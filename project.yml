@@ -12,8 +12,8 @@ options:
 # CURRENT_PROJECT_VERSION is the build number: raise it with every release.
 settings:
   base:
-    MARKETING_VERSION: "0.5.13"
-    CURRENT_PROJECT_VERSION: "38"
+    MARKETING_VERSION: "0.5.14"
+    CURRENT_PROJECT_VERSION: "39"
 
 packages:
   VoiceIQCore:
