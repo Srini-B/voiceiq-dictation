@@ -1,4 +1,3 @@
-import AppKit
 import SwiftUI
 import VoiceIQCore
 
@@ -51,11 +50,8 @@ struct AgentEntryRow: View {
             }
             .foregroundStyle(VoiceIQUI.Colors.outline)
         case .answer(_, let text):
-            Text(markdown(text))
-                .font(VoiceIQUI.TypeScale.body())
-                .foregroundStyle(VoiceIQUI.Colors.onSurface)
-                .textSelection(.enabled)
-                .fixedSize(horizontal: false, vertical: true)
+            MarkdownView(text)
+                .frame(maxWidth: .infinity, alignment: .leading)
         case .confirmation(_, let request, let allowed):
             HStack(alignment: .firstTextBaseline, spacing: 6) {
                 Image(systemName: allowed == true ? "checkmark.shield" : allowed == false ? "hand.raised" : "questionmark.circle")
@@ -85,9 +81,5 @@ struct AgentEntryRow: View {
         case .declined:
             Image(systemName: "minus").font(.system(size: 10, weight: .semibold)).foregroundStyle(VoiceIQUI.Colors.outline)
         }
-    }
-
-    private func markdown(_ text: String) -> AttributedString {
-        AttributedString(MarkdownRenderer.render(text, color: NSColor(VoiceIQUI.Colors.onSurface)))
     }
 }

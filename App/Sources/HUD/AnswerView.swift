@@ -30,8 +30,11 @@ struct AnswerView: View {
                 .accessibilityLabel("Close answer")
             }
 
-            RichTextView(text: MarkdownRenderer.render(answer, color: NSColor(VoiceIQUI.Colors.onSurface)))
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            ScrollView {
+                MarkdownView(answer)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .padding(18)
         .frame(maxWidth: .infinity, maxHeight: .infinity)

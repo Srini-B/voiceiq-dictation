@@ -39,6 +39,21 @@ model says what is missing.
 - The panel is the pill (`PillState.agent`) at the Ask Anything answer size
   (560×300 max). `AgentPanelView` renders the transcript: commands, observation
   lines, actions with status, confirmations, answers, failures.
+- Answers are Markdown. `App/Sources/DesignSystem/MarkdownView` lays them out
+  block by block: paragraphs, headings, numbered and bulleted lists,
+  code in a box, quotes, and GFM tables. A list item and a quote each hold
+  their own block sequence, so nested lists, code blocks and tables inside
+  them keep their formatting. `MarkdownBlocks.swift` groups the
+  `AttributedString(markdown:)` presentation intents into those blocks. The
+  Ask Anything answer (`App/HUD/AnswerView`) and the saved-run detail in
+  `AgentRunsPane` (which draws `AgentEntryRow`) use the same view.
+- Tables (`MarkdownTableView.swift`) size columns like HTML auto layout. Each
+  column has a minimum (its longest word) and a preferred width (its longest
+  line, capped at 320 pt). If the preferred widths fit the panel the table
+  fills it. If not, the widest column wraps first, down to its minimum, then
+  the next. If even the minimums do not fit, columns keep their preferred
+  widths and the table scrolls sideways inside its own frame; the rest of the
+  transcript does not move.
 - Pill states a dictation session would show (listening, processing, error)
   become the panel's phase line (`DictationController.reflectInAgentPanel`).
 - Stop cancels any running turn, closes the panel, and returns the pill to
@@ -111,6 +126,7 @@ three-day schedule, and the app does not delete those older files.
 | Model and loop (Core, no AppKit) | `VoiceIQCore/Sources/AgentEngine/`: `AgentLoop`, `AgentConversation`, `AgentTools`, `AgentSession`, `AgentRunStore`, `AgentEndpoint`, `AgentProviderOverride`, `AgentTransport` (+`OpenAI`, `+Anthropic`, `+Gemini`) |
 | Screen and actions (App) | `App/Sources/Agent/NativeExecutor.swift` |
 | Session and panel (App) | `App/Sources/Agent/AgentController.swift`, `AgentPanelView.swift`, `AgentEntryRow.swift`, `PillState.agent` in `App/Sources/HUD` |
+| Answer layout (App) | `App/Sources/DesignSystem/MarkdownBlocks.swift`, `MarkdownView.swift`, `MarkdownTableView.swift` (shared with `App/Sources/HUD/AnswerView.swift` and `AgentRunsPane`) |
 | Saved runs (App) | `App/Sources/Windows/AgentRunsPane.swift`, `MainSection.agent` in `SettingsWindow.swift` |
 | Settings | `DictationPane` Experimental (toggle + shortcut), `App/Sources/Windows/AgentProviderSection.swift` |
 
