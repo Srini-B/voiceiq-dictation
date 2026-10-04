@@ -513,11 +513,15 @@ public actor GeminiClient {
         return .network("interaction_status_\(status)")
     }
 
-    /// Extracts a short retry hint from a 429: Retry-After header or the
-    /// google.rpc.RetryInfo "retryDelay": "2s" detail in the error body.
-    static func retryDelaySeconds(from data: Data, headers: HTTPURLResponse) -> Double? {
-        if let header = headers.value(forHTTPHeaderField: "Retry-After"), let seconds = Double(header) {
-            return seconds
+    /// Extracts a short retry hint from a 429: Retry-After header (seconds or
+    /// an HTTP-date) or the google.rpc.RetryInfo "retryDelay": "2s" detail in
+    /// the error body.
+    static func retryDelaySeconds(from data: Data, headers: HTTPURLResponse, now: Date = Date()) -> Double? {
+        if let header = headers.value(forHTTPHeaderField: "Retry-After") {
+            if let seconds = Double(header) { return seconds }
+            if let date = httpDateFormatter.date(from: header.trimmingCharacters(in: .whitespaces)) {
+                return max(0, date.timeIntervalSince(now))
+            }
         }
         guard let body = String(data: data, encoding: .utf8) else { return nil }
         if let range = body.range(of: #""retryDelay"\s*:\s*"([0-9.]+)s""#, options: .regularExpression) {
@@ -527,6 +531,15 @@ public actor GeminiClient {
         }
         return nil
     }
+
+    /// RFC 9110 IMF-fixdate, the only form a server may send today.
+    private static let httpDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(identifier: "GMT")
+        formatter.dateFormat = "EEE, dd MMM yyyy HH:mm:ss zzz"
+        return formatter
+    }()
 
     struct DeadlineExceeded: Error {}
 

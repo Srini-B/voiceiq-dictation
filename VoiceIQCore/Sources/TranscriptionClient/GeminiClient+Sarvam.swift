@@ -90,7 +90,9 @@ extension GeminiClient {
                           language: SarvamLanguage, deadline: TimeInterval) async throws -> String {
         let keyterms = Sarvam.keyterms(vocabulary)
         let mode = verbatim ? "verbatim" : "transcribe"
-        let fx = Task { await FXRates.refresh() }
+        // Today's rate for the row; the booking does not wait for it (see
+        // `UsageMeter.scheduleFXBackfill`).
+        Task { await FXRates.refresh() }
         let json: [String: Any]
         if audioSeconds <= Sarvam.syncLimitSeconds {
             var form = MultipartForm()
@@ -115,7 +117,6 @@ extension GeminiClient {
             json = try await sarvamBatch(audio: audio, parameters: parameters, deadline: deadline,
                                          stage: .transcribe, modelLabel: Sarvam.sttModel)
         }
-        await fx.value
         UsageMeter.record(stage: .transcribe, model: Sarvam.sttModel, usage: Sarvam.usage(seconds: audioSeconds))
         if let code = json["language_code"] as? String {
             Log.transcription.info("sarvam heard \(code, privacy: .public) (p=\((json["language_probability"] as? NSNumber)?.doubleValue ?? -1, format: .fixed(precision: 2)))")
@@ -127,12 +128,11 @@ extension GeminiClient {
     /// job. Labels (`speaker_1`, …) are per request; `SpeakerLinker` maps them.
     func sarvamDiarize(audio: Data, audioSeconds: Double, language: SarvamLanguage,
                        deadline: TimeInterval) async throws -> [DiarizedWord] {
-        let fx = Task { await FXRates.refresh() }
+        Task { await FXRates.refresh() }
         let parameters: [String: Any] = ["model": Sarvam.sttModel, "mode": "transcribe", "language_code": language.rawValue,
                                          "with_timestamps": true, "with_diarization": true]
         let json = try await sarvamBatch(audio: audio, parameters: parameters, deadline: deadline,
                                          stage: .meetingTranscribe, modelLabel: Sarvam.diarizeModel)
-        await fx.value
         UsageMeter.record(stage: .meetingTranscribe, model: Sarvam.diarizeModel, usage: Sarvam.usage(seconds: audioSeconds))
         return Sarvam.diarizedWords(json)
     }
@@ -225,8 +225,8 @@ extension GeminiClient {
 
         // 81 s of audio finished in about 6 s; a ten-minute window may take a
         // minute. Sarvam's FAQ asks Starter plans to poll no faster than every
-        // 3 s, and a throttled poll waits out the job here rather than letting
-        // the caller's retry start a second job.
+        // 3 s, and a throttled (429) or overloaded (5xx) poll waits out the
+        // job here rather than letting the caller's retry start a second job.
         // A sleep never runs past the deadline: a long Retry-After ends the
         // job as a timeout instead of waiting it out.
         func pause(_ seconds: TimeInterval) async throws {
@@ -242,6 +242,10 @@ extension GeminiClient {
                 status = try await sarvamGet(path: "speech-to-text/job/v1/\(jobID)/status", deadline: min(30, remaining()))
             } catch TranscriptionError.rateLimitedTransient(let retryAfter) {
                 try await pause(max(wait, retryAfter ?? 0))
+                continue
+            } catch TranscriptionError.network(let code) where code.hasPrefix("http_5") {
+                try await pause(wait)
+                wait = min(5, wait * 1.5)
                 continue
             }
             switch status["job_state"] as? String {
@@ -299,6 +303,7 @@ extension GeminiClient {
             return json
         case 403: throw TranscriptionError.auth
         case 429: throw TranscriptionError.rateLimitedTransient(retryAfter: Self.retryDelaySeconds(from: data, headers: http))
+        case 500...599: throw TranscriptionError.network("http_\(http.statusCode)") // transient: the poll loop backs off
         default: throw TranscriptionError.network(Self.errorMessage(from: data) ?? "http_\(http.statusCode)")
         }
     }

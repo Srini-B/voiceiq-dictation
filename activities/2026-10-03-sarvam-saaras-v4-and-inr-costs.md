@@ -107,6 +107,28 @@ iPhone 17 simulator still pushes titled pages. Screenshots in
 `.amp/in/artifacts/ipad-settings-dictation.png` and
 `iphone-dictation.png` (not committed).
 
+Third round (on `a377822`), all four accepted:
+
+- `Retry-After` as an HTTP-date (`Fri, 03 Oct 2025 14:00:42 GMT`) is parsed
+  by `GeminiClient.retryDelaySeconds`; seconds past now, floored at 0.
+  Numeric values and the `retryDelay` body hint are unchanged.
+- `sarvamTranscribe` and `sarvamDiarize` no longer wait for the FX refresh
+  after the transcript is back; like `sarvamChat` they start it and let the
+  back-fill price the row. A stale quote or an unreachable Frankfurter can no
+  longer add its 10 s timeout to a dictation or meeting window.
+- The batch poll loop backs off on 5xx the way it does on 429 (`sarvamGet`
+  throws `.network("http_5xx")`, the loop pauses with the same 3 → 5 s
+  ramp, bounded by the deadline). Before, a 503 on `/status` surfaced, and
+  the retry queue uploaded a second job while the first kept running.
+- A Sarvam row booked with no rate showed "—" and added nothing to the INR
+  total until the back-fill. The row now stores `listINR` (migration
+  `v4-listINR`, nullable column), the rate card's rupee price; the INR view
+  and totals read `COALESCE(listINR, costUSD × fxRateINR)`. The rupee figure
+  is exact at once; the dollar one still waits for the rate (`≈` on the USD
+  total). Checked with a scratch test (not kept): ₹1.00 for 120 s of
+  `saaras:v4` without a quote, totals and row agree, USD = 1/90 after a 90
+  INR/USD back-fill. 148 package tests pass; Debug Mac build compiles.
+
 ## The ⌘-Tab abort
 
 Report: tap the hotkey, switch apps within a second, dictation cancels. Code:

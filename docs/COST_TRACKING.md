@@ -10,8 +10,9 @@ Each successful model call becomes one `UsageRecord` in
 `~/Library/Application Support/VoiceiQ/usage.sqlite` (GRDB, WAL). Fields:
 time, activity, stage, model, session ID, token counts by modality (text,
 audio, image, cached in; text, audio, thought out), an `isEstimated` flag,
-`costUSD`, `audioSeconds`, and the rupee rate of the call's day (`fxRateINR`,
-`fxDate`; migration `v3-fx`).
+`costUSD`, `audioSeconds`, the rupee rate of the call's day (`fxRateINR`,
+`fxDate`; migration `v3-fx`), and `listINR` for rupee-priced models
+(migration `v4-listINR`).
 
 `audioSeconds` is the audio a call was billed for, on models priced by audio
 length (ElevenLabs Scribe, OpenAI's transcription models, MAI Transcribe 2).
@@ -96,8 +97,8 @@ Every row stores INR per USD for its day (`fxRateINR`) and the quote's date
 (`fxDate`). The rate comes from Frankfurter (`api.frankfurter.dev/v1`, the
 European Central Bank reference rate, published on business days), with no
 key. `FXRates.refresh` fetches `latest?base=USD&symbols=INR` at launch, when
-a Sarvam call starts (without waiting for it), and whenever a row is booked
-without a rate, and caches the quote in `UserDefaults` (`fxQuoteINR`) for
+a Sarvam call (speech or chat) starts, without waiting for it, and whenever a
+row is booked without a rate, and caches the quote in `UserDefaults` (`fxQuoteINR`) for
 four hours. `UsageMeter` runs one refresh-and-backfill at a time. `UsageRecord.init` uses
 the cached quote only if it was fetched within 36 hours of the call; otherwise
 the row waits.
@@ -108,9 +109,16 @@ rate of its own day, or the nearest earlier business day for a weekend or
 holiday. It runs at launch, when the Cost pane opens, and after a row is
 booked without a rate, so history made before this version is converted at
 the rate of the day it happened, and a rupee-priced row that was waiting
-gets its `costUSD` then. Days are UTC. Dollar costs are the source of truth;
-a row's rupee cost is `costUSD × fxRateINR`, so a Sarvam row shows its list
-price in rupees exactly and every other row at its day's rate.
+gets its `costUSD` then. Days are UTC.
+
+Each row stores the price in the currency its provider bills: `costUSD` for
+dollar-priced models, `listINR` (the Sarvam rate card, v4 column) for
+rupee-priced ones, and the other currency is derived at the row's rate. A
+row's rupee cost is `listINR ?? costUSD × fxRateINR`, so a Sarvam row shows
+its list price exactly, with or without a rate, and every other row at its
+day's rate; a Sarvam row booked while Frankfurter was unreachable shows its
+rupees at once and its dollars after the back-fill (the USD total carries
+`≈` until then).
 
 ## Attribution
 

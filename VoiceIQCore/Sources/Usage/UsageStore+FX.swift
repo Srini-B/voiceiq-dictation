@@ -21,7 +21,9 @@ extension UsageStore {
                     record.fxRateINR = quote.inrPerUSD
                     record.fxDate = quote.date
                     if record.costUSD == nil {
-                        record.costUSD = UsageRecord.usd(fromINR: PriceBook.costINR(model: record.model, usage: record.usage), fx: quote)
+                        // Rows booked before v4 have no `listINR`; price them now.
+                        record.listINR = record.listINR ?? PriceBook.costINR(model: record.model, usage: record.usage)
+                        record.costUSD = UsageRecord.usd(fromINR: record.listINR, fx: quote)
                     }
                     try record.update(db)
                 }

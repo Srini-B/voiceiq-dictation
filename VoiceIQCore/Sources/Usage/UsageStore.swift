@@ -55,8 +55,12 @@ public struct UsageRecord: Codable, Equatable, Identifiable, FetchableRecord, Pe
     public var audioOut: Int
     public var thoughtOut: Int
     public var isEstimated: Bool
-    /// Paid-tier USD at the time of the call; nil when the model is unpriced.
+    /// Paid-tier USD at the time of the call; nil when the model is unpriced,
+    /// or until a rupee-priced row (see `listINR`) has its day's rate.
     public var costUSD: Double?
+    /// The list price in rupees for a model Sarvam bills in INR; nil for
+    /// dollar-priced models. Known at booking, with or without a rate.
+    public var listINR: Double?
     /// Seconds of audio billed, for models priced by audio length. Nil on
     /// token-priced calls and on audio-priced calls booked before v2.
     public var audioSeconds: Double?
@@ -84,8 +88,9 @@ public struct UsageRecord: Codable, Equatable, Identifiable, FetchableRecord, Pe
         // OpenRouter states the charge on every response; the price book is
         // for providers that only report tokens. A rupee price becomes USD at
         // the day's rate; without one the row waits for the back-fill.
+        self.listINR = PriceBook.costINR(model: model, usage: usage)
         self.costUSD = usage.reportedCostUSD ?? PriceBook.cost(model: model, usage: usage, at: at)
-            ?? Self.usd(fromINR: PriceBook.costINR(model: model, usage: usage), fx: fx)
+            ?? Self.usd(fromINR: listINR, fx: fx)
         self.audioSeconds = usage.audioSeconds
         self.fxRateINR = fx?.inrPerUSD
         self.fxDate = fx?.date
@@ -97,8 +102,9 @@ public struct UsageRecord: Codable, Equatable, Identifiable, FetchableRecord, Pe
     }
 
     /// The charge in rupees: Sarvam's list price exactly, every other model
-    /// at the day's rate. Nil until the rate is known.
+    /// at the day's rate, or nil until that rate is known.
     public var costINR: Double? {
+        if let listINR { return listINR }
         guard let costUSD, let fxRateINR else { return nil }
         return costUSD * fxRateINR
     }
@@ -171,6 +177,11 @@ public final class UsageStore: @unchecked Sendable {
                 t.add(column: "fxDate", .text)
             }
         }
+        migrator.registerMigration("v4-listINR") { db in
+            try db.alter(table: UsageRecord.databaseTableName) { t in
+                t.add(column: "listINR", .double)
+            }
+        }
         try migrator.migrate(queue)
     }
 
@@ -198,7 +209,8 @@ public final class UsageStore: @unchecked Sendable {
 
     public struct Total: Equatable, Sendable {
         public var costUSD: Double
-        /// Each call at its own day's rate; calls without a rate add nothing.
+        /// Rupee-priced calls at list price, the rest at their own day's
+        /// rate; a dollar call without a rate adds nothing.
         public var costINR: Double
         public var calls: Int
         public var tokensIn: Int
@@ -238,8 +250,8 @@ public final class UsageStore: @unchecked Sendable {
         var sql = """
             SELECT \(keyExpression) AS key,
                    COALESCE(SUM(costUSD), 0) AS cost,
-                   COALESCE(SUM(costUSD * fxRateINR), 0) AS costINR,
-                   MAX(CASE WHEN costUSD IS NOT NULL AND fxRateINR IS NULL THEN 1 ELSE 0 END) AS fxMissing,
+                   COALESCE(SUM(COALESCE(listINR, costUSD * fxRateINR)), 0) AS costINR,
+                   MAX(CASE WHEN listINR IS NULL AND costUSD IS NOT NULL AND fxRateINR IS NULL THEN 1 ELSE 0 END) AS fxMissing,
                    COUNT(*) AS calls,
                    COALESCE(SUM(textIn + audioIn + imageIn + cachedIn), 0) AS tokensIn,
                    COALESCE(SUM(textOut + audioOut + thoughtOut), 0) AS tokensOut,
