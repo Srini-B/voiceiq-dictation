@@ -224,6 +224,8 @@ struct ListDetailNavigation<Sidebar: View, Detail: View>: View {
         let wide = sizeClass == .regular
         NavigationSplitView {
             sidebar
+                // The selected row's tint marks it; no focus ring on top.
+                .focusEffectDisabled()
                 .modifier(BareNavigationBar(bare: wide))
                 .navigationSplitViewColumnWidth(min: 320, ideal: 380, max: 440)
         } detail: {
