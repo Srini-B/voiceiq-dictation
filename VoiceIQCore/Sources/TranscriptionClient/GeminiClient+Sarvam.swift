@@ -66,9 +66,20 @@ public enum Sarvam {
     /// tokens, which truncates the rewrite of a long dictation (Indic text
     /// tokenizes at close to one token a character). The answer is at most
     /// about the prompt's size, so one token per prompt character is a safe
-    /// ceiling; 65,536 was accepted in a probe (2026-10-03).
+    /// ceiling. The plan caps it (Starter 4,096, Pro 16,384, Business
+    /// 128,000); a budget over the cap is a 400 that names the cap, and
+    /// `sarvamChat` retries at it.
     static func outputBudget(promptCharacters: Int) -> Int {
         min(32_768, max(4_096, promptCharacters))
+    }
+
+    /// The ceiling quoted by a `max_tokens` rejection: "max_tokens (N)
+    /// exceeds the maximum output length of 128000 tokens for sarvam-105b."
+    static func maxTokensCeiling(in message: String) -> Int? {
+        guard message.contains("max_tokens"),
+              let range = message.range(of: "maximum output length of ") else { return nil }
+        let digits = message[range.upperBound...].prefix { $0.isNumber }
+        return Int(digits)
     }
 }
 
@@ -145,9 +156,24 @@ extension GeminiClient {
             // JSON for the dictation schema in every probe (2026-10-03).
             body["response_format"] = ["type": "json_object"]
         }
-        let data = try await post(path: "v1/chat/completions", body: try JSONSerialization.data(withJSONObject: body),
-                                  endpoint: Sarvam.apiBase, deadline: deadline, modelLabel: Sarvam.chatModel,
-                                  stage: stage, via: .sarvam)
+        func send() async throws -> Data {
+            try await post(path: "v1/chat/completions", body: try JSONSerialization.data(withJSONObject: body),
+                           endpoint: Sarvam.apiBase, deadline: deadline, modelLabel: Sarvam.chatModel,
+                           stage: stage, via: .sarvam)
+        }
+        let data: Data
+        do {
+            data = try await send()
+        } catch TranscriptionError.badRequest(let message) {
+            // Over the plan's cap: once more at the cap, which the message
+            // names. A Starter plan then gets 4,096 tokens, the API's own
+            // ceiling for it, rather than no rewrite at all.
+            guard let ceiling = Sarvam.maxTokensCeiling(in: message),
+                  ceiling < (body["max_tokens"] as? Int ?? 0) else { throw TranscriptionError.badRequest(message) }
+            Log.transcription.info("GeminiClient: sarvam max_tokens capped at \(ceiling, privacy: .public)")
+            body["max_tokens"] = ceiling
+            data = try await send()
+        }
         return try Self.extractGatewayMessage(from: data)
     }
 
@@ -201,32 +227,43 @@ extension GeminiClient {
         // minute. Sarvam's FAQ asks Starter plans to poll no faster than every
         // 3 s, and a throttled poll waits out the job here rather than letting
         // the caller's retry start a second job.
+        // A sleep never runs past the deadline: a long Retry-After ends the
+        // job as a timeout instead of waiting it out.
+        func pause(_ seconds: TimeInterval) async throws {
+            let left = deadline - Date().timeIntervalSince(started)
+            guard seconds < left else { throw TranscriptionError.timeout }
+            try await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+        }
         var wait: TimeInterval = 3
+        var outputName = "0.json"
         while true {
             let status: [String: Any]
             do {
                 status = try await sarvamGet(path: "speech-to-text/job/v1/\(jobID)/status", deadline: min(30, remaining()))
             } catch TranscriptionError.rateLimitedTransient(let retryAfter) {
-                guard Date().timeIntervalSince(started) < deadline else { throw TranscriptionError.timeout }
-                try await Task.sleep(nanoseconds: UInt64(max(wait, retryAfter ?? 0) * 1_000_000_000))
+                try await pause(max(wait, retryAfter ?? 0))
                 continue
             }
             switch status["job_state"] as? String {
             case "Completed":
-                if let detail = (status["job_details"] as? [[String: Any]])?.first, detail["state"] as? String == "Failed" {
-                    throw TranscriptionError.network("sarvam_file_failed: \(detail["error_message"] as? String ?? "")")
+                let detail = (status["job_details"] as? [[String: Any]])?.first
+                if detail?["state"] as? String == "Failed" {
+                    throw TranscriptionError.network("sarvam_file_failed: \(detail?["error_message"] as? String ?? "")")
+                }
+                // The output is named by the job, not the input ("0.json" so
+                // far); the status lists it.
+                if let name = (detail?["outputs"] as? [[String: Any]])?.first?["file_name"] as? String, !name.isEmpty {
+                    outputName = name
                 }
             case "Failed":
                 throw TranscriptionError.network("sarvam_job_failed: \(status["error_message"] as? String ?? "")")
             default:
-                guard Date().timeIntervalSince(started) < deadline else { throw TranscriptionError.timeout }
-                try await Task.sleep(nanoseconds: UInt64(wait * 1_000_000_000))
+                try await pause(wait)
                 wait = min(5, wait * 1.5)
                 continue
             }
             break
         }
-        let outputName = "0.json"
         var download: [String: Any] = [:]
         for attempt in 0..<6 {
             do {

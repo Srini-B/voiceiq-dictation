@@ -73,6 +73,19 @@ Accepted:
 - Privacy pages (Mac and iOS) name Sarvam as the meeting-notes writer when
   it is the writing model.
 
+Second round (on `6cdfe7d`):
+
+- `max_tokens` is capped by plan (Starter 4 096, Pro 16 384, Business
+  128 000). The budget stays; a 400 over the cap quotes the cap
+  ("exceeds the maximum output length of N tokens") and `sarvamChat`
+  retries once at N. Probed with the owner's key at 200 000 to read the
+  message shape; the key itself allows 128 000, so the retry was not seen
+  live.
+- The batch output name comes from `job_details[].outputs[].file_name` in
+  the completed status, with `0.json` as the fallback.
+- Poll sleeps are bounded by the batch deadline (`pause`): a Retry-After
+  longer than the time left throws `.timeout` instead of waiting it out.
+
 Declined, with a reply on the thread:
 
 - "+10 % for automatic language detection": the rate card lists ₹30/h and
