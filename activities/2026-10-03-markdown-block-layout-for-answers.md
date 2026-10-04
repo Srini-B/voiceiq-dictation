@@ -46,9 +46,13 @@ follow-up commit:
   in a body-sized bold font. `styled` and `measured` now take a size and a
   weight and build the font per run, so bold only raises the weight.
 - A list item whose text resumed after its nested list was pulled up in front
-  of the nested items, because runs were bucketed by item identity.
-  `listItems` now groups consecutive runs and emits the resumed text as a
-  `continuation` entry with a hidden marker.
+  of the nested items, because runs were bucketed by item identity. A second
+  round found the related flaw: a code block, quote or table inside a list
+  item lost its formatting, because every item was reduced to one string.
+  `ListItem` now holds `[MarkdownBlock]`; the parser groups runs by the block
+  component at each nesting level and recurses into items, and
+  `MarkdownBlocksView` renders an item's blocks under its marker. Source order
+  and block formatting follow from the structure instead of special cases.
 - A table cell holding one word longer than the 320 pt cap got a preferred
   width below its minimum and clipped instead of scrolling. Preferred width is
   now clamped to at least the minimum.

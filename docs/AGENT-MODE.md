@@ -40,8 +40,10 @@ model says what is missing.
   (560×300 max). `AgentPanelView` renders the transcript: commands, observation
   lines, actions with status, confirmations, answers, failures.
 - Answers are Markdown. `App/Sources/DesignSystem/MarkdownView` lays them out
-  block by block: paragraphs, headings, numbered and bulleted lists (nested),
-  code in a box, quotes, and GFM tables. `MarkdownBlocks.swift` groups the
+  block by block: paragraphs, headings, numbered and bulleted lists,
+  code in a box, quotes, and GFM tables. A list item holds its own block
+  sequence, so nested lists, code blocks and tables inside an item keep
+  their formatting. `MarkdownBlocks.swift` groups the
   `AttributedString(markdown:)` presentation intents into those blocks. The
   Ask Anything answer (`App/HUD/AnswerView`) and the saved-run detail in
   `AgentRunsPane` (which draws `AgentEntryRow`) use the same view.

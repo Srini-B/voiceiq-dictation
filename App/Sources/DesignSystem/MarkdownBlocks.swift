@@ -8,16 +8,14 @@ import Foundation
 /// groups the runs back into blocks so tables become grids, lists get their
 /// markers, and code gets its box.
 enum MarkdownBlock: Identifiable {
+    /// One list item. Its content is a block sequence, so a nested list, a
+    /// code block or a paragraph that resumes after the nested list keep
+    /// their formatting and their source order.
     struct ListItem: Identifiable {
         let id: Int
         let ordered: Bool
         let ordinal: Int
-        /// 1 for a top-level item, 2 for an item nested one level in.
-        let depth: Int
-        /// Text of an item that resumes after its nested list. It keeps the
-        /// item's indent but shows no marker.
-        let continuation: Bool
-        let text: AttributedString
+        let blocks: [MarkdownBlock]
     }
 
     struct Table {
@@ -49,38 +47,44 @@ enum MarkdownBlock: Identifiable {
         guard let parsed = try? AttributedString(markdown: markdown, options: .init(interpretedSyntax: .full)) else {
             return [.paragraph(id: 0, AttributedString(markdown))]
         }
-        var blocks: [MarkdownBlock] = []
-        var group: [AttributedString.Runs.Run] = []
-        var groupID: Int?
-
-        func flush() {
-            guard let id = groupID, !group.isEmpty else { return }
-            if let block = build(id: id, runs: group, in: parsed) { blocks.append(block) }
-            group = []
-        }
-
-        for run in parsed.runs {
-            // Components are ordered innermost first; the last one is the block
-            // the run belongs to at the top level.
-            let outer = run.presentationIntent?.components.last
-            let id = outer?.identity ?? -1
-            if id != groupID {
-                flush()
-                groupID = id
-            }
-            group.append(run)
-        }
-        flush()
-        return blocks
+        return blocks(Array(parsed.runs), level: 0, in: parsed)
     }
 
-    private static func build(id: Int, runs: [AttributedString.Runs.Run], in source: AttributedString) -> MarkdownBlock? {
-        let outer = runs[0].presentationIntent?.components.last
-        switch outer?.kind {
+    private typealias Run = AttributedString.Runs.Run
+
+    /// The block component a run belongs to at `level`: 0 is the outermost
+    /// block, 1 the block inside that, and so on. Components are stored
+    /// innermost first.
+    private static func component(of run: Run, level: Int) -> PresentationIntent.IntentType? {
+        let components = run.presentationIntent?.components ?? []
+        let index = components.count - 1 - level
+        return components.indices.contains(index) ? components[index] : nil
+    }
+
+    /// Consecutive runs that share the block at `level` form one block.
+    private static func grouped(_ runs: [Run], level: Int) -> [(id: Int, runs: [Run])] {
+        var groups: [(id: Int, runs: [Run])] = []
+        for run in runs {
+            let id = component(of: run, level: level)?.identity ?? -1
+            if groups.last?.id == id {
+                groups[groups.count - 1].runs.append(run)
+            } else {
+                groups.append((id, [run]))
+            }
+        }
+        return groups
+    }
+
+    private static func blocks(_ runs: [Run], level: Int, in source: AttributedString) -> [MarkdownBlock] {
+        grouped(runs, level: level).map { build(id: $0.id, runs: $0.runs, level: level, in: source) }
+    }
+
+    private static func build(id: Int, runs: [Run], level: Int, in source: AttributedString) -> MarkdownBlock {
+        switch component(of: runs[0], level: level)?.kind {
         case .none, .paragraph:
             return .paragraph(id: id, paragraphs(runs, in: source))
-        case .header(let level):
-            return .heading(id: id, level: level, paragraphs(runs, in: source))
+        case .header(let headingLevel):
+            return .heading(id: id, level: headingLevel, paragraphs(runs, in: source))
         case .codeBlock:
             var text = runs.map { String(source[$0.range].characters) }.joined()
             while text.hasSuffix("\n") { text.removeLast() }
@@ -90,7 +94,7 @@ enum MarkdownBlock: Identifiable {
         case .thematicBreak:
             return .rule(id: id)
         case .orderedList, .unorderedList:
-            return .list(id: id, items: listItems(runs, in: source))
+            return .list(id: id, items: listItems(runs, level: level + 1, in: source))
         case .table(let columns):
             return .table(id: id, table(columns: columns, runs: runs, in: source))
         default:
@@ -117,35 +121,16 @@ enum MarkdownBlock: Identifiable {
         return piece
     }
 
-    /// Each run belongs to its innermost list item. Nested lists may mix
-    /// numbers and bullets, so the list just outside that item decides the
-    /// marker. Runs stay in source order: when an item's text resumes after
-    /// its nested list, that text becomes a separate continuation entry
-    /// instead of being pulled up in front of the nested items.
-    private static func listItems(_ runs: [AttributedString.Runs.Run], in source: AttributedString) -> [ListItem] {
-        struct Group {
-            let identity: Int, ordered: Bool, ordinal: Int, depth: Int
-            var runs: [AttributedString.Runs.Run]
-        }
-        var groups: [Group] = []
-        for run in runs {
-            let components = run.presentationIntent?.components ?? []
-            let itemIndices = components.indices.filter { if case .listItem = components[$0].kind { return true }; return false }
-            guard let index = itemIndices.first, case .listItem(let ordinal) = components[index].kind else { continue }
-            let identity = components[index].identity
-            if groups.last?.identity == identity {
-                groups[groups.count - 1].runs.append(run)
-                continue
-            }
+    /// `level` is the list item component; the list itself is one level out
+    /// and decides the marker, since nested lists may mix numbers and
+    /// bullets. The item's content is built one level in.
+    private static func listItems(_ runs: [Run], level: Int, in source: AttributedString) -> [ListItem] {
+        grouped(runs, level: level).compactMap { group in
+            guard case .listItem(let ordinal) = component(of: group.runs[0], level: level)?.kind else { return nil }
             var ordered = false
-            if components.indices.contains(index + 1), case .orderedList = components[index + 1].kind { ordered = true }
-            groups.append(Group(identity: identity, ordered: ordered, ordinal: ordinal, depth: itemIndices.count, runs: [run]))
-        }
-        var seen: Set<Int> = []
-        return groups.enumerated().map { offset, group in
-            ListItem(id: offset, ordered: group.ordered, ordinal: group.ordinal, depth: group.depth,
-                     continuation: !seen.insert(group.identity).inserted,
-                     text: paragraphs(group.runs, in: source))
+            if case .orderedList = component(of: group.runs[0], level: level - 1)?.kind { ordered = true }
+            return ListItem(id: group.id, ordered: ordered, ordinal: ordinal,
+                            blocks: blocks(group.runs, level: level + 1, in: source))
         }
     }
 

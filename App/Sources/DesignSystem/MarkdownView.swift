@@ -17,17 +17,34 @@ struct MarkdownView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: size * 0.6) {
+        MarkdownBlocksView(blocks: blocks, style: style, spacing: size * 0.6)
+            .foregroundStyle(color)
+            .textSelection(.enabled)
+    }
+}
+
+/// A block sequence. The top level of an answer and the content of each list
+/// item are both one of these, so lists nest to any depth.
+private struct MarkdownBlocksView: View {
+    let blocks: [MarkdownBlock]
+    let style: MarkdownStyle
+    let spacing: CGFloat
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: spacing) {
             ForEach(blocks) { block in
-                view(block)
+                MarkdownBlockView(block: block, style: style)
             }
         }
-        .foregroundStyle(color)
-        .textSelection(.enabled)
     }
+}
 
-    @ViewBuilder
-    private func view(_ block: MarkdownBlock) -> some View {
+private struct MarkdownBlockView: View {
+    let block: MarkdownBlock
+    let style: MarkdownStyle
+    private var size: CGFloat { style.size }
+
+    var body: some View {
         switch block {
         case .paragraph(_, let text):
             inline(text)
@@ -85,10 +102,8 @@ struct MarkdownView: View {
                     Text(item.ordered ? "\(item.ordinal)." : "•")
                         .font(style.body)
                         .frame(minWidth: 16, alignment: .trailing)
-                        .opacity(item.continuation ? 0 : 1)
-                    inline(item.text)
+                    MarkdownBlocksView(blocks: item.blocks, style: style, spacing: size * 0.3)
                 }
-                .padding(.leading, CGFloat(item.depth - 1) * 20)
             }
         }
     }
