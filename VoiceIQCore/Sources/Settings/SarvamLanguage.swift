@@ -36,7 +36,7 @@ public enum SarvamLanguage: String, CaseIterable, Sendable, Identifiable {
 
     public var displayName: String {
         switch self {
-        case .auto: return "Detect automatically"
+        case .auto: return "Auto-detect"
         case .english: return "English"
         case .hindi: return "Hindi"
         case .bengali: return "Bengali"

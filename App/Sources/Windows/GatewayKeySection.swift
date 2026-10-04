@@ -240,8 +240,8 @@ struct TranscriptionSourceSection: View {
     var body: some View {
         Group {
             if options.count > 1 {
-                Section {
-                    Picker("Transcription provider", selection: $source) {
+                Section("Transcription") {
+                    Picker("Speech model", selection: $source) {
                         ForEach(options) { Text($0.displayName(for: provider)).tag($0) }
                     }
                     .pickerStyle(.menu)
@@ -258,7 +258,7 @@ struct TranscriptionSourceSection: View {
                         }
                     }
                     if source == .sarvam {
-                        Picker("Language", selection: $sarvamLanguage) {
+                        Picker("Spoken language", selection: $sarvamLanguage) {
                             ForEach(SarvamLanguage.menuOrder) { Text($0.displayName).tag($0) }
                         }
                         .pickerStyle(.menu)

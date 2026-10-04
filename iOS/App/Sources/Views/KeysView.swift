@@ -80,23 +80,9 @@ struct ModelKeysForm: View {
 
             if transcriptionOptions.count > 1 {
                 VStack(alignment: .leading, spacing: Theme.Spacing.m) {
-                    GroupLabel(text: "Transcription provider")
-                    Picker("Transcription provider", selection: $transcriptionSource) {
-                        ForEach(transcriptionOptions) { Text($0.displayName(for: provider)).tag($0) }
-                    }
-                    .pickerStyle(.menu)
-                    .onChange(of: transcriptionSource) { _, value in
-                        if value != SettingsStore().transcriptionSource { SettingsStore().setPreferredTranscriptionSource(value) }
-                    }
-                    if transcriptionSource == .sarvam {
-                        Picker("Language", selection: $sarvamLanguage) {
-                            ForEach(SarvamLanguage.menuOrder) { Text($0.displayName).tag($0) }
-                        }
-                        .pickerStyle(.menu)
-                        .onChange(of: sarvamLanguage) { _, value in
-                            if value != SettingsStore().sarvamLanguage { SettingsStore().setSarvamLanguage(value) }
-                        }
-                    }
+                    GroupLabel(text: "Transcription")
+                    TranscriptionCard(options: transcriptionOptions, provider: provider,
+                                      source: $transcriptionSource, language: $sarvamLanguage)
                 }
             }
 
@@ -179,6 +165,90 @@ struct ModelKeysForm: View {
         transcriptionSource = settings.transcriptionSource
         sarvamLanguage = settings.sarvamLanguage
         writingSource = settings.writingSource
+    }
+}
+
+/// Who transcribes and, for Sarvam, the spoken language. Each menu sits
+/// under or beside its own label: side by side when the width allows,
+/// stacked rows on a phone.
+private struct TranscriptionCard: View {
+    @Environment(\.horizontalSizeClass) private var sizeClass
+    let options: [TranscriptionSource]
+    let provider: ModelProvider
+    @Binding var source: TranscriptionSource
+    @Binding var language: SarvamLanguage
+
+    private var showsLanguage: Bool { source == .sarvam }
+
+    var body: some View {
+        Card(padding: 0) {
+            if sizeClass == .regular && showsLanguage {
+                HStack(spacing: 0) {
+                    column("Speech model") { modelMenu }
+                    Rectangle().fill(Theme.Colors.hairline).frame(width: 0.5)
+                    column("Spoken language") { languageMenu }
+                }
+                .fixedSize(horizontal: false, vertical: true)
+            } else {
+                VStack(spacing: 0) {
+                    row("Speech model") { modelMenu }
+                    if showsLanguage {
+                        Rectangle().fill(Theme.Colors.hairline).frame(height: 0.5)
+                            .padding(.leading, Theme.Spacing.l)
+                        row("Spoken language") { languageMenu }
+                    }
+                }
+            }
+        }
+    }
+
+    private var modelMenu: some View {
+        Picker("Speech model", selection: $source) {
+            ForEach(options) { Text($0.displayName(for: provider)).tag($0) }
+        }
+        .pickerStyle(.menu)
+        .labelsHidden()
+        .onChange(of: source) { _, value in
+            if value != SettingsStore().transcriptionSource { SettingsStore().setPreferredTranscriptionSource(value) }
+        }
+    }
+
+    private var languageMenu: some View {
+        Picker("Spoken language", selection: $language) {
+            ForEach(SarvamLanguage.menuOrder) { Text($0.displayName).tag($0) }
+        }
+        .pickerStyle(.menu)
+        .labelsHidden()
+        .onChange(of: language) { _, value in
+            if value != SettingsStore().sarvamLanguage { SettingsStore().setSarvamLanguage(value) }
+        }
+    }
+
+    /// Label and menu on one line; when the menu's value would wrap (large
+    /// text sizes), the menu drops below its label instead.
+    private func row(_ title: String, @ViewBuilder menu: () -> some View) -> some View {
+        let menu = menu()
+        return ViewThatFits(in: .horizontal) {
+            HStack(spacing: Theme.Spacing.m) {
+                Text(title).font(Theme.Fonts.body()).foregroundStyle(Theme.Colors.ink).fixedSize()
+                Spacer(minLength: Theme.Spacing.s)
+                menu.fixedSize()
+            }
+            .padding(.leading, Theme.Spacing.l)
+            .padding(.trailing, Theme.Spacing.s)
+            .frame(minHeight: 52)
+            column(title) { menu }
+        }
+    }
+
+    private func column(_ title: String, @ViewBuilder menu: () -> some View) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title).font(Theme.Fonts.footnote()).foregroundStyle(Theme.Colors.muted)
+                .padding(.leading, Theme.Spacing.l)
+            menu().padding(.leading, Theme.Spacing.xs)
+        }
+        .padding(.vertical, Theme.Spacing.m)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 

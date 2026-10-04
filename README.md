@@ -139,7 +139,7 @@ dictation is a few seconds of audio. VoiceiQ itself is free and has no account.
 | Writing rules, Ask Anything, Translate, meeting notes | `gemini-3.8-flash` | `gpt-6-luna` |
 | Meeting speakers | `gemini-3.5-transcribe` | `gpt-4o-transcribe-diarize` |
 
-Settings → Advanced → Transcription provider can hand the transcription stage
+Settings → Advanced → Transcription → Speech model can hand the transcription stage
 to another model; the provider above still writes the text and the notes. With
 an ElevenLabs key, dictation and meetings can use `scribe_v2`. With an
 OpenRouter or Vercel AI Gateway key, they can use MAI Transcribe 2
