@@ -53,6 +53,8 @@ follow-up commit:
   component at each nesting level and recurses into items, and
   `MarkdownBlocksView` renders an item's blocks under its marker. Source order
   and block formatting follow from the structure instead of special cases.
+  A third round asked for the same inside block quotes; `.quote` now holds
+  `[MarkdownBlock]` too.
 - A table cell holding one word longer than the 320 pt cap got a preferred
   width below its minimum and clipped instead of scrolling. Preferred width is
   now clamped to at least the minimum.

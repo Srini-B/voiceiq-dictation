@@ -29,7 +29,9 @@ enum MarkdownBlock: Identifiable {
     case heading(id: Int, level: Int, AttributedString)
     case list(id: Int, items: [ListItem])
     case code(id: Int, String)
-    case quote(id: Int, AttributedString)
+    /// A quote is a block sequence like a list item, so a heading, list or
+    /// code block inside it keeps its formatting.
+    case quote(id: Int, [MarkdownBlock])
     case table(id: Int, Table)
     case rule(id: Int)
 
@@ -90,7 +92,7 @@ enum MarkdownBlock: Identifiable {
             while text.hasSuffix("\n") { text.removeLast() }
             return .code(id: id, text)
         case .blockQuote:
-            return .quote(id: id, paragraphs(runs, in: source))
+            return .quote(id: id, blocks(runs, level: level + 1, in: source))
         case .thematicBreak:
             return .rule(id: id)
         case .orderedList, .unorderedList:

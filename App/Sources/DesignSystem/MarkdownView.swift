@@ -62,12 +62,12 @@ private struct MarkdownBlockView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(VoiceIQUI.Colors.surfaceContainer)
                 .clipShape(RoundedRectangle(cornerRadius: VoiceIQUI.Radius.small, style: .continuous))
-        case .quote(_, let text):
+        case .quote(_, let blocks):
             HStack(alignment: .top, spacing: 10) {
                 RoundedRectangle(cornerRadius: 1.5)
                     .fill(VoiceIQUI.Colors.outlineVariant)
                     .frame(width: 3)
-                inline(text)
+                MarkdownBlocksView(blocks: blocks, style: style, spacing: size * 0.3)
                     .foregroundStyle(VoiceIQUI.Colors.onSurfaceVariant)
             }
             .fixedSize(horizontal: false, vertical: true)
