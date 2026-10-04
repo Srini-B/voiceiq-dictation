@@ -149,6 +149,17 @@ Fourth round (on `a2cd404`), all four accepted:
   the day before is ignored for a 02:00 UTC call, one from the same day
   prices it. 148 tests pass; Mac and iOS builds compile.
 
+Fifth round (on `4f96bc2`), one thread, accepted:
+
+- A status poll that lost the connection or stalled (`.offline`,
+  `.timeout`, a URLError-mapped `.network`) left the loop and the retry
+  queue started a second job. The loop now treats every failure except a
+  429 (its own wait), `.auth` and a 4xx as "the job is still running" and
+  polls again with the same ramp, bounded by the deadline. `sarvamGet` makes
+  a 4xx `.badRequest` (permanent: the job is gone or the call is wrong)
+  instead of `.network`, so the loop can tell them apart. The download loop
+  also pauses on `.offline`/`.timeout`. 148 tests pass; Mac build compiles.
+
 ## The ⌘-Tab abort
 
 Report: tap the hotkey, switch apps within a second, dictation cancels. Code:

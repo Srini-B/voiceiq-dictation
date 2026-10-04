@@ -243,7 +243,11 @@ extension GeminiClient {
             } catch TranscriptionError.rateLimitedTransient(let retryAfter) {
                 try await pause(max(wait, retryAfter ?? 0))
                 continue
-            } catch TranscriptionError.network(let code) where code.hasPrefix("http_5") {
+            } catch TranscriptionError.offline, TranscriptionError.timeout, TranscriptionError.network {
+                // A 5xx, a dropped connection or a stalled read: the job is
+                // still running server-side, so ask again. `sarvamGet` makes
+                // a 4xx `.badRequest`, which leaves the loop. The deadline
+                // bounds the whole wait.
                 try await pause(wait)
                 wait = min(5, wait * 1.5)
                 continue
@@ -283,6 +287,10 @@ extension GeminiClient {
                 try await pause(1)
             } catch TranscriptionError.rateLimitedTransient(let retryAfter) where attempt < 5 {
                 try await pause(max(3, retryAfter ?? 0))
+            } catch TranscriptionError.offline where attempt < 5 {
+                try await pause(3)
+            } catch TranscriptionError.timeout where attempt < 5 {
+                try await pause(3)
             } catch TranscriptionError.network(let code) where code.hasPrefix("http_5") && attempt < 5 {
                 try await pause(3)
             }
@@ -310,8 +318,8 @@ extension GeminiClient {
             return json
         case 403: throw TranscriptionError.auth
         case 429: throw TranscriptionError.rateLimitedTransient(retryAfter: Self.retryDelaySeconds(from: data, headers: http))
-        case 500...599: throw TranscriptionError.network("http_\(http.statusCode)") // transient: the poll loop backs off
-        default: throw TranscriptionError.network(Self.errorMessage(from: data) ?? "http_\(http.statusCode)")
+        case 400...499: throw TranscriptionError.badRequest(Self.errorMessage(from: data) ?? "http_\(http.statusCode)") // the job is gone or the call is wrong: permanent
+        default: throw TranscriptionError.network("http_\(http.statusCode)") // 5xx: transient, the poll loop backs off
         }
     }
 
