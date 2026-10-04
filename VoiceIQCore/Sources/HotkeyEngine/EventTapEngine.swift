@@ -246,9 +246,11 @@ public final class EventTapEngine {
                 return nil // consume Esc only while dictating
             }
             // The accidental-chord abort exists for bare modifiers, where a
-            // letter right after the press means the user meant ⌥-something.
-            // A combo already carries its key, so typing after it is deliberate.
-            guard trigger.isModifier else {
+            // letter while the modifier is still held means the user meant
+            // ⌥-something. A combo already carries its key, and a key pressed
+            // after the modifier was released (⌘-Tab to another app right
+            // after the tap) is not a chord: it passes and the session stays.
+            guard trigger.isModifier, keyIsDown else {
                 lock.unlock()
                 return Unmanaged.passUnretained(event)
             }

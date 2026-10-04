@@ -55,13 +55,20 @@ final class DictationController {
             vercelKey: { KeychainStore.loadVercelKey() },
             openAIKey: { KeychainStore.loadOpenAIKey() },
             elevenLabsKey: { KeychainStore.loadElevenLabsKey() },
+            sarvamKey: { KeychainStore.loadSarvamKey() },
             openAIConfig: { SettingsStore().openAIConfig },
+            writingSource: { SettingsStore().writingSource },
             route: { SettingsStore().activeRoute }
         )
         let service = GeminiTranscriptionService(client: client)
         transcriptionService = service
         historyStore = try? HistoryStore.standard()
         UsageMeter.store = try? UsageStore.standard()
+        // Today's rupee rate for the rows to come, and the rate of their day
+        // for rows that have none.
+        if let usage = UsageMeter.store {
+            Task.detached(priority: .utility) { await FXRates.refresh(); await usage.backfillFX() }
+        }
         meetings = MeetingEngine(
             client: client,
             config: { SettingsStore().geminiConfig },
@@ -1170,6 +1177,7 @@ final class DictationController {
         let settings = SettingsStore()
         switch settings.transcriptionSource {
         case .elevenLabs: return "ElevenLabs"
+        case .sarvam: return "Sarvam"
         case .maiTranscribe: return settings.maiTranscribeEndpoint?.hostName ?? "MAI Transcribe 2"
         case .provider:
             let route = settings.activeRoute

@@ -2,11 +2,19 @@ import SwiftUI
 import VoiceIQCore
 
 /// Cost Analysis: what the model calls behind each action cost, for one
-/// source at a time (Gemini, OpenAI, or ElevenLabs or MAI transcription). It opens on
-/// the provider selected in Settings; the toggle shows the others' calls. Period totals up top, then a breakdown
-/// by action and by model for the chosen period, then the most recent calls.
+/// source at a time (Gemini, OpenAI, ElevenLabs, MAI or Sarvam). It opens on
+/// the provider selected in Settings; the toggle shows the others' calls.
+/// Period totals up top, then a breakdown by action and by model for the
+/// chosen period, then the most recent calls. Shown in dollars or rupees:
+/// every row carries the ECB rate of its day, so either is a sum of rows.
 struct CostPane: View {
     let store: UsageStore
+
+    enum Currency: String, CaseIterable, Identifiable {
+        case usd, inr
+        var id: String { rawValue }
+        var title: String { self == .usd ? "USD" : "INR" }
+    }
 
     enum Period: String, CaseIterable, Identifiable {
         case today, week, month, all
@@ -36,6 +44,7 @@ struct CostPane: View {
     /// Simple view: period totals and cost per action. Detailed adds tokens,
     /// the per-model table, and the recent-call list.
     @AppStorage("costPaneDetailed") private var detailed = false
+    @AppStorage("costPaneCurrency") private var currency: Currency = .usd
     @State private var totals: [Period: UsageStore.Total] = [:]
     @State private var byActivity: [(key: String, total: UsageStore.Total)] = []
     @State private var byModel: [(key: String, total: UsageStore.Total)] = []
@@ -48,13 +57,22 @@ struct CostPane: View {
             VStack(alignment: .leading, spacing: VoiceIQUI.Spacing.l) {
                 // Its own row: beside the totals, four sources squeezed them
                 // into "$0.01…".
-                Picker("Source", selection: $source) {
-                    ForEach(CostSource.allCases) { Text($0.displayName).tag($0) }
+                HStack {
+                    Picker("Source", selection: $source) {
+                        ForEach(CostSource.allCases) { Text($0.displayName).tag($0) }
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .fixedSize()
+                    .onChange(of: source) { _, _ in reload() }
+                    Spacer()
+                    Picker("Currency", selection: $currency) {
+                        ForEach(Currency.allCases) { Text($0.title).tag($0) }
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .fixedSize()
                 }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .fixedSize()
-                .onChange(of: source) { _, _ in reload() }
                 summary
                 HStack(spacing: VoiceIQUI.Spacing.m) {
                     Picker("Period", selection: $period) {
@@ -79,7 +97,10 @@ struct CostPane: View {
             }
             .padding(VoiceIQUI.Spacing.l)
         }
-        .onAppear(perform: reload)
+        .onAppear {
+            reload()
+            Task { await store.backfillFX() }
+        }
         .onReceive(
             NotificationCenter.default.publisher(for: .gtUsageDidChange)
                 .debounce(for: .milliseconds(250), scheduler: RunLoop.main)
@@ -88,10 +109,15 @@ struct CostPane: View {
 
     // MARK: - Sections
 
-    /// Names where the shown source's prices come from.
+    /// Names where the shown source's prices come from, and the rate behind
+    /// the other currency.
     private var footer: String {
-        let note = source.pricingNote(activeRoute: SettingsStore().activeRoute)
-        return detailed ? note + " ≈ marks estimated tokens or an unpriced model." : note
+        var note = source.pricingNote(activeRoute: SettingsStore().activeRoute)
+        // The Sarvam note already names the rate: its prices start in rupees.
+        if currency == .inr, source != .sarvam {
+            note += " Rupees at the European Central Bank rate of each call's day (Frankfurter)."
+        }
+        return detailed ? note + " ≈ marks estimated tokens, an unpriced model or a missing rate." : note
     }
 
     private var summary: some View {
@@ -99,7 +125,7 @@ struct CostPane: View {
             ForEach(Period.allCases) { p in
                 let total = totals[p] ?? .zero
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(Self.money(total.costUSD, approximate: total.isApproximate))
+                    Text(money(total))
                         .font(VoiceIQUI.TypeScale.title(grad: grad))
                         .monospacedDigit()
                         .lineLimit(1)
@@ -136,7 +162,7 @@ struct CostPane: View {
                                 cell(total.tokensOut > 0 ? UsageFormat.tokens(total.tokensOut) : "—")
                                 cell(total.audioSeconds > 0 ? UsageFormat.audio(total.audioSeconds) : "—")
                             }
-                            cell(Self.money(total.costUSD, approximate: total.isApproximate))
+                            cell(money(total))
                         }
                     }
                 }
@@ -165,7 +191,7 @@ struct CostPane: View {
                                 .foregroundStyle(.secondary)
                         }
                         Spacer()
-                        Text(Self.money(record.costUSD, approximate: record.isEstimated || record.costUSD == nil))
+                        Text(money(record))
                             .font(VoiceIQUI.TypeScale.body(grad: grad))
                             .monospacedDigit()
                     }
@@ -201,11 +227,24 @@ struct CostPane: View {
 
     // MARK: - Formatting
 
+    private func money(_ total: UsageStore.Total) -> String {
+        switch currency {
+        case .usd: return Self.money(total.costUSD, approximate: total.isApproximate)
+        case .inr: return Self.money(total.costINR, currency: .inr, approximate: total.isApproximate || total.fxMissing)
+        }
+    }
+
+    private func money(_ record: UsageRecord) -> String {
+        let value = currency == .usd ? record.costUSD : record.costINR
+        return Self.money(value, currency: currency, approximate: record.isEstimated || value == nil)
+    }
+
     /// Costs are fractions of a cent per dictation, so four decimals until a
-    /// dollar, two after.
-    static func money(_ value: Double?, approximate: Bool = false) -> String {
+    /// whole unit, two after.
+    static func money(_ value: Double?, currency: Currency = .usd, approximate: Bool = false) -> String {
         guard let value else { return "—" }
-        let text = value >= 1 ? String(format: "$%.2f", value) : String(format: "$%.4f", value)
+        let symbol = currency == .usd ? "$" : "₹"
+        let text = value >= 1 ? String(format: "%@%.2f", symbol, value) : String(format: "%@%.4f", symbol, value)
         return approximate ? "≈" + text : text
     }
 }

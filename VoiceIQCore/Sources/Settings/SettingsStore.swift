@@ -116,8 +116,35 @@ public struct SettingsStore: Sendable {
         switch preferredTranscriptionSource {
         case .elevenLabs where KeychainStore.loadElevenLabsKey() != nil: return .elevenLabs
         case .maiTranscribe where maiTranscribeEndpoint != nil: return .maiTranscribe
+        case .sarvam where KeychainStore.loadSarvamKey() != nil: return .sarvam
         default: return .provider
         }
+    }
+
+    /// The language Sarvam is told the audio is in; `auto` lets it detect.
+    public var sarvamLanguage: SarvamLanguage {
+        SarvamLanguage(rawValue: Self.defaults.string(forKey: "sarvamLanguage") ?? "") ?? .auto
+    }
+
+    public func setSarvamLanguage(_ language: SarvamLanguage) {
+        Self.set(language.rawValue, forKey: "sarvamLanguage")
+    }
+
+    /// Writing model chosen in Settings. Until the user picks one, Sarvam
+    /// transcription brings Sarvam's own writing model and everything else
+    /// the provider's; an explicit choice sticks whatever transcribes.
+    public var preferredWritingSource: WritingSource {
+        if let stored = WritingSource(rawValue: Self.defaults.string(forKey: "writingSource") ?? "") { return stored }
+        return preferredTranscriptionSource == .sarvam ? .sarvam : .provider
+    }
+
+    public func setPreferredWritingSource(_ source: WritingSource) {
+        Self.set(source.rawValue, forKey: "writingSource")
+    }
+
+    /// Whose model writes next. Sarvam only while its key is stored.
+    public var writingSource: WritingSource {
+        preferredWritingSource == .sarvam && KeychainStore.loadSarvamKey() != nil ? .sarvam : .provider
     }
 
     /// Clean unless the user picked Verbatim: the writing rules exist to
@@ -138,6 +165,7 @@ public struct SettingsStore: Sendable {
         case .provider: return nil
         case .elevenLabs: return .elevenLabs
         case .maiTranscribe: return maiTranscribeEndpoint.map(MeetingTranscriber.SpeechRoute.mai)
+        case .sarvam: return .sarvam
         }
     }
 

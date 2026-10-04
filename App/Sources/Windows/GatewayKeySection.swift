@@ -62,6 +62,18 @@ struct GatewayKeySection: View {
             keyURL: URL(string: "https://elevenlabs.io/app/settings/api-keys")!,
             footer: "Optional. Lets ElevenLabs Scribe transcribe your dictation and meetings instead of the provider's speech model; the provider still applies the writing rules. Stored in your Mac's Keychain and only ever sent to ElevenLabs."
         )
+
+        static let sarvam = Gateway(
+            name: "Sarvam",
+            secret: .sarvam,
+            load: KeychainStore.loadSarvamKey,
+            save: KeychainStore.saveSarvamKey,
+            delete: { KeychainStore.deleteSarvamKey(notify: true) },
+            validate: { await $0.validateSarvamKey() },
+            client: { key in GeminiClient(apiKey: { nil }, sarvamKey: { key }) },
+            keyURL: URL(string: "https://dashboard.sarvam.ai/")!,
+            footer: "Optional. Lets Sarvam Saaras V4 transcribe your dictation and meetings (Indian languages and English, no screenshots), and Sarvam 105B apply the writing rules. Priced in rupees. Stored in your Mac's Keychain and only ever sent to Sarvam."
+        )
     }
 
     let gateway: Gateway
@@ -199,17 +211,20 @@ struct OpenAIModelsSection: View {
     }
 }
 
-/// Settings → Advanced: who transcribes, and the ElevenLabs key. ElevenLabs is
-/// offered once its key is stored, MAI Transcribe 2 once an OpenRouter or
-/// Vercel key is. With neither, the picker is hidden and the provider
-/// transcribes.
+/// Settings → Advanced: who transcribes and who writes, plus the ElevenLabs
+/// and Sarvam keys. ElevenLabs and Sarvam are offered once their keys are
+/// stored, MAI Transcribe 2 once an OpenRouter or Vercel key is. With none,
+/// the pickers are hidden and the provider transcribes and writes.
 struct TranscriptionSourceSection: View {
     let provider: ModelProvider
     private let settings = SettingsStore()
     @State private var source = SettingsStore().preferredTranscriptionSource
+    @State private var writing = SettingsStore().preferredWritingSource
     @State private var hasElevenLabsKey = KeychainStore.loadElevenLabsKey() != nil
+    @State private var hasSarvamKey = KeychainStore.loadSarvamKey() != nil
     @State private var hasGatewayKey = SettingsStore().maiTranscribeEndpoint != nil
     @State private var maiStyle = SettingsStore().maiTranscribeStyle
+    @State private var sarvamLanguage = SettingsStore().sarvamLanguage
 
     private var options: [TranscriptionSource] {
         TranscriptionSource.allCases.filter { source in
@@ -217,6 +232,7 @@ struct TranscriptionSourceSection: View {
             case .provider: return true
             case .elevenLabs: return hasElevenLabsKey
             case .maiTranscribe: return hasGatewayKey
+            case .sarvam: return hasSarvamKey
             }
         }
     }
@@ -228,7 +244,7 @@ struct TranscriptionSourceSection: View {
                     Picker("Transcription provider", selection: $source) {
                         ForEach(options) { Text($0.displayName(for: provider)).tag($0) }
                     }
-                    .pickerStyle(.segmented)
+                    .pickerStyle(.menu)
                     .onChange(of: source) { _, value in
                         if value != settings.transcriptionSource { settings.setPreferredTranscriptionSource(value) }
                     }
@@ -241,9 +257,30 @@ struct TranscriptionSourceSection: View {
                             if value != settings.maiTranscribeStyle { settings.setMAITranscribeStyle(value) }
                         }
                     }
+                    if source == .sarvam {
+                        Picker("Language", selection: $sarvamLanguage) {
+                            ForEach(SarvamLanguage.menuOrder) { Text($0.displayName).tag($0) }
+                        }
+                        .pickerStyle(.menu)
+                        .onChange(of: sarvamLanguage) { _, value in
+                            if value != settings.sarvamLanguage { settings.setSarvamLanguage(value) }
+                        }
+                    }
+                }
+            }
+            if hasSarvamKey {
+                Section {
+                    Picker("Writing model", selection: $writing) {
+                        ForEach(WritingSource.allCases) { Text($0.displayName(for: provider)).tag($0) }
+                    }
+                    .pickerStyle(.segmented)
+                    .onChange(of: writing) { _, value in
+                        if value != settings.writingSource { settings.setPreferredWritingSource(value) }
+                    }
                 }
             }
             GatewayKeySection(.elevenLabs)
+            GatewayKeySection(.sarvam)
         }
         .onAppear(perform: refresh)
         .onReceive(NotificationCenter.default.publisher(for: .gtSettingDidChange).receive(on: RunLoop.main)) { _ in refresh() }
@@ -251,9 +288,12 @@ struct TranscriptionSourceSection: View {
 
     private func refresh() {
         hasElevenLabsKey = KeychainStore.loadElevenLabsKey() != nil
+        hasSarvamKey = KeychainStore.loadSarvamKey() != nil
         hasGatewayKey = settings.maiTranscribeEndpoint != nil
         source = settings.transcriptionSource
+        writing = settings.writingSource
         maiStyle = settings.maiTranscribeStyle
+        sarvamLanguage = settings.sarvamLanguage
     }
 }
 

@@ -67,7 +67,7 @@ extension GeminiClient {
                 let status = (result.1 as? HTTPURLResponse)?.statusCode
                 record(collector, requestID: requestID, attempt: attempt, stage: stage, via: via, model: modelLabel,
                        request: request, started: attemptStart, status: status,
-                       outcome: status == 200 ? "ok" : "http_\(status ?? -1)")
+                       outcome: status.map { (200...299).contains($0) } == true ? "ok" : "http_\(status ?? -1)")
                 return result
             } catch {
                 let outcome = outcomeName(error)

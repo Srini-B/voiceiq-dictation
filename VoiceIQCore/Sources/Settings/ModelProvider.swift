@@ -48,14 +48,15 @@ public enum ModelProvider: String, CaseIterable, Sendable, Codable, Identifiable
 }
 
 /// Who turns dictation audio into text: the selected provider's own speech
-/// model, ElevenLabs Scribe v2 (also meetings), or MAI Transcribe 2 through a
-/// gateway. The writing rules and meeting notes always run on the selected
-/// provider's writing model: neither ElevenLabs nor MAI Transcribe 2 takes a
-/// prompt.
+/// model, ElevenLabs Scribe v2 (also meetings), MAI Transcribe 2 through a
+/// gateway, or Sarvam Saaras V4 (also meetings). The writing rules and
+/// meeting notes run on the writing model (`WritingSource`): none of the
+/// three speech-only services takes a prompt.
 public enum TranscriptionSource: String, CaseIterable, Sendable, Identifiable {
     case provider
     case elevenLabs
     case maiTranscribe
+    case sarvam
 
     public var id: String { rawValue }
 
@@ -64,6 +65,25 @@ public enum TranscriptionSource: String, CaseIterable, Sendable, Identifiable {
         case .provider: return provider.displayName
         case .elevenLabs: return "ElevenLabs"
         case .maiTranscribe: return "MAI Transcribe 2"
+        case .sarvam: return "Sarvam Saaras V4"
+        }
+    }
+}
+
+/// Whose model applies the writing rules, answers Ask Anything, translates
+/// and writes meeting notes: the selected provider's (default) or Sarvam's
+/// `sarvam-105b`. Sarvam's chat model takes text only, so screenshots and
+/// the recording are not sent on that path.
+public enum WritingSource: String, CaseIterable, Sendable, Identifiable {
+    case provider
+    case sarvam
+
+    public var id: String { rawValue }
+
+    public func displayName(for provider: ModelProvider) -> String {
+        switch self {
+        case .provider: return provider.displayName
+        case .sarvam: return "Sarvam 105B"
         }
     }
 }
@@ -116,6 +136,9 @@ public enum ModelEndpoint: String, Sendable {
     case vercel
     /// Speech-to-text only; never a route, chosen by `TranscriptionSource`.
     case elevenLabs
+    /// Never a route: speech-to-text by `TranscriptionSource`, writing by
+    /// `WritingSource`.
+    case sarvam
 
     /// Who receives the request, for privacy copy.
     public var hostName: String {
@@ -125,6 +148,7 @@ public enum ModelEndpoint: String, Sendable {
         case .openRouter: return "OpenRouter"
         case .vercel: return "Vercel"
         case .elevenLabs: return "ElevenLabs"
+        case .sarvam: return "Sarvam"
         }
     }
 }

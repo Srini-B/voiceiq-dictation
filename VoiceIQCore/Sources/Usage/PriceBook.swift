@@ -93,6 +93,37 @@ public enum PriceBook {
         price(for: model, at: date)?.cost(usage)
     }
 
+    // MARK: - Rupee list prices
+
+    /// Sarvam lists prices in INR (docs.sarvam.ai/api-reference-docs/pricing,
+    /// copied 2026-10-03): `sarvam-105b` per one million tokens, speech to
+    /// text per hour billed per second, ₹45 with diarization. Rows are stored
+    /// in USD at that day's rate (`FXRates`), so the Cost pane can show either.
+    static let pricesINR: [(prefix: String, price: ModelPrice)] = [
+        ("sarvam-105b", ModelPrice(textIn: 29.28, cachedIn: 10.98, textOut: 73.20)),
+    ]
+
+    static let perMinuteINR: [(prefix: String, price: Double)] = [
+        ("saaras:v4:diarize", 45.0 / 60),
+        ("saaras:v4", 30.0 / 60),
+    ]
+
+    /// Cost in INR for a model priced in rupees, or nil for every other model.
+    public static func costINR(model: String, usage: TokenUsage) -> Double? {
+        let id = model.lowercased()
+        if let seconds = usage.audioSeconds,
+           let perMinute = perMinuteINR.filter({ id.hasPrefix($0.prefix) }).max(by: { $0.prefix.count < $1.prefix.count })?.price {
+            return seconds / 60 * perMinute
+        }
+        return pricesINR.filter { id.hasPrefix($0.prefix) }.max { $0.prefix.count < $1.prefix.count }?.price.cost(usage)
+    }
+
+    /// Whether the model's list price is in rupees.
+    public static func isPricedInINR(model: String) -> Bool {
+        let id = model.lowercased()
+        return perMinuteINR.contains { id.hasPrefix($0.prefix) } || pricesINR.contains { id.hasPrefix($0.prefix) }
+    }
+
     /// Audio tokens per second for estimation: the transcribe models bill 25,
     /// every other Gemini model 32 (both from the pricing page).
     public static func audioTokensPerSecond(model: String) -> Double {

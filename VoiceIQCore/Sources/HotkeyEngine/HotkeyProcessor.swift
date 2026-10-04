@@ -5,7 +5,8 @@ import Foundation
 ///   press while idle        → begin recording, hands-free
 ///   press while recording   → finalize
 ///   Esc                     → cancel
-///   other key < 1s in       → accidental chord, silent abort
+///   other key < 1s in       → accidental chord, silent abort (the tap only
+///                             reports one while the modifier is still held)
 ///
 /// Releasing the key never does anything, so holding it is harmless. Pure and
 /// clock-free: callers pass monotonic timestamps.

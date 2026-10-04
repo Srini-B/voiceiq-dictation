@@ -18,6 +18,7 @@ public enum KeychainStore {
         case vercel = "vercel-ai-gateway-key"
         case openAI = "openai-api-key"
         case elevenLabs = "elevenlabs-api-key"
+        case sarvam = "sarvam-api-key"
         case agentProvider = "agent-provider-api-key"
 
         var label: String {
@@ -28,6 +29,7 @@ public enum KeychainStore {
             case .vercel: return "VoiceiQ — Vercel AI Gateway key"
             case .openAI: return "VoiceiQ — OpenAI API key"
             case .elevenLabs: return "VoiceiQ — ElevenLabs API key"
+            case .sarvam: return "VoiceiQ — Sarvam API key"
             case .agentProvider: return "VoiceiQ — Agent provider API key"
             }
         }
@@ -41,6 +43,7 @@ public enum KeychainStore {
             case .vercel: return "vercelKey"
             case .openAI: return "openAIKey"
             case .elevenLabs: return "elevenLabsKey"
+            case .sarvam: return "sarvamKey"
             case .agentProvider: return "agentProviderKey"
             }
         }
@@ -135,6 +138,16 @@ public enum KeychainStore {
 
     @discardableResult
     public static func deleteElevenLabsKey(notify: Bool = false) -> Bool { delete(.elevenLabs, notify: notify) }
+
+    // MARK: - Sarvam
+
+    public static func loadSarvamKey() -> String? { load(.sarvam, service: service) }
+
+    @discardableResult
+    public static func saveSarvamKey(_ key: String) -> Bool { save(key, for: .sarvam) }
+
+    @discardableResult
+    public static func deleteSarvamKey(notify: Bool = false) -> Bool { delete(.sarvam, notify: notify) }
 
     /// Whether the provider's own key is stored.
     public static func hasDirectKey(for provider: ModelProvider) -> Bool {

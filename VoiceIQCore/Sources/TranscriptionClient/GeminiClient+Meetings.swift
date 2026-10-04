@@ -60,6 +60,9 @@ public extension GeminiClient {
     /// Notes JSON for a prompt built by `MeetingNotesPrompt`.
     func meetingNotesJSON(prompt: String, model: String, endpoint: URL, deadline: TimeInterval,
                           via route: ModelRoute) async throws -> String {
+        if writingSource() == .sarvam {
+            return try await sarvamChat(prompt: prompt, deadline: deadline, stage: .meetingSummary, jsonObject: true)
+        }
         switch (route.provider, route.gateway) {
         case (.gemini, .direct): break
         case (.openAI, .direct):

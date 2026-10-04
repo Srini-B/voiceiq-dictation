@@ -213,34 +213,50 @@ extension UIDevice {
 
 /// A list beside its detail where there is room (iPad); the split view collapses
 /// to a stack elsewhere (iPhone, and iPad windows too narrow for two columns).
-struct ListDetailNavigation<Sidebar: View, Placeholder: View>: View {
+/// Side by side, the tab bar above names the page and the highlighted row
+/// names the section, so neither column shows a title or a bar behind it.
+struct ListDetailNavigation<Sidebar: View, Detail: View>: View {
     @Environment(\.horizontalSizeClass) private var sizeClass
     @ViewBuilder var sidebar: Sidebar
-    @ViewBuilder var placeholder: Placeholder
+    @ViewBuilder var detail: Detail
 
     var body: some View {
+        let wide = sizeClass == .regular
         NavigationSplitView {
             sidebar
-                .modifier(HiddenSidebarTitle(hidden: sizeClass == .regular))
+                .modifier(BareNavigationBar(bare: wide))
                 .navigationSplitViewColumnWidth(min: 320, ideal: 380, max: 440)
         } detail: {
-            NavigationStack { placeholder }
+            NavigationStack { detail.modifier(BareNavigationBar(bare: wide)) }
         }
         .navigationSplitViewStyle(.balanced)
+        // The split view paints the band under the tab bar itself; without
+        // this it shows the system black above both columns' canvases.
+        .background(Theme.Colors.canvas.ignoresSafeArea())
     }
 }
 
-/// The tab bar above already names the page, so the expanded sidebar doesn't
-/// repeat it. Collapsed (compact width), the sidebar is the page and keeps
-/// its title.
-private struct HiddenSidebarTitle: ViewModifier {
-    let hidden: Bool
+extension ListDetailNavigation {
+    /// A sidebar whose links push their own pages; the detail column shows
+    /// `placeholder` until one is picked.
+    init(@ViewBuilder sidebar: () -> Sidebar, @ViewBuilder placeholder: () -> Detail) {
+        self.sidebar = sidebar()
+        self.detail = placeholder()
+    }
+}
 
-    /// Removes the sidebar's toolbar title on iOS 18 and later, returning
-    /// the content unchanged on earlier versions.
+/// No title and no bar background. Collapsed (compact width), the page keeps
+/// both: the title is then the only name it has.
+private struct BareNavigationBar: ViewModifier {
+    let bare: Bool
+
+    /// Removes the toolbar title on iOS 18 and later, returning the content
+    /// with its title on earlier versions.
     func body(content: Content) -> some View {
-        if #available(iOS 18.0, *), hidden {
-            content.toolbar(removing: .title)
+        if #available(iOS 18.0, *), bare {
+            content.toolbar(removing: .title).toolbarBackground(.hidden, for: .navigationBar)
+        } else if bare {
+            content.toolbarBackground(.hidden, for: .navigationBar)
         } else {
             content
         }

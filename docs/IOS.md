@@ -172,8 +172,11 @@ Layout follows the horizontal size class, not the device:
 
 - Regular width (an iPad window wide enough): History, Meetings and Settings
   use `ListDetailNavigation`, a `NavigationSplitView` with the list on the
-  left and the selected item on the right. The sidebar has no title: the
-  tab bar above already names the page. Home puts the session, setup and
+  left and the selected item on the right. Neither column shows a title or
+  a bar background: the tab bar above names the page, and in Settings the
+  open section's row is tinted in the sidebar (`List(selection:)` over
+  `SettingsSection`). Pages pushed inside the detail column keep their
+  title and back button. Home puts the session, setup and
   hardware keyboard cards in one column and Try it, stats and recent
   dictations in a second.
 - Compact width (iPhone, narrow iPad windows): the iPhone layout, with a

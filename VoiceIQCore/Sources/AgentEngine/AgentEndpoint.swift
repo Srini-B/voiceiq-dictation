@@ -61,7 +61,7 @@ public struct AgentEndpoint: Equatable, Sendable {
             let model = route.provider == .gemini ? "google/\(gemini.cleanupModel)" : "openai/\(openAI.writingModel)"
             return AgentEndpoint(baseURL: URL(string: base)!, apiKey: key, format: .openAIChat,
                                  modelID: model, label: route.displayName, isCustom: false)
-        case .elevenLabs:
+        case .elevenLabs, .sarvam:
             return nil
         }
     }

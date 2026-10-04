@@ -28,7 +28,10 @@ struct ModelKeysForm: View {
     @State private var available = KeychainStore.gatewaysWithKeys(for: SettingsStore().preferredProvider)
     @State private var transcriptionSource = SettingsStore().preferredTranscriptionSource
     @State private var hasElevenLabsKey = KeychainStore.loadElevenLabsKey() != nil
+    @State private var hasSarvamKey = KeychainStore.loadSarvamKey() != nil
     @State private var hasGatewayKey = SettingsStore().maiTranscribeEndpoint != nil
+    @State private var sarvamLanguage = SettingsStore().sarvamLanguage
+    @State private var writingSource = SettingsStore().preferredWritingSource
     /// Collapsed on every visit, like the Mac's Experimental group.
     @State private var experimentalExpanded = false
 
@@ -40,6 +43,7 @@ struct ModelKeysForm: View {
             case .provider: return true
             case .elevenLabs: return hasElevenLabsKey
             case .maiTranscribe: return hasGatewayKey
+            case .sarvam: return hasSarvamKey
             }
         }
     }
@@ -80,9 +84,31 @@ struct ModelKeysForm: View {
                     Picker("Transcription provider", selection: $transcriptionSource) {
                         ForEach(transcriptionOptions) { Text($0.displayName(for: provider)).tag($0) }
                     }
-                    .pickerStyle(.segmented)
+                    .pickerStyle(.menu)
                     .onChange(of: transcriptionSource) { _, value in
                         if value != SettingsStore().transcriptionSource { SettingsStore().setPreferredTranscriptionSource(value) }
+                    }
+                    if transcriptionSource == .sarvam {
+                        Picker("Language", selection: $sarvamLanguage) {
+                            ForEach(SarvamLanguage.menuOrder) { Text($0.displayName).tag($0) }
+                        }
+                        .pickerStyle(.menu)
+                        .onChange(of: sarvamLanguage) { _, value in
+                            if value != SettingsStore().sarvamLanguage { SettingsStore().setSarvamLanguage(value) }
+                        }
+                    }
+                }
+            }
+
+            if hasSarvamKey {
+                VStack(alignment: .leading, spacing: Theme.Spacing.m) {
+                    GroupLabel(text: "Writing model")
+                    Picker("Writing model", selection: $writingSource) {
+                        ForEach(WritingSource.allCases) { Text($0.displayName(for: provider)).tag($0) }
+                    }
+                    .pickerStyle(.segmented)
+                    .onChange(of: writingSource) { _, value in
+                        if value != SettingsStore().writingSource { SettingsStore().setPreferredWritingSource(value) }
                     }
                 }
             }
@@ -90,6 +116,7 @@ struct ModelKeysForm: View {
             VStack(alignment: .leading, spacing: Theme.Spacing.m) {
                 GroupLabel(text: "Optional")
                 KeyCard(slot: .elevenLabs, onChange: reload)
+                KeyCard(slot: .sarvam, onChange: reload)
                 KeyCard(slot: .tinyFish, onChange: reload)
             }
 
@@ -147,8 +174,11 @@ struct ModelKeysForm: View {
         available = KeychainStore.gatewaysWithKeys(for: provider)
         gateway = settings.activeRoute.gateway
         hasElevenLabsKey = KeychainStore.loadElevenLabsKey() != nil
+        hasSarvamKey = KeychainStore.loadSarvamKey() != nil
         hasGatewayKey = settings.maiTranscribeEndpoint != nil
         transcriptionSource = settings.transcriptionSource
+        sarvamLanguage = settings.sarvamLanguage
+        writingSource = settings.writingSource
     }
 }
 
@@ -292,7 +322,7 @@ private struct TrailingIconLabelStyle: LabelStyle {
 
 /// A place a key can be stored, with what it is for.
 enum KeySlot: Hashable, CaseIterable {
-    case gemini, openAI, openRouter, vercel, tinyFish, elevenLabs
+    case gemini, openAI, openRouter, vercel, tinyFish, elevenLabs, sarvam
 
     var title: String {
         switch self {
@@ -302,6 +332,7 @@ enum KeySlot: Hashable, CaseIterable {
         case .openAI: return "OpenAI"
         case .tinyFish: return "TinyFish"
         case .elevenLabs: return "ElevenLabs"
+        case .sarvam: return "Sarvam"
         }
     }
 
@@ -313,6 +344,7 @@ enum KeySlot: Hashable, CaseIterable {
         case .openAI: return "circle.hexagongrid"
         case .tinyFish: return "globe"
         case .elevenLabs: return "waveform"
+        case .sarvam: return "indianrupeesign.circle"
         }
     }
 
@@ -330,6 +362,8 @@ enum KeySlot: Hashable, CaseIterable {
             return "Lets Ask Anything look up current information on the web. Stored in your \(UIDevice.current.localizedModel)'s Keychain and only ever sent to TinyFish."
         case .elevenLabs:
             return "Lets ElevenLabs Scribe transcribe your dictation and meetings instead of the provider's speech model; the provider still applies the writing rules. Stored in your \(UIDevice.current.localizedModel)'s Keychain and only ever sent to ElevenLabs."
+        case .sarvam:
+            return "Lets Sarvam Saaras V4 transcribe your dictation and meetings (Indian languages and English), and Sarvam 105B apply the writing rules. Priced in rupees. Stored in your \(UIDevice.current.localizedModel)'s Keychain and only ever sent to Sarvam."
         }
     }
 
@@ -341,6 +375,7 @@ enum KeySlot: Hashable, CaseIterable {
         case .openAI: return URL(string: "https://platform.openai.com/api-keys")!
         case .tinyFish: return URL(string: "https://agent.tinyfish.ai/api-keys")!
         case .elevenLabs: return URL(string: "https://elevenlabs.io/app/settings/api-keys")!
+        case .sarvam: return URL(string: "https://dashboard.sarvam.ai/")!
         }
     }
 
@@ -352,6 +387,7 @@ enum KeySlot: Hashable, CaseIterable {
         case .openAI: return KeychainStore.loadOpenAIKey()
         case .tinyFish: return KeychainStore.loadTinyFishKey()
         case .elevenLabs: return KeychainStore.loadElevenLabsKey()
+        case .sarvam: return KeychainStore.loadSarvamKey()
         }
     }
 
@@ -363,6 +399,7 @@ enum KeySlot: Hashable, CaseIterable {
         case .openAI: return KeychainStore.saveOpenAIKey(key)
         case .tinyFish: return KeychainStore.saveTinyFishKey(key)
         case .elevenLabs: return KeychainStore.saveElevenLabsKey(key)
+        case .sarvam: return KeychainStore.saveSarvamKey(key)
         }
     }
 
@@ -374,6 +411,7 @@ enum KeySlot: Hashable, CaseIterable {
         case .openAI: _ = KeychainStore.deleteOpenAIKey(notify: true)
         case .tinyFish: _ = KeychainStore.deleteTinyFishKey(notify: true)
         case .elevenLabs: _ = KeychainStore.deleteElevenLabsKey(notify: true)
+        case .sarvam: _ = KeychainStore.deleteSarvamKey(notify: true)
         }
     }
 
@@ -392,6 +430,8 @@ enum KeySlot: Hashable, CaseIterable {
             check = await GeminiClient(apiKey: { nil }, openAIKey: { key }).validateOpenAIKey()
         case .elevenLabs:
             check = await GeminiClient(apiKey: { nil }, elevenLabsKey: { key }).validateElevenLabsKey()
+        case .sarvam:
+            check = await GeminiClient(apiKey: { nil }, sarvamKey: { key }).validateSarvamKey()
         case .tinyFish:
             switch await TinyFishClient(apiKey: { key }).validateKey() {
             case .valid: return .accepted(offline: false)

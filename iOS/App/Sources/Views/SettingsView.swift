@@ -2,12 +2,62 @@ import SwiftUI
 import VoiceIQBridge
 import VoiceIQCore
 
+/// The pages under Settings, in sidebar order.
+enum SettingsSection: String, CaseIterable, Identifiable {
+    case keys, keyboard, dictation, dictionary, returnApps, privacy, cost, advanced
+    var id: String { rawValue }
+
+    static let primary: [SettingsSection] = [.keys, .keyboard, .dictation, .dictionary, .returnApps]
+    static let secondary: [SettingsSection] = [.privacy, .cost, .advanced]
+
+    var title: String {
+        switch self {
+        case .keys: return "Provider & Keys"
+        case .keyboard: return "Keyboard & Permissions"
+        case .dictation: return "Dictation"
+        case .dictionary: return "Dictionary"
+        case .returnApps: return "Return to Apps"
+        case .privacy: return "Privacy"
+        case .cost: return "Cost"
+        case .advanced: return "Advanced"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .keys: return "key.fill"
+        case .keyboard: return "keyboard.fill"
+        case .dictation: return "waveform"
+        case .dictionary: return "character.book.closed.fill"
+        case .returnApps: return "arrow.uturn.backward"
+        case .privacy: return "hand.raised.fill"
+        case .cost: return "chart.bar.fill"
+        case .advanced: return "slider.horizontal.3"
+        }
+    }
+
+    @ViewBuilder var page: some View {
+        switch self {
+        case .keys: KeysView()
+        case .keyboard: KeyboardSetupView()
+        case .dictation: DictationSettingsView()
+        case .dictionary: DictionaryView()
+        case .returnApps: ReturnAppsView()
+        case .privacy: PrivacyView()
+        case .cost: UsageView()
+        case .advanced: AdvancedView()
+        }
+    }
+}
+
 struct SettingsView: View {
     @EnvironmentObject private var setup: SetupMonitor
+    @Environment(\.horizontalSizeClass) private var sizeClass
+    @State private var selection: SettingsSection?
 
     var body: some View {
         ListDetailNavigation {
-            List {
+            List(selection: $selection) {
                 Section {
                     VStack(spacing: Theme.Spacing.s) {
                         Wordmark(height: 36)
@@ -20,35 +70,19 @@ struct SettingsView: View {
                     .listRowInsets(EdgeInsets())
                     .listRowBackground(Color.clear)
                 }
-
-                Section {
-                    settingsLink("Provider & Keys", icon: "key.fill", destination: KeysView()) {
-                        if !KeychainStore.hasModelKey { StatusChip(text: "Missing", tone: .pending) }
-                    }
-                    settingsLink("Keyboard & Permissions", icon: "keyboard.fill", destination: KeyboardSetupView()) {
-                        if !setup.status.keyboardReady || !setup.status.micGranted {
-                            StatusChip(text: "Set up", tone: .pending)
-                        }
-                    }
-                    settingsLink("Dictation", icon: "waveform", destination: DictationSettingsView())
-                    settingsLink("Dictionary", icon: "character.book.closed.fill", destination: DictionaryView())
-                    settingsLink("Return to Apps", icon: "arrow.uturn.backward", destination: ReturnAppsView())
-                }
-                .listRowBackground(Theme.Colors.surface)
-
-                Section {
-                    settingsLink("Privacy", icon: "hand.raised.fill", destination: PrivacyView())
-                    settingsLink("Cost", icon: "chart.bar.fill", destination: UsageView())
-                    settingsLink("Advanced", icon: "slider.horizontal.3", destination: AdvancedView())
-                }
-                .listRowBackground(Theme.Colors.surface)
+                Section { ForEach(SettingsSection.primary) { row($0) } }
+                Section { ForEach(SettingsSection.secondary) { row($0) } }
             }
             .listStyle(.insetGrouped)
             .themedBackground()
             .navigationTitle("Settings")
             .onAppear { setup.refresh() }
-        } placeholder: {
-            DetailPlaceholder(systemImage: "gearshape", title: "No setting selected")
+        } detail: {
+            if let selection {
+                selection.page
+            } else {
+                DetailPlaceholder(systemImage: "gearshape", title: "No setting selected")
+            }
         }
     }
 
@@ -58,24 +92,31 @@ struct SettingsView: View {
         return "Version \(version) (\(build))"
     }
 
-    private func settingsLink<Destination: View, Trailing: View>(
-        _ title: String,
-        icon: String,
-        destination: Destination,
-        @ViewBuilder trailing: () -> Trailing
-    ) -> some View {
-        NavigationLink { destination } label: {
+    /// Beside its page (iPad) the open section's row is tinted; a custom row
+    /// background hides the list's own selection, so the tint is drawn here.
+    private func row(_ section: SettingsSection) -> some View {
+        let open = sizeClass == .regular && selection == section
+        return NavigationLink(value: section) {
             HStack(spacing: Theme.Spacing.m) {
-                IconTile(systemImage: icon)
-                Text(title).font(Theme.Fonts.body()).foregroundStyle(Theme.Colors.ink)
+                IconTile(systemImage: section.icon)
+                Text(section.title).font(Theme.Fonts.body())
+                    .foregroundStyle(open ? Theme.Colors.accent : Theme.Colors.ink)
                 Spacer(minLength: Theme.Spacing.s)
-                trailing()
+                chip(for: section)
             }
         }
+        .listRowBackground(open ? Theme.Colors.accent.opacity(0.14) : Theme.Colors.surface)
     }
 
-    private func settingsLink<Destination: View>(_ title: String, icon: String, destination: Destination) -> some View {
-        settingsLink(title, icon: icon, destination: destination) { EmptyView() }
+    @ViewBuilder private func chip(for section: SettingsSection) -> some View {
+        switch section {
+        case .keys where !KeychainStore.hasModelKey:
+            StatusChip(text: "Missing", tone: .pending)
+        case .keyboard where !setup.status.keyboardReady || !setup.status.micGranted:
+            StatusChip(text: "Set up", tone: .pending)
+        default:
+            EmptyView()
+        }
     }
 }
 
@@ -299,6 +340,7 @@ struct PrivacyView: View {
     @State private var route = SettingsStore().activeRoute
     @State private var source = SettingsStore().transcriptionSource
     @State private var maiHost = SettingsStore().maiTranscribeEndpoint?.hostName ?? ""
+    @State private var writing = SettingsStore().writingSource
 
     private var owner: String { route.provider == .gemini ? "Google" : "OpenAI" }
 
@@ -308,6 +350,7 @@ struct PrivacyView: View {
     private var audioDestination: String {
         switch source {
         case .elevenLabs: return "ElevenLabs, with your key"
+        case .sarvam: return "Sarvam, with your key"
         case .maiTranscribe: return "\(maiHost), then Microsoft"
         case .provider: return route.gateway == .direct ? "\(owner), with your key" : "\(route.endpoint.hostName), then \(owner)"
         }
@@ -328,10 +371,11 @@ struct PrivacyView: View {
             Section {
                 LabeledContent("Audio", value: audioDestination)
                 LabeledContent("Transcript text", value: "Only with writing rules on")
-                LabeledContent("Meeting notes", value: route.provider.displayName)
+                LabeledContent("Meeting notes", value: writing == .sarvam ? "Sarvam" : route.provider.displayName)
                 LabeledContent("Dictionary terms", value: "Sent with the audio")
                 LabeledContent("Dictionary", value: "Your iCloud, to sync")
                 LabeledContent("Ask search queries", value: "TinyFish, if its key is saved")
+                LabeledContent("Rupee rate lookups", value: "Frankfurter; a date range at most")
                 LabeledContent("What you type", value: "Never")
             } header: { SettingsSectionHeader("What leaves your \(UIDevice.current.localizedModel)") }
         }
@@ -340,6 +384,7 @@ struct PrivacyView: View {
             route = SettingsStore().activeRoute
             source = SettingsStore().transcriptionSource
             maiHost = SettingsStore().maiTranscribeEndpoint?.hostName ?? ""
+            writing = SettingsStore().writingSource
         }
     }
 }

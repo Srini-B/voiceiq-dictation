@@ -13,9 +13,10 @@ import Foundation
 ///   On OpenAI's own API the writing model cannot hear the audio, so a
 ///   single-chunk dictation also gets whisper-1's transcript as SECOND,
 ///   fetched in parallel, for cleanup to repair misheard stretches of RAW.
-///   With ElevenLabs or MAI Transcribe 2 picked as the transcription source,
-///   every chunk goes to that model instead, and neither the one-call path nor
-///   SECOND runs: the writing model gets its transcript as RAW.
+///   With ElevenLabs, MAI Transcribe 2 or Sarvam picked as the transcription
+///   source, every chunk goes to that model instead, and neither the one-call
+///   path nor SECOND runs: the writing model gets its transcript as RAW. With
+///   Sarvam as the writing model the same holds: it cannot hear audio.
 ///
 /// The one-call path has no separate raw transcript, so there is nothing for
 /// the validation gate to compare against; the raw column holds the same text.
@@ -65,7 +66,7 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
         // that stops it (an error, a timeout, "no speech") falls through to
         // transcription then cleanup below, so it can only cost time.
         if context.mode == .dictate, policy.cleanupPass, ranges.count == 1, context.speechHeard,
-           source == .provider, settings.activeRoute.provider.writingModelHearsAudio,
+           source == .provider, settings.writingSource == .provider, settings.activeRoute.provider.writingModelHearsAudio,
            !Self.oneCallRefused.contains(settings.activeRoute),
            let text = await transcribeInOneCall(audioURL: audioURL, range: ranges[0],
                                                 durationSeconds: durationSeconds, context: context, config: config) {
@@ -91,7 +92,8 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
             let flacData = try encodeChunk(audioURL: audioURL, range: range, index: index)
             let seconds = durationSeconds * Double(range.count) / Double(max(1, fileFrames))
             let deadline = TimeoutPolicy.overallDeadline(audioDuration: seconds)
-            if ranges.count == 1, context.mode == .dictate, policy.cleanupPass, source == .provider {
+            if ranges.count == 1, context.mode == .dictate, policy.cleanupPass, source == .provider,
+               settings.writingSource == .provider {
                 let client = client
                 secondOpinion = Task { try? await client.secondOpinionTranscript(flacData: flacData, deadline: deadline) }
             }
@@ -231,7 +233,7 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
     /// The models that run, for History's model column. OpenAI's
     /// transcription model has no smart mode, so no mode is named.
     private func modelNames(_ source: TranscriptionSource) -> (transcribe: String, writing: String) {
-        let names: (transcribe: String, writing: String)
+        var names: (transcribe: String, writing: String)
         if settings.activeRoute.provider == .openAI {
             let openAI = settings.openAIConfig
             names = (openAI.transcribeModel, openAI.writingModel)
@@ -239,10 +241,12 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
             let config = settings.geminiConfig
             names = ("\(config.transcribeModel)/\(settings.formattingPolicy.mode.rawValue)", config.cleanupModel)
         }
+        if settings.writingSource == .sarvam { names.writing = Sarvam.chatModel }
         switch source {
         case .provider: return names
         case .elevenLabs: return (ElevenLabs.batchModel, names.writing)
         case .maiTranscribe: return (GeminiClient.maiTranscribeModel, names.writing)
+        case .sarvam: return (Sarvam.sttModel, names.writing)
         }
     }
 
@@ -393,6 +397,12 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
                 return try await client.elevenLabsTranscribe(
                     audio: flacData, keyterms: terms, noVerbatim: policy.mode == .smart,
                     audioSeconds: seconds, deadline: deadline
+                )
+            }
+            if source == .sarvam {
+                return try await client.sarvamTranscribe(
+                    audio: flacData, audioSeconds: seconds, keyterms: terms, verbatim: policy.mode != .smart,
+                    language: settings.sarvamLanguage, deadline: deadline
                 )
             }
             if settings.usesLegacyTranscribeEndpoint {

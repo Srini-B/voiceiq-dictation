@@ -12,7 +12,12 @@ ElevenLabs key instead, and only the transcript goes on to the provider for the
 writing rules and meeting notes. If you pick MAI Transcribe 2, dictation audio
 goes to OpenRouter or Vercel AI Gateway with your gateway key, which forwards
 it to Microsoft; the provider again receives only the transcript, for meetings
-too. There is no VoiceiQ server, no account, no analytics, no telemetry.
+too. If you add a Sarvam key and pick Sarvam Saaras V4, dictation and meeting
+audio goes to Sarvam (`api.sarvam.ai`; recordings over 30 seconds and
+meetings are uploaded to Sarvam's storage for a batch job) with your Sarvam
+key, and with Sarvam 105B as the writing model the transcript and your writing
+rules go there too; that model takes no screenshots and no audio. There is no
+VoiceiQ server, no account, no analytics, no telemetry.
 Everything else stays on your Mac. The code is open — verify all of this.
 
 "The provider" below means whichever of these the active route sends to:
@@ -89,7 +94,7 @@ With no usable key, nothing is sent and the recording stays on your Mac.
    sends only your dictation, as a normal dictation does.
 8. **Your API keys**, each only in the request header to its own service: the
    Gemini key to Google, the OpenAI key to OpenAI, a gateway key to that
-   gateway, the ElevenLabs key to ElevenLabs. They are stored in the macOS Keychain, never in files or
+   gateway, the ElevenLabs key to ElevenLabs, the Sarvam key to Sarvam. They are stored in the macOS Keychain, never in files or
    preferences.
 9. **Update checks.** Every six hours, and when you choose Check for Updates, the
    app downloads the update feed (`appcast.xml`) from the project's GitHub
@@ -98,6 +103,13 @@ With no usable key, nothing is sent and the recording stays on your Mac.
    User-Agent; Sparkle's system profiling is off. When an update is offered, the
    ZIP comes from the same place. GitHub sees your IP address, as with any
    download. Turn the checks off in Settings › About.
+10. **A date range, to the exchange-rate service.** To show costs in rupees the
+   app fetches the day's USD→INR rate from `api.frankfurter.dev`, a request
+   that carries no data about you. When calls were booked without a rate
+   (offline, or before this version), it asks once for a range of days: from
+   the first of a month at least a month before the oldest such call through
+   today. Frankfurter sees your IP address and roughly how far back you have
+   used the app, not the days you dictated, and nothing about the calls.
 
 The auto-learn feature ("Learn from your edits") never sends anything. It
 re-reads the field VoiceiQ typed into, through the Accessibility API, for up to ten

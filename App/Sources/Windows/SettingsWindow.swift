@@ -265,6 +265,7 @@ struct PrivacyPane: View {
     private var audioDestination: String {
         switch source {
         case .elevenLabs: return "Sent to ElevenLabs with your key"
+        case .sarvam: return "Sent to Sarvam with your key"
         case .maiTranscribe: return "Sent to \(maiHost) with your key, then to Microsoft"
         case .provider:
             return route.gateway == .direct
@@ -273,13 +274,20 @@ struct PrivacyPane: View {
         }
     }
 
+    /// Who writes meeting notes: the writing model, not the transcriber.
+    private var notesWriter: String {
+        settings.writingSource == .sarvam ? "Sarvam" : route.provider.displayName
+    }
+
     private var recipients: String {
         var names = route.gateway == .direct ? [owner] : [route.endpoint.hostName, owner]
         switch source {
         case .provider: break
         case .elevenLabs: names.append("ElevenLabs")
+        case .sarvam: names.append("Sarvam")
         case .maiTranscribe: names += [maiHost, "Microsoft"]
         }
+        if settings.writingSource == .sarvam { names.append("Sarvam") }
         var unique: [String] = []
         for name in names where !unique.contains(name) { unique.append(name) }
         return unique.count == 1 ? unique[0] : unique.dropLast().joined(separator: ", ") + " and " + unique.last!
@@ -334,7 +342,7 @@ struct PrivacyPane: View {
             Section {
                 LabeledContent("Audio") { Text(audioDestination) }
                 LabeledContent("Transcript text") { Text("Only if writing rules are on — otherwise it never leaves") }
-                LabeledContent("Meeting audio") { Text("Only if call recording is on; notes are made by \(route.provider.displayName)") }
+                LabeledContent("Meeting audio") { Text("Only if call recording is on; notes are made by \(notesWriter)") }
                 LabeledContent("Dictionary terms") { Text("Sent with the audio, so names are spelled right as you speak") }
                 LabeledContent("Dictionary") { Text("Synced to your iPhone through your iCloud account") }
                 LabeledContent("Screen snapshots") { Text("Only if screen context is on; sent with the audio, never stored") }
@@ -343,7 +351,7 @@ struct PrivacyPane: View {
             } header: {
                 Text("What leaves your Mac")
             } footer: {
-                Text("No middleman server, no account, no analytics, no keystroke logging. Only \(recipients), plus TinyFish when you add its key.")
+                Text("No middleman server, no account, no analytics, no keystroke logging. Only \(recipients), plus TinyFish when you add its key, and Frankfurter for the day's rupee rate (a date range at most, never a call).")
             }
 
             Section {
