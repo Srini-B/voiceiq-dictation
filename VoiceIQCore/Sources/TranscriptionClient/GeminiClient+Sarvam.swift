@@ -268,6 +268,9 @@ extension GeminiClient {
             }
             break
         }
+        // The result is ready; a throttled or failed download call is tried
+        // again against this job rather than surfaced, which would upload a
+        // second one.
         var download: [String: Any] = [:]
         for attempt in 0..<6 {
             do {
@@ -277,7 +280,11 @@ extension GeminiClient {
                 // Still pending after the retries is a slow job, not a bad
                 // request: the retry queue keeps a `.network` row.
                 guard attempt < 5 else { throw TranscriptionError.network("sarvam_output_pending") }
-                try await Task.sleep(nanoseconds: 1_000_000_000)
+                try await pause(1)
+            } catch TranscriptionError.rateLimitedTransient(let retryAfter) where attempt < 5 {
+                try await pause(max(3, retryAfter ?? 0))
+            } catch TranscriptionError.network(let code) where code.hasPrefix("http_5") && attempt < 5 {
+                try await pause(3)
             }
         }
         guard let downloadURL = ((download["download_urls"] as? [String: Any])?[outputName] as? [String: Any])?["file_url"] as? String,

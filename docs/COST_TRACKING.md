@@ -100,13 +100,15 @@ key. `FXRates.refresh` fetches `latest?base=USD&symbols=INR` at launch, when
 a Sarvam call (speech or chat) starts, without waiting for it, and whenever a
 row is booked without a rate, and caches the quote in `UserDefaults` (`fxQuoteINR`) for
 four hours. `UsageMeter` runs one refresh-and-backfill at a time. `UsageRecord.init` uses
-the cached quote only if it was fetched within 36 hours of the call; otherwise
-the row waits.
+the cached quote only if it was fetched on the call's UTC day; otherwise the
+row waits, so a quote from the evening before never prices a morning call.
 
-`UsageStore.backfillFX` finds rows with no rate, asks Frankfurter for the range
-of their days in one request (`/v1/{start}..{end}`) and writes each row the
-rate of its own day, or the nearest earlier business day for a weekend or
-holiday. It runs at launch, when the Cost pane opens, and after a row is
+`UsageStore.backfillFX` finds rows with no rate, asks Frankfurter for one
+range in one request (`/v1/{start}..{end}`, from the first of a month at
+least 31 days before the oldest such row through today) and writes each row
+the rate of its own day, or the nearest earlier business day for a weekend or
+holiday. The range is the only thing the request says about the ledger; it
+is deliberately coarser than the rows' own days (see `docs/PRIVACY.md`). It runs at launch, when the Cost pane opens, and after a row is
 booked without a rate, so history made before this version is converted at
 the rate of the day it happened, and a rupee-priced row that was waiting
 gets its `costUSD` then. Days are UTC.

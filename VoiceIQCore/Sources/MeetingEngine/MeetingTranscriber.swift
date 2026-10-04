@@ -52,11 +52,14 @@ public struct MeetingTranscriber: Sendable {
 
         /// Names the window cache, so a redo after switching the source
         /// transcribes again instead of reusing the other model's windows.
+        /// Sarvam's key carries the language the windows were sent with
+        /// (`diarize` reads the same setting), so a redo after changing it
+        /// does not keep windows heard in the old one.
         var cacheKey: String {
             switch self {
             case .elevenLabs: return "elevenlabs"
             case .mai(let via): return "mai-\(via.rawValue)"
-            case .sarvam: return "sarvam"
+            case .sarvam: return "sarvam-\(SettingsStore().sarvamLanguage.rawValue)"
             case .model(let route): return "\(route.provider.rawValue)-\(route.gateway.rawValue)"
             }
         }

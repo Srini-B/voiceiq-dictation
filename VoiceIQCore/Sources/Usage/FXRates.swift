@@ -100,6 +100,11 @@ public enum FXRates {
         return formatter.string(from: date)
     }
 
+    /// `YYYY-MM-01` of the day's month.
+    public static func utcMonthStart(_ day: String) -> String {
+        String(day.prefix(7)) + "-01"
+    }
+
     public static func utcDay(_ day: String, adding days: Int) -> String {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")

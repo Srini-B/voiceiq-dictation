@@ -103,9 +103,13 @@ With no usable key, nothing is sent and the recording stays on your Mac.
    User-Agent; Sparkle's system profiling is off. When an update is offered, the
    ZIP comes from the same place. GitHub sees your IP address, as with any
    download. Turn the checks off in Settings › About.
-10. **Nothing, to the exchange-rate service.** To show costs in rupees the app
-   fetches the day's USD→INR rate from `api.frankfurter.dev`, a request that
-   carries no data about you.
+10. **A date range, to the exchange-rate service.** To show costs in rupees the
+   app fetches the day's USD→INR rate from `api.frankfurter.dev`, a request
+   that carries no data about you. When calls were booked without a rate
+   (offline, or before this version), it asks once for a range of days: from
+   the first of a month at least a month before the oldest such call through
+   today. Frankfurter sees your IP address and roughly how far back you have
+   used the app, not the days you dictated, and nothing about the calls.
 
 The auto-learn feature ("Learn from your edits") never sends anything. It
 re-reads the field VoiceiQ typed into, through the Accessibility API, for up to ten

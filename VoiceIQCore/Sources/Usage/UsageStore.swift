@@ -69,13 +69,13 @@ public struct UsageRecord: Codable, Equatable, Identifiable, FetchableRecord, Pe
     public var fxRateINR: Double?
     public var fxDate: String?
 
-    /// A cached quote older than this is not the call's day: leave the rate
-    /// empty and let the back-fill fetch that day's.
-    static let fxFreshness: TimeInterval = 36 * 3600
-
     public init(at: Date = Date(), activity: UsageActivity, stage: UsageStage, model: String,
                 sessionID: String?, usage: TokenUsage, fx cached: FXQuote? = FXRates.cachedQuote()) {
-        let fx = cached.flatMap { abs(at.timeIntervalSince($0.fetchedAt)) < Self.fxFreshness ? $0 : nil }
+        // Only a quote fetched on the call's own UTC day is that day's rate;
+        // one from the evening before would price a morning call at
+        // yesterday's. Otherwise the row waits for the back-fill, which
+        // picks the day's published rate.
+        let fx = cached.flatMap { FXRates.utcDay($0.fetchedAt) == FXRates.utcDay(at) ? $0 : nil }
         self.id = UUID().uuidString
         self.at = at
         self.activity = activity.rawValue

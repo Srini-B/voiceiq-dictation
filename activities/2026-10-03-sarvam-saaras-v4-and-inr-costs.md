@@ -129,6 +129,26 @@ Third round (on `a377822`), all four accepted:
   `saaras:v4` without a quote, totals and row agree, USD = 1/90 after a 90
   INR/USD back-fill. 148 package tests pass; Debug Mac build compiles.
 
+Fourth round (on `a2cd404`), all four accepted:
+
+- The Sarvam meeting window cache is keyed by language
+  (`sarvam-<code>`), so a redo after changing Language transcribes every
+  window again instead of keeping the ones heard in the old one.
+- `download-files` on a completed job retries 429 and 5xx against the same
+  job (up to the same six attempts, paused within the deadline) instead of
+  surfacing and letting the retry queue upload a second job.
+- Frankfurter's back-fill request named the oldest and newest unrated rows'
+  days, which `docs/PRIVACY.md` did not say. The range is now the first of a
+  month at least 31 days before the oldest unrated row through today, and
+  `PRIVACY.md`, the Mac privacy footer and the iOS Privacy page say so.
+  (Verified on the iPad Air 13" simulator: `.amp/in/artifacts/ipad-privacy.png`.)
+- A cached quote fetched the evening before priced a morning call at the
+  earlier day's rate within the 36 h window. `UsageRecord.init` now uses the
+  cache only when it was fetched on the call's UTC day; otherwise the row
+  waits for the back-fill. Scratch test (not kept): a quote from 20:00 UTC
+  the day before is ignored for a 02:00 UTC call, one from the same day
+  prices it. 148 tests pass; Mac and iOS builds compile.
+
 ## The ⌘-Tab abort
 
 Report: tap the hotkey, switch apps within a second, dictation cancels. Code:

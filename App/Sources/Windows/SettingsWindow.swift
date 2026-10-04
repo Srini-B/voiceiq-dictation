@@ -351,7 +351,7 @@ struct PrivacyPane: View {
             } header: {
                 Text("What leaves your Mac")
             } footer: {
-                Text("No middleman server, no account, no analytics, no keystroke logging. Only \(recipients), plus TinyFish when you add its key.")
+                Text("No middleman server, no account, no analytics, no keystroke logging. Only \(recipients), plus TinyFish when you add its key, and Frankfurter for the day's rupee rate (a date range at most, never a call).")
             }
 
             Section {

@@ -36,14 +36,19 @@ extension UsageStore {
 
     /// Fetches the rates the ledger is missing and writes them. Safe to call
     /// often: nothing is fetched when every row has one.
+    ///
+    /// The one request names a range of days, and Frankfurter sees it. It
+    /// runs from the first of a month at least 31 days before the oldest
+    /// unrated row through today, not the rows' own days: the service learns
+    /// roughly how far back usage reaches, nothing finer (`docs/PRIVACY.md`).
+    /// The margin also covers a weekend or holiday run before the first row.
     public func backfillFX() async {
         let missing = recordsMissingFX()
-        guard let first = missing.first, let last = missing.last else { return }
+        guard let first = missing.first else { return }
         let days = Set(missing.map { FXRates.utcDay($0.at) })
-        // A week back covers a weekend and a holiday run before the first row.
-        let start = FXRates.utcDay(FXRates.utcDay(first.at), adding: -7)
+        let start = FXRates.utcMonthStart(FXRates.utcDay(FXRates.utcDay(first.at), adding: -31))
         do {
-            let rates = try await FXRates.rates(from: start, to: FXRates.utcDay(last.at))
+            let rates = try await FXRates.rates(from: start, to: FXRates.utcDay(Date()))
             let quotes = FXRates.quotes(for: Array(days), from: rates)
             setFX(quotes, for: missing)
             Log.usage.info("UsageStore: rates back-filled for \(quotes.count) of \(days.count) days, \(missing.count) rows")
