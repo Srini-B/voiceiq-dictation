@@ -302,12 +302,13 @@ struct PrivacyPane: View {
             }
 
             Section {
-                LabeledContent("Audio") { Text("Sent to \(owner) with your key") }
-                LabeledContent("Transcript text") { Text("Only if writing rules are on — otherwise it never leaves") }
+                LabeledContent("Audio") { Text("Sent to \(owner) with your key, transcribed every time") }
+                LabeledContent("Transcript text") { Text("Sent back only for writing rules, Ask Anything and Translate") }
+                LabeledContent("Text around the cursor") { Text("Only if Fit to existing text and writing rules are on") }
                 LabeledContent("Meeting audio") { Text("Only if call recording is on; notes are made by \(provider.displayName)") }
                 LabeledContent("Dictionary terms") { Text("Sent with the audio, so names are spelled right as you speak") }
                 LabeledContent("Dictionary") { Text("Synced to your iPhone through your iCloud account") }
-                LabeledContent("Screen snapshots") { Text("Only if screen context is on; sent with the audio, never stored") }
+                LabeledContent("Screen snapshots") { Text("Only if screen context and writing rules are on; never stored") }
                 LabeledContent("Ask Anything search") { Text("Only if a TinyFish key is saved; the search query goes to TinyFish") }
                 LabeledContent("Everything else") { Text("Never leaves this Mac") }
             } header: {

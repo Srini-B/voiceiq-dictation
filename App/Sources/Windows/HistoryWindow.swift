@@ -394,26 +394,12 @@ private struct RecordDetailSheet: View {
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var scheme
-    @State private var showRaw = false
     @State private var player: AVAudioPlayer?
     private var grad: CGFloat { scheme == .dark ? 25 : 0 }
 
     var body: some View {
         VStack(alignment: .leading, spacing: VoiceIQUI.Spacing.m) {
             HStack {
-                // Native smart transcription formats as it transcribes, so on the
-                // default path there is no separate raw text to compare against —
-                // the two tabs would be byte-identical. A segmented control whose
-                // halves match reads as broken, so it only appears when a second
-                // model actually rewrote something.
-                if hasDistinctRaw {
-                    Picker("", selection: $showRaw) {
-                        Text("Cleaned").tag(false)
-                        Text("Raw").tag(true)
-                    }
-                    .pickerStyle(.segmented)
-                    .frame(width: 170)
-                }
                 Spacer()
                 Button {
                     let pasteboard = NSPasteboard.general
@@ -431,6 +417,22 @@ private struct RecordDetailSheet: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             .frame(minHeight: 120, maxHeight: 260)
+
+            // What the transcription model heard, before the writing rules.
+            // Shown only when the writing model changed it, as on iPhone.
+            if let raw = record.rawTranscript, raw != shownText {
+                VStack(alignment: .leading, spacing: VoiceIQUI.Spacing.xs) {
+                    metaLabel("As heard")
+                    ScrollView {
+                        Text(raw)
+                            .font(VoiceIQUI.TypeScale.bodyLarge(grad: grad))
+                            .foregroundStyle(.secondary)
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .frame(maxHeight: 160)
+                }
+            }
 
             HStack(spacing: VoiceIQUI.Spacing.s) {
                 audioButton
@@ -496,14 +498,8 @@ private struct RecordDetailSheet: View {
         .onDisappear { player?.stop() }
     }
 
-    private var hasDistinctRaw: Bool {
-        guard let raw = record.rawTranscript, let clean = record.cleanedTranscript else { return false }
-        return raw != clean
-    }
-
     private var shownText: String {
-        (showRaw && hasDistinctRaw) ? (record.rawTranscript ?? "—")
-                : (record.cleanedTranscript ?? record.rawTranscript ?? "—")
+        record.cleanedTranscript ?? record.rawTranscript ?? "—"
     }
 
     @ViewBuilder

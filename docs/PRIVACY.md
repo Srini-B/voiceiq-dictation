@@ -35,7 +35,8 @@ With no usable key, nothing is sent and the recording stays on your Mac.
    "Fit to existing text" is on (on by default), up to 300 characters before
    the cursor and 100 after it in the field you are dictating into. No tone or
    category is derived from the app; the model reads intent from your speech. With that
-   setting off, your transcript text never leaves this Mac after transcription.
+   setting off, a dictation's transcript never leaves this Mac after
+   transcription. Ask Anything and Translate always send it (item 7).
 4. **Screen context**, while "Screen context" is on in Settings → Dictation — on
    by default. VoiceiQ captures the main display when dictation starts and when
    the frontmost app changes during that dictation. It sends up to four reduced-

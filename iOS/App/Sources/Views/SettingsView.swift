@@ -353,7 +353,7 @@ struct PrivacyView: View {
             }
             Section {
                 LabeledContent("Audio", value: destination)
-                LabeledContent("Transcript text", value: "Only with writing rules on")
+                LabeledContent("Transcript text", value: "For writing rules, Ask and Translate")
                 LabeledContent("Meeting notes", value: provider.displayName)
                 LabeledContent("Dictionary terms", value: "Sent with the audio")
                 LabeledContent("Dictionary", value: "Your iCloud, to sync")
