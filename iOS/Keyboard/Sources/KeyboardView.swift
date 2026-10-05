@@ -49,7 +49,7 @@ struct KeyboardView: View {
                     .foregroundStyle(.secondary)
             }
         } else {
-            VStack(spacing: 4) {
+            VStack(spacing: 6) {
                 HStack(spacing: 8) {
                     cancelSlot
                     MicBar(
@@ -74,7 +74,7 @@ struct KeyboardView: View {
                         DictionaryOfferChip(offer: offer)
                     }
                 }
-                .frame(height: 26)
+                .frame(height: DictionaryOfferChip.height)
             }
         }
     }

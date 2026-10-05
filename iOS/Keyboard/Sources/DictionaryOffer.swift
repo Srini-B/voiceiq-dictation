@@ -121,6 +121,8 @@ final class DictionaryOffer: ObservableObject {
 
 /// The offer as a small capsule under the mic bar.
 struct DictionaryOfferChip: View {
+    static let height: CGFloat = 36
+
     @ObservedObject var offer: DictionaryOffer
 
     var body: some View {
@@ -129,6 +131,8 @@ struct DictionaryOfferChip: View {
                 Label(feedback, systemImage: "checkmark")
                     .foregroundStyle(.secondary)
             } else if offer.offer == .copied {
+                // iOS fixes the paste button at about 34pt tall, whatever
+                // the control size, so the capsule is sized to hold it.
                 HStack(spacing: 8) {
                     Text("Add copied text to Dictionary")
                     // The system paste button: the only way a keyboard may
@@ -140,6 +144,10 @@ struct DictionaryOfferChip: View {
                     .buttonBorderShape(.capsule)
                     .controlSize(.small)
                 }
+                .padding(.leading, 14)
+                .padding(.trailing, 1)
+                .frame(height: DictionaryOfferChip.height)
+                .background(Capsule().fill(Color(.secondarySystemFill)))
             } else if let current = offer.offer {
                 Button(action: offer.add) {
                     Label(title(current), systemImage: saved(current) ? "checkmark" : "plus")
@@ -172,3 +180,4 @@ struct DictionaryOfferChip: View {
         return false
     }
 }
+
