@@ -32,6 +32,7 @@ let package = Package(
             name: "VoiceIQCore",
             dependencies: [
                 "VoiceIQObjC",
+                "VoiceIQBridge",
                 .product(name: "GRDB", package: "GRDB.swift"),
                 .product(name: "Sauce", package: "Sauce", condition: .when(platforms: [.macOS])),
                 // The vendored xcframework carries a macOS slice only. iOS

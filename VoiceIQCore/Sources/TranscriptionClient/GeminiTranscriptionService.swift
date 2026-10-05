@@ -3,19 +3,13 @@ import Foundation
 
 /// The transcription pipeline.
 ///
-///   Writing rules on (the default), under ten minutes:
-///   CAF → FLAC → flash model with the cleanup prompt and the audio, one call
-///       → ReplacementEngine → inserted text.
-///   Otherwise, or when that call fails:
-///   CAF → FLAC → interactions (mode: smart, custom_vocabulary)
-///       → [writing rules] flash cleanup → validation gate
-///       → ReplacementEngine → inserted text.
+///   CAF → FLAC → transcription model (gemini-3.5-transcribe in smart mode
+///   with custom_vocabulary, or gpt-transcribe)
+///       → [writing rules] writing model cleanup, with any screenshots
+///       → validation gate → ReplacementEngine → inserted text.
 ///   On OpenAI's own API the writing model cannot hear the audio, so a
 ///   single-chunk dictation also gets whisper-1's transcript as SECOND,
 ///   fetched in parallel, for cleanup to repair misheard stretches of RAW.
-///
-/// The one-call path has no separate raw transcript, so there is nothing for
-/// the validation gate to compare against; the raw column holds the same text.
 ///
 /// Rules unchanged: one silent retry on transient transcribe failures; cleanup
 /// has a hard deadline and NEVER blocks a good transcript; every failure is a
@@ -57,17 +51,6 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
         // trailing silence is left out of every request.
         let (ranges, fileFrames) = try AudioChunker.ranges(cafURL: audioURL)
 
-        // A dictation with writing rules on goes to the flash model in one
-        // call, which hears the audio and writes the cleaned text. Anything
-        // that stops it (an error, a timeout, "no speech") falls through to
-        // transcription then cleanup below, so it can only cost time.
-        if context.mode == .dictate, policy.cleanupPass, ranges.count == 1, context.speechHeard,
-           provider.writingModelHearsAudio, !Self.oneCallRefused.contains(provider),
-           let text = await transcribeInOneCall(audioURL: audioURL, range: ranges[0],
-                                                durationSeconds: durationSeconds, context: context, config: config) {
-            return TranscriptionResult(rawTranscript: text, cleanedTranscript: text,
-                                       modelID: "\(config.cleanupModel)/one-call")
-        }
         // A multi-chunk upload can fail half way (Tier 1 meters ~400 s of audio
         // per minute, so chunk 1 is often refused right after chunk 0). Finished
         // chunks are kept next to the audio so a retry sends only the rest.
@@ -177,53 +160,6 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
         return text.caseInsensitiveCompare(raw) == .orderedSame ? nil : text
     }
 
-    /// The one-call dictation path. Returns nil when the caller should fall
-    /// back to the two-call pipeline.
-    private func transcribeInOneCall(
-        audioURL: URL, range: Range<AVAudioFramePosition>, durationSeconds: Double,
-        context: DictationContext, config: GeminiConfig
-    ) async -> String? {
-        let dictionary = DictionaryStore()
-        let prompt = PromptV1.dictationPrompt(
-            vocabulary: dictionary.sanitizedVocabulary(),
-            spellings: dictionary.spellings(),
-            instructions: settings.customInstructions,
-            imagesAttached: !context.screenshots.isEmpty
-        )
-        do {
-            let flac = try encodeChunk(audioURL: audioURL, range: range, index: 0)
-            // Measured at 2–4 s for up to three minutes of audio. Tighter than
-            // the transcription deadline because a miss still has the two-call
-            // path to run.
-            let deadline = 15 + durationSeconds / 8 + Double(context.screenshots.count * 2)
-            let response = try await client.cleanup(
-                prompt: prompt, images: context.screenshots, audioFLAC: flac,
-                model: config.cleanupModel, endpoint: config.endpoint, deadline: deadline, stage: .transcribe,
-                jsonSchema: PromptV1.dictationSchema
-            )
-            guard let answer = PromptV1.dictationText(fromJSON: response) else {
-                // Not the object the schema asked for: never paste the model's
-                // working. The two-call path has a validation gate.
-                Log.transcription.warning("one call returned something other than the JSON answer — transcribing, then cleaning up")
-                return nil
-            }
-            let text = ValidationGate.stripArtifacts(answer).trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !text.isEmpty, !text.contains(PromptV1.noSpeechToken) else {
-                Log.transcription.info("one call heard no speech — checking with the transcription model")
-                return nil
-            }
-            return ReplacementEngine.apply(dictionary.replacementRules(), to: text)
-        } catch {
-            if case .modelUnavailable = error as? TranscriptionError {
-                // A key refused the flash model is refused on every call;
-                // stop paying for the refusal until the app restarts.
-                Self.oneCallRefused.insert(settings.preferredProvider)
-            }
-            Log.transcription.info("one call failed (\(String(describing: error), privacy: .public)) — transcribing, then cleaning up")
-            return nil
-        }
-    }
-
     /// The models that run, for History's model column. OpenAI's
     /// transcription model has no smart mode, so no mode is named.
     private func modelNames(_ provider: ModelProvider) -> (transcribe: String, writing: String) {
@@ -233,21 +169,6 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
         }
         let config = settings.geminiConfig
         return ("\(config.transcribeModel)/\(settings.formattingPolicy.mode.rawValue)", config.cleanupModel)
-    }
-
-    /// Providers whose key was refused the flash model this run.
-    private static let oneCallRefused = ProviderSet()
-    final class ProviderSet: @unchecked Sendable {
-        private let lock = NSLock()
-        private var providers: Set<ModelProvider> = []
-        func contains(_ provider: ModelProvider) -> Bool {
-            lock.lock(); defer { lock.unlock() }
-            return providers.contains(provider)
-        }
-        func insert(_ provider: ModelProvider) {
-            lock.lock(); defer { lock.unlock() }
-            providers.insert(provider)
-        }
     }
 
     // MARK: - Stages

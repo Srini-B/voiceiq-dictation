@@ -2,6 +2,7 @@
 import AppKit
 import ApplicationServices
 import Foundation
+import VoiceIQBridge
 
 /// Tier 1: direct Accessibility insertion at the cursor — no clipboard involved.
 ///
@@ -39,6 +40,37 @@ public enum AXInserter {
         guard AXUIElementIsAttributeSettable(element, kAXSelectedTextAttribute as CFString, &settable) == .success,
               settable.boolValue else { return nil }
         return element
+    }
+
+    /// Records the target app's focused text field and the text around its
+    /// cursor, for the field guard and the writing model.
+    public nonisolated static func captureFocusedField(pid: pid_t, into capture: FocusedFieldCapture) {
+        let element = focusedTextField(pid: pid)
+        capture.set(element, surroundingText: element.flatMap(surroundingText(of:)))
+    }
+
+    /// The text around the cursor of the focused field, when it belongs to
+    /// `targetPID` and says where its cursor is. Read right before inserting.
+    public static func surroundingText(targetPID: pid_t?) -> SurroundingText? {
+        let system = AXUIElementCreateSystemWide()
+        AXUIElementSetMessagingTimeout(system, 0.5)
+        var focusedRef: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(system, kAXFocusedUIElementAttribute as CFString, &focusedRef) == .success,
+              let focused = focusedRef, CFGetTypeID(focused) == AXUIElementGetTypeID() else { return nil }
+        let element = unsafeDowncast(focused as AnyObject, to: AXUIElement.self)
+        var pid: pid_t = 0
+        guard AXUIElementGetPid(element, &pid) == .success, targetPID == nil || targetPID == pid else { return nil }
+        return surroundingText(of: element)
+    }
+
+    nonisolated static func surroundingText(of element: AXUIElement) -> SurroundingText? {
+        var rangeRef: CFTypeRef?
+        guard let value = fieldText(of: element),
+              AXUIElementCopyAttributeValue(element, kAXSelectedTextRangeAttribute as CFString, &rangeRef) == .success,
+              let rangeRef, CFGetTypeID(rangeRef) == AXValueGetTypeID() else { return nil }
+        var range = CFRange()
+        guard AXValueGetValue(rangeRef as! AXValue, .cfRange, &range) else { return nil }
+        return SurroundingText(value: value, selectionLocation: range.location, selectionLength: range.length)
     }
 
     public static func insert(_ text: String, targetPID: pid_t?, bundleID: String?, startField: AnyObject? = nil) async -> Result {
@@ -92,7 +124,6 @@ public enum AXInserter {
         var settable = DarwinBoolean(false)
         AXUIElementIsAttributeSettable(element, kAXSelectedTextAttribute as CFString, &settable)
         guard settable.boolValue else { return .notPossible }
-        let text = Self.joined(text, before: before, cursor: cursorLocation(of: element))
         guard AXUIElementSetAttributeValue(element, kAXSelectedTextAttribute as CFString, text as CFTypeRef) == .success else {
             return .notPossible
         }
@@ -131,48 +162,6 @@ public enum AXInserter {
               targetPID == nil || targetPID == pid,
               fieldText(of: element) != nil else { return nil }
         return FieldSnapshot(element: element, pid: pid, bundleID: bundleID)
-    }
-
-    /// UTF-16 offset of the insertion point, or nil when the app does not expose
-    /// a selected range (then we insert the text as-is, like before).
-    nonisolated static func cursorLocation(of element: AXUIElement) -> Int? {
-        var rangeRef: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(element, kAXSelectedTextRangeAttribute as CFString, &rangeRef) == .success,
-              let rangeRef, CFGetTypeID(rangeRef) == AXValueGetTypeID() else { return nil }
-        var range = CFRange()
-        guard AXValueGetValue(rangeRef as! AXValue, .cfRange, &range) else { return nil }
-        return range.location
-    }
-
-    /// Adds one space when the transcript would otherwise run into the character
-    /// before the cursor ("button.Please"). Nothing is added at the start of the
-    /// field, after whitespace, an opening bracket or quote, or the `@`/`#`
-    /// that starts a handle or tag, when the transcript itself starts with
-    /// whitespace or closing punctuation, or next to Chinese, Japanese or Thai,
-    /// which put no spaces between words. Character sets follow Parrot's
-    /// `Spacing` (humanitas-labs/parrot, MIT).
-    nonisolated static func joined(_ text: String, before: String, cursor: Int?) -> String {
-        guard let cursor, cursor > 0, cursor <= before.utf16.count,
-              let first = text.unicodeScalars.first else { return text }
-        let utf16 = Array(before.utf16)
-        guard let previous = Unicode.Scalar(utf16[cursor - 1]) else { return text }
-        let openers: Set<Character> = ["(", "[", "{", "<", "\"", "'", "“", "‘", "«", "‹", "¿", "¡", "/", "@", "#"]
-        let closers: Set<Character> = [",", ".", ";", ":", "!", "?", ")", "]", "}", "…", "%", "”", "’", "»", "›"]
-        if CharacterSet.whitespacesAndNewlines.contains(previous) || openers.contains(Character(previous)) { return text }
-        if CharacterSet.whitespacesAndNewlines.contains(first) || closers.contains(Character(first)) { return text }
-        if isSpaceless(previous) || isSpaceless(first) { return text }
-        return " " + text
-    }
-
-    /// Thai, and the Chinese and Japanese scripts and their punctuation.
-    nonisolated static func isSpaceless(_ scalar: Unicode.Scalar) -> Bool {
-        switch scalar.value {
-        case 0x0E00...0x0E7F, 0x3000...0x303F, 0x3040...0x30FF, 0x3400...0x4DBF,
-             0x4E00...0x9FFF, 0xFF00...0xFFEF, 0x20000...0x2FA1F:
-            return true
-        default:
-            return false
-        }
     }
 
     nonisolated static func stringValue(of element: AXUIElement) -> String? {

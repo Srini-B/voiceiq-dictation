@@ -352,6 +352,11 @@ public final class AudioCaptureEngine: AudioCapturing {
         }
         let converter = AVAudioConverter(from: hwFormat, to: targetFormat)
         guard let converter else { throw CaptureError.converterUnavailable }
+        // Record channel 0, the channel the level meter reads. Left to its
+        // default map, the converter writes silence from a device with more
+        // than two discrete channels (an 8-channel Jump Desktop Microphone
+        // recorded all zeros while its meter showed speech, 2026-10-05).
+        converter.channelMap = [0]
         self.converter = converter
 
         // NOTE: bufferSize is a REQUEST, and AVAudioNode documents the supported

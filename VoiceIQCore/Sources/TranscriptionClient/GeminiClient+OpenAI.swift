@@ -55,17 +55,14 @@ extension GeminiClient {
     }
 
     func openAIChat(prompt: String, images: [Data] = [], deadline: TimeInterval, stage: UsageStage,
-                    jsonObject: Bool = false, jsonSchema: [String: Any]? = nil) async throws -> String {
+                    jsonObject: Bool = false) async throws -> String {
         let model = openAIConfig().writingModel
         var body: [String: Any] = [
             "model": model,
             "messages": Self.openAIMessages(prompt: prompt, images: images, instructionRole: "developer"),
             "reasoning_effort": GeminiClient.openAIReasoningEffort,
         ]
-        if let jsonSchema {
-            body["response_format"] = ["type": "json_schema",
-                                       "json_schema": ["name": "result", "strict": true, "schema": jsonSchema] as [String: Any]]
-        } else if jsonObject {
+        if jsonObject {
             body["response_format"] = ["type": "json_object"]
         }
         let data = try await post(path: "chat/completions", body: try JSONSerialization.data(withJSONObject: body),
@@ -115,7 +112,8 @@ extension GeminiClient {
         let imageParts: [[String: Any]] = images.map {
             ["type": "image_url", "image_url": ["url": "data:image/jpeg;base64,\($0.base64EncodedString())"]]
         }
-        let dictation = prompt.range(of: "SECOND: ", options: .backwards) ?? prompt.range(of: "RAW: ", options: .backwards)
+        let dictation = prompt.range(of: PromptV1.fieldBeforeLabel, options: .backwards)
+            ?? prompt.range(of: "SECOND: ", options: .backwards) ?? prompt.range(of: "RAW: ", options: .backwards)
         guard !images.isEmpty, let split = dictation else {
             return [["role": "user", "content": [["type": "text", "text": prompt]] + imageParts]]
         }

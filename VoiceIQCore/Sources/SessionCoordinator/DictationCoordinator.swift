@@ -71,13 +71,6 @@ public final class DictationCoordinator: ObservableObject {
     /// room. This clause can only ever prevent a discard, never cause one.
     static let discardSNRThreshold: Double = 6
 
-    /// Speech must rise this far above the room, for this many ~100 ms buffers,
-    /// before the one-call dictation path trusts the recording. Room tone stays
-    /// within ~6 dB of its 10th percentile; speech crosses 12 dB within 0.2–3 s
-    /// of the key.
-    static let speechAboveRoomDB: Double = 12
-    static let speechBuffersRequired = 3
-
     /// The in-flight transcription task — cancelled when the user cancels the
     /// session (audit L8: Esc previously left the network work running).
     private var inFlightTask: Task<Void, Never>?
@@ -106,13 +99,6 @@ public final class DictationCoordinator: ObservableObject {
     /// How loud the room is. Always measured, never in charge: what it feeds is
     /// gated on `noiseHandlingActive`, what it records is not.
     private var noiseFloor = NoiseFloorEstimator()
-    /// Whether the mic has heard speech above the room this session. The
-    /// one-call path runs only when it has: fed silence, the flash model
-    /// guesses a dictionary term. Relative to the room, not absolute: AirPods
-    /// room tone sits near −52 dBFS, above `trailingSpeechThreshold`
-    /// (−54.6 dBFS), so an absolute bar latched on the first buffer (measured
-    /// 2026-09-28).
-    private var speechHeard = false
     /// Why the last session ended with no speech — the pill copy differs, nothing
     /// else does, so this rides alongside the outcome instead of widening the
     /// state machine for a string.
@@ -276,7 +262,6 @@ public final class DictationCoordinator: ObservableObject {
             }
 
             noiseFloor = NoiseFloorEstimator()
-            speechHeard = false
             noiseHandlingActive = noiseHandlingEnabled()
 
             let capture = audioFactory()
@@ -395,15 +380,6 @@ public final class DictationCoordinator: ObservableObject {
         if updatingMeter { micLevel = level }
         latestLevel = level
         noiseFloor.ingest(level: level)
-        if !speechHeard,
-           let loud = noiseFloor.samplesAboveFloor(
-               byDB: Self.speechAboveRoomDB,
-               minimumDBFS: AudioLevelCurve.dBFS(fromLevel: Self.trailingSpeechThreshold)
-           ),
-           loud >= Self.speechBuffersRequired {
-            speechHeard = true
-            Log.audio.info("speech heard above the room after \(self.noiseFloor.sampleCount) buffers")
-        }
     }
 
     /// The level below which the user has stopped talking.
@@ -500,7 +476,6 @@ public final class DictationCoordinator: ObservableObject {
             return
         }
         session.peakLevel = result.peakLevel
-        session.context.speechHeard = speechHeard
         self.session = session
         // Only meaningful together: a peak with no floor to compare it against
         // says nothing about the room, and would read as a measurement.

@@ -79,7 +79,7 @@ final class DictationController {
                 )
                 let field = FocusedFieldCapture()
                 if let pid = app?.processIdentifier {
-                    Task.detached(priority: .userInitiated) { field.set(AXInserter.focusedTextField(pid: pid)) }
+                    Task.detached(priority: .userInitiated) { AXInserter.captureFocusedField(pid: pid, into: field) }
                 }
                 return DictationContext(
                     targetAppBundleID: app?.bundleIdentifier,
@@ -784,7 +784,7 @@ final class DictationController {
                 targetAppName: app?.localizedName,
                 targetPID: app?.processIdentifier
             )
-            switch await InsertionCoordinator().insert(text, context: context) {
+            switch await InsertionCoordinator().insert(InsertionCoordinator.fitted(text, context: context), context: context) {
             case .inserted:
                 break
             case .fellBackToClipboard, .frontmostChanged:

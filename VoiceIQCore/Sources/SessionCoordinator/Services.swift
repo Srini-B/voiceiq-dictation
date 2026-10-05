@@ -2,6 +2,7 @@
 import AppKit
 #endif
 import Foundation
+import VoiceIQBridge
 
 /// Transcription seam. M3 provides the Gemini implementation; tests use fakes.
 public protocol TranscriptionServicing: Sendable {
@@ -66,16 +67,21 @@ public enum DictationMode: Equatable, Sendable {
     public var keepsRecording: Bool { self != .agent }
 }
 
-/// The text field that had focus when dictation started. An Accessibility
-/// query can stall on a busy app, so it is filled in off the main thread a
-/// moment after the session starts. Empty when the app could not say or
-/// focus was not in a field text can be typed into.
+/// The text field that had focus when dictation started, and the text around
+/// its cursor then. An Accessibility query can stall on a busy app, so it is
+/// filled in off the main thread a moment after the session starts. Empty
+/// when the app could not say or focus was not in a field text can be typed
+/// into.
 public final class FocusedFieldCapture: @unchecked Sendable, Equatable {
     private let lock = NSLock()
     private var captured: AnyObject?
+    private var capturedText: SurroundingText?
     public init() {}
     public var element: AnyObject? { lock.withLock { captured } }
-    public func set(_ element: AnyObject?) { lock.withLock { captured = element } }
+    public var surroundingText: SurroundingText? { lock.withLock { capturedText } }
+    public func set(_ element: AnyObject?, surroundingText: SurroundingText?) {
+        lock.withLock { captured = element; capturedText = surroundingText }
+    }
     public static func == (lhs: FocusedFieldCapture, rhs: FocusedFieldCapture) -> Bool { lhs === rhs }
 }
 
@@ -88,10 +94,6 @@ public struct DictationContext: Equatable, Sendable {
     public var mode: DictationMode
     public var selectedTextIsSettable: Bool
     public var screenshots: [Data]
-    /// False when the mic never rose clearly above the room. The one-call flash
-    /// model writes plausible sentences for such recordings (3 of 6 runs on a
-    /// silent AirPods clip, 2026-09-28); the transcription model returns nothing.
-    public var speechHeard = true
 
     public init(
         targetAppBundleID: String? = nil,

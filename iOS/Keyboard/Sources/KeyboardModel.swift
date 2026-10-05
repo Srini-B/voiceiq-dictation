@@ -214,16 +214,14 @@ final class KeyboardModel: ObservableObject {
         }
     }
 
-    /// Adds a space when the new text would otherwise run into the previous word.
+    /// Fits the new text to the text around the cursor: spaces on both
+    /// sides and a capital at the start of a sentence.
     @discardableResult
     private func insert(_ text: String) -> Bool {
         guard let proxy = controller?.textDocumentProxy, !text.isEmpty else { return false }
-        var output = text
-        if let previous = proxy.documentContextBeforeInput?.last, !previous.isWhitespace,
-           let first = text.first, !first.isWhitespace, !first.isPunctuation {
-            output = " " + output
-        }
-        proxy.insertText(output)
+        let surrounding = SurroundingText(before: proxy.documentContextBeforeInput ?? "",
+                                          after: proxy.documentContextAfterInput ?? "")
+        proxy.insertText(surrounding.fitted(text))
         return true
     }
 

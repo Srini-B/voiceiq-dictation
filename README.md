@@ -54,7 +54,9 @@ provider you choose, Gemini or OpenAI, with *your* key. No middleman server, no
 account, no analytics, no keystroke logging — one network host per dictation,
 and you can read every line of the code that talks to it. Screen context (a few downscaled screenshots sent with each
 dictation so on-screen names and paths are spelled right) can be switched off
-in Settings → Dictation. See [PRIVACY.md](docs/PRIVACY.md).
+in Settings → Dictation, and so can Fit to existing text (the text around the
+cursor, sent so a dictation continues or follows what is already in the field).
+See [PRIVACY.md](docs/PRIVACY.md).
 
 **Your jargon, spelled right.** Names and product terms go in the Dictionary and
 ride along with the audio, so the model hears "Kubernetes" instead of guessing
@@ -134,9 +136,10 @@ dictation is a few seconds of audio. VoiceiQ itself is free and has no account.
 | Writing rules, Ask Anything, Translate, meeting notes | `gemini-3.8-flash` | `gpt-6-luna` |
 | Meeting speakers | `gemini-3.5-transcribe` | `gpt-4o-transcribe-diarize` |
 
-With Gemini, a dictation under ten minutes is one call to `gemini-3.8-flash`
-with the audio attached; OpenAI's writing model takes no audio, so every
-dictation there is a transcription followed by a writing-rules pass.
+Every dictation is a transcription followed, with writing rules on, by a
+writing-rules pass. Screenshots go only to the writing model. On OpenAI,
+`whisper-1` also transcribes a single-chunk dictation in parallel so the
+writing model can repair misheard words.
 Settings → Advanced can pin other model names for either provider.
 
 ## How it works

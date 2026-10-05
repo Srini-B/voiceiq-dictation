@@ -26,12 +26,6 @@ public enum ModelProvider: String, CaseIterable, Sendable, Codable, Identifiable
     /// The other provider, for meetings when this one has no key.
     public var other: ModelProvider { self == .gemini ? .openAI : .gemini }
 
-    /// Whether the writing model can take the recording as input. The Gemini
-    /// flash model hears audio, which is what the one-call dictation and the
-    /// audio-checked cleanup rely on. GPT-6 Luna takes text and images only
-    /// (and rejects FLAC even as `input_audio`, probed 2026-09-28).
-    public var writingModelHearsAudio: Bool { self == .gemini }
-
     /// Usage records store only the model ID; the provider is read off it.
     /// The `google/` and `openai/` prefixes match rows booked before the
     /// gateways were removed.

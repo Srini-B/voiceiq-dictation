@@ -18,6 +18,7 @@ struct DictationPane: View {
     @State private var showingLanguages = false
     @State private var muteOtherAudio = SettingsStore().muteOtherAudioWhileDictating
     @State private var screenContext = SettingsStore().screenContextEnabled
+    @State private var fitToExistingText = SettingsStore().fitToExistingText
     @State private var copyRecovered = SettingsStore().copyRecoveredToClipboard
     @State private var preferredMicrophone = SettingsStore().preferredInputDeviceUID
     @State private var microphones = AudioInputDevices.list()
@@ -117,10 +118,15 @@ struct DictationPane: View {
                         guard enabled != settings.screenContextEnabled else { return }
                         settings.setScreenContextEnabled(enabled)
                     }
+                Toggle("Fit to existing text", isOn: $fitToExistingText)
+                    .onChange(of: fitToExistingText) { _, enabled in
+                        guard enabled != settings.fitToExistingText else { return }
+                        settings.setFitToExistingText(enabled)
+                    }
                 Toggle("Offer to record calls", isOn: $meetingDetection)
                     .onChange(of: meetingDetection) { _, enabled in settings.setMeetingDetection(enabled) }
             } footer: {
-                Text("Words you change after a dictation lands are added to the Dictionary. Screen context sends a snapshot of what you're looking at, taken when dictation starts and when you switch apps, so names and paths on screen are spelled right. When a call app or a meeting tab is using the microphone, the pill asks before recording; the Meeting recording shortcut starts and stops a recording at any time. Notes appear under Meetings.")
+                Text("Words you change after a dictation lands are added to the Dictionary. Screen context sends a snapshot of what you're looking at, taken when dictation starts and when you switch apps, so names and paths on screen are spelled right. Fit to existing text sends the text around the cursor with the transcript, so a dictation continues or follows what is already in the field. When a call app or a meeting tab is using the microphone, the pill asks before recording; the Meeting recording shortcut starts and stops a recording at any time. Notes appear under Meetings.")
             }
 
             Section {
@@ -155,6 +161,7 @@ struct DictationPane: View {
             case "translationTargetLanguage": translationTarget = settings.translationTargetLanguage
             case "muteOtherAudioWhileDictating": muteOtherAudio = settings.muteOtherAudioWhileDictating
             case "screenContextEnabled": screenContext = settings.screenContextEnabled
+            case "fitToExistingText": fitToExistingText = settings.fitToExistingText
             case "copyRecoveredToClipboard": copyRecovered = settings.copyRecoveredToClipboard
             case "preferredInputDeviceUID": preferredMicrophone = settings.preferredInputDeviceUID
             default: break

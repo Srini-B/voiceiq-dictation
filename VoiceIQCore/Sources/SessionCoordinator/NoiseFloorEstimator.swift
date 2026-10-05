@@ -66,19 +66,4 @@ public struct NoiseFloorEstimator: Sendable {
         guard let floorDB else { return nil }
         return peakDB - floorDB
     }
-
-    /// How many samples so far sit at least `marginDB` above the room, and never
-    /// below `minimumDBFS`. Nil until there is a room to compare against. The bar
-    /// stops 1 dB short of saturation so a loud room cannot make it unreachable.
-    ///
-    /// The room here leaves out digital-zero buffers. AirPods deliver about four
-    /// of them as the engine starts (measured 2026-09-28); counted as the room,
-    /// they put the floor at −120 dBFS and the bar back at `minimumDBFS`.
-    public func samplesAboveFloor(byDB marginDB: Double, minimumDBFS: Double) -> Int? {
-        let heard = samples.filter { $0 > AudioLevelCurve.floorDBFS }.sorted()
-        guard heard.count >= Self.minimumSamples else { return nil }
-        let room = heard[Int((Double(heard.count - 1) * Self.percentile).rounded())]
-        let bar = max(minimumDBFS, min(room + marginDB, AudioLevelCurve.saturationDBFS - 1))
-        return heard.reduce(0) { $1 >= bar ? $0 + 1 : $0 }
-    }
 }

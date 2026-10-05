@@ -63,7 +63,8 @@ extension GeminiTranscriptionService {
             spellings: dictionary.spellings(),
             instructions: settings.customInstructions,
             imagesAttached: !screenshots.isEmpty,
-            secondTranscript: second
+            secondTranscript: second,
+            surroundingText: settings.fitToExistingText ? context.focusedField?.surroundingText : nil
         )
         do {
             let deadline = min(

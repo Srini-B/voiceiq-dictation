@@ -76,21 +76,14 @@ public actor GeminiClient {
     public func cleanup(
         prompt: String,
         images: [Data] = [],
-        audioFLAC: Data? = nil,
         model: String,
         endpoint: URL,
         deadline: TimeInterval,
-        stage: UsageStage = .cleanup,
-        jsonSchema: [String: Any]? = nil
+        stage: UsageStage = .cleanup
     ) async throws -> String {
         let provider = provider()
-        // Callers check `writingModelHearsAudio`; a recording reaching an
-        // OpenAI writing model would be dropped and the prompt would lie.
-        if audioFLAC != nil, !provider.writingModelHearsAudio {
-            throw TranscriptionError.badRequest("writing model takes no audio")
-        }
         if provider == .openAI {
-            return try await openAIChat(prompt: prompt, images: images, deadline: deadline, stage: stage, jsonSchema: jsonSchema)
+            return try await openAIChat(prompt: prompt, images: images, deadline: deadline, stage: stage)
         }
         let thinkingConfig: [String: Any] = model.hasPrefix("gemini-2")
             ? ["thinkingBudget": 0]
@@ -99,20 +92,10 @@ public actor GeminiClient {
         parts.append(contentsOf: images.map {
             ["inline_data": ["mime_type": "image/jpeg", "data": $0.base64EncodedString()]]
         })
-        if let audioFLAC {
-            parts.append(["inline_data": ["mime_type": "audio/flac", "data": audioFLAC.base64EncodedString()]])
-        }
-        var generationConfig: [String: Any] = [
+        let generationConfig: [String: Any] = [
             "temperature": 0,
             "thinkingConfig": thinkingConfig,
         ]
-        if let jsonSchema {
-            // Structured output keeps the model's working out of the answer:
-            // with audio attached, gemini-3.8-flash sometimes wrote its
-            // re-listening and drafts as plain text before the result.
-            generationConfig["responseMimeType"] = "application/json"
-            generationConfig["responseJsonSchema"] = jsonSchema
-        }
         let body: [String: Any] = [
             "contents": [[
                 "role": "user",

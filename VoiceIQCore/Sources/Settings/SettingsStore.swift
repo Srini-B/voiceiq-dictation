@@ -159,6 +159,17 @@ public struct SettingsStore: Sendable {
         Self.set(enabled, forKey: "screenContextEnabled")
     }
 
+    /// Fits a dictation to the text already in the field: the writing model
+    /// sees the text around the cursor, and the insert adds spaces and a
+    /// sentence-start capital.
+    public var fitToExistingText: Bool {
+        Self.defaults.object(forKey: "fitToExistingText") as? Bool ?? true
+    }
+
+    public func setFitToExistingText(_ enabled: Bool) {
+        Self.set(enabled, forKey: "fitToExistingText")
+    }
+
     public var preferredInputDeviceUID: String? {
         Self.defaults.string(forKey: "preferredInputDeviceUID")
     }

@@ -22,6 +22,7 @@ final class LearningInserter: TextInserting {
             ? AXInserter.focusedField(targetPID: context.targetPID, bundleID: context.targetAppBundleID)
             : nil
         if let field { await learner.harvest(before: field) }
+        let text = InsertionCoordinator.fitted(text, context: context)
         let outcome = await inner.insert(text, context: context)
         if outcome == .inserted, let field { learner.track(inserted: text, in: field) }
         return outcome
