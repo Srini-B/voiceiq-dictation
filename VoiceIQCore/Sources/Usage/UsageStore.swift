@@ -55,27 +55,14 @@ public struct UsageRecord: Codable, Equatable, Identifiable, FetchableRecord, Pe
     public var audioOut: Int
     public var thoughtOut: Int
     public var isEstimated: Bool
-    /// Paid-tier USD at the time of the call; nil when the model is unpriced,
-    /// or until a rupee-priced row (see `listINR`) has its day's rate.
+    /// Paid-tier USD at the time of the call; nil when the model is unpriced.
     public var costUSD: Double?
-    /// The list price in rupees for a model Sarvam bills in INR; nil for
-    /// dollar-priced models. Known at booking, with or without a rate.
-    public var listINR: Double?
     /// Seconds of audio billed, for models priced by audio length. Nil on
     /// token-priced calls and on audio-priced calls booked before v2.
     public var audioSeconds: Double?
-    /// INR per USD on the day of the call and the quote's date, so the Cost
-    /// pane can show rupees. Nil until `UsageStore.backfillFX` finds the rate.
-    public var fxRateINR: Double?
-    public var fxDate: String?
 
     public init(at: Date = Date(), activity: UsageActivity, stage: UsageStage, model: String,
-                sessionID: String?, usage: TokenUsage, fx cached: FXQuote? = FXRates.cachedQuote()) {
-        // Only a quote fetched on the call's own UTC day is that day's rate;
-        // one from the evening before would price a morning call at
-        // yesterday's. Otherwise the row waits for the back-fill, which
-        // picks the day's published rate.
-        let fx = cached.flatMap { FXRates.utcDay($0.fetchedAt) == FXRates.utcDay(at) ? $0 : nil }
+                sessionID: String?, usage: TokenUsage) {
         self.id = UUID().uuidString
         self.at = at
         self.activity = activity.rawValue
@@ -85,28 +72,10 @@ public struct UsageRecord: Codable, Equatable, Identifiable, FetchableRecord, Pe
         self.textIn = usage.textIn; self.audioIn = usage.audioIn; self.imageIn = usage.imageIn
         self.cachedIn = usage.cachedIn; self.textOut = usage.textOut; self.audioOut = usage.audioOut
         self.thoughtOut = usage.thoughtOut; self.isEstimated = usage.isEstimated
-        // OpenRouter states the charge on every response; the price book is
-        // for providers that only report tokens. A rupee price becomes USD at
-        // the day's rate; without one the row waits for the back-fill.
-        self.listINR = PriceBook.costINR(model: model, usage: usage)
+        // A stated charge (per-minute models) wins; the price book is for
+        // models that only report tokens.
         self.costUSD = usage.reportedCostUSD ?? PriceBook.cost(model: model, usage: usage, at: at)
-            ?? Self.usd(fromINR: listINR, fx: fx)
         self.audioSeconds = usage.audioSeconds
-        self.fxRateINR = fx?.inrPerUSD
-        self.fxDate = fx?.date
-    }
-
-    static func usd(fromINR inr: Double?, fx: FXQuote?) -> Double? {
-        guard let inr, let fx else { return nil }
-        return inr / fx.inrPerUSD
-    }
-
-    /// The charge in rupees: Sarvam's list price exactly, every other model
-    /// at the day's rate, or nil until that rate is known.
-    public var costINR: Double? {
-        if let listINR { return listINR }
-        guard let costUSD, let fxRateINR else { return nil }
-        return costUSD * fxRateINR
     }
 
     public var usage: TokenUsage {
@@ -125,7 +94,7 @@ public extension Notification.Name {
 /// Append-only ledger of model calls, separate from history.sqlite so
 /// deleting a dictation's audio never erases what it cost.
 public final class UsageStore: @unchecked Sendable {
-    let queue: DatabaseQueue
+    private let queue: DatabaseQueue
 
     public init(databaseURL: URL) throws {
         try FileManager.default.createDirectory(
@@ -171,6 +140,9 @@ public final class UsageStore: @unchecked Sendable {
                 t.add(column: "audioSeconds", .double)
             }
         }
+        // v3 and v4 added rupee columns for the removed Sarvam integration.
+        // They stay registered so existing databases keep a known history;
+        // nothing reads or writes the columns any more.
         migrator.registerMigration("v3-fx") { db in
             try db.alter(table: UsageRecord.databaseTableName) { t in
                 t.add(column: "fxRateINR", .double)
@@ -209,9 +181,6 @@ public final class UsageStore: @unchecked Sendable {
 
     public struct Total: Equatable, Sendable {
         public var costUSD: Double
-        /// Rupee-priced calls at list price, the rest at their own day's
-        /// rate; a dollar call without a rate adds nothing.
-        public var costINR: Double
         public var calls: Int
         public var tokensIn: Int
         public var tokensOut: Int
@@ -219,10 +188,7 @@ public final class UsageStore: @unchecked Sendable {
         public var audioSeconds: Double
         /// True when any call in the total had no price entry or estimated tokens.
         public var isApproximate: Bool
-        /// True when a priced call has no rate yet, so `costINR` is short.
-        public var fxMissing: Bool
-        public static let zero = Total(costUSD: 0, costINR: 0, calls: 0, tokensIn: 0, tokensOut: 0, audioSeconds: 0,
-                                       isApproximate: false, fxMissing: false)
+        public static let zero = Total(costUSD: 0, calls: 0, tokensIn: 0, tokensOut: 0, audioSeconds: 0, isApproximate: false)
     }
 
     /// `source` limits every read to that source's models (see
@@ -250,8 +216,6 @@ public final class UsageStore: @unchecked Sendable {
         var sql = """
             SELECT \(keyExpression) AS key,
                    COALESCE(SUM(costUSD), 0) AS cost,
-                   COALESCE(SUM(COALESCE(listINR, costUSD * fxRateINR)), 0) AS costINR,
-                   MAX(CASE WHEN listINR IS NULL AND costUSD IS NOT NULL AND fxRateINR IS NULL THEN 1 ELSE 0 END) AS fxMissing,
                    COUNT(*) AS calls,
                    COALESCE(SUM(textIn + audioIn + imageIn + cachedIn), 0) AS tokensIn,
                    COALESCE(SUM(textOut + audioOut + thoughtOut), 0) AS tokensOut,
@@ -276,9 +240,8 @@ public final class UsageStore: @unchecked Sendable {
             return try queue.read { db in
                 try Row.fetchAll(db, sql: sql, arguments: arguments).map { row in
                     (row["key"] as String,
-                     Total(costUSD: row["cost"], costINR: row["costINR"], calls: row["calls"], tokensIn: row["tokensIn"],
-                           tokensOut: row["tokensOut"], audioSeconds: row["audioSeconds"],
-                           isApproximate: (row["approx"] as Int? ?? 0) == 1, fxMissing: (row["fxMissing"] as Int? ?? 0) == 1))
+                     Total(costUSD: row["cost"], calls: row["calls"], tokensIn: row["tokensIn"],
+                           tokensOut: row["tokensOut"], audioSeconds: row["audioSeconds"], isApproximate: (row["approx"] as Int? ?? 0) == 1))
                 }
             }
         } catch {

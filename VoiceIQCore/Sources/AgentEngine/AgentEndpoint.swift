@@ -42,27 +42,18 @@ public struct AgentEndpoint: Equatable, Sendable {
                 isCustom: true
             )
         }
-        let route = settings.activeRoute
+        let provider = settings.preferredProvider
         let gemini = settings.geminiConfig
         let openAI = settings.openAIConfig
-        switch route.endpoint {
+        switch provider {
         case .gemini:
             guard let key = KeychainStore.loadAPIKey() else { return nil }
             return AgentEndpoint(baseURL: gemini.endpoint, apiKey: key, format: .googleGenerativeAI,
-                                 modelID: gemini.cleanupModel, label: route.displayName, isCustom: false)
+                                 modelID: gemini.cleanupModel, label: provider.directName, isCustom: false)
         case .openAI:
             guard let key = KeychainStore.loadOpenAIKey() else { return nil }
             return AgentEndpoint(baseURL: URL(string: "https://api.openai.com")!, apiKey: key, format: .openAIChat,
-                                 modelID: openAI.writingModel, label: route.displayName, isCustom: false)
-        case .openRouter, .vercel:
-            let key = route.endpoint == .openRouter ? KeychainStore.loadOpenRouterKey() : KeychainStore.loadVercelKey()
-            guard let key else { return nil }
-            let base = route.endpoint == .openRouter ? "https://openrouter.ai/api" : "https://ai-gateway.vercel.sh"
-            let model = route.provider == .gemini ? "google/\(gemini.cleanupModel)" : "openai/\(openAI.writingModel)"
-            return AgentEndpoint(baseURL: URL(string: base)!, apiKey: key, format: .openAIChat,
-                                 modelID: model, label: route.displayName, isCustom: false)
-        case .elevenLabs, .sarvam:
-            return nil
+                                 modelID: openAI.writingModel, label: provider.directName, isCustom: false)
         }
     }
 
@@ -152,7 +143,7 @@ public enum AgentTransportError: Error, Equatable, Sendable {
     /// For the transcript.
     public var userMessage: String {
         switch self {
-        case .noEndpoint: return "No model is set up. Add a provider key in Settings, or a custom provider under Experimental."
+        case .noEndpoint: return "No model is set up. Add a provider key or a custom Agent mode provider in Settings → Advanced."
         case .http(401, _), .http(403, _): return "The model host refused the key."
         case .http(404, let detail): return "The model host has no such model or path\(detail.map { ": \($0)" } ?? "")."
         case .http(429, _): return "The model host is rate limiting; try again in a moment."

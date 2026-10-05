@@ -65,13 +65,7 @@ public enum PriceBook {
         ("gpt-4o-mini-transcribe", 0.003),
         ("gpt-4o-transcribe", 0.006),
         ("whisper-1", 0.006),
-        // ElevenLabs, from elevenlabs.io/pricing/api (copied 2026-09-28):
-        // $0.22 an hour, the same on every plan.
-        ("scribe_v2", 0.22 / 60),
     ]
-
-    /// ElevenLabs' add-on for `keyterms` (the dictionary terms), same source.
-    public static let elevenLabsKeytermsPerMinute = 0.05 / 60
 
     public static func perMinutePrice(for model: String) -> Double? {
         let id = model.lowercased().split(separator: "/").last.map(String.init) ?? model.lowercased()
@@ -80,7 +74,8 @@ public enum PriceBook {
 
     /// Price for a model ID, or nil when the pricing page has no entry.
     public static func price(for model: String, at date: Date = Date()) -> ModelPrice? {
-        // Gateways label models `google/<id>`; the list price is the same.
+        // Rows booked through the removed gateways are labelled `google/<id>`;
+        // the list price is the same.
         let id = model.lowercased().split(separator: "/").last.map(String.init) ?? model.lowercased()
         return prices(at: date)
             .filter { id.hasPrefix($0.prefix) }
@@ -91,37 +86,6 @@ public enum PriceBook {
     /// Cost in USD, or nil for a model with no price entry.
     public static func cost(model: String, usage: TokenUsage, at date: Date = Date()) -> Double? {
         price(for: model, at: date)?.cost(usage)
-    }
-
-    // MARK: - Rupee list prices
-
-    /// Sarvam lists prices in INR (docs.sarvam.ai/api-reference-docs/pricing,
-    /// copied 2026-10-03): `sarvam-105b` per one million tokens, speech to
-    /// text per hour billed per second, ₹45 with diarization. Rows are stored
-    /// in USD at that day's rate (`FXRates`), so the Cost pane can show either.
-    static let pricesINR: [(prefix: String, price: ModelPrice)] = [
-        ("sarvam-105b", ModelPrice(textIn: 29.28, cachedIn: 10.98, textOut: 73.20)),
-    ]
-
-    static let perMinuteINR: [(prefix: String, price: Double)] = [
-        ("saaras:v4:diarize", 45.0 / 60),
-        ("saaras:v4", 30.0 / 60),
-    ]
-
-    /// Cost in INR for a model priced in rupees, or nil for every other model.
-    public static func costINR(model: String, usage: TokenUsage) -> Double? {
-        let id = model.lowercased()
-        if let seconds = usage.audioSeconds,
-           let perMinute = perMinuteINR.filter({ id.hasPrefix($0.prefix) }).max(by: { $0.prefix.count < $1.prefix.count })?.price {
-            return seconds / 60 * perMinute
-        }
-        return pricesINR.filter { id.hasPrefix($0.prefix) }.max { $0.prefix.count < $1.prefix.count }?.price.cost(usage)
-    }
-
-    /// Whether the model's list price is in rupees.
-    public static func isPricedInINR(model: String) -> Bool {
-        let id = model.lowercased()
-        return perMinuteINR.contains { id.hasPrefix($0.prefix) } || pricesINR.contains { id.hasPrefix($0.prefix) }
     }
 
     /// Audio tokens per second for estimation: the transcribe models bill 25,

@@ -15,9 +15,8 @@ public struct OpenAIConfig: Sendable, Equatable {
     public init() {}
 }
 
-/// OpenAI's own API. Unlike the gateways it serves OpenAI models, so each call
-/// picks the model for its role from `OpenAIConfig` and ignores the Gemini
-/// model name the caller passes.
+/// OpenAI's own API. Each call picks the model for its role from
+/// `OpenAIConfig` and ignores the Gemini model name the caller passes.
 ///
 /// Probed 2026-09-28 with a real key:
 ///  - `/audio/transcriptions` takes the app's FLAC as is (FLAC is not in the
@@ -41,15 +40,15 @@ extension GeminiClient {
         let data = try await post(path: "audio/transcriptions", body: form.body, endpoint: Self.openAIEndpoint,
                                   deadline: deadline, modelLabel: model, stage: .transcribe, via: .openAI,
                                   extraHeaders: ["Content-Type": form.contentType])
-        return try Self.extractGatewayTranscript(from: data)
+        return try Self.extractTranscriptText(from: data)
     }
 
     /// A transcript of the same recording by a different speech model, for
     /// the cleanup pass to check the primary transcript against. Only on
-    /// OpenAI's own API; nil everywhere else. No keywords: whisper-1 takes a
-    /// free-text prompt instead, and SECOND is more useful when independent.
+    /// OpenAI; nil on Gemini. No keywords: whisper-1 takes a free-text prompt
+    /// instead, and SECOND is more useful when independent.
     public func secondOpinionTranscript(flacData: Data, deadline: TimeInterval) async throws -> String? {
-        guard route() == ModelRoute(provider: .openAI, gateway: .direct) else { return nil }
+        guard provider() == .openAI else { return nil }
         let text = try await openAITranscribe(audio: flacData, keywords: [], deadline: deadline,
                                               model: openAIConfig().secondOpinionModel)
         return text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -72,7 +71,7 @@ extension GeminiClient {
         let data = try await post(path: "chat/completions", body: try JSONSerialization.data(withJSONObject: body),
                                   endpoint: Self.openAIEndpoint, deadline: deadline, modelLabel: model,
                                   stage: stage, via: .openAI)
-        return try Self.extractGatewayMessage(from: data)
+        return try Self.extractChatMessage(from: data)
     }
 
     /// Speaker-labelled segments for a meeting window. Each reference is a
@@ -100,8 +99,7 @@ extension GeminiClient {
     /// MEASURED 2026-09-28 on three dictations with the full cleanup prompt:
     /// `none` took 1.4–2.5 s with no reasoning tokens; `low` took 1.9–4.7 s,
     /// spent up to 307 reasoning tokens, and turned a two-sentence dictation
-    /// into a numbered list. Through OpenRouter at `low`, one reply spent 232
-    /// reasoning tokens and returned no text at all.
+    /// into a numbered list.
     static let openAIReasoningEffort = "none"
 
     /// Chat messages for an OpenAI writing model.
@@ -147,6 +145,51 @@ extension GeminiClient {
     }
 
     // MARK: - Parsing
+
+    static func audioFormat(_ mimeType: String) -> String {
+        switch mimeType {
+        case "audio/wav", "audio/x-wav": return "wav"
+        case "audio/mp3", "audio/mpeg": return "mp3"
+        case "audio/ogg": return "ogg"
+        default: return "flac"
+        }
+    }
+
+    /// `{"text": "...", ...}` from `/audio/transcriptions`. A silent clip is an
+    /// empty string, never an error, matching the Gemini extractors.
+    static func extractTranscriptText(from data: Data) throws -> String {
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            throw TranscriptionError.network("unparseable_response")
+        }
+        let text = json["text"] as? String ?? ""
+        if text.isEmpty {
+            Log.transcription.info("openai transcript empty; response keys: \(json.keys.sorted().joined(separator: ","), privacy: .public)")
+        }
+        return text
+    }
+
+    /// `choices[0].message.content`, which may be a string or an array of text
+    /// parts. A `finish_reason` of `content_filter` is the safety block.
+    static func extractChatMessage(from data: Data) throws -> String {
+        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            throw TranscriptionError.network("unparseable_response")
+        }
+        guard let choices = json["choices"] as? [[String: Any]], let first = choices.first else {
+            throw TranscriptionError.network("no_choices")
+        }
+        if let finish = first["finish_reason"] as? String, finish == "content_filter" {
+            throw TranscriptionError.safetyBlocked
+        }
+        let message = first["message"] as? [String: Any] ?? [:]
+        let parts = message["content"] as? [[String: Any]] ?? []
+        let text = message["content"] as? String ?? parts.compactMap { $0["text"] as? String }.joined()
+        if text.isEmpty {
+            // Shape only, never content: which keys came back and why it stopped.
+            let details = (json["usage"] as? [String: Any])?["completion_tokens_details"] as? [String: Any] ?? [:]
+            Log.transcription.error("openai message empty: finish=\(first["finish_reason"] as? String ?? "nil", privacy: .public) message keys=\(message.keys.sorted().joined(separator: ","), privacy: .public) content type=\(String(describing: type(of: message["content"] as Any)), privacy: .public) reasoning tokens=\((details["reasoning_tokens"] as? NSNumber)?.intValue ?? -1, privacy: .public)")
+        }
+        return text
+    }
 
     /// Keywords may not contain `<`, `>`, a carriage return or a line feed.
     static func openAIKeywords(_ terms: [String]) -> [String] {

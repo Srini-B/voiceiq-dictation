@@ -22,19 +22,11 @@ extension GeminiTranscriptionService {
                raw: raw, rawHasFillers: rawHasFillers)
     }
 
-    /// Whether the transcript can still carry "uh" and "um". MAI Transcribe 2
-    /// in its Verbatim style, and ElevenLabs and Sarvam in verbatim mode,
-    /// write every one they hear, as does Gemini's verbatim mode; OpenAI's
-    /// transcription model has no smart mode.
-    func transcriptKeepsFillers(source: TranscriptionSource, policy: SettingsStore.FormattingPolicy) -> Bool {
-        switch source {
-        case .maiTranscribe: return settings.maiTranscribeStyle == .verbatim
-        case .elevenLabs, .sarvam: return policy.mode != .smart
-        case .provider:
-            return settings.activeRoute.provider == .openAI
-                || policy.mode != .smart
-                || settings.usesLegacyTranscribeEndpoint
-        }
+    /// Whether the transcript can still carry "uh" and "um". Gemini's
+    /// verbatim mode writes every one it hears; OpenAI's transcription model
+    /// has no smart mode.
+    func transcriptKeepsFillers(provider: ModelProvider, policy: SettingsStore.FormattingPolicy) -> Bool {
+        provider == .openAI || policy.mode != .smart
     }
 
     /// Turns a cleanup outcome into the text to insert. The dictionary's hard
@@ -64,9 +56,7 @@ extension GeminiTranscriptionService {
         raw: String, context: DictationContext, config: GeminiConfig, second: String? = nil
     ) async -> CleanupOutcome {
         let dictionary = DictionaryStore()
-        // Sarvam's writing model takes text only, so the prompt must not
-        // promise it screenshots it will never see.
-        let screenshots = settings.writingSource == .sarvam ? [] : context.screenshots
+        let screenshots = context.screenshots
         let prompt = PromptV1.cleanupPrompt(
             raw: raw,
             vocabulary: dictionary.sanitizedVocabulary(),

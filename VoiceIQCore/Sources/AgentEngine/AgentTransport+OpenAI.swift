@@ -12,10 +12,10 @@ extension AgentTransport {
 
     // MARK: - Chat Completions
 
-    /// OpenAI, OpenRouter, Vercel and CLIProxyAPI's `/v1/chat/completions`.
-    /// GPT and Gemini models cache the prefix on their own. A Claude model
-    /// on this path (OpenRouter, CLIProxyAPI) needs Anthropic breakpoints,
-    /// which both hosts accept as `cache_control` on content parts: one on
+    /// `/v1/chat/completions` on OpenAI or a custom endpoint such as
+    /// CLIProxyAPI. GPT and Gemini models cache the prefix on their own. A
+    /// Claude model on this path (a proxy) needs Anthropic breakpoints,
+    /// which proxies accept as `cache_control` on content parts: one on
     /// the system text, which also covers the tools before it, and one on
     /// the last part of the newest message.
     func sendOpenAIChat(_ conversation: AgentConversation) async throws -> AgentReply {

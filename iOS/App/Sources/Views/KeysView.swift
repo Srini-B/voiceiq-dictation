@@ -17,36 +17,11 @@ struct KeysView: View {
     }
 }
 
-/// The provider (Gemini or OpenAI) and its key, the transcription provider
-/// (shown once an ElevenLabs, OpenRouter or Vercel key makes a second option),
-/// the optional ElevenLabs and TinyFish keys, and the gateways under a collapsed Experimental section, as
-/// on the Mac. Gateway keys serve both providers and MAI Transcribe 2, so
-/// they are entered once.
+/// The selected model provider and the optional web search key.
 struct ModelKeysForm: View {
     @State private var provider = SettingsStore().preferredProvider
-    @State private var gateway = SettingsStore().activeRoute.gateway
-    @State private var available = KeychainStore.gatewaysWithKeys(for: SettingsStore().preferredProvider)
-    @State private var transcriptionSource = SettingsStore().preferredTranscriptionSource
-    @State private var hasElevenLabsKey = KeychainStore.loadElevenLabsKey() != nil
-    @State private var hasSarvamKey = KeychainStore.loadSarvamKey() != nil
-    @State private var hasGatewayKey = SettingsStore().maiTranscribeEndpoint != nil
-    @State private var sarvamLanguage = SettingsStore().sarvamLanguage
-    @State private var writingSource = SettingsStore().preferredWritingSource
-    /// Collapsed on every visit, like the Mac's Experimental group.
-    @State private var experimentalExpanded = false
 
     private var providerSlot: KeySlot { provider == .gemini ? .gemini : .openAI }
-
-    private var transcriptionOptions: [TranscriptionSource] {
-        TranscriptionSource.allCases.filter { source in
-            switch source {
-            case .provider: return true
-            case .elevenLabs: return hasElevenLabsKey
-            case .maiTranscribe: return hasGatewayKey
-            case .sarvam: return hasSarvamKey
-            }
-        }
-    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.xl) {
@@ -54,7 +29,7 @@ struct ModelKeysForm: View {
                 Image(systemName: "info.circle.fill")
                     .foregroundStyle(Theme.Colors.accent)
                     .font(.system(size: 17))
-                Text("Pick **Gemini** or **OpenAI** and add that provider's key. The ElevenLabs and TinyFish keys are optional.")
+                Text("Pick **Gemini** or **OpenAI** and add that provider's key. The TinyFish key is optional.")
                     .font(Theme.Fonts.subheadline())
                     .foregroundStyle(Theme.Colors.inkSecondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -78,35 +53,10 @@ struct ModelKeysForm: View {
                     .id(providerSlot)
             }
 
-            if transcriptionOptions.count > 1 {
-                VStack(alignment: .leading, spacing: Theme.Spacing.m) {
-                    GroupLabel(text: "Transcription")
-                    TranscriptionCard(options: transcriptionOptions, provider: provider,
-                                      source: $transcriptionSource, language: $sarvamLanguage)
-                }
-            }
-
-            if hasSarvamKey {
-                VStack(alignment: .leading, spacing: Theme.Spacing.m) {
-                    GroupLabel(text: "Writing model")
-                    Picker("Writing model", selection: $writingSource) {
-                        ForEach(WritingSource.allCases) { Text($0.displayName(for: provider)).tag($0) }
-                    }
-                    .pickerStyle(.segmented)
-                    .onChange(of: writingSource) { _, value in
-                        if value != SettingsStore().writingSource { SettingsStore().setPreferredWritingSource(value) }
-                    }
-                }
-            }
-
             VStack(alignment: .leading, spacing: Theme.Spacing.m) {
                 GroupLabel(text: "Optional")
-                KeyCard(slot: .elevenLabs, onChange: reload)
-                KeyCard(slot: .sarvam, onChange: reload)
                 KeyCard(slot: .tinyFish, onChange: reload)
             }
-
-            experimental
         }
         .onAppear(perform: reload)
         .onReceive(NotificationCenter.default.publisher(for: .gtSettingDidChange).receive(on: RunLoop.main)) { _ in
@@ -114,151 +64,8 @@ struct ModelKeysForm: View {
         }
     }
 
-    @ViewBuilder private var experimental: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.m) {
-            Button {
-                withAnimation(.easeInOut(duration: 0.2)) { experimentalExpanded.toggle() }
-            } label: {
-                HStack(spacing: Theme.Spacing.s) {
-                    GroupLabel(text: "Experimental")
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(Theme.Colors.muted)
-                        .rotationEffect(.degrees(experimentalExpanded ? 90 : 0))
-                    Spacer(minLength: 0)
-                }
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Experimental")
-            .accessibilityValue(experimentalExpanded ? "Expanded" : "Collapsed")
-
-            if experimentalExpanded {
-                if available.count > 1 {
-                    Card {
-                        Text("Gateway").font(Theme.Fonts.headline()).foregroundStyle(Theme.Colors.ink)
-                        Picker("Gateway", selection: $gateway) {
-                            ForEach(ModelGateway.allCases.filter(available.contains)) { option in
-                                Text(option.shortName(for: provider)).tag(option)
-                            }
-                        }
-                        .pickerStyle(.segmented)
-                        .onChange(of: gateway) { _, value in
-                            if value != SettingsStore().activeRoute.gateway { SettingsStore().setPreferredGateway(value) }
-                        }
-                    }
-                }
-                KeyCard(slot: .openRouter, onChange: reload)
-                KeyCard(slot: .vercel, onChange: reload)
-            }
-        }
-    }
-
     private func reload() {
-        let settings = SettingsStore()
-        provider = settings.preferredProvider
-        available = KeychainStore.gatewaysWithKeys(for: provider)
-        gateway = settings.activeRoute.gateway
-        hasElevenLabsKey = KeychainStore.loadElevenLabsKey() != nil
-        hasSarvamKey = KeychainStore.loadSarvamKey() != nil
-        hasGatewayKey = settings.maiTranscribeEndpoint != nil
-        transcriptionSource = settings.transcriptionSource
-        sarvamLanguage = settings.sarvamLanguage
-        writingSource = settings.writingSource
-    }
-}
-
-/// Who transcribes and, for Sarvam, the spoken language. Each menu sits
-/// under or beside its own label: side by side when the width allows,
-/// stacked rows on a phone.
-private struct TranscriptionCard: View {
-    @Environment(\.horizontalSizeClass) private var sizeClass
-    let options: [TranscriptionSource]
-    let provider: ModelProvider
-    @Binding var source: TranscriptionSource
-    @Binding var language: SarvamLanguage
-
-    private var showsLanguage: Bool { source == .sarvam }
-
-    var body: some View {
-        Card(padding: 0) {
-            if sizeClass == .regular && showsLanguage {
-                HStack(spacing: 0) {
-                    column("Speech model") { modelMenu }
-                    Rectangle().fill(Theme.Colors.hairline).frame(width: 0.5)
-                    column("Spoken language") { languageMenu }
-                }
-                .fixedSize(horizontal: false, vertical: true)
-            } else {
-                VStack(spacing: 0) {
-                    row("Speech model") { modelMenu }
-                    if showsLanguage {
-                        Rectangle().fill(Theme.Colors.hairline).frame(height: 0.5)
-                            .padding(.leading, Theme.Spacing.l)
-                        row("Spoken language") { languageMenu }
-                    }
-                }
-            }
-        }
-    }
-
-    private var modelMenu: some View {
-        Picker("Speech model", selection: $source) {
-            ForEach(options) { Text($0.displayName(for: provider)).tag($0) }
-        }
-        .pickerStyle(.menu)
-        .labelsHidden()
-        .onChange(of: source) { _, value in
-            if value != SettingsStore().transcriptionSource { SettingsStore().setPreferredTranscriptionSource(value) }
-        }
-    }
-
-    private var languageMenu: some View {
-        Picker("Spoken language", selection: $language) {
-            ForEach(SarvamLanguage.menuOrder) { Text($0.displayName).tag($0) }
-        }
-        .pickerStyle(.menu)
-        .labelsHidden()
-        .onChange(of: language) { _, value in
-            if value != SettingsStore().sarvamLanguage { SettingsStore().setSarvamLanguage(value) }
-        }
-    }
-
-    /// Label and menu on one line; when the menu's value would wrap (large
-    /// text sizes), the menu drops below its label instead.
-    private func row(_ title: String, @ViewBuilder menu: () -> some View) -> some View {
-        let menu = menu()
-        return ViewThatFits(in: .horizontal) {
-            HStack(spacing: Theme.Spacing.m) {
-                Text(title).font(Theme.Fonts.body()).foregroundStyle(Theme.Colors.ink).fixedSize()
-                Spacer(minLength: Theme.Spacing.s)
-                menu.fixedSize()
-            }
-            .padding(.leading, Theme.Spacing.l)
-            .padding(.trailing, Theme.Spacing.s)
-            .frame(minHeight: 52)
-            column(title) { menu }
-        }
-    }
-
-    private func column(_ title: String, @ViewBuilder menu: () -> some View) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(title).font(Theme.Fonts.footnote()).foregroundStyle(Theme.Colors.muted)
-                .padding(.leading, Theme.Spacing.l)
-            menu().padding(.leading, Theme.Spacing.xs)
-        }
-        .padding(.vertical, Theme.Spacing.m)
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-}
-
-private extension ModelGateway {
-    func shortName(for provider: ModelProvider) -> String {
-        switch self {
-        case .direct: return provider.displayName
-        case .openRouter: return "OpenRouter"
-        case .vercel: return "Vercel"
-        }
+        provider = SettingsStore().preferredProvider
     }
 }
 
@@ -392,29 +199,21 @@ private struct TrailingIconLabelStyle: LabelStyle {
 
 /// A place a key can be stored, with what it is for.
 enum KeySlot: Hashable, CaseIterable {
-    case gemini, openAI, openRouter, vercel, tinyFish, elevenLabs, sarvam
+    case gemini, openAI, tinyFish
 
     var title: String {
         switch self {
         case .gemini: return "Gemini"
-        case .openRouter: return "OpenRouter"
-        case .vercel: return "Vercel AI Gateway"
         case .openAI: return "OpenAI"
         case .tinyFish: return "TinyFish"
-        case .elevenLabs: return "ElevenLabs"
-        case .sarvam: return "Sarvam"
         }
     }
 
     var symbol: String {
         switch self {
         case .gemini: return "sparkles"
-        case .openRouter: return "arrow.triangle.branch"
-        case .vercel: return "triangle.fill"
         case .openAI: return "circle.hexagongrid"
         case .tinyFish: return "globe"
-        case .elevenLabs: return "waveform"
-        case .sarvam: return "indianrupeesign.circle"
         }
     }
 
@@ -422,66 +221,42 @@ enum KeySlot: Hashable, CaseIterable {
         switch self {
         case .gemini:
             return "Google's Gemini API, with a free tier. Stored in your \(UIDevice.current.localizedModel)'s Keychain and only ever sent to Google."
-        case .openRouter:
-            return "Runs Gemini or OpenAI models through OpenRouter, which has no per-minute tier limits. Stored in your \(UIDevice.current.localizedModel)'s Keychain and only ever sent to OpenRouter."
-        case .vercel:
-            return "Runs Gemini or OpenAI models through Vercel AI Gateway, billed per call. Stored in your \(UIDevice.current.localizedModel)'s Keychain and only ever sent to Vercel."
         case .openAI:
             return "OpenAI's API. Stored in your \(UIDevice.current.localizedModel)'s Keychain and only ever sent to OpenAI."
         case .tinyFish:
             return "Lets Ask Anything look up current information on the web. Stored in your \(UIDevice.current.localizedModel)'s Keychain and only ever sent to TinyFish."
-        case .elevenLabs:
-            return "Lets ElevenLabs Scribe transcribe your dictation and meetings instead of the provider's speech model; the provider still applies the writing rules. Stored in your \(UIDevice.current.localizedModel)'s Keychain and only ever sent to ElevenLabs."
-        case .sarvam:
-            return "Lets Sarvam Saaras V4 transcribe your dictation and meetings (Indian languages and English), and Sarvam 105B apply the writing rules. Priced in rupees. Stored in your \(UIDevice.current.localizedModel)'s Keychain and only ever sent to Sarvam."
         }
     }
 
     var keyURL: URL {
         switch self {
         case .gemini: return URL(string: "https://aistudio.google.com/apikey")!
-        case .openRouter: return URL(string: "https://openrouter.ai/settings/keys")!
-        case .vercel: return URL(string: "https://vercel.com/ai-gateway")!
         case .openAI: return URL(string: "https://platform.openai.com/api-keys")!
         case .tinyFish: return URL(string: "https://agent.tinyfish.ai/api-keys")!
-        case .elevenLabs: return URL(string: "https://elevenlabs.io/app/settings/api-keys")!
-        case .sarvam: return URL(string: "https://dashboard.sarvam.ai/")!
         }
     }
 
     func load() -> String? {
         switch self {
         case .gemini: return KeychainStore.loadAPIKey()
-        case .openRouter: return KeychainStore.loadOpenRouterKey()
-        case .vercel: return KeychainStore.loadVercelKey()
         case .openAI: return KeychainStore.loadOpenAIKey()
         case .tinyFish: return KeychainStore.loadTinyFishKey()
-        case .elevenLabs: return KeychainStore.loadElevenLabsKey()
-        case .sarvam: return KeychainStore.loadSarvamKey()
         }
     }
 
     func save(_ key: String) -> Bool {
         switch self {
         case .gemini: return KeychainStore.saveAPIKey(key)
-        case .openRouter: return KeychainStore.saveOpenRouterKey(key)
-        case .vercel: return KeychainStore.saveVercelKey(key)
         case .openAI: return KeychainStore.saveOpenAIKey(key)
         case .tinyFish: return KeychainStore.saveTinyFishKey(key)
-        case .elevenLabs: return KeychainStore.saveElevenLabsKey(key)
-        case .sarvam: return KeychainStore.saveSarvamKey(key)
         }
     }
 
     func delete() {
         switch self {
         case .gemini: _ = KeychainStore.deleteAPIKey(notify: true)
-        case .openRouter: _ = KeychainStore.deleteOpenRouterKey(notify: true)
-        case .vercel: _ = KeychainStore.deleteVercelKey(notify: true)
         case .openAI: _ = KeychainStore.deleteOpenAIKey(notify: true)
         case .tinyFish: _ = KeychainStore.deleteTinyFishKey(notify: true)
-        case .elevenLabs: _ = KeychainStore.deleteElevenLabsKey(notify: true)
-        case .sarvam: _ = KeychainStore.deleteSarvamKey(notify: true)
         }
     }
 
@@ -492,16 +267,8 @@ enum KeySlot: Hashable, CaseIterable {
         switch self {
         case .gemini:
             check = await GeminiClient(apiKey: { key }).validateKey(endpoint: SettingsStore().geminiConfig.endpoint)
-        case .openRouter:
-            check = await GeminiClient(apiKey: { nil }, openRouterKey: { key }).validateOpenRouterKey()
-        case .vercel:
-            check = await GeminiClient(apiKey: { nil }, vercelKey: { key }).validateVercelKey()
         case .openAI:
             check = await GeminiClient(apiKey: { nil }, openAIKey: { key }).validateOpenAIKey()
-        case .elevenLabs:
-            check = await GeminiClient(apiKey: { nil }, elevenLabsKey: { key }).validateElevenLabsKey()
-        case .sarvam:
-            check = await GeminiClient(apiKey: { nil }, sarvamKey: { key }).validateSarvamKey()
         case .tinyFish:
             switch await TinyFishClient(apiKey: { key }).validateKey() {
             case .valid: return .accepted(offline: false)

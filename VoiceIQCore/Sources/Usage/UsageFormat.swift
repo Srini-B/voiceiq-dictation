@@ -2,8 +2,7 @@ import Foundation
 
 /// What a call or a total was billed on, as the Cost and History screens show
 /// it: token counts for token-priced models, audio length for models priced
-/// by the minute (ElevenLabs Scribe, OpenAI's transcription models, MAI
-/// Transcribe 2).
+/// by the minute (OpenAI's transcription models).
 public enum UsageFormat {
     public static func tokens(_ count: Int) -> String {
         count >= 10_000 ? String(format: "%.1fk", Double(count) / 1000) : "\(count)"

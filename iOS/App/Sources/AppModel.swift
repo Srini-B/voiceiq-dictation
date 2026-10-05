@@ -47,29 +47,18 @@ final class AppModel: ObservableObject {
         FormattingSettingsMigration.removeLiveTranscriptionSettings()
         let client = GeminiClient(
             apiKey: { KeychainStore.loadAPIKey() },
-            openRouterKey: { KeychainStore.loadOpenRouterKey() },
-            vercelKey: { KeychainStore.loadVercelKey() },
             openAIKey: { KeychainStore.loadOpenAIKey() },
-            elevenLabsKey: { KeychainStore.loadElevenLabsKey() },
-            sarvamKey: { KeychainStore.loadSarvamKey() },
             openAIConfig: { SettingsStore().openAIConfig },
-            writingSource: { SettingsStore().writingSource },
-            route: { SettingsStore().activeRoute }
+            provider: { SettingsStore().preferredProvider }
         )
         transcription = GeminiTranscriptionService(client: client)
         historyStore = try? HistoryStore.standard()
         UsageMeter.store = try? UsageStore.standard()
-        // Today's rupee rate for the rows to come, and the rate of their day
-        // for rows that have none.
-        if let usage = UsageMeter.store {
-            Task.detached(priority: .utility) { await FXRates.refresh(); await usage.backfillFX() }
-        }
         meetings = MeetingEngine(
             client: client,
             config: { SettingsStore().geminiConfig },
             summaryModel: SettingsStore().geminiConfig.cleanupModel,
-            providers: { SettingsStore().meetingRoutes },
-            transcriptionRoute: { SettingsStore().meetingTranscriptionRoute }
+            providers: { SettingsStore().meetingProviders }
         )
         let inserter = self.inserter
         coordinator = DictationCoordinator(

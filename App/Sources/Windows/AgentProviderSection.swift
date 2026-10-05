@@ -1,8 +1,8 @@
 import VoiceIQCore
 import SwiftUI
 
-/// Settings → Advanced → Experimental: the model host Agent mode uses
-/// instead of the dictation route. Everything but the key persists as it is
+/// Settings → Advanced: the model host Agent mode uses instead of the
+/// selected provider. Everything but the key persists as it is
 /// typed; the key follows the same save-and-validate flow as the other keys.
 struct AgentProviderSection: View {
     private let settings = SettingsStore()

@@ -164,8 +164,6 @@ struct DictationSettingsView: View {
             Section {
                 Toggle("Better hearing in loud rooms", isOn: $noiseHandling)
                     .onChange(of: noiseHandling) { _, value in settings.setExperimentalNoiseHandling(value) }
-            } header: {
-                SettingsSectionHeader("Experimental")
             }
             if UIDevice.isPad {
                 Section {
@@ -337,24 +335,9 @@ private struct ReturnAppDetail: View {
 
 struct PrivacyView: View {
     @State private var retentionDays = SettingsStore().audioRetentionDays
-    @State private var route = SettingsStore().activeRoute
-    @State private var source = SettingsStore().transcriptionSource
-    @State private var maiHost = SettingsStore().maiTranscribeEndpoint?.hostName ?? ""
-    @State private var writing = SettingsStore().writingSource
+    @State private var provider = SettingsStore().preferredProvider
 
-    private var owner: String { route.provider == .gemini ? "Google" : "OpenAI" }
-
-    /// Where requests go on the active route: the provider, or a gateway that
-    /// forwards them to the provider. With ElevenLabs or MAI Transcribe 2
-    /// transcribing, dictation audio goes only there.
-    private var audioDestination: String {
-        switch source {
-        case .elevenLabs: return "ElevenLabs, with your key"
-        case .sarvam: return "Sarvam, with your key"
-        case .maiTranscribe: return "\(maiHost), then Microsoft"
-        case .provider: return route.gateway == .direct ? "\(owner), with your key" : "\(route.endpoint.hostName), then \(owner)"
-        }
-    }
+    private var destination: String { "\(provider.directName), with your key" }
 
     var body: some View {
         Form {
@@ -369,22 +352,18 @@ struct PrivacyView: View {
                 }
             }
             Section {
-                LabeledContent("Audio", value: audioDestination)
+                LabeledContent("Audio", value: destination)
                 LabeledContent("Transcript text", value: "Only with writing rules on")
-                LabeledContent("Meeting notes", value: writing == .sarvam ? "Sarvam" : route.provider.displayName)
+                LabeledContent("Meeting notes", value: provider.displayName)
                 LabeledContent("Dictionary terms", value: "Sent with the audio")
                 LabeledContent("Dictionary", value: "Your iCloud, to sync")
                 LabeledContent("Ask search queries", value: "TinyFish, if its key is saved")
-                LabeledContent("Rupee rate lookups", value: "Frankfurter; a date range at most")
                 LabeledContent("What you type", value: "Never")
             } header: { SettingsSectionHeader("What leaves your \(UIDevice.current.localizedModel)") }
         }
         .settingsPage(title: "Privacy")
         .onAppear {
-            route = SettingsStore().activeRoute
-            source = SettingsStore().transcriptionSource
-            maiHost = SettingsStore().maiTranscribeEndpoint?.hostName ?? ""
-            writing = SettingsStore().writingSource
+            provider = SettingsStore().preferredProvider
         }
     }
 }
@@ -397,7 +376,6 @@ struct AdvancedView: View {
     @State private var endpoint = SettingsStore().endpointOverride ?? ""
     @State private var transcribeModel = SettingsStore().transcribeModelOverride ?? ""
     @State private var cleanupModel = SettingsStore().cleanupModelOverride ?? ""
-    @State private var legacyEndpoint = SettingsStore().usesLegacyTranscribeEndpoint
     @State private var openAITranscribe = SettingsStore().openAITranscribeModelOverride ?? ""
     @State private var openAIWriting = SettingsStore().openAIWritingModelOverride ?? ""
     private let geminiDefaults = GeminiConfig()
@@ -425,10 +403,6 @@ struct AdvancedView: View {
                     field("Transcription", text: $transcribeModel, prompt: geminiDefaults.transcribeModel) { settings.setTranscribeModelOverride($0) }
                     field("Formatting", text: $cleanupModel, prompt: geminiDefaults.cleanupModel) { settings.setCleanupModelOverride($0) }
                 } header: { SettingsSectionHeader("Gemini models") }
-                Section {
-                    Toggle("Use the previous transcription endpoint", isOn: $legacyEndpoint)
-                        .onChange(of: legacyEndpoint) { _, value in settings.setLegacyTranscribeEndpoint(value) }
-                }
             } else {
                 Section {
                     field("Transcription", text: $openAITranscribe, prompt: openAIDefaults.transcribeModel) { settings.setOpenAITranscribeModelOverride($0) }

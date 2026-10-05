@@ -9,8 +9,7 @@ final class SettingsLiveUpdateTests: XCTestCase {
 
     override func tearDown() {
         for key in ["showIdleIndicator", "soundsEnabled", "gateTrips",
-                    "experimentalNoiseHandling", "smartTranscription", "smartCleanupPass",
-                    "legacyTranscribeEndpoint"] {
+                    "experimentalNoiseHandling", "smartTranscription", "smartCleanupPass"] {
             UserDefaults.standard.removeObject(forKey: key)
         }
     }
@@ -34,7 +33,6 @@ final class SettingsLiveUpdateTests: XCTestCase {
         expectChange(forKey: "soundsEnabled") { settings.setSoundsEnabled(false) }
         expectChange(forKey: "smartTranscription") { settings.setSmartTranscription(false) }
         expectChange(forKey: "smartCleanupPass") { settings.setSmartCleanupPass(false) }
-        expectChange(forKey: "legacyTranscribeEndpoint") { settings.setLegacyTranscribeEndpoint(true) }
         expectChange(forKey: "dictationTrigger") { settings.setDictationTrigger(.modifier(.fn)) }
         expectChange(forKey: "audioRetentionDays") { settings.setAudioRetentionDays(7) }
         expectChange(forKey: "experimentalNoiseHandling") { settings.setExperimentalNoiseHandling(true) }

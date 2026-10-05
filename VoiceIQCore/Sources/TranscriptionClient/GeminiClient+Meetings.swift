@@ -33,43 +33,11 @@ public extension GeminiClient {
         return try Self.parseDiarizedWords(data)
     }
 
-    /// The same through a gateway, where no transcription endpoint diarizes.
-    /// VERIFIED 2026-09-27: OpenRouter's `/audio/transcriptions` for
-    /// `google/gemini-3.5-transcribe` returns one untimed segment whatever
-    /// options are passed, and Vercel's drops `word_info` too (Vercel community
-    /// thread 48498). The flash model is sent each known speaker's clips as
-    /// separate audio parts under their ids, then the window, and answers with
-    /// those ids. MEASURED 2026-09-27: its timestamps drift too far for the
-    /// overlap vote the native path uses, which split one person into two ids.
-    func transcribeSpeakers(audio: Data, references: [(id: String, audio: Data)], model: String,
-                            deadline: TimeInterval, via: ModelEndpoint) async throws -> [DiarizedWord] {
-        var parts: [ChatPart] = []
-        if references.isEmpty {
-            parts.append(.text("Reference clips: none yet."))
-        } else {
-            parts.append(.text("Reference clips:"))
-            for reference in references { parts += [.text("Reference \(reference.id):"), .flac(reference.audio)] }
-        }
-        parts += [.text("Window audio:"), .flac(audio)]
-        let text = try await gatewayChat(prompt: Self.speakerTranscriptPrompt, model: model, deadline: deadline,
-                                         stage: .meetingTranscribe, jsonSchema: Self.speakerTranscriptSchema,
-                                         parts: parts, via: via)
-        return try Self.parseSpeakerSegments(text)
-    }
-
     /// Notes JSON for a prompt built by `MeetingNotesPrompt`.
     func meetingNotesJSON(prompt: String, model: String, endpoint: URL, deadline: TimeInterval,
-                          via route: ModelRoute) async throws -> String {
-        if writingSource() == .sarvam {
-            return try await sarvamChat(prompt: prompt, deadline: deadline, stage: .meetingSummary, jsonObject: true)
-        }
-        switch (route.provider, route.gateway) {
-        case (.gemini, .direct): break
-        case (.openAI, .direct):
+                          via provider: ModelProvider) async throws -> String {
+        if provider == .openAI {
             return try await openAIChat(prompt: prompt, deadline: deadline, stage: .meetingSummary, jsonObject: true)
-        default:
-            return try await gatewayChat(prompt: prompt, model: writingModelID(model, route: route), provider: route.provider,
-                                         deadline: deadline, stage: .meetingSummary, jsonObject: true, via: route.endpoint)
         }
         let body: [String: Any] = [
             "contents": [["role": "user", "parts": [["text": prompt]]]],
@@ -80,44 +48,6 @@ public extension GeminiClient {
         ]
         return try await generateContent(body: body, model: model, endpoint: endpoint, deadline: deadline,
                                          stage: .meetingSummary)
-    }
-
-    /// MEASURED 2026-09-27: asking the flash model to judge speakers "by voice
-    /// (pitch, timbre, accent)" got `content_filter` every time. This wording
-    /// passed.
-    static let speakerTranscriptPrompt = """
-    Transcribe this window of a recorded call and label who speaks.
-
-    Speaker ids must stay the same across the whole call, which is processed in consecutive windows. Each reference clip is a person already identified earlier in the call, under a fixed id. When the same person talks in this window, use their id. Use a new id (the next unused one of s1, s2, s3, ...) only for a person who matches no reference. Never give two different people the same id, and never give one person two ids.
-
-    Return ONLY JSON: {"segments":[{"speaker":"s1","start":0.0,"end":0.0,"text":""}]}
-    - One segment per speaker turn, in time order. Start a new segment when the speaker changes or after a pause longer than one second.
-    - "start" and "end": seconds from the start of the window audio, to one decimal place.
-    - "text": exactly what is said, in the language and script spoken. Do not translate, correct, summarize, or add words. Leave out silence, music, and noise.
-    """
-
-    /// Strict schema, because the same request with `json_object` returned an
-    /// unterminated string on a Tamil call (2026-09-27).
-    static let speakerTranscriptSchema: [String: Any] = [
-        "type": "object",
-        "properties": ["segments": ["type": "array", "items": [
-            "type": "object",
-            "properties": ["speaker": ["type": "string"], "start": ["type": "number"],
-                           "end": ["type": "number"], "text": ["type": "string"]],
-            "required": ["speaker", "start", "end", "text"],
-            "additionalProperties": false,
-        ] as [String: Any]]],
-        "required": ["segments"],
-        "additionalProperties": false,
-    ]
-
-    static func parseSpeakerSegments(_ text: String) throws -> [DiarizedWord] {
-        struct Segment: Decodable { var speaker: String; var start: Double; var end: Double; var text: String }
-        struct Envelope: Decodable { var segments: [Segment] }
-        let envelope = try JSONDecoder().decode(Envelope.self, from: Data(stripFences(text).utf8))
-        return envelope.segments.filter { !$0.text.trimmingCharacters(in: .whitespaces).isEmpty }.map {
-            DiarizedWord(text: $0.text, speaker: $0.speaker, start: $0.start, end: $0.end)
-        }
     }
 
     static func parseDiarizedWords(_ data: Data) throws -> [DiarizedWord] {

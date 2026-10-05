@@ -3,8 +3,7 @@
 A voice-only keyboard backed by the same dictation pipeline as the Mac app.
 The keyboard never records or calls a model. It sends commands to the VoiceiQ
 app, which records, transcribes with your own API key, and hands the text back.
-Like the Mac, it runs Gemini or OpenAI models, with that provider's own key or
-through OpenRouter or Vercel AI Gateway.
+Like the Mac, it runs Gemini or OpenAI models, with that provider's own key.
 
 ## Targets
 
@@ -33,7 +32,7 @@ second, extension-safe library in the same package.
 ```
 Keyboard ──command + Darwin ping──▶ App Group ──▶ App (background audio)
    ▲                                                   │ DictationCoordinator
-   └──────snapshot + Darwin ping ◀── App Group ◀───────┘ → Gemini / gateways
+   └──────snapshot + Darwin ping ◀── App Group ◀───────┘ → Gemini / OpenAI
 ```
 
 `VoiceIQBridge` defines the protocol:
@@ -255,10 +254,8 @@ Permissions can be taken back after onboarding (2026-09-30):
 Onboarding saves its page in `MobileSettings.onboardingStep`,
 so a trip to Settings resumes on the same page.
 
-Onboarding has four pages: welcome, API keys (every provider plus the optional
-ElevenLabs and TinyFish keys on one page, with a provider picker once two or
-more keys are saved and a Transcription card once an ElevenLabs, Sarvam,
-OpenRouter or Vercel key is), permissions
+Onboarding has four pages: welcome, API keys (a Gemini or OpenAI provider
+picker with that provider's key, plus the optional TinyFish key), permissions
 (microphone and keyboard together), and a Try it field.
 
 ### Design system
@@ -337,7 +334,7 @@ runs. Everything needs Full Access.
 | Pill | Keyboard status plus Dynamic Island |
 | AX and paste insertion | `textDocumentProxy.insertText` |
 | Ask Anything, Translate, Paste last | Keyboard modes and Paste last |
-| Provider (Gemini or OpenAI), ElevenLabs transcription, gateways under Experimental, TinyFish | Same, in Settings › Provider & Keys and the iOS Keychain |
+| Provider (Gemini or OpenAI), TinyFish | Same, in Settings › Provider & Keys and the iOS Keychain |
 | History stats: words, dictations, WPM, audio time | Home's stats grid |
 | Dictionary with search, CSV and Auto-learned | Same, synced through iCloud, plus adding a selection or a copied word from the keyboard |
 | Writing rules, smart transcription, live, noise handling | Same settings |

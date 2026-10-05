@@ -14,22 +14,14 @@ public enum KeychainStore {
     public enum Secret: String {
         case gemini = "gemini-api-key"
         case tinyFish = "tinyfish-api-key"
-        case openRouter = "openrouter-api-key"
-        case vercel = "vercel-ai-gateway-key"
         case openAI = "openai-api-key"
-        case elevenLabs = "elevenlabs-api-key"
-        case sarvam = "sarvam-api-key"
         case agentProvider = "agent-provider-api-key"
 
         var label: String {
             switch self {
             case .gemini: return "VoiceiQ — Gemini API key"
             case .tinyFish: return "VoiceiQ — TinyFish API key"
-            case .openRouter: return "VoiceiQ — OpenRouter API key"
-            case .vercel: return "VoiceiQ — Vercel AI Gateway key"
             case .openAI: return "VoiceiQ — OpenAI API key"
-            case .elevenLabs: return "VoiceiQ — ElevenLabs API key"
-            case .sarvam: return "VoiceiQ — Sarvam API key"
             case .agentProvider: return "VoiceiQ — Agent provider API key"
             }
         }
@@ -39,11 +31,7 @@ public enum KeychainStore {
             switch self {
             case .gemini: return "apiKey"
             case .tinyFish: return "tinyFishKey"
-            case .openRouter: return "openRouterKey"
-            case .vercel: return "vercelKey"
             case .openAI: return "openAIKey"
-            case .elevenLabs: return "elevenLabsKey"
-            case .sarvam: return "sarvamKey"
             case .agentProvider: return "agentProviderKey"
             }
         }
@@ -99,26 +87,6 @@ public enum KeychainStore {
     @discardableResult
     public static func deleteTinyFishKey(notify: Bool = false) -> Bool { delete(.tinyFish, notify: notify) }
 
-    // MARK: - OpenRouter
-
-    public static func loadOpenRouterKey() -> String? { load(.openRouter, service: service) }
-
-    @discardableResult
-    public static func saveOpenRouterKey(_ key: String) -> Bool { save(key, for: .openRouter) }
-
-    @discardableResult
-    public static func deleteOpenRouterKey(notify: Bool = false) -> Bool { delete(.openRouter, notify: notify) }
-
-    // MARK: - Vercel AI Gateway
-
-    public static func loadVercelKey() -> String? { load(.vercel, service: service) }
-
-    @discardableResult
-    public static func saveVercelKey(_ key: String) -> Bool { save(key, for: .vercel) }
-
-    @discardableResult
-    public static func deleteVercelKey(notify: Bool = false) -> Bool { delete(.vercel, notify: notify) }
-
     // MARK: - OpenAI
 
     public static func loadOpenAIKey() -> String? { load(.openAI, service: service) }
@@ -129,48 +97,18 @@ public enum KeychainStore {
     @discardableResult
     public static func deleteOpenAIKey(notify: Bool = false) -> Bool { delete(.openAI, notify: notify) }
 
-    // MARK: - ElevenLabs
-
-    public static func loadElevenLabsKey() -> String? { load(.elevenLabs, service: service) }
-
-    @discardableResult
-    public static func saveElevenLabsKey(_ key: String) -> Bool { save(key, for: .elevenLabs) }
-
-    @discardableResult
-    public static func deleteElevenLabsKey(notify: Bool = false) -> Bool { delete(.elevenLabs, notify: notify) }
-
-    // MARK: - Sarvam
-
-    public static func loadSarvamKey() -> String? { load(.sarvam, service: service) }
-
-    @discardableResult
-    public static func saveSarvamKey(_ key: String) -> Bool { save(key, for: .sarvam) }
-
-    @discardableResult
-    public static func deleteSarvamKey(notify: Bool = false) -> Bool { delete(.sarvam, notify: notify) }
-
-    /// Whether the provider's own key is stored.
-    public static func hasDirectKey(for provider: ModelProvider) -> Bool {
+    /// Whether the provider's key is stored.
+    public static func hasKey(for provider: ModelProvider) -> Bool {
         switch provider {
         case .gemini: return loadAPIKey() != nil
         case .openAI: return loadOpenAIKey() != nil
         }
     }
 
-    /// The gateways that can reach `provider` right now. A gateway key serves
-    /// both providers; the direct route needs the provider's own key.
-    public static func gatewaysWithKeys(for provider: ModelProvider) -> Set<ModelGateway> {
-        var set = Set<ModelGateway>()
-        if hasDirectKey(for: provider) { set.insert(.direct) }
-        if loadOpenRouterKey() != nil { set.insert(.openRouter) }
-        if loadVercelKey() != nil { set.insert(.vercel) }
-        return set
-    }
-
     /// Whether the selected provider can be reached at all. This is what "the
     /// app can transcribe" means; a Gemini key alone does not let an OpenAI
     /// selection transcribe.
-    public static var hasModelKey: Bool { !gatewaysWithKeys(for: SettingsStore().preferredProvider).isEmpty }
+    public static var hasModelKey: Bool { hasKey(for: SettingsStore().preferredProvider) }
 
     // MARK: - Generic
 

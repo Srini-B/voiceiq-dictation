@@ -3,9 +3,9 @@ import Foundation
 /// Removes standalone hesitation sounds from a verbatim transcript.
 ///
 /// Only for text that reaches the user WITHOUT the writing model: the cleanup
-/// call failed or its answer was rejected. MAI Transcribe 2 writes every "uh"
-/// it hears ("check on, uh, development branch"), and on those paths nothing
-/// else would remove them. Deliberately narrow: only sounds that are never a
+/// call failed or its answer was rejected. A verbatim transcript keeps every
+/// "uh" it hears ("check on, uh, development branch"), and on those paths
+/// nothing else would remove them. Deliberately narrow: only sounds that are never a
 /// word in a language the app supports. "er" (German "he"), "ah", "eh", "hmm"
 /// and "like" stay, because each carries meaning somewhere.
 public enum FillerStripper {

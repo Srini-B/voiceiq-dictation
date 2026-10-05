@@ -133,8 +133,6 @@ struct DictationPane: View {
                 if agentMode {
                     ShortcutRecorderRow(action: .agent)
                 }
-            } header: {
-                Text("Experimental")
             } footer: {
                 Text("Loud rooms judges your voice against the actual room noise instead of a fixed level. Agent mode operates your Mac from a spoken command: it sees the screen and clicks, types and opens apps on your behalf. It needs Screen Recording and Accessibility access, and asks before anything that looks like sending, paying or deleting.")
             }

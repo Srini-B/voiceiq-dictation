@@ -49,7 +49,7 @@ public enum LegacyMigration {
             "hotkeyKey", "endpointOverride", "transcribeModelOverride", "cleanupModelOverride",
             "audioRetentionDays", "gateTrips", "dictionaryEntries", "hasCompletedOnboarding",
             "experimentalNoiseHandling", "smartTranscription", "smartCleanupPass",
-            "legacyTranscribeEndpoint", "shouldAnnounceSmartRestored",
+            "shouldAnnounceSmartRestored",
         ]
         guard let old = UserDefaults(suiteName: legacyBundleID) else { return }
         let defaults = UserDefaults.standard

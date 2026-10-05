@@ -13,10 +13,6 @@ import Foundation
 ///   On OpenAI's own API the writing model cannot hear the audio, so a
 ///   single-chunk dictation also gets whisper-1's transcript as SECOND,
 ///   fetched in parallel, for cleanup to repair misheard stretches of RAW.
-///   With ElevenLabs, MAI Transcribe 2 or Sarvam picked as the transcription
-///   source, every chunk goes to that model instead, and neither the one-call
-///   path nor SECOND runs: the writing model gets its transcript as RAW. With
-///   Sarvam as the writing model the same holds: it cannot hear audio.
 ///
 /// The one-call path has no separate raw transcript, so there is nothing for
 /// the validation gate to compare against; the raw column holds the same text.
@@ -53,8 +49,8 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
         // Read once per dictation: a toggle flipped mid-flight must not change
         // the rules this transcript is being produced under.
         let vocabulary = Self.vocabularyIfEnabled()
-        let source = settings.transcriptionSource
-        let names = modelNames(source)
+        let provider = settings.preferredProvider
+        let names = modelNames(provider)
 
         // One request per chunk. A short dictation is one chunk, so this is the
         // old single-request path for everything under ten minutes. Leading and
@@ -66,8 +62,7 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
         // that stops it (an error, a timeout, "no speech") falls through to
         // transcription then cleanup below, so it can only cost time.
         if context.mode == .dictate, policy.cleanupPass, ranges.count == 1, context.speechHeard,
-           source == .provider, settings.writingSource == .provider, settings.activeRoute.provider.writingModelHearsAudio,
-           !Self.oneCallRefused.contains(settings.activeRoute),
+           provider.writingModelHearsAudio, !Self.oneCallRefused.contains(provider),
            let text = await transcribeInOneCall(audioURL: audioURL, range: ranges[0],
                                                 durationSeconds: durationSeconds, context: context, config: config) {
             return TranscriptionResult(rawTranscript: text, cleanedTranscript: text,
@@ -92,13 +87,12 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
             let flacData = try encodeChunk(audioURL: audioURL, range: range, index: index)
             let seconds = durationSeconds * Double(range.count) / Double(max(1, fileFrames))
             let deadline = TimeoutPolicy.overallDeadline(audioDuration: seconds)
-            if ranges.count == 1, context.mode == .dictate, policy.cleanupPass, source == .provider,
-               settings.writingSource == .provider {
+            if ranges.count == 1, context.mode == .dictate, policy.cleanupPass {
                 let client = client
                 secondOpinion = Task { try? await client.secondOpinionTranscript(flacData: flacData, deadline: deadline) }
             }
             var raw = try await transcribeWithRetry(
-                flacData: flacData, seconds: seconds, source: source, config: config, policy: policy,
+                flacData: flacData, seconds: seconds, config: config, policy: policy,
                 vocabulary: vocabulary, deadline: deadline
             )
             var trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -110,7 +104,7 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
                 // Sending this one down the old endpoint would leave a rare branch
                 // silently on a different pipeline.
                 raw = (try? await sendTranscribe(
-                    flacData: flacData, seconds: seconds, source: source, config: config, policy: policy,
+                    flacData: flacData, seconds: seconds, config: config, policy: policy,
                     vocabulary: vocabulary, deadline: deadline
                 )) ?? ""
                 trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -157,7 +151,7 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
         let second = await Self.awaitSecondOpinion(secondOpinion, raw: trimmedRaw, audioSeconds: durationSeconds)
         let cleanup = await cleanupOrFallback(
             raw: trimmedRaw, context: context, config: config, second: second,
-            rawHasFillers: transcriptKeepsFillers(source: source, policy: policy)
+            rawHasFillers: transcriptKeepsFillers(provider: provider, policy: policy)
         )
         return TranscriptionResult(
             rawTranscript: trimmedRaw,
@@ -221,9 +215,9 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
             return ReplacementEngine.apply(dictionary.replacementRules(), to: text)
         } catch {
             if case .modelUnavailable = error as? TranscriptionError {
-                // A Vercel free-tier key is refused the flash model on every
-                // call; stop paying for the refusal until the app restarts.
-                Self.oneCallRefused.insert(settings.activeRoute)
+                // A key refused the flash model is refused on every call;
+                // stop paying for the refusal until the app restarts.
+                Self.oneCallRefused.insert(settings.preferredProvider)
             }
             Log.transcription.info("one call failed (\(String(describing: error), privacy: .public)) — transcribing, then cleaning up")
             return nil
@@ -232,34 +226,25 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
 
     /// The models that run, for History's model column. OpenAI's
     /// transcription model has no smart mode, so no mode is named.
-    private func modelNames(_ source: TranscriptionSource) -> (transcribe: String, writing: String) {
-        var names: (transcribe: String, writing: String)
-        if settings.activeRoute.provider == .openAI {
+    private func modelNames(_ provider: ModelProvider) -> (transcribe: String, writing: String) {
+        if provider == .openAI {
             let openAI = settings.openAIConfig
-            names = (openAI.transcribeModel, openAI.writingModel)
-        } else {
-            let config = settings.geminiConfig
-            names = ("\(config.transcribeModel)/\(settings.formattingPolicy.mode.rawValue)", config.cleanupModel)
+            return (openAI.transcribeModel, openAI.writingModel)
         }
-        if settings.writingSource == .sarvam { names.writing = Sarvam.chatModel }
-        switch source {
-        case .provider: return names
-        case .elevenLabs: return (ElevenLabs.batchModel, names.writing)
-        case .maiTranscribe: return (GeminiClient.maiTranscribeModel, names.writing)
-        case .sarvam: return (Sarvam.sttModel, names.writing)
-        }
+        let config = settings.geminiConfig
+        return ("\(config.transcribeModel)/\(settings.formattingPolicy.mode.rawValue)", config.cleanupModel)
     }
 
-    /// Routes whose key was refused the flash model this run.
+    /// Providers whose key was refused the flash model this run.
     private static let oneCallRefused = ProviderSet()
     final class ProviderSet: @unchecked Sendable {
         private let lock = NSLock()
-        private var providers: Set<ModelRoute> = []
-        func contains(_ provider: ModelRoute) -> Bool {
+        private var providers: Set<ModelProvider> = []
+        func contains(_ provider: ModelProvider) -> Bool {
             lock.lock(); defer { lock.unlock() }
             return providers.contains(provider)
         }
-        func insert(_ provider: ModelRoute) {
+        func insert(_ provider: ModelProvider) {
             lock.lock(); defer { lock.unlock() }
             providers.insert(provider)
         }
@@ -368,52 +353,23 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
     /// The ONE place a transcription request is sent. Every caller — primary,
     /// silent retry, and the empty-transcript second chance — goes through here.
     private func sendTranscribe(
-        flacData: Data, seconds: Double, source: TranscriptionSource,
+        flacData: Data, seconds: Double,
         config: GeminiConfig, policy: SettingsStore.FormattingPolicy,
         vocabulary: [String], deadline: TimeInterval
     ) async throws -> String {
         try await UsageMeter.$audioSeconds.withValue(seconds) {
-            try await sendTranscribeRequest(flacData: flacData, seconds: seconds, source: source, config: config,
+            try await sendTranscribeRequest(flacData: flacData, config: config,
                                             policy: policy, vocabulary: vocabulary, deadline: deadline)
         }
     }
 
     private func sendTranscribeRequest(
-        flacData: Data, seconds: Double, source: TranscriptionSource,
+        flacData: Data,
         config: GeminiConfig, policy: SettingsStore.FormattingPolicy,
         vocabulary: [String], deadline: TimeInterval
     ) async throws -> String {
-        // No dictionary terms: neither gateway documents keyword biasing for
-        // this model. The writing rules still get the dictionary.
-        if source == .maiTranscribe, let endpoint = settings.maiTranscribeEndpoint {
-            return try await client.gatewayTranscribe(audio: flacData, model: GeminiClient.maiTranscribeModel,
-                                                      deadline: deadline, stage: .transcribe, via: endpoint,
-                                                      maiStyle: settings.maiTranscribeStyle)
-        }
-        // The transport decision lives in ONE place so the fail-open retry below
-        // cannot silently switch endpoints half way through a recovery.
         func send(_ terms: [String]) async throws -> String {
-            if source == .elevenLabs {
-                return try await client.elevenLabsTranscribe(
-                    audio: flacData, keyterms: terms, noVerbatim: policy.mode == .smart,
-                    audioSeconds: seconds, deadline: deadline
-                )
-            }
-            if source == .sarvam {
-                return try await client.sarvamTranscribe(
-                    audio: flacData, audioSeconds: seconds, keyterms: terms, verbatim: policy.mode != .smart,
-                    language: settings.sarvamLanguage, deadline: deadline
-                )
-            }
-            if settings.usesLegacyTranscribeEndpoint {
-                // Verbatim only — `mode` returns an empty transcript on this
-                // endpoint. The tone pass, if enabled, still runs on top.
-                return try await client.transcribe(
-                    flacData: flacData, model: config.transcribeModel,
-                    endpoint: config.endpoint, deadline: deadline, customVocabulary: terms
-                )
-            }
-            return try await client.transcribeInteraction(
+            try await client.transcribeInteraction(
                 audio: flacData, model: config.transcribeModel, endpoint: config.endpoint,
                 mode: policy.mode, customVocabulary: terms, deadline: deadline
             )
@@ -424,8 +380,7 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
         } catch TranscriptionError.badRequest(let message) where !vocabulary.isEmpty {
             // Fail open. badRequest is deliberately terminal everywhere else, but
             // one strange dictionary entry must never be able to break a user's
-            // own dictation. Covers BOTH transports — the legacy endpoint carries
-            // vocabulary too.
+            // own dictation.
             Log.transcription.error("transcribe rejected with vocabulary (\(message, privacy: .private)) — retrying without it")
             let text = try await send([])
             // Only latch once the vocabulary-free retry SUCCEEDS. If it also
@@ -438,13 +393,13 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
     }
 
     private func transcribeWithRetry(
-        flacData: Data, seconds: Double, source: TranscriptionSource,
+        flacData: Data, seconds: Double,
         config: GeminiConfig, policy: SettingsStore.FormattingPolicy,
         vocabulary: [String], deadline: TimeInterval
     ) async throws -> String {
         do {
             return try await sendTranscribe(
-                flacData: flacData, seconds: seconds, source: source, config: config, policy: policy,
+                flacData: flacData, seconds: seconds, config: config, policy: policy,
                 vocabulary: vocabulary, deadline: deadline
             )
         } catch let error as TranscriptionError {
@@ -456,7 +411,7 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
                 Log.transcription.notice("transcribe retrying after \(String(describing: error), privacy: .public)")
                 if case .network = error { try await Task.sleep(nanoseconds: 500_000_000) }
                 return try await sendTranscribe(
-                    flacData: flacData, seconds: seconds, source: source, config: config, policy: policy,
+                    flacData: flacData, seconds: seconds, config: config, policy: policy,
                     vocabulary: vocabulary, deadline: deadline
                 )
             case .rateLimitedTransient(let retryAfter):
@@ -468,7 +423,7 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
                 Log.transcription.info("transcribe rate limited — waiting \(Int(wait))s once")
                 try await Task.sleep(nanoseconds: UInt64(wait * 1_000_000_000))
                 return try await sendTranscribe(
-                    flacData: flacData, seconds: seconds, source: source, config: config, policy: policy,
+                    flacData: flacData, seconds: seconds, config: config, policy: policy,
                     vocabulary: vocabulary, deadline: deadline
                 )
             default:

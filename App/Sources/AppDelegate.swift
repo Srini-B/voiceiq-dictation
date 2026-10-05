@@ -172,7 +172,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case "experimentalNoiseHandling": settings.setExperimentalNoiseHandling(value)
         case "smartTranscription": settings.setSmartTranscription(value)
         case "smartCleanupPass": settings.setSmartCleanupPass(value)
-        case "legacyTranscribeEndpoint": settings.setLegacyTranscribeEndpoint(value)
         default: Log.session.warning("debug set: unknown key \(key, privacy: .public)")
         }
     }

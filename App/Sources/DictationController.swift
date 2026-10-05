@@ -51,30 +51,19 @@ final class DictationController {
         KeychainStore.migrateDevKeyFileIfPresent()
         let client = GeminiClient(
             apiKey: { KeychainStore.loadAPIKey() },
-            openRouterKey: { KeychainStore.loadOpenRouterKey() },
-            vercelKey: { KeychainStore.loadVercelKey() },
             openAIKey: { KeychainStore.loadOpenAIKey() },
-            elevenLabsKey: { KeychainStore.loadElevenLabsKey() },
-            sarvamKey: { KeychainStore.loadSarvamKey() },
             openAIConfig: { SettingsStore().openAIConfig },
-            writingSource: { SettingsStore().writingSource },
-            route: { SettingsStore().activeRoute }
+            provider: { SettingsStore().preferredProvider }
         )
         let service = GeminiTranscriptionService(client: client)
         transcriptionService = service
         historyStore = try? HistoryStore.standard()
         UsageMeter.store = try? UsageStore.standard()
-        // Today's rupee rate for the rows to come, and the rate of their day
-        // for rows that have none.
-        if let usage = UsageMeter.store {
-            Task.detached(priority: .utility) { await FXRates.refresh(); await usage.backfillFX() }
-        }
         meetings = MeetingEngine(
             client: client,
             config: { SettingsStore().geminiConfig },
             summaryModel: SettingsStore().geminiConfig.cleanupModel,
-            providers: { SettingsStore().meetingRoutes },
-            transcriptionRoute: { SettingsStore().meetingTranscriptionRoute }
+            providers: { SettingsStore().meetingProviders }
         )
         coordinator = DictationCoordinator(
             audioFactory: { [warmEngines] in warmEngines.take() },
@@ -426,7 +415,7 @@ final class DictationController {
             if !engineActive {
                 activateEngine()
             }
-        case "apiKey", "openRouterKey", "vercelKey", "openAIKey", "modelProvider":
+        case "apiKey", "openAIKey", "modelProvider":
             if KeychainStore.hasModelKey {
                 // Covers the "I'll add it later" onboarding path, where the
                 // engine was never started: a key arriving in Settings must
@@ -494,8 +483,6 @@ final class DictationController {
             let message: String
             if case .auth = error {
                 message = "Queued dictations are waiting — fix your API key in Settings → Advanced"
-            } else if SettingsStore().transcriptionSource == .elevenLabs {
-                message = "ElevenLabs credits are used up — queued dictations will retry once you add credits"
             } else {
                 message = "Daily quota reached — queued dictations will retry later"
             }
@@ -546,7 +533,7 @@ final class DictationController {
                         case .stillOffline:
                             self.showNotice("Still offline — will retry automatically when you're back", for: 4.0, sound: nil)
                         case .rateLimited(let retryIn):
-                            self.showNotice("\(SettingsStore().activeRoute.provider.displayName) is rate limited — retrying in \(Int(retryIn.rounded()))s", for: 4.0, sound: nil)
+                            self.showNotice("\(SettingsStore().preferredProvider.displayName) is rate limited — retrying in \(Int(retryIn.rounded()))s", for: 4.0, sound: nil)
                         case .busy:
                             self.showNotice("Already retrying your queued dictations…", for: 2.5, sound: nil)
                         case .failed:
@@ -1170,19 +1157,8 @@ final class DictationController {
 
     // MARK: - Copy
 
-    /// The service the recording goes to: ElevenLabs or MAI Transcribe 2's
-    /// gateway when either transcribes, otherwise the active route's provider
-    /// or gateway.
     private static var providerName: String {
-        let settings = SettingsStore()
-        switch settings.transcriptionSource {
-        case .elevenLabs: return "ElevenLabs"
-        case .sarvam: return "Sarvam"
-        case .maiTranscribe: return settings.maiTranscribeEndpoint?.hostName ?? "MAI Transcribe 2"
-        case .provider:
-            let route = settings.activeRoute
-            return route.gateway == .direct ? route.provider.displayName : route.gateway.displayName(for: route.provider)
-        }
+        SettingsStore().preferredProvider.displayName
     }
 
     private static func copy(for failure: DictationFailure) -> String {
@@ -1200,10 +1176,7 @@ final class DictationController {
         case .rateLimited: return "Rate limited — History will retry it shortly"
         case .noMicrophone: return "No microphone found — connect one to dictate"
         case .quotaExhausted:
-            // ElevenLabs credits are a monthly balance, not a daily quota.
-            return SettingsStore().transcriptionSource == .elevenLabs
-                ? "ElevenLabs credits are used up. Saved to History"
-                : "Daily quota reached for your \(providerName) key. Saved to History"
+            return "Daily quota reached for your \(providerName) key. Saved to History"
         case .timeout: return "Timed out — saved to History"
         case .validation: return "Couldn't transcribe — saved to History"
         case .safetyBlocked: return "The API declined this one — saved to History"

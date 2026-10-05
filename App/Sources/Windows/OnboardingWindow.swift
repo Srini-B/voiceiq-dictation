@@ -354,9 +354,8 @@ private struct APIKeyScreen: View {
     /// bad key had to UNINSTALL the app to get another chance at this screen.
     @State private var replacing = false
     @State private var provider = SettingsStore().preferredProvider
-    /// Any route to the provider counts, so a gateway key saved earlier is
-    /// not asked for again.
-    @State private var storedKeyExists = KeychainStore.hasModelKey
+    /// A saved key for the selected provider completes this step.
+    @State private var storedKeyExists = KeychainStore.hasKey(for: SettingsStore().preferredProvider)
     private var showingField: Bool { !storedKeyExists || replacing }
     private var host: String { provider == .gemini ? "Google" : "OpenAI" }
 
@@ -372,7 +371,7 @@ private struct APIKeyScreen: View {
                 .disabled(validating)
                 .onChange(of: provider) { _, value in
                     SettingsStore().setPreferredProvider(value)
-                    storedKeyExists = KeychainStore.hasModelKey
+                    storedKeyExists = KeychainStore.hasKey(for: value)
                     replacing = false
                     key = ""
                     failed = false

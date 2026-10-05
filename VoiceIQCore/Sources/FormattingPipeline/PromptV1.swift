@@ -42,7 +42,7 @@ public enum PromptV1 {
     /// cleaned text directly, with the same rules, dictionary and examples as
     /// the cleanup pass. MEASURED 2026-09-28 on gemini-3.8-flash: 2.4 s for a
     /// 21 s dictation and 3.7 s for 164 s, against 7.5 s and 10.5 s for
-    /// transcription then cleanup, on both Google's endpoint and OpenRouter.
+    /// transcription then cleanup.
     public static func dictationPrompt(
         vocabulary: [String] = [],
         spellings: [(wrong: String, right: String)] = [],

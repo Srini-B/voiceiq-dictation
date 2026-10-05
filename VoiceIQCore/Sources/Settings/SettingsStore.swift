@@ -76,127 +76,19 @@ public struct SettingsStore: Sendable {
         return value
     }
 
-    /// Gemini or OpenAI, chosen in Settings → Advanced. Before 2026-09-28
-    /// `modelProvider` also held `openRouter` or `vercel`; those were Gemini
-    /// over a gateway, so they read as Gemini here and as the gateway below.
+    /// Gemini or OpenAI, chosen in Settings → Advanced. Any other stored
+    /// value (an older build's gateway) reads as Gemini.
     public var preferredProvider: ModelProvider {
         ModelProvider(rawValue: Self.defaults.string(forKey: "modelProvider") ?? "") ?? .gemini
     }
 
-    /// The gateway chosen in Settings. Only matters when its key exists.
-    public var preferredGateway: ModelGateway {
-        if let raw = Self.defaults.string(forKey: "modelGateway"), let gateway = ModelGateway(rawValue: raw) { return gateway }
-        return ModelGateway(rawValue: Self.defaults.string(forKey: "modelProvider") ?? "") ?? .direct
-    }
-
     public func setPreferredProvider(_ provider: ModelProvider) {
-        // Pin the gateway first: a legacy `modelProvider` gateway value is
-        // about to be overwritten.
-        Self.defaults.set(preferredGateway.rawValue, forKey: "modelGateway")
         Self.set(provider.rawValue, forKey: "modelProvider")
     }
 
-    public func setPreferredGateway(_ gateway: ModelGateway) {
-        Self.set(gateway.rawValue, forKey: "modelGateway")
-    }
-
-    /// Speech-to-text chosen in Settings. Only matters when its key exists.
-    public var preferredTranscriptionSource: TranscriptionSource {
-        TranscriptionSource(rawValue: Self.defaults.string(forKey: "transcriptionSource") ?? "") ?? .provider
-    }
-
-    public func setPreferredTranscriptionSource(_ source: TranscriptionSource) {
-        Self.set(source.rawValue, forKey: "transcriptionSource")
-    }
-
-    /// Who transcribes the next dictation. ElevenLabs only while its key is
-    /// stored and MAI Transcribe 2 only while a gateway key is, so removing a
-    /// key falls back to the provider's own model.
-    public var transcriptionSource: TranscriptionSource {
-        switch preferredTranscriptionSource {
-        case .elevenLabs where KeychainStore.loadElevenLabsKey() != nil: return .elevenLabs
-        case .maiTranscribe where maiTranscribeEndpoint != nil: return .maiTranscribe
-        case .sarvam where KeychainStore.loadSarvamKey() != nil: return .sarvam
-        default: return .provider
-        }
-    }
-
-    /// The language Sarvam is told the audio is in; `auto` lets it detect.
-    public var sarvamLanguage: SarvamLanguage {
-        SarvamLanguage(rawValue: Self.defaults.string(forKey: "sarvamLanguage") ?? "") ?? .auto
-    }
-
-    public func setSarvamLanguage(_ language: SarvamLanguage) {
-        Self.set(language.rawValue, forKey: "sarvamLanguage")
-    }
-
-    /// Writing model chosen in Settings. Until the user picks one, Sarvam
-    /// transcription brings Sarvam's own writing model and everything else
-    /// the provider's; an explicit choice sticks whatever transcribes.
-    public var preferredWritingSource: WritingSource {
-        if let stored = WritingSource(rawValue: Self.defaults.string(forKey: "writingSource") ?? "") { return stored }
-        return preferredTranscriptionSource == .sarvam ? .sarvam : .provider
-    }
-
-    public func setPreferredWritingSource(_ source: WritingSource) {
-        Self.set(source.rawValue, forKey: "writingSource")
-    }
-
-    /// Whose model writes next. Sarvam only while its key is stored.
-    public var writingSource: WritingSource {
-        preferredWritingSource == .sarvam && KeychainStore.loadSarvamKey() != nil ? .sarvam : .provider
-    }
-
-    /// Clean unless the user picked Verbatim: the writing rules exist to
-    /// remove fillers, and when they cannot run the transcript should not
-    /// carry every "uh" into the text.
-    public var maiTranscribeStyle: MAITranscribeStyle {
-        MAITranscribeStyle(rawValue: Self.defaults.string(forKey: "maiTranscribeStyle") ?? "") ?? .clean
-    }
-
-    public func setMAITranscribeStyle(_ style: MAITranscribeStyle) {
-        Self.set(style.rawValue, forKey: "maiTranscribeStyle")
-    }
-
-    /// The picked transcription source as a meeting route; nil when the
-    /// provider's meeting routes transcribe.
-    public var meetingTranscriptionRoute: MeetingTranscriber.SpeechRoute? {
-        switch transcriptionSource {
-        case .provider: return nil
-        case .elevenLabs: return .elevenLabs
-        case .maiTranscribe: return maiTranscribeEndpoint.map(MeetingTranscriber.SpeechRoute.mai)
-        case .sarvam: return .sarvam
-        }
-    }
-
-    /// The gateway MAI Transcribe 2 runs on: the chosen one when its key is
-    /// stored, otherwise the first with a key. Nil without a gateway key.
-    public var maiTranscribeEndpoint: ModelEndpoint? {
-        var keys = KeychainStore.gatewaysWithKeys(for: preferredProvider)
-        keys.remove(.direct)
-        guard !keys.isEmpty else { return nil }
-        return ModelRoute.resolve(provider: preferredProvider, preferred: preferredGateway, available: keys).endpoint
-    }
-
-    /// The route that serves calls right now; see `ModelRoute.resolve`.
-    public var activeRoute: ModelRoute {
-        let provider = preferredProvider
-        return ModelRoute.resolve(provider: provider, preferred: preferredGateway,
-                                  available: KeychainStore.gatewaysWithKeys(for: provider))
-    }
-
-    /// Routes for meeting transcription and notes; see `ModelRoute.meetingOrder`.
-    public var meetingRoutes: [ModelRoute] {
-        ModelRoute.meetingOrder(provider: preferredProvider, preferred: preferredGateway,
-                                available: KeychainStore.gatewaysWithKeys(for:))
-    }
-
-    /// The active route, then the selected provider over each other gateway
-    /// with a key. Never the other provider.
-    public var fallbackRoutes: [ModelRoute] {
-        let provider = preferredProvider
-        return ModelRoute.fallbackOrder(provider: provider, preferred: preferredGateway,
-                                        available: KeychainStore.gatewaysWithKeys(for: provider))
+    /// Providers for meeting transcription and notes; see `ModelProvider.meetingOrder`.
+    public var meetingProviders: [ModelProvider] {
+        ModelProvider.meetingOrder(selected: preferredProvider, hasKey: KeychainStore.hasKey(for:))
     }
 
     /// Show the resting dot at the bottom of the screen when idle. Off = the pill
@@ -379,22 +271,6 @@ public struct SettingsStore: Sendable {
     /// Only the user changes this. Rejected rewrites never turn it off.
     public func setSmartCleanupPass(_ enabled: Bool) {
         Self.set(enabled, forKey: "smartCleanupPass")
-    }
-
-    /// Escape hatch back to the pre-native-smart transport.
-    ///
-    /// `/v1beta/interactions` is days old. For the cost of one settings row, a
-    /// server-side regression in smart mode becomes something a user can switch
-    /// off rather than something that needs a hotfix release. Smart formatting is
-    /// unavailable on the legacy endpoint (`mode` returns an empty transcript
-    /// there), so this necessarily means verbatim + the optional tone pass.
-    /// Remove once native smart has a clean dogfood run.
-    public var usesLegacyTranscribeEndpoint: Bool {
-        Self.defaults.bool(forKey: "legacyTranscribeEndpoint")
-    }
-
-    public func setLegacyTranscribeEndpoint(_ enabled: Bool) {
-        Self.set(enabled, forKey: "legacyTranscribeEndpoint")
     }
 
     public func setDictationTrigger(_ trigger: DictationTrigger) {

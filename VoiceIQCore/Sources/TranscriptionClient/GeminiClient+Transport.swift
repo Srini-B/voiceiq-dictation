@@ -6,22 +6,19 @@ import Foundation
 ///
 /// WHY a session per request (2026-10-02 investigation):
 /// - With one long-lived session, CFNetwork learned HTTP/3 from each host's
-///   `Alt-Svc` header and reused idle QUIC connections. Two failure shapes
-///   followed: an ElevenLabs request on a connection idle for 72 s got a QUIC
-///   stateless reset and failed in 42 ms with -1005 (shown as "offline"), and
-///   an earlier OpenAI cleanup reused a connection idle for 134 s.
+///   `Alt-Svc` header and reused idle QUIC connections. A request on a
+///   connection idle for 72 s got a QUIC stateless reset and failed in 42 ms
+///   with -1005 (shown as "offline"), and an OpenAI cleanup reused a
+///   connection idle for 134 s.
 /// - There is no public API to turn HTTP/3 off for a session or request
 ///   (Apple DTS: "There's not a good way to disable QUIC for a specific
 ///   URLSession"; `assumesHTTP3Capable` only opts in). URLSession learns
-///   HTTP/3 from DNS HTTPS records or `Alt-Svc`. None of our hosts publishes
-///   an HTTPS record advertising h3 (api.openai.com, api.elevenlabs.io,
-///   generativelanguage.googleapis.com have none; openrouter.ai advertises
-///   h2 only; ai-gateway.vercel.sh is a CNAME), and an ephemeral session's
-///   `Alt-Svc` memory is its own.
+///   HTTP/3 from DNS HTTPS records or `Alt-Svc`. Neither api.openai.com nor
+///   generativelanguage.googleapis.com publishes an HTTPS record advertising
+///   h3, and an ephemeral session's `Alt-Svc` memory is its own.
 /// - So a new ephemeral session per request always starts on TCP + HTTP/2
-///   (probed from the MacBook on all five hosts) and never reuses an idle
-///   connection. Each call pays one TCP + TLS handshake, measured at 30–150 ms
-///   against calls of 1–5 s.
+///   and never reuses an idle connection. Each call pays one TCP + TLS
+///   handshake, measured at 30–150 ms against calls of 1–5 s.
 extension GeminiClient {
     static func makeSession(delegate: URLSessionDelegate? = nil) -> URLSession {
         let config = URLSessionConfiguration.ephemeral
@@ -44,7 +41,7 @@ extension GeminiClient {
     /// insert. Nothing else is retried here: a timeout already spent the
     /// deadline (callers retry it), and an HTTP status is an answer.
     static func perform(
-        _ request: URLRequest, deadline: TimeInterval, stage: UsageStage, via: ModelEndpoint, modelLabel: String
+        _ request: URLRequest, deadline: TimeInterval, stage: UsageStage, via: ModelProvider, modelLabel: String
     ) async throws -> (Data, URLResponse) {
         var request = request
         let requestID = UUID().uuidString
@@ -98,7 +95,7 @@ extension GeminiClient {
 
     private static func record(
         _ collector: TransportMetricsCollector, requestID: String, attempt: Int, stage: UsageStage,
-        via: ModelEndpoint, model: String, request: URLRequest, started: Date, status: Int?, outcome: String
+        via: ModelProvider, model: String, request: URLRequest, started: Date, status: Int?, outcome: String
     ) {
         let metrics = collector.transaction
         func ms(_ from: Date?, _ to: Date?) -> Int? {

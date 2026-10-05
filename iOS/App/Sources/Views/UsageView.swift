@@ -1,17 +1,10 @@
 import SwiftUI
 import VoiceIQCore
 
-/// Cost, as on the Mac: one source at a time (Gemini, OpenAI, ElevenLabs,
-/// MAI or Sarvam), opening on the selected provider, in dollars or rupees.
+/// Cost for Gemini or OpenAI, opening on the selected provider.
 /// Period totals, cost per action, and in Detailed the per-model table and
 /// the most recent calls.
 struct UsageView: View {
-    enum Currency: String, CaseIterable, Identifiable {
-        case usd, inr
-        var id: String { rawValue }
-        var title: String { self == .usd ? "USD" : "INR" }
-    }
-
     enum Period: String, CaseIterable, Identifiable {
         case today, week, month, all
         var id: String { rawValue }
@@ -38,7 +31,6 @@ struct UsageView: View {
     @State private var source = CostSource(SettingsStore().preferredProvider)
     @State private var period: Period = .month
     @AppStorage("costPaneDetailed") private var detailed = false
-    @AppStorage("costPaneCurrency") private var currency: Currency = .usd
     @State private var total = UsageStore.Total.zero
     @State private var byActivity: [(key: String, total: UsageStore.Total)] = []
     @State private var byModel: [(key: String, total: UsageStore.Total)] = []
@@ -54,10 +46,6 @@ struct UsageView: View {
                     .pickerStyle(.segmented)
                     Picker("Period", selection: $period) {
                         ForEach(Period.allCases) { Text($0.title).tag($0) }
-                    }
-                    .pickerStyle(.segmented)
-                    Picker("Currency", selection: $currency) {
-                        ForEach(Currency.allCases) { Text($0.title).tag($0) }
                     }
                     .pickerStyle(.segmented)
                     Card {
@@ -110,25 +98,16 @@ struct UsageView: View {
             }
         }
         .settingsPage(title: "Cost")
-        .onAppear {
-            reload()
-            if let store = UsageMeter.store { Task { await store.backfillFX() } }
-        }
+        .onAppear(perform: reload)
         .onChange(of: source) { _, _ in reload() }
         .onChange(of: period) { _, _ in reload() }
         .onReceive(NotificationCenter.default.publisher(for: .gtUsageDidChange)
             .debounce(for: .milliseconds(250), scheduler: RunLoop.main)) { _ in reload() }
     }
 
-    /// Where the shown source's prices come from, and the rate behind the
-    /// other currency.
     private var footer: String {
-        var note = source.pricingNote(activeRoute: SettingsStore().activeRoute)
-        // The Sarvam note already names the rate: its prices start in rupees.
-        if currency == .inr, source != .sarvam {
-            note += " Rupees at the European Central Bank rate of each call's day (Frankfurter)."
-        }
-        return detailed ? note + " ≈ marks estimated tokens, an unpriced model or a missing rate." : note
+        let note = source.pricingNote
+        return detailed ? note + " ≈ marks estimated tokens or an unpriced model." : note
     }
 
     private func row(_ name: String, _ total: UsageStore.Total) -> some View {
@@ -155,23 +134,18 @@ struct UsageView: View {
     }
 
     private func money(_ total: UsageStore.Total) -> String {
-        switch currency {
-        case .usd: return Self.money(total.costUSD, approximate: total.isApproximate)
-        case .inr: return Self.money(total.costINR, currency: .inr, approximate: total.isApproximate || total.fxMissing)
-        }
+        Self.money(total.costUSD, approximate: total.isApproximate)
     }
 
     private func money(_ record: UsageRecord) -> String {
-        let value = currency == .usd ? record.costUSD : record.costINR
-        return Self.money(value, currency: currency, approximate: record.isEstimated || value == nil)
+        Self.money(record.costUSD, approximate: record.isEstimated || record.costUSD == nil)
     }
 
     /// Costs are fractions of a cent per dictation, so four decimals until a
     /// whole unit, two after.
-    static func money(_ value: Double?, currency: Currency = .usd, approximate: Bool = false) -> String {
+    static func money(_ value: Double?, approximate: Bool = false) -> String {
         guard let value else { return "—" }
-        let symbol = currency == .usd ? "$" : "₹"
-        let text = value >= 1 ? String(format: "%@%.2f", symbol, value) : String(format: "%@%.4f", symbol, value)
+        let text = value >= 1 ? String(format: "$%.2f", value) : String(format: "$%.4f", value)
         return approximate ? "≈" + text : text
     }
 }

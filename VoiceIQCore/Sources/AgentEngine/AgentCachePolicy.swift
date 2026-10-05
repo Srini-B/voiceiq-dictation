@@ -1,7 +1,7 @@
 import Foundation
 
 /// The vendor a model id names. Caching rules follow the model, not the
-/// host: a Claude model behind OpenRouter or CLIProxyAPI still wants
+/// host: a Claude model behind CLIProxyAPI or another proxy still wants
 /// Anthropic breakpoints, and a GPT model behind a proxy still wants its
 /// cache key.
 public enum ModelFamily: String, Equatable, Sendable {
@@ -11,7 +11,7 @@ public enum ModelFamily: String, Equatable, Sendable {
     case other
 
     /// From the id's prefix, after any `vendor/` routing prefix such as
-    /// OpenRouter's `openai/gpt-4.1`. The Anthropic and Gemini request
+    /// `openai/gpt-4.1`. The Anthropic and Gemini request
     /// formats name their vendor outright.
     public static func infer(modelID: String, format: AgentAPIFormat) -> ModelFamily {
         switch format {

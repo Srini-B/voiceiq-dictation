@@ -92,14 +92,13 @@ Webex, or a Meet/Teams/Zoom tab in any browser starts a call, the pill offers to
 record it. Accept, or press ⌥M at any time, and VoiceiQ records both sides.
 Press ⌥M again (or the pill's stop button) to finish: you get a
 speaker-labelled transcript plus a summary, decisions, and owned action items
-under Settings → Meetings. Recording never stops on its own. Meetings need a
-model that labels speakers, so with OpenAI selected through a gateway they use
-your OpenAI key, or Gemini when there is none. With no usable key the recording
-is kept and marked failed with the reason, ready to Retry once a key is added.
+under Settings → Meetings. Recording never stops on its own. Meetings run on
+the selected provider, or on the other provider when only its key is saved.
+With no usable key the recording is kept and marked failed with the reason,
+ready to Retry once a key is added.
 
 **Cost Analysis.** Every model call is metered: tokens or audio seconds from the
-API response, priced at the provider's list prices, or the charge a gateway
-reports. Settings → Cost Analysis shows today, this week, this month, and all
+API response, priced at the provider's list prices. Settings → Cost Analysis shows today, this week, this month, and all
 time, broken down by action and by model, for Gemini or OpenAI (a toggle
 switches between them); each dictation in History shows what it cost. Details in
 [docs/COST_TRACKING.md](docs/COST_TRACKING.md).
@@ -114,11 +113,7 @@ you through it:
    [Google AI Studio](https://aistudio.google.com/apikey)) or OpenAI (get one at
    [platform.openai.com](https://platform.openai.com/api-keys)). The key is
    stored in your macOS Keychain and only ever sent to that provider. You can
-   switch provider later in Settings → Advanced. If a key keeps hitting rate
-   limits, the Experimental section there takes an
-   [OpenRouter](https://openrouter.ai/settings/keys) or
-   [Vercel AI Gateway](https://vercel.com/ai-gateway) key, which runs either
-   provider's models; a gateway key entered once serves both.
+   switch provider later in Settings → Advanced.
 2. **Allow the microphone** — say hello and it advances by itself.
 3. **Allow Accessibility** — macOS requires this for any app that types into
    another app.
@@ -138,19 +133,6 @@ dictation is a few seconds of audio. VoiceiQ itself is free and has no account.
 | Transcription | `gemini-3.5-transcribe` | `gpt-transcribe` |
 | Writing rules, Ask Anything, Translate, meeting notes | `gemini-3.8-flash` | `gpt-6-luna` |
 | Meeting speakers | `gemini-3.5-transcribe` | `gpt-4o-transcribe-diarize` |
-
-Settings → Advanced → Transcription → Speech model can hand the transcription stage
-to another model; the provider above still writes the text and the notes. With
-an ElevenLabs key, dictation and meetings can use `scribe_v2`. With an
-OpenRouter or Vercel AI Gateway key, they can use MAI Transcribe 2
-(`microsoft/mai-transcribe-2`), which labels the speakers and times each word
-for meetings. With a Sarvam key, they can use Saaras V4 (`saaras:v4`), which
-transcribes English and 22 Indian languages, detects the language by default,
-and labels speakers in meetings; the same key offers Sarvam 105B
-(`sarvam-105b`) as the writing model, which is the default while Saaras
-transcribes until you pick one. Sarvam prices in rupees, and Cost Analysis
-shows dollars or rupees. The picker appears only when one of those
-keys is stored.
 
 With Gemini, a dictation under ten minutes is one call to `gemini-3.8-flash`
 with the audio attached; OpenAI's writing model takes no audio, so every
@@ -199,9 +181,8 @@ lands where you were typing.
 - **One trip to the app, once.** The first tap starts a background session and
   sends you back to the app you were in. After that the mic starts in place,
   and the session shows in the Dynamic Island until you end it.
-- **Same settings as the Mac.** Gemini or OpenAI with your own key, or
-  through OpenRouter or Vercel under Experimental (keys in the iOS Keychain),
-  dictionary, writing rules, Ask Anything, Translate, History and Cost.
+- **Same settings as the Mac.** Gemini or OpenAI with your own key (stored
+  in the iOS Keychain), dictionary, writing rules, Ask Anything, Translate, History and Cost.
 - **Meetings are a recorder.** Record in the app, stop, and the notes are
   written with the same pipeline as on the Mac. The iPhone records the room
   mic only, because iOS does not let an app capture call audio.
@@ -243,7 +224,7 @@ iOS/            iPhone app, voice keyboard extension, Live Activity
 VoiceIQCore/        all engine logic, headless and testable
   HotkeyEngine/     CGEventTap + the pure hold/lock/cancel grammar
   AudioEngine/      crash-safe CAF capture, device changes, prewarming
-  TranscriptionClient/  Gemini, OpenAI and gateway calls, live sockets, retries, FLAC
+  TranscriptionClient/  Gemini and OpenAI calls, retries, FLAC
   FormattingPipeline/   cleanup prompt, validation gate, dictionary rules
   InsertionEngine/      the AX → paste → clipboard ladder
   HistoryStore/         GRDB index, recovery, retry queue, retention

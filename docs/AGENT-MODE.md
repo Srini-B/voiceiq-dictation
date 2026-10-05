@@ -1,6 +1,6 @@
 # Agent mode
 
-Experimental fourth mode. The user presses the Agent shortcut, speaks a
+A fourth mode. The user presses the Agent shortcut, speaks a
 command, and one model looks at the screen, acts through macOS Accessibility
 and CGEvent, and reports in the pill panel. The session stays open, with its
 transcript, until Stop. Research and the decisions behind this design are in
@@ -8,7 +8,7 @@ transcript, until Stop. Research and the decisions behind this design are in
 
 ## Turning it on
 
-Settings → Dictation → Experimental → **Agent mode**. The shortcut row
+Settings → Dictation → **Agent mode**. The shortcut row
 (`ShortcutAction.agent`, default ⌃⌥G) appears under the toggle; it is not in
 the Shortcuts list. The toggle persists as `agentModeEnabled`.
 
@@ -128,7 +128,7 @@ three-day schedule, and the app does not delete those older files.
 | Session and panel (App) | `App/Sources/Agent/AgentController.swift`, `AgentPanelView.swift`, `AgentEntryRow.swift`, `PillState.agent` in `App/Sources/HUD` |
 | Answer layout (App) | `App/Sources/DesignSystem/MarkdownBlocks.swift`, `MarkdownView.swift`, `MarkdownTableView.swift` (shared with `App/Sources/HUD/AnswerView.swift` and `AgentRunsPane`) |
 | Saved runs (App) | `App/Sources/Windows/AgentRunsPane.swift`, `MainSection.agent` in `SettingsWindow.swift` |
-| Settings | `DictationPane` Experimental (toggle + shortcut), `App/Sources/Windows/AgentProviderSection.swift` |
+| Settings | `DictationPane` (toggle + shortcut), `App/Sources/Windows/AgentProviderSection.swift` |
 
 `AgentLoop` depends on `ActionExecutor` and `AgentTransport` protocols only;
 `NativeExecutor` is the one executor.
@@ -167,8 +167,8 @@ the package has no tagged releases).
 provider or key saved while the panel is open takes effect after Stop and
 the next shortcut press. It resolves to:
 
-1. **Custom provider** (Settings → Advanced → Experimental → Agent mode
-   provider) when enabled, the base URL parses, and a model is selected.
+1. **Custom provider** (Settings → Advanced → Agent mode provider) when
+   enabled, the base URL parses, and a model is selected.
 2. Otherwise the dictation route: Gemini uses the formatting model on the
    configured endpoint; OpenAI uses the writing model on `api.openai.com`.
 
@@ -254,7 +254,7 @@ message never is, so the ceiling for a 6-call run is around 75 %.
 
 Direct Gemini and direct Anthropic keys were not available on the build
 machine; the Anthropic numbers are through CLIProxyAPI, which forwards the
-cache fields. OpenRouter and Vercel are untested. There is no per-session
+cache fields. There is no per-session
 token or cost cap; the only bound is 25 steps per command.
 
 ## Debug hooks

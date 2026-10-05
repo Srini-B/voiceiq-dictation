@@ -17,8 +17,9 @@ public struct TokenUsage: Equatable, Sendable, Codable {
     /// True when the server never reported counts and these are derived from
     /// audio length and output characters.
     public var isEstimated: Bool = false
-    /// USD the provider itself billed for the call, when it says (OpenRouter
-    /// does). Takes precedence over the price book.
+    /// USD charged for the call when it is known without the token price
+    /// book: a per-minute model's list price, or a host that states its
+    /// charge. Takes precedence over the price book.
     public var reportedCostUSD: Double? = nil
     /// Seconds of audio the call was billed for, on models priced by audio
     /// length instead of tokens.
@@ -52,14 +53,13 @@ public struct TokenUsage: Equatable, Sendable, Codable {
         )
     }
 
-    // MARK: - OpenAI-shaped gateways
+    // MARK: - OpenAI-shaped envelopes
 
-    /// `usage` from the OpenAI-shaped envelopes OpenRouter and Vercel AI
-    /// Gateway return: token counts plus, on OpenRouter only, `cost` in USD.
-    /// Audio and cached prompt tokens come from `prompt_tokens_details`,
-    /// reasoning tokens from `completion_tokens_details`; OpenRouter's
-    /// transcription endpoint reports `input_tokens`/`output_tokens` instead,
-    /// all of its input being audio.
+    /// `usage` from OpenAI-shaped responses: token counts plus `cost` in USD
+    /// when the host states it. Audio and cached prompt tokens come from
+    /// `prompt_tokens_details`, reasoning tokens from
+    /// `completion_tokens_details`; a transcription endpoint reports
+    /// `input_tokens`/`output_tokens` instead, all of its input being audio.
     public static func fromOpenAI(_ data: Data) -> TokenUsage? {
         guard let root = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
               let meta = root["usage"] as? [String: Any] else { return nil }
@@ -94,32 +94,6 @@ public struct TokenUsage: Equatable, Sendable, Codable {
     public static func fromAudioMinutes(seconds: Double, model: String) -> TokenUsage? {
         guard let perMinute = PriceBook.perMinutePrice(for: model) else { return nil }
         return TokenUsage(reportedCostUSD: seconds / 60 * perMinute, audioSeconds: seconds)
-    }
-
-    /// Vercel's `/v4/ai/transcription-model` response has no `usage` block;
-    /// the counts sit in `providerMetadata.google.usage` and the USD charge
-    /// in `providerMetadata.gateway.cost` (probed 2026-09-27).
-    public static func fromVercelTranscription(_ data: Data) -> TokenUsage? {
-        guard let root = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
-              let provider = root["providerMetadata"] as? [String: Any] else { return nil }
-        var usage = TokenUsage()
-        if let google = (provider["google"] as? [String: Any])?["usage"] as? [String: Any] {
-            for entry in google["input_tokens_by_modality"] as? [[String: Any]] ?? [] {
-                let tokens = (entry["tokens"] as? NSNumber)?.intValue ?? 0
-                switch entry["modality"] as? String {
-                case "audio": usage.audioIn += tokens
-                case "image": usage.imageIn += tokens
-                default: usage.textIn += tokens
-                }
-            }
-            usage.cachedIn = int(google, "total_cached_tokens", "totalCachedTokens")
-            usage.textOut = int(google, "total_output_tokens", "totalOutputTokens")
-            usage.thoughtOut = int(google, "total_thought_tokens", "totalThoughtTokens")
-        }
-        if let cost = (provider["gateway"] as? [String: Any])?["cost"] {
-            usage.reportedCostUSD = (cost as? NSNumber)?.doubleValue ?? (cost as? String).flatMap(Double.init)
-        }
-        return usage.isEmpty && usage.reportedCostUSD == nil ? nil : usage
     }
 
     // MARK: - Agent mode hosts

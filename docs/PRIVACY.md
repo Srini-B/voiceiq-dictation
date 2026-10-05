@@ -4,32 +4,15 @@
 
 Your voice goes from your Mac directly to the model provider you chose in
 Settings → Advanced, using your own API key: Google's Gemini API or OpenAI's API.
-If you choose a gateway instead (OpenRouter or Vercel AI Gateway), requests go
-to that gateway with your gateway key, and it forwards them to the provider.
-If you add an ElevenLabs key and pick ElevenLabs as the transcription source,
-dictation and meeting audio goes to ElevenLabs (`api.elevenlabs.io`) with your
-ElevenLabs key instead, and only the transcript goes on to the provider for the
-writing rules and meeting notes. If you pick MAI Transcribe 2, dictation audio
-goes to OpenRouter or Vercel AI Gateway with your gateway key, which forwards
-it to Microsoft; the provider again receives only the transcript, for meetings
-too. If you add a Sarvam key and pick Sarvam Saaras V4, dictation and meeting
-audio goes to Sarvam (`api.sarvam.ai`; recordings over 30 seconds and
-meetings are uploaded to Sarvam's storage for a batch job) with your Sarvam
-key, and with Sarvam 105B as the writing model the transcript and your writing
-rules go there too; that model takes no screenshots and no audio. There is no
-VoiceiQ server, no account, no analytics, no telemetry.
+There is no VoiceiQ server, no account, no analytics, no telemetry.
 Everything else stays on your Mac. The code is open — verify all of this.
 
-"The provider" below means whichever of these the active route sends to:
-`generativelanguage.googleapis.com` (Gemini), `api.openai.com` (OpenAI),
-`openrouter.ai`, or `ai-gateway.vercel.sh`. Only one of them receives a given
-dictation; nothing is sent to the others. Meetings are the one exception: they
-need a model that labels speakers, so with OpenAI selected through a gateway a
-meeting goes to OpenAI with your OpenAI key, or to Gemini when there is no
-OpenAI key, and a meeting whose provider fails moves on to the other provider
-you have a key for. With ElevenLabs or MAI Transcribe 2 as the transcription
-source, meeting audio goes only there (MAI through your OpenRouter or Vercel
-key) and the provider receives the transcript for the notes.
+"The provider" below means the one you selected:
+`generativelanguage.googleapis.com` (Gemini) or `api.openai.com` (OpenAI).
+Only it receives a given dictation; nothing is sent to the other. Meetings are
+the one exception: a meeting goes to the selected provider when its key is
+saved, otherwise to the other provider, and a meeting whose provider fails
+moves on to the other provider you have a key for.
 With no usable key, nothing is sent and the recording stays on your Mac.
 
 ## What leaves your machine (the complete list)
@@ -37,12 +20,6 @@ With no usable key, nothing is sent and the recording stays on your Mac.
 1. **The audio of each dictation** (FLAC-compressed), sent to the provider —
    the only network host this app talks to apart from the update check
    (item 9) and a TinyFish key if you add one (item 5).
-   With ElevenLabs as the transcription source, this audio goes to ElevenLabs
-   instead, along with up to 100 dictionary terms as `keyterms`, and the
-   provider never receives it: the writing-rules request (item 3) carries no
-   audio in that case. With MAI Transcribe 2, the audio goes to OpenRouter or
-   Vercel AI Gateway (the chosen one when both keys are stored) and on to
-   Microsoft, without dictionary terms; the provider again never receives it.
 2. **Your dictionary terms**, alongside that audio. The transcription model uses
    them to bias what it hears, which is why names and jargon come out spelled
    right as you speak rather than being corrected afterwards. Only the correct
@@ -93,8 +70,7 @@ With no usable key, nothing is sent and the recording stays on your Mac.
    instruction to the provider. Nothing else in the window is read. Translate (⌃⌥T)
    sends only your dictation, as a normal dictation does.
 8. **Your API keys**, each only in the request header to its own service: the
-   Gemini key to Google, the OpenAI key to OpenAI, a gateway key to that
-   gateway, the ElevenLabs key to ElevenLabs, the Sarvam key to Sarvam. They are stored in the macOS Keychain, never in files or
+   Gemini key to Google, the OpenAI key to OpenAI. They are stored in the macOS Keychain, never in files or
    preferences.
 9. **Update checks.** Every six hours, and when you choose Check for Updates, the
    app downloads the update feed (`appcast.xml`) from the project's GitHub
@@ -103,14 +79,6 @@ With no usable key, nothing is sent and the recording stays on your Mac.
    User-Agent; Sparkle's system profiling is off. When an update is offered, the
    ZIP comes from the same place. GitHub sees your IP address, as with any
    download. Turn the checks off in Settings › About.
-10. **A date range, to the exchange-rate service.** To show costs in rupees the
-   app fetches the day's USD→INR rate from `api.frankfurter.dev`, a request
-   that carries no data about you. When calls were booked without a rate
-   (offline, or before this version), it asks once for a range of days: from
-   the first of a month at least a month before the oldest such call through
-   today. Frankfurter sees your IP address and roughly how far back you have
-   used the app, not the days you dictated, and nothing about the calls.
-
 The auto-learn feature ("Learn from your edits") never sends anything. It
 re-reads the field VoiceiQ typed into, through the Accessibility API, for up to ten
 minutes after an insertion, waits until you have stopped editing for a few
@@ -155,11 +123,9 @@ Everything it reads stays on this Mac.
 Your audio is governed by your own terms with whoever receives it. With Gemini,
 that is the Gemini API terms with Google; as of writing, paid-tier API usage is
 not used for model training, and free-tier usage may be. With OpenAI, it is
-OpenAI's API terms. Through a gateway, the gateway's terms apply as well as the
-provider's. That relationship is yours — this app doesn't broker it. Review the
-[Gemini API terms](https://ai.google.dev/gemini-api/terms), the
-[OpenAI API data controls](https://platform.openai.com/docs/guides/your-data),
-and your gateway's policy.
+OpenAI's API terms. That relationship is yours — this app doesn't broker it. Review the
+[Gemini API terms](https://ai.google.dev/gemini-api/terms) and the
+[OpenAI API data controls](https://platform.openai.com/docs/guides/your-data).
 
 ## Secure input
 

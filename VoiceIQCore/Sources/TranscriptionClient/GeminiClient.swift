@@ -45,78 +45,27 @@ public extension GeminiClient {
 public actor GeminiClient {
     let session: URLSession
     private let apiKey: @Sendable () -> String?
-    let openRouterKey: @Sendable () -> String?
-    let vercelKey: @Sendable () -> String?
     let openAIKey: @Sendable () -> String?
-    let elevenLabsKey: @Sendable () -> String?
-    let sarvamKey: @Sendable () -> String?
     /// Read per call, like `provider`, so a model override applies at once.
     let openAIConfig: @Sendable () -> OpenAIConfig
-    /// Read per call: whose model writes (`cleanup`, meeting notes).
-    let writingSource: @Sendable () -> WritingSource
-    /// Read per call, so flipping the provider or gateway in Settings takes
-    /// effect on the next request without rebuilding the client.
-    let route: @Sendable () -> ModelRoute
+    /// Read per call, so flipping the provider in Settings takes effect on
+    /// the next request without rebuilding the client.
+    let provider: @Sendable () -> ModelProvider
 
     public init(
         apiKey: @escaping @Sendable () -> String?,
-        openRouterKey: @escaping @Sendable () -> String? = { nil },
-        vercelKey: @escaping @Sendable () -> String? = { nil },
         openAIKey: @escaping @Sendable () -> String? = { nil },
-        elevenLabsKey: @escaping @Sendable () -> String? = { nil },
-        sarvamKey: @escaping @Sendable () -> String? = { nil },
         openAIConfig: @escaping @Sendable () -> OpenAIConfig = { OpenAIConfig() },
-        writingSource: @escaping @Sendable () -> WritingSource = { .provider },
-        route: @escaping @Sendable () -> ModelRoute = { ModelRoute(provider: .gemini, gateway: .direct) }
+        provider: @escaping @Sendable () -> ModelProvider = { .gemini }
     ) {
         self.session = Self.makeSession()
         self.apiKey = apiKey
-        self.openRouterKey = openRouterKey
-        self.vercelKey = vercelKey
         self.openAIKey = openAIKey
-        self.elevenLabsKey = elevenLabsKey
-        self.sarvamKey = sarvamKey
         self.openAIConfig = openAIConfig
-        self.writingSource = writingSource
-        self.route = route
+        self.provider = provider
     }
 
     // MARK: - Calls
-
-    /// Audio-only request. The transcribe models ignore prompts, and
-    /// audioTranscriptionConfig.wordTimestamp MUST be true or the transcript
-    /// comes back empty.
-    public func transcribe(
-        flacData: Data, model: String, endpoint: URL, deadline: TimeInterval,
-        customVocabulary: [String] = []
-    ) async throws -> String {
-        let route = route()
-        switch (route.provider, route.gateway) {
-        case (.gemini, .direct): break
-        case (.openAI, .direct):
-            return try await openAITranscribe(audio: flacData, keywords: customVocabulary, deadline: deadline)
-        default:
-            return try await gatewayTranscribe(audio: flacData, model: transcriptionModelID(model, route: route),
-                                               deadline: deadline, stage: .transcribe, via: route.endpoint)
-        }
-        let parts: [[String: Any]] = [
-            ["inline_data": ["mime_type": "audio/flac", "data": flacData.base64EncodedString()]],
-        ]
-        // NB: `mode` is NOT available here — it parses but returns an empty text
-        // part on this endpoint. wordTimestamp remains mandatory, and the two are
-        // mutually exclusive (400 together). customVocabulary does work, so the
-        // Dictionary keeps biasing the recogniser even on the legacy transport.
-        var audioConfig: [String: Any] = ["wordTimestamp": true, "diarization": false]
-        if !customVocabulary.isEmpty { audioConfig["customVocabulary"] = customVocabulary }
-        let body: [String: Any] = [
-            "contents": [["role": "user", "parts": parts]],
-            "generationConfig": [
-                "temperature": 0,
-                "audioTranscriptionConfig": audioConfig,
-            ],
-        ]
-        return try await generateContent(body: body, model: model, endpoint: endpoint, deadline: deadline, stage: .transcribe)
-    }
 
     /// Cleanup call (flash class, thinking minimized), optionally with JPEG context.
     /// The thinking knob differs by model generation (probed live):
@@ -134,24 +83,14 @@ public actor GeminiClient {
         stage: UsageStage = .cleanup,
         jsonSchema: [String: Any]? = nil
     ) async throws -> String {
-        let route = route()
+        let provider = provider()
         // Callers check `writingModelHearsAudio`; a recording reaching an
         // OpenAI writing model would be dropped and the prompt would lie.
-        if audioFLAC != nil, !route.provider.writingModelHearsAudio || writingSource() == .sarvam {
+        if audioFLAC != nil, !provider.writingModelHearsAudio {
             throw TranscriptionError.badRequest("writing model takes no audio")
         }
-        if writingSource() == .sarvam {
-            // Text only: `sarvam-105b` takes no images, so screenshots stay here.
-            return try await sarvamChat(prompt: prompt, deadline: deadline, stage: stage, jsonSchema: jsonSchema)
-        }
-        switch (route.provider, route.gateway) {
-        case (.gemini, .direct): break
-        case (.openAI, .direct):
+        if provider == .openAI {
             return try await openAIChat(prompt: prompt, images: images, deadline: deadline, stage: stage, jsonSchema: jsonSchema)
-        default:
-            return try await gatewayChat(prompt: prompt, images: images, audioFLAC: audioFLAC,
-                                         model: writingModelID(model, route: route), provider: route.provider,
-                                         deadline: deadline, stage: stage, jsonSchema: jsonSchema, via: route.endpoint)
         }
         let thinkingConfig: [String: Any] = model.hasPrefix("gemini-2")
             ? ["thinkingBudget": 0]
@@ -269,9 +208,9 @@ public actor GeminiClient {
         /// Attributed to the current `UsageMeter.scope` for the Cost pane.
         stage: UsageStage,
         isRetryAfter429: Bool = false,
-        /// Gateway calls share this transport: same deadline, same status →
+        /// OpenAI calls share this transport: same deadline, same status →
         /// error mapping, different base URL, auth header and usage envelope.
-        via: ModelEndpoint = .gemini,
+        via: ModelProvider = .gemini,
         extraHeaders: [String: String] = [:]
     ) async throws -> Data {
         let url = endpoint.appendingPathComponent(path)
@@ -304,49 +243,18 @@ public actor GeminiClient {
             throw TranscriptionError.network("non-http")
         }
         switch http.statusCode {
-        // Sarvam answers 202 Accepted when it creates a batch job.
-        case 200,
-             202 where via == .sarvam:
+        case 200:
             // Every billed call passes through here, so this is the one place
             // usage is read. Both envelopes are tried; a body with neither is
             // simply not metered.
             let usage: TokenUsage? = switch via {
             case .gemini: TokenUsage.fromGenerateContent(data) ?? TokenUsage.fromInteraction(data)
             case .openAI: TokenUsage.fromOpenAIDuration(data, model: modelLabel) ?? TokenUsage.fromOpenAI(data)
-            case .openRouter, .vercel: TokenUsage.fromOpenAI(data) ?? TokenUsage.fromVercelTranscription(data)
-            // No usage block, and the price depends on the request's options:
-            // `elevenLabsTranscribe` books it.
-            case .elevenLabs: nil
-            // Chat reports OpenAI-shaped usage; speech-to-text has none and
-            // `sarvamTranscribe` books it by audio length.
-            case .sarvam: TokenUsage.fromOpenAI(data)
             }
             if let usage {
                 UsageMeter.record(stage: stage, model: modelLabel, usage: usage)
             }
         case 401:
-            // ElevenLabs answers 401 for an exhausted credit balance as well as
-            // for a bad key (`quota_exceeded`): that is "add credits", not "fix
-            // your key", and it clears on top-up, so it blocks the queue like a
-            // daily quota instead of failing the row.
-            if via == .elevenLabs {
-                let detail = Self.elevenLabsErrorDetail(from: data)
-                Log.transcription.error("GeminiClient: 401 on \(path, privacy: .public) via elevenLabs — \(detail.kinds.joined(separator: "/"), privacy: .public): \(detail.message ?? "no detail", privacy: .private)")
-                if Self.isElevenLabsQuota(detail) { throw TranscriptionError.rateLimitedDaily }
-            }
-            throw TranscriptionError.auth
-        case 402 where via == .elevenLabs:
-            Log.transcription.error("GeminiClient: 402 on \(path, privacy: .public) via elevenLabs — \(Self.errorMessage(from: data) ?? "no detail", privacy: .private)")
-            throw TranscriptionError.rateLimitedDaily
-        case 402:
-            // Gateways: the key is fine, the account balance is not. Retryable
-            // so the recording stays queued until credits are added.
-            Log.transcription.error("GeminiClient: 402 on \(path, privacy: .public) — \(Self.errorMessage(from: data) ?? "no detail", privacy: .private)")
-            throw TranscriptionError.network("gateway_insufficient_credits")
-        case 403 where via == .sarvam:
-            // Sarvam answers 403 `invalid_api_key_error` for a bad key
-            // (checked 2026-10-03); 401 is not used.
-            Log.transcription.error("GeminiClient: 403 on \(path, privacy: .public) via sarvam — \(Self.errorMessage(from: data) ?? "no detail", privacy: .private)")
             throw TranscriptionError.auth
         case 403, 404:
             // Key authenticated but this model is not available to it — gated,
@@ -373,10 +281,10 @@ public actor GeminiClient {
                                       isRetryAfter429: true, via: via, extraHeaders: extraHeaders)
             }
             // OpenAI answers 429 `insufficient_quota` when the account has no
-            // credit left, Sarvam 429 `insufficient_quota_error`: the same
-            // situation as a gateway's 402.
+            // credit left. Retryable, so the recording stays queued until
+            // credit is added.
             if let body = String(data: data, encoding: .utf8), body.contains("insufficient_quota") {
-                throw TranscriptionError.network("gateway_insufficient_credits")
+                throw TranscriptionError.network("insufficient_credits")
             }
             // Only a real daily/hard quota is terminal; a per-minute throttle
             // (or an unparseable body) clears on its own and stays retryable.
@@ -386,10 +294,8 @@ public actor GeminiClient {
                 throw TranscriptionError.rateLimitedDaily
             }
             throw TranscriptionError.rateLimitedTransient(retryAfter: retryAfter)
-        case 400,
-             422 where via == .elevenLabs || via == .sarvam:
-            // Permanent: malformed request — retrying is pointless. ElevenLabs
-            // and Sarvam report schema validation as 422.
+        case 400:
+            // Permanent: malformed request — retrying is pointless.
             let message = Self.errorMessage(from: data) ?? "http_\(http.statusCode)"
             Log.transcription.error("GeminiClient: \(http.statusCode) — \(message, privacy: .private)")
             throw TranscriptionError.badRequest(message)
@@ -423,18 +329,10 @@ public actor GeminiClient {
         customVocabulary: [String],
         deadline: TimeInterval
     ) async throws -> String {
-        let route = route()
-        switch (route.provider, route.gateway) {
-        case (.gemini, .direct): break
-        case (.openAI, .direct):
+        if provider() == .openAI {
             // No smart mode; the dictionary rides along as keywords, and the
             // cleanup pass does the formatting.
             return try await openAITranscribe(audio: audio, mimeType: mimeType, keywords: customVocabulary, deadline: deadline)
-        default:
-            // The gateways' transcription endpoints have no smart mode or custom
-            // vocabulary; the cleanup pass carries the dictionary instead.
-            return try await gatewayTranscribe(audio: audio, mimeType: mimeType, model: transcriptionModelID(model, route: route),
-                                               deadline: deadline, stage: .transcribe, via: route.endpoint)
         }
         var body: [String: Any] = [
             "model": model,
@@ -561,32 +459,16 @@ public actor GeminiClient {
         session.invalidateAndCancel() // transient clients (key validation) must not leak (audit L33)
     }
 
-    func applyAuth(_ request: inout URLRequest, via: ModelEndpoint = .gemini) {
+    func applyAuth(_ request: inout URLRequest, via: ModelProvider = .gemini) {
         // Header, never ?key= — query strings leak into logs and proxies.
         switch via {
         case .gemini:
             if let key = apiKey() {
                 request.setValue(key, forHTTPHeaderField: "x-goog-api-key")
             }
-        case .openRouter:
-            if let key = openRouterKey() {
-                request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
-            }
-        case .vercel:
-            if let key = vercelKey() {
-                request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
-            }
         case .openAI:
             if let key = openAIKey() {
                 request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
-            }
-        case .elevenLabs:
-            if let key = elevenLabsKey() {
-                request.setValue(key, forHTTPHeaderField: "xi-api-key")
-            }
-        case .sarvam:
-            if let key = sarvamKey() {
-                request.setValue(key, forHTTPHeaderField: "api-subscription-key")
             }
         }
     }
@@ -638,7 +520,7 @@ public actor GeminiClient {
         } else {
             object = nil
         }
-        guard let error = object?["error"] as? [String: Any] else { return elevenLabsErrorDetail(from: data).message }
-        return error["message"] as? String
+        let error = object?["error"] as? [String: Any]
+        return error?["message"] as? String
     }
 }

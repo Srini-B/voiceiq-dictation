@@ -108,7 +108,7 @@ public struct AgentProviderOverride: Equatable, Sendable, Codable {
 }
 
 public extension SettingsStore {
-    /// Experimental: the Agent mode toggle in the Dictation pane.
+    /// The Agent mode toggle in the Dictation pane.
     var agentModeEnabled: Bool {
         UserDefaults.standard.bool(forKey: "agentModeEnabled")
     }
