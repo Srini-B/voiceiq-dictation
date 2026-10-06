@@ -14,32 +14,19 @@ public enum PromptV1 {
         spellings: [(wrong: String, right: String)] = [],
         instructions: String? = nil,
         imagesAttached: Bool = false,
-        secondTranscript: String? = nil,
         surroundingText: SurroundingText? = nil
     ) -> String {
         var sections = sharedSections(vocabulary: vocabulary, spellings: spellings,
                                       instructions: instructions, imagesAttached: imagesAttached)
         sections.append(examples)
         sections.append(layoutReminder)
-        if secondTranscript != nil {
-            sections.append(secondTranscriptSection)
-        }
         let field = surroundingText.flatMap(fieldContext)
         if field != nil {
             sections.append(fieldSection)
         }
-        let second = secondTranscript.map { "SECOND: \($0)\n\n" } ?? ""
-        sections.append("\(field ?? "")\(second)RAW: \(raw)\nCLEAN:")
+        sections.append("\(field ?? "")RAW: \(raw)\nCLEAN:")
         return sections.joined(separator: "\n\n")
     }
-
-    /// For a writing model that cannot hear the recording (GPT-6 Luna): a
-    /// second speech model's transcript lets it repair a stretch the primary
-    /// transcript misheard. MEASURED 2026-09-28 on gpt-6-luna with whisper-1 as
-    /// SECOND: misheard stretches were repaired in 22 of 22 runs over two
-    /// recordings (4 of 4 kept "But stop the other things" without SECOND), and
-    /// a correct RAW was kept in 8 of 8 runs where whisper-1 had its own errors.
-    static let secondTranscriptSection = "SECOND:\nSECOND is an independent transcript of the same recording by a different speech model. Both can mishear. RAW is the primary transcript: keep its wording by default. Where a stretch of RAW makes no sense in context (words that do not fit the sentence, a phrase that reads like a mishearing) and SECOND has a reading of the same stretch that does make sense, use SECOND's words for that stretch. Where both make sense but differ, keep RAW. Never take anything else from SECOND: no extra sentences, filler, or details RAW does not have. Still output only the cleaned text."
 
     /// CLEAN goes into a field that already holds text. Only the writing
     /// model can tell whether the dictation continues the sentence before the

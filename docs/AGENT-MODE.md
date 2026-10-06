@@ -102,8 +102,8 @@ only lever pushing the model to gather more before answering.
 
 The command is transcribed by the dictation provider and model, not the agent
 endpoint (`GeminiTranscriptionService.transcribe` with `context.mode ==
-.agent`). The `.agent` mode skips the live stream, the writing-rules cleanup
-pass and the second opinion, and `transform` applies only the dictionary's
+.agent`). The `.agent` mode skips the live stream and the writing-rules cleanup
+pass, and `transform` applies only the dictionary's
 hard replacements. That is why an agent command comes back faster than a
 dictation: fewer passes, not a different model.
 

@@ -64,6 +64,7 @@ public enum PriceBook {
         ("gpt-transcribe", 0.0045),
         ("gpt-4o-mini-transcribe", 0.003),
         ("gpt-4o-transcribe", 0.006),
+        // No longer called; prices rows booked by older builds.
         ("whisper-1", 0.006),
     ]
 

@@ -16,9 +16,9 @@ extension GeminiTranscriptionService {
     }
 
     func cleanupOrFallback(
-        raw: String, context: DictationContext, config: GeminiConfig, second: String? = nil, rawHasFillers: Bool
+        raw: String, context: DictationContext, config: GeminiConfig, rawHasFillers: Bool
     ) async -> SettledCleanup {
-        settle(await runCleanup(raw: raw, context: context, config: config, second: second),
+        settle(await runCleanup(raw: raw, context: context, config: config),
                raw: raw, rawHasFillers: rawHasFillers)
     }
 
@@ -53,7 +53,7 @@ extension GeminiTranscriptionService {
     }
 
     private func runCleanup(
-        raw: String, context: DictationContext, config: GeminiConfig, second: String? = nil
+        raw: String, context: DictationContext, config: GeminiConfig
     ) async -> CleanupOutcome {
         let dictionary = DictionaryStore()
         let screenshots = context.screenshots
@@ -63,7 +63,6 @@ extension GeminiTranscriptionService {
             spellings: dictionary.spellings(),
             instructions: settings.customInstructions,
             imagesAttached: !screenshots.isEmpty,
-            secondTranscript: second,
             surroundingText: settings.fitToExistingText ? context.focusedField?.surroundingText : nil
         )
         do {

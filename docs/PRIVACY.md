@@ -27,9 +27,7 @@ With no usable key, nothing is sent and the recording stays on your Mac.
    dictation, including with Smart transcription off.
 3. **The writing-rules prompt**, while "Apply writing rules" is on in
    Settings → Dictation — on by default. It runs after transcription and
-   sends text only (and screen images, item 4), never the audio. On OpenAI's own API, the dictation
-   audio also goes to OpenAI's `whisper-1` for a second transcript, which is
-   added to this prompt so the writing model can repair misheard words. It contains the transcript being
+   sends text only (and screen images, item 4), never the audio. It contains the transcript being
    formatted, the built-in formatting rules, your custom instructions from the
    same pane, the frontmost app's name, your dictionary terms, and, while
    "Fit to existing text" is on (on by default), up to 300 characters before

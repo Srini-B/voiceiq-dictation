@@ -8,9 +8,6 @@ public struct OpenAIConfig: Sendable, Equatable {
     public var writingModel = "gpt-6-luna"
     /// Meetings only. `gpt-transcribe` has no speaker labels.
     public var diarizeModel = "gpt-4o-transcribe-diarize"
-    /// Dictation only: a second transcript for the writing model, which cannot
-    /// hear the recording. A different model family errs in different places.
-    public var secondOpinionModel = "whisper-1"
 
     public init() {}
 }
@@ -25,7 +22,7 @@ public struct OpenAIConfig: Sendable, Equatable {
 ///    takes no audio at all: Chat Completions answers 400 for `input_audio`
 ///    (wav included), and the Responses API answers "Audio input is not
 ///    available". The writing model never hears the recording on this
-///    provider; `secondOpinionTranscript` is what it gets instead.
+///    provider; it works from the `gpt-transcribe` transcript alone.
 ///  - A keyword containing `<` fails the whole request with 400.
 extension GeminiClient {
     static let openAIEndpoint = URL(string: "https://api.openai.com/v1")!
@@ -41,17 +38,6 @@ extension GeminiClient {
                                   deadline: deadline, modelLabel: model, stage: .transcribe, via: .openAI,
                                   extraHeaders: ["Content-Type": form.contentType])
         return try Self.extractTranscriptText(from: data)
-    }
-
-    /// A transcript of the same recording by a different speech model, for
-    /// the cleanup pass to check the primary transcript against. Only on
-    /// OpenAI; nil on Gemini. No keywords: whisper-1 takes a free-text prompt
-    /// instead, and SECOND is more useful when independent.
-    public func secondOpinionTranscript(flacData: Data, deadline: TimeInterval) async throws -> String? {
-        guard provider() == .openAI else { return nil }
-        let text = try await openAITranscribe(audio: flacData, keywords: [], deadline: deadline,
-                                              model: openAIConfig().secondOpinionModel)
-        return text.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     func openAIChat(prompt: String, images: [Data] = [], deadline: TimeInterval, stage: UsageStage,
@@ -113,7 +99,7 @@ extension GeminiClient {
             ["type": "image_url", "image_url": ["url": "data:image/jpeg;base64,\($0.base64EncodedString())"]]
         }
         let dictation = prompt.range(of: PromptV1.fieldBeforeLabel, options: .backwards)
-            ?? prompt.range(of: "SECOND: ", options: .backwards) ?? prompt.range(of: "RAW: ", options: .backwards)
+            ?? prompt.range(of: "RAW: ", options: .backwards)
         guard !images.isEmpty, let split = dictation else {
             return [["role": "user", "content": [["type": "text", "text": prompt]] + imageParts]]
         }

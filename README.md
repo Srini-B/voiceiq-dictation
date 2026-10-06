@@ -137,9 +137,7 @@ dictation is a few seconds of audio. VoiceiQ itself is free and has no account.
 | Meeting speakers | `gemini-3.5-transcribe` | `gpt-4o-transcribe-diarize` |
 
 Every dictation is a transcription followed, with writing rules on, by a
-writing-rules pass. Screenshots go only to the writing model. On OpenAI,
-`whisper-1` also transcribes a single-chunk dictation in parallel so the
-writing model can repair misheard words.
+writing-rules pass. Screenshots go only to the writing model.
 Settings → Advanced can pin other model names for either provider.
 
 ## How it works

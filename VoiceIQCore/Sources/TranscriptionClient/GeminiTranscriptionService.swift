@@ -7,9 +7,6 @@ import Foundation
 ///   with custom_vocabulary, or gpt-transcribe)
 ///       → [writing rules] writing model cleanup, with any screenshots
 ///       → validation gate → ReplacementEngine → inserted text.
-///   On OpenAI's own API the writing model cannot hear the audio, so a
-///   single-chunk dictation also gets whisper-1's transcript as SECOND,
-///   fetched in parallel, for cleanup to repair misheard stretches of RAW.
 ///
 /// Rules unchanged: one silent retry on transient transcribe failures; cleanup
 /// has a hard deadline and NEVER blocks a good transcript; every failure is a
@@ -60,8 +57,6 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
             Log.transcription.info("long recording (\(Int(durationSeconds))s) split into \(ranges.count) chunks, \(done.count) already transcribed")
         }
         var pieces: [String] = []
-        var secondOpinion: Task<String?, Never>?
-        defer { secondOpinion?.cancel() }
         for (index, range) in ranges.enumerated() {
             if let earlier = done[range] {
                 if !earlier.isEmpty { pieces.append(earlier) }
@@ -70,10 +65,6 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
             let flacData = try encodeChunk(audioURL: audioURL, range: range, index: index)
             let seconds = durationSeconds * Double(range.count) / Double(max(1, fileFrames))
             let deadline = TimeoutPolicy.overallDeadline(audioDuration: seconds)
-            if ranges.count == 1, context.mode == .dictate, policy.cleanupPass {
-                let client = client
-                secondOpinion = Task { try? await client.secondOpinionTranscript(flacData: flacData, deadline: deadline) }
-            }
             var raw = try await transcribeWithRetry(
                 flacData: flacData, seconds: seconds, config: config, policy: policy,
                 vocabulary: vocabulary, deadline: deadline
@@ -131,9 +122,8 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
             )
         }
 
-        let second = await Self.awaitSecondOpinion(secondOpinion, raw: trimmedRaw, audioSeconds: durationSeconds)
         let cleanup = await cleanupOrFallback(
-            raw: trimmedRaw, context: context, config: config, second: second,
+            raw: trimmedRaw, context: context, config: config,
             rawHasFillers: transcriptKeepsFillers(provider: provider, policy: policy)
         )
         return TranscriptionResult(
@@ -142,22 +132,6 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
             modelID: "\(names.transcribe)+\(names.writing)",
             cleanupNote: cleanup.note
         )
-    }
-
-    /// The second transcript runs alongside the primary one; once RAW is in,
-    /// waits at most `grace` more for it. MEASURED 2026-09-28: whisper-1 took
-    /// 1.4–2.3 s on a 21 s dictation (gpt-transcribe 2.3–2.9 s) and 5.8–6.1 s
-    /// on 84 s (gpt-transcribe 3.1 s), so the wait only shows on long ones.
-    static func awaitSecondOpinion(_ task: Task<String?, Never>?, raw: String, audioSeconds: Double) async -> String? {
-        guard let task else { return nil }
-        let grace = min(5, max(1.5, audioSeconds * 0.04))
-        let text = try? await GeminiClient.withDeadline(seconds: grace) { await task.value }
-        task.cancel()
-        guard let text, !text.isEmpty else {
-            Log.transcription.info("second transcript not used (late or failed after \(String(format: "%.1f", grace))s grace)")
-            return nil
-        }
-        return text.caseInsensitiveCompare(raw) == .orderedSame ? nil : text
     }
 
     /// The models that run, for History's model column. OpenAI's
