@@ -75,7 +75,8 @@ final class AppModel: ObservableObject {
                     targetAppBundleID: target.host,
                     targetAppName: target.host.map(AppNames.displayName(for:))
                 )
-            }
+            },
+            liveFactory: { LiveTranscriber.makeFromSettings() }
         )
         inserter.onDeliver = { [weak self] text, mode in self?.deliver(text, mode: mode) }
 

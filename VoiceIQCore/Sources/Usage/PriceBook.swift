@@ -47,6 +47,7 @@ public enum PriceBook {
             ("gemini-3.8-flash", late
                 ? ModelPrice(textIn: 1.50, cachedIn: 0.15, textOut: 7.50)
                 : ModelPrice(textIn: 0.75, cachedIn: 0.075, textOut: 3.75)),
+            ("gemini-3.5-transcribe-live", ModelPrice(textIn: 3.50, audioIn: 3.50, textOut: 21.00)),
             ("gemini-3.5-transcribe", ModelPrice(textIn: 2.00, audioIn: 2.00, textOut: 12.00)),
             ("gemini-3.1-flash-lite", ModelPrice(textIn: 0.25, audioIn: 0.50, cachedIn: 0.025, textOut: 1.50)),
             ("gemini-3-flash", ModelPrice(textIn: 0.50, audioIn: 1.00, cachedIn: 0.05, textOut: 3.00)),
@@ -61,6 +62,7 @@ public enum PriceBook {
 
     /// OpenAI transcription models billed per audio minute, USD, same source.
     static let perMinute: [(prefix: String, price: Double)] = [
+        ("gpt-live-transcribe", 0.017),
         ("gpt-transcribe", 0.0045),
         ("gpt-4o-mini-transcribe", 0.003),
         ("gpt-4o-transcribe", 0.006),

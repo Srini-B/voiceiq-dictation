@@ -17,9 +17,13 @@ With no usable key, nothing is sent and the recording stays on your Mac.
 
 ## What leaves your machine (the complete list)
 
-1. **The audio of each dictation** (FLAC-compressed), sent to the provider —
-   the only network host this app talks to apart from the update check
-   (item 9) and a TinyFish key if you add one (item 5).
+1. **The audio of each dictation**, sent to the provider. With "Real-time
+   transcription" off, VoiceiQ sends FLAC-compressed audio after you stop.
+   With it on, VoiceiQ sends PCM audio while you speak in Dictation, Ask
+   Anything, Translate and Agent. It uses the selected provider's existing
+   key. If the live connection fails or does not return every completed turn,
+   VoiceiQ uploads the saved recording to that provider after you stop.
+   Real-time transcription is off by default and does not affect meetings.
 2. **Your dictionary terms**, alongside that audio. The transcription model uses
    them to bias what it hears, which is why names and jargon come out spelled
    right as you speak rather than being corrected afterwards. Only the correct

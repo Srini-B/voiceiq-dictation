@@ -86,6 +86,15 @@ public struct SettingsStore: Sendable {
         Self.set(provider.rawValue, forKey: "modelProvider")
     }
 
+    public var liveTranscriptionEnabled: Bool {
+        Self.defaults.object(forKey: "liveDictationEnabled") as? Bool ?? false
+    }
+
+    public func setLiveTranscriptionEnabled(_ enabled: Bool) {
+        if enabled && !liveTranscriptionEnabled { LiveAvailability.shared.resetRefusals() }
+        Self.set(enabled, forKey: "liveDictationEnabled")
+    }
+
     /// Providers for meeting transcription and notes; see `ModelProvider.meetingOrder`.
     public var meetingProviders: [ModelProvider] {
         ModelProvider.meetingOrder(selected: preferredProvider, hasKey: KeychainStore.hasKey(for:))

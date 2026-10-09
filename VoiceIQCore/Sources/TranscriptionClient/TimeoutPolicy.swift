@@ -12,6 +12,9 @@ public enum TimeoutPolicy {
     /// When the HUD flips to the "Still working…" slow state.
     public static let slowStateUI: TimeInterval = 3
 
+    /// Budget for the final live transcript before uploading the saved audio.
+    public static let liveFinal: TimeInterval = 2
+
     /// Longest a transcription waits out a per-minute throttle before giving
     /// the row back to History. Tier 1 meters gemini-3.5-transcribe at 10 000
     /// input tokens per minute (~400 s of audio), so a second chunk right after

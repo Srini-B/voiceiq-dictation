@@ -121,6 +121,7 @@ struct SettingsView: View {
 }
 
 struct DictationSettingsView: View {
+    @State private var liveTranscription = SettingsStore().liveTranscriptionEnabled
     @EnvironmentObject private var session: VoiceSession
     private let settings = SettingsStore()
     @State private var translationTarget = SettingsStore().translationTargetLanguage
@@ -155,6 +156,12 @@ struct DictationSettingsView: View {
                     }
             }
             Section {
+                Toggle("Real-time transcription", isOn: $liveTranscription)
+                    .onChange(of: liveTranscription) { _, value in settings.setLiveTranscriptionEnabled(value) }
+            } footer: {
+                Text("Transcribes while you speak in Dictation, Ask Anything, and Translate. Uses your selected provider and key. Meetings are unchanged.")
+            }
+            Section {
                 Toggle("Smart transcription", isOn: $smartTranscription)
                     .onChange(of: smartTranscription) { _, value in settings.setSmartTranscription(value) }
                 Toggle("Apply writing rules", isOn: $cleanupPass)
@@ -184,6 +191,7 @@ struct DictationSettingsView: View {
         // leave a stale toggle here.
         .onReceive(NotificationCenter.default.publisher(for: .gtSettingDidChange).receive(on: RunLoop.main)) { note in
             switch note.object as? String {
+            case "liveDictationEnabled": liveTranscription = settings.liveTranscriptionEnabled
             case "smartTranscription": smartTranscription = settings.smartTranscriptionEnabled
             case "smartCleanupPass": cleanupPass = settings.smartCleanupPassEnabled
             case "customInstructions": instructions = settings.customInstructions

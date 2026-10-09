@@ -94,6 +94,25 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
         }
 
         let trimmedRaw = pieces.joined(separator: " ")
+        return try await process(
+            TranscriptionResult(rawTranscript: trimmedRaw, cleanedTranscript: trimmedRaw, modelID: names.transcribe),
+            context: context, config: config, policy: policy, provider: provider, writingModel: names.writing
+        )
+    }
+
+    public func process(_ transcript: TranscriptionResult, context: DictationContext) async throws -> TranscriptionResult {
+        let provider = settings.preferredProvider
+        return try await process(transcript, context: context, config: settings.geminiConfig,
+                                 policy: settings.formattingPolicy, provider: provider,
+                                 writingModel: modelNames(provider).writing)
+    }
+
+    private func process(
+        _ transcript: TranscriptionResult, context: DictationContext,
+        config: GeminiConfig, policy: SettingsStore.FormattingPolicy,
+        provider: ModelProvider, writingModel: String
+    ) async throws -> TranscriptionResult {
+        let trimmedRaw = transcript.rawTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedRaw.isEmpty else {
             // The coordinator classifies silence vs dropped-transcript by energy.
             throw TranscriptionError.emptyTranscript
@@ -104,7 +123,7 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
             return TranscriptionResult(
                 rawTranscript: trimmedRaw,
                 cleanedTranscript: cleaned,
-                modelID: "\(names.transcribe)+\(names.writing)"
+                modelID: context.mode == .agent ? transcript.modelID : "\(transcript.modelID)+\(writingModel)"
             )
         }
 
@@ -118,7 +137,7 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
             return TranscriptionResult(
                 rawTranscript: trimmedRaw,
                 cleanedTranscript: text,
-                modelID: names.transcribe
+                modelID: transcript.modelID
             )
         }
 
@@ -129,7 +148,7 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
         return TranscriptionResult(
             rawTranscript: trimmedRaw,
             cleanedTranscript: cleanup.text,
-            modelID: "\(names.transcribe)+\(names.writing)",
+            modelID: "\(transcript.modelID)+\(writingModel)",
             cleanupNote: cleanup.note
         )
     }

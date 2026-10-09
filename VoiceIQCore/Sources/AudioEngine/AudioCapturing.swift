@@ -50,9 +50,15 @@ public protocol AudioCapturing: AnyObject {
     /// what exists — a pill that keeps "listening" while nothing records is the
     /// worst kind of word loss. The message describes the cause for the user.
     var onEngineDied: ((String) -> Void)? { get set }
+    /// Receives the same 16 kHz mono Int16 frames written to the CAF, in order.
+    func setPCMSink(_ sink: (@Sendable (Data) -> Void)?)
     /// Starts the engine and begins writing CAF to `url` immediately.
     func start(writingTo url: URL) throws
     /// Stops and finalizes the file, first draining the HAL's in-flight buffer
     /// so the tail of the last word is not discarded. Safe to call once.
     func stop() async -> AudioCaptureResult
+}
+
+public extension AudioCapturing {
+    func setPCMSink(_ sink: (@Sendable (Data) -> Void)?) {}
 }

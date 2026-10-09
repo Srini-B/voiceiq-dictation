@@ -87,7 +87,8 @@ final class DictationController {
                     targetPID: app?.processIdentifier,
                     focusedField: field
                 )
-            }
+            },
+            liveFactory: { LiveTranscriber.makeFromSettings() }
         )
     }
 

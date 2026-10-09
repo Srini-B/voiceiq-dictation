@@ -85,6 +85,11 @@ public final class DictationCoordinator: ObservableObject {
     private var session: Session? {
         didSet {
             guard oldValue?.id != session?.id else { return }
+            if let live = liveTranscriber {
+                liveTranscriber = nil
+                let scope = oldValue.map { UsageScope(mode: $0.context.mode, sessionID: $0.id.uuidString) }
+                Task { await UsageMeter.$scope.withValue(scope) { await live.abort() } }
+            }
             if oldValue != nil, let collector = screenContextCollector {
                 screenContextCollector = nil
                 _ = collector.stop()
@@ -92,6 +97,7 @@ public final class DictationCoordinator: ObservableObject {
         }
     }
     private var capture: AudioCapturing?
+    private var liveTranscriber: LiveTranscriber?
     private var screenContextCollector: ScreenContextCollector?
     /// Most recent metered level — decides whether the user was mid-word when
     /// they released the key.
@@ -123,6 +129,7 @@ public final class DictationCoordinator: ObservableObject {
     static let cancelKeepThreshold: Double = 10
 
     private let audioFactory: @MainActor () -> AudioCapturing
+    private let liveFactory: @MainActor () -> LiveTranscriber?
     private let transcription: TranscriptionServicing
     private let insertion: TextInserting
     private let contextProvider: @MainActor () -> DictationContext
@@ -143,6 +150,7 @@ public final class DictationCoordinator: ObservableObject {
         transcription: TranscriptionServicing,
         insertion: TextInserting,
         contextProvider: @escaping @MainActor () -> DictationContext = { DictationContext() },
+        liveFactory: @escaping @MainActor () -> LiveTranscriber? = { nil },
         now: @escaping () -> Date = Date.init,
         noiseHandlingEnabled: @escaping @MainActor () -> Bool = { SettingsStore().experimentalNoiseHandling },
         secureInputActive: @escaping @MainActor () -> Bool = { SecureInput.isActive }
@@ -151,6 +159,7 @@ public final class DictationCoordinator: ObservableObject {
         self.transcription = transcription
         self.insertion = insertion
         self.contextProvider = contextProvider
+        self.liveFactory = liveFactory
         self.now = now
         self.noiseHandlingEnabled = noiseHandlingEnabled
         self.secureInputActive = secureInputActive
@@ -266,6 +275,13 @@ public final class DictationCoordinator: ObservableObject {
 
             let capture = audioFactory()
             self.capture = capture
+            let live = liveFactory()
+            liveTranscriber = live
+            if let live {
+                capture.setPCMSink { pcm in live.enqueue(pcm) }
+            } else {
+                capture.setPCMSink(nil)
+            }
             capture.onLevel = { [weak self] level in
                 Task { @MainActor [weak self] in
                     self?.ingestLevel(level, updatingMeter: true)
@@ -401,7 +417,7 @@ public final class DictationCoordinator: ObservableObject {
     }
 
     private func finalizeSession() {
-        guard session != nil else { return }
+        guard let sessionID = session?.id else { return }
         // The machine decides first; side effects only on an ACCEPTED finalize
         // (same pattern as cancelSession, audit #10). A second stop while a
         // session is in flight must not stop capture or clobber meta.
@@ -420,6 +436,7 @@ public final class DictationCoordinator: ObservableObject {
                 await self?.captureTrailingSpeech(from: engine)
             }
             let result = await engine?.stop() ?? AudioCaptureResult(framesWritten: 0, durationSeconds: 0)
+            guard self?.session?.id == sessionID else { return }
             self?.completeFinalize(result: result)
         }
     }
@@ -528,16 +545,24 @@ public final class DictationCoordinator: ObservableObject {
 
         let sessionID = session.id
         let finalizeStartedAt = Date()
+        let live = liveTranscriber
         let usageScope = UsageScope(mode: session.context.mode, sessionID: sessionID.uuidString)
         inFlightTask = Task { [weak self] in
           await UsageMeter.$scope.withValue(usageScope) {
             guard let self else { return }
             do {
-                let outcome = try await self.transcription.transcribe(
-                    audioURL: FileLayout.audioCAF(in: session.folder),
-                    durationSeconds: result.durationSeconds,
-                    context: session.context
-                )
+                let liveResult = await live?.finish(framesWritten: result.framesWritten)
+                try Task.checkCancellation()
+                let outcome: TranscriptionResult
+                if let liveResult {
+                    outcome = try await self.transcription.process(liveResult, context: session.context)
+                } else {
+                    outcome = try await self.transcription.transcribe(
+                        audioURL: FileLayout.audioCAF(in: session.folder),
+                        durationSeconds: result.durationSeconds,
+                        context: session.context
+                    )
+                }
                 guard !Task.isCancelled else { return }
                 await self.completeTranscription(sessionID: sessionID, outcome: outcome, startedAt: finalizeStartedAt)
             } catch {
@@ -679,6 +704,11 @@ public final class DictationCoordinator: ObservableObject {
             return
         }
         finishScreenContext()
+        if let live = liveTranscriber {
+            let scope = session.map { UsageScope(mode: $0.context.mode, sessionID: $0.id.uuidString) }
+            liveTranscriber = nil
+            Task { await UsageMeter.$scope.withValue(scope) { await live.abort() } }
+        }
         inFlightTask?.cancel() // stop the network work too (audit L8)
         inFlightTask = nil
         micLevel = 0

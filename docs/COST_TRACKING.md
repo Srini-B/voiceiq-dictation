@@ -52,9 +52,15 @@ envelopes are handled by `TokenUsage`:
   2026-09-26), so the per-invocation list is authoritative.
 
 The live socket (`LiveTranscriptionSession`) reads `usageMetadata` frames as
-they arrive and books the largest total at `finish()`. If no frame carried
-usage, it estimates: audio seconds × 25 tokens/s for the transcribe models
-(32 for other models) and output characters ÷ 4, flagged `isEstimated`.
+they arrive and books usage once at finish or cancellation. A single Gemini
+turn uses its largest reported total. Multi-turn sessions and sessions without
+usage reports estimate from all accepted audio, rather than treating one
+turn's usage as the session total. The estimate uses audio seconds × 25
+tokens/s and output characters ÷ 4, flagged `isEstimated`.
+OpenAI live transcription estimates cost from accepted audio duration at
+$0.017/minute. Live and batch fallback attempts appear as separate stages
+under the same dictation. A failed live attempt can therefore add cost even
+when the final transcript comes from a batch upload.
 
 On OpenAI's own API, the transcription models (`gpt-transcribe`,
 `gpt-4o-transcribe`, and `whisper-1`, which older builds also called

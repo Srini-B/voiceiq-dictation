@@ -6,6 +6,7 @@ import SwiftUI
 struct DictationPane: View {
     private let settings = SettingsStore()
     @State private var sounds = SettingsStore().soundsEnabled
+    @State private var liveTranscription = SettingsStore().liveTranscriptionEnabled
     @State private var smartTranscription = SettingsStore().smartTranscriptionEnabled
     @State private var cleanupPass = SettingsStore().smartCleanupPassEnabled
     @State private var instructions = SettingsStore().customInstructions
@@ -71,6 +72,15 @@ struct DictationPane: View {
                     .onChange(of: showIdleDot) { _, show in settings.setShowIdleIndicator(show) }
             } footer: {
                 Text("The resting dot grows into a Dictate button on hover; click it for hands-free. Off = the pill appears only while dictating.")
+            }
+
+            Section {
+                Toggle("Real-time transcription", isOn: $liveTranscription)
+                    .onChange(of: liveTranscription) { _, enabled in
+                        settings.setLiveTranscriptionEnabled(enabled)
+                    }
+            } footer: {
+                Text("Transcribes while you speak in Dictation, Ask Anything, Translate, and Agent. Uses your selected provider and key. Meetings are unchanged.")
             }
 
             Section {
@@ -149,6 +159,7 @@ struct DictationPane: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .gtSettingDidChange).receive(on: RunLoop.main)) { note in
             switch note.object as? String {
+            case "liveDictationEnabled": liveTranscription = settings.liveTranscriptionEnabled
             case "smartTranscription": smartTranscription = settings.smartTranscriptionEnabled
             case "agentModeEnabled": agentMode = settings.agentModeEnabled
             case "smartCleanupPass": cleanupPass = settings.smartCleanupPassEnabled

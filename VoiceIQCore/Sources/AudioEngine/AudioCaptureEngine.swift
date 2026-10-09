@@ -45,6 +45,7 @@ public final class AudioCaptureEngine: AudioCapturing {
     private var configObserver: NSObjectProtocol?
 
     private let queue = DispatchQueue(label: "io.blue.voiceiq.audio.write", qos: .userInitiated)
+    private var pcmSink: (@Sendable (Data) -> Void)?
     private let stateLock = NSLock()
     private var framesWritten: Int64 = 0
     private var stopped = false
@@ -86,6 +87,10 @@ public final class AudioCaptureEngine: AudioCapturing {
     public static let noAudioMessage = "Mic didn't start"
 
     public init() {}
+
+    public func setPCMSink(_ sink: (@Sendable (Data) -> Void)?) {
+        queue.sync { pcmSink = sink }
+    }
 
     // MARK: - Lifecycle
 
@@ -514,6 +519,9 @@ public final class AudioCaptureEngine: AudioCapturing {
                 self.framesWritten += Int64(out.frameLength)
                 self.consecutiveWriteFailures = 0
                 self.stateLock.unlock()
+                if let sink = self.pcmSink, let samples = out.int16ChannelData?[0] {
+                    sink(Data(bytes: samples, count: Int(out.frameLength) * 2))
+                }
                 // A stop() waiting on the tail can finish now — this buffer is
                 // the audio that used to be thrown away.
                 self.resumeTailWaiter()
