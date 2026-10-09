@@ -33,6 +33,16 @@ preflight (tools, identity, credentials)
 3. Confirm the production models are available with a real dictation on both
    providers (Gemini and OpenAI).
 
+Parakeet and Nemotron use the pinned FluidAudio Swift package. Model weights are downloaded
+only from Settings, not during build or app launch. Verify the release bundle
+contains no `whistle.cact`, Parakeet weights, or Nemotron weights. See
+[local transcription](LOCAL_TRANSCRIPTION.md) for download and fallback checks.
+The macOS target embeds `Contents/Helpers/VoiceiQLocalSpeech.app`. Xcode signs
+this background app with the same Developer ID and hardened runtime; the host's
+notarization submission includes it. Verify the nested signature with
+`codesign --verify --deep --strict VoiceiQ.app` and exercise its 60-second idle
+exit from an installed, notarized build. Do not distribute the helper separately.
+
 ## macOS
 
 `scripts/release.sh` produces a Developer ID signed, notarized, and stapled app

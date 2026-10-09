@@ -1,10 +1,20 @@
 import Foundation
 
+public protocol DictationStreaming: Sendable {
+    /// Display-only replacement text. Never a source for insertion or History.
+    var partials: AsyncStream<String> { get }
+    func enqueue(_ pcm: Data)
+    func finish(framesWritten: Int64) async -> TranscriptionResult?
+    func abort() async
+}
+
 /// A live result is usable only when the socket accepted the entire saved recording.
-public final class LiveTranscriber: Sendable {
+public final class LiveTranscriber: DictationStreaming {
     private let session: LiveTranscriptionSession
     private let model: String
     private let startTask: Task<Void, Never>
+
+    public var partials: AsyncStream<String> { session.partials }
 
     public init(session: LiveTranscriptionSession, model: String) {
         self.session = session
@@ -42,10 +52,15 @@ public final class LiveTranscriber: Sendable {
         await session.abort()
     }
 
-    @MainActor public static func makeFromSettings() -> LiveTranscriber? {
+    @MainActor public static func makeFromSettings(audioURL: URL) -> (any DictationStreaming)? {
         let settings = SettingsStore()
-        guard settings.liveTranscriptionEnabled else { return nil }
         let vocabulary = DictionaryStore().sanitizedVocabulary()
+        if settings.localTranscriptionEnabled,
+           let local = LocalTranscriber(audioURL: audioURL, model: settings.localSpeechModel,
+                                        realtime: settings.liveTranscriptionEnabled) {
+            return local
+        }
+        guard settings.liveTranscriptionEnabled else { return nil }
         switch settings.preferredProvider {
         case .gemini:
             // Endpoint overrides must not send their credentials to Google's socket.

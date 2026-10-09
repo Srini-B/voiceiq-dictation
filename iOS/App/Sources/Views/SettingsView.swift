@@ -122,11 +122,15 @@ struct SettingsView: View {
 
 struct DictationSettingsView: View {
     @State private var liveTranscription = SettingsStore().liveTranscriptionEnabled
+    @State private var localTranscription = SettingsStore().localTranscriptionEnabled
+    @State private var localModel = SettingsStore().localSpeechModel
+    @ObservedObject private var nemotron = LocalModelStore.store(for: .nemotron)
     @EnvironmentObject private var session: VoiceSession
     private let settings = SettingsStore()
     @State private var translationTarget = SettingsStore().translationTargetLanguage
     @State private var smartTranscription = SettingsStore().smartTranscriptionEnabled
     @State private var cleanupPass = SettingsStore().smartCleanupPassEnabled
+    @State private var skipShortCleanup = SettingsStore().skipShortDictationCleanup
     @State private var instructions = SettingsStore().customInstructions
     @State private var noiseHandling = SettingsStore().experimentalNoiseHandling
     @State private var builtInMic = MobileSettings.preferBuiltInMic
@@ -156,16 +160,30 @@ struct DictationSettingsView: View {
                     }
             }
             Section {
-                Toggle("Real-time transcription", isOn: $liveTranscription)
-                    .onChange(of: liveTranscription) { _, value in settings.setLiveTranscriptionEnabled(value) }
+                Toggle("On-device transcription", isOn: $localTranscription)
+                    .disabled(!LocalModelSupport.isAvailable)
+                    .onChange(of: localTranscription) { _, value in settings.setLocalTranscriptionEnabled(value) }
+                    // Here, not on the controls: they expand to several rows.
+                    .onChange(of: localModel) { _, value in settings.setLocalSpeechModel(value) }
+                LocalModelControls(localEnabled: localTranscription, selection: $localModel)
+                Toggle(isOn: $liveTranscription) {
+                    Text("Real-time transcription")
+                    if localTranscription && nemotron.state != .ready {
+                        Text(LocalModelControls.streamingHint)
+                    }
+                }
+                .onChange(of: liveTranscription) { _, value in settings.setLiveTranscriptionEnabled(value) }
             } footer: {
-                Text("Transcribes while you speak in Dictation, Ask Anything, and Translate. Uses your selected provider and key. Meetings are unchanged.")
+                LocalModelFooter(localEnabled: localTranscription, selection: localModel)
             }
             Section {
                 Toggle("Smart transcription", isOn: $smartTranscription)
                     .onChange(of: smartTranscription) { _, value in settings.setSmartTranscription(value) }
                 Toggle("Apply writing rules", isOn: $cleanupPass)
                     .onChange(of: cleanupPass) { _, value in settings.setSmartCleanupPass(value) }
+                Toggle("Skip cleanup for dictations of 5 seconds or less", isOn: $skipShortCleanup)
+                    .disabled(!cleanupPass)
+                    .onChange(of: skipShortCleanup) { _, value in settings.setSkipShortDictationCleanup(value) }
                 if cleanupPass { NavigationLink("Writing rules") { WritingRulesView(text: $instructions) } }
             }
             Section {
@@ -191,9 +209,12 @@ struct DictationSettingsView: View {
         // leave a stale toggle here.
         .onReceive(NotificationCenter.default.publisher(for: .gtSettingDidChange).receive(on: RunLoop.main)) { note in
             switch note.object as? String {
+            case "localTranscriptionEnabled": localTranscription = settings.localTranscriptionEnabled
+            case "localSpeechModel": localModel = settings.localSpeechModel
             case "liveDictationEnabled": liveTranscription = settings.liveTranscriptionEnabled
             case "smartTranscription": smartTranscription = settings.smartTranscriptionEnabled
             case "smartCleanupPass": cleanupPass = settings.smartCleanupPassEnabled
+            case "skipShortDictationCleanup": skipShortCleanup = settings.skipShortDictationCleanup
             case "customInstructions": instructions = settings.customInstructions
             case "experimentalNoiseHandling": noiseHandling = settings.experimentalNoiseHandling
             case "translationTargetLanguage": translationTarget = settings.translationTargetLanguage
@@ -360,10 +381,10 @@ struct PrivacyView: View {
                 }
             }
             Section {
-                LabeledContent("Audio", value: destination)
+                LocalAudioPrivacyRow(provider: provider.directName, cloudDescription: destination)
                 LabeledContent("Transcript text", value: "For writing rules, Ask and Translate")
                 LabeledContent("Meeting notes", value: provider.displayName)
-                LabeledContent("Dictionary terms", value: "Sent with the audio")
+                LabeledContent("Dictionary terms", value: "With cloud transcription and cleanup")
                 LabeledContent("Dictionary", value: "Your iCloud, to sync")
                 LabeledContent("Ask search queries", value: "TinyFish, if its key is saved")
                 LabeledContent("What you type", value: "Never")
@@ -371,6 +392,9 @@ struct PrivacyView: View {
         }
         .settingsPage(title: "Privacy")
         .onAppear {
+            provider = SettingsStore().preferredProvider
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .gtSettingDidChange).receive(on: RunLoop.main)) { _ in
             provider = SettingsStore().preferredProvider
         }
     }

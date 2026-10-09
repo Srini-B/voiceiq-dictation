@@ -67,12 +67,9 @@ public actor GeminiClient {
 
     // MARK: - Calls
 
-    /// Cleanup call (flash class, thinking minimized), optionally with JPEG context.
-    /// The thinking knob differs by model generation (probed live):
-    ///  - gemini-2.x: `thinkingConfig.thinkingBudget: 0`
-    ///  - gemini-3.x+: `thinkingConfig.thinkingLevel: "low"` (thinkingBudget → 400;
-    ///    bare/top-level thinkingLevel → 400; "low" measured faster and more
-    ///    consistent than "minimal" on our eval set)
+    /// Cleanup with optional JPEG context. Gemini 2 uses a zero thinking budget;
+    /// Gemini 3 uses low thinking. The selected Gemini 3.8 model rejected minimal
+    /// in the live probe; low was not established as faster than minimal.
     public func cleanup(
         prompt: String,
         images: [Data] = [],

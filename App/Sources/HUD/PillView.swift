@@ -40,7 +40,7 @@ struct PillView: View {
                 .padding(.vertical, 20) // stable panel hit area
 
         case .listening(let locked):
-            pillSurface(width: locked ? 268 : 200) {
+            pillSurface(width: model.partial.isEmpty ? (locked ? 268 : 200) : 520) {
                 HStack(spacing: VoiceIQUI.Spacing.s) {
                     if locked {
                         Image(systemName: "lock.fill")
@@ -55,6 +55,16 @@ struct PillView: View {
                             .foregroundStyle(VoiceIQUI.Colors.onSurfaceVariant)
                     }
                     WaveformView(level: model.level, processing: false)
+                    if !model.partial.isEmpty {
+                        Text(model.partial)
+                            .font(VoiceIQUI.TypeScale.labelSmall())
+                            .foregroundStyle(VoiceIQUI.Colors.onSurfaceVariant)
+                            .lineLimit(1)
+                            .truncationMode(.head)
+                            .frame(maxWidth: .infinity, alignment: .trailing)
+                            .animation(nil, value: model.partial)
+                            .accessibilityHidden(true)
+                    }
                     if locked {
                         stopButton
                     }

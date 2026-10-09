@@ -7,8 +7,12 @@ struct DictationPane: View {
     private let settings = SettingsStore()
     @State private var sounds = SettingsStore().soundsEnabled
     @State private var liveTranscription = SettingsStore().liveTranscriptionEnabled
+    @State private var localTranscription = SettingsStore().localTranscriptionEnabled
+    @State private var localModel = SettingsStore().localSpeechModel
+    @ObservedObject private var nemotron = LocalModelStore.store(for: .nemotron)
     @State private var smartTranscription = SettingsStore().smartTranscriptionEnabled
     @State private var cleanupPass = SettingsStore().smartCleanupPassEnabled
+    @State private var skipShortCleanup = SettingsStore().skipShortDictationCleanup
     @State private var instructions = SettingsStore().customInstructions
     @State private var autoLearn = SettingsStore().autoLearnEnabled
     @State private var meetingDetection = SettingsStore().meetingDetectionEnabled
@@ -75,12 +79,27 @@ struct DictationPane: View {
             }
 
             Section {
-                Toggle("Real-time transcription", isOn: $liveTranscription)
-                    .onChange(of: liveTranscription) { _, enabled in
-                        settings.setLiveTranscriptionEnabled(enabled)
+                Toggle("On-device transcription", isOn: $localTranscription)
+                    .disabled(!LocalModelSupport.isAvailable)
+                    .onChange(of: localTranscription) { _, enabled in
+                        settings.setLocalTranscriptionEnabled(enabled)
                     }
+                    // Here, not on the controls: they expand to several rows.
+                    .onChange(of: localModel) { _, model in
+                        settings.setLocalSpeechModel(model)
+                    }
+                LocalModelControls(localEnabled: localTranscription, selection: $localModel)
+                Toggle(isOn: $liveTranscription) {
+                    Text("Real-time transcription")
+                    if localTranscription && nemotron.state != .ready {
+                        Text(LocalModelControls.streamingHint)
+                    }
+                }
+                .onChange(of: liveTranscription) { _, enabled in
+                    settings.setLiveTranscriptionEnabled(enabled)
+                }
             } footer: {
-                Text("Transcribes while you speak in Dictation, Ask Anything, Translate, and Agent. Uses your selected provider and key. Meetings are unchanged.")
+                LocalModelFooter(localEnabled: localTranscription, selection: localModel)
             }
 
             Section {
@@ -97,6 +116,12 @@ struct DictationPane: View {
                     .onChange(of: cleanupPass) { _, enabled in
                         guard enabled != settings.smartCleanupPassEnabled else { return }
                         settings.setSmartCleanupPass(enabled)
+                    }
+                Toggle("Skip cleanup for dictations of 5 seconds or less", isOn: $skipShortCleanup)
+                    .disabled(!cleanupPass)
+                    .onChange(of: skipShortCleanup) { _, enabled in
+                        guard enabled != settings.skipShortDictationCleanup else { return }
+                        settings.setSkipShortDictationCleanup(enabled)
                     }
                 TextEditor(text: $instructions)
                     .font(.body)
@@ -159,10 +184,13 @@ struct DictationPane: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .gtSettingDidChange).receive(on: RunLoop.main)) { note in
             switch note.object as? String {
+            case "localTranscriptionEnabled": localTranscription = settings.localTranscriptionEnabled
+            case "localSpeechModel": localModel = settings.localSpeechModel
             case "liveDictationEnabled": liveTranscription = settings.liveTranscriptionEnabled
             case "smartTranscription": smartTranscription = settings.smartTranscriptionEnabled
             case "agentModeEnabled": agentMode = settings.agentModeEnabled
             case "smartCleanupPass": cleanupPass = settings.smartCleanupPassEnabled
+            case "skipShortDictationCleanup": skipShortCleanup = settings.skipShortDictationCleanup
             case "customInstructions": instructions = settings.customInstructions
             case "autoLearn": autoLearn = settings.autoLearnEnabled
             case "meetingDetection": meetingDetection = settings.meetingDetectionEnabled

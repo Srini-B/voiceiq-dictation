@@ -39,6 +39,10 @@ public actor LiveTranscriptionSession {
 
     private let commands: AsyncStream<Command>
     private let commandSink: AsyncStream<Command>.Continuation
+    public nonisolated let partials: AsyncStream<String>
+    private let partialSink: AsyncStream<String>.Continuation
+    private var previewTail = ""
+    private var previewItemID: String?
 
     private var sendLoop: Task<Void, Never>?
     private var receiveLoop: Task<Void, Never>?
@@ -82,6 +86,7 @@ public actor LiveTranscriptionSession {
         // carries wakeups, not audio. The audio is in the ring, which is the
         // only thing with a drop policy.
         (self.commands, self.commandSink) = AsyncStream<Command>.makeStream(bufferingPolicy: .unbounded)
+        (self.partials, self.partialSink) = AsyncStream<String>.makeStream(bufferingPolicy: .bufferingNewest(1))
     }
 
     /// Called from the audio write queue. Must not block, must not await.
@@ -294,12 +299,18 @@ public actor LiveTranscriptionSession {
                 switch event {
                 case .setupComplete:
                     continue
-                case .partial:
+                case .partial(let text):
+                    partialSink.yield(String((previewTail + " " + text).suffix(512)))
                     noteTranscriptActivity()
-                case .itemDelta:
+                case .itemDelta(let itemID, let text):
+                    if previewItemID != itemID { previewTail = ""; previewItemID = itemID }
+                    previewTail = String((previewTail + text).suffix(512))
+                    partialSink.yield(previewTail)
                     noteTranscriptActivity()
                 case .final(let text):
                     ledger.applyFinal(text)
+                    previewTail = String((previewTail + " " + text).suffix(512))
+                    partialSink.yield(previewTail)
                     noteTranscriptActivity()
                 case .turnComplete:
                     ledger.applyTurnComplete(closedTurns: turnsEnded)
@@ -307,6 +318,11 @@ public actor LiveTranscriptionSession {
                     ledger.applyCommitted(itemID: itemID)
                 case .itemFinal(let itemID, let text):
                     ledger.applyItemFinal(itemID: itemID, text: text)
+                    if previewItemID == nil || previewItemID == itemID {
+                        previewItemID = itemID
+                        previewTail = String(text.suffix(512))
+                        partialSink.yield(previewTail)
+                    }
                     noteTranscriptActivity()
                 case .goAway:
                     renewAt = .distantPast
@@ -326,6 +342,8 @@ public actor LiveTranscriptionSession {
         guard failure == nil, phase != .closed, !Task.isCancelled else { return }
         failure = String(describing: error)
         onFailure(error as? LiveFailure ?? LiveFailure(message: String(describing: error)))
+        partialSink.yield("")
+        partialSink.finish()
         transport.close()
         commandSink.finish()
     }
@@ -500,6 +518,7 @@ public actor LiveTranscriptionSession {
         phase = .closed
         sendLoop?.cancel()
         receiveLoop?.cancel()
+        partialSink.finish()
         commandSink.finish()
         transport.close()
     }

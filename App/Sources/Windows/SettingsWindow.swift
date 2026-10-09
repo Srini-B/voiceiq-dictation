@@ -7,19 +7,22 @@ import VoiceIQCore
 /// The one app window — System Settings idiom: icon-tile sidebar, grouped detail.
 /// Your data (History, Dictionary) on top; app configuration below.
 @MainActor
-final class MainWindowController: NSWindowController {
+final class MainWindowController: NSWindowController, NSWindowDelegate {
     private var hosting: NSHostingView<MainView>?
     private let model: MainWindowModel
     private var titleObserver: AnyCancellable?
+    private let onClosed: () -> Void
 
     init(
         store: HistoryStore?,
         meetings: MeetingEngine,
         onRetry: @escaping (DictationRecord) -> Void,
         onDeleteAllHistory: @escaping () -> Void,
-        agentRuns: AgentRunStore
+        agentRuns: AgentRunStore,
+        onClosed: @escaping () -> Void
     ) {
         model = MainWindowModel()
+        self.onClosed = onClosed
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 880, height: 580),
             styleMask: [.titled, .closable, .miniaturizable, .fullSizeContentView],
@@ -30,6 +33,7 @@ final class MainWindowController: NSWindowController {
         window.titlebarAppearsTransparent = true
         window.center()
         super.init(window: window)
+        window.delegate = self
         // System Settings idiom: the titlebar names the selected pane (the app
         // name already anchors the sidebar header).
         titleObserver = model.$selection.sink { [weak window] section in
@@ -47,6 +51,11 @@ final class MainWindowController: NSWindowController {
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError() }
+
+    func windowWillClose(_ notification: Notification) {
+        // Wait until AppKit removes the closing window before checking for other windows.
+        Task { @MainActor [onClosed] in onClosed() }
+    }
 
     func show(section: MainSection) {
         model.selection = section
@@ -302,11 +311,11 @@ struct PrivacyPane: View {
             }
 
             Section {
-                LabeledContent("Audio") { Text("Sent to \(owner) with your key, transcribed every time") }
+                LocalAudioPrivacyRow(provider: owner, cloudDescription: "Sent to \(owner) with your key, transcribed every time")
                 LabeledContent("Transcript text") { Text("Sent back only for writing rules, Ask Anything and Translate") }
                 LabeledContent("Text around the cursor") { Text("Only if Fit to existing text and writing rules are on") }
                 LabeledContent("Meeting audio") { Text("Only if call recording is on; notes are made by \(provider.displayName)") }
-                LabeledContent("Dictionary terms") { Text("Sent with the audio, so names are spelled right as you speak") }
+                LabeledContent("Dictionary terms") { Text("Sent with cloud transcription and cleanup, so names are spelled right") }
                 LabeledContent("Dictionary") { Text("Synced to your iPhone through your iCloud account") }
                 LabeledContent("Screen snapshots") { Text("Only if screen context and writing rules are on; never stored") }
                 LabeledContent("Ask Anything search") { Text("Only if a TinyFish key is saved; the search query goes to TinyFish") }
@@ -334,6 +343,9 @@ struct PrivacyPane: View {
         // off without telling us. Re-reading on appear covers reopening the window.
         .onAppear {
             launchAtLogin = SMAppService.mainApp.status == .enabled
+            provider = settings.preferredProvider
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .gtSettingDidChange).receive(on: RunLoop.main)) { _ in
             provider = settings.preferredProvider
         }
     }

@@ -14,6 +14,7 @@ let package = Package(
     dependencies: [
         .package(url: "https://github.com/groue/GRDB.swift.git", from: "7.0.0"),
         .package(url: "https://github.com/Clipy/Sauce.git", from: "2.2.0"),
+        .package(url: "https://github.com/FluidInference/FluidAudio.git", exact: "0.17.7"),
     ],
     targets: [
         // WebRTC's AEC3 echo canceller and a small C bridge, built by
@@ -34,6 +35,7 @@ let package = Package(
                 "VoiceIQObjC",
                 "VoiceIQBridge",
                 .product(name: "GRDB", package: "GRDB.swift"),
+                .product(name: "FluidAudio", package: "FluidAudio"),
                 .product(name: "Sauce", package: "Sauce", condition: .when(platforms: [.macOS])),
                 // The vendored xcframework carries a macOS slice only. iOS
                 // meetings record the mic alone, so there is no echo to cancel.
