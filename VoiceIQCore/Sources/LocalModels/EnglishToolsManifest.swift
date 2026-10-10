@@ -3,33 +3,30 @@ import Foundation
 
 /// Subfolders of the English tools pack install folder.
 public enum EnglishToolsFolder: String, CaseIterable, Sendable {
-    /// LocalVQE v1.3 4.8M, 256 ms chunk: noise reduction.
-    case vqe
     /// Silero VAD unified 256 ms v6.2.1: speech detection.
     case vad
     /// Parakeet CTC 110M: dictionary correction for Parakeet.
     case ctc
 }
 
-/// The English tools pack: three small models from three Hugging Face repos,
+/// The English tools pack: two small models from two Hugging Face repos,
 /// each pinned to one commit, installed together as one verified folder at
-/// `<appSupport>/Models/english-tools/<revision>/{vqe,vad,ctc}`. Bump
+/// `<appSupport>/Models/english-tools/<revision>/{vad,ctc}`. Bump
 /// `revision` whenever any pinned file changes, so the marker check fails and
 /// the old pack is cleared. Sizes and SHA-256 digests come from each commit's
 /// tree metadata; the small git files were downloaded and checked against their
-/// git blob SHA-1 before their SHA-256 was recorded. 21 files, 123,501,211 bytes.
+/// git blob SHA-1 before their SHA-256 was recorded. 17 files, 103,865,880 bytes.
+///
+/// v1 also carried LocalVQE noise reduction. It was dropped after a replay of
+/// 15 dictations raised word error rate for both decoders (Parakeet 14.9% to
+/// 21.2%, Nemotron 24.9% to 32.6%); see
+/// `activities/2026-10-10-drop-speech-enhancement-and-nemotron-bias.md`.
 extension LocalModelManifest {
     static let englishTools = LocalModelManifest(
         repository: "FluidInference",
-        revision: "v1",
+        revision: "v2",
         directoryName: "english-tools",
-        files: files(in: .vqe, repository: "FluidInference/localvqe-coreml", revision: "4205430781c240397073d6f7bf676fb4c732fc12", [
-                ("localvqe-v1.3-4.8M-256ms.mlmodelc/analytics/coremldata.bin", 243, "a0e97d957f54c9a144993bfbb9d3d8320def9de35a77844e20fbf0703fa461c6"),
-                ("localvqe-v1.3-4.8M-256ms.mlmodelc/coremldata.bin", 3_531, "9ac719cbfbc018ce1f1168062ee1629b77bd86f4881567bca8668591817f402f"),
-                ("localvqe-v1.3-4.8M-256ms.mlmodelc/model.mil", 349_829, "11da4803a13bcc357550904fcbfeb4a169b0c4b38e529787aeed8a9b233c528c"),
-                ("localvqe-v1.3-4.8M-256ms.mlmodelc/weights/weight.bin", 19_281_728, "fc5f290cbfb497718d9d9568ee965c352bfe4663bab49b30a10e91f8fcfff826"),
-            ])
-            + files(in: .vad, repository: "FluidInference/silero-vad-coreml", revision: "b419383c55c110e2c9271fa6ee0ea83d03c70d96", [
+        files: files(in: .vad, repository: "FluidInference/silero-vad-coreml", revision: "b419383c55c110e2c9271fa6ee0ea83d03c70d96", [
                 ("silero-vad-unified-256ms-v6.2.1.mlmodelc/analytics/coremldata.bin", 243, "8067594eb3126ab8318af507f0c00cabfed40d5fedb8a0ee5075dd02e903d909"),
                 ("silero-vad-unified-256ms-v6.2.1.mlmodelc/coremldata.bin", 625, "7db35a4fd995222a7fb0129713473b15d1462572ab4a2e5e4d56bcaad9e40f41"),
                 ("silero-vad-unified-256ms-v6.2.1.mlmodelc/metadata.json", 3_335, "2740be542c611e1ba358e1849b4e265c65cdf0b17192767e1e5de86a31ac94d6"),

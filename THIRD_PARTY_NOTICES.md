@@ -57,12 +57,6 @@ VoiceiQ downloads these Core ML conversions unmodified, on explicit request, as
 one pack. No weights are bundled with the app. File hashes are in
 `EnglishToolsManifest.swift`.
 
-- **LocalVQE v1.3 4.8M (noise reduction).** Original model:
-  https://github.com/localai-org/LocalVQE, weights
-  https://huggingface.co/LocalAI-io/LocalVQE (LocalAI). Core ML conversion:
-  https://huggingface.co/FluidInference/localvqe-coreml (Fluid Inference),
-  revision `4205430781c240397073d6f7bf676fb4c732fc12`. License: Apache 2.0,
-  with the full text in the conversion repository's `LICENSE` file.
 - **Silero VAD v6.2.1 (speech detection).** Original model:
   https://github.com/snakers4/silero-vad (Copyright (c) 2020-present Silero Team),
   via https://huggingface.co/onnx-community/silero-vad. Core ML conversion:

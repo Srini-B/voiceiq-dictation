@@ -23,10 +23,10 @@ Recordings, history, API keys, dictionary, and cloud preferences are preserved.
 4. Select a model row to use it. The checkmark shows the selected model.
 5. Use the trash icon and confirm **Delete** to remove a downloaded model,
    even with local transcription on.
-6. Optional: select **Download** beside **English tools** (123,501,211 bytes,
-   shown as 123.5 MB). This row has no checkmark because it is never selected.
-   It adds noise reduction, speech detection, and Parakeet dictionary
-   correction. See [English speech processing](#english-speech-processing).
+6. Optional: select **Download** beside **English tools** (103,865,880 bytes,
+   shown as 103.9 MB). This row has no checkmark because it is never selected.
+   It adds speech detection and Parakeet dictionary correction. See
+   [English speech processing](#english-speech-processing).
 
 The model is not bundled, downloaded automatically, or loaded during download.
 Each device owns its download. A cancelled or failed download can be retried.
@@ -65,8 +65,8 @@ Model loading starts only when dictation starts, on a worker rather than the UI
 thread. Audio capture writes the existing 16 kHz mono CAF immediately. After
 capture drains and closes, Parakeet transcribes that complete recording.
 Recordings up to five minutes use in-memory audio processing. Longer Parakeet
-recordings use FluidAudio's disk-backed chunking and skip noise reduction,
-VAD trimming, and CTC dictionary correction to bound audio memory.
+recordings use FluidAudio's disk-backed chunking and skip VAD trimming and
+CTC dictionary correction to bound audio memory.
 We do not use its sliding-window API because that API can return partial text
 after an individual window fails without exposing the failure to its caller.
 
@@ -75,7 +75,7 @@ recommended 2240 ms tier. Real-time capture uses a bounded 30-second PCM queue
 and coalesces 2.24-second blocks. Missing, dropped or rejected bytes disqualify
 the local result and fall back to the saved recording. With real-time off,
 Nemotron processes recordings up to five minutes in memory. Longer recordings
-use bounded 35,840-frame reads with streaming noise reduction and no VAD trim.
+use bounded 35,840-frame reads with no VAD trim.
 Nemotron real-time never holds the complete recording in a second audio buffer.
 
 At stop, Nemotron receives one silent decoder chunk before finalization, including
@@ -85,7 +85,7 @@ and does not count toward captured-frame validation.
 
 If the first chunk contains sustained audio energy but no early word emissions,
 Nemotron can re-decode only the first 6.72 seconds of the audio the decoder
-received (after any enhancement or trimming) using its detected language.
+received (after any trimming) using its detected language.
 When no language tag was emitted, the retry keeps automatic language selection
 and adds one leading silent chunk. Recovery prepends at most three opening words
 only when the following five words match the primary transcript. It never
@@ -138,35 +138,45 @@ runs on final transcripts only, never on the live preview, and needs no
 download. It contains no neural weights. If it returns nothing, the candidate
 equals its input.
 
-The optional **English tools** pack adds three small Core ML models. The pack
+The optional **English tools** pack adds two small Core ML models. The pack
 is never required: without it, or when one part fails to load or run, that part
-is skipped and the base model still transcribes.
+is skipped and the base model still transcribes. Both decoders receive the
+recorded audio as captured; there is no noise reduction step. Pack v1 carried
+LocalVQE noise reduction, which raised word error rate for both decoders on
+replayed dictations and was removed (see
+`activities/2026-10-10-drop-speech-enhancement-and-nemotron-bias.md`).
 
 | Folder | Model | Used for |
 |---|---|---|
-| `vqe` | LocalVQE v1.3 4.8M, 256 ms chunk | Noise reduction. No loudspeaker reference is supplied, so it does not cancel echo. |
 | `vad` | Silero VAD unified 256 ms v6.2.1, threshold 0.4 | Speech detection |
 | `ctc` | Parakeet CTC 110M with its tokenizer | Dictionary correction for Parakeet |
 
 How each mode uses the pack:
 
-| Mode | Noise reduction | Speech detection | Dictionary |
-|---|---|---|---|
-| Parakeet | Whole recording up to five minutes | Trims silent edges up to five minutes | CTC rescoring up to five minutes, needs the pack |
-| Nemotron real-time | Each block before decoding, decided before audio arrives | Logs speech start and end only | Decoder biasing, no pack needed |
-| Nemotron file | Whole recording up to five minutes; blocks above that | Trims silent edges up to five minutes | Decoder biasing, no pack needed |
+| Mode | Speech detection | Dictionary |
+|---|---|---|
+| Parakeet | Trims silent edges up to five minutes | CTC rescoring up to five minutes, needs the pack |
+| Nemotron real-time | Logs speech start and end only | None |
+| Nemotron file | Trims silent edges up to five minutes | None |
 
 Speech detection never splits a recording or removes audio between words. It
 trims an edge only when more than 2 seconds of silence precede the first or
 follow the last detected speech, and it keeps 1 second of margin. A recording
-with no detected speech is decoded in full. If enhancement or detection fails,
-the raw or untrimmed audio is used. The Parakeet decoder and the CTC spotter
-see the same samples, so their timings share one clock.
+with no detected speech is decoded in full. If detection fails, the untrimmed
+audio is used. The Parakeet decoder and the CTC spotter see the same samples,
+so their timings share one clock.
 
-Dictionary terms come from the first 256 entries in the Dictionary. A term's
-misspelling, if set, becomes its alias. Before any decoder sees them, terms are
-whitespace-collapsed, deduplicated without regard to case, limited to 64
-characters, and limited to 8 aliases each. Parakeet rescoring requires 0.75
+Nemotron does not receive dictionary terms. FluidAudio's decode-time hotword
+bias is a greedy boost with no recovery: a short term such as "Cal" turned a
+spoken hesitation into a run of "Ca Ca Ca", and the bias raised word error
+rate on replayed dictations. Dictionary terms still reach the cleanup prompt
+and the deterministic replacement layer.
+
+Dictionary terms for Parakeet come from the first 256 entries in the
+Dictionary. A term's misspelling, if set, becomes its alias. Before the
+decoder sees them, terms are whitespace-collapsed, deduplicated without regard
+to case, limited to 64 characters, and limited to 8 aliases each. Parakeet
+rescoring requires 0.75
 text similarity and an acoustic score better than the original without an
 additive vocabulary bonus. Its permissive acoustic rescue pass is disabled
 because replay exposed unspoken dictionary insertions. The normalized candidate
@@ -218,15 +228,15 @@ Nemotron comes from
 `NemotronManifest.swift` pins its 22 files and SHA-256 digests, totalling
 664,846,846 bytes. The same verification and atomic installation apply.
 
-English tools come from three Hugging Face repositories, each pinned to one
-commit. `EnglishToolsManifest.swift` pins all 21 files, sizes and SHA-256
-digests, totalling 123,501,211 bytes, and installs them as one verified pack
-at `Models/english-tools/v1/{vqe,vad,ctc}`. Bump the pack revision when any
+English tools come from two Hugging Face repositories, each pinned to one
+commit. `EnglishToolsManifest.swift` pins all 17 files, sizes and SHA-256
+digests, totalling 103,865,880 bytes, and installs them as one verified pack
+at `Models/english-tools/v2/{vad,ctc}`. Bump the pack revision when any
 pinned file changes so the old pack fails its marker check and is cleared.
+A v1 pack is cleared at the next launch and the row shows Download again.
 
 | Folder | Repository | Revision | Bytes |
 |---|---|---|---:|
-| `vqe` | `FluidInference/localvqe-coreml` | `4205430781c240397073d6f7bf676fb4c732fc12` | 19,635,331 |
 | `vad` | `FluidInference/silero-vad-coreml` | `b419383c55c110e2c9271fa6ee0ea83d03c70d96` | 1,063,425 |
 | `ctc` | `FluidInference/parakeet-ctc-110m-coreml` | `accdafd8cf8a2ff1cabe3c11e54416b405d409aa` | 102,802,455 |
 
