@@ -1,4 +1,4 @@
-import VoiceIQCore
+import VoiceIQInference
 
 @main
 enum LocalSpeechMain {

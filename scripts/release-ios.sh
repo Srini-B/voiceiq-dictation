@@ -83,6 +83,7 @@ echo "▸ Version $VERSION ($BUILD)"
 
 echo "▸ Archiving"
 BUILD="$BUILD" scripts/archive-ios.sh
+python3 scripts/check-app-bundle.py "$ARCHIVE/Products/Applications/VoiceiQ.app"
 
 echo "▸ Verifying signatures"
 payload=$(mktemp -d)

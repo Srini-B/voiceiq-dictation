@@ -1,4 +1,5 @@
 import VoiceIQCore
+import VoiceIQSpeech
 import SwiftUI
 
 // MARK: - Dictation

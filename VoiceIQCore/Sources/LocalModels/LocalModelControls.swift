@@ -1,4 +1,5 @@
 import SwiftUI
+import VoiceIQSpeech
 
 /// The model list shared by the macOS and iOS settings. While on-device
 /// transcription is on, every model has a row: the leading check selects it,

@@ -1,6 +1,7 @@
 import AVFoundation
 import FluidAudio
 import Foundation
+import VoiceIQSpeech
 
 actor NemotronSession: LocalSpeechSession {
     private let audioURL: URL
@@ -74,17 +75,17 @@ actor NemotronSession: LocalSpeechSession {
         let task = Task {
             let file = try AVAudioFile(forReading: audioURL, commonFormat: .pcmFormatFloat32, interleaved: false)
             guard file.length == framesWritten, file.fileFormat.sampleRate == 16_000,
-                  file.fileFormat.channelCount == 1 else { throw TranscriptionError.emptyTranscript }
+                  file.fileFormat.channelCount == 1 else { throw CocoaError(.fileReadCorruptFile) }
             let chunk = await manager.config.chunkSamples
             if !streaming {
                 guard let buffer = AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: AVAudioFrameCount(chunk)) else {
-                    throw TranscriptionError.emptyTranscript
+                    throw CocoaError(.fileReadCorruptFile)
                 }
                 while file.framePosition < file.length {
                     try Task.checkCancellation()
                     try file.read(into: buffer, frameCount: AVAudioFrameCount(min(Int64(chunk), file.length - file.framePosition)))
                     guard buffer.frameLength > 0, let samples = buffer.floatChannelData?[0] else {
-                        throw TranscriptionError.emptyTranscript
+                        throw CocoaError(.fileReadCorruptFile)
                     }
                     _ = try await manager.process(samples: Array(UnsafeBufferPointer(start: samples, count: Int(buffer.frameLength))))
                 }

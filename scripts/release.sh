@@ -75,6 +75,8 @@ env GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=safe.bareRepository GIT_CONFIG_VALUE_0=a
 
 [[ -d "$APP_PATH" ]] || { echo "error: build produced no app at $APP_PATH" >&2; exit 1; }
 
+python3 scripts/check-app-bundle.py "$APP_PATH"
+
 echo "▸ Verifying app signature"
 codesign --verify --deep --strict --verbose=2 "$APP_PATH"
 codesign -dvv "$APP_PATH"

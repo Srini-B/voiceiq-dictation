@@ -193,12 +193,14 @@ It is distributed through TestFlight as "VoiceiQ Dictation". Details in
 
 ## Development
 
-Requires macOS 14+, Xcode 16+ with the iOS SDK, and
+Requires macOS 14+ to run, Xcode 26+ with Swift 6.2+ and the iOS SDK to build, and
 [xcodegen](https://github.com/yonaskolb/XcodeGen). The `.xcodeproj` is
 generated from `project.yml`, not checked in. One project holds both apps:
 `VoiceIQ` (macOS) and `VoiceIQiOS` with its `VoiceIQKeyboard` and
 `VoiceIQLiveActivity` extensions. All of them build on the `VoiceIQCore`
 package; the extensions link only its small `VoiceIQBridge` library.
+The Mac speech helper and iOS app also link `VoiceIQInference`. The Mac UI
+does not link the local inference runtime.
 
 ```bash
 brew install xcodegen

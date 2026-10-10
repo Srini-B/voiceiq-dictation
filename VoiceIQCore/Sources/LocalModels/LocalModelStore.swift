@@ -1,4 +1,5 @@
 import Foundation
+import VoiceIQSpeech
 
 public enum LocalModelSupport {
     /// The package's deployment targets already guarantee macOS 14 and iOS 17.
