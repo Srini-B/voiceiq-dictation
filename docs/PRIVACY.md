@@ -2,8 +2,11 @@
 
 ## The promise
 
-Your voice goes from your Mac directly to the model provider you chose in
+By default, your voice goes from your Mac directly to the model provider you chose in
 Settings → Advanced, using your own API key: Google's Gemini API or OpenAI's API.
+Optional Parakeet or Nemotron transcription processes audio on-device on supported systems.
+Cleanup and screen context still use your selected cloud provider. Failed local
+transcription falls back to sending the saved audio to that provider.
 There is no VoiceiQ server, no account, no analytics, no telemetry.
 Everything else stays on your Mac. The code is open — verify all of this.
 
@@ -17,20 +20,31 @@ With no usable key, nothing is sent and the recording stays on your Mac.
 
 ## What leaves your machine (the complete list)
 
-1. **The audio of each dictation**, sent to the provider. With "Real-time
+1. **The audio of each cloud dictation**, sent to the provider. With "Real-time
    transcription" off, VoiceiQ sends FLAC-compressed audio after you stop.
    With it on, VoiceiQ sends PCM audio while you speak in Dictation, Ask
    Anything, Translate and Agent. It uses the selected provider's existing
    key. If the live connection fails or does not return every completed turn,
    VoiceiQ uploads the saved recording to that provider after you stop.
    Real-time transcription is off by default and does not affect meetings.
+   With "On-device transcription" on and the selected model downloaded,
+   successful transcription sends no audio. The explicit Download button fetches
+   483.1 MB for Parakeet or 664.8 MB for Nemotron from Hugging Face and its CDN, exposing your IP address
+   to those hosts, but sending no recordings or API keys. Missing models use the
+   configured cloud transcription. Failed local results upload the saved
+   recording through the existing cloud path. This option is not an offline-only
+   privacy mode. See [local transcription](LOCAL_TRANSCRIPTION.md).
 2. **Your dictionary terms**, alongside that audio. The transcription model uses
    them to bias what it hears, which is why names and jargon come out spelled
    right as you speak rather than being corrected afterwards. Only the correct
    spellings are sent — never the misspellings you record. They ride on every
    dictation, including with Smart transcription off.
 3. **The writing-rules prompt**, while "Apply writing rules" is on in
-   Settings → Dictation — on by default. It runs after transcription and
+   Settings → Dictation — on by default. "Skip cleanup for dictations of 5 seconds
+   or less" is also on by default. With that setting on, short ordinary dictations
+   skip this request and insert the transcript with local dictionary rules.
+   Turn it off to send short dictations for cleanup too. Longer dictations run
+   cleanup after transcription. The request
    sends text only (and screen images, item 4), never the audio. It contains the transcript being
    formatted, the built-in formatting rules, your custom instructions from the
    same pane, the frontmost app's name, your dictionary terms, and, while

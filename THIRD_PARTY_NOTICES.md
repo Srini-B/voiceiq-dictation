@@ -30,9 +30,26 @@ repository's Apache 2.0 license. See `App/Resources/Sounds/ATTRIBUTION.md`.
 |---|---|
 | [Sauce](https://github.com/Clipy/Sauce) (Clipy) | MIT |
 | [GRDB.swift](https://github.com/groue/GRDB.swift) (Gwendal Roué) | MIT |
+| [FluidAudio](https://github.com/FluidInference/FluidAudio) 0.17.7 (Fluid Inference) | Apache 2.0; bundled dependencies retain their upstream notices |
 | [Sparkle](https://github.com/sparkle-project/Sparkle) (from M8) | Sparkle License (permissive, MIT-style) |
 
 ## Vendored libraries
+
+### Optional NVIDIA Parakeet TDT 0.6B v3 model
+
+- Original model: https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3 (NVIDIA).
+- Core ML conversion: https://huggingface.co/FluidInference/parakeet-tdt-0.6b-v3-coreml (Fluid Inference), revision `7dd20fe6b1797d35f5e3307e8b1732d9a178edfe`.
+- License: [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
+- VoiceiQ downloads the converted model files unmodified, on explicit request.
+  Weights are not bundled with the app. File hashes are in `ParakeetManifest.swift`.
+
+### Optional NVIDIA Nemotron 3.5 ASR Streaming 0.6B model
+
+- Original model: https://huggingface.co/nvidia/nemotron-3.5-asr-streaming-0.6b (NVIDIA).
+- Core ML conversion: https://huggingface.co/FluidInference/Nemotron-3.5-ASR-Streaming-Multilingual-0.6b-CoreML (Fluid Inference), revision `1a41b75758b0337ff67db7d5408280aaaf23074e`.
+- License: [OpenMDW-1.1](https://openmdw.ai/license/1-1/).
+- VoiceiQ downloads the converted `multilingual/2240ms/` files unmodified on
+  explicit request. Weights are not bundled. File hashes are in `NemotronManifest.swift`.
 
 ### WebRTC audio processing (AEC3 echo canceller)
 - File: `VoiceIQCore/Vendor/WebRTCAEC/CVoiceIQAEC.xcframework` (static library, arm64 and x86_64)

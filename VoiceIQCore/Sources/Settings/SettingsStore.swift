@@ -95,6 +95,28 @@ public struct SettingsStore: Sendable {
         Self.set(enabled, forKey: "liveDictationEnabled")
     }
 
+    public var localTranscriptionEnabled: Bool {
+        LocalModelSupport.isAvailable && Self.defaults.bool(forKey: "localTranscriptionEnabled")
+    }
+
+    public func setLocalTranscriptionEnabled(_ enabled: Bool) {
+        Self.set(enabled && LocalModelSupport.isAvailable, forKey: "localTranscriptionEnabled")
+    }
+
+    /// The on-device model to download and use. Unknown or missing values read as Parakeet.
+    public var localSpeechModel: LocalSpeechModel {
+        LocalSpeechModel(rawValue: Self.defaults.string(forKey: "localSpeechModel") ?? "") ?? .parakeet
+    }
+
+    /// Picking Nemotron turns real-time transcription on, because Nemotron is
+    /// built for streaming. Only a change of selection does this, so a user who
+    /// later turns real-time off keeps it off.
+    public func setLocalSpeechModel(_ model: LocalSpeechModel) {
+        guard model != localSpeechModel else { return }
+        Self.set(model.rawValue, forKey: "localSpeechModel")
+        if model == .nemotron { setLiveTranscriptionEnabled(true) }
+    }
+
     /// Providers for meeting transcription and notes; see `ModelProvider.meetingOrder`.
     public var meetingProviders: [ModelProvider] {
         ModelProvider.meetingOrder(selected: preferredProvider, hasKey: KeychainStore.hasKey(for:))
@@ -246,6 +268,14 @@ public struct SettingsStore: Sendable {
     /// transcript text a second time.
     public var smartCleanupPassEnabled: Bool {
         Self.defaults.object(forKey: "smartCleanupPass") as? Bool ?? true
+    }
+
+    public var skipShortDictationCleanup: Bool {
+        Self.defaults.object(forKey: "skipShortDictationCleanup") as? Bool ?? true
+    }
+
+    public func setSkipShortDictationCleanup(_ enabled: Bool) {
+        Self.set(enabled, forKey: "skipShortDictationCleanup")
     }
 
     /// Free-form rules the cleanup pass follows. Empty or whitespace means

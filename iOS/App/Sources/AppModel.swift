@@ -76,7 +76,7 @@ final class AppModel: ObservableObject {
                     targetAppName: target.host.map(AppNames.displayName(for:))
                 )
             },
-            liveFactory: { LiveTranscriber.makeFromSettings() }
+            liveFactory: { LiveTranscriber.makeFromSettings(audioURL: $0) }
         )
         inserter.onDeliver = { [weak self] text, mode in self?.deliver(text, mode: mode) }
 

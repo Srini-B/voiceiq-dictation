@@ -8,11 +8,11 @@ import VoiceIQBridge
 public protocol TranscriptionServicing: Sendable {
     /// Returns (rawTranscript, cleanedTranscript). Throws TranscriptionError.
     func transcribe(audioURL: URL, durationSeconds: Double, context: DictationContext) async throws -> TranscriptionResult
-    func process(_ transcript: TranscriptionResult, context: DictationContext) async throws -> TranscriptionResult
+    func process(_ transcript: TranscriptionResult, durationSeconds: Double, context: DictationContext) async throws -> TranscriptionResult
 }
 
 public extension TranscriptionServicing {
-    func process(_ transcript: TranscriptionResult, context: DictationContext) async throws -> TranscriptionResult {
+    func process(_ transcript: TranscriptionResult, durationSeconds: Double, context: DictationContext) async throws -> TranscriptionResult {
         transcript
     }
 }

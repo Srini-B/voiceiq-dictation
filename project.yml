@@ -12,8 +12,8 @@ options:
 # CURRENT_PROJECT_VERSION is the build number: raise it with every release.
 settings:
   base:
-    MARKETING_VERSION: "0.5.17"
-    CURRENT_PROJECT_VERSION: "42"
+    MARKETING_VERSION: "0.5.18"
+    CURRENT_PROJECT_VERSION: "43"
 
 packages:
   VoiceIQCore:
@@ -88,6 +88,12 @@ targets:
         product: PeekabooAutomationKit
       - package: Peekaboo
         product: PeekabooFoundation
+      - target: VoiceiQLocalSpeech
+        embed: true
+        codeSign: true
+        copy:
+          destination: wrapper
+          subpath: Contents/Helpers
     postBuildScripts:
       # Xcode signs Sparkle.framework on copy but not the helpers inside it,
       # which keep Sparkle's ad-hoc signature and fail notarization. The app is
@@ -126,6 +132,33 @@ targets:
     scheme:
       testTargets: []
       gatherCoverageData: false
+
+  VoiceiQLocalSpeech:
+    type: application
+    platform: macOS
+    settings:
+      base:
+        PRODUCT_NAME: VoiceiQLocalSpeech
+        PRODUCT_BUNDLE_IDENTIFIER: io.blue.voiceiq.localspeech
+        DEVELOPMENT_TEAM: G8K3545FJ2
+        SWIFT_VERSION: "5.10"
+        ENABLE_HARDENED_RUNTIME: YES
+        CODE_SIGN_INJECT_BASE_ENTITLEMENTS: NO
+      configs:
+        Debug:
+          CODE_SIGN_IDENTITY: "-"
+          CODE_SIGN_STYLE: Manual
+          CODE_SIGNING_REQUIRED: NO
+    sources:
+      - path: LocalSpeech/Sources
+    dependencies:
+      - package: VoiceIQCore
+    info:
+      path: LocalSpeech/Info.plist
+      properties:
+        LSBackgroundOnly: true
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
 
   # iOS: the app owns audio, keys and transcription; the keyboard is a remote
   # control; the Live Activity shows the background session in the Dynamic

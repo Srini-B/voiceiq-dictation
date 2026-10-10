@@ -116,14 +116,12 @@ extension GeminiClient {
         Log.transcription.notice("call \(event.stage, privacy: .public) via \(event.via, privacy: .public) (\(model, privacy: .public)) id=\(requestID, privacy: .public) attempt=\(attempt) \(event.networkProtocol ?? "-", privacy: .public)\(event.reusedConnection == true ? " reused" : "", privacy: .public) \(outcome, privacy: .public) in \(event.totalMs)ms, first byte \(event.firstByteMs ?? -1)ms, sent \(event.requestBytes ?? 0) bytes")
     }
 
-    /// When the second attempt starts and how long it may run. Cleanup normally
-    /// answers in 2.5–5.7 s (gpt-6-luna, measured from History 2026-10-01/02),
-    /// so silence for 45% of the budget is treated as a stall. The second
-    /// attempt gets what is left, never less than 8 s, so the worst case stays
-    /// close to the single-attempt deadline.
+    /// A retry processes the entire prompt, so it needs an entire request budget.
+    /// Giving it only the first request's remaining time makes both expire
+    /// together when the provider stalls before returning any bytes.
     static func freshRetryTiming(deadline: TimeInterval) -> (startAfter: TimeInterval, deadline: TimeInterval) {
         let startAfter = min(max(deadline * 0.45, 5), 20)
-        return (startAfter, max(8, deadline - startAfter))
+        return (startAfter, deadline)
     }
 
     /// Errors a new connection can fix. Anything about the key, the model, the
@@ -167,15 +165,17 @@ extension GeminiClient {
         first: @escaping @Sendable () async throws -> String,
         retry: @escaping @Sendable () async throws -> String
     ) async throws -> String {
-        try await withThrowingTaskGroup(of: Attempt.self) { group in
+        try Task.checkCancellation()
+        return try await withThrowingTaskGroup(of: Attempt.self) { group in
             group.addTask { .first(await outcome(first)) }
             group.addTask {
-                try? await Task.sleep(nanoseconds: UInt64(retryAfter * 1_000_000_000))
+                try await Task.sleep(nanoseconds: UInt64(retryAfter * 1_000_000_000))
                 return .retryDue
             }
             var retryStarted = false
             var inFlight = 1
             while let attempt = try await group.next() {
+                try Task.checkCancellation()
                 var startReason: String?
                 switch attempt {
                 case .retryDue:

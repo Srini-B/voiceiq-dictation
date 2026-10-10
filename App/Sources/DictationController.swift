@@ -88,7 +88,7 @@ final class DictationController {
                     focusedField: field
                 )
             },
-            liveFactory: { LiveTranscriber.makeFromSettings() }
+            liveFactory: { LiveTranscriber.makeFromSettings(audioURL: $0) }
         )
     }
 
@@ -573,8 +573,13 @@ final class DictationController {
                     // Wiping history also forgets the paste-last buffer.
                     self.coordinator.clearLastResult()
                 },
-                agentRuns: agentRuns
+                agentRuns: agentRuns,
+                onClosed: { [weak self] in self?.handBackActivation(afterWindowClose: true) }
             )
+        }
+        if let app = NSWorkspace.shared.frontmostApplication,
+           app.processIdentifier != ProcessInfo.processInfo.processIdentifier {
+            previousFrontmostApp = app
         }
         mainWindow?.show(section: section)
     }
@@ -685,16 +690,16 @@ final class DictationController {
     /// A click on the panel's buttons can still activate VoiceiQ on some
     /// systems; when that happens with no regular window open, give the
     /// activation back to the app behind the panel.
-    private func handBackActivation() {
-        guard agent.isOpen else { return }
+    private func handBackActivation(afterWindowClose: Bool = false) {
+        guard NSApp.isActive, agent.isOpen || afterWindowClose else { return }
         guard !NSApp.windows.contains(where: { $0.isVisible && $0.canBecomeMain }) else { return }
         let app = previousFrontmostApp.flatMap { $0.isTerminated ? nil : $0 }
             ?? NativeExecutor.topmostForeignWindowOwner().flatMap { NSRunningApplication(processIdentifier: $0) }
         guard let app else {
-            Log.hotkey.info("agent panel activated VoiceiQ; no app to hand focus back to")
+            Log.hotkey.info("VoiceiQ has no main window; no app to hand focus back to")
             return
         }
-        Log.hotkey.info("agent panel activated VoiceiQ; handing focus back to \(app.localizedName ?? "app", privacy: .public)")
+        Log.hotkey.info("VoiceiQ has no main window; handing focus back to \(app.localizedName ?? "app", privacy: .public)")
         app.activate()
     }
 
@@ -799,6 +804,12 @@ final class DictationController {
     // MARK: - State → HUD/earcons (frame-synced: sound fires on the same tick)
 
     private func bind() {
+        coordinator.$partialTranscript
+            .removeDuplicates()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] text in self?.hud.model.partial = text }
+            .store(in: &cancellables)
+
         coordinator.$state
             .receive(on: DispatchQueue.main)
             .sink { [weak self] state in

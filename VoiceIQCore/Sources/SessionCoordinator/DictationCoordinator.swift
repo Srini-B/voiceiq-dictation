@@ -14,6 +14,8 @@ public final class DictationCoordinator: ObservableObject {
     @Published public private(set) var lastResult: String?
     @Published public private(set) var coachingHint: String?
     @Published public private(set) var modeFailureMessage: String?
+    @Published public private(set) var partialTranscript = ""
+    private var partialPump: Task<Void, Never>?
 
     /// "Delete All History" should also forget the paste-last buffer — a user
     /// wiping their words expects them gone from everywhere we hold them.
@@ -85,6 +87,9 @@ public final class DictationCoordinator: ObservableObject {
     private var session: Session? {
         didSet {
             guard oldValue?.id != session?.id else { return }
+            partialPump?.cancel()
+            partialPump = nil
+            partialTranscript = ""
             if let live = liveTranscriber {
                 liveTranscriber = nil
                 let scope = oldValue.map { UsageScope(mode: $0.context.mode, sessionID: $0.id.uuidString) }
@@ -97,7 +102,7 @@ public final class DictationCoordinator: ObservableObject {
         }
     }
     private var capture: AudioCapturing?
-    private var liveTranscriber: LiveTranscriber?
+    private var liveTranscriber: (any DictationStreaming)?
     private var screenContextCollector: ScreenContextCollector?
     /// Most recent metered level — decides whether the user was mid-word when
     /// they released the key.
@@ -129,7 +134,7 @@ public final class DictationCoordinator: ObservableObject {
     static let cancelKeepThreshold: Double = 10
 
     private let audioFactory: @MainActor () -> AudioCapturing
-    private let liveFactory: @MainActor () -> LiveTranscriber?
+    private let liveFactory: @MainActor (URL) -> (any DictationStreaming)?
     private let transcription: TranscriptionServicing
     private let insertion: TextInserting
     private let contextProvider: @MainActor () -> DictationContext
@@ -150,7 +155,7 @@ public final class DictationCoordinator: ObservableObject {
         transcription: TranscriptionServicing,
         insertion: TextInserting,
         contextProvider: @escaping @MainActor () -> DictationContext = { DictationContext() },
-        liveFactory: @escaping @MainActor () -> LiveTranscriber? = { nil },
+        liveFactory: @escaping @MainActor (URL) -> (any DictationStreaming)? = { _ in nil },
         now: @escaping () -> Date = Date.init,
         noiseHandlingEnabled: @escaping @MainActor () -> Bool = { SettingsStore().experimentalNoiseHandling },
         secureInputActive: @escaping @MainActor () -> Bool = { SecureInput.isActive }
@@ -275,10 +280,17 @@ public final class DictationCoordinator: ObservableObject {
 
             let capture = audioFactory()
             self.capture = capture
-            let live = liveFactory()
+            let live = liveFactory(FileLayout.audioCAF(in: folder))
             liveTranscriber = live
             if let live {
                 capture.setPCMSink { pcm in live.enqueue(pcm) }
+                partialPump = Task { [weak self] in
+                    for await text in live.partials {
+                        guard let self, !Task.isCancelled, self.session?.id == id else { return }
+                        guard case .recording = self.state else { continue }
+                        self.partialTranscript = text
+                    }
+                }
             } else {
                 capture.setPCMSink(nil)
             }
@@ -422,6 +434,9 @@ public final class DictationCoordinator: ObservableObject {
         // (same pattern as cancelSession, audit #10). A second stop while a
         // session is in flight must not stop capture or clobber meta.
         guard apply(.finalize) else { return }
+        partialPump?.cancel()
+        partialPump = nil
+        partialTranscript = ""
         finishScreenContext()
         // Hand the engine off and release it immediately: stop() now drains the
         // HAL's in-flight buffer (~50ms mean of real speech) and tears the graph
@@ -555,7 +570,9 @@ public final class DictationCoordinator: ObservableObject {
                 try Task.checkCancellation()
                 let outcome: TranscriptionResult
                 if let liveResult {
-                    outcome = try await self.transcription.process(liveResult, context: session.context)
+                    outcome = try await self.transcription.process(
+                        liveResult, durationSeconds: result.durationSeconds, context: session.context
+                    )
                 } else {
                     outcome = try await self.transcription.transcribe(
                         audioURL: FileLayout.audioCAF(in: session.folder),

@@ -39,6 +39,8 @@ final class LevelSource {
 final class PillModel: ObservableObject {
     @Published var state: PillState = .idleDot
     @Published var elapsed: TimeInterval = 0
+    /// A provisional preview, never the result to insert.
+    @Published var partial = ""
     /// Still-working slow state (>3s in processing — TimeoutPolicy.slowStateUI).
     @Published var slow = false
     /// `SettingsStore.pillAnchor`, mirrored so the pill hugs the panel edge
