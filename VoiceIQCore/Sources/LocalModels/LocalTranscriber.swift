@@ -1,3 +1,4 @@
+#if os(macOS)
 import Foundation
 import VoiceIQSpeech
 
@@ -113,3 +114,4 @@ public final class LocalTranscriber: DictationStreaming, Sendable {
         await LocalModelStore.englishTools.releaseSession(id: id)
     }
 }
+#endif

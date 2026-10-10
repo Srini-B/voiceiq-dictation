@@ -1,11 +1,18 @@
 # On-device transcription
 
 Settings → Dictation offers **On-device transcription** on Apple
-Silicon Macs running macOS 14+, and iPhone/iPad running iOS/iPadOS 17+.
+Silicon Macs running macOS 14+ only.
 The toggle is off by default. Existing local-transcription preferences survive
 the removal of Whistle, but its model and runtime are no longer included.
 On-device dictation is English only: Parakeet decodes as English and Nemotron
 is locked to `en-US`. Cloud transcription keeps its own language handling.
+
+iPhone and iPad use online transcription only, including cloud real-time
+transcription. They do not link FluidAudio, the normalizer, or the local model
+manager. On launch, the app clears retired local preferences and removes its
+`Application Support/VoiceiQ/Models` folder in the background. This also removes
+partial downloads and English tools. Failed deletion retries on the next launch.
+Recordings, history, API keys, dictionary, and cloud preferences are preserved.
 
 ## Download and delete
 
@@ -23,7 +30,7 @@ is locked to `en-US`. Cloud transcription keeps its own language handling.
 
 The model is not bundled, downloaded automatically, or loaded during download.
 Each device owns its download. A cancelled or failed download can be retried.
-Downloads run in the foreground; keep the iOS app open until complete.
+Keep the Mac app running until downloads complete.
 Deleting during a local session cancels local processing before removing files;
 the saved recording can still use cloud transcription.
 
@@ -109,11 +116,6 @@ idle timer does not run during recording or recognition. Cancellation or model d
 helper and waits for exit before removing files. Helper failure falls back to the
 saved-audio cloud path. Startup has a 120-second deadline; recognition allows at
 least 120 seconds or twice the recording duration, whichever is longer.
-
-iOS and iPadOS do not permit this general-purpose child-process approach. They
-release models in-process and join active Core ML calls on cancellation. Core ML
-can retain runtime caches there, so returning physical memory to its original
-baseline within a fixed time is not guaranteed.
 
 Successful local calls record `parakeet-v3-local` or
 `nemotron-3.5-multilingual-local`, stage `transcribe`, with zero
@@ -231,9 +233,9 @@ pinned file changes so the old pack fails its marker check and is cleared.
 FluidAudio's `NemoTextProcessing` trait is enabled for inverse text
 normalization. It links the prebuilt `text-processing-rs` v0.3.1 static library,
 which contains compiled grammars and no model weights. Only the inference
-binary links it: the Mac speech helper and the iOS app. The Mac UI does not.
+binary links it: the Mac speech helper. The Mac UI and iOS app do not.
 
 Storage is `Application Support/VoiceiQ/Models/<model>/<revision>`.
 Neither the keyboard nor Live Activity extension links FluidAudio. Models load
-in the macOS helper or the iOS host app. See `THIRD_PARTY_NOTICES.md` for SDK and
+only in the macOS helper. See `THIRD_PARTY_NOTICES.md` for SDK and
 model attribution.

@@ -78,7 +78,7 @@ one pack. No weights are bundled with the app. File hashes are in
 ### NeMo text processing (inverse text normalization)
 
 - Linked through FluidAudio's `NemoTextProcessing` trait into the Mac speech
-  helper and the iOS app, not the Mac UI.
+  helper only, not the Mac UI or the iOS app.
 - Binary: `NemoTextProcessing.xcframework` from
   https://github.com/FluidInference/text-processing-rs release v0.3.1
   (Fluid Inference). License: Apache 2.0.

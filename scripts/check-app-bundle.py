@@ -44,10 +44,10 @@ def main():
             raise SystemExit("Speech helper still links app/database code")
         if "10FluidAudio" not in symbols:
             raise SystemExit("Speech helper lacks the expected inference runtime")
-    elif "10FluidAudio" not in symbols:
-        raise SystemExit("iOS app lacks the expected inference runtime")
-    if "_nemo_normalize_sentence" not in symbols:
-        raise SystemExit("Inference lacks the required English normalization runtime")
+        if "_nemo_normalize_sentence" not in symbols:
+            raise SystemExit("Inference lacks the required English normalization runtime")
+    elif any(name in symbols for name in ["10FluidAudio", "16VoiceIQInference", "13VoiceIQSpeech", "_nemo_normalize", "LocalTranscriber", "LocalModelStore"]):
+        raise SystemExit("iOS app still links local transcription code")
 
     print(json.dumps({
         "app": str(app),

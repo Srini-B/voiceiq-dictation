@@ -206,15 +206,9 @@ targets:
       - package: VoiceIQCore
         product: VoiceIQCore
       - package: VoiceIQCore
-        product: VoiceIQInference
-      - package: VoiceIQCore
         product: VoiceIQBridge
       - target: VoiceIQKeyboard
       - target: VoiceIQLiveActivity
-    postBuildScripts:
-      - name: Remove unused speech-synthesis resources
-        basedOnDependencyAnalysis: false
-        script: 'python3 "$SRCROOT/scripts/trim-inference-resources.py"'
     info:
       path: iOS/App/Info.plist
       properties:

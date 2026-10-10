@@ -1,3 +1,4 @@
+#if os(macOS)
 import Foundation
 import VoiceIQSpeech
 
@@ -70,3 +71,4 @@ public struct LocalModelManifest: Sendable {
     /// the files and the marker together.
     static let markerName = ".verified"
 }
+#endif

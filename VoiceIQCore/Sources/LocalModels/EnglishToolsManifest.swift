@@ -1,3 +1,4 @@
+#if os(macOS)
 import Foundation
 
 /// Subfolders of the English tools pack install folder.
@@ -67,3 +68,4 @@ extension LocalModelManifest {
         }
     }
 }
+#endif

@@ -1,7 +1,8 @@
+#if os(macOS)
 import SwiftUI
 import VoiceIQSpeech
 
-/// The model list shared by the macOS and iOS settings. While on-device
+/// The model list in macOS settings. While on-device
 /// transcription is on, every model has a row: the leading check selects it,
 /// and the trailing action downloads, cancels, or deletes that model alone.
 /// While it is off, only models on disk or in transit keep a row, so they can
@@ -50,11 +51,7 @@ private struct LocalModelRow: View {
     let selection: (isSelected: Bool, select: () -> Void)?
     @State private var confirmingDelete = false
 
-    #if os(iOS)
-    private static let minTarget: CGFloat = 44
-    #else
     private static let minTarget: CGFloat = 24
-    #endif
 
     private var name: String { store.displayName }
 
@@ -190,7 +187,7 @@ public struct LocalModelFooter: View {
     }
 }
 
-/// The privacy "Audio" row on both platforms. It follows the on-device
+/// The macOS privacy "Audio" row. It follows the on-device
 /// setting, the selected model, and that model's download state, so it never
 /// claims audio stays local while the model is missing.
 @MainActor
@@ -237,3 +234,4 @@ public struct LocalAudioPrivacyRow: View {
         }
     }
 }
+#endif
