@@ -1,37 +1,70 @@
-import AVFoundation
 import FluidAudio
 import Foundation
 import VoiceIQSpeech
 
 actor NemotronSession: LocalSpeechSession {
+    private typealias Loaded = (manager: StreamingNemotronMultilingualAsrManager, tools: EnglishTools, enhancer: SpeechEnhancerStream?)
     private let audioURL: URL
     private let streaming: Bool
+    private let options: LocalSpeechOptions
     private var manager: StreamingNemotronMultilingualAsrManager?
-    private var loading: Task<StreamingNemotronMultilingualAsrManager, Error>?
+    private var tools = EnglishTools()
+    private var enhancer: SpeechEnhancerStream?
+    private var meter: SpeechActivityMeter?
+    private var loading: Task<Loaded, Error>?
     private var processing: Task<String, Error>?
     private var acceptedFrames: Int64 = 0
+    /// Start of the decoder's input, kept for onset recovery.
+    private var opening: [Float] = []
     private var stopped = false
     private var failed = false
 
-    init(audioURL: URL, streaming: Bool) {
+    init(audioURL: URL, streaming: Bool, options: LocalSpeechOptions) {
         self.audioURL = audioURL
         self.streaming = streaming
+        self.options = options
     }
 
     func load(from directory: URL) async {
         guard !stopped else { return }
-        let task = Task.detached(priority: .userInitiated) {
+        let terms = EnglishVocabulary.terms(options.vocabulary)
+        let toolsRoot = options.toolsDirectory
+        let streaming = streaming
+        let task = Task.detached(priority: .userInitiated) { () throws -> Loaded in
             try Task.checkCancellation()
+            async let tools = EnglishTools.load(root: toolsRoot)
             let manager = StreamingNemotronMultilingualAsrManager()
             try await manager.loadModels(from: directory)
-            return manager
+            try Task.checkCancellation()
+            await manager.setLanguage("en-US")
+            await manager.setForcedPrefix(true)
+            // Decode-time biasing from the model directory; needs no tools pack.
+            await manager.setCustomVocabulary(terms)
+            let loadedTools = try await tools
+            var enhancer: SpeechEnhancerStream?
+            if streaming, let vqe = loadedTools.enhancer {
+                do {
+                    enhancer = try await SpeechEnhancerStream(vqe)
+                } catch {
+                    Log.transcription.notice("Speech enhancement stream unavailable; using raw audio: \(error.localizedDescription, privacy: .public)")
+                }
+            }
+            try Task.checkCancellation()
+            return (manager, loadedTools, enhancer)
         }
         loading = task
         do {
             let loaded = try await task.value
             loading = nil
-            guard !stopped else { await loaded.cleanup(); return }
-            manager = loaded
+            guard !stopped else { await loaded.manager.cleanup(); return }
+            manager = loaded.manager
+            tools = loaded.tools
+            if streaming {
+                // Decided before any audio arrives: a stream is never half enhanced.
+                enhancer = loaded.enhancer
+                meter = tools.vad.map(SpeechActivityMeter.init)
+            }
+            Log.transcription.notice("Nemotron English: \(terms.count) vocabulary terms, enhancement=\(self.streaming ? self.enhancer != nil : self.tools.enhancer != nil), vad=\(self.tools.vad != nil)")
         } catch {
             loading = nil
             failed = true
@@ -47,9 +80,12 @@ actor NemotronSession: LocalSpeechSession {
                 Float(Int16(littleEndian: bytes.loadUnaligned(fromByteOffset: offset, as: Int16.self))) / 32_768
             }
         }
+        let enhancer = enhancer
+        let meter = meter
         let task = Task {
             try Task.checkCancellation()
-            _ = try await manager.process(samples: samples)
+            let input = try await enhancer?.push(samples) ?? samples
+            try await self.decode(input, manager: manager, meter: meter)
             return await manager.getPartialTranscript()
         }
         processing = task
@@ -57,6 +93,7 @@ actor NemotronSession: LocalSpeechSession {
             let preview = try await task.value
             processing = nil
             guard !stopped else { return nil }
+            // Accounting stays in recorded frames, independent of enhancement delay.
             acceptedFrames += Int64(samples.count)
             return String(preview.suffix(512))
         } catch {
@@ -67,27 +104,33 @@ actor NemotronSession: LocalSpeechSession {
         }
     }
 
-    func transcribe(framesWritten: Int64) async -> String? {
+    func transcribe(framesWritten: Int64) async -> LocalSpeechOutput? {
         guard !stopped, !failed, let manager else { return nil }
         guard !streaming || acceptedFrames == framesWritten else { return nil }
         let audioURL = audioURL
         let streaming = streaming
+        let tools = tools
+        let enhancer = enhancer
+        let meter = meter
         let task = Task {
-            let file = try AVAudioFile(forReading: audioURL, commonFormat: .pcmFormatFloat32, interleaved: false)
-            guard file.length == framesWritten, file.fileFormat.sampleRate == 16_000,
-                  file.fileFormat.channelCount == 1 else { throw CocoaError(.fileReadCorruptFile) }
             let chunk = await manager.config.chunkSamples
-            if !streaming {
-                guard let buffer = AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: AVAudioFrameCount(chunk)) else {
-                    throw CocoaError(.fileReadCorruptFile)
+            if streaming {
+                try SpeechAudio.validate(audioURL, frames: framesWritten)
+                if let enhancer {
+                    try await self.decode(try await enhancer.finish(), manager: manager, meter: meter)
                 }
-                while file.framePosition < file.length {
+                if let speech = await meter?.finish() {
+                    Log.transcription.notice("Nemotron VAD speech start \(Double(speech.start) / 16_000, format: .fixed(precision: 2))s, end \(speech.end.map { Double($0) / 16_000 } ?? -1, format: .fixed(precision: 2))s of \(Double(framesWritten) / 16_000, format: .fixed(precision: 2))s")
+                }
+            } else if !SpeechAudio.fitsInMemory(framesWritten) {
+                try await self.decodeLong(audioURL, frames: framesWritten, enhancer: tools.enhancer, manager: manager, chunk: chunk)
+            } else {
+                let recorded = try SpeechAudio.read(audioURL, frames: framesWritten)
+                let enhanced = try await SpeechAudio.enhanced(recorded, with: tools.enhancer)
+                let samples = try await SpeechBoundaries.trimmed(enhanced, vad: tools.vad)
+                for start in stride(from: 0, to: samples.count, by: chunk) {
                     try Task.checkCancellation()
-                    try file.read(into: buffer, frameCount: AVAudioFrameCount(min(Int64(chunk), file.length - file.framePosition)))
-                    guard buffer.frameLength > 0, let samples = buffer.floatChannelData?[0] else {
-                        throw CocoaError(.fileReadCorruptFile)
-                    }
-                    _ = try await manager.process(samples: Array(UnsafeBufferPointer(start: samples, count: Int(buffer.frameLength))))
+                    try await self.decode(Array(samples[start..<min(start + chunk, samples.count)]), manager: manager, meter: nil)
                 }
             }
             try Task.checkCancellation()
@@ -98,19 +141,60 @@ actor NemotronSession: LocalSpeechSession {
             let primary = try await manager.finishWithTokenTimings()
             return try await NemotronOnsetRecovery.recover(
                 text: primary.text.trimmingCharacters(in: .whitespacesAndNewlines),
-                timings: primary.timings, file: file, manager: manager
+                timings: primary.timings, opening: self.opening, manager: manager
             )
         }
         processing = task
         do {
             let text = try await task.value
             processing = nil
-            return !stopped && !text.isEmpty ? text : nil
+            guard !stopped else { return nil }
+            return EnglishText.output(original: text)
         } catch {
             processing = nil
             failed = true
             Log.transcription.notice("Nemotron finalization failed; using saved-audio cloud transcription: \(error.localizedDescription, privacy: .public)")
             return nil
+        }
+    }
+
+    /// Feeds the decoder and records the opening audio it actually received.
+    private func decode(
+        _ samples: [Float], manager: StreamingNemotronMultilingualAsrManager, meter: SpeechActivityMeter?
+    ) async throws {
+        guard !samples.isEmpty else { return }
+        _ = try await manager.process(samples: samples)
+        let limit = await manager.config.chunkSamples * 3
+        if opening.count < limit { opening += samples.prefix(limit - opening.count) }
+        await meter?.feed(samples)
+    }
+
+    /// Streams a long recording from disk through a fresh enhancer so memory
+    /// stays bounded. VAD trimming needs the whole recording and is skipped.
+    /// If the enhanced pass fails, the decoder restarts on raw audio instead
+    /// of mixing enhanced and raw input.
+    private func decodeLong(
+        _ url: URL, frames: Int64, enhancer vqe: LocalVqeManager?,
+        manager: StreamingNemotronMultilingualAsrManager, chunk: Int
+    ) async throws {
+        Log.transcription.notice("Nemotron long recording (\(frames) frames): chunked decode, enhancement=\(vqe != nil), no VAD trim")
+        if let vqe {
+            do {
+                let stream = try await SpeechEnhancerStream(vqe)
+                try await SpeechAudio.forEachChunk(url, frames: frames, size: chunk) { samples in
+                    try await self.decode(try await stream.push(samples), manager: manager, meter: nil)
+                }
+                try await decode(try await stream.finish(), manager: manager, meter: nil)
+                return
+            } catch {
+                try Task.checkCancellation()
+                Log.transcription.notice("Nemotron enhanced long decode failed; restarting on raw audio: \(error.localizedDescription, privacy: .public)")
+                await manager.reset()
+                opening = []
+            }
+        }
+        try await SpeechAudio.forEachChunk(url, frames: frames, size: chunk) { samples in
+            try await self.decode(samples, manager: manager, meter: nil)
         }
     }
 
@@ -126,5 +210,9 @@ actor NemotronSession: LocalSpeechSession {
         self.processing = nil
         await manager?.cleanup()
         manager = nil
+        tools = EnglishTools()
+        enhancer = nil
+        meter = nil
+        opening = []
     }
 }

@@ -120,7 +120,8 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
         }
 
         if context.mode != .dictate {
-            let cleaned = try await transform(raw: trimmedRaw, context: context, config: config)
+            let cleaned = try await transform(raw: trimmedRaw, normalized: transcript.normalizedTranscript,
+                                              context: context, config: config)
             return TranscriptionResult(
                 rawTranscript: trimmedRaw,
                 cleanedTranscript: cleaned,
@@ -147,7 +148,8 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
 
         let cleanup = await cleanupOrFallback(
             raw: trimmedRaw, context: context, config: config,
-            rawHasFillers: transcriptKeepsFillers(provider: provider, policy: policy)
+            rawHasFillers: transcriptKeepsFillers(provider: provider, policy: policy),
+            normalized: transcript.normalizedTranscript
         )
         return TranscriptionResult(
             rawTranscript: trimmedRaw,
@@ -170,7 +172,7 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
 
     // MARK: - Stages
 
-    private func transform(raw: String, context: DictationContext, config: GeminiConfig) async throws -> String {
+    private func transform(raw: String, normalized: String?, context: DictationContext, config: GeminiConfig) async throws -> String {
         let dictionary = DictionaryStore()
         let prompt: String
         switch context.mode {
@@ -179,7 +181,7 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
         case .agent:
             // The command goes to the agent model as spoken; only the
             // dictionary's hard replacements apply.
-            return ReplacementEngine.apply(dictionary.replacementRules(), to: raw)
+            return ReplacementEngine.apply(dictionary.replacementRules(), to: normalized ?? raw)
         case .askAnything(let selectedText):
             var webContext: WebContext?
             if KeychainStore.loadTinyFishKey() != nil {
@@ -195,11 +197,12 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
                 instruction: raw,
                 selectedText: selectedText,
                 vocabulary: dictionary.sanitizedVocabulary(),
-                webContext: webContext
+                webContext: webContext,
+                normalized: normalized
             )
         case .translate(let target):
             prompt = PromptV1.translatePrompt(
-                raw: raw, target: target, vocabulary: dictionary.sanitizedVocabulary()
+                raw: raw, target: target, vocabulary: dictionary.sanitizedVocabulary(), normalized: normalized
             )
         }
         let stage: UsageStage = { if case .translate = context.mode { return .translate }; return .answer }()

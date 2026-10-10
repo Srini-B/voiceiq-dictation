@@ -1,10 +1,10 @@
-import AVFoundation
 import FluidAudio
 import Foundation
 
 enum NemotronOnsetRecovery {
+    /// `opening` is the start of the exact audio the decoder received.
     static func recover(
-        text: String, timings: [TokenTiming], file: AVAudioFile,
+        text: String, timings: [TokenTiming], opening: [Float],
         manager: StreamingNemotronMultilingualAsrManager
     ) async throws -> String {
         let chunk = await manager.config.chunkSamples
@@ -13,20 +13,8 @@ enum NemotronOnsetRecovery {
         guard original.count >= 5, let first = original.first,
               first.startTime >= chunkSeconds - 0.001 else { return text }
         let language = await manager.detectedLanguage()
-
-        file.framePosition = 0
-        guard let buffer = AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: AVAudioFrameCount(chunk * 3)) else {
-            return text
-        }
-        do {
-            try Task.checkCancellation()
-            try file.read(into: buffer, frameCount: AVAudioFrameCount(min(file.length, Int64(chunk * 3))))
-        } catch {
-            try Task.checkCancellation()
-            return text
-        }
-        guard let data = buffer.floatChannelData?[0] else { return text }
-        let samples = Array(UnsafeBufferPointer(start: data, count: Int(buffer.frameLength)))
+        try Task.checkCancellation()
+        let samples = Array(opening.prefix(chunk * 3))
         // Match the SDK's energy gate to skip quiet openings. This is only
         // a candidate filter; the word alignment below decides what to retain.
         let speechWindows = stride(from: 0, to: min(chunk, samples.count), by: 1_280).filter { start in

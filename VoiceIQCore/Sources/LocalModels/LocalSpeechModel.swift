@@ -17,6 +17,16 @@ public struct LocalModelManifest: Sendable {
         public let path: String
         public let size: Int64
         public let sha256: String
+        /// Pinned source for a file outside the manifest's repository and
+        /// revision. Nil downloads from `repository` at `revision`.
+        public let downloadURL: URL?
+
+        init(path: String, size: Int64, sha256: String, downloadURL: URL? = nil) {
+            self.path = path
+            self.size = size
+            self.sha256 = sha256
+            self.downloadURL = downloadURL
+        }
     }
 
     public let repository: String
@@ -38,7 +48,11 @@ public struct LocalModelManifest: Sendable {
     }
 
     public func remoteURL(for file: File) -> URL {
-        URL(string: "https://huggingface.co/\(repository)/resolve/\(revision)/\(remotePrefix)\(file.path)")!
+        file.downloadURL ?? Self.huggingFaceURL(repository: repository, revision: revision, path: remotePrefix + file.path)
+    }
+
+    static func huggingFaceURL(repository: String, revision: String, path: String) -> URL {
+        URL(string: "https://huggingface.co/\(repository)/resolve/\(revision)/\(path)")!
     }
 
     public var rootDirectory: URL {

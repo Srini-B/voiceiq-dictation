@@ -34,10 +34,12 @@ preflight (tools, identity, credentials)
    providers (Gemini and OpenAI).
 
 Parakeet and Nemotron use the pinned FluidAudio Swift package through the
-`VoiceIQInference` target. Build with Swift 6.2+ so FluidAudio's unused
-`NemoTextProcessing` trait can be disabled. This text-normalization engine is
-unrelated to the Nemotron ASR model. The Mac UI links only `VoiceIQCore`;
-the Mac helper and iOS app link inference. The keyboard and Live Activity
+`VoiceIQInference` target. Build with Swift 6.2+ for package traits.
+`VoiceIQCore/Package.swift` enables FluidAudio's `NemoTextProcessing` trait,
+which links the prebuilt `text-processing-rs` v0.3.1 inverse text
+normalization library used for local English transcripts. It holds compiled
+NeMo grammars, not neural weights, and is unrelated to the Nemotron ASR model.
+The Mac UI links only `VoiceIQCore`; the Mac helper and iOS app link inference. The keyboard and Live Activity
 continue to link only `VoiceIQBridge`.
 `VoiceIQSpeech` holds the shared model identifiers, session contract, and Mac
 pipe messages. The inference target depends on this contract rather than Core,
@@ -47,11 +49,15 @@ so the helper does not carry the app's database or cloud-provider code.
 removes FluidAudio 0.17.7's unused LuxTTS resource bundle and fails on unfamiliar
 resource files so dependency upgrades require an explicit review. ASR uses
 downloaded model directories, not these resources. Do not add TTS functionality
-without restoring its resources and reviewing the disabled trait.
+without restoring its resources.
 
-Model weights are downloaded only from Settings, not during build or app launch.
+Model weights, including the optional English tools pack, are downloaded only
+from Settings, not during build or app launch.
 Both release scripts run `scripts/check-app-bundle.py` to reject bundled model
-weights, unused TTS resources, and accidental runtime dependencies. To check an
+weights, unused TTS resources, and accidental runtime dependencies. It fails if
+the Mac UI links FluidAudio or the normalizer, if the helper links app or
+database code, or if the inference binary (Mac helper or iOS app) lacks
+`_nemo_normalize_sentence`. To check an
 existing build, pass the Mac app path or the app inside an iOS device archive:
 
 ```bash
@@ -62,6 +68,8 @@ python3 scripts/check-app-bundle.py build/ios/VoiceiQ.xcarchive/Products/Applica
 Keep the iOS archive's dSYMs for this check because its app executable is stripped.
 See
 [local transcription](LOCAL_TRANSCRIPTION.md) for download and fallback checks.
+When local speech changes, also download and delete English tools, and dictate
+with each model both with and without the pack on the installed notarized build.
 The macOS target embeds `Contents/Helpers/VoiceiQLocalSpeech.app`. Xcode signs
 this background app with the same Developer ID and hardened runtime; the host's
 notarization submission includes it. Verify the nested signature with

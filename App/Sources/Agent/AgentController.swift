@@ -93,14 +93,14 @@ final class AgentController {
     }
 
     /// One spoken command. Returns when the turn is over.
-    func submit(command: String) {
+    func submit(command: String, originalTranscript: String? = nil) {
         guard let loop else {
             panel.phase = .idle
             return
         }
         panel.phase = .thinking
         turn = Task { @MainActor [weak self] in
-            await loop.handle(command: command)
+            await loop.handle(command: command, originalTranscript: originalTranscript)
             guard let self, self.loop === loop else { return }
             self.panel.phase = .idle
         }

@@ -18,15 +18,28 @@ public final class LocalTranscriber: DictationStreaming, Sendable {
                            makeSession: LocalSpeechSessionFactory) {
         let id = UUID()
         let streaming = model == .nemotron && realtime
-        let worker = makeSession(model, audioURL, streaming)
+        let toolsReady = LocalModelStore.englishTools.state == .ready
+        let vocabulary = DictionaryStore().entries().prefix(256).map {
+            LocalSpeechOptions.Term(text: $0.term, aliases: $0.misspelling.map { [$0] } ?? [])
+        }
+        let options = LocalSpeechOptions(
+            vocabulary: vocabulary,
+            toolsDirectory: toolsReady ? LocalModelManifest.englishTools.installDirectory : nil
+        )
+        let worker = makeSession(model, audioURL, streaming, options)
         let signals = AsyncStream<Void>.makeStream(bufferingPolicy: .bufferingNewest(1))
         let previews = AsyncStream<String>.makeStream(bufferingPolicy: .bufferingNewest(1))
-        guard let directory = LocalModelStore.store(for: model).acquireSession(id: id, cancel: {
+        let cancel: @Sendable () async -> Void = {
             signals.continuation.finish()
             previews.continuation.yield("")
             previews.continuation.finish()
             await worker.stop()
-        }) else { return nil }
+        }
+        guard let directory = LocalModelStore.store(for: model).acquireSession(id: id, cancel: cancel) else { return nil }
+        if toolsReady, LocalModelStore.englishTools.acquireSession(id: id, cancel: cancel) == nil {
+            LocalModelStore.store(for: model).releaseSession(id: id)
+            return nil
+        }
         partials = previews.stream
         partialSink = previews.continuation
         self.id = id
@@ -70,7 +83,7 @@ public final class LocalTranscriber: DictationStreaming, Sendable {
         let text = await withTaskCancellationHandler {
             await pump.value
             guard !Task.isCancelled, !streaming || (!ring.didDrop && ring.acceptedBytes == framesWritten * 2) else {
-                return nil as String?
+                return nil as LocalSpeechOutput?
             }
             return await worker.transcribe(framesWritten: framesWritten)
         } onCancel: {
@@ -79,10 +92,15 @@ public final class LocalTranscriber: DictationStreaming, Sendable {
         }
         await worker.stop()
         await LocalModelStore.store(for: model).releaseSession(id: id)
+        await LocalModelStore.englishTools.releaseSession(id: id)
         guard !Task.isCancelled, let text else { return nil }
+        if let confidence = text.confidence {
+            Log.transcription.notice("Parakeet token confidence (uncalibrated): \(confidence)")
+        }
         UsageMeter.record(stage: .transcribe, model: model.modelID,
                           usage: TokenUsage(reportedCostUSD: 0, audioSeconds: Double(framesWritten) / 16_000))
-        return TranscriptionResult(rawTranscript: text, cleanedTranscript: text, modelID: model.modelID)
+        return TranscriptionResult(rawTranscript: text.original, cleanedTranscript: text.normalized,
+                                   modelID: model.modelID, normalizedTranscript: text.normalized)
     }
 
     public func abort() async {
@@ -92,5 +110,6 @@ public final class LocalTranscriber: DictationStreaming, Sendable {
         await worker.stop()
         await pump.value
         await LocalModelStore.store(for: model).releaseSession(id: id)
+        await LocalModelStore.englishTools.releaseSession(id: id)
     }
 }

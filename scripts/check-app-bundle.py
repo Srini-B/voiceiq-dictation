@@ -35,19 +35,19 @@ def main():
         / "Contents/Resources/DWARF" / metadata["CFBundleExecutable"]
     )
     symbols = subprocess.run(["nm", str(symbol_file)], check=True, capture_output=True, text=True).stdout
-    if "_nemo_normalize" in symbols:
-        raise SystemExit("App still links unused text normalization")
     if mac:
         helper = app / "Contents/Helpers/VoiceiQLocalSpeech.app/Contents/MacOS/VoiceiQLocalSpeech"
-        if "10FluidAudio" in symbols:
+        if "10FluidAudio" in symbols or "_nemo_normalize" in symbols:
             raise SystemExit("Mac UI still links the inference runtime")
         symbols = subprocess.run(["nm", str(helper)], check=True, capture_output=True, text=True).stdout
-        if any(name in symbols for name in ["11VoiceIQCore", "GRDB", "_nemo_normalize"]):
-            raise SystemExit("Speech helper still links app/database/normalization code")
+        if any(name in symbols for name in ["11VoiceIQCore", "GRDB"]):
+            raise SystemExit("Speech helper still links app/database code")
         if "10FluidAudio" not in symbols:
             raise SystemExit("Speech helper lacks the expected inference runtime")
     elif "10FluidAudio" not in symbols:
         raise SystemExit("iOS app lacks the expected inference runtime")
+    if "_nemo_normalize_sentence" not in symbols:
+        raise SystemExit("Inference lacks the required English normalization runtime")
 
     print(json.dumps({
         "app": str(app),

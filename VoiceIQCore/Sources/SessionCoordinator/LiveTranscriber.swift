@@ -56,7 +56,7 @@ public final class LiveTranscriber: DictationStreaming {
     #if os(macOS)
     @MainActor public static func makeFromSettings(audioURL: URL) -> (any DictationStreaming)? {
         makeFromSettings(audioURL: audioURL, localSessionFactory: {
-            LocalRemoteSession(audioURL: $1, model: $0, streaming: $2)
+            LocalRemoteSession(audioURL: $1, model: $0, streaming: $2, options: $3)
         })
     }
     #endif

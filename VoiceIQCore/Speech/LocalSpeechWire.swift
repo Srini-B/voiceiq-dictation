@@ -2,7 +2,7 @@
 import Foundation
 
 public enum ParakeetCommand: Codable {
-    case load(model: LocalSpeechModel, directory: URL, audio: URL, streaming: Bool)
+    case load(model: LocalSpeechModel, directory: URL, audio: URL, streaming: Bool, options: LocalSpeechOptions)
     case append(Data)
     case transcribe(frames: Int64)
 }
@@ -10,7 +10,7 @@ public enum ParakeetCommand: Codable {
 public enum ParakeetReply: Codable {
     case ready
     case accepted(String?)
-    case transcript(String?)
+    case transcript(LocalSpeechOutput?)
 }
 
 public enum ParakeetWire {

@@ -16,7 +16,7 @@ let package = Package(
     dependencies: [
         .package(url: "https://github.com/groue/GRDB.swift.git", from: "7.0.0"),
         .package(url: "https://github.com/Clipy/Sauce.git", from: "2.2.0"),
-        .package(url: "https://github.com/FluidInference/FluidAudio.git", exact: "0.17.7", traits: []),
+        .package(url: "https://github.com/FluidInference/FluidAudio.git", exact: "0.17.7", traits: ["NemoTextProcessing"]),
     ],
     targets: [
         // WebRTC's AEC3 echo canceller and a small C bridge, built by

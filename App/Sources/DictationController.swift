@@ -238,13 +238,11 @@ final class DictationController {
             Task { @MainActor in self?.handleInputDevicesChanged() }
         }
 
+        coordinator.onAgentCommandReady = { [weak self] result in
+            self?.agent.submit(command: result.cleanedTranscript, originalTranscript: result.rawTranscript)
+        }
         coordinator.onAnswerReady = { [weak self] answer in
-            guard let self else { return }
-            if self.agentListening {
-                self.agent.submit(command: answer)
-            } else {
-                self.pendingAnswer = answer
-            }
+            self?.pendingAnswer = answer
         }
         agent.overlay = hud
         agent.onSessionChange = { [agentRuns] session in

@@ -30,7 +30,7 @@ repository's Apache 2.0 license. See `App/Resources/Sounds/ATTRIBUTION.md`.
 |---|---|
 | [Sauce](https://github.com/Clipy/Sauce) (Clipy) | MIT |
 | [GRDB.swift](https://github.com/groue/GRDB.swift) (Gwendal Roué) | MIT |
-| [FluidAudio](https://github.com/FluidInference/FluidAudio) 0.17.7 (Fluid Inference) | Apache 2.0; bundled dependencies retain their upstream notices |
+| [FluidAudio](https://github.com/FluidInference/FluidAudio) 0.17.7 (Fluid Inference), with the `NemoTextProcessing` trait | Apache 2.0; bundled dependencies retain their upstream notices |
 | [Sparkle](https://github.com/sparkle-project/Sparkle) (from M8) | Sparkle License (permissive, MIT-style) |
 
 ## Vendored libraries
@@ -50,6 +50,45 @@ repository's Apache 2.0 license. See `App/Resources/Sounds/ATTRIBUTION.md`.
 - License: [OpenMDW-1.1](https://openmdw.ai/license/1-1/).
 - VoiceiQ downloads the converted `multilingual/2240ms/` files unmodified on
   explicit request. Weights are not bundled. File hashes are in `NemotronManifest.swift`.
+
+### Optional English tools pack
+
+VoiceiQ downloads these Core ML conversions unmodified, on explicit request, as
+one pack. No weights are bundled with the app. File hashes are in
+`EnglishToolsManifest.swift`.
+
+- **LocalVQE v1.3 4.8M (noise reduction).** Original model:
+  https://github.com/localai-org/LocalVQE, weights
+  https://huggingface.co/LocalAI-io/LocalVQE (LocalAI). Core ML conversion:
+  https://huggingface.co/FluidInference/localvqe-coreml (Fluid Inference),
+  revision `4205430781c240397073d6f7bf676fb4c732fc12`. License: Apache 2.0,
+  with the full text in the conversion repository's `LICENSE` file.
+- **Silero VAD v6.2.1 (speech detection).** Original model:
+  https://github.com/snakers4/silero-vad (Copyright (c) 2020-present Silero Team),
+  via https://huggingface.co/onnx-community/silero-vad. Core ML conversion:
+  https://huggingface.co/FluidInference/silero-vad-coreml (Fluid Inference),
+  revision `b419383c55c110e2c9271fa6ee0ea83d03c70d96`. License: MIT.
+- **Parakeet TDT-CTC 110M, CTC branch (dictionary correction).** Original
+  model: https://huggingface.co/nvidia/parakeet-tdt_ctc-110m (NVIDIA). Core ML
+  conversion with tokenizer and vocabulary files:
+  https://huggingface.co/FluidInference/parakeet-ctc-110m-coreml (Fluid
+  Inference), revision `accdafd8cf8a2ff1cabe3c11e54416b405d409aa`. License:
+  [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
+
+### NeMo text processing (inverse text normalization)
+
+- Linked through FluidAudio's `NemoTextProcessing` trait into the Mac speech
+  helper and the iOS app, not the Mac UI.
+- Binary: `NemoTextProcessing.xcframework` from
+  https://github.com/FluidInference/text-processing-rs release v0.3.1
+  (Fluid Inference). License: Apache 2.0.
+- Includes compiled weighted-FST grammars derived from
+  https://github.com/NVIDIA/NeMo-text-processing (Copyright (c) NVIDIA
+  CORPORATION & AFFILIATES), Apache 2.0. It statically links rustfst and
+  flate2, each MIT OR Apache 2.0, and their MIT or Apache 2.0 dependencies.
+  It contains no neural network weights.
+- Full notice: `ThirdPartyLicenses/NemoTextProcessing-LICENSE.md` in the
+  FluidAudio 0.17.7 source.
 
 ### WebRTC audio processing (AEC3 echo canceller)
 - File: `VoiceIQCore/Vendor/WebRTCAEC/CVoiceIQAEC.xcframework` (static library, arm64 and x86_64)

@@ -8,19 +8,21 @@ actor LocalRemoteSession: LocalSpeechSession {
     private let audioURL: URL
     private let model: LocalSpeechModel
     private let streaming: Bool
+    private let options: LocalSpeechOptions
     private var stopped = false
     private var loading: Task<Void, Never>?
 
-    init(audioURL: URL, model: LocalSpeechModel, streaming: Bool) {
+    init(audioURL: URL, model: LocalSpeechModel, streaming: Bool, options: LocalSpeechOptions) {
         self.audioURL = audioURL
         self.model = model
         self.streaming = streaming
+        self.options = options
     }
 
     func load(from directory: URL) async {
         guard !stopped else { return }
         let task = Task {
-            await ParakeetHelperClient.shared.load(id: id, model: model, directory: directory, audio: audioURL, streaming: streaming)
+            await ParakeetHelperClient.shared.load(id: id, model: model, directory: directory, audio: audioURL, streaming: streaming, options: options)
         }
         loading = task
         await task.value
@@ -32,7 +34,7 @@ actor LocalRemoteSession: LocalSpeechSession {
         return await ParakeetHelperClient.shared.append(pcm, id: id)
     }
 
-    func transcribe(framesWritten: Int64) async -> String? {
+    func transcribe(framesWritten: Int64) async -> LocalSpeechOutput? {
         guard !stopped else { return nil }
         return await ParakeetHelperClient.shared.transcribe(id: id, frames: framesWritten)
     }
@@ -52,7 +54,7 @@ private actor ParakeetHelperClient {
     private var output: FileHandle?
     private var owner: UUID?
 
-    func load(id: UUID, model: LocalSpeechModel, directory: URL, audio: URL, streaming: Bool) async {
+    func load(id: UUID, model: LocalSpeechModel, directory: URL, audio: URL, streaming: Bool, options: LocalSpeechOptions) async {
         guard owner == nil, !Task.isCancelled else { return }
         owner = id
         do {
@@ -75,7 +77,7 @@ private actor ParakeetHelperClient {
                 input = commands.fileHandleForWriting
                 output = replies.fileHandleForReading
             }
-            guard case .ready = await exchange(.load(model: model, directory: directory, audio: audio, streaming: streaming), id: id, timeout: 120) else {
+            guard case .ready = await exchange(.load(model: model, directory: directory, audio: audio, streaming: streaming, options: options), id: id, timeout: 120) else {
                 cancel(id: id)
                 return
             }
@@ -93,7 +95,7 @@ private actor ParakeetHelperClient {
         return preview
     }
 
-    func transcribe(id: UUID, frames: Int64) async -> String? {
+    func transcribe(id: UUID, frames: Int64) async -> LocalSpeechOutput? {
         guard owner == id else { return nil }
         let reply = await exchange(.transcribe(frames: frames), id: id,
                                    timeout: max(120, Double(frames) / 8_000))
