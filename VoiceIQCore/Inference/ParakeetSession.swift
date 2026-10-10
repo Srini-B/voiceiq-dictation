@@ -40,7 +40,7 @@ actor ParakeetSession: LocalSpeechSession {
             if !terms.isEmpty, tools.vocabulary == nil {
                 Log.transcription.notice("Parakeet vocabulary spotting unavailable; \(terms.count) terms not applied")
             }
-            Log.transcription.notice("Parakeet cold load complete in \(Date().timeIntervalSince(started), format: .fixed(precision: 2))s, enhancement=\(self.tools.enhancer != nil), vad=\(self.tools.vad != nil), vocabulary=\(self.tools.vocabulary != nil)")
+            Log.transcription.notice("Parakeet cold load complete in \(Date().timeIntervalSince(started), format: .fixed(precision: 2))s, vad=\(self.tools.vad != nil), vocabulary=\(self.tools.vocabulary != nil)")
         } catch {
             loading = nil
             Log.transcription.notice("Parakeet load failed; using cloud: \(error.localizedDescription, privacy: .public)")
@@ -53,21 +53,20 @@ actor ParakeetSession: LocalSpeechSession {
         let tools = tools
         let task = Task { () throws -> LocalSpeechOutput? in
             guard SpeechAudio.fitsInMemory(framesWritten) else {
-                // FluidAudio's disk-backed path keeps memory constant. Enhancement,
-                // VAD trimming and vocabulary rescoring need the whole recording
+                // FluidAudio's disk-backed path keeps memory constant. VAD
+                // trimming and vocabulary rescoring need the whole recording
                 // in memory, so a long recording is decoded from the raw file.
                 try SpeechAudio.validate(audioURL, frames: framesWritten)
-                Log.transcription.notice("Parakeet long recording (\(framesWritten) frames): disk-backed decode without enhancement, VAD or vocabulary")
+                Log.transcription.notice("Parakeet long recording (\(framesWritten) frames): disk-backed decode without VAD or vocabulary")
                 var decoder = TdtDecoderState.make(decoderLayers: await manager.decoderLayerCount)
                 let result = try await manager.transcribeDiskBacked(audioURL, decoderState: &decoder, language: .english)
                 try Task.checkCancellation()
                 return EnglishText.output(original: result.text, confidence: result.confidence)
             }
             let recorded = try SpeechAudio.read(audioURL, frames: framesWritten)
-            let enhanced = try await SpeechAudio.enhanced(recorded, with: tools.enhancer)
             // The decoder and CTC spotter see the same samples, so token
             // timings and CTC frames share one clock.
-            let samples = try await SpeechBoundaries.trimmed(enhanced, vad: tools.vad)
+            let samples = try await SpeechBoundaries.trimmed(recorded, vad: tools.vad)
             try Task.checkCancellation()
             var decoder = TdtDecoderState.make(decoderLayers: await manager.decoderLayerCount)
             let result = try await manager.transcribe(samples, decoderState: &decoder, language: .english)

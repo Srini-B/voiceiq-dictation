@@ -36,7 +36,7 @@ public struct LocalModelControls: View {
         }
     }
 
-    static let englishNote = "On-device dictation is English only. English tools add noise reduction, speech detection, and Parakeet dictionary correction. Without them, on-device transcription still works."
+    static let englishNote = "On-device dictation is English only. English tools add speech detection and Parakeet dictionary correction. Without them, on-device transcription still works."
 
     /// Shown beneath the real-time toggle while on-device transcription is on
     /// and Nemotron is not downloaded.

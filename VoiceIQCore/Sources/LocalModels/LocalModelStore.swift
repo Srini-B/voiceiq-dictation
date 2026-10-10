@@ -36,8 +36,8 @@ public final class LocalModelStore: ObservableObject {
     private static let parakeet = LocalModelStore(model: .parakeet)
     private static let nemotron = LocalModelStore(model: .nemotron)
 
-    /// Noise reduction, speech detection, and Parakeet dictionary correction
-    /// for English dictation. The install folder holds one subfolder per
+    /// Speech detection and Parakeet dictionary correction for English
+    /// dictation. The install folder holds one subfolder per
     /// `EnglishToolsFolder` case.
     public static let englishTools = LocalModelStore(manifest: .englishTools, displayName: "English tools")
 
