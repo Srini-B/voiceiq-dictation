@@ -3,6 +3,7 @@ import Combine
 import UIKit
 import VoiceIQBridge
 import VoiceIQCore
+import VoiceIQInference
 
 /// Composition root for the iOS app: the same dictation pipeline as macOS,
 /// driven by keyboard commands instead of a hotkey, delivering to the keyboard
@@ -76,7 +77,9 @@ final class AppModel: ObservableObject {
                     targetAppName: target.host.map(AppNames.displayName(for:))
                 )
             },
-            liveFactory: { LiveTranscriber.makeFromSettings(audioURL: $0) }
+            liveFactory: {
+                LiveTranscriber.makeFromSettings(audioURL: $0, localSessionFactory: LocalSpeechInference.makeSession)
+            }
         )
         inserter.onDeliver = { [weak self] text, mode in self?.deliver(text, mode: mode) }
 

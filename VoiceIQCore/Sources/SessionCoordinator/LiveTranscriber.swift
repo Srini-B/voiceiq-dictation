@@ -1,4 +1,5 @@
 import Foundation
+import VoiceIQSpeech
 
 public protocol DictationStreaming: Sendable {
     /// Display-only replacement text. Never a source for insertion or History.
@@ -52,12 +53,23 @@ public final class LiveTranscriber: DictationStreaming {
         await session.abort()
     }
 
+    #if os(macOS)
     @MainActor public static func makeFromSettings(audioURL: URL) -> (any DictationStreaming)? {
+        makeFromSettings(audioURL: audioURL, localSessionFactory: {
+            LocalRemoteSession(audioURL: $1, model: $0, streaming: $2)
+        })
+    }
+    #endif
+
+    @MainActor public static func makeFromSettings(
+        audioURL: URL, localSessionFactory: LocalSpeechSessionFactory
+    ) -> (any DictationStreaming)? {
         let settings = SettingsStore()
         let vocabulary = DictionaryStore().sanitizedVocabulary()
         if settings.localTranscriptionEnabled,
            let local = LocalTranscriber(audioURL: audioURL, model: settings.localSpeechModel,
-                                        realtime: settings.liveTranscriptionEnabled) {
+                                        realtime: settings.liveTranscriptionEnabled,
+                                        makeSession: localSessionFactory) {
             return local
         }
         guard settings.liveTranscriptionEnabled else { return nil }

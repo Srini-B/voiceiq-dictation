@@ -1,6 +1,7 @@
 import SwiftUI
 import VoiceIQBridge
 import VoiceIQCore
+import VoiceIQSpeech
 
 /// The pages under Settings, in sidebar order.
 enum SettingsSection: String, CaseIterable, Identifiable {

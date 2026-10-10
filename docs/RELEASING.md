@@ -33,9 +33,34 @@ preflight (tools, identity, credentials)
 3. Confirm the production models are available with a real dictation on both
    providers (Gemini and OpenAI).
 
-Parakeet and Nemotron use the pinned FluidAudio Swift package. Model weights are downloaded
-only from Settings, not during build or app launch. Verify the release bundle
-contains no `whistle.cact`, Parakeet weights, or Nemotron weights. See
+Parakeet and Nemotron use the pinned FluidAudio Swift package through the
+`VoiceIQInference` target. Build with Swift 6.2+ so FluidAudio's unused
+`NemoTextProcessing` trait can be disabled. This text-normalization engine is
+unrelated to the Nemotron ASR model. The Mac UI links only `VoiceIQCore`;
+the Mac helper and iOS app link inference. The keyboard and Live Activity
+continue to link only `VoiceIQBridge`.
+`VoiceIQSpeech` holds the shared model identifiers, session contract, and Mac
+pipe messages. The inference target depends on this contract rather than Core,
+so the helper does not carry the app's database or cloud-provider code.
+
+`scripts/trim-inference-resources.py` runs before helper/iOS app signing. It
+removes FluidAudio 0.17.7's unused LuxTTS resource bundle and fails on unfamiliar
+resource files so dependency upgrades require an explicit review. ASR uses
+downloaded model directories, not these resources. Do not add TTS functionality
+without restoring its resources and reviewing the disabled trait.
+
+Model weights are downloaded only from Settings, not during build or app launch.
+Both release scripts run `scripts/check-app-bundle.py` to reject bundled model
+weights, unused TTS resources, and accidental runtime dependencies. To check an
+existing build, pass the Mac app path or the app inside an iOS device archive:
+
+```bash
+python3 scripts/check-app-bundle.py build/release/DerivedData/Build/Products/Release/VoiceiQ.app
+python3 scripts/check-app-bundle.py build/ios/VoiceiQ.xcarchive/Products/Applications/VoiceiQ.app
+```
+
+Keep the iOS archive's dSYMs for this check because its app executable is stripped.
+See
 [local transcription](LOCAL_TRANSCRIPTION.md) for download and fallback checks.
 The macOS target embeds `Contents/Helpers/VoiceiQLocalSpeech.app`. Xcode signs
 this background app with the same Developer ID and hardened runtime; the host's
