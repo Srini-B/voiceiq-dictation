@@ -3,7 +3,6 @@ import Combine
 import UIKit
 import VoiceIQBridge
 import VoiceIQCore
-import VoiceIQInference
 
 /// Composition root for the iOS app: the same dictation pipeline as macOS,
 /// driven by keyboard commands instead of a hotkey, delivering to the keyboard
@@ -17,6 +16,7 @@ final class AppModel: ObservableObject {
     let setup = SetupMonitor()
     let historyStore: HistoryStore?
     let transcription: GeminiTranscriptionService
+    private let sleepGuard: SessionSleepGuard
 
     /// Shown after the one-time bounce when the app could not send the user
     /// back on its own.
@@ -44,6 +44,7 @@ final class AppModel: ObservableObject {
     private var needsForeground = false
 
     init() {
+        RemovedLocalModels.cleanUp()
         FormattingSettingsMigration.restoreAutoDegradedWritingRulesOnce()
         FormattingSettingsMigration.removeLiveTranscriptionSettings()
         let client = GeminiClient(
@@ -78,9 +79,10 @@ final class AppModel: ObservableObject {
                 )
             },
             liveFactory: {
-                LiveTranscriber.makeFromSettings(audioURL: $0, localSessionFactory: LocalSpeechInference.makeSession)
+                LiveTranscriber.makeFromSettings(audioURL: $0)
             }
         )
+        sleepGuard = SessionSleepGuard(dictation: coordinator, meetings: meetings)
         inserter.onDeliver = { [weak self] text, mode in self?.deliver(text, mode: mode) }
 
         // Commands already in the App Group belong to an earlier process. Only
@@ -436,6 +438,7 @@ final class AppModel: ObservableObject {
     }
 
     func prepareForTermination() {
+        sleepGuard.stop()
         if case .recording = coordinator.state { coordinator.handle(.finalize) }
         if meetings.isRecording { meetings.stopRecording() }
         session.end()

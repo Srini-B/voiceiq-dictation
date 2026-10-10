@@ -1,11 +1,13 @@
+#if os(macOS)
 import SwiftUI
 import VoiceIQSpeech
 
-/// The model list shared by the macOS and iOS settings. While on-device
+/// The model list in macOS settings. While on-device
 /// transcription is on, every model has a row: the leading check selects it,
 /// and the trailing action downloads, cancels, or deletes that model alone.
 /// While it is off, only models on disk or in transit keep a row, so they can
-/// still be cancelled or deleted.
+/// still be cancelled or deleted. The English tools pack follows the same
+/// rules but is never selected.
 @MainActor
 public struct LocalModelControls: View {
     private let localEnabled: Bool
@@ -22,12 +24,19 @@ public struct LocalModelControls: View {
                 LocalModelRow(
                     store: .store(for: model),
                     localEnabled: localEnabled,
-                    isSelected: model == selection,
-                    select: { selection = model }
+                    selection: (isSelected: model == selection, select: { selection = model })
                 )
+            }
+            LocalModelRow(store: .englishTools, localEnabled: localEnabled, selection: nil)
+            if localEnabled {
+                Text(Self.englishNote)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
         }
     }
+
+    static let englishNote = "On-device dictation is English only. English tools add noise reduction, speech detection, and Parakeet dictionary correction. Without them, on-device transcription still works."
 
     /// Shown beneath the real-time toggle while on-device transcription is on
     /// and Nemotron is not downloaded.
@@ -38,24 +47,20 @@ public struct LocalModelControls: View {
 private struct LocalModelRow: View {
     @ObservedObject var store: LocalModelStore
     let localEnabled: Bool
-    let isSelected: Bool
-    let select: () -> Void
+    /// Nil for a row that is never selected.
+    let selection: (isSelected: Bool, select: () -> Void)?
     @State private var confirmingDelete = false
 
-    #if os(iOS)
-    private static let minTarget: CGFloat = 44
-    #else
     private static let minTarget: CGFloat = 24
-    #endif
 
-    private var name: String { store.model.displayName }
+    private var name: String { store.displayName }
 
     var body: some View {
         if isVisible {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 10) {
-                    if localEnabled {
-                        selectButton
+                    if localEnabled, let selection {
+                        selectButton(selection)
                     } else {
                         Text(name)
                     }
@@ -86,8 +91,9 @@ private struct LocalModelRow: View {
         }
     }
 
-    private var selectButton: some View {
-        Button(action: select) {
+    private func selectButton(_ selection: (isSelected: Bool, select: () -> Void)) -> some View {
+        let isSelected = selection.isSelected
+        return Button(action: selection.select) {
             HStack(spacing: 8) {
                 Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
                     .foregroundStyle(isSelected ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary))
@@ -125,7 +131,7 @@ private struct LocalModelRow: View {
             }
         case .ready:
             iconButton("trash", label: "Delete \(name)") { confirmingDelete = true }
-                .confirmationDialog("Delete the \(name) model?", isPresented: $confirmingDelete, titleVisibility: .visible) {
+                .confirmationDialog("Delete \(name)?", isPresented: $confirmingDelete, titleVisibility: .visible) {
                     Button("Delete", role: .destructive) {
                         Task { await store.deleteModel() }
                     }
@@ -156,7 +162,7 @@ private struct LocalModelRow: View {
     }
 
     private var size: String {
-        ByteCountFormatter.string(fromByteCount: store.model.manifest.totalBytes, countStyle: .file)
+        ByteCountFormatter.string(fromByteCount: store.downloadBytes, countStyle: .file)
     }
 }
 
@@ -176,12 +182,12 @@ public struct LocalModelFooter: View {
         if !LocalModelSupport.isAvailable {
             Text(LocalModelSupport.requirement)
         } else if localEnabled && store.state != .ready {
-            Text("Cloud transcription is used until \(store.model.displayName) is downloaded.")
+            Text("Cloud transcription is used until \(store.displayName) is downloaded.")
         }
     }
 }
 
-/// The privacy "Audio" row on both platforms. It follows the on-device
+/// The macOS privacy "Audio" row. It follows the on-device
 /// setting, the selected model, and that model's download state, so it never
 /// claims audio stays local while the model is missing.
 @MainActor
@@ -220,7 +226,7 @@ public struct LocalAudioPrivacyRow: View {
         }
 
         private var value: String {
-            let name = store.model.displayName
+            let name = store.displayName
             guard localEnabled else { return cloudDescription }
             return store.state == .ready
                 ? "Transcribed on device by \(name); sent to \(provider) only if that fails"
@@ -228,3 +234,4 @@ public struct LocalAudioPrivacyRow: View {
         }
     }
 }
+#endif

@@ -47,13 +47,13 @@ public final class AgentLoop {
 
     /// Run one spoken command to its end. Returns when the turn ends, is
     /// cancelled, or fails. A command spoken while a turn runs waits.
-    public func handle(command: String) async {
+    public func handle(command: String, originalTranscript: String? = nil) async {
         let trimmed = command.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         _ = await turn?.value
         let scope = UsageScope(activity: .agent, sessionID: session.id.uuidString)
         let task = Task { @MainActor in
-            await UsageMeter.$scope.withValue(scope) { await self.runTurn(command: trimmed) }
+            await UsageMeter.$scope.withValue(scope) { await self.runTurn(command: trimmed, originalTranscript: originalTranscript) }
         }
         turn = task
         await task.value
@@ -67,14 +67,14 @@ public final class AgentLoop {
 
     // MARK: - Turn
 
-    private func runTurn(command: String) async {
+    private func runTurn(command: String, originalTranscript: String?) async {
         isBusy = true
         defer { isBusy = false; notify() }
         append(.command(id: UUID(), text: command, at: Date()))
 
         let observation = await executor.observe()
         append(.observation(id: UUID(), summary: observation.summary))
-        conversation.append(.user(Self.content(command: command, observation: observation)))
+        conversation.append(.user(Self.content(command: command, originalTranscript: originalTranscript, observation: observation)))
 
         var steps = 0
         while steps < Self.maxSteps, !Task.isCancelled {
@@ -239,8 +239,9 @@ public final class AgentLoop {
 
     // MARK: - Content
 
-    private static func content(command: String, observation: AgentObservation) -> [AgentContent] {
-        [.text("User command: \(command)")] + content(observation: observation)
+    private static func content(command: String, originalTranscript: String?, observation: AgentObservation) -> [AgentContent] {
+        let original = originalTranscript.flatMap { $0 == command ? nil : "\nOriginal speech recognition: \($0)\nThe command above includes local normalization and dictionary corrections. Compare both using sentence context; neither is guaranteed correct." } ?? ""
+        return [.text("User command: \(command)\(original)")] + content(observation: observation)
     }
 
     private static func content(observation: AgentObservation) -> [AgentContent] {

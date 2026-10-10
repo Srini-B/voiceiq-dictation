@@ -1,8 +1,9 @@
+#if os(macOS)
 import Foundation
 import VoiceIQSpeech
 
 public enum LocalModelSupport {
-    /// The package's deployment targets already guarantee macOS 14 and iOS 17.
+    /// The package's deployment target already guarantees macOS 14.
     public static var isAvailable: Bool {
         #if arch(arm64)
         return true
@@ -12,11 +13,7 @@ public enum LocalModelSupport {
     }
 
     public static var requirement: String {
-        #if os(macOS)
         return "Requires a Mac with Apple silicon and macOS 14 or later."
-        #else
-        return "Requires iOS 17 or later."
-        #endif
     }
 }
 
@@ -30,15 +27,19 @@ public enum LocalModelState: Equatable, Sendable {
     case failed(String)
 }
 
-/// Owns one downloaded model. Nothing here downloads or loads the model on its
-/// own: downloads start only from `download()`, and inference code loads the
-/// model from the folder `acquireSession` returns. Each model has its own
-/// store, folder, and state, so one model's download or delete never affects
-/// the other.
+/// Owns one downloaded model or pack. Nothing here downloads or loads it on its
+/// own: downloads start only from `download()`, and inference code loads it
+/// from the folder `acquireSession` returns. Each store has its own folder and
+/// state, so one download or delete never affects another.
 @MainActor
 public final class LocalModelStore: ObservableObject {
     private static let parakeet = LocalModelStore(model: .parakeet)
     private static let nemotron = LocalModelStore(model: .nemotron)
+
+    /// Noise reduction, speech detection, and Parakeet dictionary correction
+    /// for English dictation. The install folder holds one subfolder per
+    /// `EnglishToolsFolder` case.
+    public static let englishTools = LocalModelStore(manifest: .englishTools, displayName: "English tools")
 
     public static func store(for model: LocalSpeechModel) -> LocalModelStore {
         switch model {
@@ -47,18 +48,24 @@ public final class LocalModelStore: ObservableObject {
         }
     }
 
-    public let model: LocalSpeechModel
+    public let displayName: String
     @Published public private(set) var state: LocalModelState
     private let manifest: LocalModelManifest
+
+    /// Total size of every file a download fetches.
+    public var downloadBytes: Int64 { manifest.totalBytes }
 
     private var downloadTask: Task<Void, Never>?
     private var deleteTask: Task<Void, Never>?
     private var cleanupTask: Task<Void, Never>?
     private var sessions: [UUID: @Sendable () async -> Void] = [:]
 
-    private init(model: LocalSpeechModel) {
-        self.model = model
-        let manifest = model.manifest
+    private convenience init(model: LocalSpeechModel) {
+        self.init(manifest: model.manifest, displayName: model.displayName)
+    }
+
+    private init(manifest: LocalModelManifest, displayName: String) {
+        self.displayName = displayName
         self.manifest = manifest
         guard LocalModelSupport.isAvailable else {
             state = .unsupported
@@ -151,3 +158,4 @@ public final class LocalModelStore: ObservableObject {
         if progress > current { state = .downloading(progress: progress) }
     }
 }
+#endif

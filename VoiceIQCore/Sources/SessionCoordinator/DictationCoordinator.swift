@@ -128,6 +128,7 @@ public final class DictationCoordinator: ObservableObject {
     /// what History doesn't show, we don't store.
     public var onSessionDiscard: ((UUID) -> Void)?
     public var onAnswerReady: ((String) -> Void)?
+    public var onAgentCommandReady: ((TranscriptionResult) -> Void)?
 
     /// Cancelled recordings at least this long stay recoverable in History —
     /// an accidental Esc after minutes of dictation must not destroy the words.
@@ -603,7 +604,11 @@ public final class DictationCoordinator: ObservableObject {
 
         if session?.context.mode.handsTranscriptToCaller == true {
             lastResult = outcome.cleanedTranscript
-            onAnswerReady?(outcome.cleanedTranscript)
+            if session?.context.mode == .agent, let onAgentCommandReady {
+                onAgentCommandReady(outcome)
+            } else {
+                onAnswerReady?(outcome.cleanedTranscript)
+            }
             updateMeta { $0.status = .inserted; $0.pipelineSeconds = Date().timeIntervalSince(startedAt) }
             apply(.inserted)
             discardUnlessKept()

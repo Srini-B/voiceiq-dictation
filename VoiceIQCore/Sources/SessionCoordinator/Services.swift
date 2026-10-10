@@ -24,12 +24,16 @@ public struct TranscriptionResult: Equatable, Sendable {
     /// Why the writing rules did not shape `cleanedTranscript`, when they were
     /// on and did not. Shown in History as the row's details.
     public var cleanupNote: String?
+    /// Local English formatting candidate. The original remains authoritative.
+    public var normalizedTranscript: String?
 
-    public init(rawTranscript: String, cleanedTranscript: String, modelID: String, cleanupNote: String? = nil) {
+    public init(rawTranscript: String, cleanedTranscript: String, modelID: String, cleanupNote: String? = nil,
+                normalizedTranscript: String? = nil) {
         self.rawTranscript = rawTranscript
         self.cleanedTranscript = cleanedTranscript
         self.modelID = modelID
         self.cleanupNote = cleanupNote
+        self.normalizedTranscript = normalizedTranscript
     }
 }
 

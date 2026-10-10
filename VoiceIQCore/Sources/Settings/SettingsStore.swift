@@ -1,5 +1,7 @@
 import Foundation
+#if os(macOS)
 import VoiceIQSpeech
+#endif
 
 public extension Notification.Name {
     /// Posted after any SettingsStore write and after Keychain API-key writes,
@@ -96,6 +98,7 @@ public struct SettingsStore: Sendable {
         Self.set(enabled, forKey: "liveDictationEnabled")
     }
 
+    #if os(macOS)
     public var localTranscriptionEnabled: Bool {
         LocalModelSupport.isAvailable && Self.defaults.bool(forKey: "localTranscriptionEnabled")
     }
@@ -117,6 +120,7 @@ public struct SettingsStore: Sendable {
         Self.set(model.rawValue, forKey: "localSpeechModel")
         if model == .nemotron { setLiveTranscriptionEnabled(true) }
     }
+    #endif
 
     /// Providers for meeting transcription and notes; see `ModelProvider.meetingOrder`.
     public var meetingProviders: [ModelProvider] {

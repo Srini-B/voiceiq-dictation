@@ -1,3 +1,4 @@
+#if os(macOS)
 import Foundation
 
 /// Parakeet TDT 0.6B v3 (Core ML). Sizes and SHA-256 digests come from the
@@ -34,3 +35,4 @@ extension LocalModelManifest {
         ]
     )
 }
+#endif

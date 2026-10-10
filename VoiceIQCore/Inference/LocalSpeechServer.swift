@@ -33,23 +33,23 @@ private actor HelperLifetime {
         idleExit?.cancel()
         idleExit = nil
         switch command {
-        case .load(let model, let directory, let audio, let streaming):
+        case .load(let model, let directory, let audio, let streaming, let options):
             await session?.stop()
-            let next = LocalSpeechInference.makeSession(model, audio, streaming)
+            let next = LocalSpeechInference.makeSession(model, audio, streaming, options)
             session = next
             await next.load(from: directory)
             return .ready
         case .append(let pcm):
             return .accepted(await session?.append(pcm))
         case .transcribe(let frames):
-            let text = await session?.transcribe(framesWritten: frames)
+            let output = await session?.transcribe(framesWritten: frames)
             await session?.stop()
             session = nil
             idleExit = Task {
                 do { try await Task.sleep(for: .seconds(60)) } catch { return }
                 exit(0)
             }
-            return .transcript(text)
+            return .transcript(output)
         }
     }
 }

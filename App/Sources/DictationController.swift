@@ -20,6 +20,7 @@ final class DictationController {
     private let historyStore: HistoryStore?
     private let learner = EditLearner()
     private let meetings: MeetingEngine
+    private let sleepGuard: SessionSleepGuard
     private lazy var meetingHUD = MeetingHUDController(meetings: meetings, hud: hud)
     private let updatePill = UpdatePillController()
     private var recoveryScanner: RecoveryScanner?
@@ -90,6 +91,7 @@ final class DictationController {
             },
             liveFactory: { LiveTranscriber.makeFromSettings(audioURL: $0) }
         )
+        sleepGuard = SessionSleepGuard(dictation: coordinator, meetings: meetings)
     }
 
     private var needsOnboarding: Bool {
@@ -238,13 +240,11 @@ final class DictationController {
             Task { @MainActor in self?.handleInputDevicesChanged() }
         }
 
+        coordinator.onAgentCommandReady = { [weak self] result in
+            self?.agent.submit(command: result.cleanedTranscript, originalTranscript: result.rawTranscript)
+        }
         coordinator.onAnswerReady = { [weak self] answer in
-            guard let self else { return }
-            if self.agentListening {
-                self.agent.submit(command: answer)
-            } else {
-                self.pendingAnswer = answer
-            }
+            self?.pendingAnswer = answer
         }
         agent.overlay = hud
         agent.onSessionChange = { [agentRuns] session in
@@ -607,6 +607,7 @@ final class DictationController {
     /// finalize synchronously enough that the CAF is complete and meta says
     /// .recorded; next launch's RecoveryScanner picks the transcript up.
     func prepareForTermination() {
+        sleepGuard.stop()
         outputMute.unmute()
         if case .recording = coordinator.state {
             Log.session.info("terminating — finalizing active dictation")
