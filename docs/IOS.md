@@ -119,6 +119,11 @@ meaningful bundle ID segment (`com.acme.notes.ios` → "Notes", not "Ios").
 
 ### The background session
 
+Dictation and meeting recording use the shared [sleep guard](POWER_MANAGEMENT.md).
+It disables Auto-Lock while VoiceiQ is in front, and restores it when no active
+dictation or meeting recording remains. It cannot control Auto-Lock in the
+keyboard's host app. A warm microphone alone does not hold the sleep lock.
+
 `KeepAliveAudio` sets a `.playAndRecord` session (mix with others, A2DP; HFP
 only when "Use iPhone microphone" is off), plays silence and taps `inputNode`
 without keeping the buffers. Each dictation builds its own capture engine
