@@ -22,6 +22,16 @@ extension DictationRecord {
     /// Statuses whose text is final. Anything else is in flight, waiting for
     /// the user, or has no text worth another device's History.
     static let uploadableStatuses: [SessionMeta.Status] = [.inserted, .copiedToClipboard, .recovered]
+
+    /// Whether deleting the row should delete a record in iCloud. A retried
+    /// row waiting to upload again has no `cloudSyncedAt`, yet its earlier
+    /// copy is there, so every finished row of this device counts. Deleting a
+    /// record that was never uploaded fails with `unknownItem`, which sync
+    /// ignores.
+    var mayBeInCloud: Bool {
+        isInCloud || isFromOtherDevice
+            || Self.uploadableStatuses.contains { $0.rawValue == status }
+    }
 }
 
 extension HistoryStore {
@@ -54,18 +64,24 @@ extension HistoryStore {
         }
     }
 
-    /// Rows fetched from iCloud. A row this device already has (its own
-    /// upload coming back) only learns that it is in iCloud.
+    /// Rows fetched from iCloud. Another device's row takes the new text and
+    /// status. This device's own upload coming back only learns that it is in
+    /// iCloud, and only when it matches: an older copy leaves a retried row
+    /// waiting to upload.
     public func applyFromCloud(_ rows: [DictationRecord]) {
         guard !rows.isEmpty else { return }
         do {
             try queue.write { db in
                 for row in rows {
-                    if try DictationRecord.exists(db, key: row.id) {
+                    guard let stored = try DictationRecord.fetchOne(db, key: row.id) else {
+                        try row.insert(db)
+                        continue
+                    }
+                    if stored.isFromOtherDevice {
+                        try row.update(db)
+                    } else if stored.displayText == row.displayText, stored.status == row.status {
                         try db.execute(sql: "UPDATE dictation SET cloudSyncedAt = ? WHERE id = ?",
                                        arguments: [row.cloudSyncedAt, row.id])
-                    } else {
-                        try row.insert(db)
                     }
                 }
             }
