@@ -10,8 +10,9 @@ import Security
 /// container entitlement (Debug builds on the Mac), History stays local.
 ///
 /// One record per dictation, `Dictation` in zone `History`, named by the
-/// dictation id. Records never change: a dictation's text is final before it
-/// is uploaded (`HistoryStore.pendingUploads`). Deleting a row in History
+/// dictation id. A dictation is uploaded once its text is final
+/// (`HistoryStore.pendingUploads`); a Retry that changes the text uploads it
+/// again over the same record. Deleting a row in History
 /// deletes its record, and the other device drops its copy. Retention purges
 /// are local and leave the copies in iCloud alone.
 public actor HistorySync {
@@ -25,6 +26,9 @@ public actor HistorySync {
     private var store: HistoryStore?
     private var deviceName = ""
     private var observer: (any NSObjectProtocol)?
+    /// Server copies of records this device is overwriting (a retried
+    /// dictation). They carry the change tag CloudKit needs to accept the save.
+    private var serverRecords: [String: CKRecord] = [:]
 
     private init() {}
 
@@ -110,8 +114,8 @@ public actor HistorySync {
 // MARK: - Records
 
 extension HistorySync {
-    private static func record(for row: DictationRecord, deviceName: String) -> CKRecord {
-        let record = CKRecord(recordType: recordType, recordID: recordID(row.id))
+    private static func record(for row: DictationRecord, deviceName: String, over server: CKRecord?) -> CKRecord {
+        let record = server ?? CKRecord(recordType: recordType, recordID: recordID(row.id))
         record["text"] = row.displayText
         record["startedAt"] = row.startedAt
         record["durationSeconds"] = row.durationSeconds
@@ -119,6 +123,10 @@ extension HistorySync {
         record["device"] = deviceName
         record["status"] = row.status
         return record
+    }
+
+    private static func matches(_ record: CKRecord, _ row: DictationRecord) -> Bool {
+        record["text"] as? String == row.displayText && record["status"] as? String == row.status
     }
 
     private static func row(from record: CKRecord, syncedAt: Date) -> DictationRecord? {
@@ -181,25 +189,36 @@ extension HistorySync: CKSyncEngineDelegate {
         let changes = syncEngine.state.pendingRecordZoneChanges.filter { scope.contains($0) }
         guard let store else { return nil }
         let deviceName = deviceName
+        let serverRecords = serverRecords
         return await CKSyncEngine.RecordZoneChangeBatch(pendingChanges: changes) { recordID in
             guard let row = store.record(id: recordID.recordName), !row.isFromOtherDevice else {
                 // Deleted locally before it went up.
                 syncEngine.state.remove(pendingRecordZoneChanges: [.saveRecord(recordID)])
                 return nil
             }
-            return Self.record(for: row, deviceName: deviceName)
+            return Self.record(for: row, deviceName: deviceName, over: serverRecords[recordID.recordName])
         }
     }
 
     private func sentRecordZoneChanges(_ event: CKSyncEngine.Event.SentRecordZoneChanges, syncEngine: CKSyncEngine) {
         var synced = event.savedRecords.map(\.recordID.recordName)
         var retry: [CKSyncEngine.PendingRecordZoneChange] = []
+        var overwrites: [CKSyncEngine.PendingRecordZoneChange] = []
         for failure in event.failedRecordSaves {
             let recordID = failure.record.recordID
             switch failure.error.code {
             case .serverRecordChanged:
-                // Already there, from an earlier install or the other device.
-                synced.append(recordID.recordName)
+                // Already there: from an earlier install, or this dictation
+                // before a Retry changed it. Send ours again over the server's
+                // copy unless that copy already says the same.
+                let name = recordID.recordName
+                if let server = failure.error.serverRecord, let row = store?.record(id: name),
+                   !row.isFromOtherDevice, !Self.matches(server, row) {
+                    serverRecords[name] = server
+                    overwrites.append(.saveRecord(recordID))
+                } else {
+                    synced.append(name)
+                }
             case .zoneNotFound:
                 syncEngine.state.add(pendingDatabaseChanges: [.saveZone(CKRecordZone(zoneID: Self.zoneID))])
                 retry.append(.saveRecord(recordID))
@@ -213,7 +232,22 @@ extension HistorySync: CKSyncEngineDelegate {
         for (recordID, error) in event.failedRecordDeletes where error.code != .unknownItem {
             Log.history.error("history sync: delete failed for \(recordID.recordName, privacy: .public): \(error)")
         }
-        syncEngine.state.add(pendingRecordZoneChanges: retry)
+        for name in synced { serverRecords[name] = nil }
+        syncEngine.state.add(pendingRecordZoneChanges: retry + overwrites)
+        if !overwrites.isEmpty {
+            // The engine does not schedule another send for a save that failed
+            // (measured: nothing in 4 minutes), so send the overwrites now.
+            // Detached: a task started here inherits the delegate callback,
+            // and CloudKit traps when it awaits the engine from there.
+            Log.history.info("history sync: \(overwrites.count) changed row(s), sending again over the server copy")
+            Task.detached {
+                do {
+                    try await syncEngine.sendChanges()
+                } catch {
+                    Log.history.error("history sync: resend failed: \(error)")
+                }
+            }
+        }
         store?.markSynced(ids: synced)
         if !synced.isEmpty || !event.deletedRecordIDs.isEmpty {
             Log.history.info("history sync: sent \(synced.count) row(s), \(event.deletedRecordIDs.count) deletion(s)")

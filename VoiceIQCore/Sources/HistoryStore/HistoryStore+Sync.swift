@@ -54,18 +54,24 @@ extension HistoryStore {
         }
     }
 
-    /// Rows fetched from iCloud. A row this device already has (its own
-    /// upload coming back) only learns that it is in iCloud.
+    /// Rows fetched from iCloud. Another device's row takes the new text and
+    /// status. This device's own upload coming back only learns that it is in
+    /// iCloud, and only when it matches: an older copy leaves a retried row
+    /// waiting to upload.
     public func applyFromCloud(_ rows: [DictationRecord]) {
         guard !rows.isEmpty else { return }
         do {
             try queue.write { db in
                 for row in rows {
-                    if try DictationRecord.exists(db, key: row.id) {
+                    guard let stored = try DictationRecord.fetchOne(db, key: row.id) else {
+                        try row.insert(db)
+                        continue
+                    }
+                    if stored.isFromOtherDevice {
+                        try row.update(db)
+                    } else if stored.displayText == row.displayText, stored.status == row.status {
                         try db.execute(sql: "UPDATE dictation SET cloudSyncedAt = ? WHERE id = ?",
                                        arguments: [row.cloudSyncedAt, row.id])
-                    } else {
-                        try row.insert(db)
                     }
                 }
             }

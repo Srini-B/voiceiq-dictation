@@ -347,8 +347,12 @@ name, the device name and the status. Audio, the "As heard" transcript,
 errors and token usage stay on the device that dictated.
 
 - A dictation is uploaded once its status is final (`inserted`,
-  `copiedToClipboard` or `recovered`; `HistoryStore.pendingUploads`). Records
-  never change afterwards. `cloudSyncedAt` on the row marks it as uploaded.
+  `copiedToClipboard` or `recovered`; `HistoryStore.pendingUploads`).
+  `cloudSyncedAt` on the row marks it as uploaded. A Retry that changes the
+  text or status clears it, so the row uploads again over the same record:
+  CloudKit answers the first save with `serverRecordChanged`, and the engine
+  saves our fields on the server copy it returned. The other device replaces
+  its copy's text.
 - Rows from the other device arrive with `origin` (its name) and no folder.
   History shows them like any other dictation; the detail view says
   "Dictated on <device>". They have no Retry and no "As heard".

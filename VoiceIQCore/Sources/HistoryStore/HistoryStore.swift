@@ -152,8 +152,13 @@ public final class HistoryStore: @unchecked Sendable {
         var record = DictationRecord(meta: meta, folder: folder)
         do {
             try queue.write { db in
-                // The folder knows nothing about iCloud; keep what sync wrote.
-                record.cloudSyncedAt = try DictationRecord.fetchOne(db, key: record.id)?.cloudSyncedAt
+                // The folder knows nothing about iCloud; keep what sync wrote
+                // while the synced text and status still match. A Retry that
+                // changes them makes the row an upload again.
+                if let stored = try DictationRecord.fetchOne(db, key: record.id),
+                   stored.displayText == record.displayText, stored.status == record.status {
+                    record.cloudSyncedAt = stored.cloudSyncedAt
+                }
                 try record.save(db)
             }
             Self.notifyChanged()
