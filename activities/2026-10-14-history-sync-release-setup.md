@@ -57,6 +57,13 @@ release flow (bump version, push to main) to work without further steps.
 - `scripts/ci-plan-release.sh`: with `EVENT=workflow_dispatch DRY_RUN=1` it
   plans 0.6.0 (45); without `DRY_RUN` and for a push that does not change
   the version it plans `release=false`, as before.
+- Release workflow dry run on `typeless-parity` at 73eebd9 (run
+  38498663377): plan, notes, ios, macos and publish all succeed. CI
+  installed the new profiles (62a6dc49-… Mac, e20ef96e-… iOS) and the
+  unchanged keyboard and Live Activity ones; the app and DMG were
+  notarized ("Accepted"); the IPA was signed and not uploaded; publish
+  verified a new appcast signature and published nothing (v0.6.0 is still
+  the 2026-10-10 release).
 - GitHub: all seven secrets the workflow reads exist. CI downloads the
   profiles by name and ACTIVE state, so it gets the new ones without a
   change. The signing certificates are the same, so `SIGNING_P12_B64`
