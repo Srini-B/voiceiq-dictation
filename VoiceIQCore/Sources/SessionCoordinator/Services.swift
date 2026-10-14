@@ -26,14 +26,19 @@ public struct TranscriptionResult: Equatable, Sendable {
     public var cleanupNote: String?
     /// Local English formatting candidate. The original remains authoritative.
     public var normalizedTranscript: String?
+    /// An Ask Anything result that is the edited selection rather than an
+    /// answer: it goes through the insertion ladder in place of the selected
+    /// text instead of the answer pill.
+    public var replacesSelection: Bool
 
     public init(rawTranscript: String, cleanedTranscript: String, modelID: String, cleanupNote: String? = nil,
-                normalizedTranscript: String? = nil) {
+                normalizedTranscript: String? = nil, replacesSelection: Bool = false) {
         self.rawTranscript = rawTranscript
         self.cleanedTranscript = cleanedTranscript
         self.modelID = modelID
         self.cleanupNote = cleanupNote
         self.normalizedTranscript = normalizedTranscript
+        self.replacesSelection = replacesSelection
     }
 }
 
@@ -60,7 +65,9 @@ public enum TranscriptionError: Error, Equatable, Sendable {
 public enum DictationMode: Equatable, Sendable {
     case dictate
     case askAnything(selectedText: String?)
-    case translate(target: String)
+    /// Targets in order of preference; the model picks the first one the
+    /// transcript is not already in.
+    case translate(targets: [String])
     /// A spoken command for the agent. The transcript is handed to the
     /// agent loop instead of being inserted or answered here.
     case agent
@@ -87,12 +94,21 @@ public final class FocusedFieldCapture: @unchecked Sendable, Equatable {
     private let lock = NSLock()
     private var captured: AnyObject?
     private var capturedText: SurroundingText?
+    private var capturedWindowTitle: String?
+    private var capturedPageURL: String?
     public init() {}
     public var element: AnyObject? { lock.withLock { captured } }
     public var surroundingText: SurroundingText? { lock.withLock { capturedText } }
-    public func set(_ element: AnyObject?, surroundingText: SurroundingText?) {
-        lock.withLock { captured = element; capturedText = surroundingText }
+    /// The title of the target app's focused window (a document name, a page
+    /// title, a chat name). Read with the field, so it costs no extra wait.
+    public var windowTitle: String? { lock.withLock { capturedWindowTitle } }
+    public func set(_ element: AnyObject?, surroundingText: SurroundingText?, windowTitle: String? = nil) {
+        lock.withLock { captured = element; capturedText = surroundingText; capturedWindowTitle = windowTitle }
     }
+    /// The browser page's host and path. Found by a tree walk after the
+    /// field, so it is set on its own and may arrive later.
+    public var pageURL: String? { lock.withLock { capturedPageURL } }
+    public func setPageURL(_ url: String?) { lock.withLock { capturedPageURL = url } }
     public static func == (lhs: FocusedFieldCapture, rhs: FocusedFieldCapture) -> Bool { lhs === rhs }
 }
 

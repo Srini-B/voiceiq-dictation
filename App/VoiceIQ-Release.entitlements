@@ -3,11 +3,13 @@
 <plist version="1.0">
 <dict>
 	<!-- Release (Developer ID) only. Same as VoiceIQ.entitlements, plus iCloud
-	     key-value storage for the dictionary. The store identifier is shared
-	     with the iPhone app. iCloud is a restricted entitlement: it needs the
-	     "VoiceiQ macOS Developer ID" profile, which ad-hoc Debug builds lack,
-	     so Debug keeps VoiceIQ.entitlements. The identifiers are spelled out
-	     because Release does not inject base entitlements. -->
+	     key-value storage for the dictionary and the CloudKit container for
+	     History. Both are shared with the iPhone app. iCloud is a restricted
+	     entitlement: it needs the "VoiceiQ macOS Developer ID" profile, which
+	     ad-hoc Debug builds lack, so Debug keeps VoiceIQ.entitlements. The
+	     identifiers are spelled out because Release does not inject base
+	     entitlements. The container environment is pinned to Production so
+	     the Mac and the App Store iPhone app see the same records. -->
 	<key>com.apple.security.device.audio-input</key>
 	<true/>
 	<key>com.apple.application-identifier</key>
@@ -16,5 +18,15 @@
 	<string>G8K3545FJ2</string>
 	<key>com.apple.developer.ubiquity-kvstore-identifier</key>
 	<string>G8K3545FJ2.io.blue.voiceiq</string>
+	<key>com.apple.developer.icloud-services</key>
+	<array>
+		<string>CloudKit</string>
+	</array>
+	<key>com.apple.developer.icloud-container-identifiers</key>
+	<array>
+		<string>iCloud.io.blue.voiceiq</string>
+	</array>
+	<key>com.apple.developer.icloud-container-environment</key>
+	<string>Production</string>
 </dict>
 </plist>

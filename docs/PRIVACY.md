@@ -4,7 +4,7 @@
 
 By default, your voice goes from your Mac directly to the model provider you chose in
 Settings → Advanced, using your own API key: Google's Gemini API or OpenAI's API.
-Optional Parakeet or Nemotron transcription processes audio on-device on supported systems.
+Optional Fluid Speech Mini or Nemotron transcription processes audio on-device on supported systems.
 Cleanup and screen context still use your selected cloud provider. Failed local
 transcription falls back to sending the saved audio to that provider.
 There is no VoiceiQ server, no account, no analytics, no telemetry.
@@ -26,10 +26,11 @@ With no usable key, nothing is sent and the recording stays on your Mac.
    Anything, Translate and Agent. It uses the selected provider's existing
    key. If the live connection fails or does not return every completed turn,
    VoiceiQ uploads the saved recording to that provider after you stop.
-   Real-time transcription is off by default and does not affect meetings.
+   Real-time transcription is on by default (since 2026-10-13, so the result
+   lands about 1.5 s sooner after you stop) and does not affect meetings.
    With "On-device transcription" on and the selected model downloaded,
    successful transcription sends no audio. The explicit Download button fetches
-   483.1 MB for Parakeet or 664.8 MB for Nemotron from Hugging Face and its CDN, exposing your IP address
+   252.7 MB for Fluid Speech Mini or 664.8 MB for Nemotron from Hugging Face and its CDN, exposing your IP address
    to those hosts, but sending no recordings or API keys. Missing models use the
    configured cloud transcription. Failed local results upload the saved
    recording through the existing cloud path. This option is not an offline-only
@@ -47,14 +48,23 @@ With no usable key, nothing is sent and the recording stays on your Mac.
    cleanup after transcription. The request
    sends text only (and screen images, item 4), never the audio. It contains the transcript being
    formatted, the built-in formatting rules, your custom instructions from the
-   same pane, the frontmost app's name, your dictionary terms, and, while
+   same pane, the frontmost app's name and the title of its focused window
+   (a document name, a page title, a chat name; since 2026-10-13), in Safari,
+   Chrome, Edge, Brave, Vivaldi, Arc, Dia, Opera, Firefox and Zen the host and
+   path of the page in that window (never the query string or fragment, so no
+   search terms or tokens; also since 2026-10-13), your spelling choice from
+   the same pane, your
+   dictionary terms, and, while
    "Fit to existing text" is on (on by default), up to 300 characters before
    the cursor and 100 after it in the field you are dictating into. No tone or
-   category is derived from the app; the model reads intent from your speech. With that
+   category is derived from the app; the model reads intent from your speech
+   and uses the app and window names only to tell what kind of text this is
+   and how names on screen are spelled. With that
    setting off, a dictation's transcript never leaves this Mac after
    transcription. Ask Anything and Translate always send it (item 7).
-4. **Screen context**, while "Screen context" is on in Settings → Dictation — on
-   by default. VoiceiQ captures the main display when dictation starts and when
+4. **Screen context**, while "Screen context" is on in Settings → Dictation — off
+   by default since 2026-10-13 (three images added about 1.3 s to every
+   cleanup; the app and window names in item 3 replace them). VoiceiQ captures the main display when dictation starts and when
    the frontmost app changes during that dictation. It sends up to four reduced-
    size JPEG images to the provider only with the writing-rules request. VoiceiQ keeps
    the images in memory and never stores them on disk. macOS asks for Screen
@@ -114,7 +124,12 @@ Everything it reads stays on this Mac.
   writing-rules prompt while that pass is on. The dictionary itself (words,
   "heard as" spellings, stars, and when entries were added or deleted) is
   kept in your own iCloud account, in VoiceiQ's key-value storage, so the Mac
-  and iPhone apps share it. Nothing else VoiceiQ stores goes to iCloud
+  and iPhone apps share it. The final text of each finished dictation, with
+  its time, length, app name and device name, is kept in your own iCloud
+  account too (VoiceiQ's private CloudKit database), so History is the same
+  on both. Audio, the "as heard" transcript and errors never go to iCloud.
+  Deleting a dictation in History removes it from iCloud and from the other
+  device. Nothing else VoiceiQ stores goes to iCloud
 - Which apps you use, when you dictate, or anything you type
 - Keystrokes: the event tap watches your dictation key, plus — only while a
   dictation is active — Esc (cancel), Space (the hands-free gesture), and the
@@ -131,7 +146,10 @@ Everything it reads stays on this Mac.
 - One folder per dictation (`~/Library/Application Support/VoiceiQ/recordings/`):
   crash-safe audio, transcript, metadata — this is what makes Retry and recovery work.
 - Settings → Privacy & Storage: audio retention (24h / 7d / 30d / forever / never —
-  "never" disables Retry), plus one-click **Delete all history**.
+  "never" disables Retry), dictation retention ("Keep dictations": never / 24h /
+  7d / 30d / 1 year / forever; finished dictations older than that are
+  deleted with their folders, rows waiting for Retry or your attention are
+  kept), plus one-click **Delete all history**.
 - Local files are protected by FileVault if enabled; they are not separately
   encrypted (stated honestly).
 

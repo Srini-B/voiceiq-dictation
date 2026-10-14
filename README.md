@@ -73,14 +73,18 @@ there is no time limit.
 
 **Ask Anything and Translate.** Select text (optional), press ⌃⌥A, and ask
 ("make this shorter", "what does this error mean"); the answer opens in the
-pill, with Markdown rendered and a Copy button, and never edits your text. Each
+pill, with Markdown rendered and a Copy button. An instruction that edits an
+editable selection ("make this shorter", "fix the grammar") replaces the
+selection in place instead. Each
 question stands alone. Add a free [TinyFish](https://agent.tinyfish.ai/api-keys)
 API key in Settings → Advanced and questions that need current information
 (news, prices, releases) are answered from a live web search, with sources
 linked. Press ⌃⌥T to dictate in any language and have it typed in
-the target language you pick from the searchable list in Settings → Dictation
-(99 languages); if the model cannot translate it, the pill says so and nothing
-is inserted. ⌘⇧V pastes the last transcript or answer
+a target language. Settings → Dictation takes up to three targets from the
+searchable list (99 languages); the first one that is not the language you
+spoke is used, so "English, Tamil" translates English speech into Tamil and
+anything else into English. If the model cannot translate it, the pill says
+so and nothing is inserted. ⌘⇧V pastes the last transcript or answer
 again. All three shortcuts are editable and can require either, left, or right
 modifier keys. Plain dictation is language-agnostic: speak in any language, or
 mix them mid-sentence, and the text stays in the language you used.

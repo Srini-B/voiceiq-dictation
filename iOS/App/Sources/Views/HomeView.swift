@@ -68,7 +68,7 @@ struct HomeView: View {
         HStack(spacing: Theme.Spacing.m) {
             Wordmark(height: 28)
             Spacer()
-            StatusChip(text: session.isActive ? "Mic on" : "Off", tone: session.isActive ? .live : .off)
+            StatusChip(text: session.isActive ? "On" : "Off", tone: session.isActive ? .live : .off)
         }
         .padding(.top, Theme.Spacing.m)
     }
@@ -80,8 +80,8 @@ struct HomeView: View {
     }
 }
 
-/// The warm session: while it is on the mic is open and the keyboard's mic
-/// starts in place.
+/// The session: while a keeper holds it, the keyboard's mic starts in place
+/// instead of switching to VoiceiQ.
 private struct SessionCard: View {
     @EnvironmentObject private var model: AppModel
     @EnvironmentObject private var session: VoiceSession
@@ -90,7 +90,7 @@ private struct SessionCard: View {
         Card(padding: Theme.Spacing.xl) {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text(session.isActive ? "Mic is on" : "Mic is off")
+                    Text(session.isActive ? "Skips app switching" : "Needs app switching")
                         .font(Theme.Fonts.title2())
                         .foregroundStyle(Theme.Colors.ink)
                     subtitle
@@ -114,8 +114,11 @@ private struct SessionCard: View {
                 Text("Turns off in")
                 Text(timerInterval: Date()...until, countsDown: true).monospacedDigit()
             }
-        } else if session.isActive {
-            Text("Dictating")
+        } else if let keeper = session.keeper {
+            switch keeper {
+            case .openMic: Text("Mic is on")
+            case .backgroundAudio: Text("Ready in the background")
+            }
         } else if UIDevice.isPad {
             if #available(iOS 18.0, *) {
                 Text("Tap the mic on the VoiceiQ keyboard, or use VoiceiQ Dictate.")

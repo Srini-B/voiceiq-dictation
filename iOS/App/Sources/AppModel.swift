@@ -93,6 +93,8 @@ final class AppModel: ObservableObject {
         bind()
         startHistoryServices()
         DictionaryBridge.start()
+        let deviceName = UIDevice.current.name
+        Task { await HistorySync.shared.start(deviceName: deviceName) }
         ActionButtonBridge.toggle = { [weak self] in await self?.toggleFromActionButton() }
         commandObserver = DarwinNotifier.observe(.command) { [weak self] in
             Task { @MainActor in self?.drainCommands() }
@@ -158,7 +160,7 @@ final class AppModel: ObservableObject {
         Task {
             await scanner.scanAndRecover()
             queue.start()
-            Task.detached(priority: .utility) { RetentionPolicy().purgeExpiredAudio() }
+            Task.detached(priority: .utility) { RetentionPolicy().purge() }
         }
     }
 
@@ -250,7 +252,7 @@ final class AppModel: ObservableObject {
         let mode: DictationMode
         switch command.mode {
         case .dictate: mode = .dictate
-        case .translate: mode = .translate(target: SettingsStore().translationTargetLanguage)
+        case .translate: mode = .translate(targets: SettingsStore().translationTargetLanguages)
         case .ask: mode = .askAnything(selectedText: command.context)
         }
         guard coordinator.handle(.begin, mode: mode) else {
@@ -431,6 +433,7 @@ final class AppModel: ObservableObject {
         setup.refresh()
         drainCommands()
         DictionaryBridge.appBecameActive()
+        Task { await HistorySync.shared.refresh() }
     }
 
     func appEnteredBackground() {
@@ -543,31 +546,6 @@ final class AppModel: ObservableObject {
         case .done(.silent): return "Didn't catch that"
         default: return nil
         }
-    }
-}
-
-@MainActor
-final class DictationTarget {
-    var host: String?
-}
-
-/// Hands results to the keyboard. The keyboard does the actual typing.
-@MainActor
-final class KeyboardInserter: TextInserting {
-    var onDeliver: ((String, KeyboardMode) -> Void)?
-
-    func insert(_ text: String, context: DictationContext) async -> InsertionOutcome {
-        let mode: KeyboardMode
-        switch context.mode {
-        case .dictate: mode = .dictate
-        case .translate: mode = .translate
-        case .askAnything: mode = .ask
-        // The iPhone never starts an agent session; its transcript is
-        // handed to the caller, not inserted. Deliver as plain text.
-        case .agent: mode = .dictate
-        }
-        onDeliver?(text, mode)
-        return .inserted
     }
 }
 

@@ -1,16 +1,35 @@
 import AVFoundation
 import VoiceIQCore
 
-/// Keeps the app running in the background, with the microphone open, for the
-/// warm window after a dictation.
+/// What each keeper asks of the audio session.
+extension MobileSettings.KeepActiveMode {
+    /// A discarding input tap keeps the mic open (the orange dot shows).
+    var holdsMicOpen: Bool { self == .openMic }
+    /// Whether other apps' audio keeps playing. iOS refuses to start a
+    /// *mixable* recording from the background (`'!rec'`,
+    /// CoreAudioTypes/AudioSessionTypes.h), so the background-audio keeper
+    /// gives up mixing: that is what lets a dictation start in place with the
+    /// mic closed meanwhile.
+    var mixesWithOthers: Bool { self != .backgroundAudio }
+}
+
+/// The audio session behind a voice session: a `.playAndRecord` session the
+/// dictation's capture engine records into, plus looping silence that keeps
+/// the app running, plus interruption handling.
 ///
-/// iOS lets a backgrounded app start recording only while it is already
-/// recording. Measured on device (builds 13–15): with silent playback alone, or
-/// with a Live Activity up, every in-place start failed; with a visible PiP it
-/// worked. So the keep-alive engine loops silence and also runs a discarding
-/// tap on `inputNode`: the mic stays open (the orange dot shows) and each
-/// dictation's own capture engine starts alongside it. The warm window, set in
-/// Settings › Dictation, decides how long this lasts after a dictation.
+/// What else it does depends on the keeper (`MobileSettings.KeepActiveMode`):
+/// - Keep mic on: holds the mic open for the warm window.
+/// - Background audio: a non-mixable session; the mic stays closed until a
+///   dictation starts.
+///
+/// iOS lets a backgrounded app start a *mixable* recording only while it is
+/// already recording. Measured on device (builds 13–15, all with
+/// `.mixWithOthers`): with silent playback alone, or with a Live Activity up,
+/// every in-place start failed; with the mic held open, it worked. The
+/// background-audio keeper is the untested case: a non-mixable session, which
+/// the SDK header says is allowed to start recording from the background. The
+/// warm window, set in Settings › Dictation, decides how long a keeper lasts
+/// after a dictation.
 ///
 /// The session must be started while the app is in the foreground, or inside
 /// the Action button's audio-recording intent: iOS refuses to activate an
@@ -27,15 +46,17 @@ final class KeepAliveAudio {
     private var player: AVAudioPlayerNode?
     private var observers: [NSObjectProtocol] = []
     private var preferBuiltInMic = true
+    private var keeper: MobileSettings.KeepActiveMode = .openMic
 
-    func start(preferBuiltInMic: Bool) throws {
+    func start(preferBuiltInMic: Bool, keeper: MobileSettings.KeepActiveMode) throws {
         guard !isRunning else { return }
         self.preferBuiltInMic = preferBuiltInMic
+        self.keeper = keeper
         try configureSession()
         try startSilence()
         observe()
         isRunning = true
-        Log.audio.info("keep-alive started (built-in mic preferred: \(preferBuiltInMic))")
+        Log.audio.info("keep-alive started (keeper: \(keeper.rawValue, privacy: .public), built-in mic preferred: \(preferBuiltInMic), mic held open: \(keeper.holdsMicOpen), mixable: \(keeper.mixesWithOthers))")
     }
 
     func stop() {
@@ -59,10 +80,12 @@ final class KeepAliveAudio {
 
     private func configureSession() throws {
         let session = AVAudioSession.sharedInstance()
-        // Mix with others so music and podcasts keep playing. HFP Bluetooth is
-        // only allowed when the user wants their headset mic: enabling it moves
+        // Mix with others so music and podcasts keep playing, except for the
+        // keeper that needs a non-mixable session. HFP Bluetooth is only
+        // allowed when the user wants their headset mic: enabling it moves
         // AirPods to the low-quality call profile for everything they play.
-        var options: AVAudioSession.CategoryOptions = [.mixWithOthers, .defaultToSpeaker, .allowBluetoothA2DP]
+        var options: AVAudioSession.CategoryOptions = [.defaultToSpeaker, .allowBluetoothA2DP]
+        if keeper.mixesWithOthers { options.insert(.mixWithOthers) }
         if !preferBuiltInMic { options.insert(.allowBluetoothHFP) }
         try session.setCategory(.playAndRecord, mode: .default, options: options)
         try session.setActive(true)
@@ -88,10 +111,14 @@ final class KeepAliveAudio {
         let format = AVAudioFormat(standardFormatWithSampleRate: 44_100, channels: 2)!
         engine.connect(player, to: engine.mainMixerNode, format: format)
         // Holds the microphone open. Buffers are dropped; nothing is recorded.
-        let input = engine.inputNode
-        let inputFormat = input.outputFormat(forBus: 0)
-        if inputFormat.sampleRate > 0, inputFormat.channelCount > 0 {
-            input.installTap(onBus: 0, bufferSize: 4096, format: inputFormat) { _, _ in }
+        // Touching `inputNode` at all opens the mic, so the other keeper
+        // leaves it alone.
+        if keeper.holdsMicOpen {
+            let input = engine.inputNode
+            let inputFormat = input.outputFormat(forBus: 0)
+            if inputFormat.sampleRate > 0, inputFormat.channelCount > 0 {
+                input.installTap(onBus: 0, bufferSize: 4096, format: inputFormat) { _, _ in }
+            }
         }
         guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 44_100) else { return }
         buffer.frameLength = buffer.frameCapacity
@@ -116,7 +143,7 @@ final class KeepAliveAudio {
 
     private func stopSilence() {
         player?.stop()
-        engine?.inputNode.removeTap(onBus: 0)
+        if keeper.holdsMicOpen { engine?.inputNode.removeTap(onBus: 0) }
         engine?.stop()
         player = nil
         engine = nil

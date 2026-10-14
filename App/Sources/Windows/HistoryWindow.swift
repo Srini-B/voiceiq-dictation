@@ -62,6 +62,9 @@ struct HistoryPane: View {
                 stat(value: "\(stats.totalDictations)", label: "dictations")
                 stat(value: stats.averageWPM > 0 ? "\(stats.averageWPM)" : "—", label: "avg WPM")
                 stat(value: stats.totalAudioSeconds > 0 ? stats.audioLabel : "—", label: "of audio")
+                stat(value: stats.minutesSaved > 0 ? stats.savedLabel : "—", label: "saved")
+                stat(value: stats.currentStreak > 0 ? "\(stats.currentStreak)" : "—", label: "day streak")
+                    .help("Longest: \(stats.longestStreak) days, active on \(stats.activeDays) days")
                 Spacer()
                 HStack(spacing: 3) {
                     ForEach(0..<4, id: \.self) { index in
@@ -321,6 +324,7 @@ struct HistoryPane: View {
 
     /// Human words, never raw enum values, in the detail sheet.
     static func statusDisplayName(_ record: DictationRecord) -> String {
+        if let origin = record.origin { return "Dictated on \(origin)" }
         switch SessionMeta.Status(rawValue: record.status) {
         case .inserted: return "Inserted at the cursor"
         case .copiedToClipboard: return "Copied to the clipboard"

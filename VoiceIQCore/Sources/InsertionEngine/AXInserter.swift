@@ -44,9 +44,26 @@ public enum AXInserter {
 
     /// Records the target app's focused text field and the text around its
     /// cursor, for the field guard and the writing model.
-    public nonisolated static func captureFocusedField(pid: pid_t, into capture: FocusedFieldCapture) {
+    public nonisolated static func captureFocusedField(pid: pid_t, bundleID: String? = nil, into capture: FocusedFieldCapture) {
         let element = focusedTextField(pid: pid)
-        capture.set(element, surroundingText: element.flatMap(surroundingText(of:)))
+        capture.set(element, surroundingText: element.flatMap(surroundingText(of:)),
+                    windowTitle: focusedWindowTitle(pid: pid))
+        capture.setPageURL(BrowserPageURL.capture(pid: pid, bundleID: bundleID))
+    }
+
+    /// The focused window's title, for the writing model's context line.
+    nonisolated static func focusedWindowTitle(pid: pid_t) -> String? {
+        let app = AXUIElementCreateApplication(pid)
+        AXUIElementSetMessagingTimeout(app, 0.25)
+        var windowRef: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(app, kAXFocusedWindowAttribute as CFString, &windowRef) == .success,
+              let windowRef, CFGetTypeID(windowRef) == AXUIElementGetTypeID() else { return nil }
+        let window = unsafeDowncast(windowRef as AnyObject, to: AXUIElement.self)
+        var titleRef: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(window, kAXTitleAttribute as CFString, &titleRef) == .success,
+              let title = titleRef as? String else { return nil }
+        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 
     /// The text around the cursor of the focused field, when it belongs to

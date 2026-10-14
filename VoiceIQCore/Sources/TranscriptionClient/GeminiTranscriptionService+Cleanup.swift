@@ -1,4 +1,5 @@
 import Foundation
+import VoiceIQBridge
 
 /// The writing-rules pass of a dictation, and what is inserted when it fails.
 extension GeminiTranscriptionService {
@@ -58,13 +59,19 @@ extension GeminiTranscriptionService {
     ) async -> CleanupOutcome {
         let dictionary = DictionaryStore()
         let screenshots = context.screenshots
+        let place = DictationPlace(appName: context.targetAppName,
+                                   windowTitle: context.focusedField?.windowTitle,
+                                   pageURL: context.focusedField?.pageURL)
+        Log.transcription.info("cleanup place: app=\(place.appName ?? "-", privacy: .public) title=\(place.windowTitle ?? "-", privacy: .private) page=\(place.pageURL ?? "-", privacy: .private) (page \(place.pageURL?.count ?? 0, privacy: .public) chars)")
         let prompt = PromptV1.cleanupPrompt(
             raw: raw,
             vocabulary: dictionary.sanitizedVocabulary(),
             spellings: dictionary.spellings(),
             instructions: settings.customInstructions,
+            spelling: settings.spellingVariant.promptLine,
             imagesAttached: !screenshots.isEmpty,
             surroundingText: settings.fitToExistingText ? context.focusedField?.surroundingText : nil,
+            place: place,
             normalized: normalized
         )
         do {

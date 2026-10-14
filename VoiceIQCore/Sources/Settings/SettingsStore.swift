@@ -89,8 +89,12 @@ public struct SettingsStore: Sendable {
         Self.set(provider.rawValue, forKey: "modelProvider")
     }
 
+    /// On by default since 2026-10-13: the transcript is finished when the
+    /// user stops, so the wait is the writing model alone (measured 2.95 s
+    /// end to end against 4.45 s median for batch). A refused socket falls
+    /// back to the saved recording on its own.
     public var liveTranscriptionEnabled: Bool {
-        Self.defaults.object(forKey: "liveDictationEnabled") as? Bool ?? false
+        Self.defaults.object(forKey: "liveDictationEnabled") as? Bool ?? true
     }
 
     public func setLiveTranscriptionEnabled(_ enabled: Bool) {
@@ -145,13 +149,35 @@ public struct SettingsStore: Sendable {
         Self.set(enabled, forKey: "soundsEnabled")
     }
 
-    public var translationTargetLanguage: String {
-        Self.defaults.string(forKey: "translationTargetLanguage") ?? "English"
+    public static let maxTranslationTargets = 3
+
+    /// Translate targets in order of preference. The model picks the first
+    /// one the transcript is not already in, so "English, Tamil" translates
+    /// in both directions. At least one, at most `maxTranslationTargets`.
+    public var translationTargetLanguages: [String] {
+        if let list = Self.defaults.stringArray(forKey: "translationTargetLanguages"), !list.isEmpty {
+            return list
+        }
+        return [Self.defaults.string(forKey: "translationTargetLanguage") ?? "English"]
     }
 
+    /// The first target. iOS offers one picker and reads this.
+    public var translationTargetLanguage: String { translationTargetLanguages[0] }
+
+    public func setTranslationTargetLanguages(_ languages: [String]) {
+        var seen = Set<String>()
+        let list = languages
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty && seen.insert($0).inserted }
+            .prefix(Self.maxTranslationTargets)
+        let stored = list.isEmpty ? ["English"] : Array(list)
+        Self.defaults.set(stored[0], forKey: "translationTargetLanguage")
+        Self.set(stored, forKey: "translationTargetLanguages")
+    }
+
+    /// Replaces the first target and keeps the others.
     public func setTranslationTargetLanguage(_ language: String) {
-        let trimmed = language.trimmingCharacters(in: .whitespacesAndNewlines)
-        Self.set(trimmed.isEmpty ? "English" : trimmed, forKey: "translationTargetLanguage")
+        setTranslationTargetLanguages([language] + translationTargetLanguages.dropFirst())
     }
 
     /// Where the pill sits along the bottom of the screen, as a fraction of the
@@ -187,8 +213,11 @@ public struct SettingsStore: Sendable {
         Self.set(enabled, forKey: "copyRecoveredToClipboard")
     }
 
+    /// Off by default since 2026-10-13: three screenshots add about 1.3 s to
+    /// every cleanup (measured 2.4 s → 3.7 s). The app and window names go
+    /// with the transcript instead, at no cost.
     public var screenContextEnabled: Bool {
-        Self.defaults.object(forKey: "screenContextEnabled") as? Bool ?? true
+        Self.defaults.object(forKey: "screenContextEnabled") as? Bool ?? false
     }
 
     public func setScreenContextEnabled(_ enabled: Bool) {
@@ -283,6 +312,14 @@ public struct SettingsStore: Sendable {
         Self.set(enabled, forKey: "skipShortDictationCleanup")
     }
 
+    public var spellingVariant: SpellingVariant {
+        SpellingVariant(rawValue: Self.defaults.string(forKey: "spellingVariant") ?? "") ?? .automatic
+    }
+
+    public func setSpellingVariant(_ variant: SpellingVariant) {
+        Self.set(variant.rawValue, forKey: "spellingVariant")
+    }
+
     /// Free-form rules the cleanup pass follows. Empty or whitespace means
     /// "use `DictationRulesSeed.text`", so a user who clears the box gets the
     /// defaults rather than a rule-less pass.
@@ -373,5 +410,17 @@ public struct SettingsStore: Sendable {
 
     public func setAudioRetentionDays(_ days: Int) {
         Self.set(days, forKey: "audioRetentionDays")
+    }
+
+    /// Days to keep finished dictations in History, with their folders.
+    /// 0 = forever (the default), -1 = never: a dictation is removed as soon
+    /// as it has landed. Rows that still need attention (a failed upload
+    /// waiting for Retry, text held for a secure field) are kept either way.
+    public var transcriptRetentionDays: Int {
+        Self.defaults.object(forKey: "transcriptRetentionDays") as? Int ?? 0
+    }
+
+    public func setTranscriptRetentionDays(_ days: Int) {
+        Self.set(days, forKey: "transcriptRetentionDays")
     }
 }

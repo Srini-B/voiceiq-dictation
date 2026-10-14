@@ -44,19 +44,26 @@ for file in "$ZIP" "$DMG" "$NOTES" "$SPARKLE_NOTES"; do
   [[ -f "$file" ]] || fail "$file is missing."
 done
 xcrun stapler validate "$APP_PATH" >/dev/null || fail "the app is not stapled; publish only what scripts/release.sh notarized."
+published=""
 if gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
-  fail "release $TAG already exists in $REPO. Bump MARKETING_VERSION and CURRENT_PROJECT_VERSION."
+  [[ -n "${DRY_RUN:-}" ]] || fail "release $TAG already exists in $REPO. Bump MARKETING_VERSION and CURRENT_PROJECT_VERSION."
+  published=1
 fi
 
 echo "▸ Fetching the current appcast"
 rm -rf "$STAGE"
 mkdir -p "$STAGE"
-status=$(curl -sSL -o "$STAGE/appcast.xml" -w '%{http_code}' "$FEED_URL")
-case "$status" in
-  200) ;;
-  404) rm -f "$STAGE/appcast.xml"; echo "  none published yet; starting a new feed" ;;
-  *) fail "fetching $FEED_URL returned HTTP $status." ;;
-esac
+if [[ -n "$published" ]]; then
+  # The live feed already lists this build, so a rehearsal checks a new feed.
+  echo "  dry run of the published $TAG; starting a new feed"
+else
+  status=$(curl -sSL -o "$STAGE/appcast.xml" -w '%{http_code}' "$FEED_URL")
+  case "$status" in
+    200) ;;
+    404) rm -f "$STAGE/appcast.xml"; echo "  none published yet; starting a new feed" ;;
+    *) fail "fetching $FEED_URL returned HTTP $status." ;;
+  esac
+fi
 
 if [[ -f "$STAGE/appcast.xml" ]]; then
   newest=$(grep -o '<sparkle:version>[0-9]*' "$STAGE/appcast.xml" | grep -o '[0-9]*$' | sort -n | tail -1)

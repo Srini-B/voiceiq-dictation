@@ -39,7 +39,8 @@ GitHub release each refuse to repeat a build that already went out.
 
 To rehearse, run the workflow by hand (Actions › Release › Run workflow). It
 defaults to a dry run that builds, notarizes and checks everything and uploads
-nothing.
+nothing. A dry run also works on a branch and on a version that is already
+tagged: `gh workflow run release.yml --ref <branch> -f dry_run=true`.
 
 ### How the previous version is found
 

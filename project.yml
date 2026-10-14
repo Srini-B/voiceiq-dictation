@@ -12,8 +12,8 @@ options:
 # CURRENT_PROJECT_VERSION is the build number: raise it with every release.
 settings:
   base:
-    MARKETING_VERSION: "0.6.0"
-    CURRENT_PROJECT_VERSION: "45"
+    MARKETING_VERSION: "0.6.1"
+    CURRENT_PROJECT_VERSION: "46"
 
 packages:
   VoiceIQCore:
@@ -60,8 +60,9 @@ targets:
           CODE_SIGNING_REQUIRED: NO
         Release:
           CODE_SIGN_INJECT_BASE_ENTITLEMENTS: NO
-          # iCloud key-value storage (dictionary sync) needs the Developer ID
-          # profile; see docs/RELEASING.md.
+          # iCloud key-value storage (dictionary sync) and the CloudKit
+          # container (history sync) need the Developer ID profile; see
+          # docs/RELEASING.md.
           CODE_SIGN_ENTITLEMENTS: App/VoiceIQ-Release.entitlements
           PROVISIONING_PROFILE_SPECIFIER: "VoiceiQ macOS Developer ID"
     sources:
@@ -202,6 +203,9 @@ targets:
         com.apple.security.application-groups: [group.io.blue.voiceiq]
         # Dictionary sync, shared with the Mac app's store.
         com.apple.developer.ubiquity-kvstore-identifier: G8K3545FJ2.io.blue.voiceiq
+        # History sync (final text), shared with the Mac app's container.
+        com.apple.developer.icloud-services: [CloudKit]
+        com.apple.developer.icloud-container-identifiers: [iCloud.io.blue.voiceiq]
     dependencies:
       - package: VoiceIQCore
         product: VoiceIQCore

@@ -120,12 +120,13 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
         }
 
         if context.mode != .dictate {
-            let cleaned = try await transform(raw: trimmedRaw, normalized: transcript.normalizedTranscript,
-                                              context: context, config: config)
+            let transformed = try await transform(raw: trimmedRaw, normalized: transcript.normalizedTranscript,
+                                                  context: context, config: config)
             return TranscriptionResult(
                 rawTranscript: trimmedRaw,
-                cleanedTranscript: cleaned,
-                modelID: context.mode == .agent ? transcript.modelID : "\(transcript.modelID)+\(writingModel)"
+                cleanedTranscript: transformed.text,
+                modelID: context.mode == .agent ? transcript.modelID : "\(transcript.modelID)+\(writingModel)",
+                replacesSelection: transformed.replacesSelection
             )
         }
 
@@ -172,16 +173,21 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
 
     // MARK: - Stages
 
-    private func transform(raw: String, normalized: String?, context: DictationContext, config: GeminiConfig) async throws -> String {
+    struct Transformed {
+        var text: String
+        var replacesSelection = false
+    }
+
+    private func transform(raw: String, normalized: String?, context: DictationContext, config: GeminiConfig) async throws -> Transformed {
         let dictionary = DictionaryStore()
         let prompt: String
         switch context.mode {
         case .dictate:
-            return raw
+            return Transformed(text: raw)
         case .agent:
             // The command goes to the agent model as spoken; only the
             // dictionary's hard replacements apply.
-            return ReplacementEngine.apply(dictionary.replacementRules(), to: normalized ?? raw)
+            return Transformed(text: ReplacementEngine.apply(dictionary.replacementRules(), to: normalized ?? raw))
         case .askAnything(let selectedText):
             var webContext: WebContext?
             if KeychainStore.loadTinyFishKey() != nil {
@@ -196,13 +202,14 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
             prompt = PromptV1.askAnythingPrompt(
                 instruction: raw,
                 selectedText: selectedText,
+                selectionIsEditable: context.selectedTextIsSettable,
                 vocabulary: dictionary.sanitizedVocabulary(),
                 webContext: webContext,
                 normalized: normalized
             )
-        case .translate(let target):
+        case .translate(let targets):
             prompt = PromptV1.translatePrompt(
-                raw: raw, target: target, vocabulary: dictionary.sanitizedVocabulary(), normalized: normalized
+                raw: raw, targets: targets, vocabulary: dictionary.sanitizedVocabulary(), normalized: normalized
             )
         }
         let stage: UsageStage = { if case .translate = context.mode { return .translate }; return .answer }()
@@ -215,13 +222,28 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
             deadline: Self.cleanupDeadline(forCharacters: max(raw.count, prompt.count / 3)),
             stage: stage
         )
-        var cleaned = ValidationGate.stripArtifacts(response).trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleaned = ValidationGate.stripArtifacts(response).trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cleaned.isEmpty else { throw TranscriptionError.emptyTranscript }
         if case .translate = context.mode, cleaned == Self.untranslatableToken {
             throw TranscriptionError.emptyTranscript
         }
-        if case .askAnything = context.mode { cleaned = Self.separateSources(cleaned) }
-        return cleaned
+        guard case .askAnything = context.mode else { return Transformed(text: cleaned) }
+        if let replacement = Self.replacement(in: cleaned) {
+            guard !replacement.isEmpty else { throw TranscriptionError.emptyTranscript }
+            return Transformed(text: replacement, replacesSelection: true)
+        }
+        return Transformed(text: Self.separateSources(cleaned))
+    }
+
+    /// The edited selection when the answer starts with the replace marker,
+    /// which is only asked for when the selection is editable. A model that
+    /// answers a question never starts with it, and a marker anywhere else
+    /// is left alone. Fences the model may have wrapped the result in are
+    /// removed, since the text is typed over the selection as is.
+    static func replacement(in answer: String) -> String? {
+        guard answer.hasPrefix(PromptV1.replaceMarker) else { return nil }
+        let body = answer.dropFirst(PromptV1.replaceMarker.count).trimmingCharacters(in: .whitespacesAndNewlines)
+        return ValidationGate.stripArtifacts(body)
     }
 
     /// Puts the "Sources" line the answer prompt asks for on its own paragraph.

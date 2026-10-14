@@ -132,16 +132,34 @@ struct DictationSettingsView: View {
     @State private var noiseHandling = SettingsStore().experimentalNoiseHandling
     @State private var builtInMic = MobileSettings.preferBuiltInMic
     @State private var warmWindow = MobileSettings.warmWindow
+    @State private var keepActiveMode = MobileSettings.keepActiveMode
 
     var body: some View {
         Form {
             Section {
-                Picker("Keep mic on after dictating", selection: $warmWindow) {
+                Picker("Skip app switching", selection: $keepActiveMode) {
+                    ForEach(MobileSettings.KeepActiveMode.allCases) { Text($0.label).tag($0) }
+                }
+                .onChange(of: keepActiveMode) { _, value in
+                    MobileSettings.keepActiveMode = value
+                    warmWindow = MobileSettings.warmWindow
+                    session.keepActiveModeChanged()
+                }
+                Picker(keepActiveMode == .openMic ? "Keep mic on after dictating" : "Stay ready after dictating", selection: $warmWindow) {
                     ForEach(MobileSettings.WarmWindow.allCases) { Text($0.label).tag($0) }
                 }
-                .onChange(of: warmWindow) { _, value in MobileSettings.warmWindow = value }
+                .onChange(of: warmWindow) { _, value in
+                    // A mode switch resyncs the picker to the mode's
+                    // default; only a real choice is stored.
+                    if MobileSettings.warmWindow != value { MobileSettings.warmWindow = value }
+                }
             } footer: {
-                Text("While the mic is on, the next keyboard tap starts right away. After that, the tap opens VoiceiQ for a moment.")
+                switch keepActiveMode {
+                case .openMic:
+                    Text("While the mic is on, the next keyboard tap starts right away. After that, the tap opens VoiceiQ for a moment.")
+                case .backgroundAudio:
+                    Text("While VoiceiQ is ready, the next keyboard tap starts right away and other apps' audio pauses. After that, the tap opens VoiceiQ for a moment.")
+                }
             }
             Section {
                 NavigationLink {
@@ -199,7 +217,7 @@ struct DictationSettingsView: View {
             case "skipShortDictationCleanup": skipShortCleanup = settings.skipShortDictationCleanup
             case "customInstructions": instructions = settings.customInstructions
             case "experimentalNoiseHandling": noiseHandling = settings.experimentalNoiseHandling
-            case "translationTargetLanguage": translationTarget = settings.translationTargetLanguage
+            case "translationTargetLanguages": translationTarget = settings.translationTargetLanguage
             default: break
             }
         }
@@ -346,6 +364,7 @@ private struct ReturnAppDetail: View {
 
 struct PrivacyView: View {
     @State private var retentionDays = SettingsStore().audioRetentionDays
+    @State private var transcriptRetentionDays = SettingsStore().transcriptRetentionDays
     @State private var provider = SettingsStore().preferredProvider
 
     private var destination: String { "\(provider.directName), with your key" }
@@ -359,7 +378,15 @@ struct PrivacyView: View {
                 }
                 .onChange(of: retentionDays) { _, days in
                     SettingsStore().setAudioRetentionDays(days)
-                    Task.detached(priority: .utility) { RetentionPolicy().purgeExpiredAudio() }
+                    Task.detached(priority: .utility) { RetentionPolicy().purge() }
+                }
+                Picker("Keep dictations", selection: $transcriptRetentionDays) {
+                    Text("Never").tag(-1); Text("24 hours").tag(1); Text("7 days").tag(7)
+                    Text("30 days").tag(30); Text("1 year").tag(365); Text("Forever").tag(0)
+                }
+                .onChange(of: transcriptRetentionDays) { _, days in
+                    SettingsStore().setTranscriptRetentionDays(days)
+                    Task.detached(priority: .utility) { RetentionPolicy().purge() }
                 }
             }
             Section {
@@ -368,6 +395,7 @@ struct PrivacyView: View {
                 LabeledContent("Meeting notes", value: provider.displayName)
                 LabeledContent("Dictionary terms", value: "With cloud transcription and cleanup")
                 LabeledContent("Dictionary", value: "Your iCloud, to sync")
+                LabeledContent("History", value: "Your iCloud, to sync final text")
                 LabeledContent("Ask search queries", value: "TinyFish, if its key is saved")
                 LabeledContent("What you type", value: "Never")
             } header: { SettingsSectionHeader("What leaves your \(UIDevice.current.localizedModel)") }
@@ -468,46 +496,5 @@ private struct SettingsKeyboardModifier: ViewModifier {
     let enabled: Bool
     @ViewBuilder func body(content: Content) -> some View {
         if enabled { content.keyboardDismissable() } else { content }
-    }
-}
-
-
-/// The keeper and background-start events from `SessionDiagnostics`.
-private struct SessionLogView: View {
-    @State private var text = SessionLogView.combined()
-
-    /// The app's events, then the keyboard's.
-    static func combined() -> String {
-        let app = SessionDiagnostics.read()
-        let keyboard = SharedStore.shared.keyboardLog.joined(separator: "\n")
-        guard !keyboard.isEmpty else { return app }
-        return app + (app.isEmpty ? "" : "\n\n") + "Keyboard\n" + keyboard
-    }
-
-    var body: some View {
-        ScrollView {
-            Text(text.isEmpty ? "No events yet." : text)
-                .font(.system(.caption, design: .monospaced))
-                .foregroundStyle(Theme.Colors.ink)
-                .textSelection(.enabled)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(Theme.Spacing.page)
-        }
-        .themedBackground()
-        .navigationTitle("Session log")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button("Copy") { UIPasteboard.general.string = text }
-            }
-            ToolbarItem(placement: .topBarLeading) {
-                Button("Clear") {
-                    SessionDiagnostics.clear()
-                    SharedStore.shared.clearKeyboardLog()
-                    text = ""
-                }
-            }
-        }
-        .onAppear { text = SessionLogView.combined() }
     }
 }

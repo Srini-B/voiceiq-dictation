@@ -18,10 +18,20 @@ public struct DictationRecord: Codable, Equatable, Identifiable, FetchableRecord
     public var errorCode: String?
     public var errorMessage: String?
     public var pipelineSeconds: Double?
+    /// The device that dictated it, for rows that came from iCloud. Nil for
+    /// dictations made on this device.
+    public var origin: String?
+    /// When the row reached iCloud (this device's rows) or arrived from it.
+    public var cloudSyncedAt: Date?
 
     public var displayText: String {
         cleanedTranscript ?? rawTranscript ?? ""
     }
+
+    /// Rows from another device have no folder: the text is all there is.
+    public var isFromOtherDevice: Bool { origin != nil }
+    public var isInCloud: Bool { cloudSyncedAt != nil }
+    public var hasFolder: Bool { !folder.isEmpty }
 
     public var folderURL: URL {
         URL(fileURLWithPath: folder, isDirectory: true)
@@ -46,14 +56,22 @@ public struct DictationRecord: Codable, Equatable, Identifiable, FetchableRecord
 public extension Notification.Name {
     /// Posted after any HistoryStore write so an open History pane refreshes as
     /// dictations land, retries drain, or rows are deleted — no polling.
+    /// `object` is "sync" for writes that came from iCloud, nil otherwise.
+    /// `userInfo[HistoryStore.deletedCloudIDsKey]` lists deleted rows that
+    /// were in iCloud, so the deletion can follow them there.
     static let gtHistoryDidChange = Notification.Name("io.blue.voiceiq.history-changed")
 }
 
 public final class HistoryStore: @unchecked Sendable {
-    private let queue: DatabaseQueue
+    let queue: DatabaseQueue
 
-    private static func notifyChanged() {
-        NotificationCenter.default.post(name: .gtHistoryDidChange, object: nil)
+    public static let deletedCloudIDsKey = "deletedCloudIDs"
+
+    static func notifyChanged(fromSync: Bool = false, deletedCloudIDs: [String] = []) {
+        NotificationCenter.default.post(
+            name: .gtHistoryDidChange, object: fromSync ? "sync" : nil,
+            userInfo: deletedCloudIDs.isEmpty ? nil : [deletedCloudIDsKey: deletedCloudIDs]
+        )
     }
 
     public init(databaseURL: URL) throws {
@@ -119,15 +137,23 @@ public final class HistoryStore: @unchecked Sendable {
                 t.add(column: "errorMessage", .text)
             }
         }
+        migrator.registerMigration("v3-cloud") { db in
+            try db.alter(table: DictationRecord.databaseTableName) { t in
+                t.add(column: "origin", .text)
+                t.add(column: "cloudSyncedAt", .datetime)
+            }
+        }
         try migrator.migrate(queue)
     }
 
     // MARK: - Writes
 
     public func upsert(meta: SessionMeta, folder: URL) {
-        let record = DictationRecord(meta: meta, folder: folder)
+        var record = DictationRecord(meta: meta, folder: folder)
         do {
             try queue.write { db in
+                // The folder knows nothing about iCloud; keep what sync wrote.
+                record.cloudSyncedAt = try DictationRecord.fetchOne(db, key: record.id)?.cloudSyncedAt
                 try record.save(db)
             }
             Self.notifyChanged()
@@ -143,21 +169,53 @@ public final class HistoryStore: @unchecked Sendable {
                 try DictationRecord.deleteOne(db, key: id)
                 return record
             }
-            if removeFolder, let record {
+            if removeFolder, let record, record.hasFolder {
                 try? FileManager.default.removeItem(at: record.folderURL)
             }
-            Self.notifyChanged()
+            Self.notifyChanged(deletedCloudIDs: record.map(Self.cloudIDs) ?? [])
         } catch {
             Log.history.error("HistoryStore: delete failed: \(error)")
         }
     }
 
+    /// The row's id when a copy of it is in iCloud.
+    static func cloudIDs(_ record: DictationRecord) -> [String] {
+        record.isInCloud || record.isFromOtherDevice ? [record.id] : []
+    }
+
+    /// Removes rows in `statuses` that started before `cutoff`, with their
+    /// folders. Returns how many went. Retention is this device's setting,
+    /// so the copies in iCloud stay.
+    @discardableResult
+    public func deleteExpired(before cutoff: Date, statuses: [String]) -> Int {
+        do {
+            let expired = try queue.write { db -> [DictationRecord] in
+                let rows = try DictationRecord
+                    .filter(sql: "startedAt < ? AND status IN (\(statuses.map { _ in "?" }.joined(separator: ",")))",
+                            arguments: StatementArguments([cutoff] + statuses))
+                    .fetchAll(db)
+                for row in rows { try DictationRecord.deleteOne(db, key: row.id) }
+                return rows
+            }
+            for row in expired where row.hasFolder { try? FileManager.default.removeItem(at: row.folderURL) }
+            if !expired.isEmpty { Self.notifyChanged() }
+            return expired.count
+        } catch {
+            Log.history.error("HistoryStore: deleteExpired failed: \(error)")
+            return 0
+        }
+    }
+
     public func deleteAll(removeFolders: Bool, sparing activeFolder: URL? = nil) {
         do {
-            _ = try queue.write { db in
+            let inCloud = try queue.write { db -> [String] in
+                let ids = try DictationRecord
+                    .filter(sql: "cloudSyncedAt IS NOT NULL OR origin IS NOT NULL")
+                    .fetchAll(db).map(\.id)
                 try DictationRecord.deleteAll(db)
+                return ids
             }
-            Self.notifyChanged()
+            Self.notifyChanged(deletedCloudIDs: inCloud)
         } catch {
             Log.history.error("HistoryStore: deleteAll failed: \(error)")
         }
@@ -179,7 +237,8 @@ public final class HistoryStore: @unchecked Sendable {
 
     /// Rebuild the index from the folders on disk (launch reconciliation).
     /// Folders are the source of truth: rows whose folders vanished (external
-    /// cleanup, Finder deletion) are pruned, never shown as ghosts.
+    /// cleanup, Finder deletion) are pruned, never shown as ghosts. Rows from
+    /// another device never had a folder and stay.
     public func reindex(recordingsRoot: URL = FileLayout.recordingsRoot) {
         let folders = (try? FileManager.default.contentsOfDirectory(
             at: recordingsRoot, includingPropertiesForKeys: nil
@@ -196,7 +255,7 @@ public final class HistoryStore: @unchecked Sendable {
             try DictationRecord.fetchAll(db)
         }) ?? []
         let orphans = all.filter {
-            !FileManager.default.fileExists(atPath: $0.folder)
+            !$0.isFromOtherDevice && !FileManager.default.fileExists(atPath: $0.folder)
         }
         for orphan in orphans {
             delete(id: orphan.id, removeFolder: false)
@@ -291,12 +350,39 @@ public final class HistoryStore: @unchecked Sendable {
         /// Recorded audio across the same dictations. Transcription is billed
         /// by audio time, so this is the figure to hold against a price per hour.
         public var totalAudioSeconds: Double
+        /// Calendar days with at least one dictation.
+        public var activeDays: Int
+        /// Consecutive days up to today (or yesterday, when today has none yet).
+        public var currentStreak: Int
+        public var longestStreak: Int
 
-        public init(totalWords: Int, totalDictations: Int, averageWPM: Int, totalAudioSeconds: Double = 0) {
+        public init(totalWords: Int, totalDictations: Int, averageWPM: Int, totalAudioSeconds: Double = 0,
+                    activeDays: Int = 0, currentStreak: Int = 0, longestStreak: Int = 0) {
             self.totalWords = totalWords
             self.totalDictations = totalDictations
             self.averageWPM = averageWPM
             self.totalAudioSeconds = totalAudioSeconds
+            self.activeDays = activeDays
+            self.currentStreak = currentStreak
+            self.longestStreak = longestStreak
+        }
+
+        /// Words per minute a person types, for the time-saved figure. 40 is
+        /// the usual average for a non-professional typist.
+        public static let typingWPM = 40.0
+
+        /// Minutes typing the same words would have taken, less the minutes
+        /// spent speaking them. Zero when speaking was not faster.
+        public var minutesSaved: Int {
+            max(0, Int((Double(totalWords) / Self.typingWPM - totalAudioSeconds / 60).rounded()))
+        }
+
+        /// "38 min" under an hour, then hours.
+        public var savedLabel: String {
+            let minutes = minutesSaved
+            if minutes < 60 { return minutes > 0 ? "\(minutes) min" : "–" }
+            let hours = Double(minutes) / 60
+            return hours < 100 ? String(format: "%.1f h", hours) : "\(Int(hours.rounded())) h"
         }
 
         /// "42 min" under an hour, then hours: "3.2 h", "148 h".
@@ -309,15 +395,16 @@ public final class HistoryStore: @unchecked Sendable {
         }
     }
 
-    public func stats() -> Stats {
+    public func stats(now: Date = Date(), calendar: Calendar = .current) -> Stats {
         (try? queue.read { db in
             let rows = try Row.fetchAll(db, sql: """
-                SELECT cleanedTranscript, durationSeconds FROM dictation
+                SELECT cleanedTranscript, durationSeconds, startedAt FROM dictation
                 WHERE cleanedTranscript IS NOT NULL
                 """)
             var words = 0
             var timedWords = 0
             var speech = 0.0
+            var days = Set<Date>()
             for row in rows {
                 let text: String = row["cleanedTranscript"] ?? ""
                 // Whitespace-aware split (newlines count too — audit L29).
@@ -327,10 +414,35 @@ public final class HistoryStore: @unchecked Sendable {
                     timedWords += count
                     speech += duration
                 }
+                if let startedAt: Date = row["startedAt"] { days.insert(calendar.startOfDay(for: startedAt)) }
             }
             // WPM only over rows that actually have a duration.
             let wpm = speech > 10 ? Int(Double(timedWords) / (speech / 60)) : 0
-            return Stats(totalWords: words, totalDictations: rows.count, averageWPM: wpm, totalAudioSeconds: speech)
+            let streaks = Self.streaks(days: days, now: now, calendar: calendar)
+            return Stats(totalWords: words, totalDictations: rows.count, averageWPM: wpm, totalAudioSeconds: speech,
+                         activeDays: days.count, currentStreak: streaks.current, longestStreak: streaks.longest)
         }) ?? Stats(totalWords: 0, totalDictations: 0, averageWPM: 0)
+    }
+
+    /// The run of consecutive days ending today or yesterday, and the
+    /// longest run anywhere. A day with no dictation yet does not break the
+    /// streak until it is over.
+    static func streaks(days: Set<Date>, now: Date, calendar: Calendar) -> (current: Int, longest: Int) {
+        guard !days.isEmpty else { return (0, 0) }
+        let sorted = days.sorted()
+        var longest = 1
+        var run = 1
+        for (previous, day) in zip(sorted, sorted.dropFirst()) {
+            run = calendar.dateComponents([.day], from: previous, to: day).day == 1 ? run + 1 : 1
+            longest = max(longest, run)
+        }
+        let today = calendar.startOfDay(for: now)
+        var current = 0
+        var cursor = days.contains(today) ? today : calendar.date(byAdding: .day, value: -1, to: today)!
+        while days.contains(cursor) {
+            current += 1
+            cursor = calendar.date(byAdding: .day, value: -1, to: cursor)!
+        }
+        return (current, longest)
     }
 }

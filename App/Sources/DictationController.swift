@@ -80,7 +80,10 @@ final class DictationController {
                 )
                 let field = FocusedFieldCapture()
                 if let pid = app?.processIdentifier {
-                    Task.detached(priority: .userInitiated) { AXInserter.captureFocusedField(pid: pid, into: field) }
+                    let bundleID = app?.bundleIdentifier
+                    Task.detached(priority: .userInitiated) {
+                        AXInserter.captureFocusedField(pid: pid, bundleID: bundleID, into: field)
+                    }
                 }
                 return DictationContext(
                     targetAppBundleID: app?.bundleIdentifier,
@@ -287,7 +290,7 @@ final class DictationController {
         // Retention shouldn't depend on relaunches (audit L11): purge every 6h.
         Timer.scheduledTimer(withTimeInterval: 6 * 3600, repeats: true) { _ in
             Task.detached(priority: .utility) {
-                RetentionPolicy().purgeExpiredAudio()
+                RetentionPolicy().purge()
             }
         }
 
@@ -498,7 +501,7 @@ final class DictationController {
             await scanner.scanAndRecover()
             queue.start()
             Task.detached(priority: .utility) {
-                RetentionPolicy().purgeExpiredAudio()
+                RetentionPolicy().purge()
             }
         }
     }
@@ -625,7 +628,7 @@ final class DictationController {
                 self.toggleModeShortcut(.askAnything(selectedText: nil))
             case .translate:
                 self.toggleModeShortcut(
-                    .translate(target: SettingsStore().translationTargetLanguage)
+                    .translate(targets: SettingsStore().translationTargetLanguages)
                 )
             case .meetingToggle:
                 self.meetingHUD.toggle()
@@ -740,7 +743,7 @@ final class DictationController {
             mode = .askAnything(selectedText: selection.text)
             settable = selection.isSettable
         case .translate:
-            mode = .translate(target: SettingsStore().translationTargetLanguage)
+            mode = .translate(targets: SettingsStore().translationTargetLanguages)
         case .dictate:
             mode = .dictate
         case .agent:
