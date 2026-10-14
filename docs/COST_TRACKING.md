@@ -108,7 +108,8 @@ source (`CostSource.pricingNote`): the provider's pricing page. The iPhone's
 Cost page has the same source toggle.
 `HistoryPane` shows the summed session cost on each row and the detail sheet
 lists each call with its model, what it was billed on, and its cost.
-Successful on-device calls use model ID `parakeet-v3-local` or
+Successful on-device calls use model ID `fluid-speech-mini-local`
+(`parakeet-v3-local` before 2026-10-14) or
 `nemotron-3.5-multilingual-local`, stage `transcribe`, and explicit zero cost.
 They appear in session details but match neither cloud provider tab. Cleanup
 and saved-audio fallback retain their normal provider costs.

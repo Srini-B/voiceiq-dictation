@@ -1,14 +1,29 @@
 #if os(macOS)
 import Foundation
 
-/// Parakeet TDT 0.6B v3 (Core ML). Sizes and SHA-256 digests come from the
-/// commit's tree metadata: LFS files carry their SHA-256 there; the small git
-/// files were downloaded and checked against their git blob SHA-1 before their
-/// SHA-256 was recorded. Installs to `<appSupport>/Models/parakeet-v3/<revision>`.
+/// Fluid Speech Mini by FluidVoice (Core ML), an English fine-tune of Parakeet
+/// TDT 0.6B v3 with the same inputs, outputs and vocabulary, so FluidAudio
+/// loads it as `.v3`. Its joint network has no top-K outputs, which only
+/// disables FluidAudio's English script filter. FluidAudio 0.17.7 looks for
+/// the v3 joint at `JointDecisionv3.mlmodelc`, so the repository's
+/// `JointDecision.mlmodelc` installs under that name.
+///
+/// Sizes and SHA-256 digests come from the commit's tree metadata: LFS files
+/// carry their SHA-256 there; the small git files were downloaded and checked
+/// against their git blob SHA-1 before their SHA-256 was recorded. Installs to
+/// `<appSupport>/Models/parakeet-v3/<revision>`; keeping the folder name lets
+/// the stale-revision cleanup remove an earlier Parakeet v3 download.
 extension LocalModelManifest {
+    private static let fluidSpeechMiniRepository = "FluidVoice-Labs/fluid-speech-mini-coreml"
+    private static let fluidSpeechMiniRevision = "d81c3160dfe5a5e1f8f7267164a07d30617a3a1a"
+
+    private static func remote(_ path: String) -> URL {
+        huggingFaceURL(repository: fluidSpeechMiniRepository, revision: fluidSpeechMiniRevision, path: path)
+    }
+
     static let parakeet = LocalModelManifest(
-        repository: "FluidInference/parakeet-tdt-0.6b-v3-coreml",
-        revision: "7dd20fe6b1797d35f5e3307e8b1732d9a178edfe",
+        repository: fluidSpeechMiniRepository,
+        revision: fluidSpeechMiniRevision,
         directoryName: "parakeet-v3",
         files: [
             .init(path: "Preprocessor.mlmodelc/analytics/coremldata.bin", size: 243, sha256: "c9beeb989c8d66f8be11df59bc6df277ec76cee404f6865b46243835ef562f6d"),
@@ -16,21 +31,21 @@ extension LocalModelManifest {
             .init(path: "Preprocessor.mlmodelc/metadata.json", size: 2_841, sha256: "2a98699e22d279dd37fa1d238aeb1c6db1df0d6fad687775324157689d8f3acf"),
             .init(path: "Preprocessor.mlmodelc/model.mil", size: 28_181, sha256: "4b8518a956450fec57f06c2a21bdffc26973f7f1fa6842fb38fe917f896b6b93"),
             .init(path: "Preprocessor.mlmodelc/weights/weight.bin", size: 491_072, sha256: "129b76e3aeafa8afa3ea76d995b964b145fe83700d579f6ff42c4c38fa0968ea"),
-            .init(path: "Encoder.mlmodelc/analytics/coremldata.bin", size: 243, sha256: "42e638870d73f26b332918a3496ce36793fbb413a81cbd3d16ba01328637a105"),
-            .init(path: "Encoder.mlmodelc/coremldata.bin", size: 485, sha256: "d48034a167a82e88fc3df64f60af963ab3983538271175b8319e7d5720a0fb86"),
-            .init(path: "Encoder.mlmodelc/metadata.json", size: 2_921, sha256: "da24da9cca943fb29d7fa8e376d57fca7cb3aa08ca51b956b0b0e56813f087e9"),
-            .init(path: "Encoder.mlmodelc/model.mil", size: 959_769, sha256: "ed7b19156ca29fa7dfd6891deb9fda4b0e8893f68597c985d135736546a43808"),
-            .init(path: "Encoder.mlmodelc/weights/weight.bin", size: 445_187_200, sha256: "e2020f323703477a5b21d7c2d282c403e371afb5962e79877e3033e73ba6f421"),
-            .init(path: "Decoder.mlmodelc/analytics/coremldata.bin", size: 243, sha256: "4238c4e81ecd0dc94bd7dfbb60f7e2cc824107c1ffe0387b8607b72833dba350"),
-            .init(path: "Decoder.mlmodelc/coremldata.bin", size: 554, sha256: "18647af085d87bd8f3121c8a9b4d4564c1ede038dab63d295b4e745cf2d7fb99"),
-            .init(path: "Decoder.mlmodelc/metadata.json", size: 3_427, sha256: "a39e93cd8371b8ded92635c7804fcd0590f0d1dd9415c6d19a0484be073077d9"),
-            .init(path: "Decoder.mlmodelc/model.mil", size: 13_110, sha256: "ef2a0a281695398a62fde86ac269c68f73d5b578d7ed3b31f2ba91a2d1ea1f35"),
-            .init(path: "Decoder.mlmodelc/weights/weight.bin", size: 23_604_992, sha256: "48adf0f0d47c406c8253d4f7fef967436a39da14f5a65e66d5a4b407be355d41"),
-            .init(path: "JointDecisionv3.mlmodelc/analytics/coremldata.bin", size: 243, sha256: "26def4bf73dd56d29dee21c8ef97cb8969e62f6120ed1adc91e46828e2737b6c"),
-            .init(path: "JointDecisionv3.mlmodelc/coremldata.bin", size: 521, sha256: "f5fc08b741400f0088492c9e839418b1e18522f19cba28d361dd030c5f398342"),
-            .init(path: "JointDecisionv3.mlmodelc/metadata.json", size: 3_453, sha256: "d9307211b9a37e0f0ac260c7660b1571a3de25841035cfdf9b58fd40425f890f"),
-            .init(path: "JointDecisionv3.mlmodelc/model.mil", size: 11_775, sha256: "be60732943389a047175111a83f8839f3eb39d4803adafa828a0871b2f39818d"),
-            .init(path: "JointDecisionv3.mlmodelc/weights/weight.bin", size: 12_642_764, sha256: "4e0e63d840032f7f07ddb1d64446051166281e5491bf22da8a945c41f6eedb3e"),
+            .init(path: "Encoder.mlmodelc/analytics/coremldata.bin", size: 243, sha256: "3a3caa2c6aec983d94a5659eff09a00f77077147ea6726b8ddfdf022f0238ce9"),
+            .init(path: "Encoder.mlmodelc/coremldata.bin", size: 427, sha256: "494d8e2ce30b37bcdf494b3ba7ddf6e1bc921b9a59e369a9efd44d013ca3bf7d"),
+            .init(path: "Encoder.mlmodelc/metadata.json", size: 2_906, sha256: "1a2229e2cc4c271e4876715c9e36aef18bc7287e35690022c7f3939d85260ea9"),
+            .init(path: "Encoder.mlmodelc/model.mil", size: 712_643, sha256: "f96b7707936ea7ce5517c5b0f5c15cc634006bc58af1fe2587ac5979dd180343"),
+            .init(path: "Encoder.mlmodelc/weights/weight.bin", size: 233_096_704, sha256: "cf0b61022de8c698984a8c7185c2d093fa744694621881ff062c46fee2546131"),
+            .init(path: "Decoder.mlmodelc/analytics/coremldata.bin", size: 243, sha256: "d4beee43a6eab29b2adcc298f2e8582e8fb79d5fe3aa9f1ab692ade681ca369d"),
+            .init(path: "Decoder.mlmodelc/coremldata.bin", size: 491, sha256: "6094d06d05c1ca4599c7b13c9a4ca7c00826ee2396796cf3084ce602a9884468"),
+            .init(path: "Decoder.mlmodelc/metadata.json", size: 3_373, sha256: "13fcb358af8b028703dc7f424fd149ce9524642de510f3d682b75d471b1a001d"),
+            .init(path: "Decoder.mlmodelc/model.mil", size: 13_411, sha256: "4ccd8ecbc7eb59bed7ad38d471bf6b78ef52a24500bf64619c549ed45fbee4e9"),
+            .init(path: "Decoder.mlmodelc/weights/weight.bin", size: 11_845_120, sha256: "d173e381488d07fd7648e2ccecbfb1bceff0457d75461550b26ba7fa2d23309a"),
+            .init(path: "JointDecisionv3.mlmodelc/analytics/coremldata.bin", size: 243, sha256: "9e767d69e1092b27b28d9f236b9cbcded58ff3891e320cba7855e2c24e803d69", downloadURL: remote("JointDecision.mlmodelc/analytics/coremldata.bin")),
+            .init(path: "JointDecisionv3.mlmodelc/coremldata.bin", size: 462, sha256: "284b235c08cd4769202af017f854deace69c0209c29f2253a2073bb68d58d38d", downloadURL: remote("JointDecision.mlmodelc/coremldata.bin")),
+            .init(path: "JointDecisionv3.mlmodelc/metadata.json", size: 2_790, sha256: "fe1ce083f9ff57524926a92fc264b0cf7d88f3ba9852f7acf9f59dcdf427e01f", downloadURL: remote("JointDecision.mlmodelc/metadata.json")),
+            .init(path: "JointDecisionv3.mlmodelc/model.mil", size: 7_547, sha256: "1109ce72f6d014a6b99e49b41e83b3082d7555d74a6275838e7cbea42a6bd0ee", downloadURL: remote("JointDecision.mlmodelc/model.mil")),
+            .init(path: "JointDecisionv3.mlmodelc/weights/weight.bin", size: 6_350_284, sha256: "f991f65979c1b3fee3db39a645aa87e6bef1a304ed1816d074b17479bea797fc", downloadURL: remote("JointDecision.mlmodelc/weights/weight.bin")),
             .init(path: "parakeet_vocab.json", size: 151_122, sha256: "7ec60e05f1b24480736ec0eed40900f4626bce1fa9a60fd700ec7e2a59198735"),
         ]
     )

@@ -4,7 +4,7 @@
 
 By default, your voice goes from your Mac directly to the model provider you chose in
 Settings → Advanced, using your own API key: Google's Gemini API or OpenAI's API.
-Optional Parakeet or Nemotron transcription processes audio on-device on supported systems.
+Optional Fluid Speech Mini or Nemotron transcription processes audio on-device on supported systems.
 Cleanup and screen context still use your selected cloud provider. Failed local
 transcription falls back to sending the saved audio to that provider.
 There is no VoiceiQ server, no account, no analytics, no telemetry.
@@ -30,7 +30,7 @@ With no usable key, nothing is sent and the recording stays on your Mac.
    lands about 1.5 s sooner after you stop) and does not affect meetings.
    With "On-device transcription" on and the selected model downloaded,
    successful transcription sends no audio. The explicit Download button fetches
-   483.1 MB for Parakeet or 664.8 MB for Nemotron from Hugging Face and its CDN, exposing your IP address
+   252.7 MB for Fluid Speech Mini or 664.8 MB for Nemotron from Hugging Face and its CDN, exposing your IP address
    to those hosts, but sending no recordings or API keys. Missing models use the
    configured cloud transcription. Failed local results upload the saved
    recording through the existing cloud path. This option is not an offline-only

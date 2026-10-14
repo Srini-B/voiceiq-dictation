@@ -4,7 +4,7 @@ Settings → Dictation offers **On-device transcription** on Apple
 Silicon Macs running macOS 14+ only.
 The toggle is off by default. Existing local-transcription preferences survive
 the removal of Whistle, but its model and runtime are no longer included.
-On-device dictation is English only: Parakeet decodes as English and Nemotron
+On-device dictation is English only: Fluid Speech Mini decodes as English and Nemotron
 is locked to `en-US`. Cloud transcription keeps its own language handling.
 
 iPhone and iPad use online transcription only, including cloud real-time
@@ -17,15 +17,15 @@ Recordings, history, API keys, dictionary, and cloud preferences are preserved.
 ## Download and delete
 
 1. Turn on local transcription.
-2. Select **Download** beside **Parakeet v3** or **Nemotron 3.5**.
-   Parakeet downloads 483.1 MB; Nemotron downloads 664.8 MB.
+2. Select **Download** beside **Fluid Speech Mini** or **Nemotron 3.5**.
+   Fluid Speech Mini downloads 252.7 MB; Nemotron downloads 664.8 MB.
 3. Wait for download and file verification. Progress and Cancel remain available.
 4. Select a model row to use it. The checkmark shows the selected model.
 5. Use the trash icon and confirm **Delete** to remove a downloaded model,
    even with local transcription on.
 6. Optional: select **Download** beside **English tools** (103,865,880 bytes,
    shown as 103.9 MB). This row has no checkmark because it is never selected.
-   It adds speech detection and Parakeet dictionary correction. See
+   It adds speech detection and Fluid Speech Mini dictionary correction. See
    [English speech processing](#english-speech-processing).
 
 The model is not bundled, downloaded automatically, or loaded during download.
@@ -51,7 +51,7 @@ has its own trash icon, including the model that is not selected.
 
 | Selected, downloaded model | Real-time on | Real-time off |
 |---|---|---|
-| Parakeet v3 | Transcribe the saved recording after stop | Same |
+| Fluid Speech Mini | Transcribe the saved recording after stop | Same |
 | Nemotron 3.5 | Process PCM while speaking, then finalize after stop | Process the saved recording after stop |
 | Selected model missing | Cloud real-time, if available | Cloud file transcription |
 
@@ -63,8 +63,8 @@ while it is missing. There is no automatic switch to another downloaded model.
 
 Model loading starts only when dictation starts, on a worker rather than the UI
 thread. Audio capture writes the existing 16 kHz mono CAF immediately. After
-capture drains and closes, Parakeet transcribes that complete recording.
-Recordings up to five minutes use in-memory audio processing. Longer Parakeet
+capture drains and closes, Fluid Speech Mini transcribes that complete recording.
+Recordings up to five minutes use in-memory audio processing. Longer Fluid Speech Mini
 recordings use FluidAudio's disk-backed chunking and skip VAD trimming and
 CTC dictionary correction to bound audio memory.
 We do not use its sliding-window API because that API can return partial text
@@ -95,7 +95,7 @@ but does not guarantee recognition of every word or recover speech before captur
 
 On Mac, real-time Nemotron and cloud transcription show provisional words in the
 pill while recording. The latest words stay visible in a single line. Nemotron
-updates after each 2.24-second audio block, once the model has loaded. Parakeet
+updates after each 2.24-second audio block, once the model has loaded. Fluid Speech Mini
 and Nemotron file mode do not produce live words. The preview clears on stop,
 cancel or streaming failure. It never enters History, cleanup or insertion;
 those paths use only the validated final transcript.
@@ -117,7 +117,8 @@ helper and waits for exit before removing files. Helper failure falls back to th
 saved-audio cloud path. Startup has a 120-second deadline; recognition allows at
 least 120 seconds or twice the recording duration, whichever is longer.
 
-Successful local calls record `parakeet-v3-local` or
+Successful local calls record `fluid-speech-mini-local` (`parakeet-v3-local` before
+2026-10-14) or
 `nemotron-3.5-multilingual-local`, stage `transcribe`, with zero
 provider cost. Cold startup and
 final inference still take time; this does not guarantee avoiding "Still working".
@@ -149,13 +150,13 @@ replayed dictations and was removed (see
 | Folder | Model | Used for |
 |---|---|---|
 | `vad` | Silero VAD unified 256 ms v6.2.1, threshold 0.4 | Speech detection |
-| `ctc` | Parakeet CTC 110M with its tokenizer | Dictionary correction for Parakeet |
+| `ctc` | Parakeet CTC 110M with its tokenizer | Dictionary correction for Fluid Speech Mini |
 
 How each mode uses the pack:
 
 | Mode | Speech detection | Dictionary |
 |---|---|---|
-| Parakeet | Trims silent edges up to five minutes | CTC rescoring up to five minutes, needs the pack |
+| Fluid Speech Mini | Trims silent edges up to five minutes | CTC rescoring up to five minutes, needs the pack |
 | Nemotron real-time | Logs speech start and end only | None |
 | Nemotron file | Trims silent edges up to five minutes | None |
 
@@ -163,7 +164,7 @@ Speech detection never splits a recording or removes audio between words. It
 trims an edge only when more than 2 seconds of silence precede the first or
 follow the last detected speech, and it keeps 1 second of margin. A recording
 with no detected speech is decoded in full. If detection fails, the untrimmed
-audio is used. The Parakeet decoder and the CTC spotter see the same samples,
+audio is used. The Fluid Speech Mini decoder and the CTC spotter see the same samples,
 so their timings share one clock.
 
 Nemotron does not receive dictionary terms. FluidAudio's decode-time hotword
@@ -172,11 +173,11 @@ spoken hesitation into a run of "Ca Ca Ca", and the bias raised word error
 rate on replayed dictations. Dictionary terms still reach the cleanup prompt
 and the deterministic replacement layer.
 
-Dictionary terms for Parakeet come from the first 256 entries in the
+Dictionary terms for Fluid Speech Mini come from the first 256 entries in the
 Dictionary. A term's misspelling, if set, becomes its alias. Before the
 decoder sees them, terms are whitespace-collapsed, deduplicated without regard
-to case, limited to 64 characters, and limited to 8 aliases each. Parakeet
-rescoring requires 0.75
+to case, limited to 64 characters, and limited to 8 aliases each.
+Rescoring requires 0.75
 text similarity and an acoustic score better than the original without an
 additive vocabulary bonus. Its permissive acoustic rescue pass is disabled
 because replay exposed unspoken dictionary insertions. The normalized candidate
@@ -184,7 +185,7 @@ uses accepted corrections; the original transcript keeps the decoder's words.
 
 The tools pack is used only when it is ready when dictation starts. The session
 then holds the pack like a model, so deleting it cancels local processing and
-the saved recording falls back to cloud transcription. Parakeet logs its token
+the saved recording falls back to cloud transcription. Fluid Speech Mini logs its token
 confidence for diagnostics. The value is uncalibrated and changes no decision.
 
 ## Cleanup
@@ -215,10 +216,19 @@ Agent retain their requested actions regardless of duration.
 
 ## Dependencies and storage
 
-FluidAudio is pinned to 0.17.7. Model files come from
-`FluidInference/parakeet-tdt-0.6b-v3-coreml`, revision
-`7dd20fe6b1797d35f5e3307e8b1732d9a178edfe`. The 21 paths, byte sizes and SHA-256
-digests are in `ParakeetManifest.swift`. Downloads verify every file in a staging
+FluidAudio is pinned to 0.17.7. Fluid Speech Mini by FluidVoice
+([post](https://fluidvoice.com/labs/fluid-speech-mini)), an English fine-tune of
+Parakeet TDT 0.6B v3, comes from `FluidVoice-Labs/fluid-speech-mini-coreml`,
+revision `d81c3160dfe5a5e1f8f7267164a07d30617a3a1a`. The 21 paths, byte sizes
+and SHA-256 digests, totalling 252,710,832 bytes, are in
+`ParakeetManifest.swift`. It has the Parakeet v3 Core ML contract, so FluidAudio
+loads it as `.v3`. FluidAudio 0.17.7 looks for the v3 joint at
+`JointDecisionv3.mlmodelc`, so the repository's `JointDecision.mlmodelc`
+installs under that name. That joint has no top-K outputs, which turns off only
+FluidAudio's English script filter. The install folder stays
+`Models/parakeet-v3`, so the first launch after the change removes an earlier
+Parakeet v3 download (483.1 MB) and the row shows Download again.
+Downloads verify every file in a staging
 folder, then atomically publish a revision marker. Startup checks marker and file
 sizes. No FluidAudio auto-download API is called.
 

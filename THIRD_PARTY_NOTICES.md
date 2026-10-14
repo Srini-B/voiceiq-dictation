@@ -35,13 +35,15 @@ repository's Apache 2.0 license. See `App/Resources/Sounds/ATTRIBUTION.md`.
 
 ## Vendored libraries
 
-### Optional NVIDIA Parakeet TDT 0.6B v3 model
+### Optional Fluid Speech Mini model
 
-- Original model: https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3 (NVIDIA).
-- Core ML conversion: https://huggingface.co/FluidInference/parakeet-tdt-0.6b-v3-coreml (Fluid Inference), revision `7dd20fe6b1797d35f5e3307e8b1732d9a178edfe`.
+- Fluid Speech Mini by FluidVoice: https://huggingface.co/FluidVoice-Labs/fluid-speech-mini-coreml, revision `d81c3160dfe5a5e1f8f7267164a07d30617a3a1a` (https://fluidvoice.com/labs/fluid-speech-mini).
+- Built on NVIDIA Parakeet TDT 0.6B v3 (https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3) and Moondream Parakeet Ultra, with the audio preprocessor from FluidInference's Parakeet v3 Core ML package.
 - License: [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
-- VoiceiQ downloads the converted model files unmodified, on explicit request.
-  Weights are not bundled with the app. File hashes are in `ParakeetManifest.swift`.
+- VoiceiQ downloads the model files unmodified, on explicit request; the joint
+  network folder is saved as `JointDecisionv3.mlmodelc` instead of
+  `JointDecision.mlmodelc`. Weights are not bundled with the app. File hashes
+  are in `ParakeetManifest.swift`.
 
 ### Optional NVIDIA Nemotron 3.5 ASR Streaming 0.6B model
 
