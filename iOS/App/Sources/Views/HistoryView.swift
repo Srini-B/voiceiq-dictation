@@ -240,6 +240,7 @@ private struct HistoryDetail: View {
         VStack(spacing: 0) {
             DetailRow(label: "When", value: record.startedAt.formatted(date: .abbreviated, time: .shortened))
             if let app = AppNames.name(for: record) { divider; DetailRow(label: "App", value: app) }
+            if let origin = record.origin { divider; DetailRow(label: "Dictated on", value: origin) }
             if let seconds = record.durationSeconds {
                 divider
                 DetailRow(label: "Length", value: Duration.seconds(seconds).formatted(.time(pattern: .minuteSecond)))

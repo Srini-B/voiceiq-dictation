@@ -50,6 +50,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         EditLearner.pruneOrdinaryAutoLearnedOnce()
         // Dictionary shared with the iPhone through iCloud; always on.
         DictionarySync.shared.start()
+        // History's final text too, through CloudKit; also always on.
+        let deviceName = Host.current().localizedName ?? "Mac"
+        Task { await HistorySync.shared.start(deviceName: deviceName) }
         let controller = DictationController()
         statusItemController = StatusItemController(
             onOpenHistory: { [weak controller] in controller?.openHistory() },

@@ -112,10 +112,13 @@ the Developer ID profile names this certificate. To set up another Mac:
 
 It also needs the Developer ID provisioning profile "VoiceiQ macOS Developer ID"
 in `~/Library/Developer/Xcode/UserData/Provisioning Profiles`. Release builds
-carry the iCloud key-value storage entitlement (dictionary sync,
+carry the iCloud key-value storage entitlement (dictionary sync) and the
+CloudKit container `iCloud.io.blue.voiceiq` (history sync, both in
 `App/VoiceIQ-Release.entitlements`), which macOS allows only with a profile;
-without it the build fails at signing. Debug builds are ad-hoc and have no
-iCloud. The profile is for App ID `io.blue.voiceiq` with the iCloud capability:
+without it the build fails at signing, and with a profile that lacks the
+container the signed app does not launch. Debug builds are ad-hoc and have no
+iCloud. The profile is for App ID `io.blue.voiceiq` with the iCloud capability
+and the container `iCloud.io.blue.voiceiq` assigned:
 
 ```bash
 asc --profile voiceiq profiles list --profile-type MAC_APP_DIRECT
@@ -123,6 +126,29 @@ asc --profile voiceiq profiles download --id PROFILE_ID --output VoiceiQ-macOS.p
 ```
 
 Name the installed file `<UUID>.provisionprofile` (the UUID inside the profile).
+
+**History sync (2026-10-13) needs three one-time steps before the next
+release.** The installed Developer ID profile was made with an empty
+container list (`icloud-container-identifiers: []`), and the iOS App Store
+profile has no iCloud keys at all, so both must be regenerated:
+
+1. In the Developer portal, add the iCloud container `iCloud.io.blue.voiceiq`
+   to the App IDs `io.blue.voiceiq` (Mac) and `io.blue.voiceiq.ios` (iPhone),
+   under the iCloud capability (CloudKit, not only key-value storage).
+2. Delete and recreate "VoiceiQ macOS Developer ID" and "VoiceiQ iOS App
+   Store" (the asc commands above and below), install both, and check the
+   Mac one with `security cms -D -i <file>.provisionprofile | grep -A3
+   icloud-container-identifiers`: it must list the container.
+3. In the CloudKit Console, deploy the schema of `iCloud.io.blue.voiceiq` to
+   Production: record type `Dictation` with fields `text` (String),
+   `startedAt` (Date/Time), `durationSeconds` (Double), `appName` (String),
+   `device` (String), `status` (String), in a custom zone. The quickest way
+   is one dictation on a development build (an Xcode device build of the
+   iPhone app, or the Mac app signed with a development profile), which
+   creates the type in Development; then Deploy Schema Changes to
+   Production. The Mac Release entitlements pin
+   `com.apple.developer.icloud-container-environment` to Production so the
+   Mac and the TestFlight iPhone app read the same records.
 
 The shell must export these values before the script starts:
 

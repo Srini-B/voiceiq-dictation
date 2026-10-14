@@ -56,8 +56,8 @@ because pings are dropped while a process is suspended.
    up to 0.7 s for the app to acknowledge the command. The app starts recording
    from the background. No app switch. The app acknowledges only when it can
    start in place (`AppModel.canStartInPlace`): it is in the foreground, or the
-   session's Live Activity is on screen and no background start has failed
-   since the app was last opened.
+   session's keeper can record from the background (the mic is held open)
+   and no background start has failed since the app was last opened.
 3. Otherwise, or without an acknowledgement, the keyboard opens
    `voiceiq://keyboard/start?cmd=<id>&host=<bundle id>`. The app starts the
    background session in the foreground (iOS refuses to activate audio from the
@@ -80,7 +80,11 @@ because pings are dropped while a process is suspended.
    under "Keyboard" in Settings › Advanced › Session log.
 
 Ask shows the answer in a panel with Insert and Copy. Translate inserts the
-translation into the target language from Settings › Dictation.
+translation into the target language from Settings › Dictation (the iPhone
+picker sets the first of the Mac's up-to-three targets; the others are kept
+and used when the first matches the spoken language). Settings › Privacy has
+the same "Keep dictations" picker as the Mac (`transcriptRetentionDays`);
+`AppModel` runs `RetentionPolicy.purge()` on launch.
 
 ### Returning to the app
 
@@ -124,32 +128,56 @@ It disables Auto-Lock while VoiceiQ is in front, and restores it when no active
 dictation or meeting recording remains. It cannot control Auto-Lock in the
 keyboard's host app. A warm microphone alone does not hold the sleep lock.
 
-`KeepAliveAudio` sets a `.playAndRecord` session (mix with others, A2DP; HFP
-only when "Use iPhone microphone" is off), plays silence and taps `inputNode`
-without keeping the buffers. Each dictation builds its own capture engine
-(`AudioCaptureEngine`), which runs alongside it.
+iOS lets a backgrounded app start a *mixable* recording only while it is
+already recording. The SDK header (`CoreAudioTypes/AudioSessionTypes.h`,
+`AVAudioSessionErrorCodeCannotStartRecording`, `'!rec'`) states the rule:
+"The app is not allowed to start recording, usually because it is starting a
+mixable recording from the background". Measured on device (builds 13 to 15,
+every session with `.mixWithOthers`): silent playback alone and a Live
+Activity both failed at the second in-place start. A non-mixable session has
+not been measured yet; that is the Background audio mode below. (A Picture in
+Picture keeper was tried in between and removed: it held the session, but
+left a tab at the screen edge, which Typeless no longer shows either.)
+Settings › Dictation › Skip app switching (`MobileSettings.keepActiveMode`)
+picks what keeps the session alive after the one-time bounce.
+`VoiceSession.keeper` holds exactly one keeper, or nil when no session is up.
 
-The session ends when the user taps End (app or Dynamic Island) or when an
-audio interruption cannot be resumed. There is no idle timeout. A call or Siri
-interruption finalizes an in-progress dictation, so the words are kept.
+- **Keep mic on** (default; `KeepAliveAudio`, keeper `.openMic`). Plays silence and
+  taps `inputNode` without keeping the buffers: the mic stays open and the
+  orange dot shows. It lasts for the warm window after each dictation, set in
+  Keep mic on after dictating (`MobileSettings.warmWindow`: Never, 5 s, 10 s,
+  30 s default, 1 minute, 5 minutes, 1 hour, 12 hours). The window counts
+  from when the text is delivered; "Never" closes the audio session as soon
+  as recording stops but keeps the session up (on background time) until the
+  text is delivered, so the keyboard and the Dynamic Island show "Writing…"
+  in between.
+- **Background audio** (`KeepAliveAudio`, keeper `.backgroundAudio`;
+  prototype, not yet verified on a device). Plays silence on a session
+  *without* `.mixWithOthers` and never touches `inputNode`, so the mic is off
+  and no orange dot shows while idle. The bet, from the `'!rec'` rule above:
+  a non-mixable session may start recording from the background, so the next
+  keyboard tap records in place with nothing visible meanwhile. Other apps'
+  audio pauses while the session is up. It lasts for the warm window, set in
+  Stay ready after dictating (same `MobileSettings.warmWindow`; 12 hours when
+  unset, Typeless's default `audioCloseDelaySeconds`). Home shows "Turns off
+  in" with the countdown.
 
-iOS lets a backgrounded app start recording only while it is already
-recording. Measured on device: silent playback alone and a Live Activity both
-failed at the second in-place start; a visible Picture in Picture window
-worked, but iOS gives the app no way to hide it (the only client-to-system
-PiP calls are start, stop and size). So the keep-alive engine also runs a
-discarding tap on `inputNode`: while a session is up the mic is open and the
-orange dot shows, and each dictation's capture engine starts alongside it.
+`holdsMicOpen` and `mixesWithOthers` (in `KeepAliveAudio.swift`) say what
+each keeper asks of the audio session. Both keep a `.playAndRecord` session
+active through `KeepAliveAudio` (default to speaker, A2DP; HFP only when
+"Use iPhone microphone" is off; mix with others except for Background
+audio). `AudioCaptureEngine` never configures the session, so each
+dictation's capture engine records into it.
 
-The session lasts for the warm window after each dictation, set in
-Settings › Dictation › Keep mic on after dictating (`MobileSettings.warmWindow`:
-Never, 5 s, 10 s, 30 s default, 1 minute). The window counts from when the
-text is delivered; "Never" closes the mic as soon as recording stops but keeps
-the session up (on background time) until the text is delivered, so the
-keyboard and the Dynamic Island show "Writing…" in between. Settings ›
-Dictation has an "Open Action Button settings" button (`App-prefs:ACTION_BUTTON`,
-falling back to VoiceiQ's page in Settings). When it runs out the mic
-closes and the next keyboard tap bounces through the app again.
+The session also ends when the user taps End (app or Dynamic Island) or when
+an audio interruption cannot be resumed. A call or Siri interruption
+finalizes an in-progress dictation, so the words are kept. Settings ›
+Dictation has an "Open Action Button settings" button
+(`App-prefs:ACTION_BUTTON`, falling back to VoiceiQ's page in Settings).
+
+Home shows "Skips app switching" while a keeper holds the session and "Needs
+app switching" otherwise. The session log (Settings › Advanced) records the
+keeper.
 
 ### Action button
 
@@ -307,6 +335,38 @@ Every local edit and every change from iCloud merges the two copies with
 - the same word added on two devices becomes one entry (the older one,
   starred if either was).
 
+### History sync
+
+History's final text is the same on the Mac and the iPhone, with no setting.
+`HistorySync` (VoiceIQCore) keeps one `Dictation` record per finished
+dictation in the `History` zone of the private CloudKit database of the
+container both apps share (`iCloud.io.blue.voiceiq`), through `CKSyncEngine`.
+A record holds the final text (`displayText`: the cleaned text, or the raw
+transcript when nothing was cleaned), the start time, the length, the app
+name, the device name and the status. Audio, the "As heard" transcript,
+errors and token usage stay on the device that dictated.
+
+- A dictation is uploaded once its status is final (`inserted`,
+  `copiedToClipboard` or `recovered`; `HistoryStore.pendingUploads`). Records
+  never change afterwards. `cloudSyncedAt` on the row marks it as uploaded.
+- Rows from the other device arrive with `origin` (its name) and no folder.
+  History shows them like any other dictation; the detail view says
+  "Dictated on <device>". They have no Retry and no "As heard".
+- Deleting a row (swipe, Discard, Delete All) deletes its record, and the
+  other device removes its copy, folder included. The retention purge is
+  local and leaves iCloud alone, so an old dictation purged on the iPhone
+  stays on the Mac.
+- Signing out of iCloud removes the other device's rows and forgets which
+  local rows were uploaded; signing in again uploads them. A deleted zone or
+  a switched account does the same and starts over.
+- The engine's state lives in `history-sync-state.json` next to
+  `history.sqlite`. `refresh()` fetches on every return to the foreground,
+  because a suspended app receives no push.
+- On the Mac, Debug builds have no container entitlement, so `HistorySync`
+  checks `com.apple.developer.icloud-container-identifiers` at launch and
+  stays off without it. Release builds need the Developer ID profile with
+  the container (see RELEASING.md).
+
 iOS delivers no iCloud change while the app is suspended, so the app also
 merges when it becomes active (`DictionaryBridge.appBecameActive`). Without an
 iCloud account the dictionary stays local and uploads once one is signed in.
@@ -388,7 +448,11 @@ is `false`, so builds skip the export-compliance question.
   verified in the simulator only so far.
 - iOS ends a Live Activity after eight hours. The session stays up, and the
   next mic tap bounces once to start a new activity.
-- The orange mic dot shows for the whole warm window.
+- In Keep mic on mode, the orange mic dot shows for the whole warm window. In
+  Background audio mode, other apps' audio pauses for the warm window.
+- Background audio mode is untested on a device: whether a non-mixable
+  session may start recording from the background is read from the SDK
+  header, not measured.
 - The Action button control needs iOS 18 and Live Activities turned on.
 - On an iPad with a keyboard case, a dictation lands on the clipboard, not in
   the field: iPadOS hides third-party keyboards while a hardware keyboard is

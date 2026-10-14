@@ -264,6 +264,7 @@ struct PrivacyPane: View {
     @State private var provider = SettingsStore().preferredProvider
     private var owner: String { provider == .gemini ? "Google" : "OpenAI" }
     @State private var retentionDays = SettingsStore().audioRetentionDays
+    @State private var transcriptRetentionDays = SettingsStore().transcriptRetentionDays
     @State private var confirmingDelete = false
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
 
@@ -306,17 +307,33 @@ struct PrivacyPane: View {
                         RetentionPolicy(audioRetentionDays: days).purgeExpiredAudio()
                     }
                 }
+                Picker("Keep dictations", selection: $transcriptRetentionDays) {
+                    Text("Never (no History)").tag(-1)
+                    Text("24 hours").tag(1)
+                    Text("7 days").tag(7)
+                    Text("30 days").tag(30)
+                    Text("1 year").tag(365)
+                    Text("Forever").tag(0)
+                }
+                .onChange(of: transcriptRetentionDays) { _, days in
+                    settings.setTranscriptRetentionDays(days)
+                    Task.detached(priority: .utility) {
+                        RetentionPolicy(transcriptRetentionDays: days).purgeExpiredTranscripts()
+                    }
+                }
             } footer: {
-                Text("Transcripts stay in History until you delete them.")
+                Text("Dictations that still need you (a failed upload with Retry, text held for a secure field) stay until you deal with them.")
             }
 
             Section {
                 LocalAudioPrivacyRow(provider: owner, cloudDescription: "Sent to \(owner) with your key, transcribed every time")
                 LabeledContent("Transcript text") { Text("Sent back only for writing rules, Ask Anything and Translate") }
                 LabeledContent("Text around the cursor") { Text("Only if Fit to existing text and writing rules are on") }
+                LabeledContent("Where you are typing") { Text("App name, window title and browser page address, only with writing rules") }
                 LabeledContent("Meeting audio") { Text("Only if call recording is on; notes are made by \(provider.displayName)") }
                 LabeledContent("Dictionary terms") { Text("Sent with cloud transcription and cleanup, so names are spelled right") }
                 LabeledContent("Dictionary") { Text("Synced to your iPhone through your iCloud account") }
+                LabeledContent("History") { Text("Final text synced to your iPhone through your iCloud account") }
                 LabeledContent("Screen snapshots") { Text("Only if screen context and writing rules are on; never stored") }
                 LabeledContent("Ask Anything search") { Text("Only if a TinyFish key is saved; the search query goes to TinyFish") }
                 LabeledContent("Everything else") { Text("Never leaves this Mac") }

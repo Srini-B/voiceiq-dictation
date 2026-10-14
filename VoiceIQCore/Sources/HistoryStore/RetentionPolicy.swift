@@ -1,13 +1,42 @@
 import Foundation
 
 /// Audio retention (the setting Superwhisper lacks): purge audio files after N
-/// days while KEEPING transcripts + meta forever (until the user deletes them).
+/// days while KEEPING transcripts + meta (until the user deletes them, or
+/// until the separate transcript retention removes the whole dictation).
 /// Audio is never deleted before a transcript exists — that would break Retry.
 public struct RetentionPolicy: Sendable {
     public var audioRetentionDays: Int
+    public var transcriptRetentionDays: Int
 
-    public init(audioRetentionDays: Int = SettingsStore().audioRetentionDays) {
+    public init(audioRetentionDays: Int = SettingsStore().audioRetentionDays,
+                transcriptRetentionDays: Int = SettingsStore().transcriptRetentionDays) {
         self.audioRetentionDays = audioRetentionDays
+        self.transcriptRetentionDays = transcriptRetentionDays
+    }
+
+    /// Both purges, in the order that matters: whole dictations first, then
+    /// the audio of those that stay.
+    public func purge(now: Date = Date()) {
+        purgeExpiredTranscripts(now: now)
+        purgeExpiredAudio(now: now)
+    }
+
+    /// Statuses a dictation ends in. Anything else is in flight or waiting
+    /// for the user (Retry, a secure field, the chip) and stays whatever
+    /// its age.
+    static let finishedStatuses: [SessionMeta.Status] = [
+        .inserted, .copiedToClipboard, .recovered, .silent, .cancelled, .failed,
+    ]
+
+    public func purgeExpiredTranscripts(store: HistoryStore? = nil, now: Date = Date()) {
+        guard transcriptRetentionDays != 0, let store = store ?? (try? HistoryStore.standard()) else { return }
+        let cutoff = transcriptRetentionDays < 0
+            ? now.addingTimeInterval(60)
+            : now.addingTimeInterval(-Double(transcriptRetentionDays) * 86_400)
+        let removed = store.deleteExpired(before: cutoff, statuses: Self.finishedStatuses.map(\.rawValue))
+        if removed > 0 {
+            Log.history.info("RetentionPolicy: removed \(removed) dictation(s) older than \(self.transcriptRetentionDays)d")
+        }
     }
 
     public func purgeExpiredAudio(recordingsRoot: URL = FileLayout.recordingsRoot, now: Date = Date()) {

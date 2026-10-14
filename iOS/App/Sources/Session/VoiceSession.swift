@@ -3,18 +3,26 @@ import UIKit
 import VoiceIQBridge
 import VoiceIQCore
 
-/// The background voice session: the keep-alive engine that holds the mic
-/// open, the warm window, and everything the keyboard reads from the App Group.
+/// The background voice session: the keeper that lets keyboard taps record
+/// in place, and everything the keyboard reads from the App Group.
 ///
 /// A session starts when a keyboard tap opens the app (the one-time bounce)
-/// or when the Action button runs `ToggleDictationIntent`. It stays warm for
-/// `MobileSettings.warmWindow` after each dictation finishes, then ends and
-/// the mic closes; the next keyboard tap bounces again. The Live Activity is
+/// or when the Action button runs `ToggleDictationIntent`. One keeper holds it
+/// (`MobileSettings.KeepActiveMode`) for `MobileSettings.warmWindow` after
+/// each dictation, then the session ends:
+/// - Keep mic on: the mic stays open meanwhile.
+/// - Background audio: silent playback on a non-mixable session keeps the app
+///   up; the mic is off while idle.
+/// Once it ends, the next keyboard tap bounces again. The Live Activity is
 /// shown only for sessions the Action button started (iOS requires one for an
 /// audio-recording intent) and for meetings.
 @MainActor
 final class VoiceSession: ObservableObject {
-    @Published private(set) var isActive = false
+    typealias Keeper = MobileSettings.KeepActiveMode
+
+    /// What holds the session, or nil when there is none.
+    @Published private(set) var keeper: Keeper?
+    var isActive: Bool { keeper != nil }
     /// When the warm window runs out, while it is counting.
     @Published private(set) var warmUntil: Date?
 
@@ -30,7 +38,7 @@ final class VoiceSession: ObservableObject {
     var meetingStartedAt: Date? {
         didSet {
             publishIfChanged()
-            if meetingStartedAt == nil, oldValue != nil { scheduleWarmEnd() }
+            if meetingStartedAt == nil, oldValue != nil { becameIdle() }
         }
     }
 
@@ -73,8 +81,9 @@ final class VoiceSession: ObservableObject {
             }
             return
         }
-        try audio.start(preferBuiltInMic: MobileSettings.preferBuiltInMic)
-        isActive = true
+        let keeper = MobileSettings.keepActiveMode
+        try audio.start(preferBuiltInMic: MobileSettings.preferBuiltInMic, keeper: keeper)
+        self.keeper = keeper
         startedByActionButton = fromActionButton
         if fromActionButton { activity.start(activityState) }
         heartbeat = Timer.scheduledTimer(withTimeInterval: SharedStore.heartbeatInterval, repeats: true) { [weak self] _ in
@@ -82,7 +91,7 @@ final class VoiceSession: ObservableObject {
         }
         beat()
         publish(force: true)
-        SessionDiagnostics.note("session began (\(fromActionButton ? "action button" : "keyboard")), warm window \(MobileSettings.warmWindow.label)")
+        SessionDiagnostics.note("session began (\(fromActionButton ? "action button" : "keyboard")), keeper \(keeper.label), warm window \(MobileSettings.warmWindow.label)")
         // The dictation that opened the session starts right after this. If
         // none does (it was refused), count the warm window from now.
         DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
@@ -91,15 +100,26 @@ final class VoiceSession: ObservableObject {
         }
     }
 
-    /// Whether a dictation can start without opening the app: the session is
-    /// up, so the mic is already open.
-    var canRecordInBackground: Bool { isActive && audio.isRunning }
+    /// Whether a dictation can start without opening the app.
+    var canRecordInBackground: Bool {
+        keeper != nil && audio.isRunning
+    }
 
-    var keeperDescription: String { canRecordInBackground ? "open mic" : "none" }
+    var keeperDescription: String {
+        guard canRecordInBackground, let keeper else { return "none" }
+        return keeper.label.lowercased()
+    }
+
+    /// The setting changed. An idle session held by the other keeper ends, so
+    /// the next one starts with the new keeper.
+    func keepActiveModeChanged() {
+        guard let keeper, keeper != MobileSettings.keepActiveMode, dictationPhase == .warm, meetingStartedAt == nil else { return }
+        end()
+    }
 
     func end() {
-        guard isActive else { return }
-        isActive = false
+        guard let keeper else { return }
+        self.keeper = nil
         startedByActionButton = false
         cancelWarmEnd()
         heartbeat?.invalidate()
@@ -120,18 +140,23 @@ final class VoiceSession: ObservableObject {
         case .recording:
             cancelWarmEnd()
         case .processing where MobileSettings.warmWindow.seconds == 0 && meetingStartedAt == nil:
-            // "Never": the mic closes as soon as the dictation stops, but the
-            // session stays up until the text is delivered, so the keyboard
-            // and the Dynamic Island show "Writing…" meanwhile. It ends at
-            // `.warm`. Background time covers the transcription.
+            // "Never": the audio session closes as soon as the dictation
+            // stops, but the session stays up until the text is delivered, so
+            // the keyboard and the Dynamic Island show "Writing…" meanwhile.
+            // It ends at `.warm`. Background time covers the transcription.
             holdBackgroundTime()
             audio.stop()
-            SessionDiagnostics.note("mic closed (keep mic on: Never)")
+            SessionDiagnostics.note("audio session closed (warm window: Never)")
         case .warm:
-            scheduleWarmEnd()
+            becameIdle()
         default:
             break
         }
+    }
+
+    /// No dictation or meeting is running. The warm window counts down.
+    private func becameIdle() {
+        scheduleWarmEnd()
     }
 
     /// Counts the warm window from the end of the dictation (the text has

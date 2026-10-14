@@ -602,7 +602,9 @@ public final class DictationCoordinator: ObservableObject {
         }
         apply(.transcriptReady)
 
-        if session?.context.mode.handsTranscriptToCaller == true {
+        // An edited selection is typed over the selection like a translation
+        // is, instead of going to the answer card.
+        if session?.context.mode.handsTranscriptToCaller == true, !outcome.replacesSelection {
             lastResult = outcome.cleanedTranscript
             if session?.context.mode == .agent, let onAgentCommandReady {
                 onAgentCommandReady(outcome)
@@ -639,8 +641,8 @@ public final class DictationCoordinator: ObservableObject {
     private func failTranscription(sessionID: UUID, error: Error) async {
         guard session?.id == sessionID else { return }
         if session?.context.mode != .dictate {
-            if case .translate(let target) = session?.context.mode {
-                modeFailureMessage = "Couldn't translate to \(target)"
+            if case .translate(let targets) = session?.context.mode {
+                modeFailureMessage = "Couldn't translate to \(targets.joined(separator: " or "))"
             }
             updateMeta { $0.status = .failed; $0.errorCode = "mode_transform" }
             apply(.transcriptFailed(.network))
@@ -763,6 +765,9 @@ public final class DictationCoordinator: ObservableObject {
                 $0.status = .cancelled
                 $0.audioDurationSeconds = $0.audioDurationSeconds ?? duration
             }
+            // Said once the duration is known, so a cancel that leaves no
+            // trace never promises a row that is not there.
+            coachingHint = "Cancelled. Kept in History with Retry"
         } else {
             // Blips and short deliberate cancels leave no trace: the pill already
             // gave feedback in the moment; hidden audio is pure liability.

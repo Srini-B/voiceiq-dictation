@@ -20,8 +20,8 @@ struct DictationPane: View {
     @State private var showIdleDot = SettingsStore().showIdleIndicator
     @State private var noiseHandling = SettingsStore().experimentalNoiseHandling
     @State private var agentMode = SettingsStore().agentModeEnabled
-    @State private var translationTarget = SettingsStore().translationTargetLanguage
-    @State private var showingLanguages = false
+    @State private var translationTargets = SettingsStore().translationTargetLanguages
+    @State private var spelling = SettingsStore().spellingVariant
     @State private var muteOtherAudio = SettingsStore().muteOtherAudioWhileDictating
     @State private var screenContext = SettingsStore().screenContextEnabled
     @State private var fitToExistingText = SettingsStore().fitToExistingText
@@ -39,15 +39,7 @@ struct DictationPane: View {
                 ShortcutRecorderRow(action: .askAnything)
                 ShortcutRecorderRow(action: .translate)
                 ShortcutRecorderRow(action: .meetingToggle)
-                LabeledContent("Translation language") {
-                    Button(translationTarget) { showingLanguages.toggle() }
-                        .popover(isPresented: $showingLanguages, arrowEdge: .trailing) {
-                            LanguagePicker(selected: $translationTarget) {
-                                settings.setTranslationTargetLanguage(translationTarget)
-                                showingLanguages = false
-                            }
-                        }
-                }
+                TranslationTargetsRow(targets: $translationTargets)
             }
 
             Section {
@@ -124,6 +116,14 @@ struct DictationPane: View {
                         guard enabled != settings.skipShortDictationCleanup else { return }
                         settings.setSkipShortDictationCleanup(enabled)
                     }
+                Picker("Spelling", selection: $spelling) {
+                    ForEach(SpellingVariant.allCases, id: \.self) { Text($0.name).tag($0) }
+                }
+                .disabled(!cleanupPass)
+                .onChange(of: spelling) { _, variant in
+                    guard variant != settings.spellingVariant else { return }
+                    settings.setSpellingVariant(variant)
+                }
                 TextEditor(text: $instructions)
                     .font(.body)
                     .frame(minHeight: 180, maxHeight: 320)
@@ -198,7 +198,8 @@ struct DictationPane: View {
             // voiceiq://set drives this headlessly in DEBUG — the pane must not show
             // a stale toggle after the flag moved underneath it.
             case "experimentalNoiseHandling": noiseHandling = settings.experimentalNoiseHandling
-            case "translationTargetLanguage": translationTarget = settings.translationTargetLanguage
+            case "translationTargetLanguages": translationTargets = settings.translationTargetLanguages
+            case "spellingVariant": spelling = settings.spellingVariant
             case "muteOtherAudioWhileDictating": muteOtherAudio = settings.muteOtherAudioWhileDictating
             case "screenContextEnabled": screenContext = settings.screenContextEnabled
             case "fitToExistingText": fitToExistingText = settings.fitToExistingText
@@ -207,52 +208,5 @@ struct DictationPane: View {
             default: break
             }
         }
-    }
-}
-
-private struct LanguagePicker: View {
-    @Binding var selected: String
-    let onSelect: () -> Void
-    @State private var search = ""
-
-    private var languages: [GeminiLanguage] {
-        guard !search.isEmpty else { return GeminiLanguages.supported }
-        return GeminiLanguages.supported.filter {
-            $0.name.localizedCaseInsensitiveContains(search)
-                || $0.code.localizedCaseInsensitiveContains(search)
-        }
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            TextField("Search languages", text: $search)
-                .textFieldStyle(.roundedBorder)
-                .multilineTextAlignment(.leading)
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 0) {
-                    ForEach(languages) { language in
-                        Button {
-                            selected = language.name
-                            onSelect()
-                        } label: {
-                            Text(language.name)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 5)
-                                .background(
-                                    RoundedRectangle(cornerRadius: VoiceIQUI.Radius.small)
-                                        .fill(language.name == selected
-                                              ? Color.primary.opacity(VoiceIQUI.StateLayer.hover) : .clear)
-                                )
-                                .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-            }
-        }
-        .environment(\.layoutDirection, .leftToRight)
-        .padding(12)
-        .frame(width: 280, height: 360)
     }
 }
