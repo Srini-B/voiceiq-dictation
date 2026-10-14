@@ -33,7 +33,25 @@ two minor issues, both confirmed in the code.
   `translationTargetLanguages` setting. `docs/IOS.md` describes the new sync
   rule.
 
+CodeRabbit's review of PR #11 found three more issues, all confirmed:
+
+- Deleting a retried row before its re-upload succeeded queued no iCloud
+  delete, because `cloudIDs` relied on `cloudSyncedAt`. `mayBeInCloud` now
+  counts every finished row of this device, and both `delete` and
+  `deleteAll` use it. A delete for a record that was never uploaded fails
+  with `unknownItem`, which sync already ignores, so no new column is
+  needed.
+- `serverRecords` is cleared on every account change, so a change tag from
+  one account's database is never reused for another.
+- `architecture.md` states how the translate prompt picks among targets.
+  The doc matches `PromptV1+Modes.translatePrompt`.
+
 ## Verification
+
+- A second scratch XCTest (deleted) passed with the delete fix. A retried
+  row waiting to upload produces an iCloud delete on `delete` and on
+  `deleteAll`; a failed row does not. `swift test`: 146 pass, the 143
+  committed tests plus these 3.
 
 - A scratch XCTest (deleted) covered four cases: unchanged text stays
   synced, changed text uploads again, an older server copy does not mark the

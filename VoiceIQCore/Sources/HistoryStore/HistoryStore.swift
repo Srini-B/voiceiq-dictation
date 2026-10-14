@@ -183,9 +183,9 @@ public final class HistoryStore: @unchecked Sendable {
         }
     }
 
-    /// The row's id when a copy of it is in iCloud.
+    /// The row's id when a copy of it may be in iCloud.
     static func cloudIDs(_ record: DictationRecord) -> [String] {
-        record.isInCloud || record.isFromOtherDevice ? [record.id] : []
+        record.mayBeInCloud ? [record.id] : []
     }
 
     /// Removes rows in `statuses` that started before `cutoff`, with their
@@ -214,9 +214,7 @@ public final class HistoryStore: @unchecked Sendable {
     public func deleteAll(removeFolders: Bool, sparing activeFolder: URL? = nil) {
         do {
             let inCloud = try queue.write { db -> [String] in
-                let ids = try DictationRecord
-                    .filter(sql: "cloudSyncedAt IS NOT NULL OR origin IS NOT NULL")
-                    .fetchAll(db).map(\.id)
+                let ids = try DictationRecord.fetchAll(db).filter(\.mayBeInCloud).map(\.id)
                 try DictationRecord.deleteAll(db)
                 return ids
             }

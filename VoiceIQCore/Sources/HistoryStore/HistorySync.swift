@@ -255,6 +255,8 @@ extension HistorySync: CKSyncEngineDelegate {
     }
 
     private func accountChanged(_ event: CKSyncEngine.Event.AccountChange) {
+        // A cached server copy belongs to the previous account's database.
+        serverRecords = [:]
         switch event.changeType {
         case .signIn:
             engine?.state.add(pendingDatabaseChanges: [.saveZone(CKRecordZone(zoneID: Self.zoneID))])

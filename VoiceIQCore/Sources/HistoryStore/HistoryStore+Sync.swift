@@ -22,6 +22,16 @@ extension DictationRecord {
     /// Statuses whose text is final. Anything else is in flight, waiting for
     /// the user, or has no text worth another device's History.
     static let uploadableStatuses: [SessionMeta.Status] = [.inserted, .copiedToClipboard, .recovered]
+
+    /// Whether deleting the row should delete a record in iCloud. A retried
+    /// row waiting to upload again has no `cloudSyncedAt`, yet its earlier
+    /// copy is there, so every finished row of this device counts. Deleting a
+    /// record that was never uploaded fails with `unknownItem`, which sync
+    /// ignores.
+    var mayBeInCloud: Bool {
+        isInCloud || isFromOtherDevice
+            || Self.uploadableStatuses.contains { $0.rawValue == status }
+    }
 }
 
 extension HistoryStore {
