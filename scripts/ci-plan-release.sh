@@ -5,7 +5,8 @@
 #   EVENT=workflow_dispatch scripts/ci-plan-release.sh
 #
 # A push releases when it changes MARKETING_VERSION in project.yml and that
-# version has no v<version> tag yet. A manual run always releases (or dry-runs).
+# version has no v<version> tag yet. A manual run always releases (or dry-runs,
+# with DRY_RUN=1, even for a tagged version).
 # The build number must be higher than the previous version's, because Sparkle
 # and TestFlight both order by it.
 set -euo pipefail
@@ -27,7 +28,8 @@ case "${EVENT:?}" in
     ;;
 esac
 
-if [[ $release == true ]] && git rev-parse -q --verify "refs/tags/v$version" >/dev/null; then
+# A dry run publishes nothing, so it may rebuild a version that is already out.
+if [[ $release == true && -z "${DRY_RUN:-}" ]] && git rev-parse -q --verify "refs/tags/v$version" >/dev/null; then
   echo "v$version is already released; nothing to do" >&2
   release=false
 fi

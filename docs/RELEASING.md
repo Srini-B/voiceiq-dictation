@@ -127,26 +127,28 @@ asc --profile voiceiq profiles download --id PROFILE_ID --output VoiceiQ-macOS.p
 
 Name the installed file `<UUID>.provisionprofile` (the UUID inside the profile).
 
-**History sync (2026-10-13) needs three one-time steps before the next
-release.** The installed Developer ID profile was made with an empty
-container list (`icloud-container-identifiers: []`), and the iOS App Store
-profile has no iCloud keys at all, so both must be regenerated:
+**History sync (CloudKit).** Set up on 2026-10-14; nothing more is needed
+for a release. For reference, or to redo it:
 
-1. In the Developer portal, add the iCloud container `iCloud.io.blue.voiceiq`
-   to the App IDs `io.blue.voiceiq` (Mac) and `io.blue.voiceiq.ios` (iPhone),
-   under the iCloud capability (CloudKit, not only key-value storage).
-2. Delete and recreate "VoiceiQ macOS Developer ID" and "VoiceiQ iOS App
-   Store" (the asc commands above and below), install both, and check the
-   Mac one with `security cms -D -i <file>.provisionprofile | grep -A3
-   icloud-container-identifiers`: it must list the container.
-3. In the CloudKit Console, deploy the schema of `iCloud.io.blue.voiceiq` to
-   Production: record type `Dictation` with fields `text` (String),
-   `startedAt` (Date/Time), `durationSeconds` (Double), `appName` (String),
-   `device` (String), `status` (String), in a custom zone. The quickest way
-   is one dictation on a development build (an Xcode device build of the
-   iPhone app, or the Mac app signed with a development profile), which
-   creates the type in Development; then Deploy Schema Changes to
-   Production. The Mac Release entitlements pin
+1. The iCloud container `iCloud.io.blue.voiceiq` (description "VoiceiQ") is
+   registered in the Developer portal (Identifiers › iCloud Containers) and
+   assigned to the App IDs `io.blue.voiceiq` and `io.blue.voiceiq.ios`
+   (iCloud capability, "Include CloudKit support", Configure). The API key
+   cannot do this; `asc bundle-ids capabilities` has no container setting.
+   Changing a capability makes the App ID's profiles INVALID.
+2. "VoiceiQ macOS Developer ID" and "VoiceiQ iOS App Store" were deleted and
+   recreated with the asc commands above and below, then installed. Check a
+   profile with `security cms -D -i <file> | grep -A3
+   icloud-container-identifiers`: it must list the container. The keyboard
+   and Live Activity profiles have no iCloud and did not change.
+3. The CloudKit Console (container `iCloud.io.blue.voiceiq`) has record type
+   `Dictation` with fields `text` (String), `startedAt` (Date/Time),
+   `durationSeconds` (Double), `appName` (String), `device` (String) and
+   `status` (String), created in Development and deployed to Production
+   (Deploy Schema Changes). The app creates its zone `History` itself. A new
+   field must be added in Development and deployed the same way before a
+   release that writes it, because Production rejects unknown fields. The
+   Mac Release entitlements pin
    `com.apple.developer.icloud-container-environment` to Production so the
    Mac and the TestFlight iPhone app read the same records.
 
