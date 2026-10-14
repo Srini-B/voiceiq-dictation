@@ -53,6 +53,7 @@ public enum PromptV1 {
     private static func sanitizeLine(_ value: String?, limit: Int) -> String? {
         guard let value else { return nil }
         let flat = value.replacingOccurrences(of: "\n", with: " ")
+            .replacingOccurrences(of: "\r", with: " ")
             .replacingOccurrences(of: "<", with: "‹").replacingOccurrences(of: ">", with: "›")
             .trimmingCharacters(in: .whitespacesAndNewlines)
         guard !flat.isEmpty else { return nil }
