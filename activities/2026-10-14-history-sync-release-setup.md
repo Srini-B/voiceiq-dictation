@@ -32,6 +32,12 @@ release flow (bump version, push to main) to work without further steps.
    on a version that is already tagged used to plan `release=false` and
    skip every build job. It now plans the build when `DRY_RUN=1`. Real
    releases still skip a tagged version.
+5. `scripts/publish-github-release.sh`: the first branch dry run (run
+   38497041202) passed plan, notes, ios and macos, then failed in publish
+   with "release v0.6.0 already exists". In a dry run of a published
+   version the script now continues and verifies a new appcast instead of
+   the live one, which already lists that build. A real run still stops at
+   that check (run locally: exit 1, same message).
 
 ## Verification
 
