@@ -47,9 +47,12 @@ CodeRabbit raised five points. Three were fixed:
   (developers.openai.com/api/docs/guides/function-calling). Agent mode on
   the OpenAI provider used Chat Completions; it now uses the existing
   `.openAIResponses` transport, which the proxy setup already exercised.
-- A new install could upload its untouched default rules before its first
-  iCloud download and replace the rules stored there. A copy that was never
-  edited is no longer uploaded while iCloud shows no value.
+- A device could upload its rules before its first iCloud download and
+  replace a newer value stored there. The first fix covered only unedited
+  copies; CodeRabbit pointed out that an older edited copy had the same
+  problem. Now, while iCloud shows no value, only an edit made just now is
+  uploaded. Start, refresh, and iCloud-change passes upload only after they
+  have read a stored value and merged with it.
 
 Not changed: stamping edits later than the iCloud value when the clock moves
 backward (`DictionarySync` has the same behavior and device clocks are

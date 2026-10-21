@@ -53,7 +53,7 @@ public final class WritingRulesSync {
         }
         NotificationCenter.default.addObserver(forName: .gtSettingDidChange, object: nil, queue: .main) { note in
             guard note.object as? String == "customInstructions" else { return }
-            Task { @MainActor in WritingRulesSync.shared.reconcile(because: "local edit") }
+            Task { @MainActor in WritingRulesSync.shared.reconcile(because: "local edit", localEdit: true) }
         }
         store.synchronize()
         reconcile(because: "start")
@@ -67,7 +67,7 @@ public final class WritingRulesSync {
         reconcile(because: "refresh")
     }
 
-    private func reconcile(because reason: String) {
+    private func reconcile(because reason: String, localEdit: Bool = false) {
         let settings = SettingsStore()
         let local = settings.writingRulesSnapshot
         let store = NSUbiquitousKeyValueStore.default
@@ -77,10 +77,10 @@ public final class WritingRulesSync {
             settings.applySyncedWritingRules(merged)
         }
         guard merged != remote else { return }
-        // Before the first download a new install sees no value even when
-        // iCloud holds one. Rules never edited on this device have nothing to
-        // add, and writing them then could replace that value unread.
-        guard remote != nil || merged.updatedAt != .distantPast else { return }
+        // Until the first download finishes, iCloud shows no value even when
+        // it holds a newer one. Only an edit made just now is certain to be
+        // newest; anything older waits until the stored value can be compared.
+        guard remote != nil || localEdit else { return }
         guard let data = try? JSONEncoder().encode(merged), data.count <= Self.maxBytes else {
             Log.session.error("writing rules sync: too large for iCloud key-value storage, kept on this device")
             return

@@ -338,10 +338,10 @@ resets the other device. `SettingsStore.setCustomInstructions` stamps an edit
 only when the text changes, and stores text equal to the defaults as "use the
 defaults". Rules edited before sync existed have no stamp and count as the
 oldest edit; when two such copies meet, custom rules win over the defaults.
-A copy with no stamp is not uploaded while iCloud shows no value: a new
-install sees no value until its first download finishes, and writing then
-could replace rules it has not read. It goes up with its next edit, or once
-another device has written a value.
+While iCloud shows no value, only an edit made just now is uploaded: until
+its first download finishes a device sees no value even when iCloud holds a
+newer one, and writing an older copy then could replace it. An older copy
+goes up once the stored value can be compared, or with the next edit.
 The value is capped at 64 KB so the dictionary keeps most of the 1 MB store.
 
 ### History sync
