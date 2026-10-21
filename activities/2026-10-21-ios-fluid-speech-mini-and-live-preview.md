@@ -53,9 +53,11 @@ the Neural Engine keeps up.
 ## Local meetings
 
 FluidVoice's Fluid Meet runs Fluid Speech Mini for words and Nemotron 3
-Diarization for speakers, all on device. The same pair now transcribes a
-saved meeting here when "Transcribe meetings on device" is on and both
-models are downloaded; the cloud writing model still produces the notes.
+Diarization for speakers, all on device. On the Mac the same pair now
+transcribes a saved meeting when "Transcribe meetings on device" is on and
+both models are downloaded; the cloud writing model still produces the notes.
+iPhone and iPad run Fluid Speech Mini alone, skip the diarizer, and label the
+transcript as one speaker (`LocalMeetingTranscriber.diarizes`).
 
 - Diarizer: `FluidInference/nemotron-3-diarization-coreml`, revision
   `25a90f97`, `monolithic/v2/` offline bundle plus `learnable_sil_emb.bin`,

@@ -80,6 +80,7 @@ the right to contribute it under this repository's license.
    modal; nothing is silently discarded.
 10. **No telemetry.** PRs adding analytics, tracking, or phone-home behavior will
    be declined. The only network hosts are the model services the user has
-   keys for (Gemini API, OpenAI API), plus TinyFish when the user has entered a key for it.
+   keys for (Gemini API, OpenAI API, ElevenLabs API), plus TinyFish when the
+   user has entered a key for it.
 11. **Keep files small.** Around 500 lines per source file; split when it improves
    clarity, not to hit a number.

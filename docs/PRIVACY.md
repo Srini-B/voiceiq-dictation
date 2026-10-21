@@ -190,10 +190,11 @@ the clipboard.
 ## Verify it
 
 - Build from source (`./scripts/build.sh`).
-- Watch traffic with Little Snitch or `nettop` — a dictation reaches exactly
-  one model host, the one the active route names, plus `api.elevenlabs.io`
-  first when ElevenLabs is the transcription source (two TinyFish hosts appear
-  only after you add a TinyFish key).
+- Watch traffic with Little Snitch or `nettop` — a dictation reaches the
+  transcription host the active route names, and no other model host, except
+  that with ElevenLabs as the source the audio goes to `api.elevenlabs.io`
+  and the transcript then goes to the selected provider for the writing pass:
+  two hosts (two TinyFish hosts appear only after you add a TinyFish key).
 - Read the prompts: they are source files. The writing-rules pass is
   [PromptV1.swift](../VoiceIQCore/Sources/FormattingPipeline/PromptV1.swift) plus
   the default custom instructions in

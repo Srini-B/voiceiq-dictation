@@ -135,8 +135,9 @@ you through it:
 
 **Cost:** you pay the provider for what you dictate, at
 [Gemini API pricing](https://ai.google.dev/pricing) (a free tier exists) or
-[OpenAI API pricing](https://developers.openai.com/api/docs/pricing); a typical
-dictation is a few seconds of audio. VoiceiQ itself is free and has no account.
+[OpenAI API pricing](https://developers.openai.com/api/docs/pricing), plus
+[ElevenLabs pricing](https://elevenlabs.io/pricing/api) for Scribe when you
+add that key; a typical dictation is a few seconds of audio. VoiceiQ itself is free and has no account.
 
 **Models:**
 
@@ -155,8 +156,9 @@ Save an ElevenLabs key in Settings → Advanced (Mac) or Provider & Keys
 (iPhone, iPad) and the **Transcription** and **Meeting transcription** pickers
 in Settings → Dictation (**Notes transcription** on iPhone and iPad) gain an
 ElevenLabs segment. Dictation, Ask Anything,
-Translate and meetings then send their audio to Scribe v2 (`scribe_v2`, with
-up to 100 dictionary terms as `keyterms`, and speaker labels for meetings),
+Translate and meetings then send their audio to Scribe v2 (`scribe_v2`;
+Dictation, Ask Anything and Translate add up to 100 dictionary terms as
+`keyterms`, meetings ask for speaker labels instead),
 and the selected provider receives only the transcript for the writing pass
 and the notes. ElevenLabs has no live socket, so real-time transcription
 shows no text while you speak on that source. Remove the key and both
@@ -170,7 +172,7 @@ Settings → Advanced can pin other model names for either provider.
 
 ```
 key ─▶ capture (CAF on disk from t=0) ─▶ key ─▶ FLAC ─▶ transcribe (Gemini, OpenAI or ElevenLabs)
-                    │  (live socket streams text meanwhile)     │  (chunked past 10 min)
+                    │  (Gemini/OpenAI live socket streams text) │  (chunked past 10 min)
                     ▼                                           ▼
    cursor ◀─ insert (AX → paste → clipboard) ◀─ validate ◀─ writing-rules pass
       │                                           (gemini-3.8-flash or gpt-6-luna, with screenshots)

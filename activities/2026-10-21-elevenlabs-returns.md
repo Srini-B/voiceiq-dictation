@@ -65,6 +65,6 @@ on-device settings that landed since.
   and the ElevenLabs segment appearing after a key is saved was not seen on
   screen. The client is the 2026-10-05 code with `scribe_v2`, against the API
   reference read 2026-09-28.
-- Shared `MeetingEngine` failure strings still say "Meeting" and "Settings →
-  Advanced" on iPhone and iPad, where the tab is now Notes and keys live in
-  Provider & Keys.
+- Shared `MeetingEngine` failure strings said "Meeting" and "Settings →
+  Advanced" on iPhone and iPad, where the tab is Notes and keys live in
+  Provider & Keys. Fixed in [the PR #13 review pass](2026-10-21-pr13-review-fixes.md).

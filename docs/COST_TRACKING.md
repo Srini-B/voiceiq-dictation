@@ -1,6 +1,6 @@
 # Cost tracking
 
-VoiceiQ meters every model call, Gemini and OpenAI, and shows the result under
+VoiceiQ meters every model call, Gemini, OpenAI and ElevenLabs, and shows the result under
 Settings → Cost Analysis (`voiceiq://settings/cost`) and per dictation in
 History. Costs are in US dollars.
 

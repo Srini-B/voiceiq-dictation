@@ -27,14 +27,16 @@ In-process dictation has the same deadlines as the Mac helper
 load, then at least 120 seconds or twice the recording duration to transcribe.
 Core ML work cannot be cancelled, so past the deadline the session is
 abandoned, its models are released once the work ends, and the saved recording
-goes to cloud transcription. On-device meetings on iOS do not have this
-deadline yet.
+goes to cloud transcription. An on-device meeting has the Mac helper's budget,
+`TimeoutPolicy.localMeeting` (at least ten minutes, or three times the audio);
+past it the in-process run is abandoned the same way and the meeting goes to
+cloud transcription when a key is stored.
 
 ## Download and delete
 
 1. Set Transcription to On device.
-2. Select **Download** beside **Fluid Speech Mini** or **Nemotron 3.5**.
-   Fluid Speech Mini downloads 252.7 MB; Nemotron downloads 664.8 MB.
+2. Select **Download** beside **Fluid Speech Mini** (252.7 MB) or, on the
+   Mac, **Nemotron 3.5** (664.8 MB).
 3. Wait for download and file verification. Progress and Cancel remain available.
 4. Select a model row to use it. The checkmark shows the selected model.
 5. Use the trash icon and confirm **Delete** to remove a downloaded model,

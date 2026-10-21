@@ -43,6 +43,7 @@ meetings did not: they required the 199 MB diarizer on both platforms.
 ## Gaps
 
 - No physical-device meeting run; the simulator cannot be fed meeting audio.
-- The iOS in-process meeting decode still has no deadline (dictation has one).
+- The iOS in-process meeting decode had no deadline at first; added in
+  [the PR #13 review pass](2026-10-21-pr13-review-fixes.md).
 - The Mac release build was not rebuilt; the Mac code path is unchanged apart
   from the optional wire field.
