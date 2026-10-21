@@ -36,6 +36,16 @@ model says what is missing.
 - First shortcut press opens the panel and listens. While listening a press
   ends the command. While idle a press listens again. Only the panel's Stop
   button closes it; click-away and Esc do nothing.
+- While the panel is open, the dictation key (fn by default) also speaks to
+  the agent: a press starts an `.agent` session, the next press ends it. The
+  panel never takes focus, so without this a dictation would land in the app
+  behind it. The intent loop in `DictationController.start()` routes `.begin`
+  to `startAgentListening()` when `agent.isOpen` and no session is running;
+  it is a no-op while the agent is working or has no model. A hands-free
+  dictation started from the menu while the panel is open still stops on
+  the dictation key. A session the key started can end from
+  the Agent shortcut or the panel's Done button, so every terminal
+  coordinator state resets the hotkey grammar (`transition(to:)`).
 - The panel is the pill (`PillState.agent`) at the Ask Anything answer size
   (560×300 max). `AgentPanelView` renders the transcript: commands, observation
   lines, actions with status, confirmations, answers, failures.

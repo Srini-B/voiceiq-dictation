@@ -142,8 +142,9 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
                 rawTranscript: trimmedRaw,
                 cleanedTranscript: text,
                 modelID: transcript.modelID,
-                cleanupNote: policy.cleanupPass && skipShortCleanup
-                    ? "Writing rules skipped: dictation is 5 seconds or less" : nil
+                cleanupSkip: policy.cleanupPass && skipShortCleanup
+                    ? CleanupSkip(cause: .shortDictation, note: "Writing rules skipped: dictation is 5 seconds or less")
+                    : nil
             )
         }
 
@@ -156,7 +157,7 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
             rawTranscript: trimmedRaw,
             cleanedTranscript: cleanup.text,
             modelID: "\(transcript.modelID)+\(writingModel)",
-            cleanupNote: cleanup.note
+            cleanupSkip: cleanup.skip
         )
     }
 

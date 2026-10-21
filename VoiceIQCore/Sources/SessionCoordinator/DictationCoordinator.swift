@@ -12,6 +12,8 @@ public final class DictationCoordinator: ObservableObject {
     @Published public private(set) var state: DictationState = .idle
     @Published public private(set) var micLevel: Float = 0
     @Published public private(set) var lastResult: String?
+    /// Why the writing rules did not shape `lastResult`, when they were on and did not.
+    public private(set) var lastCleanupSkip: CleanupSkip?
     @Published public private(set) var coachingHint: String?
     @Published public private(set) var modeFailureMessage: String?
     @Published public private(set) var partialTranscript = ""
@@ -606,6 +608,7 @@ public final class DictationCoordinator: ObservableObject {
         // is, instead of going to the answer card.
         if session?.context.mode.handsTranscriptToCaller == true, !outcome.replacesSelection {
             lastResult = outcome.cleanedTranscript
+            lastCleanupSkip = outcome.cleanupSkip
             if session?.context.mode == .agent, let onAgentCommandReady {
                 onAgentCommandReady(outcome)
             } else {
@@ -635,6 +638,7 @@ public final class DictationCoordinator: ObservableObject {
             apply(.insertionBlockedSecure)
         }
         lastResult = outcome.cleanedTranscript
+        lastCleanupSkip = outcome.cleanupSkip
         session = nil
     }
 
