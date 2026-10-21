@@ -10,23 +10,17 @@ struct EnglishTools: Sendable {
     var vad: VadManager?
     var vocabulary: ParakeetVocabulary?
 
-    static func load(root: URL?, vocabulary terms: [CustomVocabularyTerm] = []) async throws -> EnglishTools {
+    /// `speechDetection: false` skips the VAD for a decoder that never trims.
+    static func load(
+        root: URL?, vocabulary terms: [CustomVocabularyTerm] = [], speechDetection: Bool = true
+    ) async throws -> EnglishTools {
         guard let root else {
             Log.transcription.notice("English tools not installed; using base model audio path")
             return EnglishTools()
         }
         var tools = EnglishTools()
-        do {
-            let configuration = MLModelConfiguration()
-            configuration.computeUnits = .cpuAndNeuralEngine
-            let model = try MLModel(
-                contentsOf: root.appendingPathComponent("vad", isDirectory: true)
-                    .appendingPathComponent(ModelNames.VAD.sileroVadFile),
-                configuration: configuration
-            )
-            tools.vad = VadManager(config: VadConfig(defaultThreshold: SpeechBoundaries.threshold), vadModel: model)
-        } catch {
-            Log.transcription.notice("Voice activity detection unavailable: \(error.localizedDescription, privacy: .public)")
+        if speechDetection {
+            tools.vad = loadVad(root: root)
         }
         try Task.checkCancellation()
         if !terms.isEmpty {
@@ -43,11 +37,27 @@ struct EnglishTools: Sendable {
         try Task.checkCancellation()
         return tools
     }
+
+    private static func loadVad(root: URL) -> VadManager? {
+        do {
+            let configuration = MLModelConfiguration()
+            configuration.computeUnits = .cpuAndNeuralEngine
+            let model = try MLModel(
+                contentsOf: root.appendingPathComponent("vad", isDirectory: true)
+                    .appendingPathComponent(ModelNames.VAD.sileroVadFile),
+                configuration: configuration
+            )
+            return VadManager(config: VadConfig(defaultThreshold: SpeechBoundaries.threshold), vadModel: model)
+        } catch {
+            Log.transcription.notice("Voice activity detection unavailable: \(error.localizedDescription, privacy: .public)")
+            return nil
+        }
+    }
 }
 
 enum SpeechAudio {
     /// Recordings up to five minutes (19.2 MB per Float copy) are processed
-    /// whole in memory with VAD trimming and vocabulary rescoring. Longer
+    /// whole in memory, which vocabulary rescoring and Nemotron's VAD trim need. Longer
     /// recordings stream from disk so memory stays bounded.
     static let wholeFileFrames: Int64 = 5 * 60 * 16_000
 

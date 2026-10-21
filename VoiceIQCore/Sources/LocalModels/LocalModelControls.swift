@@ -38,7 +38,7 @@ public struct LocalModelControls: View {
         }
     }
 
-    static let englishNote = "On-device dictation is English only. English tools add speech detection and Fluid Speech Mini dictionary correction. Without them, on-device transcription still works."
+    static let englishNote = "On-device dictation is English only. English tools add dictionary correction for Fluid Speech Mini. Without them, on-device transcription still works."
 }
 
 /// The speaker diarizer's row, offered while meetings are kept on device.

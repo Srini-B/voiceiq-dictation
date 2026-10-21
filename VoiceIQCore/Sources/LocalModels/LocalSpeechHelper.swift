@@ -77,7 +77,7 @@ private actor ParakeetHelperClient {
                 input = commands.fileHandleForWriting
                 output = replies.fileHandleForReading
             }
-            guard case .ready = await exchange(.load(model: model, directory: directory, audio: audio, streaming: streaming, options: options), id: id, timeout: 120) else {
+            guard case .ready = await exchange(.load(model: model, directory: directory, audio: audio, streaming: streaming, options: options), id: id, timeout: TimeoutPolicy.localLoad) else {
                 cancel(id: id)
                 return
             }
@@ -98,7 +98,7 @@ private actor ParakeetHelperClient {
     func transcribe(id: UUID, frames: Int64) async -> LocalSpeechOutput? {
         guard owner == id else { return nil }
         let reply = await exchange(.transcribe(frames: frames), id: id,
-                                   timeout: max(120, Double(frames) / 8_000))
+                                   timeout: TimeoutPolicy.localTranscribe(frames: frames))
         guard owner == id else { return nil }
         owner = nil
         guard case .transcript(let text) = reply else { terminate(); return nil }

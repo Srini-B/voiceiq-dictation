@@ -55,7 +55,10 @@ actor ParakeetSession: LocalSpeechSession {
         let toolsRoot = options.toolsDirectory
         let task = Task.detached(priority: .userInitiated) { () throws -> Loaded in
             try Task.checkCancellation()
-            async let tools = EnglishTools.load(root: toolsRoot, vocabulary: terms)
+            // No VAD: trimming silent edges changed Fluid Speech Mini's words
+            // in the middle of a recording and never improved one (15-dictation
+            // replay, 2026-10-21). The decoder sees the recording as captured.
+            async let tools = EnglishTools.load(root: toolsRoot, vocabulary: terms, speechDetection: false)
             let models = try AsrModels.loadLocal(from: directory, version: .v3)
             return (models, try await tools)
         }
@@ -69,7 +72,7 @@ actor ParakeetSession: LocalSpeechSession {
             if !terms.isEmpty, tools.vocabulary == nil {
                 Log.transcription.notice("Parakeet vocabulary spotting unavailable; \(terms.count) terms not applied")
             }
-            Log.transcription.notice("Parakeet cold load complete in \(Date().timeIntervalSince(started), format: .fixed(precision: 2))s, vad=\(self.tools.vad != nil), vocabulary=\(self.tools.vocabulary != nil)")
+            Log.transcription.notice("Parakeet cold load complete in \(Date().timeIntervalSince(started), format: .fixed(precision: 2))s, vocabulary=\(self.tools.vocabulary != nil)")
         } catch {
             loading = nil
             Log.transcription.notice("Parakeet load failed; using cloud: \(error.localizedDescription, privacy: .public)")
@@ -82,21 +85,19 @@ actor ParakeetSession: LocalSpeechSession {
         let tools = tools
         let task = Task { () throws -> LocalSpeechOutput? in
             guard SpeechAudio.fitsInMemory(framesWritten) else {
-                // FluidAudio's disk-backed path keeps memory constant. VAD
-                // trimming and vocabulary rescoring need the whole recording
-                // in memory, so a long recording is decoded from the raw file.
+                // FluidAudio's disk-backed path keeps memory constant.
+                // Vocabulary rescoring needs the whole recording in memory,
+                // so a long recording is decoded from the raw file.
                 try SpeechAudio.validate(audioURL, frames: framesWritten)
-                Log.transcription.notice("Parakeet long recording (\(framesWritten) frames): disk-backed decode without VAD or vocabulary")
+                Log.transcription.notice("Parakeet long recording (\(framesWritten) frames): disk-backed decode without vocabulary")
                 var decoder = TdtDecoderState.make(decoderLayers: await manager.decoderLayerCount)
                 let result = try await manager.transcribeDiskBacked(audioURL, decoderState: &decoder, language: .english)
                 try Task.checkCancellation()
                 return EnglishText.output(original: result.text, confidence: result.confidence)
             }
-            let recorded = try SpeechAudio.read(audioURL, frames: framesWritten)
             // The decoder and CTC spotter see the same samples, so token
             // timings and CTC frames share one clock.
-            let samples = try await SpeechBoundaries.trimmed(recorded, vad: tools.vad)
-            try Task.checkCancellation()
+            let samples = try SpeechAudio.read(audioURL, frames: framesWritten)
             var decoder = TdtDecoderState.make(decoderLayers: await manager.decoderLayerCount)
             let result = try await manager.transcribe(samples, decoderState: &decoder, language: .english)
             try Task.checkCancellation()

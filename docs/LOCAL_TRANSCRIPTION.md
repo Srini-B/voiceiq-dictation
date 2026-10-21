@@ -17,6 +17,14 @@ retain runtime caches there, so returning physical memory to its original
 baseline within a fixed time is not guaranteed. Downloads run in the
 foreground; keep the iOS app open until complete.
 
+In-process dictation has the same deadlines as the Mac helper
+(`TimeoutPolicy.localLoad`, `TimeoutPolicy.localTranscribe`): 120 seconds to
+load, then at least 120 seconds or twice the recording duration to transcribe.
+Core ML work cannot be cancelled, so past the deadline the session is
+abandoned, its models are released once the work ends, and the saved recording
+goes to cloud transcription. On-device meetings on iOS do not have this
+deadline yet.
+
 ## Download and delete
 
 1. Turn on local transcription.
@@ -186,16 +194,25 @@ How each mode uses the pack:
 
 | Mode | Speech detection | Dictionary |
 |---|---|---|
-| Fluid Speech Mini | Trims silent edges up to five minutes | CTC rescoring up to five minutes, needs the pack |
+| Fluid Speech Mini | Not loaded | CTC rescoring up to five minutes, needs the pack |
 | Nemotron real-time | Logs speech start and end only | None |
 | Nemotron file | Trims silent edges up to five minutes | None |
 
-Speech detection never splits a recording or removes audio between words. It
-trims an edge only when more than 2 seconds of silence precede the first or
-follow the last detected speech, and it keeps 1 second of margin. A recording
-with no detected speech is decoded in full. If detection fails, the untrimmed
-audio is used. The Fluid Speech Mini decoder and the CTC spotter see the same samples,
-so their timings share one clock.
+Fluid Speech Mini decodes the recording as captured and does not load the
+speech detector. Replaying 15 dictations with the pack showed that edge
+trimming changed only two of them, and both lost accuracy (the tail cut moved
+words and casing mid-sentence); none improved. It also added about 0.5 s per
+dictation. Nemotron file mode keeps trimming. There, speech detection never
+splits a recording or removes audio between words. It trims an edge only when
+more than 2 seconds of silence precede the first or follow the last detected
+speech, and it keeps 1 second of margin. A recording with no detected speech
+is decoded in full. If detection fails, the untrimmed audio is used.
+
+With a non-empty Dictionary, the CTC pass adds about 0.3 to 0.5 s per
+dictation plus about 0.02 s per second of audio, after a one-time Core ML
+compile on first load (about 15 s on an M2 Mac mini). The Fluid Speech Mini
+decoder and the CTC spotter see the same samples, so their timings share one
+clock.
 
 Nemotron does not receive dictionary terms. FluidAudio's decode-time hotword
 bias is a greedy boost with no recovery: a short term such as "Cal" turned a

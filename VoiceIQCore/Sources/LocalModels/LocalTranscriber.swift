@@ -1,4 +1,5 @@
 import Foundation
+import os
 import VoiceIQSpeech
 
 /// The CAF remains authoritative. Missing stream bytes disqualify local output,
@@ -114,20 +115,28 @@ public final class LocalTranscriber: DictationStreaming, Sendable {
     public func finish(framesWritten: Int64) async -> TranscriptionResult? {
         partialSink.finish()
         wake.finish()
-        let text = await withTaskCancellationHandler {
-            await pump.value
-            guard !Task.isCancelled, !strict || (!ring.didDrop && ring.acceptedBytes == framesWritten * 2) else {
-                return nil as LocalSpeechOutput?
+        let deadline = TimeoutPolicy.localLoad + TimeoutPolicy.localTranscribe(frames: framesWritten)
+        let outcome = await withTaskCancellationHandler {
+            await Self.bounded(seconds: deadline) { [self] in
+                await pump.value
+                guard !strict || (!ring.didDrop && ring.acceptedBytes == framesWritten * 2) else {
+                    return nil as LocalSpeechOutput?
+                }
+                return await worker.transcribe(framesWritten: framesWritten)
             }
-            return await worker.transcribe(framesWritten: framesWritten)
         } onCancel: {
             self.pump.cancel()
             Task { await self.worker.stop() }
         }
-        await worker.stop()
+        if case .finished = outcome {
+            await worker.stop()
+        } else {
+            Log.transcription.notice("On-device transcription passed \(deadline, format: .fixed(precision: 0))s; using saved audio with cloud transcription")
+            Task { await worker.stop() }
+        }
         await LocalModelStore.store(for: model).releaseSession(id: id)
         await LocalModelStore.englishTools.releaseSession(id: id)
-        guard !Task.isCancelled, let text else { return nil }
+        guard !Task.isCancelled, case .finished(let text?) = outcome else { return nil }
         if let confidence = text.confidence {
             Log.transcription.notice("Parakeet token confidence (uncalibrated): \(confidence)")
         }
@@ -135,6 +144,33 @@ public final class LocalTranscriber: DictationStreaming, Sendable {
                           usage: TokenUsage(reportedCostUSD: 0, audioSeconds: Double(framesWritten) / 16_000))
         return TranscriptionResult(rawTranscript: text.original, cleanedTranscript: text.normalized,
                                    modelID: model.modelID, normalizedTranscript: text.normalized)
+    }
+
+    private enum Bounded<T: Sendable>: Sendable {
+        case finished(T)
+        case timedOut
+    }
+
+    /// Core ML work cannot be cancelled, so a stalled in-process session is
+    /// abandoned instead of joined: past the deadline the caller moves on and
+    /// the work keeps its task. The Mac helper bounds its own steps with the
+    /// same numbers and is killed first, so this fires only in-process (iOS).
+    private static func bounded<T: Sendable>(
+        seconds: TimeInterval, _ operation: @escaping @Sendable () async -> T
+    ) async -> Bounded<T> {
+        let settled = OSAllocatedUnfairLock(initialState: false)
+        let claim: @Sendable () -> Bool = { settled.withLock { let first = !$0; $0 = true; return first } }
+        return await withCheckedContinuation { continuation in
+            let timer = Task {
+                try? await Task.sleep(for: .seconds(seconds))
+                if claim() { continuation.resume(returning: .timedOut) }
+            }
+            Task {
+                let value = await operation()
+                timer.cancel()
+                if claim() { continuation.resume(returning: .finished(value)) }
+            }
+        }
     }
 
     public func abort() async {

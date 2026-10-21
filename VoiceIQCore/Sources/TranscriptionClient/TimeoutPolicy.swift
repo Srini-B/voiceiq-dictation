@@ -21,6 +21,14 @@ public enum TimeoutPolicy {
     /// a ten-minute one is refused with Retry-After up to 60 s.
     public static let rateLimitWait: TimeInterval = 65
 
+    /// On-device session load, including the first-use Core ML compile of a
+    /// model and the English tools.
+    public static let localLoad: TimeInterval = 120
+    /// On-device final decode: twice the audio length, at least two minutes.
+    public static func localTranscribe(frames: Int64) -> TimeInterval {
+        max(120, Double(frames) / 8_000)
+    }
+
     /// Overall per-request deadline. Scales gently with audio length:
     /// 5s clip → 31s; 10min clip → 2.5min. Never the unbounded 2×duration formula.
     public static func overallDeadline(audioDuration: TimeInterval) -> TimeInterval {
