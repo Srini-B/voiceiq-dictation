@@ -15,6 +15,13 @@ shortcut or the panel's mic button.
   the coordinator's insert path. The next press ends the command the usual
   way. If the agent has no model or is still working, the press is ignored
   and the grammar is reset so it does not arm a phantom session.
+- Review fix (PR #12, CodeRabbit): the agent route applies only when the
+  coordinator is idle or terminal. A hands-free dictation started from the
+  menu item or `voiceiq://start-hands-free` while the panel is open keeps
+  the dictation key as its stop through the refused-begin path. Verified on
+  the notarized build: panel open, URL start, speech, ⌃⌥D → "begin ignored:
+  session already active", finalize, cleanup, insert; panel open and idle,
+  ⌃⌥D → "dictation key speaks to the agent".
 - `startAgentListening()` now reports whether it began, so the key path
   can reset the grammar when it did not.
 - `transition(to:)` resets the hotkey grammar on every terminal coordinator

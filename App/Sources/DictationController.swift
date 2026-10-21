@@ -137,8 +137,11 @@ final class DictationController {
                 }
                 // While the agent panel is open the dictation key speaks to
                 // the agent. The panel never takes focus, so a plain
-                // dictation would land in the app behind it instead.
-                if intent == .begin, self.agent.isOpen {
+                // dictation would land in the app behind it instead. Only when
+                // nothing is running: a hands-free dictation started from the
+                // menu keeps the key as its stop (refused-begin path below).
+                if intent == .begin, self.agent.isOpen,
+                   self.coordinator.state == .idle || self.coordinator.state.isTerminal {
                     Log.hotkey.info("dictation key speaks to the agent")
                     if !self.agent.canRun || self.agent.isBusy || !self.startAgentListening() {
                         self.engine.resetGrammar()

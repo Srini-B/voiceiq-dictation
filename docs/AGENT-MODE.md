@@ -40,8 +40,10 @@ model says what is missing.
   the agent: a press starts an `.agent` session, the next press ends it. The
   panel never takes focus, so without this a dictation would land in the app
   behind it. The intent loop in `DictationController.start()` routes `.begin`
-  to `startAgentListening()` when `agent.isOpen`; it is a no-op while the
-  agent is working or has no model. A session the key started can end from
+  to `startAgentListening()` when `agent.isOpen` and no session is running;
+  it is a no-op while the agent is working or has no model. A hands-free
+  dictation started from the menu while the panel is open still stops on
+  the dictation key. A session the key started can end from
   the Agent shortcut or the panel's Done button, so every terminal
   coordinator state resets the hotkey grammar (`transition(to:)`).
 - The panel is the pill (`PillState.agent`) at the Ask Anything answer size
