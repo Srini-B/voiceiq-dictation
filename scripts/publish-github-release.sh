@@ -8,8 +8,10 @@
 # Needs gh signed in with push access, release notes, and the Sparkle EdDSA
 # private key: login keychain account "voiceiq", or a key file exported from it
 # in SPARKLE_ED_KEY_FILE. RELEASE_NOTES is the GitHub release body and
-# SPARKLE_NOTES the text in the update alert (Markdown); both default to
-# release-notes/<version>.md. CI writes them with scripts/generate-release-notes.py.
+# SPARKLE_NOTES this version's notes for the update alert (Markdown), which
+# scripts/sparkle-release-notes.py combines with the earlier versions' notes;
+# both default to release-notes/<version>.md. CI writes them with
+# scripts/generate-release-notes.py.
 # See docs/UPDATES.md.
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -74,7 +76,8 @@ fi
 
 echo "▸ Generating appcast for $VERSION ($BUILD)"
 cp "$ZIP" "$STAGE/"
-cp "$SPARKLE_NOTES" "$STAGE/VoiceiQ-$VERSION.md"
+python3 scripts/sparkle-release-notes.py "$STAGE/appcast.xml" "$BUILD" "$VERSION" "$SPARKLE_NOTES" \
+  "https://github.com/$REPO/releases" > "$STAGE/VoiceiQ-$VERSION.html"
 key_args=(--account voiceiq)
 [[ -n "${SPARKLE_ED_KEY_FILE:-}" ]] && key_args=(--ed-key-file "$SPARKLE_ED_KEY_FILE")
 "$SPARKLE_BIN/generate_appcast" "${key_args[@]}" \
