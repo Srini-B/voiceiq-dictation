@@ -126,7 +126,7 @@ struct AgentPanelView: View {
 
     private var phaseLine: String {
         switch model.phase {
-        case .idle: return "Press the Agent shortcut and speak"
+        case .idle: return "Press the Agent shortcut or \(SettingsStore().dictationTrigger.displayName) and speak"
         case .listening: return "Listening"
         case .transcribing: return "Transcribing"
         case .thinking: return "Working"

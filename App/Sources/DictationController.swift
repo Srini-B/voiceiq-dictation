@@ -135,6 +135,16 @@ final class DictationController {
                     self.engine.resetGrammar()
                     continue
                 }
+                // While the agent panel is open the dictation key speaks to
+                // the agent. The panel never takes focus, so a plain
+                // dictation would land in the app behind it instead.
+                if intent == .begin, self.agent.isOpen {
+                    Log.hotkey.info("dictation key speaks to the agent")
+                    if !self.agent.canRun || self.agent.isBusy || !self.startAgentListening() {
+                        self.engine.resetGrammar()
+                    }
+                    continue
+                }
                 let accepted = self.coordinator.handle(intent)
                 if !accepted, intent == .begin {
                     // Refused begin: the grammar armed a phantom session, so
@@ -707,12 +717,15 @@ final class DictationController {
         app.activate()
     }
 
-    private func startAgentListening() {
-        guard coordinator.state == .idle || coordinator.state.isTerminal else { return }
-        guard coordinator.handle(.begin, mode: .agent) else { return }
+    /// False when the coordinator is mid-session or refused to begin.
+    @discardableResult
+    private func startAgentListening() -> Bool {
+        guard coordinator.state == .idle || coordinator.state.isTerminal else { return false }
+        guard coordinator.handle(.begin, mode: .agent) else { return false }
         coordinator.handle(.lockIn)
         shortcutMode = .agent
         agentListening = true
+        return true
     }
 
     private func stopAgent() {
@@ -853,6 +866,10 @@ final class DictationController {
         if state.isTerminal {
             shortcutMode = nil
             agentListening = false
+            // A session the key started can end elsewhere (the panel's Done,
+            // the Agent shortcut). Without this the grammar still thinks it
+            // is recording and swallows the next press as a stop.
+            engine.resetGrammar()
         }
         defer { previousState = state }
         dismissTask?.cancel()
