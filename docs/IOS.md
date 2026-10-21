@@ -327,6 +327,19 @@ Every local edit and every change from iCloud merges the two copies with
 - the same word added on two devices becomes one entry (the older one,
   starred if either was).
 
+### Writing rules sync
+
+The writing rules are the same on the Mac and the iPhone, with no setting.
+`WritingRulesSync` (VoiceIQCore) keeps them as a second value, `writingRules.v1`,
+in the same key-value store. The value is the rules text (absent when the
+device uses the default rules) and when it was last edited. The newer edit
+wins (`WritingRulesSnapshot.merge`); "Reset to defaults" is an edit too, so it
+resets the other device. `SettingsStore.setCustomInstructions` stamps an edit
+only when the text changes, and stores text equal to the defaults as "use the
+defaults". Rules edited before sync existed have no stamp and count as the
+oldest edit; when two such copies meet, custom rules win over the defaults.
+The value is capped at 64 KB so the dictionary keeps most of the 1 MB store.
+
 ### History sync
 
 History's final text is the same on the Mac and the iPhone, with no setting.

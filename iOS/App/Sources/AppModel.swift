@@ -96,6 +96,7 @@ final class AppModel: ObservableObject {
         bind()
         startHistoryServices()
         DictionaryBridge.start()
+        WritingRulesSync.shared.start()
         let deviceName = UIDevice.current.name
         Task { await HistorySync.shared.start(deviceName: deviceName) }
         ActionButtonBridge.toggle = { [weak self] in await self?.toggleFromActionButton() }
@@ -436,6 +437,7 @@ final class AppModel: ObservableObject {
         setup.refresh()
         drainCommands()
         DictionaryBridge.appBecameActive()
+        WritingRulesSync.shared.refresh()
         Task { await HistorySync.shared.refresh() }
     }
 

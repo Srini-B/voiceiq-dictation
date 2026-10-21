@@ -382,9 +382,34 @@ public struct SettingsStore: Sendable {
         Self.defaults.string(forKey: "customInstructions")
     }
 
+    /// Stores an edit and stamps it for `WritingRulesSync`. Text equal to the
+    /// defaults is stored as "use the defaults", so a later default update
+    /// still reaches this device. Unchanged text is not stamped: the iPhone
+    /// editor saves on every close, and a fresh stamp would let an untouched
+    /// copy win over a real edit on the Mac.
     public func setCustomInstructions(_ text: String?) {
         let trimmed = text?.trimmingCharacters(in: .whitespacesAndNewlines)
-        Self.set(trimmed.flatMap { $0.isEmpty ? nil : $0 }, forKey: "customInstructions")
+        let seed = DictationRulesSeed.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let value = trimmed.flatMap { $0.isEmpty || $0 == seed ? nil : $0 }
+        guard value != customInstructionsOverride else { return }
+        Self.defaults.set(Date(), forKey: Self.customInstructionsUpdatedAtKey)
+        Self.set(value, forKey: "customInstructions")
+    }
+
+    private static let customInstructionsUpdatedAtKey = "customInstructionsUpdatedAt"
+
+    /// The writing rules as `WritingRulesSync` sees them. A copy edited before
+    /// sync existed has no stamp and counts as the oldest possible edit.
+    public var writingRulesSnapshot: WritingRulesSnapshot {
+        WritingRulesSnapshot(
+            text: customInstructionsOverride,
+            updatedAt: Self.defaults.object(forKey: Self.customInstructionsUpdatedAtKey) as? Date ?? .distantPast
+        )
+    }
+
+    public func applySyncedWritingRules(_ snapshot: WritingRulesSnapshot) {
+        Self.defaults.set(snapshot.updatedAt, forKey: Self.customInstructionsUpdatedAtKey)
+        Self.set(snapshot.text, forKey: "customInstructions")
     }
 
     /// Watch the field after insertion and add the user's word-level edits to
