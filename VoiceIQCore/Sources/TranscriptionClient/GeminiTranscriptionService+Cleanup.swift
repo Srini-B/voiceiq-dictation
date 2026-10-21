@@ -10,10 +10,10 @@ extension GeminiTranscriptionService {
     }
 
     /// The text to insert, and why the writing rules did not shape it when
-    /// they did not. The note is kept in History so a raw paste explains itself.
+    /// they did not. The skip's note is kept in History so a raw paste explains itself.
     struct SettledCleanup {
         var text: String
-        var note: String?
+        var skip: CleanupSkip?
     }
 
     func cleanupOrFallback(
@@ -35,6 +35,7 @@ extension GeminiTranscriptionService {
     /// guarantee applies on every branch: explicit wrong→right rules always win.
     private func settle(_ outcome: CleanupOutcome, raw: String, rawHasFillers: Bool) -> SettledCleanup {
         let rules = DictionaryStore().replacementRules()
+        let cause: CleanupSkip.Cause
         let reason: String
         switch outcome {
         case .accepted(let cleaned):
@@ -42,16 +43,20 @@ extension GeminiTranscriptionService {
         case .rejected(let why):
             // Writing rules stay on: only the user turns them off. One bad
             // rewrite costs that dictation its formatting, nothing more.
+            cause = .rewriteRejected
             reason = "Writing rules skipped: the rewrite was rejected (\(why))"
         case .unavailable(let why):
+            cause = .requestFailed
             reason = "Writing rules skipped: cleanup \(why)"
         }
         // Without the writing model nothing else removes hesitation sounds
         // from a verbatim transcript.
         let base = rawHasFillers ? FillerStripper.strip(raw) : raw
-        let note = base == raw ? reason : reason + "; filler words removed"
+        let fillersRemoved = base != raw
+        let note = fillersRemoved ? reason + "; filler words removed" : reason
         Log.transcription.error("\(note, privacy: .public). Inserting the transcript.")
-        return SettledCleanup(text: ReplacementEngine.apply(rules, to: base), note: note)
+        return SettledCleanup(text: ReplacementEngine.apply(rules, to: base),
+                              skip: CleanupSkip(cause: cause, fillersRemoved: fillersRemoved, note: note))
     }
 
     private func runCleanup(

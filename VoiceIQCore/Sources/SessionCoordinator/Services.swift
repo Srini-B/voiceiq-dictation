@@ -17,13 +17,36 @@ public extension TranscriptionServicing {
     }
 }
 
+/// Why the writing rules did not shape a transcript when they were on, and
+/// what stood in for them.
+public struct CleanupSkip: Equatable, Sendable {
+    public enum Cause: Equatable, Sendable {
+        /// The user keeps dictations of 5 seconds or less as spoken.
+        case shortDictation
+        /// The cleanup request never answered: timed out, offline, or a network error.
+        case requestFailed
+        /// The model answered and the validation gate refused its rewrite.
+        case rewriteRejected
+    }
+    public var cause: Cause
+    /// `FillerStripper` removed hesitation sounds in the model's place.
+    public var fillersRemoved: Bool
+    /// The row's details in History.
+    public var note: String
+
+    public init(cause: Cause, fillersRemoved: Bool = false, note: String) {
+        self.cause = cause
+        self.fillersRemoved = fillersRemoved
+        self.note = note
+    }
+}
+
 public struct TranscriptionResult: Equatable, Sendable {
     public var rawTranscript: String
     public var cleanedTranscript: String
     public var modelID: String
-    /// Why the writing rules did not shape `cleanedTranscript`, when they were
-    /// on and did not. Shown in History as the row's details.
-    public var cleanupNote: String?
+    /// Set when the writing rules were on and did not shape `cleanedTranscript`.
+    public var cleanupSkip: CleanupSkip?
     /// Local English formatting candidate. The original remains authoritative.
     public var normalizedTranscript: String?
     /// An Ask Anything result that is the edited selection rather than an
@@ -31,12 +54,15 @@ public struct TranscriptionResult: Equatable, Sendable {
     /// text instead of the answer pill.
     public var replacesSelection: Bool
 
-    public init(rawTranscript: String, cleanedTranscript: String, modelID: String, cleanupNote: String? = nil,
+    /// Shown in History as the row's details.
+    public var cleanupNote: String? { cleanupSkip?.note }
+
+    public init(rawTranscript: String, cleanedTranscript: String, modelID: String, cleanupSkip: CleanupSkip? = nil,
                 normalizedTranscript: String? = nil, replacesSelection: Bool = false) {
         self.rawTranscript = rawTranscript
         self.cleanedTranscript = cleanedTranscript
         self.modelID = modelID
-        self.cleanupNote = cleanupNote
+        self.cleanupSkip = cleanupSkip
         self.normalizedTranscript = normalizedTranscript
         self.replacesSelection = replacesSelection
     }
