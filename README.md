@@ -101,16 +101,18 @@ speaker-labelled transcript plus a summary, decisions, and owned action items
 under Settings → Meetings. Recording never stops on its own. Meetings run on
 the selected provider, or on the other provider when only its key is saved.
 With no usable key the recording is kept and marked failed with the reason,
-ready to Retry once a key is added. Turn on **Transcribe meetings on device**
-and download Fluid Speech Mini plus Nemotron 3 Diarization (199 MB) to get the
-words and speakers on device, FluidMeet-style; only the transcript then goes
-to the writing model for notes. On iPhone and iPad, Fluid Speech Mini alone
-transcribes the meeting after it ends, as one speaker.
+ready to Retry once a key is added. Set **Meeting transcription** to On
+device and download Fluid Speech Mini plus Nemotron 3 Diarization (199 MB) to
+get the words and speakers on device, FluidMeet-style; only the transcript
+then goes to the writing model for notes. On iPhone and iPad, Fluid Speech
+Mini alone transcribes the meeting after it ends, as one speaker. With an
+ElevenLabs key saved, the same picker offers ElevenLabs: Scribe v2 hears the
+call and labels the speakers, and the provider writes the notes.
 
 **Cost Analysis.** Every model call is metered: tokens or audio seconds from the
 API response, priced at the provider's list prices. Settings → Cost Analysis shows today, this week, this month, and all
-time, broken down by action and by model, for Gemini or OpenAI (a toggle
-switches between them); each dictation in History shows what it cost. Details in
+time, broken down by action and by model, for Gemini, OpenAI or ElevenLabs (a
+toggle switches between them); each dictation in History shows what it cost. Details in
 [docs/COST_TRACKING.md](docs/COST_TRACKING.md).
 
 ## Setup
@@ -144,9 +146,21 @@ dictation is a few seconds of audio. VoiceiQ itself is free and has no account.
 | Writing rules, Ask Anything, Translate, meeting notes | `gemini-3.8-flash` | `gpt-6-luna` |
 | Meeting speakers | `gemini-3.5-transcribe` | `gpt-4o-transcribe-diarize` |
 
-With **Transcribe meetings on device** on, Fluid Speech Mini and Nemotron 3
+With **Meeting transcription** on device, Fluid Speech Mini and Nemotron 3
 Diarization (Mac) or Fluid Speech Mini alone (iPhone, iPad) replace the
 meeting speakers row; the notes row is unchanged.
+
+**ElevenLabs** is an optional third source for the transcription rows only.
+Save an ElevenLabs key in Settings → Advanced (Mac) or Provider & Keys
+(iPhone, iPad) and the **Transcription** and **Meeting transcription** pickers
+in Settings → Dictation (**Notes transcription** on iPhone and iPad) gain an
+ElevenLabs segment. Dictation, Ask Anything,
+Translate and meetings then send their audio to Scribe v2 (`scribe_v2`, with
+up to 100 dictionary terms as `keyterms`, and speaker labels for meetings),
+and the selected provider receives only the transcript for the writing pass
+and the notes. ElevenLabs has no live socket, so real-time transcription
+shows no text while you speak on that source. Remove the key and both
+pickers fall back to the provider.
 
 Every dictation is a transcription followed, with writing rules on, by a
 writing-rules pass. Screenshots go only to the writing model.
@@ -155,7 +169,7 @@ Settings → Advanced can pin other model names for either provider.
 ## How it works
 
 ```
-key ─▶ capture (CAF on disk from t=0) ─▶ key ─▶ FLAC ─▶ transcribe (Gemini or OpenAI)
+key ─▶ capture (CAF on disk from t=0) ─▶ key ─▶ FLAC ─▶ transcribe (Gemini, OpenAI or ElevenLabs)
                     │  (live socket streams text meanwhile)     │  (chunked past 10 min)
                     ▼                                           ▼
    cursor ◀─ insert (AX → paste → clipboard) ◀─ validate ◀─ writing-rules pass
@@ -195,7 +209,8 @@ lands where you were typing.
   sends you back to the app you were in. After that the mic starts in place,
   and the session shows in the Dynamic Island until you end it.
 - **Same settings as the Mac.** Gemini or OpenAI with your own key (stored
-  in the iOS Keychain), dictionary, writing rules, Ask Anything, Translate, History and Cost.
+  in the iOS Keychain), the optional ElevenLabs transcription source,
+  dictionary, writing rules, Ask Anything, Translate, History and Cost.
 - **Meetings are a recorder.** Record in the app, stop, and the notes are
   written with the same pipeline as on the Mac. The iPhone records the room
   mic only, because iOS does not let an app capture call audio.
@@ -239,7 +254,7 @@ iOS/            iPhone app, voice keyboard extension, Live Activity
 VoiceIQCore/        all engine logic, headless and testable
   HotkeyEngine/     CGEventTap + the pure hold/lock/cancel grammar
   AudioEngine/      crash-safe CAF capture, device changes, prewarming
-  TranscriptionClient/  Gemini and OpenAI calls, retries, FLAC
+  TranscriptionClient/  Gemini, OpenAI and ElevenLabs calls, retries, FLAC
   FormattingPipeline/   cleanup prompt, validation gate, dictionary rules
   InsertionEngine/      the AX → paste → clipboard ladder
   HistoryStore/         GRDB index, recovery, retry queue, retention

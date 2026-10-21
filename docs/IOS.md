@@ -288,7 +288,8 @@ Onboarding saves its page in `MobileSettings.onboardingStep`,
 so a trip to Settings resumes on the same page.
 
 Onboarding has four pages: welcome, API keys (a Gemini or OpenAI provider
-picker with that provider's key, plus the optional TinyFish key), permissions
+picker with that provider's key, plus the optional ElevenLabs and TinyFish
+keys), permissions
 (microphone and keyboard together), and a Try it field.
 
 ### Design system
@@ -317,10 +318,12 @@ far-side reference, so `MeetingTranscriber.callAudio` skips echo cancellation
 (the WebRTC AEC3 xcframework ships a macOS slice only and is not linked on
 iOS). Speaker linking, meeting-type notes, suggested speaker names and Redo
 (notes only, or transcript and notes) work as on the Mac. Dictation is refused
-while notes record. With **Transcribe notes on device** on and Fluid
+while notes record. With **Notes transcription** set to On device and Fluid
 Speech Mini downloaded, the recording is transcribed in process after Stop as
 one speaker; there is no diarizer, real-time path, or Nemotron on iOS (see
-[On-device meetings](LOCAL_TRANSCRIPTION.md#on-device-meetings)).
+[On-device meetings](LOCAL_TRANSCRIPTION.md#on-device-meetings)). With an
+ElevenLabs key saved, the picker also offers ElevenLabs, which labels speakers
+from the room mic alone.
 
 ### Dictionary
 
@@ -409,13 +412,14 @@ runs. Everything needs Full Access.
 | Pill | Keyboard status plus Dynamic Island |
 | AX and paste insertion | `textDocumentProxy.insertText` |
 | Ask Anything, Translate, Paste last | Keyboard modes and Paste last |
-| Provider (Gemini or OpenAI), TinyFish | Same, in Settings › Provider & Keys and the iOS Keychain |
+| Provider (Gemini or OpenAI), ElevenLabs, TinyFish | Same, in Settings › Provider & Keys and the iOS Keychain |
+| Transcription and Meeting transcription pickers (On device, provider, ElevenLabs) | Same; the second is **Notes transcription**, each in its own section because an iOS Form hides a segmented picker's label |
 | History stats: words, dictations, WPM, audio time | Home's stats grid |
 | Dictionary with search, CSV and Auto-learned | Same, synced through iCloud, plus adding a selection or a copied word from the keyboard |
 | Writing rules, smart transcription, live, noise handling | Same settings |
 | On-device transcription: Fluid Speech Mini and Nemotron 3.5, English tools, live preview with Fluid Speech Mini | Fluid Speech Mini and English tools only, in-process; no live preview (see [local transcription](LOCAL_TRANSCRIPTION.md)) |
 | History, retry, crash recovery, retention | Same |
-| Cost with the provider toggle, periods and Detailed | Same |
+| Cost with the Gemini, OpenAI and ElevenLabs toggle, periods and Detailed | Same |
 | Advanced: the selected provider's models | Same, plus the session log |
 | Screen context, auto-learn, shortcuts, call detection, mute other audio, sounds | Not on iOS |
 

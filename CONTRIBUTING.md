@@ -42,8 +42,9 @@ the right to contribute it under this repository's license.
    frameworks only. Gemini or OpenAI models, each reached on its own API with
    the provider's own key. A change to the transcription or writing path has
    to work on both providers (`ModelProvider` picks the calls; see
-   `docs/design/architecture.md`). No local models, no other model families or
-   speech services, no gateways, no cross-platform layers.
+   `docs/design/architecture.md`). The on-device models and ElevenLabs Scribe
+   are the only other speech sources; neither writes text or notes. No other
+   model families, no gateways, no cross-platform layers.
 2. **Share code through `VoiceIQCore`.** Logic both apps need goes in the
    package, not in `App/` or `iOS/`. Mac-only code is wrapped in
    `#if os(macOS)`; its iPhone stand-in lives in a sibling file ending
