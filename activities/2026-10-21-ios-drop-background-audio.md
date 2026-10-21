@@ -28,6 +28,10 @@ the owner corrected that the same day. The picker is back, "Never" included.
   background" state.
 - A stale `keepActiveMode` default is left in place and ignored. A stored
   `warmWindowSeconds` keeps its value.
+- Review follow-ups (PR #14): changing the picker while a session idles
+  reschedules the countdown from now ("Never" ends it at once), and Home's
+  session card shows "Writing…" instead of "Mic is on" while the text is
+  processed, since "Never" closes the mic during that phase.
 
 ## Verification
 

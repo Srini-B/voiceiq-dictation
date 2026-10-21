@@ -20,7 +20,7 @@ final class VoiceSession: ObservableObject {
     @Published private(set) var warmUntil: Date?
 
     /// What the dictation pipeline is doing. Set by the app model.
-    var dictationPhase: SessionSnapshot.Phase = .warm {
+    @Published var dictationPhase: SessionSnapshot.Phase = .warm {
         didSet {
             publishIfChanged()
             if dictationPhase != oldValue { phaseChanged() }
@@ -157,6 +157,14 @@ final class VoiceSession: ObservableObject {
                 self.end()
             }
         }
+    }
+
+    /// The picker changed. An idle session takes the new window from now;
+    /// "Never" ends it at once. A dictation in progress picks it up when it
+    /// returns to `.warm`.
+    func warmWindowChanged() {
+        guard isActive, dictationPhase == .warm, meetingStartedAt == nil else { return }
+        scheduleWarmEnd()
     }
 
     private func cancelWarmEnd() {

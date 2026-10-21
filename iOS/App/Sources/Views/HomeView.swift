@@ -115,7 +115,9 @@ private struct SessionCard: View {
                 Text(timerInterval: Date()...until, countsDown: true).monospacedDigit()
             }
         } else if session.isActive {
-            Text("Mic is on")
+            // With "Never" the mic is already closed while the text is
+            // written, so name the phase rather than the mic.
+            Text(session.dictationPhase == .processing ? "Writing…" : "Mic is on")
         } else if UIDevice.isPad {
             if #available(iOS 18.0, *) {
                 Text("Tap the mic on the VoiceiQ keyboard, or use VoiceiQ Dictate.")

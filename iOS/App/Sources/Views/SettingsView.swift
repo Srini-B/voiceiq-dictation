@@ -143,7 +143,10 @@ struct DictationSettingsView: View {
                 Picker("Keep mic on after dictating", selection: $warmWindow) {
                     ForEach(MobileSettings.WarmWindow.allCases) { Text($0.label).tag($0) }
                 }
-                .onChange(of: warmWindow) { _, value in MobileSettings.warmWindow = value }
+                .onChange(of: warmWindow) { _, value in
+                    MobileSettings.warmWindow = value
+                    session.warmWindowChanged()
+                }
             } footer: {
                 Text("While the mic is on, the next keyboard tap starts right away. After that, the tap opens VoiceiQ for a moment.")
             }
