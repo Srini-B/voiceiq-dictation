@@ -1,4 +1,3 @@
-#if os(macOS)
 import Foundation
 
 /// Fluid Speech Mini by FluidVoice (Core ML), an English fine-tune of Parakeet
@@ -50,4 +49,3 @@ extension LocalModelManifest {
         ]
     )
 }
-#endif

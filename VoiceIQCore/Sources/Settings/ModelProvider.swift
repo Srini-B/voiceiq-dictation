@@ -59,3 +59,38 @@ public enum ModelProvider: String, CaseIterable, Sendable, Codable, Identifiable
         [selected, selected.other].filter(hasKey)
     }
 }
+
+/// Who turns audio into text for dictation or for meetings: a model on this
+/// device, ElevenLabs Scribe v2 with its own key, or the provider's speech
+/// model. The provider's writing model always runs after whichever is picked.
+public enum TranscriptionSource: String, CaseIterable, Sendable, Identifiable {
+    case onDevice
+    case elevenLabs
+    case provider
+
+    public var id: String { rawValue }
+
+    public func displayName(for provider: ModelProvider) -> String {
+        switch self {
+        case .onDevice: return "On device"
+        case .elevenLabs: return "ElevenLabs"
+        case .provider: return provider.displayName
+        }
+    }
+}
+
+/// The host a request goes to, which decides its auth header, its usage
+/// envelope and how its error bodies read. ElevenLabs is speech-to-text only
+/// and never a `ModelProvider`. Raw values are the `TransportEvent.via` strings.
+public enum ModelEndpoint: String, Sendable {
+    case gemini
+    case openAI
+    case elevenLabs
+
+    public init(_ provider: ModelProvider) {
+        switch provider {
+        case .gemini: self = .gemini
+        case .openAI: self = .openAI
+        }
+    }
+}

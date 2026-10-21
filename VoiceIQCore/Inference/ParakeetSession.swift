@@ -5,19 +5,48 @@ import VoiceIQSpeech
 actor ParakeetSession: LocalSpeechSession {
     private typealias Loaded = (models: AsrModels, tools: EnglishTools)
     private let audioURL: URL
+    private let streaming: Bool
     private let options: LocalSpeechOptions
     private var loading: Task<Loaded, Error>?
+    private var previewing: Task<ASRResult, Error>?
     private var recognition: Task<LocalSpeechOutput?, Error>?
     private var manager: AsrManager?
     private var tools = EnglishTools()
+    private var preview = ParakeetPreview()
     private var stopped = false
 
-    init(audioURL: URL, options: LocalSpeechOptions) {
+    /// `streaming` turns on the display-only preview; the final transcript
+    /// always comes from `transcribe`.
+    init(audioURL: URL, streaming: Bool, options: LocalSpeechOptions) {
         self.audioURL = audioURL
+        self.streaming = streaming
         self.options = options
     }
 
-    func append(_ pcm: Data) -> String? { nil }
+    /// Re-decodes the open tail of the recording. A failed preview decode
+    /// keeps the last text; only a missing model rejects the audio.
+    func append(_ pcm: Data) async -> String? {
+        guard streaming, !stopped, let manager, pcm.count.isMultiple(of: 2) else { return nil }
+        preview.append(pcm)
+        guard preview.isReady else { return preview.text }
+        let samples = preview.tail
+        let task = Task { () throws -> ASRResult in
+            try Task.checkCancellation()
+            var decoder = TdtDecoderState.make(decoderLayers: await manager.decoderLayerCount)
+            return try await manager.transcribe(samples, decoderState: &decoder, language: .english)
+        }
+        previewing = task
+        defer { previewing = nil }
+        do {
+            let result = try await task.value
+            guard !stopped else { return nil }
+            preview.apply(text: result.text, timings: result.tokenTimings ?? [], decoded: samples.count)
+        } catch {
+            guard !stopped else { return nil }
+            Log.transcription.notice("Parakeet preview decode failed; keeping last preview: \(error.localizedDescription, privacy: .public)")
+        }
+        return String(preview.text.suffix(512))
+    }
 
     func load(from directory: URL) async {
         guard !stopped else { return }
@@ -26,7 +55,10 @@ actor ParakeetSession: LocalSpeechSession {
         let toolsRoot = options.toolsDirectory
         let task = Task.detached(priority: .userInitiated) { () throws -> Loaded in
             try Task.checkCancellation()
-            async let tools = EnglishTools.load(root: toolsRoot, vocabulary: terms)
+            // No VAD: trimming silent edges changed Fluid Speech Mini's words
+            // in the middle of a recording and never improved one (15-dictation
+            // replay, 2026-10-21). The decoder sees the recording as captured.
+            async let tools = EnglishTools.load(root: toolsRoot, vocabulary: terms, speechDetection: false)
             let models = try AsrModels.loadLocal(from: directory, version: .v3)
             return (models, try await tools)
         }
@@ -40,7 +72,7 @@ actor ParakeetSession: LocalSpeechSession {
             if !terms.isEmpty, tools.vocabulary == nil {
                 Log.transcription.notice("Parakeet vocabulary spotting unavailable; \(terms.count) terms not applied")
             }
-            Log.transcription.notice("Parakeet cold load complete in \(Date().timeIntervalSince(started), format: .fixed(precision: 2))s, vad=\(self.tools.vad != nil), vocabulary=\(self.tools.vocabulary != nil)")
+            Log.transcription.notice("Parakeet cold load complete in \(Date().timeIntervalSince(started), format: .fixed(precision: 2))s, vocabulary=\(self.tools.vocabulary != nil)")
         } catch {
             loading = nil
             Log.transcription.notice("Parakeet load failed; using cloud: \(error.localizedDescription, privacy: .public)")
@@ -53,21 +85,19 @@ actor ParakeetSession: LocalSpeechSession {
         let tools = tools
         let task = Task { () throws -> LocalSpeechOutput? in
             guard SpeechAudio.fitsInMemory(framesWritten) else {
-                // FluidAudio's disk-backed path keeps memory constant. VAD
-                // trimming and vocabulary rescoring need the whole recording
-                // in memory, so a long recording is decoded from the raw file.
+                // FluidAudio's disk-backed path keeps memory constant.
+                // Vocabulary rescoring needs the whole recording in memory,
+                // so a long recording is decoded from the raw file.
                 try SpeechAudio.validate(audioURL, frames: framesWritten)
-                Log.transcription.notice("Parakeet long recording (\(framesWritten) frames): disk-backed decode without VAD or vocabulary")
+                Log.transcription.notice("Parakeet long recording (\(framesWritten) frames): disk-backed decode without vocabulary")
                 var decoder = TdtDecoderState.make(decoderLayers: await manager.decoderLayerCount)
                 let result = try await manager.transcribeDiskBacked(audioURL, decoderState: &decoder, language: .english)
                 try Task.checkCancellation()
                 return EnglishText.output(original: result.text, confidence: result.confidence)
             }
-            let recorded = try SpeechAudio.read(audioURL, frames: framesWritten)
             // The decoder and CTC spotter see the same samples, so token
             // timings and CTC frames share one clock.
-            let samples = try await SpeechBoundaries.trimmed(recorded, vad: tools.vad)
-            try Task.checkCancellation()
+            let samples = try SpeechAudio.read(audioURL, frames: framesWritten)
             var decoder = TdtDecoderState.make(decoderLayers: await manager.decoderLayerCount)
             let result = try await manager.transcribe(samples, decoderState: &decoder, language: .english)
             try Task.checkCancellation()
@@ -102,12 +132,16 @@ actor ParakeetSession: LocalSpeechSession {
     func stop() async {
         stopped = true
         let loading = loading
+        let previewing = previewing
         let recognition = recognition
         loading?.cancel()
+        previewing?.cancel()
         recognition?.cancel()
         _ = await loading?.result
+        _ = await previewing?.result
         _ = await recognition?.result
         self.loading = nil
+        self.previewing = nil
         self.recognition = nil
         await manager?.cleanup()
         manager = nil

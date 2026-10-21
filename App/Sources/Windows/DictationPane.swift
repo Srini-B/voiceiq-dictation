@@ -8,9 +8,9 @@ struct DictationPane: View {
     private let settings = SettingsStore()
     @State private var sounds = SettingsStore().soundsEnabled
     @State private var liveTranscription = SettingsStore().liveTranscriptionEnabled
-    @State private var localTranscription = SettingsStore().localTranscriptionEnabled
+    @State private var dictationSource = SettingsStore().dictationSource
     @State private var localModel = SettingsStore().localSpeechModel
-    @ObservedObject private var nemotron = LocalModelStore.store(for: .nemotron)
+    @State private var meetingSource = SettingsStore().meetingSource
     @State private var smartTranscription = SettingsStore().smartTranscriptionEnabled
     @State private var cleanupPass = SettingsStore().smartCleanupPassEnabled
     @State private var skipShortCleanup = SettingsStore().skipShortDictationCleanup
@@ -72,27 +72,30 @@ struct DictationPane: View {
             }
 
             Section {
-                Toggle("On-device transcription", isOn: $localTranscription)
-                    .disabled(!LocalModelSupport.isAvailable)
-                    .onChange(of: localTranscription) { _, enabled in
-                        settings.setLocalTranscriptionEnabled(enabled)
+                TranscriptionSourcePicker("Transcription", selection: $dictationSource)
+                    .onChange(of: dictationSource) { _, source in
+                        settings.setDictationSource(source)
                     }
                     // Here, not on the controls: they expand to several rows.
                     .onChange(of: localModel) { _, model in
                         settings.setLocalSpeechModel(model)
                     }
-                LocalModelControls(localEnabled: localTranscription, selection: $localModel)
-                Toggle(isOn: $liveTranscription) {
-                    Text("Real-time transcription")
-                    if localTranscription && nemotron.state != .ready {
-                        Text(LocalModelControls.streamingHint)
+                LocalModelControls(localEnabled: dictationSource == .onDevice, meetingsLocal: meetingSource == .onDevice,
+                                   selection: $localModel)
+                Toggle("Real-time transcription", isOn: $liveTranscription)
+                    .onChange(of: liveTranscription) { _, enabled in
+                        settings.setLiveTranscriptionEnabled(enabled)
                     }
-                }
-                .onChange(of: liveTranscription) { _, enabled in
-                    settings.setLiveTranscriptionEnabled(enabled)
-                }
+                TranscriptionSourcePicker("Meeting transcription", selection: $meetingSource)
+                    .onChange(of: meetingSource) { _, source in
+                        settings.setMeetingSource(source)
+                    }
+                LocalMeetingControls(meetingsLocal: meetingSource == .onDevice)
             } footer: {
-                LocalModelFooter(localEnabled: localTranscription, selection: localModel)
+                VStack(alignment: .leading, spacing: 4) {
+                    LocalModelFooter(localEnabled: dictationSource == .onDevice, selection: localModel)
+                    LocalMeetingFooter(enabled: meetingSource == .onDevice)
+                }
             }
 
             Section {
@@ -185,7 +188,8 @@ struct DictationPane: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .gtSettingDidChange).receive(on: RunLoop.main)) { note in
             switch note.object as? String {
-            case "localTranscriptionEnabled": localTranscription = settings.localTranscriptionEnabled
+            case "dictationSource": dictationSource = settings.dictationSource
+            case "meetingSource": meetingSource = settings.meetingSource
             case "localSpeechModel": localModel = settings.localSpeechModel
             case "liveDictationEnabled": liveTranscription = settings.liveTranscriptionEnabled
             case "smartTranscription": smartTranscription = settings.smartTranscriptionEnabled

@@ -21,7 +21,7 @@ struct PermissionsPanel: View {
                     IconTile(systemImage: "mic.fill", size: 32)
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Microphone").font(Theme.Fonts.headline()).foregroundStyle(Theme.Colors.ink)
-                        Text("Used only while you dictate or record a meeting.")
+                        Text("Used only while you dictate or record notes.")
                             .font(Theme.Fonts.footnote()).foregroundStyle(Theme.Colors.muted)
                             .fixedSize(horizontal: false, vertical: true)
                     }

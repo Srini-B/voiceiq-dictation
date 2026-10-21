@@ -4,9 +4,14 @@
 
 By default, your voice goes from your Mac directly to the model provider you chose in
 Settings → Advanced, using your own API key: Google's Gemini API or OpenAI's API.
-Optional Fluid Speech Mini or Nemotron transcription processes audio on-device on supported systems.
+Optional Fluid Speech Mini or Nemotron transcription processes audio on-device on supported systems
+(Fluid Speech Mini only on iPhone and iPad).
 Cleanup and screen context still use your selected cloud provider. Failed local
 transcription falls back to sending the saved audio to that provider.
+If you add an ElevenLabs key and set the Transcription or Meeting
+transcription picker to ElevenLabs, that audio goes to ElevenLabs
+(`api.elevenlabs.io`) with your ElevenLabs key instead, and only the transcript
+goes on to the provider for the writing rules and meeting notes.
 There is no VoiceiQ server, no account, no analytics, no telemetry.
 Everything else stays on your Mac. The code is open — verify all of this.
 
@@ -15,7 +20,9 @@ Everything else stays on your Mac. The code is open — verify all of this.
 Only it receives a given dictation; nothing is sent to the other. Meetings are
 the one exception: a meeting goes to the selected provider when its key is
 saved, otherwise to the other provider, and a meeting whose provider fails
-moves on to the other provider you have a key for.
+moves on to the other provider you have a key for. With ElevenLabs as the
+meeting transcription source, meeting audio goes only there and the provider
+receives the transcript for the notes.
 With no usable key, nothing is sent and the recording stays on your Mac.
 
 ## What leaves your machine (the complete list)
@@ -35,6 +42,11 @@ With no usable key, nothing is sent and the recording stays on your Mac.
    configured cloud transcription. Failed local results upload the saved
    recording through the existing cloud path. This option is not an offline-only
    privacy mode. See [local transcription](LOCAL_TRANSCRIPTION.md).
+   With ElevenLabs as the transcription source, this audio goes to ElevenLabs
+   instead, as FLAC after you stop (ElevenLabs has no live socket), along with
+   up to 100 dictionary terms as `keyterms`, and the provider never receives
+   it: the writing-rules request (item 3) carries no audio in that case.
+   Removing the ElevenLabs key sends later dictations to the provider again.
 2. **Your dictionary terms**, alongside that audio. The transcription model uses
    them to bias what it hears, which is why names and jargon come out spelled
    right as you speak rather than being corrected afterwards. Only the correct
@@ -90,14 +102,21 @@ With no usable key, nothing is sent and the recording stays on your Mac.
    `~/Library/Application Support/VoiceiQ/meetings/` and nothing is sent.
    Recording stops only when you stop it; the stretches with speech are then
    sent to the provider for a speaker-labelled transcript, and that
-   transcript is sent back for a summary and action items. Turn the setting off and no call detection runs.
+   transcript is sent back for a summary and action items. With "Meeting
+   transcription" on device and the models downloaded (Fluid Speech Mini and
+   Nemotron 3 Diarization on the Mac; Fluid Speech Mini alone on iPhone and
+   iPad, where the transcript has one speaker), the audio never leaves the
+   device: the words and speakers are worked out locally, and only the
+   transcript is sent, for the notes. If that on-device pass fails and a key is saved, the audio is sent
+   as above. Turn the setting off and no call detection runs.
 7. **The selected text, when you use Ask Anything** (⌃⌥A by default). At the
    moment you press the shortcut, VoiceiQ reads the text selected in the
    frontmost app through the Accessibility API and sends it with your spoken
    instruction to the provider. Nothing else in the window is read. Translate (⌃⌥T)
    sends only your dictation, as a normal dictation does.
 8. **Your API keys**, each only in the request header to its own service: the
-   Gemini key to Google, the OpenAI key to OpenAI. They are stored in the macOS Keychain, never in files or
+   Gemini key to Google, the OpenAI key to OpenAI, the ElevenLabs key to
+   ElevenLabs. They are stored in the macOS Keychain, never in files or
    preferences.
 9. **Update checks.** Every six hours, and when you choose Check for Updates, the
    app downloads the update feed (`appcast.xml`) from the project's GitHub
@@ -171,9 +190,11 @@ the clipboard.
 ## Verify it
 
 - Build from source (`./scripts/build.sh`).
-- Watch traffic with Little Snitch or `nettop` — a dictation reaches exactly
-  one model host, the one the active route names (two TinyFish hosts appear
-  only after you add a TinyFish key).
+- Watch traffic with Little Snitch or `nettop` — a dictation reaches the
+  transcription host the active route names, and no other model host, except
+  that with ElevenLabs as the source the audio goes to `api.elevenlabs.io`
+  and the transcript then goes to the selected provider for the writing pass:
+  two hosts (two TinyFish hosts appear only after you add a TinyFish key).
 - Read the prompts: they are source files. The writing-rules pass is
   [PromptV1.swift](../VoiceIQCore/Sources/FormattingPipeline/PromptV1.swift) plus
   the default custom instructions in

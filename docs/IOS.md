@@ -9,7 +9,7 @@ Like the Mac, it runs Gemini or OpenAI models, with that provider's own key.
 
 | Target | Contents |
 | --- | --- |
-| `VoiceIQiOS` | App: onboarding, keys, settings, history, meetings, background voice session |
+| `VoiceIQiOS` | App: onboarding, keys, settings, history, notes (meetings), background voice session |
 | `VoiceIQKeyboard` | Keyboard extension (`RequestsOpenAccess`), links `VoiceIQBridge` only |
 | `VoiceIQLiveActivity` | Dynamic Island and lock-screen Live Activity |
 
@@ -202,7 +202,7 @@ runs full screen, in Split View and in Stage Manager windows.
 
 Layout follows the horizontal size class, not the device:
 
-- Regular width (an iPad window wide enough): History, Meetings and Settings
+- Regular width (an iPad window wide enough): History, Notes and Settings
   use `ListDetailNavigation`, a `NavigationSplitView` with the list on the
   left and the selected item on the right. Neither column shows a title or
   a bar background: the tab bar above names the page, and in Settings the
@@ -288,7 +288,8 @@ Onboarding saves its page in `MobileSettings.onboardingStep`,
 so a trip to Settings resumes on the same page.
 
 Onboarding has four pages: welcome, API keys (a Gemini or OpenAI provider
-picker with that provider's key, plus the optional TinyFish key), permissions
+picker with that provider's key, plus the optional ElevenLabs and TinyFish
+keys), permissions
 (microphone and keyboard together), and a Try it field.
 
 ### Design system
@@ -303,9 +304,12 @@ scroll dismissal). Every CTA uses a pill style. The launch screen shows the
 app mark (`LaunchMark`, `LaunchBackground`). The brand image sets are
 rendered from the app icon.
 
-### Meetings
+### Notes
 
-Meetings run in the app like a recorder: Record meeting, the phone records the
+The Mac's Meetings tab is called **Notes** on iPhone and iPad: the phone cannot
+record calls, so the feature is a recorder for notes, not a call companion. The
+code keeps the `Meeting*` names. Notes run in the app like a recorder: Record
+notes, the phone records the
 room with the mic, Stop, then `MeetingEngine` transcribes and writes notes. The
 Live Activity shows the running time with a Stop button. iOS does not allow
 recording other apps' or call audio, so `SystemAudioTap` writes an empty
@@ -314,7 +318,12 @@ far-side reference, so `MeetingTranscriber.callAudio` skips echo cancellation
 (the WebRTC AEC3 xcframework ships a macOS slice only and is not linked on
 iOS). Speaker linking, meeting-type notes, suggested speaker names and Redo
 (notes only, or transcript and notes) work as on the Mac. Dictation is refused
-while a meeting records.
+while notes record. With **Notes transcription** set to On device and Fluid
+Speech Mini downloaded, the recording is transcribed in process after Stop as
+one speaker; there is no diarizer, real-time path, or Nemotron on iOS (see
+[On-device meetings](LOCAL_TRANSCRIPTION.md#on-device-meetings)). With an
+ElevenLabs key saved, the picker also offers ElevenLabs, which labels speakers
+from the room mic alone.
 
 ### Dictionary
 
@@ -403,12 +412,14 @@ runs. Everything needs Full Access.
 | Pill | Keyboard status plus Dynamic Island |
 | AX and paste insertion | `textDocumentProxy.insertText` |
 | Ask Anything, Translate, Paste last | Keyboard modes and Paste last |
-| Provider (Gemini or OpenAI), TinyFish | Same, in Settings › Provider & Keys and the iOS Keychain |
+| Provider (Gemini or OpenAI), ElevenLabs, TinyFish | Same, in Settings › Provider & Keys and the iOS Keychain. Each key card carries the service's favicon from `Assets.xcassets/Provider*.imageset` (`BrandTile`); the OpenAI and ElevenLabs marks are template images so they take the ink colour in dark mode |
+| Transcription and Meeting transcription pickers (On device, provider, ElevenLabs) | Same; the second is **Notes transcription**, each in its own section because an iOS Form hides a segmented picker's label |
 | History stats: words, dictations, WPM, audio time | Home's stats grid |
 | Dictionary with search, CSV and Auto-learned | Same, synced through iCloud, plus adding a selection or a copied word from the keyboard |
 | Writing rules, smart transcription, live, noise handling | Same settings |
+| On-device transcription: Fluid Speech Mini and Nemotron 3.5, English tools, live preview with Fluid Speech Mini | Fluid Speech Mini and English tools only, in-process; no live preview (see [local transcription](LOCAL_TRANSCRIPTION.md)) |
 | History, retry, crash recovery, retention | Same |
-| Cost with the provider toggle, periods and Detailed | Same |
+| Cost with the Gemini, OpenAI and ElevenLabs toggle, periods and Detailed | Same |
 | Advanced: the selected provider's models | Same, plus the session log |
 | Screen context, auto-learn, shortcuts, call detection, mute other audio, sounds | Not on iOS |
 

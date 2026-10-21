@@ -5,12 +5,17 @@ public enum ParakeetCommand: Codable {
     case load(model: LocalSpeechModel, directory: URL, audio: URL, streaming: Bool, options: LocalSpeechOptions)
     case append(Data)
     case transcribe(frames: Int64)
+    /// A whole saved meeting, sent once to a helper the client spawns for it
+    /// and kills after the reply.
+    case meeting(LocalMeetingRequest)
 }
 
 public enum ParakeetReply: Codable {
     case ready
     case accepted(String?)
     case transcript(LocalSpeechOutput?)
+    case meeting(LocalMeetingResult)
+    case meetingFailed(String)
 }
 
 public enum ParakeetWire {

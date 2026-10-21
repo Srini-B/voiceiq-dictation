@@ -1,7 +1,5 @@
 import Foundation
-#if os(macOS)
 import VoiceIQSpeech
-#endif
 
 public protocol DictationStreaming: Sendable {
     /// Display-only replacement text. Never a source for insertion or History.
@@ -55,17 +53,17 @@ public final class LiveTranscriber: DictationStreaming {
         await session.abort()
     }
 
+    #if os(macOS)
+    /// The Mac UI never links inference: local sessions run in the speech helper.
     @MainActor public static func makeFromSettings(audioURL: URL) -> (any DictationStreaming)? {
-        #if os(macOS)
         makeFromSettings(audioURL: audioURL, localSessionFactory: {
             LocalRemoteSession(audioURL: $1, model: $0, streaming: $2, options: $3)
         })
-        #else
-        makeCloudFromSettings()
-        #endif
     }
+    #endif
 
-    #if os(macOS)
+    /// On iOS the app passes `LocalSpeechInference.makeSession`, so inference
+    /// runs in-process.
     @MainActor public static func makeFromSettings(
         audioURL: URL, localSessionFactory: LocalSpeechSessionFactory
     ) -> (any DictationStreaming)? {
@@ -78,12 +76,13 @@ public final class LiveTranscriber: DictationStreaming {
         }
         return makeCloudFromSettings()
     }
-    #endif
 
     @MainActor private static func makeCloudFromSettings() -> (any DictationStreaming)? {
         let settings = SettingsStore()
         let vocabulary = DictionaryStore().sanitizedVocabulary()
-        guard settings.liveTranscriptionEnabled else { return nil }
+        // Scribe is batch-only, so an ElevenLabs dictation waits for the full
+        // recording instead of streaming to the provider's socket.
+        guard settings.liveTranscriptionEnabled, settings.cloudDictationSource == .provider else { return nil }
         switch settings.preferredProvider {
         case .gemini:
             // Endpoint overrides must not send their credentials to Google's socket.

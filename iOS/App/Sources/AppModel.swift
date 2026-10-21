@@ -3,6 +3,7 @@ import Combine
 import UIKit
 import VoiceIQBridge
 import VoiceIQCore
+import VoiceIQInference
 
 /// Composition root for the iOS app: the same dictation pipeline as macOS,
 /// driven by keyboard commands instead of a hotkey, delivering to the keyboard
@@ -44,14 +45,14 @@ final class AppModel: ObservableObject {
     private var needsForeground = false
 
     init() {
-        RemovedLocalModels.cleanUp()
         FormattingSettingsMigration.restoreAutoDegradedWritingRulesOnce()
         FormattingSettingsMigration.removeLiveTranscriptionSettings()
         let client = GeminiClient(
             apiKey: { KeychainStore.loadAPIKey() },
             openAIKey: { KeychainStore.loadOpenAIKey() },
             openAIConfig: { SettingsStore().openAIConfig },
-            provider: { SettingsStore().preferredProvider }
+            provider: { SettingsStore().preferredProvider },
+            elevenLabsKey: { KeychainStore.loadElevenLabsKey() }
         )
         transcription = GeminiTranscriptionService(client: client)
         historyStore = try? HistoryStore.standard()
@@ -60,7 +61,9 @@ final class AppModel: ObservableObject {
             client: client,
             config: { SettingsStore().geminiConfig },
             summaryModel: SettingsStore().geminiConfig.cleanupModel,
-            providers: { SettingsStore().meetingProviders }
+            providers: { SettingsStore().meetingProviders },
+            routes: { SettingsStore().meetingSpeechRoutes },
+            localMeeting: LocalSpeechInference.transcribeMeeting
         )
         let inserter = self.inserter
         coordinator = DictationCoordinator(
@@ -79,7 +82,7 @@ final class AppModel: ObservableObject {
                 )
             },
             liveFactory: {
-                LiveTranscriber.makeFromSettings(audioURL: $0)
+                LiveTranscriber.makeFromSettings(audioURL: $0, localSessionFactory: LocalSpeechInference.makeSession)
             }
         )
         sleepGuard = SessionSleepGuard(dictation: coordinator, meetings: meetings)
@@ -264,7 +267,7 @@ final class AppModel: ObservableObject {
 
     private func startBlocker() -> String? {
         if let missing = setupBlocker() { return missing }
-        if meetings.isRecording { return "A meeting is recording" }
+        if meetings.isRecording { return "Notes are recording" }
         switch coordinator.state {
         case .idle, .done, .cancelled, .failed: return nil
         case .recording, .warming: return nil

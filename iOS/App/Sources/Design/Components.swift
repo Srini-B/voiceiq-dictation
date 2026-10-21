@@ -181,6 +181,24 @@ struct IconTile: View {
     }
 }
 
+/// A service's own mark from the asset catalog on a neutral tile. Monochrome
+/// marks are template images and take the ink colour, so they read in dark mode.
+struct BrandTile: View {
+    let image: String
+    var size: CGFloat = 30
+
+    var body: some View {
+        Image(image)
+            .resizable()
+            .scaledToFit()
+            .foregroundStyle(Theme.Colors.ink)
+            .frame(width: size * 0.6, height: size * 0.6)
+            .frame(width: size, height: size)
+            .background(RoundedRectangle(cornerRadius: Theme.Radius.tile, style: .continuous).fill(Theme.Colors.porcelain))
+            .accessibilityHidden(true)
+    }
+}
+
 /// A checklist line: a state glyph, a title and an optional detail.
 struct CheckLine: View {
     let title: String

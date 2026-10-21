@@ -15,6 +15,7 @@ public enum KeychainStore {
         case gemini = "gemini-api-key"
         case tinyFish = "tinyfish-api-key"
         case openAI = "openai-api-key"
+        case elevenLabs = "elevenlabs-api-key"
         case agentProvider = "agent-provider-api-key"
 
         var label: String {
@@ -22,6 +23,7 @@ public enum KeychainStore {
             case .gemini: return "VoiceiQ — Gemini API key"
             case .tinyFish: return "VoiceiQ — TinyFish API key"
             case .openAI: return "VoiceiQ — OpenAI API key"
+            case .elevenLabs: return "VoiceiQ — ElevenLabs API key"
             case .agentProvider: return "VoiceiQ — Agent provider API key"
             }
         }
@@ -32,6 +34,7 @@ public enum KeychainStore {
             case .gemini: return "apiKey"
             case .tinyFish: return "tinyFishKey"
             case .openAI: return "openAIKey"
+            case .elevenLabs: return "elevenLabsKey"
             case .agentProvider: return "agentProviderKey"
             }
         }
@@ -96,6 +99,16 @@ public enum KeychainStore {
 
     @discardableResult
     public static func deleteOpenAIKey(notify: Bool = false) -> Bool { delete(.openAI, notify: notify) }
+
+    // MARK: - ElevenLabs
+
+    public static func loadElevenLabsKey() -> String? { load(.elevenLabs, service: service) }
+
+    @discardableResult
+    public static func saveElevenLabsKey(_ key: String) -> Bool { save(key, for: .elevenLabs) }
+
+    @discardableResult
+    public static func deleteElevenLabsKey(notify: Bool = false) -> Bool { delete(.elevenLabs, notify: notify) }
 
     /// Whether the provider's key is stored.
     public static func hasKey(for provider: ModelProvider) -> Bool {

@@ -1,4 +1,3 @@
-#if os(macOS)
 import CryptoKit
 import Foundation
 
@@ -239,4 +238,3 @@ final class LocalModelFileDownloader: NSObject, URLSessionDownloadDelegate, @unc
         }
     }
 }
-#endif

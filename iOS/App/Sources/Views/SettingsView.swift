@@ -1,6 +1,7 @@
 import SwiftUI
 import VoiceIQBridge
 import VoiceIQCore
+import VoiceIQSpeech
 
 /// The pages under Settings, in sidebar order.
 enum SettingsSection: String, CaseIterable, Identifiable {
@@ -122,6 +123,9 @@ struct SettingsView: View {
 
 struct DictationSettingsView: View {
     @State private var liveTranscription = SettingsStore().liveTranscriptionEnabled
+    @State private var dictationSource = SettingsStore().dictationSource
+    @State private var localModel = SettingsStore().localSpeechModel
+    @State private var meetingSource = SettingsStore().meetingSource
     @EnvironmentObject private var session: VoiceSession
     private let settings = SettingsStore()
     @State private var translationTarget = SettingsStore().translationTargetLanguage
@@ -179,6 +183,23 @@ struct DictationSettingsView: View {
                     .onChange(of: liveTranscription) { _, value in settings.setLiveTranscriptionEnabled(value) }
             }
             Section {
+                TranscriptionSourcePicker("Transcription", selection: $dictationSource)
+                    .onChange(of: dictationSource) { _, value in settings.setDictationSource(value) }
+                    // Here, not on the controls: they expand to several rows.
+                    .onChange(of: localModel) { _, value in settings.setLocalSpeechModel(value) }
+                LocalModelControls(localEnabled: dictationSource == .onDevice, meetingsLocal: meetingSource == .onDevice,
+                                   selection: $localModel)
+            } header: { SettingsSectionHeader("Transcription") } footer: {
+                LocalModelFooter(localEnabled: dictationSource == .onDevice, selection: localModel)
+            }
+            Section {
+                TranscriptionSourcePicker("Notes transcription", selection: $meetingSource)
+                    .onChange(of: meetingSource) { _, value in settings.setMeetingSource(value) }
+                LocalMeetingControls(meetingsLocal: meetingSource == .onDevice)
+            } header: { SettingsSectionHeader("Notes transcription") } footer: {
+                LocalMeetingFooter(enabled: meetingSource == .onDevice)
+            }
+            Section {
                 Toggle("Smart transcription", isOn: $smartTranscription)
                     .onChange(of: smartTranscription) { _, value in settings.setSmartTranscription(value) }
                 Toggle("Apply writing rules", isOn: $cleanupPass)
@@ -211,6 +232,9 @@ struct DictationSettingsView: View {
         // leave a stale toggle here.
         .onReceive(NotificationCenter.default.publisher(for: .gtSettingDidChange).receive(on: RunLoop.main)) { note in
             switch note.object as? String {
+            case "dictationSource": dictationSource = settings.dictationSource
+            case "meetingSource": meetingSource = settings.meetingSource
+            case "localSpeechModel": localModel = settings.localSpeechModel
             case "liveDictationEnabled": liveTranscription = settings.liveTranscriptionEnabled
             case "smartTranscription": smartTranscription = settings.smartTranscriptionEnabled
             case "smartCleanupPass": cleanupPass = settings.smartCleanupPassEnabled
@@ -366,8 +390,13 @@ struct PrivacyView: View {
     @State private var retentionDays = SettingsStore().audioRetentionDays
     @State private var transcriptRetentionDays = SettingsStore().transcriptRetentionDays
     @State private var provider = SettingsStore().preferredProvider
+    @State private var dictationSource = SettingsStore().cloudDictationSource
+    @State private var meetingSource = SettingsStore().meetingSpeechRoutes.first
 
-    private var destination: String { "\(provider.directName), with your key" }
+    /// Who hears dictation audio when it is not transcribed on device.
+    private var audioOwner: String { dictationSource == .elevenLabs ? "ElevenLabs" : provider.directName }
+    private var destination: String { "\(audioOwner), with your key" }
+    private var meetingOwner: String { meetingSource?.displayName ?? provider.directName }
 
     var body: some View {
         Form {
@@ -390,9 +419,12 @@ struct PrivacyView: View {
                 }
             }
             Section {
-                LabeledContent("Audio", value: destination)
+                LocalAudioPrivacyRow(provider: audioOwner, cloudDescription: destination)
                 LabeledContent("Transcript text", value: "For writing rules, Ask and Translate")
-                LabeledContent("Meeting notes", value: provider.displayName)
+                LocalMeetingPrivacyRow(
+                    label: "Notes audio",
+                    localDescription: "Transcribed on device; transcript to \(provider.displayName) for notes",
+                    cloudDescription: "\(meetingOwner), then notes by \(provider.displayName)")
                 LabeledContent("Dictionary terms", value: "With cloud transcription and cleanup")
                 LabeledContent("Dictionary", value: "Your iCloud, to sync")
                 LabeledContent("History", value: "Your iCloud, to sync final text")
@@ -406,6 +438,8 @@ struct PrivacyView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .gtSettingDidChange).receive(on: RunLoop.main)) { _ in
             provider = SettingsStore().preferredProvider
+            dictationSource = SettingsStore().cloudDictationSource
+            meetingSource = SettingsStore().meetingSpeechRoutes.first
         }
     }
 }
