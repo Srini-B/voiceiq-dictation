@@ -26,11 +26,6 @@ public enum LocalMeetingHelper {
 
     public static let run: LocalMeetingRunner = { request in try await transcribe(request) }
 
-    /// Model loading plus a decode and a diarizer pass; both run faster than
-    /// real time on Apple silicon, so three times the audio covers a slow
-    /// machine with the fans already on.
-    static func timeout(seconds duration: Double) -> Double { max(600, 3 * duration) }
-
     static func transcribe(_ request: LocalMeetingRequest) async throws -> LocalMeetingResult {
         let duration = (try? AVAudioFile(forReading: request.audio)).map { Double($0.length) / $0.fileFormat.sampleRate } ?? 0
         let process = Process()
@@ -55,7 +50,7 @@ public enum LocalMeetingHelper {
         defer { end() }
         let timedOut = OSAllocatedUnfairLock(initialState: false)
         let deadline = Task {
-            do { try await Task.sleep(for: .seconds(timeout(seconds: duration))) } catch { return }
+            do { try await Task.sleep(for: .seconds(TimeoutPolicy.localMeeting(audioSeconds: duration))) } catch { return }
             timedOut.withLock { $0 = true }
             end()
         }

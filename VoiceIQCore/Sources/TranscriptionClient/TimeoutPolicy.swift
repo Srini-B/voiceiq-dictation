@@ -28,6 +28,12 @@ public enum TimeoutPolicy {
     public static func localTranscribe(frames: Int64) -> TimeInterval {
         max(120, Double(frames) / 8_000)
     }
+    /// On-device meeting: model loading plus a decode and a diarizer pass.
+    /// Both run faster than real time on Apple silicon, so three times the
+    /// audio covers a slow machine with the fans already on.
+    public static func localMeeting(audioSeconds: Double) -> TimeInterval {
+        max(600, 3 * audioSeconds)
+    }
 
     /// Overall per-request deadline. Scales gently with audio length:
     /// 5s clip → 31s; 10min clip → 2.5min. Never the unbounded 2×duration formula.

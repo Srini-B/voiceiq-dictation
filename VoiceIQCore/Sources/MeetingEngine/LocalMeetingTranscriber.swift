@@ -1,5 +1,6 @@
 import AVFoundation
 import Foundation
+import os
 import VoiceIQSpeech
 
 /// A meeting transcribed on device: Fluid Speech Mini for the words, Nemotron
@@ -13,9 +14,11 @@ import VoiceIQSpeech
 public struct LocalMeetingTranscriber: Sendable {
     enum Failure: LocalizedError {
         case busy
+        case timedOut
         var errorDescription: String? {
             switch self {
             case .busy: return "The on-device models were busy with a dictation."
+            case .timedOut: return "On-device transcription took too long."
             }
         }
     }
@@ -81,7 +84,7 @@ public struct LocalMeetingTranscriber: Sendable {
         } }
         let audio = try MeetingTranscriber.callAudio(folder: folder)
         let result = try await decode(audio, folder: folder)
-        UsageMeter.record(stage: .transcribe, model: LocalSpeechModel.parakeet.modelID,
+        UsageMeter.record(stage: .meetingTranscribe, model: LocalSpeechModel.parakeet.modelID,
                           usage: TokenUsage(reportedCostUSD: 0, audioSeconds: audio.duration))
         var words = Self.label(result.words, segments: result.segments)
         if audio.isOnline { words = MeetingTranscriber.markOwner(words, audio: audio) }
@@ -100,7 +103,9 @@ public struct LocalMeetingTranscriber: Sendable {
         defer { try? FileManager.default.removeItem(at: mix) }
         try Self.writeMix(audio, to: mix)
         let request = LocalMeetingRequest(speechDirectory: speech, diarizerDirectory: diarizer, audio: mix)
-        let result = try await job.run { try await runner(request) }
+        let result = try await job.run(deadline: TimeoutPolicy.localMeeting(audioSeconds: audio.duration)) {
+            try await runner(request)
+        }
         try JSONEncoder().encode(result).write(to: cache, options: .atomic)
         return result
     }
@@ -115,6 +120,7 @@ public struct LocalMeetingTranscriber: Sendable {
         while start < audio.duration {
             try Task.checkCancellation()
             let samples = try audio.samples(start...min(audio.duration, start + piece))
+            guard !samples.isEmpty else { start += piece; continue }
             guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(max(1, samples.count))) else {
                 throw CocoaError(.fileWriteUnknown)
             }
@@ -170,11 +176,33 @@ public struct LocalMeetingTranscriber: Sendable {
 private actor Job {
     private var task: Task<LocalMeetingResult, Error>?
 
-    func run(_ body: @escaping @Sendable () async throws -> LocalMeetingResult) async throws -> LocalMeetingResult {
+    /// Core ML work cannot be cancelled, so a run that passes its deadline is
+    /// abandoned instead of joined: the caller moves on to the cloud path and
+    /// the work keeps its task until the next cancellation check between
+    /// models. The Mac helper is killed at the same deadline first, so this
+    /// fires only in-process (iOS).
+    func run(deadline: TimeInterval,
+             _ body: @escaping @Sendable () async throws -> LocalMeetingResult) async throws -> LocalMeetingResult {
         let task = Task { try await body() }
         self.task = task
         defer { self.task = nil }
-        return try await withTaskCancellationHandler { try await task.value } onCancel: { task.cancel() }
+        let settled = OSAllocatedUnfairLock(initialState: false)
+        let claim: @Sendable () -> Bool = { settled.withLock { let first = !$0; $0 = true; return first } }
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                let timer = Task {
+                    do { try await Task.sleep(for: .seconds(deadline)) } catch { return }
+                    guard claim() else { return }
+                    task.cancel()
+                    continuation.resume(throwing: LocalMeetingTranscriber.Failure.timedOut)
+                }
+                Task {
+                    let result = await task.result
+                    timer.cancel()
+                    if claim() { continuation.resume(with: result) }
+                }
+            }
+        } onCancel: { task.cancel() }
     }
 
     func cancel() async {

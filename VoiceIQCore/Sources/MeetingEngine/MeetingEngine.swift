@@ -179,7 +179,7 @@ import VoiceIQSpeech
     private func transcribe(folder: URL, config cfg: GeminiConfig) async throws -> [TranscriptSegment] {
         let cloud = MeetingTranscriber(client: client, models: .init(transcribe: transcribeModel ?? cfg.transcribeModel),
                                        endpoint: cfg.endpoint, routes: routes)
-        guard let runner = localMeeting, let local = try await LocalMeetingTranscriber.acquire(runner: runner) else {
+        guard let local = try await acquireLocal() else {
             guard !routes().isEmpty else { throw MeetingFailure.noRoute }
             return try await cloud.transcribe(folder: folder)
         }
@@ -194,6 +194,20 @@ import VoiceIQSpeech
         }
     }
 
+    /// Nil when the meeting should go to the cloud: on-device is off or not
+    /// downloaded, or the models stayed busy and a key is stored. Without a
+    /// key the busy error is the meeting's failure.
+    private func acquireLocal() async throws -> LocalMeetingTranscriber? {
+        guard let runner = localMeeting else { return nil }
+        do {
+            return try await LocalMeetingTranscriber.acquire(runner: runner)
+        } catch {
+            guard !routes().isEmpty, !(error is CancellationError) else { throw error }
+            Log.meeting.error("on-device models unavailable, using cloud: \(String(describing: error), privacy: .public)")
+            return nil
+        }
+    }
+
     /// The recording stays; the meeting is marked failed with a reason the
     /// Meetings list shows, and Retry runs it again with the keys stored then.
     private func saveFailure(id: MeetingID, meta: inout MeetingMeta, error: Error) {
@@ -203,9 +217,9 @@ import VoiceIQSpeech
         meta.status = .failed(reason); try? store.save(meta: meta)
         processing.remove(id)
         switch error as? MeetingFailure {
-        case .noRoute: onNotice?("Meeting saved without a transcript — add a key, then Retry in Meetings")
-        case .noNotesRoute: onNotice?("Meeting transcribed on device — add a key for notes, then Retry in Meetings")
-        case nil: onNotice?("Meeting transcript failed — see Meetings")
+        case .noRoute: onNotice?("\(MeetingFailure.noun) saved without a transcript — add a key, then Retry in \(MeetingFailure.listName)")
+        case .noNotesRoute: onNotice?("\(MeetingFailure.noun) transcribed on device — add a key for notes, then Retry in \(MeetingFailure.listName)")
+        case nil: onNotice?("\(MeetingFailure.noun) transcript failed — see \(MeetingFailure.listName)")
         }
     }
 
@@ -275,17 +289,25 @@ public enum MeetingFailure: Error, Equatable {
     case noNotesRoute
 
     static let fixHint = "The recording is saved. Press Retry after fixing this."
+    /// Where keys live and what the list is called on each platform.
+    #if os(macOS)
+    static let keysPlace = "Settings → Advanced"
+    static let listName = "Meetings", noun = "Meeting"
+    #else
+    static let keysPlace = "Provider & Keys"
+    static let listName = "Notes", noun = "Note"
+    #endif
 
     static func reason(for error: Error, tried: String) -> String {
         switch error {
         case MeetingFailure.noRoute:
-            return "No key can transcribe meetings. Add a Gemini, OpenAI or ElevenLabs key in Settings → Advanced. The recording is saved; press Retry once a key is added."
+            return "No key can transcribe meetings. Add a Gemini, OpenAI or ElevenLabs key in \(keysPlace). The recording is saved; press Retry once a key is added."
         case MeetingFailure.noNotesRoute:
-            return "The transcript was made on device, but no key can write the notes. Add a Gemini or OpenAI key in Settings → Advanced, then press Retry."
+            return "The transcript was made on device, but no key can write the notes. Add a Gemini or OpenAI key in \(keysPlace), then press Retry."
         case let error as TranscriptionError:
             switch error {
             case .auth:
-                return "The API key was rejected (\(tried)). Check it in Settings → Advanced. \(fixHint)"
+                return "The API key was rejected (\(tried)). Check it in \(keysPlace). \(fixHint)"
             case .rateLimitedDaily:
                 return "The daily quota is used up (\(tried)). \(fixHint)"
             case .rateLimitedTransient:
