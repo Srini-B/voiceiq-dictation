@@ -33,6 +33,7 @@ plan ─▶ notes ─┬▶ ios    archive, upload to TestFlight, set What to Te
 - **macos** runs `scripts/release.sh`, notarizing with the App Store Connect key.
 - **publish** runs `scripts/publish-github-release.sh` once both apps built, so
   the two never ship different versions. It creates the tag; nobody tags by hand.
+  The update alert's notes cover every version the user is missing (below).
 
 A failed job can be re-run from the Actions page. The TestFlight upload and the
 GitHub release each refuse to repeat a build that already went out.
@@ -52,6 +53,37 @@ version. Check it with:
 ```bash
 python3 scripts/generate-release-notes.py --base   # previous version, commit, build
 OPENAI_API_KEY=… python3 scripts/generate-release-notes.py /tmp/notes
+```
+
+### Notes for users several versions behind
+
+Sparkle's update alert shows only the newest appcast item's notes. So
+`scripts/sparkle-release-notes.py` makes that item's notes cover the last 10
+versions, newest first, as HTML:
+
+```html
+<style>.sparkle-installed-version, .sparkle-installed-version ~ * { display: none; }</style>
+<section data-sparkle-version="49"><h3>VoiceiQ 0.6.4</h3><ul>…</ul></section>
+<section data-sparkle-version="48"><h3>VoiceiQ 0.6.3</h3><ul>…</ul></section>
+…
+<p><a href="https://github.com/Srini-B/voiceiq-dictation/releases">Earlier releases</a></p>
+```
+
+Sparkle adds the class `sparkle-installed-version` to the section whose build
+number matches the installed app, and the CSS hides that section and everything
+after it. A user on 0.6.2 sees 0.6.4 and 0.6.3; a user further back than the
+list sees all of it and the link. This needs no app code, so it reaches copies
+that are already installed.
+
+The earlier sections come from the appcast that is live when publishing: the
+sections in its items, or the Markdown notes of items from before this change.
+The appcast keeps three items, but each new item carries the history forward.
+Preview the HTML for a version with:
+
+```bash
+curl -sSL https://github.com/Srini-B/voiceiq-dictation/releases/latest/download/appcast.xml -o /tmp/appcast.xml
+python3 scripts/sparkle-release-notes.py /tmp/appcast.xml <build> <version> build/release-notes/mac.md \
+  https://github.com/Srini-B/voiceiq-dictation/releases
 ```
 
 ### Secrets
@@ -115,6 +147,9 @@ is detected, recording or being written up, or an answer on screen. The pill
 offer waits while any of those is going on. `UpdatePillController`
 (`App/Sources/Updates/UpdatePillController.swift`) owns steps 2 to 4;
 `AppUpdater` owns Sparkle.
+
+This path never shows release notes, so Settings › About has a Release Notes
+button that opens the GitHub Releases page.
 
 With automatic downloads off, Sparkle shows its alert with the release notes,
 and the menu item reads "Install VoiceiQ x.y.z…" until the user installs,
