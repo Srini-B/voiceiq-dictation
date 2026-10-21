@@ -1,6 +1,7 @@
 import Foundation
 import UIKit
 import VoiceIQBridge
+import WidgetKit
 import VoiceIQCore
 
 /// The background voice session: the open mic that lets keyboard taps record
@@ -245,8 +246,13 @@ final class VoiceSession: ObservableObject {
         if current.phase != lastPublished?.phase {
             SessionDiagnostics.note("phase \(current.phase.rawValue)")
         }
+        let wasRecording = lastPublished?.phase == .recording
         lastPublished = current
         store.publish(current)
+        if #available(iOS 18.0, *), wasRecording != (current.phase == .recording) {
+            // The Control Center toggle shows whether a dictation records.
+            ControlCenter.shared.reloadControls(ofKind: SharedStore.dictationControlKind)
+        }
         guard isActive else { return }
         if meetingStartedAt != nil || startedByActionButton {
             if activity.isRunning {

@@ -61,6 +61,16 @@ public struct StopDictationIntent: LiveActivityIntent {
 public enum ActionButtonBridge {
     /// Returns why no dictation started, or nil.
     public static var toggle: (@MainActor () async -> String?)?
+
+    static func run() async throws {
+        // A cold launch can reach here before the app has finished setting up.
+        for _ in 0..<30 where toggle == nil {
+            try? await Task.sleep(for: .milliseconds(100))
+        }
+        if let refusal = await toggle?() {
+            throw ActionButtonRefusal(message: refusal)
+        }
+    }
 }
 
 /// A reason the Action button could not start, shown by the system.
@@ -83,14 +93,40 @@ public struct ToggleDictationIntent: AudioRecordingIntent, LiveActivityIntent {
 
     @MainActor
     public func perform() async throws -> some IntentResult {
-        // A cold launch can reach here before the app has finished setting up.
-        for _ in 0..<30 where ActionButtonBridge.toggle == nil {
-            try? await Task.sleep(for: .milliseconds(100))
-        }
-        if let refusal = await ActionButtonBridge.toggle?() {
-            throw ActionButtonRefusal(message: refusal)
+        try await ActionButtonBridge.run()
+        return .result()
+    }
+}
+
+/// The Control Center toggle. Same work as `ToggleDictationIntent`, but iOS
+/// passes the state the user switched to, so a press on a control that shows
+/// a stale state does not start a second dictation. Not an App Shortcut: a
+/// required value would make Siri and Spotlight ask for it.
+@available(iOS 18.0, *)
+public struct SetDictationIntent: SetValueIntent, AudioRecordingIntent, LiveActivityIntent {
+    public static let title: LocalizedStringResource = "Dictate with VoiceiQ"
+    public static let isDiscoverable = false
+
+    @Parameter(title: "Dictating")
+    public var value: Bool
+
+    public init() {}
+
+    @MainActor
+    public func perform() async throws -> some IntentResult {
+        if value != SharedStore.shared.isDictating() {
+            try await ActionButtonBridge.run()
         }
         return .result()
+    }
+}
+
+extension SharedStore {
+    /// The control is on while the app records a dictation.
+    public static let dictationControlKind = "io.blue.voiceiq.ios.control.dictate"
+
+    public func isDictating(now: Date = Date()) -> Bool {
+        snapshot.phase == .recording && appIsAlive(now: now)
     }
 }
 

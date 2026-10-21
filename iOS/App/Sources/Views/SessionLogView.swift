@@ -5,6 +5,7 @@ import VoiceIQBridge
 /// The session and background-start events from `SessionDiagnostics`.
 struct SessionLogView: View {
     @State private var text = SessionLogView.combined()
+    @State private var copied = false
 
     /// The app's events, then the keyboard's.
     static func combined() -> String {
@@ -28,7 +29,14 @@ struct SessionLogView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                Button("Copy") { UIPasteboard.general.string = text }
+                Button(copied ? "Copied" : "Copy") {
+                    UIPasteboard.general.string = text
+                    copied = true
+                    Task {
+                        try? await Task.sleep(for: .seconds(1.5))
+                        copied = false
+                    }
+                }
             }
             ToolbarItem(placement: .topBarLeading) {
                 Button("Clear") {
@@ -39,5 +47,6 @@ struct SessionLogView: View {
             }
         }
         .onAppear { text = SessionLogView.combined() }
+        .sensoryFeedback(.success, trigger: copied) { _, new in new }
     }
 }

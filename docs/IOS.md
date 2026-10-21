@@ -177,6 +177,18 @@ dictation, and the result has no host app, so whichever field has the
 VoiceiQ keyboard within two minutes receives it. Keyboard-started sessions
 have no Live Activity.
 
+The control is a `ControlWidgetToggle`, on while a dictation records. Its
+value provider reads `SharedStore.isDictating()`, which is the snapshot phase
+`recording` with a live heartbeat. `VoiceSession.publish` calls
+`ControlCenter.reloadControls(ofKind:)` each time the phase enters or leaves
+`recording`, so the control stays lit for the whole dictation and turns off
+when it stops from any path. A press runs `SetDictationIntent`, a
+`SetValueIntent` with the same work as `ToggleDictationIntent`
+(`ActionButtonBridge.run`). It acts only when the requested state differs
+from the actual one, so a stale control cannot start a second dictation.
+`ToggleDictationIntent` stays the App Shortcut, because a `SetValueIntent`
+would make Siri and Spotlight ask for its value.
+
 ### iPad
 
 The app and both extensions target iPhone and iPad (`TARGETED_DEVICE_FAMILY`
@@ -191,7 +203,9 @@ Layout follows the horizontal size class, not the device:
   a bar background: the tab bar above names the page, and in Settings the
   open section's row is tinted in the sidebar (`List(selection:)` over
   `SettingsSection`). Pages pushed inside the detail column keep their
-  title and back button. Home puts the session, setup and
+  title and back button. History's detail is keyed by the dictation id
+  (`.id(record.id)`); without it the split view kept the first dictation's
+  state when another row was picked. Home puts the session, setup and
   hardware keyboard cards in one column and Try it, stats and recent
   dictations in a second.
 - Compact width (iPhone, narrow iPad windows): the iPhone layout, with a
@@ -228,7 +242,14 @@ setup, so it runs from:
 
 Run it once to start and again to stop. No keyboard types the result, so after
 two seconds it goes on the clipboard (the existing `copyIfNotTyped` path) and
-the user presses ⌘V. On iPad, Home, onboarding's Try it page and
+the user presses ⌘V. The session log records whether the clipboard write took
+effect (`UIPasteboard.changeCount` before and after) and whether the app was
+in the foreground or the background at that moment.
+
+On an iPad, which has no Dynamic Island, iPadOS shows the Live Activity as a
+banner for a few seconds when it starts and then hides it. It stays on the
+Lock Screen only. An app cannot keep the banner on screen, so the Control
+Center toggle is the in-session indicator and the way to stop. On iPad, Home, onboarding's Try it page and
 Settings › Dictation show these steps in a "Hardware keyboard" card in place
 of the Action button section.
 
@@ -418,7 +439,7 @@ runs. Everything needs Full Access.
 | Dictionary with search, CSV and Auto-learned | Same, synced through iCloud, plus adding a selection or a copied word from the keyboard |
 | Writing rules, smart transcription, live, noise handling | Same settings |
 | On-device transcription: Fluid Speech Mini and Nemotron 3.5, English tools, live preview with Fluid Speech Mini | Fluid Speech Mini and English tools only, in-process; no live preview (see [local transcription](LOCAL_TRANSCRIPTION.md)) |
-| History, retry, crash recovery, retention | Same |
+| History, retry, crash recovery, retention | Same. The detail shows the cost and one row per model call (stage, model, cost) from `UsageStore.records(forSession:)`, and Copy turns into "Copied" with a checkmark and a success haptic for 1.5 s |
 | Cost with the Gemini, OpenAI and ElevenLabs toggle, periods and Detailed | Same |
 | Advanced: the selected provider's models | Same, plus the session log |
 | Screen context, auto-learn, shortcuts, call detection, mute other audio, sounds | Not on iOS |

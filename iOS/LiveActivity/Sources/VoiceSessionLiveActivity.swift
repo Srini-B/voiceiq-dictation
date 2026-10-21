@@ -16,16 +16,27 @@ struct VoiceIQWidgets: WidgetBundle {
 
 /// "VoiceiQ Dictate" in Control Center, assignable to the Action button.
 /// Press once to start dictating in whatever app is open, again to stop.
+/// It stays on while the dictation records; the app reloads it when that
+/// changes.
 @available(iOS 18.0, *)
 struct DictationControl: ControlWidget {
     var body: some ControlWidgetConfiguration {
-        StaticControlConfiguration(kind: "io.blue.voiceiq.ios.control.dictate") {
-            ControlWidgetButton(action: ToggleDictationIntent()) {
-                Label("Dictate", systemImage: "mic.fill")
+        StaticControlConfiguration(kind: SharedStore.dictationControlKind, provider: Provider()) { dictating in
+            ControlWidgetToggle("Dictate", isOn: dictating, action: SetDictationIntent()) { on in
+                Label(on ? "Dictating" : "Dictate", systemImage: on ? "mic.fill" : "mic")
             }
+            .tint(recordingRed)
         }
         .displayName("VoiceiQ Dictate")
         .description("Start or stop a dictation without opening VoiceiQ.")
+    }
+
+    struct Provider: ControlValueProvider {
+        var previewValue: Bool { false }
+
+        func currentValue() async throws -> Bool {
+            SharedStore.shared.isDictating()
+        }
     }
 }
 
