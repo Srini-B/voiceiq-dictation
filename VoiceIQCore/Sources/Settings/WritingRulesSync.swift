@@ -77,6 +77,10 @@ public final class WritingRulesSync {
             settings.applySyncedWritingRules(merged)
         }
         guard merged != remote else { return }
+        // Before the first download a new install sees no value even when
+        // iCloud holds one. Rules never edited on this device have nothing to
+        // add, and writing them then could replace that value unread.
+        guard remote != nil || merged.updatedAt != .distantPast else { return }
         guard let data = try? JSONEncoder().encode(merged), data.count <= Self.maxBytes else {
             Log.session.error("writing rules sync: too large for iCloud key-value storage, kept on this device")
             return

@@ -29,6 +29,33 @@
   as "use the defaults", so a copy of old defaults does not stop later
   default updates.
 
+## Review fixes (PR #16)
+
+CodeRabbit raised five points. Three were fixed:
+
+- Astra has no `none` reasoning effort; its lowest is `low`
+  (developers.openai.com/api/docs/models/gpt-6-astra). The app sent `none`,
+  so every direct OpenAI writing request would have been rejected and the
+  raw transcript inserted. `openAIReasoningEffort(model:)` now sends `low`
+  to Astra and keeps `none` for other models, such as a Luna override. The
+  earlier Astra numbers came through CLIProxyAPI, which accepted `none`.
+  Re-measured at `low`: 22 of 33 fixed (21 at `none`), controls unchanged,
+  p50 3.9 s, p90 9.2 s (7.8 s at `none`), gate 75 of 75. The proxy reported
+  almost no reasoning tokens at either level, so latency on OpenAI itself
+  is not measured.
+- Astra calls tools only through the Responses API
+  (developers.openai.com/api/docs/guides/function-calling). Agent mode on
+  the OpenAI provider used Chat Completions; it now uses the existing
+  `.openAIResponses` transport, which the proxy setup already exercised.
+- A new install could upload its untouched default rules before its first
+  iCloud download and replace the rules stored there. A copy that was never
+  edited is no longer uploaded while iCloud shows no value.
+
+Not changed: stamping edits later than the iCloud value when the clock moves
+backward (`DictionarySync` has the same behavior and device clocks are
+network-synced), and Astra's long-context price above 272K input tokens (no
+VoiceiQ request comes near it; cleanup prompts are about 8,300 tokens).
+
 ## Cost
 
 The cleanup prompt is about 8,300 input tokens and 30 output tokens
