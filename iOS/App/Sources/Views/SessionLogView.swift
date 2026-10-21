@@ -2,7 +2,7 @@ import SwiftUI
 import UIKit
 import VoiceIQBridge
 
-/// The keeper and background-start events from `SessionDiagnostics`.
+/// The session and background-start events from `SessionDiagnostics`.
 struct SessionLogView: View {
     @State private var text = SessionLogView.combined()
 

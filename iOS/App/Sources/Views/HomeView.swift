@@ -80,8 +80,8 @@ struct HomeView: View {
     }
 }
 
-/// The session: while a keeper holds it, the keyboard's mic starts in place
-/// instead of switching to VoiceiQ.
+/// The session: while the mic is held open, the keyboard's mic starts in
+/// place instead of switching to VoiceiQ.
 private struct SessionCard: View {
     @EnvironmentObject private var model: AppModel
     @EnvironmentObject private var session: VoiceSession
@@ -114,11 +114,10 @@ private struct SessionCard: View {
                 Text("Turns off in")
                 Text(timerInterval: Date()...until, countsDown: true).monospacedDigit()
             }
-        } else if let keeper = session.keeper {
-            switch keeper {
-            case .openMic: Text("Mic is on")
-            case .backgroundAudio: Text("Ready in the background")
-            }
+        } else if session.isActive {
+            // With "Never" the mic is already closed while the text is
+            // written, so name the phase rather than the mic.
+            Text(session.dictationPhase == .processing ? "Writing…" : "Mic is on")
         } else if UIDevice.isPad {
             if #available(iOS 18.0, *) {
                 Text("Tap the mic on the VoiceiQ keyboard, or use VoiceiQ Dictate.")

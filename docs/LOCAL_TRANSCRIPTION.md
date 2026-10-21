@@ -79,6 +79,14 @@ has its own trash icon, including the model that is not selected.
 Nemotron supports saved audio, so disabling real-time does not require a
 different local model. There is no automatic switch to another downloaded model.
 
+The section footer (`LocalModelFooter`, shared by both platforms) depends on
+the selected model's state. While it is missing, the footer says cloud
+transcription is used until it is downloaded. Once it is on disk, the footer
+says the first dictation after a download takes longer while the model is set
+up on the device, and later dictations are fast. That is the one-time Core ML
+compile on first load (see "English speech processing"); the compiled model
+is cached by the OS, so only the first dictation pays for it.
+
 ### Fluid Speech Mini live preview
 
 Fluid Speech Mini is an offline decoder with no streaming state, so its

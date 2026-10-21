@@ -56,7 +56,7 @@ because pings are dropped while a process is suspended.
    up to 0.7 s for the app to acknowledge the command. The app starts recording
    from the background. No app switch. The app acknowledges only when it can
    start in place (`AppModel.canStartInPlace`): it is in the foreground, or the
-   session's keeper can record from the background (the mic is held open)
+   session holds the mic open, so it can record from the background,
    and no background start has failed since the app was last opened.
 3. Otherwise, or without an acknowledgement, the keyboard opens
    `voiceiq://keyboard/start?cmd=<id>&host=<bundle id>`. The app starts the
@@ -132,42 +132,25 @@ iOS lets a backgrounded app start a *mixable* recording only while it is
 already recording. The SDK header (`CoreAudioTypes/AudioSessionTypes.h`,
 `AVAudioSessionErrorCodeCannotStartRecording`, `'!rec'`) states the rule:
 "The app is not allowed to start recording, usually because it is starting a
-mixable recording from the background". Measured on device (builds 13 to 15,
-every session with `.mixWithOthers`): silent playback alone and a Live
-Activity both failed at the second in-place start. A non-mixable session has
-not been measured yet; that is the Background audio mode below. (A Picture in
-Picture keeper was tried in between and removed: it held the session, but
-left a tab at the screen edge, which Typeless no longer shows either.)
-Settings › Dictation › Skip app switching (`MobileSettings.keepActiveMode`)
-picks what keeps the session alive after the one-time bounce.
-`VoiceSession.keeper` holds exactly one keeper, or nil when no session is up.
+mixable recording from the background". Measured on device (builds 13 to 15):
+silent playback alone and a Live Activity both failed at the second in-place
+start; only an open mic worked. Two alternatives were tried and removed: a
+Picture in Picture keeper (held the session, but left a tab at the screen
+edge) and a non-mixable "Background audio" session with the mic closed (did
+not start in place on the owner's device; removed on 2026-10-21 along with
+the Skip app switching picker).
 
-- **Keep mic on** (default; `KeepAliveAudio`, keeper `.openMic`). Plays silence and
-  taps `inputNode` without keeping the buffers: the mic stays open and the
-  orange dot shows. It lasts for the warm window after each dictation, set in
-  Keep mic on after dictating (`MobileSettings.warmWindow`: Never, 5 s, 10 s,
-  30 s default, 1 minute, 5 minutes, 1 hour, 12 hours). The window counts
-  from when the text is delivered; "Never" closes the audio session as soon
-  as recording stops but keeps the session up (on background time) until the
-  text is delivered, so the keyboard and the Dynamic Island show "Writing…"
-  in between.
-- **Background audio** (`KeepAliveAudio`, keeper `.backgroundAudio`;
-  prototype, not yet verified on a device). Plays silence on a session
-  *without* `.mixWithOthers` and never touches `inputNode`, so the mic is off
-  and no orange dot shows while idle. The bet, from the `'!rec'` rule above:
-  a non-mixable session may start recording from the background, so the next
-  keyboard tap records in place with nothing visible meanwhile. Other apps'
-  audio pauses while the session is up. It lasts for the warm window, set in
-  Stay ready after dictating (same `MobileSettings.warmWindow`; 12 hours when
-  unset, Typeless's default `audioCloseDelaySeconds`). Home shows "Turns off
-  in" with the countdown.
-
-`holdsMicOpen` and `mixesWithOthers` (in `KeepAliveAudio.swift`) say what
-each keeper asks of the audio session. Both keep a `.playAndRecord` session
-active through `KeepAliveAudio` (default to speaker, A2DP; HFP only when
-"Use iPhone microphone" is off; mix with others except for Background
-audio). `AudioCaptureEngine` never configures the session, so each
-dictation's capture engine records into it.
+`KeepAliveAudio` is the one keeper. It plays silence on a `.playAndRecord`
+session (default to speaker, A2DP, mix with others; HFP only when "Use
+iPhone microphone" is off) and taps `inputNode` without keeping the buffers,
+so the mic stays open and the orange dot shows. `VoiceSession.isActive` says
+whether it is up. It lasts `MobileSettings.warmWindow` after each dictation
+(Settings › Dictation › "Keep mic on after dictating": Never, 5 s to 12 h,
+default 30 s; key `warmWindowSeconds`), counted from when the text is
+delivered; Home shows "Turns off in" with the countdown. With "Never" the
+audio session closes as soon as the dictation stops and the session ends once
+the text is delivered, so the next keyboard tap opens VoiceiQ again.
+`AudioCaptureEngine` never configures the session, so each dictation's capture engine records into it.
 
 The session also ends when the user taps End (app or Dynamic Island) or when
 an audio interruption cannot be resumed. A call or Siri interruption
@@ -175,9 +158,9 @@ finalizes an in-progress dictation, so the words are kept. Settings ›
 Dictation has an "Open Action Button settings" button
 (`App-prefs:ACTION_BUTTON`, falling back to VoiceiQ's page in Settings).
 
-Home shows "Skips app switching" while a keeper holds the session and "Needs
-app switching" otherwise. The session log (Settings › Advanced) records the
-keeper.
+Home shows "Skips app switching" while the session is up and "Needs app
+switching" otherwise. The session log (Settings › Advanced) records session
+starts and background mic starts.
 
 ### Action button
 
@@ -463,11 +446,7 @@ is `false`, so builds skip the export-compliance question.
   verified in the simulator only so far.
 - iOS ends a Live Activity after eight hours. The session stays up, and the
   next mic tap bounces once to start a new activity.
-- In Keep mic on mode, the orange mic dot shows for the whole warm window. In
-  Background audio mode, other apps' audio pauses for the warm window.
-- Background audio mode is untested on a device: whether a non-mixable
-  session may start recording from the background is read from the SDK
-  header, not measured.
+- The orange mic dot shows for the whole warm window after a dictation.
 - The Action button control needs iOS 18 and Live Activities turned on.
 - On an iPad with a keyboard case, a dictation lands on the clipboard, not in
   the field: iPadOS hides third-party keyboards while a hardware keyboard is

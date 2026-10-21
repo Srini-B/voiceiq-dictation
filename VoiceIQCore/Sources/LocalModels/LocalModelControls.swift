@@ -185,8 +185,8 @@ private struct LocalModelRow: View {
     }
 }
 
-/// Section footer: the hardware requirement, or the cloud fallback while the
-/// selected model is missing.
+/// Section footer: the hardware requirement, the cloud fallback while the
+/// selected model is missing, or the first-run note once it is on disk.
 @MainActor
 public struct LocalModelFooter: View {
     private let localEnabled: Bool
@@ -200,10 +200,18 @@ public struct LocalModelFooter: View {
     public var body: some View {
         if !LocalModelSupport.isAvailable {
             Text(LocalModelSupport.requirement)
-        } else if localEnabled && store.state != .ready {
-            Text("Cloud transcription is used until \(store.displayName) is downloaded.")
+        } else if localEnabled {
+            if store.state == .ready {
+                Text(Self.firstRunNote)
+            } else {
+                Text("Cloud transcription is used until \(store.displayName) is downloaded.")
+            }
         }
     }
+
+    /// Core ML prepares a downloaded model for this device on its first load
+    /// and caches the result, so only the first dictation pays for it.
+    static let firstRunNote = "The first dictation after a download takes longer while the model is set up on this device. Later dictations are fast."
 }
 
 /// Section footer while meetings are kept on device but a model is missing.
