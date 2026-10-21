@@ -29,7 +29,7 @@ struct ModelKeysForm: View {
                 Image(systemName: "info.circle.fill")
                     .foregroundStyle(Theme.Colors.accent)
                     .font(.system(size: 17))
-                Text("Pick **Gemini** or **OpenAI** and add that provider's key. The TinyFish key is optional.")
+                Text("Pick **Gemini** or **OpenAI** and add that provider's key. The ElevenLabs and TinyFish keys are optional.")
                     .font(Theme.Fonts.subheadline())
                     .foregroundStyle(Theme.Colors.inkSecondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -55,6 +55,7 @@ struct ModelKeysForm: View {
 
             VStack(alignment: .leading, spacing: Theme.Spacing.m) {
                 GroupLabel(text: "Optional")
+                KeyCard(slot: .elevenLabs, onChange: reload)
                 KeyCard(slot: .tinyFish, onChange: reload)
             }
         }
@@ -199,12 +200,13 @@ private struct TrailingIconLabelStyle: LabelStyle {
 
 /// A place a key can be stored, with what it is for.
 enum KeySlot: Hashable, CaseIterable {
-    case gemini, openAI, tinyFish
+    case gemini, openAI, elevenLabs, tinyFish
 
     var title: String {
         switch self {
         case .gemini: return "Gemini"
         case .openAI: return "OpenAI"
+        case .elevenLabs: return "ElevenLabs"
         case .tinyFish: return "TinyFish"
         }
     }
@@ -213,6 +215,7 @@ enum KeySlot: Hashable, CaseIterable {
         switch self {
         case .gemini: return "sparkles"
         case .openAI: return "circle.hexagongrid"
+        case .elevenLabs: return "waveform"
         case .tinyFish: return "globe"
         }
     }
@@ -223,6 +226,8 @@ enum KeySlot: Hashable, CaseIterable {
             return "Google's Gemini API, with a free tier. Stored in your \(UIDevice.current.localizedModel)'s Keychain and only ever sent to Google."
         case .openAI:
             return "OpenAI's API. Stored in your \(UIDevice.current.localizedModel)'s Keychain and only ever sent to OpenAI."
+        case .elevenLabs:
+            return "Unlocks ElevenLabs Scribe as a transcription source. Stored in your \(UIDevice.current.localizedModel)'s Keychain and only ever sent to ElevenLabs."
         case .tinyFish:
             return "Lets Ask Anything look up current information on the web. Stored in your \(UIDevice.current.localizedModel)'s Keychain and only ever sent to TinyFish."
         }
@@ -232,6 +237,7 @@ enum KeySlot: Hashable, CaseIterable {
         switch self {
         case .gemini: return URL(string: "https://aistudio.google.com/apikey")!
         case .openAI: return URL(string: "https://platform.openai.com/api-keys")!
+        case .elevenLabs: return URL(string: "https://elevenlabs.io/app/settings/api-keys")!
         case .tinyFish: return URL(string: "https://agent.tinyfish.ai/api-keys")!
         }
     }
@@ -240,6 +246,7 @@ enum KeySlot: Hashable, CaseIterable {
         switch self {
         case .gemini: return KeychainStore.loadAPIKey()
         case .openAI: return KeychainStore.loadOpenAIKey()
+        case .elevenLabs: return KeychainStore.loadElevenLabsKey()
         case .tinyFish: return KeychainStore.loadTinyFishKey()
         }
     }
@@ -248,6 +255,7 @@ enum KeySlot: Hashable, CaseIterable {
         switch self {
         case .gemini: return KeychainStore.saveAPIKey(key)
         case .openAI: return KeychainStore.saveOpenAIKey(key)
+        case .elevenLabs: return KeychainStore.saveElevenLabsKey(key)
         case .tinyFish: return KeychainStore.saveTinyFishKey(key)
         }
     }
@@ -256,6 +264,7 @@ enum KeySlot: Hashable, CaseIterable {
         switch self {
         case .gemini: _ = KeychainStore.deleteAPIKey(notify: true)
         case .openAI: _ = KeychainStore.deleteOpenAIKey(notify: true)
+        case .elevenLabs: _ = KeychainStore.deleteElevenLabsKey(notify: true)
         case .tinyFish: _ = KeychainStore.deleteTinyFishKey(notify: true)
         }
     }
@@ -269,6 +278,8 @@ enum KeySlot: Hashable, CaseIterable {
             check = await GeminiClient(apiKey: { key }).validateKey(endpoint: SettingsStore().geminiConfig.endpoint)
         case .openAI:
             check = await GeminiClient(apiKey: { nil }, openAIKey: { key }).validateOpenAIKey()
+        case .elevenLabs:
+            check = await GeminiClient(apiKey: { nil }, elevenLabsKey: { key }).validateElevenLabsKey()
         case .tinyFish:
             switch await TinyFishClient(apiKey: { key }).validateKey() {
             case .valid: return .accepted(offline: false)

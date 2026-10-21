@@ -80,7 +80,9 @@ public final class LiveTranscriber: DictationStreaming {
     @MainActor private static func makeCloudFromSettings() -> (any DictationStreaming)? {
         let settings = SettingsStore()
         let vocabulary = DictionaryStore().sanitizedVocabulary()
-        guard settings.liveTranscriptionEnabled else { return nil }
+        // Scribe is batch-only, so an ElevenLabs dictation waits for the full
+        // recording instead of streaming to the provider's socket.
+        guard settings.liveTranscriptionEnabled, settings.cloudDictationSource == .provider else { return nil }
         switch settings.preferredProvider {
         case .gemini:
             // Endpoint overrides must not send their credentials to Google's socket.

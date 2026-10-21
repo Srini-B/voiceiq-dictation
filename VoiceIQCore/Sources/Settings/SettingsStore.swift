@@ -100,12 +100,39 @@ public struct SettingsStore: Sendable {
         Self.set(enabled, forKey: "liveDictationEnabled")
     }
 
-    public var localTranscriptionEnabled: Bool {
-        LocalModelSupport.isAvailable && Self.defaults.bool(forKey: "localTranscriptionEnabled")
+    /// Who transcribes dictation. Reads the pre-picker booleans when the key
+    /// is absent: on-device on → `.onDevice`; an old `transcriptionSource` of
+    /// ElevenLabs → `.elevenLabs`; otherwise the provider. On a device without
+    /// local models `.onDevice` reads as the provider.
+    public var dictationSource: TranscriptionSource {
+        Self.source(forKey: "dictationSource", legacyLocalKey: "localTranscriptionEnabled")
     }
 
-    public func setLocalTranscriptionEnabled(_ enabled: Bool) {
-        Self.set(enabled && LocalModelSupport.isAvailable, forKey: "localTranscriptionEnabled")
+    public func setDictationSource(_ source: TranscriptionSource) {
+        Self.set(source.rawValue, forKey: "dictationSource")
+    }
+
+    public var localTranscriptionEnabled: Bool { dictationSource == .onDevice }
+
+    /// The cloud source dictation falls to when no on-device model answers.
+    /// ElevenLabs only while its key is stored, so a removed key never strands
+    /// dictation.
+    public var cloudDictationSource: TranscriptionSource {
+        dictationSource == .elevenLabs && KeychainStore.loadElevenLabsKey() != nil ? .elevenLabs : .provider
+    }
+
+    private static func source(forKey key: String, legacyLocalKey: String) -> TranscriptionSource {
+        let stored: TranscriptionSource
+        if let raw = defaults.string(forKey: key), let parsed = TranscriptionSource(rawValue: raw) {
+            stored = parsed
+        } else if defaults.bool(forKey: legacyLocalKey) {
+            stored = .onDevice
+        } else if defaults.string(forKey: "transcriptionSource") == TranscriptionSource.elevenLabs.rawValue {
+            stored = .elevenLabs
+        } else {
+            stored = .provider
+        }
+        return stored == .onDevice && !LocalModelSupport.isAvailable ? .provider : stored
     }
 
     /// The on-device model to download and use. Unknown, missing, or
@@ -125,20 +152,30 @@ public struct SettingsStore: Sendable {
         if model == .nemotron { setLiveTranscriptionEnabled(true) }
     }
 
-    /// Meetings are transcribed and diarized on device when this is on and
-    /// both Fluid Speech Mini and the speaker diarizer are downloaded. Notes
-    /// still come from the cloud writing model.
-    public var localMeetingTranscriptionEnabled: Bool {
-        LocalModelSupport.isAvailable && Self.defaults.bool(forKey: "localMeetingTranscriptionEnabled")
+    /// Who transcribes meetings. On device needs Fluid Speech Mini and the
+    /// speaker diarizer downloaded; notes still come from the cloud writing
+    /// model. Same legacy reading as `dictationSource`.
+    public var meetingSource: TranscriptionSource {
+        Self.source(forKey: "meetingSource", legacyLocalKey: "localMeetingTranscriptionEnabled")
     }
 
-    public func setLocalMeetingTranscriptionEnabled(_ enabled: Bool) {
-        Self.set(enabled && LocalModelSupport.isAvailable, forKey: "localMeetingTranscriptionEnabled")
+    public func setMeetingSource(_ source: TranscriptionSource) {
+        Self.set(source.rawValue, forKey: "meetingSource")
     }
 
-    /// Providers for meeting transcription and notes; see `ModelProvider.meetingOrder`.
+    public var localMeetingTranscriptionEnabled: Bool { meetingSource == .onDevice }
+
+    /// Providers for meeting notes, and for meeting transcription when the
+    /// source is the provider; see `ModelProvider.meetingOrder`.
     public var meetingProviders: [ModelProvider] {
         ModelProvider.meetingOrder(selected: preferredProvider, hasKey: KeychainStore.hasKey(for:))
+    }
+
+    /// Cloud routes a meeting is transcribed on, in order. ElevenLabs alone
+    /// when picked with a key stored; otherwise the providers with keys.
+    public var meetingSpeechRoutes: [MeetingTranscriber.SpeechRoute] {
+        if meetingSource == .elevenLabs, KeychainStore.loadElevenLabsKey() != nil { return [.elevenLabs] }
+        return meetingProviders.map(MeetingTranscriber.SpeechRoute.provider)
     }
 
     /// Show the resting dot at the bottom of the screen when idle. Off = the pill

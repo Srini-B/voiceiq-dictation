@@ -41,7 +41,8 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
         // the rules this transcript is being produced under.
         let vocabulary = Self.vocabularyIfEnabled()
         let provider = settings.preferredProvider
-        let names = modelNames(provider)
+        let source = settings.cloudDictationSource
+        let names = modelNames(provider, source: source)
 
         // One request per chunk. A short dictation is one chunk, so this is the
         // old single-request path for everything under ten minutes. Leading and
@@ -66,7 +67,7 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
             let seconds = durationSeconds * Double(range.count) / Double(max(1, fileFrames))
             let deadline = TimeoutPolicy.overallDeadline(audioDuration: seconds)
             var raw = try await transcribeWithRetry(
-                flacData: flacData, seconds: seconds, config: config, policy: policy,
+                flacData: flacData, seconds: seconds, config: config, policy: policy, source: source,
                 vocabulary: vocabulary, deadline: deadline
             )
             var trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -78,7 +79,7 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
                 // Sending this one down the old endpoint would leave a rare branch
                 // silently on a different pipeline.
                 raw = (try? await sendTranscribe(
-                    flacData: flacData, seconds: seconds, config: config, policy: policy,
+                    flacData: flacData, seconds: seconds, config: config, policy: policy, source: source,
                     vocabulary: vocabulary, deadline: deadline
                 )) ?? ""
                 trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -97,20 +98,21 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
         return try await process(
             TranscriptionResult(rawTranscript: trimmedRaw, cleanedTranscript: trimmedRaw, modelID: names.transcribe),
             durationSeconds: durationSeconds, context: context, config: config,
-            policy: policy, provider: provider, writingModel: names.writing
+            policy: policy, source: source, provider: provider, writingModel: names.writing
         )
     }
 
     public func process(_ transcript: TranscriptionResult, durationSeconds: Double, context: DictationContext) async throws -> TranscriptionResult {
         let provider = settings.preferredProvider
+        let source = settings.cloudDictationSource
         return try await process(transcript, durationSeconds: durationSeconds, context: context, config: settings.geminiConfig,
-                                 policy: settings.formattingPolicy, provider: provider,
-                                 writingModel: modelNames(provider).writing)
+                                 policy: settings.formattingPolicy, source: source, provider: provider,
+                                 writingModel: modelNames(provider, source: source).writing)
     }
 
     private func process(
         _ transcript: TranscriptionResult, durationSeconds: Double, context: DictationContext,
-        config: GeminiConfig, policy: SettingsStore.FormattingPolicy,
+        config: GeminiConfig, policy: SettingsStore.FormattingPolicy, source: TranscriptionSource,
         provider: ModelProvider, writingModel: String
     ) async throws -> TranscriptionResult {
         let trimmedRaw = transcript.rawTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -150,7 +152,7 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
 
         let cleanup = await cleanupOrFallback(
             raw: trimmedRaw, context: context, config: config,
-            rawHasFillers: transcriptKeepsFillers(provider: provider, policy: policy),
+            rawHasFillers: transcriptKeepsFillers(source: source, provider: provider, policy: policy),
             normalized: transcript.normalizedTranscript
         )
         return TranscriptionResult(
@@ -161,15 +163,16 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
         )
     }
 
-    /// The models that run, for History's model column. OpenAI's
-    /// transcription model has no smart mode, so no mode is named.
-    private func modelNames(_ provider: ModelProvider) -> (transcribe: String, writing: String) {
-        if provider == .openAI {
-            let openAI = settings.openAIConfig
-            return (openAI.transcribeModel, openAI.writingModel)
+    /// The models that run, for History's model column. Neither Scribe nor
+    /// OpenAI's transcription model has a smart mode, so no mode is named.
+    private func modelNames(_ provider: ModelProvider, source: TranscriptionSource) -> (transcribe: String, writing: String) {
+        let writing = provider == .openAI ? settings.openAIConfig.writingModel : settings.geminiConfig.cleanupModel
+        switch (source, provider) {
+        case (.elevenLabs, _): return (ElevenLabs.batchModel, writing)
+        case (_, .openAI): return (settings.openAIConfig.transcribeModel, writing)
+        case (_, .gemini):
+            return ("\(settings.geminiConfig.transcribeModel)/\(settings.formattingPolicy.mode.rawValue)", writing)
         }
-        let config = settings.geminiConfig
-        return ("\(config.transcribeModel)/\(settings.formattingPolicy.mode.rawValue)", config.cleanupModel)
     }
 
     // MARK: - Stages
@@ -298,25 +301,33 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
     /// silent retry, and the empty-transcript second chance — goes through here.
     private func sendTranscribe(
         flacData: Data, seconds: Double,
-        config: GeminiConfig, policy: SettingsStore.FormattingPolicy,
+        config: GeminiConfig, policy: SettingsStore.FormattingPolicy, source: TranscriptionSource,
         vocabulary: [String], deadline: TimeInterval
     ) async throws -> String {
         try await UsageMeter.$audioSeconds.withValue(seconds) {
-            try await sendTranscribeRequest(flacData: flacData, config: config,
-                                            policy: policy, vocabulary: vocabulary, deadline: deadline)
+            try await sendTranscribeRequest(flacData: flacData, seconds: seconds, config: config, policy: policy,
+                                            source: source, vocabulary: vocabulary, deadline: deadline)
         }
     }
 
     private func sendTranscribeRequest(
-        flacData: Data,
-        config: GeminiConfig, policy: SettingsStore.FormattingPolicy,
+        flacData: Data, seconds: Double,
+        config: GeminiConfig, policy: SettingsStore.FormattingPolicy, source: TranscriptionSource,
         vocabulary: [String], deadline: TimeInterval
     ) async throws -> String {
         func send(_ terms: [String]) async throws -> String {
-            try await client.transcribeInteraction(
-                audio: flacData, model: config.transcribeModel, endpoint: config.endpoint,
-                mode: policy.mode, customVocabulary: terms, deadline: deadline
-            )
+            switch source {
+            case .elevenLabs:
+                return try await client.elevenLabsTranscribe(
+                    audio: flacData, keyterms: terms, noVerbatim: policy.mode == .smart,
+                    audioSeconds: seconds, deadline: deadline
+                )
+            case .onDevice, .provider:
+                return try await client.transcribeInteraction(
+                    audio: flacData, model: config.transcribeModel, endpoint: config.endpoint,
+                    mode: policy.mode, customVocabulary: terms, deadline: deadline
+                )
+            }
         }
 
         do {
@@ -338,12 +349,12 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
 
     private func transcribeWithRetry(
         flacData: Data, seconds: Double,
-        config: GeminiConfig, policy: SettingsStore.FormattingPolicy,
+        config: GeminiConfig, policy: SettingsStore.FormattingPolicy, source: TranscriptionSource,
         vocabulary: [String], deadline: TimeInterval
     ) async throws -> String {
         do {
             return try await sendTranscribe(
-                flacData: flacData, seconds: seconds, config: config, policy: policy,
+                flacData: flacData, seconds: seconds, config: config, policy: policy, source: source,
                 vocabulary: vocabulary, deadline: deadline
             )
         } catch let error as TranscriptionError {
@@ -355,7 +366,7 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
                 Log.transcription.notice("transcribe retrying after \(String(describing: error), privacy: .public)")
                 if case .network = error { try await Task.sleep(nanoseconds: 500_000_000) }
                 return try await sendTranscribe(
-                    flacData: flacData, seconds: seconds, config: config, policy: policy,
+                    flacData: flacData, seconds: seconds, config: config, policy: policy, source: source,
                     vocabulary: vocabulary, deadline: deadline
                 )
             case .rateLimitedTransient(let retryAfter):
@@ -367,7 +378,7 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
                 Log.transcription.info("transcribe rate limited — waiting \(Int(wait))s once")
                 try await Task.sleep(nanoseconds: UInt64(wait * 1_000_000_000))
                 return try await sendTranscribe(
-                    flacData: flacData, seconds: seconds, config: config, policy: policy,
+                    flacData: flacData, seconds: seconds, config: config, policy: policy, source: source,
                     vocabulary: vocabulary, deadline: deadline
                 )
             default:

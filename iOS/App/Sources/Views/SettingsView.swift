@@ -123,9 +123,9 @@ struct SettingsView: View {
 
 struct DictationSettingsView: View {
     @State private var liveTranscription = SettingsStore().liveTranscriptionEnabled
-    @State private var localTranscription = SettingsStore().localTranscriptionEnabled
+    @State private var dictationSource = SettingsStore().dictationSource
     @State private var localModel = SettingsStore().localSpeechModel
-    @State private var localMeetings = SettingsStore().localMeetingTranscriptionEnabled
+    @State private var meetingSource = SettingsStore().meetingSource
     @EnvironmentObject private var session: VoiceSession
     private let settings = SettingsStore()
     @State private var translationTarget = SettingsStore().translationTargetLanguage
@@ -183,21 +183,21 @@ struct DictationSettingsView: View {
                     .onChange(of: liveTranscription) { _, value in settings.setLiveTranscriptionEnabled(value) }
             }
             Section {
-                Toggle("On-device transcription", isOn: $localTranscription)
-                    .disabled(!LocalModelSupport.isAvailable)
-                    .onChange(of: localTranscription) { _, value in settings.setLocalTranscriptionEnabled(value) }
+                TranscriptionSourcePicker("Transcription", selection: $dictationSource)
+                    .onChange(of: dictationSource) { _, value in settings.setDictationSource(value) }
                     // Here, not on the controls: they expand to several rows.
                     .onChange(of: localModel) { _, value in settings.setLocalSpeechModel(value) }
-                LocalModelControls(localEnabled: localTranscription, meetingsLocal: localMeetings, selection: $localModel)
-                Toggle("Transcribe notes on device", isOn: $localMeetings)
-                    .disabled(!LocalModelSupport.isAvailable)
-                    .onChange(of: localMeetings) { _, value in settings.setLocalMeetingTranscriptionEnabled(value) }
-                LocalMeetingControls(meetingsLocal: localMeetings)
-            } footer: {
-                VStack(alignment: .leading, spacing: 4) {
-                    LocalModelFooter(localEnabled: localTranscription, selection: localModel)
-                    LocalMeetingFooter(enabled: localMeetings)
-                }
+                LocalModelControls(localEnabled: dictationSource == .onDevice, meetingsLocal: meetingSource == .onDevice,
+                                   selection: $localModel)
+            } header: { SettingsSectionHeader("Transcription") } footer: {
+                LocalModelFooter(localEnabled: dictationSource == .onDevice, selection: localModel)
+            }
+            Section {
+                TranscriptionSourcePicker("Notes transcription", selection: $meetingSource)
+                    .onChange(of: meetingSource) { _, value in settings.setMeetingSource(value) }
+                LocalMeetingControls(meetingsLocal: meetingSource == .onDevice)
+            } header: { SettingsSectionHeader("Notes transcription") } footer: {
+                LocalMeetingFooter(enabled: meetingSource == .onDevice)
             }
             Section {
                 Toggle("Smart transcription", isOn: $smartTranscription)
@@ -232,7 +232,8 @@ struct DictationSettingsView: View {
         // leave a stale toggle here.
         .onReceive(NotificationCenter.default.publisher(for: .gtSettingDidChange).receive(on: RunLoop.main)) { note in
             switch note.object as? String {
-            case "localTranscriptionEnabled": localTranscription = settings.localTranscriptionEnabled
+            case "dictationSource": dictationSource = settings.dictationSource
+            case "meetingSource": meetingSource = settings.meetingSource
             case "localSpeechModel": localModel = settings.localSpeechModel
             case "liveDictationEnabled": liveTranscription = settings.liveTranscriptionEnabled
             case "smartTranscription": smartTranscription = settings.smartTranscriptionEnabled
@@ -389,8 +390,13 @@ struct PrivacyView: View {
     @State private var retentionDays = SettingsStore().audioRetentionDays
     @State private var transcriptRetentionDays = SettingsStore().transcriptRetentionDays
     @State private var provider = SettingsStore().preferredProvider
+    @State private var dictationSource = SettingsStore().cloudDictationSource
+    @State private var meetingSource = SettingsStore().meetingSpeechRoutes.first
 
-    private var destination: String { "\(provider.directName), with your key" }
+    /// Who hears dictation audio when it is not transcribed on device.
+    private var audioOwner: String { dictationSource == .elevenLabs ? "ElevenLabs" : provider.directName }
+    private var destination: String { "\(audioOwner), with your key" }
+    private var meetingOwner: String { meetingSource?.displayName ?? provider.directName }
 
     var body: some View {
         Form {
@@ -413,12 +419,12 @@ struct PrivacyView: View {
                 }
             }
             Section {
-                LocalAudioPrivacyRow(provider: provider.directName, cloudDescription: destination)
+                LocalAudioPrivacyRow(provider: audioOwner, cloudDescription: destination)
                 LabeledContent("Transcript text", value: "For writing rules, Ask and Translate")
                 LocalMeetingPrivacyRow(
                     label: "Notes audio",
                     localDescription: "Transcribed on device; transcript to \(provider.displayName) for notes",
-                    cloudDescription: "\(provider.directName), then notes by \(provider.displayName)")
+                    cloudDescription: "\(meetingOwner), then notes by \(provider.displayName)")
                 LabeledContent("Dictionary terms", value: "With cloud transcription and cleanup")
                 LabeledContent("Dictionary", value: "Your iCloud, to sync")
                 LabeledContent("History", value: "Your iCloud, to sync final text")
@@ -432,6 +438,8 @@ struct PrivacyView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .gtSettingDidChange).receive(on: RunLoop.main)) { _ in
             provider = SettingsStore().preferredProvider
+            dictationSource = SettingsStore().cloudDictationSource
+            meetingSource = SettingsStore().meetingSpeechRoutes.first
         }
     }
 }

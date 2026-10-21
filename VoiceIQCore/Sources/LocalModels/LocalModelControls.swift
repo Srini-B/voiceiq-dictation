@@ -246,7 +246,7 @@ public struct LocalMeetingPrivacyRow: View {
     public var body: some View {
         Content(enabled: enabled, label: label, localDescription: localDescription, cloudDescription: cloudDescription)
             .onReceive(NotificationCenter.default.publisher(for: .gtSettingDidChange).receive(on: RunLoop.main)) { note in
-                if note.object as? String == "localMeetingTranscriptionEnabled" {
+                if note.object as? String == "meetingSource" {
                     enabled = SettingsStore().localMeetingTranscriptionEnabled
                 }
             }
@@ -287,7 +287,7 @@ public struct LocalAudioPrivacyRow: View {
         Content(store: .store(for: model), localEnabled: localEnabled, provider: provider, cloudDescription: cloudDescription)
             .onReceive(NotificationCenter.default.publisher(for: .gtSettingDidChange).receive(on: RunLoop.main)) { note in
                 switch note.object as? String {
-                case "localTranscriptionEnabled": localEnabled = SettingsStore().localTranscriptionEnabled
+                case "dictationSource": localEnabled = SettingsStore().localTranscriptionEnabled
                 case "localSpeechModel": model = SettingsStore().localSpeechModel
                 default: break
                 }

@@ -26,9 +26,13 @@ extension GeminiTranscriptionService {
 
     /// Whether the transcript can still carry "uh" and "um". Gemini's
     /// verbatim mode writes every one it hears; OpenAI's transcription model
-    /// has no smart mode.
-    func transcriptKeepsFillers(provider: ModelProvider, policy: SettingsStore.FormattingPolicy) -> Bool {
-        provider == .openAI || policy.mode != .smart
+    /// has no smart mode; Scribe drops them only when asked not to be verbatim.
+    func transcriptKeepsFillers(source: TranscriptionSource, provider: ModelProvider,
+                                policy: SettingsStore.FormattingPolicy) -> Bool {
+        switch source {
+        case .elevenLabs: return policy.mode != .smart
+        case .onDevice, .provider: return provider == .openAI || policy.mode != .smart
+        }
     }
 
     /// Turns a cleanup outcome into the text to insert. The dictionary's hard
