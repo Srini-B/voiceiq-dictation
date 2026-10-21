@@ -27,37 +27,9 @@ enum MobileSettings {
         set { defaults.set(newValue, forKey: "mobileOnboardingStep") }
     }
 
-    /// What keeps the session alive after the one-time bounce, so later
-    /// keyboard taps record in place.
-    enum KeepActiveMode: String, CaseIterable, Identifiable {
-        /// The mic stays open (orange dot) for the warm window.
-        case openMic
-        /// Silent playback on a non-mixable audio session keeps the app
-        /// running for the warm window. The mic stays closed while idle, and
-        /// other apps' audio pauses. Prototype, pending device verification.
-        case backgroundAudio
-
-        var id: String { rawValue }
-        var label: String {
-            switch self {
-            case .openMic: return "Keep mic on"
-            case .backgroundAudio: return "Background audio"
-            }
-        }
-
-        var defaultWarmWindow: WarmWindow {
-            self == .backgroundAudio ? .twelveHours : .thirtySeconds
-        }
-    }
-
-    static var keepActiveMode: KeepActiveMode {
-        get { defaults.string(forKey: "keepActiveMode").flatMap(KeepActiveMode.init(rawValue:)) ?? .openMic }
-        set { defaults.set(newValue.rawValue, forKey: "keepActiveMode") }
-    }
-
-    /// For keepers with a warm window, how long the session stays up after a
-    /// dictation, so the next keyboard tap records in place. When it runs out
-    /// the session ends, and the next tap opens VoiceiQ once.
+    /// How long the session keeps the mic open after a dictation, so the next
+    /// keyboard tap records in place. When it runs out the session ends, and
+    /// the next tap opens VoiceiQ once.
     enum WarmWindow: Int, CaseIterable, Identifiable {
         case never = 0, fiveSeconds = 5, tenSeconds = 10, thirtySeconds = 30, oneMinute = 60
         case fiveMinutes = 300, oneHour = 3600, twelveHours = 43_200
@@ -76,12 +48,9 @@ enum MobileSettings {
         }
     }
 
-    /// Unset, it follows the keeper: 30 s for the open mic, 12 h for
-    /// background audio (Typeless's default `audioCloseDelaySeconds`).
     static var warmWindow: WarmWindow {
         get {
-            (defaults.object(forKey: "warmWindowSeconds") as? Int).flatMap(WarmWindow.init(rawValue:))
-                ?? keepActiveMode.defaultWarmWindow
+            (defaults.object(forKey: "warmWindowSeconds") as? Int).flatMap(WarmWindow.init(rawValue:)) ?? .thirtySeconds
         }
         set { defaults.set(newValue.rawValue, forKey: "warmWindowSeconds") }
     }

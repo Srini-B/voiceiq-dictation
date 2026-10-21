@@ -136,34 +136,16 @@ struct DictationSettingsView: View {
     @State private var noiseHandling = SettingsStore().experimentalNoiseHandling
     @State private var builtInMic = MobileSettings.preferBuiltInMic
     @State private var warmWindow = MobileSettings.warmWindow
-    @State private var keepActiveMode = MobileSettings.keepActiveMode
 
     var body: some View {
         Form {
             Section {
-                Picker("Skip app switching", selection: $keepActiveMode) {
-                    ForEach(MobileSettings.KeepActiveMode.allCases) { Text($0.label).tag($0) }
-                }
-                .onChange(of: keepActiveMode) { _, value in
-                    MobileSettings.keepActiveMode = value
-                    warmWindow = MobileSettings.warmWindow
-                    session.keepActiveModeChanged()
-                }
-                Picker(keepActiveMode == .openMic ? "Keep mic on after dictating" : "Stay ready after dictating", selection: $warmWindow) {
+                Picker("Keep mic on after dictating", selection: $warmWindow) {
                     ForEach(MobileSettings.WarmWindow.allCases) { Text($0.label).tag($0) }
                 }
-                .onChange(of: warmWindow) { _, value in
-                    // A mode switch resyncs the picker to the mode's
-                    // default; only a real choice is stored.
-                    if MobileSettings.warmWindow != value { MobileSettings.warmWindow = value }
-                }
+                .onChange(of: warmWindow) { _, value in MobileSettings.warmWindow = value }
             } footer: {
-                switch keepActiveMode {
-                case .openMic:
-                    Text("While the mic is on, the next keyboard tap starts right away. After that, the tap opens VoiceiQ for a moment.")
-                case .backgroundAudio:
-                    Text("While VoiceiQ is ready, the next keyboard tap starts right away and other apps' audio pauses. After that, the tap opens VoiceiQ for a moment.")
-                }
+                Text("While the mic is on, the next keyboard tap starts right away. After that, the tap opens VoiceiQ for a moment.")
             }
             Section {
                 NavigationLink {

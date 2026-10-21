@@ -1,7 +1,7 @@
 import Foundation
 import VoiceIQCore
 
-/// The last few hundred session events (keeper, background mic starts), kept
+/// The last few hundred session events (session starts, background mic starts), kept
 /// in a file so a TestFlight user can copy them from Settings › Advanced.
 /// No transcript text or keys go in here.
 enum SessionDiagnostics {

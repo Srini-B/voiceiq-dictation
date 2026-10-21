@@ -191,12 +191,12 @@ final class AppModel: ObservableObject {
             // keyboard opens next.
             if command.action == .start, !canStartInPlace {
                 if UIApplication.shared.applicationState != .active {
-                    SessionDiagnostics.note("keyboard start left for the app (keeper: \(session.keeperDescription), needsForeground: \(needsForeground))")
+                    SessionDiagnostics.note("keyboard start left for the app (mic open: \(session.canRecordInBackground), needsForeground: \(needsForeground))")
                 }
                 continue
             }
             if command.action == .start, UIApplication.shared.applicationState != .active {
-                SessionDiagnostics.note("keyboard start in place from the background (keeper: \(session.keeperDescription))")
+                SessionDiagnostics.note("keyboard start in place from the background")
             }
             accept(command)
             handle(command)
@@ -458,7 +458,7 @@ final class AppModel: ObservableObject {
         case .warming, .recording:
             if case .recording = state, !(previousState.isRecording),
                UIApplication.shared.applicationState != .active {
-                SessionDiagnostics.note("microphone started from the background (keeper: \(session.keeperDescription))")
+                SessionDiagnostics.note("microphone started from the background")
             }
             if session.recordingStartedAt == nil { session.recordingStartedAt = Date() }
             session.dictationPhase = .recording
@@ -473,7 +473,7 @@ final class AppModel: ObservableObject {
                UIApplication.shared.applicationState != .active {
                 // iOS refused the microphone to a backgrounded app. The next tap
                 // opens the app once, which always works.
-                SessionDiagnostics.note("background microphone start refused (\(failure)) with keeper \(self.session.keeperDescription); next dictation goes through the app")
+                SessionDiagnostics.note("background microphone start refused (\(failure)) with mic open \(self.session.canRecordInBackground); next dictation goes through the app")
                 needsForeground = true
                 session.post(notice: "Tap the mic again")
             } else if state != previousState, let message = Self.notice(for: state, coordinator: coordinator) {
