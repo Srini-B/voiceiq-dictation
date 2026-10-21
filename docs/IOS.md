@@ -9,7 +9,7 @@ Like the Mac, it runs Gemini or OpenAI models, with that provider's own key.
 
 | Target | Contents |
 | --- | --- |
-| `VoiceIQiOS` | App: onboarding, keys, settings, history, meetings, background voice session |
+| `VoiceIQiOS` | App: onboarding, keys, settings, history, notes (meetings), background voice session |
 | `VoiceIQKeyboard` | Keyboard extension (`RequestsOpenAccess`), links `VoiceIQBridge` only |
 | `VoiceIQLiveActivity` | Dynamic Island and lock-screen Live Activity |
 
@@ -202,7 +202,7 @@ runs full screen, in Split View and in Stage Manager windows.
 
 Layout follows the horizontal size class, not the device:
 
-- Regular width (an iPad window wide enough): History, Meetings and Settings
+- Regular width (an iPad window wide enough): History, Notes and Settings
   use `ListDetailNavigation`, a `NavigationSplitView` with the list on the
   left and the selected item on the right. Neither column shows a title or
   a bar background: the tab bar above names the page, and in Settings the
@@ -303,9 +303,12 @@ scroll dismissal). Every CTA uses a pill style. The launch screen shows the
 app mark (`LaunchMark`, `LaunchBackground`). The brand image sets are
 rendered from the app icon.
 
-### Meetings
+### Notes
 
-Meetings run in the app like a recorder: Record meeting, the phone records the
+The Mac's Meetings tab is called **Notes** on iPhone and iPad: the phone cannot
+record calls, so the feature is a recorder for notes, not a call companion. The
+code keeps the `Meeting*` names. Notes run in the app like a recorder: Record
+notes, the phone records the
 room with the mic, Stop, then `MeetingEngine` transcribes and writes notes. The
 Live Activity shows the running time with a Stop button. iOS does not allow
 recording other apps' or call audio, so `SystemAudioTap` writes an empty
@@ -314,7 +317,7 @@ far-side reference, so `MeetingTranscriber.callAudio` skips echo cancellation
 (the WebRTC AEC3 xcframework ships a macOS slice only and is not linked on
 iOS). Speaker linking, meeting-type notes, suggested speaker names and Redo
 (notes only, or transcript and notes) work as on the Mac. Dictation is refused
-while a meeting records. With **Transcribe meetings on device** on and Fluid
+while notes record. With **Transcribe notes on device** on and Fluid
 Speech Mini downloaded, the recording is transcribed in process after Stop as
 one speaker; there is no diarizer, real-time path, or Nemotron on iOS (see
 [On-device meetings](LOCAL_TRANSCRIPTION.md#on-device-meetings)).

@@ -18,7 +18,7 @@ struct MeetingsView: View {
                         .listRowSeparator(.hidden)
                 }
                 if !meetings.isEmpty {
-                    Section("Past meetings") {
+                    Section("Past notes") {
                         ForEach(meetings) { meta in
                             NavigationLink { MeetingDetail(meta: meta) } label: { MeetingRow(meta: meta) }
                         }
@@ -29,12 +29,12 @@ struct MeetingsView: View {
             .listStyle(.insetGrouped)
             .listRowBackground(Theme.Colors.surface)
             .themedBackground()
-            .navigationTitle("Meetings")
+            .navigationTitle("Notes")
             .onAppear(perform: reload)
             .onReceive(model.meetings.$phase) { _ in reload() }
             .onReceive(model.meetings.$processing) { _ in reload() }
         } placeholder: {
-            DetailPlaceholder(systemImage: "doc.text", title: "No meeting selected")
+            DetailPlaceholder(systemImage: "doc.text", title: "No note selected")
         }
     }
 
@@ -72,8 +72,8 @@ private struct RecorderCard: View {
             }
             .buttonStyle(.plain)
             .frame(minWidth: 72, minHeight: 72)
-            .accessibilityLabel("Record a meeting")
-            Text("Record a meeting").font(Theme.Fonts.headline()).foregroundStyle(Theme.Colors.ink)
+            .accessibilityLabel("Record notes")
+            Text("Record notes").font(Theme.Fonts.headline()).foregroundStyle(Theme.Colors.ink)
             Text("Records the room with your \(UIDevice.current.localizedModel)'s mic.")
                 .font(Theme.Fonts.footnote())
                 .foregroundStyle(Theme.Colors.muted)
@@ -121,7 +121,7 @@ private struct MeetingRow: View {
         let selected = prominence == .increased
         HStack(alignment: .top, spacing: Theme.Spacing.m) {
             VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                Text(meta.title ?? "Meeting")
+                Text(meta.title ?? "Notes")
                     .font(Theme.Fonts.callout())
                     .foregroundStyle(selected ? Theme.Colors.onAccent : Theme.Colors.ink)
                     .lineLimit(1)
@@ -173,7 +173,7 @@ private struct MeetingDetail: View {
             .readableWidth()
         }
         .themedBackground()
-        .navigationTitle(notes?.title ?? meta.title ?? "Meeting")
+        .navigationTitle(notes?.title ?? meta.title ?? "Notes")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             if meta.status == .done {

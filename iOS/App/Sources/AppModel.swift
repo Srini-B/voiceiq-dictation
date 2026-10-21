@@ -265,7 +265,7 @@ final class AppModel: ObservableObject {
 
     private func startBlocker() -> String? {
         if let missing = setupBlocker() { return missing }
-        if meetings.isRecording { return "A meeting is recording" }
+        if meetings.isRecording { return "Notes are recording" }
         switch coordinator.state {
         case .idle, .done, .cancelled, .failed: return nil
         case .recording, .warming: return nil

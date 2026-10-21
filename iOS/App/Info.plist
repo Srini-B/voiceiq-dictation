@@ -38,7 +38,7 @@
 	<key>NSHumanReadableCopyright</key>
 	<string>Copyright 2026 Google LLC. Apache License 2.0. This is not an officially supported Google product.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>VoiceiQ records audio when you tap the microphone in the VoiceiQ keyboard or record a meeting, so it can transcribe what you say.</string>
+	<string>VoiceiQ records audio when you tap the microphone in the VoiceiQ keyboard or record notes, so it can transcribe what you say.</string>
 	<key>NSSupportsLiveActivities</key>
 	<true/>
 	<key>UIAppFonts</key>

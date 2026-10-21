@@ -242,7 +242,7 @@ targets:
         UIBackgroundModes: [audio]
         NSSupportsLiveActivities: true
         ITSAppUsesNonExemptEncryption: false
-        NSMicrophoneUsageDescription: VoiceiQ records audio when you tap the microphone in the VoiceiQ keyboard or record a meeting, so it can transcribe what you say.
+        NSMicrophoneUsageDescription: VoiceiQ records audio when you tap the microphone in the VoiceiQ keyboard or record notes, so it can transcribe what you say.
         NSHumanReadableCopyright: "Copyright 2026 Google LLC. Apache License 2.0. This is not an officially supported Google product."
         CFBundleURLTypes:
           - CFBundleURLName: io.blue.voiceiq.ios.url

@@ -189,7 +189,7 @@ struct DictationSettingsView: View {
                     // Here, not on the controls: they expand to several rows.
                     .onChange(of: localModel) { _, value in settings.setLocalSpeechModel(value) }
                 LocalModelControls(localEnabled: localTranscription, meetingsLocal: localMeetings, selection: $localModel)
-                Toggle("Transcribe meetings on device", isOn: $localMeetings)
+                Toggle("Transcribe notes on device", isOn: $localMeetings)
                     .disabled(!LocalModelSupport.isAvailable)
                     .onChange(of: localMeetings) { _, value in settings.setLocalMeetingTranscriptionEnabled(value) }
                 LocalMeetingControls(meetingsLocal: localMeetings)
@@ -416,7 +416,7 @@ struct PrivacyView: View {
                 LocalAudioPrivacyRow(provider: provider.directName, cloudDescription: destination)
                 LabeledContent("Transcript text", value: "For writing rules, Ask and Translate")
                 LocalMeetingPrivacyRow(
-                    label: "Meeting audio",
+                    label: "Notes audio",
                     localDescription: "Transcribed on device; transcript to \(provider.displayName) for notes",
                     cloudDescription: "\(provider.directName), then notes by \(provider.displayName)")
                 LabeledContent("Dictionary terms", value: "With cloud transcription and cleanup")

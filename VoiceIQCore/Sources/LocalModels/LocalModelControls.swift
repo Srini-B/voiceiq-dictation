@@ -222,7 +222,7 @@ public struct LocalMeetingFooter: View {
             if LocalMeetingTranscriber.diarizes {
                 Text("Meetings use cloud transcription until \(speech.displayName) and \(diarizer.displayName) are downloaded.")
             } else {
-                Text("Meetings use cloud transcription until \(speech.displayName) is downloaded.")
+                Text("Notes use cloud transcription until \(speech.displayName) is downloaded.")
             }
         }
     }
