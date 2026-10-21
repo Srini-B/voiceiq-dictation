@@ -27,14 +27,22 @@ public struct LocalMeetingTranscriber: Sendable {
     /// A dictation keeps the models for seconds; a meeting waits this long for one.
     static let busyWait: Duration = .seconds(600)
 
+    /// The Mac labels speakers with Nemotron 3 Diarization. iPhone and iPad
+    /// record the microphone only and skip the diarizer: one speaker.
+    #if os(macOS)
+    public static let diarizes = true
+    #else
+    public static let diarizes = false
+    #endif
+
     private let runner: LocalMeetingRunner
     private let speech: URL
-    private let diarizer: URL
+    private let diarizer: URL?
     private let id: UUID
     private let job: Job
 
-    /// Nil when meetings are not set to stay on device or either model is
-    /// missing. Otherwise holds a session on both models until `transcribe`
+    /// Nil when meetings are not set to stay on device or a needed model is
+    /// missing. Otherwise holds a session on the models until `transcribe`
     /// returns, waiting out a dictation that has them first.
     @MainActor
     public static func acquire(runner: @escaping LocalMeetingRunner) async throws -> LocalMeetingTranscriber? {
@@ -44,6 +52,9 @@ public struct LocalMeetingTranscriber: Sendable {
         let clock = ContinuousClock(), deadline = clock.now + busyWait
         while true {
             if let speech = LocalModelStore.store(for: .parakeet).acquireSession(id: id, cancel: cancel) {
+                guard diarizes else {
+                    return LocalMeetingTranscriber(runner: runner, speech: speech, diarizer: nil, id: id, job: job)
+                }
                 if let diarizer = LocalModelStore.speakerDiarizer.acquireSession(id: id, cancel: cancel) {
                     return LocalMeetingTranscriber(runner: runner, speech: speech, diarizer: diarizer, id: id, job: job)
                 }
@@ -55,17 +66,18 @@ public struct LocalMeetingTranscriber: Sendable {
         }
     }
 
-    /// The setting is on and both models are downloaded.
+    /// The setting is on and the needed models are downloaded.
     @MainActor public static var isReady: Bool {
         SettingsStore().localMeetingTranscriptionEnabled
             && LocalModelStore.store(for: .parakeet).state == .ready
-            && LocalModelStore.speakerDiarizer.state == .ready
+            && (!diarizes || LocalModelStore.speakerDiarizer.state == .ready)
     }
 
     public func transcribe(folder: URL) async throws -> [TranscriptSegment] {
+        let holdsDiarizer = diarizer != nil
         defer { Task { @MainActor in
             LocalModelStore.store(for: .parakeet).releaseSession(id: id)
-            LocalModelStore.speakerDiarizer.releaseSession(id: id)
+            if holdsDiarizer { LocalModelStore.speakerDiarizer.releaseSession(id: id) }
         } }
         let audio = try MeetingTranscriber.callAudio(folder: folder)
         let result = try await decode(audio, folder: folder)

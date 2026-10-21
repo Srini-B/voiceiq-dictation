@@ -104,7 +104,8 @@ With no usable key the recording is kept and marked failed with the reason,
 ready to Retry once a key is added. Turn on **Transcribe meetings on device**
 and download Fluid Speech Mini plus Nemotron 3 Diarization (199 MB) to get the
 words and speakers on device, FluidMeet-style; only the transcript then goes
-to the writing model for notes.
+to the writing model for notes. On iPhone and iPad, Fluid Speech Mini alone
+transcribes the meeting after it ends, as one speaker.
 
 **Cost Analysis.** Every model call is metered: tokens or audio seconds from the
 API response, priced at the provider's list prices. Settings → Cost Analysis shows today, this week, this month, and all
@@ -144,7 +145,8 @@ dictation is a few seconds of audio. VoiceiQ itself is free and has no account.
 | Meeting speakers | `gemini-3.5-transcribe` | `gpt-4o-transcribe-diarize` |
 
 With **Transcribe meetings on device** on, Fluid Speech Mini and Nemotron 3
-Diarization replace the meeting speakers row; the notes row is unchanged.
+Diarization (Mac) or Fluid Speech Mini alone (iPhone, iPad) replace the
+meeting speakers row; the notes row is unchanged.
 
 Every dictation is a transcription followed, with writing rules on, by a
 writing-rules pass. Screenshots go only to the writing model.

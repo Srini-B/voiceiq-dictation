@@ -25,7 +25,11 @@ enum LocalMeetingJob {
         let words = try await transcribe(request.audio, models: request.speechDirectory)
         try Task.checkCancellation()
         let spoken = Date()
-        let segments = try await diarize(request.audio, models: request.diarizerDirectory)
+        guard let diarizerDirectory = request.diarizerDirectory else {
+            Log.transcription.notice("Local meeting: \(words.count) words in \(spoken.timeIntervalSince(started), format: .fixed(precision: 1))s, no diarizer")
+            return LocalMeetingResult(words: words, segments: [])
+        }
+        let segments = try await diarize(request.audio, models: diarizerDirectory)
         Log.transcription.notice("Local meeting: \(words.count) words in \(spoken.timeIntervalSince(started), format: .fixed(precision: 1))s, \(segments.count) speaker stretches in \(Date().timeIntervalSince(spoken), format: .fixed(precision: 1))s")
         return LocalMeetingResult(words: words, segments: segments)
     }

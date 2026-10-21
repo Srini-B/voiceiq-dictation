@@ -42,6 +42,7 @@ public struct LocalModelControls: View {
 }
 
 /// The speaker diarizer's row, offered while meetings are kept on device.
+/// Nothing on iPhone and iPad, which transcribe meetings without a diarizer.
 @MainActor
 public struct LocalMeetingControls: View {
     private let meetingsLocal: Bool
@@ -51,7 +52,7 @@ public struct LocalMeetingControls: View {
     }
 
     public var body: some View {
-        if LocalModelSupport.isAvailable {
+        if LocalModelSupport.isAvailable, LocalMeetingTranscriber.diarizes {
             LocalModelRow(store: .speakerDiarizer, offered: meetingsLocal, selection: nil)
         }
     }
@@ -218,7 +219,11 @@ public struct LocalMeetingFooter: View {
 
     public var body: some View {
         if LocalModelSupport.isAvailable, enabled, !LocalMeetingTranscriber.isReady {
-            Text("Meetings use cloud transcription until \(speech.displayName) and \(diarizer.displayName) are downloaded.")
+            if LocalMeetingTranscriber.diarizes {
+                Text("Meetings use cloud transcription until \(speech.displayName) and \(diarizer.displayName) are downloaded.")
+            } else {
+                Text("Meetings use cloud transcription until \(speech.displayName) is downloaded.")
+            }
         }
     }
 }

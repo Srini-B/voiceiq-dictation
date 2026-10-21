@@ -1,13 +1,14 @@
 import Foundation
 
 /// One saved meeting mix to transcribe on device: Fluid Speech Mini for the
-/// words, Nemotron 3 Diarization for who spoke when.
+/// words, Nemotron 3 Diarization for who spoke when. Without a diarizer the
+/// words come back unlabelled (one speaker); iPhone and iPad run this way.
 public struct LocalMeetingRequest: Codable, Sendable {
     public var speechDirectory: URL
-    public var diarizerDirectory: URL
+    public var diarizerDirectory: URL?
     /// 16 kHz mono, the whole meeting on one timeline.
     public var audio: URL
-    public init(speechDirectory: URL, diarizerDirectory: URL, audio: URL) {
+    public init(speechDirectory: URL, diarizerDirectory: URL?, audio: URL) {
         self.speechDirectory = speechDirectory
         self.diarizerDirectory = diarizerDirectory
         self.audio = audio

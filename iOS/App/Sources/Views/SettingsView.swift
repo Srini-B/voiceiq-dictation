@@ -179,14 +179,16 @@ struct DictationSettingsView: View {
                     }
             }
             Section {
+                Toggle("Real-time transcription", isOn: $liveTranscription)
+                    .onChange(of: liveTranscription) { _, value in settings.setLiveTranscriptionEnabled(value) }
+            }
+            Section {
                 Toggle("On-device transcription", isOn: $localTranscription)
                     .disabled(!LocalModelSupport.isAvailable)
                     .onChange(of: localTranscription) { _, value in settings.setLocalTranscriptionEnabled(value) }
                     // Here, not on the controls: they expand to several rows.
                     .onChange(of: localModel) { _, value in settings.setLocalSpeechModel(value) }
                 LocalModelControls(localEnabled: localTranscription, meetingsLocal: localMeetings, selection: $localModel)
-                Toggle("Real-time transcription", isOn: $liveTranscription)
-                    .onChange(of: liveTranscription) { _, value in settings.setLiveTranscriptionEnabled(value) }
                 Toggle("Transcribe meetings on device", isOn: $localMeetings)
                     .disabled(!LocalModelSupport.isAvailable)
                     .onChange(of: localMeetings) { _, value in settings.setLocalMeetingTranscriptionEnabled(value) }

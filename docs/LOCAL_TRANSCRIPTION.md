@@ -36,7 +36,7 @@ deadline yet.
    even with local transcription on.
 6. Optional: select **Download** beside **English tools** (103,865,880 bytes,
    shown as 103.9 MB). This row has no checkmark because it is never selected.
-   It adds speech detection and Fluid Speech Mini dictionary correction. See
+   It adds Fluid Speech Mini dictionary correction. See
    [English speech processing](#english-speech-processing).
 
 The model is not bundled, downloaded automatically, or loaded during download.
@@ -85,8 +85,8 @@ a word emitted up to 200 ms after the cut is committed too; if the kept audio
 decodes it again, `ParakeetPreview.dropOverlap` hides up to three repeated
 words (compared without case or punctuation). The final transcript never comes
 from the preview: after stop, the session decodes the complete saved recording
-exactly as with real-time off, including VAD trimming and dictionary
-rescoring. A failed preview decode keeps the last text and does not affect the
+exactly as with real-time off, including dictionary rescoring when English
+tools are installed. A failed preview decode keeps the last text and does not affect the
 final transcript. Dropped PCM only affects the preview. A missing model ends
 the preview; the final decode still returns nil and cloud transcription takes
 over as before.
@@ -265,17 +265,25 @@ Agent retain their requested actions regardless of duration.
 ## On-device meetings
 
 **Transcribe meetings on device** (Settings → Dictation, both platforms) is a
-separate switch from on-device dictation. It needs two downloads: Fluid Speech
-Mini for the words and **Nemotron 3 Diarization** (199 MB) for who spoke when.
-While the switch is on, the Fluid Speech Mini row stays offered even with
-dictation on the cloud, and the diarizer row appears under the switch. Until
-both are `.ready`, meetings use the cloud path and the footer says so. This is
-the FluidMeet recipe: one ASR model and one diarizer, joined by time.
+separate switch from on-device dictation. On the Mac it needs two downloads:
+Fluid Speech Mini for the words and **Nemotron 3 Diarization** (199 MB) for
+who spoke when. This is the FluidMeet recipe: one ASR model and one diarizer,
+joined by time. While the switch is on, the Fluid Speech Mini row stays
+offered even with dictation on the cloud, and the diarizer row appears under
+the switch. Until both are `.ready`, meetings use the cloud path and the
+footer says so.
+
+iPhone and iPad need Fluid Speech Mini only (`LocalMeetingTranscriber.diarizes`
+is false there). They record the microphone only, so there is no second track
+to tell speakers apart by, and the whole transcript is labelled Speaker 1. No
+diarizer row is shown, `LocalMeetingRequest.diarizerDirectory` is nil, and
+`LocalMeetingJob.run` returns no segments. The footer names Fluid Speech Mini
+alone.
 
 The flow, in `MeetingEngine.transcribe(folder:config:)`:
 
 1. `LocalMeetingTranscriber.acquire(runner:)` returns nil unless the setting is
-   on and both stores are `.ready`. It then takes a session on both stores. A
+   on and the needed stores are `.ready`. It then takes a session on them. A
    dictation holding Fluid Speech Mini wins: the meeting polls every 2 s for up
    to 600 s, then fails with "busy". While the meeting holds the sessions, a
    dictation falls back to the cloud as it does during a download.
@@ -285,9 +293,9 @@ The flow, in `MeetingEngine.transcribe(folder:config:)`:
    hands a `LocalMeetingRequest` to the runner. The file is removed after.
 3. The runner (`LocalMeetingJob.run`) loads Fluid Speech Mini, runs
    `AsrManager.transcribeDiskBacked`, groups token timings into words at
-   leading-space boundaries, frees the ASR, then loads the diarizer with
-   `Nemotron3Config.offline`, streams the file through it in 60 s chunks, and
-   turns the speaker probabilities into `Segment(speaker:start:end)` with
+   leading-space boundaries, frees the ASR, then (Mac only) loads the diarizer
+   with `Nemotron3Config.offline`, streams the file through it in 60 s chunks,
+   and turns the speaker probabilities into `Segment(speaker:start:end)` with
    `Nemotron3Diarizer.segments`. On macOS the runner is
    `LocalMeetingHelper.run`, which spawns its own copy of the speech helper
    (so a dictation's helper is never blocked), kills it on cancel, and times

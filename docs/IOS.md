@@ -314,7 +314,10 @@ far-side reference, so `MeetingTranscriber.callAudio` skips echo cancellation
 (the WebRTC AEC3 xcframework ships a macOS slice only and is not linked on
 iOS). Speaker linking, meeting-type notes, suggested speaker names and Redo
 (notes only, or transcript and notes) work as on the Mac. Dictation is refused
-while a meeting records.
+while a meeting records. With **Transcribe meetings on device** on and Fluid
+Speech Mini downloaded, the recording is transcribed in process after Stop as
+one speaker; there is no diarizer, real-time path, or Nemotron on iOS (see
+[On-device meetings](LOCAL_TRANSCRIPTION.md#on-device-meetings)).
 
 ### Dictionary
 
