@@ -1,11 +1,15 @@
 import Foundation
 
-/// OpenAI's models for each role the app has. Defaults follow OpenAI's own
-/// recommendations (2026-09): `gpt-transcribe` for recorded speech and
-/// GPT-6 Luna for the writing rules, Ask Anything, Translate and meeting notes.
+/// OpenAI's models for each role the app has: `gpt-transcribe` for recorded
+/// speech and one text model, GPT-6 Astra, for the writing rules, Ask
+/// Anything, Translate, meeting notes and agent mode. Astra replaced GPT-6
+/// Luna on 2026-10-21 because Luna kept misheard phrases that read as English
+/// ("merge it here" for "merge the PR"). Replayed on 10 real failures, Astra
+/// fixed 23 of 30 runs and Luna 7 of 40
+/// (activities/2026-10-21-mishearings-that-read-as-english.md).
 public struct OpenAIConfig: Sendable, Equatable {
     public var transcribeModel = "gpt-transcribe"
-    public var writingModel = "gpt-6-luna"
+    public var writingModel = "gpt-6-astra"
     /// Meetings only. `gpt-transcribe` has no speaker labels.
     public var diarizeModel = "gpt-4o-transcribe-diarize"
 
