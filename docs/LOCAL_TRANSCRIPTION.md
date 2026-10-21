@@ -11,6 +11,12 @@ read of that picker. Existing local-transcription preferences survive
 the removal of Whistle, but its model and runtime are no longer included.
 On-device dictation is English only: Fluid Speech Mini decodes as English and Nemotron
 is locked to `en-US`. Cloud transcription keeps its own language handling.
+Settings shows "Languages: English" under each model
+(`LocalSpeechModel.languages`). Nemotron 3.5 itself was measured on English,
+Spanish, French, Italian, Portuguese, German, Chinese and Japanese and takes
+more through a language prompt (FluidInference model card), but the app does
+not offer them. Fluid Speech Mini is trained on English only (FluidVoice
+model card).
 
 iPhone and iPad offer Fluid Speech Mini only (`LocalSpeechModel.available`).
 Nemotron stalled on a physical iPhone when both models were offered in

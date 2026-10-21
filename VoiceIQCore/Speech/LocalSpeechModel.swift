@@ -25,6 +25,12 @@ public enum LocalSpeechModel: String, CaseIterable, Codable, Sendable {
         }
     }
 
+    /// The languages dictation with this model transcribes, shown under it in
+    /// Settings. Fluid Speech Mini is trained on English only. Nemotron knows
+    /// more, but `NemotronSession` locks it to `en-US` so the English tools and
+    /// number formatting apply, so its other languages are not offered.
+    public var languages: [String] { ["English"] }
+
     /// Recorded with each transcript and in usage tracking.
     public var modelID: String {
         switch self {

@@ -26,7 +26,8 @@ public struct LocalModelControls: View {
                 LocalModelRow(
                     store: .store(for: model),
                     offered: localEnabled || (meetingsLocal && model == .parakeet),
-                    selection: localEnabled ? (isSelected: model == selection, select: { selection = model }) : nil
+                    selection: localEnabled ? (isSelected: model == selection, select: { selection = model }) : nil,
+                    languages: model.languages
                 )
             }
             LocalModelRow(store: .englishTools, offered: localEnabled, selection: nil)
@@ -38,7 +39,7 @@ public struct LocalModelControls: View {
         }
     }
 
-    static let englishNote = "On-device dictation is English only. English tools add dictionary correction for Fluid Speech Mini. Without them, on-device transcription still works."
+    static let englishNote = "English tools add dictionary correction for Fluid Speech Mini. Without them, on-device transcription still works."
 }
 
 /// The speaker diarizer's row, offered while meetings are kept on device.
@@ -66,6 +67,8 @@ private struct LocalModelRow: View {
     let offered: Bool
     /// Nil for a row that is never selected.
     let selection: (isSelected: Bool, select: () -> Void)?
+    /// Nil for a row that is not a speech model.
+    var languages: [String]? = nil
     @State private var confirmingDelete = false
 
     #if os(iOS)
@@ -87,6 +90,11 @@ private struct LocalModelRow: View {
                     }
                     Spacer(minLength: 8)
                     trailing
+                }
+                if let languages {
+                    Text("Languages: \(ListFormatter.localizedString(byJoining: languages))")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
                 if case .downloading(let progress) = store.state {
                     ProgressView(value: progress)
