@@ -609,8 +609,14 @@ private struct UpdateControls: View {
 
     var body: some View {
         VStack(spacing: VoiceIQUI.Spacing.m) {
-            Button("Check for Updates…") { updater.checkForUpdates() }
-                .disabled(!updater.canCheckForUpdates)
+            HStack(spacing: VoiceIQUI.Spacing.s) {
+                Button("Check for Updates…") { updater.checkForUpdates() }
+                    .disabled(!updater.canCheckForUpdates)
+                // Automatic updates install without showing their notes.
+                Button("Release Notes") {
+                    NSWorkspace.shared.open(URL(string: "https://github.com/Srini-B/voiceiq-dictation/releases")!)
+                }
+            }
             VStack(alignment: .leading, spacing: 6) {
                 Toggle("Check for updates automatically", isOn: $updater.automaticallyChecksForUpdates)
                 Toggle("Download and install updates automatically", isOn: $updater.automaticallyDownloadsUpdates)

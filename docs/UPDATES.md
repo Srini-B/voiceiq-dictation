@@ -148,6 +148,9 @@ offer waits while any of those is going on. `UpdatePillController`
 (`App/Sources/Updates/UpdatePillController.swift`) owns steps 2 to 4;
 `AppUpdater` owns Sparkle.
 
+This path never shows release notes, so Settings › About has a Release Notes
+button that opens the GitHub Releases page.
+
 With automatic downloads off, Sparkle shows its alert with the release notes,
 and the menu item reads "Install VoiceiQ x.y.z…" until the user installs,
 skips or dismisses it.

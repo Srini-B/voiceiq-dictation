@@ -26,6 +26,10 @@ merges notes across items.
   listed, followed by an "Earlier releases" link. The link is hidden when the
   installed version is in the list.
 
+- With automatic download on, the default, the update installs without any
+  alert, so users see no notes. Settings › About now has a Release Notes
+  button next to Check for Updates. It opens the GitHub Releases page.
+
 ## Verification
 
 - I reran the publish steps for 0.6.4 against the v0.6.3 appcast:
@@ -39,3 +43,7 @@ merges notes across items.
     versions and the link were hidden, in both the screenshot and the
     accessibility tree.
 - Afterwards I removed the default and relaunched the app.
+- Release Notes button: I built 0.6.4 (49) with `scripts/release.sh`. It was
+  notarized ("Accepted") and stapled. I installed it in /Applications, where
+  `spctl` reported "Notarized Developer ID". Pressing the button opened
+  "Releases · Srini-B/voiceiq-dictation" in the default browser.
