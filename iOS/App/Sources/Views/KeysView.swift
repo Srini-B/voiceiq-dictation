@@ -85,7 +85,7 @@ private struct KeyCard: View {
     var body: some View {
         Card {
             HStack(spacing: Theme.Spacing.m) {
-                IconTile(systemImage: slot.symbol, size: 32)
+                BrandTile(image: slot.mark, size: 32)
                 Text(slot.title).font(Theme.Fonts.headline()).foregroundStyle(Theme.Colors.ink)
                 Spacer(minLength: 0)
                 if stored {
@@ -211,12 +211,13 @@ enum KeySlot: Hashable, CaseIterable {
         }
     }
 
-    var symbol: String {
+    /// The service's favicon in the asset catalog.
+    var mark: String {
         switch self {
-        case .gemini: return "sparkles"
-        case .openAI: return "circle.hexagongrid"
-        case .elevenLabs: return "waveform"
-        case .tinyFish: return "globe"
+        case .gemini: return "ProviderGemini"
+        case .openAI: return "ProviderOpenAI"
+        case .elevenLabs: return "ProviderElevenLabs"
+        case .tinyFish: return "ProviderTinyFish"
         }
     }
 
