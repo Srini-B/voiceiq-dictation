@@ -125,6 +125,7 @@ struct DictationSettingsView: View {
     @State private var liveTranscription = SettingsStore().liveTranscriptionEnabled
     @State private var localTranscription = SettingsStore().localTranscriptionEnabled
     @State private var localModel = SettingsStore().localSpeechModel
+    @State private var localMeetings = SettingsStore().localMeetingTranscriptionEnabled
     @EnvironmentObject private var session: VoiceSession
     private let settings = SettingsStore()
     @State private var translationTarget = SettingsStore().translationTargetLanguage
@@ -183,11 +184,18 @@ struct DictationSettingsView: View {
                     .onChange(of: localTranscription) { _, value in settings.setLocalTranscriptionEnabled(value) }
                     // Here, not on the controls: they expand to several rows.
                     .onChange(of: localModel) { _, value in settings.setLocalSpeechModel(value) }
-                LocalModelControls(localEnabled: localTranscription, selection: $localModel)
+                LocalModelControls(localEnabled: localTranscription, meetingsLocal: localMeetings, selection: $localModel)
                 Toggle("Real-time transcription", isOn: $liveTranscription)
                     .onChange(of: liveTranscription) { _, value in settings.setLiveTranscriptionEnabled(value) }
+                Toggle("Transcribe meetings on device", isOn: $localMeetings)
+                    .disabled(!LocalModelSupport.isAvailable)
+                    .onChange(of: localMeetings) { _, value in settings.setLocalMeetingTranscriptionEnabled(value) }
+                LocalMeetingControls(meetingsLocal: localMeetings)
             } footer: {
-                LocalModelFooter(localEnabled: localTranscription, selection: localModel)
+                VStack(alignment: .leading, spacing: 4) {
+                    LocalModelFooter(localEnabled: localTranscription, selection: localModel)
+                    LocalMeetingFooter(enabled: localMeetings)
+                }
             }
             Section {
                 Toggle("Smart transcription", isOn: $smartTranscription)
@@ -405,7 +413,10 @@ struct PrivacyView: View {
             Section {
                 LocalAudioPrivacyRow(provider: provider.directName, cloudDescription: destination)
                 LabeledContent("Transcript text", value: "For writing rules, Ask and Translate")
-                LabeledContent("Meeting notes", value: provider.displayName)
+                LocalMeetingPrivacyRow(
+                    label: "Meeting audio",
+                    localDescription: "Transcribed on device; transcript to \(provider.displayName) for notes",
+                    cloudDescription: "\(provider.directName), then notes by \(provider.displayName)")
                 LabeledContent("Dictionary terms", value: "With cloud transcription and cleanup")
                 LabeledContent("Dictionary", value: "Your iCloud, to sync")
                 LabeledContent("History", value: "Your iCloud, to sync final text")

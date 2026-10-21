@@ -60,7 +60,8 @@ final class AppModel: ObservableObject {
             client: client,
             config: { SettingsStore().geminiConfig },
             summaryModel: SettingsStore().geminiConfig.cleanupModel,
-            providers: { SettingsStore().meetingProviders }
+            providers: { SettingsStore().meetingProviders },
+            localMeeting: LocalSpeechInference.transcribeMeeting
         )
         let inserter = self.inserter
         coordinator = DictationCoordinator(

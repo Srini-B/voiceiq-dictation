@@ -125,6 +125,17 @@ public struct SettingsStore: Sendable {
         if model == .nemotron { setLiveTranscriptionEnabled(true) }
     }
 
+    /// Meetings are transcribed and diarized on device when this is on and
+    /// both Fluid Speech Mini and the speaker diarizer are downloaded. Notes
+    /// still come from the cloud writing model.
+    public var localMeetingTranscriptionEnabled: Bool {
+        LocalModelSupport.isAvailable && Self.defaults.bool(forKey: "localMeetingTranscriptionEnabled")
+    }
+
+    public func setLocalMeetingTranscriptionEnabled(_ enabled: Bool) {
+        Self.set(enabled && LocalModelSupport.isAvailable, forKey: "localMeetingTranscriptionEnabled")
+    }
+
     /// Providers for meeting transcription and notes; see `ModelProvider.meetingOrder`.
     public var meetingProviders: [ModelProvider] {
         ModelProvider.meetingOrder(selected: preferredProvider, hasKey: KeychainStore.hasKey(for:))

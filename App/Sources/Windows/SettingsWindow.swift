@@ -330,7 +330,10 @@ struct PrivacyPane: View {
                 LabeledContent("Transcript text") { Text("Sent back only for writing rules, Ask Anything and Translate") }
                 LabeledContent("Text around the cursor") { Text("Only if Fit to existing text and writing rules are on") }
                 LabeledContent("Where you are typing") { Text("App name, window title and browser page address, only with writing rules") }
-                LabeledContent("Meeting audio") { Text("Only if call recording is on; notes are made by \(provider.displayName)") }
+                LocalMeetingPrivacyRow(
+                    label: "Meeting audio",
+                    localDescription: "Transcribed on device; only the transcript goes to \(provider.displayName) for notes",
+                    cloudDescription: "Only if call recording is on; notes are made by \(provider.displayName)")
                 LabeledContent("Dictionary terms") { Text("Sent with cloud transcription and cleanup, so names are spelled right") }
                 LabeledContent("Dictionary") { Text("Synced to your iPhone through your iCloud account") }
                 LabeledContent("History") { Text("Final text synced to your iPhone through your iCloud account") }

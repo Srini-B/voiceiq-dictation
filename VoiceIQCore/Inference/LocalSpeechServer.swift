@@ -50,6 +50,15 @@ private actor HelperLifetime {
                 exit(0)
             }
             return .transcript(output)
+        case .meeting(let request):
+            await session?.stop()
+            session = nil
+            do {
+                let result = try await LocalMeetingJob.run(request)
+                return .meeting(result)
+            } catch {
+                return .meetingFailed(error.localizedDescription)
+            }
         }
     }
 }

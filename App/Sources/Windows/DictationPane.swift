@@ -10,6 +10,7 @@ struct DictationPane: View {
     @State private var liveTranscription = SettingsStore().liveTranscriptionEnabled
     @State private var localTranscription = SettingsStore().localTranscriptionEnabled
     @State private var localModel = SettingsStore().localSpeechModel
+    @State private var localMeetings = SettingsStore().localMeetingTranscriptionEnabled
     @State private var smartTranscription = SettingsStore().smartTranscriptionEnabled
     @State private var cleanupPass = SettingsStore().smartCleanupPassEnabled
     @State private var skipShortCleanup = SettingsStore().skipShortDictationCleanup
@@ -80,13 +81,22 @@ struct DictationPane: View {
                     .onChange(of: localModel) { _, model in
                         settings.setLocalSpeechModel(model)
                     }
-                LocalModelControls(localEnabled: localTranscription, selection: $localModel)
+                LocalModelControls(localEnabled: localTranscription, meetingsLocal: localMeetings, selection: $localModel)
                 Toggle("Real-time transcription", isOn: $liveTranscription)
                     .onChange(of: liveTranscription) { _, enabled in
                         settings.setLiveTranscriptionEnabled(enabled)
                     }
+                Toggle("Transcribe meetings on device", isOn: $localMeetings)
+                    .disabled(!LocalModelSupport.isAvailable)
+                    .onChange(of: localMeetings) { _, enabled in
+                        settings.setLocalMeetingTranscriptionEnabled(enabled)
+                    }
+                LocalMeetingControls(meetingsLocal: localMeetings)
             } footer: {
-                LocalModelFooter(localEnabled: localTranscription, selection: localModel)
+                VStack(alignment: .leading, spacing: 4) {
+                    LocalModelFooter(localEnabled: localTranscription, selection: localModel)
+                    LocalMeetingFooter(enabled: localMeetings)
+                }
             }
 
             Section {

@@ -6,14 +6,17 @@ import VoiceIQSpeech
 /// and the trailing action downloads, cancels, or deletes that model alone.
 /// While it is off, only models on disk or in transit keep a row, so they can
 /// still be cancelled or deleted. The English tools pack follows the same
-/// rules but is never selected.
+/// rules but is never selected. Fluid Speech Mini also transcribes meetings
+/// kept on device, so its row stays offered while that is on.
 @MainActor
 public struct LocalModelControls: View {
     private let localEnabled: Bool
+    private let meetingsLocal: Bool
     @Binding private var selection: LocalSpeechModel
 
-    public init(localEnabled: Bool, selection: Binding<LocalSpeechModel>) {
+    public init(localEnabled: Bool, meetingsLocal: Bool = false, selection: Binding<LocalSpeechModel>) {
         self.localEnabled = localEnabled
+        self.meetingsLocal = meetingsLocal
         _selection = selection
     }
 
@@ -22,11 +25,11 @@ public struct LocalModelControls: View {
             ForEach(LocalSpeechModel.available, id: \.self) { model in
                 LocalModelRow(
                     store: .store(for: model),
-                    localEnabled: localEnabled,
-                    selection: (isSelected: model == selection, select: { selection = model })
+                    offered: localEnabled || (meetingsLocal && model == .parakeet),
+                    selection: localEnabled ? (isSelected: model == selection, select: { selection = model }) : nil
                 )
             }
-            LocalModelRow(store: .englishTools, localEnabled: localEnabled, selection: nil)
+            LocalModelRow(store: .englishTools, offered: localEnabled, selection: nil)
             if localEnabled {
                 Text(Self.englishNote)
                     .font(.caption)
@@ -38,10 +41,28 @@ public struct LocalModelControls: View {
     static let englishNote = "On-device dictation is English only. English tools add speech detection and Fluid Speech Mini dictionary correction. Without them, on-device transcription still works."
 }
 
+/// The speaker diarizer's row, offered while meetings are kept on device.
+@MainActor
+public struct LocalMeetingControls: View {
+    private let meetingsLocal: Bool
+
+    public init(meetingsLocal: Bool) {
+        self.meetingsLocal = meetingsLocal
+    }
+
+    public var body: some View {
+        if LocalModelSupport.isAvailable {
+            LocalModelRow(store: .speakerDiarizer, offered: meetingsLocal, selection: nil)
+        }
+    }
+}
+
 @MainActor
 private struct LocalModelRow: View {
     @ObservedObject var store: LocalModelStore
-    let localEnabled: Bool
+    /// Shown even before download; off, a row stays only while there is
+    /// something on disk or in transit to cancel or delete.
+    let offered: Bool
     /// Nil for a row that is never selected.
     let selection: (isSelected: Bool, select: () -> Void)?
     @State private var confirmingDelete = false
@@ -58,7 +79,7 @@ private struct LocalModelRow: View {
         if isVisible {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 10) {
-                    if localEnabled, let selection {
+                    if let selection {
                         selectButton(selection)
                     } else {
                         Text(name)
@@ -80,12 +101,10 @@ private struct LocalModelRow: View {
         }
     }
 
-    /// Off, a row stays only while there is something on disk or in transit
-    /// to cancel or delete.
     private var isVisible: Bool {
         switch store.state {
         case .unsupported: return false
-        case .notDownloaded, .failed: return localEnabled
+        case .notDownloaded, .failed: return offered
         case .downloading, .ready, .deleting: return true
         }
     }
@@ -182,6 +201,62 @@ public struct LocalModelFooter: View {
             Text(LocalModelSupport.requirement)
         } else if localEnabled && store.state != .ready {
             Text("Cloud transcription is used until \(store.displayName) is downloaded.")
+        }
+    }
+}
+
+/// Section footer while meetings are kept on device but a model is missing.
+@MainActor
+public struct LocalMeetingFooter: View {
+    private let enabled: Bool
+    @ObservedObject private var speech: LocalModelStore = .store(for: .parakeet)
+    @ObservedObject private var diarizer: LocalModelStore = .speakerDiarizer
+
+    public init(enabled: Bool) {
+        self.enabled = enabled
+    }
+
+    public var body: some View {
+        if LocalModelSupport.isAvailable, enabled, !LocalMeetingTranscriber.isReady {
+            Text("Meetings use cloud transcription until \(speech.displayName) and \(diarizer.displayName) are downloaded.")
+        }
+    }
+}
+
+/// The privacy "Meeting audio" row on both platforms. It follows the
+/// on-device meeting setting and both models' download state.
+@MainActor
+public struct LocalMeetingPrivacyRow: View {
+    private let label: String
+    private let localDescription: String
+    private let cloudDescription: String
+    @State private var enabled = SettingsStore().localMeetingTranscriptionEnabled
+
+    public init(label: String, localDescription: String, cloudDescription: String) {
+        self.label = label
+        self.localDescription = localDescription
+        self.cloudDescription = cloudDescription
+    }
+
+    public var body: some View {
+        Content(enabled: enabled, label: label, localDescription: localDescription, cloudDescription: cloudDescription)
+            .onReceive(NotificationCenter.default.publisher(for: .gtSettingDidChange).receive(on: RunLoop.main)) { note in
+                if note.object as? String == "localMeetingTranscriptionEnabled" {
+                    enabled = SettingsStore().localMeetingTranscriptionEnabled
+                }
+            }
+    }
+
+    private struct Content: View {
+        @ObservedObject var speech: LocalModelStore = .store(for: .parakeet)
+        @ObservedObject var diarizer: LocalModelStore = .speakerDiarizer
+        let enabled: Bool
+        let label: String
+        let localDescription: String
+        let cloudDescription: String
+
+        var body: some View {
+            LabeledContent(label) { Text(enabled && LocalMeetingTranscriber.isReady ? localDescription : cloudDescription) }
         }
     }
 }

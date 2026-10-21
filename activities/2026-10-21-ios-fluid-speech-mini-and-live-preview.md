@@ -50,23 +50,39 @@ preview needs a full re-decode per second and the simulator took 1.4–1.8 s
 per 1 s chunk on CPU, so it stays off there until a physical device shows
 the Neural Engine keeps up.
 
-## Local meetings (not built)
+## Local meetings
 
 FluidVoice's Fluid Meet runs Fluid Speech Mini for words and Nemotron 3
-Diarization for speakers, all on device. The CoreML offline preset
-(`FluidInference/nemotron-3-diarization-coreml`, offline variant) is
-199.2 MB (199,162,403 bytes; `weight.bin` 198,654,080). FluidAudio 0.17.7
-exposes `Nemotron3Config.offline`, `Nemotron3Models.load(config:directory:computeUnits:)`,
-`Nemotron3Diarizer(config:models:)`, `processComplete(audio:speechMask:)`
-and `Nemotron3Diarizer.segments(...)` → `[Nemotron3Segment(speakerIndex, startSeconds, endSeconds)]`.
-Design for a follow-up: a `LocalMeetingTranscriber` decodes the call audio
-with Fluid Speech Mini (token timings on), runs the diarizer over the same
-timeline, assigns each word the speaker whose segment overlaps its time,
-builds `TimedWord`s, and feeds the existing `SpeakerLinker.overlappingTurns`
-→ `TranscriptSegment` → notes path unchanged. The Mac needs a new helper
-wire command and a longer helper deadline (60 s idle / 120 s today); iOS
-runs it in-process. Needs a diarizer manifest, a `LocalModelStore` row and
-a Meetings setting.
+Diarization for speakers, all on device. The same pair now transcribes a
+saved meeting here when "Transcribe meetings on device" is on and both
+models are downloaded; the cloud writing model still produces the notes.
+
+- Diarizer: `FluidInference/nemotron-3-diarization-coreml`, revision
+  `25a90f97`, `monolithic/v2/` offline bundle plus `learnable_sil_emb.bin`,
+  199,162,403 bytes, OpenMDW-1.1, installed as
+  `Models/nemotron-3-diarization-offline`. The `offline` preset is the
+  model card's batch configuration (no Neural Engine, 87.5 % speaker-count
+  accuracy on the card's test set). `fast128` reports 100 % speaker-count
+  accuracy at 10.5 s latency per window and was not tried.
+- `LocalMeetingJob` (VoiceIQInference) mixes mic and system to one 16 kHz
+  track, decodes it with Fluid Speech Mini (`transcribeDiskBacked`, words
+  from token timings), then streams the diarizer in 60 s chunks and reads
+  `Nemotron3Diarizer.segments`. `LocalMeetingTranscriber` labels each word
+  by the segment under its midpoint, else the largest overlap, else the
+  nearest segment within 2 s, else the previous word's speaker; the owner
+  pass (`markOwner`) and `SpeakerLinker.overlappingTurns` are the cloud
+  path's. Words are cached in `local-words-v1.json` so a Retry only redoes
+  the notes.
+- The Mac runs the job in its own `VoiceiQLocalSpeech` helper
+  (`ParakeetCommand.meeting`), deadline max(600 s, 3 × duration), killed on
+  cancel. iOS runs it in-process; cancellation lands between diarizer
+  chunks.
+- `MeetingEngine` tries the local route first and falls back to the cloud
+  transcriber when the local one throws (not when cancelled). With no
+  provider key the notes step fails with `MeetingFailure.noNotesRoute`.
+- While a meeting decodes, the two model stores are busy; a dictation
+  started then goes to the cloud. `acquire` waits up to 600 s for a busy
+  store, polling every 2 s.
 
 ## Verification
 
@@ -97,6 +113,27 @@ a Meetings setting.
   Speakers) reached that input. The pill preview on the Mac is therefore
   untested end to end; the same `ParakeetSession.append` path was exercised
   with real audio in the simulator.
+- Local meeting, macOS (notarized 0.6.2 build 47 installed to
+  `/Applications`): the Dictation pane shows "Transcribe meetings on
+  device"; turning it on reveals the Nemotron 3 Diarization row
+  (Download 199.2 MB) and the footer, both gone once installed. Privacy &
+  Storage then reads "Transcribed on device; only the transcript goes to
+  Gemini for notes". The Mac mini's microphone is a Jump Desktop virtual
+  device, so the meeting was synthesized: `mic.caf` with Samantha and
+  `system.caf` with Daniel, six alternating turns, 31 s, 1 s gaps. Retry
+  from Settings → Meetings: helper log "73 words in 0.5s, 6 speaker
+  stretches in 10.6s", usage row `meeting/transcribe fluid-speech-mini-local`
+  at $0, six transcript turns whose speaker alternates exactly as scripted
+  (boundaries within 0.5 s of the script), notes by Gemini 3.8 Flash,
+  `local-words-v1.json` kept, `local-mix.caf` removed. One decode quirk:
+  "by12%" (Fluid Speech Mini drops the space before a digit after "by";
+  the notes read "12%"). `markOwner` did not label the mic track "you"
+  because the clip has under 20 s of system speech, the same threshold the
+  cloud path uses.
+- Local meeting, iOS simulator: the Dictation settings show the toggle,
+  the diarizer row and the footer; Privacy shows the cloud description
+  while the diarizer is not downloaded. The decode itself was not run in
+  the simulator.
 
 ## Gaps
 
@@ -106,7 +143,14 @@ a Meetings setting.
   energy window, 200 ms lead) were tuned on one TTS clip in the simulator.
 - The Mac pill preview with Fluid Speech Mini needs a run with a real
   microphone.
-- The local meeting path is a design only.
+- The local meeting path ran once on synthetic TTS audio with two clean,
+  non-overlapping voices. Diarization of real calls with cross-talk, more
+  than two people, or a speakerphone is unmeasured; FluidVoice ships Fluid
+  Meet on the Mac only, and iPhone decode time for a long meeting is
+  unknown.
+- "Transcribe meetings on device" is a second toggle under On-device
+  transcription rather than part of it, so a user who downloads both
+  models must also turn it on.
 
 ## Rollback
 
@@ -114,4 +158,7 @@ Revert the listed files; `LocalSpeechModel.available` and the iOS
 `VoiceIQInference` link are the two switches. Settings keys are unchanged;
 an iOS install that had `localTranscriptionEnabled` on from before
 2026-10-14 starts using Fluid Speech Mini again once the model is
-downloaded.
+downloaded. Local meetings add one key, `localMeetingTranscriptionEnabled`
+(default off), and one model folder, `Models/nemotron-3-diarization-offline`;
+turning the toggle off returns meetings to the cloud transcriber with no
+other change, and the Delete button on the diarizer row removes the model.

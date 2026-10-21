@@ -64,7 +64,8 @@ final class DictationController {
             client: client,
             config: { SettingsStore().geminiConfig },
             summaryModel: SettingsStore().geminiConfig.cleanupModel,
-            providers: { SettingsStore().meetingProviders }
+            providers: { SettingsStore().meetingProviders },
+            localMeeting: LocalMeetingHelper.run
         )
         coordinator = DictationCoordinator(
             audioFactory: { [warmEngines] in warmEngines.take() },

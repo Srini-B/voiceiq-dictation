@@ -41,8 +41,8 @@ When the model is absent, downloading, being deleted, busy, or fails to load,
 dictation uses the selected cloud provider. The cloud real-time preference still
 applies when no local session starts. A failed local transcription uploads the
 saved recording through the batch cloud path. This is not an offline-only mode.
-Meetings are unchanged. Dictation, Ask Anything, Translate and macOS Agent all
-use this selection logic.
+Dictation, Ask Anything, Translate and macOS Agent all use this selection
+logic. Meetings have their own switch; see [On-device meetings](#on-device-meetings).
 
 ## Model and real-time selection
 
@@ -237,12 +237,59 @@ When writing rules are off or skipped for a short dictation, a local result
 inserts the original with dictionary replacements. This preserves the raw-text
 five-second rule and avoids accepting an ambiguous normalization without the
 writing model. Rejected or unavailable cleanup also keeps the original.
-Meetings do not use local transcription or the English tools.
+Meetings do not use the English tools or this cleanup; their transcript goes
+to the writing model for notes as it does from the cloud path.
 
 With **Skip cleanup for dictations of 5 seconds or less** enabled, short ordinary
 dictations retain the transcript plus local dictionary replacements. Disable it
 to use writing rules for short dictations too. Ask Anything, Translate and
 Agent retain their requested actions regardless of duration.
+
+## On-device meetings
+
+**Transcribe meetings on device** (Settings → Dictation, both platforms) is a
+separate switch from on-device dictation. It needs two downloads: Fluid Speech
+Mini for the words and **Nemotron 3 Diarization** (199 MB) for who spoke when.
+While the switch is on, the Fluid Speech Mini row stays offered even with
+dictation on the cloud, and the diarizer row appears under the switch. Until
+both are `.ready`, meetings use the cloud path and the footer says so. This is
+the FluidMeet recipe: one ASR model and one diarizer, joined by time.
+
+The flow, in `MeetingEngine.transcribe(folder:config:)`:
+
+1. `LocalMeetingTranscriber.acquire(runner:)` returns nil unless the setting is
+   on and both stores are `.ready`. It then takes a session on both stores. A
+   dictation holding Fluid Speech Mini wins: the meeting polls every 2 s for up
+   to 600 s, then fails with "busy". While the meeting holds the sessions, a
+   dictation falls back to the cloud as it does during a download.
+2. `transcribe(folder:)` mixes mic and system onto one timeline with
+   `CallAudio.samples` (silence kept, so model seconds are meeting seconds),
+   writes it as `local-mix.caf` (Int16 16 kHz mono, a minute at a time), and
+   hands a `LocalMeetingRequest` to the runner. The file is removed after.
+3. The runner (`LocalMeetingJob.run`) loads Fluid Speech Mini, runs
+   `AsrManager.transcribeDiskBacked`, groups token timings into words at
+   leading-space boundaries, frees the ASR, then loads the diarizer with
+   `Nemotron3Config.offline`, streams the file through it in 60 s chunks, and
+   turns the speaker probabilities into `Segment(speaker:start:end)` with
+   `Nemotron3Diarizer.segments`. On macOS the runner is
+   `LocalMeetingHelper.run`, which spawns its own copy of the speech helper
+   (so a dictation's helper is never blocked), kills it on cancel, and times
+   out at `max(600 s, 3 × duration)`. On iOS it is
+   `LocalSpeechInference.transcribeMeeting`, in process.
+4. Words and segments are cached as `local-words-v1.json` beside the audio, so
+   a Retry after the notes fail does not decode twice. Each word takes the
+   speaker active at its midpoint, else the one overlapping it most, else the
+   nearest within 2 s, else the previous word's. Speakers are renumbered in
+   order of first appearance; the owner is marked from the mic track with
+   `MeetingTranscriber.markOwner` as on the cloud path. Turns come from
+   `SpeakerLinker.overlappingTurns`.
+5. The transcript is saved, then notes are written by the cloud writing model.
+   With no key the meeting is marked failed with "add a key for notes, then
+   Retry"; the transcript is kept and Retry reuses the cache.
+
+If the on-device pass fails and a key is stored, the cloud path runs. A
+cancelled job does not fall back. Usage is recorded under the Fluid Speech
+Mini model ID with zero cost.
 
 ## Dependencies and storage
 
@@ -267,6 +314,13 @@ Nemotron comes from
 `1a41b75758b0337ff67db7d5408280aaaf23074e`, folder `multilingual/2240ms/`.
 `NemotronManifest.swift` pins its 22 files and SHA-256 digests, totalling
 664,846,846 bytes. The same verification and atomic installation apply.
+
+Nemotron 3 Diarization comes from `FluidInference/nemotron-3-diarization-coreml`,
+revision `25a90f97f254428d4b30374b76af9c74fdee8327`: the offline monolithic v2
+bundle under `monolithic/v2/` plus `learnable_sil_emb.bin` at the repository
+root, installed flat as `Models/nemotron-3-diarization-offline/<revision>`,
+the layout `Nemotron3Models.load(config: .offline, directory:)` reads.
+`NemotronDiarizerManifest.swift` pins its 5 files, totalling 199,162,403 bytes.
 
 English tools come from two Hugging Face repositories, each pinned to one
 commit. `EnglishToolsManifest.swift` pins all 17 files, sizes and SHA-256

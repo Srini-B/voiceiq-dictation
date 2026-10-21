@@ -44,6 +44,10 @@ public final class LocalModelStore: ObservableObject {
     /// `EnglishToolsFolder` case.
     public static let englishTools = LocalModelStore(manifest: .englishTools, displayName: "English tools")
 
+    /// Who spoke when, for meetings transcribed on device. Words come from
+    /// Fluid Speech Mini; this model only tells the speakers apart.
+    public static let speakerDiarizer = LocalModelStore(manifest: .nemotronDiarizer, displayName: "Nemotron 3 Diarization")
+
     public static func store(for model: LocalSpeechModel) -> LocalModelStore {
         switch model {
         case .parakeet: return parakeet

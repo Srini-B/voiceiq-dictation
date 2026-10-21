@@ -91,7 +91,12 @@ With no usable key, nothing is sent and the recording stays on your Mac.
    `~/Library/Application Support/VoiceiQ/meetings/` and nothing is sent.
    Recording stops only when you stop it; the stretches with speech are then
    sent to the provider for a speaker-labelled transcript, and that
-   transcript is sent back for a summary and action items. Turn the setting off and no call detection runs.
+   transcript is sent back for a summary and action items. With "Transcribe
+   meetings on device" on and both Fluid Speech Mini and Nemotron 3
+   Diarization downloaded, the audio never leaves the device: the words and
+   speakers are worked out locally, and only the transcript is sent, for the
+   notes. If that on-device pass fails and a key is saved, the audio is sent
+   as above. Turn the setting off and no call detection runs.
 7. **The selected text, when you use Ask Anything** (⌃⌥A by default). At the
    moment you press the shortcut, VoiceiQ reads the text selected in the
    frontmost app through the Accessibility API and sends it with your spoken

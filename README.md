@@ -101,7 +101,10 @@ speaker-labelled transcript plus a summary, decisions, and owned action items
 under Settings → Meetings. Recording never stops on its own. Meetings run on
 the selected provider, or on the other provider when only its key is saved.
 With no usable key the recording is kept and marked failed with the reason,
-ready to Retry once a key is added.
+ready to Retry once a key is added. Turn on **Transcribe meetings on device**
+and download Fluid Speech Mini plus Nemotron 3 Diarization (199 MB) to get the
+words and speakers on device, FluidMeet-style; only the transcript then goes
+to the writing model for notes.
 
 **Cost Analysis.** Every model call is metered: tokens or audio seconds from the
 API response, priced at the provider's list prices. Settings → Cost Analysis shows today, this week, this month, and all
@@ -139,6 +142,9 @@ dictation is a few seconds of audio. VoiceiQ itself is free and has no account.
 | Transcription | `gemini-3.5-transcribe` | `gpt-transcribe` |
 | Writing rules, Ask Anything, Translate, meeting notes | `gemini-3.8-flash` | `gpt-6-luna` |
 | Meeting speakers | `gemini-3.5-transcribe` | `gpt-4o-transcribe-diarize` |
+
+With **Transcribe meetings on device** on, Fluid Speech Mini and Nemotron 3
+Diarization replace the meeting speakers row; the notes row is unchanged.
 
 Every dictation is a transcription followed, with writing rules on, by a
 writing-rules pass. Screenshots go only to the writing model.

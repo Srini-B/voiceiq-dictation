@@ -13,4 +13,9 @@ public enum LocalSpeechInference {
         case .nemotron: return NemotronSession(audioURL: audioURL, streaming: streaming, options: options)
         }
     }
+
+    /// Runs in this process. The Mac app goes through its helper instead.
+    public static let transcribeMeeting: LocalMeetingRunner = { request in
+        try await LocalMeetingJob.run(request)
+    }
 }

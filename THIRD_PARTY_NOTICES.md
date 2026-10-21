@@ -53,6 +53,15 @@ repository's Apache 2.0 license. See `App/Resources/Sounds/ATTRIBUTION.md`.
 - VoiceiQ downloads the converted `multilingual/2240ms/` files unmodified on
   explicit request. Weights are not bundled. File hashes are in `NemotronManifest.swift`.
 
+### Optional NVIDIA Nemotron 3 Diarization model
+
+- Original model: https://huggingface.co/nvidia/Nemotron-3-Diarization (NVIDIA).
+- Core ML conversion: https://huggingface.co/FluidInference/nemotron-3-diarization-coreml (Fluid Inference), revision `25a90f97f254428d4b30374b76af9c74fdee8327`.
+- License: [OpenMDW-1.1](https://openmdw.ai/license/1-1/).
+- VoiceiQ downloads the converted `monolithic/v2/` offline bundle and
+  `learnable_sil_emb.bin` unmodified on explicit request, for on-device meeting
+  speakers. Weights are not bundled. File hashes are in `NemotronDiarizerManifest.swift`.
+
 ### Optional English tools pack
 
 VoiceiQ downloads these Core ML conversions unmodified, on explicit request, as
