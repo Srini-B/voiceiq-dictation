@@ -9,7 +9,7 @@ enum Log {
 public enum LocalSpeechInference {
     public static let makeSession: LocalSpeechSessionFactory = { model, audioURL, streaming, options in
         switch model {
-        case .parakeet: return ParakeetSession(audioURL: audioURL, options: options)
+        case .parakeet: return ParakeetSession(audioURL: audioURL, streaming: streaming, options: options)
         case .nemotron: return NemotronSession(audioURL: audioURL, streaming: streaming, options: options)
         }
     }

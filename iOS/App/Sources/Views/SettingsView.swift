@@ -1,6 +1,7 @@
 import SwiftUI
 import VoiceIQBridge
 import VoiceIQCore
+import VoiceIQSpeech
 
 /// The pages under Settings, in sidebar order.
 enum SettingsSection: String, CaseIterable, Identifiable {
@@ -122,6 +123,8 @@ struct SettingsView: View {
 
 struct DictationSettingsView: View {
     @State private var liveTranscription = SettingsStore().liveTranscriptionEnabled
+    @State private var localTranscription = SettingsStore().localTranscriptionEnabled
+    @State private var localModel = SettingsStore().localSpeechModel
     @EnvironmentObject private var session: VoiceSession
     private let settings = SettingsStore()
     @State private var translationTarget = SettingsStore().translationTargetLanguage
@@ -175,8 +178,16 @@ struct DictationSettingsView: View {
                     }
             }
             Section {
+                Toggle("On-device transcription", isOn: $localTranscription)
+                    .disabled(!LocalModelSupport.isAvailable)
+                    .onChange(of: localTranscription) { _, value in settings.setLocalTranscriptionEnabled(value) }
+                    // Here, not on the controls: they expand to several rows.
+                    .onChange(of: localModel) { _, value in settings.setLocalSpeechModel(value) }
+                LocalModelControls(localEnabled: localTranscription, selection: $localModel)
                 Toggle("Real-time transcription", isOn: $liveTranscription)
                     .onChange(of: liveTranscription) { _, value in settings.setLiveTranscriptionEnabled(value) }
+            } footer: {
+                LocalModelFooter(localEnabled: localTranscription, selection: localModel)
             }
             Section {
                 Toggle("Smart transcription", isOn: $smartTranscription)
@@ -211,6 +222,8 @@ struct DictationSettingsView: View {
         // leave a stale toggle here.
         .onReceive(NotificationCenter.default.publisher(for: .gtSettingDidChange).receive(on: RunLoop.main)) { note in
             switch note.object as? String {
+            case "localTranscriptionEnabled": localTranscription = settings.localTranscriptionEnabled
+            case "localSpeechModel": localModel = settings.localSpeechModel
             case "liveDictationEnabled": liveTranscription = settings.liveTranscriptionEnabled
             case "smartTranscription": smartTranscription = settings.smartTranscriptionEnabled
             case "smartCleanupPass": cleanupPass = settings.smartCleanupPassEnabled
@@ -390,7 +403,7 @@ struct PrivacyView: View {
                 }
             }
             Section {
-                LabeledContent("Audio", value: destination)
+                LocalAudioPrivacyRow(provider: provider.directName, cloudDescription: destination)
                 LabeledContent("Transcript text", value: "For writing rules, Ask and Translate")
                 LabeledContent("Meeting notes", value: provider.displayName)
                 LabeledContent("Dictionary terms", value: "With cloud transcription and cleanup")

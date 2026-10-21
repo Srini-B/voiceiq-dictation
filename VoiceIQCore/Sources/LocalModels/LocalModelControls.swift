@@ -1,8 +1,7 @@
-#if os(macOS)
 import SwiftUI
 import VoiceIQSpeech
 
-/// The model list in macOS settings. While on-device
+/// The model list shared by the macOS and iOS settings. While on-device
 /// transcription is on, every model has a row: the leading check selects it,
 /// and the trailing action downloads, cancels, or deletes that model alone.
 /// While it is off, only models on disk or in transit keep a row, so they can
@@ -20,7 +19,7 @@ public struct LocalModelControls: View {
 
     public var body: some View {
         if LocalModelSupport.isAvailable {
-            ForEach(LocalSpeechModel.allCases, id: \.self) { model in
+            ForEach(LocalSpeechModel.available, id: \.self) { model in
                 LocalModelRow(
                     store: .store(for: model),
                     localEnabled: localEnabled,
@@ -37,10 +36,6 @@ public struct LocalModelControls: View {
     }
 
     static let englishNote = "On-device dictation is English only. English tools add speech detection and Fluid Speech Mini dictionary correction. Without them, on-device transcription still works."
-
-    /// Shown beneath the real-time toggle while on-device transcription is on
-    /// and Nemotron is not downloaded.
-    public static let streamingHint = "Nemotron 3.5 is optimized for streaming. Download it to transcribe on device while you speak."
 }
 
 @MainActor
@@ -51,7 +46,11 @@ private struct LocalModelRow: View {
     let selection: (isSelected: Bool, select: () -> Void)?
     @State private var confirmingDelete = false
 
+    #if os(iOS)
+    private static let minTarget: CGFloat = 44
+    #else
     private static let minTarget: CGFloat = 24
+    #endif
 
     private var name: String { store.displayName }
 
@@ -187,7 +186,7 @@ public struct LocalModelFooter: View {
     }
 }
 
-/// The macOS privacy "Audio" row. It follows the on-device
+/// The privacy "Audio" row on both platforms. It follows the on-device
 /// setting, the selected model, and that model's download state, so it never
 /// claims audio stays local while the model is missing.
 @MainActor
@@ -234,4 +233,3 @@ public struct LocalAudioPrivacyRow: View {
         }
     }
 }
-#endif

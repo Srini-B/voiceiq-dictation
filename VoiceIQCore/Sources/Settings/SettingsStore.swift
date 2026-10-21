@@ -1,7 +1,5 @@
 import Foundation
-#if os(macOS)
 import VoiceIQSpeech
-#endif
 
 public extension Notification.Name {
     /// Posted after any SettingsStore write and after Keychain API-key writes,
@@ -102,7 +100,6 @@ public struct SettingsStore: Sendable {
         Self.set(enabled, forKey: "liveDictationEnabled")
     }
 
-    #if os(macOS)
     public var localTranscriptionEnabled: Bool {
         LocalModelSupport.isAvailable && Self.defaults.bool(forKey: "localTranscriptionEnabled")
     }
@@ -111,9 +108,12 @@ public struct SettingsStore: Sendable {
         Self.set(enabled && LocalModelSupport.isAvailable, forKey: "localTranscriptionEnabled")
     }
 
-    /// The on-device model to download and use. Unknown or missing values read as Parakeet.
+    /// The on-device model to download and use. Unknown, missing, or
+    /// platform-unavailable values read as Fluid Speech Mini.
     public var localSpeechModel: LocalSpeechModel {
-        LocalSpeechModel(rawValue: Self.defaults.string(forKey: "localSpeechModel") ?? "") ?? .parakeet
+        let stored = LocalSpeechModel(rawValue: Self.defaults.string(forKey: "localSpeechModel") ?? "")
+        guard let stored, LocalSpeechModel.available.contains(stored) else { return .parakeet }
+        return stored
     }
 
     /// Picking Nemotron turns real-time transcription on, because Nemotron is
@@ -124,7 +124,6 @@ public struct SettingsStore: Sendable {
         Self.set(model.rawValue, forKey: "localSpeechModel")
         if model == .nemotron { setLiveTranscriptionEnabled(true) }
     }
-    #endif
 
     /// Providers for meeting transcription and notes; see `ModelProvider.meetingOrder`.
     public var meetingProviders: [ModelProvider] {

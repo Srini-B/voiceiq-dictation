@@ -7,6 +7,17 @@ public enum LocalSpeechModel: String, CaseIterable, Codable, Sendable {
     case parakeet
     case nemotron
 
+    /// The models offered on this platform. iPhone and iPad get Fluid Speech
+    /// Mini only: Nemotron stalled on a physical iPhone, and the app has no
+    /// live-text surface there that would justify its streaming decoder.
+    public static var available: [LocalSpeechModel] {
+        #if os(macOS)
+        return allCases
+        #else
+        return [.parakeet]
+        #endif
+    }
+
     public var displayName: String {
         switch self {
         case .parakeet: return "Fluid Speech Mini"

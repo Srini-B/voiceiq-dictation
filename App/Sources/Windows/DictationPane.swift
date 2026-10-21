@@ -10,7 +10,6 @@ struct DictationPane: View {
     @State private var liveTranscription = SettingsStore().liveTranscriptionEnabled
     @State private var localTranscription = SettingsStore().localTranscriptionEnabled
     @State private var localModel = SettingsStore().localSpeechModel
-    @ObservedObject private var nemotron = LocalModelStore.store(for: .nemotron)
     @State private var smartTranscription = SettingsStore().smartTranscriptionEnabled
     @State private var cleanupPass = SettingsStore().smartCleanupPassEnabled
     @State private var skipShortCleanup = SettingsStore().skipShortDictationCleanup
@@ -82,15 +81,10 @@ struct DictationPane: View {
                         settings.setLocalSpeechModel(model)
                     }
                 LocalModelControls(localEnabled: localTranscription, selection: $localModel)
-                Toggle(isOn: $liveTranscription) {
-                    Text("Real-time transcription")
-                    if localTranscription && nemotron.state != .ready {
-                        Text(LocalModelControls.streamingHint)
+                Toggle("Real-time transcription", isOn: $liveTranscription)
+                    .onChange(of: liveTranscription) { _, enabled in
+                        settings.setLiveTranscriptionEnabled(enabled)
                     }
-                }
-                .onChange(of: liveTranscription) { _, enabled in
-                    settings.setLiveTranscriptionEnabled(enabled)
-                }
             } footer: {
                 LocalModelFooter(localEnabled: localTranscription, selection: localModel)
             }

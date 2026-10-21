@@ -1,9 +1,8 @@
-#if os(macOS)
 import Foundation
 import VoiceIQSpeech
 
 public enum LocalModelSupport {
-    /// The package's deployment target already guarantees macOS 14.
+    /// The package's deployment targets already guarantee macOS 14 and iOS 17.
     public static var isAvailable: Bool {
         #if arch(arm64)
         return true
@@ -13,7 +12,11 @@ public enum LocalModelSupport {
     }
 
     public static var requirement: String {
+        #if os(macOS)
         return "Requires a Mac with Apple silicon and macOS 14 or later."
+        #else
+        return "Requires iOS 17 or later."
+        #endif
     }
 }
 
@@ -158,4 +161,3 @@ public final class LocalModelStore: ObservableObject {
         if progress > current { state = .downloading(progress: progress) }
     }
 }
-#endif

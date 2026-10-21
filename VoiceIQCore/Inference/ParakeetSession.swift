@@ -5,19 +5,48 @@ import VoiceIQSpeech
 actor ParakeetSession: LocalSpeechSession {
     private typealias Loaded = (models: AsrModels, tools: EnglishTools)
     private let audioURL: URL
+    private let streaming: Bool
     private let options: LocalSpeechOptions
     private var loading: Task<Loaded, Error>?
+    private var previewing: Task<ASRResult, Error>?
     private var recognition: Task<LocalSpeechOutput?, Error>?
     private var manager: AsrManager?
     private var tools = EnglishTools()
+    private var preview = ParakeetPreview()
     private var stopped = false
 
-    init(audioURL: URL, options: LocalSpeechOptions) {
+    /// `streaming` turns on the display-only preview; the final transcript
+    /// always comes from `transcribe`.
+    init(audioURL: URL, streaming: Bool, options: LocalSpeechOptions) {
         self.audioURL = audioURL
+        self.streaming = streaming
         self.options = options
     }
 
-    func append(_ pcm: Data) -> String? { nil }
+    /// Re-decodes the open tail of the recording. A failed preview decode
+    /// keeps the last text; only a missing model rejects the audio.
+    func append(_ pcm: Data) async -> String? {
+        guard streaming, !stopped, let manager, pcm.count.isMultiple(of: 2) else { return nil }
+        preview.append(pcm)
+        guard preview.isReady else { return preview.text }
+        let samples = preview.tail
+        let task = Task { () throws -> ASRResult in
+            try Task.checkCancellation()
+            var decoder = TdtDecoderState.make(decoderLayers: await manager.decoderLayerCount)
+            return try await manager.transcribe(samples, decoderState: &decoder, language: .english)
+        }
+        previewing = task
+        defer { previewing = nil }
+        do {
+            let result = try await task.value
+            guard !stopped else { return nil }
+            preview.apply(text: result.text, timings: result.tokenTimings ?? [], decoded: samples.count)
+        } catch {
+            guard !stopped else { return nil }
+            Log.transcription.notice("Parakeet preview decode failed; keeping last preview: \(error.localizedDescription, privacy: .public)")
+        }
+        return String(preview.text.suffix(512))
+    }
 
     func load(from directory: URL) async {
         guard !stopped else { return }
@@ -102,12 +131,16 @@ actor ParakeetSession: LocalSpeechSession {
     func stop() async {
         stopped = true
         let loading = loading
+        let previewing = previewing
         let recognition = recognition
         loading?.cancel()
+        previewing?.cancel()
         recognition?.cancel()
         _ = await loading?.result
+        _ = await previewing?.result
         _ = await recognition?.result
         self.loading = nil
+        self.previewing = nil
         self.recognition = nil
         await manager?.cleanup()
         manager = nil

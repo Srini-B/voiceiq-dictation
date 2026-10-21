@@ -1,4 +1,3 @@
-#if os(macOS)
 import Foundation
 
 /// Nemotron 3.5 ASR Streaming Multilingual 0.6B (Core ML), the 2240 ms chunk
@@ -38,4 +37,3 @@ extension LocalModelManifest {
         ]
     )
 }
-#endif
