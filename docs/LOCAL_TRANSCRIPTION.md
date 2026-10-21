@@ -1,18 +1,21 @@
 # On-device transcription
 
 Settings → Dictation offers **On-device transcription** on Apple
-Silicon Macs running macOS 14+ only.
+Silicon Macs running macOS 14+, and on iPhone and iPad running iOS/iPadOS 17+.
 The toggle is off by default. Existing local-transcription preferences survive
 the removal of Whistle, but its model and runtime are no longer included.
 On-device dictation is English only: Fluid Speech Mini decodes as English and Nemotron
 is locked to `en-US`. Cloud transcription keeps its own language handling.
 
-iPhone and iPad use online transcription only, including cloud real-time
-transcription. They do not link FluidAudio, the normalizer, or the local model
-manager. On launch, the app clears retired local preferences and removes its
-`Application Support/VoiceiQ/Models` folder in the background. This also removes
-partial downloads and English tools. Failed deletion retries on the next launch.
-Recordings, history, API keys, dictionary, and cloud preferences are preserved.
+iPhone and iPad offer Fluid Speech Mini only (`LocalSpeechModel.available`).
+Nemotron stalled on a physical iPhone when both models were offered in
+October 2026, and the iOS app has no live-text surface for its streaming
+output. A stored Nemotron selection reads as Fluid Speech Mini there. The iOS
+app links FluidAudio and runs inference in-process; it releases models after
+each dictation and joins active Core ML calls on cancellation. Core ML can
+retain runtime caches there, so returning physical memory to its original
+baseline within a fixed time is not guaranteed. Downloads run in the
+foreground; keep the iOS app open until complete.
 
 ## Download and delete
 
@@ -30,7 +33,7 @@ Recordings, history, API keys, dictionary, and cloud preferences are preserved.
 
 The model is not bundled, downloaded automatically, or loaded during download.
 Each device owns its download. A cancelled or failed download can be retried.
-Keep the Mac app running until downloads complete.
+Keep the app open until downloads complete.
 Deleting during a local session cancels local processing before removing files;
 the saved recording can still use cloud transcription.
 
@@ -51,13 +54,39 @@ has its own trash icon, including the model that is not selected.
 
 | Selected, downloaded model | Real-time on | Real-time off |
 |---|---|---|
-| Fluid Speech Mini | Transcribe the saved recording after stop | Same |
+| Fluid Speech Mini | Mac: live preview while speaking, then transcribe the saved recording after stop. iPhone and iPad: transcribe the saved recording after stop | Transcribe the saved recording after stop |
 | Nemotron 3.5 | Process PCM while speaking, then finalize after stop | Process the saved recording after stop |
 | Selected model missing | Cloud real-time, if available | Cloud file transcription |
 
 Nemotron supports saved audio, so disabling real-time does not require a
-different local model. The settings recommend downloading Nemotron for streaming
-while it is missing. There is no automatic switch to another downloaded model.
+different local model. There is no automatic switch to another downloaded model.
+
+### Fluid Speech Mini live preview
+
+Fluid Speech Mini is an offline decoder with no streaming state, so its
+preview is display-only text from re-decoding the open tail of the recording
+(`ParakeetPreview`). The pump hands the session about one second of PCM at a
+time (`PCMRing.bytesPerSecond`); each call decodes the whole tail with a fresh
+decoder state and shows the result. Once the tail reaches 12 s the preview
+commits a prefix and drops the audio under it, so every decode stays under
+the model's 15 s input (`ASRConstants.maxModelSamples`). The cut lands in a
+pause: the quietest 150 ms window inside the last 6 s before the 1 s holdback,
+so the next decode never starts inside a word. Token times are encoder-frame
+emissions, not acoustic edges, and run up to two frames ahead of the audio, so
+a word emitted up to 200 ms after the cut is committed too; if the kept audio
+decodes it again, `ParakeetPreview.dropOverlap` hides up to three repeated
+words (compared without case or punctuation). The final transcript never comes
+from the preview: after stop, the session decodes the complete saved recording
+exactly as with real-time off, including VAD trimming and dictionary
+rescoring. A failed preview decode keeps the last text and does not affect the
+final transcript. Dropped PCM only affects the preview. A missing model ends
+the preview; the final decode still returns nil and cloud transcription takes
+over as before.
+
+The preview runs only where the app shows live text, the Mac pill
+(`LocalTranscriber.previews`). On iPhone and iPad the real-time toggle does not
+change Fluid Speech Mini behaviour; it still selects cloud real-time
+transcription when no local session starts.
 
 ## Model lifecycle
 
@@ -93,11 +122,12 @@ replaces the primary suffix. A failed optional retry retains the primary result;
 cancellation still cancels transcription. This reduces observed boundary omissions,
 but does not guarantee recognition of every word or recover speech before capture.
 
-On Mac, real-time Nemotron and cloud transcription show provisional words in the
-pill while recording. The latest words stay visible in a single line. Nemotron
-updates after each 2.24-second audio block, once the model has loaded. Fluid Speech Mini
-and Nemotron file mode do not produce live words. The preview clears on stop,
-cancel or streaming failure. It never enters History, cleanup or insertion;
+On Mac, real-time Nemotron, real-time Fluid Speech Mini and cloud transcription
+show provisional words in the pill while recording. The latest words stay
+visible in a single line. Nemotron updates after each 2.24-second audio block
+and Fluid Speech Mini after each second, once the model has loaded. Nemotron
+file mode and Fluid Speech Mini with real-time off do not produce live words.
+The preview clears on stop, cancel or streaming failure. It never enters History, cleanup or insertion;
 those paths use only the validated final transcript.
 
 All app-held model and English tools references are released immediately after
@@ -253,9 +283,9 @@ A v1 pack is cleared at the next launch and the row shows Download again.
 FluidAudio's `NemoTextProcessing` trait is enabled for inverse text
 normalization. It links the prebuilt `text-processing-rs` v0.3.1 static library,
 which contains compiled grammars and no model weights. Only the inference
-binary links it: the Mac speech helper. The Mac UI and iOS app do not.
+binaries link it: the Mac speech helper and the iOS app. The Mac UI does not.
 
 Storage is `Application Support/VoiceiQ/Models/<model>/<revision>`.
 Neither the keyboard nor Live Activity extension links FluidAudio. Models load
-only in the macOS helper. See `THIRD_PARTY_NOTICES.md` for SDK and
-model attribution.
+in the macOS helper or the iOS host app. See `THIRD_PARTY_NOTICES.md` for SDK
+and model attribution.

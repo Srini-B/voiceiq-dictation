@@ -407,6 +407,7 @@ runs. Everything needs Full Access.
 | History stats: words, dictations, WPM, audio time | Home's stats grid |
 | Dictionary with search, CSV and Auto-learned | Same, synced through iCloud, plus adding a selection or a copied word from the keyboard |
 | Writing rules, smart transcription, live, noise handling | Same settings |
+| On-device transcription: Fluid Speech Mini and Nemotron 3.5, English tools, live preview with Fluid Speech Mini | Fluid Speech Mini and English tools only, in-process; no live preview (see [local transcription](LOCAL_TRANSCRIPTION.md)) |
 | History, retry, crash recovery, retention | Same |
 | Cost with the provider toggle, periods and Detailed | Same |
 | Advanced: the selected provider's models | Same, plus the session log |

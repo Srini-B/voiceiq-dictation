@@ -4,7 +4,8 @@
 
 By default, your voice goes from your Mac directly to the model provider you chose in
 Settings → Advanced, using your own API key: Google's Gemini API or OpenAI's API.
-Optional Fluid Speech Mini or Nemotron transcription processes audio on-device on supported systems.
+Optional Fluid Speech Mini or Nemotron transcription processes audio on-device on supported systems
+(Fluid Speech Mini only on iPhone and iPad).
 Cleanup and screen context still use your selected cloud provider. Failed local
 transcription falls back to sending the saved audio to that provider.
 There is no VoiceiQ server, no account, no analytics, no telemetry.
