@@ -31,13 +31,14 @@ actor NemotronSession: LocalSpeechSession {
     func load(from directory: URL) async {
         guard !stopped else { return }
         let toolsRoot = options.toolsDirectory
+        let language = options.language
         let task = Task.detached(priority: .userInitiated) { () throws -> Loaded in
             try Task.checkCancellation()
             async let tools = EnglishTools.load(root: toolsRoot)
             let manager = StreamingNemotronMultilingualAsrManager()
             try await manager.loadModels(from: directory)
             try Task.checkCancellation()
-            await manager.setLanguage("en-US")
+            await manager.setLanguage(language)
             await manager.setForcedPrefix(true)
             let loadedTools = try await tools
             try Task.checkCancellation()
@@ -53,7 +54,7 @@ actor NemotronSession: LocalSpeechSession {
             if streaming {
                 meter = tools.vad.map(SpeechActivityMeter.init)
             }
-            Log.transcription.notice("Nemotron English: vad=\(self.tools.vad != nil)")
+            Log.transcription.notice("Nemotron \(language, privacy: .public): vad=\(self.tools.vad != nil)")
         } catch {
             loading = nil
             failed = true
@@ -134,6 +135,10 @@ actor NemotronSession: LocalSpeechSession {
             let text = try await task.value
             processing = nil
             guard !stopped else { return nil }
+            guard options.language.hasPrefix("en") else {
+                // English number formatting would rewrite other languages.
+                return text.isEmpty ? nil : LocalSpeechOutput(original: text, normalized: text)
+            }
             return EnglishText.output(original: text)
         } catch {
             processing = nil

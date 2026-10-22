@@ -9,14 +9,27 @@ with no stored value reads the old `localTranscriptionEnabled` boolean, so an
 earlier on-device choice is kept. `localTranscriptionEnabled` is now a derived
 read of that picker. Existing local-transcription preferences survive
 the removal of Whistle, but its model and runtime are no longer included.
-On-device dictation is English only: Fluid Speech Mini decodes as English and Nemotron
-is locked to `en-US`. Cloud transcription keeps its own language handling.
-Settings shows "Languages: English" under each model
-(`LocalSpeechModel.languages`). Nemotron 3.5 itself was measured on English,
-Spanish, French, Italian, Portuguese, German, Chinese and Japanese and takes
-more through a language prompt (FluidInference model card), but the app does
-not offer them. Fluid Speech Mini is trained on English only (FluidVoice
-model card).
+Each model offers its own languages (`LocalSpeechModel.languages`, a list
+of `LocalSpeechLanguage` with a locale code and a name). The selected model's
+row in Settings has a Language menu; the other rows show "Languages:
+English" or "32 languages". The choice is stored once
+(`SettingsStore.localSpeechLanguage`, key `localSpeechLanguage`, a locale
+code). `LocalSpeechModel.language(code:)` reads it for the selected model and
+falls back to English, so a German choice reads as English under Fluid Speech
+Mini and returns when Nemotron is picked again.
+
+- Fluid Speech Mini: English only. It is trained on English (FluidVoice model
+  card) and ignores the code.
+- Nemotron 3.5: 32 locales, the "transcription-ready" and "broad-coverage"
+  tiers of NVIDIA's model card. The card's eight "adaptation-ready" locales
+  need fine-tuning and are not offered. `LocalTranscriber` passes the code in
+  `LocalSpeechOptions.language`, and `NemotronSession` calls
+  `setLanguage(code)` with the forced language prefix.
+
+The English tools (speech detection, dictionary spotting) and English number
+formatting (`EnglishText`) run only for an English code. For other languages
+the transcript goes to cleanup as decoded; the cleanup prompt keeps the
+speaker's language. Cloud transcription keeps its own language handling.
 
 iPhone and iPad offer Fluid Speech Mini only (`LocalSpeechModel.available`).
 Nemotron stalled on a physical iPhone when both models were offered in

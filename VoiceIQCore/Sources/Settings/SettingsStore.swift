@@ -143,6 +143,17 @@ public struct SettingsStore: Sendable {
         return stored
     }
 
+    /// The language the on-device model transcribes. A stored code the
+    /// selected model lacks (German, then Fluid Speech Mini) reads as English,
+    /// and comes back when that model is picked again.
+    public var localSpeechLanguage: LocalSpeechLanguage {
+        localSpeechModel.language(code: Self.defaults.string(forKey: "localSpeechLanguage"))
+    }
+
+    public func setLocalSpeechLanguage(_ code: String) {
+        Self.set(code, forKey: "localSpeechLanguage")
+    }
+
     /// Picking Nemotron turns real-time transcription on, because Nemotron is
     /// built for streaming. Only a change of selection does this, so a user who
     /// later turns real-time off keeps it off.
