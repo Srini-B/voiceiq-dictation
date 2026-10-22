@@ -147,7 +147,12 @@ public struct SettingsStore: Sendable {
     /// selected model lacks (German, then Fluid Speech Mini) reads as English,
     /// and comes back when that model is picked again.
     public var localSpeechLanguage: LocalSpeechLanguage {
-        localSpeechModel.language(code: Self.defaults.string(forKey: "localSpeechLanguage"))
+        localSpeechModel.language(code: localSpeechLanguageCode)
+    }
+
+    /// The stored code as chosen, which the selected model may not offer.
+    public var localSpeechLanguageCode: String? {
+        Self.defaults.string(forKey: "localSpeechLanguage")
     }
 
     public func setLocalSpeechLanguage(_ code: String) {
@@ -399,12 +404,19 @@ public struct SettingsStore: Sendable {
     /// editor saves on every close, and a fresh stamp would let an untouched
     /// copy win over a real edit on the Mac.
     public func setCustomInstructions(_ text: String?) {
-        let trimmed = text?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let seed = DictationRulesSeed.text.trimmingCharacters(in: .whitespacesAndNewlines)
-        let value = trimmed.flatMap { $0.isEmpty || $0 == seed ? nil : $0 }
-        guard value != customInstructionsOverride else { return }
+        let value = Self.normalizedRules(text)
+        // An older build stored the text untrimmed; compare like for like.
+        guard value != Self.normalizedRules(customInstructionsOverride) else { return }
         Self.defaults.set(Date(), forKey: Self.customInstructionsUpdatedAtKey)
         Self.set(value, forKey: "customInstructions")
+    }
+
+    /// Trimmed text, or nil for "use the defaults".
+    private static func normalizedRules(_ text: String?) -> String? {
+        let seed = DictationRulesSeed.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let trimmed = text?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !trimmed.isEmpty, trimmed != seed else { return nil }
+        return trimmed
     }
 
     private static let customInstructionsUpdatedAtKey = "customInstructionsUpdatedAt"

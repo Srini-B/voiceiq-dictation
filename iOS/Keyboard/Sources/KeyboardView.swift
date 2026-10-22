@@ -183,7 +183,7 @@ private struct MicBar: View {
             .shadow(color: .black.opacity(0.12), radius: 4, y: 2)
         }
         .buttonStyle(MicBarButtonStyle())
-        .accessibilityLabel(phase == .recording ? "Stop" : "Dictate")
+        .accessibilityLabel(phase == .recording ? "Stop" : phase == .processing ? title : "Dictate")
     }
 
     @ViewBuilder private var leadingContent: some View {

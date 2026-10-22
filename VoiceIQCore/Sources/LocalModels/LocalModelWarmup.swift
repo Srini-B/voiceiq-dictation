@@ -43,7 +43,11 @@ public enum LocalModelWarmup {
         LocalModelStore.store(for: current.model).releaseSession(id: current.id)
     }
 
+    /// Polls rather than awaiting the warm-up's task, so a cancelled
+    /// dictation stops waiting at once.
     static func finished() async {
-        await current?.task.value
+        while current != nil, !Task.isCancelled {
+            try? await Task.sleep(for: .milliseconds(100))
+        }
     }
 }

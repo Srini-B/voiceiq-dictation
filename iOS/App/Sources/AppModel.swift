@@ -522,26 +522,31 @@ final class AppModel: ObservableObject {
             UIApplication.shared.endBackgroundTask(task)
             task = .invalid
         }
+        let endTask = {
+            if task != .invalid { UIApplication.shared.endBackgroundTask(task) }
+            task = .invalid
+        }
         DispatchQueue.main.asyncAfter(deadline: .now() + Self.typedCheckDelay) { [store] in
-            defer {
-                if task != .invalid { UIApplication.shared.endBackgroundTask(task) }
-                task = .invalid
-            }
-            guard store.insertedDeliveryID != delivery.id else { return }
+            guard store.insertedDeliveryID != delivery.id else { return endTask() }
             // Handled: a keyboard opened later must not type it as well.
             store.insertedDeliveryID = delivery.id
             let before = UIPasteboard.general.changeCount
             UIPasteboard.general.string = delivery.text
-            // Not something the user copied: the keyboard must not offer it
-            // for the dictionary.
-            store.appPasteboardChangeCount = UIPasteboard.general.changeCount
-            // Whether iOS took the write from the background; the Control
-            // Center path on a keyboard-case iPad depends on it.
-            let landed = UIPasteboard.general.changeCount != before
-            let state = UIApplication.shared.applicationState == .active ? "foreground" : "background"
-            SessionDiagnostics.note(landed
-                ? "result not typed by a keyboard; copied to the clipboard (\(state))"
-                : "result not typed by a keyboard; clipboard write refused (\(state))")
+            // UIPasteboard bumps changeCount at the end of the current event
+            // loop, so read it on the next pass.
+            DispatchQueue.main.async {
+                defer { endTask() }
+                // Not something the user copied: the keyboard must not offer
+                // it for the dictionary.
+                store.appPasteboardChangeCount = UIPasteboard.general.changeCount
+                // Whether iOS took the write from the background; the Control
+                // Center path on a keyboard-case iPad depends on it.
+                let landed = UIPasteboard.general.changeCount != before
+                let state = UIApplication.shared.applicationState == .active ? "foreground" : "background"
+                SessionDiagnostics.note(landed
+                    ? "result not typed by a keyboard; copied to the clipboard (\(state))"
+                    : "result not typed by a keyboard; clipboard write refused (\(state))")
+            }
         }
     }
 

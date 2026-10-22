@@ -15,7 +15,7 @@ public struct LocalModelControls: View {
     @Binding private var selection: LocalSpeechModel
     /// The stored code, kept as is: the picker shows the selected model's
     /// reading of it, so switching models does not lose a choice.
-    @State private var languageCode = SettingsStore().localSpeechLanguage.code
+    @State private var languageCode = SettingsStore().localSpeechLanguageCode
 
     public init(localEnabled: Bool, meetingsLocal: Bool = false, selection: Binding<LocalSpeechModel>) {
         self.localEnabled = localEnabled
