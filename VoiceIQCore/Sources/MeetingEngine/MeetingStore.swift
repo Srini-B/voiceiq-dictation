@@ -34,25 +34,43 @@ public final class MeetingStore: @unchecked Sendable {
         meta.speakerNames[label] = name.trimmingCharacters(in: .whitespacesAndNewlines)
         try save(meta: meta)
     }
-    public func exportMarkdown(id: MeetingID) throws -> String {
+    /// Name-like text read off the screen while recording; see `ScreenNameSampler`.
+    public func save(screenSamples: [ScreenNameSample], id: MeetingID) throws { try save(screenSamples, in: requiredFolder(id), name: "screen-names.json") }
+    public func loadScreenSamples(id: MeetingID) -> [ScreenNameSample]? {
+        try? load([ScreenNameSample].self, from: requiredFolder(id).appendingPathComponent("screen-names.json"))
+    }
+
+    public struct ExportParts: OptionSet, Sendable {
+        public let rawValue: Int
+        public init(rawValue: Int) { self.rawValue = rawValue }
+        public static let notes = ExportParts(rawValue: 1), transcript = ExportParts(rawValue: 2)
+        public static let both: ExportParts = [.notes, .transcript]
+    }
+
+    /// The meeting as one Markdown document: the notes, the transcript, or the notes above the transcript.
+    public func markdown(id: MeetingID, parts: ExportParts) throws -> String {
         let folder = try requiredFolder(id), meta = try load(MeetingMeta.self, from: folder.appendingPathComponent("meta.json"))
-        let notes = try loadNotes(id: id), transcript = try loadTranscript(id: id)
-        var lines = ["# \(notes.title)", "", meta.startedAt.formatted(date: .long, time: .shortened),
-                     String(format: "%.0f minutes", meta.durationSeconds / 60), "", "## Summary", notes.summary]
-        for section in notes.sections ?? [] { append(section.title, section.items, to: &lines) }
-        append("Decisions", notes.decisions, to: &lines)
-        if !notes.actions.isEmpty { lines += ["", "## Action items"] + notes.actions.map { item in
-            var suffix = [item.owner, item.deadline].compactMap { $0 }.joined(separator: " · ")
-            if !suffix.isEmpty { suffix = " (\(suffix))" }; return "- \(item.text)\(suffix)"
-        }}
-        append("Notes", notes.notes, to: &lines)
-        lines += ["", "## Transcript"] + transcript.map { segment in
-            let time = segment.start.map { "[\(MeetingNotesPrompt.clock($0))] " } ?? ""
-            return "\(time)**\(MeetingSpeaker.displayName(segment.speaker, names: meta.speakerNames, suggested: notes.speakers)):** \(segment.text)"
+        let notes = try? loadNotes(id: id)
+        var lines = ["# \(notes?.title ?? meta.title ?? "Meeting")", "", meta.startedAt.formatted(date: .long, time: .shortened),
+                     String(format: "%.0f minutes", meta.durationSeconds / 60)]
+        if parts.contains(.notes), let notes {
+            lines += ["", "## Summary", notes.summary]
+            for section in notes.sections ?? [] { append(section.title, section.items, to: &lines) }
+            append("Decisions", notes.decisions, to: &lines)
+            if !notes.actions.isEmpty { lines += ["", "## Action items"] + notes.actions.map { item in
+                var suffix = [item.owner, item.deadline].compactMap { $0 }.joined(separator: " · ")
+                if !suffix.isEmpty { suffix = " (\(suffix))" }; return "- [ ] \(item.text)\(suffix)"
+            }}
+            append("Notes", notes.notes, to: &lines)
         }
-        let markdown = lines.joined(separator: "\n") + "\n"
-        try markdown.write(to: folder.appendingPathComponent("notes.md"), atomically: true, encoding: .utf8)
-        return markdown
+        if parts.contains(.transcript) {
+            let transcript = (try? loadTranscript(id: id)) ?? []
+            lines += ["", "## Transcript", ""] + transcript.map { segment in
+                let time = segment.start.map { "[\(MeetingNotesPrompt.clock($0))] " } ?? ""
+                return "\(time)**\(meta.displayName(segment.speaker, notes: notes)):** \(segment.text)\n"
+            }
+        }
+        return lines.joined(separator: "\n").trimmingCharacters(in: .newlines) + "\n"
     }
     private func requiredFolder(_ id: MeetingID) throws -> URL {
         guard let folder = folder(for: id) else { throw CocoaError(.fileNoSuchFile) }; return folder

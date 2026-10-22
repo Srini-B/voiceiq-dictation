@@ -1,0 +1,84 @@
+# Meetings on the Mac
+
+How a recorded meeting gets speaker names from the call screen, and how the
+Meetings window shows and exports it. Recording, transcription and the notes
+prompt are covered in [LOCAL_TRANSCRIPTION.md](LOCAL_TRANSCRIPTION.md#on-device-meetings),
+[PRIVACY.md](PRIVACY.md) and [design/meeting-prompt-rulebook.md](design/meeting-prompt-rulebook.md).
+
+## Speaker names from the screen
+
+Call apps show the active speaker's name tag on their tile. VoiceiQ reads those
+tags while it records and matches them to the diarized speakers afterwards.
+
+Setting: **Read names from the screen** in Settings → Dictation
+(`SettingsStore.meetingScreenNamesEnabled`, key `meetingScreenNames`, default
+on). It needs Screen Recording, which the dictation onboarding asks for; a
+meeting never raises the prompt (`CGPreflightScreenCaptureAccess`).
+
+1. `MeetingEngine.startRecording` starts a `ScreenNameSampler` with the
+   detected call source.
+2. Every 3 s the sampler captures one image with ScreenCaptureKit:
+   - the call app's or browser's largest on-screen window, when a source was
+     detected (`SCContentFilter(desktopIndependentWindow:)`, so it works when
+     the window is covered);
+   - otherwise the main display, without VoiceiQ's own windows.
+   The long side is capped at 2560 px.
+3. Vision reads the text of the whole frame and of four overlapping quarters
+   (name tags are small). `ScreenSpeakerNames.candidates(in:)` keeps lines that
+   look like name tags: two to four capitalised words, or one word followed by
+   `-`, `–`, `|` or `(`.
+4. The image is dropped as soon as it is read. **No screenshot is ever written
+   to disk**, so there is nothing to clean up. Only `(time, names)` samples are
+   kept, and `stopRecording` saves them as `screen-names.json` in the meeting
+   folder. Snapshots with no names are kept too; they set the base rate.
+5. After transcription, `ScreenSpeakerNames.match(samples:transcript:)` runs
+   (also on Retry, from the saved file):
+   - Spellings within 0.8 Levenshtein similarity fold into the most frequent one.
+   - For each speaker other than "you", it counts snapshots taken while only
+     that speaker talked (1 s lag for the tile switch).
+   - A name wins a speaker when it is in ≥50 % of those snapshots, ≥1.5× its
+     overall rate, and ≥2 snapshots. Pairs are assigned greedily by
+     lift × count; a name goes to one speaker only.
+   - The 30 most frequent names go to `ScreenNames.seen`.
+   The result is stored as `MeetingMeta.screenNames`.
+6. The notes prompt labels matched speakers with their screen name and lists
+   `seen`; the notes model returns `participants`, the people among them.
+
+Name shown for a speaker (`MeetingMeta.displayName`): the name the user typed,
+then the screen match, then the notes model's suggestion, then "Speaker N".
+`MeetingMeta.knownNames` lists every name from those sources for Assign speakers.
+
+Limits: a gallery view with every tile always visible gives no signal (a name
+that is always on screen has no lift); banners covering a tag lose it; the
+owner ("you") is never named from the screen.
+
+## Meetings window
+
+`App/Sources/Windows/`:
+
+| File | Shows |
+| --- | --- |
+| `MeetingsView.swift` | Record button above the list, the detail header (title, Export menu, `…` menu with Redo notes / Redo transcript and notes / Retry / Delete, transcript toggle), the export message |
+| `MeetingNotesColumn.swift` | Title, Summary, the meeting type's sections, Decisions, Action items as open circles ("Owner: task"), Notes |
+| `MeetingTranscriptColumn.swift` | The transcript in one `NSTextView`: speaker names in their own colour (`SpeakerPalette`), time on a right tab stop, search that filters and highlights |
+| `AssignSpeakersView.swift` | One card per speaker: name, a sample line, shuffle (next line), play (that line's audio) |
+
+In Assign speakers, clicking a name lists `knownNames`, a field for another
+name, and Reset when the user typed one. Play uses `mic-aec.caf` (else
+`mic.caf`) for "you" and `system.caf` for everyone else, from the turn's start
+to its end, through `AVAudioPlayer`.
+
+## Export
+
+Export asks for Notes, Transcript, or Notes and transcript, then writes one
+Markdown file to `~/Downloads/<title>.md` (`<title> notes.md`,
+`<title> transcript.md`; a number is added when the name is taken).
+`MeetingStore.markdown(id:parts:)` builds it: notes first, transcript below.
+The window shows the saved path with Show in Finder. Nothing is written into
+the meeting folder. iOS shares the same Markdown with both parts.
+
+## ffmpeg
+
+The app does not use ffmpeg; audio is read and written with AVFoundation.
+ffmpeg is a development tool only (for playing test recordings) and is not
+bundled.

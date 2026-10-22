@@ -33,6 +33,11 @@ import VoiceIQSpeech
     private lazy var detector = CallDetector()
     private var mic: MicTap?, system: SystemAudioTap?
     private var currentFolder: URL?, currentMeta: MeetingMeta?
+    /// Whether to read speaker name tags off the screen while recording.
+    private let readsScreenNames: () -> Bool
+    #if os(macOS)
+    private var screenNames: ScreenNameSampler?
+    #endif
     /// The call the detector currently sees, whether or not it was accepted.
     public private(set) var detectedSource: CallSource?
 
@@ -40,8 +45,8 @@ import VoiceIQSpeech
                 transcribeModel: String? = nil, summaryModel: String = "gemini-3.8-flash",
                 providers: @escaping @Sendable () -> [ModelProvider] = { [.gemini] },
                 routes: (@Sendable () -> [MeetingTranscriber.SpeechRoute])? = nil,
-                localMeeting: LocalMeetingRunner? = nil) {
-        self.client = client; self.store = store; self.config = config
+                localMeeting: LocalMeetingRunner? = nil, readsScreenNames: @escaping () -> Bool = { false }) {
+        self.client = client; self.store = store; self.config = config; self.readsScreenNames = readsScreenNames
         self.transcribeModel = transcribeModel; self.summaryModel = summaryModel; self.providers = providers
         self.routes = routes ?? { providers().map(MeetingTranscriber.SpeechRoute.provider) }
         self.localMeeting = localMeeting
@@ -99,6 +104,9 @@ import VoiceIQSpeech
             do { try system.start() } catch { _ = mic.stop(); throw error }
             self.mic = mic; self.system = system
             currentFolder = folder; currentMeta = meta
+            #if os(macOS)
+            if readsScreenNames() { screenNames = ScreenNameSampler(source: source); screenNames?.start() }
+            #endif
             phase = .recording(id, since: now)
         } catch { fail(id, error) }
     }
@@ -107,6 +115,10 @@ import VoiceIQSpeech
         guard case let .recording(id, _) = phase, let folder = currentFolder, var meta = currentMeta else { return }
         let micDuration = mic?.stop() ?? 0, systemDuration = system?.stop() ?? 0
         mic = nil; system = nil; currentFolder = nil; currentMeta = nil
+        #if os(macOS)
+        if let samples = screenNames?.stop() { try? store.save(screenSamples: samples, id: id) }
+        screenNames = nil
+        #endif
         meta.endedAt = Date(); meta.durationSeconds = max(micDuration, systemDuration); meta.status = .transcribing
         try? store.save(meta: meta)
         processing.insert(id); phase = .idle
@@ -165,6 +177,10 @@ import VoiceIQSpeech
                 return
             }
             try store.save(transcript: transcript, id: id)
+            if let samples = store.loadScreenSamples(id: id) {
+                meta.screenNames = ScreenSpeakerNames.match(samples: samples, transcript: transcript)
+                Log.meeting.info("screen names: \(meta.screenNames?.speakers.count ?? 0, privacy: .public) speakers named, \(meta.screenNames?.seen.count ?? 0, privacy: .public) names seen")
+            }
             guard !providers().isEmpty else { throw MeetingFailure.noNotesRoute }
             meta.status = .summarizing; try store.save(meta: meta)
             let notes = try await writeNotes(transcript: transcript, meta: meta)
@@ -227,7 +243,7 @@ import VoiceIQSpeech
         let cfg = config()
         let prompt = MeetingNotesPrompt.build(transcript: transcript, context: .init(
             startedAt: meta.startedAt, durationSeconds: meta.durationSeconds,
-            app: meta.source.map(Self.name), names: meta.speakerNames))
+            app: meta.source.map(Self.name), names: meta.speakerNames, screenNames: meta.screenNames))
         var lastError: Error = TranscriptionError.network("no_provider")
         for via in providers() {
             do {

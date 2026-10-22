@@ -111,6 +111,17 @@ No surveyed repository lets the notes model rename speakers freely. The good one
 | Manual names always win. | pasrom/meeting-transcriber, screenpipe |
 | Participant names from the call app or calendar are good spelling hints for transcription even when they cannot be assigned. | screenpipe |
 
+### Names read from the call screen (macOS)
+
+`ScreenSpeakerNames.match` names a speaker before the notes call when a name tag was on screen in at least half of the snapshots taken while that speaker alone talked, at least 1.5 times as often as it is on screen overall, and in at least two snapshots. The prompt then:
+
+- labels that speaker's lines with the name, unless the user typed one, and lists it under "Names read from the meeting screen";
+- lists the other name-like text seen on screen under "Other text seen on screen that may be participant names";
+- asks for the on-screen spelling when the transcript mentions one of those people;
+- asks for `"participants"`: the entries from that list that are people, so the Assign speakers list offers names and not window titles or product names.
+
+Display order for a speaker's name: a name the user typed, then the screen match, then the notes model's suggestion (`MeetingMeta.displayName`).
+
 ## Meeting type
 
 No surveyed app picks the meeting type on its own. Meetily and Anarlog both use a template the user selects. VoiceiQ lets the model choose: `MeetingKind` defines 14 types, each with a one-line description and its sections, and the prompt's type list is generated from that table. The model decides the type first and fills that type's sections. A prompt that said "use general unless clearly another type" returned `general` for an obvious setup walkthrough three times out of three. The current wording ("pick the one whose description fits most of the meeting") returned `training` twice out of two on the same call.

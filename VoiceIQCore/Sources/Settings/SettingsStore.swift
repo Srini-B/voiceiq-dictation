@@ -455,6 +455,16 @@ public struct SettingsStore: Sendable {
         Self.set(enabled, forKey: "meetingDetection")
     }
 
+    /// Read name tags off the call window while a meeting records, to name
+    /// its speakers. macOS only; the snapshots never leave memory.
+    public var meetingScreenNamesEnabled: Bool {
+        Self.defaults.object(forKey: "meetingScreenNames") as? Bool ?? true
+    }
+
+    public func setMeetingScreenNames(_ enabled: Bool) {
+        Self.set(enabled, forKey: "meetingScreenNames")
+    }
+
     /// Only the user changes this. Rejected rewrites never turn it off.
     public func setSmartCleanupPass(_ enabled: Bool) {
         Self.set(enabled, forKey: "smartCleanupPass")

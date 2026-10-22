@@ -255,7 +255,7 @@ private struct MeetingDetail: View {
                     ForEach(Array(transcript.enumerated()), id: \.offset) { _, segment in
                         VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
                             HStack(spacing: Theme.Spacing.s) {
-                                Text(MeetingSpeaker.displayName(segment.speaker, names: meta.speakerNames, suggested: notes?.speakers))
+                                Text(meta.displayName(segment.speaker, notes: notes))
                                     .font(Theme.Fonts.label()).foregroundStyle(Theme.Colors.accent)
                                 if let start = segment.start {
                                     Text(MeetingNotesPrompt.clock(start)).font(Theme.Fonts.caption()).foregroundStyle(Theme.Colors.muted)
@@ -288,6 +288,6 @@ private struct MeetingDetail: View {
     private func load() {
         notes = try? model.meetings.store.loadNotes(id: meta.id)
         transcript = (try? model.meetings.store.loadTranscript(id: meta.id)) ?? []
-        markdown = try? model.meetings.store.exportMarkdown(id: meta.id)
+        markdown = try? model.meetings.store.markdown(id: meta.id, parts: .both)
     }
 }
