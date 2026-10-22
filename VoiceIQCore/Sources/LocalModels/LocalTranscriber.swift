@@ -63,6 +63,7 @@ public final class LocalTranscriber: DictationStreaming, Sendable {
             previews.continuation.finish()
             await worker.stop()
         }
+        LocalModelWarmup.yieldToDictation()
         guard let directory = LocalModelStore.store(for: model).acquireSession(id: id, cancel: cancel) else { return nil }
         if toolsReady, LocalModelStore.englishTools.acquireSession(id: id, cancel: cancel) == nil {
             LocalModelStore.store(for: model).releaseSession(id: id)
@@ -82,6 +83,7 @@ public final class LocalTranscriber: DictationStreaming, Sendable {
                 previews.continuation.yield("")
                 previews.continuation.finish()
             }
+            await LocalModelWarmup.finished()
             await worker.load(from: directory)
             guard previewing else { return }
             // A rejected chunk or a dropped one ends a strict session, because

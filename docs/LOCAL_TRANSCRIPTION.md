@@ -117,6 +117,26 @@ transcription (`LocalTranscriber.finish` stops the session, which drops
 idle seconds; the iOS app releases the model in-process and keeps running
 only as long as the voice session holds the mic.
 
+Warm-up (iOS, `ModelWarmer` over `LocalModelWarmup`): loads the model the
+on-device settings use and releases it at once, so Core ML prepares it before
+a dictation needs it. Nothing stays loaded. It runs:
+
+1. In a background processing task (`io.blue.voiceiq.ios.warm-model`,
+   `BGProcessingTaskRequest` with no power or network requirement, earliest
+   six hours after it was scheduled). iOS picks the time, usually when the
+   phone is idle overnight; it does not have to be charging, and iOS may skip
+   a night. The app schedules it at launch, on entering the background and
+   after each run. The simulator has no BGTaskScheduler.
+2. When the app becomes active on an iOS version it has not warmed on yet
+   (`modelWarmedOSVersion`), because an update always drops the prepared copy
+   whenever it was installed. This also covers the first open after a
+   download.
+
+A dictation that starts during a warm-up takes the model's claim from it
+(`yieldToDictation`) and loads after the warm-up's load ends, so two Neural
+Engine compiles never overlap; the second load is then fast. The session log
+records "model warmed in Ns (reason)".
+
 ### Fluid Speech Mini live preview
 
 Fluid Speech Mini is an offline decoder with no streaming state, so its

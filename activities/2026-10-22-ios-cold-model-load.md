@@ -68,3 +68,54 @@ is slow.
   the app was not exercised.
 - Not reproduced: the cold load itself (the simulator does not use the Neural
   Engine) and the suspension on a device.
+
+## Follow-up the same day
+
+The owner had cleared the session log: its lines showed only the time, so the
+night's events could not be told apart. He chose the overnight warm-up, noted
+that the phone is not always charging overnight and iOS updates do not always
+install overnight, and asked to keep the mic open until delivery under
+"Never", which he always uses.
+
+- Session log: every line, the app's and the keyboard's, starts with
+  "yyyy-MM-dd HH:mm:ss" (`SharedStore.logStamp`).
+- Warm-up: `LocalModelWarmup` (VoiceIQCore) loads and releases the model;
+  `ModelWarmer` (iOS) runs it from a `BGProcessingTask` with no power
+  requirement, and on the first app open on a new iOS version. A dictation
+  that starts meanwhile takes the model's claim and loads after the warm-up.
+- "Never": the audio session stays open until the text is delivered, so iOS
+  cannot suspend the app mid-transcription. The mic dot shows until then.
+
+### Verification
+
+- iPhone 18 Pro Max simulator with Fluid Speech Mini downloaded and on-device
+  selected: the first launch logged "2026-10-22 06:52:08 model warmed in 3.2s
+  (iOS version not warmed yet)"; a relaunch did not warm again. Scheduling
+  logged "BGTaskScheduler is not available on this platform", as expected on
+  the simulator.
+- `VoiceIQiOS` Debug build succeeded; `scripts/test.sh` 143 tests, 0 failures.
+- Not exercised: the background task on a device, a dictation started during
+  a warm-up, and "Never" keeping the app awake through a slow load. The
+  simulator cannot run the first, and the keyboard does not take synthetic
+  taps for the others.
+
+## Silent warm-up transcription: measured, not added
+
+Dictus runs one discarded transcription of silence after loading, to cover
+any Neural Engine setup on the first prediction. Measured on the Mac mini
+(M2) with the installed signed helper and Fluid Speech Mini, `.cpuAndNeuralEngine`.
+Copying the model to a new folder forces a cold Neural Engine compile, the
+same way a reinstall does:
+
+| Run | Load | First transcription (4.5 s clip) |
+| --- | --- | --- |
+| Cold, load only (2 runs) | 14.5 s, 13.2 s | 0.09 s, 0.08 s |
+| Warm, load only | 0.14 s | 0.08 s |
+| Cold warm-up with a silent transcription, then a fresh load | 13.6 s warm-up, then 0.12–0.15 s | 0.07 s |
+
+The whole cold cost is in the load. The first transcription after a cold
+load is as fast as a warm one, so a silent transcription has nothing to
+speed up. The table also confirms the warm-up as built: one load and release
+makes the next load fast (0.12–0.15 s) in a new model instance and process.
+iPhone timings will be longer, but the split between load and first
+transcription is assumed to be the same.

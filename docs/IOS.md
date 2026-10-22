@@ -77,7 +77,9 @@ because pings are dropped while a process is suspended.
    screen with no text field), the app puts it on the clipboard and marks it
    handled, so a keyboard opened later doesn't type it too. Paste last always
    has it. The keyboard's decisions go to `SharedStore.keyboardLog`, shown
-   under "Keyboard" in Settings › Advanced › Session log.
+   under "Keyboard" in Settings › Advanced › Session log. Every line of
+   that log, the app's and the keyboard's, starts with the date and time
+   (`SharedStore.logStamp`, "2026-10-22 06:52:04", device time zone).
 6. If the heartbeat stops while the snapshot says `processing`, iOS suspended
    or ended the app mid-dictation (a first on-device load after an iOS update
    or a long break can take minutes). The keyboard keeps the spinner and shows
@@ -157,8 +159,11 @@ whether it is up. It lasts `MobileSettings.warmWindow` after each dictation
 (Settings › Dictation › "Keep mic on after dictating": Never, 5 s to 12 h,
 default 30 s; key `warmWindowSeconds`), counted from when the text is
 delivered; Home shows "Turns off in" with the countdown. With "Never" the
-audio session closes as soon as the dictation stops and the session ends once
-the text is delivered, so the next keyboard tap opens VoiceiQ again.
+session ends once the text is delivered, so the next keyboard tap opens
+VoiceiQ again. The audio session stays open until then: it is what keeps iOS
+from suspending the app while a slow transcription runs (a first on-device
+load can take minutes), at the cost of the mic dot showing until the text
+arrives.
 `AudioCaptureEngine` never configures the session, so each dictation's capture engine records into it.
 
 The session also ends when the user taps End (app or Dynamic Island) or when

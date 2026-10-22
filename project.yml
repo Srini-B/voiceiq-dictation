@@ -239,7 +239,8 @@ targets:
           - UIInterfaceOrientationPortraitUpsideDown
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
-        UIBackgroundModes: [audio]
+        UIBackgroundModes: [audio, processing]
+        BGTaskSchedulerPermittedIdentifiers: [io.blue.voiceiq.ios.warm-model]
         NSSupportsLiveActivities: true
         ITSAppUsesNonExemptEncryption: false
         NSMicrophoneUsageDescription: VoiceiQ records audio when you tap the microphone in the VoiceiQ keyboard or record notes, so it can transcribe what you say.

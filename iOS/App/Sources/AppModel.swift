@@ -442,10 +442,12 @@ final class AppModel: ObservableObject {
         DictionaryBridge.appBecameActive()
         WritingRulesSync.shared.refresh()
         Task { await HistorySync.shared.refresh() }
+        ModelWarmer.warmIfSystemUpdated()
     }
 
     func appEnteredBackground() {
         showSwipeBack = false
+        ModelWarmer.schedule()
     }
 
     func prepareForTermination() {

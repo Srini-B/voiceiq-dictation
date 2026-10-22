@@ -120,14 +120,6 @@ final class VoiceSession: ObservableObject {
         switch dictationPhase {
         case .recording:
             cancelWarmEnd()
-        case .processing where MobileSettings.warmWindow.seconds == 0 && meetingStartedAt == nil:
-            // "Never": the audio session closes as soon as the dictation
-            // stops, but the session stays up until the text is delivered, so
-            // the keyboard and the Dynamic Island show "Writing…" meanwhile.
-            // It ends at `.warm`. Background time covers the transcription.
-            holdBackgroundTime()
-            audio.stop()
-            SessionDiagnostics.note("audio session closed (warm window: Never)")
         case .warm:
             becameIdle()
         default:

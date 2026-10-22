@@ -1,4 +1,5 @@
 import Foundation
+import VoiceIQBridge
 import VoiceIQCore
 
 /// The last few hundred session events (session starts, background mic starts), kept
@@ -12,7 +13,7 @@ enum SessionDiagnostics {
 
     static func note(_ line: String) {
         Log.session.info("\(line, privacy: .public)")
-        let stamp = ISO8601DateFormatter.string(from: Date(), timeZone: .current, formatOptions: [.withTime, .withColonSeparatorInTime])
+        let stamp = SharedStore.logStamp(Date())
         queue.async {
             var lines = (try? String(contentsOf: url, encoding: .utf8))?.split(separator: "\n", omittingEmptySubsequences: true).map(String.init) ?? []
             lines.append("\(stamp) \(line)")
