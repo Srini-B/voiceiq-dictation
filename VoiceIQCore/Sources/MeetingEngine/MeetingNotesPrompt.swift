@@ -15,9 +15,10 @@ public enum MeetingNotesPrompt {
             self.screenNames = screenNames
         }
 
-        /// Typed names, then names read off the screen for speakers the user has not named.
+        /// Typed names, then names read off the screen for speakers the user has
+        /// not named. The owner stays "You", the label the rules key on.
         var labels: [String: String] {
-            var out = (screenNames?.speakers ?? [:]).mapValues(\.name)
+            var out = (screenNames?.speakers ?? [:]).filter { $0.key != MeetingSpeaker.you }.mapValues(\.name)
             for (id, name) in names where !name.isEmpty { out[id] = name }
             return out
         }
@@ -36,7 +37,10 @@ public enum MeetingNotesPrompt {
         let date = context.startedAt.formatted(.dateTime.weekday(.wide).day().month(.wide).year().hour().minute())
         let confirmed = context.names.filter { !$0.value.isEmpty }.map(\.value).sorted()
         let typed = Set(context.names.filter { !$0.value.isEmpty }.keys)
-        let fromScreen = (context.screenNames?.speakers ?? [:]).filter { !typed.contains($0.key) }.map(\.value.name).sorted()
+        let fromScreen = (context.screenNames?.speakers ?? [:])
+            .filter { !typed.contains($0.key) && $0.key != MeetingSpeaker.you }.map(\.value.name).sorted()
+        let ownerName = context.names[MeetingSpeaker.you].flatMap { $0.isEmpty ? nil : $0 }
+            ?? context.screenNames?.speakers[MeetingSpeaker.you]?.name
         let seen = context.screenNames?.seen ?? []
         return """
         \(rules)
@@ -49,7 +53,7 @@ public enum MeetingNotesPrompt {
         - Started: \(date)
         - Length: \(Int((context.durationSeconds / 60).rounded())) minutes
         - App: \(context.app ?? "unknown")
-        - Note owner: \(hasOwner ? "\"You\" in the transcript" : "not identified; nobody in the transcript is known to be the note owner")
+        - Note owner: \(hasOwner ? "\"You\" in the transcript" + (ownerName.map { ", named \($0)" } ?? "") : "not identified; nobody in the transcript is known to be the note owner")
         - Confirmed names: \(confirmed.isEmpty ? "none" : confirmed.joined(separator: ", "))
         - Names read from the meeting screen: \(fromScreen.isEmpty ? "none" : fromScreen.joined(separator: ", "))
         - Other text seen on screen that may be participant names: \(seen.isEmpty ? "none" : seen.joined(separator: ", "))

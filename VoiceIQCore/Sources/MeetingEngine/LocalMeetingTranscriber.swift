@@ -23,7 +23,8 @@ public struct LocalMeetingTranscriber: Sendable {
         }
     }
 
-    static let cacheName = "local-words-v1.json"
+    /// v2: words split at Fluid Speech Mini's lone space tokens; v1 caches glued digits to the word before.
+    static let cacheName = "local-words-v2.json"
     static let mixName = "local-mix.caf"
     /// The mix is written a minute at a time.
     static let piece = 60.0
@@ -107,6 +108,7 @@ public struct LocalMeetingTranscriber: Sendable {
             try await runner(request)
         }
         try JSONEncoder().encode(result).write(to: cache, options: .atomic)
+        try? FileManager.default.removeItem(at: folder.appendingPathComponent("local-words-v1.json"))
         return result
     }
 

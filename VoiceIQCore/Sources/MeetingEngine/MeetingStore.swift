@@ -52,7 +52,8 @@ public final class MeetingStore: @unchecked Sendable {
         let folder = try requiredFolder(id), meta = try load(MeetingMeta.self, from: folder.appendingPathComponent("meta.json"))
         let notes = try? loadNotes(id: id)
         var lines = ["# \(notes?.title ?? meta.title ?? "Meeting")", "", meta.startedAt.formatted(date: .long, time: .shortened),
-                     String(format: "%.0f minutes", meta.durationSeconds / 60)]
+                     Duration.seconds(meta.durationSeconds.rounded())
+                         .formatted(.units(allowed: [.hours, .minutes, .seconds], width: .wide, maximumUnitCount: 2))]
         if parts.contains(.notes), let notes {
             lines += ["", "## Summary", notes.summary]
             for section in notes.sections ?? [] { append(section.title, section.items, to: &lines) }

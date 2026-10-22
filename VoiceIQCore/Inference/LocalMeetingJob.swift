@@ -55,21 +55,25 @@ enum LocalMeetingJob {
     }
 
     /// Tokens joined into words at SentencePiece boundaries: a token with a
-    /// leading space starts a word. Timings are encoder-frame emissions and
-    /// run up to two frames (160 ms) ahead of the audio, which the join by
-    /// time tolerates.
+    /// leading space starts a word. Fluid Speech Mini also emits the boundary
+    /// as a token of its own before digits (" " then "12"), so a space-only
+    /// token starts the next word too; joining across it gave "by12%".
+    /// Timings are encoder-frame emissions and run up to two frames (160 ms)
+    /// ahead of the audio, which the join by time tolerates.
     static func words(_ timings: [TokenTiming]) -> [LocalMeetingResult.Word] {
         var out: [LocalMeetingResult.Word] = []
+        var boundary = true
         for timing in timings {
             let piece = timing.token
-            if piece.hasPrefix(" ") || out.isEmpty {
-                let text = piece.trimmingCharacters(in: .whitespaces)
-                if text.isEmpty { continue }
+            let text = piece.trimmingCharacters(in: .whitespaces)
+            if text.isEmpty { boundary = true; continue }
+            if boundary || piece.hasPrefix(" ") {
                 out.append(.init(text: text, start: timing.startTime, end: max(timing.endTime, timing.startTime)))
             } else {
                 out[out.count - 1].text += piece
                 out[out.count - 1].end = max(out[out.count - 1].end, timing.endTime)
             }
+            boundary = false
         }
         return out
     }

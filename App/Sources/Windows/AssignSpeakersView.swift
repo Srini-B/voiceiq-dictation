@@ -38,12 +38,12 @@ struct AssignSpeakersView: View {
 
     /// The note owner first, then everyone else in order of first turn.
     private var speakers: [String] {
-        let others = SpeakerPalette.order(transcript)
+        let others = MeetingSpeaker.others(in: transcript)
         return transcript.contains { $0.speaker == MeetingSpeaker.you } ? [MeetingSpeaker.you] + others : others
     }
 
     private func card(_ speaker: String) -> some View {
-        let color = Color(nsColor: SpeakerPalette.color(speaker, order: SpeakerPalette.order(transcript)))
+        let color = Color(nsColor: SpeakerPalette.color(speaker, order: MeetingSpeaker.others(in: transcript)))
         let turns = samples(speaker)
         let turn = turns[(sample[speaker] ?? 0) % turns.count]
         let key = "\(speaker)-\(turn.start ?? 0)"

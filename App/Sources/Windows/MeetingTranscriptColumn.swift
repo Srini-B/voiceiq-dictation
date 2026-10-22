@@ -65,7 +65,7 @@ struct MeetingTranscriptColumn: View {
     private func closeSearch() { searching = false; query = "" }
 
     private var text: NSAttributedString {
-        let order = SpeakerPalette.order(transcript)
+        let order = MeetingSpeaker.others(in: transcript)
         let nameFont = GTFont.nsFlex(12, weight: 600), body = GTFont.nsFlex(14, weight: 400)
         let time = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .regular)
         // The time sits on a right tab at the column's text edge.
@@ -109,26 +109,10 @@ struct MeetingTranscriptColumn: View {
     }
 }
 
-/// A colour per speaker: green for the note owner, then one hue per other
-/// speaker in the order they first talk.
+/// A colour per speaker; see `MeetingSpeaker.colorHex`.
 enum SpeakerPalette {
-    private static let hues: [(light: UInt32, dark: UInt32)] = [
-        (0x1A73E8, 0x8AB4F8), (0x8E44C9, 0xC58AF9), (0xD35400, 0xFCAD70), (0xC2185B, 0xF48FB1),
-        (0x00897B, 0x80CBC4), (0xA0790B, 0xFDD663), (0x5C6BC0, 0x9FA8DA), (0x6D4C41, 0xBCAAA4),
-    ]
-    private static let owner: (light: UInt32, dark: UInt32) = (0x188038, 0x81C995)
-
-    /// Everyone but the note owner, in order of first turn.
-    static func order(_ transcript: [TranscriptSegment]) -> [String] {
-        var seen: [String] = []
-        for segment in transcript where segment.speaker != MeetingSpeaker.you && !seen.contains(segment.speaker) {
-            seen.append(segment.speaker)
-        }
-        return seen
-    }
-
     static func color(_ speaker: String, order: [String]) -> NSColor {
-        let pair = speaker == MeetingSpeaker.you ? owner : hues[(order.firstIndex(of: speaker) ?? 0) % hues.count]
+        let pair = MeetingSpeaker.colorHex(speaker, others: order)
         return NSColor(name: nil) { appearance in
             NSColor(hex: appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? pair.dark : pair.light)
         }

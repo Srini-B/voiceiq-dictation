@@ -1,9 +1,38 @@
 # Meetings on the Mac
 
-How a recorded meeting gets speaker names from the call screen, and how the
-Meetings window shows and exports it. Recording, transcription and the notes
+How VoiceiQ notices a call, how a recorded meeting gets speaker names from
+the call screen, and how the Meetings window shows and exports it. Recording, transcription and the notes
 prompt are covered in [LOCAL_TRANSCRIPTION.md](LOCAL_TRANSCRIPTION.md#on-device-meetings),
 [PRIVACY.md](PRIVACY.md) and [design/meeting-prompt-rulebook.md](design/meeting-prompt-rulebook.md).
+
+## Call detection
+
+`CallDetector` polls every 5 s (two hits to offer, three misses to drop the
+offer) and reads which processes have running input and output from Core
+Audio's process objects (`kAudioHardwarePropertyProcessObjectList`, macOS
+14.2+). A helper process is mapped to its app with
+`responsibility_get_pid_responsible_for_pid`. It offers to record when:
+
+1. a system call daemon (`avconferenced`, `callservicesd`) captures the mic:
+   FaceTime and iPhone calls relayed to the Mac, which have no app process on
+   the mic. Shown as "FaceTime or phone";
+2. an app in `CallApps.known` (Zoom, Teams, FaceTime, Phone, WhatsApp, Slack,
+   Discord, Webex, Skype, Messages, Telegram, Signal, Viber, LINE, WeChat,
+   Messenger, Chime, GoTo, RingCentral, Tencent Meeting, DingTalk, Around,
+   Tuple, Element) captures the mic;
+3. a browser captures the mic on a page in `CallApps.meetingPages`, matched
+   against window titles and the URL of each window's `AXWebArea` (searched 9
+   levels deep, 300 elements at most, as FluidVoice does for Safari);
+4. any other app, or a browser on any other page, both captures the mic and
+   plays sound. Two-way audio is what a call looks like whatever the app is.
+   `CallApps.notCalls` and `notCallPages` leave out voice assistants,
+   recorders and music software.
+
+VoiceiQ's own processes never count. Before macOS 14.2 only rules 2 and 3
+apply, on the global "mic in use" bit.
+
+The daemon names in rule 1 come from Apple's process layout; a relayed
+iPhone call was not available to test on the development Mac.
 
 ## Speaker names from the screen
 
@@ -31,7 +60,20 @@ meeting never raises the prompt (`CGPreflightScreenCaptureAccess`).
    to disk**, so there is nothing to clean up. Only `(time, names)` samples are
    kept, and `stopRecording` saves them as `screen-names.json` in the meeting
    folder. Snapshots with no names are kept too; they set the base rate.
-5. After transcription, `ScreenSpeakerNames.match(samples:transcript:)` runs
+5. With Accessibility granted, `CallWindowText` also reads the call app's
+   windows through the Accessibility API at each sample: static text, image
+   and group labels (name tags, the participants list), not buttons or menus.
+   The walk stops at 2,500 elements or 0.8 s, because each read waits on the
+   call app. Electron and Chromium apps are woken first with
+   `AccessibilityWaker`. Either permission is enough for sampling to run.
+   Zoom 7.2 exposes each video tile as an `AXTabGroup` described "Name,
+   Computer audio unmuted", and the participants list as `AXStaticText`
+   rows such as "Name (me)". A recording started by hand with no call
+   detected reads the frontmost known call app (`ScreenNameSampler.frontCallApp`).
+6. Lines the call app marks as the user's own ("Priya Raman (me)", Zoom's
+   "(Host, me)", Meet's and Teams' "(You)") are kept as `me` on the sample
+   (`ScreenSpeakerNames.owner(in:)`).
+7. After transcription, `ScreenSpeakerNames.match(samples:transcript:)` runs
    (also on Retry, from the saved file):
    - Spellings within 0.8 Levenshtein similarity fold into the most frequent one.
    - For each speaker other than "you", it counts snapshots taken while only
@@ -40,8 +82,11 @@ meeting never raises the prompt (`CGPreflightScreenCaptureAccess`).
      overall rate, and ≥2 snapshots. Pairs are assigned greedily by
      lift × count; a name goes to one speaker only.
    - The 30 most frequent names go to `ScreenNames.seen`.
+   - "you" is named only from the owner marker, when one name carries it in
+     at least two samples. Active-speaker views never show the user their own
+     tile, so a name on screen while the user talks is someone else's.
    The result is stored as `MeetingMeta.screenNames`.
-6. The notes prompt labels matched speakers with their screen name and lists
+8. The notes prompt labels matched speakers with their screen name and lists
    `seen`; the notes model returns `participants`, the people among them.
 
 Name shown for a speaker (`MeetingMeta.displayName`): the name the user typed,
@@ -50,7 +95,8 @@ then the screen match, then the notes model's suggestion, then "Speaker N".
 
 Limits: a gallery view with every tile always visible gives no signal (a name
 that is always on screen has no lift); banners covering a tag lose it; the
-owner ("you") is never named from the screen.
+owner is named only when the call app marks their tile or row. The notes
+prompt keeps the label "You" for the owner and adds their name as context.
 
 ## Meetings window
 

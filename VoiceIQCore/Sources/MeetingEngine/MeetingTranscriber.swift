@@ -232,8 +232,12 @@ public struct MeetingTranscriber: Sendable {
     static func place(_ raw: [DiarizedWord], audio request: AssembledAudio, call: CallAudio, known: [TimedWord],
                       mapping linked: [String: String], idPrefix: String = "s") -> [TimedWord] {
         typealias Placed = (text: String, label: String, start: Double, end: Double)
+        // A word the provider left without a speaker belongs to the one before
+        // it; an empty label of its own became a speaker who never existed.
+        var previous = ""
         let placed: [Placed] = raw.compactMap { word in
-            let label = word.speaker ?? ""
+            let label = word.speaker ?? previous
+            previous = label
             guard let start = word.start else {
                 // Untimed text (the API's no-annotation fallback) is kept as one turn.
                 return (word.text, label, request.trackTime(request.bodyStart) ?? 0, request.trackTime(request.duration) ?? 0)

@@ -174,11 +174,32 @@ final class LocalModelFileDownloader: NSObject, URLSessionDownloadDelegate, @unc
         session.invalidateAndCancel()
     }
 
+    /// A dropped connection resumes from the bytes already fetched, up to
+    /// `retries` times with growing waits, instead of failing the whole install.
+    static let retries = 4
+    private static let transient: Set<URLError.Code> = [
+        .networkConnectionLost, .timedOut, .notConnectedToInternet, .cannotConnectToHost, .dnsLookupFailed,
+    ]
+
     func download(_ url: URL, to destination: URL, onBytes: @escaping @Sendable (Int64) -> Void) async throws {
+        var resumeData: Data?
+        for attempt in 0... {
+            do {
+                return try await fetch(url, resumeData: resumeData, to: destination, onBytes: onBytes)
+            } catch let error as URLError where Self.transient.contains(error.code) && attempt < Self.retries {
+                resumeData = error.userInfo[NSURLSessionDownloadTaskResumeData] as? Data
+                Log.transcription.notice("model download interrupted (\(error.code.rawValue)), retry \(attempt + 1) \(resumeData == nil ? "from the start" : "resuming", privacy: .public)")
+                try await Task.sleep(for: .seconds(1 << attempt))
+            }
+        }
+        throw CancellationError()
+    }
+
+    private func fetch(_ url: URL, resumeData: Data?, to destination: URL, onBytes: @escaping @Sendable (Int64) -> Void) async throws {
         try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
                 lock.withLock {
-                    let task = session.downloadTask(with: url)
+                    let task = resumeData.map { session.downloadTask(withResumeData: $0) } ?? session.downloadTask(with: url)
                     pending = Pending(task: task, destination: destination, onBytes: onBytes, continuation: continuation)
                     task.resume()
                 }

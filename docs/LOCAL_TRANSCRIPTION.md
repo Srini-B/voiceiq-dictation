@@ -374,7 +374,7 @@ The flow, in `MeetingEngine.transcribe(folder:config:)`:
    (so a dictation's helper is never blocked), kills it on cancel, and times
    out at `max(600 s, 3 × duration)`. On iOS it is
    `LocalSpeechInference.transcribeMeeting`, in process.
-4. Words and segments are cached as `local-words-v1.json` beside the audio, so
+4. Words and segments are cached as `local-words-v2.json` beside the audio, so
    a Retry after the notes fail does not decode twice. Each word takes the
    speaker active at its midpoint, else the one overlapping it most, else the
    nearest within 2 s, else the previous word's. Speakers are renumbered in

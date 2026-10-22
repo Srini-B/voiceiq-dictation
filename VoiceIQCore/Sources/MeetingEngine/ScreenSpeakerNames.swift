@@ -5,7 +5,9 @@ public struct ScreenNameSample: Codable, Equatable, Sendable {
     /// Seconds from the start of the recording.
     public var time: Double
     public var names: [String]
-    public init(time: Double, names: [String]) { self.time = time; self.names = names }
+    /// Names marked as the note owner's own ("Priya Raman (me)", "Priya (Host, me)", "Priya (You)").
+    public var me: [String]?
+    public init(time: Double, names: [String], me: [String]? = nil) { self.time = time; self.names = names; self.me = me }
 }
 
 /// What the screen said about who was in the meeting.
@@ -20,6 +22,7 @@ public struct ScreenNames: Codable, Equatable, Sendable {
     /// product names; the notes model picks out the people.
     public var seen: [String]
     /// Speaker id → the name on screen while that speaker alone was talking.
+    /// "you" comes from the owner marker call apps put on the user's own tile or row.
     public var speakers: [String: Match]
 }
 
@@ -41,23 +44,41 @@ public enum ScreenSpeakerNames {
     static let minimumSeen = 2
     static let seenLimit = 30
 
-    /// Name tags in OCR'd lines: "Priya Raman", "Priya Raman - Product", "Max Woolf | Staff …",
-    /// "Alvise | Frontend". Two to four capitalised words, or one followed by a separator.
+    /// Name tags in OCR'd or Accessibility lines: "Priya Raman", "Priya Raman - Product",
+    /// "Max Woolf | Staff …", "Alvise | Frontend", Zoom's tile "Priya Raman, Computer audio muted".
+    /// Two to four capitalised words, or one followed by a separator; a comma
+    /// only after two or more words, since "Thanks, Max" is not a name.
     public static func candidates(in lines: [String]) -> [String] {
         var out: [String] = []
         for line in lines {
             let text = line.trimmingCharacters(in: .whitespaces)
-            guard let match = text.firstMatch(of: tag) else { continue }
+            // Counters such as "Participants (3)" are UI, not a name.
+            guard let match = text.firstMatch(of: tag), text.wholeMatch(of: counter) == nil else { continue }
             let name = String(match.output.1)
             let words = name.split(separator: " ").count
-            let separated = text.count > name.count
-            guard words >= 2 || separated, !out.contains(name) else { continue }
+            let next = text.dropFirst(name.count).trimmingCharacters(in: .whitespaces).first
+            guard next == nil ? words >= 2 : (next != "," || words >= 2), !out.contains(name) else { continue }
             out.append(name)
         }
         return out
     }
 
-    nonisolated(unsafe) private static let tag = #/^(\p{Lu}[\p{L}'’.-]+(?: \p{Lu}[\p{L}'’.-]+){0,3})\s*(?:[-–|(]|$)/#
+    /// The note owner's name, from a tag the call app marks as theirs: Zoom's
+    /// "Priya Raman (me)" or "(Host, me)", Meet's and Teams' "(You)".
+    public static func owner(in lines: [String]) -> [String] {
+        var out: [String] = []
+        for line in lines {
+            guard let match = line.trimmingCharacters(in: .whitespaces).firstMatch(of: mine) else { continue }
+            let name = String(match.output.1)
+            if !out.contains(name) { out.append(name) }
+        }
+        return out
+    }
+
+    nonisolated(unsafe) private static let mine = #/^(\p{Lu}[\p{L}'’.-]+(?: \p{Lu}[\p{L}'’.-]+){0,3})\s*\((?:[^)]*,\s*)?(?i:me|you)\)/#
+
+    nonisolated(unsafe) private static let counter = #/.*\(\d+\)/#
+    nonisolated(unsafe) private static let tag = #/^(\p{Lu}[\p{L}'’.-]+(?: \p{Lu}[\p{L}'’.-]+){0,3})\s*(?:[-–|(,]|$)/#
 
     public static func match(samples: [ScreenNameSample], transcript: [TranscriptSegment]) -> ScreenNames? {
         guard !samples.isEmpty else { return nil }
@@ -85,6 +106,16 @@ public enum ScreenSpeakerNames {
             }
         }
         var speakers: [String: ScreenNames.Match] = [:], used = Set<String>()
+        // The owner's name only from the owner marker: active-speaker views never
+        // show the owner their own tile, so a name on screen while they talk is
+        // someone else's.
+        var marked: [String: Int] = [:]
+        for sample in samples { for name in Set(sample.me ?? []) { marked[name, default: 0] += 1 } }
+        if let (name, count) = marked.max(by: { $0.value != $1.value ? $0.value < $1.value : $0.key > $1.key }),
+           count >= minimumSeen, transcript.contains(where: { $0.speaker == MeetingSpeaker.you }) {
+            speakers[MeetingSpeaker.you] = .init(name: name, seen: count, of: samples.count)
+            used.insert(name)
+        }
         for candidate in candidates.sorted(by: { $0.score > $1.score }) {
             guard speakers[candidate.speaker] == nil, !used.contains(candidate.name) else { continue }
             speakers[candidate.speaker] = .init(name: candidate.name, seen: candidate.seen, of: candidate.of)
@@ -120,7 +151,7 @@ public enum ScreenSpeakerNames {
     /// OCR reads one tag several ways ("Halil Coban", "Hall Coban", "Halll Coban").
     /// Each spelling folds into the most frequent close spelling, so votes are not split.
     static func folded(_ samples: [ScreenNameSample]) -> [ScreenNameSample] {
-        let samples = samples.map { ScreenNameSample(time: $0.time, names: $0.names.map(withoutStatus)) }
+        let samples = samples.map { ScreenNameSample(time: $0.time, names: $0.names.map(withoutStatus), me: $0.me) }
         var counts: [String: Int] = [:]
         for sample in samples { for name in Set(sample.names) { counts[name, default: 0] += 1 } }
         var heads: [String] = [], canonical: [String: String] = [:]
@@ -132,7 +163,7 @@ public enum ScreenSpeakerNames {
         return samples.map { sample in
             var names: [String] = []
             for name in sample.names { let head = canonical[name] ?? name; if !names.contains(head) { names.append(head) } }
-            return ScreenNameSample(time: sample.time, names: names)
+            return ScreenNameSample(time: sample.time, names: names, me: sample.me?.map { canonical[$0] ?? $0 })
         }
     }
 

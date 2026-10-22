@@ -43,6 +43,25 @@ public enum MeetingSpeaker {
         return id
     }
 
+    /// Everyone but the note owner, in order of first turn.
+    public static func others(in transcript: [TranscriptSegment]) -> [String] {
+        var seen: [String] = []
+        for segment in transcript where segment.speaker != you && !seen.contains(segment.speaker) { seen.append(segment.speaker) }
+        return seen
+    }
+
+    /// A speaker's name colour as light and dark RGB: green for the note
+    /// owner, then one hue per other speaker in `others` order.
+    public static func colorHex(_ id: String, others: [String]) -> (light: UInt32, dark: UInt32) {
+        if id == you { return (0x188038, 0x81C995) }
+        return hues[(others.firstIndex(of: id) ?? 0) % hues.count]
+    }
+
+    private static let hues: [(light: UInt32, dark: UInt32)] = [
+        (0x1A73E8, 0x8AB4F8), (0x8E44C9, 0xC58AF9), (0xD35400, 0xFCAD70), (0xC2185B, 0xF48FB1),
+        (0x00897B, 0x80CBC4), (0xA0790B, 0xFDD663), (0x5C6BC0, 0x9FA8DA), (0x6D4C41, 0xBCAAA4),
+    ]
+
     /// A name the user typed wins over one the notes model found in the conversation.
     public static func displayName(_ id: String, names: [String: String], suggested: [SpeakerSuggestion]?) -> String {
         if let name = names[id], !name.isEmpty { return name }

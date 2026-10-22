@@ -93,10 +93,15 @@ With no usable key, nothing is sent and the recording stays on your Mac.
    discarded.
    Remove the key to stop this entirely.
 6. **Meeting audio**, only after you start a recording. With "Offer to record
-   calls" on in Settings → Dictation (on by default), VoiceiQ watches whether a
-   calling app (Zoom, Teams, FaceTime, WhatsApp, Slack, Discord, Webex) or a
-   browser tab on a meeting site is using your microphone, and shows an offer
-   in the pill. Nothing is recorded until you accept it, press the meeting
+   calls" on in Settings → Dictation (on by default), VoiceiQ watches which
+   processes use your microphone (Core Audio's per-process list; nothing is
+   recorded). It offers to record when a calling app (Zoom, Teams, FaceTime,
+   WhatsApp, Slack, Discord, Webex, Telegram, Signal and others), the system's
+   FaceTime and iPhone-call service, or a browser tab on a meeting site uses
+   the microphone, or when any other app or browser page both uses the
+   microphone and plays sound, which is what a call looks like. The offer
+   shows in the pill. To tell a meeting page apart, it reads the browser's
+   window titles and page addresses through the Accessibility API. Nothing is recorded until you accept it, press the meeting
    shortcut (⌥M by default), or start one from Settings → Meetings. While
    recording, mic and system audio are written to
    `~/Library/Application Support/VoiceiQ/meetings/` and nothing is sent.
@@ -116,8 +121,10 @@ With no usable key, nothing is sent and the recording stays on your Mac.
    is read with Apple's on-device text recognition and dropped at once; it is
    never written to disk or sent anywhere. Only the name-like text and its time
    are kept, in `screen-names.json` in the meeting's folder, and only the names
-   are sent with the transcript for the notes. A meeting never asks for Screen
-   Recording itself.
+   are sent with the transcript for the notes. With Accessibility granted, it
+   also reads the call app's window text (name tags, the participants list)
+   through the Accessibility API, with the same rule: only name-like text is
+   kept. A meeting never asks for Screen Recording or Accessibility itself.
 7. **The selected text, when you use Ask Anything** (⌃⌥A by default). At the
    moment you press the shortcut, VoiceiQ reads the text selected in the
    frontmost app through the Accessibility API and sends it with your spoken

@@ -6,12 +6,13 @@ import os
 import ScreenCaptureKit
 import Vision
 
-/// Reads name tags off the screen every few seconds while a meeting records.
+/// Reads name tags off the screen every few seconds while a meeting records:
+/// a snapshot read with on-device text recognition, plus the call app's
+/// window text through the Accessibility API (`CallWindowText`).
 ///
-/// Each snapshot is read with on-device text recognition and dropped at once;
-/// it is never written to disk or sent anywhere. Only the name-like text and
-/// its time are kept, for `ScreenSpeakerNames` to match against the speakers
-/// once the transcript exists.
+/// Each snapshot is read and dropped at once; it is never written to disk or
+/// sent anywhere. Only the name-like text and its time are kept, for
+/// `ScreenSpeakerNames` to match against the speakers once the transcript exists.
 public final class ScreenNameSampler: @unchecked Sendable {
     static let interval: Duration = .seconds(3)
     /// Longest snapshot side read, in pixels. Name tags stay legible and a 5K
@@ -19,7 +20,9 @@ public final class ScreenNameSampler: @unchecked Sendable {
     static let maxPixels: CGFloat = 2560
 
     private let startedAt = Date()
-    private let bundleID: String?
+    private var bundleID: String?
+    private var pid: pid_t?
+    private var snapshots = false
     private let samples = OSAllocatedUnfairLock(initialState: [ScreenNameSample]())
     private var task: Task<Void, Never>?
 
@@ -33,10 +36,19 @@ public final class ScreenNameSampler: @unchecked Sendable {
     }
 
     public func start() {
-        // A meeting never raises the permission prompt; the dictation
-        // onboarding asks for Screen Recording.
-        guard CGPreflightScreenCaptureAccess() else {
-            Log.meeting.info("screen names off: no Screen Recording access")
+        // A meeting never raises a permission prompt; the dictation onboarding
+        // asks for Screen Recording and Accessibility. Either one is enough.
+        snapshots = CGPreflightScreenCaptureAccess()
+        // A recording started by hand, with no call detected (a call app
+        // without microphone access, say), reads the frontmost call app.
+        if bundleID == nil { bundleID = Self.frontCallApp() }
+        if let bundleID, AXIsProcessTrusted(),
+           let app = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).first {
+            pid = app.processIdentifier
+            AccessibilityWaker.wakeIfNeeded(bundleID: bundleID, pid: app.processIdentifier)
+        }
+        guard snapshots || pid != nil else {
+            Log.meeting.info("screen names off: no Screen Recording or Accessibility access")
             return
         }
         task = Task.detached(priority: .utility) { [weak self] in
@@ -45,6 +57,17 @@ public final class ScreenNameSampler: @unchecked Sendable {
                 try? await Task.sleep(for: Self.interval)
             }
         }
+    }
+
+    /// The known call app with the frontmost normal window.
+    static func frontCallApp() -> String? {
+        let windows = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] ?? []
+        for window in windows where window[kCGWindowLayer as String] as? Int == 0 {
+            guard let pid = window[kCGWindowOwnerPID as String] as? pid_t,
+                  let id = NSRunningApplication(processIdentifier: pid)?.bundleIdentifier, CallApps.known[id] != nil else { continue }
+            return id
+        }
+        return nil
     }
 
     /// Everything read so far, in time order.
@@ -58,9 +81,10 @@ public final class ScreenNameSampler: @unchecked Sendable {
     private func sample() async {
         let time = Date().timeIntervalSince(startedAt)
         do {
-            let image = try await capture()
-            let names = ScreenSpeakerNames.candidates(in: try Self.read(image))
-            samples.withLock { $0.append(ScreenNameSample(time: time, names: names)) }
+            var lines = snapshots ? try Self.read(try await capture()) : []
+            if let pid { lines += CallWindowText.lines(pid: pid) }
+            let names = ScreenSpeakerNames.candidates(in: lines), me = ScreenSpeakerNames.owner(in: lines)
+            samples.withLock { $0.append(ScreenNameSample(time: time, names: names, me: me.isEmpty ? nil : me)) }
         } catch is CancellationError {
         } catch {
             Log.meeting.info("screen names snapshot failed: \(String(describing: error), privacy: .public)")
