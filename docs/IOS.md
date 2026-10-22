@@ -78,6 +78,15 @@ because pings are dropped while a process is suspended.
    handled, so a keyboard opened later doesn't type it too. Paste last always
    has it. The keyboard's decisions go to `SharedStore.keyboardLog`, shown
    under "Keyboard" in Settings › Advanced › Session log.
+6. If the heartbeat stops while the snapshot says `processing`, iOS suspended
+   or ended the app mid-dictation (a first on-device load after an iOS update
+   or a long break can take minutes). The keyboard keeps the spinner and shows
+   "Open VoiceiQ to finish" (`KeyboardModel.needsAppToFinish`); a tap opens
+   `BridgeURL.app`. A suspended app resumes the dictation; an ended one
+   recovers the saved recording at launch. The session log records each
+   dictation's processing time and whether the app was in the foreground
+   ("processed in 94.2s (background)"), and when the app was opened during
+   processing.
 
 Ask shows the answer in a panel with Insert and Copy. Translate inserts the
 translation into the target language from Settings › Dictation (the iPhone

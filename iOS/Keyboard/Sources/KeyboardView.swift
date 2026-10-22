@@ -99,6 +99,7 @@ struct KeyboardView: View {
         if model.waitingForApp, model.phase != .recording { return "Starting…" }
         switch model.phase {
         case .recording: return "Tap to finish"
+        case .processing where model.needsAppToFinish: return "Open VoiceiQ to finish"
         case .processing: return model.mode == .ask ? "Thinking…" : "Writing…"
         case .warm, .off:
             switch model.mode {

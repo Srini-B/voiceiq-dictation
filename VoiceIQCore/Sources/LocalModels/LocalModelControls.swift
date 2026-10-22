@@ -239,8 +239,10 @@ public struct LocalModelFooter: View {
     }
 
     /// Core ML prepares a downloaded model for this device on its first load
-    /// and caches the result, so only the first dictation pays for it.
-    static let firstRunNote = "The first dictation after a download takes longer while the model is set up on this device. Later dictations are fast."
+    /// and caches the result. The system drops that cache after an OS update
+    /// and when the model goes unused for a long time, so the slow load
+    /// comes back then.
+    static let firstRunNote = "The first dictation after a download, a system update or a long break takes longer while the model is prepared for this device."
 }
 
 /// Section footer while meetings are kept on device but a model is missing.

@@ -17,6 +17,10 @@ public enum BridgeURL {
         return components.url!
     }
 
+    /// Brings the app forward with nothing to do, so a suspended dictation
+    /// resumes. `parse` ignores it.
+    public static let app = URL(string: "voiceiq://keyboard/open")!
+
     /// Opens the app's keyboard setup screen (Full Access missing).
     public static let setup = URL(string: "voiceiq://keyboard/setup")!
 

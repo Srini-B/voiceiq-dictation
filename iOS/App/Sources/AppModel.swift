@@ -433,6 +433,9 @@ final class AppModel: ObservableObject {
     }
 
     func appBecameActive() {
+        if let since = processingSince {
+            SessionDiagnostics.note(String(format: "app opened %.0fs into processing", Date().timeIntervalSince(since)))
+        }
         needsForeground = false
         setup.refresh()
         drainCommands()
@@ -454,6 +457,8 @@ final class AppModel: ObservableObject {
 
     // MARK: - Pipeline → keyboard
 
+    private var processingSince: Date?
+
     private func stateChanged(_ state: DictationState) {
         defer { previousState = state }
         switch state {
@@ -467,7 +472,15 @@ final class AppModel: ObservableObject {
         case .finalizing, .transcribing, .inserting:
             session.recordingStartedAt = nil
             session.dictationPhase = .processing
+            if processingSince == nil { processingSince = Date() }
         case .idle, .done, .cancelled, .failed:
+            if let since = processingSince {
+                // A first on-device load after an iOS update or a long break
+                // can take minutes; this shows it, and where the app was.
+                let place = UIApplication.shared.applicationState == .active ? "foreground" : "background"
+                SessionDiagnostics.note(String(format: "processed in %.1fs (%@)", Date().timeIntervalSince(since), place))
+                processingSince = nil
+            }
             session.recordingStartedAt = nil
             session.dictationPhase = .warm
             session.releaseBackgroundTime()

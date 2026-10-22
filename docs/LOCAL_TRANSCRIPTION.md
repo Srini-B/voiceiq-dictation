@@ -101,10 +101,21 @@ different local model. There is no automatic switch to another downloaded model.
 The section footer (`LocalModelFooter`, shared by both platforms) depends on
 the selected model's state. While it is missing, the footer says cloud
 transcription is used until it is downloaded. Once it is on disk, the footer
-says the first dictation after a download takes longer while the model is set
-up on the device, and later dictations are fast. That is the one-time Core ML
-compile on first load (see "English speech processing"); the compiled model
-is cached by the OS, so only the first dictation pays for it.
+says the first dictation after a download, a system update or a long break
+takes longer while the model is prepared for the device. That is Core ML's
+device specialization on first load (see "English speech processing"). The OS
+caches the result outside the app and drops it after an OS update and when a
+model goes unused for a long time (WhisperKit documents the same eviction);
+there is no API to check whether the cache is warm. FluidAudio reports cold
+Parakeet encoder loads of 51 to 181 seconds on iPhone (FluidAudio issue
+#1022). Warm loads take about a second.
+
+Memory: no platform keeps a model loaded between dictations. Each dictation
+loads the selected model when recording starts and releases it after
+transcription (`LocalTranscriber.finish` stops the session, which drops
+`AsrManager` and the tools). The Mac's helper process then exits after 60
+idle seconds; the iOS app releases the model in-process and keeps running
+only as long as the voice session holds the mic.
 
 ### Fluid Speech Mini live preview
 
