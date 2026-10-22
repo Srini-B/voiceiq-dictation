@@ -48,8 +48,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         FontLoader.registerBundledFonts()
         // Before sync starts, so the cleanup goes up with the first merge.
         EditLearner.pruneOrdinaryAutoLearnedOnce()
-        // Dictionary shared with the iPhone through iCloud; always on.
+        // Dictionary and writing rules shared with the iPhone through iCloud; always on.
         DictionarySync.shared.start()
+        WritingRulesSync.shared.start()
         // History's final text too, through CloudKit; also always on.
         let deviceName = Host.current().localizedName ?? "Mac"
         Task { await HistorySync.shared.start(deviceName: deviceName) }

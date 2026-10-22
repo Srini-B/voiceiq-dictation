@@ -1,11 +1,15 @@
 import Foundation
 
-/// OpenAI's models for each role the app has. Defaults follow OpenAI's own
-/// recommendations (2026-09): `gpt-transcribe` for recorded speech and
-/// GPT-6 Luna for the writing rules, Ask Anything, Translate and meeting notes.
+/// OpenAI's models for each role the app has: `gpt-transcribe` for recorded
+/// speech and one text model, GPT-6 Astra, for the writing rules, Ask
+/// Anything, Translate, meeting notes and agent mode. Astra replaced GPT-6
+/// Luna on 2026-10-21 because Luna kept misheard phrases that read as English
+/// ("merge it here" for "merge the PR"). Replayed on 10 real failures, Astra
+/// fixed 23 of 30 runs and Luna 7 of 40
+/// (activities/2026-10-21-mishearings-that-read-as-english.md).
 public struct OpenAIConfig: Sendable, Equatable {
     public var transcribeModel = "gpt-transcribe"
-    public var writingModel = "gpt-6-luna"
+    public var writingModel = "gpt-6-astra"
     /// Meetings only. `gpt-transcribe` has no speaker labels.
     public var diarizeModel = "gpt-4o-transcribe-diarize"
 
@@ -46,7 +50,7 @@ extension GeminiClient {
         var body: [String: Any] = [
             "model": model,
             "messages": Self.openAIMessages(prompt: prompt, images: images, instructionRole: "developer"),
-            "reasoning_effort": GeminiClient.openAIReasoningEffort,
+            "reasoning_effort": GeminiClient.openAIReasoningEffort(model: model),
         ]
         if jsonObject {
             body["response_format"] = ["type": "json_object"]
@@ -79,11 +83,16 @@ extension GeminiClient {
         return try Self.parseOpenAIDiarized(data)
     }
 
-    /// MEASURED 2026-09-28 on three dictations with the full cleanup prompt:
-    /// `none` took 1.4–2.5 s with no reasoning tokens; `low` took 1.9–4.7 s,
-    /// spent up to 307 reasoning tokens, and turned a two-sentence dictation
-    /// into a numbered list.
-    static let openAIReasoningEffort = "none"
+    /// The lowest effort the model takes. GPT-6 Astra has no `none` (its
+    /// lowest is `low`, per developers.openai.com/api/docs/models/gpt-6-astra)
+    /// and rejects a request that asks for it.
+    /// MEASURED 2026-09-28 on Luna with three dictations and the full cleanup
+    /// prompt: `none` took 1.4–2.5 s with no reasoning tokens; `low` took
+    /// 1.9–4.7 s, spent up to 307 reasoning tokens, and turned a
+    /// two-sentence dictation into a numbered list.
+    static func openAIReasoningEffort(model: String) -> String {
+        model.hasPrefix("gpt-6-astra") ? "low" : "none"
+    }
 
     /// Chat messages for an OpenAI writing model.
     ///

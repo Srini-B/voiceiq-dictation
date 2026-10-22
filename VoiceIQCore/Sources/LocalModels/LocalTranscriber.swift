@@ -36,7 +36,7 @@ public final class LocalTranscriber: DictationStreaming, Sendable {
         }
     }
 
-    @MainActor public init?(audioURL: URL, model: LocalSpeechModel, realtime: Bool,
+    @MainActor public init?(audioURL: URL, model: LocalSpeechModel, language: LocalSpeechLanguage, realtime: Bool,
                            makeSession: LocalSpeechSessionFactory) {
         let id = UUID()
         let previewing = Self.previews(model, realtime: realtime)
@@ -44,13 +44,15 @@ public final class LocalTranscriber: DictationStreaming, Sendable {
         // Nemotron wants its native chunk; Fluid Speech Mini re-decodes, so
         // one second keeps the preview moving without stacking decodes.
         let chunkBytes = model == .nemotron ? 71_680 : PCMRing.bytesPerSecond
-        let toolsReady = LocalModelStore.englishTools.state == .ready
+        // The English tools would trim and reformat other languages as English.
+        let toolsReady = language.isEnglish && LocalModelStore.englishTools.state == .ready
         let vocabulary = DictionaryStore().entries().prefix(256).map {
             LocalSpeechOptions.Term(text: $0.term, aliases: $0.misspelling.map { [$0] } ?? [])
         }
         let options = LocalSpeechOptions(
             vocabulary: vocabulary,
-            toolsDirectory: toolsReady ? LocalModelManifest.englishTools.installDirectory : nil
+            toolsDirectory: toolsReady ? LocalModelManifest.englishTools.installDirectory : nil,
+            language: language.code
         )
         let worker = makeSession(model, audioURL, previewing, options)
         let signals = AsyncStream<Void>.makeStream(bufferingPolicy: .bufferingNewest(1))
@@ -61,6 +63,7 @@ public final class LocalTranscriber: DictationStreaming, Sendable {
             previews.continuation.finish()
             await worker.stop()
         }
+        LocalModelWarmup.yieldToDictation()
         guard let directory = LocalModelStore.store(for: model).acquireSession(id: id, cancel: cancel) else { return nil }
         if toolsReady, LocalModelStore.englishTools.acquireSession(id: id, cancel: cancel) == nil {
             LocalModelStore.store(for: model).releaseSession(id: id)
@@ -80,6 +83,7 @@ public final class LocalTranscriber: DictationStreaming, Sendable {
                 previews.continuation.yield("")
                 previews.continuation.finish()
             }
+            await LocalModelWarmup.finished()
             await worker.load(from: directory)
             guard previewing else { return }
             // A rejected chunk or a dropped one ends a strict session, because

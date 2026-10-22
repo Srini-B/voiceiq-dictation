@@ -96,6 +96,7 @@ final class AppModel: ObservableObject {
         bind()
         startHistoryServices()
         DictionaryBridge.start()
+        WritingRulesSync.shared.start()
         let deviceName = UIDevice.current.name
         Task { await HistorySync.shared.start(deviceName: deviceName) }
         ActionButtonBridge.toggle = { [weak self] in await self?.toggleFromActionButton() }
@@ -432,15 +433,21 @@ final class AppModel: ObservableObject {
     }
 
     func appBecameActive() {
+        if let since = processingSince {
+            SessionDiagnostics.note(String(format: "app opened %.0fs into processing", Date().timeIntervalSince(since)))
+        }
         needsForeground = false
         setup.refresh()
         drainCommands()
         DictionaryBridge.appBecameActive()
+        WritingRulesSync.shared.refresh()
         Task { await HistorySync.shared.refresh() }
+        ModelWarmer.warmIfSystemUpdated()
     }
 
     func appEnteredBackground() {
         showSwipeBack = false
+        ModelWarmer.schedule()
     }
 
     func prepareForTermination() {
@@ -451,6 +458,8 @@ final class AppModel: ObservableObject {
     }
 
     // MARK: - Pipeline → keyboard
+
+    private var processingSince: Date?
 
     private func stateChanged(_ state: DictationState) {
         defer { previousState = state }
@@ -465,7 +474,15 @@ final class AppModel: ObservableObject {
         case .finalizing, .transcribing, .inserting:
             session.recordingStartedAt = nil
             session.dictationPhase = .processing
+            if processingSince == nil { processingSince = Date() }
         case .idle, .done, .cancelled, .failed:
+            if let since = processingSince {
+                // A first on-device load after an iOS update or a long break
+                // can take minutes; this shows it, and where the app was.
+                let place = UIApplication.shared.applicationState == .active ? "foreground" : "background"
+                SessionDiagnostics.note(String(format: "processed in %.1fs (%@)", Date().timeIntervalSince(since), place))
+                processingSince = nil
+            }
             session.recordingStartedAt = nil
             session.dictationPhase = .warm
             session.releaseBackgroundTime()
@@ -505,19 +522,31 @@ final class AppModel: ObservableObject {
             UIApplication.shared.endBackgroundTask(task)
             task = .invalid
         }
+        let endTask = {
+            if task != .invalid { UIApplication.shared.endBackgroundTask(task) }
+            task = .invalid
+        }
         DispatchQueue.main.asyncAfter(deadline: .now() + Self.typedCheckDelay) { [store] in
-            defer {
-                if task != .invalid { UIApplication.shared.endBackgroundTask(task) }
-                task = .invalid
-            }
-            guard store.insertedDeliveryID != delivery.id else { return }
+            guard store.insertedDeliveryID != delivery.id else { return endTask() }
             // Handled: a keyboard opened later must not type it as well.
             store.insertedDeliveryID = delivery.id
+            let before = UIPasteboard.general.changeCount
             UIPasteboard.general.string = delivery.text
-            // Not something the user copied: the keyboard must not offer it
-            // for the dictionary.
-            store.appPasteboardChangeCount = UIPasteboard.general.changeCount
-            SessionDiagnostics.note("result not typed by a keyboard; copied to the clipboard")
+            // UIPasteboard bumps changeCount at the end of the current event
+            // loop, so read it on the next pass.
+            DispatchQueue.main.async {
+                defer { endTask() }
+                // Not something the user copied: the keyboard must not offer
+                // it for the dictionary.
+                store.appPasteboardChangeCount = UIPasteboard.general.changeCount
+                // Whether iOS took the write from the background; the Control
+                // Center path on a keyboard-case iPad depends on it.
+                let landed = UIPasteboard.general.changeCount != before
+                let state = UIApplication.shared.applicationState == .active ? "foreground" : "background"
+                SessionDiagnostics.note(landed
+                    ? "result not typed by a keyboard; copied to the clipboard (\(state))"
+                    : "result not typed by a keyboard; clipboard write refused (\(state))")
+            }
         }
     }
 

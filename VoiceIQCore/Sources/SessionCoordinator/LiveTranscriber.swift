@@ -70,6 +70,7 @@ public final class LiveTranscriber: DictationStreaming {
         let settings = SettingsStore()
         if settings.localTranscriptionEnabled,
            let local = LocalTranscriber(audioURL: audioURL, model: settings.localSpeechModel,
+                                        language: settings.localSpeechLanguage,
                                         realtime: settings.liveTranscriptionEnabled,
                                         makeSession: localSessionFactory) {
             return local

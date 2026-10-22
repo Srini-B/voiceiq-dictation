@@ -54,11 +54,18 @@ public final class SharedStore: @unchecked Sendable {
     }
 
     public func appendKeyboardLog(_ line: String) {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "HH:mm:ss"
         var lines = keyboardLog
-        lines.append("\(formatter.string(from: Date())) \(line)")
+        lines.append("\(Self.logStamp(Date())) \(line)")
         defaults.set(Array(lines.suffix(100)), forKey: Key.keyboardLog)
+    }
+
+    /// "2026-10-22 06:30:12" in the device's time zone, for the session log
+    /// lines of the app and the keyboard alike.
+    public static func logStamp(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        return formatter.string(from: date)
     }
 
     public func clearKeyboardLog() {

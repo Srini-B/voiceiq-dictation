@@ -77,7 +77,18 @@ because pings are dropped while a process is suspended.
    screen with no text field), the app puts it on the clipboard and marks it
    handled, so a keyboard opened later doesn't type it too. Paste last always
    has it. The keyboard's decisions go to `SharedStore.keyboardLog`, shown
-   under "Keyboard" in Settings › Advanced › Session log.
+   under "Keyboard" in Settings › Advanced › Session log. Every line of
+   that log, the app's and the keyboard's, starts with the date and time
+   (`SharedStore.logStamp`, "2026-10-22 06:52:04", device time zone).
+6. If the heartbeat stops while the snapshot says `processing`, iOS suspended
+   or ended the app mid-dictation (a first on-device load after an iOS update
+   or a long break can take minutes). The keyboard keeps the spinner and shows
+   "Open VoiceiQ to finish" (`KeyboardModel.needsAppToFinish`); a tap opens
+   `BridgeURL.app`. A suspended app resumes the dictation; an ended one
+   recovers the saved recording at launch. The session log records each
+   dictation's processing time and whether the app was in the foreground
+   ("processed in 94.2s (background)"), and when the app was opened during
+   processing.
 
 Ask shows the answer in a panel with Insert and Copy. Translate inserts the
 translation into the target language from Settings › Dictation (the iPhone
@@ -148,8 +159,11 @@ whether it is up. It lasts `MobileSettings.warmWindow` after each dictation
 (Settings › Dictation › "Keep mic on after dictating": Never, 5 s to 12 h,
 default 30 s; key `warmWindowSeconds`), counted from when the text is
 delivered; Home shows "Turns off in" with the countdown. With "Never" the
-audio session closes as soon as the dictation stops and the session ends once
-the text is delivered, so the next keyboard tap opens VoiceiQ again.
+session ends once the text is delivered, so the next keyboard tap opens
+VoiceiQ again. The audio session stays open until then: it is what keeps iOS
+from suspending the app while a slow transcription runs (a first on-device
+load can take minutes), at the cost of the mic dot showing until the text
+arrives.
 `AudioCaptureEngine` never configures the session, so each dictation's capture engine records into it.
 
 The session also ends when the user taps End (app or Dynamic Island) or when
@@ -177,6 +191,18 @@ dictation, and the result has no host app, so whichever field has the
 VoiceiQ keyboard within two minutes receives it. Keyboard-started sessions
 have no Live Activity.
 
+The control is a `ControlWidgetToggle`, on while a dictation records. Its
+value provider reads `SharedStore.isDictating()`, which is the snapshot phase
+`recording` with a live heartbeat. `VoiceSession.publish` calls
+`ControlCenter.reloadControls(ofKind:)` each time the phase enters or leaves
+`recording`, so the control stays lit for the whole dictation and turns off
+when it stops from any path. A press runs `SetDictationIntent`, a
+`SetValueIntent` with the same work as `ToggleDictationIntent`
+(`ActionButtonBridge.run`). It acts only when the requested state differs
+from the actual one, so a stale control cannot start a second dictation.
+`ToggleDictationIntent` stays the App Shortcut, because a `SetValueIntent`
+would make Siri and Spotlight ask for its value.
+
 ### iPad
 
 The app and both extensions target iPhone and iPad (`TARGETED_DEVICE_FAMILY`
@@ -191,7 +217,9 @@ Layout follows the horizontal size class, not the device:
   a bar background: the tab bar above names the page, and in Settings the
   open section's row is tinted in the sidebar (`List(selection:)` over
   `SettingsSection`). Pages pushed inside the detail column keep their
-  title and back button. Home puts the session, setup and
+  title and back button. History's detail is keyed by the dictation id
+  (`.id(record.id)`); without it the split view kept the first dictation's
+  state when another row was picked. Home puts the session, setup and
   hardware keyboard cards in one column and Try it, stats and recent
   dictations in a second.
 - Compact width (iPhone, narrow iPad windows): the iPhone layout, with a
@@ -228,7 +256,14 @@ setup, so it runs from:
 
 Run it once to start and again to stop. No keyboard types the result, so after
 two seconds it goes on the clipboard (the existing `copyIfNotTyped` path) and
-the user presses ⌘V. On iPad, Home, onboarding's Try it page and
+the user presses ⌘V. The session log records whether the clipboard write took
+effect (`UIPasteboard.changeCount` before and after) and whether the app was
+in the foreground or the background at that moment.
+
+On an iPad, which has no Dynamic Island, iPadOS shows the Live Activity as a
+banner for a few seconds when it starts and then hides it. It stays on the
+Lock Screen only. An app cannot keep the banner on screen, so the Control
+Center toggle is the in-session indicator and the way to stop. On iPad, Home, onboarding's Try it page and
 Settings › Dictation show these steps in a "Hardware keyboard" card in place
 of the Action button section.
 
@@ -327,6 +362,23 @@ Every local edit and every change from iCloud merges the two copies with
 - the same word added on two devices becomes one entry (the older one,
   starred if either was).
 
+### Writing rules sync
+
+The writing rules are the same on the Mac and the iPhone, with no setting.
+`WritingRulesSync` (VoiceIQCore) keeps them as a second value, `writingRules.v1`,
+in the same key-value store. The value is the rules text (absent when the
+device uses the default rules) and when it was last edited. The newer edit
+wins (`WritingRulesSnapshot.merge`); "Reset to defaults" is an edit too, so it
+resets the other device. `SettingsStore.setCustomInstructions` stamps an edit
+only when the text changes, and stores text equal to the defaults as "use the
+defaults". Rules edited before sync existed have no stamp and count as the
+oldest edit; when two such copies meet, custom rules win over the defaults.
+While iCloud shows no value, only an edit made just now is uploaded: until
+its first download finishes a device sees no value even when iCloud holds a
+newer one, and writing an older copy then could replace it. An older copy
+goes up once the stored value can be compared, or with the next edit.
+The value is capped at 64 KB so the dictionary keeps most of the 1 MB store.
+
 ### History sync
 
 History's final text is the same on the Mac and the iPhone, with no setting.
@@ -401,7 +453,7 @@ runs. Everything needs Full Access.
 | Dictionary with search, CSV and Auto-learned | Same, synced through iCloud, plus adding a selection or a copied word from the keyboard |
 | Writing rules, smart transcription, live, noise handling | Same settings |
 | On-device transcription: Fluid Speech Mini and Nemotron 3.5, English tools, live preview with Fluid Speech Mini | Fluid Speech Mini and English tools only, in-process; no live preview (see [local transcription](LOCAL_TRANSCRIPTION.md)) |
-| History, retry, crash recovery, retention | Same |
+| History, retry, crash recovery, retention | Same. The detail shows the cost and one row per model call (stage, model, cost) from `UsageStore.records(forSession:)`, and Copy turns into "Copied" with a checkmark and a success haptic for 1.5 s |
 | Cost with the Gemini, OpenAI and ElevenLabs toggle, periods and Detailed | Same |
 | Advanced: the selected provider's models | Same, plus the session log |
 | Screen context, auto-learn, shortcuts, call detection, mute other audio, sounds | Not on iOS |

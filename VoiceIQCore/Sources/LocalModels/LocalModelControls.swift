@@ -13,6 +13,9 @@ public struct LocalModelControls: View {
     private let localEnabled: Bool
     private let meetingsLocal: Bool
     @Binding private var selection: LocalSpeechModel
+    /// The stored code, kept as is: the picker shows the selected model's
+    /// reading of it, so switching models does not lose a choice.
+    @State private var languageCode = SettingsStore().localSpeechLanguageCode
 
     public init(localEnabled: Bool, meetingsLocal: Bool = false, selection: Binding<LocalSpeechModel>) {
         self.localEnabled = localEnabled
@@ -26,7 +29,9 @@ public struct LocalModelControls: View {
                 LocalModelRow(
                     store: .store(for: model),
                     offered: localEnabled || (meetingsLocal && model == .parakeet),
-                    selection: localEnabled ? (isSelected: model == selection, select: { selection = model }) : nil
+                    selection: localEnabled ? (isSelected: model == selection, select: { selection = model }) : nil,
+                    languages: model.languages,
+                    language: localEnabled && model == selection ? languageBinding(for: model) : nil
                 )
             }
             LocalModelRow(store: .englishTools, offered: localEnabled, selection: nil)
@@ -38,7 +43,17 @@ public struct LocalModelControls: View {
         }
     }
 
-    static let englishNote = "On-device dictation is English only. English tools add dictionary correction for Fluid Speech Mini. Without them, on-device transcription still works."
+    private func languageBinding(for model: LocalSpeechModel) -> Binding<String> {
+        Binding(
+            get: { model.language(code: languageCode).code },
+            set: { code in
+                languageCode = code
+                SettingsStore().setLocalSpeechLanguage(code)
+            }
+        )
+    }
+
+    static let englishNote = "English tools add dictionary correction for Fluid Speech Mini. Without them, on-device transcription still works."
 }
 
 /// The speaker diarizer's row, offered while meetings are kept on device.
@@ -66,6 +81,10 @@ private struct LocalModelRow: View {
     let offered: Bool
     /// Nil for a row that is never selected.
     let selection: (isSelected: Bool, select: () -> Void)?
+    /// Nil for a row that is not a speech model.
+    var languages: [LocalSpeechLanguage]? = nil
+    /// The selected model's language choice; other rows list their languages.
+    var language: Binding<String>? = nil
     @State private var confirmingDelete = false
 
     #if os(iOS)
@@ -87,6 +106,16 @@ private struct LocalModelRow: View {
                     }
                     Spacer(minLength: 8)
                     trailing
+                }
+                if let languages, let language {
+                    Picker("Language", selection: language) {
+                        ForEach(languages, id: \.code) { Text($0.name).tag($0.code) }
+                    }
+                    .pickerStyle(.menu)
+                } else if let languages {
+                    Text(languages.count == 1 ? "Languages: \(languages[0].name)" : "\(languages.count) languages")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
                 if case .downloading(let progress) = store.state {
                     ProgressView(value: progress)
@@ -210,8 +239,10 @@ public struct LocalModelFooter: View {
     }
 
     /// Core ML prepares a downloaded model for this device on its first load
-    /// and caches the result, so only the first dictation pays for it.
-    static let firstRunNote = "The first dictation after a download takes longer while the model is set up on this device. Later dictations are fast."
+    /// and caches the result. The system drops that cache after an OS update
+    /// and when the model goes unused for a long time, so the slow load
+    /// comes back then.
+    static let firstRunNote = "The first dictation after a download, a system update or a long break takes longer while the model is prepared for this device."
 }
 
 /// Section footer while meetings are kept on device but a model is missing.

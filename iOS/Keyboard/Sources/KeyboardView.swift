@@ -99,6 +99,7 @@ struct KeyboardView: View {
         if model.waitingForApp, model.phase != .recording { return "Starting…" }
         switch model.phase {
         case .recording: return "Tap to finish"
+        case .processing where model.needsAppToFinish: return "Open VoiceiQ to finish"
         case .processing: return model.mode == .ask ? "Thinking…" : "Writing…"
         case .warm, .off:
             switch model.mode {
@@ -182,7 +183,7 @@ private struct MicBar: View {
             .shadow(color: .black.opacity(0.12), radius: 4, y: 2)
         }
         .buttonStyle(MicBarButtonStyle())
-        .accessibilityLabel(phase == .recording ? "Stop" : "Dictate")
+        .accessibilityLabel(phase == .recording ? "Stop" : phase == .processing ? title : "Dictate")
     }
 
     @ViewBuilder private var leadingContent: some View {

@@ -52,7 +52,8 @@ public struct AgentEndpoint: Equatable, Sendable {
                                  modelID: gemini.cleanupModel, label: provider.directName, isCustom: false)
         case .openAI:
             guard let key = KeychainStore.loadOpenAIKey() else { return nil }
-            return AgentEndpoint(baseURL: URL(string: "https://api.openai.com")!, apiKey: key, format: .openAIChat,
+            // Responses, because GPT-6 Astra calls tools only through it.
+            return AgentEndpoint(baseURL: URL(string: "https://api.openai.com")!, apiKey: key, format: .openAIResponses,
                                  modelID: openAI.writingModel, label: provider.directName, isCustom: false)
         }
     }

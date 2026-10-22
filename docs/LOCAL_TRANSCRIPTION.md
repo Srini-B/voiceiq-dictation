@@ -9,8 +9,27 @@ with no stored value reads the old `localTranscriptionEnabled` boolean, so an
 earlier on-device choice is kept. `localTranscriptionEnabled` is now a derived
 read of that picker. Existing local-transcription preferences survive
 the removal of Whistle, but its model and runtime are no longer included.
-On-device dictation is English only: Fluid Speech Mini decodes as English and Nemotron
-is locked to `en-US`. Cloud transcription keeps its own language handling.
+Each model offers its own languages (`LocalSpeechModel.languages`, a list
+of `LocalSpeechLanguage` with a locale code and a name). The selected model's
+row in Settings has a Language menu; the other rows show "Languages:
+English" or "32 languages". The choice is stored once
+(`SettingsStore.localSpeechLanguage`, key `localSpeechLanguage`, a locale
+code). `LocalSpeechModel.language(code:)` reads it for the selected model and
+falls back to English, so a German choice reads as English under Fluid Speech
+Mini and returns when Nemotron is picked again.
+
+- Fluid Speech Mini: English only. It is trained on English (FluidVoice model
+  card) and ignores the code.
+- Nemotron 3.5: 32 locales, the "transcription-ready" and "broad-coverage"
+  tiers of NVIDIA's model card. The card's eight "adaptation-ready" locales
+  need fine-tuning and are not offered. `LocalTranscriber` passes the code in
+  `LocalSpeechOptions.language`, and `NemotronSession` calls
+  `setLanguage(code)` with the forced language prefix.
+
+The English tools (speech detection, dictionary spotting) and English number
+formatting (`EnglishText`) run only for an English code. For other languages
+the transcript goes to cleanup as decoded; the cleanup prompt keeps the
+speaker's language. Cloud transcription keeps its own language handling.
 
 iPhone and iPad offer Fluid Speech Mini only (`LocalSpeechModel.available`).
 Nemotron stalled on a physical iPhone when both models were offered in
@@ -82,10 +101,41 @@ different local model. There is no automatic switch to another downloaded model.
 The section footer (`LocalModelFooter`, shared by both platforms) depends on
 the selected model's state. While it is missing, the footer says cloud
 transcription is used until it is downloaded. Once it is on disk, the footer
-says the first dictation after a download takes longer while the model is set
-up on the device, and later dictations are fast. That is the one-time Core ML
-compile on first load (see "English speech processing"); the compiled model
-is cached by the OS, so only the first dictation pays for it.
+says the first dictation after a download, a system update or a long break
+takes longer while the model is prepared for the device. That is Core ML's
+device specialization on first load (see "English speech processing"). The OS
+caches the result outside the app and drops it after an OS update and when a
+model goes unused for a long time (WhisperKit documents the same eviction);
+there is no API to check whether the cache is warm. FluidAudio reports cold
+Parakeet encoder loads of 51 to 181 seconds on iPhone (FluidAudio issue
+#1022). Warm loads take about a second.
+
+Memory: no platform keeps a model loaded between dictations. Each dictation
+loads the selected model when recording starts and releases it after
+transcription (`LocalTranscriber.finish` stops the session, which drops
+`AsrManager` and the tools). The Mac's helper process then exits after 60
+idle seconds; the iOS app releases the model in-process and keeps running
+only as long as the voice session holds the mic.
+
+Warm-up (iOS, `ModelWarmer` over `LocalModelWarmup`): loads the model the
+on-device settings use and releases it at once, so Core ML prepares it before
+a dictation needs it. Nothing stays loaded. It runs:
+
+1. In a background processing task (`io.blue.voiceiq.ios.warm-model`,
+   `BGProcessingTaskRequest` with no power or network requirement, earliest
+   six hours after it was scheduled). iOS picks the time, usually when the
+   phone is idle overnight; it does not have to be charging, and iOS may skip
+   a night. The app schedules it at launch, on entering the background and
+   after each run. The simulator has no BGTaskScheduler.
+2. When the app becomes active on an iOS version it has not warmed on yet
+   (`modelWarmedOSVersion`), because an update always drops the prepared copy
+   whenever it was installed. This also covers the first open after a
+   download.
+
+A dictation that starts during a warm-up takes the model's claim from it
+(`yieldToDictation`) and loads after the warm-up's load ends, so two Neural
+Engine compiles never overlap; the second load is then fast. The session log
+records "model warmed in Ns (reason)".
 
 ### Fluid Speech Mini live preview
 

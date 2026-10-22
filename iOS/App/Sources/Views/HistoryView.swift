@@ -15,7 +15,10 @@ struct HistoryView: View {
                 ForEach(sections) { section in
                     Section(section.title) {
                         ForEach(section.records) { record in
-                            NavigationLink { HistoryDetail(record: record, reload: reload) } label: {
+                            // The id gives each dictation its own detail state;
+                            // without it the split view kept showing the first
+                            // one opened.
+                            NavigationLink { HistoryDetail(record: record, reload: reload).id(record.id) } label: {
                                 HistoryRow(record: record)
                             }
                         }
@@ -160,6 +163,9 @@ private struct HistoryDetail: View {
     let reload: () -> Void
     @State private var message: String?
     @State private var retrying = false
+    @State private var copied = false
+    /// The model calls this dictation made, as in the Mac's History.
+    @State private var calls: [UsageRecord] = []
 
     init(record: DictationRecord, reload: @escaping () -> Void) {
         _record = State(initialValue: record)
@@ -195,6 +201,12 @@ private struct HistoryDetail: View {
         .themedBackground()
         .navigationTitle("Dictation")
         .navigationBarTitleDisplayMode(.inline)
+        .onAppear(perform: loadCalls)
+        .sensoryFeedback(.success, trigger: copied) { _, new in new }
+    }
+
+    private func loadCalls() {
+        calls = UsageMeter.store?.records(forSession: record.id) ?? []
     }
 
     private var transcriptCard: some View {
@@ -204,10 +216,19 @@ private struct HistoryDetail: View {
                 .foregroundStyle(Theme.Colors.ink)
                 .textSelection(.enabled)
             HStack(spacing: Theme.Spacing.s) {
-                Button { UIPasteboard.general.string = record.displayText } label: {
-                    Label("Copy", systemImage: "doc.on.doc")
+                Button {
+                    UIPasteboard.general.string = record.displayText
+                    copied = true
+                    Task {
+                        try? await Task.sleep(for: .seconds(1.5))
+                        copied = false
+                    }
+                } label: {
+                    Label(copied ? "Copied" : "Copy", systemImage: copied ? "checkmark" : "doc.on.doc")
+                        .contentTransition(.symbolEffect(.replace))
                 }
                 .buttonStyle(.compactSecondary)
+                .animation(.default, value: copied)
                 ShareLink(item: record.displayText) {
                     Label("Share", systemImage: "square.and.arrow.up")
                 }
@@ -225,6 +246,7 @@ private struct HistoryDetail: View {
                     message = await model.retry(record)
                     retrying = false
                     if let fresh = model.historyStore?.record(id: record.id) { record = fresh }
+                    loadCalls()
                     reload()
                 }
             }
@@ -244,6 +266,18 @@ private struct HistoryDetail: View {
             if let seconds = record.durationSeconds {
                 divider
                 DetailRow(label: "Length", value: Duration.seconds(seconds).formatted(.time(pattern: .minuteSecond)))
+            }
+            if !calls.isEmpty {
+                divider
+                DetailRow(label: "Cost", value: UsageView.money(
+                    calls.reduce(0) { $0 + ($1.costUSD ?? 0) },
+                    approximate: calls.contains { $0.isEstimated || $0.costUSD == nil }
+                ))
+                ForEach(calls) { call in
+                    divider
+                    DetailRow(label: call.stageValue?.displayName ?? call.stage,
+                              value: "\(call.model) · \(UsageView.money(call.costUSD, approximate: call.isEstimated))")
+                }
             }
             if let error = record.errorMessage ?? record.errorCode { divider; DetailRow(label: "Error", value: error) }
         }

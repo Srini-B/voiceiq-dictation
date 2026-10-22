@@ -42,7 +42,15 @@ final class KeyboardModel: ObservableObject {
     }
 
     /// The session phase, trusting the snapshot only while the app is alive.
-    var phase: SessionSnapshot.Phase { appAlive ? snapshot.phase : .off }
+    /// A dictation the app was still writing when it stopped answering stays
+    /// `.processing`: iOS suspended the app (a first on-device load can take
+    /// minutes) or ended it, and opening the app finishes or recovers it.
+    var phase: SessionSnapshot.Phase {
+        if appAlive { return snapshot.phase }
+        return needsAppToFinish ? .processing : .off
+    }
+
+    var needsAppToFinish: Bool { !appAlive && snapshot.phase == .processing }
 
     var lastText: String? { snapshot.delivery?.text }
 
@@ -117,7 +125,7 @@ final class KeyboardModel: ObservableObject {
         case .recording:
             send(KeyboardCommand(action: .stop, mode: mode))
         case .processing:
-            break
+            if needsAppToFinish { controller?.openURL(BridgeURL.app) }
         case .warm, .off:
             start()
         }

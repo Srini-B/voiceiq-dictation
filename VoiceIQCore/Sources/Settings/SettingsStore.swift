@@ -143,6 +143,22 @@ public struct SettingsStore: Sendable {
         return stored
     }
 
+    /// The language the on-device model transcribes. A stored code the
+    /// selected model lacks (German, then Fluid Speech Mini) reads as English,
+    /// and comes back when that model is picked again.
+    public var localSpeechLanguage: LocalSpeechLanguage {
+        localSpeechModel.language(code: localSpeechLanguageCode)
+    }
+
+    /// The stored code as chosen, which the selected model may not offer.
+    public var localSpeechLanguageCode: String? {
+        Self.defaults.string(forKey: "localSpeechLanguage")
+    }
+
+    public func setLocalSpeechLanguage(_ code: String) {
+        Self.set(code, forKey: "localSpeechLanguage")
+    }
+
     /// Picking Nemotron turns real-time transcription on, because Nemotron is
     /// built for streaming. Only a change of selection does this, so a user who
     /// later turns real-time off keeps it off.
@@ -382,9 +398,41 @@ public struct SettingsStore: Sendable {
         Self.defaults.string(forKey: "customInstructions")
     }
 
+    /// Stores an edit and stamps it for `WritingRulesSync`. Text equal to the
+    /// defaults is stored as "use the defaults", so a later default update
+    /// still reaches this device. Unchanged text is not stamped: the iPhone
+    /// editor saves on every close, and a fresh stamp would let an untouched
+    /// copy win over a real edit on the Mac.
     public func setCustomInstructions(_ text: String?) {
-        let trimmed = text?.trimmingCharacters(in: .whitespacesAndNewlines)
-        Self.set(trimmed.flatMap { $0.isEmpty ? nil : $0 }, forKey: "customInstructions")
+        let value = Self.normalizedRules(text)
+        // An older build stored the text untrimmed; compare like for like.
+        guard value != Self.normalizedRules(customInstructionsOverride) else { return }
+        Self.defaults.set(Date(), forKey: Self.customInstructionsUpdatedAtKey)
+        Self.set(value, forKey: "customInstructions")
+    }
+
+    /// Trimmed text, or nil for "use the defaults".
+    private static func normalizedRules(_ text: String?) -> String? {
+        let seed = DictationRulesSeed.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let trimmed = text?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !trimmed.isEmpty, trimmed != seed else { return nil }
+        return trimmed
+    }
+
+    private static let customInstructionsUpdatedAtKey = "customInstructionsUpdatedAt"
+
+    /// The writing rules as `WritingRulesSync` sees them. A copy edited before
+    /// sync existed has no stamp and counts as the oldest possible edit.
+    public var writingRulesSnapshot: WritingRulesSnapshot {
+        WritingRulesSnapshot(
+            text: customInstructionsOverride,
+            updatedAt: Self.defaults.object(forKey: Self.customInstructionsUpdatedAtKey) as? Date ?? .distantPast
+        )
+    }
+
+    public func applySyncedWritingRules(_ snapshot: WritingRulesSnapshot) {
+        Self.defaults.set(snapshot.updatedAt, forKey: Self.customInstructionsUpdatedAtKey)
+        Self.set(snapshot.text, forKey: "customInstructions")
     }
 
     /// Watch the field after insertion and add the user's word-level edits to
