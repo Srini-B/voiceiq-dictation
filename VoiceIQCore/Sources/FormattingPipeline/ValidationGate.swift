@@ -63,12 +63,14 @@ public enum ValidationGate {
             return .fail("ai_selfreference")
         }
         guard !rawWords.isEmpty else { return .ok }
-        // A dictated question comes back as a question. An answer drops the
-        // question mark and adds what the speaker never said ("What is the
-        // capital of France?" → "The capital of France is Paris."), and keeps
-        // enough words to pass the content checks below.
-        if raw.trimmingCharacters(in: .whitespacesAndNewlines).hasSuffix("?"), !cleaned.contains("?"),
-           cleanWords.contains(where: { !Set(rawWords).contains($0) && Int($0) == nil }) {
+        // A dictated question comes back as a question. An answer no longer
+        // ends on the question mark and adds what the speaker never said
+        // ("What is the capital of France?" → "The capital of France is
+        // Paris." or "… France? Paris."), and keeps enough words to pass the
+        // content checks below.
+        if raw.trimmingCharacters(in: .whitespacesAndNewlines).hasSuffix("?"),
+           !cleaned.trimmingCharacters(in: .whitespacesAndNewlines).hasSuffix("?"),
+           cleanWords.contains(where: { !Set(rawWords).contains($0) }) {
             return .fail("question_answered")
         }
 

@@ -88,10 +88,13 @@ struct AssignSpeakersView: View {
         return Array((long.isEmpty ? turns : long).prefix(12))
     }
 
-    /// The note owner is on the microphone track, everyone else on the system track.
+    /// On a call the note owner is on the microphone track and everyone else on
+    /// the system track. A meeting with no owner turn was not a call, so
+    /// everyone is on the microphone.
     private func audio(_ speaker: String) -> URL? {
         guard let folder else { return nil }
-        let names = speaker == MeetingSpeaker.you ? ["mic-aec.caf", "mic.caf"] : ["system.caf", "mic.caf"]
+        let call = transcript.contains { $0.speaker == MeetingSpeaker.you }
+        let names = speaker == MeetingSpeaker.you ? ["mic-aec.caf", "mic.caf"] : call ? ["system.caf", "mic.caf"] : ["mic.caf"]
         return names.map { folder.appendingPathComponent($0) }.first { FileManager.default.fileExists(atPath: $0.path) }
     }
 }

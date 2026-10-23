@@ -21,6 +21,14 @@ enum CallApps {
         "co.teamport.around": "Around", "app.tuple.app": "Tuple", "im.riot.app": "Element",
     ]
 
+    /// Known apps that also record voice notes: their mic use is a call only
+    /// while they also play sound.
+    static let voiceNoteApps: Set<String> = [
+        "net.whatsapp.WhatsApp", "desktop.WhatsApp", "com.apple.MobileSMS", "ru.keepcoder.Telegram",
+        "org.telegram.desktop", "org.whispersystems.signal-desktop", "com.viber.osx", "jp.naver.line.mac",
+        "com.tencent.xinWeChat", "com.facebook.archon",
+    ]
+
     /// System daemons that carry FaceTime audio and iPhone calls relayed to
     /// the Mac (Continuity). The call itself has no app process using the mic.
     static let callDaemons: Set<String> = ["avconferenced", "callservicesd"]

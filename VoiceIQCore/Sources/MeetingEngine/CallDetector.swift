@@ -127,7 +127,10 @@ import CoreAudio
             let capturing = audio.map { $0.inputPIDs.contains(pid) || $0.inputBundleIDs.contains { $0.hasPrefix(id) } } ?? true
             guard capturing else { continue }
             let playing = audio.map { $0.outputPIDs.contains(pid) || $0.outputBundleIDs.contains { $0.hasPrefix(id) } } ?? false
-            if let name = CallApps.known[id] { return .app(bundleID: id, name: name) }
+            if let name = CallApps.known[id] {
+                if audio == nil || playing || !CallApps.voiceNoteApps.contains(id) { return .app(bundleID: id, name: name) }
+                continue
+            }
             let isBrowser = CallApps.browsers.contains(id) || app.localizedName?.localizedCaseInsensitiveContains("Chrome") == true
                 || app.localizedName?.localizedCaseInsensitiveContains("Chromium") == true
             if isBrowser {

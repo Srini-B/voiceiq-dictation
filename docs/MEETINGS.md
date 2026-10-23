@@ -19,7 +19,10 @@ Audio's process objects (`kAudioHardwarePropertyProcessObjectList`, macOS
 2. an app in `CallApps.known` (Zoom, Teams, FaceTime, Phone, WhatsApp, Slack,
    Discord, Webex, Skype, Messages, Telegram, Signal, Viber, LINE, WeChat,
    Messenger, Chime, GoTo, RingCentral, Tencent Meeting, DingTalk, Around,
-   Tuple, Element) captures the mic;
+   Tuple, Element) captures the mic. Apps that also record voice notes
+   (`CallApps.voiceNoteApps`: WhatsApp, Messages, Telegram, Signal, Viber,
+   LINE, WeChat, Messenger) count only while they also play sound, so a voice
+   note does not raise the offer;
 3. a browser captures the mic on a page in `CallApps.meetingPages`, matched
    against window titles and the URL of each window's `AXWebArea` (searched 9
    levels deep, 300 elements at most, as FluidVoice does for Safari);
