@@ -70,8 +70,11 @@ public enum ValidationGate {
         // ends on the question mark and adds what the speaker never said
         // ("What is the capital of France?" → "The capital of France is
         // Paris." or "… France? Paris."), and keeps enough words to pass the
-        // content checks below.
-        if raw.trimmingCharacters(in: .whitespacesAndNewlines).hasSuffix("?"),
+        // content checks below. A question can also end in the spoken words
+        // "question mark".
+        let rawEnd = raw.trimmingCharacters(in: .whitespacesAndNewlines.union(.punctuationCharacters))
+        if raw.trimmingCharacters(in: .whitespacesAndNewlines).hasSuffix("?")
+            || rawEnd.lowercased().hasSuffix("question mark"),
            !cleaned.trimmingCharacters(in: .whitespacesAndNewlines).hasSuffix("?"),
            cleanWords.contains(where: { !Set(rawWords).contains($0) }) {
             return .fail(questionAnswered)
