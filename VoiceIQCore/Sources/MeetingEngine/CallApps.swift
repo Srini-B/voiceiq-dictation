@@ -29,6 +29,14 @@ enum CallApps {
         "com.tencent.xinWeChat", "com.facebook.archon",
     ]
 
+    /// The developer part of a bundle ID: "com.p5sys.jump.connect" and
+    /// "com.p5sys.jump.audio.driver" are both "com.p5sys". Nil for Apple's own.
+    static func vendor(_ bundleID: String) -> String? {
+        let parts = bundleID.lowercased().split(separator: ".").prefix(2)
+        let vendor = parts.joined(separator: ".")
+        return parts.count == 2 && vendor != "com.apple" ? vendor : nil
+    }
+
     /// System daemons that carry FaceTime audio and iPhone calls relayed to
     /// the Mac (Continuity). The call itself has no app process using the mic.
     static let callDaemons: Set<String> = ["avconferenced", "callservicesd"]
