@@ -58,8 +58,9 @@ import os
 
     private nonisolated static func runningAudio() -> Audio? {
         guard #available(macOS 14.2, *) else { return nil }
+        guard let processes = objects(system, kAudioHardwarePropertyProcessObjectList) else { return nil }
         var result = Audio()
-        for object in objects(system, kAudioHardwarePropertyProcessObjectList) {
+        for object in processes {
             let input = flag(object, kAudioProcessPropertyIsRunningInput), output = flag(object, kAudioProcessPropertyIsRunningOutput)
             guard input || output else { continue }
             var pids: [pid_t] = []
@@ -88,40 +89,50 @@ import os
     @available(macOS 14.2, *)
     private nonisolated static func routesOwnAudio(_ process: AudioObjectID, app bundleID: String?) -> Bool {
         guard let vendor = bundleID.flatMap(CallApps.vendor) else { return false }
-        let devices = Set([kAudioObjectPropertyScopeInput, kAudioObjectPropertyScopeOutput]
-            .flatMap { objects(process, kAudioProcessPropertyDevices, scope: $0) })
-        guard !devices.isEmpty else { return false }
-        let drivers = deviceDrivers()
-        return devices.allSatisfy { drivers[$0].flatMap(CallApps.vendor) == vendor }
+        guard let input = objects(process, kAudioProcessPropertyDevices, scope: kAudioObjectPropertyScopeInput),
+              let output = objects(process, kAudioProcessPropertyDevices, scope: kAudioObjectPropertyScopeOutput),
+              let drivers = deviceDrivers() else { return false }
+        let devices = Set(input + output)
+        return !devices.isEmpty && devices.allSatisfy { drivers[$0].flatMap(CallApps.vendor) == vendor }
     }
 
     /// The driver bundle ID of each audio device. Walking the plug-ins takes
-    /// about 0.6 s (AirPlay registers about a thousand), so the map is rebuilt
-    /// only when the device list changes.
-    private nonisolated static func deviceDrivers() -> [AudioObjectID: String] {
-        let devices = objects(system, kAudioHardwarePropertyDevices)
-        if let map = driverCache.withLock({ $0.devices == devices ? $0.map : nil }) { return map }
+    /// about 0.6 s (AirPlay registers about a thousand), so a map that names
+    /// every device is kept until the device list changes. A plug-in whose
+    /// read fails is skipped (one on the development Mac always fails); a map
+    /// that misses a device is rebuilt after a minute. Nil when the device
+    /// or plug-in list cannot be read.
+    private nonisolated static func deviceDrivers() -> [AudioObjectID: String]? {
+        guard let devices = objects(system, kAudioHardwarePropertyDevices) else { return nil }
+        let now = Date()
+        if let map = driverCache.withLock({ $0.devices == devices && now < $0.until ? $0.map : nil }) { return map }
+        guard let plugIns = objects(system, kAudioHardwarePropertyPlugInList) else { return nil }
         var map: [AudioObjectID: String] = [:]
-        for plugIn in objects(system, kAudioHardwarePropertyPlugInList) {
-            let owned = objects(plugIn, kAudioPlugInPropertyDeviceList)
-            guard !owned.isEmpty, let id = string(plugIn, kAudioPlugInPropertyBundleID) else { continue }
+        for plugIn in plugIns {
+            guard let owned = objects(plugIn, kAudioPlugInPropertyDeviceList), !owned.isEmpty,
+                  let id = string(plugIn, kAudioPlugInPropertyBundleID) else { continue }
             for device in owned { map[device] = id }
         }
         let built = map
-        driverCache.withLock { $0 = (devices, built) }
+        let until = devices.allSatisfy { built[$0] != nil } ? Date.distantFuture : now.addingTimeInterval(60)
+        driverCache.withLock { $0 = (devices, built, until) }
         return built
     }
 
-    private nonisolated static let driverCache = OSAllocatedUnfairLock(initialState: (devices: [AudioObjectID](), map: [AudioObjectID: String]()))
+    private nonisolated static let driverCache = OSAllocatedUnfairLock(
+        initialState: (devices: [AudioObjectID](), map: [AudioObjectID: String](), until: Date.distantPast))
     private nonisolated static let system = AudioObjectID(kAudioObjectSystemObject)
 
+    /// Nil when Core Audio fails the read; an empty list is a successful read.
     private nonisolated static func objects(_ object: AudioObjectID, _ selector: AudioObjectPropertySelector,
-                                            scope: AudioObjectPropertyScope = kAudioObjectPropertyScopeGlobal) -> [AudioObjectID] {
+                                            scope: AudioObjectPropertyScope = kAudioObjectPropertyScopeGlobal) -> [AudioObjectID]? {
         var address = AudioObjectPropertyAddress(mSelector: selector, mScope: scope, mElement: kAudioObjectPropertyElementMain)
         var size: UInt32 = 0
-        guard AudioObjectGetPropertyDataSize(object, &address, 0, nil, &size) == noErr, size > 0 else { return [] }
+        guard AudioObjectGetPropertyDataSize(object, &address, 0, nil, &size) == noErr else { return nil }
+        guard size > 0 else { return [] }
         var list = [AudioObjectID](repeating: 0, count: Int(size) / MemoryLayout<AudioObjectID>.size)
-        return AudioObjectGetPropertyData(object, &address, 0, nil, &size, &list) == noErr ? list : []
+        guard AudioObjectGetPropertyData(object, &address, 0, nil, &size, &list) == noErr else { return nil }
+        return Array(list.prefix(Int(size) / MemoryLayout<AudioObjectID>.size))
     }
 
     private nonisolated static func string(_ object: AudioObjectID, _ selector: AudioObjectPropertySelector) -> String? {

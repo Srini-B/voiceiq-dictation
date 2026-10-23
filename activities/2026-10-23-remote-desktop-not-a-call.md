@@ -35,6 +35,12 @@ records one device and plays into the other. Rejected: device-owner lookup.
 Audio itself for these devices. The plug-in walk is the only source found.
 It takes about 0.6 s, so it is cached until the device list changes.
 
+Failed Core Audio reads are kept apart from empty results (review on PR #18).
+A failed process-list read falls back to the global mic check, as before.
+A failed device read never skips a process. One plug-in on the development Mac
+fails its device-list read every time, so failing plug-ins are skipped. A map
+that misses a device is rebuilt after a minute instead of kept.
+
 ## Verification
 
 On the installed notarized 0.6.6 build, with scratch apps that do the same
