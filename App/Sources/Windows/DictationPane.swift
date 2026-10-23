@@ -17,6 +17,7 @@ struct DictationPane: View {
     @State private var instructions = SettingsStore().customInstructions
     @State private var autoLearn = SettingsStore().autoLearnEnabled
     @State private var meetingDetection = SettingsStore().meetingDetectionEnabled
+    @State private var meetingScreenNames = SettingsStore().meetingScreenNamesEnabled
     @State private var showIdleDot = SettingsStore().showIdleIndicator
     @State private var noiseHandling = SettingsStore().experimentalNoiseHandling
     @State private var agentMode = SettingsStore().agentModeEnabled
@@ -164,8 +165,10 @@ struct DictationPane: View {
                     }
                 Toggle("Offer to record calls", isOn: $meetingDetection)
                     .onChange(of: meetingDetection) { _, enabled in settings.setMeetingDetection(enabled) }
+                Toggle("Read names from the screen", isOn: $meetingScreenNames)
+                    .onChange(of: meetingScreenNames) { _, enabled in settings.setMeetingScreenNames(enabled) }
             } footer: {
-                Text("Words you change after a dictation lands are added to the Dictionary. Screen context sends a snapshot of what you're looking at, taken when dictation starts and when you switch apps, so names and paths on screen are spelled right. Fit to existing text sends the text around the cursor with the transcript, so a dictation continues or follows what is already in the field. When a call app or a meeting tab is using the microphone, the pill asks before recording; the Meeting recording shortcut starts and stops a recording at any time. Notes appear under Meetings.")
+                Text("Words you change after a dictation lands are added to the Dictionary. Screen context sends a snapshot of what you're looking at, taken when dictation starts and when you switch apps, so names and paths on screen are spelled right. Fit to existing text sends the text around the cursor with the transcript, so a dictation continues or follows what is already in the field. When a call app or a meeting tab is using the microphone, the pill asks before recording; the Meeting recording shortcut starts and stops a recording at any time. Notes appear under Meetings. Read names from the screen reads the name tags in the call window on this Mac while a meeting records, to name its speakers; no image is kept.")
             }
 
             Section {

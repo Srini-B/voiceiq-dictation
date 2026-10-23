@@ -72,22 +72,15 @@ extension GeminiTranscriptionService {
                                    windowTitle: context.focusedField?.windowTitle,
                                    pageURL: context.focusedField?.pageURL)
         Log.transcription.info("cleanup place: app=\(place.appName ?? "-", privacy: .public) title=\(place.windowTitle ?? "-", privacy: .private) page=\(place.pageURL ?? "-", privacy: .private) (page \(place.pageURL?.count ?? 0, privacy: .public) chars)")
-        let prompt = PromptV1.cleanupPrompt(
-            raw: raw,
-            vocabulary: dictionary.sanitizedVocabulary(),
-            spellings: dictionary.spellings(),
-            instructions: settings.customInstructions,
-            spelling: settings.spellingVariant.promptLine,
-            imagesAttached: !screenshots.isEmpty,
-            surroundingText: settings.fitToExistingText ? context.focusedField?.surroundingText : nil,
-            place: place,
-            normalized: normalized
-        )
-        do {
-            let deadline = min(
-                60,
-                Self.cleanupDeadline(forCharacters: raw.count)
-                    + Double(screenshots.count * 2)
+        let vocabulary = dictionary.sanitizedVocabulary(), spellings = dictionary.spellings()
+        let surrounding = settings.fitToExistingText ? context.focusedField?.surroundingText : nil
+        let deadline = min(60, Self.cleanupDeadline(forCharacters: raw.count) + Double(screenshots.count * 2))
+        func attempt(reminder: String?) async throws -> CleanupOutcome {
+            let prompt = PromptV1.cleanupPrompt(
+                raw: raw, vocabulary: vocabulary, spellings: spellings,
+                instructions: settings.customInstructions, spelling: settings.spellingVariant.promptLine,
+                imagesAttached: !screenshots.isEmpty, surroundingText: surrounding, place: place,
+                normalized: normalized, reminder: reminder
             )
             let response = try await client.cleanupWithFreshRetry(
                 prompt: prompt, images: screenshots,
@@ -97,6 +90,17 @@ extension GeminiTranscriptionService {
             let verdict = ValidationGate.validate(raw: raw, cleaned: cleaned)
             guard verdict.accepted else { return .rejected(reason: verdict.reason ?? "?") }
             return .accepted(cleaned)
+        }
+        do {
+            let first = try await attempt(reminder: nil)
+            // The model answered a dictated question instead of writing it
+            // down. Ask once more with a reminder; a second answer, or a failed
+            // request, keeps the first rejection.
+            guard case .rejected(reason: ValidationGate.questionAnswered) = first else { return first }
+            Log.transcription.info("cleanup answered a dictated question; retrying with a reminder")
+            guard let second = try? await attempt(reminder: PromptV1.questionReminder),
+                  case .accepted = second else { return first }
+            return second
         } catch {
             // Deadline miss / network hiccup on cleanup never costs the dictation —
             // and the dictionary guarantee still holds (audit L9).

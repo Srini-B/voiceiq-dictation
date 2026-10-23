@@ -25,7 +25,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
         self.onClosed = onClosed
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 880, height: 580),
-            styleMask: [.titled, .closable, .miniaturizable, .fullSizeContentView],
+            styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
             backing: .buffered,
             defer: false
         )
@@ -33,6 +33,10 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
         window.titlebarAppearsTransparent = true
         window.center()
         super.init(window: window)
+        // Meetings shows notes and transcript side by side once there is room,
+        // so a resized window keeps its size. Set on the controller: it
+        // overrides the window's own autosave name.
+        windowFrameAutosaveName = "MainWindow"
         window.delegate = self
         // System Settings idiom: the titlebar names the selected pane (the app
         // name already anchors the sidebar header).
@@ -343,6 +347,7 @@ struct PrivacyPane: View {
                 LabeledContent("Dictionary") { Text("Synced to your iPhone through your iCloud account") }
                 LabeledContent("History") { Text("Final text synced to your iPhone through your iCloud account") }
                 LabeledContent("Screen snapshots") { Text("Only if screen context and writing rules are on; never stored") }
+                LabeledContent("Names on a call screen") { Text("Read on this Mac while a meeting records; only the names go to \(provider.displayName) for notes") }
                 LabeledContent("Ask Anything search") { Text("Only if a TinyFish key is saved; the search query goes to TinyFish") }
                 LabeledContent("Everything else") { Text("Never leaves this Mac") }
             } header: {

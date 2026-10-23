@@ -232,14 +232,24 @@ public struct MeetingTranscriber: Sendable {
     static func place(_ raw: [DiarizedWord], audio request: AssembledAudio, call: CallAudio, known: [TimedWord],
                       mapping linked: [String: String], idPrefix: String = "s") -> [TimedWord] {
         typealias Placed = (text: String, label: String, start: Double, end: Double)
-        let placed: [Placed] = raw.compactMap { word in
-            let label = word.speaker ?? ""
+        // A word the provider left without a speaker belongs to the one before
+        // it; an empty label of its own became a speaker who never existed.
+        // Reference words dropped below do not pass their label on, and words
+        // before the first label take that label.
+        var previous = ""
+        var placed: [Placed] = raw.compactMap { word in
+            let label = word.speaker ?? previous
             guard let start = word.start else {
                 // Untimed text (the API's no-annotation fallback) is kept as one turn.
+                previous = label
                 return (word.text, label, request.trackTime(request.bodyStart) ?? 0, request.trackTime(request.duration) ?? 0)
             }
             guard let span = request.trackSpan(start, word.end ?? start) else { return nil }
+            previous = label
             return (word.text, label, span.lowerBound, span.upperBound)
+        }
+        if let first = placed.first(where: { !$0.label.isEmpty })?.label {
+            for index in placed.indices where placed[index].label.isEmpty { placed[index].label = first }
         }
         var mapping = linked
         if call.isOnline {

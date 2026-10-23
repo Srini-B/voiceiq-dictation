@@ -93,10 +93,15 @@ With no usable key, nothing is sent and the recording stays on your Mac.
    discarded.
    Remove the key to stop this entirely.
 6. **Meeting audio**, only after you start a recording. With "Offer to record
-   calls" on in Settings → Dictation (on by default), VoiceiQ watches whether a
-   calling app (Zoom, Teams, FaceTime, WhatsApp, Slack, Discord, Webex) or a
-   browser tab on a meeting site is using your microphone, and shows an offer
-   in the pill. Nothing is recorded until you accept it, press the meeting
+   calls" on in Settings → Dictation (on by default), VoiceiQ watches which
+   processes use your microphone (Core Audio's per-process list; nothing is
+   recorded). It offers to record when a calling app (Zoom, Teams, FaceTime,
+   WhatsApp, Slack, Discord, Webex, Telegram, Signal and others), the system's
+   FaceTime and iPhone-call service, or a browser tab on a meeting site uses
+   the microphone, or when any other app or browser page both uses the
+   microphone and plays sound, which is what a call looks like. The offer
+   shows in the pill. To tell a meeting page apart, it reads the browser's
+   window titles and page addresses through the Accessibility API. Nothing is recorded until you accept it, press the meeting
    shortcut (⌥M by default), or start one from Settings → Meetings. While
    recording, mic and system audio are written to
    `~/Library/Application Support/VoiceiQ/meetings/` and nothing is sent.
@@ -109,6 +114,17 @@ With no usable key, nothing is sent and the recording stays on your Mac.
    device: the words and speakers are worked out locally, and only the
    transcript is sent, for the notes. If that on-device pass fails and a key is saved, the audio is sent
    as above. Turn the setting off and no call detection runs.
+   With "Read names from the screen" on (Settings → Dictation, on by default,
+   macOS only) and Screen Recording already granted, VoiceiQ takes a snapshot
+   of the call window every 3 seconds while recording (the main display,
+   minus VoiceiQ's own windows, when no call app was detected). Each snapshot
+   is read with Apple's on-device text recognition and dropped at once; it is
+   never written to disk or sent anywhere. Only the name-like text and its time
+   are kept, in `screen-names.json` in the meeting's folder, and only the names
+   are sent with the transcript for the notes. With Accessibility granted, it
+   also reads the call app's window text (name tags, the participants list)
+   through the Accessibility API, with the same rule: only name-like text is
+   kept. A meeting never asks for Screen Recording or Accessibility itself.
 7. **The selected text, when you use Ask Anything** (⌃⌥A by default). At the
    moment you press the shortcut, VoiceiQ reads the text selected in the
    frontmost app through the Accessibility API and sends it with your spoken
@@ -156,8 +172,9 @@ Everything it reads stays on this Mac.
   *fact that* another key was pressed (the accidental-chord guard; which key it
   was is never examined beyond its keycode, never logged, never stored, never
   transmitted). When you're not dictating, other keys pass through untouched.
-- Screen context images are never stored on disk and are never attached to Ask
-  Anything, Translate, meeting, or transcription requests.
+- Screen context images and meeting name snapshots are never stored on disk and
+  are never attached to Ask Anything, Translate, meeting, or transcription
+  requests.
 - Telemetry: there is none. No analytics SDK, no crash uploader, no phone-home
   beyond the update check in item 9.
 

@@ -32,6 +32,17 @@ public final class MicTap: @unchecked Sendable {
     private lazy var deviceListener: AudioObjectPropertyListenerBlock = { [weak self] _, _ in
         self?.control.async { self?.moveToDefaultDevice() }
     }
+    private var formatAddress = AudioObjectPropertyAddress(mSelector: kAudioDevicePropertyStreamFormat,
+                                                          mScope: kAudioDevicePropertyScopeInput,
+                                                          mElement: kAudioObjectPropertyElementMain)
+    /// The same device can change format under the recording: AirPods switch
+    /// to the headset profile when a call app opens the mic.
+    private lazy var formatListener: AudioObjectPropertyListenerBlock = { [weak self] _, _ in
+        self?.control.async { self?.formatChanged() }
+    }
+    /// A failed move is retried this many times, half a second apart, so a
+    /// device still settling does not leave the rest of the meeting silent.
+    static let attachRetries = 5
 
     public init(url: URL) { self.url = url }
 
@@ -72,10 +83,14 @@ public final class MicTap: @unchecked Sendable {
             self?.consume(inputData)
         })
         try check(AudioDeviceStart(device, procID))
+        _ = AudioObjectAddPropertyListenerBlock(device, &formatAddress, control, formatListener)
         Log.meeting.notice("mic started on device \(device): \(input.description, privacy: .public)")
     }
 
     private func detach() {
+        if deviceID != kAudioObjectUnknown {
+            _ = AudioObjectRemovePropertyListenerBlock(deviceID, &formatAddress, control, formatListener)
+        }
         if deviceID != kAudioObjectUnknown, let procID {
             _ = AudioDeviceStop(deviceID, procID)
             _ = AudioDeviceDestroyIOProcID(deviceID, procID)
@@ -85,13 +100,26 @@ public final class MicTap: @unchecked Sendable {
     }
 
     /// Default input changed (headset plugged in, user switched mics): follow it.
-    private func moveToDefaultDevice() {
+    private func moveToDefaultDevice(force: Bool = false, attempt: Int = 0) {
         guard writer != nil else { return }
         let device = Self.defaultInputDevice()
-        guard device != deviceID else { return }
+        guard force || device != deviceID else { return }
         detach()
         do { try attach(to: device); Log.meeting.notice("mic moved to device \(device) (frames=\(self.frames))") }
-        catch { Log.meeting.error("mic move failed: \(String(describing: error), privacy: .public)") }
+        catch {
+            Log.meeting.error("mic move failed (attempt \(attempt + 1)): \(String(describing: error), privacy: .public)")
+            guard attempt < Self.attachRetries else { return }
+            control.asyncAfter(deadline: .now() + 0.5) { [weak self] in self?.moveToDefaultDevice(force: true, attempt: attempt + 1) }
+        }
+    }
+
+    private func formatChanged() {
+        guard writer != nil, deviceID != kAudioObjectUnknown, let inputFormat else { return }
+        var stream = AudioStreamBasicDescription(), size = UInt32(MemoryLayout.size(ofValue: stream))
+        guard AudioObjectGetPropertyData(deviceID, &formatAddress, 0, nil, &size, &stream) == noErr,
+              stream.mSampleRate != inputFormat.sampleRate || stream.mChannelsPerFrame != inputFormat.channelCount else { return }
+        Log.meeting.notice("mic format changed to \(stream.mSampleRate) Hz, \(stream.mChannelsPerFrame) ch")
+        moveToDefaultDevice(force: true)
     }
 
     private func consume(_ list: UnsafePointer<AudioBufferList>) {

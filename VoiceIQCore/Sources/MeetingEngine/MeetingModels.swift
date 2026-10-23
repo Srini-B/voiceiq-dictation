@@ -43,6 +43,25 @@ public enum MeetingSpeaker {
         return id
     }
 
+    /// Everyone but the note owner, in order of first turn.
+    public static func others(in transcript: [TranscriptSegment]) -> [String] {
+        var seen: [String] = []
+        for segment in transcript where segment.speaker != you && !seen.contains(segment.speaker) { seen.append(segment.speaker) }
+        return seen
+    }
+
+    /// A speaker's name colour as light and dark RGB: green for the note
+    /// owner, then one hue per other speaker in `others` order.
+    public static func colorHex(_ id: String, others: [String]) -> (light: UInt32, dark: UInt32) {
+        if id == you { return (0x188038, 0x81C995) }
+        return hues[(others.firstIndex(of: id) ?? 0) % hues.count]
+    }
+
+    private static let hues: [(light: UInt32, dark: UInt32)] = [
+        (0x1A73E8, 0x8AB4F8), (0x8E44C9, 0xC58AF9), (0xD35400, 0xFCAD70), (0xC2185B, 0xF48FB1),
+        (0x00897B, 0x80CBC4), (0xA0790B, 0xFDD663), (0x5C6BC0, 0x9FA8DA), (0x6D4C41, 0xBCAAA4),
+    ]
+
     /// A name the user typed wins over one the notes model found in the conversation.
     public static func displayName(_ id: String, names: [String: String], suggested: [SpeakerSuggestion]?) -> String {
         if let name = names[id], !name.isEmpty { return name }
@@ -94,10 +113,14 @@ public struct MeetingNotes: Codable, Equatable, Sendable {
     public var actions: [ActionItem]
     public var notes: [String]
     public var speakers: [SpeakerSuggestion]?
+    /// The people among the names seen on screen; titles and product names left out.
+    public var participants: [String]?
     public init(type: String? = nil, title: String, summary: String, sections: [NoteSection]? = nil,
-                decisions: [String], actions: [ActionItem], notes: [String], speakers: [SpeakerSuggestion]? = nil) {
+                decisions: [String], actions: [ActionItem], notes: [String], speakers: [SpeakerSuggestion]? = nil,
+                participants: [String]? = nil) {
         self.type = type; self.title = title; self.summary = summary; self.sections = sections
         self.decisions = decisions; self.actions = actions; self.notes = notes; self.speakers = speakers
+        self.participants = participants
     }
 
     /// The model leaves out empty lists now and then; a missing list is empty.
@@ -111,6 +134,7 @@ public struct MeetingNotes: Codable, Equatable, Sendable {
         actions = try c.decodeIfPresent([ActionItem].self, forKey: .actions) ?? []
         notes = try c.decodeIfPresent([String].self, forKey: .notes) ?? []
         speakers = try c.decodeIfPresent([SpeakerSuggestion].self, forKey: .speakers)
+        participants = try c.decodeIfPresent([String].self, forKey: .participants)
     }
 }
 
@@ -226,11 +250,36 @@ public struct MeetingMeta: Codable, Equatable, Sendable, Identifiable {
     public var status: MeetingStatus
     public var speakerNames: [String: String]
     public var title: String?
+    /// Set once the transcript exists, when names were read off the screen.
+    public var screenNames: ScreenNames?
 
     public init(id: MeetingID, startedAt: Date, endedAt: Date? = nil, source: CallSource? = nil,
                 durationSeconds: Double = 0, status: MeetingStatus = .recording,
-                speakerNames: [String: String] = [:], title: String? = nil) {
+                speakerNames: [String: String] = [:], title: String? = nil, screenNames: ScreenNames? = nil) {
         self.id = id; self.startedAt = startedAt; self.endedAt = endedAt; self.source = source
         self.durationSeconds = durationSeconds; self.status = status; self.speakerNames = speakerNames; self.title = title
+        self.screenNames = screenNames
+    }
+
+    /// Names for speakers the user has not named: what the screen showed while
+    /// they talked first, then what the notes model found in the conversation.
+    public func suggestions(_ notes: MeetingNotes?) -> [SpeakerSuggestion] {
+        let screen = (screenNames?.speakers ?? [:]).sorted { $0.key < $1.key }.map { id, match in
+            SpeakerSuggestion(label: MeetingSpeaker.defaultName(id), name: match.name,
+                              evidence: "On screen while this speaker talked (\(match.seen) of \(match.of) snapshots)")
+        }
+        return screen + (notes?.speakers ?? [])
+    }
+
+    /// Every name this meeting knows of, for assigning speakers by hand.
+    public func knownNames(_ notes: MeetingNotes?) -> [String] {
+        let all = suggestions(notes).compactMap(\.name) + (notes?.participants ?? []) + speakerNames.values
+        var seen = Set<String>()
+        return all.map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty && seen.insert($0.lowercased()).inserted }
+    }
+
+    public func displayName(_ speaker: String, notes: MeetingNotes?) -> String {
+        MeetingSpeaker.displayName(speaker, names: speakerNames, suggested: suggestions(notes))
     }
 }

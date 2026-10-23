@@ -16,6 +16,9 @@ public enum ValidationGate {
         static func fail(_ reason: String) -> Verdict { Verdict(accepted: false, reason: reason) }
     }
 
+    /// The rejection for an answer to a dictated question; cleanup retries it once.
+    public static let questionAnswered = "question_answered"
+
     // Tuned against the live probe fixtures (see ValidationGateTests). Constants
     // deliberately generous: self-correction collapse legitimately halves a
     // transcript; answer-mode diverges in *content*, which containment catches.
@@ -63,6 +66,19 @@ public enum ValidationGate {
             return .fail("ai_selfreference")
         }
         guard !rawWords.isEmpty else { return .ok }
+        // A dictated question comes back as a question. An answer no longer
+        // ends on the question mark and adds what the speaker never said
+        // ("What is the capital of France?" → "The capital of France is
+        // Paris." or "… France? Paris."), and keeps enough words to pass the
+        // content checks below. A question can also end in the spoken words
+        // "question mark".
+        let rawEnd = raw.trimmingCharacters(in: .whitespacesAndNewlines.union(.punctuationCharacters))
+        if raw.trimmingCharacters(in: .whitespacesAndNewlines).hasSuffix("?")
+            || rawEnd.lowercased().hasSuffix("question mark"),
+           !cleaned.trimmingCharacters(in: .whitespacesAndNewlines).hasSuffix("?"),
+           cleanWords.contains(where: { !Set(rawWords).contains($0) }) {
+            return .fail(questionAnswered)
+        }
 
         let ratio = Double(cleanWords.count) / Double(rawWords.count)
         // Expansion is most dangerous on short raws (hallucinated content), so the

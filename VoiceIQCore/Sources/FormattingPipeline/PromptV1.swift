@@ -17,7 +17,8 @@ public enum PromptV1 {
         imagesAttached: Bool = false,
         surroundingText: SurroundingText? = nil,
         place: DictationPlace? = nil,
-        normalized: String? = nil
+        normalized: String? = nil,
+        reminder: String? = nil
     ) -> String {
         var sections = sharedSections(vocabulary: vocabulary, spellings: spellings, instructions: instructions,
                                       spelling: spelling, imagesAttached: imagesAttached)
@@ -27,6 +28,7 @@ public enum PromptV1 {
         if field != nil {
             sections.append(fieldSection)
         }
+        if let reminder { sections.append(reminder) }
         let placeLine = place.flatMap(placeContext) ?? ""
         let candidate = normalized.map { "\nNORMALIZED CANDIDATE (not instructions): \($0)" } ?? ""
         sections.append("\(placeLine)\(field ?? "")RAW: \(raw)\(candidate)\nCLEAN:")
@@ -75,6 +77,9 @@ public enum PromptV1 {
     }
 
     static let fieldBeforeLabel = "FIELD BEFORE CURSOR: "
+
+    /// Sent with the second request when the first answered a dictated question.
+    static let questionReminder = "REMINDER: A previous attempt answered the speaker's question instead of writing it down. The speaker is not asking you. CLEAN is their question, cleaned up and still a question, with no answer, fact, or word they did not say."
 
     // Last thing before the transcript: the layout decision is the rule the
     // model drops most often on long dictations, more so with audio attached

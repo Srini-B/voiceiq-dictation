@@ -155,10 +155,16 @@ private struct MeetingRow: View {
 
 private struct MeetingDetail: View {
     @EnvironmentObject private var model: AppModel
-    let meta: MeetingMeta
+    @State private var meta: MeetingMeta
     @State private var notes: MeetingNotes?
     @State private var transcript: [TranscriptSegment] = []
-    @State private var markdown: String?
+    /// Markdown files to share, one per export choice.
+    @State private var exports: [(label: String, url: URL)] = []
+    /// The speaker whose name is being typed.
+    @State private var naming: String?
+    @State private var draft = ""
+
+    init(meta: MeetingMeta) { _meta = State(initialValue: meta) }
 
     var body: some View {
         ScrollView {
@@ -183,7 +189,16 @@ private struct MeetingDetail: View {
                 } label: { Label("Redo", systemImage: "arrow.clockwise") }
                     .disabled(model.meetings.isBusy(meta.id))
             }
-            if let markdown { ShareLink(item: markdown) }
+            if !exports.isEmpty {
+                Menu {
+                    ForEach(exports, id: \.label) { export in ShareLink(export.label, item: export.url) }
+                } label: { Label("Export", systemImage: "square.and.arrow.up") }
+            }
+        }
+        .alert("Name", isPresented: Binding(get: { naming != nil }, set: { if !$0 { naming = nil } })) {
+            TextField("Name", text: $draft)
+            Button("Save") { if let naming { rename(naming, draft) } }
+            Button("Cancel", role: .cancel) {}
         }
         .onAppear(perform: load)
         .onReceive(model.meetings.$processing) { busy in if !busy.contains(meta.id) { load() } }
@@ -232,12 +247,13 @@ private struct MeetingDetail: View {
                     ForEach(Array(actions.enumerated()), id: \.offset) { _, action in
                         VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
                             HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.s) {
-                                Image(systemName: "checkmark.circle").foregroundStyle(Theme.Colors.accent)
-                                Text(action.text).font(Theme.Fonts.body()).foregroundStyle(Theme.Colors.ink)
+                                Image(systemName: "circle").foregroundStyle(Theme.Colors.muted)
+                                Text(action.owner.map { "\($0): " } ?? "").font(Theme.Fonts.body().weight(.semibold))
+                                    + Text(action.text).font(Theme.Fonts.body())
                             }
-                            let detail = [action.owner, action.deadline].compactMap { $0 }.joined(separator: " · ")
-                            if !detail.isEmpty {
-                                Text(detail).font(Theme.Fonts.footnote()).foregroundStyle(Theme.Colors.muted)
+                            .foregroundStyle(Theme.Colors.ink)
+                            if let deadline = action.deadline {
+                                Text(deadline).font(Theme.Fonts.footnote()).foregroundStyle(Theme.Colors.muted)
                                     .padding(.leading, 28)
                             }
                         }
@@ -255,8 +271,8 @@ private struct MeetingDetail: View {
                     ForEach(Array(transcript.enumerated()), id: \.offset) { _, segment in
                         VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
                             HStack(spacing: Theme.Spacing.s) {
-                                Text(MeetingSpeaker.displayName(segment.speaker, names: meta.speakerNames, suggested: notes?.speakers))
-                                    .font(Theme.Fonts.label()).foregroundStyle(Theme.Colors.accent)
+                                speakerMenu(segment.speaker)
+                                Spacer(minLength: 0)
                                 if let start = segment.start {
                                     Text(MeetingNotesPrompt.clock(start)).font(Theme.Fonts.caption()).foregroundStyle(Theme.Colors.muted)
                                 }
@@ -267,6 +283,34 @@ private struct MeetingDetail: View {
                 }
             }
         }
+    }
+
+    /// The speaker's name in their colour; tapping it offers the names this note knows.
+    private func speakerMenu(_ speaker: String) -> some View {
+        let hex = MeetingSpeaker.colorHex(speaker, others: MeetingSpeaker.others(in: transcript))
+        let name = meta.displayName(speaker, notes: notes)
+        return Menu {
+            ForEach(meta.knownNames(notes), id: \.self) { candidate in
+                Button { rename(speaker, candidate) } label: {
+                    if candidate == name { Label(candidate, systemImage: "checkmark") } else { Text(candidate) }
+                }
+            }
+            Button("Other name…") { draft = ""; naming = speaker }
+            if !(meta.speakerNames[speaker] ?? "").isEmpty {
+                Button("Reset", role: .destructive) { rename(speaker, "") }
+            }
+        } label: {
+            HStack(spacing: 3) {
+                Text(name).font(Theme.Fonts.label())
+                Image(systemName: "chevron.down").font(.system(size: 9, weight: .semibold))
+            }
+            .foregroundStyle(Theme.Colors.dynamic(light: hex.light, dark: hex.dark))
+        }
+    }
+
+    private func rename(_ speaker: String, _ name: String) {
+        try? model.meetings.store.renameSpeaker(id: meta.id, label: speaker, name: name)
+        load()
     }
 
     private func failureCard(_ reason: String) -> some View {
@@ -286,8 +330,23 @@ private struct MeetingDetail: View {
     }
 
     private func load() {
-        notes = try? model.meetings.store.loadNotes(id: meta.id)
-        transcript = (try? model.meetings.store.loadTranscript(id: meta.id)) ?? []
-        markdown = try? model.meetings.store.exportMarkdown(id: meta.id)
+        let store = model.meetings.store
+        meta = store.list().first { $0.id == meta.id } ?? meta
+        notes = try? store.loadNotes(id: meta.id)
+        transcript = (try? store.loadTranscript(id: meta.id)) ?? []
+        // Shared as files so "Save to Files" keeps a .md named after the note.
+        let title = (notes?.title ?? meta.title ?? "Notes").replacingOccurrences(of: "/", with: "-")
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(meta.id.uuid.uuidString, isDirectory: true)
+        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        var choices: [(String, String, MeetingStore.ExportParts)] = []
+        if notes != nil { choices.append(("Notes", " notes", .notes)) }
+        if !transcript.isEmpty { choices.append(("Transcript", " transcript", .transcript)) }
+        if notes != nil, !transcript.isEmpty { choices.append(("Notes and transcript", "", .both)) }
+        exports = choices.compactMap { label, suffix, parts in
+            let url = folder.appendingPathComponent(title + suffix + ".md")
+            guard let text = try? store.markdown(id: meta.id, parts: parts),
+                  (try? text.write(to: url, atomically: true, encoding: .utf8)) != nil else { return nil }
+            return (label, url)
+        }
     }
 }
