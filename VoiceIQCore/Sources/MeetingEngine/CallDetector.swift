@@ -2,6 +2,7 @@
 import AppKit
 import ApplicationServices
 import CoreAudio
+import os
 
 /// Polls for an active call. A call is "active" when:
 /// - a known calling app, or a browser showing a meeting page, is itself
@@ -57,13 +58,9 @@ import CoreAudio
 
     private nonisolated static func runningAudio() -> Audio? {
         guard #available(macOS 14.2, *) else { return nil }
-        var address = Self.address(kAudioHardwarePropertyProcessObjectList)
-        var size: UInt32 = 0
-        guard AudioObjectGetPropertyDataSize(AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &size) == noErr else { return nil }
-        var objects = [AudioObjectID](repeating: 0, count: Int(size) / MemoryLayout<AudioObjectID>.size)
-        guard AudioObjectGetPropertyData(AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &size, &objects) == noErr else { return nil }
+        guard let processes = objects(system, kAudioHardwarePropertyProcessObjectList) else { return nil }
         var result = Audio()
-        for object in objects {
+        for object in processes {
             let input = flag(object, kAudioProcessPropertyIsRunningInput), output = flag(object, kAudioProcessPropertyIsRunningOutput)
             guard input || output else { continue }
             var pids: [pid_t] = []
@@ -71,18 +68,77 @@ import CoreAudio
             var pidAddress = Self.address(kAudioProcessPropertyPID)
             if AudioObjectGetPropertyData(object, &pidAddress, 0, nil, &pidSize, &pid) == noErr, pid > 0 {
                 pids.append(pid)
-                if input { result.directInputPIDs.insert(pid) }
                 if let owner = Self.responsiblePID?(pid), owner > 0 { pids.append(owner) }
-                if input, callDaemon(pid) { result.inputDaemon = true }
             }
-            var value: Unmanaged<CFString>? = nil; var valueSize = UInt32(MemoryLayout<Unmanaged<CFString>?>.size)
-            var bundle = Self.address(kAudioProcessPropertyBundleID)
-            let id = AudioObjectGetPropertyData(object, &bundle, 0, nil, &valueSize, &value) == noErr
-                ? value?.takeRetainedValue() as String? : nil
+            let id = string(object, kAudioProcessPropertyBundleID)
+            if routesOwnAudio(object, app: id ?? pids.last.flatMap { NSRunningApplication(processIdentifier: $0)?.bundleIdentifier }) { continue }
+            if input, let pid = pids.first {
+                result.directInputPIDs.insert(pid)
+                if callDaemon(pid) { result.inputDaemon = true }
+            }
             if input { result.inputPIDs.formUnion(pids); if let id { result.inputBundleIDs.insert(id) } }
             if output { result.outputPIDs.formUnion(pids); if let id { result.outputBundleIDs.insert(id) } }
         }
         return result
+    }
+
+    /// An app whose audio goes only through devices its own developer's driver
+    /// provides is routing sound, not on a call. Jump Desktop Connect, during a
+    /// remote session, records its "Jump Desktop Audio" device to stream the
+    /// Mac's sound and plays the client's mic into "Jump Desktop Microphone".
+    @available(macOS 14.2, *)
+    private nonisolated static func routesOwnAudio(_ process: AudioObjectID, app bundleID: String?) -> Bool {
+        guard let vendor = bundleID.flatMap(CallApps.vendor) else { return false }
+        guard let input = objects(process, kAudioProcessPropertyDevices, scope: kAudioObjectPropertyScopeInput),
+              let output = objects(process, kAudioProcessPropertyDevices, scope: kAudioObjectPropertyScopeOutput),
+              let drivers = deviceDrivers() else { return false }
+        let devices = Set(input + output)
+        return !devices.isEmpty && devices.allSatisfy { drivers[$0].flatMap(CallApps.vendor) == vendor }
+    }
+
+    /// The driver bundle ID of each audio device. Walking the plug-ins takes
+    /// about 0.6 s (AirPlay registers about a thousand), so a map that names
+    /// every device is kept until the device list changes. A plug-in whose
+    /// read fails is skipped (one on the development Mac always fails); a map
+    /// that misses a device is rebuilt after a minute. Nil when the device
+    /// or plug-in list cannot be read.
+    private nonisolated static func deviceDrivers() -> [AudioObjectID: String]? {
+        guard let devices = objects(system, kAudioHardwarePropertyDevices) else { return nil }
+        let now = Date()
+        if let map = driverCache.withLock({ $0.devices == devices && now < $0.until ? $0.map : nil }) { return map }
+        guard let plugIns = objects(system, kAudioHardwarePropertyPlugInList) else { return nil }
+        var map: [AudioObjectID: String] = [:]
+        for plugIn in plugIns {
+            guard let owned = objects(plugIn, kAudioPlugInPropertyDeviceList), !owned.isEmpty,
+                  let id = string(plugIn, kAudioPlugInPropertyBundleID) else { continue }
+            for device in owned { map[device] = id }
+        }
+        let built = map
+        let until = devices.allSatisfy { built[$0] != nil } ? Date.distantFuture : now.addingTimeInterval(60)
+        driverCache.withLock { $0 = (devices, built, until) }
+        return built
+    }
+
+    private nonisolated static let driverCache = OSAllocatedUnfairLock(
+        initialState: (devices: [AudioObjectID](), map: [AudioObjectID: String](), until: Date.distantPast))
+    private nonisolated static let system = AudioObjectID(kAudioObjectSystemObject)
+
+    /// Nil when Core Audio fails the read; an empty list is a successful read.
+    private nonisolated static func objects(_ object: AudioObjectID, _ selector: AudioObjectPropertySelector,
+                                            scope: AudioObjectPropertyScope = kAudioObjectPropertyScopeGlobal) -> [AudioObjectID]? {
+        var address = AudioObjectPropertyAddress(mSelector: selector, mScope: scope, mElement: kAudioObjectPropertyElementMain)
+        var size: UInt32 = 0
+        guard AudioObjectGetPropertyDataSize(object, &address, 0, nil, &size) == noErr else { return nil }
+        guard size > 0 else { return [] }
+        var list = [AudioObjectID](repeating: 0, count: Int(size) / MemoryLayout<AudioObjectID>.size)
+        guard AudioObjectGetPropertyData(object, &address, 0, nil, &size, &list) == noErr else { return nil }
+        return Array(list.prefix(Int(size) / MemoryLayout<AudioObjectID>.size))
+    }
+
+    private nonisolated static func string(_ object: AudioObjectID, _ selector: AudioObjectPropertySelector) -> String? {
+        var value: Unmanaged<CFString>? = nil; var size = UInt32(MemoryLayout<Unmanaged<CFString>?>.size)
+        var address = Self.address(selector)
+        return AudioObjectGetPropertyData(object, &address, 0, nil, &size, &value) == noErr ? value?.takeRetainedValue() as String? : nil
     }
 
     private nonisolated static func flag(_ object: AudioObjectID, _ selector: AudioObjectPropertySelector) -> Bool {

@@ -31,8 +31,19 @@ Audio's process objects (`kAudioHardwarePropertyProcessObjectList`, macOS
    `CallApps.notCalls` and `notCallPages` leave out voice assistants,
    recorders and music software.
 
-VoiceiQ's own processes never count. Before macOS 14.2 only rules 2 and 3
-apply, on the global "mic in use" bit.
+VoiceiQ's own processes never count. Neither does an app whose audio goes
+only through devices its own developer's driver provides: that is a remote
+desktop host or audio router moving sound, not a call. Jump Desktop Connect
+records "Jump Desktop Audio" and plays the client's mic into "Jump Desktop
+Microphone" for a whole remote session; both devices come from
+`com.p5sys.jump.audio.driver*` and the app is `com.p5sys.jump.connect`. The
+developer is the first two parts of the bundle ID (`CallApps.vendor`); a
+device's driver is the HAL plug-in that lists it (`kAudioPlugInPropertyDeviceList`).
+That walk takes about 0.6 s on a Mac with AirPlay's thousand plug-ins, so the
+map is cached until the device list changes. A call app used during a remote
+session still counts: its developer differs from the driver's.
+
+Before macOS 14.2 only rules 2 and 3 apply, on the global "mic in use" bit.
 
 The daemon names in rule 1 come from Apple's process layout; a relayed
 iPhone call was not available to test on the development Mac.
