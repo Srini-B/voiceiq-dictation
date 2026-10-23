@@ -38,6 +38,16 @@ and to adopt FluidVoice's improvements to existing dictation and meetings.
   design here, removed in FluidVoice), and re-pinning the insertion target
   when recording stops (changes insertion behaviour). The user chose to
   keep both as they are.
+- **An answered question is asked again, not given up.** The writing model
+  must never answer a dictation. When the gate catches an answer
+  (`question_answered`), cleanup sends the dictation once more with
+  `PromptV1.questionReminder` placed just before RAW. A second answer or a
+  failed request falls back to the transcript as before. The cost is one
+  extra request, only on that path. Checked on the installed notarized
+  build through History → Retry Transcription with six spoken questions,
+  two of them asking for an answer ("Please answer this question for me,
+  what is the capital of Japan?"): each came back as the question, with one
+  cleanup request, so the retry was not needed.
 - **iOS Notes:** speaker colours, assign a speaker from known names, action
   items as "Owner: task", and an Export menu with Notes, Transcript, or both.
   No screen names on iOS.

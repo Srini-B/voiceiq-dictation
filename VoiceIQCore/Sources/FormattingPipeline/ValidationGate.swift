@@ -16,6 +16,9 @@ public enum ValidationGate {
         static func fail(_ reason: String) -> Verdict { Verdict(accepted: false, reason: reason) }
     }
 
+    /// The rejection for an answer to a dictated question; cleanup retries it once.
+    public static let questionAnswered = "question_answered"
+
     // Tuned against the live probe fixtures (see ValidationGateTests). Constants
     // deliberately generous: self-correction collapse legitimately halves a
     // transcript; answer-mode diverges in *content*, which containment catches.
@@ -71,7 +74,7 @@ public enum ValidationGate {
         if raw.trimmingCharacters(in: .whitespacesAndNewlines).hasSuffix("?"),
            !cleaned.trimmingCharacters(in: .whitespacesAndNewlines).hasSuffix("?"),
            cleanWords.contains(where: { !Set(rawWords).contains($0) }) {
-            return .fail("question_answered")
+            return .fail(questionAnswered)
         }
 
         let ratio = Double(cleanWords.count) / Double(rawWords.count)
