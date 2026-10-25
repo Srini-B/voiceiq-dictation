@@ -159,7 +159,7 @@ Everything it reads stays on this Mac.
   writing-rules prompt while that pass is on. The dictionary itself (words,
   "heard as" spellings, stars, and when entries were added or deleted) is
   kept in your own iCloud account, in VoiceiQ's key-value storage, so the Mac
-  and iPhone apps share it. Your writing rules are kept there too, for the
+  and iPhone apps share it. Your custom writing rules are kept there too, for the
   same reason. The final text of each finished dictation, with
   its time, length, app name and device name, is kept in your own iCloud
   account too (VoiceiQ's private CloudKit database), so History is the same

@@ -31,6 +31,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         FormattingSettingsMigration.enableWritingRulesIfNeeded()
         FormattingSettingsMigration.removeLiveTranscriptionSettings()
         FormattingSettingsMigration.restoreAutoDegradedWritingRulesOnce()
+        FormattingSettingsMigration.splitWritingRulesOnce()
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {

@@ -28,18 +28,18 @@ public struct SurroundingText: Equatable, Sendable {
         before.contains { !$0.isWhitespace } || after.contains { !$0.isWhitespace }
     }
 
-    /// Only the space before the result, when it would otherwise run into the
-    /// previous word ("button.Please").
+    /// Only the gap before the result: a space when it would otherwise run
+    /// into the previous word ("button.Please"), or a line break when its
+    /// layout needs one, such as the next item of a list (`FieldLayout`).
     public func spaced(_ text: String) -> String {
-        Self.needsSpace(after: before, and: text.first) ? " " + text : text
+        FieldLayout.leadingGap(before: before, text: text) + text
     }
 
     /// `spaced`, plus: a capital first letter at the start of a sentence,
     /// punctuation the field already has dropped from the front of the
-    /// result, and a space after it when the text after the cursor would
-    /// otherwise run into it. Whether a result continues the sentence before
-    /// it is left to the writing model, which can tell a name from an
-    /// ordinary word.
+    /// result, and the gap after it that the text after the cursor needs.
+    /// Whether a result continues the sentence before it is left to the
+    /// writing model, which can tell a name from an ordinary word.
     public func fitted(_ text: String) -> String {
         var text = text
         let lastMark = before.last { !$0.isWhitespace }
@@ -49,11 +49,13 @@ public struct SurroundingText: Equatable, Sendable {
            let first = text.first, Self.joiners.contains(first) || Self.terminators.contains(first) {
             text = String(text.drop { Self.joiners.contains($0) || Self.terminators.contains($0) || $0.isWhitespace })
         }
-        if startsSentence { text = Self.capitalizingFirstWord(text) }
         guard !text.isEmpty else { return text }
-        text = spaced(text)
-        if Self.needsSpace(after: before + text, and: after.first) { text += " " }
-        return text
+        // The gap reads the writing model's casing: a capital it wrote can
+        // start a new paragraph, one added here only starts a sentence.
+        let gap = FieldLayout.leadingGap(before: before, text: text)
+        if startsSentence { text = Self.capitalizingFirstWord(text) }
+        text = gap + text
+        return text + FieldLayout.trailingGap(before: before, text: text, after: after)
     }
 
     /// The field is empty before the cursor, or its last sentence is closed.

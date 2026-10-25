@@ -358,8 +358,8 @@ public struct SettingsStore: Sendable {
     }
 
     /// The second pass through the cleanup model — this is what applies the
-    /// user's writing rules (`customInstructions`) and per-app tone. On by
-    /// default: native smart transcription cannot apply a correction spoken
+    /// writing rules (`DefaultWritingRules` plus `customWritingRules`) and
+    /// per-app tone. On by default: native smart transcription cannot apply a correction spoken
     /// several sentences after the thing it corrects, and cannot segment
     /// pause-free speech by grammar. It costs a round trip and sends the
     /// transcript text a second time.
@@ -383,56 +383,38 @@ public struct SettingsStore: Sendable {
         Self.set(variant.rawValue, forKey: "spellingVariant")
     }
 
-    /// Free-form rules the cleanup pass follows. Empty or whitespace means
-    /// "use `DictationRulesSeed.text`", so a user who clears the box gets the
-    /// defaults rather than a rule-less pass.
-    public var customInstructions: String {
-        let stored = Self.defaults.string(forKey: "customInstructions") ?? ""
-        return stored.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            ? DictationRulesSeed.text
-            : stored
+    /// Rules the user adds on top of `DefaultWritingRules`. Empty when there
+    /// are none.
+    public var customWritingRules: String {
+        Self.defaults.string(forKey: Self.customWritingRulesKey) ?? ""
     }
 
-    /// The raw stored value for the editor (nil until the user edits).
-    public var customInstructionsOverride: String? {
-        Self.defaults.string(forKey: "customInstructions")
+    /// Stores an edit and stamps it for `WritingRulesSync`. Unchanged text is
+    /// not stamped: the iPhone editor saves on every close, and a fresh stamp
+    /// would let an untouched copy win over a real edit on the Mac.
+    public func setCustomWritingRules(_ text: String) {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let value = trimmed.isEmpty ? nil : trimmed
+        guard value != Self.defaults.string(forKey: Self.customWritingRulesKey) else { return }
+        Self.defaults.set(Date(), forKey: Self.customWritingRulesUpdatedAtKey)
+        Self.set(value, forKey: Self.customWritingRulesKey)
     }
 
-    /// Stores an edit and stamps it for `WritingRulesSync`. Text equal to the
-    /// defaults is stored as "use the defaults", so a later default update
-    /// still reaches this device. Unchanged text is not stamped: the iPhone
-    /// editor saves on every close, and a fresh stamp would let an untouched
-    /// copy win over a real edit on the Mac.
-    public func setCustomInstructions(_ text: String?) {
-        let value = Self.normalizedRules(text)
-        // An older build stored the text untrimmed; compare like for like.
-        guard value != Self.normalizedRules(customInstructionsOverride) else { return }
-        Self.defaults.set(Date(), forKey: Self.customInstructionsUpdatedAtKey)
-        Self.set(value, forKey: "customInstructions")
-    }
+    public static let customWritingRulesKey = "customWritingRules"
+    static let customWritingRulesUpdatedAtKey = "customWritingRulesUpdatedAt"
 
-    /// Trimmed text, or nil for "use the defaults".
-    private static func normalizedRules(_ text: String?) -> String? {
-        let seed = DictationRulesSeed.text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let trimmed = text?.trimmingCharacters(in: .whitespacesAndNewlines),
-              !trimmed.isEmpty, trimmed != seed else { return nil }
-        return trimmed
-    }
-
-    private static let customInstructionsUpdatedAtKey = "customInstructionsUpdatedAt"
-
-    /// The writing rules as `WritingRulesSync` sees them. A copy edited before
-    /// sync existed has no stamp and counts as the oldest possible edit.
+    /// The custom rules as `WritingRulesSync` sees them. Rules that were never
+    /// stamped count as the oldest possible edit.
     public var writingRulesSnapshot: WritingRulesSnapshot {
         WritingRulesSnapshot(
-            text: customInstructionsOverride,
-            updatedAt: Self.defaults.object(forKey: Self.customInstructionsUpdatedAtKey) as? Date ?? .distantPast
+            text: Self.defaults.string(forKey: Self.customWritingRulesKey),
+            updatedAt: Self.defaults.object(forKey: Self.customWritingRulesUpdatedAtKey) as? Date ?? .distantPast
         )
     }
 
     public func applySyncedWritingRules(_ snapshot: WritingRulesSnapshot) {
-        Self.defaults.set(snapshot.updatedAt, forKey: Self.customInstructionsUpdatedAtKey)
-        Self.set(snapshot.text, forKey: "customInstructions")
+        Self.defaults.set(snapshot.updatedAt, forKey: Self.customWritingRulesUpdatedAtKey)
+        Self.set(snapshot.text, forKey: Self.customWritingRulesKey)
     }
 
     /// Watch the field after insertion and add the user's word-level edits to

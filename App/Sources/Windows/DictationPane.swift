@@ -14,7 +14,7 @@ struct DictationPane: View {
     @State private var smartTranscription = SettingsStore().smartTranscriptionEnabled
     @State private var cleanupPass = SettingsStore().smartCleanupPassEnabled
     @State private var skipShortCleanup = SettingsStore().skipShortDictationCleanup
-    @State private var instructions = SettingsStore().customInstructions
+    @State private var customRules = SettingsStore().customWritingRules
     @State private var autoLearn = SettingsStore().autoLearnEnabled
     @State private var meetingDetection = SettingsStore().meetingDetectionEnabled
     @State private var meetingScreenNames = SettingsStore().meetingScreenNamesEnabled
@@ -128,26 +128,20 @@ struct DictationPane: View {
                     guard variant != settings.spellingVariant else { return }
                     settings.setSpellingVariant(variant)
                 }
-                TextEditor(text: $instructions)
-                    .font(.body)
-                    .frame(minHeight: 180, maxHeight: 320)
-                    .disabled(!cleanupPass)
-                    .onChange(of: instructions) { _, text in
-                        guard text != settings.customInstructions else { return }
-                        settings.setCustomInstructions(text)
-                    }
-                HStack {
-                    Spacer()
-                    Button("Reset to defaults") {
-                        settings.setCustomInstructions(nil)
-                        instructions = settings.customInstructions
-                    }
-                    .disabled(settings.customInstructionsOverride == nil)
-                }
             } header: {
                 Text("Writing rules")
             } footer: {
                 Text("A second model rewrites the transcript by these rules: corrections you speak later fix what you said earlier, sentences are split by grammar rather than pauses, and the layout follows what you said: a message stays a message, several requests become a numbered list.")
+            }
+
+            Section("Custom rules") {
+                TextEditor(text: $customRules)
+                    .font(.body)
+                    .frame(minHeight: 120, maxHeight: 320)
+                    .disabled(!cleanupPass)
+                    .onChange(of: customRules) { _, text in
+                        settings.setCustomWritingRules(text)
+                    }
             }
 
             Section {
@@ -199,7 +193,7 @@ struct DictationPane: View {
             case "agentModeEnabled": agentMode = settings.agentModeEnabled
             case "smartCleanupPass": cleanupPass = settings.smartCleanupPassEnabled
             case "skipShortDictationCleanup": skipShortCleanup = settings.skipShortDictationCleanup
-            case "customInstructions": instructions = settings.customInstructions
+            case SettingsStore.customWritingRulesKey: customRules = settings.customWritingRules
             case "autoLearn": autoLearn = settings.autoLearnEnabled
             case "meetingDetection": meetingDetection = settings.meetingDetectionEnabled
             // voiceiq://set drives this headlessly in DEBUG — the pane must not show

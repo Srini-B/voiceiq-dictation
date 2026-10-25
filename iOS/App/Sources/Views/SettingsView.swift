@@ -132,7 +132,7 @@ struct DictationSettingsView: View {
     @State private var smartTranscription = SettingsStore().smartTranscriptionEnabled
     @State private var cleanupPass = SettingsStore().smartCleanupPassEnabled
     @State private var skipShortCleanup = SettingsStore().skipShortDictationCleanup
-    @State private var instructions = SettingsStore().customInstructions
+    @State private var customRules = SettingsStore().customWritingRules
     @State private var noiseHandling = SettingsStore().experimentalNoiseHandling
     @State private var builtInMic = MobileSettings.preferBuiltInMic
     @State private var warmWindow = MobileSettings.warmWindow
@@ -192,7 +192,7 @@ struct DictationSettingsView: View {
                 Toggle("Skip cleanup for dictations of 5 seconds or less", isOn: $skipShortCleanup)
                     .disabled(!cleanupPass)
                     .onChange(of: skipShortCleanup) { _, value in settings.setSkipShortDictationCleanup(value) }
-                if cleanupPass { NavigationLink("Writing rules") { WritingRulesView(text: $instructions) } }
+                if cleanupPass { NavigationLink("Custom rules") { CustomRulesView(text: $customRules) } }
             }
             Section {
                 Toggle("Better hearing in loud rooms", isOn: $noiseHandling)
@@ -224,7 +224,7 @@ struct DictationSettingsView: View {
             case "smartTranscription": smartTranscription = settings.smartTranscriptionEnabled
             case "smartCleanupPass": cleanupPass = settings.smartCleanupPassEnabled
             case "skipShortDictationCleanup": skipShortCleanup = settings.skipShortDictationCleanup
-            case "customInstructions": instructions = settings.customInstructions
+            case SettingsStore.customWritingRulesKey: customRules = settings.customWritingRules
             case "experimentalNoiseHandling": noiseHandling = settings.experimentalNoiseHandling
             case "translationTargetLanguages": translationTarget = settings.translationTargetLanguage
             default: break
@@ -245,7 +245,7 @@ private func openActionButtonSettings() {
     }
 }
 
-private struct WritingRulesView: View {
+private struct CustomRulesView: View {
     @Binding var text: String
 
     var body: some View {
@@ -258,18 +258,10 @@ private struct WritingRulesView: View {
                     .padding(Theme.Spacing.s)
                     .background(RoundedRectangle(cornerRadius: Theme.Radius.field).fill(Theme.Colors.surfaceNested))
                     .overlay(RoundedRectangle(cornerRadius: Theme.Radius.field).strokeBorder(Theme.Colors.hairline, lineWidth: 0.5))
-                HStack {
-                    Spacer()
-                    Button("Restore defaults") {
-                        SettingsStore().setCustomInstructions(nil)
-                        text = SettingsStore().customInstructions
-                    }
-                    .buttonStyle(.compactSecondary)
-                }
             }
         }
-        .settingsPage(title: "Writing Rules", keyboard: true)
-        .onDisappear { SettingsStore().setCustomInstructions(text) }
+        .settingsPage(title: "Custom Rules", keyboard: true)
+        .onDisappear { SettingsStore().setCustomWritingRules(text) }
     }
 }
 

@@ -1,7 +1,7 @@
 import Foundation
 
-/// The user's writing rules and when they were last edited. `text` is nil
-/// when the device uses the default rules.
+/// The user's custom writing rules and when they were last edited. `text` is
+/// nil when there are none.
 public struct WritingRulesSnapshot: Codable, Equatable, Sendable {
     public var text: String?
     public var updatedAt: Date
@@ -12,8 +12,8 @@ public struct WritingRulesSnapshot: Codable, Equatable, Sendable {
     }
 
     /// The newer edit wins, the same on every device whatever the order. On a
-    /// tie (two copies edited before sync existed) custom rules win over the
-    /// defaults, so turning sync on never wipes someone's rules.
+    /// tie (two copies edited before sync existed) custom rules win over none,
+    /// so turning sync on never wipes someone's rules.
     public static func merge(_ a: WritingRulesSnapshot, _ b: WritingRulesSnapshot) -> WritingRulesSnapshot {
         if a.updatedAt != b.updatedAt { return a.updatedAt > b.updatedAt ? a : b }
         switch (a.text, b.text) {
@@ -24,15 +24,18 @@ public struct WritingRulesSnapshot: Codable, Equatable, Sendable {
     }
 }
 
-/// Keeps the writing rules the same on the Mac and iPhone through the iCloud
-/// key-value store `DictionarySync` uses, as one value, `writingRules.v1`.
+/// Keeps the custom writing rules the same on the Mac and iPhone through the
+/// iCloud key-value store `DictionarySync` uses, as one value, `writingRules.v2`.
+/// `writingRules.v1` held the full rules text of older builds; it is left for
+/// them and never read.
 /// Always on: there is no setting. Without an iCloud account (or without the
 /// entitlement, as in Debug builds) the rules stay local.
 @MainActor
 public final class WritingRulesSync {
     public static let shared = WritingRulesSync()
 
-    static let key = "writingRules.v1"
+    static let key = "writingRules.v2"
+    static let legacyKey = "writingRules.v1"
     /// The store holds 1 MB in total and the dictionary may use most of it.
     static let maxBytes = 64_000
 
@@ -52,7 +55,7 @@ public final class WritingRulesSync {
             Task { @MainActor in WritingRulesSync.shared.reconcile(because: "iCloud change") }
         }
         NotificationCenter.default.addObserver(forName: .gtSettingDidChange, object: nil, queue: .main) { note in
-            guard note.object as? String == "customInstructions" else { return }
+            guard note.object as? String == SettingsStore.customWritingRulesKey else { return }
             Task { @MainActor in WritingRulesSync.shared.reconcile(because: "local edit", localEdit: true) }
         }
         store.synchronize()
@@ -80,12 +83,16 @@ public final class WritingRulesSync {
         // Until the first download finishes, iCloud shows no value even when
         // it holds a newer one. Only an edit made just now is certain to be
         // newest; anything older waits until the stored value can be compared.
-        guard remote != nil || localEdit else { return }
+        // Older builds wrote writingRules.v1 under this same rule, so finding
+        // it shows this device has compared with iCloud (or made the edit
+        // itself): v2 is really missing, and rules migrated from v1 go up.
+        // Other keys prove nothing; DictionarySync writes before it downloads.
+        guard remote != nil || localEdit || store.object(forKey: Self.legacyKey) != nil else { return }
         guard let data = try? JSONEncoder().encode(merged), data.count <= Self.maxBytes else {
             Log.session.error("writing rules sync: too large for iCloud key-value storage, kept on this device")
             return
         }
         store.set(data, forKey: Self.key)
-        Log.session.info("writing rules sync (\(reason, privacy: .public)): \(merged.text == nil ? "defaults" : "custom", privacy: .public)")
+        Log.session.info("writing rules sync (\(reason, privacy: .public)): \(merged.text == nil ? "none" : "custom", privacy: .public)")
     }
 }
