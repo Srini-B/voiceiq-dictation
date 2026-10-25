@@ -109,7 +109,7 @@ public enum FormattingSettingsMigration {
     /// defaults, plus whatever the user added or changed. The defaults are now
     /// built in, so keep only the user's own lines as custom rules. A line of
     /// any earlier default is dropped; every other line stays, including a
-    /// default line the user reworded. The edit time moves with the text so
+    /// default line the user reworded. The edit time moves to the new key so
     /// sync still orders it against other devices.
     public static func splitWritingRulesOnce(defaults: UserDefaults = .standard) {
         guard !defaults.bool(forKey: splitRulesFlag) else { return }
@@ -117,9 +117,11 @@ public enum FormattingSettingsMigration {
         let custom = defaults.string(forKey: "customInstructions").map(customPart) ?? ""
         if !custom.isEmpty {
             defaults.set(custom, forKey: SettingsStore.customWritingRulesKey)
-            defaults.set(defaults.object(forKey: "customInstructionsUpdatedAt"),
-                         forKey: SettingsStore.customWritingRulesUpdatedAtKey)
         }
+        // A reset to the defaults is an edit too: its time keeps an older
+        // copy on another device from bringing the cleared rules back.
+        defaults.set(defaults.object(forKey: "customInstructionsUpdatedAt"),
+                     forKey: SettingsStore.customWritingRulesUpdatedAtKey)
         defaults.removeObject(forKey: "customInstructions")
         defaults.removeObject(forKey: "customInstructionsUpdatedAt")
         Log.session.info("writing rules migration: kept \(custom.count, privacy: .public) characters of custom rules")

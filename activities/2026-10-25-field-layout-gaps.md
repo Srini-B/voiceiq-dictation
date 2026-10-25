@@ -26,6 +26,10 @@ Two steps lost the break:
   after a finished list, or an email body after a greeting line, starts after
   a blank line. A lowercase continuation and a number ending an unfinished
   sentence ("Meet at 3.") stay on the line.
+- Spaces typed after the last word do not stop a needed line break, and a
+  bullet, quote, or table row after unfinished prose always starts its own
+  line (from PR #19 review). Only a number or letter label continues an
+  unfinished sentence.
 - `SurroundingText.spaced` and `fitted` use it. `fitted` chooses the gap
   from the model's casing before it capitalizes anything itself.
 - The prompt is unchanged. A sentence asking the model to continue lists and
@@ -35,10 +39,10 @@ Two steps lost the break:
 
 ## Verification
 
-- `.amp/in/fieldjoin/` (not committed): 31 field scenarios through
+- `.amp/in/fieldjoin/` (not committed): 36 field scenarios through
   `SurroundingText.fitted`, including the real case, tight and spaced lists,
   bullets, letters, quotes, tables, headings, greetings, inserts before
-  existing text, CJK, and inline numbers. 31 pass.
+  existing text, CJK, inline numbers, trailing spaces, and bullets after unfinished prose. 36 pass.
 - `.amp/in/fieldeval/`: the app's cleanup prompt with field text, 8 cases ×
   3 runs on gpt-6-astra. The current prompt continued lists correctly in 8 of
   9 runs and kept all 15 control runs right. Its outputs, trimmed as the app

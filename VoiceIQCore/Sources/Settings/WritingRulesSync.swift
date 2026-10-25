@@ -82,7 +82,10 @@ public final class WritingRulesSync {
         // Until the first download finishes, iCloud shows no value even when
         // it holds a newer one. Only an edit made just now is certain to be
         // newest; anything older waits until the stored value can be compared.
-        guard remote != nil || localEdit else { return }
+        // Any other value in the store (the dictionary, the older
+        // writingRules.v1) shows the download has happened, so a missing value
+        // is really missing, and rules migrated from v1 go up.
+        guard remote != nil || localEdit || !store.dictionaryRepresentation.isEmpty else { return }
         guard let data = try? JSONEncoder().encode(merged), data.count <= Self.maxBytes else {
             Log.session.error("writing rules sync: too large for iCloud key-value storage, kept on this device")
             return

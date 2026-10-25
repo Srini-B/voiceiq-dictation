@@ -79,11 +79,17 @@ defaults, and a past default with one reworded line and two added lines:
 The notarized release build (`scripts/release.sh`, installed on the Mac mini
 and then replaced with the original 0.6.6) and the iOS Simulator build both
 turned a saved full copy into just the GitButler paragraph on first launch,
-and both show it alone in "Custom rules". The Mac run found one leftover,
-fixed before this entry: a device whose rules had been reset to the defaults
-has `customInstructionsUpdatedAt` but no `customInstructions`, and the first
-version of the migration returned early and left that key behind. The
-migration now always removes both old keys.
+and both show it alone in "Custom rules".
+
+Review (PR #19, Greptile and CodeRabbit) found two sync gaps, now fixed:
+
+- A reset to the defaults has an edit time but no text. The migration now
+  keeps that time under the new key, so an older copy on another device
+  cannot bring the cleared rules back.
+- `writingRules.v2` starts empty, and sync uploaded only a fresh edit while
+  iCloud showed no value, so migrated rules would never have reached the
+  other device. It now uploads when any other value is in the store (the
+  dictionary or `writingRules.v1`), which shows the download has happened.
 
 `scripts/test.sh`: 143 tests pass. `scripts/build.sh` and
 `scripts/build-ios.sh` build.

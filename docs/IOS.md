@@ -376,7 +376,8 @@ edit too, so it clears them on the other device.
 `SettingsStore.setCustomWritingRules` stamps an edit only when the text
 changes. Rules that were never stamped count as the oldest edit; when two
 such copies meet, custom rules win over none.
-While iCloud shows no value, only an edit made just now is uploaded: until
+While iCloud shows no value, only an edit made just now is uploaded, unless
+the store holds some other value (the dictionary, `writingRules.v1`): until
 its first download finishes a device sees no value even when iCloud holds a
 newer one, and writing an older copy then could replace it. An older copy
 goes up once the stored value can be compared, or with the next edit.
@@ -384,7 +385,8 @@ Builds before the split kept the full editable rules in `writingRules.v1`;
 new builds never read it. On first launch,
 `FormattingSettingsMigration.splitWritingRulesOnce` turns a saved full copy
 into custom rules: it drops every line of any earlier default and keeps the
-rest, with its edit time.
+rest. The edit time moves to the new key even when nothing is left, so a
+reset still counts as the newest edit.
 The value is capped at 64 KB so the dictionary keeps most of the 1 MB store.
 
 ### History sync

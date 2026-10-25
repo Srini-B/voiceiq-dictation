@@ -38,17 +38,16 @@ enum FieldLayout {
     /// What goes between the text before the cursor and the dictation: "",
     /// " ", a line break, or a blank line.
     static func leadingGap(before: String, text: String) -> String {
-        guard let previous = before.last, let next = text.first else { return "" }
-        guard !previous.isWhitespace else { return "" }
-        let beforeLines = lines(before)
+        // Spaces already typed after the last word stand in for a space, not
+        // for a line break the layout needs.
+        let field = String(before.reversed().drop { $0 == " " || $0 == "\t" }.reversed())
+        guard let previous = field.last, !previous.isNewline, let next = text.first else { return "" }
+        let beforeLines = lines(field)
         let textLines = lines(text)
         let last = beforeLines[beforeLines.count - 1]
         let lastKind = kind(of: last), firstKind = kind(of: textLines[0])
 
-        // One line after an unfinished sentence ("Meet at" + "3. Then we
-        // go home") is the sentence going on, whatever its first characters.
-        let continuesSentence = lastKind == .prose && !endsSentence(last) && previous != ":" && !text.contains("\n")
-        if firstKind != .prose, !continuesSentence {
+        if firstKind != .prose, text.contains("\n") || !continuesSentence(last, into: textLines[0]) {
             guard firstKind == lastKind else { return "\n\n" }
             return gap(firstKind, from: Array(beforeLines.reversed()))
                 ?? gap(firstKind, from: textLines)
@@ -64,18 +63,17 @@ enum FieldLayout {
 
     /// What goes between the dictation and the text after the cursor.
     static func trailingGap(before: String, text: String, after: String) -> String {
-        guard let next = after.first, !next.isWhitespace, !text.isEmpty else { return "" }
-        let textLines = lines(text)
+        let rest = String(after.drop { $0 == " " || $0 == "\t" })
+        guard let next = rest.first, !next.isNewline, !text.isEmpty else { return "" }
+        let textLines = lines(text), afterLines = lines(rest)
         let last = textLines[textLines.count - 1]
-        let lastKind = kind(of: last), nextKind = kind(of: lines(after)[0])
+        let lastKind = kind(of: last), nextKind = kind(of: afterLines[0])
 
-        if nextKind != .prose {
-            if nextKind == lastKind {
-                return gap(nextKind, from: Array(textLines.reversed()))
-                    ?? gap(nextKind, from: lines(after))
-                    ?? defaultGap(nextKind, item: last)
-            }
-            if lastKind != .prose || endsSentence(last) { return "\n\n" }
+        if nextKind != .prose, !continuesSentence(last, into: afterLines[0]) {
+            guard nextKind == lastKind else { return "\n\n" }
+            return gap(nextKind, from: Array(textLines.reversed()))
+                ?? gap(nextKind, from: afterLines)
+                ?? defaultGap(nextKind, item: last)
         }
         // The cursor sat at the start of a line, and the dictation is a whole
         // line or paragraph of its own: keep the break the field had there.
@@ -84,6 +82,14 @@ enum FieldLayout {
             return lineStart.filter(\.isNewline).count >= 2 ? "\n\n" : "\n"
         }
         return SurroundingText.needsSpace(after: before + text, and: next) ? " " : ""
+    }
+
+    /// An unfinished sentence followed by a number or letter label goes on
+    /// ("Meet at" + "3. Then we go home"); a bullet, quote, or table row never
+    /// continues a sentence.
+    private static func continuesSentence(_ prose: Substring, into line: Substring) -> Bool {
+        kind(of: prose) == .prose && !endsSentence(prose) && !prose.hasSuffix(":")
+            && isOrderedMarker(line.drop { $0 == " " || $0 == "\t" })
     }
 
     private static func lines(_ text: String) -> [Substring] {
