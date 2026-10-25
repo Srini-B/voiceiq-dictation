@@ -46,6 +46,7 @@ final class AppModel: ObservableObject {
 
     init() {
         FormattingSettingsMigration.restoreAutoDegradedWritingRulesOnce()
+        FormattingSettingsMigration.splitWritingRulesOnce()
         FormattingSettingsMigration.removeLiveTranscriptionSettings()
         let client = GeminiClient(
             apiKey: { KeychainStore.loadAPIKey() },

@@ -78,7 +78,7 @@ extension GeminiTranscriptionService {
         func attempt(reminder: String?) async throws -> CleanupOutcome {
             let prompt = PromptV1.cleanupPrompt(
                 raw: raw, vocabulary: vocabulary, spellings: spellings,
-                instructions: settings.customInstructions, spelling: settings.spellingVariant.promptLine,
+                customRules: settings.customWritingRules, spelling: settings.spellingVariant.promptLine,
                 imagesAttached: !screenshots.isEmpty, surroundingText: surrounding, place: place,
                 normalized: normalized, reminder: reminder
             )

@@ -364,19 +364,27 @@ Every local edit and every change from iCloud merges the two copies with
 
 ### Writing rules sync
 
-The writing rules are the same on the Mac and the iPhone, with no setting.
-`WritingRulesSync` (VoiceIQCore) keeps them as a second value, `writingRules.v1`,
-in the same key-value store. The value is the rules text (absent when the
-device uses the default rules) and when it was last edited. The newer edit
-wins (`WritingRulesSnapshot.merge`); "Reset to defaults" is an edit too, so it
-resets the other device. `SettingsStore.setCustomInstructions` stamps an edit
-only when the text changes, and stores text equal to the defaults as "use the
-defaults". Rules edited before sync existed have no stamp and count as the
-oldest edit; when two such copies meet, custom rules win over the defaults.
+The built-in writing rules (`DefaultWritingRules`) ship with the app and are
+not shown or editable, so an update changes them on every device. Settings
+shows only "Custom rules", which the cleanup prompt appends after the
+built-in rules. The custom rules are the same on the Mac and the iPhone,
+with no setting. `WritingRulesSync` (VoiceIQCore) keeps them as a second
+value, `writingRules.v2`, in the same key-value store. The value is the
+custom rules text (absent when there are none) and when it was last edited.
+The newer edit wins (`WritingRulesSnapshot.merge`); clearing the rules is an
+edit too, so it clears them on the other device.
+`SettingsStore.setCustomWritingRules` stamps an edit only when the text
+changes. Rules that were never stamped count as the oldest edit; when two
+such copies meet, custom rules win over none.
 While iCloud shows no value, only an edit made just now is uploaded: until
 its first download finishes a device sees no value even when iCloud holds a
 newer one, and writing an older copy then could replace it. An older copy
 goes up once the stored value can be compared, or with the next edit.
+Builds before the split kept the full editable rules in `writingRules.v1`;
+new builds never read it. On first launch,
+`FormattingSettingsMigration.splitWritingRulesOnce` turns a saved full copy
+into custom rules: it drops every line of any earlier default and keeps the
+rest, with its edit time.
 The value is capped at 64 KB so the dictionary keeps most of the 1 MB store.
 
 ### History sync

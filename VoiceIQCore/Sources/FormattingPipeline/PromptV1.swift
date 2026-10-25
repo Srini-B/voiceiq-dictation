@@ -12,7 +12,7 @@ public enum PromptV1 {
         raw: String,
         vocabulary: [String] = [],
         spellings: [(wrong: String, right: String)] = [],
-        instructions: String? = nil,
+        customRules: String? = nil,
         spelling: String? = nil,
         imagesAttached: Bool = false,
         surroundingText: SurroundingText? = nil,
@@ -20,7 +20,7 @@ public enum PromptV1 {
         normalized: String? = nil,
         reminder: String? = nil
     ) -> String {
-        var sections = sharedSections(vocabulary: vocabulary, spellings: spellings, instructions: instructions,
+        var sections = sharedSections(vocabulary: vocabulary, spellings: spellings, customRules: customRules,
                                       spelling: spelling, imagesAttached: imagesAttached)
         sections.append(examples)
         sections.append(layoutReminder)
@@ -88,19 +88,22 @@ public enum PromptV1 {
 
     private static func sharedSections(
         vocabulary: [String], spellings: [(wrong: String, right: String)],
-        instructions: String?, spelling: String?, imagesAttached: Bool
+        customRules: String?, spelling: String?, imagesAttached: Bool
     ) -> [String] {
         var sections: [String] = [rules]
         // A regional spelling, right after the fixed rules: it changes as
         // rarely as they do, so the cacheable prefix stays stable.
         if let spelling { sections.append(spelling) }
-        // The user's writing rules sit between the fixed rules and the examples
-        // so the cacheable prefix stays stable across dictations. They are
-        // fenced so the model can tell where they stop; the transcript itself
-        // still arrives last, after "RAW:".
-        if let instructions, !instructions.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            sections.append("Writing rules from the user (follow these; they refine the rules above):\n<rules>\n\(instructions.prefix(12_000))\n</rules>")
+        // The writing rules sit between the fixed rules and the examples so the
+        // cacheable prefix stays stable across dictations. They are fenced so
+        // the model can tell where they stop; the transcript itself still
+        // arrives last, after "RAW:". Only the user's part is capped, so long
+        // custom rules never cut off the built-in ones.
+        var writingRules = DefaultWritingRules.text
+        if let customRules, !customRules.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            writingRules += "\n\n" + customRules.prefix(12_000)
         }
+        sections.append("Writing rules from the user (follow these; they refine the rules above):\n<rules>\n\(writingRules)\n</rules>")
         // Dictionary entries are user/CSV data riding inside the prompt — strip
         // newlines and cap length so a crafted entry can't smuggle extra
         // instructions on its own line (audit L31).
