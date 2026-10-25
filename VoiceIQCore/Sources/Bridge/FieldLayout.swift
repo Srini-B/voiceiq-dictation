@@ -81,7 +81,7 @@ enum FieldLayout {
         if lineStart.contains(where: \.isNewline), !next.isLowercase, lastKind != .prose || endsSentence(last) {
             return lineStart.filter(\.isNewline).count >= 2 ? "\n\n" : "\n"
         }
-        return SurroundingText.needsSpace(after: before + text, and: next) ? " " : ""
+        return SurroundingText.needsSpace(after: before + text, and: after.first) ? " " : ""
     }
 
     /// An unfinished sentence followed by a number or letter label goes on

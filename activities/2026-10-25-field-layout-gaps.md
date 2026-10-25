@@ -39,10 +39,11 @@ Two steps lost the break:
 
 ## Verification
 
-- `.amp/in/fieldjoin/` (not committed): 36 field scenarios through
+- `.amp/in/fieldjoin/` (not committed): 37 field scenarios through
   `SurroundingText.fitted`, including the real case, tight and spaced lists,
   bullets, letters, quotes, tables, headings, greetings, inserts before
-  existing text, CJK, inline numbers, trailing spaces, and bullets after unfinished prose. 36 pass.
+  existing text, CJK, inline numbers, trailing spaces, spaces already after the cursor, and bullets after
+  unfinished prose. 37 pass.
 - `.amp/in/fieldeval/`: the app's cleanup prompt with field text, 8 cases ×
   3 runs on gpt-6-astra. The current prompt continued lists correctly in 8 of
   9 runs and kept all 15 control runs right. Its outputs, trimmed as the app

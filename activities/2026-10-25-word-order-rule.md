@@ -88,8 +88,10 @@ Review (PR #19, Greptile and CodeRabbit) found two sync gaps, now fixed:
   cannot bring the cleared rules back.
 - `writingRules.v2` starts empty, and sync uploaded only a fresh edit while
   iCloud showed no value, so migrated rules would never have reached the
-  other device. It now uploads when any other value is in the store (the
-  dictionary or `writingRules.v1`), which shows the download has happened.
+  other device. It now uploads when `writingRules.v1` is in the store. Old
+  builds wrote that key only after comparing with iCloud or after an edit on
+  that device. Other keys prove nothing: `DictionarySync` writes before it
+  downloads (Greptile re-review).
 
 `scripts/test.sh`: 143 tests pass. `scripts/build.sh` and
 `scripts/build-ios.sh` build.

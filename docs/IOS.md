@@ -377,7 +377,8 @@ edit too, so it clears them on the other device.
 changes. Rules that were never stamped count as the oldest edit; when two
 such copies meet, custom rules win over none.
 While iCloud shows no value, only an edit made just now is uploaded, unless
-the store holds some other value (the dictionary, `writingRules.v1`): until
+the store holds `writingRules.v1`, which older builds wrote only after
+comparing with iCloud or after an edit on that device: until
 its first download finishes a device sees no value even when iCloud holds a
 newer one, and writing an older copy then could replace it. An older copy
 goes up once the stored value can be compared, or with the next edit.
