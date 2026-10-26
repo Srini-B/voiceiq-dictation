@@ -1,3 +1,4 @@
+import CoreML
 import FluidAudio
 import Foundation
 import VoiceIQSpeech
@@ -44,7 +45,7 @@ struct ParakeetVocabulary: Sendable {
         }
         guard !tokenized.isEmpty else { return nil }
         try Task.checkCancellation()
-        let models = try await CtcModels.loadDirect(from: directory, variant: .ctc110m)
+        let models = try loadModels(from: directory)
         try Task.checkCancellation()
         let context = CustomVocabularyContext(terms: tokenized)
         let spotter = CtcKeywordSpotter(models: models, blankId: models.vocabulary.count)
@@ -55,6 +56,29 @@ struct ParakeetVocabulary: Sendable {
         )
         return ParakeetVocabulary(
             context: context, spotter: spotter, rescorer: rescorer
+        )
+    }
+
+    /// Same files as `CtcModels.loadDirect`, which pins the Neural Engine
+    /// (`DictationCompute` has the numbers). Spotting 10 s of audio takes
+    /// 0.2 s on either unit.
+    private static func loadModels(from directory: URL) throws -> CtcModels {
+        let configuration = MLModelConfiguration()
+        configuration.computeUnits = DictationCompute.encoderUnits
+        func component(_ name: String) throws -> MLModel {
+            try MLModel(contentsOf: directory.appendingPathComponent(name), configuration: configuration)
+        }
+        let vocabulary = try JSONDecoder().decode(
+            [String: String].self, from: Data(contentsOf: directory.appendingPathComponent("vocab.json"))
+        )
+        var tokens: [Int: String] = [:]
+        for (key, value) in vocabulary {
+            if let id = Int(key) { tokens[id] = value }
+        }
+        return CtcModels(
+            melSpectrogram: try component("MelSpectrogram.mlmodelc"),
+            encoder: try component("AudioEncoder.mlmodelc"),
+            configuration: configuration, vocabulary: tokens, variant: .ctc110m
         )
     }
 
