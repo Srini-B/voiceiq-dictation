@@ -134,19 +134,17 @@ With both on:
 
 1. Sparkle finds the update, downloads it, and checks its EdDSA signature and
    Developer ID.
-2. The pill at the bottom of the screen shows "VoiceiQ x.y.z is ready" with
-   Restart. Restart installs it and relaunches; × hides the pill. The status
-   menu says "Restart to Install VoiceiQ x.y.z" until then.
-3. If nobody restarts, the update installs by itself once nothing is in use
-   and the Mac has had no keyboard or mouse input for 5 minutes. Quitting
+2. VoiceiQ installs it and relaunches as soon as nothing is in use. It checks
+   again every 30 seconds while something is. Until then the status menu says
+   "Restart to Install VoiceiQ x.y.z", which installs it at once. Quitting
    VoiceiQ also installs it.
-4. After the relaunch the pill says "Updated to VoiceiQ x.y.z".
+3. After the relaunch the pill says "Updated to VoiceiQ x.y.z".
 
 "In use" means a dictation, Ask Anything or Translate session, a meeting that
-is detected, recording or being written up, or an answer on screen. The pill
-offer waits while any of those is going on. `UpdatePillController`
-(`App/Sources/Updates/UpdatePillController.swift`) owns steps 2 to 4;
-`AppUpdater` owns Sparkle.
+is detected, recording or being written up, a History retry or queued
+dictation being sent, or an answer on screen.
+`UpdatePillController` (`App/Sources/Updates/UpdatePillController.swift`) owns
+steps 2 and 3; `AppUpdater` owns Sparkle.
 
 This path never shows release notes, so Settings › About has a Release Notes
 button that opens the GitHub Releases page.
@@ -167,7 +165,7 @@ VoiceiQ ──every 6 h──▶ github.com/Srini-B/voiceiq-dictation/releases/l
                newest item: build number, version, notes, ZIP URL, EdDSA signature
                              │  newer CFBundleVersion than the running app?
                              ▼
-       download ZIP ─▶ verify signature and Developer ID ─▶ pill ─▶ replace app ─▶ relaunch
+       download ZIP ─▶ verify signature and Developer ID ─▶ wait until idle ─▶ replace app ─▶ relaunch
 ```
 
 Configuration is in `project.yml`, VoiceIQ target:
@@ -244,7 +242,7 @@ $BIN/generate_appcast --account voiceiq --download-url-prefix http://127.0.0.1:8
 
 Both copies must be signed by the same identity; `build.sh` uses your Apple
 Development certificate when one is in the keychain. The old copy checks on
-launch, downloads 0.0.2 and shows the pill. Clear `SULastCheckTime` in the
+launch, downloads 0.0.2, and relaunches as 0.0.2. Clear `SULastCheckTime` in the
 `io.blue.voiceiq.updatetest` defaults to check again at the next launch.
 
 The test copy shares `~/Library/Application Support/VoiceiQ` with the real app

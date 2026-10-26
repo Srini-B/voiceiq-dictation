@@ -10,7 +10,8 @@ public final class RetryQueue {
     private let store: HistoryStore
     private let transcription: TranscriptionServicing
     private let monitor = NWPathMonitor()
-    private var draining = false
+    /// A drain or a manual retry is sending a recording.
+    public private(set) var draining = false
     private var lastPathSatisfied = false
     private var scheduledDrain: Task<Void, Never>?
 
