@@ -117,8 +117,8 @@ week, this month, and all time totals; a period picker drives the by-action
 and by-model tables and the recent-calls list. The footer names the price
 source (`CostSource.pricingNote`): the provider's pricing page. The iPhone's
 Cost page has the same source toggle.
-`HistoryPane` shows the summed session cost on each row and the detail sheet
-lists each call with its model, what it was billed on, and its cost.
+`HistoryPane` shows the summed session cost on each row and the detail column
+(`DictationDetail`) lists each call with its model, what it was billed on, and its cost.
 Successful on-device calls use model ID `fluid-speech-mini-local`
 (`parakeet-v3-local` before 2026-10-14) or
 `nemotron-3.5-multilingual-local`, stage `transcribe`, and explicit zero cost.

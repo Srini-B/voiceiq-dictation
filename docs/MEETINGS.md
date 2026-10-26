@@ -135,7 +135,9 @@ Markdown file to `~/Downloads/<title>.md` (`<title> notes.md`,
 `<title> transcript.md`; a number is added when the name is taken).
 `MeetingStore.markdown(id:parts:)` builds it: notes first, transcript below.
 The window shows the saved path with Show in Finder. Nothing is written into
-the meeting folder. iOS shares the same Markdown with both parts.
+the meeting folder. The menu's Copy section puts the same Markdown for Notes,
+Transcript, or Notes and transcript on the clipboard instead. iOS shares the
+same Markdown with both parts.
 
 ## ffmpeg
 
