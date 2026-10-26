@@ -95,6 +95,9 @@ final class AppModel: ObservableObject {
             case .loaded(let model, let seconds):
                 SessionDiagnostics.note(String(format: "%@ loaded in %.1fs (%@, %@)", model.displayName, seconds,
                                               SessionDiagnostics.processAge, PreparedModelCache.description))
+            case .failed(let model, let seconds):
+                SessionDiagnostics.note(String(format: "%@ failed to load after %.1fs (%@, %@)", model.displayName, seconds,
+                                              SessionDiagnostics.processAge, PreparedModelCache.description))
             case .stillLoading(let model, let waited):
                 SessionDiagnostics.note(String(format: "%@ still loading %.0fs after the recording; sent to the cloud, load goes on",
                                               model.displayName, waited))

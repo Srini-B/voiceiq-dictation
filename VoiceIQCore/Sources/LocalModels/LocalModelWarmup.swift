@@ -8,7 +8,18 @@ import VoiceIQSpeech
 /// take minutes. Nothing stays in memory afterwards.
 @MainActor
 public enum LocalModelWarmup {
-    private static var current: (id: UUID, model: LocalSpeechModel, task: Task<Void, Never>)?
+    private struct Entry {
+        let id: UUID
+        let model: LocalSpeechModel
+        let task: Task<Void, Never>
+    }
+
+    /// The load in progress. Only one model loads at a time.
+    private static var current: Entry?
+    /// Adopted dictation loads waiting for `current` to end, in order. Each
+    /// becomes `current` in turn, so an adopted load never replaces the load
+    /// it is itself waiting for.
+    private static var pending: [Entry] = []
 
     public struct Outcome: Sendable {
         public let seconds: TimeInterval
@@ -46,11 +57,11 @@ public enum LocalModelWarmup {
             loaded.withLock { $0 = ok }
             await session.stop()
         }
-        current = (id, model, task)
+        current = Entry(id: id, model: model, task: task)
         await task.value
         store.releaseSession(id: id)
         LocalModelStore.englishTools.releaseSession(id: id)
-        current = nil
+        ended(id)
         return Outcome(seconds: Date().timeIntervalSince(started), loaded: loaded.withLock { $0 })
     }
 
@@ -59,33 +70,54 @@ public enum LocalModelWarmup {
     /// dictation's claims on the stores stay until the load ends, the next
     /// dictation waits for it (`finished`) and then loads fast, and the
     /// session is stopped once loaded. Nothing stays in memory afterwards.
+    /// A load that is itself waiting for a warm-up in progress queues behind
+    /// it and becomes the warm-up when that one ends.
     static func adopt(id: UUID, model: LocalSpeechModel, load: Task<Void, Never>, stop: @escaping @Sendable () async -> Void) {
-        let task = Task {
+        let entry = Entry(id: id, model: model, task: Task {
             await load.value
             await stop()
             LocalModelStore.store(for: model).releaseSession(id: id)
             LocalModelStore.englishTools.releaseSession(id: id)
-            if current?.id == id { current = nil }
+            ended(id)
+        })
+        if current == nil {
+            current = entry
+        } else {
+            pending.append(entry)
         }
-        current = (id, model, task)
     }
 
-    /// A dictation is starting: it takes the model from a warm-up in progress.
-    /// The warm-up's load keeps running, and the dictation loads after it
-    /// (`finished`), so two Neural Engine compiles never overlap.
+    /// The load `id` ended; the next adopted load, if any, takes its place.
+    private static func ended(_ id: UUID) {
+        guard current?.id == id else { return }
+        current = pending.isEmpty ? nil : pending.removeFirst()
+    }
+
+    /// A dictation is starting: it takes the model from the warm-ups in
+    /// progress and queued. Their loads keep running, and the dictation loads
+    /// after them (`finished(before:)`), so two model compiles never overlap.
     static func yieldToDictation() {
-        guard let current else { return }
-        LocalModelStore.store(for: current.model).releaseSession(id: current.id)
-        LocalModelStore.englishTools.releaseSession(id: current.id)
+        for entry in [current].compactMap({ $0 }) + pending {
+            LocalModelStore.store(for: entry.model).releaseSession(id: entry.id)
+            LocalModelStore.englishTools.releaseSession(id: entry.id)
+        }
     }
 
     /// A warm-up or an adopted dictation load is in progress.
     public static var isLoading: Bool { current != nil }
 
-    /// Polls rather than awaiting the warm-up's task, so a cancelled
-    /// dictation stops waiting at once.
+    /// Waits for every warm-up and adopted load to end. Polls rather than
+    /// awaiting their tasks, so a cancelled caller stops waiting at once.
     public static func finished() async {
         while current != nil, !Task.isCancelled {
+            try? await Task.sleep(for: .milliseconds(100))
+        }
+    }
+
+    /// Waits until the dictation load `id` may start: no load is in progress,
+    /// or `id` itself has become the load in progress after being adopted.
+    static func finished(before id: UUID) async {
+        while let current, current.id != id, !Task.isCancelled {
             try? await Task.sleep(for: .milliseconds(100))
         }
     }

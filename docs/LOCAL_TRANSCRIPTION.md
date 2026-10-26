@@ -164,7 +164,10 @@ the recording ends and the selected provider has a key
 audio, and the load goes on as a warm-up (`LocalModelWarmup.adopt`): the
 dictation keeps its claims on the model and English tools stores until the
 load ends, then the session is stopped and released. The next dictation waits
-for that load (`finished`) and then loads fast. On iOS, under "Never" and
+for that load (`finished(before:)`) and then loads fast. If that next
+dictation is also sent to the cloud while still waiting, its load queues
+behind the running one (`pending`) and becomes the warm-up when it ends;
+loads never overlap and an adopted load never waits for itself. On iOS, under "Never" and
 when a warm window runs out during such a load, the voice session keeps the
 mic open until the load ends ("session held open for the model load"), so iOS
 does not suspend the app with the load half done. Without a provider key the
@@ -175,8 +178,9 @@ recording of a second or two after the Core ML cache was cleared.
 Load timing in the session log (iOS). Each dictation's load, which overlaps
 the recording, is logged as "Fluid Speech Mini loaded in Ns (process up Ns,
 prepared models: …)" through `LocalTranscriber.onLoadEvent`; a load longer
-than the recording is the wait the user sees in "processing". A dictation
-sent to the cloud during a cold load logs "Fluid Speech Mini still loading 5s
+than the recording is the wait the user sees in "processing"; a load the
+session reports as failed logs "Fluid Speech Mini failed to load after Ns
+(…)" instead. A dictation sent to the cloud during a cold load logs "Fluid Speech Mini still loading 5s
 after the recording; sent to the cloud, load goes on". A warm-up logs
 "model warmed in Ns (reason, process up Ns, before: prepared models: …,
 after: prepared models: …)". "process up" is the age of the app process;

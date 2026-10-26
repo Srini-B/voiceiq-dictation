@@ -48,6 +48,8 @@ public final class LocalTranscriber: DictationStreaming, Sendable {
     public enum LoadEvent: Sendable {
         /// The model loaded, in `seconds` from the start of the recording.
         case loaded(LocalSpeechModel, seconds: TimeInterval)
+        /// The load failed after `seconds`; the dictation goes to the cloud.
+        case failed(LocalSpeechModel, seconds: TimeInterval)
         /// The model was still loading `waited` seconds after the recording
         /// ended; the dictation went to the cloud and the load goes on.
         case stillLoading(LocalSpeechModel, waited: TimeInterval)
@@ -111,11 +113,12 @@ public final class LocalTranscriber: DictationStreaming, Sendable {
         self.cloudOnColdLoad = cloudOnColdLoad
         let ring = ring
         let load = Task {
-            await LocalModelWarmup.finished()
+            await LocalModelWarmup.finished(before: id)
             let loadStarted = Date()
-            await worker.load(from: directory)
+            let loaded = await worker.load(from: directory)
             if !Task.isCancelled {
-                await MainActor.run { Self.onLoadEvent?(.loaded(model, seconds: Date().timeIntervalSince(loadStarted))) }
+                let seconds = Date().timeIntervalSince(loadStarted)
+                await MainActor.run { Self.onLoadEvent?(loaded ? .loaded(model, seconds: seconds) : .failed(model, seconds: seconds)) }
             }
         }
         self.load = load
