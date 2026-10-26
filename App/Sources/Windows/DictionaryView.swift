@@ -139,7 +139,7 @@ struct DictionaryView: View {
                     .foregroundStyle(VoiceIQUI.Colors.onSurfaceVariant)
                     .lineLimit(1)
             }
-            .help(entry.term)
+            .help([entry.term, subtitle(entry)].compactMap { $0 }.joined(separator: "\n"))
             Spacer(minLength: 0)
             Button {
                 store.remove(id: entry.id)

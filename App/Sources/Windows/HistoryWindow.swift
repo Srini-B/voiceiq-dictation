@@ -299,7 +299,9 @@ struct HistoryPane: View {
         .tag(record.id)
         .contextMenu {
             Button("Copy") { copy(record) }
-            Button("Retry Transcription") { onRetry(record) }
+            if !record.isFromOtherDevice {
+                Button("Retry Transcription") { onRetry(record) }
+            }
             Divider()
             Button("Delete", role: .destructive) { delete(record) }
         }

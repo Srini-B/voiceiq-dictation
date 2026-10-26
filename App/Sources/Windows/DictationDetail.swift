@@ -57,8 +57,11 @@ struct DictationDetail: View {
                        systemImage: player?.isPlaying == true ? "stop.fill" : "play.fill", action: toggleAudio)
                     .help(player?.isPlaying == true ? "Stop" : "Play audio")
             }
-            Button("Retry transcription", systemImage: "arrow.clockwise", action: onRetry)
-                .help("Retry transcription")
+            // Dictations synced from another device have no local folder to retry from.
+            if !record.isFromOtherDevice {
+                Button("Retry transcription", systemImage: "arrow.clockwise", action: onRetry)
+                    .help("Retry transcription")
+            }
             Button("Copy", systemImage: "doc.on.doc") {
                 NSPasteboard.general.clearContents()
                 NSPasteboard.general.setString(shownText, forType: .string)
@@ -103,7 +106,7 @@ struct DictationDetail: View {
             if let message = record.errorMessage, !message.isEmpty {
                 GridRow { metaLabel("Details"); metaValue(String(message.prefix(160))) }
             }
-            if !audioExists {
+            if !audioExists && !record.isFromOtherDevice {
                 GridRow { metaLabel("Audio"); metaValue("Removed by retention policy") }
             }
         }

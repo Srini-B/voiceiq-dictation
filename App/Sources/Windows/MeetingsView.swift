@@ -186,8 +186,11 @@ struct MeetingsPane: View {
         do {
             let markdown = try store.markdown(id: meeting.id, parts: parts)
             NSPasteboard.general.clearContents()
-            NSPasteboard.general.setString(markdown, forType: .string)
-            exported = .copied(parts == .notes ? "notes" : parts == .transcript ? "transcript" : "notes and transcript")
+            guard NSPasteboard.general.setString(markdown, forType: .string) else {
+                exported = .failed("the clipboard didn't accept the text")
+                return
+            }
+            exported = .copied(parts == .notes ? "notes" : parts == .transcript ? "transcript" : "notes and transcript", UUID())
         } catch {
             exported = .failed(error.localizedDescription)
         }
@@ -239,7 +242,8 @@ struct MeetingsPane: View {
 
 enum ExportResult: Equatable {
     case saved(URL)
-    case copied(String)
+    /// The UUID makes a repeat copy a new value, so the toast's dismiss timer restarts.
+    case copied(String, UUID)
     case failed(String)
 }
 
@@ -256,7 +260,7 @@ private struct ExportToast: View {
                     .lineLimit(1).truncationMode(.middle)
                 Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([url]); dismiss() }
                     .buttonStyle(.link)
-            case .copied(let what):
+            case .copied(let what, _):
                 Image(systemName: "checkmark.circle.fill").foregroundStyle(VoiceIQUI.Colors.success)
                 Text("Copied \(what)")
             case .failed(let reason):
