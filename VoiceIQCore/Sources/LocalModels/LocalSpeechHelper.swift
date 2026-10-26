@@ -10,7 +10,7 @@ actor LocalRemoteSession: LocalSpeechSession {
     private let streaming: Bool
     private let options: LocalSpeechOptions
     private var stopped = false
-    private var loading: Task<Void, Never>?
+    private var loading: Task<Bool, Never>?
 
     init(audioURL: URL, model: LocalSpeechModel, streaming: Bool, options: LocalSpeechOptions) {
         self.audioURL = audioURL
@@ -19,14 +19,15 @@ actor LocalRemoteSession: LocalSpeechSession {
         self.options = options
     }
 
-    func load(from directory: URL) async {
-        guard !stopped else { return }
+    func load(from directory: URL) async -> Bool {
+        guard !stopped else { return false }
         let task = Task {
             await ParakeetHelperClient.shared.load(id: id, model: model, directory: directory, audio: audioURL, streaming: streaming, options: options)
         }
         loading = task
-        await task.value
+        let loaded = await task.value
         loading = nil
+        return loaded
     }
 
     func append(_ pcm: Data) async -> String? {
@@ -54,8 +55,8 @@ private actor ParakeetHelperClient {
     private var output: FileHandle?
     private var owner: UUID?
 
-    func load(id: UUID, model: LocalSpeechModel, directory: URL, audio: URL, streaming: Bool, options: LocalSpeechOptions) async {
-        guard owner == nil, !Task.isCancelled else { return }
+    func load(id: UUID, model: LocalSpeechModel, directory: URL, audio: URL, streaming: Bool, options: LocalSpeechOptions) async -> Bool {
+        guard owner == nil, !Task.isCancelled else { return false }
         owner = id
         do {
             if process?.isRunning != true {
@@ -79,11 +80,13 @@ private actor ParakeetHelperClient {
             }
             guard case .ready = await exchange(.load(model: model, directory: directory, audio: audio, streaming: streaming, options: options), id: id, timeout: TimeoutPolicy.localLoad) else {
                 cancel(id: id)
-                return
+                return false
             }
+            return true
         } catch {
             Log.transcription.notice("Local helper could not start; using cloud: \(error.localizedDescription, privacy: .public)")
             cancel(id: id)
+            return false
         }
     }
 

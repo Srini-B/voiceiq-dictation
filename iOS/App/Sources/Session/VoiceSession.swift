@@ -43,6 +43,8 @@ final class VoiceSession: ObservableObject {
     private let store = SharedStore.shared
     private var heartbeat: Timer?
     private var warmTimer: Timer?
+    /// Waits for a model load that is finishing as a warm-up before ending.
+    private var warmHold: Task<Void, Never>?
     private var delivery: Delivery?
     private var notice: Notice?
     private var lastPublished: SessionSnapshot?
@@ -88,7 +90,7 @@ final class VoiceSession: ObservableObject {
         // The dictation that opened the session starts right after this. If
         // none does (it was refused), count the warm window from now.
         DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
-            guard let self, self.isActive, self.dictationPhase == .warm, self.warmTimer == nil else { return }
+            guard let self, self.isActive, self.dictationPhase == .warm, self.warmTimer == nil, self.warmHold == nil else { return }
             self.scheduleWarmEnd()
         }
     }
@@ -139,7 +141,7 @@ final class VoiceSession: ObservableObject {
         cancelWarmEnd()
         let seconds = MobileSettings.warmWindow.seconds
         guard seconds > 0 else {
-            end()
+            endAfterModelLoad()
             return
         }
         warmUntil = Date().addingTimeInterval(seconds)
@@ -147,8 +149,26 @@ final class VoiceSession: ObservableObject {
             Task { @MainActor in
                 guard let self, self.dictationPhase == .warm, self.meetingStartedAt == nil else { return }
                 SessionDiagnostics.note("warm window over")
-                self.end()
+                self.endAfterModelLoad()
             }
+        }
+    }
+
+    /// A cold model load that outlived its dictation goes on as a warm-up
+    /// (`LocalModelWarmup`). The mic stays open until it ends, so iOS does not
+    /// suspend the app with the load half done; the next dictation then loads
+    /// fast. Without a load in progress the session ends now.
+    private func endAfterModelLoad() {
+        guard LocalModelWarmup.isLoading else {
+            end()
+            return
+        }
+        SessionDiagnostics.note("session held open for the model load")
+        warmHold = Task { [weak self] in
+            await LocalModelWarmup.finished()
+            guard let self, !Task.isCancelled, self.dictationPhase == .warm, self.meetingStartedAt == nil else { return }
+            self.warmHold = nil
+            self.end()
         }
     }
 
@@ -164,6 +184,8 @@ final class VoiceSession: ObservableObject {
         warmTimer?.invalidate()
         warmTimer = nil
         warmUntil = nil
+        warmHold?.cancel()
+        warmHold = nil
     }
 
     func setPreferBuiltInMic(_ prefer: Bool) {
