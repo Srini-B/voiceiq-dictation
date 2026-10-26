@@ -124,9 +124,8 @@ struct MeetingsPane: View {
             Text(title(meeting)).font(VoiceIQUI.TypeScale.title()).lineLimit(1)
             Spacer(minLength: VoiceIQUI.Spacing.s)
             Menu {
-                Button("Notes") { export(meeting, .notes) }.disabled(notes == nil)
-                Button("Transcript") { export(meeting, .transcript) }.disabled(transcript.isEmpty)
-                Button("Notes and transcript") { export(meeting, .both) }.disabled(notes == nil || transcript.isEmpty)
+                Section("Save to Downloads") { exportItems { export(meeting, $0) } }
+                Section("Copy") { exportItems { copy(meeting, $0) } }
             } label: {
                 Label("Export", systemImage: "square.and.arrow.up")
             }
@@ -142,8 +141,10 @@ struct MeetingsPane: View {
                 Divider()
                 Button("Delete…", role: .destructive) { confirmingDelete = true }
             } label: {
-                Image(systemName: "ellipsis")
+                // As text, the symbol gets the same bezel height as Export; a bare Image gets a shorter one.
+                Text(Image(systemName: "ellipsis"))
             }
+            .accessibilityLabel("More")
             .menuIndicator(.hidden)
             .fixedSize()
             .disabled(busy)
@@ -171,6 +172,28 @@ struct MeetingsPane: View {
     private func rename(_ meeting: MeetingMeta, _ speaker: String, _ name: String) {
         try? store.renameSpeaker(id: meeting.id, label: speaker, name: name)
         meetings = store.list()
+    }
+
+    @ViewBuilder
+    private func exportItems(_ action: @escaping (MeetingStore.ExportParts) -> Void) -> some View {
+        Button("Notes") { action(.notes) }.disabled(notes == nil)
+        Button("Transcript") { action(.transcript) }.disabled(transcript.isEmpty)
+        Button("Notes and transcript") { action(.both) }.disabled(notes == nil || transcript.isEmpty)
+    }
+
+    /// The same Markdown as the saved file, on the clipboard.
+    private func copy(_ meeting: MeetingMeta, _ parts: MeetingStore.ExportParts) {
+        do {
+            let markdown = try store.markdown(id: meeting.id, parts: parts)
+            NSPasteboard.general.clearContents()
+            guard NSPasteboard.general.setString(markdown, forType: .string) else {
+                exported = .failed("the clipboard didn't accept the text")
+                return
+            }
+            exported = .copied(parts == .notes ? "notes" : parts == .transcript ? "transcript" : "notes and transcript", UUID())
+        } catch {
+            exported = .failed(error.localizedDescription)
+        }
     }
 
     /// One Markdown file in Downloads, named after the meeting.
@@ -219,6 +242,8 @@ struct MeetingsPane: View {
 
 enum ExportResult: Equatable {
     case saved(URL)
+    /// The UUID makes a repeat copy a new value, so the toast's dismiss timer restarts.
+    case copied(String, UUID)
     case failed(String)
 }
 
@@ -235,6 +260,9 @@ private struct ExportToast: View {
                     .lineLimit(1).truncationMode(.middle)
                 Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([url]); dismiss() }
                     .buttonStyle(.link)
+            case .copied(let what, _):
+                Image(systemName: "checkmark.circle.fill").foregroundStyle(VoiceIQUI.Colors.success)
+                Text("Copied \(what)")
             case .failed(let reason):
                 Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(VoiceIQUI.Colors.error)
                 Text("Couldn't export: \(reason)").lineLimit(2)

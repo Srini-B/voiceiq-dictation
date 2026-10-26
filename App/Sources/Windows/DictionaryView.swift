@@ -91,26 +91,33 @@ struct DictionaryView: View {
     }
 
     private var entryList: some View {
-        List {
-            let manual = filtered.filter { $0.source == .manual }
-            let auto = filtered.filter { $0.source == .auto }
-            if !manual.isEmpty {
-                Section("Dictionary") {
-                    ForEach(manual) { entry in entryRow(entry) }
-                }
+        ScrollView {
+            VStack(alignment: .leading, spacing: VoiceIQUI.Spacing.l) {
+                section("Dictionary", filtered.filter { $0.source == .manual })
+                section("Auto-learned", filtered.filter { $0.source == .auto })
             }
-            if !auto.isEmpty {
-                Section("Auto-learned") {
-                    ForEach(auto) { entry in entryRow(entry) }
+            .padding(.horizontal, VoiceIQUI.Spacing.l)
+            .padding(.vertical, VoiceIQUI.Spacing.s)
+        }
+    }
+
+    @ViewBuilder
+    private func section(_ title: String, _ items: [DictionaryEntry]) -> some View {
+        if !items.isEmpty {
+            VStack(alignment: .leading, spacing: VoiceIQUI.Spacing.xs) {
+                Text(title)
+                    .font(VoiceIQUI.TypeScale.labelSmall(grad: grad))
+                    .foregroundStyle(.secondary)
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 200), spacing: VoiceIQUI.Spacing.s)],
+                          spacing: VoiceIQUI.Spacing.s) {
+                    ForEach(items) { entry in entryCard(entry) }
                 }
             }
         }
-        .listStyle(.inset)
-        .scrollContentBackground(.hidden)
     }
 
-    private func entryRow(_ entry: DictionaryEntry) -> some View {
-        HStack(spacing: VoiceIQUI.Spacing.s) {
+    private func entryCard(_ entry: DictionaryEntry) -> some View {
+        HStack(alignment: .top, spacing: VoiceIQUI.Spacing.s) {
             Button {
                 store.toggleStar(id: entry.id)
                 reload()
@@ -125,17 +132,15 @@ struct DictionaryView: View {
                 Text(entry.term)
                     .font(VoiceIQUI.TypeScale.body(grad: grad))
                     .foregroundStyle(VoiceIQUI.Colors.onSurface)
-                if let misspelling = entry.misspelling, !misspelling.isEmpty {
-                    Text("\"\(misspelling)\" → \(entry.term)")
-                        .font(VoiceIQUI.TypeScale.labelSmall(grad: grad))
-                        .foregroundStyle(VoiceIQUI.Colors.onSurfaceVariant)
-                } else if let learnedFrom = entry.learnedFrom, !learnedFrom.isEmpty {
-                    Text("Heard as \"\(learnedFrom)\"")
-                        .font(VoiceIQUI.TypeScale.labelSmall(grad: grad))
-                        .foregroundStyle(VoiceIQUI.Colors.onSurfaceVariant)
-                }
+                    .lineLimit(1)
+                // A blank second line keeps cards without one the same height.
+                Text(subtitle(entry) ?? " ")
+                    .font(VoiceIQUI.TypeScale.labelSmall(grad: grad))
+                    .foregroundStyle(VoiceIQUI.Colors.onSurfaceVariant)
+                    .lineLimit(1)
             }
-            Spacer()
+            .help([entry.term, subtitle(entry)].compactMap { $0 }.joined(separator: "\n"))
+            Spacer(minLength: 0)
             Button {
                 store.remove(id: entry.id)
                 reload()
@@ -146,7 +151,15 @@ struct DictionaryView: View {
             }
             .buttonStyle(.plain)
         }
-        .padding(.vertical, 2)
+        .padding(VoiceIQUI.Spacing.s)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: VoiceIQUI.Radius.medium).fill(VoiceIQUI.Colors.surfaceContainer))
+    }
+
+    private func subtitle(_ entry: DictionaryEntry) -> String? {
+        if let misspelling = entry.misspelling, !misspelling.isEmpty { return "Heard as \"\(misspelling)\"" }
+        if let learnedFrom = entry.learnedFrom, !learnedFrom.isEmpty { return "Heard as \"\(learnedFrom)\"" }
+        return nil
     }
 
     private var emptyState: some View {

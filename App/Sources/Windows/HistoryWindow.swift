@@ -1,11 +1,10 @@
 import AppKit
-import AVFoundation
 import SwiftUI
 import VoiceIQCore
 
 /// The History pane of the main window: proof that nothing is ever lost.
-/// Stats up top, day-grouped searchable list, row → detail sheet with
-/// Cleaned/Raw, audio playback, retry, delete.
+/// Stats, search and the day-grouped list on the left; the selected
+/// dictation on the right with audio playback, retry, copy and delete.
 struct HistoryPane: View {
     let store: HistoryStore
     var usage: UsageStore?
@@ -15,19 +14,39 @@ struct HistoryPane: View {
     @State private var records: [DictationRecord] = []
     @State private var costs: [String: Double] = [:]
     @State private var stats = HistoryStore.Stats(totalWords: 0, totalDictations: 0, averageWPM: 0)
-    @State private var detailRecord: DictationRecord?
+    @State private var selection: String?
     @State private var showAllAttention = false
     @State private var confirmingDiscardAll = false
     @Environment(\.colorScheme) private var scheme
     private var grad: CGFloat { scheme == .dark ? 25 : 0 }
 
     var body: some View {
-        VStack(spacing: 0) {
-            header
-            if records.isEmpty {
+        Group {
+            if records.isEmpty && query.isEmpty {
                 emptyState
             } else {
-                recordList
+                HStack(spacing: 0) {
+                    sidebar.frame(width: 280)
+                    // Same as Meetings: a rectangle reaches the top edge under the transparent titlebar.
+                    Rectangle()
+                        .fill(Color(nsColor: .separatorColor))
+                        .frame(width: 1)
+                        .ignoresSafeArea(.container, edges: .top)
+                    Group {
+                        if let record = selected {
+                            DictationDetail(
+                                record: record,
+                                calls: usage?.records(forSession: record.id) ?? [],
+                                onRetry: { onRetry(record) },
+                                onDelete: { delete(record) }
+                            )
+                            .id(record.id)
+                        } else {
+                            ContentUnavailableView("No Dictation Selected", systemImage: "waveform")
+                        }
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
             }
         }
         .onAppear(perform: reload)
@@ -39,55 +58,55 @@ struct HistoryPane: View {
         ) { _ in
             reload()
         }
-        .sheet(item: $detailRecord) { record in
-            RecordDetailSheet(
-                record: record,
-                calls: usage?.records(forSession: record.id) ?? [],
-                onRetry: { onRetry(record) },
-                onDelete: {
-                    store.delete(id: record.id, removeFolder: true)
-                    detailRecord = nil
-                    reload()
-                }
-            )
+    }
+
+    private var selected: DictationRecord? { records.first { $0.id == selection } }
+
+    // MARK: - Sidebar (stats + search + list)
+
+    private var sidebar: some View {
+        VStack(spacing: 0) {
+            VStack(spacing: VoiceIQUI.Spacing.s) {
+                statsGrid
+                searchField
+            }
+            .padding(.horizontal, VoiceIQUI.Spacing.s)
+            .padding(.top, VoiceIQUI.Spacing.l)
+            .padding(.bottom, VoiceIQUI.Spacing.xxs)
+            recordList
         }
     }
 
-    // MARK: - Header (stats + search)
-
-    private var header: some View {
-        VStack(spacing: VoiceIQUI.Spacing.s) {
-            HStack(spacing: VoiceIQUI.Spacing.xl) {
-                stat(value: "\(stats.totalWords)", label: "words dictated")
+    private var statsGrid: some View {
+        Grid(alignment: .leading, horizontalSpacing: VoiceIQUI.Spacing.s, verticalSpacing: VoiceIQUI.Spacing.xs) {
+            GridRow {
+                stat(value: "\(stats.totalWords)", label: "words")
                 stat(value: "\(stats.totalDictations)", label: "dictations")
                 stat(value: stats.averageWPM > 0 ? "\(stats.averageWPM)" : "—", label: "avg WPM")
+            }
+            GridRow {
                 stat(value: stats.totalAudioSeconds > 0 ? stats.audioLabel : "—", label: "of audio")
                 stat(value: stats.minutesSaved > 0 ? stats.savedLabel : "—", label: "saved")
                 stat(value: stats.currentStreak > 0 ? "\(stats.currentStreak)" : "—", label: "day streak")
                     .help("Longest: \(stats.longestStreak) days, active on \(stats.activeDays) days")
-                Spacer()
-                HStack(spacing: 3) {
-                    ForEach(0..<4, id: \.self) { index in
-                        Capsule().fill(VoiceIQUI.Colors.brandQuad[index])
-                            .frame(width: 12, height: 4)
-                    }
-                }
             }
-            HStack(spacing: VoiceIQUI.Spacing.xs) {
-                Image(systemName: "magnifyingglass")
-                    .foregroundStyle(.secondary)
-                TextField("Search your dictations", text: $query)
-                    .textFieldStyle(.plain)
-                    .font(VoiceIQUI.TypeScale.body(grad: grad))
-                    .onChange(of: query) { _, _ in reload() }
-            }
-            .padding(.horizontal, VoiceIQUI.Spacing.s)
-            .padding(.vertical, 7)
-            .background(RoundedRectangle(cornerRadius: VoiceIQUI.Radius.small).fill(.quaternary.opacity(0.5)))
         }
-        .padding(.horizontal, VoiceIQUI.Spacing.l)
-        .padding(.top, VoiceIQUI.Spacing.l)
-        .padding(.bottom, VoiceIQUI.Spacing.s)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, VoiceIQUI.Spacing.xxs)
+    }
+
+    private var searchField: some View {
+        HStack(spacing: VoiceIQUI.Spacing.xs) {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(.secondary)
+            TextField("Search your dictations", text: $query)
+                .textFieldStyle(.plain)
+                .font(VoiceIQUI.TypeScale.body(grad: grad))
+                .onChange(of: query) { _, _ in reload() }
+        }
+        .padding(.horizontal, VoiceIQUI.Spacing.s)
+        .padding(.vertical, 7)
+        .background(RoundedRectangle(cornerRadius: VoiceIQUI.Radius.small).fill(.quaternary.opacity(0.5)))
     }
 
     private func stat(value: String, label: String) -> some View {
@@ -99,6 +118,7 @@ struct HistoryPane: View {
                 .font(VoiceIQUI.TypeScale.labelSmall(grad: grad))
                 .foregroundStyle(.secondary)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     // MARK: - List
@@ -135,7 +155,7 @@ struct HistoryPane: View {
     }
 
     private var recordList: some View {
-        List {
+        List(selection: $selection) {
             if !attention.isEmpty {
                 Section {
                     // Capped shelf: attention must never bury the timeline of words.
@@ -187,8 +207,7 @@ struct HistoryPane: View {
                 }
             }
         }
-        .listStyle(.inset)
-        .scrollContentBackground(.hidden)
+        .overlay { if records.isEmpty { Text("No matches").foregroundStyle(.secondary) } }
     }
 
     private func attentionRow(_ record: DictationRecord) -> some View {
@@ -229,6 +248,7 @@ struct HistoryPane: View {
             .help("Discard this recording")
         }
         .padding(.vertical, 3)
+        .tag(record.id)
     }
 
     private func audioExists(_ record: DictationRecord) -> Bool {
@@ -255,47 +275,35 @@ struct HistoryPane: View {
     }
 
     private func row(_ record: DictationRecord) -> some View {
-        Button {
-            detailRecord = record
-        } label: {
-            HStack(spacing: VoiceIQUI.Spacing.s) {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(record.displayText.isEmpty ? "—" : String(record.displayText.prefix(110)))
-                        .font(VoiceIQUI.TypeScale.body(grad: grad))
-                        .foregroundStyle(.primary)
-                        .lineLimit(1)
-                    HStack(spacing: VoiceIQUI.Spacing.xs) {
-                        if let app = record.targetAppName {
-                            Text(app)
-                        }
-                        if let duration = record.durationSeconds {
-                            Text(String(format: "%.0fs", duration))
-                        }
-                        Text(record.startedAt.formatted(date: .omitted, time: .shortened))
-                        if let cost = costs[record.id] {
-                            Text(CostPane.money(cost))
-                        }
-                    }
-                    .font(VoiceIQUI.TypeScale.labelSmall(grad: grad))
-                    .foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 3) {
+            Text(record.displayText.isEmpty ? "—" : String(record.displayText.prefix(220)))
+                .font(VoiceIQUI.TypeScale.body(grad: grad))
+                .lineLimit(2)
+            HStack(spacing: VoiceIQUI.Spacing.xs) {
+                Text(record.startedAt.formatted(date: .omitted, time: .shortened))
+                if let app = record.targetAppName {
+                    Text(app).lineLimit(1)
                 }
-                Spacer()
-                statusChip(record)
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(.tertiary)
+                if let duration = record.durationSeconds {
+                    Text(String(format: "%.0fs", duration))
+                }
+                if let cost = costs[record.id] {
+                    Text(CostPane.money(cost))
+                }
             }
-            .contentShape(Rectangle())
+            .font(VoiceIQUI.TypeScale.labelSmall(grad: grad))
+            .foregroundStyle(.secondary)
+            statusChip(record)
         }
-        .buttonStyle(.plain)
+        .padding(.vertical, 2)
+        .tag(record.id)
         .contextMenu {
             Button("Copy") { copy(record) }
-            Button("Retry Transcription") { onRetry(record) }
-            Divider()
-            Button("Delete", role: .destructive) {
-                store.delete(id: record.id, removeFolder: true)
-                reload()
+            if !record.isFromOtherDevice {
+                Button("Retry Transcription") { onRetry(record) }
             }
+            Divider()
+            Button("Delete", role: .destructive) { delete(record) }
         }
     }
 
@@ -376,164 +384,16 @@ struct HistoryPane: View {
         pasteboard.setString(record.displayText, forType: .string)
     }
 
+    private func delete(_ record: DictationRecord) {
+        store.delete(id: record.id, removeFolder: true)
+        reload()
+    }
+
     private func reload() {
         records = store.records(matching: query.isEmpty ? nil : query)
-        // An open detail sheet shows the new text after a Retry.
-        if let open = detailRecord, let fresh = store.record(id: open.id), fresh != open {
-            detailRecord = fresh
-        }
+        if selected == nil { selection = timeline.first?.id ?? attention.first?.id }
         stats = store.stats()
         costs = usage?.costBySession(ids: records.map(\.id)) ?? [:]
     }
 
-}
-
-// MARK: - Detail sheet
-
-private struct RecordDetailSheet: View {
-    let record: DictationRecord
-    var calls: [UsageRecord] = []
-    let onRetry: () -> Void
-    let onDelete: () -> Void
-
-    @Environment(\.dismiss) private var dismiss
-    @Environment(\.colorScheme) private var scheme
-    @State private var player: AVAudioPlayer?
-    private var grad: CGFloat { scheme == .dark ? 25 : 0 }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: VoiceIQUI.Spacing.m) {
-            HStack {
-                Spacer()
-                Button {
-                    let pasteboard = NSPasteboard.general
-                    pasteboard.clearContents()
-                    pasteboard.setString(shownText, forType: .string)
-                } label: {
-                    Label("Copy", systemImage: "doc.on.doc")
-                }
-            }
-
-            ScrollView {
-                Text(shownText)
-                    .font(VoiceIQUI.TypeScale.bodyLarge(grad: grad))
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .frame(minHeight: 120, maxHeight: 260)
-
-            // What the transcription model heard, before the writing rules.
-            // Shown only when the writing model changed it, as on iPhone.
-            if let raw = record.rawTranscript, raw != shownText {
-                VStack(alignment: .leading, spacing: VoiceIQUI.Spacing.xs) {
-                    metaLabel("As heard")
-                    ScrollView {
-                        Text(raw)
-                            .font(VoiceIQUI.TypeScale.bodyLarge(grad: grad))
-                            .foregroundStyle(.secondary)
-                            .textSelection(.enabled)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                    .frame(maxHeight: 160)
-                }
-            }
-
-            HStack(spacing: VoiceIQUI.Spacing.s) {
-                audioButton
-                Button("Retry Transcription") { onRetry() }
-                Spacer()
-                Button(role: .destructive) { onDelete() } label: {
-                    Image(systemName: "trash")
-                }
-                .help("Delete this dictation")
-            }
-
-            Divider()
-
-            Grid(alignment: .leading, horizontalSpacing: VoiceIQUI.Spacing.l, verticalSpacing: 4) {
-                if let app = record.targetAppName {
-                    GridRow {
-                        metaLabel("Dictated into"); metaValue(app)
-                    }
-                }
-                if let duration = record.durationSeconds {
-                    GridRow {
-                        metaLabel("Duration"); metaValue(String(format: "%.1fs", duration))
-                    }
-                }
-                if let pipeline = record.pipelineSeconds {
-                    GridRow {
-                        metaLabel("Pipeline"); metaValue(String(format: "%.2fs", pipeline))
-                    }
-                }
-                if !calls.isEmpty {
-                    GridRow {
-                        metaLabel("Cost")
-                        metaValue(CostPane.money(
-                            calls.reduce(0) { $0 + ($1.costUSD ?? 0) },
-                            approximate: calls.contains { $0.isEstimated || $0.costUSD == nil }
-                        ))
-                    }
-                    ForEach(calls) { call in
-                        GridRow {
-                            metaLabel(call.stageValue?.displayName ?? call.stage)
-                            metaValue("\(call.model) · \(UsageFormat.measure(call)) · \(CostPane.money(call.costUSD, approximate: call.isEstimated))")
-                        }
-                    }
-                }
-                GridRow {
-                    metaLabel("Status"); metaValue(HistoryPane.statusDisplayName(record))
-                }
-                if let message = record.errorMessage, !message.isEmpty {
-                    GridRow {
-                        metaLabel("Details"); metaValue(String(message.prefix(160)))
-                    }
-                }
-            }
-
-            HStack {
-                Spacer()
-                Button("Done") { dismiss() }
-                    .keyboardShortcut(.defaultAction)
-            }
-        }
-        .padding(VoiceIQUI.Spacing.l)
-        .frame(width: 520)
-        .onDisappear { player?.stop() }
-    }
-
-    private var shownText: String {
-        record.cleanedTranscript ?? record.rawTranscript ?? "—"
-    }
-
-    @ViewBuilder
-    private var audioButton: some View {
-        let cafURL = FileLayout.audioCAF(in: record.folderURL)
-        if FileManager.default.fileExists(atPath: cafURL.path) {
-            Button {
-                if player?.isPlaying == true {
-                    player?.stop()
-                    player = nil
-                } else {
-                    player = try? AVAudioPlayer(contentsOf: cafURL)
-                    player?.play()
-                }
-            } label: {
-                Label(player?.isPlaying == true ? "Stop" : "Play Audio",
-                      systemImage: player?.isPlaying == true ? "stop.fill" : "play.fill")
-            }
-        } else {
-            Text("Audio removed by retention policy")
-                .font(VoiceIQUI.TypeScale.labelSmall(grad: grad))
-                .foregroundStyle(.secondary)
-        }
-    }
-
-    private func metaLabel(_ text: String) -> some View {
-        Text(text).font(VoiceIQUI.TypeScale.labelSmall(grad: grad)).foregroundStyle(.secondary)
-    }
-
-    private func metaValue(_ text: String) -> some View {
-        Text(text).font(VoiceIQUI.TypeScale.labelSmall(grad: grad))
-    }
 }
