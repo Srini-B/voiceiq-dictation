@@ -48,8 +48,8 @@ actor ParakeetSession: LocalSpeechSession {
         return String(preview.text.suffix(512))
     }
 
-    func load(from directory: URL) async {
-        guard !stopped else { return }
+    func load(from directory: URL) async -> Bool {
+        guard !stopped else { return false }
         let started = Date()
         let terms = EnglishVocabulary.terms(options.vocabulary)
         let toolsRoot = options.toolsDirectory
@@ -59,23 +59,29 @@ actor ParakeetSession: LocalSpeechSession {
             // in the middle of a recording and never improved one (15-dictation
             // replay, 2026-10-21). The decoder sees the recording as captured.
             async let tools = EnglishTools.load(root: toolsRoot, vocabulary: terms, speechDetection: false)
-            let models = try AsrModels.loadLocal(from: directory, version: .v3)
+            // Decoder and joint stay on the ANE; only the encoder's compile
+            // is slow. 10 s of audio: 0.24 s on the CPU, 0.08 s on the ANE.
+            let models = try AsrModels.loadLocal(
+                from: directory, version: .v3, encoderComputeUnits: DictationCompute.encoderUnits
+            )
             return (models, try await tools)
         }
         loading = task
         do {
             let loaded = try await task.value
             loading = nil
-            guard !stopped else { return }
+            guard !stopped else { return false }
             manager = AsrManager(config: .default, models: loaded.models)
             tools = loaded.tools
             if !terms.isEmpty, tools.vocabulary == nil {
                 Log.transcription.notice("Parakeet vocabulary spotting unavailable; \(terms.count) terms not applied")
             }
-            Log.transcription.notice("Parakeet cold load complete in \(Date().timeIntervalSince(started), format: .fixed(precision: 2))s, vocabulary=\(self.tools.vocabulary != nil)")
+            Log.transcription.notice("Parakeet cold load complete in \(Date().timeIntervalSince(started), format: .fixed(precision: 2))s, vocabulary=\(self.tools.vocabulary != nil), encoder=\(DictationCompute.encoderLabel, privacy: .public)")
+            return true
         } catch {
             loading = nil
             Log.transcription.notice("Parakeet load failed; using cloud: \(error.localizedDescription, privacy: .public)")
+            return false
         }
     }
 

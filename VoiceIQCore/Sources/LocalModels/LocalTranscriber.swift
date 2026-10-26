@@ -18,7 +18,16 @@ public final class LocalTranscriber: DictationStreaming, Sendable {
     private let strict: Bool
     private let ring = PCMRing(seconds: 30)
     private let wake: AsyncStream<Void>.Continuation
+    /// Waits for any warm-up, then loads the model. Starts with the recording.
+    private let load: Task<Void, Never>
     private let pump: Task<Void, Never>
+    /// A load still running `TimeoutPolicy.localColdLoad` after the recording
+    /// sends the dictation to the cloud provider and goes on as a warm-up.
+    /// The caller passes whether a provider can take it.
+    private let cloudOnColdLoad: Bool
+    /// Set when the load was handed to `LocalModelWarmup`; the coordinator's
+    /// later `abort` must then leave it running.
+    private let handedOff = OSAllocatedUnfairLock(initialState: false)
 
     /// Fluid Speech Mini previews cost one decode per second of speech, so
     /// they run only where the app shows live text: the Mac pill. iPhone and
@@ -36,14 +45,24 @@ public final class LocalTranscriber: DictationStreaming, Sendable {
         }
     }
 
-    @MainActor public init?(audioURL: URL, model: LocalSpeechModel, language: LocalSpeechLanguage, realtime: Bool,
-                           makeSession: LocalSpeechSessionFactory) {
-        let id = UUID()
-        let previewing = Self.previews(model, realtime: realtime)
-        let strict = model == .nemotron && previewing
-        // Nemotron wants its native chunk; Fluid Speech Mini re-decodes, so
-        // one second keeps the preview moving without stacking decodes.
-        let chunkBytes = model == .nemotron ? 71_680 : PCMRing.bytesPerSecond
+    public enum LoadEvent: Sendable {
+        /// The model loaded, in `seconds` from the start of the recording.
+        case loaded(LocalSpeechModel, seconds: TimeInterval)
+        /// The load failed after `seconds`; the dictation goes to the cloud.
+        case failed(LocalSpeechModel, seconds: TimeInterval)
+        /// The model was still loading `waited` seconds after the recording
+        /// ended; the dictation went to the cloud and the load goes on.
+        case stillLoading(LocalSpeechModel, waited: TimeInterval)
+    }
+
+    /// Called for each dictation's model load, so the app can put it in its
+    /// session log next to the dictation.
+    @MainActor public static var onLoadEvent: ((LoadEvent) -> Void)?
+
+    /// What a dictation in `language` loads: the dictionary terms and, for
+    /// English, the installed English tools. The warm-up uses the same
+    /// options so it prepares every model a dictation will load.
+    @MainActor static func sessionOptions(language: LocalSpeechLanguage) -> (options: LocalSpeechOptions, toolsReady: Bool) {
         // The English tools would trim and reformat other languages as English.
         let toolsReady = language.isEnglish && LocalModelStore.englishTools.state == .ready
         let vocabulary = DictionaryStore().entries().prefix(256).map {
@@ -54,6 +73,20 @@ public final class LocalTranscriber: DictationStreaming, Sendable {
             toolsDirectory: toolsReady ? LocalModelManifest.englishTools.installDirectory : nil,
             language: language.code
         )
+        return (options, toolsReady)
+    }
+
+    /// `cloudOnColdLoad`: a provider key is stored, so a dictation whose
+    /// model is still loading after the recording can go to the cloud.
+    @MainActor public init?(audioURL: URL, model: LocalSpeechModel, language: LocalSpeechLanguage, realtime: Bool,
+                           cloudOnColdLoad: Bool, makeSession: LocalSpeechSessionFactory) {
+        let id = UUID()
+        let previewing = Self.previews(model, realtime: realtime)
+        let strict = model == .nemotron && previewing
+        // Nemotron wants its native chunk; Fluid Speech Mini re-decodes, so
+        // one second keeps the preview moving without stacking decodes.
+        let chunkBytes = model == .nemotron ? 71_680 : PCMRing.bytesPerSecond
+        let (options, toolsReady) = Self.sessionOptions(language: language)
         let worker = makeSession(model, audioURL, previewing, options)
         let signals = AsyncStream<Void>.makeStream(bufferingPolicy: .bufferingNewest(1))
         let previews = AsyncStream<String>.makeStream(bufferingPolicy: .bufferingNewest(1))
@@ -77,15 +110,26 @@ public final class LocalTranscriber: DictationStreaming, Sendable {
         self.previewing = previewing
         self.strict = strict
         wake = signals.continuation
+        self.cloudOnColdLoad = cloudOnColdLoad
         let ring = ring
+        let load = Task {
+            await LocalModelWarmup.finished(before: id)
+            let loadStarted = Date()
+            let loaded = await worker.load(from: directory)
+            if !Task.isCancelled {
+                // Not awaited: the log is diagnostics, the pump is waiting on this task.
+                let seconds = Date().timeIntervalSince(loadStarted)
+                Task { @MainActor in Self.onLoadEvent?(loaded ? .loaded(model, seconds: seconds) : .failed(model, seconds: seconds)) }
+            }
+        }
+        self.load = load
         pump = Task {
             defer {
                 previews.continuation.yield("")
                 previews.continuation.finish()
             }
-            await LocalModelWarmup.finished()
-            await worker.load(from: directory)
-            guard previewing else { return }
+            await load.value
+            guard previewing, !Task.isCancelled else { return }
             // A rejected chunk or a dropped one ends a strict session, because
             // its stream can no longer become the transcript. A preview-only
             // session just stops previewing; its final decode is unaffected.
@@ -119,6 +163,19 @@ public final class LocalTranscriber: DictationStreaming, Sendable {
     public func finish(framesWritten: Int64) async -> TranscriptionResult? {
         partialSink.finish()
         wake.finish()
+        if cloudOnColdLoad,
+           case .timedOut = await Self.bounded(seconds: TimeoutPolicy.localColdLoad, { [load] in await load.value }),
+           !Task.isCancelled {
+            // The load cannot be stopped, so it is finished as a warm-up: the
+            // stores stay claimed and the next dictation waits for it.
+            Log.transcription.notice("On-device model still loading \(TimeoutPolicy.localColdLoad, format: .fixed(precision: 0))s after the recording; using cloud transcription, load goes on as a warm-up")
+            pump.cancel()
+            handedOff.withLock { $0 = true }
+            let worker = worker
+            await LocalModelWarmup.adopt(id: id, model: model, load: load, stop: { await worker.stop() })
+            await MainActor.run { Self.onLoadEvent?(.stillLoading(model, waited: TimeoutPolicy.localColdLoad)) }
+            return nil
+        }
         let deadline = TimeoutPolicy.localLoad + TimeoutPolicy.localTranscribe(frames: framesWritten)
         let outcome = await withTaskCancellationHandler {
             await Self.bounded(seconds: deadline) { [self] in
@@ -129,6 +186,7 @@ public final class LocalTranscriber: DictationStreaming, Sendable {
                 return await worker.transcribe(framesWritten: framesWritten)
             }
         } onCancel: {
+            self.load.cancel()
             self.pump.cancel()
             Task { await self.worker.stop() }
         }
@@ -180,6 +238,8 @@ public final class LocalTranscriber: DictationStreaming, Sendable {
     public func abort() async {
         partialSink.finish()
         wake.finish()
+        guard !handedOff.withLock({ $0 }) else { return }
+        load.cancel()
         pump.cancel()
         await worker.stop()
         await pump.value

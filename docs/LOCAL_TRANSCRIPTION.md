@@ -117,9 +117,13 @@ transcription (`LocalTranscriber.finish` stops the session, which drops
 idle seconds; the iOS app releases the model in-process and keeps running
 only as long as the voice session holds the mic.
 
-Warm-up (iOS, `ModelWarmer` over `LocalModelWarmup`): loads the model the
-on-device settings use and releases it at once, so Core ML prepares it before
-a dictation needs it. Nothing stays loaded. It runs:
+Warm-up (iOS, `ModelWarmer` over `LocalModelWarmup`): loads what a dictation
+would load and releases it at once, so Core ML prepares it before a dictation
+needs it. It uses the same `LocalSpeechOptions` as a dictation in the
+on-device language (`LocalTranscriber.sessionOptions`): the dictionary terms
+and, for English, the installed English tools, so the CTC vocabulary model is
+prepared too. It claims the English tools store as well as the model's store
+while it runs. Nothing stays loaded. It runs:
 
 1. In a background processing task (`io.blue.voiceiq.ios.warm-model`,
    `BGProcessingTaskRequest` with no power or network requirement, earliest
@@ -134,8 +138,60 @@ a dictation needs it. Nothing stays loaded. It runs:
 
 A dictation that starts during a warm-up takes the model's claim from it
 (`yieldToDictation`) and loads after the warm-up's load ends, so two Neural
-Engine compiles never overlap; the second load is then fast. The session log
-records "model warmed in Ns (reason)".
+Engine compiles never overlap; the second load is then fast. A warm-up whose
+load fails logs "model warm-up failed after Ns" and does not count as having
+warmed the iOS version.
+
+Compute units for a dictation (`DictationCompute.encoderUnits`, both
+platforms): the Parakeet encoder and the English tools CTC encoder load with
+`.cpuOnly`; the decoder and joint keep FluidAudio's default
+`.cpuAndNeuralEngine`. The Neural Engine's prepared encoder program is held by
+the ANE driver, not by the `e5bundlecache` on disk (a byte-identical restore
+of that cache still loads cold), and on iOS it is dropped after hours of idle,
+so every first dictation after idle paid a 13 s (M2) to 60 s (iPhone)
+compile per encoder. On the CPU the two encoders load in 3 s and 2 s cold
+(M2) and in 0.2 s warm, and decode 10 s of audio in 0.24 s against 0.08 s on
+the ANE, with the same words. The load log ends with `encoder=cpu`.
+`ParakeetVocabulary.loadModels` builds `CtcModels` from the pack's files
+itself because `CtcModels.loadDirect` pins the ANE. Meetings
+(`LocalMeetingJob`) and Nemotron keep the ANE.
+
+Cold load during a dictation (both platforms): the load starts with the
+recording. If it is still running `TimeoutPolicy.localColdLoad` (5 s) after
+the recording ends and the selected provider has a key
+(`KeychainStore.hasModelKey`, passed as `LocalTranscriber`'s
+`cloudOnColdLoad`), the dictation goes to the cloud provider from the saved
+audio, and the load goes on as a warm-up (`LocalModelWarmup.adopt`): the
+dictation keeps its claims on the model and English tools stores until the
+load ends, then the session is stopped and released. The next dictation waits
+for that load (`finished(before:)`) and then loads fast. If that next
+dictation is also sent to the cloud while still waiting, its load queues
+behind the running one (`pending`) and becomes the warm-up when it ends;
+loads never overlap and an adopted load never waits for itself. On iOS, under "Never" and
+when a warm window runs out during such a load, the voice session keeps the
+mic open until the load ends ("session held open for the model load"), so iOS
+does not suspend the app with the load half done; the hold ends after
+`localLoad` (120 s) at the latest ("model load still running after 120s;
+session ended"), so a stalled load cannot keep the mic open. Without a provider key the
+dictation waits for the load as before (up to `localLoad`). On the Mac a cold
+load takes about 5 s (M2, CPU encoders), so the rule only triggers for a
+recording of a second or two after the Core ML cache was cleared.
+
+Load timing in the session log (iOS). Each dictation's load, which overlaps
+the recording, is logged as "Fluid Speech Mini loaded in Ns (process up Ns,
+prepared models: …)" through `LocalTranscriber.onLoadEvent`; a load longer
+than the recording is the wait the user sees in "processing"; a load the
+session reports as failed logs "Fluid Speech Mini failed to load after Ns
+(…)" instead. A dictation sent to the cloud during a cold load logs "Fluid Speech Mini still loading 5s
+after the recording; sent to the cloud, load goes on". A warm-up logs
+"model warmed in Ns (reason, process up Ns, before: prepared models: …,
+after: prepared models: …)". "process up" is the age of the app process;
+"prepared models" (`PreparedModelCache`) counts Core ML's prepared bundles
+under `Library/Caches/<bundle id>/com.apple.e5rt.e5bundlecache/`, with their
+size and the age of the newest file. Together they tell a slow load apart: the
+prepared copies are gone (iOS cleared the cache), or they are present and the
+time is spent elsewhere, such as the first Neural Engine load in a new
+process.
 
 ### Fluid Speech Mini live preview
 

@@ -72,6 +72,7 @@ public final class LiveTranscriber: DictationStreaming {
            let local = LocalTranscriber(audioURL: audioURL, model: settings.localSpeechModel,
                                         language: settings.localSpeechLanguage,
                                         realtime: settings.liveTranscriptionEnabled,
+                                        cloudOnColdLoad: KeychainStore.hasModelKey,
                                         makeSession: localSessionFactory) {
             return local
         }

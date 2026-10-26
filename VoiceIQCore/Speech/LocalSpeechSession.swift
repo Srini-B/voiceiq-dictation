@@ -32,7 +32,9 @@ public struct LocalSpeechOutput: Codable, Sendable, Equatable {
 }
 
 public protocol LocalSpeechSession: Actor {
-    func load(from directory: URL) async
+    /// False when the model did not load; `transcribe` then returns nil.
+    @discardableResult
+    func load(from directory: URL) async -> Bool
     /// Nil rejects the audio; otherwise the string is the display-only preview.
     func append(_ pcm: Data) async -> String?
     func transcribe(framesWritten: Int64) async -> LocalSpeechOutput?

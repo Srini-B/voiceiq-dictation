@@ -88,6 +88,26 @@ final class AppModel: ObservableObject {
         )
         sleepGuard = SessionSleepGuard(dictation: coordinator, meetings: meetings)
         inserter.onDeliver = { [weak self] text, mode in self?.deliver(text, mode: mode) }
+        // The load overlaps the recording; a load longer than the recording
+        // is what the user waits for in "processing".
+        LocalTranscriber.onLoadEvent = { event in
+            let age = SessionDiagnostics.processAge
+            switch event {
+            case .loaded(let model, let seconds):
+                Task {
+                    SessionDiagnostics.note(String(format: "%@ loaded in %.1fs (%@, %@)", model.displayName, seconds,
+                                                  age, await PreparedModelCache.describe()))
+                }
+            case .failed(let model, let seconds):
+                Task {
+                    SessionDiagnostics.note(String(format: "%@ failed to load after %.1fs (%@, %@)", model.displayName, seconds,
+                                                  age, await PreparedModelCache.describe()))
+                }
+            case .stillLoading(let model, let waited):
+                SessionDiagnostics.note(String(format: "%@ still loading %.0fs after the recording; sent to the cloud, load goes on",
+                                              model.displayName, waited))
+            }
+        }
 
         // Commands already in the App Group belong to an earlier process. Only
         // a command named in a launch URL may still be acted on.

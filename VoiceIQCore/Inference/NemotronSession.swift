@@ -28,8 +28,8 @@ actor NemotronSession: LocalSpeechSession {
         self.options = options
     }
 
-    func load(from directory: URL) async {
-        guard !stopped else { return }
+    func load(from directory: URL) async -> Bool {
+        guard !stopped else { return false }
         let toolsRoot = options.toolsDirectory
         let language = options.language
         let task = Task.detached(priority: .userInitiated) { () throws -> Loaded in
@@ -48,17 +48,19 @@ actor NemotronSession: LocalSpeechSession {
         do {
             let loaded = try await task.value
             loading = nil
-            guard !stopped else { await loaded.manager.cleanup(); return }
+            guard !stopped else { await loaded.manager.cleanup(); return false }
             manager = loaded.manager
             tools = loaded.tools
             if streaming {
                 meter = tools.vad.map(SpeechActivityMeter.init)
             }
             Log.transcription.notice("Nemotron \(language, privacy: .public): vad=\(self.tools.vad != nil)")
+            return true
         } catch {
             loading = nil
             failed = true
             Log.transcription.notice("Nemotron load failed; using cloud: \(error.localizedDescription, privacy: .public)")
+            return false
         }
     }
 

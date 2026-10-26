@@ -12,6 +12,8 @@ public enum ParakeetCommand: Codable {
 
 public enum ParakeetReply: Codable {
     case ready
+    /// The session reported a failed load; the helper has released it.
+    case loadFailed
     case accepted(String?)
     case transcript(LocalSpeechOutput?)
     case meeting(LocalMeetingResult)
