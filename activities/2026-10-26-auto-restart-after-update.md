@@ -11,9 +11,13 @@ instead of waiting for a click.
 ## Decisions
 
 - A downloaded update now installs and relaunches as soon as nothing is in
-  use. "In use" is unchanged (dictation, Ask Anything, Translate, a meeting
-  detected, recording or being written up, an answer on screen). While the app
-  is in use, it checks again every 30 seconds.
+  use: dictation, Ask Anything, Translate, a meeting detected, recording or
+  being written up, an answer on screen, and now also a History retry or a
+  queued-dictation drain. While the app is in use, it checks again every 30
+  seconds.
+- The retry queue joined "in use" after review (Greptile, PR #21): a manual
+  Retry runs while the coordinator is idle, and the old 5-minute no-input rule
+  was what kept an install from cutting it short.
 - Removed the 5-minute no-input condition. It kept the update waiting while
   the user typed in other apps, and the relaunch takes a few seconds and
   interrupts nothing in VoiceiQ.

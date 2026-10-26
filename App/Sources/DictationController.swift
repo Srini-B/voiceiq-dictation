@@ -955,13 +955,14 @@ final class DictationController {
     }
 
     /// Anything an update relaunch would cut short: a dictation or mode session,
-    /// a meeting (detected, recording, or making notes), or an answer on screen.
+    /// a meeting (detected, recording, or making notes), a History retry, or an
+    /// answer on screen.
     private var isInUse: Bool {
         switch coordinator.state {
         case .idle, .done, .cancelled, .failed: break
         default: return true
         }
-        guard meetings.processing.isEmpty else { return true }
+        guard meetings.processing.isEmpty, retryQueue?.draining != true else { return true }
         switch meetings.phase {
         case .idle, .failed: break
         default: return true
