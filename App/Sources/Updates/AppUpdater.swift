@@ -90,9 +90,8 @@ extension AppUpdater: SPUUpdaterDelegate {
             installDownloaded = immediateInstallHandler
             availableUpdate = .downloaded(version: version)
         }
-        // The app takes over when to install: UpdatePillController offers a
-        // restart and applies it once nothing is recording. Quitting still
-        // installs it.
+        // The app takes over when to install: UpdatePillController applies it
+        // once nothing is recording. Quitting still installs it.
         return true
     }
 

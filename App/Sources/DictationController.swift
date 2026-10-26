@@ -207,7 +207,7 @@ final class DictationController {
             // Notes finish in the background, so they can land while another
             // offer or answer is on the pill; the check must not replace it.
             switch self.hud.model.state {
-            case .meetingPrompt, .answer, .updateReady: return
+            case .meetingPrompt, .answer: return
             default: break
             }
             switch self.coordinator.state {
@@ -232,11 +232,6 @@ final class DictationController {
         meetingHUD.bind()
         meetings.autoDetect = SettingsStore().meetingDetectionEnabled
 
-        updatePill.setPill = { [weak self] state in self?.setPill(state) }
-        updatePill.currentPill = { [weak self] in self?.hud.model.state ?? .hidden }
-        updatePill.restingPill = { [weak self] in
-            self.map { $0.restingPill(for: $0.coordinator.state) } ?? .idleDot
-        }
         updatePill.sessionIsActive = { [weak self] in self?.isInUse ?? false }
         updatePill.notice = { [weak self] message in
             self?.showBackgroundNotice(message, for: 4.0, sound: nil)
@@ -1065,7 +1060,7 @@ final class DictationController {
             if wasListening { panel.phase = .idle }
         case .success, .idleDot, .hidden:
             if wasListening { panel.phase = .idle }
-        case .answer, .meetingPrompt, .meetingRecording, .updateReady:
+        case .answer, .meetingPrompt, .meetingRecording:
             return false
         }
         hud.model.state = .agent

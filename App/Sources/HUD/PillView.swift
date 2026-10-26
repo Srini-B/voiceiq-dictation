@@ -20,7 +20,7 @@ struct PillView: View {
 
     private var hasInteractiveControls: Bool {
         switch model.state {
-        case .idleDot, .listening(locked: true), .answer, .agent, .meetingPrompt, .meetingRecording, .updateReady: return true
+        case .idleDot, .listening(locked: true), .answer, .agent, .meetingPrompt, .meetingRecording: return true
         default: return false
         }
     }
@@ -118,11 +118,6 @@ struct PillView: View {
         case .meetingRecording(let since):
             pillSurface(width: 300) {
                 MeetingRecordingContent(since: since)
-            }
-
-        case .updateReady(let version):
-            pillSurface(width: nil) {
-                UpdateReadyContent(version: version)
             }
         }
     }
@@ -223,7 +218,6 @@ struct PillView: View {
         case .error(let message): return "Error — \(message)"
         case .meetingPrompt(let name): return "Meeting detected in \(name)"
         case .meetingRecording: return "Recording meeting"
-        case .updateReady(let version): return "VoiceiQ \(version) is ready to install"
         }
     }
 }
@@ -368,6 +362,4 @@ extension Notification.Name {
     static let pillMeetingAccepted = Notification.Name("io.blue.voiceiq.pill.meeting.accept")
     static let pillMeetingDismissed = Notification.Name("io.blue.voiceiq.pill.meeting.dismiss")
     static let pillMeetingStopTapped = Notification.Name("io.blue.voiceiq.pill.meeting.stop")
-    static let pillUpdateRestartTapped = Notification.Name("io.blue.voiceiq.pill.update.restart")
-    static let pillUpdateDismissed = Notification.Name("io.blue.voiceiq.pill.update.dismiss")
 }

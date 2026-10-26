@@ -20,8 +20,6 @@ enum PillState: Equatable {
     case meetingPrompt(String)
     /// A meeting is recording: timer, waveform, stop.
     case meetingRecording(since: Date)
-    /// A downloaded update waits for a restart. The string is its version.
-    case updateReady(String)
 }
 
 /// Microphone level for the waveform. A plain reference, not published: the
