@@ -8,7 +8,13 @@ import Foundation
 /// are gone (iOS cleared the cache), or they are there and the time goes
 /// somewhere else.
 enum PreparedModelCache {
-    static var description: String {
+    /// Walks the cache off the calling actor, so a note from the main actor
+    /// does not block it on the file system.
+    static func describe() async -> String {
+        await Task.detached(priority: .utility) { description }.value
+    }
+
+    private static var description: String {
         guard let bundleID = Bundle.main.bundleIdentifier else { return "prepared models: unknown" }
         let root = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
             .appendingPathComponent(bundleID, isDirectory: true)

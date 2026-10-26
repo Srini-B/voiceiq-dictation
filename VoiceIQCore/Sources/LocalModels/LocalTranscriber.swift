@@ -117,8 +117,9 @@ public final class LocalTranscriber: DictationStreaming, Sendable {
             let loadStarted = Date()
             let loaded = await worker.load(from: directory)
             if !Task.isCancelled {
+                // Not awaited: the log is diagnostics, the pump is waiting on this task.
                 let seconds = Date().timeIntervalSince(loadStarted)
-                await MainActor.run { Self.onLoadEvent?(loaded ? .loaded(model, seconds: seconds) : .failed(model, seconds: seconds)) }
+                Task { @MainActor in Self.onLoadEvent?(loaded ? .loaded(model, seconds: seconds) : .failed(model, seconds: seconds)) }
             }
         }
         self.load = load

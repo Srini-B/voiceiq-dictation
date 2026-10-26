@@ -58,10 +58,10 @@ enum ModelWarmer {
     }
 
     private static func warm(reason: String) async {
-        let before = PreparedModelCache.description
+        let before = await PreparedModelCache.describe()
         guard let outcome = await LocalModelWarmup.run(makeSession: LocalSpeechInference.makeSession) else { return }
         let detail = String(format: "(%@, %@, before: %@, after: %@)", reason, SessionDiagnostics.processAge,
-                            before, PreparedModelCache.description)
+                            before, await PreparedModelCache.describe())
         guard outcome.loaded else {
             SessionDiagnostics.note(String(format: "model warm-up failed after %.1fs %@", outcome.seconds, detail))
             return

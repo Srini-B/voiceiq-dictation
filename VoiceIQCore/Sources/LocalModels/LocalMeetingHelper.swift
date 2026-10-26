@@ -69,7 +69,7 @@ public enum LocalMeetingHelper {
         switch reply {
         case .meeting(let result): return result
         case .meetingFailed(let reason): throw Failure.helper(reason)
-        case .ready, .accepted, .transcript: throw Failure.disconnected
+        case .ready, .loadFailed, .accepted, .transcript: throw Failure.disconnected
         }
     }
 }

@@ -157,7 +157,9 @@ final class VoiceSession: ObservableObject {
     /// A cold model load that outlived its dictation goes on as a warm-up
     /// (`LocalModelWarmup`). The mic stays open until it ends, so iOS does not
     /// suspend the app with the load half done; the next dictation then loads
-    /// fast. Without a load in progress the session ends now.
+    /// fast. Without a load in progress the session ends now. The hold is
+    /// bounded by `TimeoutPolicy.localLoad`: a stalled load must not keep the
+    /// mic open indefinitely.
     private func endAfterModelLoad() {
         guard LocalModelWarmup.isLoading else {
             end()
@@ -165,10 +167,24 @@ final class VoiceSession: ObservableObject {
         }
         SessionDiagnostics.note("session held open for the model load")
         warmHold = Task { [weak self] in
-            await LocalModelWarmup.finished()
+            let ended = await Self.modelLoadEnded(within: TimeoutPolicy.localLoad)
             guard let self, !Task.isCancelled, self.dictationPhase == .warm, self.meetingStartedAt == nil else { return }
+            if !ended {
+                SessionDiagnostics.note(String(format: "model load still running after %.0fs; session ended", TimeoutPolicy.localLoad))
+            }
             self.warmHold = nil
             self.end()
+        }
+    }
+
+    /// True when every model load ended within `seconds`.
+    private static func modelLoadEnded(within seconds: TimeInterval) async -> Bool {
+        await withTaskGroup(of: Bool.self) { group in
+            group.addTask { await LocalModelWarmup.finished(); return true }
+            group.addTask { try? await Task.sleep(for: .seconds(seconds)); return false }
+            let first = await group.next() ?? false
+            group.cancelAll()
+            return first
         }
     }
 

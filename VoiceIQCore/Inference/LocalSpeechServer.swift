@@ -37,7 +37,11 @@ private actor HelperLifetime {
             await session?.stop()
             let next = LocalSpeechInference.makeSession(model, audio, streaming, options)
             session = next
-            await next.load(from: directory)
+            guard await next.load(from: directory) else {
+                await next.stop()
+                session = nil
+                return .loadFailed
+            }
             return .ready
         case .append(let pcm):
             return .accepted(await session?.append(pcm))

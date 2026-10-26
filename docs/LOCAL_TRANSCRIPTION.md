@@ -170,7 +170,9 @@ behind the running one (`pending`) and becomes the warm-up when it ends;
 loads never overlap and an adopted load never waits for itself. On iOS, under "Never" and
 when a warm window runs out during such a load, the voice session keeps the
 mic open until the load ends ("session held open for the model load"), so iOS
-does not suspend the app with the load half done. Without a provider key the
+does not suspend the app with the load half done; the hold ends after
+`localLoad` (120 s) at the latest ("model load still running after 120s;
+session ended"), so a stalled load cannot keep the mic open. Without a provider key the
 dictation waits for the load as before (up to `localLoad`). On the Mac a cold
 load takes about 5 s (M2, CPU encoders), so the rule only triggers for a
 recording of a second or two after the Core ML cache was cleared.
