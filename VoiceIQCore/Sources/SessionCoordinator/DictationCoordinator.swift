@@ -105,6 +105,8 @@ public final class DictationCoordinator: ObservableObject {
     }
     private var capture: AudioCapturing?
     private var liveTranscriber: (any DictationStreaming)?
+    /// When the user let go; the gap to the audio's end is the finalize stage.
+    private var finalizeRequestedAt: Date?
     private var screenContextCollector: ScreenContextCollector?
     /// Most recent metered level — decides whether the user was mid-word when
     /// they released the key.
@@ -131,6 +133,29 @@ public final class DictationCoordinator: ObservableObject {
     public var onSessionDiscard: ((UUID) -> Void)?
     public var onAnswerReady: ((String) -> Void)?
     public var onAgentCommandReady: ((TranscriptionResult) -> Void)?
+
+    /// Where the time after key-up went, for the session log.
+    public struct StageTimes: Equatable, Sendable {
+        public enum Source: Equatable, Sendable {
+            /// Decoded in-process or in the speech helper.
+            case onDevice
+            /// A cloud socket that streamed during the recording.
+            case cloudLive
+            /// The saved recording uploaded after the fact; one request transcribes and cleans up.
+            case cloudUpload
+        }
+        public var source: Source
+        /// Trailing speech kept after key-up, then the microphone teardown.
+        public var finalize: TimeInterval
+        /// Decode, the live socket's final result, or the whole upload round-trip.
+        public var transcribe: TimeInterval
+        /// The cleanup request; nil for `.cloudUpload`, whose one request includes it.
+        public var cleanup: TimeInterval?
+        /// Typing the result; nil when it went to the answer card instead.
+        public var insert: TimeInterval?
+    }
+    /// Fired once per completed session, after the result was handed over.
+    public var onStageTimes: ((StageTimes) -> Void)?
 
     /// Cancelled recordings at least this long stay recoverable in History —
     /// an accidental Esc after minutes of dictation must not destroy the words.
@@ -437,6 +462,7 @@ public final class DictationCoordinator: ObservableObject {
         // (same pattern as cancelSession, audit #10). A second stop while a
         // session is in flight must not stop capture or clobber meta.
         guard apply(.finalize) else { return }
+        finalizeRequestedAt = Date()
         partialPump?.cancel()
         partialPump = nil
         partialTranscript = ""
@@ -563,7 +589,9 @@ public final class DictationCoordinator: ObservableObject {
 
         let sessionID = session.id
         let finalizeStartedAt = Date()
+        let finalizeSeconds = finalizeStartedAt.timeIntervalSince(finalizeRequestedAt ?? finalizeStartedAt)
         let live = liveTranscriber
+        let source: StageTimes.Source = live?.runsOnDevice == true ? .onDevice : .cloudLive
         let usageScope = UsageScope(mode: session.context.mode, sessionID: sessionID.uuidString)
         inFlightTask = Task { [weak self] in
           await UsageMeter.$scope.withValue(usageScope) {
@@ -571,10 +599,17 @@ public final class DictationCoordinator: ObservableObject {
             do {
                 let liveResult = await live?.finish(framesWritten: result.framesWritten)
                 try Task.checkCancellation()
+                let decodeDoneAt = Date()
                 let outcome: TranscriptionResult
+                let stages: StageTimes
                 if let liveResult {
                     outcome = try await self.transcription.process(
                         liveResult, durationSeconds: result.durationSeconds, context: session.context
+                    )
+                    stages = StageTimes(
+                        source: source, finalize: finalizeSeconds,
+                        transcribe: decodeDoneAt.timeIntervalSince(finalizeStartedAt),
+                        cleanup: Date().timeIntervalSince(decodeDoneAt), insert: nil
                     )
                 } else {
                     outcome = try await self.transcription.transcribe(
@@ -582,9 +617,17 @@ public final class DictationCoordinator: ObservableObject {
                         durationSeconds: result.durationSeconds,
                         context: session.context
                     )
+                    // Counted from the recording's end so a cloud fallback after a
+                    // slow on-device load shows that wait too.
+                    stages = StageTimes(
+                        source: .cloudUpload, finalize: finalizeSeconds,
+                        transcribe: Date().timeIntervalSince(finalizeStartedAt), cleanup: nil, insert: nil
+                    )
                 }
                 guard !Task.isCancelled else { return }
-                await self.completeTranscription(sessionID: sessionID, outcome: outcome, startedAt: finalizeStartedAt)
+                await self.completeTranscription(
+                    sessionID: sessionID, outcome: outcome, startedAt: finalizeStartedAt, stages: stages
+                )
             } catch {
                 guard !Task.isCancelled else { return }
                 await self.failTranscription(sessionID: sessionID, error: error)
@@ -593,8 +636,11 @@ public final class DictationCoordinator: ObservableObject {
         }
     }
 
-    private func completeTranscription(sessionID: UUID, outcome: TranscriptionResult, startedAt: Date) async {
+    private func completeTranscription(
+        sessionID: UUID, outcome: TranscriptionResult, startedAt: Date, stages: StageTimes
+    ) async {
         guard session?.id == sessionID else { return } // stale completion
+        var stages = stages
         updateMeta {
             $0.rawTranscript = outcome.rawTranscript
             $0.cleanedTranscript = outcome.cleanedTranscript
@@ -618,11 +664,14 @@ public final class DictationCoordinator: ObservableObject {
             apply(.inserted)
             discardUnlessKept()
             session = nil
+            onStageTimes?(stages)
             return
         }
 
+        let insertStartedAt = Date()
         let insertionOutcome = await insertion.insert(outcome.cleanedTranscript, context: session?.context ?? DictationContext())
         let pipelineSeconds = Date().timeIntervalSince(startedAt)
+        stages.insert = Date().timeIntervalSince(insertStartedAt)
         switch insertionOutcome {
         case .inserted:
             updateMeta { $0.status = .inserted; $0.pipelineSeconds = pipelineSeconds }
@@ -640,6 +689,7 @@ public final class DictationCoordinator: ObservableObject {
         lastResult = outcome.cleanedTranscript
         lastCleanupSkip = outcome.cleanupSkip
         session = nil
+        onStageTimes?(stages)
     }
 
     private func failTranscription(sessionID: UUID, error: Error) async {

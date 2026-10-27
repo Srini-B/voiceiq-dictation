@@ -231,3 +231,18 @@ The test term and the input-device change were reverted afterwards. Not
 exercised: the phone. The owner's next TestFlight log shows the iPhone CPU
 cold load and decode time in "Parakeet cold load complete … encoder=cpu" and
 "Parakeet complete … in Ns".
+
+## Follow-up: stage split in the session log
+
+The owner's log after the fix (2026-10-26 21:45, 11.5 h idle) shows the load
+down to 3.3 s, but "processed in 8.4s" for a 66 s recording and 7.7 s for a
+36 s one. The log could not say whether that was the decode, the cleanup
+request, or the insert. `DictationCoordinator` now measures the three
+stages (`StageTimes`, `onStageTimes`) and the iOS app logs them as
+"finalize Ns, decode Ns, cleanup Ns, insert Ns" right after "processed in".
+Review added the finalize stage (trailing speech and mic teardown, which
+"processed in" counts but the first split did not) and a source flag on
+`DictationStreaming` so a cloud live socket's result is not logged as a
+decode. Verified by
+`scripts/test.sh` (143/0) and the iOS and Mac builds; the line itself needs
+the next TestFlight build and a real dictation on the phone.

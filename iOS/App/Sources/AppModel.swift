@@ -149,6 +149,19 @@ final class AppModel: ObservableObject {
         coordinator.onSessionDiscard = { [weak self] id in
             self?.historyStore?.delete(id: id.uuidString, removeFolder: false)
         }
+        coordinator.onStageTimes = { stages in
+            // Splits "processed in" so a slow result can be blamed on the mic
+            // teardown, the decode, the cleanup request, or typing it in.
+            var parts = [String(format: "finalize %.1fs", stages.finalize)]
+            switch stages.source {
+            case .onDevice: parts.append(String(format: "decode %.1fs", stages.transcribe))
+            case .cloudLive: parts.append(String(format: "cloud live final %.1fs", stages.transcribe))
+            case .cloudUpload: parts.append(String(format: "cloud transcribe+cleanup %.1fs", stages.transcribe))
+            }
+            if let cleanup = stages.cleanup { parts.append(String(format: "cleanup %.1fs", cleanup)) }
+            if let insert = stages.insert { parts.append(String(format: "insert %.1fs", insert)) }
+            SessionDiagnostics.note(parts.joined(separator: ", "))
+        }
         meetings.$phase
             .sink { [weak self] phase in
                 guard let self else { return }

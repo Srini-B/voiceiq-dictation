@@ -5,6 +5,7 @@ import VoiceIQSpeech
 /// The CAF remains authoritative. Missing stream bytes disqualify local output,
 /// rather than passing a fluent but incomplete transcript to cleanup.
 public final class LocalTranscriber: DictationStreaming, Sendable {
+    public var runsOnDevice: Bool { true }
     public let partials: AsyncStream<String>
     private let partialSink: AsyncStream<String>.Continuation
     private let id: UUID

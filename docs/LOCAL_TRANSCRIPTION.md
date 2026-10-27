@@ -193,6 +193,20 @@ prepared copies are gone (iOS cleared the cache), or they are present and the
 time is spent elsewhere, such as the first Neural Engine load in a new
 process.
 
+Stage split in the session log (iOS). After "processed in Ns", the app logs
+where that time went, from `DictationCoordinator.onStageTimes`
+(`StageTimes`): "finalize 0.4s, decode 5.1s, cleanup 2.8s, insert 0.3s" for
+an on-device dictation. "finalize" is the time from key-up to the end of the
+audio: trailing speech kept while the user was still talking, then the
+microphone teardown. "decode" is `LocalTranscriber.finish`, counted from the
+end of the audio, so it includes any wait for a model still loading;
+"cleanup" is the writing-rules request; "insert" is typing the result,
+omitted when it went to the answer card instead. A cloud socket that
+streamed during the recording (`DictationStreaming.runsOnDevice` false)
+logs "cloud live final Ns" in place of "decode". A recording uploaded after
+the fact, including a cloud fallback after a slow on-device load, logs
+"cloud transcribe+cleanup Ns" because one request does both.
+
 ### Fluid Speech Mini live preview
 
 Fluid Speech Mini is an offline decoder with no streaming state, so its

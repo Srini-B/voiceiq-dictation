@@ -7,6 +7,12 @@ public protocol DictationStreaming: Sendable {
     func enqueue(_ pcm: Data)
     func finish(framesWritten: Int64) async -> TranscriptionResult?
     func abort() async
+    /// True when `finish` decodes on this device rather than on a cloud socket.
+    var runsOnDevice: Bool { get }
+}
+
+public extension DictationStreaming {
+    var runsOnDevice: Bool { false }
 }
 
 /// A live result is usable only when the socket accepted the entire saved recording.
