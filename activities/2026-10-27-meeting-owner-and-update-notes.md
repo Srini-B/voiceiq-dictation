@@ -49,3 +49,33 @@ a name in Assign speakers left the notes as they were.
 - WebKit skip: confirmed on the MacBook that `com.apple.WebKit.GPU` is listed
   by `NSWorkspace.runningApplications` and its responsible process is Safari.
   Not tested on a live Safari Meet call.
+
+## Follow-up: short words on calls (same day)
+
+The owner asked that a one-word reply from someone else is kept and never
+given to another speaker.
+
+Each track of the same meeting, decoded alone with the installed on-device
+model, against the meeting transcript (decoded from a mix of both tracks):
+
+| Time | Each track alone | From the mix |
+| --- | --- | --- |
+| 14.0 s | far side "Yeah." over the owner | lost |
+| 78.6 s, 82.3 s | far side, over the owner | lost |
+| 110.2 s | far side "this.", owner "Okay." | "this." given to the owner, "Okay." lost |
+
+Decision: on a call with an echo-free mic, decode the mic and the system
+track separately (`LocalMeetingTranscriber.byTrack`). Mic words are the
+owner's; system words are diarized among the other people. Calls whose mic
+failed the echo check, and in-person recordings, still use the mix.
+
+Verified by replaying the meeting through the new path with the installed
+models: all four cases above now come out right. None of the 220 words on the
+owner's track fell where only the far side was speaking, so no echo leaked in
+as the owner's speech. VoiceIQCore tests: 143 passed.
+
+Still open: telling two remote people apart uses only the diarizer. At 87.4 s
+it marked both remote voices over the same half second, and the phrase there
+was split between them. The cloud meeting path still transcribes a mix; it
+re-reads the owner's side of an overlap from the mic, but a far-side word said
+over the owner can still be lost there.
