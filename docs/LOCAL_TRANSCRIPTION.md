@@ -451,6 +451,20 @@ The flow, in `MeetingEngine.transcribe(folder:config:)`:
    order of first appearance; the owner is marked from the mic track with
    `MeetingTranscriber.markOwner` as on the cloud path. Turns come from
    `SpeakerLinker.overlappingTurns`.
+   On a call whose echo-cancelled mic passed the echo check
+   (`CallAudio.isOnline && micIsEchoFree`), the tracks are not mixed. The mic
+   is decoded alone, and every word on it is the owner's
+   (`local-words-mic-v1.json`). The system track is decoded and diarized
+   alone, and its speakers are everyone else (`local-words-system-v1.json`).
+   `LocalMeetingTranscriber.byTrack` joins them by time. A mix keeps only one
+   voice where two overlap. On a 2.5-minute Meet call (2026-10-27) it lost a
+   far-side "Yeah" said over the owner and gave the owner a far-side
+   "this."; decoded alone, each track had every word.
+   On the far side, a word where the diarizer heard two people at once goes
+   to whichever of them said the nearest word in the same phrase (words
+   under 0.3 s apart) that only one person was heard on
+   (`LocalMeetingTranscriber.settled`). Other words keep their label, so a
+   one-word reply between someone else's words stays a turn of its own.
 5. The transcript is saved, then notes are written by the cloud writing model.
    With no key the meeting is marked failed with "add a key for notes, then
    Retry"; the transcript is kept and Retry reuses the cache.

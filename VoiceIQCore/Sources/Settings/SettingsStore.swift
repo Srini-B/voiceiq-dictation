@@ -204,6 +204,16 @@ public struct SettingsStore: Sendable {
         Self.set(show, forKey: "showIdleIndicator")
     }
 
+    /// Keep the pill out of screen shares and recordings of the whole screen,
+    /// so a shared screen does not show that a meeting is being recorded.
+    public var hidePillFromScreenSharing: Bool {
+        Self.defaults.object(forKey: "hidePillFromScreenSharing") as? Bool ?? true
+    }
+
+    public func setHidePillFromScreenSharing(_ hide: Bool) {
+        Self.set(hide, forKey: "hidePillFromScreenSharing")
+    }
+
     public var soundsEnabled: Bool {
         Self.defaults.object(forKey: "soundsEnabled") as? Bool ?? true
     }

@@ -33,6 +33,7 @@ final class PillHUDController: AgentOverlay {
         panel.hidesOnDeactivate = false
         panel.becomesKeyOnlyIfNeeded = true
         panel.acceptsMouseMovedEvents = true
+        applyScreenSharingPrivacy()
         panel.contentView = NSHostingView(
             rootView: PillRootView(model: model)
         )
@@ -94,6 +95,12 @@ final class PillHUDController: AgentOverlay {
     /// its position and the agent transcript survive the capture.
     func setHidden(_ hidden: Bool) {
         panel.alphaValue = hidden ? 0 : 1
+    }
+
+    /// `.none` leaves the panel out of other apps' screen captures (Zoom, Meet,
+    /// Teams, screen recorders) while it stays visible on this Mac.
+    func applyScreenSharingPrivacy() {
+        panel.sharingType = settings.hidePillFromScreenSharing ? .none : .readOnly
     }
 
     /// While the pill is up it lives on whichever display the pointer is on.

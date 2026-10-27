@@ -19,6 +19,7 @@ struct DictationPane: View {
     @State private var meetingDetection = SettingsStore().meetingDetectionEnabled
     @State private var meetingScreenNames = SettingsStore().meetingScreenNamesEnabled
     @State private var showIdleDot = SettingsStore().showIdleIndicator
+    @State private var hidePillFromScreenSharing = SettingsStore().hidePillFromScreenSharing
     @State private var noiseHandling = SettingsStore().experimentalNoiseHandling
     @State private var agentMode = SettingsStore().agentModeEnabled
     @State private var translationTargets = SettingsStore().translationTargetLanguages
@@ -68,6 +69,8 @@ struct DictationPane: View {
                     .onChange(of: sounds) { _, enabled in settings.setSoundsEnabled(enabled) }
                 Toggle("Show resting indicator", isOn: $showIdleDot)
                     .onChange(of: showIdleDot) { _, show in settings.setShowIdleIndicator(show) }
+                Toggle("Hide pill from screen sharing", isOn: $hidePillFromScreenSharing)
+                    .onChange(of: hidePillFromScreenSharing) { _, hide in settings.setHidePillFromScreenSharing(hide) }
             } footer: {
                 Text("The resting dot grows into a Dictate button on hover; click it for hands-free. Off = the pill appears only while dictating.")
             }

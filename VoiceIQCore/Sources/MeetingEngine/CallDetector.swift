@@ -178,7 +178,12 @@ import os
             (audio?.directInputPIDs.contains($0.processIdentifier) ?? false) && !(audio?.directInputPIDs.contains($1.processIdentifier) ?? false)
         }
         for app in apps {
-            guard let id = app.bundleIdentifier, !id.hasPrefix(own) else { continue }
+            // WebKit's XPC services are listed as apps ("Safari Graphics and
+            // Media") and capture the mic themselves, so they would sort first
+            // and hide the browser. The app responsible for them is the call;
+            // without that lookup the helper is all there is to find.
+            guard let id = app.bundleIdentifier, !id.hasPrefix(own),
+                  !(id.hasPrefix("com.apple.WebKit.") && Self.responsiblePID != nil) else { continue }
             let pid = app.processIdentifier
             let capturing = audio.map { $0.inputPIDs.contains(pid) || $0.inputBundleIDs.contains { $0.hasPrefix(id) } } ?? true
             guard capturing else { continue }

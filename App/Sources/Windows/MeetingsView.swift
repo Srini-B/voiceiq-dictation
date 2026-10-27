@@ -50,7 +50,8 @@ struct MeetingsPane: View {
     private var sidebar: some View {
         VStack(spacing: 0) {
             Button {
-                recording ? engine.stopRecording() : engine.startRecording()
+                // As Option-M: a call already detected becomes the meeting's source.
+                engine.toggleRecording()
             } label: {
                 Label(recording ? "Stop recording" : "Record", systemImage: recording ? "stop.fill" : "record.circle")
                     .frame(maxWidth: .infinity)
@@ -123,6 +124,17 @@ struct MeetingsPane: View {
         return HStack(spacing: VoiceIQUI.Spacing.xs) {
             Text(title(meeting)).font(VoiceIQUI.TypeScale.title()).lineLimit(1)
             Spacer(minLength: VoiceIQUI.Spacing.s)
+            if notes != nil, meeting.status == .done, meeting.namesChangedSinceNotes {
+                Button {
+                    engine.regenerateNotes(id: meeting.id)
+                } label: {
+                    Label("Update notes", systemImage: "arrow.clockwise")
+                }
+                .buttonStyle(.borderedProminent)
+                .fixedSize()
+                .disabled(busy)
+                .help("Write the notes again with the speaker names you set")
+            }
             Menu {
                 Section("Save to Downloads") { exportItems { export(meeting, $0) } }
                 Section("Copy") { exportItems { copy(meeting, $0) } }

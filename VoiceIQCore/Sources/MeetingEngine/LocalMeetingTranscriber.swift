@@ -7,9 +7,10 @@ import VoiceIQSpeech
 /// 3 Diarization for who spoke when, joined by time. This is how FluidMeet
 /// does it; the cloud path (`MeetingTranscriber`) asks one model for both.
 ///
-/// Both tracks are mixed onto one timeline the way the cloud path mixes a
-/// request (`CallAudio.samples`), written as one file so both models read it
-/// from disk, and removed after. The result is cached beside the audio, so a
+/// A call with an echo-free mic is decoded one track at a time (`byTrack`).
+/// Otherwise both tracks are mixed onto one timeline the way the cloud path
+/// mixes a request (`CallAudio.samples`). Each pass is written as one file so
+/// both models read it from disk, and removed after. The result is cached beside the audio, so a
 /// retry after the notes fail never decodes the same meeting twice.
 public struct LocalMeetingTranscriber: Sendable {
     enum Failure: LocalizedError {
@@ -25,6 +26,9 @@ public struct LocalMeetingTranscriber: Sendable {
 
     /// v2: words split at Fluid Speech Mini's lone space tokens; v1 caches glued digits to the word before.
     static let cacheName = "local-words-v2.json"
+    /// A call's mic and system tracks, each decoded alone (`byTrack`).
+    static let ownerCacheName = "local-words-mic-v1.json"
+    static let farCacheName = "local-words-system-v1.json"
     static let mixName = "local-mix.caf"
     /// The mix is written a minute at a time.
     static let piece = 60.0
@@ -84,27 +88,38 @@ public struct LocalMeetingTranscriber: Sendable {
             if holdsDiarizer { LocalModelStore.speakerDiarizer.releaseSession(id: id) }
         } }
         let audio = try MeetingTranscriber.callAudio(folder: folder)
-        let result = try await decode(audio, folder: folder)
+        var words: [TimedWord]
+        if audio.isOnline, audio.micIsEchoFree {
+            let owner = try await decode(Self.ownerCacheName, duration: audio.mic.duration, diarize: false,
+                                         folder: folder, samples: audio.mic.samples)
+            let far = try await decode(Self.farCacheName, duration: audio.system.duration, diarize: true,
+                                       folder: folder, samples: audio.system.samples)
+            words = Self.byTrack(owner: owner.words, far: far)
+        } else {
+            let result = try await decode(Self.cacheName, duration: audio.duration, diarize: true,
+                                          folder: folder, samples: audio.samples)
+            words = Self.label(result.words, segments: result.segments)
+            if audio.isOnline { words = MeetingTranscriber.markOwner(words, audio: audio) }
+        }
         UsageMeter.record(stage: .meetingTranscribe, model: LocalSpeechModel.parakeet.modelID,
                           usage: TokenUsage(reportedCostUSD: 0, audioSeconds: audio.duration))
-        var words = Self.label(result.words, segments: result.segments)
-        if audio.isOnline { words = MeetingTranscriber.markOwner(words, audio: audio) }
         words = Self.renumber(words)
         return SpeakerLinker.overlappingTurns(words).map { turn in
             TranscriptSegment(speaker: turn.speaker, text: turn.text, chunkIndex: 0, start: turn.start, end: turn.end)
         }
     }
 
-    private func decode(_ audio: CallAudio, folder: URL) async throws -> LocalMeetingResult {
-        let cache = folder.appendingPathComponent(Self.cacheName)
+    private func decode(_ cacheName: String, duration: Double, diarize: Bool, folder: URL,
+                        samples: (ClosedRange<Double>) throws -> [Int16]) async throws -> LocalMeetingResult {
+        let cache = folder.appendingPathComponent(cacheName)
         if let data = try? Data(contentsOf: cache), let cached = try? JSONDecoder().decode(LocalMeetingResult.self, from: data) {
             return cached
         }
         let mix = folder.appendingPathComponent(Self.mixName)
         defer { try? FileManager.default.removeItem(at: mix) }
-        try Self.writeMix(audio, to: mix)
-        let request = LocalMeetingRequest(speechDirectory: speech, diarizerDirectory: diarizer, audio: mix)
-        let result = try await job.run(deadline: TimeoutPolicy.localMeeting(audioSeconds: audio.duration)) {
+        try Self.writeMix(duration: duration, samples: samples, to: mix)
+        let request = LocalMeetingRequest(speechDirectory: speech, diarizerDirectory: diarize ? diarizer : nil, audio: mix)
+        let result = try await job.run(deadline: TimeoutPolicy.localMeeting(audioSeconds: duration)) {
             try await runner(request)
         }
         try JSONEncoder().encode(result).write(to: cache, options: .atomic)
@@ -112,16 +127,62 @@ public struct LocalMeetingTranscriber: Sendable {
         return result
     }
 
+    /// On a call with an echo-free mic each track is transcribed alone: every
+    /// word on the mic is the owner's, every word on the system track someone
+    /// else's, and only the far side is diarized. MEASURED 2026-10-27 on a
+    /// 2.5-minute Meet call: the mix of both tracks kept one voice wherever
+    /// two overlapped. It lost the far side's "Yeah" said over the owner and
+    /// gave the owner a far-side "this."; each track alone had every word.
+    static func byTrack(owner: [LocalMeetingResult.Word], far: LocalMeetingResult) -> [TimedWord] {
+        let mine = owner.map { TimedWord(text: $0.text, speaker: MeetingSpeaker.you, start: $0.start, end: $0.end) }
+        let others = settled(label(far.words, segments: far.segments), segments: far.segments)
+        return (mine + others).sorted { $0.start < $1.start }
+    }
+
+    /// Words closer together than this are one phrase, said by one person.
+    static let phraseGap = 0.3
+
+    /// Where the diarizer heard two or more people at a word, the word goes
+    /// to whichever of them said the nearest word in its phrase that only one
+    /// person was heard on. Every other word keeps its label: a one-word
+    /// reply between someone else's words is a turn change, not noise.
+    /// MEASURED 2026-10-27: on a Meet call's far side the diarizer put both
+    /// remote speakers on the same half second, and the phrase there was
+    /// split between them word by word. Taking the phrase's speaker for
+    /// every unsure word, also outside overlaps, moved 77 words in three
+    /// earlier meetings, many of them real replies ("Awesome.", "Cool.").
+    static func settled(_ words: [TimedWord], segments: [LocalMeetingResult.Segment]) -> [TimedWord] {
+        let heard = words.map { word -> Set<String> in
+            let middle = (word.start + word.end) / 2
+            return Set(segments.filter { $0.start <= middle && middle <= $0.end }.map { "s\($0.speaker + 1)" })
+        }
+        var out = words
+        var first = 0
+        while first < words.count {
+            var last = first
+            while last + 1 < words.count, words[last + 1].start - words[last].end < phraseGap { last += 1 }
+            let sure = (first...last).filter { heard[$0].count == 1 }
+            for index in first...last where heard[index].count > 1 {
+                if let nearest = sure.filter({ heard[index].contains(words[$0].speaker) })
+                    .min(by: { abs($0 - index) < abs($1 - index) }) {
+                    out[index].speaker = words[nearest].speaker
+                }
+            }
+            first = last + 1
+        }
+        return out
+    }
+
     /// The whole timeline, silence included, so the models' seconds are the
     /// meeting's seconds.
-    static func writeMix(_ audio: CallAudio, to url: URL) throws {
+    static func writeMix(duration: Double, samples read: (ClosedRange<Double>) throws -> [Int16], to url: URL) throws {
         let format = AVAudioFormat(commonFormat: .pcmFormatInt16, sampleRate: TrackAudio.sampleRate, channels: 1, interleaved: true)!
         try? FileManager.default.removeItem(at: url)
         let file = try AVAudioFile(forWriting: url, settings: format.settings, commonFormat: .pcmFormatInt16, interleaved: true)
         var start = 0.0
-        while start < audio.duration {
+        while start < duration {
             try Task.checkCancellation()
-            let samples = try audio.samples(start...min(audio.duration, start + piece))
+            let samples = try read(start...min(duration, start + piece))
             guard !samples.isEmpty else { start += piece; continue }
             guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(max(1, samples.count))) else {
                 throw CocoaError(.fileWriteUnknown)
