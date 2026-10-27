@@ -195,11 +195,13 @@ The control is a `ControlWidgetToggle`, on while a dictation records. Its
 value provider reads `SharedStore.isDictating()`, which is the snapshot phase
 `recording` with a live heartbeat. `VoiceSession.publish` calls
 `ControlCenter.reloadControls(ofKind:)` each time the phase enters or leaves
-`recording`, so the control stays lit for the whole dictation and turns off
-when it stops from any path. A press runs `SetDictationIntent`, a
-`SetValueIntent` with the same work as `ToggleDictationIntent`
-(`ActionButtonBridge.run`). It acts only when the requested state differs
-from the actual one, so a stale control cannot start a second dictation.
+`recording`, so the control stays lit for the whole dictation and should turn
+off when it stops from any path. A press, from Control Center or the Action
+button, runs `SetDictationIntent`, a `SetValueIntent` with the same work as
+`ToggleDictationIntent` (`ActionButtonBridge.run`). It ignores the value iOS
+passes and toggles the real state: the app's reload does not always reach the
+control (seen after a cancel on the keyboard), and a press on a control left
+on must still start a dictation.
 `ToggleDictationIntent` stays the App Shortcut, because a `SetValueIntent`
 would make Siri and Spotlight ask for its value.
 
