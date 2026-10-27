@@ -239,6 +239,10 @@ down to 3.3 s, but "processed in 8.4s" for a 66 s recording and 7.7 s for a
 36 s one. The log could not say whether that was the decode, the cleanup
 request, or the insert. `DictationCoordinator` now measures the three
 stages (`StageTimes`, `onStageTimes`) and the iOS app logs them as
-"decode Ns, cleanup Ns, insert Ns" right after "processed in". Verified by
+"finalize Ns, decode Ns, cleanup Ns, insert Ns" right after "processed in".
+Review added the finalize stage (trailing speech and mic teardown, which
+"processed in" counts but the first split did not) and a source flag on
+`DictationStreaming` so a cloud live socket's result is not logged as a
+decode. Verified by
 `scripts/test.sh` (143/0) and the iOS and Mac builds; the line itself needs
 the next TestFlight build and a real dictation on the phone.

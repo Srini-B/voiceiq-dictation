@@ -195,14 +195,17 @@ process.
 
 Stage split in the session log (iOS). After "processed in Ns", the app logs
 where that time went, from `DictationCoordinator.onStageTimes`
-(`StageTimes`): "decode 5.1s, cleanup 2.8s, insert 0.3s" for an on-device
-dictation, or "cloud transcribe+cleanup 6.2s, insert 0.3s" when the audio
-went to the cloud (one network call does both, so they are one number; it is
-counted from the end of the recording, so a cloud fallback after a slow
-on-device load includes that wait). "decode" is `LocalTranscriber.finish`,
-counted from the end of the recording, so it includes any wait for a model
-still loading; "cleanup" is the writing-rules request; "insert" is typing
-the result, omitted when it went to the answer card instead.
+(`StageTimes`): "finalize 0.4s, decode 5.1s, cleanup 2.8s, insert 0.3s" for
+an on-device dictation. "finalize" is the time from key-up to the end of the
+audio: trailing speech kept while the user was still talking, then the
+microphone teardown. "decode" is `LocalTranscriber.finish`, counted from the
+end of the audio, so it includes any wait for a model still loading;
+"cleanup" is the writing-rules request; "insert" is typing the result,
+omitted when it went to the answer card instead. A cloud socket that
+streamed during the recording (`DictationStreaming.runsOnDevice` false)
+logs "cloud live final Ns" in place of "decode". A recording uploaded after
+the fact, including a cloud fallback after a slow on-device load, logs
+"cloud transcribe+cleanup Ns" because one request does both.
 
 ### Fluid Speech Mini live preview
 

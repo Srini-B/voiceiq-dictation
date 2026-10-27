@@ -105,6 +105,8 @@ public final class DictationCoordinator: ObservableObject {
     }
     private var capture: AudioCapturing?
     private var liveTranscriber: (any DictationStreaming)?
+    /// When the user let go; the gap to the audio's end is the finalize stage.
+    private var finalizeRequestedAt: Date?
     private var screenContextCollector: ScreenContextCollector?
     /// Most recent metered level — decides whether the user was mid-word when
     /// they released the key.
@@ -132,15 +134,25 @@ public final class DictationCoordinator: ObservableObject {
     public var onAnswerReady: ((String) -> Void)?
     public var onAgentCommandReady: ((TranscriptionResult) -> Void)?
 
-    /// Where the time after the recording went, for the session log.
+    /// Where the time after key-up went, for the session log.
     public struct StageTimes: Equatable, Sendable {
-        /// On-device decode, or the whole cloud round-trip (which includes cleanup).
+        public enum Source: Equatable, Sendable {
+            /// Decoded in-process or in the speech helper.
+            case onDevice
+            /// A cloud socket that streamed during the recording.
+            case cloudLive
+            /// The saved recording uploaded after the fact; one request transcribes and cleans up.
+            case cloudUpload
+        }
+        public var source: Source
+        /// Trailing speech kept after key-up, then the microphone teardown.
+        public var finalize: TimeInterval
+        /// Decode, the live socket's final result, or the whole upload round-trip.
         public var transcribe: TimeInterval
-        /// The cleanup request after an on-device decode; nil on the cloud path.
+        /// The cleanup request; nil for `.cloudUpload`, whose one request includes it.
         public var cleanup: TimeInterval?
         /// Typing the result; nil when it went to the answer card instead.
         public var insert: TimeInterval?
-        public var onDevice: Bool
     }
     /// Fired once per completed session, after the result was handed over.
     public var onStageTimes: ((StageTimes) -> Void)?
@@ -450,6 +462,7 @@ public final class DictationCoordinator: ObservableObject {
         // (same pattern as cancelSession, audit #10). A second stop while a
         // session is in flight must not stop capture or clobber meta.
         guard apply(.finalize) else { return }
+        finalizeRequestedAt = Date()
         partialPump?.cancel()
         partialPump = nil
         partialTranscript = ""
@@ -576,7 +589,9 @@ public final class DictationCoordinator: ObservableObject {
 
         let sessionID = session.id
         let finalizeStartedAt = Date()
+        let finalizeSeconds = finalizeStartedAt.timeIntervalSince(finalizeRequestedAt ?? finalizeStartedAt)
         let live = liveTranscriber
+        let source: StageTimes.Source = live?.runsOnDevice == true ? .onDevice : .cloudLive
         let usageScope = UsageScope(mode: session.context.mode, sessionID: sessionID.uuidString)
         inFlightTask = Task { [weak self] in
           await UsageMeter.$scope.withValue(usageScope) {
@@ -592,8 +607,9 @@ public final class DictationCoordinator: ObservableObject {
                         liveResult, durationSeconds: result.durationSeconds, context: session.context
                     )
                     stages = StageTimes(
+                        source: source, finalize: finalizeSeconds,
                         transcribe: decodeDoneAt.timeIntervalSince(finalizeStartedAt),
-                        cleanup: Date().timeIntervalSince(decodeDoneAt), insert: nil, onDevice: true
+                        cleanup: Date().timeIntervalSince(decodeDoneAt), insert: nil
                     )
                 } else {
                     outcome = try await self.transcription.transcribe(
@@ -604,7 +620,8 @@ public final class DictationCoordinator: ObservableObject {
                     // Counted from the recording's end so a cloud fallback after a
                     // slow on-device load shows that wait too.
                     stages = StageTimes(
-                        transcribe: Date().timeIntervalSince(finalizeStartedAt), cleanup: nil, insert: nil, onDevice: false
+                        source: .cloudUpload, finalize: finalizeSeconds,
+                        transcribe: Date().timeIntervalSince(finalizeStartedAt), cleanup: nil, insert: nil
                     )
                 }
                 guard !Task.isCancelled else { return }
