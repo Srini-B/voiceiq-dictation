@@ -144,7 +144,7 @@ add that key; a typical dictation is a few seconds of audio. VoiceiQ itself is f
 | | Gemini | OpenAI |
 | --- | --- | --- |
 | Transcription | `gemini-3.5-transcribe` | `gpt-transcribe` |
-| Writing rules, Ask Anything, Translate, meeting notes | `gemini-3.8-flash` | `gpt-6-astra` |
+| Writing rules, Ask Anything, Translate, meeting notes | `gemini-3.8-flash` | `gpt-6.1-terra` |
 | Meeting speakers | `gemini-3.5-transcribe` | `gpt-4o-transcribe-diarize` |
 
 With **Meeting transcription** on device, Fluid Speech Mini and Nemotron 3
@@ -175,7 +175,7 @@ key ─▶ capture (CAF on disk from t=0) ─▶ key ─▶ FLAC ─▶ transcri
                     │  (Gemini/OpenAI live socket streams text) │  (chunked past 10 min)
                     ▼                                           ▼
    cursor ◀─ insert (AX → paste → clipboard) ◀─ validate ◀─ writing-rules pass
-      │                                           (gemini-3.8-flash or gpt-6-astra, with screenshots)
+      │                                           (gemini-3.8-flash or gpt-6.1-terra, with screenshots)
       ▼                                                         │
    learn from edits ─▶ Dictionary                  History (SQLite) + usage ledger
 ```

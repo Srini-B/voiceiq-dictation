@@ -67,7 +67,7 @@ On OpenAI's own API, the transcription models (`gpt-transcribe`,
 for a second transcript) bill per audio minute and report
 `usage: {type: "duration", seconds}`; `TokenUsage.fromOpenAIDuration` books
 `seconds / 60 × PriceBook.perMinutePrice` as `reportedCostUSD` with no token
-counts. Chat models (GPT-6 Astra, GPT-6 Luna, and
+counts. Chat models (GPT-6.1 Terra, GPT-6 Astra, GPT-6 Luna, and
 `gpt-4o-transcribe-diarize`, which bills tokens) use the OpenAI-shaped
 `usage` block (`TokenUsage.fromOpenAI`).
 
@@ -92,7 +92,7 @@ Calls without a scope are booked as `other`.
 `PriceBook` holds paid-tier Standard prices per million tokens from
 ai.google.dev/gemini-api/docs/pricing (copied 2026-09-26) and Standard prices
 from developers.openai.com/api/docs/pricing (copied 2026-09-28, GPT-6 Astra
-2026-10-21; GPT-6 Luna,
+2026-10-21, GPT-6.1 Terra 2026-10-27; GPT-6 Luna,
 GPT-6 Sol, `gpt-4o-transcribe-diarize`, plus the per-minute table for the
 transcription models), matched by the longest model-ID prefix. A `google/` or
 `openai/` prefix, found on rows booked through the gateways older builds

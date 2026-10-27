@@ -1,15 +1,17 @@
 import Foundation
 
 /// OpenAI's models for each role the app has: `gpt-transcribe` for recorded
-/// speech and one text model, GPT-6 Astra, for the writing rules, Ask
-/// Anything, Translate, meeting notes and agent mode. Astra replaced GPT-6
-/// Luna on 2026-10-21 because Luna kept misheard phrases that read as English
-/// ("merge it here" for "merge the PR"). Replayed on 10 real failures, Astra
-/// fixed 23 of 30 runs and Luna 7 of 40
-/// (activities/2026-10-21-mishearings-that-read-as-english.md).
+/// speech and one text model, GPT-6.1 Terra, for the writing rules, Ask
+/// Anything, Translate, meeting notes and agent mode. GPT-6 Astra replaced
+/// GPT-6 Luna on 2026-10-21 because Luna kept misheard phrases that read as
+/// English ("merge it here" for "merge the PR"): Astra fixed 23 of 30 replayed
+/// runs, Luna 7 of 40 (activities/2026-10-21-mishearings-that-read-as-english.md).
+/// Terra replaced Astra on 2026-10-27: on the same cleanup cases at `none` it
+/// matched Astra at `low` within one run, with under half the p90 latency and a
+/// tenth of the price (activities/2026-10-27-gpt-6-1-terra.md).
 public struct OpenAIConfig: Sendable, Equatable {
     public var transcribeModel = "gpt-transcribe"
-    public var writingModel = "gpt-6-astra"
+    public var writingModel = "gpt-6.1-terra"
     /// Meetings only. `gpt-transcribe` has no speaker labels.
     public var diarizeModel = "gpt-4o-transcribe-diarize"
 
@@ -83,9 +85,10 @@ extension GeminiClient {
         return try Self.parseOpenAIDiarized(data)
     }
 
-    /// The lowest effort the model takes. GPT-6 Astra has no `none` (its
-    /// lowest is `low`, per developers.openai.com/api/docs/models/gpt-6-astra)
-    /// and rejects a request that asks for it.
+    /// The lowest effort the model takes. GPT-6 Astra, still reachable through
+    /// the Formatting model override, has no `none` (its lowest is `low`, per
+    /// developers.openai.com/api/docs/models/gpt-6-astra) and rejects a request
+    /// that asks for it. GPT-6.1 Terra takes `none`.
     /// MEASURED 2026-09-28 on Luna with three dictations and the full cleanup
     /// prompt: `none` took 1.4–2.5 s with no reasoning tokens; `low` took
     /// 1.9–4.7 s, spent up to 307 reasoning tokens, and turned a
