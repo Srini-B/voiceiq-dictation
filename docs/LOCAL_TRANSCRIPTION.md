@@ -460,6 +460,11 @@ The flow, in `MeetingEngine.transcribe(folder:config:)`:
    voice where two overlap. On a 2.5-minute Meet call (2026-10-27) it lost a
    far-side "Yeah" said over the owner and gave the owner a far-side
    "this."; decoded alone, each track had every word.
+   On the far side, a word where the diarizer heard two people at once goes
+   to whichever of them said the nearest word in the same phrase (words
+   under 0.3 s apart) that only one person was heard on
+   (`LocalMeetingTranscriber.settled`). Other words keep their label, so a
+   one-word reply between someone else's words stays a turn of its own.
 5. The transcript is saved, then notes are written by the cloud writing model.
    With no key the meeting is marked failed with "add a key for notes, then
    Retry"; the transcript is kept and Retry reuses the cache.

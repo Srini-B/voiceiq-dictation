@@ -135,7 +135,42 @@ public struct LocalMeetingTranscriber: Sendable {
     /// gave the owner a far-side "this."; each track alone had every word.
     static func byTrack(owner: [LocalMeetingResult.Word], far: LocalMeetingResult) -> [TimedWord] {
         let mine = owner.map { TimedWord(text: $0.text, speaker: MeetingSpeaker.you, start: $0.start, end: $0.end) }
-        return (mine + label(far.words, segments: far.segments)).sorted { $0.start < $1.start }
+        let others = settled(label(far.words, segments: far.segments), segments: far.segments)
+        return (mine + others).sorted { $0.start < $1.start }
+    }
+
+    /// Words closer together than this are one phrase, said by one person.
+    static let phraseGap = 0.3
+
+    /// Where the diarizer heard two or more people at a word, the word goes
+    /// to whichever of them said the nearest word in its phrase that only one
+    /// person was heard on. Every other word keeps its label: a one-word
+    /// reply between someone else's words is a turn change, not noise.
+    /// MEASURED 2026-10-27: on a Meet call's far side the diarizer put both
+    /// remote speakers on the same half second, and the phrase there was
+    /// split between them word by word. Taking the phrase's speaker for
+    /// every unsure word, also outside overlaps, moved 77 words in three
+    /// earlier meetings, many of them real replies ("Awesome.", "Cool.").
+    static func settled(_ words: [TimedWord], segments: [LocalMeetingResult.Segment]) -> [TimedWord] {
+        let heard = words.map { word -> Set<String> in
+            let middle = (word.start + word.end) / 2
+            return Set(segments.filter { $0.start <= middle && middle <= $0.end }.map { "s\($0.speaker + 1)" })
+        }
+        var out = words
+        var first = 0
+        while first < words.count {
+            var last = first
+            while last + 1 < words.count, words[last + 1].start - words[last].end < phraseGap { last += 1 }
+            let sure = (first...last).filter { heard[$0].count == 1 }
+            for index in first...last where heard[index].count > 1 {
+                if let nearest = sure.filter({ heard[index].contains(words[$0].speaker) })
+                    .min(by: { abs($0 - index) < abs($1 - index) }) {
+                    out[index].speaker = words[nearest].speaker
+                }
+            }
+            first = last + 1
+        }
+        return out
     }
 
     /// The whole timeline, silence included, so the models' seconds are the

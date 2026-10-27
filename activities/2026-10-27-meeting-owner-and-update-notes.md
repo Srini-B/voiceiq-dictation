@@ -79,3 +79,16 @@ it marked both remote voices over the same half second, and the phrase there
 was split between them. The cloud meeting path still transcribes a mix; it
 re-reads the owner's side of an overlap from the mic, but a far-side word said
 over the owner can still be lost there.
+
+## Follow-up: words the diarizer heard two people on
+
+Without a test call, the owner asked for the best rule available now.
+`LocalMeetingTranscriber.settled` gives a far-side word that the diarizer
+heard two people on to whichever of them said the nearest single-speaker
+word in the same phrase. Replayed with the installed models on the Mac mini's
+22 Oct calls: 36 of 2,252 words moved in a 4-person crosstalk recording,
+mostly sentence fragments joining their sentence; 0 moved in two ordinary
+calls. A wider first version (every uncertain word) moved 77 words,
+including real one-word replies, and was dropped. Today's 87 s phrase stays
+split: its second word had no overlap, only weak evidence for the other
+speaker. Version 0.6.11 (56).
