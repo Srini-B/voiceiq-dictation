@@ -98,10 +98,12 @@ public struct ToggleDictationIntent: AudioRecordingIntent, LiveActivityIntent {
     }
 }
 
-/// The Control Center toggle. Same work as `ToggleDictationIntent`, but iOS
-/// passes the state the user switched to, so a press on a control that shows
-/// a stale state does not start a second dictation. Not an App Shortcut: a
-/// required value would make Siri and Spotlight ask for it.
+/// The Control Center toggle, also run by the Action button. iOS passes the
+/// flipped displayed state as `value`, but that state can be stale: the app's
+/// reload after a dictation stopped elsewhere does not always reach the
+/// control. So `value` is ignored and a press toggles the real state, like
+/// `ToggleDictationIntent`. Not an App Shortcut: a required value would make
+/// Siri and Spotlight ask for it.
 @available(iOS 18.0, *)
 public struct SetDictationIntent: SetValueIntent, AudioRecordingIntent, LiveActivityIntent {
     public static let title: LocalizedStringResource = "Dictate with VoiceiQ"
@@ -114,9 +116,7 @@ public struct SetDictationIntent: SetValueIntent, AudioRecordingIntent, LiveActi
 
     @MainActor
     public func perform() async throws -> some IntentResult {
-        if value != SharedStore.shared.isDictating() {
-            try await ActionButtonBridge.run()
-        }
+        try await ActionButtonBridge.run()
         return .result()
     }
 }
