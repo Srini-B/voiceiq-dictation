@@ -415,6 +415,8 @@ final class DictationController {
             if hud.model.state == .idleDot || hud.model.state == .hidden {
                 setPill(.idleDot)
             }
+        case "hidePillFromScreenSharing":
+            hud.applyScreenSharingPrivacy()
         case "dictationTrigger":
             applyHotkeySettings()
             // The menu-bar status line names the key — keep it truthful, but

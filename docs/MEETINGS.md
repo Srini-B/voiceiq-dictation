@@ -112,6 +112,23 @@ that is always on screen has no lift); banners covering a tag lose it; the
 owner is named only when the call app marks their tile or row. The notes
 prompt keeps the label "You" for the owner and adds their name as context.
 
+## The pill in screen shares
+
+The pill shows the recording clock while a meeting records. When you share
+your whole screen, the other people would see it. **Hide pill from screen
+sharing** in Settings → Dictation (`SettingsStore.hidePillFromScreenSharing`,
+key `hidePillFromScreenSharing`, default on) keeps it out of other apps'
+captures. You still see it on your Mac.
+
+`PillHUDController` sets the panel's `sharingType` to `.none` (off:
+`.readOnly`). The setting applies to every pill state, not only meetings.
+Apple calls `sharingType` a legacy value and gives no guarantee that capture
+apps honour it. Reports from macOS 15.4 said ScreenCaptureKit captured such
+windows. On macOS 26.6.2 (2026-10-27), a ScreenCaptureKit display stream and
+screenshot from another process left the pill out. Zoom, Meet and Teams
+were not tested directly. A camera pointed at the screen, or a
+mirrored or AirPlay display, still shows the pill.
+
 ## Meetings window
 
 `App/Sources/Windows/`:
