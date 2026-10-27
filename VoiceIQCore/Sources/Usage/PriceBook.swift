@@ -54,6 +54,7 @@ public enum PriceBook {
             ("gemini-2.5-flash-lite", ModelPrice(textIn: 0.10, audioIn: 0.30, textOut: 0.40)),
             ("gemini-2.5-flash", ModelPrice(textIn: 0.30, audioIn: 1.00, cachedIn: 0.03, textOut: 2.50)),
             // developers.openai.com/api/docs/pricing, Standard, copied 2026-09-28.
+            ("gpt-6.1-terra", ModelPrice(textIn: 1.00, cachedIn: 0.05, textOut: 5.00)), // copied 2026-10-27
             ("gpt-6-astra", ModelPrice(textIn: 10.00, cachedIn: 1.00, textOut: 50.00)), // copied 2026-10-21
             ("gpt-6-luna", ModelPrice(textIn: 0.10, cachedIn: 0.01, textOut: 0.50)),
             ("gpt-6-sol", ModelPrice(textIn: 2.00, cachedIn: 0.20, textOut: 10.00)),
