@@ -269,7 +269,10 @@ import VoiceIQSpeech
     private func finish(id: MeetingID, meta: inout MeetingMeta, transcript: [TranscriptSegment], notes: MeetingNotes) throws {
         try store.save(transcript: transcript, id: id)
         try store.save(notes: notes, id: id)
-        meta.title = notes.title; meta.status = .done; try store.save(meta: meta)
+        meta.title = notes.title; meta.status = .done; meta.notesSpeakerNames = meta.speakerNames
+        // Names typed while the notes were written stay, and show the notes as out of date.
+        if let current = store.list().first(where: { $0.id == id }) { meta.speakerNames = current.speakerNames }
+        try store.save(meta: meta)
         processing.remove(id); onNotesReady?()
     }
 

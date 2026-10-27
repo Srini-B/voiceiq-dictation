@@ -43,10 +43,26 @@ That walk takes about 0.6 s on a Mac with AirPlay's thousand plug-ins, so the
 map is cached until the device list changes. A call app used during a remote
 session still counts: its developer differs from the driver's.
 
+WebKit's XPC services (`com.apple.WebKit.*`, such as "Safari Graphics and
+Media") are skipped. macOS lists them as running apps, and Safari's GPU
+process captures the mic itself, so it used to win before Safari and the
+call was recorded as an app with no windows. Safari is found through the
+helper's responsible process instead, and its Meet page is read as usual.
+
 Before macOS 14.2 only rules 2 and 3 apply, on the global "mic in use" bit.
 
 The daemon names in rule 1 come from Apple's process layout; a relayed
 iPhone call was not available to test on the development Mac.
+
+## The note owner
+
+The owner is the speaker heard from the mic and not from the far side
+(`MeetingTranscriber.markOwner`). This runs only when the recording is a call
+(`CallAudio.isOnline`): at least 5 s of far-side speech when the recording
+started on a detected call (`MeetingMeta.source`), and 20 s otherwise.
+Before 2026-10-27 every recording needed 20 s. A 2.5-minute Meet call had
+15.9 s, so the owner became an ordinary speaker and got a participant's name
+from the screen.
 
 ## Speaker names from the screen
 
@@ -135,13 +151,17 @@ mirrored or AirPlay display, still shows the pill.
 
 | File | Shows |
 | --- | --- |
-| `MeetingsView.swift` | Record button above the list, the detail header (title, Export menu, `…` menu with Redo notes / Redo transcript and notes / Retry / Delete, transcript toggle), the export message |
+| `MeetingsView.swift` | Record button above the list, the detail header (title, Update notes after a speaker is renamed, Export menu, `…` menu with Redo notes / Redo transcript and notes / Retry / Delete, transcript toggle), the export message |
 | `MeetingNotesColumn.swift` | Title, Summary, the meeting type's sections, Decisions, Action items as open circles ("Owner: task"), Notes |
 | `MeetingTranscriptColumn.swift` | The transcript in one `NSTextView`: speaker names in their own colour (`SpeakerPalette`), time on a right tab stop, search that filters and highlights |
 | `AssignSpeakersView.swift` | One card per speaker: name, a sample line, shuffle (next line), play (that line's audio) |
 
 In Assign speakers, clicking a name lists `knownNames`, a field for another
-name, and Reset when the user typed one. Play uses `mic-aec.caf` (else
+name, and Reset when the user typed one. The notes keep the names they were
+written with (`MeetingMeta.notesSpeakerNames`). When a name is set, changed
+or cleared after that (`namesChangedSinceNotes`), the header shows **Update
+notes**, which runs `MeetingEngine.regenerateNotes` with the typed names. A
+name typed while the notes are written is kept and shows the button again. Play uses `mic-aec.caf` (else
 `mic.caf`) for "you" and `system.caf` for everyone else, from the turn's start
 to its end, through `AVAudioPlayer`.
 

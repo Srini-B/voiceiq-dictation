@@ -121,6 +121,8 @@ public struct CallAudio: Sendable {
     /// The mic carries no echo worth ducking; speech on it is the owner's
     /// even while the far side talks.
     public let micIsEchoFree: Bool
+    /// The recording started on a call `CallDetector` found (`MeetingMeta.source`).
+    public let detectedCall: Bool
 
     /// A window belongs to the far side when the system track is near its own
     /// speech level and, relative to each track's speech level, louder than
@@ -128,8 +130,8 @@ public struct CallAudio: Sendable {
     /// tone was -87 dBFS and its speech -32, so "above room tone" also caught
     /// keyboard clicks and hiss, and the owner's id counted 758 far-side
     /// windows to 229 mic-only ones. With this test it counted 119 to 422.
-    public init(mic: TrackAudio, system: TrackAudio, micIsEchoFree: Bool = false) {
-        self.mic = mic; self.system = system; self.micIsEchoFree = micIsEchoFree
+    public init(mic: TrackAudio, system: TrackAudio, micIsEchoFree: Bool = false, detectedCall: Bool = false) {
+        self.mic = mic; self.system = system; self.micIsEchoFree = micIsEchoFree; self.detectedCall = detectedCall
         let micSpeech = mic.speechLevel, systemSpeech = system.speechLevel
         let count = max(mic.levels.count, system.levels.count)
         let far = (0..<count).map { index -> Bool in
@@ -161,7 +163,10 @@ public struct CallAudio: Sendable {
 
     public var duration: Double { max(mic.duration, system.duration) }
     /// The far side talked: this is a call, and the mic is the note owner.
-    public var isOnline: Bool { Double(systemSpeech.filter { $0 }.count) / 10 >= 20 }
+    /// A recording of a detected call needs only a few seconds of the far
+    /// side. MEASURED 2026-10-27: a 2.5-minute Meet call in Safari had 15.9 s,
+    /// so the owner was never told apart and got a participant's name.
+    public var isOnline: Bool { Double(systemSpeech.filter { $0 }.count) / 10 >= (detectedCall ? 5 : 20) }
 
     /// Speech on either track, padded and merged across short pauses.
     public func activeRegions(maxLength: Double = 60) -> [ClosedRange<Double>] {

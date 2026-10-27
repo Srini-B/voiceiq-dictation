@@ -252,6 +252,16 @@ public struct MeetingMeta: Codable, Equatable, Sendable, Identifiable {
     public var title: String?
     /// Set once the transcript exists, when names were read off the screen.
     public var screenNames: ScreenNames?
+    /// The typed names the current notes were written with. Nil for notes
+    /// written before this was kept: as if written with none.
+    public var notesSpeakerNames: [String: String]?
+
+    /// Speakers were named, renamed or cleared since the notes were written,
+    /// so the notes may credit the wrong people.
+    public var namesChangedSinceNotes: Bool {
+        func typed(_ names: [String: String]) -> [String: String] { names.filter { !$0.value.isEmpty } }
+        return typed(speakerNames) != typed(notesSpeakerNames ?? [:])
+    }
 
     public init(id: MeetingID, startedAt: Date, endedAt: Date? = nil, source: CallSource? = nil,
                 durationSeconds: Double = 0, status: MeetingStatus = .recording,

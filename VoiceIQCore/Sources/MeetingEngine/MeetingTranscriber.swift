@@ -160,7 +160,9 @@ public struct MeetingTranscriber: Sendable {
     static func callAudio(folder: URL) throws -> CallAudio {
         let micURL = folder.appendingPathComponent("mic.caf"), systemURL = folder.appendingPathComponent("system.caf")
         let system = try TrackAudio(url: systemURL)
-        let raw = CallAudio(mic: try TrackAudio(url: micURL), system: system)
+        let meta = try? JSONDecoder().decode(MeetingMeta.self, from: Data(contentsOf: folder.appendingPathComponent("meta.json")))
+        let detectedCall = meta?.source != nil
+        let raw = CallAudio(mic: try TrackAudio(url: micURL), system: system, detectedCall: detectedCall)
         guard raw.isOnline else { return raw }
         #if os(macOS)
         let cancelledURL = folder.appendingPathComponent("mic-aec.caf")
@@ -169,7 +171,8 @@ public struct MeetingTranscriber: Sendable {
                 let erle = try EchoCanceller.cancel(mic: micURL, system: systemURL, output: cancelledURL)
                 Log.meeting.info("echo cancelled, ERLE \(String(format: "%.1f", erle), privacy: .public) dB")
             }
-            let cancelled = CallAudio(mic: try TrackAudio(url: cancelledURL), system: system, micIsEchoFree: true)
+            let cancelled = CallAudio(mic: try TrackAudio(url: cancelledURL), system: system, micIsEchoFree: true,
+                                      detectedCall: detectedCall)
             Log.meeting.info("echo left in mic: \(String(format: "%.1f", raw.residualEcho), privacy: .public) dB before, \(String(format: "%.1f", cancelled.residualEcho), privacy: .public) dB after")
             return cancelled.residualEcho <= maximumResidualEcho ? cancelled : raw
         } catch {
