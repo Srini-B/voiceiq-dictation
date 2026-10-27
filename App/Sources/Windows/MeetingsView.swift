@@ -50,7 +50,8 @@ struct MeetingsPane: View {
     private var sidebar: some View {
         VStack(spacing: 0) {
             Button {
-                recording ? engine.stopRecording() : engine.startRecording()
+                // As Option-M: a call already detected becomes the meeting's source.
+                engine.toggleRecording()
             } label: {
                 Label(recording ? "Stop recording" : "Record", systemImage: recording ? "stop.fill" : "record.circle")
                     .frame(maxWidth: .infinity)
