@@ -14,6 +14,7 @@ struct HistoryPane: View {
     @State private var records: [DictationRecord] = []
     @State private var costs: [String: Double] = [:]
     @State private var stats = HistoryStore.Stats(totalWords: 0, totalDictations: 0, averageWPM: 0)
+    @AppStorage("historyStatsPeriod") private var statsPeriod = HistoryStore.StatsPeriod.allTime
     @State private var selection: String?
     @State private var showAllAttention = false
     @State private var confirmingDiscardAll = false
@@ -22,7 +23,8 @@ struct HistoryPane: View {
 
     var body: some View {
         Group {
-            if records.isEmpty && query.isEmpty {
+            // Stats outlive History, so the sidebar stays after it is cleared.
+            if records.isEmpty && query.isEmpty && stats.activeDays == 0 {
                 emptyState
             } else {
                 HStack(spacing: 0) {
@@ -67,6 +69,7 @@ struct HistoryPane: View {
     private var sidebar: some View {
         VStack(spacing: 0) {
             VStack(spacing: VoiceIQUI.Spacing.s) {
+                periodPicker
                 statsGrid
                 searchField
             }
@@ -75,6 +78,18 @@ struct HistoryPane: View {
             .padding(.bottom, VoiceIQUI.Spacing.xxs)
             recordList
         }
+    }
+
+    private var periodPicker: some View {
+        Picker("Period", selection: $statsPeriod) {
+            ForEach(HistoryStore.StatsPeriod.allCases) { Text($0.title).tag($0) }
+        }
+        .pickerStyle(.menu)
+        .labelsHidden()
+        .fixedSize()
+        .font(VoiceIQUI.TypeScale.labelSmall(grad: grad))
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .onChange(of: statsPeriod) { _, _ in reload() }
     }
 
     private var statsGrid: some View {
@@ -102,7 +117,7 @@ struct HistoryPane: View {
             TextField("Search your dictations", text: $query)
                 .textFieldStyle(.plain)
                 .font(VoiceIQUI.TypeScale.body(grad: grad))
-                .onChange(of: query) { _, _ in reload() }
+                .onChange(of: query) { _, _ in reloadRecords() }
         }
         .padding(.horizontal, VoiceIQUI.Spacing.s)
         .padding(.vertical, 7)
@@ -207,7 +222,7 @@ struct HistoryPane: View {
                 }
             }
         }
-        .overlay { if records.isEmpty { Text("No matches").foregroundStyle(.secondary) } }
+        .overlay { if records.isEmpty { Text(query.isEmpty ? "No dictations" : "No matches").foregroundStyle(.secondary) } }
     }
 
     private func attentionRow(_ record: DictationRecord) -> some View {
@@ -390,9 +405,14 @@ struct HistoryPane: View {
     }
 
     private func reload() {
+        reloadRecords()
+        stats = store.stats(period: statsPeriod)
+    }
+
+    /// Search changes only the list; the stats ignore the query.
+    private func reloadRecords() {
         records = store.records(matching: query.isEmpty ? nil : query)
         if selected == nil { selection = timeline.first?.id ?? attention.first?.id }
-        stats = store.stats()
         costs = usage?.costBySession(ids: records.map(\.id)) ?? [:]
     }
 

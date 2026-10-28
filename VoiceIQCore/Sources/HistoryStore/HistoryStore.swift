@@ -143,6 +143,7 @@ public final class HistoryStore: @unchecked Sendable {
                 t.add(column: "cloudSyncedAt", .datetime)
             }
         }
+        migrator.registerMigration("v4-stats", migrate: Self.createStatTable)
         try migrator.migrate(queue)
     }
 
@@ -160,6 +161,7 @@ public final class HistoryStore: @unchecked Sendable {
                     record.cloudSyncedAt = stored.cloudSyncedAt
                 }
                 try record.save(db)
+                try Self.recordStat(of: record, in: db)
             }
             Self.notifyChanged()
         } catch {
@@ -344,108 +346,5 @@ public final class HistoryStore: @unchecked Sendable {
                 .order(sql: "startedAt DESC")
                 .fetchAll(db)
         }) ?? []
-    }
-
-    public struct Stats: Equatable, Sendable {
-        public var totalWords: Int
-        public var totalDictations: Int
-        public var averageWPM: Int
-        /// Recorded audio across the same dictations. Transcription is billed
-        /// by audio time, so this is the figure to hold against a price per hour.
-        public var totalAudioSeconds: Double
-        /// Calendar days with at least one dictation.
-        public var activeDays: Int
-        /// Consecutive days up to today (or yesterday, when today has none yet).
-        public var currentStreak: Int
-        public var longestStreak: Int
-
-        public init(totalWords: Int, totalDictations: Int, averageWPM: Int, totalAudioSeconds: Double = 0,
-                    activeDays: Int = 0, currentStreak: Int = 0, longestStreak: Int = 0) {
-            self.totalWords = totalWords
-            self.totalDictations = totalDictations
-            self.averageWPM = averageWPM
-            self.totalAudioSeconds = totalAudioSeconds
-            self.activeDays = activeDays
-            self.currentStreak = currentStreak
-            self.longestStreak = longestStreak
-        }
-
-        /// Words per minute a person types, for the time-saved figure. 40 is
-        /// the usual average for a non-professional typist.
-        public static let typingWPM = 40.0
-
-        /// Minutes typing the same words would have taken, less the minutes
-        /// spent speaking them. Zero when speaking was not faster.
-        public var minutesSaved: Int {
-            max(0, Int((Double(totalWords) / Self.typingWPM - totalAudioSeconds / 60).rounded()))
-        }
-
-        /// "38 min" under an hour, then hours.
-        public var savedLabel: String {
-            let minutes = minutesSaved
-            if minutes < 60 { return minutes > 0 ? "\(minutes) min" : "–" }
-            let hours = Double(minutes) / 60
-            return hours < 100 ? String(format: "%.1f h", hours) : "\(Int(hours.rounded())) h"
-        }
-
-        /// "42 min" under an hour, then hours: "3.2 h", "148 h".
-        public var audioLabel: String {
-            let seconds = totalAudioSeconds
-            if seconds < 60 { return seconds > 0 ? "\(Int(seconds.rounded())) s" : "–" }
-            if seconds < 3_600 { return "\(Int((seconds / 60).rounded())) min" }
-            let hours = seconds / 3_600
-            return hours < 100 ? String(format: "%.1f h", hours) : "\(Int(hours.rounded())) h"
-        }
-    }
-
-    public func stats(now: Date = Date(), calendar: Calendar = .current) -> Stats {
-        (try? queue.read { db in
-            let rows = try Row.fetchAll(db, sql: """
-                SELECT cleanedTranscript, durationSeconds, startedAt FROM dictation
-                WHERE cleanedTranscript IS NOT NULL
-                """)
-            var words = 0
-            var timedWords = 0
-            var speech = 0.0
-            var days = Set<Date>()
-            for row in rows {
-                let text: String = row["cleanedTranscript"] ?? ""
-                // Whitespace-aware split (newlines count too — audit L29).
-                let count = text.split(whereSeparator: \.isWhitespace).count
-                words += count
-                if let duration: Double = row["durationSeconds"], duration > 0 {
-                    timedWords += count
-                    speech += duration
-                }
-                if let startedAt: Date = row["startedAt"] { days.insert(calendar.startOfDay(for: startedAt)) }
-            }
-            // WPM only over rows that actually have a duration.
-            let wpm = speech > 10 ? Int(Double(timedWords) / (speech / 60)) : 0
-            let streaks = Self.streaks(days: days, now: now, calendar: calendar)
-            return Stats(totalWords: words, totalDictations: rows.count, averageWPM: wpm, totalAudioSeconds: speech,
-                         activeDays: days.count, currentStreak: streaks.current, longestStreak: streaks.longest)
-        }) ?? Stats(totalWords: 0, totalDictations: 0, averageWPM: 0)
-    }
-
-    /// The run of consecutive days ending today or yesterday, and the
-    /// longest run anywhere. A day with no dictation yet does not break the
-    /// streak until it is over.
-    static func streaks(days: Set<Date>, now: Date, calendar: Calendar) -> (current: Int, longest: Int) {
-        guard !days.isEmpty else { return (0, 0) }
-        let sorted = days.sorted()
-        var longest = 1
-        var run = 1
-        for (previous, day) in zip(sorted, sorted.dropFirst()) {
-            run = calendar.dateComponents([.day], from: previous, to: day).day == 1 ? run + 1 : 1
-            longest = max(longest, run)
-        }
-        let today = calendar.startOfDay(for: now)
-        var current = 0
-        var cursor = days.contains(today) ? today : calendar.date(byAdding: .day, value: -1, to: today)!
-        while days.contains(cursor) {
-            current += 1
-            cursor = calendar.date(byAdding: .day, value: -1, to: cursor)!
-        }
-        return (current, longest)
     }
 }
