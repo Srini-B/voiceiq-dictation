@@ -117,7 +117,7 @@ struct HistoryPane: View {
             TextField("Search your dictations", text: $query)
                 .textFieldStyle(.plain)
                 .font(VoiceIQUI.TypeScale.body(grad: grad))
-                .onChange(of: query) { _, _ in reload() }
+                .onChange(of: query) { _, _ in reloadRecords() }
         }
         .padding(.horizontal, VoiceIQUI.Spacing.s)
         .padding(.vertical, 7)
@@ -222,7 +222,7 @@ struct HistoryPane: View {
                 }
             }
         }
-        .overlay { if records.isEmpty { Text("No matches").foregroundStyle(.secondary) } }
+        .overlay { if records.isEmpty { Text(query.isEmpty ? "No dictations" : "No matches").foregroundStyle(.secondary) } }
     }
 
     private func attentionRow(_ record: DictationRecord) -> some View {
@@ -405,9 +405,14 @@ struct HistoryPane: View {
     }
 
     private func reload() {
+        reloadRecords()
+        stats = store.stats(period: statsPeriod)
+    }
+
+    /// Search changes only the list; the stats ignore the query.
+    private func reloadRecords() {
         records = store.records(matching: query.isEmpty ? nil : query)
         if selected == nil { selection = timeline.first?.id ?? attention.first?.id }
-        stats = store.stats(period: statsPeriod)
         costs = usage?.costBySession(ids: records.map(\.id)) ?? [:]
     }
 

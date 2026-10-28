@@ -3,7 +3,9 @@ import GRDB
 
 /// What the History stats count for one dictation, without its text. Rows are
 /// written with the dictation and never deleted, so deleting, clearing or
-/// expiring History leaves the stats alone.
+/// expiring History leaves the stats alone. They share `history.sqlite`, so
+/// when a corrupt index is quarantined and rebuilt, only dictations whose
+/// folders remain are counted again.
 struct DictationStat: Codable, FetchableRecord, PersistableRecord {
     static let databaseTableName = "dictationStat"
 
@@ -128,26 +130,23 @@ extension HistoryStore {
     /// deleted from History.
     public func stats(period: StatsPeriod = .allTime, now: Date = Date(), calendar: Calendar = .current) -> Stats {
         (try? queue.read { db in
-            let start = period.start(now: now, calendar: calendar)
-            var dictations = 0
-            var words = 0
-            var timedWords = 0
-            var speech = 0.0
-            var days = Set<Date>()
-            for stat in try DictationStat.fetchAll(db) {
-                days.insert(calendar.startOfDay(for: stat.startedAt))
-                if let start, stat.startedAt < start { continue }
-                dictations += 1
-                words += stat.words
-                if let duration = stat.durationSeconds, duration > 0 {
-                    timedWords += stat.words
-                    speech += duration
-                }
-            }
+            let start = period.start(now: now, calendar: calendar) ?? .distantPast
+            let row = try Row.fetchOne(db, sql: """
+                SELECT COUNT(*) AS dictations, IFNULL(SUM(words), 0) AS words,
+                       IFNULL(SUM(CASE WHEN durationSeconds > 0 THEN words END), 0) AS timedWords,
+                       IFNULL(SUM(CASE WHEN durationSeconds > 0 THEN durationSeconds END), 0) AS speech
+                FROM dictationStat WHERE startedAt >= ?
+                """, arguments: [start])
+            let words: Int = row?["words"] ?? 0
+            let timedWords: Int = row?["timedWords"] ?? 0
+            let speech: Double = row?["speech"] ?? 0
+            // Streaks need calendar days, which only Calendar can draw in the
+            // user's time zone, so the dates themselves are read.
+            let days = Set(try Date.fetchAll(db, sql: "SELECT startedAt FROM dictationStat").map(calendar.startOfDay))
             // WPM only over rows that actually have a duration.
             let wpm = speech > 10 ? Int(Double(timedWords) / (speech / 60)) : 0
             let streaks = Self.streaks(days: days, now: now, calendar: calendar)
-            return Stats(totalWords: words, totalDictations: dictations, averageWPM: wpm, totalAudioSeconds: speech,
+            return Stats(totalWords: words, totalDictations: row?["dictations"] ?? 0, averageWPM: wpm, totalAudioSeconds: speech,
                          activeDays: days.count, currentStreak: streaks.current, longestStreak: streaks.longest)
         }) ?? Stats(totalWords: 0, totalDictations: 0, averageWPM: 0)
     }

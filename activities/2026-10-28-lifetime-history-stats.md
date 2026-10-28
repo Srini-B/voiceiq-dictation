@@ -22,6 +22,10 @@ History and transcript retention lowered them.
 - Periods are rolling: today, last 7 days, last 30 days, last 12 months, all
   time. Streaks and active days stay all-time, because a week window would cap
   a streak at 7.
+- The table lives in `history.sqlite`. When a corrupt index is quarantined
+  and rebuilt, only dictations whose folders remain are counted again. A
+  separate database file would need its own corruption handling, so this
+  rare case is documented instead.
 - The Mac History pane keeps its sidebar after History is cleared, so the
   stats stay visible. The choice of period is remembered. The iPhone Home
   stats show all time and have no picker.
