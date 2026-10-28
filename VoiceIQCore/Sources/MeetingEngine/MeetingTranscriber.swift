@@ -20,48 +20,17 @@ public struct MeetingTranscriber: Sendable {
         public init(transcribe: String) { self.transcribe = transcribe }
     }
 
-    /// Who hears the audio: ElevenLabs Scribe, or a provider's diarizing model.
-    public enum SpeechRoute: Equatable, Sendable {
-        case elevenLabs
-        case provider(ModelProvider)
-
-        public var displayName: String {
-            switch self {
-            case .elevenLabs: return "ElevenLabs"
-            case .provider(let provider): return provider.directName
-            }
-        }
-
-        /// Names the window cache and log lines.
-        var key: String {
-            switch self {
-            case .elevenLabs: return "elevenlabs"
-            case .provider(let provider): return provider.rawValue
-            }
-        }
-
-        /// Whether reference clips go inside the audio and the labels the
-        /// model gives them name the speakers (`SpeakerLinker.link`). OpenAI
-        /// takes named voice references alongside instead.
-        var anchorsInAudio: Bool {
-            switch self {
-            case .elevenLabs, .provider(.gemini): return true
-            case .provider(.openAI): return false
-            }
-        }
-    }
-
     private let client: GeminiClient
     private let models: Models
     private let endpoint: URL
-    /// Routes to try in order; see `SettingsStore.meetingSpeechRoutes`.
-    private let routes: @Sendable () -> [SpeechRoute]
+    /// Providers to try in order; see `ModelProvider.meetingOrder`.
+    private let providers: @Sendable () -> [ModelProvider]
     private let sleep: @Sendable (TimeInterval) async throws -> Void
 
     public init(client: GeminiClient, models: Models, endpoint: URL,
-                routes: @escaping @Sendable () -> [SpeechRoute],
+                providers: @escaping @Sendable () -> [ModelProvider],
                 sleep: @escaping @Sendable (TimeInterval) async throws -> Void = { try await Task.sleep(nanoseconds: UInt64($0 * 1_000_000_000)) }) {
-        self.client = client; self.models = models; self.endpoint = endpoint; self.routes = routes; self.sleep = sleep
+        self.client = client; self.models = models; self.endpoint = endpoint; self.providers = providers; self.sleep = sleep
     }
 
     /// Seconds of speech per request. Diarized requests are capped at 30
@@ -78,12 +47,12 @@ public struct MeetingTranscriber: Sendable {
 
     public func transcribe(folder: URL) async throws -> [TranscriptSegment] {
         let audio = try Self.callAudio(folder: folder)
-        // The route names the window cache, so a redo after switching it
+        // The provider names the window cache, so a redo after switching it
         // transcribes again instead of reusing the other model's windows.
-        let first = routes().first
+        let first = providers().first
         let window = Self.windowSpeech
         let cache = folder.appendingPathComponent(
-            "transcribe-\(Self.cacheVersion)-\(first?.key ?? "none")-\(Int(window))", isDirectory: true)
+            "transcribe-\(Self.cacheVersion)-\(first?.rawValue ?? "none")-\(Int(window))", isDirectory: true)
         try FileManager.default.createDirectory(at: cache, withIntermediateDirectories: true)
         var budget = Self.rateLimitBudget
         let windows = Self.windows(audio.activeRegions(), speech: window)
@@ -128,7 +97,7 @@ public struct MeetingTranscriber: Sendable {
         var request = AssembledAudio()
         try request.appendBody(regions, source: audio.mic.samples)
         let flac = try FLACEncoder.encode(samples: request.samples)
-        let raw = try await withRoutes(label: "overlap", budget: &budget) { via in
+        let raw = try await withProviders(label: "overlap", budget: &budget) { via in
             try await transcribeSpeakers(flac, seconds: request.duration, references: [], via: via)
         }
         return raw.compactMap { word in
@@ -288,35 +257,35 @@ public struct MeetingTranscriber: Sendable {
     private func transcribe(window regions: [ClosedRange<Double>], audio: CallAudio, known: [TimedWord],
                             budget: inout TimeInterval, label: String) async throws -> [TimedWord] {
         let clips = SpeakerLinker.anchorClips(known).sorted { $0.key < $1.key }
-        return try await withRoutes(label: label, budget: &budget) { via in
+        return try await withProviders(label: label, budget: &budget) { via in
             try await transcribe(window: regions, audio: audio, clips: clips, known: known, via: via)
         }
     }
 
-    /// Runs `body` with each route in turn. A throttled route is waited out
-    /// only when no other route has a key.
-    private func withRoutes<T>(label: String, budget: inout TimeInterval,
-                               _ body: (SpeechRoute) async throws -> T) async throws -> T {
+    /// Runs `body` with each provider in turn. A throttled provider is waited
+    /// out only when no other provider has a key.
+    private func withProviders<T>(label: String, budget: inout TimeInterval,
+                                  _ body: (ModelProvider) async throws -> T) async throws -> T {
         var lastError: Error = TranscriptionError.network("no_provider")
         while true {
             var waits: [TimeInterval] = []
-            for via in routes() {
+            for via in providers() {
                 do {
                     do { return try await body(via) } catch TranscriptionError.safetyBlocked {
                         // MEASURED 2026-09-27: the flash model blocked one window of a
                         // call as `content_filter` and passed the same window on the
                         // next run. One more try before moving on.
-                        Log.meeting.info("\(label, privacy: .public): \(via.key, privacy: .public) safety block, retrying")
+                        Log.meeting.info("\(label, privacy: .public): \(via.rawValue, privacy: .public) safety block, retrying")
                         return try await body(via)
                     }
                 } catch TranscriptionError.rateLimitedTransient(let retryAfter) {
-                    Log.meeting.info("\(label, privacy: .public): \(via.key, privacy: .public) rate limited")
+                    Log.meeting.info("\(label, privacy: .public): \(via.rawValue, privacy: .public) rate limited")
                     waits.append(retryAfter ?? 60); lastError = TranscriptionError.rateLimitedTransient(retryAfter: retryAfter)
                 } catch let error as TranscriptionError where Self.tryNextProvider(error) {
-                    Log.meeting.error("\(label, privacy: .public): \(via.key, privacy: .public) failed: \(String(describing: error), privacy: .public)")
+                    Log.meeting.error("\(label, privacy: .public): \(via.rawValue, privacy: .public) failed: \(String(describing: error), privacy: .public)")
                     lastError = error
                 } catch is DecodingError {
-                    Log.meeting.error("\(label, privacy: .public): \(via.key, privacy: .public) returned unreadable segments")
+                    Log.meeting.error("\(label, privacy: .public): \(via.rawValue, privacy: .public) returned unreadable segments")
                     lastError = TranscriptionError.network("unreadable_segments")
                 }
             }
@@ -327,31 +296,29 @@ public struct MeetingTranscriber: Sendable {
         }
     }
 
-    /// Speaker-labelled words on the route's diarizing model.
+    /// Speaker-labelled words on the provider's diarizing model.
     private func transcribeSpeakers(_ flac: Data, seconds: Double, references: [(id: String, audio: Data)],
-                                    via route: SpeechRoute) async throws -> [DiarizedWord] {
-        switch route {
-        case .elevenLabs:
-            return try await client.elevenLabsDiarize(audio: flac, audioSeconds: seconds, deadline: 600)
-        case .provider(.gemini):
+                                    via provider: ModelProvider) async throws -> [DiarizedWord] {
+        switch provider {
+        case .gemini:
             return try await client.transcribeSpeakers(audio: flac, model: models.transcribe, endpoint: endpoint, deadline: 600)
-        case .provider(.openAI):
+        case .openAI:
             return try await client.openAIDiarize(audio: flac, references: references, deadline: 600)
         }
     }
 
-    /// Gemini and ElevenLabs: reference clips go inside the audio and the
-    /// labels the API gives them name the speakers (`SpeakerLinker.link`).
-    /// OpenAI: up to four named voice references go alongside, and the model
-    /// labels their segments with those names.
+    /// Gemini: reference clips go inside the audio and the labels the API
+    /// gives them name the speakers (`SpeakerLinker.link`). OpenAI: up to
+    /// four named voice references go alongside, and the model labels their
+    /// segments with those names.
     private func transcribe(window regions: [ClosedRange<Double>], audio: CallAudio, clips: [(key: String, value: [ClosedRange<Double>])],
-                            known: [TimedWord], via route: SpeechRoute) async throws -> [TimedWord] {
+                            known: [TimedWord], via provider: ModelProvider) async throws -> [TimedWord] {
         var request = AssembledAudio()
-        if route.anchorsInAudio {
+        if provider == .gemini {
             for (id, ranges) in clips { try request.appendAnchor(id: id, clips: ranges, from: audio) }
             try request.appendBody(regions, from: audio)
             let raw = try await transcribeSpeakers(try FLACEncoder.encode(samples: request.samples), seconds: request.duration,
-                                                   references: [], via: route)
+                                                   references: [], via: provider)
             return Self.place(raw, audio: request, call: audio, known: known, mapping: SpeakerLinker.link(words: raw, anchors: request.anchors))
         }
         try request.appendBody(regions, from: audio)
@@ -364,7 +331,7 @@ public struct MeetingTranscriber: Sendable {
             references.append((id, try FLACEncoder.encode(samples: Array(clip.samples.prefix(limit)))))
         }
         let raw = try await transcribeSpeakers(try FLACEncoder.encode(samples: request.samples), seconds: request.duration,
-                                               references: references, via: route)
+                                               references: references, via: provider)
         let mapping = Dictionary(uniqueKeysWithValues: references.map { ($0.id, $0.id) })
         return Self.place(raw, audio: request, call: audio, known: known, mapping: mapping)
     }

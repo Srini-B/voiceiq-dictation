@@ -367,13 +367,16 @@ struct PrivacyView: View {
     @State private var retentionDays = SettingsStore().audioRetentionDays
     @State private var transcriptRetentionDays = SettingsStore().transcriptRetentionDays
     @State private var provider = SettingsStore().preferredProvider
-    @State private var dictationSource = SettingsStore().cloudDictationSource
-    @State private var meetingSource = SettingsStore().meetingSpeechRoutes.first
 
-    /// Who hears dictation audio when it is not transcribed on device.
-    private var audioOwner: String { dictationSource == .elevenLabs ? "ElevenLabs" : provider.directName }
-    private var destination: String { "\(audioOwner), with your key" }
-    private var meetingOwner: String { meetingSource?.displayName ?? provider.directName }
+    @State private var meetingProviders = SettingsStore().meetingProviders
+
+    private var destination: String { "\(provider.directName), with your key" }
+    /// Meetings go to the other provider when only its key is saved, or when
+    /// the first one fails.
+    private var meetingOwner: String {
+        let names = meetingProviders.map(\.directName)
+        return names.count > 1 ? "\(names[0]), or \(names[1]) if that fails" : names.first ?? provider.directName
+    }
 
     var body: some View {
         Form {
@@ -396,7 +399,7 @@ struct PrivacyView: View {
                 }
             }
             Section {
-                LocalAudioPrivacyRow(provider: audioOwner, cloudDescription: destination)
+                LocalAudioPrivacyRow(provider: provider.directName, cloudDescription: destination)
                 LabeledContent("Transcript text", value: "For writing rules, Ask and Translate")
                 LocalMeetingPrivacyRow(
                     label: "Notes audio",
@@ -415,8 +418,7 @@ struct PrivacyView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .gtSettingDidChange).receive(on: RunLoop.main)) { _ in
             provider = SettingsStore().preferredProvider
-            dictationSource = SettingsStore().cloudDictationSource
-            meetingSource = SettingsStore().meetingSpeechRoutes.first
+            meetingProviders = SettingsStore().meetingProviders
         }
     }
 }

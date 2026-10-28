@@ -41,7 +41,7 @@ extension GeminiClient {
     /// insert. Nothing else is retried here: a timeout already spent the
     /// deadline (callers retry it), and an HTTP status is an answer.
     static func perform(
-        _ request: URLRequest, deadline: TimeInterval, stage: UsageStage, via: ModelEndpoint, modelLabel: String
+        _ request: URLRequest, deadline: TimeInterval, stage: UsageStage, via: ModelProvider, modelLabel: String
     ) async throws -> (Data, URLResponse) {
         var request = request
         let requestID = UUID().uuidString
@@ -95,7 +95,7 @@ extension GeminiClient {
 
     private static func record(
         _ collector: TransportMetricsCollector, requestID: String, attempt: Int, stage: UsageStage,
-        via: ModelEndpoint, model: String, request: URLRequest, started: Date, status: Int?, outcome: String
+        via: ModelProvider, model: String, request: URLRequest, started: Date, status: Int?, outcome: String
     ) {
         let metrics = collector.transaction
         func ms(_ from: Date?, _ to: Date?) -> Int? {

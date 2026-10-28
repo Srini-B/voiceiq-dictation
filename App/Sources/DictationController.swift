@@ -54,8 +54,7 @@ final class DictationController {
             apiKey: { KeychainStore.loadAPIKey() },
             openAIKey: { KeychainStore.loadOpenAIKey() },
             openAIConfig: { SettingsStore().openAIConfig },
-            provider: { SettingsStore().preferredProvider },
-            elevenLabsKey: { KeychainStore.loadElevenLabsKey() }
+            provider: { SettingsStore().preferredProvider }
         )
         let service = GeminiTranscriptionService(client: client)
         transcriptionService = service
@@ -66,7 +65,6 @@ final class DictationController {
             config: { SettingsStore().geminiConfig },
             summaryModel: SettingsStore().geminiConfig.cleanupModel,
             providers: { SettingsStore().meetingProviders },
-            routes: { SettingsStore().meetingSpeechRoutes },
             localMeeting: LocalMeetingHelper.run,
             readsScreenNames: { SettingsStore().meetingScreenNamesEnabled }
         )
@@ -1199,10 +1197,8 @@ final class DictationController {
 
     // MARK: - Copy
 
-    /// Who the failed transcription request went to.
     private static var providerName: String {
-        let settings = SettingsStore()
-        return settings.cloudDictationSource == .elevenLabs ? "ElevenLabs" : settings.preferredProvider.displayName
+        SettingsStore().preferredProvider.displayName
     }
 
     private static func copy(for failure: DictationFailure) -> String {

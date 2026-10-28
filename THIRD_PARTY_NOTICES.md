@@ -137,9 +137,8 @@ SOFTWARE.
 ## Trademarks
 
 "Google", the Google logo, the Gemini spark, and related marks are trademarks of
-Google LLC. "OpenAI" and its logo are trademarks of OpenAI. "ElevenLabs" and its
-logo are trademarks of ElevenLabs Inc. "TinyFish" and its logo are trademarks of
-TinyFish. The iOS app bundles each service's favicon
+Google LLC. "OpenAI" and its logo are trademarks of OpenAI. "TinyFish" and its
+logo are trademarks of TinyFish. The iOS app bundles each service's favicon
 (`iOS/App/Resources/Assets.xcassets/Provider*.imageset`) only to label the key
 field for that service; no endorsement is implied. The app icon and menu bar
 glyph are original works.

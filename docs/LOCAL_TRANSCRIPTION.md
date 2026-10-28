@@ -1,12 +1,13 @@
 # On-device transcription
 
-Settings → Dictation has a **Transcription** picker: **On device**, the
-selected provider (Gemini or OpenAI), and **ElevenLabs** once its key is saved.
+Settings → Dictation has a **Transcription** picker: **On device** and the
+selected provider (Gemini or OpenAI).
 On device is offered on Apple Silicon Macs running macOS 14+, and on iPhone
 and iPad running iOS/iPadOS 17+. The default is the provider.
 `SettingsStore.dictationSource` stores the choice (`dictationSource`); a device
 with no stored value reads the old `localTranscriptionEnabled` boolean, so an
-earlier on-device choice is kept. `localTranscriptionEnabled` is now a derived
+earlier on-device choice is kept. A stored choice this build no longer offers
+reads as the provider. `localTranscriptionEnabled` is now a derived
 read of that picker. Existing local-transcription preferences survive
 the removal of Whistle, but its model and runtime are no longer included.
 Each model offers its own languages (`LocalSpeechModel.languages`, a list
@@ -72,11 +73,8 @@ Deleting during a local session cancels local processing before removing files;
 the saved recording can still use cloud transcription.
 
 When the model is absent, downloading, being deleted, busy, or fails to load,
-dictation uses the cloud source (`SettingsStore.cloudDictationSource`): the
-selected provider, or ElevenLabs when the picker was last set to it and the
-key is still stored. The cloud real-time preference still
-applies when no local session starts and the cloud source is the provider;
-ElevenLabs has no live socket. A failed local transcription uploads the
+dictation uses the selected provider. The cloud real-time preference still
+applies when no local session starts. A failed local transcription uploads the
 saved recording through the batch cloud path. This is not an offline-only mode.
 Dictation, Ask Anything, Translate and macOS Agent all use this selection
 logic. Meetings have their own switch; see [On-device meetings](#on-device-meetings).
@@ -403,7 +401,7 @@ Agent retain their requested actions regardless of duration.
 ## On-device meetings
 
 **Meeting transcription** (Settings → Dictation; **Notes transcription** on
-iPhone and iPad) is a separate picker from dictation, with the same three
+iPhone and iPad) is a separate picker from dictation, with the same
 segments (`SettingsStore.meetingSource`, key `meetingSource`, read from the old
 `localMeetingTranscriptionEnabled` boolean when absent). On device is a
 separate choice from on-device dictation. On the Mac it needs two downloads:
@@ -412,9 +410,8 @@ who spoke when. This is the FluidMeet recipe: one ASR model and one diarizer,
 joined by time. While the switch is on, the Fluid Speech Mini row stays
 offered even with dictation on the cloud, and the diarizer row appears under
 the picker. Until both are `.ready`, meetings use the cloud path and the
-footer says so. The cloud path is the ElevenLabs route when the picker was
-last set to ElevenLabs and its key is stored, otherwise the providers with
-keys (`SettingsStore.meetingSpeechRoutes`).
+footer says so. The cloud path is the providers with keys
+(`SettingsStore.meetingProviders`).
 
 iPhone and iPad need Fluid Speech Mini only (`LocalMeetingTranscriber.diarizes`
 is false there). They record the microphone only, so there is no second track

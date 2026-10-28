@@ -23,11 +23,9 @@ import VoiceIQSpeech
     private let config: () -> GeminiConfig
     private let transcribeModel: String?
     private let summaryModel: String
-    /// Providers to try in order for the notes; see `ModelProvider.meetingOrder`.
+    /// Providers to try in order for the transcript and the notes; see
+    /// `ModelProvider.meetingOrder`.
     private let providers: @Sendable () -> [ModelProvider]
-    /// Cloud routes to try in order for the transcript; see
-    /// `SettingsStore.meetingSpeechRoutes`.
-    private let routes: @Sendable () -> [MeetingTranscriber.SpeechRoute]
     /// On-device transcription, used when `LocalMeetingTranscriber` is ready.
     private let localMeeting: LocalMeetingRunner?
     private lazy var detector = CallDetector()
@@ -44,11 +42,9 @@ import VoiceIQSpeech
     public init(client: GeminiClient, store: MeetingStore = MeetingStore(), config: @escaping () -> GeminiConfig,
                 transcribeModel: String? = nil, summaryModel: String = "gemini-3.8-flash",
                 providers: @escaping @Sendable () -> [ModelProvider] = { [.gemini] },
-                routes: (@Sendable () -> [MeetingTranscriber.SpeechRoute])? = nil,
                 localMeeting: LocalMeetingRunner? = nil, readsScreenNames: @escaping () -> Bool = { false }) {
         self.client = client; self.store = store; self.config = config; self.readsScreenNames = readsScreenNames
         self.transcribeModel = transcribeModel; self.summaryModel = summaryModel; self.providers = providers
-        self.routes = routes ?? { providers().map(MeetingTranscriber.SpeechRoute.provider) }
         self.localMeeting = localMeeting
         detector.onChange = { [weak self] source in self?.detected(source) }
         failInterruptedRecordings()
@@ -194,9 +190,9 @@ import VoiceIQSpeech
     /// that fails.
     private func transcribe(folder: URL, config cfg: GeminiConfig) async throws -> [TranscriptSegment] {
         let cloud = MeetingTranscriber(client: client, models: .init(transcribe: transcribeModel ?? cfg.transcribeModel),
-                                       endpoint: cfg.endpoint, routes: routes)
+                                       endpoint: cfg.endpoint, providers: providers)
         guard let local = try await acquireLocal() else {
-            guard !routes().isEmpty else { throw MeetingFailure.noRoute }
+            guard !providers().isEmpty else { throw MeetingFailure.noRoute }
             return try await cloud.transcribe(folder: folder)
         }
         do {
@@ -204,7 +200,7 @@ import VoiceIQSpeech
             Log.meeting.info("transcribed on device: \(transcript.count, privacy: .public) turns")
             return transcript
         } catch {
-            guard !routes().isEmpty, !(error is CancellationError) else { throw error }
+            guard !providers().isEmpty, !(error is CancellationError) else { throw error }
             Log.meeting.error("on-device transcription failed, using cloud: \(String(describing: error), privacy: .public)")
             return try await cloud.transcribe(folder: folder)
         }
@@ -218,7 +214,7 @@ import VoiceIQSpeech
         do {
             return try await LocalMeetingTranscriber.acquire(runner: runner)
         } catch {
-            guard !routes().isEmpty, !(error is CancellationError) else { throw error }
+            guard !providers().isEmpty, !(error is CancellationError) else { throw error }
             Log.meeting.error("on-device models unavailable, using cloud: \(String(describing: error), privacy: .public)")
             return nil
         }
@@ -227,7 +223,7 @@ import VoiceIQSpeech
     /// The recording stays; the meeting is marked failed with a reason the
     /// Meetings list shows, and Retry runs it again with the keys stored then.
     private func saveFailure(id: MeetingID, meta: inout MeetingMeta, error: Error) {
-        let tried = routes().map(\.displayName).joined(separator: ", ")
+        let tried = providers().map(\.directName).joined(separator: ", ")
         let reason = MeetingFailure.reason(for: error, tried: tried)
         Log.meeting.error("meeting \(id.uuid.uuidString, privacy: .public) failed: \(String(describing: error), privacy: .public)")
         meta.status = .failed(reason); try? store.save(meta: meta)
@@ -320,7 +316,7 @@ public enum MeetingFailure: Error, Equatable {
     static func reason(for error: Error, tried: String) -> String {
         switch error {
         case MeetingFailure.noRoute:
-            return "No key can transcribe meetings. Add a Gemini, OpenAI or ElevenLabs key in \(keysPlace). The recording is saved; press Retry once a key is added."
+            return "No key can transcribe meetings. Add a Gemini or OpenAI key in \(keysPlace). The recording is saved; press Retry once a key is added."
         case MeetingFailure.noNotesRoute:
             return "The transcript was made on device, but no key can write the notes. Add a Gemini or OpenAI key in \(keysPlace), then press Retry."
         case let error as TranscriptionError:
