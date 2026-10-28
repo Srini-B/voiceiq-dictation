@@ -100,10 +100,10 @@ public struct SettingsStore: Sendable {
         Self.set(enabled, forKey: "liveDictationEnabled")
     }
 
-    /// Who transcribes dictation. Reads the pre-picker booleans when the key
-    /// is absent: on-device on → `.onDevice`; an old `transcriptionSource` of
-    /// ElevenLabs → `.elevenLabs`; otherwise the provider. On a device without
-    /// local models `.onDevice` reads as the provider.
+    /// Who transcribes dictation. Reads the pre-picker boolean when the key
+    /// is absent: on-device on → `.onDevice`, otherwise the provider. A value
+    /// this build no longer offers (ElevenLabs) reads as the provider. On a
+    /// device without local models `.onDevice` reads as the provider.
     public var dictationSource: TranscriptionSource {
         Self.source(forKey: "dictationSource", legacyLocalKey: "localTranscriptionEnabled")
     }
@@ -114,21 +114,12 @@ public struct SettingsStore: Sendable {
 
     public var localTranscriptionEnabled: Bool { dictationSource == .onDevice }
 
-    /// The cloud source dictation falls to when no on-device model answers.
-    /// ElevenLabs only while its key is stored, so a removed key never strands
-    /// dictation.
-    public var cloudDictationSource: TranscriptionSource {
-        dictationSource == .elevenLabs && KeychainStore.loadElevenLabsKey() != nil ? .elevenLabs : .provider
-    }
-
     private static func source(forKey key: String, legacyLocalKey: String) -> TranscriptionSource {
         let stored: TranscriptionSource
-        if let raw = defaults.string(forKey: key), let parsed = TranscriptionSource(rawValue: raw) {
-            stored = parsed
+        if let raw = defaults.string(forKey: key) {
+            stored = TranscriptionSource(rawValue: raw) ?? .provider
         } else if defaults.bool(forKey: legacyLocalKey) {
             stored = .onDevice
-        } else if defaults.string(forKey: "transcriptionSource") == TranscriptionSource.elevenLabs.rawValue {
-            stored = .elevenLabs
         } else {
             stored = .provider
         }
@@ -185,13 +176,6 @@ public struct SettingsStore: Sendable {
     /// source is the provider; see `ModelProvider.meetingOrder`.
     public var meetingProviders: [ModelProvider] {
         ModelProvider.meetingOrder(selected: preferredProvider, hasKey: KeychainStore.hasKey(for:))
-    }
-
-    /// Cloud routes a meeting is transcribed on, in order. ElevenLabs alone
-    /// when picked with a key stored; otherwise the providers with keys.
-    public var meetingSpeechRoutes: [MeetingTranscriber.SpeechRoute] {
-        if meetingSource == .elevenLabs, KeychainStore.loadElevenLabsKey() != nil { return [.elevenLabs] }
-        return meetingProviders.map(MeetingTranscriber.SpeechRoute.provider)
     }
 
     /// Show the resting dot at the bottom of the screen when idle. Off = the pill

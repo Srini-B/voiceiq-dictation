@@ -1,6 +1,6 @@
 # Cost tracking
 
-VoiceiQ meters every model call, Gemini, OpenAI and ElevenLabs, and shows the result under
+VoiceiQ meters every Gemini and OpenAI model call and shows the result under
 Settings → Cost Analysis (`voiceiq://settings/cost`) and per dictation in
 History. Costs are in US dollars.
 
@@ -71,15 +71,6 @@ counts. Chat models (GPT-6.1 Terra, GPT-6 Astra, GPT-6 Luna, and
 `gpt-4o-transcribe-diarize`, which bills tokens) use the OpenAI-shaped
 `usage` block (`TokenUsage.fromOpenAI`).
 
-ElevenLabs Scribe returns no usage block, so `GeminiClient.elevenLabsTranscribe`
-and `elevenLabsDiarize` book each call themselves (`ElevenLabs.batchUsage`):
-the response's `audio_duration_secs`, or the length of the audio sent when
-that field is missing, at `scribe_v2`'s $0.22 an hour, plus
-`PriceBook.elevenLabsKeytermsPerMinute` ($0.05 an hour) when dictionary terms
-were sent as `keyterms`. Prices are from elevenlabs.io/pricing/api (copied
-2026-09-28) and are the same on every plan; hours included in a subscription
-are not subtracted, so the pane shows list price.
-
 ## Attribution
 
 `UsageMeter.scope` is a task-local `UsageScope(activity, sessionID)`. It is set
@@ -107,13 +98,12 @@ shows the paid-tier figure.
 ## UI
 
 `CostPane` shows one source at a time. It opens on the provider selected in
-Settings → Advanced, and a Gemini/OpenAI/ElevenLabs toggle (`CostSource`)
+Settings → Advanced, and a Gemini/OpenAI toggle (`CostSource`)
 switches between them; every read filters `usage` rows by model ID
 (`CostSource.modelPrefixes`: `gemini` and `google/` for Gemini, `gpt`,
-`whisper` and `openai/` for OpenAI, `scribe` and `elevenlabs/` for
-ElevenLabs). Rows from services older builds supported (MAI Transcribe 2,
-Sarvam) match no tab. It shows today, this
-week, this month, and all time totals; a period picker drives the by-action
+`whisper` and `openai/` for OpenAI). Rows from services older builds supported
+(MAI Transcribe 2, Sarvam, and ElevenLabs `scribe_v2`) match no tab. It shows
+today, this week, this month, and all time totals; a period picker drives the by-action
 and by-model tables and the recent-calls list. The footer names the price
 source (`CostSource.pricingNote`): the provider's pricing page. The iPhone's
 Cost page has the same source toggle.

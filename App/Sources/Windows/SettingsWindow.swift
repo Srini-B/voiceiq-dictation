@@ -266,12 +266,7 @@ struct PrivacyPane: View {
     let onDeleteAllHistory: () -> Void
     private let settings = SettingsStore()
     @State private var provider = SettingsStore().preferredProvider
-    @State private var dictationSource = SettingsStore().cloudDictationSource
-    @State private var meetingSource = SettingsStore().meetingSpeechRoutes.first
     private var owner: String { provider == .gemini ? "Google" : "OpenAI" }
-    /// Who hears dictation audio when it is not transcribed on device.
-    private var audioOwner: String { dictationSource == .elevenLabs ? "ElevenLabs" : owner }
-    private var meetingOwner: String { meetingSource?.displayName ?? provider.displayName }
     @State private var retentionDays = SettingsStore().audioRetentionDays
     @State private var transcriptRetentionDays = SettingsStore().transcriptRetentionDays
     @State private var confirmingDelete = false
@@ -335,14 +330,14 @@ struct PrivacyPane: View {
             }
 
             Section {
-                LocalAudioPrivacyRow(provider: audioOwner, cloudDescription: "Sent to \(audioOwner) with your key, transcribed every time")
+                LocalAudioPrivacyRow(provider: owner, cloudDescription: "Sent to \(owner) with your key, transcribed every time")
                 LabeledContent("Transcript text") { Text("Sent back only for writing rules, Ask Anything and Translate") }
                 LabeledContent("Text around the cursor") { Text("Only if Fit to existing text and writing rules are on") }
                 LabeledContent("Where you are typing") { Text("App name, window title and browser page address, only with writing rules") }
                 LocalMeetingPrivacyRow(
                     label: "Meeting audio",
                     localDescription: "Transcribed on device; only the transcript goes to \(provider.displayName) for notes",
-                    cloudDescription: "Only if call recording is on; transcribed by \(meetingOwner), notes are made by \(provider.displayName)")
+                    cloudDescription: "Only if call recording is on; notes are made by \(provider.displayName)")
                 LabeledContent("Dictionary terms") { Text("Sent with cloud transcription and cleanup, so names are spelled right") }
                 LabeledContent("Dictionary") { Text("Synced to your iPhone through your iCloud account") }
                 LabeledContent("History") { Text("Final text synced to your iPhone through your iCloud account") }
@@ -353,7 +348,7 @@ struct PrivacyPane: View {
             } header: {
                 Text("What leaves your Mac")
             } footer: {
-                Text("No middleman server, no account, no analytics, no keystroke logging. Only \(owner), plus ElevenLabs and TinyFish when you add their keys.")
+                Text("No middleman server, no account, no analytics, no keystroke logging. Only \(owner), plus TinyFish when you add its key.")
             }
 
             Section {
@@ -377,8 +372,6 @@ struct PrivacyPane: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .gtSettingDidChange).receive(on: RunLoop.main)) { _ in
             provider = settings.preferredProvider
-            dictationSource = settings.cloudDictationSource
-            meetingSource = settings.meetingSpeechRoutes.first
         }
     }
 }
@@ -418,7 +411,6 @@ struct AdvancedPane: View {
                 OpenAIKeySection()
             }
 
-            ElevenLabsKeySection()
             TinyFishKeySection()
 
             if provider == .gemini {

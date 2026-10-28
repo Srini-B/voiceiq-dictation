@@ -70,13 +70,7 @@ public enum PriceBook {
         ("gpt-4o-transcribe", 0.006),
         // No longer called; prices rows booked by older builds.
         ("whisper-1", 0.006),
-        // ElevenLabs, from elevenlabs.io/pricing/api (copied 2026-09-28):
-        // $0.22 an hour, the same on every plan.
-        ("scribe_v2", 0.22 / 60),
     ]
-
-    /// ElevenLabs' add-on for `keyterms` (the dictionary terms), same source.
-    public static let elevenLabsKeytermsPerMinute = 0.05 / 60
 
     public static func perMinutePrice(for model: String) -> Double? {
         let id = model.lowercased().split(separator: "/").last.map(String.init) ?? model.lowercased()

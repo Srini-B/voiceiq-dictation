@@ -308,8 +308,7 @@ Onboarding saves its page in `MobileSettings.onboardingStep`,
 so a trip to Settings resumes on the same page.
 
 Onboarding has four pages: welcome, API keys (a Gemini or OpenAI provider
-picker with that provider's key, plus the optional ElevenLabs and TinyFish
-keys), permissions
+picker with that provider's key, plus the optional TinyFish key), permissions
 (microphone and keyboard together), and a Try it field.
 
 ### Design system
@@ -341,9 +340,7 @@ iOS). Speaker linking, meeting-type notes, suggested speaker names and Redo
 while notes record. With **Notes transcription** set to On device and Fluid
 Speech Mini downloaded, the recording is transcribed in process after Stop as
 one speaker; there is no diarizer, real-time path, or Nemotron on iOS (see
-[On-device meetings](LOCAL_TRANSCRIPTION.md#on-device-meetings)). With an
-ElevenLabs key saved, the picker also offers ElevenLabs, which labels speakers
-from the room mic alone.
+[On-device meetings](LOCAL_TRANSCRIPTION.md#on-device-meetings)).
 
 ### Dictionary
 
@@ -460,14 +457,14 @@ runs. Everything needs Full Access.
 | Pill | Keyboard status plus Dynamic Island |
 | AX and paste insertion | `textDocumentProxy.insertText` |
 | Ask Anything, Translate, Paste last | Keyboard modes and Paste last |
-| Provider (Gemini or OpenAI), ElevenLabs, TinyFish | Same, in Settings › Provider & Keys and the iOS Keychain. Each key card carries the service's favicon from `Assets.xcassets/Provider*.imageset` (`BrandTile`); the OpenAI and ElevenLabs marks are template images so they take the ink colour in dark mode |
-| Transcription and Meeting transcription pickers (On device, provider, ElevenLabs) | Same; the second is **Notes transcription**, each in its own section because an iOS Form hides a segmented picker's label |
+| Provider (Gemini or OpenAI), TinyFish | Same, in Settings › Provider & Keys and the iOS Keychain. Each key card carries the service's favicon from `Assets.xcassets/Provider*.imageset` (`BrandTile`); the OpenAI mark is a template image so it takes the ink colour in dark mode |
+| Transcription and Meeting transcription pickers (On device, provider) | Same; the second is **Notes transcription**, each in its own section because an iOS Form hides a segmented picker's label |
 | History stats: words, dictations, WPM, audio time | Home's stats grid |
 | Dictionary with search, CSV and Auto-learned | Same, synced through iCloud, plus adding a selection or a copied word from the keyboard |
 | Writing rules, smart transcription, live, noise handling | Same settings |
 | On-device transcription: Fluid Speech Mini and Nemotron 3.5, English tools, live preview with Fluid Speech Mini | Fluid Speech Mini and English tools only, in-process; no live preview (see [local transcription](LOCAL_TRANSCRIPTION.md)) |
 | History, retry, crash recovery, retention | Same. The detail shows the cost and one row per model call (stage, model, cost) from `UsageStore.records(forSession:)`, and Copy turns into "Copied" with a checkmark and a success haptic for 1.5 s |
-| Cost with the Gemini, OpenAI and ElevenLabs toggle, periods and Detailed | Same |
+| Cost with the Gemini and OpenAI toggle, periods and Detailed | Same |
 | Advanced: the selected provider's models | Same, plus the session log |
 | Screen context, auto-learn, shortcuts, call detection, mute other audio, sounds | Not on iOS |
 
