@@ -368,7 +368,15 @@ struct PrivacyView: View {
     @State private var transcriptRetentionDays = SettingsStore().transcriptRetentionDays
     @State private var provider = SettingsStore().preferredProvider
 
+    @State private var meetingProviders = SettingsStore().meetingProviders
+
     private var destination: String { "\(provider.directName), with your key" }
+    /// Meetings go to the other provider when only its key is saved, or when
+    /// the first one fails.
+    private var meetingOwner: String {
+        let names = meetingProviders.map(\.directName)
+        return names.count > 1 ? "\(names[0]), or \(names[1]) if that fails" : names.first ?? provider.directName
+    }
 
     var body: some View {
         Form {
@@ -396,7 +404,7 @@ struct PrivacyView: View {
                 LocalMeetingPrivacyRow(
                     label: "Notes audio",
                     localDescription: "Transcribed on device; transcript to \(provider.displayName) for notes",
-                    cloudDescription: "\(provider.directName), then notes by \(provider.displayName)")
+                    cloudDescription: "\(meetingOwner), then notes by \(provider.displayName)")
                 LabeledContent("Dictionary terms", value: "With cloud transcription and cleanup")
                 LabeledContent("Dictionary", value: "Your iCloud, to sync")
                 LabeledContent("History", value: "Your iCloud, to sync final text")
@@ -410,6 +418,7 @@ struct PrivacyView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .gtSettingDidChange).receive(on: RunLoop.main)) { _ in
             provider = SettingsStore().preferredProvider
+            meetingProviders = SettingsStore().meetingProviders
         }
     }
 }

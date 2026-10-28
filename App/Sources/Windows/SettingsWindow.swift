@@ -266,7 +266,14 @@ struct PrivacyPane: View {
     let onDeleteAllHistory: () -> Void
     private let settings = SettingsStore()
     @State private var provider = SettingsStore().preferredProvider
+    @State private var meetingProviders = SettingsStore().meetingProviders
     private var owner: String { provider == .gemini ? "Google" : "OpenAI" }
+    /// Meetings go to the other provider when only its key is saved, or when
+    /// the first one fails.
+    private var meetingOwner: String {
+        let names = meetingProviders.map(\.displayName)
+        return names.count > 1 ? "\(names[0]), or \(names[1]) if that fails" : names.first ?? provider.displayName
+    }
     @State private var retentionDays = SettingsStore().audioRetentionDays
     @State private var transcriptRetentionDays = SettingsStore().transcriptRetentionDays
     @State private var confirmingDelete = false
@@ -337,7 +344,7 @@ struct PrivacyPane: View {
                 LocalMeetingPrivacyRow(
                     label: "Meeting audio",
                     localDescription: "Transcribed on device; only the transcript goes to \(provider.displayName) for notes",
-                    cloudDescription: "Only if call recording is on; notes are made by \(provider.displayName)")
+                    cloudDescription: "Only if call recording is on; transcribed by \(meetingOwner), notes are made by \(provider.displayName)")
                 LabeledContent("Dictionary terms") { Text("Sent with cloud transcription and cleanup, so names are spelled right") }
                 LabeledContent("Dictionary") { Text("Synced to your iPhone through your iCloud account") }
                 LabeledContent("History") { Text("Final text synced to your iPhone through your iCloud account") }
@@ -372,6 +379,7 @@ struct PrivacyPane: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .gtSettingDidChange).receive(on: RunLoop.main)) { _ in
             provider = settings.preferredProvider
+            meetingProviders = settings.meetingProviders
         }
     }
 }
