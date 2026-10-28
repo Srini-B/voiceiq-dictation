@@ -75,10 +75,12 @@ extension HistoryStore {
                 for row in rows {
                     guard let stored = try DictationRecord.fetchOne(db, key: row.id) else {
                         try row.insert(db)
+                        try Self.recordStat(of: row, in: db)
                         continue
                     }
                     if stored.isFromOtherDevice {
                         try row.update(db)
+                        try Self.recordStat(of: row, in: db)
                     } else if stored.displayText == row.displayText, stored.status == row.status {
                         try db.execute(sql: "UPDATE dictation SET cloudSyncedAt = ? WHERE id = ?",
                                        arguments: [row.cloudSyncedAt, row.id])
