@@ -75,11 +75,17 @@ On Claude + Nemotron, DeepInfra's `verbose_json` transcript has no usage block;
 `TokenUsage.fromTranscriptDuration` books its `duration` at Nemotron 3.5
 Transcribe's $0.002 per minute. Claude calls use `TokenUsage.fromAnthropic`.
 Cleanup marks the rules up to `PromptV1.layoutReminder` with Anthropic's
-`cache_control` (`GeminiClient.anthropicCleanupSplit`), so dictations after the
-first read them from the cache for five minutes. Measured 2026-10-29 on Haiku:
-the second of two dictations into different apps sent 146 new tokens and read
-12,573 from the cache. A cache write is booked at the plain input price, though
-Anthropic bills it at 1.25×.
+`cache_control` with a one-hour TTL (`GeminiClient.anthropicCleanupSplit`), so
+dictations within an hour of the last one read them from the cache. Measured
+2026-10-29 on Haiku: the second of two dictations into different apps sent 146
+new tokens and read 12,573 from the cache. Editing the Dictionary or the writing
+rules, including a word the app learns on its own, changes the block, so the
+next dictation writes it again.
+
+A cache write counts as input tokens. `fromAnthropic` also keeps the write's
+TTL from `usage.cache_creation`, and `ModelPrice.cost` adds the write surcharge:
+0.25× input for a five-minute write (billed 1.25×) and 1× for a one-hour write
+(billed 2×). Rows booked before 0.6.13 have no surcharge.
 
 ## Attribution
 

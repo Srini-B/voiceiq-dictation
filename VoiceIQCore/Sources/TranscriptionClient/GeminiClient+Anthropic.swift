@@ -101,12 +101,15 @@ extension GeminiClient {
     /// `layoutReminder` are the same for every dictation until the user edits
     /// the dictionary or writing rules, so they carry the cache breakpoint;
     /// the field rules, reminder and PLACE line after it vary per dictation.
+    /// The one-hour TTL lets dictations minutes apart share one write; it
+    /// costs 2x input against 1.25x for five minutes, so it pays once about
+    /// half of dictations land within the hour (2026-10-29 estimate).
     /// Nil for any other prompt, which goes as one user turn uncached.
     static func anthropicCleanupSplit(_ prompt: String) -> (system: [[String: Any]], dictation: String)? {
         guard let split = dictationSplit(prompt),
               let stable = prompt.range(of: PromptV1.layoutReminder)?.upperBound, stable <= split else { return nil }
         var system: [[String: Any]] = [["type": "text", "text": String(prompt[..<stable]),
-                                        "cache_control": ["type": "ephemeral"]]]
+                                        "cache_control": AgentCachePolicy.staticTTL]]
         let varying = prompt[stable..<split].trimmingCharacters(in: .whitespacesAndNewlines)
         if !varying.isEmpty { system.append(["type": "text", "text": varying]) }
         return (system, String(prompt[split...]))

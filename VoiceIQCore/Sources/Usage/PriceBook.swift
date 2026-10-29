@@ -30,6 +30,7 @@ public struct ModelPrice: Equatable, Sendable {
             + Double(usage.audioIn) * audioIn
             + Double(usage.imageIn) * imageIn
             + Double(usage.cachedIn) * cachedIn
+            + (Double(usage.cacheWrite5m) * 0.25 + Double(usage.cacheWrite1h)) * textIn
             + Double(usage.textOut + usage.thoughtOut) * textOut
             + Double(usage.audioOut) * audioOut
         return perMillion / 1_000_000
