@@ -878,10 +878,10 @@ final class DictationController {
         defer { previousState = state }
         dismissTask?.cancel()
 
-        // Esc must reach us even when the grammar is idle: in-flight transcription
+        // ⌘Esc must reach us even when the grammar is idle: in-flight transcription
         // and UI-started hands-free are "externally active" (audit L8/L13).
         // NOT .inserting: cancel is rejected there by design (the text exists),
-        // so consuming Esc would just eat the user's keystroke for ~1s.
+        // so consuming ⌘Esc would just eat the user's keystroke for ~1s.
         switch state {
         case .finalizing, .transcribing, .recording:
             engine.setExternalSessionActive(true)

@@ -10,7 +10,7 @@ import Foundation
 ///    runs the pure `HotkeyProcessor` under a lock (microseconds), and forwards
 ///    intents to the owner via a closure.
 ///  - Consumes the configured key's flagsChanged events (that's what makes fn *ours*)
-///    and Esc key-downs, but ONLY while a session is active. Everything else passes.
+///    and ⌘Esc key-downs, but ONLY while a session is active. Everything else passes.
 ///  - Self-healing: re-enables on kCGEventTapDisabledBy* and polls tapIsEnabled
 ///    every 5s — a non-nil tap is not a healthy tap.
 public final class EventTapEngine {
@@ -41,7 +41,7 @@ public final class EventTapEngine {
     /// swallowed too instead of reaching the frontmost app as a stray release.
     private var comboKeyHeld: UInt16?
     /// Set by the app while a session is in flight beyond the grammar's view
-    /// (transcribing/inserting, or UI-started hands-free) so Esc still cancels
+    /// (transcribing/inserting, or UI-started hands-free) so ⌘Esc still cancels
     /// (audit L8/L13 — the machine supported cancel, the tap never delivered it).
     private var externalSessionActive = false
 
@@ -164,6 +164,11 @@ public final class EventTapEngine {
 
     // MARK: - Event classification (tap thread)
 
+    /// ⌘Esc, with no other modifier: the cancel shortcut.
+    public static func isCancel(keyCode: Int64, flags: CGEventFlags) -> Bool {
+        keyCode == 53 && flags.intersection([.maskCommand, .maskAlternate, .maskControl, .maskShift]) == .maskCommand
+    }
+
     private func handle(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
         // Tap health: the OS silently disables taps that are slow or during login events.
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
@@ -228,9 +233,11 @@ public final class EventTapEngine {
                 apply(fx)
                 return nil
             }
-            // Esc cancels grammar sessions AND externally-tracked ones
-            // (in-flight transcription, UI-started hands-free).
-            if keyCode == 53, externalSessionActive, !processor.isSessionActive {
+            // ⌘Esc cancels grammar sessions AND externally-tracked ones
+            // (in-flight transcription, UI-started hands-free). A bare Esc
+            // passes through: it belongs to the app being dictated into.
+            let cancel = Self.isCancel(keyCode: keyCode, flags: event.flags)
+            if cancel, externalSessionActive, !processor.isSessionActive {
                 lock.unlock()
                 onIntent?(.cancel)
                 return nil
@@ -239,11 +246,11 @@ public final class EventTapEngine {
                 lock.unlock()
                 return Unmanaged.passUnretained(event)
             }
-            if keyCode == 53 { // Esc
+            if cancel {
                 let fx = processor.handle(.escDown, at: now)
                 lock.unlock()
                 apply(fx)
-                return nil // consume Esc only while dictating
+                return nil // consume ⌘Esc only while dictating
             }
             // The accidental-chord abort exists for bare modifiers, where a
             // letter while the modifier is still held means the user meant

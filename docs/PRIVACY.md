@@ -160,7 +160,7 @@ Everything it reads stays on this Mac.
   device. Nothing else VoiceiQ stores goes to iCloud
 - Which apps you use, when you dictate, or anything you type
 - Keystrokes: the event tap watches your dictation key, plus — only while a
-  dictation is active — Esc (cancel), Space (the hands-free gesture), and the
+  dictation is active — ⌘Esc (cancel), Space (the hands-free gesture), and the
   *fact that* another key was pressed (the accidental-chord guard; which key it
   was is never examined beyond its keycode, never logged, never stored, never
   transmitted). When you're not dictating, other keys pass through untouched.

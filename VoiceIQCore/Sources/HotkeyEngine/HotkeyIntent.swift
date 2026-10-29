@@ -8,7 +8,7 @@ public enum HotkeyIntent: Equatable, Sendable {
     case lockIn
     /// Stop requested — finalize and transcribe.
     case finalize
-    /// Esc — cancel the session (audio still saved per retention policy).
+    /// ⌘Esc — cancel the session (audio still saved per retention policy).
     case cancel
     /// Another key was typed within the interruption window — accidental chord,
     /// cancel silently (Wispr/VoiceInk pattern).

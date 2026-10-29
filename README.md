@@ -27,7 +27,7 @@ while you talk, and a History window that proves nothing was ever lost.
 | Key | What happens |
 | --- | --- |
 | **Dictation key** (default `fn`) | One press starts, one press finishes. Hands-free, no holding. A bare modifier or a combination like ⌥D. |
-| **`Esc`** | Cancels. Anything over 10 seconds is still kept in History. |
+| **⌘Esc** | Cancels. A bare `Esc` goes to the app you are in. Anything over 10 seconds is still kept in History. |
 | **⌃⌥A** | Ask Anything. Speak a question or a command over selected text. |
 | **⌃⌥T** | Translate. Speak in any language; the target language is typed. |
 | **⌥M** | Start or stop meeting notes. |
