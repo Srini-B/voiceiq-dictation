@@ -77,7 +77,7 @@ public struct SettingsStore: Sendable {
         return value
     }
 
-    /// Gemini or OpenAI, chosen in Settings → Advanced. Any other stored
+    /// Gemini, OpenAI or Claude + Nemotron, chosen in Settings → Advanced. Any other stored
     /// value (an older build's gateway) reads as Gemini.
     public var preferredProvider: ModelProvider {
         ModelProvider(rawValue: Self.defaults.string(forKey: "modelProvider") ?? "") ?? .gemini

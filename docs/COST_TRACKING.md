@@ -71,6 +71,10 @@ counts. Chat models (GPT-6.1 Terra, GPT-6 Astra, GPT-6 Luna, and
 `gpt-4o-transcribe-diarize`, which bills tokens) use the OpenAI-shaped
 `usage` block (`TokenUsage.fromOpenAI`).
 
+On Claude + Nemotron, DeepInfra's `verbose_json` transcript has no usage block;
+`TokenUsage.fromTranscriptDuration` books its `duration` at Nemotron 3.5
+Transcribe's $0.002 per minute. Claude calls use `TokenUsage.fromAnthropic`.
+
 ## Attribution
 
 `UsageMeter.scope` is a task-local `UsageScope(activity, sessionID)`. It is set

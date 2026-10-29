@@ -1,15 +1,18 @@
 import Foundation
 
-/// Whose bill a usage record lands on, for the Cost pane: Gemini or OpenAI.
+/// Whose bill a usage record lands on, for the Cost pane: Gemini, OpenAI, or
+/// Claude + Nemotron (Anthropic and DeepInfra).
 /// Records store only the model ID, so the source is read off its prefix.
 public enum CostSource: String, CaseIterable, Sendable, Identifiable {
     case gemini
     case openAI
+    case anthropic
 
     public init(_ provider: ModelProvider) {
         switch provider {
         case .gemini: self = .gemini
         case .openAI: self = .openAI
+        case .anthropic: self = .anthropic
         }
     }
 
@@ -19,6 +22,7 @@ public enum CostSource: String, CaseIterable, Sendable, Identifiable {
         switch self {
         case .gemini: return .gemini
         case .openAI: return .openAI
+        case .anthropic: return .anthropic
         }
     }
 

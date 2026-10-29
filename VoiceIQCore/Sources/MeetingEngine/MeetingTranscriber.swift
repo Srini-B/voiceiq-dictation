@@ -304,16 +304,27 @@ public struct MeetingTranscriber: Sendable {
             return try await client.transcribeSpeakers(audio: flac, model: models.transcribe, endpoint: endpoint, deadline: 600)
         case .openAI:
             return try await client.openAIDiarize(audio: flac, references: references, deadline: 600)
+        case .anthropic:
+            return try await client.deepInfraWords(audio: flac, deadline: 600)
         }
     }
 
     /// Gemini: reference clips go inside the audio and the labels the API
     /// gives them name the speakers (`SpeakerLinker.link`). OpenAI: up to
     /// four named voice references go alongside, and the model labels their
-    /// segments with those names.
+    /// segments with those names. Claude + Nemotron: no speaker labels, so
+    /// each word is labelled by the track it was heard on (`labelByTrack`).
     private func transcribe(window regions: [ClosedRange<Double>], audio: CallAudio, clips: [(key: String, value: [ClosedRange<Double>])],
                             known: [TimedWord], via provider: ModelProvider) async throws -> [TimedWord] {
         var request = AssembledAudio()
+        if provider == .anthropic {
+            try request.appendBody(regions, from: audio)
+            let raw = try await transcribeSpeakers(try FLACEncoder.encode(samples: request.samples), seconds: request.duration,
+                                                   references: [], via: provider)
+            let remote = known.first { $0.speaker != MeetingSpeaker.you }?.speaker
+            return Self.place(Self.labelByTrack(raw, audio: request, call: audio), audio: request, call: audio,
+                              known: known, mapping: remote.map { [Self.farLabel: $0] } ?? [:])
+        }
         if provider == .gemini {
             for (id, ranges) in clips { try request.appendAnchor(id: id, clips: ranges, from: audio) }
             try request.appendBody(regions, from: audio)
@@ -334,6 +345,24 @@ public struct MeetingTranscriber: Sendable {
                                                references: references, via: provider)
         let mapping = Dictionary(uniqueKeysWithValues: references.map { ($0.id, $0.id) })
         return Self.place(raw, audio: request, call: audio, known: known, mapping: mapping)
+    }
+
+    static let farLabel = "far"
+
+    /// Words with no speaker, labelled by track: on a call, a word heard more
+    /// on the mic than the far side is "mic" (`place` turns that into the
+    /// owner) and the rest is the far side, one speaker for everyone there.
+    /// Without a far side every word is one speaker.
+    static func labelByTrack(_ words: [DiarizedWord], audio request: AssembledAudio, call: CallAudio) -> [DiarizedWord] {
+        words.map { word in
+            var labelled = word
+            labelled.speaker = farLabel
+            if call.isOnline, let start = word.start, let span = request.trackSpan(start, word.end ?? start) {
+                let source = call.sources(span)
+                if source.mic > source.system { labelled.speaker = "mic" }
+            }
+            return labelled
+        }
     }
 
     /// The owner first, then the speakers with the most reference audio, up

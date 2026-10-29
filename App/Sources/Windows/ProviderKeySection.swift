@@ -1,9 +1,16 @@
 import VoiceIQCore
 import SwiftUI
 
-struct OpenAIKeySection: View {
+/// One API key: paste, validate against its host, save to the Keychain.
+struct ProviderKeySection: View {
+    let secret: KeychainStore.Secret
+    /// "OpenAI", "Anthropic", "DeepInfra".
+    let vendor: String
+    let keyPage: URL
+    let validate: @Sendable (String) async -> GeminiClient.KeyCheck
+
     @State private var apiKey = ""
-    @State private var keyStatus: AdvancedPane.KeyStatus = KeychainStore.loadOpenAIKey() == nil ? .missing : .stored
+    @State private var keyStatus: AdvancedPane.KeyStatus = .missing
 
     private var hasStoredKey: Bool {
         keyStatus == .stored || keyStatus == .valid || keyStatus == .savedOffline
@@ -21,9 +28,9 @@ struct OpenAIKeySection: View {
                 keyStatusBadge
             }
             if keyStatus == .invalid {
-                Text(KeychainStore.loadOpenAIKey() != nil
+                Text(KeychainStore.loadKey(secret) != nil
                      ? "That key didn't work. Your saved key is unchanged."
-                     : "OpenAI rejected that key.")
+                     : "\(vendor) rejected that key.")
                     .font(VoiceIQUI.TypeScale.labelSmall())
                     .foregroundStyle(VoiceIQUI.Colors.error)
             }
@@ -42,23 +49,24 @@ struct OpenAIKeySection: View {
                     .disabled(apiKey.trimmingCharacters(in: .whitespaces).isEmpty)
                 if hasStoredKey {
                     Button("Remove Key…", role: .destructive) {
-                        KeychainStore.deleteOpenAIKey(notify: true)
+                        KeychainStore.deleteKey(secret, notify: true)
                         apiKey = ""
                         keyStatus = .missing
                     }
                 }
                 Spacer()
-                Link("Get a key at OpenAI", destination: URL(string: "https://platform.openai.com/api-keys")!)
+                Link("Get a key at \(vendor)", destination: keyPage)
                     .font(VoiceIQUI.TypeScale.labelSmall())
             }
         } header: {
-            Text("OpenAI API key")
+            Text("\(vendor) API key")
         } footer: {
-            Text("Stored in your Mac's Keychain and only ever sent to OpenAI.")
+            Text("Stored in your Mac's Keychain and only ever sent to \(vendor).")
         }
+        .onAppear { keyStatus = KeychainStore.loadKey(secret) == nil ? .missing : .stored }
         .onReceive(NotificationCenter.default.publisher(for: .gtSettingDidChange).receive(on: RunLoop.main)) { note in
-            if note.object as? String == "openAIKey", keyStatus == .missing || keyStatus == .stored {
-                keyStatus = KeychainStore.loadOpenAIKey() == nil ? .missing : .stored
+            if note.object as? String == secret.settingKey, keyStatus == .missing || keyStatus == .stored {
+                keyStatus = KeychainStore.loadKey(secret) == nil ? .missing : .stored
             }
         }
     }
@@ -79,11 +87,10 @@ struct OpenAIKeySection: View {
         guard !key.isEmpty else { return }
         keyStatus = .validating
         Task {
-            let client = GeminiClient(apiKey: { nil }, openAIKey: { key })
-            let check = await client.validateOpenAIKey()
+            let check = await validate(key)
             switch check {
             case .valid, .unreachable:
-                if KeychainStore.saveOpenAIKey(key) {
+                if KeychainStore.saveKey(secret, key) {
                     apiKey = ""
                     keyStatus = check == .valid ? .valid : .savedOffline
                 } else {
@@ -94,6 +101,18 @@ struct OpenAIKeySection: View {
             }
         }
     }
+}
+
+extension ProviderKeySection {
+    static let openAI = ProviderKeySection(
+        secret: .openAI, vendor: "OpenAI", keyPage: URL(string: "https://platform.openai.com/api-keys")!,
+        validate: { key in await GeminiClient(apiKey: { nil }, openAIKey: { key }).validateOpenAIKey() })
+    static let anthropic = ProviderKeySection(
+        secret: .anthropic, vendor: "Anthropic", keyPage: URL(string: "https://console.anthropic.com/settings/keys")!,
+        validate: { key in await GeminiClient.validateAnthropicKey(key) })
+    static let deepInfra = ProviderKeySection(
+        secret: .deepInfra, vendor: "DeepInfra", keyPage: URL(string: "https://deepinfra.com/dash/api_keys")!,
+        validate: { key in await GeminiClient.validateDeepInfraKey(key) })
 }
 
 struct OpenAIModelsSection: View {

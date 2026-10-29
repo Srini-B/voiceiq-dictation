@@ -164,9 +164,14 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
     /// The models that run, for History's model column. OpenAI's
     /// transcription model has no smart mode, so no mode is named.
     private func modelNames(_ provider: ModelProvider) -> (transcribe: String, writing: String) {
-        if provider == .openAI {
+        switch provider {
+        case .openAI:
             let openAI = settings.openAIConfig
             return (openAI.transcribeModel, openAI.writingModel)
+        case .anthropic:
+            let anthropic = AnthropicConfig()
+            return (anthropic.transcribeModel, anthropic.writingModel)
+        case .gemini: break
         }
         let config = settings.geminiConfig
         return ("\(config.transcribeModel)/\(settings.formattingPolicy.mode.rawValue)", config.cleanupModel)

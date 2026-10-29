@@ -36,8 +36,10 @@ public extension GeminiClient {
     /// Notes JSON for a prompt built by `MeetingNotesPrompt`.
     func meetingNotesJSON(prompt: String, model: String, endpoint: URL, deadline: TimeInterval,
                           via provider: ModelProvider) async throws -> String {
-        if provider == .openAI {
-            return try await openAIChat(prompt: prompt, deadline: deadline, stage: .meetingSummary, jsonObject: true)
+        switch provider {
+        case .openAI: return try await openAIChat(prompt: prompt, deadline: deadline, stage: .meetingSummary, jsonObject: true)
+        case .anthropic: return try await anthropicMessage(prompt: prompt, deadline: deadline, stage: .meetingSummary, maxTokens: 16_000)
+        case .gemini: break
         }
         let body: [String: Any] = [
             "contents": [["role": "user", "parts": [["text": prompt]]]],

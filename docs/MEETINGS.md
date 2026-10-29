@@ -64,6 +64,22 @@ Before 2026-10-27 every recording needed 20 s. A 2.5-minute Meet call had
 15.9 s, so the owner became an ordinary speaker and got a participant's name
 from the screen.
 
+## Speakers on Claude + Nemotron
+
+DeepInfra serves Nemotron 3.5 Transcribe without speaker labels: the model
+card's `<spk:N>` instruction, sent as the `prompt`, comes back as plain text,
+and the model is not on DeepInfra's chat completions. So on this provider
+`MeetingTranscriber` asks for timed words (`GeminiClient.deepInfraWords`) and
+labels each word by the track it was heard on (`MeetingTranscriber.labelByTrack`):
+
+- On a call, a word heard more on the mic than the far side is the note owner
+  (`you`); everyone on the far side is one speaker (`s1`).
+- Off a call (in person, or on iPhone, which records the mic alone), the whole
+  meeting is one speaker.
+
+Measured 2026-10-29 on a synthetic 41 s two-person call started as a detected
+Zoom call: all six turns landed on the right side.
+
 ## Speaker names from the screen
 
 Call apps show the active speaker's name tag on their tile. VoiceiQ reads those

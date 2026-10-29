@@ -1,10 +1,13 @@
 import Foundation
 
-/// Whose models run: Gemini's or OpenAI's, each on its own API with its own
-/// key. Settings calls this the provider.
+/// Whose models run: Gemini's, OpenAI's, or Claude with Nemotron, each on its
+/// own API with its own key. Settings calls this the provider. Claude +
+/// Nemotron is two hosts: DeepInfra's Nemotron 3.5 Transcribe hears the
+/// audio and Anthropic's Claude writes, so it needs both keys.
 public enum ModelProvider: String, CaseIterable, Sendable, Codable, Identifiable {
     case gemini
     case openAI
+    case anthropic
 
     public var id: String { rawValue }
 
@@ -12,6 +15,7 @@ public enum ModelProvider: String, CaseIterable, Sendable, Codable, Identifiable
         switch self {
         case .gemini: return "Gemini"
         case .openAI: return "OpenAI"
+        case .anthropic: return "Claude + Nemotron"
         }
     }
 
@@ -20,11 +24,9 @@ public enum ModelProvider: String, CaseIterable, Sendable, Codable, Identifiable
         switch self {
         case .gemini: return "Google AI Studio"
         case .openAI: return "OpenAI API"
+        case .anthropic: return "Anthropic API and DeepInfra"
         }
     }
-
-    /// The other provider, for meetings when this one has no key.
-    public var other: ModelProvider { self == .gemini ? .openAI : .gemini }
 
     /// Usage records store only the model ID; the provider is read off it.
     /// The `google/` and `openai/` prefixes match rows booked before the
@@ -33,6 +35,7 @@ public enum ModelProvider: String, CaseIterable, Sendable, Codable, Identifiable
         let id = modelID.lowercased()
         if Self.gemini.modelPrefixes.contains(where: id.hasPrefix) { self = .gemini }
         else if Self.openAI.modelPrefixes.contains(where: id.hasPrefix) { self = .openAI }
+        else if Self.anthropic.modelPrefixes.contains(where: id.hasPrefix) { self = .anthropic }
         else { return nil }
     }
 
@@ -41,6 +44,7 @@ public enum ModelProvider: String, CaseIterable, Sendable, Codable, Identifiable
         switch self {
         case .gemini: return ["gemini", "google/"]
         case .openAI: return ["gpt", "whisper", "openai/"]
+        case .anthropic: return ["claude", "nvidia/", "anthropic/"]
         }
     }
 
@@ -49,14 +53,15 @@ public enum ModelProvider: String, CaseIterable, Sendable, Codable, Identifiable
         switch self {
         case .gemini: return "Paid-tier Standard prices from the Gemini API pricing page. A free-tier key is billed nothing."
         case .openAI: return "Standard prices from the OpenAI API pricing page."
+        case .anthropic: return "Standard prices from Anthropic's pricing page; Nemotron at DeepInfra's per-minute price."
         }
     }
 
     /// Providers a meeting is transcribed on, in order: the selected one,
-    /// then the other, each only while its key is stored. Empty when neither
+    /// then the others, each only while its key is stored. Empty when none
     /// has a key.
     public static func meetingOrder(selected: ModelProvider, hasKey: (ModelProvider) -> Bool) -> [ModelProvider] {
-        [selected, selected.other].filter(hasKey)
+        ([selected] + allCases.filter { $0 != selected }).filter(hasKey)
     }
 }
 

@@ -16,6 +16,8 @@ public enum KeychainStore {
         case tinyFish = "tinyfish-api-key"
         case openAI = "openai-api-key"
         case agentProvider = "agent-provider-api-key"
+        case anthropic = "anthropic-api-key"
+        case deepInfra = "deepinfra-api-key"
 
         var label: String {
             switch self {
@@ -23,6 +25,8 @@ public enum KeychainStore {
             case .tinyFish: return "VoiceiQ — TinyFish API key"
             case .openAI: return "VoiceiQ — OpenAI API key"
             case .agentProvider: return "VoiceiQ — Agent provider API key"
+            case .anthropic: return "VoiceiQ — Anthropic API key"
+            case .deepInfra: return "VoiceiQ — DeepInfra API key"
             }
         }
 
@@ -33,6 +37,8 @@ public enum KeychainStore {
             case .tinyFish: return "tinyFishKey"
             case .openAI: return "openAIKey"
             case .agentProvider: return "agentProviderKey"
+            case .anthropic: return "anthropicKey"
+            case .deepInfra: return "deepInfraKey"
             }
         }
     }
@@ -97,11 +103,22 @@ public enum KeychainStore {
     @discardableResult
     public static func deleteOpenAIKey(notify: Bool = false) -> Bool { delete(.openAI, notify: notify) }
 
-    /// Whether the provider's key is stored.
+    // MARK: - Claude + Nemotron
+
+    public static func loadKey(_ secret: Secret) -> String? { load(secret, service: service) }
+
+    @discardableResult
+    public static func saveKey(_ secret: Secret, _ key: String) -> Bool { save(key, for: secret) }
+
+    @discardableResult
+    public static func deleteKey(_ secret: Secret, notify: Bool = false) -> Bool { delete(secret, notify: notify) }
+
+    /// Whether the provider's keys are stored. Claude + Nemotron needs both.
     public static func hasKey(for provider: ModelProvider) -> Bool {
         switch provider {
         case .gemini: return loadAPIKey() != nil
         case .openAI: return loadOpenAIKey() != nil
+        case .anthropic: return loadKey(.anthropic) != nil && loadKey(.deepInfra) != nil
         }
     }
 

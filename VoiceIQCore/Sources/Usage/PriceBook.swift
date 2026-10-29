@@ -59,6 +59,12 @@ public enum PriceBook {
             ("gpt-6-luna", ModelPrice(textIn: 0.10, cachedIn: 0.01, textOut: 0.50)),
             ("gpt-6-sol", ModelPrice(textIn: 2.00, cachedIn: 0.20, textOut: 10.00)),
             ("gpt-4o-transcribe-diarize", ModelPrice(textIn: 2.50, audioIn: 2.50, textOut: 10.00)),
+            // platform.claude.com/docs/en/about-claude/pricing, Standard, copied
+            // 2026-10-29. Haiku 5.5 is the price for prompts up to 100k tokens;
+            // cache reads are 0.1x input on Haiku and 0.05x on Sonnet and Opus.
+            ("claude-haiku-5-5", ModelPrice(textIn: 0.10, cachedIn: 0.01, textOut: 0.50)),
+            ("claude-sonnet-5-5", ModelPrice(textIn: 2.00, cachedIn: 0.10, textOut: 10.00)),
+            ("claude-opus-5-5", ModelPrice(textIn: 4.00, cachedIn: 0.20, textOut: 20.00)),
         ]
     }
 
@@ -70,6 +76,8 @@ public enum PriceBook {
         ("gpt-4o-transcribe", 0.006),
         // No longer called; prices rows booked by older builds.
         ("whisper-1", 0.006),
+        // DeepInfra, copied 2026-10-29.
+        ("nvidia-nemotron-3.5-transcribe", 0.002),
     ]
 
     public static func perMinutePrice(for model: String) -> Double? {

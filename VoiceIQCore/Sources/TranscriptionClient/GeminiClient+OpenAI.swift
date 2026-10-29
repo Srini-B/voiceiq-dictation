@@ -110,17 +110,21 @@ extension GeminiClient {
         let imageParts: [[String: Any]] = images.map {
             ["type": "image_url", "image_url": ["url": "data:image/jpeg;base64,\($0.base64EncodedString())"]]
         }
-        let dictation = prompt.range(of: PromptV1.fieldBeforeLabel, options: .backwards)
-            ?? prompt.range(of: "RAW: ", options: .backwards)
-        guard !images.isEmpty, let split = dictation else {
+        guard !images.isEmpty, let split = dictationSplit(prompt) else {
             return [["role": "user", "content": [["type": "text", "text": prompt]] + imageParts]]
         }
         let label = images.count == 1 ? "Screenshot" : "Screenshots"
         return [
-            ["role": instructionRole, "content": String(prompt[..<split.lowerBound]).trimmingCharacters(in: .whitespacesAndNewlines)],
+            ["role": instructionRole, "content": String(prompt[..<split]).trimmingCharacters(in: .whitespacesAndNewlines)],
             ["role": "user", "content": [["type": "text", "text": "\(label) of the user's screen while dictating (reference only, not part of the dictation):"]]
-                + imageParts + [["type": "text", "text": String(prompt[split.lowerBound...])]]],
+                + imageParts + [["type": "text", "text": String(prompt[split...])]]],
         ]
+    }
+
+    /// Where the dictation starts in a writing prompt; the rules are before it.
+    static func dictationSplit(_ prompt: String) -> String.Index? {
+        (prompt.range(of: PromptV1.fieldBeforeLabel, options: .backwards)
+            ?? prompt.range(of: "RAW: ", options: .backwards))?.lowerBound
     }
 
     static let openAIMaxReferences = 4

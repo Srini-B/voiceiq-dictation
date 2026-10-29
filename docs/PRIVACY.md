@@ -3,7 +3,8 @@
 ## The promise
 
 By default, your voice goes from your Mac directly to the model provider you chose in
-Settings → Advanced, using your own API key: Google's Gemini API or OpenAI's API.
+Settings → Advanced, using your own API key: Google's Gemini API, OpenAI's API,
+or Claude + Nemotron (DeepInfra hears the audio, Anthropic gets the text).
 Optional Fluid Speech Mini or Nemotron transcription processes audio on-device on supported systems
 (Fluid Speech Mini only on iPhone and iPad).
 Cleanup and screen context still use your selected cloud provider. Failed local
@@ -12,8 +13,10 @@ There is no VoiceiQ server, no account, no analytics, no telemetry.
 Everything else stays on your Mac. The code is open — verify all of this.
 
 "The provider" below means the one you selected:
-`generativelanguage.googleapis.com` (Gemini) or `api.openai.com` (OpenAI).
-Only it receives a given dictation; nothing is sent to the other. Meetings are
+`generativelanguage.googleapis.com` (Gemini), `api.openai.com` (OpenAI), or,
+for Claude + Nemotron, `api.deepinfra.com` for audio and `api.anthropic.com`
+for text, screenshots and agent turns. Only it receives a given dictation;
+nothing is sent to the others. Meetings are
 the one exception: a meeting goes to the selected provider when its key is
 saved, otherwise to the other provider, and a meeting whose provider fails
 moves on to the other provider you have a key for.
@@ -120,7 +123,8 @@ With no usable key, nothing is sent and the recording stays on your Mac.
    instruction to the provider. Nothing else in the window is read. Translate (⌃⌥T)
    sends only your dictation, as a normal dictation does.
 8. **Your API keys**, each only in the request header to its own service: the
-   Gemini key to Google, the OpenAI key to OpenAI. They are stored in the
+   Gemini key to Google, the OpenAI key to OpenAI, the Anthropic key to
+   Anthropic and the DeepInfra key to DeepInfra. They are stored in the
    macOS Keychain, never in files or preferences.
 9. **Update checks.** Every six hours, and when you choose Check for Updates, the
    app downloads the update feed (`appcast.xml`) from the project's GitHub

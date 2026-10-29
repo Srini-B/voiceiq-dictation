@@ -91,6 +91,14 @@ public struct TokenUsage: Equatable, Sendable, Codable {
         return fromAudioMinutes(seconds: seconds, model: model)
     }
 
+    /// DeepInfra's `verbose_json` transcript: no usage block, billed per
+    /// minute of the `duration` it reports.
+    public static func fromTranscriptDuration(_ data: Data, model: String) -> TokenUsage? {
+        guard let root = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+              let seconds = (root["duration"] as? NSNumber)?.doubleValue else { return nil }
+        return fromAudioMinutes(seconds: seconds, model: model)
+    }
+
     public static func fromAudioMinutes(seconds: Double, model: String) -> TokenUsage? {
         guard let perMinute = PriceBook.perMinutePrice(for: model) else { return nil }
         return TokenUsage(reportedCostUSD: seconds / 60 * perMinute, audioSeconds: seconds)

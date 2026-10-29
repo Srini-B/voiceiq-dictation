@@ -316,9 +316,9 @@ public enum MeetingFailure: Error, Equatable {
     static func reason(for error: Error, tried: String) -> String {
         switch error {
         case MeetingFailure.noRoute:
-            return "No key can transcribe meetings. Add a Gemini or OpenAI key in \(keysPlace). The recording is saved; press Retry once a key is added."
+            return "No key can transcribe meetings. Add a provider's keys in \(keysPlace). The recording is saved; press Retry once a key is added."
         case MeetingFailure.noNotesRoute:
-            return "The transcript was made on device, but no key can write the notes. Add a Gemini or OpenAI key in \(keysPlace), then press Retry."
+            return "The transcript was made on device, but no key can write the notes. Add a provider's keys in \(keysPlace), then press Retry."
         case let error as TranscriptionError:
             switch error {
             case .auth:
