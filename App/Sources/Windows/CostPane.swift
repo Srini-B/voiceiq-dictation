@@ -127,13 +127,15 @@ struct CostPane: View {
             } else {
                 Grid(alignment: .leading, horizontalSpacing: VoiceIQUI.Spacing.l, verticalSpacing: 6) {
                     GridRow {
-                        header(""); header("Calls")
+                        header("").frame(maxWidth: .infinity, alignment: .leading)
+                        header("Calls")
                         if detailed { header("Tokens in"); header("Tokens out"); header("Audio") }
                         header("Cost")
                     }
                     ForEach(rows, id: \.0) { name, total in
                         GridRow {
                             Text(name).font(VoiceIQUI.TypeScale.body(grad: grad))
+                                .frame(maxWidth: .infinity, alignment: .leading)
                             cell("\(total.calls)")
                             if detailed {
                                 cell(total.tokensIn > 0 ? UsageFormat.tokens(total.tokensIn) : "—")
@@ -182,6 +184,7 @@ struct CostPane: View {
 
     private func header(_ text: String) -> some View {
         Text(text).font(VoiceIQUI.TypeScale.labelSmall(grad: grad)).foregroundStyle(.secondary)
+            .gridColumnAlignment(.trailing)
     }
 
     private func cell(_ text: String) -> some View {

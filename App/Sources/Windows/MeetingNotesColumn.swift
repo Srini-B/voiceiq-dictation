@@ -37,7 +37,6 @@ struct MeetingNotesColumn: View {
             }
             .font(VoiceIQUI.TypeScale.body())
             .textSelection(.enabled)
-            .frame(maxWidth: 720, alignment: .leading)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, VoiceIQUI.Spacing.xxl)
             .padding(.vertical, VoiceIQUI.Spacing.xl)
