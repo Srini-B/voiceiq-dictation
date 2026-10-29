@@ -2,12 +2,13 @@ import Foundation
 
 /// Claude + Nemotron's models for each role: NVIDIA Nemotron 3.5 Transcribe on
 /// DeepInfra hears every recording (dictation and meetings), Claude Haiku 5.5
-/// writes (cleanup, Ask Anything, Translate, meeting notes), and Claude Sonnet
-/// 5.5 drives agent mode, which clicks by screenshot pixel and needs the
-/// stronger model.
+/// writes (cleanup, Ask Anything, Translate), and Claude Sonnet 5.5 writes
+/// meeting notes, which must keep one spelling per name across a whole
+/// meeting, and drives agent mode, which clicks by screenshot pixel.
 public struct AnthropicConfig: Sendable, Equatable {
     public var transcribeModel = "nvidia/NVIDIA-Nemotron-3.5-Transcribe-30B-A4B"
     public var writingModel = "claude-haiku-5-5"
+    public var notesModel = "claude-sonnet-5-5"
     public var agentModel = "claude-sonnet-5-5"
 
     public init() {}
@@ -71,23 +72,22 @@ extension GeminiClient {
         return text.isEmpty ? [] : [DiarizedWord(text: text, speaker: nil)]
     }
 
-    /// One Claude reply. With screenshots, the rules go in `system` and the
-    /// user turn holds the labelled screenshots and the dictation, the layout
+    /// One Claude reply. A cleanup prompt's rules go in `system` and the user
+    /// turn holds the labelled screenshots and the dictation, the layout
     /// `openAIMessages` measured as the one that keeps screen text out.
-    func anthropicMessage(prompt: String, images: [Data] = [], deadline: TimeInterval, stage: UsageStage,
-                          maxTokens: Int = 8192) async throws -> String {
-        let model = AnthropicConfig().writingModel
+    func anthropicMessage(prompt: String, images: [Data] = [], model: String = AnthropicConfig().writingModel,
+                          deadline: TimeInterval, stage: UsageStage, maxTokens: Int = 8192) async throws -> String {
         // Claude 5.5 rejects `temperature` ("deprecated for this model", probed 2026-10-29).
         var body: [String: Any] = ["model": model, "max_tokens": maxTokens]
         let imageParts: [[String: Any]] = images.map {
             ["type": "image", "source": ["type": "base64", "media_type": "image/jpeg", "data": $0.base64EncodedString()]]
         }
-        if !images.isEmpty, let split = Self.dictationSplit(prompt) {
+        if let (system, dictation) = Self.anthropicCleanupSplit(prompt) {
+            body["system"] = system
             let label = images.count == 1 ? "Screenshot" : "Screenshots"
-            body["system"] = String(prompt[..<split]).trimmingCharacters(in: .whitespacesAndNewlines)
-            body["messages"] = [["role": "user", "content":
-                [["type": "text", "text": "\(label) of the user's screen while dictating (reference only, not part of the dictation):"]]
-                + imageParts + [["type": "text", "text": String(prompt[split...])]]]]
+            let shots: [[String: Any]] = images.isEmpty ? [] :
+                [["type": "text", "text": "\(label) of the user's screen while dictating (reference only, not part of the dictation):"]] + imageParts
+            body["messages"] = [["role": "user", "content": shots + [["type": "text", "text": dictation]]]]
         } else {
             body["messages"] = [["role": "user", "content": [["type": "text", "text": prompt]] + imageParts]]
         }
@@ -95,6 +95,21 @@ extension GeminiClient {
                                   endpoint: Self.anthropicEndpoint, deadline: deadline, modelLabel: model,
                                   stage: stage, via: .anthropic)
         return try Self.extractAnthropicText(from: data)
+    }
+
+    /// A cleanup prompt as `system` blocks and the dictation. The rules up to
+    /// `layoutReminder` are the same for every dictation until the user edits
+    /// the dictionary or writing rules, so they carry the cache breakpoint;
+    /// the field rules, reminder and PLACE line after it vary per dictation.
+    /// Nil for any other prompt, which goes as one user turn uncached.
+    static func anthropicCleanupSplit(_ prompt: String) -> (system: [[String: Any]], dictation: String)? {
+        guard let split = dictationSplit(prompt),
+              let stable = prompt.range(of: PromptV1.layoutReminder)?.upperBound, stable <= split else { return nil }
+        var system: [[String: Any]] = [["type": "text", "text": String(prompt[..<stable]),
+                                        "cache_control": ["type": "ephemeral"]]]
+        let varying = prompt[stable..<split].trimmingCharacters(in: .whitespacesAndNewlines)
+        if !varying.isEmpty { system.append(["type": "text", "text": varying]) }
+        return (system, String(prompt[split...]))
     }
 
     /// `GET /v1/models`: 200 for a usable key, 401 for a bad one.

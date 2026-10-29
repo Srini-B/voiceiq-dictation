@@ -74,6 +74,12 @@ counts. Chat models (GPT-6.1 Terra, GPT-6 Astra, GPT-6 Luna, and
 On Claude + Nemotron, DeepInfra's `verbose_json` transcript has no usage block;
 `TokenUsage.fromTranscriptDuration` books its `duration` at Nemotron 3.5
 Transcribe's $0.002 per minute. Claude calls use `TokenUsage.fromAnthropic`.
+Cleanup marks the rules up to `PromptV1.layoutReminder` with Anthropic's
+`cache_control` (`GeminiClient.anthropicCleanupSplit`), so dictations after the
+first read them from the cache for five minutes. Measured 2026-10-29 on Haiku:
+the second of two dictations into different apps sent 146 new tokens and read
+12,573 from the cache. A cache write is booked at the plain input price, though
+Anthropic bills it at 1.25×.
 
 ## Attribution
 

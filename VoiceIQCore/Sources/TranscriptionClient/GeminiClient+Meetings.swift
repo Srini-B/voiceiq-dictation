@@ -38,7 +38,8 @@ public extension GeminiClient {
                           via provider: ModelProvider) async throws -> String {
         switch provider {
         case .openAI: return try await openAIChat(prompt: prompt, deadline: deadline, stage: .meetingSummary, jsonObject: true)
-        case .anthropic: return try await anthropicMessage(prompt: prompt, deadline: deadline, stage: .meetingSummary, maxTokens: 16_000)
+        case .anthropic: return try await anthropicMessage(prompt: prompt, model: AnthropicConfig().notesModel, deadline: deadline,
+                                                           stage: .meetingSummary, maxTokens: 16_000)
         case .gemini: break
         }
         let body: [String: Any] = [

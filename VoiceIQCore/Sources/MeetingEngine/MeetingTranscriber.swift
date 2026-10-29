@@ -26,11 +26,16 @@ public struct MeetingTranscriber: Sendable {
     /// Providers to try in order; see `ModelProvider.meetingOrder`.
     private let providers: @Sendable () -> [ModelProvider]
     private let sleep: @Sendable (TimeInterval) async throws -> Void
+    /// Speaker labels for Claude + Nemotron's words, which come with none
+    /// (`LocalMeetingTranscriber.relabel`). Nil keeps the track labels.
+    private let relabel: (@Sendable ([TimedWord], URL) async -> [TimedWord])?
 
     public init(client: GeminiClient, models: Models, endpoint: URL,
                 providers: @escaping @Sendable () -> [ModelProvider],
+                relabel: (@Sendable ([TimedWord], URL) async -> [TimedWord])? = nil,
                 sleep: @escaping @Sendable (TimeInterval) async throws -> Void = { try await Task.sleep(nanoseconds: UInt64($0 * 1_000_000_000)) }) {
-        self.client = client; self.models = models; self.endpoint = endpoint; self.providers = providers; self.sleep = sleep
+        self.client = client; self.models = models; self.endpoint = endpoint; self.providers = providers
+        self.relabel = relabel; self.sleep = sleep
     }
 
     /// Seconds of speech per request. Diarized requests are capped at 30
@@ -40,6 +45,12 @@ public struct MeetingTranscriber: Sendable {
     /// OpenAI's diarizing model gets the same window; it is not measured on a
     /// long call yet.
     static let windowSpeech: Double = 600
+    /// DeepInfra's Nemotron 3.5 Transcribe returns the whole text of a longer
+    /// request but word timings for only its last part, placed past the end
+    /// of the audio. MEASURED 2026-10-29 on one call's far side: 30 to 300 s
+    /// cuts timed every word; 360 s timed 33 of 309 words, and the whole
+    /// 639 s track 38 of 421, at 797 to 860 s.
+    static let deepInfraWindowSpeech: Double = 240
     /// A Tier 1 key needs about one minute of waiting per window; a two-hour
     /// call has twenty windows.
     static let rateLimitBudget: TimeInterval = 45 * 60
@@ -50,7 +61,7 @@ public struct MeetingTranscriber: Sendable {
         // The provider names the window cache, so a redo after switching it
         // transcribes again instead of reusing the other model's windows.
         let first = providers().first
-        let window = Self.windowSpeech
+        let window = first == .anthropic ? Self.deepInfraWindowSpeech : Self.windowSpeech
         let cache = folder.appendingPathComponent(
             "transcribe-\(Self.cacheVersion)-\(first?.rawValue ?? "none")-\(Int(window))", isDirectory: true)
         try FileManager.default.createDirectory(at: cache, withIntermediateDirectories: true)
@@ -80,6 +91,7 @@ public struct MeetingTranscriber: Sendable {
             }
             words = Self.mergeOwner(owner, into: words, overlaps: overlaps)
         }
+        if first == .anthropic, let relabel { words = await relabel(words, folder) }
         return SpeakerLinker.overlappingTurns(words).map { turn in
             TranscriptSegment(speaker: turn.speaker, text: turn.text, chunkIndex: 0, start: turn.start, end: turn.end)
         }
@@ -313,7 +325,8 @@ public struct MeetingTranscriber: Sendable {
     /// gives them name the speakers (`SpeakerLinker.link`). OpenAI: up to
     /// four named voice references go alongside, and the model labels their
     /// segments with those names. Claude + Nemotron: no speaker labels, so
-    /// each word is labelled by the track it was heard on (`labelByTrack`).
+    /// each word is labelled by the track it was heard on (`labelByTrack`),
+    /// and on the Mac the diarizer splits the far side afterwards (`relabel`).
     private func transcribe(window regions: [ClosedRange<Double>], audio: CallAudio, clips: [(key: String, value: [ClosedRange<Double>])],
                             known: [TimedWord], via provider: ModelProvider) async throws -> [TimedWord] {
         var request = AssembledAudio()

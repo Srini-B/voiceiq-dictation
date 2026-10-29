@@ -5,7 +5,8 @@ import SwiftUI
 struct MeetingNotesColumn: View {
     let meeting: MeetingMeta
     let notes: MeetingNotes?
-    let busy: Bool
+    /// What the meeting is doing in the background, in words; nil when idle.
+    let step: String?
 
     var body: some View {
         ScrollView {
@@ -27,10 +28,10 @@ struct MeetingNotesColumn: View {
                         }
                     }
                     bullets("Notes", notes.notes)
-                } else if busy {
+                } else if let step {
                     HStack(spacing: VoiceIQUI.Spacing.xs) {
                         ProgressView().controlSize(.small)
-                        Text(progress).foregroundStyle(.secondary)
+                        Text(step).foregroundStyle(.secondary)
                     }
                 }
             }
@@ -40,14 +41,6 @@ struct MeetingNotesColumn: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, VoiceIQUI.Spacing.xxl)
             .padding(.vertical, VoiceIQUI.Spacing.xl)
-        }
-    }
-
-    private var progress: String {
-        switch meeting.status {
-        case .recording: return "Recording"
-        case .summarizing: return "Making notes"
-        default: return "Transcribing"
         }
     }
 

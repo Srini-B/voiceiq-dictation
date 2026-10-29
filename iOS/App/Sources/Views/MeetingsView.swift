@@ -163,15 +163,18 @@ private struct MeetingDetail: View {
     /// The speaker whose name is being typed.
     @State private var naming: String?
     @State private var draft = ""
+    /// What the note is doing in the background; nil when idle.
+    @State private var step: MeetingStatus?
 
     init(meta: MeetingMeta) { _meta = State(initialValue: meta) }
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: Theme.Spacing.xl) {
+                if let step { processingCard(step) }
                 if let notes { notesContent(notes) }
                 else if case .failed(let reason) = meta.status { failureCard(reason) }
-                else { processingCard }
+                else if step == nil { processingCard(.summarizing) }
                 if !transcript.isEmpty { transcriptContent }
             }
             .padding(.horizontal, Theme.Spacing.page)
@@ -185,7 +188,7 @@ private struct MeetingDetail: View {
             if meta.status == .done {
                 Menu {
                     Button("Notes") { model.meetings.regenerateNotes(id: meta.id) }.disabled(transcript.isEmpty)
-                    Button("Transcript and notes") { model.meetings.retry(id: meta.id) }
+                    Button("Transcript and notes") { model.meetings.retry(id: meta.id, fresh: true) }
                 } label: { Label("Redo", systemImage: "arrow.clockwise") }
                     .disabled(model.meetings.isBusy(meta.id))
             }
@@ -201,7 +204,10 @@ private struct MeetingDetail: View {
             Button("Cancel", role: .cancel) {}
         }
         .onAppear(perform: load)
-        .onReceive(model.meetings.$processing) { busy in if !busy.contains(meta.id) { load() } }
+        .onReceive(model.meetings.$processing) { busy in
+            step = busy[meta.id]
+            if step == nil { load() }
+        }
     }
 
     @ViewBuilder private func notesContent(_ notes: MeetingNotes) -> some View {
@@ -320,11 +326,11 @@ private struct MeetingDetail: View {
         }
     }
 
-    private var processingCard: some View {
+    private func processingCard(_ step: MeetingStatus) -> some View {
         Card {
             HStack(spacing: Theme.Spacing.m) {
                 ProgressView().tint(Theme.Colors.accent)
-                Text("Writing notes").font(Theme.Fonts.headline()).foregroundStyle(Theme.Colors.ink)
+                Text(step == .transcribing ? "Transcribing" : "Writing notes").font(Theme.Fonts.headline()).foregroundStyle(Theme.Colors.ink)
             }
         }
     }

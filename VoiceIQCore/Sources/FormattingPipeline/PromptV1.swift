@@ -84,7 +84,9 @@ public enum PromptV1 {
     // Last thing before the transcript: the layout decision is the rule the
     // model drops most often on long dictations, more so with audio attached
     // (measured 2026-09-26), so it is restated here.
-    private static let layoutReminder = "Before writing CLEAN, decide the layout. Count the separate requests, tasks, or reported problems this dictation hands its reader to act on. Two or more become a numbered list, one item each with all of its sentences. Questions, context, and updates spoken before the first one stay as prose above the list. One request, a question, a status update, or a short conversational message stays prose. A list gets a blank line before and after it, and between items that are sentences. An email (a spoken greeting, then a sign-off or more than one paragraph) is greeting, blank line, body paragraphs, blank line, sign-off with the name under it."
+    // Also where the prompt stops being the same for every dictation, which
+    // is where Claude's cache breakpoint goes.
+    static let layoutReminder = "Before writing CLEAN, decide the layout. Count the separate requests, tasks, or reported problems this dictation hands its reader to act on. Two or more become a numbered list, one item each with all of its sentences. Questions, context, and updates spoken before the first one stay as prose above the list. One request, a question, a status update, or a short conversational message stays prose. A list gets a blank line before and after it, and between items that are sentences. An email (a spoken greeting, then a sign-off or more than one paragraph) is greeting, blank line, body paragraphs, blank line, sign-off with the name under it."
 
     private static func sharedSections(
         vocabulary: [String], spellings: [(wrong: String, right: String)],
