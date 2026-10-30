@@ -377,20 +377,32 @@ offers "Add copied text to Dictionary" until you start typing.
 | Your words | The VoiceiQ Dictionary (`SharedStore.dictionaryWords`), contact names and Text Replacements (`requestSupplementaryLexicon`), and words typed twice or picked from quotes. |
 | Emoji | Unicode's list in CLDR order, by category, with recents. |
 | No assistance | Password, one-time code, card, phone and postal code fields. |
-| Themes | Default, Clear, Physical, Mechanical and iOS 5, after the Raycast keyboard (`KeyTheme`). Physical and Mechanical take Automatic, Light or Dark keys, which pins the whole keyboard through `overrideUserInterfaceStyle`; iOS 5 is always light. Themes with their own background cannot paint the system's globe and mic strip below the keys. |
+| Themes | Default, Clear, Physical, Mechanical and iOS 5, after the Raycast keyboard (`KeyTheme`). Physical and Mechanical take Automatic, Light or Dark keys, which pins the key area through `overrideUserInterfaceStyle`; iOS 5 keys are always light. The bar follows the app, like the system backdrop under it. Every theme sits on the system's own backdrop: on iOS 26 and later iOS draws a rounded panel around the extension, with a strip above it and the globe and mic row below, that the keyboard cannot paint, so a painted background shows square corners and two greys. |
 
 Key labels are centred on the cap height, or the x-height for lowercase, not
-on the font's line box. A slide starts once the finger reaches another letter
-(at least a third of a key away) or moves three quarters of a key; moving
-more than 8 pt cancels the long press for accents. A slide shorter than 1.6
-keys that ends within 0.15 s is a sloppy tap and types its first key. The slide
-trail draws above the keys.
+on the font's line box. A tap types the key the finger lifts on once it is
+8 pt past the pressed key's edge, as on iOS. A slide starts with AOSP
+LatinIME's shipped thresholds: half a key after 20 ms, but within 0.5 s of a
+typed letter it must last about 185 ms and cross about 3.7 keys, easing to
+half a key by 450 ms, so a fast typist's drifting tap stays a tap. Mid-word a
+slide may start only when the letters typed so far are a word
+(`canStartSwipe`), so a slip never inserts a word and a space. A slide under
+0.8 of a key types the key under the finger. Moving more than 8 pt cancels
+the long press for accents. A doubled letter is one stop on a word's ideal
+path (no loop), and all-caps abbreviations ("DE") are never slid to. The
+slide trail draws above the keys. In `viewDidAppear` the keyboard turns off
+`delaysTouchesBegan` on its window's system-gesture recognizers, which
+otherwise hold back touches near the screen edges.
 
 **Data.** `lexicon.bin` holds 82,846 words and 242,342 word pairs (3.5 MB),
 memory-mapped so it does not count against the extension's memory limit. A
 word's key is lowercase without apostrophes, so one binary search finds `dont`
 and `don't`. `scripts/generate-keyboard-data.py` rebuilds it and `emoji.txt`
-from pinned sources (THIRD_PARTY_NOTICES.md, "Keyboard data").
+from pinned sources (THIRD_PARTY_NOTICES.md, "Keyboard data"). A word takes
+Hunspell's capitalized spelling only when Hunspell has no lowercase form of it,
+counting inflections of a lowercase stem: Hunspell stores "job/SM" and no "as",
+so "jobs" and "as" must not become "Jobs" and "As". A learned word drops a
+capital that only started its sentence.
 
 **Scoring.** Every candidate gets ln P(word | previous word), using the pair
 when the list has it and the word's frequency times 0.05 when it does not,
@@ -429,7 +441,10 @@ the keyboard uses. The keys respond to touch but type nothing.
 misspellings corrected as the iOS keyboard does, about 7 ms a suggestion. Slide
 to type on simulated noisy paths for 400 words drawn by frequency: 357 right
 first and 389 in the top three at 0.15 key-width noise; 302 and 355 at 0.30;
-under 1 ms a gesture.
+under 1 ms a gesture. After the 2026-10-31 fixes (no double-letter loop,
+lowercase list, no abbreviations), the 400 most frequent words with
+7 pt / 9 pt finger noise: 95.2% right first (was 90.7%) and 99.9% in the top
+three (was 97.2%); words of three or fewer distinct letters 86.5% (was 79.7%).
 
 ### Dictionary
 

@@ -83,9 +83,21 @@ def cased_forms(hunspell):
     """Lowercase word -> its dictionary spelling, for words never written lowercase."""
     entries = [line.split("/")[0] for line in hunspell.splitlines()[1:] if line]
     lower = {w for w in entries if w == w.lower()}
+
+    def lowercase_word(word):
+        # The dictionary lists stems with affix flags, so "jobs" is only
+        # "job/SM" and "as" is missing; "Jobs" and "As" must not win.
+        if word in lower:
+            return True
+        for suffix, stem_end in (("ies", "y"), ("es", ""), ("s", ""), ("ed", ""), ("ed", "e"),
+                                 ("ing", ""), ("ing", "e"), ("ers", ""), ("er", ""), ("ly", "")):
+            if word.endswith(suffix) and word[:-len(suffix)] + stem_end in lower:
+                return True
+        return False
+
     cased = {}
     for word in entries:
-        if word == word.lower() or word.lower() in lower:
+        if word == word.lower() or lowercase_word(word.lower()):
             continue
         cased.setdefault(word.lower(), word)
     return cased, {w for w in entries if "'" in w}

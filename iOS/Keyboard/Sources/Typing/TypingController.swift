@@ -424,6 +424,13 @@ final class TypingController: ObservableObject, KeyboardKeysDelegate {
         refresh()
     }
 
+    /// A slide types a new word, so mid-word it may start only once the
+    /// letters typed so far are a word: a slip while typing stays a tap.
+    var canStartSwipe: Bool {
+        let partial = TypingEngine.context(before: proxy?.documentContextBeforeInput ?? "").partial
+        return partial.isEmpty || pendingSpace || engine?.isKnown(partial) == true
+    }
+
     func cursorMoved(by offset: Int) {
         proxy?.adjustTextPosition(byCharacterOffset: offset)
         pendingSpace = false
@@ -456,8 +463,17 @@ final class TypingController: ObservableObject, KeyboardKeysDelegate {
               var engine, word.count > 1, word.allSatisfy({ $0.isLetter || $0 == "'" }) else { return }
         // A learned word stays counted after it becomes known, so typing
         // alone can take it to the uses that send it to the Dictionary.
-        guard strongly || !engine.isKnown(word)
-            || engine.user.learned[TypingEngine.key(of: word)] != nil else { return }
+        let key = TypingEngine.key(of: word)
+        guard strongly || !engine.isKnown(word) || engine.user.learned[key] != nil else { return }
+        // A capital that only starts the sentence is not the word's: keep
+        // "helo" as typed mid-sentence, and a name's saved spelling.
+        var word = word
+        let text = proxy?.documentContextBeforeInput ?? ""
+        let context = TypingEngine.context(before: text.hasSuffix(" ") ? String(text.dropLast()) : text)
+        if context.sentenceStart, TypingEngine.key(of: context.partial) == key,
+           word.dropFirst() == word.dropFirst().lowercased() {
+            word = engine.user.learned[key]?.display ?? word.lowercased()
+        }
         if LearnedWords.learn(word, strongly: strongly, in: &engine.user), controller?.hasFullAccess == true {
             LearnedWords.publish(engine.user)
         }

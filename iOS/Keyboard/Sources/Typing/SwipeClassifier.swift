@@ -28,6 +28,9 @@ struct SwipeClassifier: Sendable {
         var ranked: [(Lexicon.WordID, Double)] = []
         ranked.reserveCapacity(lexicon.count)
         for id in 0..<lexicon.count where !lexicon.flags(id).contains(.noSuggest) {
+            // Abbreviations such as "DE" and "AL" are typed, not slid to.
+            let display = lexicon.display(id)
+            if display.count > 1, display == display.uppercased() { continue }
             ranked.append((id, lexicon.logProbability(id)))
         }
         ranked.sort { $0.1 > $1.1 }
@@ -84,18 +87,13 @@ struct SwipeClassifier: Sendable {
 
     // MARK: - Paths
 
-    /// Key centres in order; a doubled letter adds a small loop so "pool" and
-    /// "pol" differ.
+    /// Key centres in order. A doubled letter is one stop: nobody draws a
+    /// loop for "see", so the word list's frequency tells "see" from "se".
     func idealPath(for key: String) -> [CGPoint]? {
         var path: [CGPoint] = []
         var previous: Character?
-        for letter in key {
+        for letter in key where letter != previous {
             guard let center = geometry.centers[letter] else { return nil }
-            if letter == previous {
-                let dx = geometry.keyWidth / 4, dy = geometry.keyHeight / 4
-                path += [CGPoint(x: center.x + dx, y: center.y + dy), CGPoint(x: center.x + dx, y: center.y - dy),
-                         CGPoint(x: center.x - dx, y: center.y - dy), CGPoint(x: center.x - dx, y: center.y + dy)]
-            }
             path.append(center)
             previous = letter
         }

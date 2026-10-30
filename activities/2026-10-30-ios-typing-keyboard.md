@@ -114,3 +114,38 @@ keyboards to type.
   `KeyboardPreferences`, Settings › Typing and `TypingController.keyDown`;
   saved preferences with the old keys still decode. The mic and Dictionary
   chip keep their own taps.
+- Typing feel fixes (2026-10-31, owner report on 0.6.17 with a screenshot:
+  words and spaces appear without a space tap, wrong keys, s→e slides gave
+  "As DE", "As" always capitalized, odd top corners). Causes found and fixed:
+  - A tap drifting a third of a key onto a neighbour became a slide, and a
+    slide inserts a word with a space. Now AOSP LatinIME's shipped gesture
+    start (`config-common.xml`: 500 ms after a typed letter, 300→20 ms and
+    6→0.5 keys over 450 ms), plus no slide mid-word unless the letters are
+    already a word (jboard's rule). Research: LatinIME, FlorisBoard v0.5.2,
+    HeliBoard, FUTO, KeyboardKit, jboard, azooKey, giellakbd-ios.
+  - A tap typed the pressed key even when the finger rolled onto the next
+    one. It now follows the finger with LatinIME's 8 pt hysteresis.
+  - `lexicon.bin` spelled "as" "As" and "de" "DE" (and "jobs", "miles",
+    "weeks"...): Hunspell lists stems with affix flags and has no "as", so
+    the generator took the proper noun. It now counts inflections of a
+    lowercase stem. 220 of the 3,000 most common words were affected.
+  - Ideal slide paths added a loop for doubled letters, which nobody draws:
+    "see" lost to "are", "good" to "god". FlorisBoard scores both; one plain
+    stop measured better here and is simpler.
+  - Learned words kept a capital that only started the sentence ("Helo").
+  - Physical, Mechanical and iOS 5 painted a square gradient inside the
+    rounded panel iOS 26 draws around keyboards, which has a strip above the
+    extension that it cannot paint. Theme backgrounds are gone; a forced key
+    tone now pins only the keys, so the bar stays readable on the system's
+    backdrop.
+  - Edge keys: window gesture recognizers no longer delay touches (azooKey's
+    fix); not provable in the Simulator.
+  Verified: Mac harness over the shipped classifier and list (400 most
+  frequent words, 3 noisy slides each) 90.7% → 95.2% right first, 97.2% →
+  99.9% in the top three. In the iPhone 17e Simulator (iOS 27.0) on the real
+  keyboard: "as" mid-sentence stays lowercase, an s→e slide types "see", a
+  fast press on n drifting 27 pt types "m" and no word; Physical with dark
+  keys has clean corners on a dark and a light app; no new crash reports.
+  Suggestion work measured at 0.65 ms median per keystroke (Mac), so it is
+  not the cause of the rough feel. Not verified on a device: edge-key delay
+  and the feel of the new thresholds under a real finger.

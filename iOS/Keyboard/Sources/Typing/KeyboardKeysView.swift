@@ -11,6 +11,8 @@ protocol KeyboardKeysDelegate: AnyObject {
     func keyTapped(_ key: KeySpec, text: String?)
     func deleteRepeated(words: Bool)
     func swiped(_ points: [CGPoint])
+    /// Whether a slide may start a word here; mid-word only after a whole word.
+    var canStartSwipe: Bool { get }
     func cursorMoved(by offset: Int)
     func shiftReleased()
 }
@@ -47,16 +49,20 @@ final class KeyboardKeysView: UIView {
     }
 
     private final class Tracked {
-        let key: Int
+        /// The key a tap types: the one under the finger, once it is clearly on it.
+        var key: Int
         let start: CGPoint
         let began = CACurrentMediaTime()
+        /// Pressed within `fastTyping` of the last typed letter.
+        let afterTyping: Bool
         var gesture: Gesture = .press
         var longPress: Timer?
-        init(key: Int, start: CGPoint) { self.key = key; self.start = start }
+        init(key: Int, start: CGPoint, afterTyping: Bool) { self.key = key; self.start = start; self.afterTyping = afterTyping }
     }
 
     private var keys: [Key] = []
     private var tracked: [ObjectIdentifier: Tracked] = [:]
+    private var lastTypedAt: CFTimeInterval = 0
     private let preview = KeyPreview()
     private let trail = CAShapeLayer()
     private var globe: UIButton?
@@ -227,7 +233,7 @@ final class KeyboardKeysView: UIView {
                     tracked[id] = nil
                 }
             }
-            let state = Tracked(key: index, start: point)
+            let state = Tracked(key: index, start: point, afterTyping: CACurrentMediaTime() - lastTypedAt < Self.fastTyping)
             tracked[ObjectIdentifier(touch)] = state
             keys[index].view.isHighlighted = true
             delegate?.keyDown(spec)
@@ -264,23 +270,26 @@ final class KeyboardKeysView: UIView {
             switch state.gesture {
             case .press:
                 let moved = hypot(point.x - state.start.x, point.y - state.start.y)
-                let width = keys[state.key].frame.width
                 // A finger that is sliding is not holding for accents.
                 if moved > 8 { state.longPress?.invalidate() }
-                // A slide starts once the finger reaches another key, so a
-                // touch near the edge of the first letter still slides to
-                // its neighbour; a long move anywhere counts too.
-                let leftKey = moved > width * 0.35 && keyIndex(at: point) != state.key
                 if spec.action == .space, abs(point.x - state.start.x) > 12 {
                     state.gesture = .cursor(anchorX: point.x)
                     keys[state.key].view.isHighlighted = false
                     setCursorMode(true)
-                } else if spec.isLetter, slideToType, tracked.count == 1, leftKey || moved > width * 0.75 {
+                } else if spec.isLetter, slideToType, tracked.count == 1, startsSwipe(state, at: point),
+                          delegate?.canStartSwipe ?? true {
                     state.longPress?.invalidate()
                     hidePreview()
                     keys[state.key].view.isHighlighted = false
                     state.gesture = .swipe([state.start, point])
                     drawTrail([state.start, point])
+                } else if isCharacter(spec), let index = keyIndex(at: point), index != state.key,
+                          isCharacter(keys[index].spec), distanceOutside(keys[state.key].frame, point) > Self.hysteresis {
+                    // The tap follows the finger to the key it lifts on, as on iOS.
+                    keys[state.key].view.isHighlighted = false
+                    state.key = index
+                    keys[index].view.isHighlighted = true
+                    showPreview(for: index)
                 }
             case .accents(let popup, _):
                 state.gesture = .accents(popup, selected: popup.select(at: convert(point, to: popup)))
@@ -325,7 +334,9 @@ final class KeyboardKeysView: UIView {
             if cancelled { break }
             switch spec.action {
             case .delete, .shift, .globe: break
-            default: delegate?.keyTapped(spec, text: nil)
+            default:
+                delegate?.keyTapped(spec, text: nil)
+                if isCharacter(spec) { lastTypedAt = CACurrentMediaTime() }
             }
         case .accents(let popup, let selected):
             popup.removeFromSuperview()
@@ -333,11 +344,12 @@ final class KeyboardKeysView: UIView {
         case .swipe(let points):
             trail.path = nil
             if cancelled { break }
-            // A quick, short slide is a sloppy tap on the first key, not a
-            // two-letter word: fast typists drift onto the next key.
+            // Under most of a key of travel is a tap that drifted, not a word.
             let travel = zip(points, points.dropFirst()).reduce(CGFloat(0)) { $0 + hypot($1.1.x - $1.0.x, $1.1.y - $1.0.y) }
-            if CACurrentMediaTime() - state.began < 0.15, travel < keys[state.key].frame.width * 1.6 {
-                delegate?.keyTapped(spec, text: nil)
+            if travel < (keys[state.key].frame.width + Self.horizontalGap) * 0.8 {
+                let index = points.last.flatMap(keyIndex(at:)).flatMap { isCharacter(keys[$0].spec) ? $0 : nil } ?? state.key
+                delegate?.keyTapped(keys[index].spec, text: nil)
+                lastTypedAt = CACurrentMediaTime()
             } else {
                 delegate?.swiped(points)
             }
@@ -347,6 +359,30 @@ final class KeyboardKeysView: UIView {
             timer?.invalidate()
         }
         if spec.action == .shift { delegate?.shiftReleased() }
+    }
+
+    // MARK: - Tap or slide
+
+    /// AOSP LatinIME's gesture start with the values it ships
+    /// (`config-common.xml`): within half a second of a typed letter, a slide
+    /// must last about 185 ms and cross about 3.7 keys to count, easing to
+    /// half a key by 450 ms, so a fast typist's drifting tap stays a tap.
+    private static let fastTyping: CFTimeInterval = 0.5
+    private static let thresholdDecay: CFTimeInterval = 0.45
+    /// How far past a key's edge a tap must go to type the next key instead.
+    private static let hysteresis: CGFloat = 8
+
+    private func startsSwipe(_ state: Tracked, at point: CGPoint) -> Bool {
+        let keyWidth = keys[state.key].frame.width + Self.horizontalGap
+        let distance = hypot(point.x - state.start.x, point.y - state.start.y) / keyWidth
+        let elapsed = CACurrentMediaTime() - state.began
+        guard state.afterTyping, elapsed < Self.thresholdDecay else { return elapsed >= 0.02 && distance >= 0.5 }
+        let decay = elapsed / Self.thresholdDecay
+        return elapsed >= 0.3 - 0.28 * decay && distance >= 6 - 5.5 * decay
+    }
+
+    private func distanceOutside(_ frame: CGRect, _ point: CGPoint) -> CGFloat {
+        hypot(max(frame.minX - point.x, 0, point.x - frame.maxX), max(frame.minY - point.y, 0, point.y - frame.maxY))
     }
 
     private func startDeleteRepeat() -> Timer {

@@ -59,6 +59,9 @@ struct KeysArea: UIViewRepresentable {
                                    numberRow: typing.preferences.numberRow)
         view.shift = typing.shift
         view.slideToType = typing.preferences.slideToType
+        // A forced key tone (and iOS 5, which has no dark look) pins only the
+        // keys: the bar sits on the system's backdrop, which follows the app.
+        view.overrideUserInterfaceStyle = typing.theme.style
         view.theme = typing.theme
         view.returnEnabled = typing.returnEnabled
     }

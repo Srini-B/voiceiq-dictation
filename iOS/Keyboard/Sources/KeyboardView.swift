@@ -57,12 +57,6 @@ struct KeyboardView: View {
             }
             .frame(maxHeight: .infinity)
         }
-        .background {
-            if let background = typing.theme.background {
-                LinearGradient(colors: [Color(background.top), Color(background.bottom)], startPoint: .top, endPoint: .bottom)
-                    .ignoresSafeArea()
-            }
-        }
         .onChange(of: model.phase) { old, new in
             // A finished session goes back to the keys.
             if old == .processing, new == .off || new == .warm { voiceOpen = false }
