@@ -10,7 +10,8 @@ protocol KeyboardKeysDelegate: AnyObject {
     func keyDown(_ key: KeySpec)
     func keyTapped(_ key: KeySpec, text: String?)
     func deleteRepeated(words: Bool)
-    func swiped(_ points: [CGPoint])
+    /// The finger's path, with each point's `UITouch.timestamp`.
+    func swiped(_ points: [CGPoint], times: [TimeInterval])
     /// Whether a slide may start a word here; mid-word only after a whole word.
     var canStartSwipe: Bool { get }
     func cursorMoved(by offset: Int)
@@ -43,7 +44,7 @@ final class KeyboardKeysView: UIView {
     private enum Gesture {
         case press
         case accents(AccentPopup, selected: Int)
-        case swipe([CGPoint])
+        case swipe([CGPoint], times: [TimeInterval])
         case cursor(anchorX: CGFloat)
         case delete(Timer?)
     }
@@ -52,12 +53,15 @@ final class KeyboardKeysView: UIView {
         /// The key a tap types: the one under the finger, once it is clearly on it.
         var key: Int
         let start: CGPoint
-        let began = CACurrentMediaTime()
+        /// `UITouch.timestamp` of the press.
+        let began: TimeInterval
         /// Pressed within `fastTyping` of the last typed letter.
         let afterTyping: Bool
         var gesture: Gesture = .press
         var longPress: Timer?
-        init(key: Int, start: CGPoint, afterTyping: Bool) { self.key = key; self.start = start; self.afterTyping = afterTyping }
+        init(key: Int, start: CGPoint, began: TimeInterval, afterTyping: Bool) {
+            self.key = key; self.start = start; self.began = began; self.afterTyping = afterTyping
+        }
     }
 
     private var keys: [Key] = []
@@ -233,7 +237,8 @@ final class KeyboardKeysView: UIView {
                     tracked[id] = nil
                 }
             }
-            let state = Tracked(key: index, start: point, afterTyping: CACurrentMediaTime() - lastTypedAt < Self.fastTyping)
+            let state = Tracked(key: index, start: point, began: touch.timestamp,
+                                afterTyping: CACurrentMediaTime() - lastTypedAt < Self.fastTyping)
             tracked[ObjectIdentifier(touch)] = state
             keys[index].view.isHighlighted = true
             delegate?.keyDown(spec)
@@ -276,12 +281,12 @@ final class KeyboardKeysView: UIView {
                     state.gesture = .cursor(anchorX: point.x)
                     keys[state.key].view.isHighlighted = false
                     setCursorMode(true)
-                } else if spec.isLetter, slideToType, tracked.count == 1, startsSwipe(state, at: point),
+                } else if spec.isLetter, slideToType, tracked.count == 1, startsSwipe(state, at: point, time: touch.timestamp),
                           delegate?.canStartSwipe ?? true {
                     state.longPress?.invalidate()
                     hidePreview()
                     keys[state.key].view.isHighlighted = false
-                    state.gesture = .swipe([state.start, point])
+                    state.gesture = .swipe([state.start, point], times: [state.began, touch.timestamp])
                     drawTrail([state.start, point])
                 } else if isCharacter(spec), let index = keyIndex(at: point), index != state.key,
                           isCharacter(keys[index].spec), distanceOutside(keys[state.key].frame, point) > Self.hysteresis {
@@ -293,9 +298,16 @@ final class KeyboardKeysView: UIView {
                 }
             case .accents(let popup, _):
                 state.gesture = .accents(popup, selected: popup.select(at: convert(point, to: popup)))
-            case .swipe(var points):
-                if let last = points.last, hypot(point.x - last.x, point.y - last.y) > 3 { points.append(point) }
-                state.gesture = .swipe(points)
+            case .swipe(var points, var times):
+                // Every sample the screen took, not one per frame: the model reads speed.
+                for sample in event?.coalescedTouches(for: touch) ?? [touch] {
+                    let p = sample.location(in: self)
+                    if hypot(p.x - points[points.count - 1].x, p.y - points[points.count - 1].y) > 1 {
+                        points.append(p)
+                        times.append(sample.timestamp)
+                    }
+                }
+                state.gesture = .swipe(points, times: times)
                 drawTrail(points)
             case .cursor(let anchorX):
                 let step: CGFloat = 9
@@ -341,7 +353,7 @@ final class KeyboardKeysView: UIView {
         case .accents(let popup, let selected):
             popup.removeFromSuperview()
             if !cancelled { delegate?.keyTapped(spec, text: spec.alternates[selected]) }
-        case .swipe(let points):
+        case .swipe(let points, let times):
             trail.path = nil
             if cancelled { break }
             // Under most of a key of travel is a tap that drifted, not a word.
@@ -351,7 +363,7 @@ final class KeyboardKeysView: UIView {
                 delegate?.keyTapped(keys[index].spec, text: nil)
                 lastTypedAt = CACurrentMediaTime()
             } else {
-                delegate?.swiped(points)
+                delegate?.swiped(points, times: times)
             }
         case .cursor:
             setCursorMode(false)
@@ -372,10 +384,10 @@ final class KeyboardKeysView: UIView {
     /// How far past a key's edge a tap must go to type the next key instead.
     private static let hysteresis: CGFloat = 8
 
-    private func startsSwipe(_ state: Tracked, at point: CGPoint) -> Bool {
+    private func startsSwipe(_ state: Tracked, at point: CGPoint, time: TimeInterval) -> Bool {
         let keyWidth = keys[state.key].frame.width + Self.horizontalGap
         let distance = hypot(point.x - state.start.x, point.y - state.start.y) / keyWidth
-        let elapsed = CACurrentMediaTime() - state.began
+        let elapsed = time - state.began
         guard state.afterTyping, elapsed < Self.thresholdDecay else { return elapsed >= 0.02 && distance >= 0.5 }
         let decay = elapsed / Self.thresholdDecay
         return elapsed >= 0.3 - 0.28 * decay && distance >= 6 - 5.5 * decay

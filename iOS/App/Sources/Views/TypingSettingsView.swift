@@ -33,6 +33,9 @@ struct TypingSettingsView: View {
                 Toggle("Auto-Capitalization", isOn: $preferences.autocapitalize)
                 Toggle("Slide to Type", isOn: $preferences.slideToType)
                 Toggle("“.” Shortcut", isOn: $preferences.periodShortcut)
+            } footer: {
+                // Required by the FUTO Model Weights License.
+                Text("Slide to Type is powered by FUTO Swipe.")
             }
             Section {
                 Button("Reset Keyboard Learning", role: .destructive) { confirmReset = true }

@@ -29,7 +29,7 @@ final class TypingController: ObservableObject, KeyboardKeysDelegate {
 
     private static let lexicon = Bundle.main.url(forResource: "lexicon", withExtension: "bin").flatMap(Lexicon.init(url:))
     private var engine: TypingEngine?
-    private var classifier: SwipeClassifier?
+    private let swipe = SwipeRecognizer()
     private let checker = UITextChecker()
 
     /// Shift follows the text (sentence starts) until the user presses it.
@@ -57,6 +57,7 @@ final class TypingController: ObservableObject, KeyboardKeysDelegate {
     func appeared() {
         preferences = SharedStore.shared.keyboardPreferences
         loadUserWords()
+        if preferences.slideToType, let geometry = engine?.geometry { swipe.update(geometry) }
         page = .letters
         showsEmoji = false
         typedSinceAppear = false
@@ -82,7 +83,7 @@ final class TypingController: ObservableObject, KeyboardKeysDelegate {
             loadUserWords()
         }
         engine?.geometry = geometry
-        classifier = SwipeClassifier(lexicon: lexicon, geometry: geometry)
+        if preferences.slideToType { swipe.update(geometry) }
         refresh()
     }
 
@@ -101,6 +102,7 @@ final class TypingController: ObservableObject, KeyboardKeysDelegate {
         pendingLexicon = (replacements, contacts)
         engine?.replacements = replacements
         engine?.user.contacts = contacts
+        syncSwipeWords()
     }
 
     private var pendingLexicon: (replacements: [String: String], contacts: [String: String])?
@@ -397,15 +399,27 @@ final class TypingController: ObservableObject, KeyboardKeysDelegate {
 
     // MARK: - Slide to type
 
-    func swiped(_ points: [CGPoint]) {
-        guard preferences.slideToType, page == .letters, let proxy, let engine, let classifier, let lexicon = Self.lexicon else { return }
-        let before = proxy.documentContextBeforeInput ?? ""
-        let context = TypingEngine.context(before: before + " ")
-        let extra = Array(engine.user.dictionary.values) + Array(engine.user.contacts.values)
-            + engine.user.learned.values.filter { $0.count >= UserWords.knownAfter }.map(\.display)
-        let words = classifier.classify(points, lexicon: lexicon, extra: extra,
-                                        prior: engine.swipePrior(previous: context.previous))
+    func swiped(_ points: [CGPoint], times: [TimeInterval]) {
+        guard preferences.slideToType, page == .letters, let proxy else { return }
+        swipe.recognize(points, times: times, context: Self.contextWords(proxy.documentContextBeforeInput ?? "")) { [weak self] words in
+            self?.insertSlid(words)
+        }
+    }
+
+    /// The words before the cursor on its line, as FUTO Keyboard gives them.
+    private static func contextWords(_ before: String) -> [String] {
+        let line = before.split(separator: "\n", omittingEmptySubsequences: false).last ?? ""
+        return line.split { !($0.isLetter || $0.isNumber || $0 == "_") }.suffix(10).map(String.init)
+    }
+
+    private func insertSlid(_ found: [String]) {
+        guard page == .letters, let proxy, let engine else { return }
+        // The user's words come back as bare letters; give them their spelling.
+        var seen = Set<String>()
+        let words = found.map { $0 == $0.lowercased() ? engine.user.display(key: TypingEngine.key(of: $0)) ?? $0 : $0 }
+            .filter { seen.insert($0.lowercased()).inserted }
         guard !words.isEmpty else { return }
+        let before = proxy.documentContextBeforeInput ?? ""
         typedSinceAppear = true
         corrected = nil
         let capitalize = shift == .once || (shouldCapitalize(before + " ") && shift != .locked && shiftIsAuto)
@@ -455,6 +469,12 @@ final class TypingController: ObservableObject, KeyboardKeysDelegate {
             engine?.replacements = pendingLexicon.replacements
             engine?.user.contacts = pendingLexicon.contacts
         }
+        syncSwipeWords()
+    }
+
+    /// The Dictionary, contacts and known learned words, for slide to type.
+    private func syncSwipeWords() {
+        if let engine { swipe.setUserWords(engine.user.keys(prefix: "")) }
     }
 
     private func learn(_ word: String, strongly: Bool) {
@@ -478,6 +498,7 @@ final class TypingController: ObservableObject, KeyboardKeysDelegate {
             LearnedWords.publish(engine.user)
         }
         self.engine = engine
+        syncSwipeWords()
     }
 
     /// Counts the word before the cursor as typed after the word before it,

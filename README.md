@@ -293,6 +293,9 @@ process, one-time setup and checks are in
 VoiceiQ is based on [Jot](https://github.com/google-gemini/jot-gemini-transcribe-macOS),
 Copyright 2026 Google LLC, and is distributed under the Apache License 2.0
 ([LICENSE](LICENSE)). Changes since the fork are by Blue Lobster Technology.
+The iPhone keyboard extension links FUTO's GPL-3.0 swipe library, so the
+keyboard as distributed is licensed under the GPL-3.0; its slide to type is
+powered by FUTO Swipe.
 Third-party components and their licenses are listed in
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). This is not an officially
 supported Google product.

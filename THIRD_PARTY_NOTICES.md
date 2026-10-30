@@ -132,17 +132,47 @@ and `emoji.txt` from these files, pinned by commit in the script.
 - `emoji-test.txt`, Emoji 15.0, from unicode.org.
 - License: Unicode License v3.
 
+## FUTO Swipe (iPhone keyboard, slide to type)
+
+The keyboard extension links FUTO's swipe library, which is GPL-3.0. **The
+keyboard extension as built and distributed is therefore licensed under the
+GNU General Public License v3.0**; its complete source is this repository
+plus the pinned library commit below, and `scripts/build-futo-swipe.sh`
+rebuilds the prebuilt libraries from them. The rest of this repository keeps
+its Apache 2.0 license, which is compatible with GPL-3.0.
+
+### swipe-library
+
+- Files: `iOS/Vendor/FUTOSwipe/` (headers and static libraries built from the
+  source, unmodified); used by `iOS/Keyboard/Sources/Swipe/`.
+- Source: [keyboard/swipe-library](https://gitlab.futo.org/keyboard/swipe-library)
+  at `1b13f2c85d6b347f6ea3fbc4b3aaf01fce42429a`.
+- License: GNU General Public License v3.0, Copyright FUTO Holdings, Inc.
+  Full text in `iOS/Vendor/FUTOSwipe/LICENSE`.
+- Linked into the same libraries, from the library's pinned ExecuTorch
+  v1.2.0 submodule: ExecuTorch (BSD 3-Clause, Meta Platforms), XNNPACK
+  (BSD 3-Clause, Google and Facebook), cpuinfo and pthreadpool (BSD 2-Clause),
+  KleidiAI (Apache 2.0, Arm), flatcc runtime (Apache 2.0).
+
+### FUTO Swipe models
+
+- Files: `iOS/Keyboard/Resources/swipe/` `honorable_sturgeon` (encoder),
+  `magic_macaw` (QWERTY decoder), `hungry_jellyfish` (context model), unmodified.
+- Source: [futo-org/futo-swipe](https://huggingface.co/futo-org/futo-swipe) at
+  `315d42583233b71d75665d076cfa2f2c7c6f43ad`.
+- License: FUTO Model Weights License 1.0, in
+  `iOS/Keyboard/Resources/swipe/LICENSE.md`. It requires a visible "powered by
+  FUTO Swipe" notice, which is the footer of Settings › Typing.
+
+### Swipe dictionary
+
+- File: `iOS/Keyboard/Resources/swipe/words.trie`, built by
+  `scripts/generate-swipe-trie.py` from AOSP's `en_US_wordlist.combined.gz` as
+  FUTO Keyboard ships it (futo-org/android-keyboard at `31e720dd`), without
+  the words it marks offensive or not a word.
+- License: Apache 2.0, Copyright The Android Open Source Project.
+
 ## Adapted source
-
-### FlorisBoard (slide to type)
-
-- File: `iOS/Keyboard/Sources/Typing/SwipeClassifier.swift`
-- Source: `StatisticalGlideTypingClassifier.kt` from
-  [florisboard/florisboard](https://github.com/florisboard/florisboard), which
-  credits Étienne Desticourt's AnySoftKeyboard classifier. Ported to Swift:
-  the shape and location Gaussians, extremity and length pruning, and doubled
-  letter loops. The sample count and the word prior are VoiceiQ's.
-- License: Apache 2.0, Copyright The FlorisBoard Contributors.
 
 ### Dictus (iOS host-app return)
 

@@ -373,7 +373,7 @@ offers "Add copied text to Dictionary" until you start typing.
 | Suggestions | Next-word predictions from word pairs, completions, and corrections. The typed letters show in quotes; picking them keeps and learns the word. |
 | Auto-correction | Delete right after a correction restores the typed word and learns it. On space or punctuation. Fixes a mistyped word one edit away (adjacent keys cost less), two edits away through `UITextChecker`, apostrophes (`dont` → `don't`), and capitals (`i` → `I`, `monday` → `Monday`). A real word is never replaced by another word. Off in URL, email and search fields and where the field turns it off. |
 | Auto-capitalization, “.” shortcut | Sentence starts, per the field's `autocapitalizationType`. Two spaces type a period. |
-| Slide to type | `SwipeClassifier` (ported from FlorisBoard). The slid word gets its space when the next word starts, so punctuation attaches; the bar offers the other candidates; delete removes the whole word. |
+| Slide to type | FUTO Swipe (`SwipeRecognizer`; see below). The slid word gets its space when the next word starts, so punctuation attaches; the bar offers the other candidates; delete removes the whole word. |
 | Your words | The VoiceiQ Dictionary (`SharedStore.dictionaryWords`), contact names and Text Replacements (`requestSupplementaryLexicon`), and words typed twice or picked from quotes. |
 | Emoji | Unicode's list in CLDR order, by category, with recents. |
 | No assistance | Password, one-time code, card, phone and postal code fields. |
@@ -388,11 +388,43 @@ half a key by 450 ms, so a fast typist's drifting tap stays a tap. Mid-word a
 slide may start only when the letters typed so far are a word
 (`canStartSwipe`), so a slip never inserts a word and a space. A slide under
 0.8 of a key types the key under the finger. Moving more than 8 pt cancels
-the long press for accents. A doubled letter is one stop on a word's ideal
-path (no loop), and all-caps abbreviations ("DE") are never slid to. The
-slide trail draws above the keys. In `viewDidAppear` the keyboard turns off
+the long press for accents. The slide trail draws above the keys. In `viewDidAppear` the keyboard turns off
 `delaysTouchesBegan` on its window's system-gesture recognizers, which
 otherwise hold back touches near the screen edges.
+
+**Slide to type: FUTO Swipe.** FUTO Keyboard's swipe engine
+(`iOS/Vendor/FUTOSwipe`, GPL-3.0) runs three models on ExecuTorch with
+XNNPACK: an encoder that reads the path for any layout, a decoder trained on
+QWERTY, and a context model that weighs the words before the cursor. A beam
+search keeps the results to words in `swipe/words.trie` and the user's own
+words (the Dictionary, contact names and learned words, at about the
+frequency of "see"). `KeyboardKeysView` records every coalesced touch sample
+with its timestamp, and `SwipeRecognizer` scales the path to the letter keys'
+bounds, where each key's centre sits at its place in FUTO's layout (q at
+0.05, 1/6). The decoder loads only when the rows are QWERTY; other layouts use
+the encoder and context model. Models load on a serial queue when the
+keyboard first lays out its letters, and each slide is decoded on the same
+queue, so the main thread never waits. Word results keep the dictionary's
+spelling ("I", "don't"); the user's words get their saved spelling.
+Settings › Typing shows "Slide to Type is powered by FUTO Swipe.", which the
+model license requires.
+
+- Accuracy on 4,931 real swipes from FUTO's MIT dataset
+  (`futo-org/swipe.futo.org` test split), first choice / top four: the
+  previous FlorisBoard-style classifier 75.6% / 85.0%; FUTO encoder only
+  88.1% / 94.0%; with the decoder and context model 91.7% / 95.3%, at
+  2.2 ms per slide on an M2 (the shipped dictionary, offensive words removed).
+- Memory: FUTO's own dictionary loader builds a 98 MB trie, too much for a
+  keyboard extension. `scripts/generate-swipe-trie.py` writes the same trie as
+  12-byte nodes that `MappedTrie.cpp` memory-maps (5.2 MB, 142,507 words).
+  The three models add about 21 MB; the keyboard measured 40 MB in the
+  iPhone 17e Simulator after slides.
+- Rebuilding: `scripts/build-futo-swipe.sh` clones the library at its pinned
+  commit, builds ExecuTorch and the library for iPhone and Simulator (about
+  five minutes on an M2), and downloads the pinned models. The output is
+  committed, so app builds need neither step. The keyboard target force-loads
+  `libfutoswipe_registry.a` (kernels register themselves), builds C++17
+  without RTTI, and excludes x86_64 Simulators.
 
 **Data.** `lexicon.bin` holds 82,846 words and 242,342 word pairs (3.5 MB),
 memory-mapped so it does not count against the extension's memory limit. A

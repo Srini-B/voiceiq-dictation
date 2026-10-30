@@ -269,6 +269,16 @@ targets:
         TARGETED_DEVICE_FAMILY: "1,2"
         APPLICATION_EXTENSION_API_ONLY: YES
         SWIFT_OBJC_BRIDGING_HEADER: iOS/Keyboard/Sources/Keyboard-Bridging-Header.h
+        # FUTO Swipe, prebuilt by scripts/build-futo-swipe.sh. The registry
+        # library is force-loaded: its kernels register themselves at launch.
+        HEADER_SEARCH_PATHS: $(SRCROOT)/iOS/Vendor/FUTOSwipe/include
+        LIBRARY_SEARCH_PATHS: $(SRCROOT)/iOS/Vendor/FUTOSwipe/lib/$(PLATFORM_NAME)
+        OTHER_LDFLAGS: -force_load $(SRCROOT)/iOS/Vendor/FUTOSwipe/lib/$(PLATFORM_NAME)/libfutoswipe_registry.a -lfutoswipe -lc++
+        # The library is C++17, built without RTTI.
+        CLANG_CXX_LANGUAGE_STANDARD: c++17
+        GCC_ENABLE_CPP_RTTI: NO
+        # Built for Apple silicon Simulators only.
+        EXCLUDED_ARCHS[sdk=iphonesimulator*]: x86_64
       configs:
         Debug:
           CODE_SIGN_IDENTITY: "-"
@@ -284,6 +294,12 @@ targets:
       - path: iOS/Keyboard/Sources
       # Word list and emoji: scripts/generate-keyboard-data.py.
       - path: iOS/Keyboard/Resources
+        buildPhase: resources
+        excludes: [swipe]
+      # FUTO Swipe's models and dictionary, kept as a folder: each model has
+      # its own metadata.json.
+      - path: iOS/Keyboard/Resources/swipe
+        type: folder
         buildPhase: resources
     entitlements:
       path: iOS/Keyboard/VoiceIQKeyboard.entitlements

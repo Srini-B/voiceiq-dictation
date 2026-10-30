@@ -304,13 +304,6 @@ struct TypingEngine: Sendable {
         return { id in pairs[id] ?? (lexicon.logProbability(id) + Self.backoff) }
     }
 
-    /// The word prior for slide to type, damped so the path's shape decides
-    /// most of it (0.25 tuned on simulated paths, 2026-10-30).
-    func swipePrior(previous: String?) -> (Lexicon.WordID) -> Double {
-        let model = contextModel(previous.flatMap(bestID(for:)))
-        return { model($0) * 0.25 }
-    }
-
     // MARK: - Next word
 
     private func bestID(for word: String) -> Lexicon.WordID? {
