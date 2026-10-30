@@ -14,6 +14,16 @@ struct TypingSettingsView: View {
                 }
             }
             Section {
+                Picker("Theme", selection: $preferences.theme) {
+                    ForEach(KeyboardTheme.allCases, id: \.self) { Text($0.title).tag($0) }
+                }
+                if preferences.theme.hasKeyTone {
+                    Picker("Keys", selection: $preferences.keyTone) {
+                        ForEach(KeyboardKeyTone.allCases, id: \.self) { Text($0.title).tag($0) }
+                    }
+                }
+            }
+            Section {
                 Toggle("Predictions", isOn: $preferences.predictions)
                 Toggle("Auto-Correction", isOn: $preferences.autocorrect)
                 Toggle("Auto-Capitalization", isOn: $preferences.autocapitalize)

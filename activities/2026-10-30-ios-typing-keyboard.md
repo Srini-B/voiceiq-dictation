@@ -54,5 +54,19 @@ keyboards to type.
   loudness) and real Claude + Nemotron keys: recording in light and dark,
   "Writing…", and the inserted text. Selecting "waveform" in the field showed
   the "Add “waveform” to Dictionary" chip.
+- Feedback from 0.6.14 (59) on device, fixed after:
+  - Letters sat low on the keys: the label centred the font's line box.
+    Measured lowercase about 4 pt low; now centred on x-height or cap height.
+  - The slide trail drew behind the keys (layer added before the key views).
+  - Slides from the edge of a key were typed as a tap: the slide needed
+    0.75 key widths of travel, so "we" from the right of W was too short.
+    A harness over the shipped word list showed the word matcher is not the
+    cause: off-centre starts and ends up to half a key kept top-1 at
+    370/400 or better, and widening the start/end keys made it worse.
+  - Key sound never played: `playInputClick` works only from the root input
+    view. Haptics created a new generator per tap, which can fire before
+    the engine is ready.
+  - Added the Raycast keyboard's themes. Checked each in the Simulator, light
+    and dark, plus a slide of "we" from the right edge of W.
 - Not verified on a physical iPhone yet: haptics, key sound, landscape, and
   how slide to type feels with a real finger.

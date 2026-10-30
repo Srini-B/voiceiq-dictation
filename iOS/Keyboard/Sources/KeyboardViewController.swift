@@ -44,6 +44,9 @@ final class KeyboardViewController: UIInputViewController {
         model.appeared()
         dictionaryOffer.appeared(hasFullAccess: hasFullAccess)
         typing.appeared()
+        // A forced key tone (and iOS 5, which has no dark look) pins the
+        // whole keyboard, bar included, to light or dark.
+        view.overrideUserInterfaceStyle = typing.theme.style
         updateHeight()
     }
 

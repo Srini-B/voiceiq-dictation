@@ -377,6 +377,14 @@ offers "Add copied text to Dictionary" until you start typing.
 | Your words | The VoiceiQ Dictionary (`SharedStore.dictionaryWords`), contact names and Text Replacements (`requestSupplementaryLexicon`), and words typed twice or picked from quotes. |
 | Emoji | Unicode's list in CLDR order, by category, with recents. |
 | No assistance | Password, one-time code, card, phone and postal code fields. |
+| Themes | Default, Clear, Physical, Mechanical and iOS 5, after the Raycast keyboard (`KeyTheme`). Physical and Mechanical take Automatic, Light or Dark keys, which pins the whole keyboard through `overrideUserInterfaceStyle`; iOS 5 is always light. Themes with their own background cannot paint the system's globe and mic strip below the keys. |
+| Sound and haptics | Key Sound plays the iOS keyboard's click, delete and modifier sounds (`AudioServicesPlaySystemSound` 1104, 1155, 1156), which follow the ring/silent switch. Haptic Feedback (off by default) needs Full Access and keeps one prepared generator. |
+
+Key labels are centred on the cap height, or the x-height for lowercase, not
+on the font's line box. A slide starts once the finger reaches another letter
+(at least a third of a key away) or moves three quarters of a key; moving
+more than 8 pt cancels the long press for accents. The slide trail draws above
+the keys.
 
 **Data.** `lexicon.bin` holds 82,846 words and 242,342 word pairs (3.5 MB),
 memory-mapped so it does not count against the extension's memory limit. A

@@ -6,6 +6,7 @@ import UIKit
 /// highlighted.
 struct SuggestionStrip: View {
     let suggestions: [Suggestion]
+    let theme: KeyTheme
     let pick: (Suggestion) -> Void
 
     private var ordered: [Suggestion] {
@@ -28,7 +29,7 @@ struct SuggestionStrip: View {
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .background {
                             if suggestion.kind == .autocorrection || suggestion.kind == .replacement {
-                                RoundedRectangle(cornerRadius: 7).fill(Color(KeyColors.character)).padding(.vertical, 5)
+                                RoundedRectangle(cornerRadius: 7).fill(Color(theme.popup)).padding(.vertical, 5)
                             }
                         }
                         .contentShape(Rectangle())
@@ -57,6 +58,7 @@ struct KeysArea: UIViewRepresentable {
         view.rows = KeyLayout.rows(page: typing.page, layout: typing.preferences.layout, field: typing.field)
         view.shift = typing.shift
         view.slideToType = typing.preferences.slideToType
+        view.theme = typing.theme
         view.returnEnabled = typing.returnEnabled
     }
 }

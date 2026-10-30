@@ -1,3 +1,4 @@
+import AudioToolbox
 import UIKit
 import VoiceIQBridge
 
@@ -13,7 +14,10 @@ final class TypingController: ObservableObject, KeyboardKeysDelegate {
     @Published private(set) var shift: ShiftState = .off
     @Published private(set) var field = FieldTraits()
     @Published private(set) var returnEnabled = true
-    @Published private(set) var preferences = KeyboardPreferences()
+    @Published private(set) var preferences = KeyboardPreferences() {
+        didSet { if preferences.theme != oldValue.theme || preferences.keyTone != oldValue.keyTone { theme = KeyTheme.make(preferences) } }
+    }
+    @Published private(set) var theme = KeyTheme.standard
     @Published var showsEmoji = false
     /// Landscape on iPhone: shorter rows and bar.
     @Published var compact = false
@@ -164,11 +168,27 @@ final class TypingController: ObservableObject, KeyboardKeysDelegate {
 
     // MARK: - Keys
 
+    /// Kept and prepared: a generator made for one tap often fires before
+    /// the haptic engine is ready, and the tap is lost.
+    private var haptic: UIImpactFeedbackGenerator?
+
     func keyDown(_ key: KeySpec) {
         if key.action == .shift { shiftHeld = true }
-        if preferences.keySound { UIDevice.current.playInputClick() }
+        if preferences.keySound {
+            // The iOS keyboard's own click, delete and modifier sounds. They
+            // follow the ring/silent switch. `playInputClick` stays silent
+            // here: it works only from the keyboard's root input view.
+            switch key.action {
+            case .insert, .space: AudioServicesPlaySystemSound(1104)
+            case .delete: AudioServicesPlaySystemSound(1155)
+            default: AudioServicesPlaySystemSound(1156)
+            }
+        }
+        // iOS allows keyboard haptics only with Full Access.
         if preferences.haptics, controller?.hasFullAccess == true {
-            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            if haptic == nil { haptic = UIImpactFeedbackGenerator(style: .light) }
+            haptic?.impactOccurred()
+            haptic?.prepare()
         }
     }
 

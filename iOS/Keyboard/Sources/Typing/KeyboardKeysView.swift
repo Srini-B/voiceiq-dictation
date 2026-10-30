@@ -29,6 +29,7 @@ final class KeyboardKeysView: UIView, UIInputViewAudioFeedback {
     var shift: ShiftState = .off { didSet { if shift != oldValue { refreshLabels() } } }
     var slideToType = true
     var returnEnabled = true { didSet { if returnEnabled != oldValue { refreshLabels() } } }
+    var theme = KeyTheme.standard { didSet { keys.forEach { $0.view.theme = theme } } }
 
     var enableInputClicksWhenVisible: Bool { true }
 
@@ -70,6 +71,8 @@ final class KeyboardKeysView: UIView, UIInputViewAudioFeedback {
         trail.lineWidth = 6
         trail.lineCap = .round
         trail.lineJoin = .round
+        // Above the keys, as on the iOS keyboard.
+        trail.zPosition = 1
         layer.addSublayer(trail)
     }
 
@@ -109,6 +112,7 @@ final class KeyboardKeysView: UIView, UIInputViewAudioFeedback {
                     globe = button
                 }
                 let view = KeyCapView(spec: spec)
+                view.theme = theme
                 addSubview(view)
                 keys.append(Key(spec: spec, view: view, row: r))
             }
@@ -227,7 +231,7 @@ final class KeyboardKeysView: UIView, UIInputViewAudioFeedback {
                         MainActor.assumeIsolated {
                             guard let self, let state, case .press = state.gesture else { return }
                             self.hidePreview()
-                            let popup = AccentPopup(key: self.keys[index].frame, options: spec.alternates.map { self.cased($0) }, in: self.bounds)
+                            let popup = AccentPopup(key: self.keys[index].frame, options: spec.alternates.map { self.cased($0) }, in: self.bounds, theme: self.theme)
                             self.addSubview(popup)
                             state.gesture = .accents(popup, selected: 0)
                         }
@@ -247,12 +251,18 @@ final class KeyboardKeysView: UIView, UIInputViewAudioFeedback {
             switch state.gesture {
             case .press:
                 let moved = hypot(point.x - state.start.x, point.y - state.start.y)
+                let width = keys[state.key].frame.width
+                // A finger that is sliding is not holding for accents.
+                if moved > 8 { state.longPress?.invalidate() }
+                // A slide starts once the finger reaches another key, so a
+                // touch near the edge of the first letter still slides to
+                // its neighbour; a long move anywhere counts too.
+                let leftKey = moved > width * 0.35 && keyIndex(at: point) != state.key
                 if spec.action == .space, abs(point.x - state.start.x) > 12 {
                     state.gesture = .cursor(anchorX: point.x)
                     keys[state.key].view.isHighlighted = false
                     setCursorMode(true)
-                } else if spec.isLetter, slideToType, tracked.count == 1,
-                          moved > keys[state.key].frame.width * 0.75 {
+                } else if spec.isLetter, slideToType, tracked.count == 1, leftKey || moved > width * 0.75 {
                     state.longPress?.invalidate()
                     hidePreview()
                     keys[state.key].view.isHighlighted = false
@@ -348,7 +358,7 @@ final class KeyboardKeysView: UIView, UIInputViewAudioFeedback {
 
     private func showPreview(for index: Int) {
         guard case .insert(let text) = keys[index].spec.action, text.count == 1 else { return }
-        preview.show(text: keys[index].spec.isLetter ? cased(text) : text, over: keys[index].frame, in: self)
+        preview.show(text: keys[index].spec.isLetter ? cased(text) : text, over: keys[index].frame, in: self, theme: theme)
     }
 
     private func hidePreview() { preview.isHidden = true }
