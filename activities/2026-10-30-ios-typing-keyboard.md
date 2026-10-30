@@ -91,3 +91,21 @@ keyboards to type.
   Verified in the Simulator: Number Row on added the digit row and removed the
   corner hints; Mechanical with Dark keys turned the whole preview dark;
   Predictions off emptied the bar, as on the keyboard.
+- Learned word pairs and Dictionary sync (requested 2026-10-30). Pairs are
+  keyed by word key, plus "." for a sentence start, and need two uses so one
+  stray sequence is not predicted. Learned words reach the Mac through the
+  Dictionary's existing iCloud sync rather than a new channel: the keyboard
+  publishes its most used words, the app imports each once. Capped at 200
+  and 3 uses, because `DictionarySync` stops syncing the whole Dictionary
+  past 900 KB (about 250 bytes an entry) and a typo kept twice should not
+  become a Mac cleanup hint. `vocabulary()` now ranks manual entries above
+  auto-learned ones so keyboard words cannot push the user's own out of the
+  100-word prompt list.
+  Verified: a scratch Mac harness over `TypingEngine`, `Lexicon` and
+  `LearnedWords` with the shipped `lexicon.bin` ("call " gave the, for, to;
+  after two "call Nitin" it gave Nitin, the, for; "call N" offered Nitin; a
+  learned "so" led at a sentence start; one use predicted nothing; caps, save
+  and reset held). In the Simulator the app imported a published list as
+  Auto-learned and skipped a word already imported. Typed on the keyboard
+  in the Simulator after the 0.6.16 crash fix: "good night" once left
+  "good " with to, for, and; twice put night first.

@@ -186,10 +186,13 @@ public struct DictionaryStore: Sendable {
 
     // MARK: - Pipeline inputs
 
-    /// Vocabulary for the cleanup prompt: starred first, then newest. Cap 100.
+    /// Vocabulary for the cleanup prompt: starred first, then words the user
+    /// added over auto-learned ones (the keyboard can learn hundreds), then
+    /// newest. Cap 100.
     public func vocabulary() -> [String] {
         let sorted = entries().sorted {
             if $0.starred != $1.starred { return $0.starred }
+            if $0.source != $1.source { return $0.source == .manual }
             return $0.createdAt > $1.createdAt
         }
         return sorted.prefix(100).map(\.term)

@@ -145,6 +145,14 @@ dictionary, checked on the Mac). They ride with your audio like any other
 dictionary term and are never applied as automatic text replacements.
 Everything it reads stays on this Mac.
 
+The iPhone keyboard learns from your typing on the iPhone. With Full Access,
+its 200 most used learned words (each typed at least three times, never from
+password, code, card-number, phone or postal fields) are handed to the
+VoiceiQ app, which adds them to the Dictionary as Auto-learned. From there
+they sync through your iCloud account and reach the cleanup prompt like any
+other term. Word pairs and the rest of the learned words stay in the keyboard
+on the iPhone.
+
 ## What never leaves
 
 - Your history database and stored recordings — audio and transcript text leave

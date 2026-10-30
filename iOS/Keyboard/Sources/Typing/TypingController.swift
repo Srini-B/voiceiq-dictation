@@ -268,10 +268,16 @@ final class TypingController: ObservableObject, KeyboardKeysDelegate {
         corrected = nil
         let first = character.first
         let startsWord = first.map { $0.isLetter || $0.isNumber || "([{\"“#@".contains($0) } ?? false
-        if pendingSpace, startsWord { proxy.insertText(" ") }
+        if pendingSpace, startsWord {
+            learnPair(before: proxy.documentContextBeforeInput ?? "")
+            proxy.insertText(" ")
+        }
         pendingSpace = false
         slid = nil
-        if let first, ".,!?;:)]}\"”".contains(first) { applyAutocorrection() }
+        if let first, ".,!?;:)]}\"”".contains(first) {
+            applyAutocorrection()
+            learnPair(before: proxy.documentContextBeforeInput ?? "")
+        }
         let isLetter = character.count == 1 && first?.isLetter == true
         proxy.insertText(isLetter && shift != .off ? character.uppercased() : character)
         if isLetter, shift == .once {
@@ -299,6 +305,7 @@ final class TypingController: ObservableObject, KeyboardKeysDelegate {
         if pendingSpace {
             pendingSpace = false
             slid = nil
+            learnPair(before: proxy.documentContextBeforeInput ?? "")
             proxy.insertText(" ")
             finishEdit()
             return
@@ -315,6 +322,7 @@ final class TypingController: ObservableObject, KeyboardKeysDelegate {
             return
         }
         if !applyAutocorrection() { learn(TypingEngine.context(before: before).partial, strongly: false) }
+        learnPair(before: proxy.documentContextBeforeInput ?? "")
         proxy.insertText(" ")
         lastSpaceAt = now
         shiftIsAuto = true
@@ -400,6 +408,7 @@ final class TypingController: ObservableObject, KeyboardKeysDelegate {
             proxy.insertText(suggestion.text + " ")
             if suggestion.kind == .typed { learn(suggestion.text, strongly: true) }
         }
+        learnPair(before: String((proxy.documentContextBeforeInput ?? "").dropLast()))
         corrected = nil
         lastSpaceAt = nil
         shiftIsAuto = true
@@ -424,6 +433,7 @@ final class TypingController: ObservableObject, KeyboardKeysDelegate {
         func style(_ word: String) -> String {
             shift == .locked ? word.uppercased() : (capitalize ? word.prefix(1).uppercased() + word.dropFirst() : word)
         }
+        if pendingSpace { learnPair(before: before) }
         let needsSpace = pendingSpace || !(before.isEmpty || before.last!.isWhitespace || "([{\"“".contains(before.last!))
         let word = style(words[0])
         proxy.insertText((needsSpace ? " " : "") + word)
@@ -443,26 +453,13 @@ final class TypingController: ObservableObject, KeyboardKeysDelegate {
 
     // MARK: - Learning
 
-    private static let learnedKey = "typing.learnedWords"
-    private static let clearedKey = "typing.learningClearedAt"
-
-    /// Learned words live in the keyboard's own defaults so typing learns
-    /// without Full Access; a reset from the app arrives as a date.
+    /// Learned words and pairs, the Dictionary, contacts and replacements;
+    /// a reset from the app arrives as a date (`LearnedWords.load`).
     private func loadUserWords() {
-        guard engine != nil else { return }
-        let defaults = UserDefaults.standard
-        if let reset = preferences.learningResetAt,
-           reset.timeIntervalSince1970 > defaults.double(forKey: Self.clearedKey) {
-            defaults.removeObject(forKey: Self.learnedKey)
-            defaults.set(reset.timeIntervalSince1970, forKey: Self.clearedKey)
-            // The extension process outlives one appearance, so the engine
-            // still holds the words it loaded before the reset.
-            engine?.user.learned = [:]
-        }
-        if let data = defaults.data(forKey: Self.learnedKey),
-           let learned = try? JSONDecoder().decode([String: UserWords.Entry].self, from: data) {
-            engine?.user.learned = learned
-        }
+        guard var loaded = engine else { return }
+        LearnedWords.load(into: &loaded.user, resetAt: preferences.learningResetAt)
+        engine = loaded
+        if controller?.hasFullAccess == true { LearnedWords.publish(loaded.user) }
         var dictionary: [String: String] = [:]
         for word in SharedStore.shared.dictionaryWords where !word.contains(" ") {
             dictionary[TypingEngine.key(of: word)] = word
@@ -478,18 +475,29 @@ final class TypingController: ObservableObject, KeyboardKeysDelegate {
         // Codes, card numbers and fields that opt out of correction are not learned.
         guard assistanceAllowed, proxy?.autocorrectionType != .no,
               var engine, word.count > 1, word.allSatisfy({ $0.isLetter || $0 == "'" }) else { return }
-        let key = TypingEngine.key(of: word)
-        guard strongly || !engine.isKnown(word, key: key) else { return }
-        var entry = engine.user.learned[key] ?? UserWords.Entry(display: word, count: 0)
-        entry.count = strongly ? max(entry.count + 1, UserWords.knownAfter) : entry.count + 1
-        entry.display = word
-        engine.user.learned[key] = entry
-        if engine.user.learned.count > 3000, let rarest = engine.user.learned.min(by: { $0.value.count < $1.value.count })?.key {
-            engine.user.learned[rarest] = nil
+        guard strongly || !engine.isKnown(word) else { return }
+        if LearnedWords.learn(word, strongly: strongly, in: &engine.user), controller?.hasFullAccess == true {
+            LearnedWords.publish(engine.user)
         }
         self.engine = engine
-        if let data = try? JSONEncoder().encode(engine.user.learned) {
-            UserDefaults.standard.set(data, forKey: Self.learnedKey)
+    }
+
+    /// Counts the word before the cursor as typed after the word before it,
+    /// or at a sentence start, once the word is finished. Both must be words.
+    private func learnPair(before text: String) {
+        guard preferences.predictions, assistanceAllowed, proxy?.autocorrectionType != .no, var engine else { return }
+        let context = TypingEngine.context(before: text)
+        let word = context.partial
+        guard !word.isEmpty, engine.isKnown(word) else { return }
+        let previous: String
+        if context.sentenceStart {
+            previous = UserWords.sentenceStart
+        } else if let before = context.previous, engine.isKnown(before) {
+            previous = TypingEngine.key(of: before)
+        } else {
+            return
         }
+        LearnedWords.learnPair(engine.spelling(of: word), after: previous, in: &engine.user)
+        self.engine = engine
     }
 }

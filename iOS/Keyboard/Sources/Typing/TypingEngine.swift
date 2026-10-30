@@ -40,9 +40,22 @@ struct UserWords: Sendable {
     var learned: [String: Entry] = [:]
     var dictionary: [String: String] = [:]
     var contacts: [String: String] = [:]
+    /// Words typed after a word: its key, then each next word's key.
+    /// `sentenceStart` stands for the start of a sentence.
+    var pairs: [String: [String: Entry]] = [:]
 
-    /// A word typed this many times without correction is a word.
+    /// A word typed this many times without correction is a word, and a
+    /// word typed this many times after another is predicted after it.
     static let knownAfter = 2
+    /// A learned word goes to the Dictionary once typed this many times, so a
+    /// typo kept once or twice does not become a cleanup hint on the Mac.
+    static let syncedAfter = 3
+    static let sentenceStart = "."
+
+    /// The words usually typed after `previous`, most used first.
+    func followers(of previous: String) -> [Entry] {
+        (pairs[previous] ?? [:]).values.filter { $0.count >= Self.knownAfter }.sorted { $0.count > $1.count }
+    }
 
     func display(key: String) -> String? {
         if let word = dictionary[key] ?? contacts[key] { return word }
@@ -136,19 +149,20 @@ struct TypingEngine: Sendable {
         let partial = context.partial
         let previousID = context.previous.flatMap(bestID(for:))
         guard !partial.isEmpty else {
-            let words = predictions(after: previousID, sentenceStart: context.sentenceStart)
+            let words = predictions(after: context.previous, sentenceStart: context.sentenceStart)
             return Result(suggestions: words.map { Suggestion(text: $0, kind: .word) })
         }
         let typedKey = Self.key(of: partial)
         if let phrase = replacements[partial.lowercased()] {
             var list = [Suggestion(text: partial, kind: .typed), Suggestion(text: phrase, kind: .replacement)]
-            if let word = rank(partial, typedKey: typedKey, previousID: previousID, spellGuesses: spellGuesses).first,
+            if let word = rank(partial, typedKey: typedKey, previousID: previousID, previousKey: nil, spellGuesses: spellGuesses).first,
                word.text.lowercased() != partial.lowercased() {
                 list.append(Suggestion(text: word.text, kind: .word))
             }
             return Result(suggestions: list)
         }
-        let ranked = rank(partial, typedKey: typedKey, previousID: previousID, spellGuesses: spellGuesses)
+        let previousKey = context.sentenceStart ? UserWords.sentenceStart : context.previous.map(Self.key(of:))
+        let ranked = rank(partial, typedKey: typedKey, previousID: previousID, previousKey: previousKey, spellGuesses: spellGuesses)
         // A typed word is only changed to its own casing or contraction
         // ("monday", "cant"); an unknown one to the best different spelling.
         // A longer word is a completion the user has not chosen.
@@ -184,7 +198,7 @@ struct TypingEngine: Sendable {
         var overridesTypedWord: Bool
     }
 
-    private func rank(_ partial: String, typedKey: String, previousID: Lexicon.WordID?,
+    private func rank(_ partial: String, typedKey: String, previousID: Lexicon.WordID?, previousKey: String?,
                       spellGuesses: (String) -> [String]) -> [Candidate] {
         var best: [String: Candidate] = [:]
         func offer(_ display: String, score: Double, correction: Bool, overrides: Bool = false) {
@@ -224,6 +238,12 @@ struct TypingEngine: Sendable {
             if let display = user.display(key: key), let lp = user.logProbability(key: key) {
                 offer(display, score: lp + Self.backoff, correction: false)
             }
+        }
+        // A word the user usually types after the previous one beats the list.
+        for entry in previousKey.map(user.followers(of:)) ?? [] {
+            let key = Self.key(of: entry.display)
+            guard key.count > typedKey.count, key.hasPrefix(typedKey) else { continue }
+            offer(entry.display, score: log(Double(entry.count)) - 0.4 * Double(key.count - typedKey.count), correction: false)
         }
 
         // Corrections one edit away, weighted by how close the keys are.
@@ -300,14 +320,28 @@ struct TypingEngine: Sendable {
 
     private static let sentenceStarters = ["I", "The", "I'm"]
 
-    func predictions(after previousID: Lexicon.WordID?, sentenceStart: Bool) -> [String] {
-        guard let previousID, !sentenceStart else { return Self.sentenceStarters }
-        let words = lexicon.followers(of: previousID, limit: 12)
-            .filter { !lexicon.flags($0.0).contains(.noSuggest) }
-            .map { lexicon.display($0.0) }
+    /// The words the user usually types next come first, then the list's.
+    func predictions(after previous: String?, sentenceStart: Bool) -> [String] {
+        let previousKey = sentenceStart ? UserWords.sentenceStart : previous.map(Self.key(of:))
+        let usual = previousKey.map { user.followers(of: $0).map(\.display) } ?? []
+        var words: [String]
+        if !sentenceStart, let previousID = previous.flatMap(bestID(for:)) {
+            words = lexicon.followers(of: previousID, limit: 12)
+                .filter { !lexicon.flags($0.0).contains(.noSuggest) }
+                .map { lexicon.display($0.0) }
+        } else {
+            words = Self.sentenceStarters
+        }
         var seen = Set<String>(), out: [String] = []
-        for word in words where seen.insert(word.lowercased()).inserted { out.append(word) }
+        for word in usual + words where seen.insert(word.lowercased()).inserted { out.append(word) }
         return Array(out.prefix(3))
+    }
+
+    /// The word as the user or the list spells it: "so" for a capitalized
+    /// "So", "I" for "i", a name as saved.
+    func spelling(of word: String) -> String {
+        if let display = user.display(key: Self.key(of: word)) { return display }
+        return bestID(for: word).map(lexicon.display) ?? word
     }
 
     // MARK: - Casing

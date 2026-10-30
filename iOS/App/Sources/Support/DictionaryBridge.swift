@@ -9,6 +9,9 @@ import VoiceIQCore
 enum DictionaryBridge {
     /// IDs of keyboard additions already added. Writer: app (own defaults).
     private static let handledKey = "handledDictionaryAdditions"
+    /// Keyboard-learned words already added, lowercased, so a word the user
+    /// deletes from the Dictionary is not added again. Writer: app.
+    private static let importedLearnedKey = "importedKeyboardLearnedWords"
     private static var observer: UUID?
 
     static func start() {
@@ -42,6 +45,23 @@ enum DictionaryBridge {
         // Only IDs still in the keyboard's list can come up again.
         let live = Set(queued.map(\.id.uuidString))
         UserDefaults.standard.set(Array(handled.intersection(live)), forKey: handledKey)
+        addLearnedWords()
+    }
+
+    /// Words the keyboard learned from typing join the Dictionary once each,
+    /// as Auto-learned, and reach the Mac through `DictionarySync`.
+    private static func addLearnedWords() {
+        var imported = Set(UserDefaults.standard.stringArray(forKey: importedLearnedKey) ?? [])
+        let fresh = SharedStore.shared.keyboardLearnedWords.filter { !imported.contains($0.lowercased()) }
+        guard !fresh.isEmpty else { return }
+        let dictionary = DictionaryStore()
+        var added = 0
+        for word in fresh {
+            if dictionary.add(term: word, source: .auto) { added += 1 }
+            imported.insert(word.lowercased())
+        }
+        UserDefaults.standard.set(Array(imported), forKey: importedLearnedKey)
+        SessionDiagnostics.note("keyboard learned words: \(added) added to the Dictionary")
     }
 
     private static func publishTerms() {
