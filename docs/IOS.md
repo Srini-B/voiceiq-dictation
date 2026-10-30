@@ -378,7 +378,6 @@ offers "Add copied text to Dictionary" until you start typing.
 | Emoji | Unicode's list in CLDR order, by category, with recents. |
 | No assistance | Password, one-time code, card, phone and postal code fields. |
 | Themes | Default, Clear, Physical, Mechanical and iOS 5, after the Raycast keyboard (`KeyTheme`). Physical and Mechanical take Automatic, Light or Dark keys, which pins the whole keyboard through `overrideUserInterfaceStyle`; iOS 5 is always light. Themes with their own background cannot paint the system's globe and mic strip below the keys. |
-| Sound and haptics | Key Sound plays the iOS keyboard's click, delete and modifier sounds (`AudioServicesPlaySystemSound` 1104, 1155, 1156), which follow the ring/silent switch. Haptic Feedback (off by default) needs Full Access and keeps one prepared generator. |
 
 Key labels are centred on the cap height, or the x-height for lowercase, not
 on the font's line box. A slide starts once the finger reaches another letter
@@ -401,10 +400,22 @@ only to its own contraction or capitalization.
 
 **Settings.** Settings › Typing in the app writes `KeyboardPreferences` to the
 App Group: layout, predictions, auto-correction, auto-capitalization, slide to
-type, “.” shortcut, key sound, haptics, and Reset Keyboard Learning. The
+type, “.” shortcut, and Reset Keyboard Learning. The
 keyboard reads them each time it appears. Without Full Access iOS hides the App
 Group, so the keyboard uses the defaults. Learned words stay in the keyboard's
 own storage.
+
+**Learning** (`LearnedWords`, the keyboard's own defaults, so it works without
+Full Access; Reset Keyboard Learning clears all of it):
+
+| What | Learned when | Used |
+|---|---|---|
+| Words | A word not in the list, typed and kept on space twice; or kept at once by deleting its autocorrection or picking it in quotes | Not corrected; offered as a completion. Up to 3,000, the least used dropped first. |
+| Word pairs | A finished word (space, punctuation, a picked suggestion, or the next word after a slide) after a word, or at a sentence start, when both are words. Not while Predictions is off. | Typed twice in that order, the next word leads the bar after the first one, ahead of the list's pairs, and leads the completions for its first letters. 12 next words kept per word, 2,000 words. |
+| To the Dictionary | A learned word typed 3 times, with Full Access | The 200 most used go to the App Group (`keyboardLearnedWords`); the app adds each once as Auto-learned (`DictionaryBridge`), and iCloud takes it to the Mac. A word deleted from the Dictionary is not added again. The app picks the list up when it is open or next opened. |
+
+Words from codes, passwords, card numbers, phone and postal fields, and fields
+that turn correction off are not learned.
 
 **Preview.** Settings › Typing pins a keyboard preview above the form
 (`iOS/App/Sources/Views/KeyboardPreview.swift`). It draws the letters page
@@ -423,7 +434,8 @@ under 1 ms a gesture.
 ### Dictionary
 
 Settings › Dictionary matches the Mac: search, add with "Heard as", separate
-Dictionary and Auto-learned sections (auto-learned words come from the Mac),
+Dictionary and Auto-learned sections (auto-learned words come from the Mac's
+edits and from the keyboard's typing),
 stars, swipe to delete, and CSV import and export from the ⋯ menu.
 
 **iCloud sync.** The dictionary is the same on the Mac and the iPhone, with no
@@ -593,5 +605,7 @@ is `false`, so builds skip the export-compliance question.
   attached, so nothing can type it in place.
 - The first dictation after a cold start costs one trip to the app.
 - Typing is English only. Predictions come from book text, so chat phrasing
-  ranks lower than on Apple's keyboard until the keyboard learns it.
-- Haptics need Full Access; iOS mutes a keyboard's haptics without it.
+  ranks lower than on Apple's keyboard until the keyboard learns the user's
+  own word pairs.
+- Keys make no sound and no haptic tap: neither worked reliably from the
+  extension, so both were removed (2026-10-30).

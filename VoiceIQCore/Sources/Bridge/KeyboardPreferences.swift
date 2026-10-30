@@ -60,8 +60,6 @@ public struct KeyboardPreferences: Codable, Equatable, Sendable {
     public var slideToType = true
     /// Two spaces type a period and a space.
     public var periodShortcut = true
-    public var keySound = true
-    public var haptics = false
     public var theme: KeyboardTheme = .standard
     public var numberRow = false
     public var height: KeyboardHeight = .standard
@@ -81,8 +79,6 @@ public struct KeyboardPreferences: Codable, Equatable, Sendable {
         predictions = (try? c.decode(Bool.self, forKey: .predictions)) ?? d.predictions
         slideToType = (try? c.decode(Bool.self, forKey: .slideToType)) ?? d.slideToType
         periodShortcut = (try? c.decode(Bool.self, forKey: .periodShortcut)) ?? d.periodShortcut
-        keySound = (try? c.decode(Bool.self, forKey: .keySound)) ?? d.keySound
-        haptics = (try? c.decode(Bool.self, forKey: .haptics)) ?? d.haptics
         theme = (try? c.decode(KeyboardTheme.self, forKey: .theme)) ?? d.theme
         numberRow = (try? c.decode(Bool.self, forKey: .numberRow)) ?? d.numberRow
         height = (try? c.decode(KeyboardHeight.self, forKey: .height)) ?? d.height

@@ -19,7 +19,7 @@ protocol KeyboardKeysDelegate: AnyObject {
 /// become a tap, an accent pick, a swipe through letters, or a cursor drag on
 /// the space bar. A touch goes to the nearest key in its row, so the gaps
 /// between keys type too.
-final class KeyboardKeysView: UIView, UIInputViewAudioFeedback {
+final class KeyboardKeysView: UIView {
     weak var delegate: KeyboardKeysDelegate?
     weak var inputController: UIInputViewController?
     /// Called with the letter positions after each layout of the letter page.
@@ -30,8 +30,6 @@ final class KeyboardKeysView: UIView, UIInputViewAudioFeedback {
     var slideToType = true
     var returnEnabled = true { didSet { if returnEnabled != oldValue { refreshLabels() } } }
     var theme = KeyTheme.standard { didSet { keys.forEach { $0.view.theme = theme } } }
-
-    var enableInputClicksWhenVisible: Bool { true }
 
     private struct Key {
         let spec: KeySpec

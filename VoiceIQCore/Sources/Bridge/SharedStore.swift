@@ -42,6 +42,7 @@ public final class SharedStore: @unchecked Sendable {
         static let keyboardLog = "bridge.keyboardLog"
         static let dictionaryAdditions = "bridge.dictionaryAdditions"
         static let dictionaryTerms = "bridge.dictionaryTerms"
+        static let keyboardLearnedWords = "bridge.keyboardLearnedWords"
         static let appPasteboardChangeCount = "bridge.appPasteboardChangeCount"
         static let keyboardPreferences = "bridge.keyboardPreferences"
     }
@@ -143,6 +144,17 @@ public final class SharedStore: @unchecked Sendable {
 
     public func setDictionaryTerms(_ terms: [String]) {
         defaults.set(terms, forKey: Key.dictionaryTerms)
+    }
+
+    /// The words the keyboard learned from typing that the app adds to the
+    /// Dictionary, most used first. Writer: keyboard.
+    public var keyboardLearnedWords: [String] {
+        defaults.stringArray(forKey: Key.keyboardLearnedWords) ?? []
+    }
+
+    public func setKeyboardLearnedWords(_ words: [String]) {
+        defaults.set(words, forKey: Key.keyboardLearnedWords)
+        DarwinNotifier.post(.dictionary)
     }
 
     // MARK: - Typing

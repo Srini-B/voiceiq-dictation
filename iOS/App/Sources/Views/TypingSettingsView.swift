@@ -35,10 +35,6 @@ struct TypingSettingsView: View {
                 Toggle("“.” Shortcut", isOn: $preferences.periodShortcut)
             }
             Section {
-                Toggle("Key Sound", isOn: $preferences.keySound)
-                Toggle("Haptic Feedback", isOn: $preferences.haptics)
-            }
-            Section {
                 Button("Reset Keyboard Learning", role: .destructive) { confirmReset = true }
             }
         }
