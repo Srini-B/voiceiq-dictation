@@ -348,8 +348,22 @@ one speaker; there is no diarizer, real-time path, or Nemotron on iOS (see
 The keyboard opens on letter keys. A bar above them shows three suggestions,
 with the VoiceiQ button (waveform) on the left and the mic on the right. The
 mic starts a dictation at once; the waveform opens the voice panel with
-Dictate, Translate and Ask. A running dictation shows the voice panel until
-the text is delivered, then the keys come back.
+Dictate, Translate and Ask. A running dictation shows the recording panel
+until the text is delivered, then the keys come back.
+
+**Recording panel** (`RecordingPanel`, `LiveWaveform`). A red waveform fills
+the panel while recording: one bar every 0.06 s from `SharedStore.level`, which
+the app writes on each mic level callback. Bars rise fast and fall slowly,
+scroll right to left and fade with age. Below it: cancel (x), the elapsed
+time with the mode ("Listening", "Listening to translate", "Listening to your
+question"), and a red stop button that finishes the dictation. While the text
+is written the bars turn blue and a slow pulse runs across them with
+"Writing…" or "Thinking…"; the buttons hide. Reduce Motion freezes the bars.
+
+**Add to Dictionary.** With Full Access, selecting text in the field replaces
+the suggestions with "Add “word” to Dictionary". Text selected in another app
+or elsewhere on screen is not visible to a keyboard: copy it, and the bar
+offers "Add copied text to Dictionary" until you start typing.
 
 | Feature | How |
 | --- | --- |

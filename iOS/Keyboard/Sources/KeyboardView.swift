@@ -39,6 +39,8 @@ struct KeyboardView: View {
                 switch panel {
                 case .answer:
                     if let answer = model.answer { AnswerPanel(answer: answer, model: model).padding(8) }
+                case .voice where isLive:
+                    RecordingPanel(model: model).padding(8)
                 case .voice:
                     VStack(spacing: 8) {
                         Spacer(minLength: 0)
@@ -59,6 +61,11 @@ struct KeyboardView: View {
             // A finished session goes back to the keys.
             if old == .processing, new == .off || new == .warm { voiceOpen = false }
         }
+    }
+
+    /// Recording, or writing the text while the app is running.
+    private var isLive: Bool {
+        model.hasFullAccess && (model.phase == .recording || (model.phase == .processing && !model.needsAppToFinish))
     }
 
     private var showsOffer: Bool {
@@ -315,6 +322,76 @@ private struct AnswerPanel: View {
         .background(RoundedRectangle(cornerRadius: 12).fill(Color(.secondarySystemBackground)))
         .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.primary.opacity(0.08)))
         .shadow(color: .black.opacity(0.08), radius: 5, y: 2)
+    }
+}
+
+/// What the keyboard shows while it listens: the live waveform, the time,
+/// and Cancel and Done. While the text is written the waveform pulses.
+private struct RecordingPanel: View {
+    @ObservedObject var model: KeyboardModel
+
+    private var recording: Bool { model.phase == .recording }
+
+    private var status: String {
+        guard recording else { return model.mode == .ask ? "Thinking…" : "Writing…" }
+        switch model.mode {
+        case .dictate: return "Listening"
+        case .translate: return "Listening to translate"
+        case .ask: return "Listening to your question"
+        }
+    }
+
+    var body: some View {
+        VStack(spacing: 10) {
+            LiveWaveform(listening: recording, color: recording ? KeyboardPalette.recording : KeyboardPalette.accent)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .padding(.horizontal, 4)
+            HStack {
+                CircleButton(systemImage: "xmark", label: "Cancel", fill: Color(.secondarySystemFill),
+                             foreground: .primary, action: model.cancelTapped)
+                    .opacity(recording ? 1 : 0)
+                    .disabled(!recording)
+                Spacer()
+                VStack(spacing: 2) {
+                    if let started = model.snapshot.recordingStartedAt, recording {
+                        Text(timerInterval: started...Date.distantFuture, countsDown: false)
+                            .font(.system(size: 20, weight: .semibold).monospacedDigit())
+                    } else {
+                        ProgressView()
+                    }
+                    Text(status)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                CircleButton(systemImage: "stop.fill", label: "Done", fill: KeyboardPalette.recording,
+                             foreground: .white, action: model.micTapped)
+                    .opacity(recording ? 1 : 0)
+                    .disabled(!recording)
+            }
+            .padding(.horizontal, 8)
+            .padding(.bottom, 6)
+        }
+    }
+}
+
+private struct CircleButton: View {
+    let systemImage: String
+    let label: String
+    let fill: Color
+    let foreground: Color
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.system(size: 18, weight: .bold))
+                .foregroundStyle(foreground)
+                .frame(width: 52, height: 52)
+                .background(Circle().fill(fill))
+        }
+        .buttonStyle(MicBarButtonStyle())
+        .accessibilityLabel(label)
     }
 }
 

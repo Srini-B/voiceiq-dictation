@@ -46,5 +46,13 @@ keyboards to type.
   your help" and got "Thanks for your help". Checked light and dark keys, 123,
   emoji, the voice panel and Settings › Typing in screenshots.
 - `swift test`: 143 tests pass. Simulator build of all targets succeeds.
+- Recording panel (follow-up): the small "Tap to finish" capsule became a
+  full panel with a live waveform, timer, cancel and stop. The level saturates
+  for loud speech, so bars are drawn at level^1.4 with a small per-bar
+  variation; without it a sentence read as a flat block. Checked in the
+  Simulator with the debug simulated mic (now emitting the file's real
+  loudness) and real Claude + Nemotron keys: recording in light and dark,
+  "Writing…", and the inserted text. Selecting "waveform" in the field showed
+  the "Add “waveform” to Dictionary" chip.
 - Not verified on a physical iPhone yet: haptics, key sound, landscape, and
   how slide to type feels with a real finger.
