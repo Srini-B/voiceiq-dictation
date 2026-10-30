@@ -47,8 +47,9 @@ final class TypingController: ObservableObject, KeyboardKeysDelegate {
     private var corrected: (original: String, replacement: String)?
     /// Every suggestion for the word at the cursor, shown or not.
     private var candidates: [Suggestion] = []
-    /// The text before the cursor after the keyboard's last edit.
+    /// The text before the cursor, and its field, after the keyboard's last edit.
     private var lastBefore: String?
+    private var lastDocument: UUID?
 
     // MARK: - Lifecycle
 
@@ -141,12 +142,13 @@ final class TypingController: ObservableObject, KeyboardKeysDelegate {
         returnEnabled = !(proxy.enablesReturnKeyAutomatically ?? false) || proxy.hasText
         updateSuggestions(before)
         lastBefore = before
+        lastDocument = proxy.documentIdentifier
     }
 
     /// The user moved the cursor or the app changed the text: a slid word or
     /// correction saved for the old position no longer applies.
     func selectionChanged() {
-        if proxy?.documentContextBeforeInput != lastBefore {
+        if proxy?.documentContextBeforeInput != lastBefore || proxy?.documentIdentifier != lastDocument {
             slid = nil
             pendingSpace = false
             corrected = nil

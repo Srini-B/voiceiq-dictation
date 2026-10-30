@@ -113,8 +113,14 @@ public struct MeetingTranscriber: Sendable {
     /// call's double talk stays within what DeepInfra can time.
     private func transcribeOwner(_ regions: [ClosedRange<Double>], audio: CallAudio, window: Double,
                                  budget: inout TimeInterval) async throws -> [TimedWord] {
+        // `windows` keeps a long region whole, and one overlap can outlast a window.
+        let pieces = regions.flatMap { region in
+            stride(from: region.lowerBound, to: region.upperBound, by: window).map {
+                $0...min($0 + window, region.upperBound)
+            }
+        }
         var words: [TimedWord] = []
-        for part in Self.windows(regions, speech: window) {
+        for part in Self.windows(pieces, speech: window) {
             var request = AssembledAudio()
             try request.appendBody(part, source: audio.mic.samples)
             let flac = try FLACEncoder.encode(samples: request.samples)
