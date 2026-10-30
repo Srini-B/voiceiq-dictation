@@ -454,7 +454,10 @@ final class TypingController: ObservableObject, KeyboardKeysDelegate {
         // Codes, card numbers and fields that opt out of correction are not learned.
         guard assistanceAllowed, proxy?.autocorrectionType != .no,
               var engine, word.count > 1, word.allSatisfy({ $0.isLetter || $0 == "'" }) else { return }
-        guard strongly || !engine.isKnown(word) else { return }
+        // A learned word stays counted after it becomes known, so typing
+        // alone can take it to the uses that send it to the Dictionary.
+        guard strongly || !engine.isKnown(word)
+            || engine.user.learned[TypingEngine.key(of: word)] != nil else { return }
         if LearnedWords.learn(word, strongly: strongly, in: &engine.user), controller?.hasFullAccess == true {
             LearnedWords.publish(engine.user)
         }
