@@ -378,7 +378,6 @@ offers "Add copied text to Dictionary" until you start typing.
 | Emoji | Unicode's list in CLDR order, by category, with recents. |
 | No assistance | Password, one-time code, card, phone and postal code fields. |
 | Themes | Default, Clear, Physical, Mechanical and iOS 5, after the Raycast keyboard (`KeyTheme`). Physical and Mechanical take Automatic, Light or Dark keys, which pins the whole keyboard through `overrideUserInterfaceStyle`; iOS 5 is always light. Themes with their own background cannot paint the system's globe and mic strip below the keys. |
-| Sound and haptics | Key Sound plays the iOS keyboard's click, delete and modifier sounds (`AudioServicesPlaySystemSound` 1104, 1155, 1156), which follow the ring/silent switch. Haptic Feedback (off by default) needs Full Access and keeps one prepared generator. |
 
 Key labels are centred on the cap height, or the x-height for lowercase, not
 on the font's line box. A slide starts once the finger reaches another letter
@@ -401,7 +400,7 @@ only to its own contraction or capitalization.
 
 **Settings.** Settings › Typing in the app writes `KeyboardPreferences` to the
 App Group: layout, predictions, auto-correction, auto-capitalization, slide to
-type, “.” shortcut, key sound, haptics, and Reset Keyboard Learning. The
+type, “.” shortcut, and Reset Keyboard Learning. The
 keyboard reads them each time it appears. Without Full Access iOS hides the App
 Group, so the keyboard uses the defaults. Learned words stay in the keyboard's
 own storage.
@@ -608,4 +607,5 @@ is `false`, so builds skip the export-compliance question.
 - Typing is English only. Predictions come from book text, so chat phrasing
   ranks lower than on Apple's keyboard until the keyboard learns the user's
   own word pairs.
-- Haptics need Full Access; iOS mutes a keyboard's haptics without it.
+- Keys make no sound and no haptic tap: neither worked reliably from the
+  extension, so both were removed (2026-10-30).

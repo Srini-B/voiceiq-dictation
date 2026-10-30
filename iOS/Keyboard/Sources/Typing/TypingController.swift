@@ -1,4 +1,3 @@
-import AudioToolbox
 import UIKit
 import VoiceIQBridge
 
@@ -195,28 +194,8 @@ final class TypingController: ObservableObject, KeyboardKeysDelegate {
 
     // MARK: - Keys
 
-    /// Kept and prepared: a generator made for one tap often fires before
-    /// the haptic engine is ready, and the tap is lost.
-    private var haptic: UIImpactFeedbackGenerator?
-
     func keyDown(_ key: KeySpec) {
         if key.action == .shift { shiftHeld = true }
-        if preferences.keySound {
-            // The iOS keyboard's own click, delete and modifier sounds. They
-            // follow the ring/silent switch. `playInputClick` stays silent
-            // here: it works only from the keyboard's root input view.
-            switch key.action {
-            case .insert, .space: AudioServicesPlaySystemSound(1104)
-            case .delete: AudioServicesPlaySystemSound(1155)
-            default: AudioServicesPlaySystemSound(1156)
-            }
-        }
-        // iOS allows keyboard haptics only with Full Access.
-        if preferences.haptics, controller?.hasFullAccess == true {
-            if haptic == nil { haptic = UIImpactFeedbackGenerator(style: .light) }
-            haptic?.impactOccurred()
-            haptic?.prepare()
-        }
     }
 
     func keyTapped(_ key: KeySpec, text: String?) {

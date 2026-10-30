@@ -109,3 +109,8 @@ keyboards to type.
   Auto-learned and skipped a word already imported. Typed on the keyboard
   in the Simulator after the 0.6.16 crash fix: "good night" once left
   "good " with to, for, and; twice put night first.
+- Key sound and haptic feedback removed (2026-10-30): the owner found
+  neither worked on the iPhone after the earlier fixes. Gone from
+  `KeyboardPreferences`, Settings › Typing and `TypingController.keyDown`;
+  saved preferences with the old keys still decode. The mic and Dictionary
+  chip keep their own taps.
