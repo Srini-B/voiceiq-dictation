@@ -47,9 +47,11 @@ final class TypingController: ObservableObject, KeyboardKeysDelegate {
     private var corrected: (original: String, replacement: String)?
     /// Every suggestion for the word at the cursor, shown or not.
     private var candidates: [Suggestion] = []
-    /// The text before the cursor, and its field, after the keyboard's last edit.
+    /// The text around the cursor after the keyboard's last edit. Not
+    /// `documentIdentifier`: Swift declares it non-optional, iOS returns nil,
+    /// and reading it crashes the keyboard (0.6.16).
     private var lastBefore: String?
-    private var lastDocument: UUID?
+    private var lastAfter: String?
 
     // MARK: - Lifecycle
 
@@ -142,13 +144,13 @@ final class TypingController: ObservableObject, KeyboardKeysDelegate {
         returnEnabled = !(proxy.enablesReturnKeyAutomatically ?? false) || proxy.hasText
         updateSuggestions(before)
         lastBefore = before
-        lastDocument = proxy.documentIdentifier
+        lastAfter = proxy.documentContextAfterInput
     }
 
     /// The user moved the cursor or the app changed the text: a slid word or
     /// correction saved for the old position no longer applies.
     func selectionChanged() {
-        if proxy?.documentContextBeforeInput != lastBefore || proxy?.documentIdentifier != lastDocument {
+        if proxy?.documentContextBeforeInput != lastBefore || proxy?.documentContextAfterInput != lastAfter {
             slid = nil
             pendingSpace = false
             corrected = nil

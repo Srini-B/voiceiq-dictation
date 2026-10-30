@@ -114,3 +114,22 @@ unused.
 Fix: declare the local first, and run CI on `macos-26` so a PR builds with
 the release's Xcode. Release again with
 `gh workflow run release.yml --ref main -f dry_run=false` once merged.
+
+## 2026-10-30: 0.6.16 keyboard crashed on every appearance
+
+The owner saw Apple's keyboard where VoiceiQ's should be. The keyboard
+crashed in `TypingController.refresh()` (EXC_BREAKPOINT in
+`UUID._unconditionallyBridgeFromObjectiveC`): the CodeRabbit follow-up on
+PR #30 read `proxy.documentIdentifier`, which Swift declares non-optional
+but iOS returns nil for, so the first layout trapped and iOS fell back to
+its own keyboard. The crash report
+(`~/Library/Logs/DiagnosticReports/VoiceIQKeyboard-2026-10-30-210300.ips`)
+was there when the Simulator "would not show the keyboard"; that was this
+crash, not the Simulator, and the change shipped without being typed on.
+
+Fix: compare the text after the cursor instead of the identifier. Verified
+in the Simulator by typing on the keyboard: it appears; "helo" + space gave
+"Help" and delete restored "Helo"; the Dictionary chip offered a selection;
+"good night" once left the bar at to, for, and, and twice put night first.
+No new crash reports. Lesson: when the keyboard does not appear, read the
+crash reports before blaming the Simulator.
