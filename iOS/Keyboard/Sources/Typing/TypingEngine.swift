@@ -279,8 +279,8 @@ struct TypingEngine: Sendable {
     /// ln P(word | previous word): the pair when the list has it, otherwise
     /// the word's own frequency with a backoff penalty.
     private func contextModel(_ previousID: Lexicon.WordID?) -> (Lexicon.WordID) -> Double {
-        let pairs = previousID.map { Dictionary(lexicon.followers(of: $0, limit: .max), uniquingKeysWith: max) } ?? [:]
         let lexicon = lexicon
+        let pairs = previousID.map { Dictionary(lexicon.followers(of: $0, limit: .max), uniquingKeysWith: max) } ?? [:]
         return { id in pairs[id] ?? (lexicon.logProbability(id) + Self.backoff) }
     }
 

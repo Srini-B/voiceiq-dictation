@@ -100,3 +100,17 @@ Greptile's second pass (its first two runs errored) found five more, all real:
 
 Not run on the keyboard in the Simulator this round (the software keyboard
 would not come up); both apps build and the 143 core tests pass.
+
+## 2026-10-30: 0.6.16 release failed on the iOS archive
+
+The merge of PR #30 started Release run 41072259457. The macOS job passed;
+the iOS archive failed on `TypingEngine.contextModel`, where a closure used
+`lexicon` one line before `let lexicon = lexicon`. Xcode 27 (this Mac, and
+CI's `macos-latest`) accepts that; Xcode 26.6 on the release's `macos-26`
+runner rejects it ("closure captures 'lexicon' before it is declared"). With
+one app failing, publish was skipped, so nothing shipped and build 61 stayed
+unused.
+
+Fix: declare the local first, and run CI on `macos-26` so a PR builds with
+the release's Xcode. Release again with
+`gh workflow run release.yml --ref main -f dry_run=false` once merged.
