@@ -83,3 +83,20 @@ CodeRabbit's eight findings were all real and are fixed:
   running delete timer); leaving a digit-pad field returns to letters; Reset
   Keyboard Learning also clears the words the running extension holds; words
   typed in code, card-number and no-correction fields are not learned.
+
+Greptile's second pass (its first two runs errored) found five more, all real:
+
+- A slow cancel could act on the next recording: `.cancelled` accepts a new
+  begin while the old stop drains. The keep-or-discard now runs on the session
+  that was cancelled. A scratch test (cancel, begin, slow stop) left the new
+  recording stuck before the fix and finished it after; deleted afterwards.
+- The owner-overlap pass now goes in windows of the main pass's size, so a
+  long call's double talk stays within DeepInfra's timing limit.
+- Predictions off no longer turns off Auto-Correction and Text Replacements;
+  it only hides the bar.
+- A slid word or correction is forgotten when the text before the cursor no
+  longer matches the keyboard's last edit (the user moved the cursor).
+- Keys answer VoiceOver's activate with the same tap the touches deliver.
+
+Not run on the keyboard in the Simulator this round (the software keyboard
+would not come up); both apps build and the 143 core tests pass.

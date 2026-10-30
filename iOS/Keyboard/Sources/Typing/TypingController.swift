@@ -45,6 +45,10 @@ final class TypingController: ObservableObject, KeyboardKeysDelegate {
     private var pendingSpace = false
     /// The last autocorrection, so the bar can offer the typed letters back.
     private var corrected: (original: String, replacement: String)?
+    /// Every suggestion for the word at the cursor, shown or not.
+    private var candidates: [Suggestion] = []
+    /// The text before the cursor after the keyboard's last edit.
+    private var lastBefore: String?
 
     // MARK: - Lifecycle
 
@@ -135,11 +139,30 @@ final class TypingController: ObservableObject, KeyboardKeysDelegate {
             if shift != wanted { shift = wanted }
         }
         returnEnabled = !(proxy.enablesReturnKeyAutomatically ?? false) || proxy.hasText
-        suggestions = currentSuggestions(before)
+        updateSuggestions(before)
+        lastBefore = before
+    }
+
+    /// The user moved the cursor or the app changed the text: a slid word or
+    /// correction saved for the old position no longer applies.
+    func selectionChanged() {
+        if proxy?.documentContextBeforeInput != lastBefore {
+            slid = nil
+            pendingSpace = false
+            corrected = nil
+        }
+        refresh()
+    }
+
+    /// Corrections come from the same list as the bar, which Predictions
+    /// only hides.
+    private func updateSuggestions(_ before: String) {
+        candidates = currentSuggestions(before)
+        suggestions = preferences.predictions ? candidates : []
     }
 
     private func currentSuggestions(_ before: String) -> [Suggestion] {
-        guard preferences.predictions, assistanceAllowed, let engine else { return [] }
+        guard preferences.predictions || autocorrectAllowed, let engine, assistanceAllowed else { return [] }
         let context = TypingEngine.context(before: before)
         if let slid, context.partial == slid.word, pendingSpace {
             return slid.alternates.prefix(3).map { Suggestion(text: $0, kind: .word) }
@@ -232,7 +255,7 @@ final class TypingController: ObservableObject, KeyboardKeysDelegate {
 
     private func refreshSuggestionCase() {
         guard let before = proxy?.documentContextBeforeInput else { return }
-        suggestions = currentSuggestions(before)
+        updateSuggestions(before)
     }
 
     func insert(_ character: String) {
@@ -298,7 +321,7 @@ final class TypingController: ObservableObject, KeyboardKeysDelegate {
     @discardableResult
     private func applyAutocorrection() -> Bool {
         guard autocorrectAllowed, let proxy,
-              let correction = suggestions.first(where: { $0.kind == .autocorrection || $0.kind == .replacement }) else { return false }
+              let correction = candidates.first(where: { $0.kind == .autocorrection || $0.kind == .replacement }) else { return false }
         let partial = TypingEngine.context(before: proxy.documentContextBeforeInput ?? "").partial
         guard !partial.isEmpty, correction.text != partial else { return false }
         for _ in partial { proxy.deleteBackward() }

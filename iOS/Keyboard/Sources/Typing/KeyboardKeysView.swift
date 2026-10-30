@@ -118,6 +118,9 @@ final class KeyboardKeysView: UIView, UIInputViewAudioFeedback {
                 }
                 let view = KeyCapView(spec: spec)
                 view.theme = theme
+                if spec.action != .globe, !spec.label.isEmpty {
+                    view.onActivate = { [weak self] in self?.activate(spec) }
+                }
                 addSubview(view)
                 keys.append(Key(spec: spec, view: view, row: r))
             }
@@ -205,6 +208,13 @@ final class KeyboardKeysView: UIView, UIInputViewAudioFeedback {
     }
 
     // MARK: - Touches
+
+    /// A key's plain tap, as touches deliver it, for VoiceOver.
+    private func activate(_ spec: KeySpec) {
+        delegate?.keyDown(spec)
+        delegate?.keyTapped(spec, text: nil)
+        if spec.action == .shift { delegate?.shiftReleased() }
+    }
 
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
         for touch in touches {

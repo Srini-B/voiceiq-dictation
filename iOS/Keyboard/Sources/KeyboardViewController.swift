@@ -81,14 +81,14 @@ final class KeyboardViewController: UIInputViewController {
         HostAppResolver.harvest()
         dictionaryOffer.selectionChanged()
         typing.readField()
-        typing.refresh()
+        typing.selectionChanged()
     }
 
     override func selectionDidChange(_ textInput: UITextInput?) {
         super.selectionDidChange(textInput)
         HostAppResolver.harvest()
         dictionaryOffer.selectionChanged()
-        typing.refresh()
+        typing.selectionChanged()
     }
 
     /// Opens a URL from inside the extension. `UIApplication.open` is marked

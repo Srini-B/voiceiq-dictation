@@ -88,7 +88,7 @@ public struct MeetingTranscriber: Sendable {
             if let data = try? Data(contentsOf: file), let cached = try? JSONDecoder().decode([TimedWord].self, from: data) {
                 owner = cached
             } else {
-                owner = try await transcribeOwner(overlaps, audio: audio, budget: &budget)
+                owner = try await transcribeOwner(overlaps, audio: audio, window: window, budget: &budget)
                 try JSONEncoder().encode(owner).write(to: file, options: .atomic)
             }
             words = Self.mergeOwner(owner, into: words, overlaps: overlaps)
@@ -109,18 +109,24 @@ public struct MeetingTranscriber: Sendable {
     /// So those stretches are sent again from the echo-cancelled mic alone,
     /// and every word in that answer is the owner's. This is how FluidVoice
     /// keeps double-talk: separate tracks, merged by time.
-    private func transcribeOwner(_ regions: [ClosedRange<Double>], audio: CallAudio,
+    /// Overlaps go in windows of the same size as the main pass, so a long
+    /// call's double talk stays within what DeepInfra can time.
+    private func transcribeOwner(_ regions: [ClosedRange<Double>], audio: CallAudio, window: Double,
                                  budget: inout TimeInterval) async throws -> [TimedWord] {
-        var request = AssembledAudio()
-        try request.appendBody(regions, source: audio.mic.samples)
-        let flac = try FLACEncoder.encode(samples: request.samples)
-        let raw = try await withProviders(label: "overlap", budget: &budget) { via in
-            try await transcribeSpeakers(flac, seconds: request.duration, references: [], via: via)
+        var words: [TimedWord] = []
+        for part in Self.windows(regions, speech: window) {
+            var request = AssembledAudio()
+            try request.appendBody(part, source: audio.mic.samples)
+            let flac = try FLACEncoder.encode(samples: request.samples)
+            let raw = try await withProviders(label: "overlap", budget: &budget) { via in
+                try await transcribeSpeakers(flac, seconds: request.duration, references: [], via: via)
+            }
+            words += raw.compactMap { word in
+                guard let start = word.start, let span = request.trackSpan(start, word.end ?? start) else { return nil }
+                return TimedWord(text: word.text, speaker: MeetingSpeaker.you, start: span.lowerBound, end: span.upperBound)
+            }
         }
-        return raw.compactMap { word in
-            guard let start = word.start, let span = request.trackSpan(start, word.end ?? start) else { return nil }
-            return TimedWord(text: word.text, speaker: MeetingSpeaker.you, start: span.lowerBound, end: span.upperBound)
-        }
+        return words
     }
 
     /// The owner's words replace whatever the mixed pass made of the overlap:

@@ -20,6 +20,14 @@ final class KeyCapView: UIView {
     }
 
     var isHighlighted = false { didSet { if isHighlighted != oldValue { applyColors() } } }
+    /// VoiceOver's double tap, which never reaches the raw-touch handling.
+    var onActivate: (() -> Void)?
+
+    override func accessibilityActivate() -> Bool {
+        guard let onActivate else { return false }
+        onActivate()
+        return true
+    }
 
     init(spec: KeySpec) {
         self.spec = spec
