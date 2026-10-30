@@ -20,7 +20,7 @@ lexicon.bin, little-endian:
 A key is the lowercase word without apostrophes, so "dont" finds "don't".
 Frequencies are ln(count) scaled to 0...255 between the header's bounds.
 """
-import hashlib, math, os, re, struct, sys, urllib.request
+import json, hashlib, math, os, re, struct, sys, urllib.request
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(ROOT, "iOS/Keyboard/Resources")
@@ -33,7 +33,14 @@ SOURCES = {
     "blocked": "https://raw.githubusercontent.com/LDNOOBW/List-of-Dirty-Naughty-Obscene-and-Otherwise-Bad-Words/5faf2ba42d7b1c0977169ec3611df25a3c08eb13/en",
     # Emoji 15.0 is the newest set iOS 17.0, the deployment target, draws.
     "emoji": "https://unicode.org/Public/emoji/15.0/emoji-test.txt",
+    # GitHub's gemoji names, aliases and tags (MIT), as FUTO Keyboard ships it.
+    "gemoji": "https://raw.githubusercontent.com/futo-org/android-keyboard/31e720ddcc2df6259069b2ae7cf0f1defaf2cb74/java/res/raw/gemoji.json",
 }
+TONES = ["\U0001F3FB", "\U0001F3FC", "\U0001F3FD", "\U0001F3FE", "\U0001F3FF"]
+# Words too vague to turn into an emoji on their own (FUTO's list).
+VAGUE = {"flag", "united", "japanese", "mrs", "lady", "empty", "small", "last", "flat", "high",
+         "old", "low", "long", "american", "cape", "costa", "cook", "diego", "central", "south",
+         "heard", "north", "san", "el", "us"}
 
 # Contractions are in the word list at a placeholder count. These are typed
 # far more often than that; counts are rough Google Books magnitudes.
@@ -194,6 +201,49 @@ def main():
         for name, items in groups:
             f.write(name + "\t" + " ".join(items) + "\n")
     print(f"✓ emoji.txt: {sum(len(g[1]) for g in groups)} emoji in {len(groups)} groups")
+    write_emoji_words(fetch("gemoji"), emoji_raw, {e for _, items in groups for e in items})
+
+
+def write_emoji_words(gemoji_raw, emoji_raw, shown):
+    """emoji-words.txt: per emoji, its five skin tones (if it takes them) and
+    the words search matches. emoji-shortcuts.txt: the word that suggests an
+    emoji while typing ("pizza" -> pizza), best source first: a one-word name,
+    then aliases, tags, and the first part of a two-part alias."""
+    qualified = set()
+    for line in emoji_raw.splitlines():
+        m = re.match(r"([0-9A-F ]+);\s*fully-qualified", line)
+        if m:
+            qualified.add("".join(chr(int(c, 16)) for c in m.group(1).split()))
+    entries = [e for e in json.loads(gemoji_raw) if e["emoji"] in shown]
+    people = {e["emoji"].replace("\uFE0F", "") for e in entries if e["category"] == "People & Body"}
+
+    def toned(emoji, tone):
+        parts = emoji.split("\u200D")
+        every = "\u200D".join(p.replace("\uFE0F", "") + tone if p.replace("\uFE0F", "") in people else p for p in parts)
+        first = "\u200D".join([parts[0].replace("\uFE0F", "") + tone] + parts[1:])
+        return next((v for v in (every, first) if v in qualified), None)
+
+    shortcuts = {}
+    lines = []
+    for e in entries:
+        emoji = e["emoji"]
+        tones = [toned(emoji, t) for t in TONES] if e.get("skin_tones") else []
+        if None in tones:
+            tones = []
+        names = [e["description"]] + e["aliases"] + e["tags"]
+        words = sorted({w for n in names for w in re.split(r"[^a-z0-9]+", n.lower()) if w})
+        lines.append(emoji + "\t" + " ".join(tones) + "\t" + " ".join(words))
+        candidates = ([(e["description"], 10)] if " " not in e["description"] else []) \
+            + [(a, 5) for a in e["aliases"]] + [(t, 4) for t in e["tags"]] \
+            + [(x.split("_")[0], 0) for x in e["aliases"] + e["tags"] if "_" in x and x.split("_")[0] not in VAGUE]
+        for word, score in candidates:
+            if len(word) > 2 and word.isalpha() and word.islower() and score > shortcuts.get(word, ("", -1))[1]:
+                shortcuts[word] = (emoji, score)
+    with open(os.path.join(OUT, "emoji-words.txt"), "w") as f:
+        f.write("\n".join(lines) + "\n")
+    with open(os.path.join(OUT, "emoji-shortcuts.txt"), "w") as f:
+        f.write("".join(f"{w}\t{shortcuts[w][0]}\n" for w in sorted(shortcuts)))
+    print(f"✓ emoji-words.txt: {len(lines)} emoji; emoji-shortcuts.txt: {len(shortcuts)} words")
 
 
 if __name__ == "__main__":

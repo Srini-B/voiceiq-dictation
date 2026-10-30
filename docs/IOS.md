@@ -369,13 +369,15 @@ offers "Add copied text to Dictionary" until you start typing.
 | --- | --- |
 | Layouts | QWERTY, QWERTZ, AZERTY, Dvorak, Colemak (`KeyLayout`). English words on each. Optional number row; Short, Default or Tall height (`KeyboardViewController.height`). Without the number row, holding a top-row letter types its digit (shown in the key's corner) on the 10-key layouts. |
 | Pages | Letters, 123, #+=, number pads for number, decimal and phone fields. Email fields get @ and `.`, URL fields `.` and `/`; search fields keep a full space bar. Return shows the field's label (go, send, search…). |
-| Keys | Shift (tap once, double-tap for Caps Lock, hold and type), accents and alternates on long press (hold `.` for `.com`, the currency key for other currencies), key preview, repeat delete that moves to whole words, space-bar cursor drag. A touch goes to the nearest key in its row. |
+| Keys | Shift (tap once, double-tap for Caps Lock, hold and type), accents and alternates on long press (hold `.` for `.com`, the currency key for other currencies), key preview, repeat delete that moves to whole words. Space Bar Slide: Move Cursor (default) or Off. Delete Slide: sliding left from delete removes Words (default, one per 22 pt) or Characters (one per 9 pt), sliding back restores them, lifting keeps the result; Off. A touch goes to the nearest key in its row. |
 | Suggestions | Next-word predictions from word pairs, completions, and corrections. The typed letters show in quotes; picking them keeps and learns the word. |
 | Auto-correction | Delete right after a correction restores the typed word and learns it. On space or punctuation. Fixes a mistyped word one edit away (adjacent keys cost less), two edits away through `UITextChecker`, apostrophes (`dont` → `don't`), and capitals (`i` → `I`, `monday` → `Monday`). A real word is never replaced by another word. Off in URL, email and search fields and where the field turns it off. |
 | Auto-capitalization, “.” shortcut | Sentence starts, per the field's `autocapitalizationType`. Two spaces type a period. |
 | Slide to type | FUTO Swipe (`SwipeRecognizer`; see below). The slid word gets its space when the next word starts, so punctuation attaches; the bar offers the other candidates; delete removes the whole word. |
+| Blocked words | Holding a word in the bar offers "Don’t Suggest". A blocked word is never suggested, corrected to or slid to, and is forgotten if learned. With Full Access the list is `KeyboardPreferences.blockedWords`, editable in Settings › Typing › Blocked Words; without it the keyboard keeps its own list. |
+| Edit panel | The bar's cursor button: line start and end, word steps, left and right arrows that repeat while held, copy, cut and paste (Full Access), undo and redo of the keyboard's own edits (each word, each run of deletes, each other action; cleared when the text changes elsewhere), delete. A keyboard cannot select text or reach the app's own undo. |
 | Your words | The VoiceiQ Dictionary (`SharedStore.dictionaryWords`), contact names and Text Replacements (`requestSupplementaryLexicon`), and words typed twice or picked from quotes. |
-| Emoji | Unicode's list in CLDR order, by category, with recents. |
+| Emoji | Unicode's list in CLDR order, by category, with recents. Search (magnifier in the emoji panel) types into the bar with the keys and matches gemoji names, aliases and tags by word prefix. Holding an emoji that takes a skin tone offers the five tones; the one picked becomes the tone the panel, search and suggestions show (`EmojiData.skinTone`). Emoji Suggestions: the third bar slot offers the emoji for the word being typed or just finished ("pizza" → 🍕, FUTO's shortcut rules: one-word names, then aliases, tags, the first part of two-part names, never words of two letters); picking it replaces the word. |
 | No assistance | Password, one-time code, card, phone and postal code fields. |
 | Themes | Default, Clear, Physical, Mechanical and iOS 5, after the Raycast keyboard (`KeyTheme`). Physical and Mechanical take Automatic, Light or Dark keys, which pins the key area through `overrideUserInterfaceStyle`; iOS 5 keys are always light. The bar follows the app, like the system backdrop under it. Every theme sits on the system's own backdrop: on iOS 26 and later iOS draws a rounded panel around the extension, with a strip above it and the globe and mic row below, that the keyboard cannot paint, so a painted background shows square corners and two greys. |
 
@@ -443,8 +445,9 @@ becomes the best different spelling scoring above −24. A known word changes
 only to its own contraction or capitalization.
 
 **Settings.** Settings › Typing in the app writes `KeyboardPreferences` to the
-App Group: layout, predictions, auto-correction, auto-capitalization, slide to
-type, “.” shortcut, and Reset Keyboard Learning. The
+App Group: layout, predictions, auto-correction, auto-capitalization, emoji
+suggestions, slide to type, “.” shortcut, space bar and delete slides, blocked
+words, and Reset Keyboard Learning. The
 keyboard reads them each time it appears. Without Full Access iOS hides the App
 Group, so the keyboard uses the defaults. Learned words stay in the keyboard's
 own storage.

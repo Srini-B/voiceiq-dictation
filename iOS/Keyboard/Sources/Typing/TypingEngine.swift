@@ -24,6 +24,8 @@ struct Suggestion: Equatable, Sendable {
         case word
         /// A Text Replacement from iOS Settings.
         case replacement
+        /// An emoji for the word typed ("pizza" → 🍕); it takes the word's place.
+        case emoji
     }
     var text: String
     var kind: Kind

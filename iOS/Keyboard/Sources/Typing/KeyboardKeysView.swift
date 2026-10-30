@@ -1,4 +1,5 @@
 import UIKit
+import VoiceIQBridge
 
 enum ShiftState: Equatable {
     case off, once, locked
@@ -15,6 +16,10 @@ protocol KeyboardKeysDelegate: AnyObject {
     /// Whether a slide may start a word here; mid-word only after a whole word.
     var canStartSwipe: Bool { get }
     func cursorMoved(by offset: Int)
+    /// Sliding left from delete: `steps` words or characters, by `deleteSlide`.
+    func deleteSlideBegan()
+    func deleteSlid(steps: Int)
+    func deleteSlideEnded()
     func shiftReleased()
 }
 
@@ -31,6 +36,8 @@ final class KeyboardKeysView: UIView {
     var rows: [[KeySpec]] = [] { didSet { if rows != oldValue { rebuild() } } }
     var shift: ShiftState = .off { didSet { if shift != oldValue { refreshLabels() } } }
     var slideToType = true
+    var spaceSlide = KeyboardSpaceSlide.cursor
+    var deleteSlide = KeyboardDeleteSlide.words
     var returnEnabled = true { didSet { if returnEnabled != oldValue { refreshLabels() } } }
     var theme = KeyTheme.standard { didSet { keys.forEach { $0.view.theme = theme } } }
 
@@ -47,6 +54,7 @@ final class KeyboardKeysView: UIView {
         case swipe([CGPoint], times: [TimeInterval])
         case cursor(anchorX: CGFloat)
         case delete(Timer?)
+        case deleteSlide
     }
 
     private final class Tracked {
@@ -277,7 +285,7 @@ final class KeyboardKeysView: UIView {
                 let moved = hypot(point.x - state.start.x, point.y - state.start.y)
                 // A finger that is sliding is not holding for accents.
                 if moved > 8 { state.longPress?.invalidate() }
-                if spec.action == .space, abs(point.x - state.start.x) > 12 {
+                if spec.action == .space, spaceSlide == .cursor, abs(point.x - state.start.x) > 12 {
                     state.gesture = .cursor(anchorX: point.x)
                     keys[state.key].view.isHighlighted = false
                     setCursorMode(true)
@@ -316,8 +324,15 @@ final class KeyboardKeysView: UIView {
                     delegate?.cursorMoved(by: offset)
                     state.gesture = .cursor(anchorX: anchorX + CGFloat(offset) * step)
                 }
-            case .delete:
-                break
+            case .delete(let timer):
+                if deleteSlide != .off, state.start.x - point.x > 12 {
+                    timer?.invalidate()
+                    state.gesture = .deleteSlide
+                    delegate?.deleteSlideBegan()
+                }
+            case .deleteSlide:
+                let step: CGFloat = deleteSlide == .characters ? 9 : 22
+                delegate?.deleteSlid(steps: max(0, Int((state.start.x - point.x) / step)))
             }
         }
     }
@@ -369,6 +384,8 @@ final class KeyboardKeysView: UIView {
             setCursorMode(false)
         case .delete(let timer):
             timer?.invalidate()
+        case .deleteSlide:
+            delegate?.deleteSlideEnded()
         }
         if spec.action == .shift { delegate?.shiftReleased() }
     }
@@ -410,7 +427,7 @@ final class KeyboardKeysView: UIView {
                     }
                 }
                 for state in self.tracked.values where self.keys[state.key].spec.action == .delete {
-                    state.gesture = .delete(timer)
+                    if case .delete = state.gesture { state.gesture = .delete(timer) } else { timer.invalidate() }
                 }
             }
         }

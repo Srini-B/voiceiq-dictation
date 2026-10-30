@@ -71,6 +71,15 @@ enum LearnedWords {
         write(user.pairs, pairsKey)
     }
 
+    /// Drops a word, a word's key, from what was learned, also as a next word.
+    static func forget(_ key: String, in user: inout UserWords) {
+        user.learned[key] = nil
+        user.pairs[key] = nil
+        for previous in user.pairs.keys { user.pairs[previous]?[key] = nil }
+        write(user.learned, wordsKey)
+        write(user.pairs, pairsKey)
+    }
+
     /// Hands the most-used learned words to the app. Needs Full Access.
     static func publish(_ user: UserWords) {
         let words = user.learned.values.filter { $0.count >= UserWords.syncedAfter }

@@ -132,6 +132,13 @@ and `emoji.txt` from these files, pinned by commit in the script.
 - `emoji-test.txt`, Emoji 15.0, from unicode.org.
 - License: Unicode License v3.
 
+### gemoji (emoji names)
+
+- `emoji-words.txt` and `emoji-shortcuts.txt`: names, aliases and tags from
+  GitHub's [gemoji](https://github.com/github/gemoji) `db/emoji.json`, as
+  FUTO Keyboard ships it (`java/res/raw/gemoji.json` at `31e720dd`).
+- License: MIT, Copyright (c) 2019 GitHub, Inc.
+
 ## FUTO Swipe (iPhone keyboard, slide to type)
 
 The keyboard extension links FUTO's swipe library, which is GPL-3.0. **The
