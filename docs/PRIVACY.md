@@ -18,8 +18,10 @@ for Claude + Nemotron, `api.deepinfra.com` for audio and `api.anthropic.com`
 for text, screenshots and agent turns. Only it receives a given dictation;
 nothing is sent to the others. Meetings are
 the one exception: a meeting goes to the selected provider when its key is
-saved, otherwise to the other provider, and a meeting whose provider fails
-moves on to the other provider you have a key for.
+saved, otherwise to the next provider you have a key for, and a meeting whose
+provider fails moves on to each other provider you have a key for in turn
+(in the order Gemini, OpenAI, Claude + Nemotron), so with all three keys
+saved any of the three can receive meeting audio.
 With no usable key, nothing is sent and the recording stays on your Mac.
 
 ## What leaves your machine (the complete list)
@@ -28,7 +30,8 @@ With no usable key, nothing is sent and the recording stays on your Mac.
    transcription" off, VoiceiQ sends FLAC-compressed audio after you stop.
    With it on, VoiceiQ sends PCM audio while you speak in Dictation, Ask
    Anything, Translate and Agent. It uses the selected provider's existing
-   key. If the live connection fails or does not return every completed turn,
+   key. Claude + Nemotron has no live connection, so with it selected audio is
+   always uploaded after you stop. If the live connection fails or does not return every completed turn,
    VoiceiQ uploads the saved recording to that provider after you stop.
    Real-time transcription is on by default (since 2026-10-13, so the result
    lands about 1.5 s sooner after you stop) and does not affect meetings.

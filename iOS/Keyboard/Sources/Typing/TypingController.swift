@@ -66,7 +66,7 @@ final class TypingController: ObservableObject, KeyboardKeysDelegate {
         field = FieldTraits(keyboardType: proxy.keyboardType ?? .default,
                             returnKeyType: proxy.returnKeyType ?? .default,
                             showsGlobe: controller?.needsInputModeSwitchKey ?? true)
-        if field.isDigitPad { page = .digits }
+        if field.isDigitPad { page = .digits } else if page == .digits { page = .letters }
     }
 
     func geometryChanged(_ geometry: KeyGeometry) {
@@ -428,6 +428,9 @@ final class TypingController: ObservableObject, KeyboardKeysDelegate {
            reset.timeIntervalSince1970 > defaults.double(forKey: Self.clearedKey) {
             defaults.removeObject(forKey: Self.learnedKey)
             defaults.set(reset.timeIntervalSince1970, forKey: Self.clearedKey)
+            // The extension process outlives one appearance, so the engine
+            // still holds the words it loaded before the reset.
+            engine?.user.learned = [:]
         }
         if let data = defaults.data(forKey: Self.learnedKey),
            let learned = try? JSONDecoder().decode([String: UserWords.Entry].self, from: data) {
@@ -445,7 +448,9 @@ final class TypingController: ObservableObject, KeyboardKeysDelegate {
     }
 
     private func learn(_ word: String, strongly: Bool) {
-        guard var engine, word.count > 1, word.allSatisfy({ $0.isLetter || $0 == "'" }) else { return }
+        // Codes, card numbers and fields that opt out of correction are not learned.
+        guard assistanceAllowed, proxy?.autocorrectionType != .no,
+              var engine, word.count > 1, word.allSatisfy({ $0.isLetter || $0 == "'" }) else { return }
         let key = TypingEngine.key(of: word)
         guard strongly || !engine.isKnown(word, key: key) else { return }
         var entry = engine.user.learned[key] ?? UserWords.Entry(display: word, count: 0)

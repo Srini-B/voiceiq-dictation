@@ -296,6 +296,7 @@ final class DictationCoordinatorTests: XCTestCase {
         c.handle(.cancel)
 
         XCTAssertEqual(c.state, .cancelled)
+        await pump() // the keep-or-discard decision waits for the engine stop
         XCTAssertNotNil(discarded, "a 3s deliberate cancel still discards")
     }
 

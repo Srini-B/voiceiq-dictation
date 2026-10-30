@@ -276,11 +276,15 @@ struct PrivacyPane: View {
     }
     /// Who hears the audio: Claude + Nemotron sends it to DeepInfra only.
     private var audioOwner: String { provider == .anthropic ? "DeepInfra" : owner }
-    /// Meetings go to the other provider when only its key is saved, or when
-    /// the first one fails.
+    /// Meetings go to the first provider with a key, then to each other one
+    /// in turn while the earlier ones fail.
     private var meetingOwner: String {
         let names = meetingProviders.map(\.displayName)
-        return names.count > 1 ? "\(names[0]), or \(names[1]) if that fails" : names.first ?? provider.displayName
+        guard let first = names.first else { return provider.displayName }
+        let rest = names.dropFirst()
+        guard let last = rest.last else { return first }
+        let fallbacks = rest.count == 1 ? last : rest.dropLast().joined(separator: ", ") + " or " + last
+        return "\(first), or \(fallbacks) if that fails"
     }
     @State private var retentionDays = SettingsStore().audioRetentionDays
     @State private var transcriptRetentionDays = SettingsStore().transcriptRetentionDays

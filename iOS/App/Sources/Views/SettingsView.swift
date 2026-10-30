@@ -374,11 +374,15 @@ struct PrivacyView: View {
     @State private var meetingProviders = SettingsStore().meetingProviders
 
     private var destination: String { "\(provider.directName), with your key" }
-    /// Meetings go to the other provider when only its key is saved, or when
-    /// the first one fails.
+    /// Meetings go to the first provider with a key, then to each other one
+    /// in turn while the earlier ones fail.
     private var meetingOwner: String {
         let names = meetingProviders.map(\.directName)
-        return names.count > 1 ? "\(names[0]), or \(names[1]) if that fails" : names.first ?? provider.directName
+        guard let first = names.first else { return provider.directName }
+        let rest = names.dropFirst()
+        guard let last = rest.last else { return first }
+        let fallbacks = rest.count == 1 ? last : rest.dropLast().joined(separator: ", ") + " or " + last
+        return "\(first), or \(fallbacks) if that fails"
     }
 
     var body: some View {

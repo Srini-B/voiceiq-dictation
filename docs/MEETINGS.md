@@ -81,11 +81,14 @@ Measured 2026-10-29 on a synthetic 41 s two-person call started as a detected
 Zoom call: all six turns landed on the right side.
 
 Each request holds 240 s of speech (`MeetingTranscriber.deepInfraWindowSpeech`),
-not the 600 s other providers get. Above 300 s of audio DeepInfra still returns
+not the 600 s other providers get. The shorter window applies whenever a
+DeepInfra key is saved, even with another provider first, because a failed
+window can fall back to DeepInfra. Above 300 s of audio DeepInfra still returns
 the whole text, but word timings for only the last part, stamped past the end
 of the file (measured 2026-10-29: 38 of 421 words timed on a 639 s track).
 
 On the Mac, when Nemotron 3 Diarization is downloaded (Settings → Dictation),
+and the far side came back as one voice (as every DeepInfra window does),
 the on-device diarizer then splits those words by speaker
 (`LocalMeetingTranscriber.relabel`, hooked in as `MeetingTranscriber.relabel`):
 

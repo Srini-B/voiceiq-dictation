@@ -64,3 +64,22 @@ others is a separate step, after the owner confirms.
   also corrected to 0.05x input. Rows already booked keep the old figure.
 - Prompt caching and far-side diarization were added the same day; see
   `2026-10-29-meeting-notes-fixes.md`.
+
+## 2026-10-30: PR #30 review fixes
+
+CodeRabbit's eight findings were all real and are fixed:
+
+- ⌘Esc with a Command trigger: the ⌘ press begins finalizing, so the Esc
+  cancel found no capture, read 0 s and discarded recordings of any length.
+  The cancel now waits for the pending engine stop and keeps long recordings
+  with Retry. A scratch test failed without the fix (60 s recording
+  discarded) and passed with it; it was deleted afterwards.
+- Meetings: windows are 240 s whenever a DeepInfra key is saved, since any
+  failed window can fall back to it, and the far side is diarized on the Mac
+  whenever it came back as one voice.
+- Privacy: Settings on Mac and iPhone and `docs/PRIVACY.md` name every
+  provider a meeting can fall back to; Claude + Nemotron never streams audio.
+- Keyboard: a layout change cancels held touches (stale key indices, a
+  running delete timer); leaving a digit-pad field returns to letters; Reset
+  Keyboard Learning also clears the words the running extension holds; words
+  typed in code, card-number and no-correction fields are not learned.

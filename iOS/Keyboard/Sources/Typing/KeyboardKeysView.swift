@@ -100,6 +100,10 @@ final class KeyboardKeysView: UIView, UIInputViewAudioFeedback {
     }
 
     private func rebuild() {
+        // Held touches point into the old keys, and a held delete owns a timer.
+        let held = tracked.values
+        tracked = [:]
+        held.forEach { finish($0, cancelled: true) }
         keys.forEach { $0.view.removeFromSuperview() }
         globe?.removeFromSuperview()
         globe = nil

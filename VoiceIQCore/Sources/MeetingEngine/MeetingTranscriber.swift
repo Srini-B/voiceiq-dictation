@@ -61,7 +61,9 @@ public struct MeetingTranscriber: Sendable {
         // The provider names the window cache, so a redo after switching it
         // transcribes again instead of reusing the other model's windows.
         let first = providers().first
-        let window = first == .anthropic ? Self.deepInfraWindowSpeech : Self.windowSpeech
+        // DeepInfra may get any window as a fallback, so every window must fit it.
+        let reachesDeepInfra = providers().contains(.anthropic)
+        let window = reachesDeepInfra ? Self.deepInfraWindowSpeech : Self.windowSpeech
         let cache = folder.appendingPathComponent(
             "transcribe-\(Self.cacheVersion)-\(first?.rawValue ?? "none")-\(Int(window))", isDirectory: true)
         try FileManager.default.createDirectory(at: cache, withIntermediateDirectories: true)
@@ -91,7 +93,10 @@ public struct MeetingTranscriber: Sendable {
             }
             words = Self.mergeOwner(owner, into: words, overlaps: overlaps)
         }
-        if first == .anthropic, let relabel { words = await relabel(words, folder) }
+        // DeepInfra labels by track alone, so its far side is one voice; a
+        // diarizing provider that found several keeps its own labels.
+        let farVoices = Set(words.lazy.filter { $0.speaker != MeetingSpeaker.you }.map(\.speaker))
+        if reachesDeepInfra, farVoices.count <= 1, let relabel { words = await relabel(words, folder) }
         return SpeakerLinker.overlappingTurns(words).map { turn in
             TranscriptSegment(speaker: turn.speaker, text: turn.text, chunkIndex: 0, start: turn.start, end: turn.end)
         }

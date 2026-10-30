@@ -107,6 +107,8 @@ public final class DictationCoordinator: ObservableObject {
     private var liveTranscriber: (any DictationStreaming)?
     /// When the user let go; the gap to the audio's end is the finalize stage.
     private var finalizeRequestedAt: Date?
+    /// The engine stop a finalize started, until its result is used.
+    private var pendingStop: Task<AudioCaptureResult, Never>?
     private var screenContextCollector: ScreenContextCollector?
     /// Most recent metered level — decides whether the user was mid-word when
     /// they released the key.
@@ -475,13 +477,20 @@ public final class DictationCoordinator: ObservableObject {
         capture = nil
         let wasSpeaking = latestLevel >= currentTrailingThreshold()
         micLevel = 0
-        Task { @MainActor [weak self] in
+        let stop = Task { @MainActor [weak self] in
             if wasSpeaking, let engine {
                 await self?.captureTrailingSpeech(from: engine)
             }
-            let result = await engine?.stop() ?? AudioCaptureResult(framesWritten: 0, durationSeconds: 0)
-            guard self?.session?.id == sessionID else { return }
-            self?.completeFinalize(result: result)
+            return await engine?.stop() ?? AudioCaptureResult(framesWritten: 0, durationSeconds: 0)
+        }
+        pendingStop = stop
+        Task { @MainActor [weak self] in
+            let result = await stop.value
+            // A cancel while the engine was stopping took the result over.
+            guard let self, self.pendingStop == stop else { return }
+            self.pendingStop = nil
+            guard self.session?.id == sessionID else { return }
+            self.completeFinalize(result: result)
         }
     }
 
@@ -799,6 +808,16 @@ public final class DictationCoordinator: ObservableObject {
             capture = nil
             Task { @MainActor [weak self] in
                 let result = await engine.stop()
+                self?.completeCancel(result: result)
+            }
+            return
+        }
+        // ⌘Esc with a Command trigger: the ⌘ press already began finalizing,
+        // so the real duration arrives with that stop, not from meta.
+        if let stop = pendingStop {
+            pendingStop = nil
+            Task { @MainActor [weak self] in
+                let result = await stop.value
                 self?.completeCancel(result: result)
             }
             return
