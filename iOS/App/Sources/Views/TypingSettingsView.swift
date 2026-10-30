@@ -42,6 +42,10 @@ struct TypingSettingsView: View {
                 Button("Reset Keyboard Learning", role: .destructive) { confirmReset = true }
             }
         }
+        .safeAreaInset(edge: .top, spacing: 0) {
+            KeyboardPreview(preferences: preferences)
+                .animation(.easeInOut(duration: 0.2), value: preferences)
+        }
         .onChange(of: preferences) { _, value in SharedStore.shared.keyboardPreferences = value }
         .confirmationDialog("Forget the words the keyboard has learned?", isPresented: $confirmReset, titleVisibility: .visible) {
             Button("Reset Keyboard Learning", role: .destructive) { preferences.learningResetAt = Date() }

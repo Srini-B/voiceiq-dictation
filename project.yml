@@ -197,6 +197,9 @@ targets:
     sources:
       - path: iOS/App/Sources
       - path: iOS/App/Resources
+      # The keyboard's key views, for the live preview in Settings › Typing.
+      - path: iOS/Keyboard/Sources/Typing
+        includes: [KeyTheme.swift, KeyViews.swift, KeyLayout.swift, KeyboardKeysView.swift, TypingEngine.swift, Lexicon.swift]
     entitlements:
       path: iOS/App/VoiceIQiOS.entitlements
       properties:

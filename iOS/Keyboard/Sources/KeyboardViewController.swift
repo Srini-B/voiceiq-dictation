@@ -31,7 +31,7 @@ final class KeyboardViewController: UIInputViewController {
             hosting.view.topAnchor.constraint(equalTo: view.topAnchor),
             hosting.view.bottomAnchor.constraint(equalTo: view.bottomAnchor),
         ])
-        let height = view.heightAnchor.constraint(equalToConstant: Self.height(compact: false, preferences: typing.preferences))
+        let height = view.heightAnchor.constraint(equalToConstant: typing.preferences.keyboardHeight(compact: false))
         height.priority = .defaultHigh
         height.isActive = true
         self.height = height
@@ -51,24 +51,10 @@ final class KeyboardViewController: UIInputViewController {
         updateHeight()
     }
 
-    /// Bar plus four rows of keys, as tall as the iOS keyboard by default.
-    /// The number row adds a row; Short and Tall resize the keys.
-    private static func height(compact: Bool, preferences: KeyboardPreferences) -> CGFloat {
-        let numberRow: CGFloat = preferences.numberRow ? (compact ? 34 : 50) : 0
-        if compact { return 196 + numberRow }
-        let base: CGFloat
-        switch preferences.height {
-        case .short: base = 238
-        case .standard: base = 262
-        case .tall: base = 290
-        }
-        return base + numberRow
-    }
-
     private func updateHeight() {
         let compact = traitCollection.verticalSizeClass == .compact
         if typing.compact != compact { typing.compact = compact }
-        height?.constant = Self.height(compact: compact, preferences: typing.preferences)
+        height?.constant = typing.preferences.keyboardHeight(compact: compact)
     }
 
     override func traitCollectionDidChange(_ previous: UITraitCollection?) {

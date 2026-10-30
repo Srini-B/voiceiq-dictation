@@ -90,3 +90,18 @@ public struct KeyboardPreferences: Codable, Equatable, Sendable {
         learningResetAt = try? c.decode(Date.self, forKey: .learningResetAt)
     }
 }
+
+extension KeyboardPreferences {
+    /// The keyboard's height: the bar plus four rows of keys, as tall as the
+    /// iOS keyboard by default. The number row adds a row; Short and Tall
+    /// resize the keys. The keyboard and the app's preview both use it.
+    public func keyboardHeight(compact: Bool) -> CGFloat {
+        let extraRow: CGFloat = numberRow ? (compact ? 34 : 50) : 0
+        if compact { return 196 + extraRow }
+        switch height {
+        case .short: return 238 + extraRow
+        case .standard: return 262 + extraRow
+        case .tall: return 290 + extraRow
+        }
+    }
+}

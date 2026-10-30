@@ -85,3 +85,9 @@ keyboards to type.
   same drift over 290 ms slid "we".
 - Not verified on a physical iPhone yet: haptics, key sound, landscape, and
   how slide to type feels with a real finger.
+- Live preview in Settings › Typing (requested 2026-10-30, so a change shows
+  before the keyboard is opened). Built from the keyboard's own key views
+  rather than a SwiftUI copy, so it cannot drift from what the keyboard draws.
+  Verified in the Simulator: Number Row on added the digit row and removed the
+  corner hints; Mechanical with Dark keys turned the whole preview dark;
+  Predictions off emptied the bar, as on the keyboard.

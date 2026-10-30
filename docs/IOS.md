@@ -406,6 +406,14 @@ keyboard reads them each time it appears. Without Full Access iOS hides the App
 Group, so the keyboard uses the defaults. Learned words stay in the keyboard's
 own storage.
 
+**Preview.** Settings › Typing pins a keyboard preview above the form
+(`iOS/App/Sources/Views/KeyboardPreview.swift`). It draws the letters page
+with the keyboard's own `KeyboardKeysView`, `KeyTheme` and `KeyLayout`, which
+`project.yml` also compiles into the app target, so theme, key tone, layout,
+height, number row and predictions redraw it the moment they change. Height
+comes from `KeyboardPreferences.keyboardHeight(compact:)`, the same function
+the keyboard uses. The keys respond to touch but type nothing.
+
 **Measured** (2026-10-30, Mac harness over the same engine): 30 of 33 common
 misspellings corrected as the iOS keyboard does, about 7 ms a suggestion. Slide
 to type on simulated noisy paths for 400 words drawn by frequency: 357 right
