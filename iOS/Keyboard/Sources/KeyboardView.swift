@@ -19,24 +19,97 @@ private enum KeyboardPalette {
 struct KeyboardView: View {
     @ObservedObject var model: KeyboardModel
     @ObservedObject var offer: DictionaryOffer
+    @ObservedObject var typing: TypingController
     let controller: KeyboardViewController
+    /// The voice panel, opened from the bar; a running session shows it too.
+    @State private var voiceOpen = false
+
+    private enum Panel { case keys, voice, emoji, answer }
+
+    private var panel: Panel {
+        if model.answer != nil { return .answer }
+        if voiceOpen || model.phase == .recording || model.phase == .processing || model.waitingForApp { return .voice }
+        return typing.showsEmoji ? .emoji : .keys
+    }
 
     var body: some View {
-        VStack(spacing: 8) {
-            if let answer = model.answer {
-                AnswerPanel(answer: answer, model: model)
-            } else {
-                ModePicker(
-                    mode: $model.mode,
-                    locked: model.phase == .recording || model.phase == .processing
-                )
-                Spacer(minLength: 0)
-                center
-                Spacer(minLength: 0)
+        VStack(spacing: 0) {
+            topBar.frame(height: typing.compact ? 36 : 44)
+            Group {
+                switch panel {
+                case .answer:
+                    if let answer = model.answer { AnswerPanel(answer: answer, model: model).padding(8) }
+                case .voice where isLive:
+                    RecordingPanel(model: model).padding(8)
+                case .voice:
+                    VStack(spacing: 8) {
+                        Spacer(minLength: 0)
+                        center
+                        Spacer(minLength: 0)
+                        bottomRow
+                    }
+                    .padding(8)
+                case .emoji:
+                    EmojiPanel(typing: typing)
+                case .keys:
+                    KeysArea(typing: typing, controller: controller)
+                }
             }
-            bottomRow
+            .frame(maxHeight: .infinity)
         }
-        .padding(8)
+        .background {
+            if let background = typing.theme.background {
+                LinearGradient(colors: [Color(background.top), Color(background.bottom)], startPoint: .top, endPoint: .bottom)
+                    .ignoresSafeArea()
+            }
+        }
+        .onChange(of: model.phase) { old, new in
+            // A finished session goes back to the keys.
+            if old == .processing, new == .off || new == .warm { voiceOpen = false }
+        }
+    }
+
+    /// Recording, or writing the text while the app is running.
+    private var isLive: Bool {
+        model.hasFullAccess && (model.phase == .recording || (model.phase == .processing && !model.needsAppToFinish))
+    }
+
+    private var showsOffer: Bool {
+        if offer.feedback != nil { return true }
+        switch offer.offer {
+        case .selection: return true
+        case .copied: return !typing.typedSinceAppear
+        case nil: return false
+        }
+    }
+
+    private var topBar: some View {
+        HStack(spacing: 2) {
+            BarButton(systemImage: panel == .voice ? "keyboard" : "waveform",
+                      label: panel == .voice ? "Keyboard" : "VoiceiQ") {
+                voiceOpen.toggle()
+                typing.showsEmoji = false
+            }
+            Group {
+                switch panel {
+                case .voice:
+                    ModePicker(mode: $model.mode, locked: model.phase == .recording || model.phase == .processing)
+                case .keys where showsOffer:
+                    DictionaryOfferChip(offer: offer)
+                case .keys:
+                    SuggestionStrip(suggestions: typing.suggestions, theme: typing.theme, pick: typing.pick)
+                default:
+                    Color.clear
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            if panel != .voice {
+                BarButton(systemImage: "mic.fill", label: "Dictate", action: model.micTapped)
+            } else {
+                Color.clear.frame(width: 40)
+            }
+        }
+        .padding(.horizontal, 4)
     }
 
     @ViewBuilder private var center: some View {
@@ -154,7 +227,7 @@ private struct ModePicker: View {
             }
         }
         .padding(2)
-        .frame(width: 286, height: 32)
+        .frame(maxWidth: 286, maxHeight: 32)
         .background(Capsule().fill(Color(.secondarySystemFill)))
         .opacity(locked ? 0.7 : 1)
         .frame(maxWidth: .infinity)
@@ -255,6 +328,94 @@ private struct AnswerPanel: View {
         .background(RoundedRectangle(cornerRadius: 12).fill(Color(.secondarySystemBackground)))
         .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.primary.opacity(0.08)))
         .shadow(color: .black.opacity(0.08), radius: 5, y: 2)
+    }
+}
+
+/// What the keyboard shows while it listens: the live waveform, the time,
+/// and Cancel and Done. While the text is written the waveform pulses.
+private struct RecordingPanel: View {
+    @ObservedObject var model: KeyboardModel
+
+    private var recording: Bool { model.phase == .recording }
+
+    private var status: String {
+        guard recording else { return model.mode == .ask ? "Thinking…" : "Writing…" }
+        switch model.mode {
+        case .dictate: return "Listening"
+        case .translate: return "Listening to translate"
+        case .ask: return "Listening to your question"
+        }
+    }
+
+    var body: some View {
+        VStack(spacing: 10) {
+            LiveWaveform(listening: recording, color: recording ? KeyboardPalette.recording : KeyboardPalette.accent)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .padding(.horizontal, 4)
+            HStack {
+                CircleButton(systemImage: "xmark", label: "Cancel", fill: Color(.secondarySystemFill),
+                             foreground: .primary, action: model.cancelTapped)
+                    .opacity(recording ? 1 : 0)
+                    .disabled(!recording)
+                Spacer()
+                VStack(spacing: 2) {
+                    if let started = model.snapshot.recordingStartedAt, recording {
+                        Text(timerInterval: started...Date.distantFuture, countsDown: false)
+                            .font(.system(size: 20, weight: .semibold).monospacedDigit())
+                    } else {
+                        ProgressView()
+                    }
+                    Text(status)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                CircleButton(systemImage: "stop.fill", label: "Done", fill: KeyboardPalette.recording,
+                             foreground: .white, action: model.micTapped)
+                    .opacity(recording ? 1 : 0)
+                    .disabled(!recording)
+            }
+            .padding(.horizontal, 8)
+            .padding(.bottom, 6)
+        }
+    }
+}
+
+private struct CircleButton: View {
+    let systemImage: String
+    let label: String
+    let fill: Color
+    let foreground: Color
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.system(size: 18, weight: .bold))
+                .foregroundStyle(foreground)
+                .frame(width: 52, height: 52)
+                .background(Circle().fill(fill))
+        }
+        .buttonStyle(MicBarButtonStyle())
+        .accessibilityLabel(label)
+    }
+}
+
+private struct BarButton: View {
+    let systemImage: String
+    let label: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.system(size: 17, weight: .medium))
+                .frame(width: 40, height: 36)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(KeyboardPalette.accent)
+        .accessibilityLabel(label)
     }
 }
 

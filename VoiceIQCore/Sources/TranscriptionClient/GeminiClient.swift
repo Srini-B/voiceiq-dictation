@@ -48,6 +48,8 @@ public actor GeminiClient {
     let openAIKey: @Sendable () -> String?
     /// Read per call, like `provider`, so a model override applies at once.
     let openAIConfig: @Sendable () -> OpenAIConfig
+    let anthropicKey: @Sendable () -> String?
+    let deepInfraKey: @Sendable () -> String?
     /// Read per call, so flipping the provider in Settings takes effect on
     /// the next request without rebuilding the client.
     let provider: @Sendable () -> ModelProvider
@@ -56,12 +58,16 @@ public actor GeminiClient {
         apiKey: @escaping @Sendable () -> String?,
         openAIKey: @escaping @Sendable () -> String? = { nil },
         openAIConfig: @escaping @Sendable () -> OpenAIConfig = { OpenAIConfig() },
+        anthropicKey: @escaping @Sendable () -> String? = { nil },
+        deepInfraKey: @escaping @Sendable () -> String? = { nil },
         provider: @escaping @Sendable () -> ModelProvider = { .gemini }
     ) {
         self.session = Self.makeSession()
         self.apiKey = apiKey
         self.openAIKey = openAIKey
         self.openAIConfig = openAIConfig
+        self.anthropicKey = anthropicKey
+        self.deepInfraKey = deepInfraKey
         self.provider = provider
     }
 
@@ -78,9 +84,10 @@ public actor GeminiClient {
         deadline: TimeInterval,
         stage: UsageStage = .cleanup
     ) async throws -> String {
-        let provider = provider()
-        if provider == .openAI {
-            return try await openAIChat(prompt: prompt, images: images, deadline: deadline, stage: stage)
+        switch provider() {
+        case .openAI: return try await openAIChat(prompt: prompt, images: images, deadline: deadline, stage: stage)
+        case .anthropic: return try await anthropicMessage(prompt: prompt, images: images, deadline: deadline, stage: stage)
+        case .gemini: break
         }
         let thinkingConfig: [String: Any] = model.hasPrefix("gemini-2")
             ? ["thinkingBudget": 0]
@@ -230,6 +237,7 @@ public actor GeminiClient {
             let usage: TokenUsage? = switch via {
             case .gemini: TokenUsage.fromGenerateContent(data) ?? TokenUsage.fromInteraction(data)
             case .openAI: TokenUsage.fromOpenAIDuration(data, model: modelLabel) ?? TokenUsage.fromOpenAI(data)
+            case .anthropic: TokenUsage.fromAnthropic(data) ?? TokenUsage.fromTranscriptDuration(data, model: modelLabel)
             }
             if let usage {
                 UsageMeter.record(stage: stage, model: modelLabel, usage: usage)
@@ -309,10 +317,14 @@ public actor GeminiClient {
         customVocabulary: [String],
         deadline: TimeInterval
     ) async throws -> String {
-        if provider() == .openAI {
+        switch provider() {
+        case .openAI:
             // No smart mode; the dictionary rides along as keywords, and the
             // cleanup pass does the formatting.
             return try await openAITranscribe(audio: audio, mimeType: mimeType, keywords: customVocabulary, deadline: deadline)
+        case .anthropic:
+            return try await deepInfraTranscribe(audio: audio, mimeType: mimeType, vocabulary: customVocabulary, deadline: deadline)
+        case .gemini: break
         }
         var body: [String: Any] = [
             "model": model,
@@ -449,6 +461,14 @@ public actor GeminiClient {
         case .openAI:
             if let key = openAIKey() {
                 request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
+            }
+        case .anthropic:
+            // Two hosts under one provider: each key goes only to its own host.
+            if request.url?.host == Self.deepInfraEndpoint.host {
+                if let key = deepInfraKey() { request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization") }
+            } else if let key = anthropicKey() {
+                request.setValue(key, forHTTPHeaderField: "x-api-key")
+                request.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
             }
         }
     }

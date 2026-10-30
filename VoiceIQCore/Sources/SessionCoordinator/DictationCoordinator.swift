@@ -107,6 +107,8 @@ public final class DictationCoordinator: ObservableObject {
     private var liveTranscriber: (any DictationStreaming)?
     /// When the user let go; the gap to the audio's end is the finalize stage.
     private var finalizeRequestedAt: Date?
+    /// The engine stop a finalize started, until its result is used.
+    private var pendingStop: Task<AudioCaptureResult, Never>?
     private var screenContextCollector: ScreenContextCollector?
     /// Most recent metered level — decides whether the user was mid-word when
     /// they released the key.
@@ -475,13 +477,20 @@ public final class DictationCoordinator: ObservableObject {
         capture = nil
         let wasSpeaking = latestLevel >= currentTrailingThreshold()
         micLevel = 0
-        Task { @MainActor [weak self] in
+        let stop = Task { @MainActor [weak self] in
             if wasSpeaking, let engine {
                 await self?.captureTrailingSpeech(from: engine)
             }
-            let result = await engine?.stop() ?? AudioCaptureResult(framesWritten: 0, durationSeconds: 0)
-            guard self?.session?.id == sessionID else { return }
-            self?.completeFinalize(result: result)
+            return await engine?.stop() ?? AudioCaptureResult(framesWritten: 0, durationSeconds: 0)
+        }
+        pendingStop = stop
+        Task { @MainActor [weak self] in
+            let result = await stop.value
+            // A cancel while the engine was stopping took the result over.
+            guard let self, self.pendingStop == stop else { return }
+            self.pendingStop = nil
+            guard self.session?.id == sessionID else { return }
+            self.completeFinalize(result: result)
         }
     }
 
@@ -795,39 +804,55 @@ public final class DictationCoordinator: ObservableObject {
         // Teardown is async (it drains the HAL tail), so the keep-or-discard
         // decision — which needs the real recorded duration — completes after it.
         // The pill is already showing cancelled, so nothing visible waits.
+        // A new recording may start while the stop drains, so the decision
+        // is made for the session cancelled here, not whichever is current.
+        let cancelled = session
         if let engine = capture {
             capture = nil
             Task { @MainActor [weak self] in
                 let result = await engine.stop()
-                self?.completeCancel(result: result)
+                self?.completeCancel(cancelled, result: result)
             }
             return
         }
-        completeCancel(result: nil)
+        // ⌘Esc with a Command trigger: the ⌘ press already began finalizing,
+        // so the real duration arrives with that stop, not from meta.
+        if let stop = pendingStop {
+            pendingStop = nil
+            Task { @MainActor [weak self] in
+                let result = await stop.value
+                self?.completeCancel(cancelled, result: result)
+            }
+            return
+        }
+        completeCancel(cancelled, result: nil)
     }
 
-    private func completeCancel(result: AudioCaptureResult?) {
+    private func completeCancel(_ cancelled: Session?, result: AudioCaptureResult?) {
+        guard let cancelled else { return }
+        let isCurrent = session?.id == cancelled.id
+        guard var target = isCurrent ? session : cancelled else { return }
         // Post-finalize cancels have no live capture — fall back to the duration
         // finalizeSession already persisted, or Esc-during-transcription reads 0
         // and destroys a recording of ANY length (production pass 2, P0).
-        let duration = result?.durationSeconds ?? session?.meta.audioDurationSeconds ?? 0
-        let hasTranscript = session?.meta.rawTranscript != nil
-        let keeps = session?.context.mode.keepsRecording ?? true
-        if keeps, hasTranscript || duration >= Self.cancelKeepThreshold {
+        let duration = result?.durationSeconds ?? target.meta.audioDurationSeconds ?? 0
+        let hasTranscript = target.meta.rawTranscript != nil
+        if target.context.mode.keepsRecording, hasTranscript || duration >= Self.cancelKeepThreshold {
             // Long cancels stay recoverable — History shows them with Retry.
-            updateMeta {
-                $0.status = .cancelled
-                $0.audioDurationSeconds = $0.audioDurationSeconds ?? duration
-            }
+            target.meta.status = .cancelled
+            target.meta.audioDurationSeconds = target.meta.audioDurationSeconds ?? duration
+            target.meta.write(to: target.folder)
+            onSessionUpdate?(target.meta, target.folder)
             // Said once the duration is known, so a cancel that leaves no
             // trace never promises a row that is not there.
-            coachingHint = "Cancelled. Kept in History with Retry"
+            if isCurrent { coachingHint = "Cancelled. Kept in History with Retry" }
         } else {
             // Blips and short deliberate cancels leave no trace: the pill already
             // gave feedback in the moment; hidden audio is pure liability.
-            discardSessionArtifacts()
+            try? FileManager.default.removeItem(at: target.folder)
+            onSessionDiscard?(target.id)
         }
-        session = nil
+        if isCurrent { session = nil }
     }
 
     private func finishScreenContext() {

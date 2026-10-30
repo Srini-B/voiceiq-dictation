@@ -4,7 +4,7 @@ import Foundation
 ///
 ///   press while idle        → begin recording, hands-free
 ///   press while recording   → finalize
-///   Esc                     → cancel
+///   ⌘Esc                    → cancel
 ///   other key < 1s in       → accidental chord, silent abort (the tap only
 ///                             reports one while the modifier is still held)
 ///
@@ -37,7 +37,7 @@ public struct HotkeyProcessor {
     }
 
     /// True whenever a dictation session is in flight from the hotkey's perspective;
-    /// the event tap uses this to decide whether to intercept Esc.
+    /// the event tap uses this to decide whether to intercept ⌘Esc.
     public var isSessionActive: Bool { phase != .idle }
 
     public init() {}

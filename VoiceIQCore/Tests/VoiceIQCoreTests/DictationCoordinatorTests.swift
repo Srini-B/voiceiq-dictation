@@ -296,6 +296,11 @@ final class DictationCoordinatorTests: XCTestCase {
         c.handle(.cancel)
 
         XCTAssertEqual(c.state, .cancelled)
+        // The keep-or-discard decision waits for the engine stop.
+        for _ in 0..<200 where discarded == nil {
+            await Task.yield()
+            try? await Task.sleep(nanoseconds: 2_000_000)
+        }
         XCTAssertNotNil(discarded, "a 3s deliberate cancel still discards")
     }
 

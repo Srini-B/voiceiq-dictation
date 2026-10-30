@@ -138,11 +138,17 @@ final class PillHUDController: AgentOverlay {
         return NSSize(width: min(560, visible.width - 24), height: min(300, visible.height - 24))
     }
 
+    /// ⌘Esc, as for a dictation (`EventTapEngine.isCancel`). A bare Esc
+    /// belongs to the app in front.
+    private static func isCancel(_ event: NSEvent) -> Bool {
+        event.keyCode == 53 && event.modifierFlags.intersection([.command, .option, .control, .shift]) == .command
+    }
+
     private func installAnswerMonitors() {
         guard eventMonitors.isEmpty else { return }
         if let local = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .leftMouseDown, .rightMouseDown], handler: { [weak self] event in
             guard let self else { return event }
-            if event.type == .keyDown, event.keyCode == 53 {
+            if event.type == .keyDown, Self.isCancel(event) {
                 self.dismissAnswer()
                 return nil
             }
@@ -154,7 +160,7 @@ final class PillHUDController: AgentOverlay {
             eventMonitors.append(local)
         }
         if let global = NSEvent.addGlobalMonitorForEvents(matching: [.keyDown, .leftMouseDown, .rightMouseDown], handler: { [weak self] event in
-            if event.type == .keyDown, event.keyCode != 53 { return }
+            if event.type == .keyDown, !Self.isCancel(event) { return }
             self?.dismissAnswer()
         }) {
             eventMonitors.append(global)

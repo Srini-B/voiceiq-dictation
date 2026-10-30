@@ -54,6 +54,8 @@ final class DictationController {
             apiKey: { KeychainStore.loadAPIKey() },
             openAIKey: { KeychainStore.loadOpenAIKey() },
             openAIConfig: { SettingsStore().openAIConfig },
+            anthropicKey: { KeychainStore.loadKey(.anthropic) },
+            deepInfraKey: { KeychainStore.loadKey(.deepInfra) },
             provider: { SettingsStore().preferredProvider }
         )
         let service = GeminiTranscriptionService(client: client)
@@ -431,7 +433,7 @@ final class DictationController {
             if !engineActive {
                 activateEngine()
             }
-        case "apiKey", "openAIKey", "modelProvider":
+        case "apiKey", "openAIKey", "anthropicKey", "deepInfraKey", "modelProvider":
             if KeychainStore.hasModelKey {
                 // Covers the "I'll add it later" onboarding path, where the
                 // engine was never started: a key arriving in Settings must
@@ -876,10 +878,10 @@ final class DictationController {
         defer { previousState = state }
         dismissTask?.cancel()
 
-        // Esc must reach us even when the grammar is idle: in-flight transcription
+        // ⌘Esc must reach us even when the grammar is idle: in-flight transcription
         // and UI-started hands-free are "externally active" (audit L8/L13).
         // NOT .inserting: cancel is rejected there by design (the text exists),
-        // so consuming Esc would just eat the user's keystroke for ~1s.
+        // so consuming ⌘Esc would just eat the user's keystroke for ~1s.
         switch state {
         case .finalizing, .transcribing, .recording:
             engine.setExternalSessionActive(true)

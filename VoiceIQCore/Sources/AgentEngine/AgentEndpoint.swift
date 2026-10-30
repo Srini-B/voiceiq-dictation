@@ -55,6 +55,10 @@ public struct AgentEndpoint: Equatable, Sendable {
             // Responses, because GPT-6.1 Terra and GPT-6 Astra call tools only through it.
             return AgentEndpoint(baseURL: URL(string: "https://api.openai.com")!, apiKey: key, format: .openAIResponses,
                                  modelID: openAI.writingModel, label: provider.directName, isCustom: false)
+        case .anthropic:
+            guard let key = KeychainStore.loadKey(.anthropic) else { return nil }
+            return AgentEndpoint(baseURL: URL(string: "https://api.anthropic.com")!, apiKey: key, format: .anthropicMessages,
+                                 modelID: AnthropicConfig().agentModel, label: "Anthropic API", isCustom: false)
         }
     }
 

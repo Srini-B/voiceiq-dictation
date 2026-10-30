@@ -77,7 +77,7 @@ public struct SettingsStore: Sendable {
         return value
     }
 
-    /// Gemini or OpenAI, chosen in Settings → Advanced. Any other stored
+    /// Gemini, OpenAI or Claude + Nemotron, chosen in Settings → Advanced. Any other stored
     /// value (an older build's gateway) reads as Gemini.
     public var preferredProvider: ModelProvider {
         ModelProvider(rawValue: Self.defaults.string(forKey: "modelProvider") ?? "") ?? .gemini
@@ -439,6 +439,21 @@ public struct SettingsStore: Sendable {
 
     public func setMeetingScreenNames(_ enabled: Bool) {
         Self.set(enabled, forKey: "meetingScreenNames")
+    }
+
+    /// The note owner's name in meeting notes, which are shared, so the owner
+    /// is never "You" there. The Mac defaults to the account's full name.
+    public var meetingOwnerName: String {
+        if let name = Self.defaults.string(forKey: "meetingOwnerName") { return name }
+        #if os(macOS)
+        return NSFullUserName()
+        #else
+        return ""
+        #endif
+    }
+
+    public func setMeetingOwnerName(_ name: String) {
+        Self.set(name.trimmingCharacters(in: .whitespacesAndNewlines), forKey: "meetingOwnerName")
     }
 
     /// Only the user changes this. Rejected rewrites never turn it off.

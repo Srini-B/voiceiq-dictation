@@ -11,6 +11,11 @@ public struct TokenUsage: Equatable, Sendable, Codable {
     public var audioIn: Int = 0
     public var imageIn: Int = 0
     public var cachedIn: Int = 0
+    /// Anthropic cache writes, already counted in `textIn`. Billed at 1.25x
+    /// input for the five-minute cache and 2x for the one-hour cache; only
+    /// the booked cost carries the surcharge, so they are not stored.
+    public var cacheWrite5m: Int = 0
+    public var cacheWrite1h: Int = 0
     public var textOut: Int = 0
     public var audioOut: Int = 0
     public var thoughtOut: Int = 0
@@ -26,9 +31,11 @@ public struct TokenUsage: Equatable, Sendable, Codable {
     public var audioSeconds: Double? = nil
 
     public init(textIn: Int = 0, audioIn: Int = 0, imageIn: Int = 0, cachedIn: Int = 0,
+                cacheWrite5m: Int = 0, cacheWrite1h: Int = 0,
                 textOut: Int = 0, audioOut: Int = 0, thoughtOut: Int = 0, isEstimated: Bool = false,
                 reportedCostUSD: Double? = nil, audioSeconds: Double? = nil) {
         self.textIn = textIn; self.audioIn = audioIn; self.imageIn = imageIn; self.cachedIn = cachedIn
+        self.cacheWrite5m = cacheWrite5m; self.cacheWrite1h = cacheWrite1h
         self.textOut = textOut; self.audioOut = audioOut; self.thoughtOut = thoughtOut
         self.isEstimated = isEstimated
         self.reportedCostUSD = reportedCostUSD
@@ -43,6 +50,7 @@ public struct TokenUsage: Equatable, Sendable, Codable {
         TokenUsage(
             textIn: lhs.textIn + rhs.textIn, audioIn: lhs.audioIn + rhs.audioIn,
             imageIn: lhs.imageIn + rhs.imageIn, cachedIn: lhs.cachedIn + rhs.cachedIn,
+            cacheWrite5m: lhs.cacheWrite5m + rhs.cacheWrite5m, cacheWrite1h: lhs.cacheWrite1h + rhs.cacheWrite1h,
             textOut: lhs.textOut + rhs.textOut, audioOut: lhs.audioOut + rhs.audioOut,
             thoughtOut: lhs.thoughtOut + rhs.thoughtOut,
             isEstimated: lhs.isEstimated || rhs.isEstimated,
@@ -91,6 +99,14 @@ public struct TokenUsage: Equatable, Sendable, Codable {
         return fromAudioMinutes(seconds: seconds, model: model)
     }
 
+    /// DeepInfra's `verbose_json` transcript: no usage block, billed per
+    /// minute of the `duration` it reports.
+    public static func fromTranscriptDuration(_ data: Data, model: String) -> TokenUsage? {
+        guard let root = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+              let seconds = (root["duration"] as? NSNumber)?.doubleValue else { return nil }
+        return fromAudioMinutes(seconds: seconds, model: model)
+    }
+
     public static func fromAudioMinutes(seconds: Double, model: String) -> TokenUsage? {
         guard let perMinute = PriceBook.perMinutePrice(for: model) else { return nil }
         return TokenUsage(reportedCostUSD: seconds / 60 * perMinute, audioSeconds: seconds)
@@ -100,13 +116,21 @@ public struct TokenUsage: Equatable, Sendable, Codable {
 
     /// Anthropic Messages `usage`: `input_tokens` excludes the cached part,
     /// which arrives as `cache_read_input_tokens`; `cache_creation_input_tokens`
-    /// is billed as input at the write rate, so it counts as text in.
+    /// counts as text in, split by TTL under `cache_creation` so the price
+    /// book can add the write surcharge.
     public static func fromAnthropic(_ data: Data) -> TokenUsage? {
         guard let root = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
               let meta = root["usage"] as? [String: Any] else { return nil }
         var usage = TokenUsage()
         usage.cachedIn = int(meta, "cache_read_input_tokens", "cacheReadInputTokens")
-        usage.textIn = int(meta, "input_tokens", "inputTokens") + int(meta, "cache_creation_input_tokens", "cacheCreationInputTokens")
+        let written = int(meta, "cache_creation_input_tokens", "cacheCreationInputTokens")
+        usage.textIn = int(meta, "input_tokens", "inputTokens") + written
+        if let split = meta["cache_creation"] as? [String: Any] {
+            usage.cacheWrite5m = int(split, "ephemeral_5m_input_tokens", "ephemeral5mInputTokens")
+            usage.cacheWrite1h = int(split, "ephemeral_1h_input_tokens", "ephemeral1hInputTokens")
+        } else {
+            usage.cacheWrite5m = written
+        }
         usage.textOut = int(meta, "output_tokens", "outputTokens")
         return usage
     }

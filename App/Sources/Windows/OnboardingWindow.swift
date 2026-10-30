@@ -362,8 +362,9 @@ private struct APIKeyScreen: View {
     var body: some View {
         ScreenScaffold("Bring your own key.", "VoiceiQ uses your \(provider.displayName) API key. It's stored in your Mac's Keychain and only ever sent to \(host).") {
             VStack(spacing: VoiceIQUI.Spacing.s) {
+                // One key field: Claude + Nemotron needs two keys and is set up in Settings → Advanced.
                 Picker("Provider", selection: $provider) {
-                    ForEach(ModelProvider.allCases) { Text($0.displayName).tag($0) }
+                    ForEach(ModelProvider.allCases.filter { $0 != .anthropic }) { Text($0.displayName).tag($0) }
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
@@ -885,7 +886,7 @@ private struct HowToScreen: View {
                 VStack(alignment: .leading, spacing: VoiceIQUI.Spacing.s) {
                     gestureRow(keys: [keyName], title: "Dictate",
                                detail: "Talk as long as you like. Press \(keyName) again and polished text lands at your cursor.")
-                    gestureRow(keys: ["esc"], title: "Changed your mind",
+                    gestureRow(keys: ["⌘esc"], title: "Changed your mind",
                                detail: "Cancels the dictation. Long recordings are kept in History.")
                     gestureRow(keys: [shortcuts.shortcut(for: .askAnything).displayString], title: "Ask Anything",
                                detail: "Speak a question or a command over selected text. The answer shows on the pill.")

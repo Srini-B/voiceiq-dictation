@@ -12,8 +12,8 @@ options:
 # CURRENT_PROJECT_VERSION is the build number: raise it with every release.
 settings:
   base:
-    MARKETING_VERSION: "0.6.12"
-    CURRENT_PROJECT_VERSION: "57"
+    MARKETING_VERSION: "0.6.16"
+    CURRENT_PROJECT_VERSION: "61"
 
 packages:
   VoiceIQCore:
@@ -197,6 +197,9 @@ targets:
     sources:
       - path: iOS/App/Sources
       - path: iOS/App/Resources
+      # The keyboard's key views, for the live preview in Settings › Typing.
+      - path: iOS/Keyboard/Sources/Typing
+        includes: [KeyTheme.swift, KeyViews.swift, KeyLayout.swift, KeyboardKeysView.swift, TypingEngine.swift, Lexicon.swift]
     entitlements:
       path: iOS/App/VoiceIQiOS.entitlements
       properties:
@@ -279,6 +282,9 @@ targets:
           PROVISIONING_PROFILE_SPECIFIER: "VoiceiQ Keyboard App Store"
     sources:
       - path: iOS/Keyboard/Sources
+      # Word list and emoji: scripts/generate-keyboard-data.py.
+      - path: iOS/Keyboard/Resources
+        buildPhase: resources
     entitlements:
       path: iOS/Keyboard/VoiceIQKeyboard.entitlements
       properties:
@@ -296,9 +302,9 @@ targets:
           NSExtensionPointIdentifier: com.apple.keyboard-service
           NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).KeyboardViewController
           NSExtensionAttributes:
-            IsASCIICapable: false
+            IsASCIICapable: true
             PrefersRightToLeft: false
-            PrimaryLanguage: mul
+            PrimaryLanguage: en-US
             RequestsOpenAccess: true
 
   VoiceIQLiveActivity:

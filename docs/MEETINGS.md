@@ -64,6 +64,46 @@ Before 2026-10-27 every recording needed 20 s. A 2.5-minute Meet call had
 15.9 s, so the owner became an ordinary speaker and got a participant's name
 from the screen.
 
+## Speakers on Claude + Nemotron
+
+DeepInfra serves Nemotron 3.5 Transcribe without speaker labels: the model
+card's `<spk:N>` instruction, sent as the `prompt`, comes back as plain text,
+and the model is not on DeepInfra's chat completions. So on this provider
+`MeetingTranscriber` asks for timed words (`GeminiClient.deepInfraWords`) and
+labels each word by the track it was heard on (`MeetingTranscriber.labelByTrack`):
+
+- On a call, a word heard more on the mic than the far side is the note owner
+  (`you`); everyone on the far side is one speaker (`s1`).
+- Off a call (in person, or on iPhone, which records the mic alone), the whole
+  meeting is one speaker.
+
+Measured 2026-10-29 on a synthetic 41 s two-person call started as a detected
+Zoom call: all six turns landed on the right side.
+
+Each request holds 240 s of speech (`MeetingTranscriber.deepInfraWindowSpeech`),
+not the 600 s other providers get. The shorter window applies whenever a
+DeepInfra key is saved, even with another provider first, because a failed
+window can fall back to DeepInfra. Above 300 s of audio DeepInfra still returns
+the whole text, but word timings for only the last part, stamped past the end
+of the file (measured 2026-10-29: 38 of 421 words timed on a 639 s track).
+
+On the Mac, when Nemotron 3 Diarization is downloaded (Settings → Dictation),
+and the far side came back as one voice (as every DeepInfra window does),
+the on-device diarizer then splits those words by speaker
+(`LocalMeetingTranscriber.relabel`, hooked in as `MeetingTranscriber.relabel`):
+
+- On a call with an echo-free mic, the owner's words stay `you` and only the
+  system track is diarized. Its far-side words take the diarizer's speakers the
+  same way on-device words do (`label`, then `settled`).
+- Otherwise the whole mix is diarized, and on a call the id heard mostly from
+  the mic becomes the owner (`markOwner`).
+
+The diarizer runs alone, without Fluid Speech Mini
+(`LocalMeetingRequest.speechDirectory` is nil), in the same helper process as
+on-device meetings. Its speaker stretches are cached beside the audio as
+`speakers-system-v1.json` or `speakers-v1.json`. Without the model, while
+another meeting holds it, or if it fails, the track labels stay.
+
 ## Speaker names from the screen
 
 Call apps show the active speaker's name tag on their tile. VoiceiQ reads those
@@ -125,8 +165,43 @@ then the screen match, then the notes model's suggestion, then "Speaker N".
 
 Limits: a gallery view with every tile always visible gives no signal (a name
 that is always on screen has no lift); banners covering a tag lose it; the
-owner is named only when the call app marks their tile or row. The notes
-prompt keeps the label "You" for the owner and adds their name as context.
+owner is named only when the call app marks their tile or row.
+
+## The notes request
+
+`MeetingNotesPrompt.build` writes the request; its rules and sources are in
+docs/design/meeting-prompt-rulebook.md. Fixes from 2026-10-29:
+
+- **Output language.** `NLLanguageRecognizer` names the transcript's main
+  language when it is at least 60 % sure, and the request says
+  `OUTPUT LANGUAGE: English`. An all-English meeting had come back in Hindi
+  once, and in English on a redo of the byte-identical request.
+- **The owner by name.** Notes are shared, so the owner is never "You" in
+  them. The owner's label is, in order: the name typed for that meeting, the
+  owner marker on screen, **Your name in meeting notes** in Settings →
+  Dictation (`SettingsStore.meetingOwnerName`, key `meetingOwnerName`; the Mac
+  defaults to the account's full name), else "Note owner". The rules forbid
+  "you" for any participant.
+- **One spelling per name and term.** The request carries the user's
+  Dictionary (vocabulary and spellings) and custom writing rules, as dictation
+  cleanup does. The model fills a leading `glossary` field first: one entry per
+  person, product and term, with every transcript spelling that means it
+  (`"Nitin": ["Nithin", "Lithin", "Nathan"]`). Every other field uses those
+  spellings. `MeetingNotes` ignores the field when decoding.
+- **Model.** On Claude + Nemotron the notes are written by
+  `claude-sonnet-5-5` (`AnthropicConfig.notesModel`).
+
+## Redo and progress
+
+- **Redo notes** writes the notes again from the saved transcript.
+- **Redo transcript and notes** (`MeetingEngine.retry(id:fresh: true)`) drops
+  the cached words (`transcribe-*`, `local-words-*`, `speakers-*`) and hears
+  the whole meeting again. **Retry** after a failure keeps the finished
+  windows.
+- `MeetingEngine.processing` maps each meeting being processed to its step
+  (`.transcribing` or `.summarizing`). The Mac header shows a spinner with
+  "Transcribing" or "Making notes" while old notes stay on screen; iOS shows
+  the same step as a card above the notes.
 
 ## The pill in screen shares
 
@@ -151,7 +226,7 @@ mirrored or AirPlay display, still shows the pill.
 
 | File | Shows |
 | --- | --- |
-| `MeetingsView.swift` | Record button above the list, the detail header (title, Update notes after a speaker is renamed, Export menu, `…` menu with Redo notes / Redo transcript and notes / Retry / Delete, transcript toggle), the export message |
+| `MeetingsView.swift` | Record button above the list, the detail header (title, progress while transcribing or making notes, Update notes after a speaker is renamed, Export menu, `…` menu with Redo notes / Redo transcript and notes / Retry / Delete, transcript toggle), the export message |
 | `MeetingNotesColumn.swift` | Title, Summary, the meeting type's sections, Decisions, Action items as open circles ("Owner: task"), Notes |
 | `MeetingTranscriptColumn.swift` | The transcript in one `NSTextView`: speaker names in their own colour (`SpeakerPalette`), time on a right tab stop, search that filters and highlights |
 | `AssignSpeakersView.swift` | One card per speaker: name, a sample line, shuffle (next line), play (that line's audio) |

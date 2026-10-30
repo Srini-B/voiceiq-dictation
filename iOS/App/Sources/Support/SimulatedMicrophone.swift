@@ -28,8 +28,23 @@ final class SimulatedMicrophone: AudioCapturing {
 
     func start(writingTo url: URL) throws {
         target = url
+        // The file's own loudness, 50 ms at a time and looping, so the
+        // keyboard's waveform follows real speech.
+        let levels = (try? Self.converted(source)).flatMap { $0 }.map(Self.levels) ?? [0.3]
+        var index = 0
         timer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] _ in
-            self?.onLevel?(Float.random(in: 0.2...0.6))
+            self?.onLevel?(levels[index % levels.count])
+            index += 1
+        }
+    }
+
+    private static func levels(_ buffer: AVAudioPCMBuffer) -> [Float] {
+        guard let samples = buffer.int16ChannelData?[0] else { return [0.3] }
+        let chunk = 800, count = Int(buffer.frameLength)
+        return stride(from: 0, to: count, by: chunk).map { start in
+            let end = min(start + chunk, count)
+            let sum = (start..<end).reduce(Float(0)) { $0 + pow(Float(samples[$1]) / 32_768, 2) }
+            return AudioLevelCurve.level(fromRMS: sqrt(sum / Float(end - start)))
         }
     }
 

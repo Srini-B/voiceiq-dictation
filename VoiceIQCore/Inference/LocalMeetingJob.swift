@@ -22,7 +22,8 @@ enum LocalMeetingJob {
 
     static func run(_ request: LocalMeetingRequest) async throws -> LocalMeetingResult {
         let started = Date()
-        let words = try await transcribe(request.audio, models: request.speechDirectory)
+        var words: [LocalMeetingResult.Word] = []
+        if let speech = request.speechDirectory { words = try await transcribe(request.audio, models: speech) }
         try Task.checkCancellation()
         let spoken = Date()
         guard let diarizerDirectory = request.diarizerDirectory else {

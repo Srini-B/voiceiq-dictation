@@ -1,8 +1,9 @@
 # VoiceiQ for iOS
 
-A voice-only keyboard backed by the same dictation pipeline as the Mac app.
-The keyboard never records or calls a model. It sends commands to the VoiceiQ
-app, which records, transcribes with your own API key, and hands the text back.
+A full English typing keyboard with VoiceiQ dictation, Translate and Ask on
+one tap. The keyboard never records or calls a model. It sends commands to the
+VoiceiQ app, which records, transcribes with your own API key, and hands the
+text back. Typing runs entirely inside the keyboard, offline.
 Like the Mac, it runs Gemini or OpenAI models, with that provider's own key.
 
 ## Targets
@@ -10,7 +11,7 @@ Like the Mac, it runs Gemini or OpenAI models, with that provider's own key.
 | Target | Contents |
 | --- | --- |
 | `VoiceIQiOS` | App: onboarding, keys, settings, history, notes (meetings), background voice session |
-| `VoiceIQKeyboard` | Keyboard extension (`RequestsOpenAccess`), links `VoiceIQBridge` only |
+| `VoiceIQKeyboard` | Keyboard extension (`RequestsOpenAccess`), links `VoiceIQBridge` only; English typing with the word list in `iOS/Keyboard/Resources` |
 | `VoiceIQLiveActivity` | Dynamic Island and lock-screen Live Activity |
 
 All three share one App Group. Bundle IDs, the App Group and profile names
@@ -342,6 +343,83 @@ Speech Mini downloaded, the recording is transcribed in process after Stop as
 one speaker; there is no diarizer, real-time path, or Nemotron on iOS (see
 [On-device meetings](LOCAL_TRANSCRIPTION.md#on-device-meetings)).
 
+### Typing
+
+The keyboard opens on letter keys. A bar above them shows three suggestions,
+with the VoiceiQ button (waveform) on the left and the mic on the right. The
+mic starts a dictation at once; the waveform opens the voice panel with
+Dictate, Translate and Ask. A running dictation shows the recording panel
+until the text is delivered, then the keys come back.
+
+**Recording panel** (`RecordingPanel`, `LiveWaveform`). A red waveform fills
+the panel while recording: one bar every 0.06 s from `SharedStore.level`, which
+the app writes on each mic level callback. Bars rise fast and fall slowly,
+scroll right to left and fade with age. Below it: cancel (x), the elapsed
+time with the mode ("Listening", "Listening to translate", "Listening to your
+question"), and a red stop button that finishes the dictation. While the text
+is written the bars turn blue and a slow pulse runs across them with
+"Writing…" or "Thinking…"; the buttons hide. Reduce Motion freezes the bars.
+
+**Add to Dictionary.** With Full Access, selecting text in the field replaces
+the suggestions with "Add “word” to Dictionary". Text selected in another app
+or elsewhere on screen is not visible to a keyboard: copy it, and the bar
+offers "Add copied text to Dictionary" until you start typing.
+
+| Feature | How |
+| --- | --- |
+| Layouts | QWERTY, QWERTZ, AZERTY, Dvorak, Colemak (`KeyLayout`). English words on each. Optional number row; Short, Default or Tall height (`KeyboardViewController.height`). Without the number row, holding a top-row letter types its digit (shown in the key's corner) on the 10-key layouts. |
+| Pages | Letters, 123, #+=, number pads for number, decimal and phone fields. Email fields get @ and `.`, URL fields `.` and `/`; search fields keep a full space bar. Return shows the field's label (go, send, search…). |
+| Keys | Shift (tap once, double-tap for Caps Lock, hold and type), accents and alternates on long press (hold `.` for `.com`, the currency key for other currencies), key preview, repeat delete that moves to whole words, space-bar cursor drag. A touch goes to the nearest key in its row. |
+| Suggestions | Next-word predictions from word pairs, completions, and corrections. The typed letters show in quotes; picking them keeps and learns the word. |
+| Auto-correction | Delete right after a correction restores the typed word and learns it. On space or punctuation. Fixes a mistyped word one edit away (adjacent keys cost less), two edits away through `UITextChecker`, apostrophes (`dont` → `don't`), and capitals (`i` → `I`, `monday` → `Monday`). A real word is never replaced by another word. Off in URL, email and search fields and where the field turns it off. |
+| Auto-capitalization, “.” shortcut | Sentence starts, per the field's `autocapitalizationType`. Two spaces type a period. |
+| Slide to type | `SwipeClassifier` (ported from FlorisBoard). The slid word gets its space when the next word starts, so punctuation attaches; the bar offers the other candidates; delete removes the whole word. |
+| Your words | The VoiceiQ Dictionary (`SharedStore.dictionaryWords`), contact names and Text Replacements (`requestSupplementaryLexicon`), and words typed twice or picked from quotes. |
+| Emoji | Unicode's list in CLDR order, by category, with recents. |
+| No assistance | Password, one-time code, card, phone and postal code fields. |
+| Themes | Default, Clear, Physical, Mechanical and iOS 5, after the Raycast keyboard (`KeyTheme`). Physical and Mechanical take Automatic, Light or Dark keys, which pins the whole keyboard through `overrideUserInterfaceStyle`; iOS 5 is always light. Themes with their own background cannot paint the system's globe and mic strip below the keys. |
+| Sound and haptics | Key Sound plays the iOS keyboard's click, delete and modifier sounds (`AudioServicesPlaySystemSound` 1104, 1155, 1156), which follow the ring/silent switch. Haptic Feedback (off by default) needs Full Access and keeps one prepared generator. |
+
+Key labels are centred on the cap height, or the x-height for lowercase, not
+on the font's line box. A slide starts once the finger reaches another letter
+(at least a third of a key away) or moves three quarters of a key; moving
+more than 8 pt cancels the long press for accents. A slide shorter than 1.6
+keys that ends within 0.15 s is a sloppy tap and types its first key. The slide
+trail draws above the keys.
+
+**Data.** `lexicon.bin` holds 82,846 words and 242,342 word pairs (3.5 MB),
+memory-mapped so it does not count against the extension's memory limit. A
+word's key is lowercase without apostrophes, so one binary search finds `dont`
+and `don't`. `scripts/generate-keyboard-data.py` rebuilds it and `emoji.txt`
+from pinned sources (THIRD_PARTY_NOTICES.md, "Keyboard data").
+
+**Scoring.** Every candidate gets ln P(word | previous word), using the pair
+when the list has it and the word's frequency times 0.05 when it does not,
+plus the log cost of the edits from what was typed. On space, an unknown word
+becomes the best different spelling scoring above −24. A known word changes
+only to its own contraction or capitalization.
+
+**Settings.** Settings › Typing in the app writes `KeyboardPreferences` to the
+App Group: layout, predictions, auto-correction, auto-capitalization, slide to
+type, “.” shortcut, key sound, haptics, and Reset Keyboard Learning. The
+keyboard reads them each time it appears. Without Full Access iOS hides the App
+Group, so the keyboard uses the defaults. Learned words stay in the keyboard's
+own storage.
+
+**Preview.** Settings › Typing pins a keyboard preview above the form
+(`iOS/App/Sources/Views/KeyboardPreview.swift`). It draws the letters page
+with the keyboard's own `KeyboardKeysView`, `KeyTheme` and `KeyLayout`, which
+`project.yml` also compiles into the app target, so theme, key tone, layout,
+height, number row and predictions redraw it the moment they change. Height
+comes from `KeyboardPreferences.keyboardHeight(compact:)`, the same function
+the keyboard uses. The keys respond to touch but type nothing.
+
+**Measured** (2026-10-30, Mac harness over the same engine): 30 of 33 common
+misspellings corrected as the iOS keyboard does, about 7 ms a suggestion. Slide
+to type on simulated noisy paths for 400 words drawn by frequency: 357 right
+first and 389 in the top three at 0.15 key-width noise; 302 and 355 at 0.30;
+under 1 ms a gesture.
+
 ### Dictionary
 
 Settings › Dictionary matches the Mac: search, add with "Heard as", separate
@@ -457,7 +535,7 @@ runs. Everything needs Full Access.
 | Pill | Keyboard status plus Dynamic Island |
 | AX and paste insertion | `textDocumentProxy.insertText` |
 | Ask Anything, Translate, Paste last | Keyboard modes and Paste last |
-| Provider (Gemini or OpenAI), TinyFish | Same, in Settings › Provider & Keys and the iOS Keychain. Each key card carries the service's favicon from `Assets.xcassets/Provider*.imageset` (`BrandTile`); the OpenAI mark is a template image so it takes the ink colour in dark mode |
+| Provider (Gemini, OpenAI, or Claude + Nemotron with an Anthropic and a DeepInfra key), TinyFish | Same, in Settings › Provider & Keys and the iOS Keychain. Each key card carries the service's favicon from `Assets.xcassets/Provider*.imageset` (`BrandTile`); the OpenAI and Anthropic marks are template images so they take the ink colour in dark mode |
 | Transcription and Meeting transcription pickers (On device, provider) | Same; the second is **Notes transcription**, each in its own section because an iOS Form hides a segmented picker's label |
 | History stats: words, dictations, WPM, audio time | Home's stats grid |
 | Dictionary with search, CSV and Auto-learned | Same, synced through iCloud, plus adding a selection or a copied word from the keyboard |
@@ -514,3 +592,6 @@ is `false`, so builds skip the export-compliance question.
   the field: iPadOS hides third-party keyboards while a hardware keyboard is
   attached, so nothing can type it in place.
 - The first dictation after a cold start costs one trip to the app.
+- Typing is English only. Predictions come from book text, so chat phrasing
+  ranks lower than on Apple's keyboard until the keyboard learns it.
+- Haptics need Full Access; iOS mutes a keyboard's haptics without it.

@@ -37,7 +37,6 @@ struct DictationDetail: View {
                     Divider()
                     metadata
                 }
-                .frame(maxWidth: 720, alignment: .leading)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, VoiceIQUI.Spacing.xxl)
                 .padding(.vertical, VoiceIQUI.Spacing.xl)

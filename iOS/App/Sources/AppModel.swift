@@ -52,6 +52,8 @@ final class AppModel: ObservableObject {
             apiKey: { KeychainStore.loadAPIKey() },
             openAIKey: { KeychainStore.loadOpenAIKey() },
             openAIConfig: { SettingsStore().openAIConfig },
+            anthropicKey: { KeychainStore.loadKey(.anthropic) },
+            deepInfraKey: { KeychainStore.loadKey(.deepInfra) },
             provider: { SettingsStore().preferredProvider }
         )
         transcription = GeminiTranscriptionService(client: client)

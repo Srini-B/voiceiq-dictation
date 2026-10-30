@@ -267,12 +267,24 @@ struct PrivacyPane: View {
     private let settings = SettingsStore()
     @State private var provider = SettingsStore().preferredProvider
     @State private var meetingProviders = SettingsStore().meetingProviders
-    private var owner: String { provider == .gemini ? "Google" : "OpenAI" }
-    /// Meetings go to the other provider when only its key is saved, or when
-    /// the first one fails.
+    private var owner: String {
+        switch provider {
+        case .gemini: return "Google"
+        case .openAI: return "OpenAI"
+        case .anthropic: return "Anthropic and DeepInfra"
+        }
+    }
+    /// Who hears the audio: Claude + Nemotron sends it to DeepInfra only.
+    private var audioOwner: String { provider == .anthropic ? "DeepInfra" : owner }
+    /// Meetings go to the first provider with a key, then to each other one
+    /// in turn while the earlier ones fail.
     private var meetingOwner: String {
         let names = meetingProviders.map(\.displayName)
-        return names.count > 1 ? "\(names[0]), or \(names[1]) if that fails" : names.first ?? provider.displayName
+        guard let first = names.first else { return provider.displayName }
+        let rest = names.dropFirst()
+        guard let last = rest.last else { return first }
+        let fallbacks = rest.count == 1 ? last : rest.dropLast().joined(separator: ", ") + " or " + last
+        return "\(first), or \(fallbacks) if that fails"
     }
     @State private var retentionDays = SettingsStore().audioRetentionDays
     @State private var transcriptRetentionDays = SettingsStore().transcriptRetentionDays
@@ -337,7 +349,7 @@ struct PrivacyPane: View {
             }
 
             Section {
-                LocalAudioPrivacyRow(provider: owner, cloudDescription: "Sent to \(owner) with your key, transcribed every time")
+                LocalAudioPrivacyRow(provider: audioOwner, cloudDescription: "Sent to \(audioOwner) with your key, transcribed every time")
                 LabeledContent("Transcript text") { Text("Sent back only for writing rules, Ask Anything and Translate") }
                 LabeledContent("Text around the cursor") { Text("Only if Fit to existing text and writing rules are on") }
                 LabeledContent("Where you are typing") { Text("App name, window title and browser page address, only with writing rules") }
@@ -413,18 +425,20 @@ struct AdvancedPane: View {
         Form {
             ProviderSection(provider: $provider)
 
-            if provider == .gemini {
-                geminiKeySection
-            } else {
-                OpenAIKeySection()
+            switch provider {
+            case .gemini: geminiKeySection
+            case .openAI: ProviderKeySection.openAI
+            case .anthropic:
+                ProviderKeySection.anthropic
+                ProviderKeySection.deepInfra
             }
 
             TinyFishKeySection()
 
-            if provider == .gemini {
-                geminiModelSections
-            } else {
-                OpenAIModelsSection()
+            switch provider {
+            case .gemini: geminiModelSections
+            case .openAI: OpenAIModelsSection()
+            case .anthropic: EmptyView()
             }
 
             AgentProviderSection()

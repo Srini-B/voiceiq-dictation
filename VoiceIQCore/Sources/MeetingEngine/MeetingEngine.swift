@@ -6,8 +6,9 @@ import VoiceIQSpeech
     /// The recorder: offering, recording, or free. Notes are made apart from
     /// it, so a stopped meeting never holds the recorder while it is written up.
     @Published public private(set) var phase: MeetingPhase = .idle
-    /// Meetings whose transcript and notes are being made in the background.
-    @Published public private(set) var processing: Set<MeetingID> = []
+    /// Meetings whose transcript and notes are being made in the background,
+    /// with the step each is on (`.transcribing` or `.summarizing`).
+    @Published public private(set) var processing: [MeetingID: MeetingStatus] = [:]
     public var onNotice: ((String) -> Void)?
     /// The notes for a stopped recording are saved. The caller shows the same
     /// success mark a finished dictation gets.
@@ -115,18 +116,21 @@ import VoiceIQSpeech
         if let samples = screenNames?.stop() { try? store.save(screenSamples: samples, id: id) }
         screenNames = nil
         #endif
-        meta.endedAt = Date(); meta.durationSeconds = max(micDuration, systemDuration); meta.status = .transcribing
-        try? store.save(meta: meta)
-        processing.insert(id); phase = .idle
+        meta.endedAt = Date(); meta.durationSeconds = max(micDuration, systemDuration)
+        try? mark(&meta, .transcribing)
+        phase = .idle
         Task { await UsageMeter.$scope.withValue(UsageScope(activity: .meeting, sessionID: id.uuid.uuidString)) {
             await process(id: id, folder: folder, meta: meta)
         } }
     }
 
-    /// Transcribes again from the audio (finished windows are reused) and writes new notes.
-    public func retry(id: MeetingID) {
+    /// Transcribes again from the audio and writes new notes. A retry after a
+    /// failure reuses the finished windows; `fresh` (Redo transcript) hears
+    /// the whole meeting again.
+    public func retry(id: MeetingID, fresh: Bool = false) {
         guard !isBusy(id), let folder = store.folder(for: id), let meta = store.list().first(where: { $0.id == id }) else { return }
-        processing.insert(id)
+        if fresh { Self.dropTranscriptCaches(folder) }
+        processing[id] = .transcribing
         Task { await UsageMeter.$scope.withValue(UsageScope(activity: .meeting, sessionID: id.uuid.uuidString)) {
             await process(id: id, folder: folder, meta: meta)
         } }
@@ -136,10 +140,10 @@ import VoiceIQSpeech
     public func regenerateNotes(id: MeetingID) {
         guard !isBusy(id), var meta = store.list().first(where: { $0.id == id }),
               let transcript = try? store.loadTranscript(id: id), !transcript.isEmpty else { return }
-        processing.insert(id)
+        processing[id] = .summarizing
         Task { await UsageMeter.$scope.withValue(UsageScope(activity: .meeting, sessionID: id.uuid.uuidString)) {
             do {
-                meta.status = .summarizing; try store.save(meta: meta)
+                try mark(&meta, .summarizing)
                 guard !providers().isEmpty else { throw MeetingFailure.noNotesRoute }
                 let notes = try await writeNotes(transcript: transcript, meta: meta)
                 try finish(id: id, meta: &meta, transcript: transcript, notes: notes)
@@ -150,7 +154,25 @@ import VoiceIQSpeech
     /// Recording, or already being written up.
     public func isBusy(_ id: MeetingID) -> Bool {
         if case .recording(id, _) = phase { return true }
-        return processing.contains(id)
+        return processing[id] != nil
+    }
+
+    /// Saves the step and publishes it, so the meeting shows what it is doing.
+    private func mark(_ meta: inout MeetingMeta, _ status: MeetingStatus) throws {
+        meta.status = status
+        processing[meta.id] = status
+        try store.save(meta: meta)
+    }
+
+    /// The words cached beside the audio by `MeetingTranscriber` (the
+    /// `transcribe-*` windows) and `LocalMeetingTranscriber` (`local-words-*`,
+    /// `speakers-*`).
+    static func dropTranscriptCaches(_ folder: URL) {
+        let fm = FileManager.default
+        for name in (try? fm.contentsOfDirectory(atPath: folder.path)) ?? []
+        where name.hasPrefix("transcribe-") || name.hasPrefix("local-words-") || name.hasPrefix("speakers-") {
+            try? fm.removeItem(at: folder.appendingPathComponent(name))
+        }
     }
 
     private func process(id: MeetingID, folder: URL, meta original: MeetingMeta) async {
@@ -164,7 +186,7 @@ import VoiceIQSpeech
                 try finish(id: id, meta: &meta, transcript: [], notes: Self.emptyNotes(reason: "No speech was recorded."))
                 return
             }
-            meta.status = .transcribing; try store.save(meta: meta)
+            try mark(&meta, .transcribing)
             let transcript = try await transcribe(folder: folder, config: cfg)
             let words = transcript.reduce(0) { $0 + $1.text.split(whereSeparator: \.isWhitespace).count }
             guard words >= Self.minimumSummarizableWords else {
@@ -178,7 +200,7 @@ import VoiceIQSpeech
                 Log.meeting.info("screen names: \(meta.screenNames?.speakers.count ?? 0, privacy: .public) speakers named, \(meta.screenNames?.seen.count ?? 0, privacy: .public) names seen")
             }
             guard !providers().isEmpty else { throw MeetingFailure.noNotesRoute }
-            meta.status = .summarizing; try store.save(meta: meta)
+            try mark(&meta, .summarizing)
             let notes = try await writeNotes(transcript: transcript, meta: meta)
             try finish(id: id, meta: &meta, transcript: transcript, notes: notes)
         } catch { saveFailure(id: id, meta: &meta, error: error) }
@@ -190,7 +212,7 @@ import VoiceIQSpeech
     /// that fails.
     private func transcribe(folder: URL, config cfg: GeminiConfig) async throws -> [TranscriptSegment] {
         let cloud = MeetingTranscriber(client: client, models: .init(transcribe: transcribeModel ?? cfg.transcribeModel),
-                                       endpoint: cfg.endpoint, providers: providers)
+                                       endpoint: cfg.endpoint, providers: providers, relabel: relabel)
         guard let local = try await acquireLocal() else {
             guard !providers().isEmpty else { throw MeetingFailure.noRoute }
             return try await cloud.transcribe(folder: folder)
@@ -203,6 +225,27 @@ import VoiceIQSpeech
             guard !providers().isEmpty, !(error is CancellationError) else { throw error }
             Log.meeting.error("on-device transcription failed, using cloud: \(String(describing: error), privacy: .public)")
             return try await cloud.transcribe(folder: folder)
+        }
+    }
+
+    /// Nemotron 3 Diarization over words from a provider that labels no
+    /// speakers. Without the model, or if it fails, the words keep the track
+    /// labels: the owner, and one speaker for the far side.
+    private var relabel: (@Sendable ([TimedWord], URL) async -> [TimedWord])? {
+        guard let runner = localMeeting else { return nil }
+        return { words, folder in
+            guard let diarizer = await LocalMeetingTranscriber.acquireDiarizer(runner: runner) else {
+                Log.meeting.info("speaker diarizer not available; far side stays one speaker")
+                return words
+            }
+            do {
+                let labelled = try await diarizer.relabel(words, folder: folder)
+                Log.meeting.info("diarized cloud words: \(Set(labelled.map(\.speaker)).count, privacy: .public) speakers")
+                return labelled
+            } catch {
+                Log.meeting.error("diarizing cloud words failed: \(String(describing: error), privacy: .public)")
+                return words
+            }
         }
     }
 
@@ -227,7 +270,7 @@ import VoiceIQSpeech
         let reason = MeetingFailure.reason(for: error, tried: tried)
         Log.meeting.error("meeting \(id.uuid.uuidString, privacy: .public) failed: \(String(describing: error), privacy: .public)")
         meta.status = .failed(reason); try? store.save(meta: meta)
-        processing.remove(id)
+        processing[id] = nil
         switch error as? MeetingFailure {
         case .noRoute: onNotice?("\(MeetingFailure.noun) saved without a transcript — add a key, then Retry in \(MeetingFailure.listName)")
         case .noNotesRoute: onNotice?("\(MeetingFailure.noun) transcribed on device — add a key for notes, then Retry in \(MeetingFailure.listName)")
@@ -236,10 +279,12 @@ import VoiceIQSpeech
     }
 
     private func writeNotes(transcript: [TranscriptSegment], meta: MeetingMeta) async throws -> MeetingNotes {
-        let cfg = config()
+        let cfg = config(), settings = SettingsStore(), dictionary = DictionaryStore()
         let prompt = MeetingNotesPrompt.build(transcript: transcript, context: .init(
             startedAt: meta.startedAt, durationSeconds: meta.durationSeconds,
-            app: meta.source.map(Self.name), names: meta.speakerNames, screenNames: meta.screenNames))
+            app: meta.source.map(Self.name), names: meta.speakerNames, screenNames: meta.screenNames,
+            ownerName: settings.meetingOwnerName, vocabulary: dictionary.sanitizedVocabulary(),
+            spellings: dictionary.spellings(), writingRules: settings.customWritingRules))
         var lastError: Error = TranscriptionError.network("no_provider")
         for via in providers() {
             do {
@@ -269,7 +314,7 @@ import VoiceIQSpeech
         // Names typed while the notes were written stay, and show the notes as out of date.
         if let current = store.list().first(where: { $0.id == id }) { meta.speakerNames = current.speakerNames }
         try store.save(meta: meta)
-        processing.remove(id); onNotesReady?()
+        processing[id] = nil; onNotesReady?()
     }
 
     /// Detection only ever offers. A recording in progress is never stopped by
@@ -316,9 +361,9 @@ public enum MeetingFailure: Error, Equatable {
     static func reason(for error: Error, tried: String) -> String {
         switch error {
         case MeetingFailure.noRoute:
-            return "No key can transcribe meetings. Add a Gemini or OpenAI key in \(keysPlace). The recording is saved; press Retry once a key is added."
+            return "No key can transcribe meetings. Add a provider's keys in \(keysPlace). The recording is saved; press Retry once a key is added."
         case MeetingFailure.noNotesRoute:
-            return "The transcript was made on device, but no key can write the notes. Add a Gemini or OpenAI key in \(keysPlace), then press Retry."
+            return "The transcript was made on device, but no key can write the notes. Add a provider's keys in \(keysPlace), then press Retry."
         case let error as TranscriptionError:
             switch error {
             case .auth:

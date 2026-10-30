@@ -6,7 +6,7 @@
 
 **Press a key. Speak. It types.**
 
-Smart dictation, Ask Anything, Translate, and meeting notes for macOS and iPhone, on Gemini or OpenAI with your own key.
+Smart dictation, Ask Anything, Translate, and meeting notes for macOS and iPhone, on Gemini, OpenAI, or Claude + Nemotron with your own keys.
 
 </div>
 
@@ -27,7 +27,7 @@ while you talk, and a History window that proves nothing was ever lost.
 | Key | What happens |
 | --- | --- |
 | **Dictation key** (default `fn`) | One press starts, one press finishes. Hands-free, no holding. A bare modifier or a combination like ⌥D. |
-| **`Esc`** | Cancels. Anything over 10 seconds is still kept in History. |
+| **⌘Esc** | Cancels. A bare `Esc` goes to the app you are in. Anything over 10 seconds is still kept in History. |
 | **⌃⌥A** | Ask Anything. Speak a question or a command over selected text. |
 | **⌃⌥T** | Translate. Speak in any language; the target language is typed. |
 | **⌥M** | Start or stop meeting notes. |
@@ -50,8 +50,8 @@ Every failure is retryable from History, and Retry transcribes any dictation aga
 listening until you actually stop.
 
 **It is private by architecture.** Your voice goes from your Mac straight to the
-provider you choose, Gemini or OpenAI, with *your* key. No middleman server, no
-account, no analytics, no keystroke logging — one network host per dictation,
+provider you choose, Gemini, OpenAI, or Claude + Nemotron, with *your* key. No middleman server, no
+account, no analytics, no keystroke logging — one network host per dictation step,
 and you can read every line of the code that talks to it. Screen context (a few downscaled screenshots sent with each
 dictation so on-screen names and paths are spelled right) can be switched off
 in Settings → Dictation, and so can Fit to existing text (the text around the
@@ -187,9 +187,13 @@ built from — are in [docs/design/](docs/design/).
 
 ## iPhone
 
-VoiceiQ also ships as an iPhone app (iOS 17+) with a voice-only keyboard. Add
-the VoiceiQ keyboard with Full Access, tap the mic in any app, and the text
-lands where you were typing.
+VoiceiQ also ships as an iPhone app (iOS 17+) with its own keyboard. Add the
+VoiceiQ keyboard with Full Access, tap the mic in any app, and the text lands
+where you were typing.
+
+- **A full English keyboard.** Predictions, auto-correction, slide to type,
+  QWERTY and four other layouts, and emoji, all offline. It knows your
+  Dictionary, contacts and Text Replacements (docs/IOS.md, "Typing").
 
 - **One trip to the app, once.** The first tap starts a background session and
   sends you back to the app you were in. After that the mic starts in place,

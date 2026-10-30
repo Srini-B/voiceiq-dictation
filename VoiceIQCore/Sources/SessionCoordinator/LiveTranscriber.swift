@@ -105,6 +105,9 @@ public final class LiveTranscriber: DictationStreaming {
             return make(model: model, key: key, renewAfter: 3300,
                         dialect: OpenAILiveDialect(model: model, delay: .low, keywords: vocabulary),
                         transport: { WebSocketTransport.openAI(apiKey: { key }) })
+        case .anthropic:
+            // Nemotron 3.5 Transcribe is offline-only; the saved recording is sent when dictation stops.
+            return nil
         }
     }
 

@@ -94,7 +94,7 @@ struct MeetingsPane: View {
             }
             HStack(spacing: 0) {
                 if wide || !transcriptShown {
-                    MeetingNotesColumn(meeting: meeting, notes: notes, busy: engine.isBusy(meeting.id))
+                    MeetingNotesColumn(meeting: meeting, notes: notes, step: step(meeting))
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
                 if transcriptShown {
@@ -124,6 +124,11 @@ struct MeetingsPane: View {
         return HStack(spacing: VoiceIQUI.Spacing.xs) {
             Text(title(meeting)).font(VoiceIQUI.TypeScale.title()).lineLimit(1)
             Spacer(minLength: VoiceIQUI.Spacing.s)
+            if notes != nil, let step = step(meeting) {
+                ProgressView().controlSize(.small)
+                Text(step).foregroundStyle(.secondary).lineLimit(1).fixedSize()
+                    .padding(.trailing, VoiceIQUI.Spacing.xs)
+            }
             if notes != nil, meeting.status == .done, meeting.namesChangedSinceNotes {
                 Button {
                     engine.regenerateNotes(id: meeting.id)
@@ -148,15 +153,22 @@ struct MeetingsPane: View {
                     Button("Retry") { engine.retry(id: meeting.id) }
                 } else {
                     Button("Redo notes") { engine.regenerateNotes(id: meeting.id) }.disabled(transcript.isEmpty)
-                    Button("Redo transcript and notes") { engine.retry(id: meeting.id) }
+                    Button("Redo transcript and notes") { engine.retry(id: meeting.id, fresh: true) }
                 }
                 Divider()
                 Button("Delete…", role: .destructive) { confirmingDelete = true }
             } label: {
-                // As text, the symbol gets the same bezel height as Export; a bare Image gets a shorter one.
-                Text(Image(systemName: "ellipsis"))
+                // MEASURED 2026-10-29. macOS 26 sizes a menu bezel from its
+                // label's text: as text the symbol gets Export's height, and
+                // an image or a frame gets a shorter bezel. macOS 27 drew
+                // Text(Image(...)) here as an empty bezel, and gives a framed
+                // icon-only Label Export's height.
+                if #available(macOS 27, *) {
+                    Label("More", systemImage: "ellipsis").labelStyle(.iconOnly).frame(minHeight: 16)
+                } else {
+                    Text(Image(systemName: "ellipsis")).accessibilityLabel("More")
+                }
             }
-            .accessibilityLabel("More")
             .menuIndicator(.hidden)
             .fixedSize()
             .disabled(busy)
@@ -171,6 +183,16 @@ struct MeetingsPane: View {
         .padding(.horizontal, VoiceIQUI.Spacing.l)
         .padding(.top, VoiceIQUI.Spacing.l)
         .padding(.bottom, VoiceIQUI.Spacing.s)
+    }
+
+    /// What the meeting is doing in the background, in words; nil when idle.
+    private func step(_ meeting: MeetingMeta) -> String? {
+        if case .recording(meeting.id, _) = engine.phase { return "Recording" }
+        switch engine.processing[meeting.id] {
+        case .summarizing?: return "Making notes"
+        case nil: return nil
+        default: return "Transcribing"
+        }
     }
 
     private var selected: MeetingMeta? { meetings.first { $0.id == selection } }

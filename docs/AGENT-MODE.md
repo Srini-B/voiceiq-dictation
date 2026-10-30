@@ -180,7 +180,9 @@ the next shortcut press. It resolves to:
 1. **Custom provider** (Settings → Advanced → Agent mode provider) when
    enabled, the base URL parses, and a model is selected.
 2. Otherwise the dictation route: Gemini uses the formatting model on the
-   configured endpoint; OpenAI uses the writing model on `api.openai.com`.
+   configured endpoint; OpenAI uses the writing model on `api.openai.com`;
+   Claude + Nemotron uses `claude-sonnet-5-5` on `api.anthropic.com` in the
+   Anthropic Messages format (`AnthropicConfig.agentModel`).
 
 The override (`AgentProviderOverride`, JSON under `agentProviderOverride`;
 key in the Keychain as `agent-provider-api-key`) has a base URL, API key,

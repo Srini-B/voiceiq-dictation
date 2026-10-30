@@ -5,16 +5,17 @@ import VoiceIQSpeech
 
 /// The pages under Settings, in sidebar order.
 enum SettingsSection: String, CaseIterable, Identifiable {
-    case keys, keyboard, dictation, dictionary, returnApps, privacy, cost, advanced
+    case keys, keyboard, typing, dictation, dictionary, returnApps, privacy, cost, advanced
     var id: String { rawValue }
 
-    static let primary: [SettingsSection] = [.keys, .keyboard, .dictation, .dictionary, .returnApps]
+    static let primary: [SettingsSection] = [.keys, .keyboard, .typing, .dictation, .dictionary, .returnApps]
     static let secondary: [SettingsSection] = [.privacy, .cost, .advanced]
 
     var title: String {
         switch self {
         case .keys: return "Provider & Keys"
         case .keyboard: return "Keyboard & Permissions"
+        case .typing: return "Typing"
         case .dictation: return "Dictation"
         case .dictionary: return "Dictionary"
         case .returnApps: return "Return to Apps"
@@ -28,6 +29,7 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         switch self {
         case .keys: return "key.fill"
         case .keyboard: return "keyboard.fill"
+        case .typing: return "character.cursor.ibeam"
         case .dictation: return "waveform"
         case .dictionary: return "character.book.closed.fill"
         case .returnApps: return "arrow.uturn.backward"
@@ -41,6 +43,7 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         switch self {
         case .keys: KeysView()
         case .keyboard: KeyboardSetupView()
+        case .typing: TypingSettingsView()
         case .dictation: DictationSettingsView()
         case .dictionary: DictionaryView()
         case .returnApps: ReturnAppsView()
@@ -371,11 +374,15 @@ struct PrivacyView: View {
     @State private var meetingProviders = SettingsStore().meetingProviders
 
     private var destination: String { "\(provider.directName), with your key" }
-    /// Meetings go to the other provider when only its key is saved, or when
-    /// the first one fails.
+    /// Meetings go to the first provider with a key, then to each other one
+    /// in turn while the earlier ones fail.
     private var meetingOwner: String {
         let names = meetingProviders.map(\.directName)
-        return names.count > 1 ? "\(names[0]), or \(names[1]) if that fails" : names.first ?? provider.directName
+        guard let first = names.first else { return provider.directName }
+        let rest = names.dropFirst()
+        guard let last = rest.last else { return first }
+        let fallbacks = rest.count == 1 ? last : rest.dropLast().joined(separator: ", ") + " or " + last
+        return "\(first), or \(fallbacks) if that fails"
     }
 
     var body: some View {
