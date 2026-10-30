@@ -82,6 +82,14 @@ new tokens and read 12,573 from the cache. Editing the Dictionary or the writing
 rules, including a word the app learns on its own, changes the block, so the
 next dictation writes it again.
 
+Cleanup runs on Claude Sonnet 5.5 since 2026-10-30 (Haiku 5.5 before): $2 in,
+$10 out, $2.50 five-minute write, $4 one-hour write, $0.10 cache hit per
+million tokens. On the 12.6k-token rules block a write costs about $0.05 and
+a hit $0.0013, against $0.025 uncached. The one-hour TTL stays: on the nine
+dictations of 2026-10-29 (seven within an hour of the previous one, three
+within five minutes) the rules cost about $0.11 with it, $0.19 with five
+minutes and $0.23 without caching.
+
 A cache write counts as input tokens. `fromAnthropic` also keeps the write's
 TTL from `usage.cache_creation`, and `ModelPrice.cost` adds the write surcharge:
 0.25× input for a five-minute write (billed 1.25×) and 1× for a one-hour write

@@ -41,3 +41,24 @@ send about 500 uncached tokens with every dictation instead, which costs more.
   (22 × 0.10 + 16,811 × 0.20 + 16 × 0.50) / 1M from the price book, and checked
   that the cleanup split sends `ttl: "1h"`. Deleted afterwards.
 - `swift test`: 143 tests pass.
+
+## 2026-10-30: Sonnet 5.5 writes
+
+The user found Haiku 5.5 cleanup weak and asked for Sonnet 5.5
+(`AnthropicConfig.writingModel = "claude-sonnet-5-5"`), so cleanup, agent,
+translation and notes all run on Sonnet. Prices from Anthropic's page on
+2026-10-30: $2 in, $2.50 five-minute write, $4 one-hour write, $0.10 cache hit,
+$10 out per million tokens; `PriceBook` already had them.
+
+The one-hour cache stays. On the 12.6k-token rules block and the nine
+dictations of 2026-10-29 it costs about $0.11, against $0.19 with the
+five-minute cache and $0.23 uncached. Sonnet's minimum cacheable prompt is 512
+tokens, as on Haiku.
+
+Live probe with the real key: the first call wrote 2,096 tokens
+(`ephemeral_1h_input_tokens`), the second read 2,096 from cache, and the
+cleaned text was right. Each cleanup now costs about 20× a Haiku call and is
+slower.
+
+Rollback: set `writingModel` back to `claude-haiku-5-5`.
+

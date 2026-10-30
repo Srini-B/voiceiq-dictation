@@ -1,13 +1,13 @@
 import Foundation
 
 /// Claude + Nemotron's models for each role: NVIDIA Nemotron 3.5 Transcribe on
-/// DeepInfra hears every recording (dictation and meetings), Claude Haiku 5.5
-/// writes (cleanup, Ask Anything, Translate), and Claude Sonnet 5.5 writes
-/// meeting notes, which must keep one spelling per name across a whole
-/// meeting, and drives agent mode, which clicks by screenshot pixel.
+/// DeepInfra hears every recording (dictation and meetings) and Claude Sonnet
+/// 5.5 does all the writing: cleanup, Ask Anything, Translate, meeting notes
+/// and agent mode. Haiku 5.5 wrote cleanup until 2026-10-30, when the user
+/// found its cleanups too weak.
 public struct AnthropicConfig: Sendable, Equatable {
     public var transcribeModel = "nvidia/NVIDIA-Nemotron-3.5-Transcribe-30B-A4B"
-    public var writingModel = "claude-haiku-5-5"
+    public var writingModel = "claude-sonnet-5-5"
     public var notesModel = "claude-sonnet-5-5"
     public var agentModel = "claude-sonnet-5-5"
 
@@ -102,8 +102,11 @@ extension GeminiClient {
     /// the dictionary or writing rules, so they carry the cache breakpoint;
     /// the field rules, reminder and PLACE line after it vary per dictation.
     /// The one-hour TTL lets dictations minutes apart share one write; it
-    /// costs 2x input against 1.25x for five minutes, so it pays once about
-    /// half of dictations land within the hour (2026-10-29 estimate).
+    /// costs 2x input against 1.25x for five minutes, and a hit costs 0.05x
+    /// on Sonnet 5.5. It beats no cache once about half of dictations land
+    /// within the hour of the last one. On the 12.6k-token rules and the nine
+    /// dictations of 2026-10-29 it costs about $0.11 on Sonnet, against $0.19
+    /// with five minutes and $0.23 uncached.
     /// Nil for any other prompt, which goes as one user turn uncached.
     static func anthropicCleanupSplit(_ prompt: String) -> (system: [[String: Any]], dictation: String)? {
         guard let split = dictationSplit(prompt),
