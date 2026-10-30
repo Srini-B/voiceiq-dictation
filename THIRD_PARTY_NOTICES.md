@@ -100,7 +100,49 @@ one pack. No weights are bundled with the app. File hashes are in
 - Source: https://gitlab.freedesktop.org/pulseaudio/webrtc-audio-processing at `d0569cfa50c1858ee279d77b3fc8870be6902441`, built by `VoiceIQCore/Vendor/WebRTCAEC/build.sh` together with VoiceiQ's own bridge (`bridge/voiceiq_aec.cc`, Apache 2.0)
 - Licenses: WebRTC BSD 3-Clause plus its patent grant; Abseil Apache 2.0; PFFFT, Ooura FFT, the WebRTC FFT, and the square-root routine under their BSD-style terms. Full texts are in `VoiceIQCore/Vendor/WebRTCAEC/Notices/`.
 
+## Keyboard data
+
+`scripts/generate-keyboard-data.py` builds `iOS/Keyboard/Resources/lexicon.bin`
+and `emoji.txt` from these files, pinned by commit in the script.
+
+### SymSpell frequency dictionaries
+
+- Files: `frequency_dictionary_en_82_765.txt` (word counts) and
+  `frequency_bigramdictionary_en_243_342.txt` (word-pair counts), from
+  [wolfgarbe/SymSpell](https://github.com/wolfgarbe/SymSpell) at `91fe939`
+- License: MIT, Copyright (c) 2018 Wolf Garbe. The counts derive from Google
+  Books Ngram data (CC BY 3.0).
+
+### SCOWL / Hunspell en_US
+
+- Used for the capitalized spelling of names and brands ("iPhone", "Monday")
+  and which contractions are words. From
+  [wooorm/dictionaries](https://github.com/wooorm/dictionaries) at `8cfea40`.
+- License: the SCOWL copyright and permission notice, Copyright 2000-2018 by
+  Kevin Atkinson, with the Ispell BSD license for the parts it derives from.
+
+### List of Dirty, Naughty, Obscene and Otherwise Bad Words
+
+- Words on it stay valid but are never suggested. From
+  [LDNOOBW](https://github.com/LDNOOBW/List-of-Dirty-Naughty-Obscene-and-Otherwise-Bad-Words) at `5faf2ba`.
+- License: Creative Commons Attribution 4.0 International.
+
+### Unicode emoji
+
+- `emoji-test.txt`, Emoji 15.0, from unicode.org.
+- License: Unicode License v3.
+
 ## Adapted source
+
+### FlorisBoard (slide to type)
+
+- File: `iOS/Keyboard/Sources/Typing/SwipeClassifier.swift`
+- Source: `StatisticalGlideTypingClassifier.kt` from
+  [florisboard/florisboard](https://github.com/florisboard/florisboard), which
+  credits Étienne Desticourt's AnySoftKeyboard classifier. Ported to Swift:
+  the shape and location Gaussians, extremity and length pruning, and doubled
+  letter loops. The sample count and the word prior are VoiceiQ's.
+- License: Apache 2.0, Copyright The FlorisBoard Contributors.
 
 ### Dictus (iOS host-app return)
 

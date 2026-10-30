@@ -187,9 +187,13 @@ built from — are in [docs/design/](docs/design/).
 
 ## iPhone
 
-VoiceiQ also ships as an iPhone app (iOS 17+) with a voice-only keyboard. Add
-the VoiceiQ keyboard with Full Access, tap the mic in any app, and the text
-lands where you were typing.
+VoiceiQ also ships as an iPhone app (iOS 17+) with its own keyboard. Add the
+VoiceiQ keyboard with Full Access, tap the mic in any app, and the text lands
+where you were typing.
+
+- **A full English keyboard.** Predictions, auto-correction, slide to type,
+  QWERTY and four other layouts, and emoji, all offline. It knows your
+  Dictionary, contacts and Text Replacements (docs/IOS.md, "Typing").
 
 - **One trip to the app, once.** The first tap starts a background session and
   sends you back to the app you were in. After that the mic starts in place,

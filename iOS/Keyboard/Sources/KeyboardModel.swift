@@ -30,6 +30,8 @@ final class KeyboardModel: ObservableObject {
     weak var controller: KeyboardViewController?
     /// Called after the keyboard itself writes to the clipboard.
     var onOwnCopy: (() -> Void)?
+    /// Called after the keyboard types a result, so typing rereads the text.
+    var onInserted: (() -> Void)?
     private let store = SharedStore.shared
     private var observer: UUID?
     private var timer: Timer?
@@ -230,6 +232,7 @@ final class KeyboardModel: ObservableObject {
         let surrounding = SurroundingText(before: proxy.documentContextBeforeInput ?? "",
                                           after: proxy.documentContextAfterInput ?? "")
         proxy.insertText(surrounding.fitted(text))
+        onInserted?()
         return true
     }
 

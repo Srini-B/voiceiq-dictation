@@ -19,24 +19,84 @@ private enum KeyboardPalette {
 struct KeyboardView: View {
     @ObservedObject var model: KeyboardModel
     @ObservedObject var offer: DictionaryOffer
+    @ObservedObject var typing: TypingController
     let controller: KeyboardViewController
+    /// The voice panel, opened from the bar; a running session shows it too.
+    @State private var voiceOpen = false
+
+    private enum Panel { case keys, voice, emoji, answer }
+
+    private var panel: Panel {
+        if model.answer != nil { return .answer }
+        if voiceOpen || model.phase == .recording || model.phase == .processing || model.waitingForApp { return .voice }
+        return typing.showsEmoji ? .emoji : .keys
+    }
 
     var body: some View {
-        VStack(spacing: 8) {
-            if let answer = model.answer {
-                AnswerPanel(answer: answer, model: model)
-            } else {
-                ModePicker(
-                    mode: $model.mode,
-                    locked: model.phase == .recording || model.phase == .processing
-                )
-                Spacer(minLength: 0)
-                center
-                Spacer(minLength: 0)
+        VStack(spacing: 0) {
+            topBar.frame(height: typing.compact ? 36 : 44)
+            Group {
+                switch panel {
+                case .answer:
+                    if let answer = model.answer { AnswerPanel(answer: answer, model: model).padding(8) }
+                case .voice:
+                    VStack(spacing: 8) {
+                        Spacer(minLength: 0)
+                        center
+                        Spacer(minLength: 0)
+                        bottomRow
+                    }
+                    .padding(8)
+                case .emoji:
+                    EmojiPanel(typing: typing)
+                case .keys:
+                    KeysArea(typing: typing, controller: controller)
+                }
             }
-            bottomRow
+            .frame(maxHeight: .infinity)
         }
-        .padding(8)
+        .onChange(of: model.phase) { old, new in
+            // A finished session goes back to the keys.
+            if old == .processing, new == .off || new == .warm { voiceOpen = false }
+        }
+    }
+
+    private var showsOffer: Bool {
+        if offer.feedback != nil { return true }
+        switch offer.offer {
+        case .selection: return true
+        case .copied: return !typing.typedSinceAppear
+        case nil: return false
+        }
+    }
+
+    private var topBar: some View {
+        HStack(spacing: 2) {
+            BarButton(systemImage: panel == .voice ? "keyboard" : "waveform",
+                      label: panel == .voice ? "Keyboard" : "VoiceiQ") {
+                voiceOpen.toggle()
+                typing.showsEmoji = false
+            }
+            Group {
+                switch panel {
+                case .voice:
+                    ModePicker(mode: $model.mode, locked: model.phase == .recording || model.phase == .processing)
+                case .keys where showsOffer:
+                    DictionaryOfferChip(offer: offer)
+                case .keys:
+                    SuggestionStrip(suggestions: typing.suggestions, pick: typing.pick)
+                default:
+                    Color.clear
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            if panel != .voice {
+                BarButton(systemImage: "mic.fill", label: "Dictate", action: model.micTapped)
+            } else {
+                Color.clear.frame(width: 40)
+            }
+        }
+        .padding(.horizontal, 4)
     }
 
     @ViewBuilder private var center: some View {
@@ -154,7 +214,7 @@ private struct ModePicker: View {
             }
         }
         .padding(2)
-        .frame(width: 286, height: 32)
+        .frame(maxWidth: 286, maxHeight: 32)
         .background(Capsule().fill(Color(.secondarySystemFill)))
         .opacity(locked ? 0.7 : 1)
         .frame(maxWidth: .infinity)
@@ -255,6 +315,24 @@ private struct AnswerPanel: View {
         .background(RoundedRectangle(cornerRadius: 12).fill(Color(.secondarySystemBackground)))
         .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.primary.opacity(0.08)))
         .shadow(color: .black.opacity(0.08), radius: 5, y: 2)
+    }
+}
+
+private struct BarButton: View {
+    let systemImage: String
+    let label: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.system(size: 17, weight: .medium))
+                .frame(width: 40, height: 36)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(KeyboardPalette.accent)
+        .accessibilityLabel(label)
     }
 }
 

@@ -43,6 +43,7 @@ public final class SharedStore: @unchecked Sendable {
         static let dictionaryAdditions = "bridge.dictionaryAdditions"
         static let dictionaryTerms = "bridge.dictionaryTerms"
         static let appPasteboardChangeCount = "bridge.appPasteboardChangeCount"
+        static let keyboardPreferences = "bridge.keyboardPreferences"
     }
 
     // MARK: - Keyboard diagnostics
@@ -129,14 +130,30 @@ public final class SharedStore: @unchecked Sendable {
         DarwinNotifier.post(.dictionary)
     }
 
-    /// Every dictionary word, lowercased, so the keyboard can tell whether a
-    /// selection is already saved. Writer: app.
+    /// Every dictionary word as spelled, so the keyboard can suggest them
+    /// and tell whether a selection is already saved. Writer: app.
+    public var dictionaryWords: [String] {
+        defaults.stringArray(forKey: Key.dictionaryTerms) ?? []
+    }
+
+    /// `dictionaryWords`, lowercased.
     public var dictionaryTerms: Set<String> {
-        Set(defaults.stringArray(forKey: Key.dictionaryTerms) ?? [])
+        Set(dictionaryWords.map { $0.lowercased() })
     }
 
     public func setDictionaryTerms(_ terms: [String]) {
-        defaults.set(terms.map { $0.lowercased() }, forKey: Key.dictionaryTerms)
+        defaults.set(terms, forKey: Key.dictionaryTerms)
+    }
+
+    // MARK: - Typing
+
+    /// The keyboard's typing settings. Writer: app.
+    public var keyboardPreferences: KeyboardPreferences {
+        get { decode(KeyboardPreferences.self, forKey: Key.keyboardPreferences) ?? KeyboardPreferences() }
+        set {
+            encode(newValue, forKey: Key.keyboardPreferences)
+            DarwinNotifier.post(.state)
+        }
     }
 
     /// `UIPasteboard.changeCount` right after the app put a result on the

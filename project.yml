@@ -279,6 +279,9 @@ targets:
           PROVISIONING_PROFILE_SPECIFIER: "VoiceiQ Keyboard App Store"
     sources:
       - path: iOS/Keyboard/Sources
+      # Word list and emoji: scripts/generate-keyboard-data.py.
+      - path: iOS/Keyboard/Resources
+        buildPhase: resources
     entitlements:
       path: iOS/Keyboard/VoiceIQKeyboard.entitlements
       properties:
@@ -296,9 +299,9 @@ targets:
           NSExtensionPointIdentifier: com.apple.keyboard-service
           NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).KeyboardViewController
           NSExtensionAttributes:
-            IsASCIICapable: false
+            IsASCIICapable: true
             PrefersRightToLeft: false
-            PrimaryLanguage: mul
+            PrimaryLanguage: en-US
             RequestsOpenAccess: true
 
   VoiceIQLiveActivity:
