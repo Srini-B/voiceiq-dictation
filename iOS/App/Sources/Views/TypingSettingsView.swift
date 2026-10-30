@@ -12,6 +12,10 @@ struct TypingSettingsView: View {
                 Picker("Layout", selection: $preferences.layout) {
                     ForEach(KeyboardLetterLayout.allCases, id: \.self) { Text($0.title).tag($0) }
                 }
+                Picker("Height", selection: $preferences.height) {
+                    ForEach(KeyboardHeight.allCases, id: \.self) { Text($0.title).tag($0) }
+                }
+                Toggle("Number Row", isOn: $preferences.numberRow)
             }
             Section {
                 Picker("Theme", selection: $preferences.theme) {

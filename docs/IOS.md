@@ -367,11 +367,11 @@ offers "Add copied text to Dictionary" until you start typing.
 
 | Feature | How |
 | --- | --- |
-| Layouts | QWERTY, QWERTZ, AZERTY, Dvorak, Colemak (`KeyLayout`). English words on each. |
-| Pages | Letters, 123, #+=, number pads for number, decimal and phone fields. Email and URL fields get @, `.` and `/`. Return shows the field's label (go, send, search…). |
+| Layouts | QWERTY, QWERTZ, AZERTY, Dvorak, Colemak (`KeyLayout`). English words on each. Optional number row; Short, Default or Tall height (`KeyboardViewController.height`). Without the number row, holding a top-row letter types its digit (shown in the key's corner) on the 10-key layouts. |
+| Pages | Letters, 123, #+=, number pads for number, decimal and phone fields. Email fields get @ and `.`, URL fields `.` and `/`; search fields keep a full space bar. Return shows the field's label (go, send, search…). |
 | Keys | Shift (tap once, double-tap for Caps Lock, hold and type), accents and alternates on long press (hold `.` for `.com`, the currency key for other currencies), key preview, repeat delete that moves to whole words, space-bar cursor drag. A touch goes to the nearest key in its row. |
 | Suggestions | Next-word predictions from word pairs, completions, and corrections. The typed letters show in quotes; picking them keeps and learns the word. |
-| Auto-correction | On space or punctuation. Fixes a mistyped word one edit away (adjacent keys cost less), two edits away through `UITextChecker`, apostrophes (`dont` → `don't`), and capitals (`i` → `I`, `monday` → `Monday`). A real word is never replaced by another word. Off in URL, email and search fields and where the field turns it off. |
+| Auto-correction | Delete right after a correction restores the typed word and learns it. On space or punctuation. Fixes a mistyped word one edit away (adjacent keys cost less), two edits away through `UITextChecker`, apostrophes (`dont` → `don't`), and capitals (`i` → `I`, `monday` → `Monday`). A real word is never replaced by another word. Off in URL, email and search fields and where the field turns it off. |
 | Auto-capitalization, “.” shortcut | Sentence starts, per the field's `autocapitalizationType`. Two spaces type a period. |
 | Slide to type | `SwipeClassifier` (ported from FlorisBoard). The slid word gets its space when the next word starts, so punctuation attaches; the bar offers the other candidates; delete removes the whole word. |
 | Your words | The VoiceiQ Dictionary (`SharedStore.dictionaryWords`), contact names and Text Replacements (`requestSupplementaryLexicon`), and words typed twice or picked from quotes. |
@@ -383,8 +383,9 @@ offers "Add copied text to Dictionary" until you start typing.
 Key labels are centred on the cap height, or the x-height for lowercase, not
 on the font's line box. A slide starts once the finger reaches another letter
 (at least a third of a key away) or moves three quarters of a key; moving
-more than 8 pt cancels the long press for accents. The slide trail draws above
-the keys.
+more than 8 pt cancels the long press for accents. A slide shorter than 1.6
+keys that ends within 0.15 s is a sloppy tap and types its first key. The slide
+trail draws above the keys.
 
 **Data.** `lexicon.bin` holds 82,846 words and 242,342 word pairs (3.5 MB),
 memory-mapped so it does not count against the extension's memory limit. A

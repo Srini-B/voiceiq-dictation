@@ -55,7 +55,8 @@ struct KeysArea: UIViewRepresentable {
     }
 
     func updateUIView(_ view: KeyboardKeysView, context: Context) {
-        view.rows = KeyLayout.rows(page: typing.page, layout: typing.preferences.layout, field: typing.field)
+        view.rows = KeyLayout.rows(page: typing.page, layout: typing.preferences.layout, field: typing.field,
+                                   numberRow: typing.preferences.numberRow)
         view.shift = typing.shift
         view.slideToType = typing.preferences.slideToType
         view.theme = typing.theme

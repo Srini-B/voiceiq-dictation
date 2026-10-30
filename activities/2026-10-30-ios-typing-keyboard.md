@@ -68,5 +68,20 @@ keyboards to type.
     the engine is ready.
   - Added the Raycast keyboard's themes. Checked each in the Simulator, light
     and dark, plus a slide of "we" from the right edge of W.
+- Web feedback pass (Reddit, Apple Community, Wirecutter, MacObserver,
+  AppleInsider, SlashGear, PCMag and App Store reviews of Gboard and
+  SwiftKey). Already true here: no real word replaced by another (the iOS 26
+  "come → coke" and "ducking" complaints), no correction after the next word,
+  delete fires on touch down, swipe and voice built in. Added: number row,
+  hold a top-row letter for its digit, Short/Default/Tall height, delete
+  after an autocorrection restores the typed word, no period beside space in
+  search fields, and a guard so quick sloppy taps are not slides ("Slide to
+  Type activates erroneously"). Not possible for a keyboard extension:
+  clipboard history (iOS lets a keyboard read another app's copy only
+  through the paste button), secure and phone fields (iOS forces its own
+  keyboard). Not done yet: emoji search, one-handed mode.
+  Verified in the Simulator: "teh␣" became "The ", delete gave "Teh" and
+  space kept it; holding W typed 2; an 18 pt drift in 86 ms typed "w"; the
+  same drift over 290 ms slid "we".
 - Not verified on a physical iPhone yet: haptics, key sound, landscape, and
   how slide to type feels with a real finger.

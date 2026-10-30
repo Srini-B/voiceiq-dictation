@@ -32,6 +32,8 @@ struct KeySpec: Equatable {
     var label: String
     var alternates: [String] = []
     var width: Width = .unit
+    /// A small character in the key's corner: what holding it types first.
+    var hint: String?
 
     var isLetter: Bool {
         if case .insert(let text) = action { return text.count == 1 && text.first!.isLetter }
@@ -98,15 +100,23 @@ enum KeyLayout {
         ".": ["…"], "?": ["¿"], "!": ["¡"], "'": ["‘", "’", "`"], "%": ["‰"],
     ]
 
-    static func rows(page: KeyPage, layout: KeyboardLetterLayout, field: FieldTraits) -> [[KeySpec]] {
+    static func rows(page: KeyPage, layout: KeyboardLetterLayout, field: FieldTraits, numberRow: Bool) -> [[KeySpec]] {
         if page == .digits || (field.isDigitPad && page == .letters) { return digitRows(field) }
         var rows: [[KeySpec]]
         switch page {
         case .letters:
-            let letters = letterRows(layout).map { row in
+            var letters = letterRows(layout).map { row in
                 row.map { KeySpec(action: .insert(String($0)), label: String($0), alternates: accents[$0] ?? []) }
             }
-            rows = [letters[0], letters[1],
+            // Without a number row, holding a top-row letter types its digit.
+            if !numberRow, letters[0].count == 10 {
+                for (i, digit) in "1234567890".enumerated() {
+                    letters[0][i].alternates.insert(String(digit), at: 0)
+                    letters[0][i].hint = String(digit)
+                }
+            }
+            rows = numberRow ? ["1234567890".map { KeySpec(action: .insert(String($0)), label: String($0), alternates: symbolAlternates[String($0)] ?? []) }] : []
+            rows += [letters[0], letters[1],
                     [KeySpec(action: .shift, label: "shift", width: .units(1.4))] + letters[2]
                         + [KeySpec(action: .delete, label: "delete", width: .units(1.4))]]
         case .numbers, .symbols:
@@ -139,10 +149,12 @@ enum KeyLayout {
             row.append(KeySpec(action: .insert("@"), label: "@"))
             row.append(KeySpec(action: .space, label: "space", width: .flexible))
             row.append(KeySpec(action: .insert("."), label: ".", alternates: domains))
-        case .URL, .webSearch:
+        case .URL:
+            // Only URL fields: in search fields (Safari's address bar) a
+            // period beside the space bar is hit instead of space.
             row.append(KeySpec(action: .space, label: "space", width: .flexible))
             row.append(KeySpec(action: .insert("."), label: ".", alternates: domains))
-            if field.keyboardType == .URL { row.append(KeySpec(action: .insert("/"), label: "/")) }
+            row.append(KeySpec(action: .insert("/"), label: "/"))
         default:
             row.append(KeySpec(action: .space, label: "space", width: .flexible))
         }

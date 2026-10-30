@@ -317,6 +317,16 @@ final class TypingController: ObservableObject, KeyboardKeysDelegate {
             finishEdit()
             return
         }
+        // Delete right after an autocorrection puts back what was typed and
+        // keeps it, as Gboard does, instead of leaving the correction.
+        if !words, let corrected, before.hasSuffix(corrected.replacement + " ") {
+            for _ in 0...corrected.replacement.count { proxy.deleteBackward() }
+            proxy.insertText(corrected.original)
+            learn(corrected.original, strongly: true)
+            self.corrected = nil
+            finishEdit()
+            return
+        }
         pendingSpace = false
         slid = nil
         if words {

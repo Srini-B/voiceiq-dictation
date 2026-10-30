@@ -6,6 +6,7 @@ final class KeyCapView: UIView {
     let spec: KeySpec
     private let face = CAGradientLayer()
     private let label = UILabel()
+    private let hint = UILabel()
     private let image = UIImageView()
     private var shift: ShiftState = .off
     private var returnEnabled = true
@@ -15,7 +16,7 @@ final class KeyCapView: UIView {
     }
 
     var labelAlpha: CGFloat = 1 {
-        didSet { label.alpha = labelAlpha; image.alpha = labelAlpha }
+        didSet { label.alpha = labelAlpha; hint.alpha = labelAlpha; image.alpha = labelAlpha }
     }
 
     var isHighlighted = false { didSet { if isHighlighted != oldValue { applyColors() } } }
@@ -30,7 +31,10 @@ final class KeyCapView: UIView {
         label.adjustsFontSizeToFitWidth = true
         label.minimumScaleFactor = 0.6
         image.contentMode = .center
+        hint.text = spec.hint
+        hint.textAlignment = .right
         addSubview(label)
+        addSubview(hint)
         addSubview(image)
         isAccessibilityElement = true
         accessibilityTraits = .keyboardKey
@@ -47,6 +51,7 @@ final class KeyCapView: UIView {
         face.frame = faceFrame
         CATransaction.commit()
         image.frame = faceFrame
+        hint.frame = CGRect(x: faceFrame.minX, y: faceFrame.minY + 1.5, width: faceFrame.width - 3.5, height: 11)
         label.frame = faceFrame.insetBy(dx: 2, dy: 0).offsetBy(dx: 0, dy: labelOffset)
         layer.shadowPath = UIBezierPath(roundedRect: bounds, cornerRadius: layer.cornerRadius).cgPath
     }
@@ -94,6 +99,7 @@ final class KeyCapView: UIView {
         let symbol = UIImage.SymbolConfiguration(pointSize: 18, weight: .regular)
         switch spec.action {
         case .insert(let text):
+            hint.font = theme.font(size: 9.5)
             let shown = spec.isLetter && shift != .off ? text.uppercased() : (spec.label.isEmpty ? text : spec.label)
             label.text = shown
             label.font = theme.font(size: shown.count == 1 ? 24 : 16)
@@ -149,6 +155,7 @@ final class KeyCapView: UIView {
         let text = returnEnabled || spec.action != .returnKey ? key.label : key.label.withAlphaComponent(0.35)
         label.textColor = text
         image.tintColor = text
+        hint.textColor = key.label.withAlphaComponent(0.45)
     }
 }
 

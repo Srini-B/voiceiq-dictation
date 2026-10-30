@@ -51,6 +51,7 @@ final class KeyboardKeysView: UIView, UIInputViewAudioFeedback {
     private final class Tracked {
         let key: Int
         let start: CGPoint
+        let began = CACurrentMediaTime()
         var gesture: Gesture = .press
         var longPress: Timer?
         init(key: Int, start: CGPoint) { self.key = key; self.start = start }
@@ -319,7 +320,15 @@ final class KeyboardKeysView: UIView, UIInputViewAudioFeedback {
             if !cancelled { delegate?.keyTapped(spec, text: spec.alternates[selected]) }
         case .swipe(let points):
             trail.path = nil
-            if !cancelled { delegate?.swiped(points) }
+            if cancelled { break }
+            // A quick, short slide is a sloppy tap on the first key, not a
+            // two-letter word: fast typists drift onto the next key.
+            let travel = zip(points, points.dropFirst()).reduce(CGFloat(0)) { $0 + hypot($1.1.x - $1.0.x, $1.1.y - $1.0.y) }
+            if CACurrentMediaTime() - state.began < 0.15, travel < keys[state.key].frame.width * 1.6 {
+                delegate?.keyTapped(spec, text: nil)
+            } else {
+                delegate?.swiped(points)
+            }
         case .cursor:
             setCursorMode(false)
         case .delete(let timer):

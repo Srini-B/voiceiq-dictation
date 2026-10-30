@@ -39,6 +39,18 @@ public enum KeyboardKeyTone: String, Codable, CaseIterable, Sendable {
     public var title: String { rawValue.capitalized }
 }
 
+public enum KeyboardHeight: String, Codable, CaseIterable, Sendable {
+    case short, standard, tall
+
+    public var title: String {
+        switch self {
+        case .short: return "Short"
+        case .standard: return "Default"
+        case .tall: return "Tall"
+        }
+    }
+}
+
 /// Typing settings the app writes and the keyboard reads.
 public struct KeyboardPreferences: Codable, Equatable, Sendable {
     public var layout: KeyboardLetterLayout = .qwerty
@@ -51,6 +63,8 @@ public struct KeyboardPreferences: Codable, Equatable, Sendable {
     public var keySound = true
     public var haptics = false
     public var theme: KeyboardTheme = .standard
+    public var numberRow = false
+    public var height: KeyboardHeight = .standard
     public var keyTone: KeyboardKeyTone = .automatic
     /// When the user last asked to forget learned words. The keyboard keeps
     /// its own learned words and clears them when this is newer.
@@ -70,6 +84,8 @@ public struct KeyboardPreferences: Codable, Equatable, Sendable {
         keySound = (try? c.decode(Bool.self, forKey: .keySound)) ?? d.keySound
         haptics = (try? c.decode(Bool.self, forKey: .haptics)) ?? d.haptics
         theme = (try? c.decode(KeyboardTheme.self, forKey: .theme)) ?? d.theme
+        numberRow = (try? c.decode(Bool.self, forKey: .numberRow)) ?? d.numberRow
+        height = (try? c.decode(KeyboardHeight.self, forKey: .height)) ?? d.height
         keyTone = (try? c.decode(KeyboardKeyTone.self, forKey: .keyTone)) ?? d.keyTone
         learningResetAt = try? c.decode(Date.self, forKey: .learningResetAt)
     }
