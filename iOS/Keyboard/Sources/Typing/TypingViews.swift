@@ -109,11 +109,10 @@ struct EmojiSearchBar: View {
 /// The UIKit key area inside the SwiftUI keyboard.
 struct KeysArea: UIViewRepresentable {
     @ObservedObject var typing: TypingController
-    let controller: UIInputViewController
 
     func makeUIView(context: Context) -> KeyboardKeysView {
         let view = KeyboardKeysView()
-        view.inputController = controller
+        view.inputController = typing.controller
         view.delegate = typing
         view.onLayout = { [weak typing] geometry in DispatchQueue.main.async { typing?.geometryChanged(geometry) } }
         return view

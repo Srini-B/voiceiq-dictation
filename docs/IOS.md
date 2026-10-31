@@ -435,6 +435,15 @@ model license and GPL-3.0 section 5(d) require.
   `libfutoswipe_registry.a` (kernels register themselves), builds C++17
   without RTTI, and excludes x86_64 Simulators.
 
+**Instances and touches.** iOS makes a new `KeyboardViewController` each
+time the keyboard appears. Nothing in the view tree may hold the controller
+strongly, and its `deinit` detaches the SwiftUI view, which iOS otherwise keeps
+alive through its trait collection. Either leak kept every instance and its
+slide models (about 14 MB each) until iOS ended the extension and showed its
+own keyboard. iOS also drops a keyboard's touches on fully transparent pixels,
+so the SwiftUI root has a 1% gray background; without it a suggestion took
+only a tap on its letters, and taps between keys did nothing.
+
 **Data.** `lexicon.bin` holds 82,846 words and 242,342 word pairs (3.5 MB),
 memory-mapped so it does not count against the extension's memory limit. A
 word's key is lowercase without apostrophes, so one binary search finds `dont`
@@ -465,7 +474,7 @@ Full Access; Reset Keyboard Learning clears all of it):
 | What | Learned when | Used |
 |---|---|---|
 | Words | A word not in the list, typed and kept on space twice; or kept at once by deleting its autocorrection or picking it in quotes | Not corrected; offered as a completion. Up to 3,000, the least used dropped first. |
-| Word pairs | A finished word (space, punctuation, a picked suggestion, or the next word after a slide) after a word, or at a sentence start, when both are words. Not while Predictions is off. | Typed twice in that order, the next word leads the bar after the first one, ahead of the list's pairs, and leads the completions for its first letters. 12 next words kept per word, 2,000 words. |
+| Word pairs | A finished word (space, punctuation, a picked suggestion, or the next word after a slide) after a word, or at a sentence start, when both are words. Not while Predictions is off. | Typed twice in that order, the next word leads the bar after the first one, ahead of the list's pairs, and leads the completions for its first letters. 12 next words kept per word (200 at a sentence start), 2,000 words. |
 | To the Dictionary | A learned word typed 3 times, with Full Access | The 200 most used go to the App Group (`keyboardLearnedWords`); the app adds each once as Auto-learned (`DictionaryBridge`), and iCloud takes it to the Mac. A word deleted from the Dictionary is not added again. The app picks the list up when it is open or next opened. |
 
 Words from codes, passwords, card numbers, phone and postal fields, and fields
