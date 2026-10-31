@@ -4,6 +4,41 @@ import VoiceIQBridge
 /// What an undo step groups: a word typed, a run of deletes, or one action.
 enum EditKind { case typing, deleting, other }
 
+/// An edit to the text before the cursor: delete `remove` characters,
+/// then type `append`. Built from the exact text each keyboard edit removed
+/// and typed, because iOS shows only part of a long field.
+struct TextEdit: Equatable {
+    var remove = 0
+    var append = ""
+
+    /// Adds an edit made after this one.
+    mutating func add(removing count: Int, typing text: String) {
+        if count <= append.count {
+            append = String(append.dropLast(count)) + text
+        } else {
+            remove += count - append.count
+            append = text
+        }
+    }
+
+    /// Adds the reverse of an edit, that removed `deleted` and typed
+    /// `inserted`, made after the edits this one reverses.
+    mutating func addReverse(deleted: String, inserted: String) {
+        if deleted.count <= remove {
+            remove += inserted.count - deleted.count
+        } else {
+            append = String(deleted.dropLast(remove)) + append
+            remove = inserted.count
+        }
+    }
+}
+
+/// One step of the edit panel: how to undo it and how to redo it.
+struct UndoStep: Equatable {
+    var undo = TextEdit()
+    var redo = TextEdit()
+}
+
 enum CursorMove { case left, right, wordLeft, wordRight, lineStart, lineEnd }
 
 /// Emoji search, blocked words, delete slides and the edit panel.
@@ -94,22 +129,21 @@ extension TypingController {
     /// everything.
     func deleteSlideBegan() {
         guard emojiQuery == nil, let proxy, let restore = deleteRestore else { return }
-        for _ in 0..<restore.remove { proxy.deleteBackward() }
-        if !restore.append.isEmpty { proxy.insertText(restore.append) }
         deleteRestore = nil
+        apply(restore)
         deleteSlide = (proxy.documentContextBeforeInput ?? "", 0)
     }
 
     /// Removes `steps` words or characters from where the slide began,
     /// putting back what a slide back to the right no longer covers.
     func deleteSlid(steps: Int) {
-        guard let proxy, let slide = deleteSlide else { return }
+        guard let slide = deleteSlide else { return }
         let characters = Array(slide.source)
         let target = preferences.deleteSlide == .characters ? min(steps, characters.count) : Self.length(ofLast: steps, wordsIn: characters)
         if target > slide.removed {
-            for _ in slide.removed..<target { proxy.deleteBackward() }
+            deleteBack(target - slide.removed)
         } else if target < slide.removed {
-            proxy.insertText(String(characters[(characters.count - slide.removed)..<(characters.count - target)]))
+            typeText(String(characters[(characters.count - slide.removed)..<(characters.count - target)]))
         }
         deleteSlide?.removed = target
     }
@@ -163,33 +197,32 @@ extension TypingController {
         UIPasteboard.general.string = text
         guard cut else { return }
         checkpoint(.other)
-        proxy.deleteBackward()
+        deleteBack()
         finishEdit()
     }
 
     func paste() {
-        guard canUsePasteboard, let proxy, let text = UIPasteboard.general.string, !text.isEmpty else { return }
+        guard canUsePasteboard, let text = UIPasteboard.general.string, !text.isEmpty else { return }
         checkpoint(.other)
-        if pendingSpace { proxy.insertText(" ") }
+        if pendingSpace { typeText(" ") }
         pendingSpace = false
         slid = nil
-        proxy.insertText(text)
+        typeText(text)
         finishEdit()
     }
 
     // MARK: - Undo
 
-    /// Saves the text before the cursor when a new step starts: each word
-    /// typed, each run of deletes, each other action. A selection the edit
-    /// replaces counts as before the cursor, so undo puts it back.
+    /// Starts a new undo step for each word typed, each run of deletes and
+    /// each other action.
     func checkpoint(_ kind: EditKind) {
         guard let proxy else { return }
         editGeneration &+= 1
+        if kind != .deleting { deleteRestore = nil }
         let before = proxy.documentContextBeforeInput ?? ""
-        let state = before + (proxy.selectedText ?? "")
         let wordStart = before.isEmpty || before.last!.isWhitespace
-        if kind == .other || kind != lastEdit || (kind == .typing && wordStart) {
-            if undoStack.last != state { undoStack.append(state) }
+        if undoStack.isEmpty || kind == .other || kind != lastEdit || (kind == .typing && wordStart) {
+            if undoStack.last != UndoStep() { undoStack.append(UndoStep()) }
             if undoStack.count > 50 { undoStack.removeFirst() }
             redoStack = []
         }
@@ -197,19 +230,22 @@ extension TypingController {
     }
 
     func undo() {
-        guard let target = undoStack.popLast() else { return }
-        redoStack.append(proxy?.documentContextBeforeInput ?? "")
-        restoreBefore(target)
+        guard let step = undoStack.popLast() else { return }
+        redoStack.append(step)
+        replay(step.undo)
     }
 
     func redo() {
-        guard let target = redoStack.popLast() else { return }
-        undoStack.append(proxy?.documentContextBeforeInput ?? "")
-        restoreBefore(target)
+        guard let step = redoStack.popLast() else { return }
+        undoStack.append(step)
+        replay(step.redo)
     }
 
-    private func restoreBefore(_ target: String) {
-        replaceBefore(with: target)
+    private func replay(_ edit: TextEdit) {
+        guard let proxy else { return }
+        for _ in 0..<edit.remove { proxy.deleteBackward() }
+        if !edit.append.isEmpty { proxy.insertText(edit.append) }
+        deleteRestore = nil
         editGeneration &+= 1
         slid = nil
         pendingSpace = false
@@ -218,21 +254,33 @@ extension TypingController {
         finishEdit()
     }
 
-    /// Edits the text before the cursor into `target`. Both are the text
-    /// iOS shows before the cursor, which is cut short in long fields, so
-    /// they may start at different places: line them up where they agree
-    /// longest, one starting at its front, and edit only what follows.
-    private func replaceBefore(with target: String) {
+    func apply(_ edit: TextEdit) {
+        deleteBack(edit.remove)
+        if !edit.append.isEmpty { typeText(edit.append) }
+    }
+
+    /// Types `text` over the selection, if any, and records the edit.
+    func typeText(_ text: String) {
         guard let proxy else { return }
-        let current = Array(proxy.documentContextBeforeInput ?? ""), target = Array(target)
-        var kept = 0, from = 0, longest = -1
-        for shift in -target.count...current.count {
-            let c = max(shift, 0), t = max(-shift, 0)
-            var run = 0
-            while c + run < current.count, t + run < target.count, current[c + run] == target[t + run] { run += 1 }
-            if run > longest || (run == longest && shift == 0) { (kept, from, longest) = (c + run, t + run, run) }
+        record(deleted: proxy.selectedText ?? "", inserted: text)
+        proxy.insertText(text)
+    }
+
+    /// Presses Delete `count` times and records what that removes: the
+    /// selection first, if any, then the text before it.
+    func deleteBack(_ count: Int = 1) {
+        guard let proxy, count > 0 else { return }
+        let selected = proxy.selectedText ?? ""
+        let before = proxy.documentContextBeforeInput ?? ""
+        record(deleted: String(before.suffix(selected.isEmpty ? count : count - 1)) + selected, inserted: "")
+        for _ in 0..<count { proxy.deleteBackward() }
+    }
+
+    private func record(deleted: String, inserted: String) {
+        if !undoStack.isEmpty {
+            undoStack[undoStack.count - 1].undo.addReverse(deleted: deleted, inserted: inserted)
+            undoStack[undoStack.count - 1].redo.add(removing: deleted.count, typing: inserted)
         }
-        for _ in kept..<current.count { proxy.deleteBackward() }
-        if from < target.count { proxy.insertText(String(target[from...])) }
+        deleteRestore?.addReverse(deleted: deleted, inserted: inserted)
     }
 }

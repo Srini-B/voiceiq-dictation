@@ -100,3 +100,15 @@ longer moves the cursor during emoji search, and edit-panel repeat keys
 act on touch-down so a quick tap is not lost. Simulator: delete slide over
 "quick brown" and back restored it; a 30 ms arrow tap moved one character.
 
+Greptile on 006e625: lining up undo snapshots failed when the saved and
+current text matched in the wrong place: select all of "hello", paste
+"ello", Undo edited nothing. Undo no longer compares snapshots. Every
+keyboard edit now goes through `typeText`/`deleteBack`, which record what
+it removed and typed; each undo step keeps a reverse edit and a forward
+(redo) edit. Redo needs only the count each edit removed, so it works
+when undo removes more than iOS shows. A scratch model with a 12-character
+window passed 3000 random runs of steps and delete slides (undo all, redo
+all, slide restore) and the hello/ello case; two planted bugs failed about
+1400 runs each. Simulator: selected "Hello", typed "E", Undo gave "Hello",
+Redo gave "E"; a delete slide out and back restored the text; Undo after a
+slide-delete restored it.

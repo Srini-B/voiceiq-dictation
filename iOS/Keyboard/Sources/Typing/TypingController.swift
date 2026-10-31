@@ -49,18 +49,14 @@ final class TypingController: ObservableObject, KeyboardKeysDelegate {
     var pendingSpace = false
     /// The last autocorrection, so the bar can offer the typed letters back.
     var corrected: (original: String, replacement: String)?
-    /// How to undo what Delete removed since it went down (drop `remove`
-    /// characters, then type `append`), so a delete slide can put it back.
-    /// Built from the exact text each delete removed: the text before the
-    /// cursor is cut short in long fields, so a whole-context snapshot
-    /// could not be lined up again.
-    var deleteRestore: (remove: Int, append: String)?
+    /// How to undo what Delete removed since it went down, so a delete
+    /// slide can put it back.
+    var deleteRestore: TextEdit?
     /// Bumped by every edit, cursor move and field change except a slid
     /// word, so a slide result that arrives late is dropped.
     var editGeneration = 0
-    /// The text before the cursor at each step the edit panel can undo.
-    @Published var undoStack: [String] = []
-    @Published var redoStack: [String] = []
+    @Published var undoStack: [UndoStep] = []
+    @Published var redoStack: [UndoStep] = []
     var lastEdit: EditKind?
     /// The text before the cursor when a delete slide began, and how many
     /// of its characters the slide has removed.
@@ -242,7 +238,7 @@ final class TypingController: ObservableObject, KeyboardKeysDelegate {
 
     func keyDown(_ key: KeySpec) {
         if key.action == .shift { shiftHeld = true }
-        if key.action == .delete { deleteRestore = (0, "") }
+        if key.action == .delete { deleteRestore = TextEdit() }
     }
 
     func keyTapped(_ key: KeySpec, text: String?) {
@@ -253,7 +249,7 @@ final class TypingController: ObservableObject, KeyboardKeysDelegate {
         case .returnKey:
             checkpoint(.other)
             applyAutocorrection()
-            proxy?.insertText("\n")
+            typeText("\n")
             finishEdit()
         case .delete: delete(words: false)
         case .shift: shiftTapped()
@@ -302,7 +298,7 @@ final class TypingController: ObservableObject, KeyboardKeysDelegate {
         let startsWord = first.map { $0.isLetter || $0.isNumber || "([{\"“#@".contains($0) } ?? false
         if pendingSpace, startsWord {
             learnPair(before: proxy.documentContextBeforeInput ?? "")
-            proxy.insertText(" ")
+            typeText(" ")
         }
         pendingSpace = false
         slid = nil
@@ -311,7 +307,7 @@ final class TypingController: ObservableObject, KeyboardKeysDelegate {
             learnPair(before: proxy.documentContextBeforeInput ?? "")
         }
         let isLetter = character.count == 1 && first?.isLetter == true
-        proxy.insertText(isLetter && shift != .off ? character.uppercased() : character)
+        typeText(isLetter && shift != .off ? character.uppercased() : character)
         if isLetter, shift == .once {
             if shiftHeld { typedWhileShiftHeld = true } else { shift = .off; shiftIsAuto = true }
         }
@@ -321,14 +317,14 @@ final class TypingController: ObservableObject, KeyboardKeysDelegate {
     }
 
     func insertEmoji(_ emoji: String) {
-        guard let proxy else { return }
+        guard proxy != nil else { return }
         checkpoint(.other)
         EmojiData.noteUsed(emoji)
         typedSinceAppear = true
-        if pendingSpace { proxy.insertText(" ") }
+        if pendingSpace { typeText(" ") }
         pendingSpace = false
         slid = nil
-        proxy.insertText(emoji)
+        typeText(emoji)
         refresh()
     }
 
@@ -342,7 +338,7 @@ final class TypingController: ObservableObject, KeyboardKeysDelegate {
             pendingSpace = false
             slid = nil
             learnPair(before: proxy.documentContextBeforeInput ?? "")
-            proxy.insertText(" ")
+            typeText(" ")
             lastSpaceAt = Date()
             shiftIsAuto = true
             refresh()
@@ -353,15 +349,15 @@ final class TypingController: ObservableObject, KeyboardKeysDelegate {
         let now = Date()
         if preferences.periodShortcut, let last = lastSpaceAt, now.timeIntervalSince(last) < 0.6,
            before.hasSuffix(" "), let previous = before.dropLast().last, previous.isLetter || previous.isNumber {
-            proxy.deleteBackward()
-            proxy.insertText(". ")
+            deleteBack()
+            typeText(". ")
             lastSpaceAt = nil
             finishEdit()
             return
         }
         if !applyAutocorrection() { learn(TypingEngine.context(before: before).partial, strongly: false) }
         learnPair(before: proxy.documentContextBeforeInput ?? "")
-        proxy.insertText(" ")
+        typeText(" ")
         lastSpaceAt = now
         shiftIsAuto = true
         refresh()
@@ -374,8 +370,8 @@ final class TypingController: ObservableObject, KeyboardKeysDelegate {
               let correction = candidates.first(where: { $0.kind == .autocorrection || $0.kind == .replacement }) else { return false }
         let partial = TypingEngine.context(before: proxy.documentContextBeforeInput ?? "").partial
         guard !partial.isEmpty, correction.text != partial else { return false }
-        for _ in partial { proxy.deleteBackward() }
-        proxy.insertText(correction.text)
+        deleteBack(partial.count)
+        typeText(correction.text)
         corrected = (partial, correction.text)
         return true
     }
@@ -386,8 +382,7 @@ final class TypingController: ObservableObject, KeyboardKeysDelegate {
         let before = proxy.documentContextBeforeInput ?? ""
         if let slid, pendingSpace, before.hasSuffix(slid.word) {
             let count = slid.word.count + (slid.leadingSpace ? 1 : 0)
-            noteDeleted(String(before.suffix(count)))
-            for _ in 0..<count { proxy.deleteBackward() }
+            deleteBack(count)
             self.slid = nil
             pendingSpace = false
             finishEdit()
@@ -396,9 +391,8 @@ final class TypingController: ObservableObject, KeyboardKeysDelegate {
         // Delete right after an autocorrection puts back what was typed and
         // keeps it, as Gboard does, instead of leaving the correction.
         if !words, let corrected, before.hasSuffix(corrected.replacement + " ") {
-            noteDeleted(corrected.replacement + " ", inserted: corrected.original)
-            for _ in 0...corrected.replacement.count { proxy.deleteBackward() }
-            proxy.insertText(corrected.original)
+            deleteBack(corrected.replacement.count + 1)
+            typeText(corrected.original)
             learn(corrected.original, strongly: true)
             self.corrected = nil
             finishEdit()
@@ -415,25 +409,11 @@ final class TypingController: ObservableObject, KeyboardKeysDelegate {
             while index > before.startIndex, !before[before.index(before: index)].isWhitespace {
                 index = before.index(before: index); count += 1
             }
-            noteDeleted(String(before.suffix(max(count, 1))))
-            for _ in 0..<max(count, 1) { proxy.deleteBackward() }
+            deleteBack(max(count, 1))
         } else {
-            let selected = proxy.selectedText ?? ""
-            noteDeleted(selected.isEmpty ? before.last.map(String.init) ?? "" : selected)
-            proxy.deleteBackward()
+            deleteBack()
         }
         finishEdit()
-    }
-
-    /// Adds one delete (`deleted` removed, then `inserted` typed) to
-    /// `deleteRestore`.
-    private func noteDeleted(_ deleted: String, inserted: String = "") {
-        guard let (remove, append) = deleteRestore else { return }
-        if deleted.count <= remove {
-            deleteRestore = (inserted.count + remove - deleted.count, append)
-        } else {
-            deleteRestore = (inserted.count, String(deleted.dropLast(remove)) + append)
-        }
     }
 
     func finishEdit() {
@@ -456,8 +436,8 @@ final class TypingController: ObservableObject, KeyboardKeysDelegate {
             let previous = TypingEngine.context(before: before).previous ?? ""
             let replaced = !partial.isEmpty ? partial.count
                 : (!previous.isEmpty && before.hasSuffix(previous + " ") ? previous.count + 1 : 0)
-            for _ in 0..<replaced { proxy.deleteBackward() }
-            proxy.insertText(suggestion.text + " ")
+            deleteBack(replaced)
+            typeText(suggestion.text + " ")
             EmojiData.noteUsed(suggestion.text)
             slid = nil
             pendingSpace = false
@@ -466,18 +446,18 @@ final class TypingController: ObservableObject, KeyboardKeysDelegate {
             return
         }
         if let slid, pendingSpace, before.hasSuffix(slid.word) {
-            for _ in slid.word { proxy.deleteBackward() }
-            proxy.insertText(suggestion.text)
+            deleteBack(slid.word.count)
+            typeText(suggestion.text)
             self.slid = (suggestion.text, [slid.word] + slid.alternates.filter { $0 != suggestion.text }, slid.leadingSpace)
             refresh()
             return
         }
         if partial.isEmpty {
             let needsSpace = !(before.isEmpty || before.last!.isWhitespace || "([{\"“".contains(before.last!))
-            proxy.insertText((needsSpace ? " " : "") + suggestion.text + " ")
+            typeText((needsSpace ? " " : "") + suggestion.text + " ")
         } else {
-            for _ in partial { proxy.deleteBackward() }
-            proxy.insertText(suggestion.text + " ")
+            deleteBack(partial.count)
+            typeText(suggestion.text + " ")
             if suggestion.kind == .typed { learn(suggestion.text, strongly: true) }
         }
         learnPair(before: String((proxy.documentContextBeforeInput ?? "").dropLast()))
@@ -528,7 +508,7 @@ final class TypingController: ObservableObject, KeyboardKeysDelegate {
         if pendingSpace { learnPair(before: before) }
         let needsSpace = pendingSpace || !(before.isEmpty || before.last!.isWhitespace || "([{\"“".contains(before.last!))
         let word = style(words[0])
-        proxy.insertText((needsSpace ? " " : "") + word)
+        typeText((needsSpace ? " " : "") + word)
         slid = (word, words.dropFirst().map(style), needsSpace)
         pendingSpace = true
         if shift == .once { shift = .off }
