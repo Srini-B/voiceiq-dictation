@@ -35,3 +35,28 @@ the word step moved the cursor a word left; Settings shows the new rows
 and the blocked list. Slide to type still types words. 143 core tests pass;
 no new crash reports. Not tried: redo, Characters delete slide, Space Bar
 Slide Off, copy, cut and paste.
+
+## Review fixes (PR #33)
+
+Greptile and CodeRabbit found text-loss paths; all were real and fixed:
+a late slide result went in wherever the cursor had moved (now dropped
+unless only slides happened since); picking 🍕 after sliding "pizza" left
+"p🍕" and after a typed "pizza " appended the emoji (now replaces the word);
+a delete slide during emoji search edited the message; sliding back could
+not restore a slid word the press deleted (the slide now starts from the
+text at touch-down); undo lost a selection replaced by paste or cut and
+skipped Return and cut; locally blocked words could never be unblocked
+after Full Access; held edit-panel keys kept repeating if the touch was
+cancelled; a slide dropped its samples from before the threshold. The
+Settings credit now carries the GPL-3.0 notices and links. The App Store
+GPL question CodeRabbit raised was left as decided: the owner accepted
+GPL-3.0 for this free, open-source TestFlight build.
+
+**Verified** in the Simulator: slide "pizza" then 🍕 gives "🍕 "; typed
+"pizza " then 🍕 gives "🍕 "; a delete slide right after a slide emptied the
+field and sliding back restored it with the slid word; a delete slide in
+emoji search left the message unchanged; Return then Undo removed the
+newline and Redo put it back; a held arrow repeated and stopped on release;
+the Settings footer shows the notices. No new crash reports. Not tried:
+paste over a selection then undo (needs Full Access), a late slide result.
+

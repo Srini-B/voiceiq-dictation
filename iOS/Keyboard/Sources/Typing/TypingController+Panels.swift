@@ -45,6 +45,18 @@ extension TypingController {
         Set(preferences.blockedWords).union(UserDefaults.standard.stringArray(forKey: Self.localBlockedKey) ?? [])
     }
 
+    /// Words blocked before Full Access move to the app's list, where
+    /// Settings can unblock them.
+    func adoptLocalBlocks() {
+        guard controller?.hasFullAccess == true,
+              let local = UserDefaults.standard.stringArray(forKey: Self.localBlockedKey), !local.isEmpty else { return }
+        var shared = SharedStore.shared.keyboardPreferences
+        shared.blockedWords += local.filter { !shared.blockedWords.contains($0) }
+        SharedStore.shared.keyboardPreferences = shared
+        preferences.blockedWords = shared.blockedWords
+        UserDefaults.standard.removeObject(forKey: Self.localBlockedKey)
+    }
+
     /// Holding a suggested word offers to block it; typed letters and
     /// Text Replacements are the user's own.
     func offerBlock(_ suggestion: Suggestion) {
@@ -77,13 +89,13 @@ extension TypingController {
 
     // MARK: - Delete slide
 
-    /// The press already deleted a character; the slide starts from the
-    /// text as it was, so sliding back to the key undoes everything.
+    /// The press already deleted a character, a word or a held run; the
+    /// slide starts from the text as it was at touch-down, so sliding back
+    /// to the key undoes everything.
     func deleteSlideBegan() {
-        guard let proxy else { return }
-        if let lastDeleted { proxy.insertText(lastDeleted) }
-        lastDeleted = nil
-        deleteSlide = (proxy.documentContextBeforeInput ?? "", 0)
+        guard emojiQuery == nil, let proxy, let source = deleteDownText else { return }
+        replaceBefore(with: source)
+        deleteSlide = (source, 0)
     }
 
     /// Removes `steps` words or characters from where the slide began,
@@ -136,6 +148,7 @@ extension TypingController {
         pendingSpace = false
         slid = nil
         lastEdit = nil
+        editGeneration &+= 1
     }
 
     var hasSelection: Bool { !(proxy?.selectedText ?? "").isEmpty }
@@ -147,6 +160,7 @@ extension TypingController {
         guard canUsePasteboard, let proxy, let text = proxy.selectedText, !text.isEmpty else { return }
         UIPasteboard.general.string = text
         guard cut else { return }
+        checkpoint(.other)
         proxy.deleteBackward()
         finishEdit()
     }
@@ -164,13 +178,16 @@ extension TypingController {
     // MARK: - Undo
 
     /// Saves the text before the cursor when a new step starts: each word
-    /// typed, each run of deletes, each other action.
+    /// typed, each run of deletes, each other action. A selection the edit
+    /// replaces counts as before the cursor, so undo puts it back.
     func checkpoint(_ kind: EditKind) {
         guard let proxy else { return }
+        editGeneration &+= 1
         let before = proxy.documentContextBeforeInput ?? ""
+        let state = before + (proxy.selectedText ?? "")
         let wordStart = before.isEmpty || before.last!.isWhitespace
         if kind == .other || kind != lastEdit || (kind == .typing && wordStart) {
-            if undoStack.last != before { undoStack.append(before) }
+            if undoStack.last != state { undoStack.append(state) }
             if undoStack.count > 50 { undoStack.removeFirst() }
             redoStack = []
         }
@@ -189,18 +206,23 @@ extension TypingController {
         restoreBefore(target)
     }
 
-    /// Edits the text before the cursor into `target`, touching only the
-    /// part after what they share.
     private func restoreBefore(_ target: String) {
-        guard let proxy else { return }
-        let current = proxy.documentContextBeforeInput ?? ""
-        let shared = zip(current, target).prefix { $0 == $1 }.count
-        for _ in shared..<current.count { proxy.deleteBackward() }
-        if target.count > shared { proxy.insertText(String(target.dropFirst(shared))) }
+        replaceBefore(with: target)
+        editGeneration &+= 1
         slid = nil
         pendingSpace = false
         corrected = nil
         lastEdit = nil
         finishEdit()
+    }
+
+    /// Edits the text before the cursor into `target`, touching only the
+    /// part after what they share.
+    private func replaceBefore(with target: String) {
+        guard let proxy else { return }
+        let current = proxy.documentContextBeforeInput ?? ""
+        let shared = zip(current, target).prefix { $0 == $1 }.count
+        for _ in shared..<current.count { proxy.deleteBackward() }
+        if target.count > shared { proxy.insertText(String(target.dropFirst(shared))) }
     }
 }

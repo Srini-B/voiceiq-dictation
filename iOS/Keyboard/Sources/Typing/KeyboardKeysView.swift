@@ -67,8 +67,13 @@ final class KeyboardKeysView: UIView {
         let afterTyping: Bool
         var gesture: Gesture = .press
         var longPress: Timer?
+        /// Every sample since the press, so a slide that starts late keeps
+        /// the turns and timing before its threshold.
+        var path: [CGPoint]
+        var times: [TimeInterval]
         init(key: Int, start: CGPoint, began: TimeInterval, afterTyping: Bool) {
             self.key = key; self.start = start; self.began = began; self.afterTyping = afterTyping
+            path = [start]; times = [began]
         }
     }
 
@@ -282,6 +287,7 @@ final class KeyboardKeysView: UIView {
             let spec = keys[state.key].spec
             switch state.gesture {
             case .press:
+                if spec.isLetter, slideToType { record(touch, event, into: &state.path, &state.times) }
                 let moved = hypot(point.x - state.start.x, point.y - state.start.y)
                 // A finger that is sliding is not holding for accents.
                 if moved > 8 { state.longPress?.invalidate() }
@@ -294,8 +300,8 @@ final class KeyboardKeysView: UIView {
                     state.longPress?.invalidate()
                     hidePreview()
                     keys[state.key].view.isHighlighted = false
-                    state.gesture = .swipe([state.start, point], times: [state.began, touch.timestamp])
-                    drawTrail([state.start, point])
+                    state.gesture = .swipe(state.path, times: state.times)
+                    drawTrail(state.path)
                 } else if isCharacter(spec), let index = keyIndex(at: point), index != state.key,
                           isCharacter(keys[index].spec), distanceOutside(keys[state.key].frame, point) > Self.hysteresis {
                     // The tap follows the finger to the key it lifts on, as on iOS.
@@ -307,14 +313,7 @@ final class KeyboardKeysView: UIView {
             case .accents(let popup, _):
                 state.gesture = .accents(popup, selected: popup.select(at: convert(point, to: popup)))
             case .swipe(var points, var times):
-                // Every sample the screen took, not one per frame: the model reads speed.
-                for sample in event?.coalescedTouches(for: touch) ?? [touch] {
-                    let p = sample.location(in: self)
-                    if hypot(p.x - points[points.count - 1].x, p.y - points[points.count - 1].y) > 1 {
-                        points.append(p)
-                        times.append(sample.timestamp)
-                    }
-                }
+                record(touch, event, into: &points, &times)
                 state.gesture = .swipe(points, times: times)
                 drawTrail(points)
             case .cursor(let anchorX):
@@ -408,6 +407,17 @@ final class KeyboardKeysView: UIView {
         guard state.afterTyping, elapsed < Self.thresholdDecay else { return elapsed >= 0.02 && distance >= 0.5 }
         let decay = elapsed / Self.thresholdDecay
         return elapsed >= 0.3 - 0.28 * decay && distance >= 6 - 5.5 * decay
+    }
+
+    /// Every sample the screen took, not one per frame: the model reads speed.
+    private func record(_ touch: UITouch, _ event: UIEvent?, into points: inout [CGPoint], _ times: inout [TimeInterval]) {
+        for sample in event?.coalescedTouches(for: touch) ?? [touch] {
+            let p = sample.location(in: self)
+            if hypot(p.x - points[points.count - 1].x, p.y - points[points.count - 1].y) > 1 {
+                points.append(p)
+                times.append(sample.timestamp)
+            }
+        }
     }
 
     private func distanceOutside(_ frame: CGRect, _ point: CGPoint) -> CGFloat {

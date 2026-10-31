@@ -62,31 +62,36 @@ private struct RepeatKey: View {
     let theme: KeyTheme
     let action: () -> Void
     @State private var timer: Timer?
+    /// Resets when the touch ends or is cancelled, unlike `onEnded`.
+    @GestureState private var pressed = false
 
     var body: some View {
         Image(systemName: systemImage)
             .font(.system(size: 17, weight: .medium))
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(RoundedRectangle(cornerRadius: 8).fill(Color(timer == nil ? theme.character.top : theme.function.top)))
+            .background(RoundedRectangle(cornerRadius: 8).fill(Color(pressed ? theme.function.top : theme.character.top)))
             .contentShape(Rectangle())
-            .gesture(DragGesture(minimumDistance: 0)
-                .onChanged { _ in
-                    guard timer == nil else { return }
-                    action()
-                    timer = Timer.scheduledTimer(withTimeInterval: 0.4, repeats: false) { _ in
-                        MainActor.assumeIsolated {
-                            timer = Timer.scheduledTimer(withTimeInterval: 0.07, repeats: true) { _ in
-                                MainActor.assumeIsolated { action() }
-                            }
-                        }
-                    }
-                }
-                .onEnded { _ in
-                    timer?.invalidate()
-                    timer = nil
-                })
+            .gesture(DragGesture(minimumDistance: 0).updating($pressed) { _, pressed, _ in pressed = true })
+            .onChange(of: pressed) { _, pressed in pressed ? start() : stop() }
+            .onDisappear(perform: stop)
             .accessibilityLabel(label)
             .accessibilityAddTraits(.isButton)
             .accessibilityAction { action() }
+    }
+
+    private func start() {
+        action()
+        timer = Timer.scheduledTimer(withTimeInterval: 0.4, repeats: false) { _ in
+            MainActor.assumeIsolated {
+                timer = Timer.scheduledTimer(withTimeInterval: 0.07, repeats: true) { _ in
+                    MainActor.assumeIsolated { action() }
+                }
+            }
+        }
+    }
+
+    private func stop() {
+        timer?.invalidate()
+        timer = nil
     }
 }

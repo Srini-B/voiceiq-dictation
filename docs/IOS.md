@@ -369,13 +369,13 @@ offers "Add copied text to Dictionary" until you start typing.
 | --- | --- |
 | Layouts | QWERTY, QWERTZ, AZERTY, Dvorak, Colemak (`KeyLayout`). English words on each. Optional number row; Short, Default or Tall height (`KeyboardViewController.height`). Without the number row, holding a top-row letter types its digit (shown in the key's corner) on the 10-key layouts. |
 | Pages | Letters, 123, #+=, number pads for number, decimal and phone fields. Email fields get @ and `.`, URL fields `.` and `/`; search fields keep a full space bar. Return shows the field's label (go, send, search…). |
-| Keys | Shift (tap once, double-tap for Caps Lock, hold and type), accents and alternates on long press (hold `.` for `.com`, the currency key for other currencies), key preview, repeat delete that moves to whole words. Space Bar Slide: Move Cursor (default) or Off. Delete Slide: sliding left from delete removes Words (default, one per 22 pt) or Characters (one per 9 pt), sliding back restores them, lifting keeps the result; Off. A touch goes to the nearest key in its row. |
+| Keys | Shift (tap once, double-tap for Caps Lock, hold and type), accents and alternates on long press (hold `.` for `.com`, the currency key for other currencies), key preview, repeat delete that moves to whole words. Space Bar Slide: Move Cursor (default) or Off. Delete Slide: sliding left from delete removes Words (default, one per 22 pt) or Characters (one per 9 pt), sliding back restores them, lifting keeps the result; Off. The slide starts from the text at touch-down, so it also restores what the press itself removed (a character, a slid word, a selection, a held run). No slide during emoji search. A touch goes to the nearest key in its row. |
 | Suggestions | Next-word predictions from word pairs, completions, and corrections. The typed letters show in quotes; picking them keeps and learns the word. |
 | Auto-correction | Delete right after a correction restores the typed word and learns it. On space or punctuation. Fixes a mistyped word one edit away (adjacent keys cost less), two edits away through `UITextChecker`, apostrophes (`dont` → `don't`), and capitals (`i` → `I`, `monday` → `Monday`). A real word is never replaced by another word. Off in URL, email and search fields and where the field turns it off. |
 | Auto-capitalization, “.” shortcut | Sentence starts, per the field's `autocapitalizationType`. Two spaces type a period. |
 | Slide to type | FUTO Swipe (`SwipeRecognizer`; see below). The slid word gets its space when the next word starts, so punctuation attaches; the bar offers the other candidates; delete removes the whole word. |
-| Blocked words | Holding a word in the bar offers "Don’t Suggest". A blocked word is never suggested, corrected to or slid to, and is forgotten if learned. With Full Access the list is `KeyboardPreferences.blockedWords`, editable in Settings › Typing › Blocked Words; without it the keyboard keeps its own list. |
-| Edit panel | The bar's cursor button: line start and end, word steps, left and right arrows that repeat while held, copy, cut and paste (Full Access), undo and redo of the keyboard's own edits (each word, each run of deletes, each other action; cleared when the text changes elsewhere), delete. A keyboard cannot select text or reach the app's own undo. |
+| Blocked words | Holding a word in the bar offers "Don’t Suggest". A blocked word is never suggested, corrected to or slid to, and is forgotten if learned. With Full Access the list is `KeyboardPreferences.blockedWords`, editable in Settings › Typing › Blocked Words; without it the keyboard keeps its own list, which moves to the shared one the next time the keyboard appears with Full Access. |
+| Edit panel | The bar's cursor button: line start and end, word steps, left and right arrows that repeat while held, copy, cut and paste (Full Access), undo and redo of the keyboard's own edits (each word, each run of deletes, Return, cut, paste and each other action; a selection the edit replaced comes back; cleared when the text changes elsewhere), delete. Held arrows and delete stop when the touch ends, is cancelled or the panel closes. A keyboard cannot select text or reach the app's own undo. |
 | Your words | The VoiceiQ Dictionary (`SharedStore.dictionaryWords`), contact names and Text Replacements (`requestSupplementaryLexicon`), and words typed twice or picked from quotes. |
 | Emoji | Unicode's list in CLDR order, by category, with recents. Search (magnifier in the emoji panel) types into the bar with the keys and matches gemoji names, aliases and tags by word prefix. Holding an emoji that takes a skin tone offers the five tones; the one picked becomes the tone the panel, search and suggestions show (`EmojiData.skinTone`). Emoji Suggestions: the third bar slot offers the emoji for the word being typed or just finished ("pizza" → 🍕, FUTO's shortcut rules: one-word names, then aliases, tags, the first part of two-part names, never words of two letters); picking it replaces the word. |
 | No assistance | Password, one-time code, card, phone and postal code fields. |
@@ -407,9 +407,14 @@ bounds, where each key's centre sits at its place in FUTO's layout (q at
 the encoder and context model. Models load on a serial queue when the
 keyboard first lays out its letters, and each slide is decoded on the same
 queue, so the main thread never waits. Word results keep the dictionary's
-spelling ("I", "don't"); the user's words get their saved spelling.
-Settings › Typing shows "Slide to Type is powered by FUTO Swipe.", which the
-model license requires.
+spelling ("I", "don't"); the user's words get their saved spelling. A slide
+records every sample from touch-down, so the turns made before it counted as
+a slide reach the model. A result that arrives after the user typed, moved
+the cursor or changed fields is dropped (`editGeneration`); a slid word does
+not count, so quick slides in a row all land in order.
+Settings › Typing credits FUTO Swipe with its copyright, GPL-3.0, no
+warranty, and links to the license and this repository's source, as the
+model license and GPL-3.0 section 5(d) require.
 
 - Accuracy on 4,931 real swipes from FUTO's MIT dataset
   (`futo-org/swipe.futo.org` test split), first choice / top four: the

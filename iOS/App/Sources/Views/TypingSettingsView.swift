@@ -35,8 +35,9 @@ struct TypingSettingsView: View {
                 Toggle("Slide to Type", isOn: $preferences.slideToType)
                 Toggle("“.” Shortcut", isOn: $preferences.periodShortcut)
             } footer: {
-                // Required by the FUTO Model Weights License.
-                Text("Slide to Type is powered by FUTO Swipe.")
+                // Required by the FUTO Model Weights License, and GPL-3.0
+                // section 5(d) for the swipe library.
+                Text("Slide to Type is powered by FUTO Swipe. © FUTO Holdings, Inc. GPL-3.0, with no warranty. [License](https://www.gnu.org/licenses/gpl-3.0.html) · [Source](https://github.com/Srini-B/voiceiq-dictation)")
             }
             Section {
                 Picker("Space Bar Slide", selection: $preferences.spaceSlide) {
