@@ -372,7 +372,7 @@ offers "Add copied text to Dictionary" until you start typing.
 | Keys | Shift (tap once, double-tap for Caps Lock, hold and type), accents and alternates on long press (hold `.` for `.com`, the currency key for other currencies), key preview, repeat delete that moves to whole words. Space Bar Slide: Move Cursor (default) or Off. Delete Slide: sliding left from delete removes Words (default, one per 22 pt) or Characters (one per 9 pt), sliding back restores them, lifting keeps the result; Off. The slide starts from the text at touch-down, so it also restores what the press itself removed (a character, a slid word, a selection, a held run). No slide during emoji search. A touch goes to the nearest key in its row. |
 | Suggestions | Next-word predictions from word pairs, completions, and corrections. The typed letters show in quotes; picking them keeps and learns the word. |
 | Auto-correction | Delete right after a correction restores the typed word and learns it. On space or punctuation. Fixes a mistyped word one edit away (adjacent keys cost less), two edits away through `UITextChecker`, apostrophes (`dont` → `don't`), and capitals (`i` → `I`, `monday` → `Monday`). A real word is never replaced by another word. Off in URL, email and search fields and where the field turns it off. |
-| Auto-capitalization, “.” shortcut | Sentence starts, per the field's `autocapitalizationType`. Two spaces type a period. |
+| Auto-capitalization, “.” shortcut | Sentence starts, per the field's `autocapitalizationType`. Two spaces type a period, also after a slid word (its first space is the word's own). |
 | Slide to type | FUTO Swipe (`SwipeRecognizer`; see below). The slid word gets its space when the next word starts, so punctuation attaches; the bar offers the other candidates; delete removes the whole word. |
 | Blocked words | Holding a word in the bar offers "Don’t Suggest". A blocked word is never suggested, corrected to or slid to, and is forgotten if learned. With Full Access the list is `KeyboardPreferences.blockedWords`, editable in Settings › Typing › Blocked Words; without it the keyboard keeps its own list, which moves to the shared one the next time the keyboard appears with Full Access. |
 | Edit panel | The bar's cursor button: line start and end, word steps, left and right arrows that repeat while held, copy, cut and paste (Full Access), undo and redo of the keyboard's own edits (each word, each run of deletes, Return, cut, paste and each other action; a selection the edit replaced comes back; cleared when the text changes elsewhere), delete. Held arrows and delete stop when the touch ends, is cancelled or the panel closes. A keyboard cannot select text or reach the app's own undo. |
@@ -386,9 +386,11 @@ on the font's line box. A tap types the key the finger lifts on once it is
 8 pt past the pressed key's edge, as on iOS. A slide starts with AOSP
 LatinIME's shipped thresholds: half a key after 20 ms, but within 0.5 s of a
 typed letter it must last about 185 ms and cross about 3.7 keys, easing to
-half a key by 450 ms, so a fast typist's drifting tap stays a tap. Mid-word a
-slide may start only when the letters typed so far are a word
-(`canStartSwipe`), so a slip never inserts a word and a space. A slide under
+half a key by 450 ms, so a fast typist's drifting tap stays a tap. In that
+same half second, a slide mid-word may start only when the letters typed so
+far are a word (`canStartSwipe`), so a slip while typing never inserts a word
+and a space. Later it always may: blocking it then left an unknown word
+stuck at the cursor, each blocked slide typing one more letter onto it. A slide under
 0.8 of a key types the key under the finger. Moving more than 8 pt cancels
 the long press for accents. The slide trail draws above the keys. In `viewDidAppear` the keyboard turns off
 `delaysTouchesBegan` on its window's system-gesture recognizers, which

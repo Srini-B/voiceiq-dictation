@@ -67,3 +67,23 @@ the stored list directly. Verified in the Simulator by changing the stored
 list while the page was open: changing Space Bar Slide kept the new word,
 and deleting a word on Blocked Words kept a word added while it was open.
 
+## Missed slides and the slid-word period (owner report)
+
+The owner found slides sometimes not registering, and two spaces after a
+slid word giving two spaces instead of ". ".
+
+- **Missed slides.** Reproduced in the Simulator with logging: once the
+  word at the cursor was not a known word (a stray tap, a name), every
+  slide failed `canStartSwipe`, fell back to a tap and typed one more
+  letter, so the word stayed unknown and slides stayed blocked until a
+  space. Thirty slides in a row typed `neetmweeorrde`. The known-word rule
+  now applies only within 0.5 s of a tapped letter, where drifting taps
+  happen. After the fix, eight slides from that state typed eight words.
+  Two smaller position effects were seen and left: resting about 0.4 s on
+  a key with accents before moving opens the accent popup (as on iOS), and
+  a touch less than about 4 pt above the top row lands on the bar.
+- **Period.** The first space after a slid word only placed the word's
+  pending space and did not record the time, so the second space added a
+  second space. It now records it; verified "some" + two spaces gives
+  "some. " with Shift on, and the next slide types "The".
+

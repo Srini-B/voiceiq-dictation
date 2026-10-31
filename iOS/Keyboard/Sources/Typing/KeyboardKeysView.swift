@@ -296,7 +296,7 @@ final class KeyboardKeysView: UIView {
                     keys[state.key].view.isHighlighted = false
                     setCursorMode(true)
                 } else if spec.isLetter, slideToType, tracked.count == 1, startsSwipe(state, at: point, time: touch.timestamp),
-                          delegate?.canStartSwipe ?? true {
+                          !state.afterTyping || delegate?.canStartSwipe ?? true {
                     state.longPress?.invalidate()
                     hidePreview()
                     keys[state.key].view.isHighlighted = false

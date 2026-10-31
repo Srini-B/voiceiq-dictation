@@ -337,11 +337,14 @@ final class TypingController: ObservableObject, KeyboardKeysDelegate {
         typedSinceAppear = true
         defer { if page == .numbers || page == .symbols { page = .letters } }
         if pendingSpace {
+            // The slid word's own space: a second space still makes ". ".
             pendingSpace = false
             slid = nil
             learnPair(before: proxy.documentContextBeforeInput ?? "")
             proxy.insertText(" ")
-            finishEdit()
+            lastSpaceAt = Date()
+            shiftIsAuto = true
+            refresh()
             return
         }
         slid = nil
@@ -516,8 +519,10 @@ final class TypingController: ObservableObject, KeyboardKeysDelegate {
         refresh()
     }
 
-    /// A slide types a new word, so mid-word it may start only once the
-    /// letters typed so far are a word: a slip while typing stays a tap.
+    /// While letters are being tapped, a slide mid-word may start only once
+    /// they are a word, so a slip while typing stays a tap. The keys ask only
+    /// then: blocking later slides too left an unknown word stuck, each
+    /// blocked slide typing another letter onto it.
     var canStartSwipe: Bool {
         let partial = TypingEngine.context(before: proxy?.documentContextBeforeInput ?? "").partial
         guard emojiQuery == nil else { return false }
