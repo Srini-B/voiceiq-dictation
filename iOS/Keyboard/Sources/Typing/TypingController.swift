@@ -519,13 +519,14 @@ final class TypingController: ObservableObject, KeyboardKeysDelegate {
         refresh()
     }
 
-    /// While letters are being tapped, a slide mid-word may start only once
-    /// they are a word, so a slip while typing stays a tap. The keys ask only
-    /// then: blocking later slides too left an unknown word stuck, each
-    /// blocked slide typing another letter onto it.
-    var canStartSwipe: Bool {
-        let partial = TypingEngine.context(before: proxy?.documentContextBeforeInput ?? "").partial
+    /// Never during emoji search. While letters are being tapped
+    /// (`afterTyping`), a slide mid-word may start only once they are a word,
+    /// so a slip while typing stays a tap; later it always may, or an
+    /// unknown word stays stuck, each blocked slide typing another letter.
+    func canStartSwipe(afterTyping: Bool) -> Bool {
         guard emojiQuery == nil else { return false }
+        guard afterTyping else { return true }
+        let partial = TypingEngine.context(before: proxy?.documentContextBeforeInput ?? "").partial
         return partial.isEmpty || pendingSpace || engine?.isKnown(partial) == true
     }
 

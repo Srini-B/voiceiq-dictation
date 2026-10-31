@@ -13,8 +13,9 @@ protocol KeyboardKeysDelegate: AnyObject {
     func deleteRepeated(words: Bool)
     /// The finger's path, with each point's `UITouch.timestamp`.
     func swiped(_ points: [CGPoint], times: [TimeInterval])
-    /// Whether a slide may start a word here; mid-word only after a whole word.
-    var canStartSwipe: Bool { get }
+    /// Whether a slide may start a word here; `afterTyping` is a press within
+    /// `fastTyping` of a typed letter.
+    func canStartSwipe(afterTyping: Bool) -> Bool
     func cursorMoved(by offset: Int)
     /// Sliding left from delete: `steps` words or characters, by `deleteSlide`.
     func deleteSlideBegan()
@@ -296,7 +297,7 @@ final class KeyboardKeysView: UIView {
                     keys[state.key].view.isHighlighted = false
                     setCursorMode(true)
                 } else if spec.isLetter, slideToType, tracked.count == 1, startsSwipe(state, at: point, time: touch.timestamp),
-                          !state.afterTyping || delegate?.canStartSwipe ?? true {
+                          delegate?.canStartSwipe(afterTyping: state.afterTyping) ?? true {
                     state.longPress?.invalidate()
                     hidePreview()
                     keys[state.key].view.isHighlighted = false
