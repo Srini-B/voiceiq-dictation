@@ -71,8 +71,13 @@ private struct RepeatKey: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(RoundedRectangle(cornerRadius: 8).fill(Color(pressed ? theme.function.top : theme.character.top)))
             .contentShape(Rectangle())
-            .gesture(DragGesture(minimumDistance: 0).updating($pressed) { _, pressed, _ in pressed = true })
-            .onChange(of: pressed) { _, pressed in pressed ? start() : stop() }
+            // The first action fires from the gesture itself: a quick tap can
+            // end before `pressed` reaches `onChange`.
+            .gesture(DragGesture(minimumDistance: 0)
+                .updating($pressed) { _, pressed, _ in pressed = true }
+                .onChanged { _ in if timer == nil { start() } }
+                .onEnded { _ in stop() })
+            .onChange(of: pressed) { _, pressed in if !pressed { stop() } }
             .onDisappear(perform: stop)
             .accessibilityLabel(label)
             .accessibilityAddTraits(.isButton)

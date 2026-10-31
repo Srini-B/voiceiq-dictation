@@ -49,9 +49,12 @@ final class TypingController: ObservableObject, KeyboardKeysDelegate {
     var pendingSpace = false
     /// The last autocorrection, so the bar can offer the typed letters back.
     var corrected: (original: String, replacement: String)?
-    /// The text before the cursor when Delete went down, so a delete slide
-    /// can put back what the press removed.
-    var deleteDownText: String?
+    /// How to undo what Delete removed since it went down (drop `remove`
+    /// characters, then type `append`), so a delete slide can put it back.
+    /// Built from the exact text each delete removed: the text before the
+    /// cursor is cut short in long fields, so a whole-context snapshot
+    /// could not be lined up again.
+    var deleteRestore: (remove: Int, append: String)?
     /// Bumped by every edit, cursor move and field change except a slid
     /// word, so a slide result that arrives late is dropped.
     var editGeneration = 0
@@ -239,9 +242,7 @@ final class TypingController: ObservableObject, KeyboardKeysDelegate {
 
     func keyDown(_ key: KeySpec) {
         if key.action == .shift { shiftHeld = true }
-        if key.action == .delete, let proxy {
-            deleteDownText = (proxy.documentContextBeforeInput ?? "") + (proxy.selectedText ?? "")
-        }
+        if key.action == .delete { deleteRestore = (0, "") }
     }
 
     func keyTapped(_ key: KeySpec, text: String?) {
@@ -384,7 +385,9 @@ final class TypingController: ObservableObject, KeyboardKeysDelegate {
         checkpoint(.deleting)
         let before = proxy.documentContextBeforeInput ?? ""
         if let slid, pendingSpace, before.hasSuffix(slid.word) {
-            for _ in 0..<(slid.word.count + (slid.leadingSpace ? 1 : 0)) { proxy.deleteBackward() }
+            let count = slid.word.count + (slid.leadingSpace ? 1 : 0)
+            noteDeleted(String(before.suffix(count)))
+            for _ in 0..<count { proxy.deleteBackward() }
             self.slid = nil
             pendingSpace = false
             finishEdit()
@@ -393,6 +396,7 @@ final class TypingController: ObservableObject, KeyboardKeysDelegate {
         // Delete right after an autocorrection puts back what was typed and
         // keeps it, as Gboard does, instead of leaving the correction.
         if !words, let corrected, before.hasSuffix(corrected.replacement + " ") {
+            noteDeleted(corrected.replacement + " ", inserted: corrected.original)
             for _ in 0...corrected.replacement.count { proxy.deleteBackward() }
             proxy.insertText(corrected.original)
             learn(corrected.original, strongly: true)
@@ -411,11 +415,25 @@ final class TypingController: ObservableObject, KeyboardKeysDelegate {
             while index > before.startIndex, !before[before.index(before: index)].isWhitespace {
                 index = before.index(before: index); count += 1
             }
+            noteDeleted(String(before.suffix(max(count, 1))))
             for _ in 0..<max(count, 1) { proxy.deleteBackward() }
         } else {
+            let selected = proxy.selectedText ?? ""
+            noteDeleted(selected.isEmpty ? before.last.map(String.init) ?? "" : selected)
             proxy.deleteBackward()
         }
         finishEdit()
+    }
+
+    /// Adds one delete (`deleted` removed, then `inserted` typed) to
+    /// `deleteRestore`.
+    private func noteDeleted(_ deleted: String, inserted: String = "") {
+        guard let (remove, append) = deleteRestore else { return }
+        if deleted.count <= remove {
+            deleteRestore = (inserted.count + remove - deleted.count, append)
+        } else {
+            deleteRestore = (inserted.count, String(deleted.dropLast(remove)) + append)
+        }
     }
 
     func finishEdit() {
@@ -531,6 +549,8 @@ final class TypingController: ObservableObject, KeyboardKeysDelegate {
     }
 
     func cursorMoved(by offset: Int) {
+        // While searching emoji the keys type into the query, not the field.
+        guard emojiQuery == nil else { return }
         proxy?.adjustTextPosition(byCharacterOffset: offset)
         editGeneration &+= 1
         pendingSpace = false

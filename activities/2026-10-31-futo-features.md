@@ -87,3 +87,16 @@ slid word giving two spaces instead of ". ".
   second space. It now records it; verified "some" + two spaces gives
   "some. " with Shift on, and the next slide types "The".
 
+CodeRabbit's second review (on 8831033): the delete slide rebuilt the
+whole text before the cursor from a snapshot, and undo did the same, but
+iOS cuts that text short in long fields, so the two copies could start at
+different places and characters near the cut were deleted or doubled
+(a scratch model with a 20-character window broke 6 of 9 cases). The
+delete slide now records exactly what each delete removed and puts back
+only that (all 6 scratch cases pass, including deleting past the window);
+undo lines the copies up first (fixes 4 of those 6; deleting past the
+window cannot be undone from a cut-short copy). Also: the space bar no
+longer moves the cursor during emoji search, and edit-panel repeat keys
+act on touch-down so a quick tap is not lost. Simulator: delete slide over
+"quick brown" and back restored it; a 30 ms arrow tap moved one character.
+

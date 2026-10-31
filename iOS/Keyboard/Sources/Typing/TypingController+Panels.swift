@@ -90,12 +90,14 @@ extension TypingController {
     // MARK: - Delete slide
 
     /// The press already deleted a character, a word or a held run; the
-    /// slide starts from the text as it was at touch-down, so sliding back
-    /// to the key undoes everything.
+    /// slide starts by putting that back, so sliding back to the key undoes
+    /// everything.
     func deleteSlideBegan() {
-        guard emojiQuery == nil, let proxy, let source = deleteDownText else { return }
-        replaceBefore(with: source)
-        deleteSlide = (source, 0)
+        guard emojiQuery == nil, let proxy, let restore = deleteRestore else { return }
+        for _ in 0..<restore.remove { proxy.deleteBackward() }
+        if !restore.append.isEmpty { proxy.insertText(restore.append) }
+        deleteRestore = nil
+        deleteSlide = (proxy.documentContextBeforeInput ?? "", 0)
     }
 
     /// Removes `steps` words or characters from where the slide began,
@@ -216,13 +218,21 @@ extension TypingController {
         finishEdit()
     }
 
-    /// Edits the text before the cursor into `target`, touching only the
-    /// part after what they share.
+    /// Edits the text before the cursor into `target`. Both are the text
+    /// iOS shows before the cursor, which is cut short in long fields, so
+    /// they may start at different places: line them up where they agree
+    /// longest, one starting at its front, and edit only what follows.
     private func replaceBefore(with target: String) {
         guard let proxy else { return }
-        let current = proxy.documentContextBeforeInput ?? ""
-        let shared = zip(current, target).prefix { $0 == $1 }.count
-        for _ in shared..<current.count { proxy.deleteBackward() }
-        if target.count > shared { proxy.insertText(String(target.dropFirst(shared))) }
+        let current = Array(proxy.documentContextBeforeInput ?? ""), target = Array(target)
+        var kept = 0, from = 0, longest = -1
+        for shift in -target.count...current.count {
+            let c = max(shift, 0), t = max(-shift, 0)
+            var run = 0
+            while c + run < current.count, t + run < target.count, current[c + run] == target[t + run] { run += 1 }
+            if run > longest || (run == longest && shift == 0) { (kept, from, longest) = (c + run, t + run, run) }
+        }
+        for _ in kept..<current.count { proxy.deleteBackward() }
+        if from < target.count { proxy.insertText(String(target[from...])) }
     }
 }
