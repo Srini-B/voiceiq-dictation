@@ -9,15 +9,20 @@ import VoiceIQBridge
 @MainActor
 final class TypingController: ObservableObject, KeyboardKeysDelegate {
     @Published private(set) var suggestions: [Suggestion] = []
-    @Published private(set) var page: KeyPage = .letters
+    @Published var page: KeyPage = .letters
     @Published private(set) var shift: ShiftState = .off
     @Published private(set) var field = FieldTraits()
     @Published private(set) var returnEnabled = true
-    @Published private(set) var preferences = KeyboardPreferences() {
+    @Published var preferences = KeyboardPreferences() {
         didSet { if preferences.theme != oldValue.theme || preferences.keyTone != oldValue.keyTone { theme = KeyTheme.make(preferences) } }
     }
     @Published private(set) var theme = KeyTheme.standard
     @Published var showsEmoji = false
+    /// Typed letters go here instead of the field while searching emoji.
+    @Published var emojiQuery: String?
+    @Published var showsEdit = false
+    /// A suggestion held down, offered for blocking.
+    @Published var blockOffer: String?
     /// Landscape on iPhone: shorter rows and bar.
     @Published var compact = false
     /// Nothing typed since the keyboard appeared, so the bar may show the
@@ -25,11 +30,11 @@ final class TypingController: ObservableObject, KeyboardKeysDelegate {
     @Published private(set) var typedSinceAppear = false
 
     weak var controller: UIInputViewController?
-    private var proxy: UITextDocumentProxy? { controller?.textDocumentProxy }
+    var proxy: UITextDocumentProxy? { controller?.textDocumentProxy }
 
     private static let lexicon = Bundle.main.url(forResource: "lexicon", withExtension: "bin").flatMap(Lexicon.init(url:))
-    private var engine: TypingEngine?
-    private var classifier: SwipeClassifier?
+    var engine: TypingEngine?
+    let swipe = SwipeRecognizer()
     private let checker = UITextChecker()
 
     /// Shift follows the text (sentence starts) until the user presses it.
@@ -39,11 +44,23 @@ final class TypingController: ObservableObject, KeyboardKeysDelegate {
     private var lastShiftTap: Date?
     private var lastSpaceAt: Date?
     /// The last slid word, its alternatives, and whether a space went in before it.
-    private var slid: (word: String, alternates: [String], leadingSpace: Bool)?
+    var slid: (word: String, alternates: [String], leadingSpace: Bool)?
     /// A slid word gets its space when the next word starts, so punctuation can attach.
-    private var pendingSpace = false
+    var pendingSpace = false
     /// The last autocorrection, so the bar can offer the typed letters back.
-    private var corrected: (original: String, replacement: String)?
+    var corrected: (original: String, replacement: String)?
+    /// How to undo what Delete removed since it went down, so a delete
+    /// slide can put it back.
+    var deleteRestore: TextEdit?
+    /// Bumped by every edit, cursor move and field change except a slid
+    /// word, so a slide result that arrives late is dropped.
+    var editGeneration = 0
+    @Published var undoStack: [UndoStep] = []
+    @Published var redoStack: [UndoStep] = []
+    var lastEdit: EditKind?
+    /// The text before the cursor when a delete slide began, and how many
+    /// of its characters the slide has removed.
+    var deleteSlide: (source: String, removed: Int)?
     /// Every suggestion for the word at the cursor, shown or not.
     private var candidates: [Suggestion] = []
     /// The text around the cursor after the keyboard's last edit. Not
@@ -57,12 +74,20 @@ final class TypingController: ObservableObject, KeyboardKeysDelegate {
     func appeared() {
         preferences = SharedStore.shared.keyboardPreferences
         loadUserWords()
+        if preferences.slideToType, let geometry = engine?.geometry { swipe.update(geometry) }
         page = .letters
         showsEmoji = false
         typedSinceAppear = false
         slid = nil
         pendingSpace = false
         corrected = nil
+        emojiQuery = nil
+        showsEdit = false
+        blockOffer = nil
+        undoStack = []
+        redoStack = []
+        editGeneration &+= 1
+        adoptLocalBlocks()
         readField()
         refresh()
     }
@@ -82,7 +107,7 @@ final class TypingController: ObservableObject, KeyboardKeysDelegate {
             loadUserWords()
         }
         engine?.geometry = geometry
-        classifier = SwipeClassifier(lexicon: lexicon, geometry: geometry)
+        if preferences.slideToType { swipe.update(geometry) }
         refresh()
     }
 
@@ -101,6 +126,7 @@ final class TypingController: ObservableObject, KeyboardKeysDelegate {
         pendingLexicon = (replacements, contacts)
         engine?.replacements = replacements
         engine?.user.contacts = contacts
+        syncSwipeWords()
     }
 
     private var pendingLexicon: (replacements: [String: String], contacts: [String: String])?
@@ -153,6 +179,11 @@ final class TypingController: ObservableObject, KeyboardKeysDelegate {
             slid = nil
             pendingSpace = false
             corrected = nil
+            // Undo replays text before the cursor; it is no longer this text.
+            undoStack = []
+            redoStack = []
+            lastEdit = nil
+            editGeneration &+= 1
         }
         refresh()
     }
@@ -160,8 +191,19 @@ final class TypingController: ObservableObject, KeyboardKeysDelegate {
     /// Corrections come from the same list as the bar, which Predictions
     /// only hides.
     private func updateSuggestions(_ before: String) {
-        candidates = currentSuggestions(before)
+        let blocked = blockedWords
+        candidates = currentSuggestions(before).filter { $0.kind == .typed || !blocked.contains(TypingEngine.key(of: $0.text)) }
         suggestions = preferences.predictions ? candidates : []
+        if preferences.predictions, preferences.emojiSuggestions, assistanceAllowed, let emoji = emojiSuggestion(before) {
+            suggestions = Array(suggestions.prefix(2)) + [Suggestion(text: emoji, kind: .emoji)]
+        }
+    }
+
+    /// The emoji for the word at the cursor, or the word just finished.
+    private func emojiSuggestion(_ before: String) -> String? {
+        let context = TypingEngine.context(before: before)
+        let word = context.partial.isEmpty ? (before.hasSuffix(" ") ? context.previous : nil) : context.partial
+        return word.flatMap(EmojiData.shortcut(for:))
     }
 
     private func currentSuggestions(_ before: String) -> [Suggestion] {
@@ -196,15 +238,18 @@ final class TypingController: ObservableObject, KeyboardKeysDelegate {
 
     func keyDown(_ key: KeySpec) {
         if key.action == .shift { shiftHeld = true }
+        if key.action == .delete { deleteRestore = TextEdit() }
     }
 
     func keyTapped(_ key: KeySpec, text: String?) {
+        if emojiQuery != nil { return searchKeyTapped(key, text: text) }
         switch key.action {
         case .insert(let character): insert(text ?? character)
         case .space: space()
         case .returnKey:
+            checkpoint(.other)
             applyAutocorrection()
-            proxy?.insertText("\n")
+            typeText("\n")
             finishEdit()
         case .delete: delete(words: false)
         case .shift: shiftTapped()
@@ -214,7 +259,10 @@ final class TypingController: ObservableObject, KeyboardKeysDelegate {
         }
     }
 
-    func deleteRepeated(words: Bool) { delete(words: words) }
+    func deleteRepeated(words: Bool) {
+        if emojiQuery != nil { return searchKeyTapped(KeySpec(action: .delete, label: "delete"), text: nil) }
+        delete(words: words)
+    }
 
     func shiftReleased() {
         shiftHeld = false
@@ -243,13 +291,14 @@ final class TypingController: ObservableObject, KeyboardKeysDelegate {
 
     func insert(_ character: String) {
         guard let proxy else { return }
+        checkpoint(character.first?.isLetter == true || character.first?.isNumber == true ? .typing : .other)
         typedSinceAppear = true
         corrected = nil
         let first = character.first
         let startsWord = first.map { $0.isLetter || $0.isNumber || "([{\"“#@".contains($0) } ?? false
         if pendingSpace, startsWord {
             learnPair(before: proxy.documentContextBeforeInput ?? "")
-            proxy.insertText(" ")
+            typeText(" ")
         }
         pendingSpace = false
         slid = nil
@@ -258,7 +307,7 @@ final class TypingController: ObservableObject, KeyboardKeysDelegate {
             learnPair(before: proxy.documentContextBeforeInput ?? "")
         }
         let isLetter = character.count == 1 && first?.isLetter == true
-        proxy.insertText(isLetter && shift != .off ? character.uppercased() : character)
+        typeText(isLetter && shift != .off ? character.uppercased() : character)
         if isLetter, shift == .once {
             if shiftHeld { typedWhileShiftHeld = true } else { shift = .off; shiftIsAuto = true }
         }
@@ -268,25 +317,31 @@ final class TypingController: ObservableObject, KeyboardKeysDelegate {
     }
 
     func insertEmoji(_ emoji: String) {
-        guard let proxy else { return }
+        guard proxy != nil else { return }
+        checkpoint(.other)
+        EmojiData.noteUsed(emoji)
         typedSinceAppear = true
-        if pendingSpace { proxy.insertText(" ") }
+        if pendingSpace { typeText(" ") }
         pendingSpace = false
         slid = nil
-        proxy.insertText(emoji)
+        typeText(emoji)
         refresh()
     }
 
     private func space() {
         guard let proxy else { return }
+        checkpoint(.typing)
         typedSinceAppear = true
         defer { if page == .numbers || page == .symbols { page = .letters } }
         if pendingSpace {
+            // The slid word's own space: a second space still makes ". ".
             pendingSpace = false
             slid = nil
             learnPair(before: proxy.documentContextBeforeInput ?? "")
-            proxy.insertText(" ")
-            finishEdit()
+            typeText(" ")
+            lastSpaceAt = Date()
+            shiftIsAuto = true
+            refresh()
             return
         }
         slid = nil
@@ -294,15 +349,15 @@ final class TypingController: ObservableObject, KeyboardKeysDelegate {
         let now = Date()
         if preferences.periodShortcut, let last = lastSpaceAt, now.timeIntervalSince(last) < 0.6,
            before.hasSuffix(" "), let previous = before.dropLast().last, previous.isLetter || previous.isNumber {
-            proxy.deleteBackward()
-            proxy.insertText(". ")
+            deleteBack()
+            typeText(". ")
             lastSpaceAt = nil
             finishEdit()
             return
         }
         if !applyAutocorrection() { learn(TypingEngine.context(before: before).partial, strongly: false) }
         learnPair(before: proxy.documentContextBeforeInput ?? "")
-        proxy.insertText(" ")
+        typeText(" ")
         lastSpaceAt = now
         shiftIsAuto = true
         refresh()
@@ -315,17 +370,19 @@ final class TypingController: ObservableObject, KeyboardKeysDelegate {
               let correction = candidates.first(where: { $0.kind == .autocorrection || $0.kind == .replacement }) else { return false }
         let partial = TypingEngine.context(before: proxy.documentContextBeforeInput ?? "").partial
         guard !partial.isEmpty, correction.text != partial else { return false }
-        for _ in partial { proxy.deleteBackward() }
-        proxy.insertText(correction.text)
+        deleteBack(partial.count)
+        typeText(correction.text)
         corrected = (partial, correction.text)
         return true
     }
 
     private func delete(words: Bool) {
         guard let proxy else { return }
+        checkpoint(.deleting)
         let before = proxy.documentContextBeforeInput ?? ""
         if let slid, pendingSpace, before.hasSuffix(slid.word) {
-            for _ in 0..<(slid.word.count + (slid.leadingSpace ? 1 : 0)) { proxy.deleteBackward() }
+            let count = slid.word.count + (slid.leadingSpace ? 1 : 0)
+            deleteBack(count)
             self.slid = nil
             pendingSpace = false
             finishEdit()
@@ -334,8 +391,8 @@ final class TypingController: ObservableObject, KeyboardKeysDelegate {
         // Delete right after an autocorrection puts back what was typed and
         // keeps it, as Gboard does, instead of leaving the correction.
         if !words, let corrected, before.hasSuffix(corrected.replacement + " ") {
-            for _ in 0...corrected.replacement.count { proxy.deleteBackward() }
-            proxy.insertText(corrected.original)
+            deleteBack(corrected.replacement.count + 1)
+            typeText(corrected.original)
             learn(corrected.original, strongly: true)
             self.corrected = nil
             finishEdit()
@@ -352,14 +409,14 @@ final class TypingController: ObservableObject, KeyboardKeysDelegate {
             while index > before.startIndex, !before[before.index(before: index)].isWhitespace {
                 index = before.index(before: index); count += 1
             }
-            for _ in 0..<max(count, 1) { proxy.deleteBackward() }
+            deleteBack(max(count, 1))
         } else {
-            proxy.deleteBackward()
+            deleteBack()
         }
         finishEdit()
     }
 
-    private func finishEdit() {
+    func finishEdit() {
         lastSpaceAt = nil
         shiftIsAuto = shift != .locked
         refresh()
@@ -369,22 +426,38 @@ final class TypingController: ObservableObject, KeyboardKeysDelegate {
 
     func pick(_ suggestion: Suggestion) {
         guard let proxy else { return }
+        checkpoint(.other)
         typedSinceAppear = true
         let before = proxy.documentContextBeforeInput ?? ""
         let partial = TypingEngine.context(before: before).partial
+        if suggestion.kind == .emoji {
+            // The emoji takes the place of the word being typed, or of the
+            // word just finished with its space, as on iOS.
+            let previous = TypingEngine.context(before: before).previous ?? ""
+            let replaced = !partial.isEmpty ? partial.count
+                : (!previous.isEmpty && before.hasSuffix(previous + " ") ? previous.count + 1 : 0)
+            deleteBack(replaced)
+            typeText(suggestion.text + " ")
+            EmojiData.noteUsed(suggestion.text)
+            slid = nil
+            pendingSpace = false
+            corrected = nil
+            refresh()
+            return
+        }
         if let slid, pendingSpace, before.hasSuffix(slid.word) {
-            for _ in slid.word { proxy.deleteBackward() }
-            proxy.insertText(suggestion.text)
+            deleteBack(slid.word.count)
+            typeText(suggestion.text)
             self.slid = (suggestion.text, [slid.word] + slid.alternates.filter { $0 != suggestion.text }, slid.leadingSpace)
             refresh()
             return
         }
         if partial.isEmpty {
             let needsSpace = !(before.isEmpty || before.last!.isWhitespace || "([{\"“".contains(before.last!))
-            proxy.insertText((needsSpace ? " " : "") + suggestion.text + " ")
+            typeText((needsSpace ? " " : "") + suggestion.text + " ")
         } else {
-            for _ in partial { proxy.deleteBackward() }
-            proxy.insertText(suggestion.text + " ")
+            deleteBack(partial.count)
+            typeText(suggestion.text + " ")
             if suggestion.kind == .typed { learn(suggestion.text, strongly: true) }
         }
         learnPair(before: String((proxy.documentContextBeforeInput ?? "").dropLast()))
@@ -397,15 +470,35 @@ final class TypingController: ObservableObject, KeyboardKeysDelegate {
 
     // MARK: - Slide to type
 
-    func swiped(_ points: [CGPoint]) {
-        guard preferences.slideToType, page == .letters, let proxy, let engine, let classifier, let lexicon = Self.lexicon else { return }
-        let before = proxy.documentContextBeforeInput ?? ""
-        let context = TypingEngine.context(before: before + " ")
-        let extra = Array(engine.user.dictionary.values) + Array(engine.user.contacts.values)
-            + engine.user.learned.values.filter { $0.count >= UserWords.knownAfter }.map(\.display)
-        let words = classifier.classify(points, lexicon: lexicon, extra: extra,
-                                        prior: engine.swipePrior(previous: context.previous))
+    func swiped(_ points: [CGPoint], times: [TimeInterval]) {
+        guard preferences.slideToType, page == .letters, let proxy else { return }
+        let generation = editGeneration
+        swipe.recognize(points, times: times, context: Self.contextWords(proxy.documentContextBeforeInput ?? "")) { [weak self] words in
+            // Typing, moving the cursor or switching fields while the model
+            // ran leaves the slide's place behind; earlier slides do not.
+            guard let self, self.editGeneration == generation else { return }
+            self.insertSlid(words)
+        }
+    }
+
+    /// The words before the cursor on its line, as FUTO Keyboard gives them.
+    private static func contextWords(_ before: String) -> [String] {
+        let line = before.split(separator: "\n", omittingEmptySubsequences: false).last ?? ""
+        return line.split { !($0.isLetter || $0.isNumber || $0 == "_") }.suffix(10).map(String.init)
+    }
+
+    private func insertSlid(_ found: [String]) {
+        guard page == .letters, emojiQuery == nil, let proxy, let engine else { return }
+        // The user's words come back as bare letters; give them their spelling.
+        var seen = Set<String>()
+        let blocked = blockedWords
+        let words = found.map { $0 == $0.lowercased() ? engine.user.display(key: TypingEngine.key(of: $0)) ?? $0 : $0 }
+            .filter { !blocked.contains(TypingEngine.key(of: $0)) && seen.insert($0.lowercased()).inserted }
         guard !words.isEmpty else { return }
+        let generation = editGeneration
+        checkpoint(.other)
+        editGeneration = generation
+        let before = proxy.documentContextBeforeInput ?? ""
         typedSinceAppear = true
         corrected = nil
         let capitalize = shift == .once || (shouldCapitalize(before + " ") && shift != .locked && shiftIsAuto)
@@ -415,7 +508,7 @@ final class TypingController: ObservableObject, KeyboardKeysDelegate {
         if pendingSpace { learnPair(before: before) }
         let needsSpace = pendingSpace || !(before.isEmpty || before.last!.isWhitespace || "([{\"“".contains(before.last!))
         let word = style(words[0])
-        proxy.insertText((needsSpace ? " " : "") + word)
+        typeText((needsSpace ? " " : "") + word)
         slid = (word, words.dropFirst().map(style), needsSpace)
         pendingSpace = true
         if shift == .once { shift = .off }
@@ -424,8 +517,22 @@ final class TypingController: ObservableObject, KeyboardKeysDelegate {
         refresh()
     }
 
+    /// Never during emoji search. While letters are being tapped
+    /// (`afterTyping`), a slide mid-word may start only once they are a word,
+    /// so a slip while typing stays a tap; later it always may, or an
+    /// unknown word stays stuck, each blocked slide typing another letter.
+    func canStartSwipe(afterTyping: Bool) -> Bool {
+        guard emojiQuery == nil else { return false }
+        guard afterTyping else { return true }
+        let partial = TypingEngine.context(before: proxy?.documentContextBeforeInput ?? "").partial
+        return partial.isEmpty || pendingSpace || engine?.isKnown(partial) == true
+    }
+
     func cursorMoved(by offset: Int) {
+        // While searching emoji the keys type into the query, not the field.
+        guard emojiQuery == nil else { return }
         proxy?.adjustTextPosition(byCharacterOffset: offset)
+        editGeneration &+= 1
         pendingSpace = false
         slid = nil
     }
@@ -448,6 +555,12 @@ final class TypingController: ObservableObject, KeyboardKeysDelegate {
             engine?.replacements = pendingLexicon.replacements
             engine?.user.contacts = pendingLexicon.contacts
         }
+        syncSwipeWords()
+    }
+
+    /// The Dictionary, contacts and known learned words, for slide to type.
+    func syncSwipeWords() {
+        if let engine { swipe.setUserWords(engine.user.keys(prefix: "")) }
     }
 
     private func learn(_ word: String, strongly: Bool) {
@@ -456,12 +569,22 @@ final class TypingController: ObservableObject, KeyboardKeysDelegate {
               var engine, word.count > 1, word.allSatisfy({ $0.isLetter || $0 == "'" }) else { return }
         // A learned word stays counted after it becomes known, so typing
         // alone can take it to the uses that send it to the Dictionary.
-        guard strongly || !engine.isKnown(word)
-            || engine.user.learned[TypingEngine.key(of: word)] != nil else { return }
+        let key = TypingEngine.key(of: word)
+        guard strongly || !engine.isKnown(word) || engine.user.learned[key] != nil else { return }
+        // A capital that only starts the sentence is not the word's: keep
+        // "helo" as typed mid-sentence, and a name's saved spelling.
+        var word = word
+        let text = proxy?.documentContextBeforeInput ?? ""
+        let context = TypingEngine.context(before: text.hasSuffix(" ") ? String(text.dropLast()) : text)
+        if context.sentenceStart, TypingEngine.key(of: context.partial) == key,
+           word.dropFirst() == word.dropFirst().lowercased() {
+            word = engine.user.learned[key]?.display ?? word.lowercased()
+        }
         if LearnedWords.learn(word, strongly: strongly, in: &engine.user), controller?.hasFullAccess == true {
             LearnedWords.publish(engine.user)
         }
         self.engine = engine
+        syncSwipeWords()
     }
 
     /// Counts the word before the cursor as typed after the word before it,

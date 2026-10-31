@@ -24,11 +24,13 @@ struct KeyboardView: View {
     /// The voice panel, opened from the bar; a running session shows it too.
     @State private var voiceOpen = false
 
-    private enum Panel { case keys, voice, emoji, answer }
+    private enum Panel { case keys, voice, emoji, edit, answer }
 
     private var panel: Panel {
         if model.answer != nil { return .answer }
         if voiceOpen || model.phase == .recording || model.phase == .processing || model.waitingForApp { return .voice }
+        if typing.emojiQuery != nil { return .keys }
+        if typing.showsEdit { return .edit }
         return typing.showsEmoji ? .emoji : .keys
     }
 
@@ -51,17 +53,13 @@ struct KeyboardView: View {
                     .padding(8)
                 case .emoji:
                     EmojiPanel(typing: typing)
+                case .edit:
+                    EditPanel(typing: typing)
                 case .keys:
                     KeysArea(typing: typing, controller: controller)
                 }
             }
             .frame(maxHeight: .infinity)
-        }
-        .background {
-            if let background = typing.theme.background {
-                LinearGradient(colors: [Color(background.top), Color(background.bottom)], startPoint: .top, endPoint: .bottom)
-                    .ignoresSafeArea()
-            }
         }
         .onChange(of: model.phase) { old, new in
             // A finished session goes back to the keys.
@@ -89,20 +87,34 @@ struct KeyboardView: View {
                       label: panel == .voice ? "Keyboard" : "VoiceiQ") {
                 voiceOpen.toggle()
                 typing.showsEmoji = false
+                typing.showsEdit = false
+                typing.emojiQuery = nil
             }
             Group {
                 switch panel {
                 case .voice:
                     ModePicker(mode: $model.mode, locked: model.phase == .recording || model.phase == .processing)
+                case .keys where typing.emojiQuery != nil:
+                    EmojiSearchBar(typing: typing)
+                case .keys where typing.blockOffer != nil:
+                    BlockWordChip(word: typing.blockOffer ?? "", block: { typing.block(typing.blockOffer ?? "") },
+                                  cancel: { typing.blockOffer = nil })
                 case .keys where showsOffer:
                     DictionaryOfferChip(offer: offer)
                 case .keys:
-                    SuggestionStrip(suggestions: typing.suggestions, theme: typing.theme, pick: typing.pick)
+                    SuggestionStrip(suggestions: typing.suggestions, theme: typing.theme, pick: typing.pick, hold: typing.offerBlock)
                 default:
                     Color.clear
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            if panel != .voice, typing.emojiQuery == nil {
+                BarButton(systemImage: panel == .edit ? "keyboard" : "character.cursor.ibeam",
+                          label: panel == .edit ? "Keyboard" : "Edit") {
+                    typing.showsEmoji = false
+                    typing.showsEdit.toggle()
+                }
+            }
             if panel != .voice {
                 BarButton(systemImage: "mic.fill", label: "Dictate", action: model.micTapped)
             } else {

@@ -51,6 +51,20 @@ public enum KeyboardHeight: String, Codable, CaseIterable, Sendable {
     }
 }
 
+/// What sliding along the space bar does.
+public enum KeyboardSpaceSlide: String, Codable, CaseIterable, Sendable {
+    case cursor, off
+
+    public var title: String { self == .cursor ? "Move Cursor" : "Off" }
+}
+
+/// What sliding left from delete removes; sliding back puts it back.
+public enum KeyboardDeleteSlide: String, Codable, CaseIterable, Sendable {
+    case words, characters, off
+
+    public var title: String { rawValue.capitalized }
+}
+
 /// Typing settings the app writes and the keyboard reads.
 public struct KeyboardPreferences: Codable, Equatable, Sendable {
     public var layout: KeyboardLetterLayout = .qwerty
@@ -64,6 +78,12 @@ public struct KeyboardPreferences: Codable, Equatable, Sendable {
     public var numberRow = false
     public var height: KeyboardHeight = .standard
     public var keyTone: KeyboardKeyTone = .automatic
+    public var spaceSlide: KeyboardSpaceSlide = .cursor
+    public var deleteSlide: KeyboardDeleteSlide = .words
+    /// An emoji for the word just typed ("pizza" → 🍕) in the bar.
+    public var emojiSuggestions = true
+    /// Never suggested, corrected to or slid to. Keys of `TypingEngine.key(of:)`.
+    public var blockedWords: [String] = []
     /// When the user last asked to forget learned words. The keyboard keeps
     /// its own learned words and clears them when this is newer.
     public var learningResetAt: Date?
@@ -83,6 +103,10 @@ public struct KeyboardPreferences: Codable, Equatable, Sendable {
         numberRow = (try? c.decode(Bool.self, forKey: .numberRow)) ?? d.numberRow
         height = (try? c.decode(KeyboardHeight.self, forKey: .height)) ?? d.height
         keyTone = (try? c.decode(KeyboardKeyTone.self, forKey: .keyTone)) ?? d.keyTone
+        spaceSlide = (try? c.decode(KeyboardSpaceSlide.self, forKey: .spaceSlide)) ?? d.spaceSlide
+        deleteSlide = (try? c.decode(KeyboardDeleteSlide.self, forKey: .deleteSlide)) ?? d.deleteSlide
+        emojiSuggestions = (try? c.decode(Bool.self, forKey: .emojiSuggestions)) ?? d.emojiSuggestions
+        blockedWords = (try? c.decode([String].self, forKey: .blockedWords)) ?? d.blockedWords
         learningResetAt = try? c.decode(Date.self, forKey: .learningResetAt)
     }
 }

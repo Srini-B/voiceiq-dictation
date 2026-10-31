@@ -45,9 +45,6 @@ final class KeyboardViewController: UIInputViewController {
         model.appeared()
         dictionaryOffer.appeared(hasFullAccess: hasFullAccess)
         typing.appeared()
-        // A forced key tone (and iOS 5, which has no dark look) pins the
-        // whole keyboard, bar included, to light or dark.
-        view.overrideUserInterfaceStyle = typing.theme.style
         updateHeight()
     }
 
@@ -66,6 +63,10 @@ final class KeyboardViewController: UIInputViewController {
         super.viewDidAppear(animated)
         // The host connection exists now, so the globe answer is reliable.
         model.refreshHostTraits()
+        // The window's system-gesture recognizers hold back touches near the
+        // screen edges, so q, a, z and p type late or not at all (azooKey,
+        // giellakbd-ios). The window is the extension's own.
+        view.window?.gestureRecognizers?.forEach { $0.delaysTouchesBegan = false }
         typing.readField()
         typing.refresh()
     }

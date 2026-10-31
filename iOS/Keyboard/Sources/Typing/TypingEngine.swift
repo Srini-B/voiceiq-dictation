@@ -24,6 +24,8 @@ struct Suggestion: Equatable, Sendable {
         case word
         /// A Text Replacement from iOS Settings.
         case replacement
+        /// An emoji for the word typed ("pizza" → 🍕); it takes the word's place.
+        case emoji
     }
     var text: String
     var kind: Kind
@@ -302,13 +304,6 @@ struct TypingEngine: Sendable {
         let lexicon = lexicon
         let pairs = previousID.map { Dictionary(lexicon.followers(of: $0, limit: .max), uniquingKeysWith: max) } ?? [:]
         return { id in pairs[id] ?? (lexicon.logProbability(id) + Self.backoff) }
-    }
-
-    /// The word prior for slide to type, damped so the path's shape decides
-    /// most of it (0.25 tuned on simulated paths, 2026-10-30).
-    func swipePrior(previous: String?) -> (Lexicon.WordID) -> Double {
-        let model = contextModel(previous.flatMap(bestID(for:)))
-        return { model($0) * 0.25 }
     }
 
     // MARK: - Next word

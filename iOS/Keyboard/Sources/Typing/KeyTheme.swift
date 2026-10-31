@@ -24,8 +24,6 @@ struct KeyTheme {
     var shadowOffset: CGFloat = 1
     var shadowRadius: CGFloat = 0
     var border: UIColor?
-    /// Painted behind the whole keyboard; nil keeps the system's backdrop.
-    var background: (top: UIColor, bottom: UIColor)?
     var style: UIUserInterfaceStyle = .unspecified
     var fontName: String?
     var fontWeight: UIFont.Weight = .regular
@@ -83,8 +81,7 @@ struct KeyTheme {
                           label: .label, body: color(0x8E939C, dark: 0x1B1B1D)),
         cornerRadius: 8,
         faceInsets: UIEdgeInsets(top: 0, left: 0, bottom: 3.5, right: 0),
-        shadow: color(0x000000, alpha: 0.18, dark: 0x000000, darkAlpha: 0.5), shadowOffset: 1.5, shadowRadius: 1.5,
-        background: (color(0xD7DAE0, dark: 0x2C2C2F), color(0xC9CCD3, dark: 0x1E1E20)))
+        shadow: color(0x000000, alpha: 0.18, dark: 0x000000, darkAlpha: 0.5), shadowOffset: 1.5, shadowRadius: 1.5)
 
     /// Keycaps: a sculpted top inside a wider skirt, on a plate.
     static let mechanical = KeyTheme(
@@ -95,16 +92,14 @@ struct KeyTheme {
         cornerRadius: 7,
         faceInsets: UIEdgeInsets(top: 1.5, left: 3, bottom: 6, right: 3),
         shadow: color(0x000000, alpha: 0.25, dark: 0x000000, darkAlpha: 0.7), shadowOffset: 1.5, shadowRadius: 1.5,
-        background: (color(0xE6E7EA, dark: 0x1E1E20), color(0xD8DADE, dark: 0x141415)),
         fontWeight: .medium)
 
-    /// The iOS 5 keyboard: shaded keys on a slate gradient, Helvetica Bold.
+    /// The iOS 5 keyboard: shaded keys, Helvetica Bold.
     static let classic = KeyTheme(
         character: KeyFace(top: color(0xFDFDFE), bottom: color(0xDCDDE1), label: color(0x111111)),
         function: KeyFace(top: color(0xA9AFBB), bottom: color(0x8A919E), label: color(0xFFFFFF)),
         cornerRadius: 5,
         shadow: color(0x2C2F36, alpha: 0.9), shadowOffset: 1.2,
-        background: (color(0x9AA0AB), color(0x6E7480)),
         style: .light,
         fontName: "Helvetica-Bold")
 

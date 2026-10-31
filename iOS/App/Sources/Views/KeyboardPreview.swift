@@ -21,7 +21,6 @@ struct KeyboardPreview: View {
         .padding(.bottom, 8)
         .background(background)
         .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
-        .modifier(ForcedScheme(style: theme.style))
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Keyboard preview")
     }
@@ -46,28 +45,12 @@ struct KeyboardPreview: View {
         .padding(.horizontal, 4)
     }
 
-    @ViewBuilder private var background: some View {
-        if let background = theme.background {
-            LinearGradient(colors: [Color(background.top), Color(background.bottom)], startPoint: .top, endPoint: .bottom)
-        } else {
-            // The system keyboard's backdrop, which Default and Clear sit on.
-            Color(UIColor { $0.userInterfaceStyle == .dark
-                ? UIColor(white: 0.17, alpha: 1)
-                : UIColor(red: 0.84, green: 0.85, blue: 0.88, alpha: 1) })
-        }
-    }
-}
-
-/// A forced key tone pins the preview to light or dark, as it pins the keyboard.
-private struct ForcedScheme: ViewModifier {
-    let style: UIUserInterfaceStyle
-
-    func body(content: Content) -> some View {
-        switch style {
-        case .light: content.environment(\.colorScheme, .light)
-        case .dark: content.environment(\.colorScheme, .dark)
-        default: content
-        }
+    /// The system keyboard's backdrop, which every theme sits on: iOS draws
+    /// a rounded panel around the extension that the keyboard cannot paint.
+    private var background: some View {
+        Color(UIColor { $0.userInterfaceStyle == .dark
+            ? UIColor(white: 0.17, alpha: 1)
+            : UIColor(red: 0.84, green: 0.85, blue: 0.88, alpha: 1) })
     }
 }
 

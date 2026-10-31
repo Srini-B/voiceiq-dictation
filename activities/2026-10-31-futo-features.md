@@ -1,0 +1,114 @@
+# FUTO Keyboard features, rebuilt (2026-10-31)
+
+**Why.** The owner asked to port FUTO Keyboard's features. From the
+inventory, they kept emoji search, emoji suggestions and skin tones; delete
+and space-bar slide options; blocked words; and the text-edit panel. They
+dropped clipboard history, key haptics and sound, and one-handed or split
+modes. FUTO's keyboard code is FUTO Source First 1.1, so each feature is
+rebuilt in Swift from FUTO's behaviour, not translated. The emoji names are
+gemoji (MIT) as FUTO ships them.
+
+**What changed.**
+- `scripts/generate-keyboard-data.py` writes `emoji-words.txt` (each emoji,
+  its five skin tones when Unicode has them, its search words) and
+  `emoji-shortcuts.txt` (1,735 words that suggest an emoji, ranked as FUTO
+  ranks them). `EmojiData` reads both and remembers the last skin tone.
+- Emoji panel: a search button, and holding an emoji offers skin tones. The
+  hold is tried before the tap; inside the scroll view a plain long press
+  lost to the tap.
+- Bar: the third slot shows the emoji for the word; holding a word offers
+  "Don’t Suggest"; a cursor button opens the edit panel. The search results
+  are not in a scroll view: iOS 26 blurs scroll view edges, which blurred
+  the whole 44 pt bar.
+- `KeyboardPreferences`: `spaceSlide`, `deleteSlide`, `emojiSuggestions`,
+  `blockedWords`, each decoding to its default when missing.
+- Settings › Typing: Emoji Suggestions, Space Bar Slide, Delete Slide,
+  Blocked Words.
+
+**Verified** in the iPhone 17e Simulator (iOS 27.0) on the real keyboard:
+"pizza" offers 🍕 and picking it gives "I love 🍕 so"; searching "thumb" and
+"fire" finds the right emoji; holding 👍 shows six tones, picking the medium
+one types 👍🏽 and "wave" then shows 👋🏽; holding "google" and blocking it
+removes it from "goog"; a delete slide of two words and back restored one;
+undo stepped back over the delete slide, then over the word typed before it;
+the word step moved the cursor a word left; Settings shows the new rows
+and the blocked list. Slide to type still types words. 143 core tests pass;
+no new crash reports. Not tried: redo, Characters delete slide, Space Bar
+Slide Off, copy, cut and paste.
+
+## Review fixes (PR #33)
+
+Greptile and CodeRabbit found text-loss paths; all were real and fixed:
+a late slide result went in wherever the cursor had moved (now dropped
+unless only slides happened since); picking 🍕 after sliding "pizza" left
+"p🍕" and after a typed "pizza " appended the emoji (now replaces the word);
+a delete slide during emoji search edited the message; sliding back could
+not restore a slid word the press deleted (the slide now starts from the
+text at touch-down); undo lost a selection replaced by paste or cut and
+skipped Return and cut; locally blocked words could never be unblocked
+after Full Access; held edit-panel keys kept repeating if the touch was
+cancelled; a slide dropped its samples from before the threshold. The
+Settings credit now carries the GPL-3.0 notices and links. The App Store
+GPL question CodeRabbit raised was left as decided: the owner accepted
+GPL-3.0 for this free, open-source TestFlight build.
+
+**Verified** in the Simulator: slide "pizza" then 🍕 gives "🍕 "; typed
+"pizza " then 🍕 gives "🍕 "; a delete slide right after a slide emptied the
+field and sliding back restored it with the slid word; a delete slide in
+emoji search left the message unchanged; Return then Undo removed the
+newline and Redo put it back; a held arrow repeated and stopped on release;
+the Settings footer shows the notices. No new crash reports. Not tried:
+paste over a selection then undo (needs Full Access), a late slide result.
+
+A second Greptile pass found that Settings › Typing saved its own, possibly
+old, copy of the blocked list over words the keyboard had blocked meanwhile.
+The page now saves every setting except that list, and Blocked Words edits
+the stored list directly. Verified in the Simulator by changing the stored
+list while the page was open: changing Space Bar Slide kept the new word,
+and deleting a word on Blocked Words kept a word added while it was open.
+
+## Missed slides and the slid-word period (owner report)
+
+The owner found slides sometimes not registering, and two spaces after a
+slid word giving two spaces instead of ". ".
+
+- **Missed slides.** Reproduced in the Simulator with logging: once the
+  word at the cursor was not a known word (a stray tap, a name), every
+  slide failed `canStartSwipe`, fell back to a tap and typed one more
+  letter, so the word stayed unknown and slides stayed blocked until a
+  space. Thirty slides in a row typed `neetmweeorrde`. The known-word rule
+  now applies only within 0.5 s of a tapped letter, where drifting taps
+  happen. After the fix, eight slides from that state typed eight words.
+  Two smaller position effects were seen and left: resting about 0.4 s on
+  a key with accents before moving opens the accent popup (as on iOS), and
+  a touch less than about 4 pt above the top row lands on the bar.
+- **Period.** The first space after a slid word only placed the word's
+  pending space and did not record the time, so the second space added a
+  second space. It now records it; verified "some" + two spaces gives
+  "some. " with Shift on, and the next slide types "The".
+
+CodeRabbit's second review (on 8831033): the delete slide rebuilt the
+whole text before the cursor from a snapshot, and undo did the same, but
+iOS cuts that text short in long fields, so the two copies could start at
+different places and characters near the cut were deleted or doubled
+(a scratch model with a 20-character window broke 6 of 9 cases). The
+delete slide now records exactly what each delete removed and puts back
+only that (all 6 scratch cases pass, including deleting past the window);
+undo lines the copies up first (fixes 4 of those 6; deleting past the
+window cannot be undone from a cut-short copy). Also: the space bar no
+longer moves the cursor during emoji search, and edit-panel repeat keys
+act on touch-down so a quick tap is not lost. Simulator: delete slide over
+"quick brown" and back restored it; a 30 ms arrow tap moved one character.
+
+Greptile on 006e625: lining up undo snapshots failed when the saved and
+current text matched in the wrong place: select all of "hello", paste
+"ello", Undo edited nothing. Undo no longer compares snapshots. Every
+keyboard edit now goes through `typeText`/`deleteBack`, which record what
+it removed and typed; each undo step keeps a reverse edit and a forward
+(redo) edit. Redo needs only the count each edit removed, so it works
+when undo removes more than iOS shows. A scratch model with a 12-character
+window passed 3000 random runs of steps and delete slides (undo all, redo
+all, slide restore) and the hello/ello case; two planted bugs failed about
+1400 runs each. Simulator: selected "Hello", typed "E", Undo gave "Hello",
+Redo gave "E"; a delete slide out and back restored the text; Undo after a
+slide-delete restored it.

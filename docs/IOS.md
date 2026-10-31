@@ -369,28 +369,81 @@ offers "Add copied text to Dictionary" until you start typing.
 | --- | --- |
 | Layouts | QWERTY, QWERTZ, AZERTY, Dvorak, Colemak (`KeyLayout`). English words on each. Optional number row; Short, Default or Tall height (`KeyboardViewController.height`). Without the number row, holding a top-row letter types its digit (shown in the key's corner) on the 10-key layouts. |
 | Pages | Letters, 123, #+=, number pads for number, decimal and phone fields. Email fields get @ and `.`, URL fields `.` and `/`; search fields keep a full space bar. Return shows the field's label (go, send, search…). |
-| Keys | Shift (tap once, double-tap for Caps Lock, hold and type), accents and alternates on long press (hold `.` for `.com`, the currency key for other currencies), key preview, repeat delete that moves to whole words, space-bar cursor drag. A touch goes to the nearest key in its row. |
+| Keys | Shift (tap once, double-tap for Caps Lock, hold and type), accents and alternates on long press (hold `.` for `.com`, the currency key for other currencies), key preview, repeat delete that moves to whole words. Space Bar Slide: Move Cursor (default) or Off. Delete Slide: sliding left from delete removes Words (default, one per 22 pt) or Characters (one per 9 pt), sliding back restores them, lifting keeps the result; Off. The slide first puts back what the press itself removed (a character, a slid word, a selection, a held run), recorded as each delete happens (`deleteRestore`) rather than as a snapshot, because iOS cuts the text before the cursor short in long fields. No delete or space-bar slide during emoji search. A touch goes to the nearest key in its row. |
 | Suggestions | Next-word predictions from word pairs, completions, and corrections. The typed letters show in quotes; picking them keeps and learns the word. |
 | Auto-correction | Delete right after a correction restores the typed word and learns it. On space or punctuation. Fixes a mistyped word one edit away (adjacent keys cost less), two edits away through `UITextChecker`, apostrophes (`dont` → `don't`), and capitals (`i` → `I`, `monday` → `Monday`). A real word is never replaced by another word. Off in URL, email and search fields and where the field turns it off. |
-| Auto-capitalization, “.” shortcut | Sentence starts, per the field's `autocapitalizationType`. Two spaces type a period. |
-| Slide to type | `SwipeClassifier` (ported from FlorisBoard). The slid word gets its space when the next word starts, so punctuation attaches; the bar offers the other candidates; delete removes the whole word. |
+| Auto-capitalization, “.” shortcut | Sentence starts, per the field's `autocapitalizationType`. Two spaces type a period, also after a slid word (its first space is the word's own). |
+| Slide to type | FUTO Swipe (`SwipeRecognizer`; see below). The slid word gets its space when the next word starts, so punctuation attaches; the bar offers the other candidates; delete removes the whole word. |
+| Blocked words | Holding a word in the bar offers "Don’t Suggest". A blocked word is never suggested, corrected to or slid to, and is forgotten if learned. With Full Access the list is `KeyboardPreferences.blockedWords`, editable in Settings › Typing › Blocked Words; without it the keyboard keeps its own list, which moves to the shared one the next time the keyboard appears with Full Access. |
+| Edit panel | The bar's cursor button: line start and end, word steps, left and right arrows that repeat while held, copy, cut and paste (Full Access), undo and redo of the keyboard's own edits (each word, each run of deletes, Return, cut, paste and each other action; a selection the edit replaced comes back; cleared when the text changes elsewhere), delete. Held arrows and delete act on touch-down and stop when the touch ends, is cancelled or the panel closes. Every keyboard edit goes through one recorder that notes the exact text it removed and typed; each undo step keeps the edit that reverses it and the edit that redoes it, so undo and redo work in fields longer than the text iOS shows before the cursor. The delete slide uses the same recorder. A keyboard cannot select text or reach the app's own undo. |
 | Your words | The VoiceiQ Dictionary (`SharedStore.dictionaryWords`), contact names and Text Replacements (`requestSupplementaryLexicon`), and words typed twice or picked from quotes. |
-| Emoji | Unicode's list in CLDR order, by category, with recents. |
+| Emoji | Unicode's list in CLDR order, by category, with recents. Search (magnifier in the emoji panel) types into the bar with the keys and matches gemoji names, aliases and tags by word prefix. Holding an emoji that takes a skin tone offers the five tones; the one picked becomes the tone the panel, search and suggestions show (`EmojiData.skinTone`). Emoji Suggestions: the third bar slot offers the emoji for the word being typed or just finished ("pizza" → 🍕, FUTO's shortcut rules: one-word names, then aliases, tags, the first part of two-part names, never words of two letters); picking it replaces the word. |
 | No assistance | Password, one-time code, card, phone and postal code fields. |
-| Themes | Default, Clear, Physical, Mechanical and iOS 5, after the Raycast keyboard (`KeyTheme`). Physical and Mechanical take Automatic, Light or Dark keys, which pins the whole keyboard through `overrideUserInterfaceStyle`; iOS 5 is always light. Themes with their own background cannot paint the system's globe and mic strip below the keys. |
+| Themes | Default, Clear, Physical, Mechanical and iOS 5, after the Raycast keyboard (`KeyTheme`). Physical and Mechanical take Automatic, Light or Dark keys, which pins the key area through `overrideUserInterfaceStyle`; iOS 5 keys are always light. The bar follows the app, like the system backdrop under it. Every theme sits on the system's own backdrop: on iOS 26 and later iOS draws a rounded panel around the extension, with a strip above it and the globe and mic row below, that the keyboard cannot paint, so a painted background shows square corners and two greys. |
 
 Key labels are centred on the cap height, or the x-height for lowercase, not
-on the font's line box. A slide starts once the finger reaches another letter
-(at least a third of a key away) or moves three quarters of a key; moving
-more than 8 pt cancels the long press for accents. A slide shorter than 1.6
-keys that ends within 0.15 s is a sloppy tap and types its first key. The slide
-trail draws above the keys.
+on the font's line box. A tap types the key the finger lifts on once it is
+8 pt past the pressed key's edge, as on iOS. A slide starts with AOSP
+LatinIME's shipped thresholds: half a key after 20 ms, but within 0.5 s of a
+typed letter it must last about 185 ms and cross about 3.7 keys, easing to
+half a key by 450 ms, so a fast typist's drifting tap stays a tap. In that
+same half second, a slide mid-word may start only when the letters typed so
+far are a word (`canStartSwipe`), so a slip while typing never inserts a word
+and a space. Later it always may: blocking it then left an unknown word
+stuck at the cursor, each blocked slide typing one more letter onto it. A slide under
+0.8 of a key types the key under the finger. Moving more than 8 pt cancels
+the long press for accents. The slide trail draws above the keys. In `viewDidAppear` the keyboard turns off
+`delaysTouchesBegan` on its window's system-gesture recognizers, which
+otherwise hold back touches near the screen edges.
+
+**Slide to type: FUTO Swipe.** FUTO Keyboard's swipe engine
+(`iOS/Vendor/FUTOSwipe`, GPL-3.0) runs three models on ExecuTorch with
+XNNPACK: an encoder that reads the path for any layout, a decoder trained on
+QWERTY, and a context model that weighs the words before the cursor. A beam
+search keeps the results to words in `swipe/words.trie` and the user's own
+words (the Dictionary, contact names and learned words, at about the
+frequency of "see"). `KeyboardKeysView` records every coalesced touch sample
+with its timestamp, and `SwipeRecognizer` scales the path to the letter keys'
+bounds, where each key's centre sits at its place in FUTO's layout (q at
+0.05, 1/6). The decoder loads only when the rows are QWERTY; other layouts use
+the encoder and context model. Models load on a serial queue when the
+keyboard first lays out its letters, and each slide is decoded on the same
+queue, so the main thread never waits. Word results keep the dictionary's
+spelling ("I", "don't"); the user's words get their saved spelling. A slide
+records every sample from touch-down, so the turns made before it counted as
+a slide reach the model. A result that arrives after the user typed, moved
+the cursor or changed fields is dropped (`editGeneration`); a slid word does
+not count, so quick slides in a row all land in order.
+Settings › Typing credits FUTO Swipe with its copyright, GPL-3.0, no
+warranty, and links to the license and this repository's source, as the
+model license and GPL-3.0 section 5(d) require.
+
+- Accuracy on 4,931 real swipes from FUTO's MIT dataset
+  (`futo-org/swipe.futo.org` test split), first choice / top four: the
+  previous FlorisBoard-style classifier 75.6% / 85.0%; FUTO encoder only
+  88.1% / 94.0%; with the decoder and context model 91.7% / 95.3%, at
+  2.2 ms per slide on an M2 (the shipped dictionary, offensive words removed).
+- Memory: FUTO's own dictionary loader builds a 98 MB trie, too much for a
+  keyboard extension. `scripts/generate-swipe-trie.py` writes the same trie as
+  12-byte nodes that `MappedTrie.cpp` memory-maps (5.2 MB, 142,507 words).
+  The three models add about 21 MB; the keyboard measured 40 MB in the
+  iPhone 17e Simulator after slides.
+- Rebuilding: `scripts/build-futo-swipe.sh` clones the library at its pinned
+  commit, builds ExecuTorch and the library for iPhone and Simulator (about
+  five minutes on an M2), and downloads the pinned models. The output is
+  committed, so app builds need neither step. The keyboard target force-loads
+  `libfutoswipe_registry.a` (kernels register themselves), builds C++17
+  without RTTI, and excludes x86_64 Simulators.
 
 **Data.** `lexicon.bin` holds 82,846 words and 242,342 word pairs (3.5 MB),
 memory-mapped so it does not count against the extension's memory limit. A
 word's key is lowercase without apostrophes, so one binary search finds `dont`
 and `don't`. `scripts/generate-keyboard-data.py` rebuilds it and `emoji.txt`
-from pinned sources (THIRD_PARTY_NOTICES.md, "Keyboard data").
+from pinned sources (THIRD_PARTY_NOTICES.md, "Keyboard data"). A word takes
+Hunspell's capitalized spelling only when Hunspell has no lowercase form of it,
+counting inflections of a lowercase stem: Hunspell stores "job/SM" and no "as",
+so "jobs" and "as" must not become "Jobs" and "As". A learned word drops a
+capital that only started its sentence.
 
 **Scoring.** Every candidate gets ln P(word | previous word), using the pair
 when the list has it and the word's frequency times 0.05 when it does not,
@@ -399,8 +452,9 @@ becomes the best different spelling scoring above −24. A known word changes
 only to its own contraction or capitalization.
 
 **Settings.** Settings › Typing in the app writes `KeyboardPreferences` to the
-App Group: layout, predictions, auto-correction, auto-capitalization, slide to
-type, “.” shortcut, and Reset Keyboard Learning. The
+App Group: layout, predictions, auto-correction, auto-capitalization, emoji
+suggestions, slide to type, “.” shortcut, space bar and delete slides, blocked
+words, and Reset Keyboard Learning. The
 keyboard reads them each time it appears. Without Full Access iOS hides the App
 Group, so the keyboard uses the defaults. Learned words stay in the keyboard's
 own storage.
@@ -429,7 +483,10 @@ the keyboard uses. The keys respond to touch but type nothing.
 misspellings corrected as the iOS keyboard does, about 7 ms a suggestion. Slide
 to type on simulated noisy paths for 400 words drawn by frequency: 357 right
 first and 389 in the top three at 0.15 key-width noise; 302 and 355 at 0.30;
-under 1 ms a gesture.
+under 1 ms a gesture. After the 2026-10-31 fixes (no double-letter loop,
+lowercase list, no abbreviations), the 400 most frequent words with
+7 pt / 9 pt finger noise: 95.2% right first (was 90.7%) and 99.9% in the top
+three (was 97.2%); words of three or fewer distinct letters 86.5% (was 79.7%).
 
 ### Dictionary
 
