@@ -60,3 +60,10 @@ newline and Redo put it back; a held arrow repeated and stopped on release;
 the Settings footer shows the notices. No new crash reports. Not tried:
 paste over a selection then undo (needs Full Access), a late slide result.
 
+A second Greptile pass found that Settings › Typing saved its own, possibly
+old, copy of the blocked list over words the keyboard had blocked meanwhile.
+The page now saves every setting except that list, and Blocked Words edits
+the stored list directly. Verified in the Simulator by changing the stored
+list while the page was open: changing Space Bar Slide kept the new word,
+and deleting a word on Blocked Words kept a word added while it was open.
+

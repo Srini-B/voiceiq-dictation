@@ -60,7 +60,13 @@ struct TypingSettingsView: View {
             KeyboardPreview(preferences: preferences)
                 .animation(.easeInOut(duration: 0.2), value: preferences)
         }
-        .onChange(of: preferences) { _, value in SharedStore.shared.keyboardPreferences = value }
+        .onChange(of: preferences) { _, value in
+            // The keyboard blocks words too, so this page's copy of the list
+            // may be old; Blocked Words saves its own edits.
+            var saved = value
+            saved.blockedWords = SharedStore.shared.keyboardPreferences.blockedWords
+            SharedStore.shared.keyboardPreferences = saved
+        }
         .confirmationDialog("Forget the words the keyboard has learned?", isPresented: $confirmReset, titleVisibility: .visible) {
             Button("Reset Keyboard Learning", role: .destructive) { preferences.learningResetAt = Date() }
         }
@@ -84,17 +90,30 @@ private struct BlockedWordsView: View {
             }
             Section {
                 ForEach(words, id: \.self) { Text($0) }
-                    .onDelete { words.remove(atOffsets: $0) }
+                    .onDelete { offsets in
+                        let removed = offsets.map { words[$0] }
+                        edit { $0.removeAll(where: removed.contains) }
+                    }
             }
         }
+        .onAppear { edit { _ in } }
         .settingsPage(title: "Blocked Words", keyboard: true)
+    }
+
+    /// Edits the stored list, not this page's copy, which misses words the
+    /// keyboard blocked while it was open.
+    private func edit(_ change: (inout [String]) -> Void) {
+        var stored = SharedStore.shared.keyboardPreferences
+        change(&stored.blockedWords)
+        SharedStore.shared.keyboardPreferences = stored
+        words = stored.blockedWords
     }
 
     /// Stored as the keyboard matches them: lowercase, no apostrophes.
     private func add() {
         let key = draft.trimmingCharacters(in: .whitespaces).lowercased()
             .replacingOccurrences(of: "'", with: "").replacingOccurrences(of: "’", with: "")
-        if !key.isEmpty, !words.contains(key) { words.insert(key, at: 0) }
+        if !key.isEmpty { edit { if !$0.contains(key) { $0.insert(key, at: 0) } } }
         draft = ""
     }
 }
