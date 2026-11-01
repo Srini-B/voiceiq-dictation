@@ -19,8 +19,11 @@ final class KeyboardViewController: UIInputViewController {
         requestSupplementaryLexicon { [weak typing] lexicon in
             Task { @MainActor in typing?.setSupplementaryLexicon(lexicon.entries) }
         }
-        let hosting = UIHostingController(rootView: KeyboardView(model: model, offer: dictionaryOffer, typing: typing, controller: self))
-        hosting.view.backgroundColor = .clear
+        let hosting = UIHostingController(rootView: KeyboardView(model: model, offer: dictionaryOffer, typing: typing))
+        // Not clear: iOS drops a keyboard's touches that land on fully
+        // transparent pixels, so taps beside a suggestion's letters and
+        // between keys did nothing. 1% gray is invisible.
+        hosting.view.backgroundColor = UIColor(white: 0.5, alpha: 0.01)
         hosting.sizingOptions = []
         addChild(hosting)
         view.addSubview(hosting.view)
@@ -37,6 +40,14 @@ final class KeyboardViewController: UIInputViewController {
         self.height = height
         hosting.didMove(toParent: self)
         self.hosting = hosting
+    }
+
+    /// iOS keeps this controller's view alive after the controller goes,
+    /// through the trait collection of the SwiftUI view inside it, so every
+    /// dismissal left a whole keyboard behind (14 MB each) until iOS ended
+    /// the extension and showed its own keyboard. Detaching it frees it.
+    deinit {
+        hosting?.view.removeFromSuperview()
     }
 
     override func viewWillAppear(_ animated: Bool) {

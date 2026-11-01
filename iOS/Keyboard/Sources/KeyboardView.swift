@@ -20,7 +20,6 @@ struct KeyboardView: View {
     @ObservedObject var model: KeyboardModel
     @ObservedObject var offer: DictionaryOffer
     @ObservedObject var typing: TypingController
-    let controller: KeyboardViewController
     /// The voice panel, opened from the bar; a running session shows it too.
     @State private var voiceOpen = false
 
@@ -56,7 +55,7 @@ struct KeyboardView: View {
                 case .edit:
                     EditPanel(typing: typing)
                 case .keys:
-                    KeysArea(typing: typing, controller: controller)
+                    KeysArea(typing: typing)
                 }
             }
             .frame(maxHeight: .infinity)
@@ -198,7 +197,7 @@ struct KeyboardView: View {
     private var bottomRow: some View {
         HStack(spacing: 6) {
             if model.showsGlobeKey {
-                GlobeKey(controller: controller).frame(width: 44)
+                GlobeKey(controller: model.controller).frame(width: 44)
             }
             KeyCap(systemImage: "doc.on.clipboard", label: "Paste last", enabled: model.lastText != nil) {
                 model.pasteLast()
@@ -533,7 +532,8 @@ private func makeUIKitKey(symbol: String) -> UIButton {
 }
 
 private struct GlobeKey: UIViewRepresentable {
-    let controller: KeyboardViewController
+    /// Weak: the controller owns this view.
+    weak var controller: KeyboardViewController?
 
     func makeUIView(context: Context) -> UIButton {
         let button = makeUIKitKey(symbol: "globe")

@@ -12,6 +12,9 @@ enum LearnedWords {
     private static let maxWords = 3000
     /// Next words kept per word, and words that keep any.
     private static let maxFollowers = 12
+    /// A sentence can start with almost any word, so twelve slots kept
+    /// dropping a word used once before its second use made it a prediction.
+    private static let maxSentenceStarters = 200
     private static let maxPrevious = 2000
     /// About 50 KB of Dictionary entries; iCloud stops syncing the whole
     /// Dictionary past 900 KB (`DictionarySync.maxBytes`).
@@ -59,7 +62,7 @@ enum LearnedWords {
         entry.count += 1
         entry.display = word
         followers[key] = entry
-        if followers.count > maxFollowers,
+        if followers.count > (previous == UserWords.sentenceStart ? maxSentenceStarters : maxFollowers),
            let rarest = followers.filter({ $0.key != key }).min(by: { $0.value.count < $1.value.count })?.key {
             followers[rarest] = nil
         }
