@@ -285,7 +285,12 @@ extension View {
             if let tint {
                 self.glassEffect(.regular.tint(tint.opacity(0.85)), in: .capsule)
             } else {
-                self.glassEffect(.regular, in: .capsule)
+                // Glass takes the brightness of what is behind it, but the text
+                // colors follow the system appearance: in dark mode over a white
+                // page the pill turned light grey under light text. A surface
+                // fill keeps the pill dark in dark mode and light in light mode.
+                self.background(Capsule().fill(VoiceIQUI.Colors.surface.opacity(0.75)))
+                    .glassEffect(.regular, in: .capsule)
             }
         } else {
             self.background(
