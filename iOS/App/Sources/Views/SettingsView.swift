@@ -167,8 +167,11 @@ struct DictationSettingsView: View {
                     }
             }
             Section {
-                Toggle("Real-time transcription", isOn: $liveTranscription)
-                    .onChange(of: liveTranscription) { _, value in settings.setLiveTranscriptionEnabled(value) }
+                // Saved only on a user change, not when its default is refreshed.
+                Toggle("Real-time transcription", isOn: Binding(get: { liveTranscription }, set: {
+                    liveTranscription = $0
+                    settings.setLiveTranscriptionEnabled($0)
+                }))
             }
             Section {
                 TranscriptionSourcePicker("Transcription", selection: $dictationSource)
@@ -220,7 +223,10 @@ struct DictationSettingsView: View {
         // leave a stale toggle here.
         .onReceive(NotificationCenter.default.publisher(for: .gtSettingDidChange).receive(on: RunLoop.main)) { note in
             switch note.object as? String {
-            case "dictationSource": dictationSource = settings.dictationSource
+            case "dictationSource":
+                dictationSource = settings.dictationSource
+                liveTranscription = settings.liveTranscriptionEnabled
+            case "modelProvider": liveTranscription = settings.liveTranscriptionEnabled
             case "meetingSource": meetingSource = settings.meetingSource
             case "localSpeechModel": localModel = settings.localSpeechModel
             case "liveDictationEnabled": liveTranscription = settings.liveTranscriptionEnabled

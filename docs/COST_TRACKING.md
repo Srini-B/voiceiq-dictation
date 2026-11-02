@@ -61,6 +61,12 @@ OpenAI live transcription estimates cost from accepted audio duration at
 $0.017/minute. Live and batch fallback attempts appear as separate stages
 under the same dictation. A failed live attempt can therefore add cost even
 when the final transcript comes from a batch upload.
+The Mac's live Nemotron 3.5 Transcribe (`DeepInfraLiveTranscriber`) books
+each DeepInfra request, the last piece included, as `liveTranscribe` from its
+reported `duration`. Every request carries the whole open tail (up to about
+13 s), so a dictation bills three to four times its length: 81 s for a 22 s
+dictation and 156 s for a 50 s one, measured 2026-11-02. When it falls back,
+the upload is booked as `transcribe` too.
 
 On OpenAI's own API, the transcription models (`gpt-transcribe`,
 `gpt-4o-transcribe`, and `whisper-1`, which older builds also called

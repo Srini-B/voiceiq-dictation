@@ -32,8 +32,12 @@ With no usable key, nothing is sent and the recording stays on your Mac.
    transcription" off, VoiceiQ sends FLAC-compressed audio after you stop.
    With it on, VoiceiQ sends PCM audio while you speak in Dictation, Ask
    Anything, Translate and Agent. It uses the selected provider's existing
-   key. Claude has no live connection, so with it and the DeepInfra key
-   selected audio is always uploaded after you stop. If the live connection fails or does not return every completed turn,
+   key. Claude has no live connection. With it, the DeepInfra key and
+   Real-time transcription turned on (it is off by default for Claude) on the
+   Mac, VoiceiQ sends the last few seconds of audio to DeepInfra about once a
+   second while you speak, as WAV, and builds the transcript from those
+   pieces. Cancelled dictations may already have been sent in part. On
+   iPhone and iPad, audio is uploaded only after you stop. If the live connection fails or does not return every completed turn,
    VoiceiQ uploads the saved recording to that provider after you stop.
    Real-time transcription is on by default (since 2026-10-13, so the result
    lands about 1.5 s sooner after you stop) and does not affect meetings.

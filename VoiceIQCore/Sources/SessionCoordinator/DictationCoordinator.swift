@@ -310,7 +310,11 @@ public final class DictationCoordinator: ObservableObject {
 
             let capture = audioFactory()
             self.capture = capture
-            let live = liveFactory(FileLayout.audioCAF(in: folder))
+            // Tasks the streamer starts inherit the scope, so requests sent while
+            // recording (the DeepInfra preview) are booked against this dictation.
+            let live = UsageMeter.$scope.withValue(UsageScope(mode: mode, sessionID: id.uuidString)) {
+                liveFactory(FileLayout.audioCAF(in: folder))
+            }
             liveTranscriber = live
             if let live {
                 capture.setPCMSink { pcm in live.enqueue(pcm) }
