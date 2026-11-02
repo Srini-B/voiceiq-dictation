@@ -77,3 +77,16 @@ the rows stay selectable while only meetings are on device, and
 `LocalMeetingJob` no longer passes `.english` to FluidAudio, which would
 block Cyrillic and Greek tokens with Pro's top-K joint. The warm-up loads
 the selected model for meetings too.
+
+## Follow-up: keyboard waveform empty on iPhone
+
+On 0.6.22 the owner's iPhone showed the recording panel (timer, Listening,
+buttons) with no waveform at all, not even the flat baseline bars. The same
+code drew the bars in the iPhone 17e Simulator in light and dark mode, in the
+in-app field and in Safari after the app-switch bounce, and with
+`TimelineView` paused (the Reduce Motion path). No physical iPhone was
+connected, so the cause on device is not confirmed. `LiveWaveform` was the
+only keyboard view using `Canvas` and `TimelineView`; it now draws plain
+`Capsule` views advanced by a timer, the same update style as the rest of the
+keyboard. Checked in the Simulator: bars follow the simulated mic while
+listening and pulse blue while writing. Needs a check on a device.

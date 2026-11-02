@@ -359,6 +359,9 @@ time with the mode ("Listening", "Listening to translate", "Listening to your
 question"), and a red stop button that finishes the dictation. While the text
 is written the bars turn blue and a slow pulse runs across them with
 "Writing…" or "Thinking…"; the buttons hide. Reduce Motion freezes the bars.
+The bars are plain `Capsule` views advanced by a 0.06 s timer. Until 0.6.23
+they were drawn by a `Canvas` inside `TimelineView(.animation)`, which drew in
+the Simulator but left the panel empty on an iPhone.
 
 **Add to Dictionary.** With Full Access, selecting text in the field replaces
 the suggestions with "Add “word” to Dictionary". Text selected in another app
