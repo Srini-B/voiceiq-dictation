@@ -345,10 +345,11 @@ public struct LocalAudioPrivacyRow: View {
 
         private var value: String {
             let name = store.displayName
-            guard localEnabled else { return cloudDescription }
             guard let provider else {
+                guard localEnabled else { return "Not sent until you add a DeepInfra key" }
                 return store.state == .ready ? "Transcribed on device by \(name)" : "\(name) unavailable, so not sent anywhere"
             }
+            guard localEnabled else { return cloudDescription }
             return store.state == .ready
                 ? "Transcribed on device by \(name); sent to \(provider) only if that fails"
                 : "\(name) unavailable, so sent to \(provider)"

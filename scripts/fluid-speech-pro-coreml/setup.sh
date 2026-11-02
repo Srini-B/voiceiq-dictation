@@ -14,8 +14,14 @@ fi
 git -C mobius checkout -q "$MOBIUS_REV"
 
 mkdir -p hf
-curl -sfL -o hf/fluid_speech.py "https://huggingface.co/FluidVoice-Labs/fluid-speech-pro/resolve/$REV/fluid_speech.py"
-[ "$(git hash-object hf/fluid_speech.py)" = e65ba9d64f912b73f793fd472b6128d17dd637f3 ]
-[ -f hf/fluid-speech-pro.nemo ] || curl -sfL --retry 5 -o hf/fluid-speech-pro.nemo \
-    "https://huggingface.co/FluidVoice-Labs/fluid-speech-pro/resolve/$REV/fluid-speech-pro.nemo"
+curl -fsSL -o hf/fluid_speech.py "https://huggingface.co/FluidVoice-Labs/fluid-speech-pro/resolve/$REV/fluid_speech.py"
+if [ "$(git hash-object hf/fluid_speech.py)" != e65ba9d64f912b73f793fd472b6128d17dd637f3 ]; then
+    echo "hf/fluid_speech.py does not match the pinned digest" >&2
+    exit 1
+fi
+if [ ! -f hf/fluid-speech-pro.nemo ]; then
+    curl -fsSL --retry 5 -o hf/fluid-speech-pro.nemo.part \
+        "https://huggingface.co/FluidVoice-Labs/fluid-speech-pro/resolve/$REV/fluid-speech-pro.nemo"
+    mv hf/fluid-speech-pro.nemo.part hf/fluid-speech-pro.nemo
+fi
 echo "ready"

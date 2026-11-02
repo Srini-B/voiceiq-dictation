@@ -45,7 +45,7 @@ repository's Apache 2.0 license. See `App/Resources/Sounds/ATTRIBUTION.md`.
   `JointDecision.mlmodelc`. Weights are not bundled with the app. File hashes
   are in `ParakeetManifest.swift`.
 
-### Optional Fluid Speech Pro model (Mac)
+### Optional Fluid Speech Pro model (macOS 15 and iOS 18 or later)
 
 - Fluid Speech Pro by FluidVoice: https://huggingface.co/FluidVoice-Labs/fluid-speech-pro, revision `53f490b9292c5943847f635b7abfc3f123018964`.
 - Built on NVIDIA Parakeet TDT 0.6B v3 (https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3) and Moondream Parakeet Ultra (https://huggingface.co/moondream/parakeet-ultra).

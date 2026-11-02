@@ -60,6 +60,7 @@ enum ModelWarmer {
     }
 
     private static func warm(reason: String) async {
+        let target = warmedValue
         let before = await PreparedModelCache.describe()
         guard let outcome = await LocalModelWarmup.run(makeSession: LocalSpeechInference.makeSession) else { return }
         let detail = String(format: "(%@, %@, before: %@, after: %@)", reason, SessionDiagnostics.processAge,
@@ -68,11 +69,15 @@ enum ModelWarmer {
             SessionDiagnostics.note(String(format: "model warm-up failed after %.1fs %@", outcome.seconds, detail))
             return
         }
-        UserDefaults.standard.set(warmedValue, forKey: warmedOSKey)
+        UserDefaults.standard.set(target, forKey: warmedOSKey)
         SessionDiagnostics.note(String(format: "model warmed in %.1fs %@", outcome.seconds, detail))
     }
 
+    /// The model `LocalModelWarmup.run` loads: the selected one for on-device
+    /// dictation, Fluid Speech Mini for on-device meetings alone.
     private static var warmedValue: String {
-        "\(ProcessInfo.processInfo.operatingSystemVersionString) \(SettingsStore().localSpeechModel.rawValue)"
+        let settings = SettingsStore()
+        let model = settings.localTranscriptionEnabled ? settings.localSpeechModel : .parakeet
+        return "\(ProcessInfo.processInfo.operatingSystemVersionString) \(model.rawValue)"
     }
 }

@@ -73,8 +73,8 @@ cloud transcription when a key is stored.
 ## Download and delete
 
 1. Set Transcription to On device.
-2. Select **Download** beside **Fluid Speech Mini** (252.7 MB) or, on the
-   Mac, **Fluid Speech Pro** (1.23 GB).
+2. Select **Download** beside **Fluid Speech Mini** (252.7 MB) or, on
+   macOS 15 or iOS 18 and later, **Fluid Speech Pro** (1.23 GB).
 3. Wait for download and file verification. Progress and Cancel remain available.
 4. Select a model row to use it. The checkmark shows the selected model.
 5. Use the trash icon and confirm **Delete** to remove a downloaded model,
@@ -107,7 +107,7 @@ has its own trash icon, including the model that is not selected.
 | Selected, downloaded model | Real-time on | Real-time off |
 |---|---|---|
 | Fluid Speech Mini | Mac: live preview while speaking, then transcribe the saved recording after stop. iPhone and iPad: transcribe the saved recording after stop | Transcribe the saved recording after stop |
-| Fluid Speech Pro (Mac) | Live preview while speaking, then transcribe the saved recording after stop | Transcribe the saved recording after stop |
+| Fluid Speech Pro | Mac: live preview while speaking, then transcribe the saved recording after stop. iPhone and iPad: transcribe the saved recording after stop | Transcribe the saved recording after stop |
 | Selected model missing | Cloud real-time, if available | Cloud file transcription |
 
 Both models decode whole recordings; the live preview re-decodes the open

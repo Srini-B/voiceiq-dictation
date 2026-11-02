@@ -35,7 +35,7 @@ struct ModelKeysForm: View {
                 Image(systemName: "info.circle.fill")
                     .foregroundStyle(Theme.Colors.accent)
                     .font(.system(size: 17))
-                Text("Pick **Gemini**, **OpenAI** or **Claude** and add its key. Claude transcribes on device unless you add a DeepInfra key. The other keys are optional.")
+                Text("Pick **Gemini**, **OpenAI** or **Claude** and add its key. Claude needs On device transcription or a DeepInfra key. The other keys are optional.")
                     .font(Theme.Fonts.subheadline())
                     .foregroundStyle(Theme.Colors.inkSecondary)
                     .fixedSize(horizontal: false, vertical: true)

@@ -267,15 +267,25 @@ struct PrivacyPane: View {
     private let settings = SettingsStore()
     @State private var provider = SettingsStore().preferredProvider
     @State private var meetingTranscribers = SettingsStore().meetingTranscribers
-    private var owner: String {
+    private static func host(_ provider: ModelProvider) -> String {
         switch provider {
         case .gemini: return "Google"
         case .openAI: return "OpenAI"
-        case .anthropic: return KeychainStore.loadKey(.deepInfra) == nil ? "Anthropic" : "Anthropic and DeepInfra"
+        case .anthropic: return "Anthropic"
         }
     }
     /// Who hears the audio: Claude sends it to DeepInfra only.
-    private var audioOwner: String { provider == .anthropic ? "DeepInfra" : owner }
+    private var audioOwner: String { provider == .anthropic ? "DeepInfra" : Self.host(provider) }
+    /// Every host this setup can send to: the provider, its audio host, and
+    /// the meeting transcript and notes fallbacks.
+    private var hosts: String {
+        let audio = settings.providerTranscribes ? [audioOwner] : []
+        let meetingAudio = meetingTranscribers.map { $0 == .anthropic ? "DeepInfra" : Self.host($0) }
+        var names: [String] = []
+        for name in [Self.host(provider)] + audio + meetingAudio + settings.meetingProviders.map(Self.host)
+        where !names.contains(name) { names.append(name) }
+        return ListFormatter.localizedString(byJoining: names)
+    }
     /// Meetings go to the first provider with a key, then to each other one
     /// in turn while the earlier ones fail.
     private var meetingOwner: String {
@@ -367,7 +377,7 @@ struct PrivacyPane: View {
             } header: {
                 Text("What leaves your Mac")
             } footer: {
-                Text("No middleman server, no account, no analytics, no keystroke logging. Only \(owner), plus TinyFish when you add its key.")
+                Text("No middleman server, no account, no analytics, no keystroke logging. Only \(hosts), plus TinyFish when you add its key.")
             }
 
             Section {

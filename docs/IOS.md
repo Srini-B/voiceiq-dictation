@@ -618,7 +618,7 @@ runs. Everything needs Full Access.
 | History stats: words, dictations, WPM, audio time | Home's stats grid |
 | Dictionary with search, CSV and Auto-learned | Same, synced through iCloud, plus adding a selection or a copied word from the keyboard |
 | Writing rules, smart transcription, live, noise handling | Same settings |
-| On-device transcription: Fluid Speech Mini and Nemotron 3.5, English tools, live preview with Fluid Speech Mini | Fluid Speech Mini and English tools only, in-process; no live preview (see [local transcription](LOCAL_TRANSCRIPTION.md)) |
+| On-device transcription: Fluid Speech Mini, Fluid Speech Pro (macOS 15+), English tools, live preview | Fluid Speech Mini, Fluid Speech Pro (iOS 18+) and English tools, in-process; no live preview (see [local transcription](LOCAL_TRANSCRIPTION.md)) |
 | History, retry, crash recovery, retention | Same. The detail shows the cost and one row per model call (stage, model, cost) from `UsageStore.records(forSession:)`, and Copy turns into "Copied" with a checkmark and a success haptic for 1.5 s |
 | Cost with the Gemini and OpenAI toggle, periods and Detailed | Same |
 | Advanced: the selected provider's models | Same, plus the session log |
