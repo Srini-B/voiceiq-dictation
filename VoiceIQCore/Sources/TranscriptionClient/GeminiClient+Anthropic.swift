@@ -43,6 +43,13 @@ extension GeminiClient {
         return try Self.parseDeepInfraWords(data)
     }
 
+    /// Live dictation: one piece of the recording (`DeepInfraLiveTranscriber`).
+    func deepInfraLiveText(wav: Data, vocabulary: [String], deadline: TimeInterval) async throws -> String {
+        let data = try await deepInfraTranscription(audio: wav, mimeType: "audio/wav", vocabulary: vocabulary,
+                                                    words: false, deadline: deadline, stage: .liveTranscribe)
+        return try Self.extractTranscriptText(from: data).trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     private func deepInfraTranscription(audio: Data, mimeType: String, vocabulary: [String], words: Bool,
                                         deadline: TimeInterval, stage: UsageStage) async throws -> Data {
         // No DeepInfra key: audio must not reach a host the user never set up.

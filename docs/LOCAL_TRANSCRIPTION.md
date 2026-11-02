@@ -48,6 +48,61 @@ where to add the key, and a dictation that cannot be transcribed on device
 fails with `.auth` instead of sending audio anywhere
 (`GeminiClient.deepInfraTranscription`).
 
+### Live transcription with Nemotron 3.5 Transcribe (Mac)
+
+DeepInfra serves Nemotron 3.5 Transcribe for whole files only, with no
+WebSocket, and returns no word timings for it (`verbose_json` with
+`timestamp_granularities[]=word` came back as text and duration only,
+2026-11-02). With **Real-time transcription** turned on by the user, the
+DeepInfra key saved and a dictation going to Nemotron 3.5, the Mac sends the
+recording in pieces while
+it is made (`DeepInfraLiveTranscriber`, chosen in
+`LiveTranscriber.makeCloudFromSettings`), and those pieces are the transcript.
+It is off by default: until the toggle is changed, `liveTranscriptionEnabled`
+reads off for Claude with Nemotron 3.5 picked (on for every other setup), and
+the live path also checks `liveTranscriptionChosen` so an on-device dictation
+that falls back to Nemotron 3.5 does not start it either.
+
+
+- After each second of new audio, and never with two requests in flight, the
+  open tail of the recording goes to `/audio/transcriptions` as 16 kHz WAV
+  with the dictionary as `prompt`. The pill shows the locked-in text plus the
+  latest tail text.
+- Once the tail reaches 12 s, the next request is a commit. It finds the
+  longest quiet run of 10 ms blocks in the 6 s before the last second (quiet
+  is up to 3x the quietest block's RMS and never above about -45 dBFS), sends
+  only the audio up to 100 ms into that run, locks the returned text in, and
+  drops the tail up to 100 ms before the run ends. With no run that quiet,
+  such as speech over steady noise, it cuts in the quietest 10 ms and drops
+  nothing. No audio is heard twice, so no words repeat across a
+  cut. Each piece keeps at most 100 ms of the pause.
+- Nemotron sometimes writes a dictionary word from the `prompt` into the short
+  silence at a piece's edge ("waveform. VoiceiQ Third, we…"); whole-recording
+  uploads never did. `Window.withoutLeakedTerms` drops a single-word
+  dictionary term at a piece's start (running straight into a capitalized
+  word) or end (after a sentence end, with no punctuation of its own) only
+  when an earlier preview heard that same audio with more context and did
+  not contain the term. A preview counts for a piece's start only if it heard
+  at least a second past the cut, and for its end only if it heard the whole
+  piece. Without that evidence the word is kept.
+- On stop, a request in flight is cancelled and only the remaining tail is
+  sent. The transcript is the locked-in text plus that last piece, and goes
+  to Claude cleanup like any live transcript (`StageTimes.Source.cloudLive`).
+- The saved recording is uploaded instead, as with real-time off, when three
+  requests in a row fail, the last piece fails, or the bytes received do not
+  match the frames written to the recording.
+
+Nemotron does not hear across a cut, so punctuation at a cut can differ from
+one whole upload; cleanup usually evens it out. Each request bills its audio,
+so a dictation bills about three to four times its length (measured 81 s
+billed for 22 s and 156 s for 50 s). The requests are booked as **Live
+transcription** under the dictation (the coordinator creates the streamer
+inside the dictation's `UsageMeter.scope`). DeepInfra answers a request in
+about 2 to 3 s whatever its length (up to 5 s seen), so the gain after stop is
+small: stop to transcript took 2.4 s against 3.3 s for one upload of a 22 s
+dictation, and 2.7 s against 4.1 s for 50 s. iPhone and iPad still upload the
+saved recording after stop.
+
 Fluid Speech Pro replaced the on-device Nemotron 3.5 ASR Streaming model on
 2026-11-02. A stored `nemotron` selection reads as Fluid Speech Pro
 (`LocalSpeechModel(stored:)`); until Pro is downloaded, dictation uses the

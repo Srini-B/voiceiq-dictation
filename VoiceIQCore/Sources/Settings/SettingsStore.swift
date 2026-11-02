@@ -90,9 +90,16 @@ public struct SettingsStore: Sendable {
     /// On by default since 2026-10-13: the transcript is finished when the
     /// user stops, so the wait is the writing model alone (measured 2.95 s
     /// end to end against 4.45 s median for batch). A refused socket falls
-    /// back to the saved recording on its own.
+    /// back to the saved recording on its own. Off by default for Claude
+    /// with Nemotron 3.5 picked: its live path re-sends audio and costs
+    /// several times an upload, so it starts only once the user turns it on.
     public var liveTranscriptionEnabled: Bool {
-        Self.defaults.object(forKey: "liveDictationEnabled") as? Bool ?? true
+        liveTranscriptionChosen ?? !(preferredProvider == .anthropic && dictationSource == .provider)
+    }
+
+    /// The user's own setting, nil until they change the toggle.
+    public var liveTranscriptionChosen: Bool? {
+        Self.defaults.object(forKey: "liveDictationEnabled") as? Bool
     }
 
     public func setLiveTranscriptionEnabled(_ enabled: Bool) {
