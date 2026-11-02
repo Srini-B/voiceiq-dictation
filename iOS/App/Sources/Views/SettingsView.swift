@@ -185,7 +185,7 @@ struct DictationSettingsView: View {
                     .onChange(of: meetingSource) { _, value in settings.setMeetingSource(value) }
                 LocalMeetingControls(meetingsLocal: meetingSource == .onDevice)
             } header: { SettingsSectionHeader("Notes transcription") } footer: {
-                LocalMeetingFooter(enabled: meetingSource == .onDevice)
+                LocalMeetingFooter(enabled: meetingSource == .onDevice, model: localModel)
             }
             Section {
                 Toggle("Smart transcription", isOn: $smartTranscription)

@@ -66,3 +66,14 @@ The owner asked for two changes:
 - Not verified: the Mac UI without a DeepInfra key (the Mac mini's key was
   not removed), and Pro on a physical iPhone. The Simulator does not apply
   iPhone memory limits, and Pro's 16-bit encoder is 1.19 GB.
+
+## Follow-up: meetings use the selected model
+
+The owner saw "Notes use cloud transcription until Fluid Speech Mini is
+downloaded" on an iPhone with Fluid Speech Pro downloaded and selected.
+On-device meetings were hard-wired to Mini. They now use the model checked
+in the list (`LocalMeetingTranscriber` holds `SettingsStore.localSpeechModel`),
+the rows stay selectable while only meetings are on device, and
+`LocalMeetingJob` no longer passes `.english` to FluidAudio, which would
+block Cyrillic and Greek tokens with Pro's top-K joint. The warm-up loads
+the selected model for meetings too.

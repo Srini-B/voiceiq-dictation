@@ -160,8 +160,8 @@ public struct SettingsStore: Sendable {
         Self.set(model.rawValue, forKey: "localSpeechModel")
     }
 
-    /// Who transcribes meetings. On device needs Fluid Speech Mini and the
-    /// speaker diarizer downloaded; notes still come from the cloud writing
+    /// Who transcribes meetings. On device needs the selected model and, on the
+    /// Mac, the speaker diarizer downloaded; notes still come from the cloud writing
     /// model. Same legacy reading as `dictationSource`.
     public var meetingSource: TranscriptionSource {
         Self.source(forKey: "meetingSource", legacyLocalKey: "localMeetingTranscriptionEnabled")

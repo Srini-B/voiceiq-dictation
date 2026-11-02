@@ -387,34 +387,36 @@ iPhone and iPad) is a separate picker from dictation, with the same
 segments (`SettingsStore.meetingSource`, key `meetingSource`, read from the old
 `localMeetingTranscriptionEnabled` boolean when absent). On device is a
 separate choice from on-device dictation. On the Mac it needs two downloads:
-Fluid Speech Mini for the words and **Nemotron 3 Diarization** (199 MB) for
-who spoke when. This is the FluidMeet recipe: one ASR model and one diarizer,
-joined by time. While the switch is on, the Fluid Speech Mini row stays
-offered even with dictation on the cloud, and the diarizer row appears under
-the picker. Until both are `.ready`, meetings use the cloud path and the
+the selected speech model (Fluid Speech Mini or Pro, the one checked in the
+model list) for the words and **Nemotron 3 Diarization** (199 MB) for who
+spoke when. This is the FluidMeet recipe: one ASR model and one diarizer,
+joined by time. While the switch is on, the model rows stay offered and
+selectable even with dictation on the cloud, and the diarizer row appears
+under the picker. Until 2026-11-02 meetings always used Fluid Speech Mini,
+so a phone with only Pro downloaded sent notes to the cloud. Until both are `.ready`, meetings use the cloud path and the
 footer says so. The cloud path is the providers with keys
 (`SettingsStore.meetingProviders`).
 
-iPhone and iPad need Fluid Speech Mini only (`LocalMeetingTranscriber.diarizes`
+iPhone and iPad need the selected speech model only (`LocalMeetingTranscriber.diarizes`
 is false there). They record the microphone only, so there is no second track
 to tell speakers apart by, and the whole transcript is labelled Speaker 1. No
 diarizer row is shown, `LocalMeetingRequest.diarizerDirectory` is nil, and
-`LocalMeetingJob.run` returns no segments. The footer names Fluid Speech Mini
-alone.
+`LocalMeetingJob.run` returns no segments. The footer names the selected
+model alone.
 
 The flow, in `MeetingEngine.transcribe(folder:config:)`:
 
 1. `LocalMeetingTranscriber.acquire(runner:)` returns nil unless the setting is
    on and the needed stores are `.ready`. It then takes a session on them. A
-   dictation holding Fluid Speech Mini wins: the meeting polls every 2 s for up
+   dictation holding the speech model wins: the meeting polls every 2 s for up
    to 600 s, then fails with "busy". While the meeting holds the sessions, a
    dictation falls back to the cloud as it does during a download.
 2. `transcribe(folder:)` mixes mic and system onto one timeline with
    `CallAudio.samples` (silence kept, so model seconds are meeting seconds),
    writes it as `local-mix.caf` (Int16 16 kHz mono, a minute at a time), and
    hands a `LocalMeetingRequest` to the runner. The file is removed after.
-3. The runner (`LocalMeetingJob.run`) loads Fluid Speech Mini, runs
-   `AsrManager.transcribeDiskBacked`, groups token timings into words at
+3. The runner (`LocalMeetingJob.run`) loads the selected speech model, runs
+   `AsrManager.transcribeDiskBacked` with no language hint (as dictation), groups token timings into words at
    leading-space boundaries, frees the ASR, then (Mac only) loads the diarizer
    with `Nemotron3Config.offline`, streams the file through it in 60 s chunks,
    and turns the speaker probabilities into `Segment(speaker:start:end)` with

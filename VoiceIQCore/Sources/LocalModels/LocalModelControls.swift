@@ -6,8 +6,8 @@ import VoiceIQSpeech
 /// and the trailing action downloads, cancels, or deletes that model alone.
 /// While it is off, only models on disk or in transit keep a row, so they can
 /// still be cancelled or deleted. The English tools pack follows the same
-/// rules but is never selected. Fluid Speech Mini also transcribes meetings
-/// kept on device, so its row stays offered while that is on.
+/// rules but is never selected. The selected model also transcribes meetings
+/// kept on device, so the rows stay offered and selectable while that is on.
 @MainActor
 public struct LocalModelControls: View {
     private let localEnabled: Bool
@@ -28,8 +28,8 @@ public struct LocalModelControls: View {
             ForEach(LocalSpeechModel.available, id: \.self) { model in
                 LocalModelRow(
                     store: .store(for: model),
-                    offered: localEnabled || (meetingsLocal && model == .parakeet),
-                    selection: localEnabled ? (isSelected: model == selection, select: { selection = model }) : nil,
+                    offered: localEnabled || meetingsLocal,
+                    selection: localEnabled || meetingsLocal ? (isSelected: model == selection, select: { selection = model }) : nil,
                     languages: model.languages,
                     language: localEnabled && model == selection ? languageBinding(for: model) : nil
                 )
@@ -249,11 +249,13 @@ public struct LocalModelFooter: View {
 @MainActor
 public struct LocalMeetingFooter: View {
     private let enabled: Bool
-    @ObservedObject private var speech: LocalModelStore = .store(for: .parakeet)
+    @ObservedObject private var speech: LocalModelStore
     @ObservedObject private var diarizer: LocalModelStore = .speakerDiarizer
 
-    public init(enabled: Bool) {
+    /// `model` is the selected on-device model, which meetings use too.
+    public init(enabled: Bool, model: LocalSpeechModel) {
         self.enabled = enabled
+        _speech = ObservedObject(wrappedValue: .store(for: model))
     }
 
     public var body: some View {
@@ -275,6 +277,7 @@ public struct LocalMeetingPrivacyRow: View {
     private let localDescription: String
     private let cloudDescription: String
     @State private var enabled = SettingsStore().localMeetingTranscriptionEnabled
+    @State private var model = SettingsStore().localSpeechModel
 
     public init(label: String, localDescription: String, cloudDescription: String) {
         self.label = label
@@ -283,16 +286,19 @@ public struct LocalMeetingPrivacyRow: View {
     }
 
     public var body: some View {
-        Content(enabled: enabled, label: label, localDescription: localDescription, cloudDescription: cloudDescription)
+        Content(speech: .store(for: model), enabled: enabled, label: label, localDescription: localDescription,
+                cloudDescription: cloudDescription)
             .onReceive(NotificationCenter.default.publisher(for: .gtSettingDidChange).receive(on: RunLoop.main)) { note in
-                if note.object as? String == "meetingSource" {
-                    enabled = SettingsStore().localMeetingTranscriptionEnabled
+                switch note.object as? String {
+                case "meetingSource": enabled = SettingsStore().localMeetingTranscriptionEnabled
+                case "localSpeechModel": model = SettingsStore().localSpeechModel
+                default: break
                 }
             }
     }
 
     private struct Content: View {
-        @ObservedObject var speech: LocalModelStore = .store(for: .parakeet)
+        @ObservedObject var speech: LocalModelStore
         @ObservedObject var diarizer: LocalModelStore = .speakerDiarizer
         let enabled: Bool
         let label: String

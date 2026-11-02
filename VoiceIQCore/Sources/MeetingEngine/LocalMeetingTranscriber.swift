@@ -3,7 +3,8 @@ import Foundation
 import os
 import VoiceIQSpeech
 
-/// A meeting transcribed on device: Fluid Speech Mini for the words, Nemotron
+/// A meeting transcribed on device: the selected speech model (Fluid Speech
+/// Mini or Pro) for the words, Nemotron
 /// 3 Diarization for who spoke when, joined by time. This is how FluidMeet
 /// does it; the cloud path (`MeetingTranscriber`) asks one model for both.
 ///
@@ -47,6 +48,8 @@ public struct LocalMeetingTranscriber: Sendable {
     #endif
 
     private let runner: LocalMeetingRunner
+    /// The speech model this session holds; nil for a diarizer-only session.
+    private let model: LocalSpeechModel?
     /// Nil for a diarizer-only session (`acquireDiarizer`).
     private let speech: URL?
     private let diarizer: URL?
@@ -59,18 +62,18 @@ public struct LocalMeetingTranscriber: Sendable {
     @MainActor
     public static func acquire(runner: @escaping LocalMeetingRunner) async throws -> LocalMeetingTranscriber? {
         guard Self.isReady else { return nil }
-        let id = UUID(), job = Job()
+        let id = UUID(), job = Job(), model = SettingsStore().localSpeechModel
         let cancel: @Sendable () async -> Void = { await job.cancel() }
         let clock = ContinuousClock(), deadline = clock.now + busyWait
         while true {
-            if let speech = LocalModelStore.store(for: .parakeet).acquireSession(id: id, cancel: cancel) {
+            if let speech = LocalModelStore.store(for: model).acquireSession(id: id, cancel: cancel) {
                 guard diarizes else {
-                    return LocalMeetingTranscriber(runner: runner, speech: speech, diarizer: nil, id: id, job: job)
+                    return LocalMeetingTranscriber(runner: runner, model: model, speech: speech, diarizer: nil, id: id, job: job)
                 }
                 if let diarizer = LocalModelStore.speakerDiarizer.acquireSession(id: id, cancel: cancel) {
-                    return LocalMeetingTranscriber(runner: runner, speech: speech, diarizer: diarizer, id: id, job: job)
+                    return LocalMeetingTranscriber(runner: runner, model: model, speech: speech, diarizer: diarizer, id: id, job: job)
                 }
-                LocalModelStore.store(for: .parakeet).releaseSession(id: id)
+                LocalModelStore.store(for: model).releaseSession(id: id)
             }
             guard Self.isReady else { return nil }
             guard clock.now < deadline else { throw Failure.busy }
@@ -86,13 +89,13 @@ public struct LocalMeetingTranscriber: Sendable {
         guard diarizes else { return nil }
         let id = UUID(), job = Job()
         guard let diarizer = LocalModelStore.speakerDiarizer.acquireSession(id: id, cancel: { await job.cancel() }) else { return nil }
-        return LocalMeetingTranscriber(runner: runner, speech: nil, diarizer: diarizer, id: id, job: job)
+        return LocalMeetingTranscriber(runner: runner, model: nil, speech: nil, diarizer: diarizer, id: id, job: job)
     }
 
     /// The setting is on and the needed models are downloaded.
     @MainActor public static var isReady: Bool {
         SettingsStore().localMeetingTranscriptionEnabled
-            && LocalModelStore.store(for: .parakeet).state == .ready
+            && LocalModelStore.store(for: SettingsStore().localSpeechModel).state == .ready
             && (!diarizes || LocalModelStore.speakerDiarizer.state == .ready)
     }
 
@@ -112,7 +115,7 @@ public struct LocalMeetingTranscriber: Sendable {
             words = Self.label(result.words, segments: result.segments)
             if audio.isOnline { words = MeetingTranscriber.markOwner(words, audio: audio) }
         }
-        UsageMeter.record(stage: .meetingTranscribe, model: LocalSpeechModel.parakeet.modelID,
+        UsageMeter.record(stage: .meetingTranscribe, model: (model ?? .parakeet).modelID,
                           usage: TokenUsage(reportedCostUSD: 0, audioSeconds: audio.duration))
         words = Self.renumber(words)
         return SpeakerLinker.overlappingTurns(words).map { turn in
@@ -145,9 +148,9 @@ public struct LocalMeetingTranscriber: Sendable {
     }
 
     private func release() {
-        let holdsSpeech = speech != nil, holdsDiarizer = diarizer != nil, id = id
+        let model = model, holdsDiarizer = diarizer != nil, id = id
         Task { @MainActor in
-            if holdsSpeech { LocalModelStore.store(for: .parakeet).releaseSession(id: id) }
+            if let model { LocalModelStore.store(for: model).releaseSession(id: id) }
             if holdsDiarizer { LocalModelStore.speakerDiarizer.releaseSession(id: id) }
         }
     }
