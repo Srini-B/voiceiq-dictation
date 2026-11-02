@@ -21,7 +21,7 @@ Mini and returns when Fluid Speech Pro is picked again.
 
 - Fluid Speech Mini: English only. It is trained on English (FluidVoice model
   card).
-- Fluid Speech Pro (Mac only): the 25 European languages of Parakeet TDT 0.6B
+- Fluid Speech Pro (macOS 15 and iOS 18 or later): the 25 European languages of Parakeet TDT 0.6B
   v3. The decoder detects the language itself. `ParakeetSession` passes no
   `language` to FluidAudio: that argument only filters the joint's top-K
   tokens by script, and with French it turned "ce soir" into "ce sort".
@@ -31,9 +31,22 @@ and English number formatting (`EnglishText`) run only for an English code. For 
 the transcript goes to cleanup as decoded; the cleanup prompt keeps the
 speaker's language. Cloud transcription keeps its own language handling.
 
-iPhone and iPad offer Fluid Speech Mini only (`LocalSpeechModel.available`);
-Fluid Speech Pro is a 16-bit, 1.23 GB build meant for the Mac. A stored Fluid
-Speech Pro selection reads as Fluid Speech Mini there.
+Fluid Speech Pro's Core ML build targets macOS 15 and iOS 18, so older systems
+offer Fluid Speech Mini only (`LocalSpeechModel.available`). A stored Fluid
+Speech Pro selection reads as Fluid Speech Mini there. On iPhone and iPad Pro
+loads like Mini: in-process through `LocalSpeechInference.makeSession`
+(`ParakeetSession`, CPU encoder), released after each dictation, and warmed by
+`ModelWarmer`, which warms again when the iOS version or the selected model
+changes. Its 16-bit encoder weighs 1.19 GB, about five times Mini's palettized
+one, so it needs that much more memory while it is loaded.
+
+Claude's cloud transcription is DeepInfra's Nemotron 3.5 Transcribe, which
+needs the optional DeepInfra key. The pickers always offer On device and
+Nemotron 3.5. With Nemotron 3.5 picked and no DeepInfra key
+(`SettingsStore.providerTranscribes` is false), a row under the picker says
+where to add the key, and a dictation that cannot be transcribed on device
+fails with `.auth` instead of sending audio anywhere
+(`GeminiClient.deepInfraTranscription`).
 
 Fluid Speech Pro replaced the on-device Nemotron 3.5 ASR Streaming model on
 2026-11-02. A stored `nemotron` selection reads as Fluid Speech Pro

@@ -79,7 +79,7 @@ public struct LocalMeetingTranscriber: Sendable {
     }
 
     /// The diarizer alone, for a meeting whose words come from a provider
-    /// that labels no speakers (Claude + Nemotron). Nil on iPhone and iPad,
+    /// that labels no speakers (Claude with DeepInfra). Nil on iPhone and iPad,
     /// when the diarizer is not downloaded, or while another meeting holds it.
     @MainActor
     public static func acquireDiarizer(runner: @escaping LocalMeetingRunner) -> LocalMeetingTranscriber? {

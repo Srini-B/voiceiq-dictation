@@ -1,6 +1,6 @@
 import Foundation
 
-/// Fluid Speech Pro by FluidVoice, converted to 16-bit Core ML for the Mac.
+/// Fluid Speech Pro by FluidVoice, converted to 16-bit Core ML for macOS 15 and iOS 18.
 /// FluidVoice publishes it only as a NeMo checkpoint
 /// (`FluidVoice-Labs/fluid-speech-pro`); it is Parakeet TDT 0.6B v3 with one
 /// extra encoder block, so the converted package has Fluid Speech Mini's

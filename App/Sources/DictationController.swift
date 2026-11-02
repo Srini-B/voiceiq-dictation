@@ -67,6 +67,7 @@ final class DictationController {
             config: { SettingsStore().geminiConfig },
             summaryModel: SettingsStore().geminiConfig.cleanupModel,
             providers: { SettingsStore().meetingProviders },
+            transcribers: { SettingsStore().meetingTranscribers },
             localMeeting: LocalMeetingHelper.run,
             readsScreenNames: { SettingsStore().meetingScreenNamesEnabled }
         )
@@ -1207,9 +1208,10 @@ final class DictationController {
         switch failure {
         case .network: return "Couldn't reach \(providerName) — saved to History"
         case .auth:
-            return !KeychainStore.hasModelKey
-                ? "Add your API key in Settings — recording saved to History"
-                : "API key isn't working — saved to History"
+            if !KeychainStore.hasModelKey { return "Add your API key in Settings — recording saved to History" }
+            return KeychainStore.canTranscribeInCloud
+                ? "API key isn't working — saved to History"
+                : "Claude needs On device or a DeepInfra key — saved to History"
         case .modelAccess:
             return SettingsStore().transcribeModelOverride != nil
                 ? "That model isn't available to your key — check Settings → Advanced. Saved to History"

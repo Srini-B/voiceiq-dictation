@@ -68,7 +68,7 @@ public final class LocalTranscriber: DictationStreaming, Sendable {
         return (options, toolsReady)
     }
 
-    /// `cloudOnColdLoad`: a provider key is stored, so a dictation whose
+    /// `cloudOnColdLoad`: the provider can transcribe, so a dictation whose
     /// model is still loading after the recording can go to the cloud.
     @MainActor public init?(audioURL: URL, model: LocalSpeechModel, language: LocalSpeechLanguage, realtime: Bool,
                            cloudOnColdLoad: Bool, makeSession: LocalSpeechSessionFactory) {

@@ -7,14 +7,11 @@ public enum LocalSpeechModel: String, CaseIterable, Codable, Sendable {
     case parakeet
     case fluidSpeechPro
 
-    /// The models offered on this platform. iPhone and iPad get Fluid Speech
-    /// Mini only; Fluid Speech Pro is a 16-bit build too large for them.
+    /// The models this OS can load. Fluid Speech Pro's Core ML build targets
+    /// macOS 15 and iOS 18.
     public static var available: [LocalSpeechModel] {
-        #if os(macOS)
-        return allCases
-        #else
+        if #available(macOS 15, iOS 18, *) { return allCases }
         return [.parakeet]
-        #endif
     }
 
     /// A stored choice of the retired on-device Nemotron reads as Fluid

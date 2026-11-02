@@ -4,24 +4,26 @@
 
 By default, your voice goes from your Mac directly to the model provider you chose in
 Settings → Advanced, using your own API key: Google's Gemini API, OpenAI's API,
-or Claude + Nemotron (DeepInfra hears the audio, Anthropic gets the text).
+or Claude (Anthropic gets the text; DeepInfra hears the audio only if you
+saved the optional DeepInfra key, otherwise Claude needs an on-device model).
 Optional Fluid Speech Mini or Fluid Speech Pro transcription processes audio on-device on supported systems
-(Fluid Speech Mini only on iPhone and iPad).
+(Fluid Speech Pro needs macOS 15 or iOS 18).
 Cleanup and screen context still use your selected cloud provider. Failed local
-transcription falls back to sending the saved audio to that provider.
+transcription falls back to sending the saved audio to that provider; with
+Claude and no DeepInfra key nothing is sent and the dictation fails.
 There is no VoiceiQ server, no account, no analytics, no telemetry.
 Everything else stays on your Mac. The code is open — verify all of this.
 
 "The provider" below means the one you selected:
 `generativelanguage.googleapis.com` (Gemini), `api.openai.com` (OpenAI), or,
-for Claude + Nemotron, `api.deepinfra.com` for audio and `api.anthropic.com`
-for text, screenshots and agent turns. Only it receives a given dictation;
+for Claude, `api.anthropic.com` and, with the optional DeepInfra key,
+`api.deepinfra.com` for audio. Anthropic gets text, screenshots and agent turns. Only it receives a given dictation;
 nothing is sent to the others. Meetings are
 the one exception: a meeting goes to the selected provider when its key is
 saved, otherwise to the next provider you have a key for, and a meeting whose
 provider fails moves on to each other provider you have a key for in turn
-(in the order Gemini, OpenAI, Claude + Nemotron), so with all three keys
-saved any of the three can receive meeting audio.
+(in the order Gemini, OpenAI, Claude). Claude takes meeting audio only with
+the DeepInfra key saved; without it Claude writes the notes only.
 With no usable key, nothing is sent and the recording stays on your Mac.
 
 ## What leaves your machine (the complete list)
@@ -30,14 +32,14 @@ With no usable key, nothing is sent and the recording stays on your Mac.
    transcription" off, VoiceiQ sends FLAC-compressed audio after you stop.
    With it on, VoiceiQ sends PCM audio while you speak in Dictation, Ask
    Anything, Translate and Agent. It uses the selected provider's existing
-   key. Claude + Nemotron has no live connection, so with it selected audio is
-   always uploaded after you stop. If the live connection fails or does not return every completed turn,
+   key. Claude has no live connection, so with it and the DeepInfra key
+   selected audio is always uploaded after you stop. If the live connection fails or does not return every completed turn,
    VoiceiQ uploads the saved recording to that provider after you stop.
    Real-time transcription is on by default (since 2026-10-13, so the result
    lands about 1.5 s sooner after you stop) and does not affect meetings.
    With "On-device transcription" on and the selected model downloaded,
    successful transcription sends no audio. The explicit Download button fetches
-   252.7 MB for Fluid Speech Mini or 1.23 GB for Fluid Speech Pro (Mac) from Hugging Face and its CDN, exposing your IP address
+   252.7 MB for Fluid Speech Mini or 1.23 GB for Fluid Speech Pro from Hugging Face and its CDN, exposing your IP address
    to those hosts, but sending no recordings or API keys. Missing models use the
    configured cloud transcription. Failed local results upload the saved
    recording through the existing cloud path. This option is not an offline-only

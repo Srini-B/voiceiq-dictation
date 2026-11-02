@@ -1,9 +1,9 @@
 import Foundation
 
-/// Claude + Nemotron's models for each role: NVIDIA Nemotron 3.5 Transcribe on
-/// DeepInfra hears every recording (dictation and meetings) and Claude Sonnet
-/// 5.5 does all the writing: cleanup, Ask Anything, Translate, meeting notes
-/// and agent mode. Haiku 5.5 wrote cleanup until 2026-10-30, when the user
+/// Claude's models for each role: Claude Sonnet 5.5 does all the writing:
+/// cleanup, Ask Anything, Translate, meeting notes and agent mode. With the
+/// optional DeepInfra key, NVIDIA Nemotron 3.5 Transcribe on DeepInfra hears
+/// recordings that are not transcribed on device. Haiku 5.5 wrote cleanup until 2026-10-30, when the user
 /// found its cleanups too weak.
 public struct AnthropicConfig: Sendable, Equatable {
     public var transcribeModel = "nvidia/NVIDIA-Nemotron-3.5-Transcribe-30B-A4B"
@@ -45,6 +45,8 @@ extension GeminiClient {
 
     private func deepInfraTranscription(audio: Data, mimeType: String, vocabulary: [String], words: Bool,
                                         deadline: TimeInterval, stage: UsageStage) async throws -> Data {
+        // No DeepInfra key: audio must not reach a host the user never set up.
+        guard deepInfraKey() != nil else { throw TranscriptionError.auth }
         let model = AnthropicConfig().transcribeModel
         var form = MultipartForm()
         form.field("model", model)

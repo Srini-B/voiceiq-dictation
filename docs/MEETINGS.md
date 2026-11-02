@@ -64,7 +64,7 @@ Before 2026-10-27 every recording needed 20 s. A 2.5-minute Meet call had
 15.9 s, so the owner became an ordinary speaker and got a participant's name
 from the screen.
 
-## Speakers on Claude + Nemotron
+## Speakers on Claude with DeepInfra
 
 DeepInfra serves Nemotron 3.5 Transcribe without speaker labels: the model
 card's `<spk:N>` instruction, sent as the `prompt`, comes back as plain text,
@@ -188,7 +188,7 @@ docs/design/meeting-prompt-rulebook.md. Fixes from 2026-10-29:
   person, product and term, with every transcript spelling that means it
   (`"Nitin": ["Nithin", "Lithin", "Nathan"]`). Every other field uses those
   spellings. `MeetingNotes` ignores the field when decoding.
-- **Model.** On Claude + Nemotron the notes are written by
+- **Model.** On Claude the notes are written by
   `claude-sonnet-5-5` (`AnthropicConfig.notesModel`).
 
 ## Redo and progress

@@ -64,6 +64,7 @@ final class AppModel: ObservableObject {
             config: { SettingsStore().geminiConfig },
             summaryModel: SettingsStore().geminiConfig.cleanupModel,
             providers: { SettingsStore().meetingProviders },
+            transcribers: { SettingsStore().meetingTranscribers },
             localMeeting: LocalSpeechInference.transcribeMeeting
         )
         let inserter = self.inserter
@@ -598,7 +599,10 @@ final class AppModel: ObservableObject {
         case .failed(let failure):
             if let message = coordinator.modeFailureMessage { return message }
             switch failure {
-            case .auth: return "API key rejected. Check it in VoiceiQ."
+            case .auth:
+                return KeychainStore.hasModelKey && !KeychainStore.canTranscribeInCloud
+                    ? "Claude needs On device or a DeepInfra key. It's in History."
+                    : "API key rejected. Check it in VoiceiQ."
             case .modelAccess: return "Model unavailable. Check Settings › Advanced."
             case .network: return "Couldn't reach the model. It's saved in History."
             case .rateLimited: return "Rate limited. Retry from History."

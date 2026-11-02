@@ -362,7 +362,7 @@ private struct APIKeyScreen: View {
     var body: some View {
         ScreenScaffold("Bring your own key.", "VoiceiQ uses your \(provider.displayName) API key. It's stored in your Mac's Keychain and only ever sent to \(host).") {
             VStack(spacing: VoiceIQUI.Spacing.s) {
-                // One key field: Claude + Nemotron needs two keys and is set up in Settings → Advanced.
+                // Claude cannot transcribe without an on-device model or a DeepInfra key, so it is set up in Settings.
                 Picker("Provider", selection: $provider) {
                     ForEach(ModelProvider.allCases.filter { $0 != .anthropic }) { Text($0.displayName).tag($0) }
                 }

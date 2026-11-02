@@ -77,7 +77,7 @@ public struct SettingsStore: Sendable {
         return value
     }
 
-    /// Gemini, OpenAI or Claude + Nemotron, chosen in Settings → Advanced. Any other stored
+    /// Gemini, OpenAI or Claude, chosen in Settings → Advanced. Any other stored
     /// value (an older build's gateway) reads as Gemini.
     public var preferredProvider: ModelProvider {
         ModelProvider(rawValue: Self.defaults.string(forKey: "modelProvider") ?? "") ?? .gemini
@@ -126,6 +126,11 @@ public struct SettingsStore: Sendable {
         return stored == .onDevice && !LocalModelSupport.isAvailable ? .provider : stored
     }
 
+    /// False for Claude without a DeepInfra key: no cloud speech model.
+    public var providerTranscribes: Bool {
+        preferredProvider != .anthropic || KeychainStore.loadKey(.deepInfra) != nil
+    }
+
     /// The on-device model to download and use. Unknown, missing, or
     /// platform-unavailable values read as Fluid Speech Mini.
     public var localSpeechModel: LocalSpeechModel {
@@ -168,10 +173,15 @@ public struct SettingsStore: Sendable {
 
     public var localMeetingTranscriptionEnabled: Bool { meetingSource == .onDevice }
 
-    /// Providers for meeting notes, and for meeting transcription when the
-    /// source is the provider; see `ModelProvider.meetingOrder`.
+    /// Providers for meeting notes; see `ModelProvider.meetingOrder`.
     public var meetingProviders: [ModelProvider] {
         ModelProvider.meetingOrder(selected: preferredProvider, hasKey: KeychainStore.hasKey(for:))
+    }
+
+    /// Providers for cloud meeting transcription: `meetingProviders` that can
+    /// transcribe.
+    public var meetingTranscribers: [ModelProvider] {
+        meetingProviders.filter(KeychainStore.canTranscribe(with:))
     }
 
     /// Show the resting dot at the bottom of the screen when idle. Off = the pill
