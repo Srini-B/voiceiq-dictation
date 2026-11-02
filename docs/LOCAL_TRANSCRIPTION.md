@@ -75,8 +75,13 @@ that falls back to Nemotron 3.5 does not start it either.
   drops the tail up to 100 ms before the run ends. With no run that quiet,
   such as speech over steady noise, it cuts in the quietest 10 ms and drops
   nothing. No audio is heard twice, so no words repeat across a
-  cut. With half the pause on each side, Nemotron once filled the silence
-  with a dictionary word from the prompt ("VoiceiQ"); with 100 ms it did not.
+  cut. Each piece keeps at most 100 ms of the pause.
+- Nemotron sometimes writes a dictionary word from the `prompt` into the short
+  silence at a piece's edge ("waveform. VoiceiQ Third, we…"); whole-recording
+  uploads never did. `Window.withoutLeakedTerms` drops a single-word
+  dictionary term that stands alone at a piece's start (running straight
+  into a capitalized word) or end (after a sentence end, with no punctuation
+  of its own).
 - On stop, a request in flight is cancelled and only the remaining tail is
   sent. The transcript is the locked-in text plus that last piece, and goes
   to Claude cleanup like any live transcript (`StageTimes.Source.cloudLive`).

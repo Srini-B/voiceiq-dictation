@@ -34,7 +34,7 @@ public final class DeepInfraLiveTranscriber: DictationStreaming {
         let ring = ring
         pump = Task {
             defer { previews.continuation.finish() }
-            var window = Window()
+            var window = Window(vocabulary: vocabulary)
             var failures = 0
             for await _ in signals.stream {
                 for pcm in ring.drain() { window.append(pcm) }
@@ -130,6 +130,8 @@ public final class DeepInfraLiveTranscriber: DictationStreaming {
             var resume: Int?
         }
 
+        /// Single-word dictionary terms, normalized; see `withoutLeakedTerms`.
+        let vocabulary: Set<String>
         private(set) var committed = ""
         private(set) var tail = Data()
         /// Every byte appended, for the reconciliation against the saved recording.
@@ -140,10 +142,15 @@ public final class DeepInfraLiveTranscriber: DictationStreaming {
         /// `received` when a preview last heard the whole tail.
         private var previewedAt: Int64?
 
+        init(vocabulary: [String] = []) {
+            self.vocabulary = Set(vocabulary.filter { !$0.contains(" ") }.map { Self.normalize(Substring($0)) })
+        }
+
         var text: String { text(withLastPiece: tailText) }
 
         func text(withLastPiece piece: String) -> String {
-            committed.isEmpty ? piece : (piece.isEmpty ? committed : committed + " " + piece)
+            let piece = withoutLeakedTerms(piece)
+            return committed.isEmpty ? piece : (piece.isEmpty ? committed : committed + " " + piece)
         }
 
         var isDue: Bool { tail.count >= Self.minimumBytes && received - requestedAt >= Int64(Self.stepBytes) }
@@ -165,6 +172,7 @@ public final class DeepInfraLiveTranscriber: DictationStreaming {
         }
 
         mutating func apply(_ text: String, request: Request) {
+            let text = withoutLeakedTerms(text)
             guard let resume = request.resume else {
                 tailText = text
                 previewedAt = request.received
@@ -224,6 +232,28 @@ public final class DeepInfraLiveTranscriber: DictationStreaming {
         /// A 10 ms block's energy at about -45 dBFS RMS: quieter than speech,
         /// so audio this quiet can be dropped without losing words.
         static let silenceEnergy = Double(blockBytes / 2) * pow(32_768 * 0.0056, 2)
+
+        /// The piece without a dictionary term that stands alone at its
+        /// start or end. Nemotron sometimes writes a word from the `prompt`
+        /// into the short silence at a piece's edge ("waveform. VoiceiQ
+        /// Third, we…" on 2026-11-02, never in whole-recording uploads). A
+        /// leaked term at the start runs straight into a capitalized word;
+        /// at the end it follows a sentence end and has no punctuation.
+        func withoutLeakedTerms(_ piece: String) -> String {
+            var words = piece.split(separator: " ")
+            guard words.count > 1, !vocabulary.isEmpty else { return piece }
+            func isBareTerm(_ word: Substring) -> Bool {
+                word.last.map { $0.isLetter || $0.isNumber } == true && vocabulary.contains(Self.normalize(word))
+            }
+            if isBareTerm(words[0]), words[1].first?.isUppercase == true { words.removeFirst() }
+            if words.count > 1, let last = words.last, isBareTerm(last),
+               let before = words[words.count - 2].last, ".?!".contains(before) { words.removeLast() }
+            return words.joined(separator: " ")
+        }
+
+        static func normalize(_ word: Substring) -> String {
+            word.lowercased().filter { $0.isLetter || $0.isNumber }
+        }
 
         /// A 44-byte RIFF header in front of the PCM.
         static func wav(_ pcm: Data) -> Data {

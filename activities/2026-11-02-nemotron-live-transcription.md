@@ -23,7 +23,17 @@ asked for the streamed pieces to be the actual transcript.
   before the cut, so nothing is heard twice.
 - A cut first split the silence in half. Nemotron then wrote a dictionary
   word from the prompt ("VoiceiQ") into the silence. Each piece now keeps
-  100 ms of the pause and the rest is dropped.
+  100 ms of the pause and the rest is dropped. That was one run of evidence:
+  the word came back at the same spot in a later 50 s run of the signed
+  0.6.24 build, and Claude cleanup turned it into "waveform in VoiceiQ". The
+  pieces now drop a single-word dictionary term that stands alone at a
+  piece's edge (`withoutLeakedTerms`); a term the user says inside a phrase
+  is kept. Two more 50 s runs of the signed build with the filter came back
+  without the word.
+- Greptile found that the pause finder judged quiet only against the
+  quietest block, so speech over steady noise could count as one long pause
+  and its middle would be dropped. A block now counts as quiet only below
+  about -45 dBFS; otherwise the cut drops nothing.
 - On stop, a request in flight is cancelled rather than waited for; the last
   piece covers its audio.
 - The saved recording is still uploaded, as before, when three requests in a
