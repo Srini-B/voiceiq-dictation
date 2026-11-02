@@ -274,12 +274,13 @@ public struct LocalMeetingFooter: View {
 @MainActor
 public struct LocalMeetingPrivacyRow: View {
     private let label: String
-    private let localDescription: String
+    private let localDescription: (String) -> String
     private let cloudDescription: String
     @State private var enabled = SettingsStore().localMeetingTranscriptionEnabled
     @State private var model = SettingsStore().localSpeechModel
 
-    public init(label: String, localDescription: String, cloudDescription: String) {
+    /// `localDescription` receives the selected model's name.
+    public init(label: String, localDescription: @escaping (String) -> String, cloudDescription: String) {
         self.label = label
         self.localDescription = localDescription
         self.cloudDescription = cloudDescription
@@ -302,11 +303,13 @@ public struct LocalMeetingPrivacyRow: View {
         @ObservedObject var diarizer: LocalModelStore = .speakerDiarizer
         let enabled: Bool
         let label: String
-        let localDescription: String
+        let localDescription: (String) -> String
         let cloudDescription: String
 
         var body: some View {
-            LabeledContent(label) { Text(enabled && LocalMeetingTranscriber.isReady ? localDescription : cloudDescription) }
+            LabeledContent(label) {
+                Text(enabled && LocalMeetingTranscriber.isReady ? localDescription(speech.displayName) : cloudDescription)
+            }
         }
     }
 }
