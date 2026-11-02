@@ -79,9 +79,12 @@ that falls back to Nemotron 3.5 does not start it either.
 - Nemotron sometimes writes a dictionary word from the `prompt` into the short
   silence at a piece's edge ("waveform. VoiceiQ Third, we…"); whole-recording
   uploads never did. `Window.withoutLeakedTerms` drops a single-word
-  dictionary term that stands alone at a piece's start (running straight
-  into a capitalized word) or end (after a sentence end, with no punctuation
-  of its own).
+  dictionary term at a piece's start (running straight into a capitalized
+  word) or end (after a sentence end, with no punctuation of its own) only
+  when an earlier preview heard that same audio with more context and did
+  not contain the term. A preview counts for a piece's start only if it heard
+  at least a second past the cut, and for its end only if it heard the whole
+  piece. Without that evidence the word is kept.
 - On stop, a request in flight is cancelled and only the remaining tail is
   sent. The transcript is the locked-in text plus that last piece, and goes
   to Claude cleanup like any live transcript (`StageTimes.Source.cloudLive`).

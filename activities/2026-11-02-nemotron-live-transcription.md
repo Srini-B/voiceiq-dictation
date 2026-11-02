@@ -27,9 +27,14 @@ asked for the streamed pieces to be the actual transcript.
   the word came back at the same spot in a later 50 s run of the signed
   0.6.24 build, and Claude cleanup turned it into "waveform in VoiceiQ". The
   pieces now drop a single-word dictionary term that stands alone at a
-  piece's edge (`withoutLeakedTerms`); a term the user says inside a phrase
-  is kept. Two more 50 s runs of the signed build with the filter came back
-  without the word.
+  piece's edge (`withoutLeakedTerms`). Greptile pointed out that the first
+  version, which judged only by capitalization and punctuation, would also
+  drop a spoken "VoiceiQ API works." It now needs audio evidence: an earlier
+  preview that heard the same audio with more context and did not contain
+  the term. Without such a preview the word is kept. Scratch tests (deleted)
+  covered the leak, a spoken "VoiceiQ API works.", "Priya Kumar" split by a
+  cut, and both no-evidence cases. Four 50 s runs of signed 0.6.24 builds
+  with the filter came back without the leaked word.
 - Greptile found that the pause finder judged quiet only against the
   quietest block, so speech over steady noise could count as one long pause
   and its middle would be dropped. A block now counts as quiet only below

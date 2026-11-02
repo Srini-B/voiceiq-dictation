@@ -141,16 +141,24 @@ public final class DeepInfraLiveTranscriber: DictationStreaming {
         private var requestedAt: Int64 = 0
         /// `received` when a preview last heard the whole tail.
         private var previewedAt: Int64?
+        /// The last preview's raw text and how much of `tail` it heard.
+        private var heard: (text: String, bytes: Int)?
+        /// What the last preview before the latest cut heard of the current
+        /// tail's start; nil when it heard less than a second past the cut.
+        private var heardStart: String?
 
         init(vocabulary: [String] = []) {
             self.vocabulary = Set(vocabulary.filter { !$0.contains(" ") }.map { Self.normalize(Substring($0)) })
         }
 
-        var text: String { text(withLastPiece: tailText) }
+        var text: String { Self.join(committed, tailText) }
 
         func text(withLastPiece piece: String) -> String {
-            let piece = withoutLeakedTerms(piece)
-            return committed.isEmpty ? piece : (piece.isEmpty ? committed : committed + " " + piece)
+            Self.join(committed, withoutLeakedTerms(piece, start: heardStart, end: nil))
+        }
+
+        private static func join(_ committed: String, _ piece: String) -> String {
+            committed.isEmpty ? piece : (piece.isEmpty ? committed : committed + " " + piece)
         }
 
         var isDue: Bool { tail.count >= Self.minimumBytes && received - requestedAt >= Int64(Self.stepBytes) }
@@ -172,13 +180,16 @@ public final class DeepInfraLiveTranscriber: DictationStreaming {
         }
 
         mutating func apply(_ text: String, request: Request) {
-            let text = withoutLeakedTerms(text)
             guard let resume = request.resume else {
-                tailText = text
+                tailText = withoutLeakedTerms(text, start: heardStart, end: nil)
+                heard = (text, request.bytes)
                 previewedAt = request.received
                 return
             }
-            if !text.isEmpty { committed = committed.isEmpty ? text : committed + " " + text }
+            let ended = heard.flatMap { $0.bytes >= request.bytes ? $0.text : nil }
+            committed = Self.join(committed, withoutLeakedTerms(text, start: heardStart, end: ended))
+            heardStart = heard.flatMap { $0.bytes - resume >= Self.bytesPerSecond ? $0.text : nil }
+            heard = nil
             tail.removeFirst(resume)
             tailText = ""
             previewedAt = nil
@@ -233,20 +244,25 @@ public final class DeepInfraLiveTranscriber: DictationStreaming {
         /// so audio this quiet can be dropped without losing words.
         static let silenceEnergy = Double(blockBytes / 2) * pow(32_768 * 0.0056, 2)
 
-        /// The piece without a dictionary term that stands alone at its
-        /// start or end. Nemotron sometimes writes a word from the `prompt`
-        /// into the short silence at a piece's edge ("waveform. VoiceiQ
+        /// The piece without a dictionary term that Nemotron wrote from the
+        /// `prompt` into the short silence at a cut ("waveform. VoiceiQ
         /// Third, we…" on 2026-11-02, never in whole-recording uploads). A
-        /// leaked term at the start runs straight into a capitalized word;
-        /// at the end it follows a sentence end and has no punctuation.
-        func withoutLeakedTerms(_ piece: String) -> String {
+        /// term is dropped only when an earlier preview heard the same audio
+        /// with more context and did not hear it: `start` is that preview's
+        /// text for the piece's start, `end` for its end, nil when no preview
+        /// heard it. It must also stand alone: at the start running straight
+        /// into a capitalized word, at the end after a sentence end with no
+        /// punctuation of its own.
+        func withoutLeakedTerms(_ piece: String, start: String?, end: String?) -> String {
             var words = piece.split(separator: " ")
             guard words.count > 1, !vocabulary.isEmpty else { return piece }
-            func isBareTerm(_ word: Substring) -> Bool {
-                word.last.map { $0.isLetter || $0.isNumber } == true && vocabulary.contains(Self.normalize(word))
+            func isLeak(_ word: Substring, heard: String?) -> Bool {
+                guard let heard, word.last.map({ $0.isLetter || $0.isNumber }) == true else { return false }
+                let term = Self.normalize(word)
+                return vocabulary.contains(term) && !heard.split(separator: " ").map(Self.normalize).contains(term)
             }
-            if isBareTerm(words[0]), words[1].first?.isUppercase == true { words.removeFirst() }
-            if words.count > 1, let last = words.last, isBareTerm(last),
+            if isLeak(words[0], heard: start), words[1].first?.isUppercase == true { words.removeFirst() }
+            if words.count > 1, let last = words.last, isLeak(last, heard: end),
                let before = words[words.count - 2].last, ".?!".contains(before) { words.removeLast() }
             return words.joined(separator: " ")
         }
