@@ -13,30 +13,48 @@ the removal of Whistle, but its model and runtime are no longer included.
 Each model offers its own languages (`LocalSpeechModel.languages`, a list
 of `LocalSpeechLanguage` with a locale code and a name). The selected model's
 row in Settings has a Language menu; the other rows show "Languages:
-English" or "32 languages". The choice is stored once
+English" or "25 languages". The choice is stored once
 (`SettingsStore.localSpeechLanguage`, key `localSpeechLanguage`, a locale
 code). `LocalSpeechModel.language(code:)` reads it for the selected model and
 falls back to English, so a German choice reads as English under Fluid Speech
-Mini and returns when Nemotron is picked again.
+Mini and returns when Fluid Speech Pro is picked again.
 
 - Fluid Speech Mini: English only. It is trained on English (FluidVoice model
-  card) and ignores the code.
-- Nemotron 3.5: 32 locales, the "transcription-ready" and "broad-coverage"
-  tiers of NVIDIA's model card. The card's eight "adaptation-ready" locales
-  need fine-tuning and are not offered. `LocalTranscriber` passes the code in
-  `LocalSpeechOptions.language`, and `NemotronSession` calls
-  `setLanguage(code)` with the forced language prefix.
+  card).
+- Fluid Speech Pro (macOS 15 and iOS 18 or later): the 25 European languages of Parakeet TDT 0.6B
+  v3. The decoder detects the language itself. `ParakeetSession` passes no
+  `language` to FluidAudio: that argument only filters the joint's top-K
+  tokens by script, and with French it turned "ce soir" into "ce sort".
 
-The English tools (speech detection, dictionary spotting) and English number
-formatting (`EnglishText`) run only for an English code. For other languages
+Neither model is told the language. The English tools (dictionary spotting)
+and English number formatting (`EnglishText`) run only for an English code. For other languages
 the transcript goes to cleanup as decoded; the cleanup prompt keeps the
 speaker's language. Cloud transcription keeps its own language handling.
 
-iPhone and iPad offer Fluid Speech Mini only (`LocalSpeechModel.available`).
-Nemotron stalled on a physical iPhone when both models were offered in
-October 2026, and the iOS app has no live-text surface for its streaming
-output. A stored Nemotron selection reads as Fluid Speech Mini there. The iOS
-app links FluidAudio and runs inference in-process; it releases models after
+Fluid Speech Pro's Core ML build targets macOS 15 and iOS 18, so older systems
+offer Fluid Speech Mini only (`LocalSpeechModel.available`). A stored Fluid
+Speech Pro selection reads as Fluid Speech Mini there. On iPhone and iPad Pro
+loads like Mini: in-process through `LocalSpeechInference.makeSession`
+(`ParakeetSession`, CPU encoder), released after each dictation, and warmed by
+`ModelWarmer`, which warms again when the iOS version or the selected model
+changes. Its 16-bit encoder weighs 1.19 GB, about five times Mini's palettized
+one, so it needs that much more memory while it is loaded.
+
+Claude's cloud transcription is DeepInfra's Nemotron 3.5 Transcribe, which
+needs the optional DeepInfra key. The pickers always offer On device and
+Nemotron 3.5. With Nemotron 3.5 picked and no DeepInfra key
+(`SettingsStore.providerTranscribes` is false), a row under the picker says
+where to add the key, and a dictation that cannot be transcribed on device
+fails with `.auth` instead of sending audio anywhere
+(`GeminiClient.deepInfraTranscription`).
+
+Fluid Speech Pro replaced the on-device Nemotron 3.5 ASR Streaming model on
+2026-11-02. A stored `nemotron` selection reads as Fluid Speech Pro
+(`LocalSpeechModel(stored:)`); until Pro is downloaded, dictation uses the
+cloud provider. The first time the Pro store is opened, it deletes the old
+`Models/nemotron-3.5-multilingual-2240ms` folder (`LocalModelManifest.replaces`).
+
+The iOS app links FluidAudio and runs inference in-process; it releases models after
 each dictation and joins active Core ML calls on cancellation. Core ML can
 retain runtime caches there, so returning physical memory to its original
 baseline within a fixed time is not guaranteed. Downloads run in the
@@ -55,15 +73,15 @@ cloud transcription when a key is stored.
 ## Download and delete
 
 1. Set Transcription to On device.
-2. Select **Download** beside **Fluid Speech Mini** (252.7 MB) or, on the
-   Mac, **Nemotron 3.5** (664.8 MB).
+2. Select **Download** beside **Fluid Speech Mini** (252.7 MB) or, on
+   macOS 15 or iOS 18 and later, **Fluid Speech Pro** (1.23 GB).
 3. Wait for download and file verification. Progress and Cancel remain available.
 4. Select a model row to use it. The checkmark shows the selected model.
 5. Use the trash icon and confirm **Delete** to remove a downloaded model,
    even with local transcription on.
 6. Optional: select **Download** beside **English tools** (103,865,880 bytes,
    shown as 103.9 MB). This row has no checkmark because it is never selected.
-   It adds Fluid Speech Mini dictionary correction. See
+   It adds dictionary correction for English dictation. See
    [English speech processing](#english-speech-processing).
 
 The model is not bundled, downloaded automatically, or loaded during download.
@@ -81,20 +99,20 @@ logic. Meetings have their own switch; see [On-device meetings](#on-device-meeti
 
 ## Model and real-time selection
 
-Changing the selected model to Nemotron enables **Real-time transcription**.
-Turning real-time off afterwards stays off, including across app restarts.
-Download completion does not change that preference. Both models can stay on
+Changing the selected model does not change **Real-time transcription**.
+Download completion does not change it either. Both models can stay on
 disk; selecting its row chooses which one dictation uses. Each downloaded model
 has its own trash icon, including the model that is not selected.
 
 | Selected, downloaded model | Real-time on | Real-time off |
 |---|---|---|
 | Fluid Speech Mini | Mac: live preview while speaking, then transcribe the saved recording after stop. iPhone and iPad: transcribe the saved recording after stop | Transcribe the saved recording after stop |
-| Nemotron 3.5 | Process PCM while speaking, then finalize after stop | Process the saved recording after stop |
+| Fluid Speech Pro | Mac: live preview while speaking, then transcribe the saved recording after stop. iPhone and iPad: transcribe the saved recording after stop | Transcribe the saved recording after stop |
 | Selected model missing | Cloud real-time, if available | Cloud file transcription |
 
-Nemotron supports saved audio, so disabling real-time does not require a
-different local model. There is no automatic switch to another downloaded model.
+Both models decode whole recordings; the live preview re-decodes the open
+tail of the recording (`ParakeetPreview`). There is no automatic switch to
+another downloaded model.
 
 The section footer (`LocalModelFooter`, shared by both platforms) depends on
 the selected model's state. While it is missing, the footer says cloud
@@ -152,7 +170,9 @@ compile per encoder. On the CPU the two encoders load in 3 s and 2 s cold
 the ANE, with the same words. The load log ends with `encoder=cpu`.
 `ParakeetVocabulary.loadModels` builds `CtcModels` from the pack's files
 itself because `CtcModels.loadDirect` pins the ANE. Meetings
-(`LocalMeetingJob`) and Nemotron keep the ANE.
+(`LocalMeetingJob`) keep the ANE. Fluid Speech Pro's 16-bit encoder runs on
+the CPU either way: Core ML places all 1,393 of its ops on the CPU even when
+the ANE is allowed, while Mini's palettized encoder gets 1,681 ANE ops.
 
 Cold load during a dictation (both platforms): the load starts with the
 recording. If it is still running `TimeoutPolicy.localColdLoad` (5 s) after
@@ -205,9 +225,9 @@ logs "cloud live final Ns" in place of "decode". A recording uploaded after
 the fact, including a cloud fallback after a slow on-device load, logs
 "cloud transcribe+cleanup Ns" because one request does both.
 
-### Fluid Speech Mini live preview
+### Live preview (Fluid Speech Mini and Pro)
 
-Fluid Speech Mini is an offline decoder with no streaming state, so its
+Both models are offline decoders with no streaming state, so the
 preview is display-only text from re-decoding the open tail of the recording
 (`ParakeetPreview`). The pump hands the session about one second of PCM at a
 time (`PCMRing.bytesPerSecond`); each call decodes the whole tail with a fresh
@@ -236,41 +256,17 @@ transcription when no local session starts.
 
 Model loading starts only when dictation starts, on a worker rather than the UI
 thread. Audio capture writes the existing 16 kHz mono CAF immediately. After
-capture drains and closes, Fluid Speech Mini transcribes that complete recording.
-Recordings up to five minutes use in-memory audio processing. Longer Fluid Speech Mini
-recordings use FluidAudio's disk-backed chunking and skip VAD trimming and
-CTC dictionary correction to bound audio memory.
+capture drains and closes, the selected model transcribes that complete recording.
+Recordings up to five minutes use in-memory audio processing. Longer
+recordings use FluidAudio's disk-backed chunking and skip CTC dictionary
+correction to bound audio memory.
 We do not use its sliding-window API because that API can return partial text
 after an individual window fails without exposing the failure to its caller.
 
-Nemotron uses the full-vocabulary multilingual Core ML conversion at the
-recommended 2240 ms tier. Real-time capture uses a bounded 30-second PCM queue
-and coalesces 2.24-second blocks. Missing, dropped or rejected bytes disqualify
-the local result and fall back to the saved recording. With real-time off,
-Nemotron processes recordings up to five minutes in memory. Longer recordings
-use bounded 35,840-frame reads with no VAD trim.
-Nemotron real-time never holds the complete recording in a second audio buffer.
-
-At stop, Nemotron receives one silent decoder chunk before finalization, including
-when the recording ends on an exact chunk boundary. This gives the decoder
-lookahead to emit trailing words. The silence is not written to the recording
-and does not count toward captured-frame validation.
-
-If the first chunk contains sustained audio energy but no early word emissions,
-Nemotron can re-decode only the first 6.72 seconds of the audio the decoder
-received (after any trimming) using its detected language.
-When no language tag was emitted, the retry keeps automatic language selection
-and adds one leading silent chunk. Recovery prepends at most three opening words
-only when the following five words match the primary transcript. It never
-replaces the primary suffix. A failed optional retry retains the primary result;
-cancellation still cancels transcription. This reduces observed boundary omissions,
-but does not guarantee recognition of every word or recover speech before capture.
-
-On Mac, real-time Nemotron, real-time Fluid Speech Mini and cloud transcription
-show provisional words in the pill while recording. The latest words stay
-visible in a single line. Nemotron updates after each 2.24-second audio block
-and Fluid Speech Mini after each second, once the model has loaded. Nemotron
-file mode and Fluid Speech Mini with real-time off do not produce live words.
+On Mac, real-time on-device and cloud transcription show provisional words in
+the pill while recording. The latest words stay visible in a single line. Both
+on-device models update after each second, once the model has loaded. With
+real-time off they do not produce live words.
 The preview clears on stop, cancel or streaming failure. It never enters History, cleanup or insertion;
 those paths use only the validated final transcript.
 
@@ -281,7 +277,7 @@ warm model cache; every dictation loads the selected model and any tools again.
 On macOS, the signed `VoiceiQLocalSpeech.app` helper owns Core ML inference.
 The main app sends model/audio paths, the final frame count, the English tools
 folder when installed, and up to 256 dictionary terms over private
-length-prefixed pipes, plus PCM blocks for Nemotron streaming. It does not send
+length-prefixed pipes, plus PCM blocks for the live preview. It does not send
 API keys, screenshots, or writing prompts.
 The helper releases the model and tools before returning the transcript, then
 exits after 60 idle seconds to reclaim its remaining process memory. Another
@@ -292,8 +288,8 @@ saved-audio cloud path. Startup has a 120-second deadline; recognition allows at
 least 120 seconds or twice the recording duration, whichever is longer.
 
 Successful local calls record `fluid-speech-mini-local` (`parakeet-v3-local` before
-2026-10-14) or
-`nemotron-3.5-multilingual-local`, stage `transcribe`, with zero
+2026-10-14) or `fluid-speech-pro-local` (`nemotron-3.5-multilingual-local`
+before 2026-11-02), stage `transcribe`, with zero
 provider cost. Cold startup and
 final inference still take time; this does not guarantee avoiding "Still working".
 
@@ -313,9 +309,9 @@ runs on final transcripts only, never on the live preview, and needs no
 download. It contains no neural weights. If it returns nothing, the candidate
 equals its input.
 
-The optional **English tools** pack adds two small Core ML models. The pack
-is never required: without it, or when one part fails to load or run, that part
-is skipped and the base model still transcribes. Both decoders receive the
+The optional **English tools** pack adds two small Core ML models; only the
+CTC model is loaded now. The pack is never required: without it, or when it
+fails to load or run, the base model still transcribes. Both decoders receive the
 recorded audio as captured; there is no noise reduction step. Pack v1 carried
 LocalVQE noise reduction, which raised word error rate for both decoders on
 replayed dictations and was removed (see
@@ -323,40 +319,26 @@ replayed dictations and was removed (see
 
 | Folder | Model | Used for |
 |---|---|---|
-| `vad` | Silero VAD unified 256 ms v6.2.1, threshold 0.4 | Speech detection |
-| `ctc` | Parakeet CTC 110M with its tokenizer | Dictionary correction for Fluid Speech Mini |
+| `vad` | Silero VAD unified 256 ms v6.2.1 | Not loaded; only the retired Nemotron path used it |
+| `ctc` | Parakeet CTC 110M with its tokenizer | Dictionary correction for English dictation, up to five minutes |
 
-How each mode uses the pack:
-
-| Mode | Speech detection | Dictionary |
-|---|---|---|
-| Fluid Speech Mini | Not loaded | CTC rescoring up to five minutes, needs the pack |
-| Nemotron real-time | Logs speech start and end only | None |
-| Nemotron file | Trims silent edges up to five minutes | None |
-
-Fluid Speech Mini decodes the recording as captured and does not load the
-speech detector. Replaying 15 dictations with the pack showed that edge
+The `vad` folder stays in the pack because removing it would change the pack
+revision and make every install download all 103.9 MB again. Both models
+decode the recording as captured. Replaying 15 dictations showed that edge
 trimming changed only two of them, and both lost accuracy (the tail cut moved
-words and casing mid-sentence); none improved. It also added about 0.5 s per
-dictation. Nemotron file mode keeps trimming. There, speech detection never
-splits a recording or removes audio between words. It trims an edge only when
-more than 2 seconds of silence precede the first or follow the last detected
-speech, and it keeps 1 second of margin. A recording with no detected speech
-is decoded in full. If detection fails, the untrimmed audio is used.
+words and casing mid-sentence); none improved.
 
 With a non-empty Dictionary, the CTC pass adds about 0.3 to 0.5 s per
 dictation plus about 0.02 s per second of audio, after a one-time Core ML
-compile on first load (about 15 s on an M2 Mac mini). The Fluid Speech Mini
-decoder and the CTC spotter see the same samples, so their timings share one
-clock.
+compile on first load (about 15 s on an M2 Mac mini). The decoder and the
+CTC spotter see the same samples, so their timings share one clock.
 
-Nemotron does not receive dictionary terms. FluidAudio's decode-time hotword
-bias is a greedy boost with no recovery: a short term such as "Cal" turned a
-spoken hesitation into a run of "Ca Ca Ca", and the bias raised word error
-rate on replayed dictations. Dictionary terms still reach the cleanup prompt
-and the deterministic replacement layer.
+FluidAudio's decode-time hotword bias is not used: it is a greedy boost with
+no recovery, and with the retired Nemotron model a short term such as "Cal"
+turned a spoken hesitation into a run of "Ca Ca Ca". Dictionary terms also
+reach the cleanup prompt and the deterministic replacement layer.
 
-Dictionary terms for Fluid Speech Mini come from the first 256 entries in the
+Dictionary terms for English dictation come from the first 256 entries in the
 Dictionary. A term's misspelling, if set, becomes its alias. Before the
 decoder sees them, terms are whitespace-collapsed, deduplicated without regard
 to case, limited to 64 characters, and limited to 8 aliases each.
@@ -488,11 +470,19 @@ Downloads verify every file in a staging
 folder, then atomically publish a revision marker. Startup checks marker and file
 sizes. No FluidAudio auto-download API is called.
 
-Nemotron comes from
-`FluidInference/Nemotron-3.5-ASR-Streaming-Multilingual-0.6b-CoreML`, revision
-`1a41b75758b0337ff67db7d5408280aaaf23074e`, folder `multilingual/2240ms/`.
-`NemotronManifest.swift` pins its 22 files and SHA-256 digests, totalling
-664,846,846 bytes. The same verification and atomic installation apply.
+Fluid Speech Pro by FluidVoice comes only as a NeMo checkpoint
+(`FluidVoice-Labs/fluid-speech-pro`, revision
+`53f490b9292c5943847f635b7abfc3f123018964`). It is Parakeet TDT 0.6B v3 with
+one extra encoder block (`fv_insert`) after subsampling. VoiceiQ converted it
+to 16-bit Core ML with FluidInference's mobius Parakeet v3 converter, with
+the block traced into the encoder, and published the package at
+`cyron/fluid-speech-pro-coreml`, revision `ec52e16204b3d2c4c8bf60e576728fc58a825689`.
+`FluidSpeechProManifest.swift` pins its 21 files and SHA-256 digests, totalling
+1,228,362,429 bytes, in Mini's layout (`JointDecisionv3.mlmodelc` included).
+Unlike Mini's, its joint has top-K outputs. It installs to
+`Models/fluid-speech-pro/<revision>` with the same verification and atomic
+installation. Conversion and parity checks against NeMo are recorded in
+`activities/2026-11-02-fluid-speech-pro-replaces-nemotron.md`.
 
 Nemotron 3 Diarization comes from `FluidInference/nemotron-3-diarization-coreml`,
 revision `25a90f97f254428d4b30374b76af9c74fdee8327`: the offline monolithic v2

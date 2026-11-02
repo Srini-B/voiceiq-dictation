@@ -53,7 +53,7 @@ public struct LocalModelControls: View {
         )
     }
 
-    static let englishNote = "English tools add dictionary correction for Fluid Speech Mini. Without them, on-device transcription still works."
+    static let englishNote = "English tools add dictionary correction for English dictation. Without them, on-device transcription still works."
 }
 
 /// The speaker diarizer's row, offered while meetings are kept on device.
@@ -310,14 +310,14 @@ public struct LocalMeetingPrivacyRow: View {
 /// claims audio stays local while the model is missing.
 @MainActor
 public struct LocalAudioPrivacyRow: View {
-    private let provider: String
+    private let provider: String?
     private let cloudDescription: String
     @State private var localEnabled = SettingsStore().localTranscriptionEnabled
     @State private var model = SettingsStore().localSpeechModel
 
-    /// `provider` names the cloud provider; `cloudDescription` is the row's
-    /// text while on-device transcription is off.
-    public init(provider: String, cloudDescription: String) {
+    /// `provider` names the cloud provider, nil when it cannot transcribe;
+    /// `cloudDescription` is the row's text while on-device transcription is off.
+    public init(provider: String?, cloudDescription: String) {
         self.provider = provider
         self.cloudDescription = cloudDescription
     }
@@ -336,7 +336,7 @@ public struct LocalAudioPrivacyRow: View {
     private struct Content: View {
         @ObservedObject var store: LocalModelStore
         let localEnabled: Bool
-        let provider: String
+        let provider: String?
         let cloudDescription: String
 
         var body: some View {
@@ -345,6 +345,10 @@ public struct LocalAudioPrivacyRow: View {
 
         private var value: String {
             let name = store.displayName
+            guard let provider else {
+                guard localEnabled else { return "Not sent until you add a DeepInfra key" }
+                return store.state == .ready ? "Transcribed on device by \(name)" : "\(name) unavailable, so not sent anywhere"
+            }
             guard localEnabled else { return cloudDescription }
             return store.state == .ready
                 ? "Transcribed on device by \(name); sent to \(provider) only if that fails"

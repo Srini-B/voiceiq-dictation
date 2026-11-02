@@ -103,7 +103,7 @@ public enum KeychainStore {
     @discardableResult
     public static func deleteOpenAIKey(notify: Bool = false) -> Bool { delete(.openAI, notify: notify) }
 
-    // MARK: - Claude + Nemotron
+    // MARK: - Claude and DeepInfra
 
     public static func loadKey(_ secret: Secret) -> String? { load(secret, service: service) }
 
@@ -113,18 +113,25 @@ public enum KeychainStore {
     @discardableResult
     public static func deleteKey(_ secret: Secret, notify: Bool = false) -> Bool { delete(secret, notify: notify) }
 
-    /// Whether the provider's keys are stored. Claude + Nemotron needs both.
+    /// Whether the provider's own key is stored.
     public static func hasKey(for provider: ModelProvider) -> Bool {
         switch provider {
         case .gemini: return loadAPIKey() != nil
         case .openAI: return loadOpenAIKey() != nil
-        case .anthropic: return loadKey(.anthropic) != nil && loadKey(.deepInfra) != nil
+        case .anthropic: return loadKey(.anthropic) != nil
         }
     }
 
-    /// Whether the selected provider can be reached at all. This is what "the
-    /// app can transcribe" means; a Gemini key alone does not let an OpenAI
-    /// selection transcribe.
+    /// Whether the provider can also transcribe in the cloud. Claude needs
+    /// the optional DeepInfra key for that.
+    public static func canTranscribe(with provider: ModelProvider) -> Bool {
+        hasKey(for: provider) && (provider != .anthropic || loadKey(.deepInfra) != nil)
+    }
+
+    public static var canTranscribeInCloud: Bool { canTranscribe(with: SettingsStore().preferredProvider) }
+
+    /// Whether the selected provider can be reached at all; a Gemini key
+    /// alone does not let an OpenAI selection work.
     public static var hasModelKey: Bool { hasKey(for: SettingsStore().preferredProvider) }
 
     // MARK: - Generic

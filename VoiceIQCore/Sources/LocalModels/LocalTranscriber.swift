@@ -2,8 +2,8 @@ import Foundation
 import os
 import VoiceIQSpeech
 
-/// The CAF remains authoritative. Missing stream bytes disqualify local output,
-/// rather than passing a fluent but incomplete transcript to cleanup.
+/// The CAF remains authoritative: the final transcript always decodes the
+/// saved recording, never the live preview.
 public final class LocalTranscriber: DictationStreaming, Sendable {
     public var runsOnDevice: Bool { true }
     public let partials: AsyncStream<String>
@@ -11,12 +11,9 @@ public final class LocalTranscriber: DictationStreaming, Sendable {
     private let id: UUID
     private let model: LocalSpeechModel
     private let worker: any LocalSpeechSession
-    /// Live PCM is pumped into the session for display-only previews.
+    /// Live PCM is pumped into the session for display-only previews. They
+    /// are disposable; the final transcript is a separate decode of the recording.
     private let previewing: Bool
-    /// Nemotron's streamed transcript is the final transcript, so every
-    /// recorded byte must have been accepted. Fluid Speech Mini previews are
-    /// disposable; its final transcript is a separate decode of the recording.
-    private let strict: Bool
     private let ring = PCMRing(seconds: 30)
     private let wake: AsyncStream<Void>.Continuation
     /// Waits for any warm-up, then loads the model. Starts with the recording.
@@ -30,20 +27,14 @@ public final class LocalTranscriber: DictationStreaming, Sendable {
     /// later `abort` must then leave it running.
     private let handedOff = OSAllocatedUnfairLock(initialState: false)
 
-    /// Fluid Speech Mini previews cost one decode per second of speech, so
-    /// they run only where the app shows live text: the Mac pill. iPhone and
-    /// iPad have no such surface.
-    static func previews(_ model: LocalSpeechModel, realtime: Bool) -> Bool {
-        guard realtime else { return false }
-        switch model {
-        case .nemotron: return true
-        case .parakeet:
-            #if os(macOS)
-            return true
-            #else
-            return false
-            #endif
-        }
+    /// Previews cost one decode per second of speech, so they run only where
+    /// the app shows live text: the Mac pill. iPhone and iPad have no such surface.
+    static func previews(realtime: Bool) -> Bool {
+        #if os(macOS)
+        return realtime
+        #else
+        return false
+        #endif
     }
 
     public enum LoadEvent: Sendable {
@@ -77,16 +68,12 @@ public final class LocalTranscriber: DictationStreaming, Sendable {
         return (options, toolsReady)
     }
 
-    /// `cloudOnColdLoad`: a provider key is stored, so a dictation whose
+    /// `cloudOnColdLoad`: the provider can transcribe, so a dictation whose
     /// model is still loading after the recording can go to the cloud.
     @MainActor public init?(audioURL: URL, model: LocalSpeechModel, language: LocalSpeechLanguage, realtime: Bool,
                            cloudOnColdLoad: Bool, makeSession: LocalSpeechSessionFactory) {
         let id = UUID()
-        let previewing = Self.previews(model, realtime: realtime)
-        let strict = model == .nemotron && previewing
-        // Nemotron wants its native chunk; Fluid Speech Mini re-decodes, so
-        // one second keeps the preview moving without stacking decodes.
-        let chunkBytes = model == .nemotron ? 71_680 : PCMRing.bytesPerSecond
+        let previewing = Self.previews(realtime: realtime)
         let (options, toolsReady) = Self.sessionOptions(language: language)
         let worker = makeSession(model, audioURL, previewing, options)
         let signals = AsyncStream<Void>.makeStream(bufferingPolicy: .bufferingNewest(1))
@@ -109,7 +96,6 @@ public final class LocalTranscriber: DictationStreaming, Sendable {
         self.model = model
         self.worker = worker
         self.previewing = previewing
-        self.strict = strict
         wake = signals.continuation
         self.cloudOnColdLoad = cloudOnColdLoad
         let ring = ring
@@ -131,26 +117,14 @@ public final class LocalTranscriber: DictationStreaming, Sendable {
             }
             await load.value
             guard previewing, !Task.isCancelled else { return }
-            // A rejected chunk or a dropped one ends a strict session, because
-            // its stream can no longer become the transcript. A preview-only
-            // session just stops previewing; its final decode is unaffected.
+            // A rejected chunk stops previewing; the final decode is unaffected.
+            // One second per decode keeps the preview moving without stacking decodes.
             for await _ in signals.stream {
                 guard !Task.isCancelled else { return }
-                if ring.didDrop && strict { await worker.stop(); return }
-                for pcm in ring.drainCoalesced(minBytes: chunkBytes, flushAll: false) {
-                    guard let preview = await worker.append(pcm) else {
-                        if strict { await worker.stop() }
-                        return
-                    }
-                    ring.markAccepted(pcm.count)
+                for pcm in ring.drainCoalesced(minBytes: PCMRing.bytesPerSecond, flushAll: false) {
+                    guard let preview = await worker.append(pcm) else { return }
                     previews.continuation.yield(String(preview.suffix(512)))
                 }
-            }
-            guard strict, !Task.isCancelled else { return }
-            guard !ring.didDrop else { await worker.stop(); return }
-            for pcm in ring.drainCoalesced(minBytes: chunkBytes, flushAll: true) {
-                guard await worker.append(pcm) != nil else { await worker.stop(); return }
-                ring.markAccepted(pcm.count)
             }
         }
     }
@@ -181,9 +155,6 @@ public final class LocalTranscriber: DictationStreaming, Sendable {
         let outcome = await withTaskCancellationHandler {
             await Self.bounded(seconds: deadline) { [self] in
                 await pump.value
-                guard !strict || (!ring.didDrop && ring.acceptedBytes == framesWritten * 2) else {
-                    return nil as LocalSpeechOutput?
-                }
                 return await worker.transcribe(framesWritten: framesWritten)
             }
         } onCancel: {

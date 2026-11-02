@@ -25,7 +25,7 @@ struct ModelKeysForm: View {
         switch provider {
         case .gemini: return [.gemini]
         case .openAI: return [.openAI]
-        case .anthropic: return [.anthropic, .deepInfra]
+        case .anthropic: return [.anthropic]
         }
     }
 
@@ -35,7 +35,7 @@ struct ModelKeysForm: View {
                 Image(systemName: "info.circle.fill")
                     .foregroundStyle(Theme.Colors.accent)
                     .font(.system(size: 17))
-                Text("Pick **Gemini**, **OpenAI** or **Claude + Nemotron** and add that provider's keys. The TinyFish key is optional.")
+                Text("Pick **Gemini**, **OpenAI** or **Claude** and add its key. Claude needs On device transcription or a DeepInfra key. The other keys are optional.")
                     .font(Theme.Fonts.subheadline())
                     .foregroundStyle(Theme.Colors.inkSecondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -62,6 +62,7 @@ struct ModelKeysForm: View {
 
             VStack(alignment: .leading, spacing: Theme.Spacing.m) {
                 GroupLabel(text: "Optional")
+                if provider == .anthropic { KeyCard(slot: .deepInfra, onChange: reload) }
                 KeyCard(slot: .tinyFish, onChange: reload)
             }
         }
@@ -238,7 +239,7 @@ enum KeySlot: Hashable, CaseIterable {
         case .anthropic:
             return "Claude writes, translates and answers. Stored in your \(UIDevice.current.localizedModel)'s Keychain and only ever sent to Anthropic."
         case .deepInfra:
-            return "Nemotron 3.5 Transcribe hears your recordings. Stored in your \(UIDevice.current.localizedModel)'s Keychain and only ever sent to DeepInfra."
+            return "Lets Claude transcribe in the cloud with Nemotron 3.5 Transcribe. Stored in your \(UIDevice.current.localizedModel)'s Keychain and only ever sent to DeepInfra."
         case .tinyFish:
             return "Lets Ask Anything look up current information on the web. Stored in your \(UIDevice.current.localizedModel)'s Keychain and only ever sent to TinyFish."
         }

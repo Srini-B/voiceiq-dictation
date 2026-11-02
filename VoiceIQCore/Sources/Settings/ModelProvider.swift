@@ -1,9 +1,9 @@
 import Foundation
 
-/// Whose models run: Gemini's, OpenAI's, or Claude with Nemotron, each on its
-/// own API with its own key. Settings calls this the provider. Claude +
-/// Nemotron is two hosts: DeepInfra's Nemotron 3.5 Transcribe hears the
-/// audio and Anthropic's Claude writes, so it needs both keys.
+/// Whose models run: Gemini's, OpenAI's, or Claude's, each on its own API with
+/// its own key. Settings calls this the provider. Gemini and OpenAI also
+/// transcribe. Claude only writes: it transcribes in the cloud only with an
+/// optional DeepInfra key for Nemotron 3.5 Transcribe, otherwise on device.
 public enum ModelProvider: String, CaseIterable, Sendable, Codable, Identifiable {
     case gemini
     case openAI
@@ -15,7 +15,7 @@ public enum ModelProvider: String, CaseIterable, Sendable, Codable, Identifiable
         switch self {
         case .gemini: return "Gemini"
         case .openAI: return "OpenAI"
-        case .anthropic: return "Claude + Nemotron"
+        case .anthropic: return "Claude"
         }
     }
 
@@ -24,7 +24,7 @@ public enum ModelProvider: String, CaseIterable, Sendable, Codable, Identifiable
         switch self {
         case .gemini: return "Google AI Studio"
         case .openAI: return "OpenAI API"
-        case .anthropic: return "Anthropic API and DeepInfra"
+        case .anthropic: return "Anthropic API"
         }
     }
 
@@ -57,9 +57,8 @@ public enum ModelProvider: String, CaseIterable, Sendable, Codable, Identifiable
         }
     }
 
-    /// Providers a meeting is transcribed on, in order: the selected one,
-    /// then the others, each only while its key is stored. Empty when none
-    /// has a key.
+    /// Providers to try for a meeting, in order: the selected one, then the
+    /// others, each only while `hasKey`. Empty when none has a key.
     public static func meetingOrder(selected: ModelProvider, hasKey: (ModelProvider) -> Bool) -> [ModelProvider] {
         ([selected] + allCases.filter { $0 != selected }).filter(hasKey)
     }
@@ -77,7 +76,7 @@ public enum TranscriptionSource: String, CaseIterable, Sendable, Identifiable {
     public func displayName(for provider: ModelProvider) -> String {
         switch self {
         case .onDevice: return "On device"
-        case .provider: return provider.displayName
+        case .provider: return provider == .anthropic ? "Nemotron 3.5" : provider.displayName
         }
     }
 }

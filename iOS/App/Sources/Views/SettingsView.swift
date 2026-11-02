@@ -371,13 +371,15 @@ struct PrivacyView: View {
     @State private var transcriptRetentionDays = SettingsStore().transcriptRetentionDays
     @State private var provider = SettingsStore().preferredProvider
 
-    @State private var meetingProviders = SettingsStore().meetingProviders
+    @State private var meetingTranscribers = SettingsStore().meetingTranscribers
 
-    private var destination: String { "\(provider.directName), with your key" }
+    /// Who hears the audio: Claude sends it to DeepInfra only.
+    private var audioOwner: String { provider == .anthropic ? "DeepInfra" : provider.directName }
+    private var destination: String { "\(audioOwner), with your key" }
     /// Meetings go to the first provider with a key, then to each other one
     /// in turn while the earlier ones fail.
     private var meetingOwner: String {
-        let names = meetingProviders.map(\.directName)
+        let names = meetingTranscribers.map { $0 == .anthropic ? "DeepInfra" : $0.directName }
         guard let first = names.first else { return provider.directName }
         let rest = names.dropFirst()
         guard let last = rest.last else { return first }
@@ -406,7 +408,7 @@ struct PrivacyView: View {
                 }
             }
             Section {
-                LocalAudioPrivacyRow(provider: provider.directName, cloudDescription: destination)
+                LocalAudioPrivacyRow(provider: SettingsStore().providerTranscribes ? audioOwner : nil, cloudDescription: destination)
                 LabeledContent("Transcript text", value: "For writing rules, Ask and Translate")
                 LocalMeetingPrivacyRow(
                     label: "Notes audio",
@@ -425,7 +427,7 @@ struct PrivacyView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .gtSettingDidChange).receive(on: RunLoop.main)) { _ in
             provider = SettingsStore().preferredProvider
-            meetingProviders = SettingsStore().meetingProviders
+            meetingTranscribers = SettingsStore().meetingTranscribers
         }
     }
 }

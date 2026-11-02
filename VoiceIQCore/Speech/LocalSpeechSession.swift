@@ -11,7 +11,7 @@ public struct LocalSpeechOptions: Codable, Sendable {
     }
     public var vocabulary: [Term]
     public var toolsDirectory: URL?
-    /// Locale code Nemotron is prompted with. Fluid Speech Mini ignores it.
+    /// Locale code of the dictation language. English turns on number formatting.
     public var language: String
     public init(vocabulary: [Term] = [], toolsDirectory: URL? = nil, language: String = "en-US") {
         self.vocabulary = vocabulary

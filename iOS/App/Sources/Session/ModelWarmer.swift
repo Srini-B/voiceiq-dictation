@@ -8,12 +8,14 @@ import VoiceIQInference
 /// dictation after an iOS update or a long break does not wait minutes for it:
 /// - a background processing task, which iOS runs when the phone is idle
 ///   (usually overnight), plugged in or not;
-/// - right away when the app opens on an iOS version the model was not warmed
-///   on, because an update always drops the prepared copy, whenever it ran.
+/// - right away when the app opens on an iOS version or with a selected model
+///   not warmed yet, because an update always drops the prepared copy, and a
+///   newly picked model has none.
 /// Each warm-up loads the model and releases it (`LocalModelWarmup`).
 @MainActor
 enum ModelWarmer {
     static let taskID = "io.blue.voiceiq.ios.warm-model"
+    /// The iOS version and selected model last warmed.
     private static let warmedOSKey = "modelWarmedOSVersion"
 
     /// Before launch finishes, as BGTaskScheduler requires.
@@ -37,8 +39,8 @@ enum ModelWarmer {
     }
 
     static func warmIfSystemUpdated() {
-        guard UserDefaults.standard.string(forKey: warmedOSKey) != osVersion else { return }
-        Task { await warm(reason: "iOS version not warmed yet") }
+        guard UserDefaults.standard.string(forKey: warmedOSKey) != warmedValue else { return }
+        Task { await warm(reason: "iOS version or model not warmed yet") }
     }
 
     private static func handle(_ task: BGTask) {
@@ -58,6 +60,7 @@ enum ModelWarmer {
     }
 
     private static func warm(reason: String) async {
+        let target = warmedValue
         let before = await PreparedModelCache.describe()
         guard let outcome = await LocalModelWarmup.run(makeSession: LocalSpeechInference.makeSession) else { return }
         let detail = String(format: "(%@, %@, before: %@, after: %@)", reason, SessionDiagnostics.processAge,
@@ -66,9 +69,15 @@ enum ModelWarmer {
             SessionDiagnostics.note(String(format: "model warm-up failed after %.1fs %@", outcome.seconds, detail))
             return
         }
-        UserDefaults.standard.set(osVersion, forKey: warmedOSKey)
+        UserDefaults.standard.set(target, forKey: warmedOSKey)
         SessionDiagnostics.note(String(format: "model warmed in %.1fs %@", outcome.seconds, detail))
     }
 
-    private static var osVersion: String { ProcessInfo.processInfo.operatingSystemVersionString }
+    /// The model `LocalModelWarmup.run` loads: the selected one for on-device
+    /// dictation, Fluid Speech Mini for on-device meetings alone.
+    private static var warmedValue: String {
+        let settings = SettingsStore()
+        let model = settings.localTranscriptionEnabled ? settings.localSpeechModel : .parakeet
+        return "\(ProcessInfo.processInfo.operatingSystemVersionString) \(model.rawValue)"
+    }
 }

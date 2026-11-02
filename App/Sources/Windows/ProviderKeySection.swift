@@ -7,6 +7,8 @@ struct ProviderKeySection: View {
     /// "OpenAI", "Anthropic", "DeepInfra".
     let vendor: String
     let keyPage: URL
+    /// Leads the footer, for an optional key.
+    var purpose: String?
     let validate: @Sendable (String) async -> GeminiClient.KeyCheck
 
     @State private var apiKey = ""
@@ -61,7 +63,7 @@ struct ProviderKeySection: View {
         } header: {
             Text("\(vendor) API key")
         } footer: {
-            Text("Stored in your Mac's Keychain and only ever sent to \(vendor).")
+            Text([purpose, "Stored in your Mac's Keychain and only ever sent to \(vendor)."].compactMap { $0 }.joined(separator: " "))
         }
         .onAppear { keyStatus = KeychainStore.loadKey(secret) == nil ? .missing : .stored }
         .onReceive(NotificationCenter.default.publisher(for: .gtSettingDidChange).receive(on: RunLoop.main)) { note in
@@ -112,6 +114,7 @@ extension ProviderKeySection {
         validate: { key in await GeminiClient.validateAnthropicKey(key) })
     static let deepInfra = ProviderKeySection(
         secret: .deepInfra, vendor: "DeepInfra", keyPage: URL(string: "https://deepinfra.com/dash/api_keys")!,
+        purpose: "Optional. Lets Claude transcribe in the cloud with Nemotron 3.5 Transcribe.",
         validate: { key in await GeminiClient.validateDeepInfraKey(key) })
 }
 

@@ -2,6 +2,8 @@ import FluidAudio
 import Foundation
 import VoiceIQSpeech
 
+/// Fluid Speech Mini and Fluid Speech Pro: Parakeet TDT 0.6B v3 packages
+/// that FluidAudio loads as `.v3`.
 actor ParakeetSession: LocalSpeechSession {
     private typealias Loaded = (models: AsrModels, tools: EnglishTools)
     private let audioURL: URL
@@ -33,7 +35,7 @@ actor ParakeetSession: LocalSpeechSession {
         let task = Task { () throws -> ASRResult in
             try Task.checkCancellation()
             var decoder = TdtDecoderState.make(decoderLayers: await manager.decoderLayerCount)
-            return try await manager.transcribe(samples, decoderState: &decoder, language: .english)
+            return try await manager.transcribe(samples, decoderState: &decoder)
         }
         previewing = task
         defer { previewing = nil }
@@ -58,7 +60,7 @@ actor ParakeetSession: LocalSpeechSession {
             // No VAD: trimming silent edges changed Fluid Speech Mini's words
             // in the middle of a recording and never improved one (15-dictation
             // replay, 2026-10-21). The decoder sees the recording as captured.
-            async let tools = EnglishTools.load(root: toolsRoot, vocabulary: terms, speechDetection: false)
+            async let tools = EnglishTools.load(root: toolsRoot, vocabulary: terms)
             // Decoder and joint stay on the ANE; only the encoder's compile
             // is slow. 10 s of audio: 0.24 s on the CPU, 0.08 s on the ANE.
             let models = try AsrModels.loadLocal(
@@ -89,6 +91,7 @@ actor ParakeetSession: LocalSpeechSession {
         guard !stopped, let manager else { return nil }
         let audioURL = audioURL
         let tools = tools
+        let english = options.language.hasPrefix("en")
         let task = Task { () throws -> LocalSpeechOutput? in
             guard SpeechAudio.fitsInMemory(framesWritten) else {
                 // FluidAudio's disk-backed path keeps memory constant.
@@ -97,15 +100,18 @@ actor ParakeetSession: LocalSpeechSession {
                 try SpeechAudio.validate(audioURL, frames: framesWritten)
                 Log.transcription.notice("Parakeet long recording (\(framesWritten) frames): disk-backed decode without vocabulary")
                 var decoder = TdtDecoderState.make(decoderLayers: await manager.decoderLayerCount)
-                let result = try await manager.transcribeDiskBacked(audioURL, decoderState: &decoder, language: .english)
+                let result = try await manager.transcribeDiskBacked(audioURL, decoderState: &decoder)
                 try Task.checkCancellation()
-                return EnglishText.output(original: result.text, confidence: result.confidence)
+                return Self.output(original: result.text, english: english, confidence: result.confidence)
             }
             // The decoder and CTC spotter see the same samples, so token
             // timings and CTC frames share one clock.
             let samples = try SpeechAudio.read(audioURL, frames: framesWritten)
             var decoder = TdtDecoderState.make(decoderLayers: await manager.decoderLayerCount)
-            let result = try await manager.transcribe(samples, decoderState: &decoder, language: .english)
+            // No `language`: the model detects it. FluidAudio's hint filters
+            // Pro's top-K tokens by script, which turned "ce soir" into "ce
+            // sort" in French; Mini's joint has no top-K, so it never applied.
+            let result = try await manager.transcribe(samples, decoderState: &decoder)
             try Task.checkCancellation()
             var corrected: String?
             if let vocabulary = tools.vocabulary {
@@ -117,7 +123,7 @@ actor ParakeetSession: LocalSpeechSession {
                 }
             }
             // Uncalibrated decoder confidence, for diagnostics only.
-            return EnglishText.output(original: result.text, corrected: corrected, confidence: result.confidence)
+            return Self.output(original: result.text, corrected: corrected, english: english, confidence: result.confidence)
         }
         recognition = task
         let started = Date()
@@ -132,6 +138,15 @@ actor ParakeetSession: LocalSpeechSession {
             Log.transcription.notice("Parakeet failed; using saved-audio cloud transcription: \(error.localizedDescription, privacy: .public)")
             return nil
         }
+    }
+
+    /// English number formatting would rewrite other languages as English.
+    private static func output(original: String, corrected: String? = nil, english: Bool, confidence: Float?) -> LocalSpeechOutput? {
+        guard english else {
+            let text = original.trimmingCharacters(in: .whitespacesAndNewlines)
+            return text.isEmpty ? nil : LocalSpeechOutput(original: text, normalized: text, confidence: confidence)
+        }
+        return EnglishText.output(original: original, corrected: corrected, confidence: confidence)
     }
 
     /// Joins in-flight Core ML work before deletion can remove its model files.

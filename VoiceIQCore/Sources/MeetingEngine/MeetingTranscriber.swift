@@ -26,7 +26,7 @@ public struct MeetingTranscriber: Sendable {
     /// Providers to try in order; see `ModelProvider.meetingOrder`.
     private let providers: @Sendable () -> [ModelProvider]
     private let sleep: @Sendable (TimeInterval) async throws -> Void
-    /// Speaker labels for Claude + Nemotron's words, which come with none
+    /// Speaker labels for DeepInfra Nemotron's words, which come with none
     /// (`LocalMeetingTranscriber.relabel`). Nil keeps the track labels.
     private let relabel: (@Sendable ([TimedWord], URL) async -> [TimedWord])?
 
@@ -341,7 +341,7 @@ public struct MeetingTranscriber: Sendable {
     /// Gemini: reference clips go inside the audio and the labels the API
     /// gives them name the speakers (`SpeakerLinker.link`). OpenAI: up to
     /// four named voice references go alongside, and the model labels their
-    /// segments with those names. Claude + Nemotron: no speaker labels, so
+    /// segments with those names. Claude with DeepInfra: no speaker labels, so
     /// each word is labelled by the track it was heard on (`labelByTrack`),
     /// and on the Mac the diarizer splits the far side afterwards (`relabel`).
     private func transcribe(window regions: [ClosedRange<Double>], audio: CallAudio, clips: [(key: String, value: [ClosedRange<Double>])],

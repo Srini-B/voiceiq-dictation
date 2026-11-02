@@ -55,9 +55,14 @@ enum LocalModelInstaller {
         }
     }
 
-    /// Clears staging folders left by a crash or quit and folders from other revisions.
+    /// Clears staging folders left by a crash or quit, folders from other
+    /// revisions, and the retired model this one replaced.
     static func removeStaleItems(_ manifest: LocalModelManifest) {
         let fileManager = FileManager.default
+        if let replaces = manifest.replaces {
+            try? fileManager.removeItem(at: manifest.rootDirectory.deletingLastPathComponent()
+                .appendingPathComponent(replaces, isDirectory: true))
+        }
         let root = manifest.rootDirectory
         guard let names = try? fileManager.contentsOfDirectory(atPath: root.path) else { return }
         for name in names where name != manifest.revision {

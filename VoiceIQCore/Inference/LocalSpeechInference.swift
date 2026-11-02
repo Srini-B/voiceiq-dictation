@@ -8,10 +8,8 @@ enum Log {
 
 public enum LocalSpeechInference {
     public static let makeSession: LocalSpeechSessionFactory = { model, audioURL, streaming, options in
-        switch model {
-        case .parakeet: return ParakeetSession(audioURL: audioURL, streaming: streaming, options: options)
-        case .nemotron: return NemotronSession(audioURL: audioURL, streaming: streaming, options: options)
-        }
+        // Both models are Parakeet TDT 0.6B v3 packages; only their files differ.
+        ParakeetSession(audioURL: audioURL, streaming: streaming, options: options)
     }
 
     /// Runs in this process. The Mac app goes through its helper instead.

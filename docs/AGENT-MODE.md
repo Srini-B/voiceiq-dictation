@@ -181,7 +181,7 @@ the next shortcut press. It resolves to:
    enabled, the base URL parses, and a model is selected.
 2. Otherwise the dictation route: Gemini uses the formatting model on the
    configured endpoint; OpenAI uses the writing model on `api.openai.com`;
-   Claude + Nemotron uses `claude-sonnet-5-5` on `api.anthropic.com` in the
+   Claude uses `claude-sonnet-5-5` on `api.anthropic.com` in the
    Anthropic Messages format (`AnthropicConfig.agentModel`).
 
 The override (`AgentProviderOverride`, JSON under `agentProviderOverride`;

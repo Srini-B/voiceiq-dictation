@@ -5,35 +5,35 @@ import Foundation
 /// Fluid Speech Mini, the Parakeet v3 fine-tune that replaced it.
 public enum LocalSpeechModel: String, CaseIterable, Codable, Sendable {
     case parakeet
-    case nemotron
+    case fluidSpeechPro
 
-    /// The models offered on this platform. iPhone and iPad get Fluid Speech
-    /// Mini only: Nemotron stalled on a physical iPhone, and the app has no
-    /// live-text surface there that would justify its streaming decoder.
+    /// The models this OS can load. Fluid Speech Pro's Core ML build targets
+    /// macOS 15 and iOS 18.
     public static var available: [LocalSpeechModel] {
-        #if os(macOS)
-        return allCases
-        #else
+        if #available(macOS 15, iOS 18, *) { return allCases }
         return [.parakeet]
-        #endif
+    }
+
+    /// A stored choice of the retired on-device Nemotron reads as Fluid
+    /// Speech Pro, which replaced it.
+    public init?(stored: String) {
+        self.init(rawValue: stored == "nemotron" ? Self.fluidSpeechPro.rawValue : stored)
     }
 
     public var displayName: String {
         switch self {
         case .parakeet: return "Fluid Speech Mini"
-        case .nemotron: return "Nemotron 3.5"
+        case .fluidSpeechPro: return "Fluid Speech Pro"
         }
     }
 
     /// The languages dictation with this model transcribes, offered in
     /// Settings under the selected model. Fluid Speech Mini is trained on
-    /// English only. Nemotron gets the 32 locales NVIDIA's model card rates
-    /// transcription-ready or broad-coverage; the card's eight
-    /// adaptation-ready locales need fine-tuning first and are left out.
+    /// English only; Fluid Speech Pro keeps Parakeet v3's 25 European languages.
     public var languages: [LocalSpeechLanguage] {
         switch self {
         case .parakeet: return [LocalSpeechLanguage(code: "en-US", name: "English")]
-        case .nemotron: return LocalSpeechLanguage.nemotron
+        case .fluidSpeechPro: return LocalSpeechLanguage.parakeetV3
         }
     }
 
@@ -46,7 +46,7 @@ public enum LocalSpeechModel: String, CaseIterable, Codable, Sendable {
     public var modelID: String {
         switch self {
         case .parakeet: return "fluid-speech-mini-local"
-        case .nemotron: return "nemotron-3.5-multilingual-local"
+        case .fluidSpeechPro: return "fluid-speech-pro-local"
         }
     }
 }
@@ -62,21 +62,19 @@ public struct LocalSpeechLanguage: Hashable, Sendable {
         self.name = name
     }
 
-    /// The English tools (speech detection, number formatting) apply only here.
+    /// The English tools (dictionary correction, number formatting) apply only here.
     public var isEnglish: Bool { code.hasPrefix("en") }
 
-    /// Codes from the model's `prompt_dictionary`, names written out because
-    /// `ar-AR` reads as Argentina to `Locale`.
-    static let nemotron: [LocalSpeechLanguage] = [
-        ("ar-AR", "Arabic"), ("bg-BG", "Bulgarian"), ("zh-CN", "Chinese (Mandarin)"),
-        ("hr-HR", "Croatian"), ("cs-CZ", "Czech"), ("da-DK", "Danish"), ("nl-NL", "Dutch"),
-        ("en-GB", "English (UK)"), ("en-US", "English (US)"), ("et-EE", "Estonian"),
-        ("fi-FI", "Finnish"), ("fr-CA", "French (Canada)"), ("fr-FR", "French (France)"),
-        ("de-DE", "German"), ("hi-IN", "Hindi"), ("hu-HU", "Hungarian"), ("it-IT", "Italian"),
-        ("ja-JP", "Japanese"), ("ko-KR", "Korean"), ("nb-NO", "Norwegian Bokmål"),
-        ("pl-PL", "Polish"), ("pt-BR", "Portuguese (Brazil)"), ("pt-PT", "Portuguese (Portugal)"),
-        ("ro-RO", "Romanian"), ("ru-RU", "Russian"), ("sk-SK", "Slovak"),
-        ("es-ES", "Spanish (Spain)"), ("es-US", "Spanish (US)"), ("sv-SE", "Swedish"),
-        ("tr-TR", "Turkish"), ("uk-UA", "Ukrainian"), ("vi-VN", "Vietnamese"),
+    /// Parakeet TDT 0.6B v3's languages. The decoder detects the language
+    /// itself; the choice decides whether the English tools and number
+    /// formatting run.
+    static let parakeetV3: [LocalSpeechLanguage] = [
+        ("bg-BG", "Bulgarian"), ("hr-HR", "Croatian"), ("cs-CZ", "Czech"), ("da-DK", "Danish"),
+        ("nl-NL", "Dutch"), ("en-US", "English"), ("et-EE", "Estonian"), ("fi-FI", "Finnish"),
+        ("fr-FR", "French"), ("de-DE", "German"), ("el-GR", "Greek"), ("hu-HU", "Hungarian"),
+        ("it-IT", "Italian"), ("lv-LV", "Latvian"), ("lt-LT", "Lithuanian"), ("mt-MT", "Maltese"),
+        ("pl-PL", "Polish"), ("pt-PT", "Portuguese"), ("ro-RO", "Romanian"), ("ru-RU", "Russian"),
+        ("sk-SK", "Slovak"), ("sl-SI", "Slovenian"), ("es-ES", "Spanish"), ("sv-SE", "Swedish"),
+        ("uk-UA", "Ukrainian"),
     ].map { LocalSpeechLanguage(code: $0.0, name: $0.1) }
 }

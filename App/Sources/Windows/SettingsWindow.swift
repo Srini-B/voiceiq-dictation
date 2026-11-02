@@ -266,20 +266,30 @@ struct PrivacyPane: View {
     let onDeleteAllHistory: () -> Void
     private let settings = SettingsStore()
     @State private var provider = SettingsStore().preferredProvider
-    @State private var meetingProviders = SettingsStore().meetingProviders
-    private var owner: String {
+    @State private var meetingTranscribers = SettingsStore().meetingTranscribers
+    private static func host(_ provider: ModelProvider) -> String {
         switch provider {
         case .gemini: return "Google"
         case .openAI: return "OpenAI"
-        case .anthropic: return "Anthropic and DeepInfra"
+        case .anthropic: return "Anthropic"
         }
     }
-    /// Who hears the audio: Claude + Nemotron sends it to DeepInfra only.
-    private var audioOwner: String { provider == .anthropic ? "DeepInfra" : owner }
+    /// Who hears the audio: Claude sends it to DeepInfra only.
+    private var audioOwner: String { provider == .anthropic ? "DeepInfra" : Self.host(provider) }
+    /// Every host this setup can send to: the provider, its audio host, and
+    /// the meeting transcript and notes fallbacks.
+    private var hosts: String {
+        let audio = settings.providerTranscribes ? [audioOwner] : []
+        let meetingAudio = meetingTranscribers.map { $0 == .anthropic ? "DeepInfra" : Self.host($0) }
+        var names: [String] = []
+        for name in [Self.host(provider)] + audio + meetingAudio + settings.meetingProviders.map(Self.host)
+        where !names.contains(name) { names.append(name) }
+        return ListFormatter.localizedString(byJoining: names)
+    }
     /// Meetings go to the first provider with a key, then to each other one
     /// in turn while the earlier ones fail.
     private var meetingOwner: String {
-        let names = meetingProviders.map(\.displayName)
+        let names = meetingTranscribers.map { $0 == .anthropic ? "DeepInfra" : $0.displayName }
         guard let first = names.first else { return provider.displayName }
         let rest = names.dropFirst()
         guard let last = rest.last else { return first }
@@ -349,7 +359,7 @@ struct PrivacyPane: View {
             }
 
             Section {
-                LocalAudioPrivacyRow(provider: audioOwner, cloudDescription: "Sent to \(audioOwner) with your key, transcribed every time")
+                LocalAudioPrivacyRow(provider: settings.providerTranscribes ? audioOwner : nil, cloudDescription: "Sent to \(audioOwner) with your key, transcribed every time")
                 LabeledContent("Transcript text") { Text("Sent back only for writing rules, Ask Anything and Translate") }
                 LabeledContent("Text around the cursor") { Text("Only if Fit to existing text and writing rules are on") }
                 LabeledContent("Where you are typing") { Text("App name, window title and browser page address, only with writing rules") }
@@ -367,7 +377,7 @@ struct PrivacyPane: View {
             } header: {
                 Text("What leaves your Mac")
             } footer: {
-                Text("No middleman server, no account, no analytics, no keystroke logging. Only \(owner), plus TinyFish when you add its key.")
+                Text("No middleman server, no account, no analytics, no keystroke logging. Only \(hosts), plus TinyFish when you add its key.")
             }
 
             Section {
@@ -391,7 +401,7 @@ struct PrivacyPane: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .gtSettingDidChange).receive(on: RunLoop.main)) { _ in
             provider = settings.preferredProvider
-            meetingProviders = settings.meetingProviders
+            meetingTranscribers = settings.meetingTranscribers
         }
     }
 }
