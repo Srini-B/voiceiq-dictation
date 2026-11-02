@@ -70,9 +70,11 @@ that falls back to Nemotron 3.5 does not start it either.
   latest tail text.
 - Once the tail reaches 12 s, the next request is a commit. It finds the
   longest quiet run of 10 ms blocks in the 6 s before the last second (quiet
-  is up to 3x the quietest block's RMS), sends only the audio up to 100 ms
-  into that run, locks the returned text in, and drops the tail up to 100 ms
-  before the run ends. No audio is heard twice, so no words repeat across a
+  is up to 3x the quietest block's RMS and never above about -45 dBFS), sends
+  only the audio up to 100 ms into that run, locks the returned text in, and
+  drops the tail up to 100 ms before the run ends. With no run that quiet,
+  such as speech over steady noise, it cuts in the quietest 10 ms and drops
+  nothing. No audio is heard twice, so no words repeat across a
   cut. With half the pause on each side, Nemotron once filled the silence
   with a dictionary word from the prompt ("VoiceiQ"); with 100 ms it did not.
 - On stop, a request in flight is cancelled and only the remaining tail is

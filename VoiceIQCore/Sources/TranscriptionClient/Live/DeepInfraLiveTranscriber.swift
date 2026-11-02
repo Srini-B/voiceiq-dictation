@@ -181,8 +181,11 @@ public final class DeepInfraLiveTranscriber: DictationStreaming {
         /// The longest quiet run of 10 ms blocks in the six seconds before
         /// the holdback, so a cut lands between sentences rather than at a
         /// comma or inside a word. A block is quiet up to three times the
-        /// quietest block's level. `end` keeps `marginBytes` of the run on
-        /// the piece before it and `resume` on the piece after.
+        /// quietest block's level, and never above `silenceEnergy`, because
+        /// the audio between `end` and `resume` is dropped: `end` keeps
+        /// `marginBytes` of the run on the piece before it and `resume` on
+        /// the piece after. With no such run (speech over steady noise), the
+        /// cut is the middle of the quietest block and nothing is dropped.
         static func longestPause(_ pcm: Data) -> (end: Int, resume: Int) {
             let last = (pcm.count - holdbackBytes) / blockBytes
             let first = max(0, last - cutWindowBytes / blockBytes)
@@ -196,7 +199,8 @@ public final class DeepInfraLiveTranscriber: DictationStreaming {
                     return energy
                 }
             }
-            let quiet = max((levels.min() ?? 0) * 9, 1e5) // 3x the RMS, and a floor near -62 dBFS
+            // 3x the RMS, at least about -62 dBFS and at most about -45 dBFS.
+            let quiet = min(max((levels.min() ?? 0) * 9, 1e5), Self.silenceEnergy)
             var best = (start: first, length: 0)
             var run = (start: first, length: 0)
             for (index, level) in levels.enumerated() {
@@ -207,10 +211,19 @@ public final class DeepInfraLiveTranscriber: DictationStreaming {
                     run.length = 0
                 }
             }
+            guard best.length > 0 else {
+                let quietest = levels.indices.min { levels[$0] < levels[$1] } ?? 0
+                let cut = (first + quietest) * blockBytes + blockBytes / 2
+                return (cut, cut)
+            }
             let start = best.start * blockBytes, length = best.length * blockBytes
             let margin = min(marginBytes, length / 2)
             return (start + margin, start + length - margin)
         }
+
+        /// A 10 ms block's energy at about -45 dBFS RMS: quieter than speech,
+        /// so audio this quiet can be dropped without losing words.
+        static let silenceEnergy = Double(blockBytes / 2) * pow(32_768 * 0.0056, 2)
 
         /// A 44-byte RIFF header in front of the PCM.
         static func wav(_ pcm: Data) -> Data {
