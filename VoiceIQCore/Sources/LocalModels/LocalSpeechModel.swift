@@ -5,7 +5,7 @@ public extension LocalSpeechModel {
     var manifest: LocalModelManifest {
         switch self {
         case .parakeet: return .parakeet
-        case .nemotron: return .nemotron
+        case .fluidSpeechPro: return .fluidSpeechPro
         }
     }
 }
@@ -35,14 +35,18 @@ public struct LocalModelManifest: Sendable {
     public let remotePrefix: String
     /// Folder under `<appSupport>/Models` that holds every revision and staging folder.
     public let directoryName: String
+    /// Folder of a retired model this one replaced, removed with the stale items.
+    public let replaces: String?
     public let files: [File]
     public let totalBytes: Int64
 
-    init(repository: String, revision: String, remotePrefix: String = "", directoryName: String, files: [File]) {
+    init(repository: String, revision: String, remotePrefix: String = "", directoryName: String,
+         replaces: String? = nil, files: [File]) {
         self.repository = repository
         self.revision = revision
         self.remotePrefix = remotePrefix
         self.directoryName = directoryName
+        self.replaces = replaces
         self.files = files
         totalBytes = files.reduce(0) { $0 + $1.size }
     }

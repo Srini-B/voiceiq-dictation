@@ -53,7 +53,7 @@ public struct LocalModelControls: View {
         )
     }
 
-    static let englishNote = "English tools add dictionary correction for Fluid Speech Mini. Without them, on-device transcription still works."
+    static let englishNote = "English tools add dictionary correction for English dictation. Without them, on-device transcription still works."
 }
 
 /// The speaker diarizer's row, offered while meetings are kept on device.

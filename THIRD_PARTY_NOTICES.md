@@ -45,13 +45,16 @@ repository's Apache 2.0 license. See `App/Resources/Sounds/ATTRIBUTION.md`.
   `JointDecision.mlmodelc`. Weights are not bundled with the app. File hashes
   are in `ParakeetManifest.swift`.
 
-### Optional NVIDIA Nemotron 3.5 ASR Streaming 0.6B model
+### Optional Fluid Speech Pro model (Mac)
 
-- Original model: https://huggingface.co/nvidia/nemotron-3.5-asr-streaming-0.6b (NVIDIA).
-- Core ML conversion: https://huggingface.co/FluidInference/Nemotron-3.5-ASR-Streaming-Multilingual-0.6b-CoreML (Fluid Inference), revision `1a41b75758b0337ff67db7d5408280aaaf23074e`.
-- License: [OpenMDW-1.1](https://openmdw.ai/license/1-1/).
-- VoiceiQ downloads the converted `multilingual/2240ms/` files unmodified on
-  explicit request. Weights are not bundled. File hashes are in `NemotronManifest.swift`.
+- Fluid Speech Pro by FluidVoice: https://huggingface.co/FluidVoice-Labs/fluid-speech-pro, revision `53f490b9292c5943847f635b7abfc3f123018964`.
+- Built on NVIDIA Parakeet TDT 0.6B v3 (https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3) and Moondream Parakeet Ultra (https://huggingface.co/moondream/parakeet-ultra).
+- License: [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
+- Modified: converted from NeMo to 16-bit Core ML for VoiceiQ (format and
+  numeric precision only; clean mode not included), published at
+  https://huggingface.co/cyron/fluid-speech-pro-coreml, revision `ec52e16204b3d2c4c8bf60e576728fc58a825689`.
+  VoiceiQ downloads those files on explicit request. Weights are not bundled.
+  File hashes are in `FluidSpeechProManifest.swift`.
 
 ### Optional NVIDIA Nemotron 3 Diarization model
 

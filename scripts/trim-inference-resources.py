@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Remove FluidAudio 0.17.7's TTS-only resources before app signing.
 
-Parakeet and Nemotron load their assets from the user's model directory.
-Neither uses Bundle.module. Fail on unfamiliar resources so an SDK upgrade
+Fluid Speech Mini, Fluid Speech Pro and the meeting diarizer load their assets
+from the user's model directory. None uses Bundle.module. Fail on unfamiliar resources so an SDK upgrade
 cannot silently remove a new ASR dependency.
 """
 

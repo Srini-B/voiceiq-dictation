@@ -37,7 +37,7 @@ public enum LocalModelState: Equatable, Sendable {
 @MainActor
 public final class LocalModelStore: ObservableObject {
     private static let parakeet = LocalModelStore(model: .parakeet)
-    private static let nemotron = LocalModelStore(model: .nemotron)
+    private static let fluidSpeechPro = LocalModelStore(model: .fluidSpeechPro)
 
     /// Speech detection and Parakeet dictionary correction for English
     /// dictation. The install folder holds one subfolder per
@@ -51,7 +51,7 @@ public final class LocalModelStore: ObservableObject {
     public static func store(for model: LocalSpeechModel) -> LocalModelStore {
         switch model {
         case .parakeet: return parakeet
-        case .nemotron: return nemotron
+        case .fluidSpeechPro: return fluidSpeechPro
         }
     }
 

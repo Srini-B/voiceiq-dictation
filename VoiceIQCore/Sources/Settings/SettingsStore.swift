@@ -129,7 +129,7 @@ public struct SettingsStore: Sendable {
     /// The on-device model to download and use. Unknown, missing, or
     /// platform-unavailable values read as Fluid Speech Mini.
     public var localSpeechModel: LocalSpeechModel {
-        let stored = LocalSpeechModel(rawValue: Self.defaults.string(forKey: "localSpeechModel") ?? "")
+        let stored = LocalSpeechModel(stored: Self.defaults.string(forKey: "localSpeechModel") ?? "")
         guard let stored, LocalSpeechModel.available.contains(stored) else { return .parakeet }
         return stored
     }
@@ -150,13 +150,9 @@ public struct SettingsStore: Sendable {
         Self.set(code, forKey: "localSpeechLanguage")
     }
 
-    /// Picking Nemotron turns real-time transcription on, because Nemotron is
-    /// built for streaming. Only a change of selection does this, so a user who
-    /// later turns real-time off keeps it off.
     public func setLocalSpeechModel(_ model: LocalSpeechModel) {
         guard model != localSpeechModel else { return }
         Self.set(model.rawValue, forKey: "localSpeechModel")
-        if model == .nemotron { setLiveTranscriptionEnabled(true) }
     }
 
     /// Who transcribes meetings. On device needs Fluid Speech Mini and the
