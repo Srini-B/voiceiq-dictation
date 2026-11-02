@@ -12,7 +12,7 @@ enum LocalMeetingJob {
         case noTimings
         var errorDescription: String? {
             switch self {
-            case .noTimings: return "Fluid Speech Mini returned no word timings."
+            case .noTimings: return "The speech model returned no word timings."
             }
         }
     }
@@ -41,7 +41,9 @@ enum LocalMeetingJob {
         var decoder = TdtDecoderState.make(decoderLayers: await manager.decoderLayerCount)
         let result: ASRResult
         do {
-            result = try await manager.transcribeDiskBacked(audio, decoderState: &decoder, language: .english)
+            // No language hint: with Fluid Speech Pro's top-K joint it filters
+            // tokens by script, which breaks non-Latin speech.
+            result = try await manager.transcribeDiskBacked(audio, decoderState: &decoder)
         } catch {
             await manager.cleanup()
             throw error

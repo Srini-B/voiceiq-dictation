@@ -99,7 +99,7 @@ struct DictationPane: View {
             } footer: {
                 VStack(alignment: .leading, spacing: 4) {
                     LocalModelFooter(localEnabled: dictationSource == .onDevice, selection: localModel)
-                    LocalMeetingFooter(enabled: meetingSource == .onDevice)
+                    LocalMeetingFooter(enabled: meetingSource == .onDevice, model: localModel)
                 }
             }
 

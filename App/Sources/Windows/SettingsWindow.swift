@@ -365,7 +365,7 @@ struct PrivacyPane: View {
                 LabeledContent("Where you are typing") { Text("App name, window title and browser page address, only with writing rules") }
                 LocalMeetingPrivacyRow(
                     label: "Meeting audio",
-                    localDescription: "Transcribed on device; only the transcript goes to \(provider.displayName) for notes",
+                    localDescription: { "Transcribed on device by \($0); only the transcript goes to \(provider.displayName) for notes" },
                     cloudDescription: "Only if call recording is on; transcribed by \(meetingOwner), notes are made by \(provider.displayName)")
                 LabeledContent("Dictionary terms") { Text("Sent with cloud transcription and cleanup, so names are spelled right") }
                 LabeledContent("Dictionary") { Text("Synced to your iPhone through your iCloud account") }

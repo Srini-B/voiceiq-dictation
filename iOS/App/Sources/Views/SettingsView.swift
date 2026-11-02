@@ -185,7 +185,7 @@ struct DictationSettingsView: View {
                     .onChange(of: meetingSource) { _, value in settings.setMeetingSource(value) }
                 LocalMeetingControls(meetingsLocal: meetingSource == .onDevice)
             } header: { SettingsSectionHeader("Notes transcription") } footer: {
-                LocalMeetingFooter(enabled: meetingSource == .onDevice)
+                LocalMeetingFooter(enabled: meetingSource == .onDevice, model: localModel)
             }
             Section {
                 Toggle("Smart transcription", isOn: $smartTranscription)
@@ -412,7 +412,7 @@ struct PrivacyView: View {
                 LabeledContent("Transcript text", value: "For writing rules, Ask and Translate")
                 LocalMeetingPrivacyRow(
                     label: "Notes audio",
-                    localDescription: "Transcribed on device; transcript to \(provider.displayName) for notes",
+                    localDescription: { "Transcribed on device by \($0); transcript to \(provider.displayName) for notes" },
                     cloudDescription: "\(meetingOwner), then notes by \(provider.displayName)")
                 LabeledContent("Dictionary terms", value: "With cloud transcription and cleanup")
                 LabeledContent("Dictionary", value: "Your iCloud, to sync")

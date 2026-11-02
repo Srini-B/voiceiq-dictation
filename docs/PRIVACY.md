@@ -105,9 +105,9 @@ With no usable key, nothing is sent and the recording stays on your Mac.
    Recording stops only when you stop it; the stretches with speech are then
    sent to the provider for a speaker-labelled transcript, and that
    transcript is sent back for a summary and action items. With "Meeting
-   transcription" on device and the models downloaded (Fluid Speech Mini and
-   Nemotron 3 Diarization on the Mac; Fluid Speech Mini alone on iPhone and
-   iPad, where the transcript has one speaker), the audio never leaves the
+   transcription" on device and the models downloaded (the selected Fluid
+   Speech model and Nemotron 3 Diarization on the Mac; the selected Fluid
+   Speech model alone on iPhone and iPad, where the transcript has one speaker), the audio never leaves the
    device: the words and speakers are worked out locally, and only the
    transcript is sent, for the notes. If that on-device pass fails and a key is saved, the audio is sent
    as above. Turn the setting off and no call detection runs.

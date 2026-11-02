@@ -1,7 +1,7 @@
 import Foundation
 
-/// One saved meeting mix to transcribe on device: Fluid Speech Mini for the
-/// words, Nemotron 3 Diarization for who spoke when. Without a diarizer the
+/// One saved meeting mix to transcribe on device: the selected Fluid Speech
+/// model for the words, Nemotron 3 Diarization for who spoke when. Without a diarizer the
 /// words come back unlabelled (one speaker); iPhone and iPad run this way.
 /// Without a speech model only the speaker stretches come back, for words
 /// heard in the cloud.

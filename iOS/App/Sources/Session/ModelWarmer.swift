@@ -73,11 +73,8 @@ enum ModelWarmer {
         SessionDiagnostics.note(String(format: "model warmed in %.1fs %@", outcome.seconds, detail))
     }
 
-    /// The model `LocalModelWarmup.run` loads: the selected one for on-device
-    /// dictation, Fluid Speech Mini for on-device meetings alone.
+    /// The model `LocalModelWarmup.run` loads, which dictation and meetings share.
     private static var warmedValue: String {
-        let settings = SettingsStore()
-        let model = settings.localTranscriptionEnabled ? settings.localSpeechModel : .parakeet
-        return "\(ProcessInfo.processInfo.operatingSystemVersionString) \(model.rawValue)"
+        "\(ProcessInfo.processInfo.operatingSystemVersionString) \(SettingsStore().localSpeechModel.rawValue)"
     }
 }
