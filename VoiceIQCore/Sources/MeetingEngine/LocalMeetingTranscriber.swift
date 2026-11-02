@@ -61,8 +61,9 @@ public struct LocalMeetingTranscriber: Sendable {
     /// returns, waiting out a dictation that has them first.
     @MainActor
     public static func acquire(runner: @escaping LocalMeetingRunner) async throws -> LocalMeetingTranscriber? {
-        guard Self.isReady else { return nil }
-        let id = UUID(), job = Job(), model = SettingsStore().localSpeechModel
+        let model = SettingsStore().localSpeechModel
+        guard isReady(model) else { return nil }
+        let id = UUID(), job = Job()
         let cancel: @Sendable () async -> Void = { await job.cancel() }
         let clock = ContinuousClock(), deadline = clock.now + busyWait
         while true {
@@ -75,7 +76,7 @@ public struct LocalMeetingTranscriber: Sendable {
                 }
                 LocalModelStore.store(for: model).releaseSession(id: id)
             }
-            guard Self.isReady else { return nil }
+            guard isReady(model) else { return nil }
             guard clock.now < deadline else { throw Failure.busy }
             try await Task.sleep(for: .seconds(2))
         }
@@ -93,9 +94,12 @@ public struct LocalMeetingTranscriber: Sendable {
     }
 
     /// The setting is on and the needed models are downloaded.
-    @MainActor public static var isReady: Bool {
+    @MainActor public static var isReady: Bool { isReady(SettingsStore().localSpeechModel) }
+
+    /// `acquire` checks the model it holds out for, not one selected since.
+    @MainActor private static func isReady(_ model: LocalSpeechModel) -> Bool {
         SettingsStore().localMeetingTranscriptionEnabled
-            && LocalModelStore.store(for: SettingsStore().localSpeechModel).state == .ready
+            && LocalModelStore.store(for: model).state == .ready
             && (!diarizes || LocalModelStore.speakerDiarizer.state == .ready)
     }
 
