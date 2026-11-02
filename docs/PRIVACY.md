@@ -32,15 +32,17 @@ With no usable key, nothing is sent and the recording stays on your Mac.
    transcription" off, VoiceiQ sends FLAC-compressed audio after you stop.
    With it on, VoiceiQ sends PCM audio while you speak in Dictation, Ask
    Anything, Translate and Agent. It uses the selected provider's existing
-   key. Claude has no live connection. With it, the DeepInfra key and
-   Real-time transcription turned on (it is off by default for Claude) on the
-   Mac, VoiceiQ sends the last few seconds of audio to DeepInfra about once a
-   second while you speak, as WAV, and builds the transcript from those
-   pieces. Cancelled dictations may already have been sent in part. On
-   iPhone and iPad, audio is uploaded only after you stop. If the live connection fails or does not return every completed turn,
-   VoiceiQ uploads the saved recording to that provider after you stop.
-   Real-time transcription is on by default (since 2026-10-13, so the result
-   lands about 1.5 s sooner after you stop) and does not affect meetings.
+   key. Claude has no live socket. On the Mac, with the DeepInfra key saved
+   and Real-time transcription turned on, VoiceiQ sends the open part of the
+   recording (up to about 13 seconds) to DeepInfra about once a second while
+   you speak, as WAV, and builds the transcript from those pieces. Cancelled
+   dictations may already have been sent in part. On iPhone and iPad, Claude
+   audio is uploaded only after you stop. If the live connection fails or
+   does not return every completed turn, VoiceiQ uploads the saved recording
+   to that provider after you stop. Real-time transcription is on by default
+   (since 2026-10-13, so the result lands about 1.5 s sooner after you stop),
+   except for Claude with Nemotron 3.5 picked, where it is off until you turn
+   it on. It does not affect meetings.
    With "On-device transcription" on and the selected model downloaded,
    successful transcription sends no audio. The explicit Download button fetches
    252.7 MB for Fluid Speech Mini or 1.23 GB for Fluid Speech Pro from Hugging Face and its CDN, exposing your IP address
