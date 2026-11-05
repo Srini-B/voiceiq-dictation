@@ -168,8 +168,7 @@ send, pay, delete, submit, log in, …) ask first. The confirmation appears
 inline in the transcript: Allow once, Always this session, or Not now.
 
 All AX and CGEvent work goes through Peekaboo's `PeekabooAutomationKit`
-(`project.yml`, pinned to revision `31d67ea858bcd9824f9f8cfe5bb105cc4ff53783`;
-the package has no tagged releases).
+(`project.yml`, pinned to release 4.9.7, which brings AXorcist 0.2.2).
 
 ## Model and provider
 

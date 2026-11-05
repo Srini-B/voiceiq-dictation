@@ -511,13 +511,13 @@ Mini model ID with zero cost.
 
 ## Dependencies and storage
 
-FluidAudio is pinned to 0.17.7. Fluid Speech Mini by FluidVoice
+FluidAudio is pinned to 0.18.2. Fluid Speech Mini by FluidVoice
 ([post](https://fluidvoice.com/labs/fluid-speech-mini)), an English fine-tune of
 Parakeet TDT 0.6B v3, comes from `FluidVoice-Labs/fluid-speech-mini-coreml`,
 revision `d81c3160dfe5a5e1f8f7267164a07d30617a3a1a`. The 21 paths, byte sizes
 and SHA-256 digests, totalling 252,710,832 bytes, are in
 `ParakeetManifest.swift`. It has the Parakeet v3 Core ML contract, so FluidAudio
-loads it as `.v3`. FluidAudio 0.17.7 looks for the v3 joint at
+loads it as `.v3`. FluidAudio 0.18.2 looks for the v3 joint at
 `JointDecisionv3.mlmodelc`, so the repository's `JointDecision.mlmodelc`
 installs under that name. That joint has no top-K outputs, which turns off only
 FluidAudio's English script filter. The install folder stays
@@ -564,6 +564,9 @@ FluidAudio's `NemoTextProcessing` trait is enabled for inverse text
 normalization. It links the prebuilt `text-processing-rs` v0.3.1 static library,
 which contains compiled grammars and no model weights. Only the inference
 binaries link it: the Mac speech helper and the iOS app. The Mac UI does not.
+The `Diarizer` trait is enabled for the meeting diarizer (`Nemotron3Diarizer`).
+Listing traits turns FluidAudio's defaults off, so the `TTS` trait and its
+resources are not built.
 
 Storage is `Application Support/VoiceiQ/Models/<model>/<revision>`.
 Neither the keyboard nor Live Activity extension links FluidAudio. Models load

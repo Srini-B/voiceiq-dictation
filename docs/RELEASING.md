@@ -39,17 +39,14 @@ Parakeet and Nemotron use the pinned FluidAudio Swift package through the
 which links the prebuilt `text-processing-rs` v0.3.1 inverse text
 normalization library used for local English transcripts. It holds compiled
 NeMo grammars, not neural weights, and is unrelated to the Nemotron ASR model.
+It also enables the `Diarizer` trait for the meeting diarizer. Listing traits
+turns FluidAudio's defaults off, so the `TTS` trait and its LuxTTS resource
+bundle stay out of the build.
 The Mac UI links only `VoiceIQCore`; the Mac helper and iOS app link inference. The keyboard and Live Activity
 continue to link only `VoiceIQBridge`.
 `VoiceIQSpeech` holds the shared model identifiers, session contract, and Mac
 pipe messages. The inference target depends on this contract rather than Core,
 so the helper does not carry the app's database or cloud-provider code.
-
-`scripts/trim-inference-resources.py` runs before helper/iOS app signing. It
-removes FluidAudio 0.17.7's unused LuxTTS resource bundle and fails on unfamiliar
-resource files so dependency upgrades require an explicit review. ASR uses
-downloaded model directories, not these resources. Do not add TTS functionality
-without restoring its resources.
 
 Model weights, including the optional English tools pack, are downloaded only
 from Settings, not during build or app launch.

@@ -14,9 +14,11 @@ let package = Package(
         .library(name: "VoiceIQBridge", targets: ["VoiceIQBridge"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/groue/GRDB.swift.git", from: "7.0.0"),
+        .package(url: "https://github.com/groue/GRDB.swift.git", from: "7.12.0"),
         .package(url: "https://github.com/Clipy/Sauce.git", from: "2.2.0"),
-        .package(url: "https://github.com/FluidInference/FluidAudio.git", exact: "0.17.7", traits: ["NemoTextProcessing"]),
+        // Listing traits turns FluidAudio's defaults off: TTS stays out, and
+        // Diarizer gates Nemotron3Diarizer (LocalMeetingJob).
+        .package(url: "https://github.com/FluidInference/FluidAudio.git", exact: "0.18.2", traits: ["NemoTextProcessing", "Diarizer"]),
     ],
     targets: [
         // WebRTC's AEC3 echo canceller and a small C bridge, built by

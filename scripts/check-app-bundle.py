@@ -23,7 +23,8 @@ def main():
     for path in app.rglob("*"):
         if path.suffix in {".mlmodel", ".mlmodelc", ".mlpackage", ".onnx", ".safetensors", ".gguf", ".cact"}:
             forbidden.append(str(path.relative_to(app)))
-        if path.name == "FluidAudio_FluidAudio.bundle" or path.name.startswith("ggml-"):
+        # FluidAudio's resource bundles (LuxTTS G2P data) come only with its TTS trait.
+        if (path.name.startswith("FluidAudio_") and path.suffix == ".bundle") or path.name.startswith("ggml-"):
             forbidden.append(str(path.relative_to(app)))
     if forbidden:
         raise SystemExit(f"Unexpected bundled models or TTS resources: {forbidden}")

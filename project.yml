@@ -21,12 +21,12 @@ packages:
   # macOS auto-update. See docs/UPDATES.md.
   Sparkle:
     url: https://github.com/sparkle-project/Sparkle
-    from: 2.10.0
-  # Agent mode's screen observer and action layer (AX + CGEvent). Pinned to a
-  # revision: the package has no tagged releases. See docs/AGENT-MODE.md.
+    from: 2.10.1
+  # Agent mode's screen observer and action layer (AX + CGEvent). Pinned to
+  # an exact release. See docs/AGENT-MODE.md.
   Peekaboo:
     url: https://github.com/openclaw/Peekaboo.git
-    revision: 31d67ea858bcd9824f9f8cfe5bb105cc4ff53783
+    exactVersion: 4.9.7
 
 targets:
   VoiceIQ:
@@ -155,10 +155,6 @@ targets:
     dependencies:
       - package: VoiceIQCore
         product: VoiceIQInference
-    postBuildScripts:
-      - name: Remove unused speech-synthesis resources
-        basedOnDependencyAnalysis: false
-        script: 'python3 "$SRCROOT/scripts/trim-inference-resources.py"'
     info:
       path: LocalSpeech/Info.plist
       properties:
@@ -218,10 +214,6 @@ targets:
         product: VoiceIQBridge
       - target: VoiceIQKeyboard
       - target: VoiceIQLiveActivity
-    postBuildScripts:
-      - name: Remove unused speech-synthesis resources
-        basedOnDependencyAnalysis: false
-        script: 'python3 "$SRCROOT/scripts/trim-inference-resources.py"'
     info:
       path: iOS/App/Info.plist
       properties:
