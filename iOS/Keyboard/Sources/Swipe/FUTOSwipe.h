@@ -28,6 +28,12 @@ NS_ASSUME_NONNULL_BEGIN
                               count:(NSInteger)count
                             context:(NSArray<NSString *> *)context;
 
+/// The context model's next words after `context` (the words before the
+/// cursor, oldest first): every word it knows, likeliest first, in UTF-8
+/// with a newline after each. `scores` receives a float per word, a logit:
+/// higher is likelier.
+- (NSData *)predictAfter:(NSArray<NSString *> *)context scores:(NSMutableData *)scores;
+
 @end
 
 NS_ASSUME_NONNULL_END

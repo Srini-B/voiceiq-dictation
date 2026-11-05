@@ -373,7 +373,7 @@ offers "Add copied text to Dictionary" until you start typing.
 | Layouts | QWERTY, QWERTZ, AZERTY, Dvorak, Colemak (`KeyLayout`). English words on each. Optional number row; Short, Default or Tall height (`KeyboardViewController.height`). Without the number row, holding a top-row letter types its digit (shown in the key's corner) on the 10-key layouts. |
 | Pages | Letters, 123, #+=, number pads for number, decimal and phone fields. Email fields get @ and `.`, URL fields `.` and `/`; search fields keep a full space bar. Return shows the field's label (go, send, search…). |
 | Keys | Shift (tap once, double-tap for Caps Lock, hold and type), accents and alternates on long press (hold `.` for `.com`, the currency key for other currencies), key preview, repeat delete that moves to whole words. Space Bar Slide: Move Cursor (default) or Off. Delete Slide: sliding left from delete removes Words (default, one per 22 pt) or Characters (one per 9 pt), sliding back restores them, lifting keeps the result; Off. The slide first puts back what the press itself removed (a character, a slid word, a selection, a held run), recorded as each delete happens (`deleteRestore`) rather than as a snapshot, because iOS cuts the text before the cursor short in long fields. No delete or space-bar slide during emoji search. A touch goes to the nearest key in its row. |
-| Suggestions | Next-word predictions from word pairs, completions, and corrections. The typed letters show in quotes; picking them keeps and learns the word. |
+| Suggestions | Next-word predictions, completions and corrections. Mid-sentence, FUTO's context model ranks predictions and completions together with the word pairs (see Scoring); at a sentence start the words the user starts sentences with come first, then "I", "The" and "I'm". The typed letters show in quotes; picking them keeps and learns the word. |
 | Auto-correction | Delete right after a correction restores the typed word and learns it. On space or punctuation. Fixes a mistyped word one edit away (adjacent keys cost less), two edits away through `UITextChecker`, apostrophes (`dont` → `don't`), and capitals (`i` → `I`, `monday` → `Monday`). A real word is never replaced by another word. Off in URL, email and search fields and where the field turns it off. |
 | Auto-capitalization, “.” shortcut | Sentence starts, per the field's `autocapitalizationType`. Two spaces type a period, also after a slid word (its first space is the word's own). |
 | Slide to type | FUTO Swipe (`SwipeRecognizer`; see below). The slid word gets its space when the next word starts, so punctuation attaches; the bar offers the other candidates; delete removes the whole word. |
@@ -402,7 +402,8 @@ otherwise hold back touches near the screen edges.
 **Slide to type: FUTO Swipe.** FUTO Keyboard's swipe engine
 (`iOS/Vendor/FUTOSwipe`, GPL-3.0) runs three models on ExecuTorch with
 XNNPACK: an encoder that reads the path for any layout, a decoder trained on
-QWERTY, and a context model that weighs the words before the cursor. A beam
+QWERTY, and a context model (`chosen_planarian`) that weighs the words before
+the cursor. The same context model ranks the suggestion bar (see Scoring). A beam
 search keeps the results to words in `swipe/words.trie` and the user's own
 words (the Dictionary, contact names and learned words, at about the
 frequency of "see"). `KeyboardKeysView` records every coalesced touch sample
@@ -410,8 +411,19 @@ with its timestamp, and `SwipeRecognizer` scales the path to the letter keys'
 bounds, where each key's centre sits at its place in FUTO's layout (q at
 0.05, 1/6). The decoder loads only when the rows are QWERTY; other layouts use
 the encoder and context model. Models load on a serial queue when the
-keyboard first lays out its letters, and each slide is decoded on the same
-queue, so the main thread never waits. Word results keep the dictionary's
+keyboard first lays out its letters, if Slide to Type or Predictions is on,
+and each slide and prediction runs on the same queue, so the main thread
+never waits. `FUTOSwipe.mm` points `scoring_path` at `swipe/scoring.json` from
+the pinned model revision: the library's built-in scoring has no entry for
+`chosen_planarian` and would fall back to the encoder's weights, which give
+the context model no weight (alpha 0). The keyboard logs "no scoring for the
+context model" at load if that happens. The context words are
+`TypingEngine.contextWords`: the last ten words on the cursor's line, split
+the way FUTO Keyboard splits them (at anything but letters, digits, `_` and
+apostrophes, with ’ read as '), so "don't" stays one word. The model's
+vocabulary is cased as mid-sentence text ("the", "I", "London"), so a word
+that starts a sentence, or that the word list lacks as typed, is lowercased
+when the list has it lowercase ("The" becomes "the"). Word results keep the dictionary's
 spelling ("I", "don't"); the user's words get their saved spelling. A slide
 records every sample from touch-down, so the turns made before it counted as
 a slide reach the model. A result that arrives after the user typed, moved
@@ -426,11 +438,23 @@ model license and GPL-3.0 section 5(d) require.
   previous FlorisBoard-style classifier 75.6% / 85.0%; FUTO encoder only
   88.1% / 94.0%; with the decoder and context model 91.7% / 95.3%, at
   2.2 ms per slide on an M2 (the shipped dictionary, offensive words removed).
+  Measured again through `SwipeRecognizer` and `FUTOSwipe.mm` on the first
+  4,931 test swipes, with each swipe's sentence giving the words before it:
+  no context 92.1% / 96.3%; `hungry_jellyfish` with the old split 93.3% /
+  96.6%; `chosen_planarian` with `contextWords` 93.7% / 96.6%, 2.2 ms per
+  slide. Without `scoring.json` it fell to 91.9% / 96.3%.
 - Memory: FUTO's own dictionary loader builds a 98 MB trie, too much for a
   keyboard extension. `scripts/generate-swipe-trie.py` writes the same trie as
   12-byte nodes that `MappedTrie.cpp` memory-maps (5.2 MB, 142,507 words).
   The three models add about 21 MB; the keyboard measured 40 MB in the
-  iPhone 17e Simulator after slides.
+  iPhone 17e Simulator after slides. On a Mac the loaded engine takes
+  19 MB and the model's scores for a context about 1 MB more; a second
+  `ContextLMScorer` for predictions would have added 11.5 MB, so predictions
+  share the swipe engine. After typing and slides in the iPhone Air Simulator
+  (iOS 27.0) the keyboard measured 42 to 48 MB with Slide to Type on, 43 to
+  51 MB with only Predictions on (which now loads the engine) and 42 MB with
+  both off; runs vary by about 5 MB. The model files are mapped and do not
+  count.
 - Rebuilding: `scripts/build-futo-swipe.sh` clones the library at its pinned
   commit, builds ExecuTorch and the library for iPhone and Simulator (about
   five minutes on an M2), and downloads the pinned models. The output is
@@ -462,6 +486,25 @@ when the list has it and the word's frequency times 0.05 when it does not,
 plus the log cost of the edits from what was typed. On space, an unknown word
 becomes the best different spelling scoring above −24. A known word changes
 only to its own contraction or capitalization.
+
+Mid-sentence, with Predictions on, the context model also ranks the bar.
+When the words before the cursor's word change, `TypingController` asks
+`SwipeRecognizer.nextWords` for the model's logit for every word it knows
+(`NextWordScores`, 32,767 words, about 6 ms on the swipe queue on an M2); the
+bar shows the word-pair ranking until they arrive and then refreshes.
+`TypingEngine.suggest` takes the scores and ranks by the model's logit plus a
+quarter of the word-pair score above (0.25 was best on the dev sets). Next
+words are chosen from the model's 30 likeliest that the word list has and may
+suggest, plus the list's followers of the previous word (or the starters
+after a comma). Completions are chosen from the 200 most frequent longer
+words starting with the typed letters, scored with 0.4 off per letter still
+to type, plus the user's own words. A word the model does not know gets the
+lowest logit of the others. The words the user usually types next still come
+first, blocked and offensive words are never offered, and the autocorrection
+applied on space stays the word list's: with a correction pending the model
+only picks the third slot. At a sentence start the model is not used: with no
+sentence-start token it put the first word in its top three 3.5% of the time
+against 16.9% for the starters (DailyDialog).
 
 **Settings.** Settings › Typing in the app writes `KeyboardPreferences` to the
 App Group: layout, predictions, auto-correction, auto-capitalization, emoji

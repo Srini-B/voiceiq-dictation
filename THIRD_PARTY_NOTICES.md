@@ -142,7 +142,7 @@ and `emoji.txt` from these files, pinned by commit in the script.
   FUTO Keyboard ships it (`java/res/raw/gemoji.json` at `31e720dd`).
 - License: MIT, Copyright (c) 2019 GitHub, Inc.
 
-## FUTO Swipe (iPhone keyboard, slide to type)
+## FUTO Swipe (iPhone keyboard, slide to type and predictions)
 
 The keyboard extension links FUTO's swipe library, which is GPL-3.0. **The
 keyboard extension as built and distributed is therefore licensed under the
@@ -167,7 +167,10 @@ its Apache 2.0 license, which is compatible with GPL-3.0.
 ### FUTO Swipe models
 
 - Files: `iOS/Keyboard/Resources/swipe/` `honorable_sturgeon` (encoder),
-  `magic_macaw` (QWERTY decoder), `hungry_jellyfish` (context model), unmodified.
+  `magic_macaw` (QWERTY decoder), `chosen_planarian` (context model, which
+  replaced `hungry_jellyfish` on 2026-11-05 and also ranks the suggestion
+  bar's predictions and completions), and `scoring.json` (the scoring
+  weights for these models), unmodified.
 - Source: [futo-org/futo-swipe](https://huggingface.co/futo-org/futo-swipe) at
   `315d42583233b71d75665d076cfa2f2c7c6f43ad`.
 - License: FUTO Model Weights License 1.0, in

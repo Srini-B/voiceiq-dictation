@@ -41,12 +41,18 @@ static swipe_decoder::KeyboardLayout Layout(NSArray<NSNumber *> *xs, NSArray<NSN
     swipe_decoder::SwipeEngine::Config config;
     config.encoder_path = [self path:@"honorable_sturgeon/model_fp32.pte"];
     config.decoder_path = decoder ? [self path:@"magic_macaw/model_fp32.pte"] : "";
-    config.lm_model_path = [self path:@"hungry_jellyfish/context_lm.pte"];
-    config.lm_vocab_path = [self path:@"hungry_jellyfish/vocab.txt"];
+    config.lm_model_path = [self path:@"chosen_planarian/context_lm.pte"];
+    config.lm_vocab_path = [self path:@"chosen_planarian/vocab.txt"];
+    // The library's built-in scoring predates chosen_planarian; without these
+    // weights it falls back to the encoder's, which ignore the context model.
+    config.scoring_path = [self path:@"scoring.json"];
     config.layout = Layout(xs, ys);
     config.dictionaries = {_words->itrie()};
     config.top_k = 4;
-    return _engine.init(config) ? self : nil;
+    if (!_engine.init(config)) return nil;
+    // Right after loading, the scoring in use is the one for slides with context.
+    if (_engine.scoring().alpha <= 0) NSLog(@"FUTO Swipe: no scoring for the context model; slides ignore the words before them");
+    return self;
 }
 
 - (BOOL)setLayoutXs:(NSArray<NSNumber *> *)xs ys:(NSArray<NSNumber *> *)ys decoder:(BOOL)decoder {
@@ -65,19 +71,36 @@ static swipe_decoder::KeyboardLayout Layout(NSArray<NSNumber *> *xs, NSArray<NSN
     if (_engine.setMode(mode)) _userWords = std::move(trie);
 }
 
+static std::vector<std::string> Words(NSArray<NSString *> *context) {
+    std::vector<std::string> words;
+    for (NSString *word in context) words.emplace_back(word.UTF8String);
+    return words;
+}
+
 - (NSArray<NSString *> *)recognizeX:(const float *)x
                                   y:(const float *)y
                                   t:(const float *)t
                               count:(NSInteger)count
                             context:(NSArray<NSString *> *)context {
-    std::vector<std::string> words;
-    for (NSString *word in context) words.emplace_back(word.UTF8String);
     NSMutableArray<NSString *> *out = [NSMutableArray array];
-    for (const auto &result : _engine.recognize(x, y, t, (size_t)count, words)) {
+    for (const auto &result : _engine.recognize(x, y, t, (size_t)count, Words(context))) {
         NSString *word = [NSString stringWithUTF8String:result.word.c_str()];
         if (word) [out addObject:word];
     }
     return out;
+}
+
+- (NSData *)predictAfter:(NSArray<NSString *> *)context scores:(NSMutableData *)scores {
+    auto ranked = _engine.predict_next(Words(context), INT_MAX);
+    std::string words;
+    scores.length = ranked.size() * sizeof(float);
+    float *out = (float *)scores.mutableBytes;
+    for (size_t i = 0; i < ranked.size(); ++i) {
+        words += ranked[i].first;
+        words += '\n';
+        out[i] = ranked[i].second;
+    }
+    return [NSData dataWithBytes:words.data() length:words.size()];
 }
 
 @end

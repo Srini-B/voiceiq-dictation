@@ -31,6 +31,26 @@ struct Suggestion: Equatable, Sendable {
     var kind: Kind
 }
 
+/// What FUTO's context model expects after some words, computed once per
+/// context off the main thread (`SwipeRecognizer.nextWords`).
+struct NextWordScores: Sendable {
+    /// The words before the word at the cursor (`TypingEngine.contextWords`).
+    var context: [String]
+    /// Every word the model knows, spelled as it spells them ("the", "I",
+    /// "don't"), with a logit: higher is likelier, and the difference of two
+    /// is the log of their odds.
+    var scores: [String: Double]
+    /// The likeliest words, best first.
+    var top: [String]
+
+    /// - Parameter words: the model's words, best first, one per logit.
+    init(context: [String], words: [String], logits: [Float]) {
+        self.context = context
+        scores = Dictionary(zip(words, logits.map(Double.init)), uniquingKeysWith: max)
+        top = Array(words.prefix(30))
+    }
+}
+
 /// Words that are not in the shipped list but are the user's: the VoiceiQ
 /// Dictionary, contact names, and words learned from typing.
 struct UserWords: Sendable {
@@ -147,11 +167,18 @@ struct TypingEngine: Sendable {
     ///   applying on space. Suggestions show either way.
     /// - Parameter spellGuesses: the system spell checker's guesses, for
     ///   mistakes two edits away.
-    func suggest(_ context: Context, autocorrect: Bool, spellGuesses: (String) -> [String] = { _ in [] }) -> Result {
+    /// - Parameter nextWords: the context model's scores for the words before
+    ///   this one. They rank predictions and completions mid-sentence; at a
+    ///   sentence start, and for corrections, the word list alone decides.
+    func suggest(_ context: Context, autocorrect: Bool, nextWords: NextWordScores? = nil,
+                 spellGuesses: (String) -> [String] = { _ in [] }) -> Result {
         let partial = context.partial
         let previousID = context.previous.flatMap(bestID(for:))
+        // With no sentence-start token the model guesses poorly there: 3%
+        // of first words in its top three against the starters' 17%.
+        let model = context.sentenceStart ? nil : nextWords
         guard !partial.isEmpty else {
-            let words = predictions(after: context.previous, sentenceStart: context.sentenceStart)
+            let words = predictions(after: context.previous, sentenceStart: context.sentenceStart, model: model)
             return Result(suggestions: words.map { Suggestion(text: $0, kind: .word) })
         }
         let typedKey = Self.key(of: partial)
@@ -171,13 +198,16 @@ struct TypingEngine: Sendable {
         let correction = isKnown(partial, key: typedKey)
             ? ranked.first { $0.overridesTypedWord }
             : ranked.first { $0.isCorrection && $0.score > Self.autocorrectFloor }
+        // With the model, its completions go first; the correction stays the list's.
+        let words = (model.map { completions(of: partial, typedKey: typedKey, previousID: previousID, previousKey: previousKey, model: $0) } ?? [])
+            + ranked.map(\.text)
         if let correction {
-            let rest = ranked.first { $0.text != correction.text && $0.text.lowercased() != partial.lowercased() }
+            let rest = words.first { $0 != correction.text && $0.lowercased() != partial.lowercased() }
             return Result(suggestions: [Suggestion(text: partial, kind: .typed),
                                         Suggestion(text: correction.text, kind: autocorrect ? .autocorrection : .word)]
-                + (rest.map { [Suggestion(text: $0.text, kind: .word)] } ?? []))
+                + (rest.map { [Suggestion(text: $0, kind: .word)] } ?? []))
         }
-        var out = ranked.prefix(3).map { Suggestion(text: $0.text, kind: .word) }
+        var out = Self.distinct(words).prefix(3).map { Suggestion(text: $0, kind: .word) }
         if !isKnown(partial, key: typedKey) {
             out = [Suggestion(text: partial, kind: .typed)] + out.filter { $0.text != partial }.prefix(2)
         }
@@ -267,6 +297,50 @@ struct TypingEngine: Sendable {
         return best.values.sorted { $0.score > $1.score }
     }
 
+    /// Longer words that start with the typed letters, blended with the
+    /// context model; the words the user usually types next come first.
+    private func completions(of partial: String, typedKey: String, previousID: Lexicon.WordID?,
+                             previousKey: String?, model: NextWordScores) -> [String] {
+        let contextScore = contextModel(previousID)
+        let usual = (previousKey.map(user.followers(of:)) ?? []).map(\.display).filter {
+            let key = Self.key(of: $0)
+            return key.count > typedKey.count && key.hasPrefix(typedKey)
+        }
+        // The 200 most frequent hold the word being typed 89% of the time
+        // after one letter and 98% after two (DailyDialog).
+        var frequent: [(id: Lexicon.WordID, logProbability: Double)] = []
+        for id in lexicon.range(prefix: typedKey)
+        where lexicon.key(id).count > typedKey.count && !lexicon.flags(id).contains(.noSuggest) {
+            frequent.append((id, lexicon.logProbability(id)))
+        }
+        frequent.sort { $0.logProbability > $1.logProbability }
+        var candidates = frequent.prefix(200).map { id, _ in
+            (lexicon.display(id), contextScore(id) - 0.4 * Double(lexicon.key(id).count - typedKey.count))
+        }
+        for key in user.keys(prefix: typedKey) where key.count > typedKey.count {
+            if let display = user.display(key: key), let lp = user.logProbability(key: key) {
+                candidates.append((display, lp + Self.backoff))
+            }
+        }
+        return Self.distinct(usual + Self.blend(candidates, model)).map { Self.matchCase(of: partial, to: $0) }
+    }
+
+    /// Best first by the context model's logit plus a quarter of the list's
+    /// score, both natural logs. The quarter was best on the DailyDialog and
+    /// BBC News dev sets; the model alone was close. A word the model does
+    /// not know gets the lowest logit of the others.
+    private static func blend(_ candidates: [(word: String, list: Double)], _ model: NextWordScores) -> [String] {
+        let logits = candidates.map { model.scores[$0.word] }
+        let floor = logits.compactMap { $0 }.min() ?? 0
+        return zip(candidates, logits).map { ($0.word, ($1 ?? floor) + 0.25 * $0.list) }
+            .sorted { $0.1 > $1.1 }.map(\.0)
+    }
+
+    private static func distinct(_ words: [String]) -> [String] {
+        var seen = Set<String>()
+        return words.filter { seen.insert($0.lowercased()).inserted }
+    }
+
     /// Every string one edit from `word`, with the log cost of the slip.
     func edits(of word: String) -> [(String, Double)] {
         let letters = Array(word)
@@ -315,21 +389,71 @@ struct TypingEngine: Sendable {
 
     private static let sentenceStarters = ["I", "The", "I'm"]
 
-    /// The words the user usually types next come first, then the list's.
-    func predictions(after previous: String?, sentenceStart: Bool) -> [String] {
+    /// The words the user usually types next come first, then the list's,
+    /// or with `model` the list's and the model's likeliest, blended.
+    func predictions(after previous: String?, sentenceStart: Bool, model: NextWordScores? = nil) -> [String] {
         let previousKey = sentenceStart ? UserWords.sentenceStart : previous.map(Self.key(of:))
         let usual = previousKey.map { user.followers(of: $0).map(\.display) } ?? []
+        let previousID = sentenceStart ? nil : previous.flatMap(bestID(for:))
         var words: [String]
-        if !sentenceStart, let previousID = previous.flatMap(bestID(for:)) {
+        if let previousID {
             words = lexicon.followers(of: previousID, limit: 12)
                 .filter { !lexicon.flags($0.0).contains(.noSuggest) }
                 .map { lexicon.display($0.0) }
         } else {
             words = Self.sentenceStarters
         }
-        var seen = Set<String>(), out: [String] = []
-        for word in usual + words where seen.insert(word.lowercased()).inserted { out.append(word) }
-        return Array(out.prefix(3))
+        if let model {
+            let contextScore = contextModel(previousID)
+            let candidates = Self.distinct(model.top + words).compactMap { word -> (String, Double)? in
+                guard let id = listID(word), !lexicon.flags(id).contains(.noSuggest),
+                      word.first?.isLetter == true, word.allSatisfy({ $0.isLetter || $0 == "'" }) else { return nil }
+                return (word, contextScore(id))
+            }
+            words = Self.blend(candidates, model)
+        }
+        return Array(Self.distinct(usual + words).prefix(3))
+    }
+
+    /// The list's entry for a word, with its exact spelling if it has one:
+    /// "may" and not "May".
+    private func listID(_ word: String) -> Lexicon.WordID? {
+        let ids = lexicon.words(key: Self.key(of: word))
+        return ids.first { lexicon.display($0) == word } ?? ids.first { lexicon.display($0).lowercased() == word.lowercased() }
+    }
+
+    // MARK: - Context model
+
+    /// The last ten words before the cursor on its line, as FUTO's context
+    /// model takes them: split at anything but letters, digits, "_" and
+    /// apostrophes, as FUTO Keyboard does, with ’ as '. The model knows a
+    /// word as written mid-sentence ("the", "I", "London"), so a word that
+    /// starts a sentence, or that the list lacks as typed, is lowercased
+    /// when the list has it lowercase: "The" and "THANKS" give "the" and "thanks".
+    func contextWords(before text: String) -> [String] {
+        let line = text.split(separator: "\n", omittingEmptySubsequences: false).last ?? ""
+        var words: [(word: String, startsSentence: Bool)] = []
+        var word = "", startsSentence = true
+        for character in line.replacingOccurrences(of: "’", with: "'") + " " {
+            if character.isLetter || character.isNumber || character == "_" || character == "'" {
+                word.append(character)
+                continue
+            }
+            if !word.isEmpty {
+                words.append((word, startsSentence))
+                word = ""
+                startsSentence = false
+            }
+            if ".!?".contains(character) { startsSentence = true }
+        }
+        return words.suffix(10).map { word, startsSentence in
+            let lower = word.lowercased()
+            return lower != word && (startsSentence || !hasSpelling(word)) && hasSpelling(lower) ? lower : word
+        }
+    }
+
+    private func hasSpelling(_ word: String) -> Bool {
+        lexicon.words(key: Self.key(of: word)).contains { lexicon.display($0) == word }
     }
 
     /// The word as the user or the list spells it: "so" for a capitalized

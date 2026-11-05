@@ -6,7 +6,10 @@
 #   iOS/Vendor/FUTOSwipe/lib/<sdk>/      libfutoswipe_registry.a (force-loaded:
 #                                        ops and backend register themselves)
 #                                        and libfutoswipe.a
-#   iOS/Keyboard/Resources/swipe/        encoder, decoder, context LM
+#   iOS/Keyboard/Resources/swipe/        encoder, decoder, context LM and the
+#                                        scoring weights for them (scoring.json;
+#                                        the library's built-in copy predates
+#                                        chosen_planarian)
 # Takes about 15 minutes; needs Xcode, CMake and Python 3.10 or later.
 set -euo pipefail
 
@@ -99,7 +102,8 @@ echo "swipe-library $LIBRARY_COMMIT (https://gitlab.futo.org/keyboard/swipe-libr
 MODELS="$ROOT/iOS/Keyboard/Resources/swipe"
 for file in honorable_sturgeon/model_fp32.pte honorable_sturgeon/metadata.json \
             magic_macaw/model_fp32.pte magic_macaw/metadata.json \
-            hungry_jellyfish/context_lm.pte hungry_jellyfish/metadata.json hungry_jellyfish/vocab.txt LICENSE.md; do
+            chosen_planarian/context_lm.pte chosen_planarian/metadata.json chosen_planarian/vocab.txt \
+            scoring.json LICENSE.md; do
   mkdir -p "$MODELS/$(dirname "$file")"
   curl -sfL -o "$MODELS/$file" "https://huggingface.co/futo-org/futo-swipe/resolve/$MODELS_REVISION/$file"
 done

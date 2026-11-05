@@ -63,6 +63,9 @@ final class TypingController: ObservableObject, KeyboardKeysDelegate {
     var deleteSlide: (source: String, removed: Int)?
     /// Every suggestion for the word at the cursor, shown or not.
     private var candidates: [Suggestion] = []
+    /// The context model's scores for the latest words before the cursor.
+    private var nextWords: NextWordScores?
+    private var requestedContext: [String]?
     /// The text around the cursor after the keyboard's last edit. Not
     /// `documentIdentifier`: Swift declares it non-optional, iOS returns nil,
     /// and reading it crashes the keyboard (0.6.16).
@@ -74,7 +77,7 @@ final class TypingController: ObservableObject, KeyboardKeysDelegate {
     func appeared() {
         preferences = SharedStore.shared.keyboardPreferences
         loadUserWords()
-        if preferences.slideToType, let geometry = engine?.geometry { swipe.update(geometry) }
+        if usesFUTOModels, let geometry = engine?.geometry { swipe.update(geometry) }
         page = .letters
         showsEmoji = false
         typedSinceAppear = false
@@ -107,7 +110,7 @@ final class TypingController: ObservableObject, KeyboardKeysDelegate {
             loadUserWords()
         }
         engine?.geometry = geometry
-        if preferences.slideToType { swipe.update(geometry) }
+        if usesFUTOModels { swipe.update(geometry) }
         refresh()
     }
 
@@ -140,6 +143,9 @@ final class TypingController: ObservableObject, KeyboardKeysDelegate {
         if let type = proxy?.textContentType ?? nil, blocked.contains(type) { return false }
         return true
     }
+
+    /// Slide to type and next-word predictions both use FUTO's models.
+    private var usesFUTOModels: Bool { preferences.slideToType || preferences.predictions }
 
     private var autocorrectAllowed: Bool {
         preferences.autocorrect && assistanceAllowed && proxy?.autocorrectionType != .no
@@ -215,11 +221,29 @@ final class TypingController: ObservableObject, KeyboardKeysDelegate {
         if let corrected, context.partial == corrected.replacement {
             return [Suggestion(text: corrected.original, kind: .typed), Suggestion(text: corrected.replacement, kind: .word)]
         }
-        var result = engine.suggest(context, autocorrect: autocorrectAllowed, spellGuesses: guesses).suggestions
+        var model: NextWordScores?
+        if preferences.predictions, !context.sentenceStart {
+            let words = engine.contextWords(before: String(before.dropLast(context.partial.count)))
+            if nextWords?.context == words { model = nextWords } else { requestNextWords(after: words) }
+        }
+        var result = engine.suggest(context, autocorrect: autocorrectAllowed, nextWords: model, spellGuesses: guesses).suggestions
         if context.partial.isEmpty {
             result = result.map { Suggestion(text: cased($0.text), kind: $0.kind) }
         }
         return result
+    }
+
+    /// The context model's scores arrive a few milliseconds after the words
+    /// before the cursor change; the bar then refreshes.
+    private func requestNextWords(after context: [String]) {
+        guard requestedContext != context else { return }
+        requestedContext = context
+        swipe.nextWords(after: context) { [weak self] scores in
+            guard let self, self.requestedContext == context else { return }
+            guard let scores else { self.requestedContext = nil; return }
+            self.nextWords = scores
+            self.refreshSuggestionCase()
+        }
     }
 
     private func guesses(_ word: String) -> [String] {
@@ -473,18 +497,13 @@ final class TypingController: ObservableObject, KeyboardKeysDelegate {
     func swiped(_ points: [CGPoint], times: [TimeInterval]) {
         guard preferences.slideToType, page == .letters, let proxy else { return }
         let generation = editGeneration
-        swipe.recognize(points, times: times, context: Self.contextWords(proxy.documentContextBeforeInput ?? "")) { [weak self] words in
+        let context = engine?.contextWords(before: proxy.documentContextBeforeInput ?? "") ?? []
+        swipe.recognize(points, times: times, context: context) { [weak self] words in
             // Typing, moving the cursor or switching fields while the model
             // ran leaves the slide's place behind; earlier slides do not.
             guard let self, self.editGeneration == generation else { return }
             self.insertSlid(words)
         }
-    }
-
-    /// The words before the cursor on its line, as FUTO Keyboard gives them.
-    private static func contextWords(_ before: String) -> [String] {
-        let line = before.split(separator: "\n", omittingEmptySubsequences: false).last ?? ""
-        return line.split { !($0.isLetter || $0.isNumber || $0 == "_") }.suffix(10).map(String.init)
     }
 
     private func insertSlid(_ found: [String]) {
