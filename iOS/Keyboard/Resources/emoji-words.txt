@@ -427,9 +427,9 @@
 💃	💃🏻 💃🏼 💃🏽 💃🏾 💃🏿	dancer dancing dress lady woman
 🕺	🕺🏻 🕺🏼 🕺🏽 🕺🏾 🕺🏿	dancer dancing man
 🕴️	🕴🏻 🕴🏼 🕴🏽 🕴🏾 🕴🏿	business in levitating person suit
-👯		bunny dancers ears people with
-👯‍♂️		bunny dancing ears men with
-👯‍♀️		bunny dancing ears with women
+👯	👯🏻@17.0 👯🏼@17.0 👯🏽@17.0 👯🏾@17.0 👯🏿@17.0	bunny dancers ears people with
+👯‍♂️	👯🏻‍♂️@17.0 👯🏼‍♂️@17.0 👯🏽‍♂️@17.0 👯🏾‍♂️@17.0 👯🏿‍♂️@17.0	bunny dancing ears men with
+👯‍♀️	👯🏻‍♀️@17.0 👯🏼‍♀️@17.0 👯🏽‍♀️@17.0 👯🏾‍♀️@17.0 👯🏿‍♀️@17.0	bunny dancing ears with women
 🧖	🧖🏻 🧖🏼 🧖🏽 🧖🏾 🧖🏿	in person room sauna steamy
 🧖‍♂️	🧖🏻‍♂️ 🧖🏼‍♂️ 🧖🏽‍♂️ 🧖🏾‍♂️ 🧖🏿‍♂️	in man room sauna steamy
 🧖‍♀️	🧖🏻‍♀️ 🧖🏼‍♀️ 🧖🏽‍♀️ 🧖🏾‍♀️ 🧖🏿‍♀️	in room sauna steamy woman
@@ -467,9 +467,9 @@
 🤸	🤸🏻 🤸🏼 🤸🏽 🤸🏾 🤸🏿	cartwheeling person
 🤸‍♂️	🤸🏻‍♂️ 🤸🏼‍♂️ 🤸🏽‍♂️ 🤸🏾‍♂️ 🤸🏿‍♂️	cartwheeling man
 🤸‍♀️	🤸🏻‍♀️ 🤸🏼‍♀️ 🤸🏽‍♀️ 🤸🏾‍♀️ 🤸🏿‍♀️	cartwheeling woman
-🤼		people wrestling
-🤼‍♂️		men wrestling
-🤼‍♀️		women wrestling
+🤼	🤼🏻@17.0 🤼🏼@17.0 🤼🏽@17.0 🤼🏾@17.0 🤼🏿@17.0	people wrestling
+🤼‍♂️	🤼🏻‍♂️@17.0 🤼🏼‍♂️@17.0 🤼🏽‍♂️@17.0 🤼🏾‍♂️@17.0 🤼🏿‍♂️@17.0	men wrestling
+🤼‍♀️	🤼🏻‍♀️@17.0 🤼🏼‍♀️@17.0 🤼🏽‍♀️@17.0 🤼🏾‍♀️@17.0 🤼🏿‍♀️@17.0	women wrestling
 🤽	🤽🏻 🤽🏼 🤽🏽 🤽🏾 🤽🏿	person playing polo water
 🤽‍♂️	🤽🏻‍♂️ 🤽🏼‍♂️ 🤽🏽‍♂️ 🤽🏾‍♂️ 🤽🏿‍♂️	man playing polo water
 🤽‍♀️	🤽🏻‍♀️ 🤽🏼‍♀️ 🤽🏽‍♀️ 🤽🏾‍♀️ 🤽🏿‍♀️	playing polo water woman
@@ -1867,3 +1867,47 @@
 🏴󠁧󠁢󠁥󠁮󠁧󠁿		england flag
 🏴󠁧󠁢󠁳󠁣󠁴󠁿		flag scotland
 🏴󠁧󠁢󠁷󠁬󠁳󠁿		flag wales
+🙂‍↔️@15.1		head horizontally shaking
+🙂‍↕️@15.1		head shaking vertically
+🫩@16.0		bags eyes face under with
+🫪@17.0		distorted face
+🫯@17.0		cloud fight
+🫈@17.0		creature hairy
+🚶‍➡️@15.1	🚶🏻‍➡️@15.1 🚶🏼‍➡️@15.1 🚶🏽‍➡️@15.1 🚶🏾‍➡️@15.1 🚶🏿‍➡️@15.1	facing person right walking
+🚶‍♀️‍➡️@15.1	🚶🏻‍♀️‍➡️@15.1 🚶🏼‍♀️‍➡️@15.1 🚶🏽‍♀️‍➡️@15.1 🚶🏾‍♀️‍➡️@15.1 🚶🏿‍♀️‍➡️@15.1	facing right walking woman
+🚶‍♂️‍➡️@15.1	🚶🏻‍♂️‍➡️@15.1 🚶🏼‍♂️‍➡️@15.1 🚶🏽‍♂️‍➡️@15.1 🚶🏾‍♂️‍➡️@15.1 🚶🏿‍♂️‍➡️@15.1	facing man right walking
+🧎‍➡️@15.1	🧎🏻‍➡️@15.1 🧎🏼‍➡️@15.1 🧎🏽‍➡️@15.1 🧎🏾‍➡️@15.1 🧎🏿‍➡️@15.1	facing kneeling person right
+🧎‍♀️‍➡️@15.1	🧎🏻‍♀️‍➡️@15.1 🧎🏼‍♀️‍➡️@15.1 🧎🏽‍♀️‍➡️@15.1 🧎🏾‍♀️‍➡️@15.1 🧎🏿‍♀️‍➡️@15.1	facing kneeling right woman
+🧎‍♂️‍➡️@15.1	🧎🏻‍♂️‍➡️@15.1 🧎🏼‍♂️‍➡️@15.1 🧎🏽‍♂️‍➡️@15.1 🧎🏾‍♂️‍➡️@15.1 🧎🏿‍♂️‍➡️@15.1	facing kneeling man right
+🧑‍🦯‍➡️@15.1	🧑🏻‍🦯‍➡️@15.1 🧑🏼‍🦯‍➡️@15.1 🧑🏽‍🦯‍➡️@15.1 🧑🏾‍🦯‍➡️@15.1 🧑🏿‍🦯‍➡️@15.1	cane facing person right white with
+👨‍🦯‍➡️@15.1	👨🏻‍🦯‍➡️@15.1 👨🏼‍🦯‍➡️@15.1 👨🏽‍🦯‍➡️@15.1 👨🏾‍🦯‍➡️@15.1 👨🏿‍🦯‍➡️@15.1	cane facing man right white with
+👩‍🦯‍➡️@15.1	👩🏻‍🦯‍➡️@15.1 👩🏼‍🦯‍➡️@15.1 👩🏽‍🦯‍➡️@15.1 👩🏾‍🦯‍➡️@15.1 👩🏿‍🦯‍➡️@15.1	cane facing right white with woman
+🧑‍🦼‍➡️@15.1	🧑🏻‍🦼‍➡️@15.1 🧑🏼‍🦼‍➡️@15.1 🧑🏽‍🦼‍➡️@15.1 🧑🏾‍🦼‍➡️@15.1 🧑🏿‍🦼‍➡️@15.1	facing in motorized person right wheelchair
+👨‍🦼‍➡️@15.1	👨🏻‍🦼‍➡️@15.1 👨🏼‍🦼‍➡️@15.1 👨🏽‍🦼‍➡️@15.1 👨🏾‍🦼‍➡️@15.1 👨🏿‍🦼‍➡️@15.1	facing in man motorized right wheelchair
+👩‍🦼‍➡️@15.1	👩🏻‍🦼‍➡️@15.1 👩🏼‍🦼‍➡️@15.1 👩🏽‍🦼‍➡️@15.1 👩🏾‍🦼‍➡️@15.1 👩🏿‍🦼‍➡️@15.1	facing in motorized right wheelchair woman
+🧑‍🦽‍➡️@15.1	🧑🏻‍🦽‍➡️@15.1 🧑🏼‍🦽‍➡️@15.1 🧑🏽‍🦽‍➡️@15.1 🧑🏾‍🦽‍➡️@15.1 🧑🏿‍🦽‍➡️@15.1	facing in manual person right wheelchair
+👨‍🦽‍➡️@15.1	👨🏻‍🦽‍➡️@15.1 👨🏼‍🦽‍➡️@15.1 👨🏽‍🦽‍➡️@15.1 👨🏾‍🦽‍➡️@15.1 👨🏿‍🦽‍➡️@15.1	facing in man manual right wheelchair
+👩‍🦽‍➡️@15.1	👩🏻‍🦽‍➡️@15.1 👩🏼‍🦽‍➡️@15.1 👩🏽‍🦽‍➡️@15.1 👩🏾‍🦽‍➡️@15.1 👩🏿‍🦽‍➡️@15.1	facing in manual right wheelchair woman
+🏃‍➡️@15.1	🏃🏻‍➡️@15.1 🏃🏼‍➡️@15.1 🏃🏽‍➡️@15.1 🏃🏾‍➡️@15.1 🏃🏿‍➡️@15.1	facing person right running
+🏃‍♀️‍➡️@15.1	🏃🏻‍♀️‍➡️@15.1 🏃🏼‍♀️‍➡️@15.1 🏃🏽‍♀️‍➡️@15.1 🏃🏾‍♀️‍➡️@15.1 🏃🏿‍♀️‍➡️@15.1	facing right running woman
+🏃‍♂️‍➡️@15.1	🏃🏻‍♂️‍➡️@15.1 🏃🏼‍♂️‍➡️@15.1 🏃🏽‍♂️‍➡️@15.1 🏃🏾‍♂️‍➡️@15.1 🏃🏿‍♂️‍➡️@15.1	facing man right running
+🧑‍🩰@17.0	🧑🏻‍🩰@17.0 🧑🏼‍🩰@17.0 🧑🏽‍🩰@17.0 🧑🏾‍🩰@17.0 🧑🏿‍🩰@17.0	ballet dancer
+🧑‍🧑‍🧒@15.1		adult child family
+🧑‍🧑‍🧒‍🧒@15.1		adult child family
+🧑‍🧒@15.1		adult child family
+🧑‍🧒‍🧒@15.1		adult child family
+🫆@16.0		fingerprint
+🐦‍🔥@15.1		phoenix
+🫍@17.0		orca
+🪾@16.0		leafless tree
+🍋‍🟩@15.1		lime
+🍄‍🟫@15.1		brown mushroom
+🫜@16.0		root vegetable
+🛘@17.0		landslide
+🪊@17.0		trombone
+🪉@16.0		harp
+🪎@17.0		chest treasure
+⛓️‍💥@15.1		broken chain
+🪏@16.0		shovel
+🫟@16.0		splatter
+🇨🇶@16.0		flag sark

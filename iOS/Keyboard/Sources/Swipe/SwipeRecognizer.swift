@@ -4,8 +4,10 @@ import Foundation
 /// Slide to type with FUTO Swipe (see THIRD_PARTY_NOTICES.md): a neural
 /// encoder reads the finger's path, a QWERTY decoder and a context model
 /// rank the words, and a beam search keeps them to the dictionary and the
-/// user's own words. Its 21 MB of models load on a background queue, which
-/// also runs each recognition, so a slide never waits on the main thread.
+/// user's own words. The context model also scores next words for the
+/// suggestion bar. Its 21 MB of models load on a background queue, which
+/// also runs each recognition and prediction, so neither waits on the main
+/// thread.
 final class SwipeRecognizer: @unchecked Sendable {
     private let queue = DispatchQueue(label: "io.blue.voiceiq.keyboard.swipe", qos: .userInitiated)
     private let directory = Bundle.main.resourceURL!.appendingPathComponent("swipe").path
@@ -65,6 +67,24 @@ final class SwipeRecognizer: @unchecked Sendable {
         queue.async { [self] in
             let words = engine?.recognizeX(xs, y: ys, t: ts, count: xs.count, context: context) ?? []
             DispatchQueue.main.async { MainActor.assumeIsolated { done(words) } }
+        }
+    }
+
+    /// Calls `done` on the main thread with the context model's scores for
+    /// the word after `context` (oldest first), or nil before the models load.
+    @MainActor
+    func nextWords(after context: [String], done: @escaping @MainActor (NextWordScores?) -> Void) {
+        queue.async { [self] in
+            let scores = engine.map { engine in
+                let logits = NSMutableData()
+                // Split as bytes: splitting the text as Characters took 30 times longer.
+                let words = engine.predict(after: context, scores: logits).split(separator: UInt8(ascii: "\n"))
+                    .map { String(decoding: $0, as: UTF8.self) }
+                let floats = logits.bytes.assumingMemoryBound(to: Float.self)
+                return NextWordScores(context: context, words: words,
+                                      logits: Array(UnsafeBufferPointer(start: floats, count: logits.length / 4)))
+            }
+            DispatchQueue.main.async { MainActor.assumeIsolated { done(scores) } }
         }
     }
 

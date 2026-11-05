@@ -30,7 +30,7 @@ repository's Apache 2.0 license. See `App/Resources/Sounds/ATTRIBUTION.md`.
 |---|---|
 | [Sauce](https://github.com/Clipy/Sauce) (Clipy) | MIT |
 | [GRDB.swift](https://github.com/groue/GRDB.swift) (Gwendal Roué) | MIT |
-| [FluidAudio](https://github.com/FluidInference/FluidAudio) 0.17.7 (Fluid Inference), with the `NemoTextProcessing` trait | Apache 2.0; bundled dependencies retain their upstream notices |
+| [FluidAudio](https://github.com/FluidInference/FluidAudio) 0.18.2 (Fluid Inference), with the `NemoTextProcessing` and `Diarizer` traits | Apache 2.0; bundled dependencies retain their upstream notices |
 | [Sparkle](https://github.com/sparkle-project/Sparkle) (from M8) | Sparkle License (permissive, MIT-style) |
 
 ## Vendored libraries
@@ -96,7 +96,7 @@ one pack. No weights are bundled with the app. File hashes are in
   flate2, each MIT OR Apache 2.0, and their MIT or Apache 2.0 dependencies.
   It contains no neural network weights.
 - Full notice: `ThirdPartyLicenses/NemoTextProcessing-LICENSE.md` in the
-  FluidAudio 0.17.7 source.
+  FluidAudio 0.18.2 source.
 
 ### WebRTC audio processing (AEC3 echo canceller)
 - File: `VoiceIQCore/Vendor/WebRTCAEC/CVoiceIQAEC.xcframework` (static library, arm64 and x86_64)
@@ -119,7 +119,8 @@ and `emoji.txt` from these files, pinned by commit in the script.
 ### SCOWL / Hunspell en_US
 
 - Used for the capitalized spelling of names and brands ("iPhone", "Monday")
-  and which contractions are words. From
+  and which contractions are words. `index.dic` and its affix rules,
+  `index.aff`, from
   [wooorm/dictionaries](https://github.com/wooorm/dictionaries) at `8cfea40`.
 - License: the SCOWL copyright and permission notice, Copyright 2000-2018 by
   Kevin Atkinson, with the Ispell BSD license for the parts it derives from.
@@ -132,7 +133,8 @@ and `emoji.txt` from these files, pinned by commit in the script.
 
 ### Unicode emoji
 
-- `emoji-test.txt`, Emoji 15.0, from unicode.org.
+- `emoji-test.txt`, Emoji 17.0, from
+  https://www.unicode.org/Public/17.0.0/emoji/emoji-test.txt.
 - License: Unicode License v3.
 
 ### gemoji (emoji names)
@@ -142,7 +144,7 @@ and `emoji.txt` from these files, pinned by commit in the script.
   FUTO Keyboard ships it (`java/res/raw/gemoji.json` at `31e720dd`).
 - License: MIT, Copyright (c) 2019 GitHub, Inc.
 
-## FUTO Swipe (iPhone keyboard, slide to type)
+## FUTO Swipe (iPhone keyboard, slide to type and predictions)
 
 The keyboard extension links FUTO's swipe library, which is GPL-3.0. **The
 keyboard extension as built and distributed is therefore licensed under the
@@ -167,7 +169,10 @@ its Apache 2.0 license, which is compatible with GPL-3.0.
 ### FUTO Swipe models
 
 - Files: `iOS/Keyboard/Resources/swipe/` `honorable_sturgeon` (encoder),
-  `magic_macaw` (QWERTY decoder), `hungry_jellyfish` (context model), unmodified.
+  `magic_macaw` (QWERTY decoder), `chosen_planarian` (context model, which
+  replaced `hungry_jellyfish` on 2026-11-05 and also ranks the suggestion
+  bar's predictions and completions), and `scoring.json` (the scoring
+  weights for these models), unmodified.
 - Source: [futo-org/futo-swipe](https://huggingface.co/futo-org/futo-swipe) at
   `315d42583233b71d75665d076cfa2f2c7c6f43ad`.
 - License: FUTO Model Weights License 1.0, in
@@ -196,6 +201,39 @@ its Apache 2.0 license, which is compatible with GPL-3.0.
 MIT License
 
 Copyright (c) 2026 PIVI Solutions
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
+### VivaDicta (return URL table)
+
+- File: `VoiceIQCore/Sources/Bridge/KnownAppSchemes.swift`. Dictus ported the
+  table of app return URLs and hosts with no way back from VivaDicta; ours
+  takes Dictus's copy and VivaDicta's later additions (synced 2026-11-05).
+- Source: [n0an/VivaDicta](https://github.com/n0an/VivaDicta)
+  (`VivaDicta/VivaDictaApp.swift`), adapted
+- License: MIT
+
+```
+MIT License
+
+Copyright (c) 2026 Anton Novoselov
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

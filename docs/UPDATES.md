@@ -69,6 +69,10 @@ versions, newest first, as HTML:
 <p><a href="https://github.com/Srini-B/voiceiq-dictation/releases">Earlier releases</a></p>
 ```
 
+`generate_appcast --embed-release-notes` embeds this HTML in the item.
+`project.yml` requires Sparkle 2.10.1 or later: earlier `generate_appcast`
+kept a stale `sparkle:format` on embedded HTML notes.
+
 Sparkle adds the class `sparkle-installed-version` to the section whose build
 number matches the installed app, and the CSS hides that section and everything
 after it. A user on 0.6.2 sees 0.6.4 and 0.6.3; a user further back than the

@@ -30,13 +30,18 @@ SOURCES = {
     "words": "https://raw.githubusercontent.com/wolfgarbe/SymSpell/91fe939e9c1259813ee817e95239629c5badf8ec/SymSpell/frequency_dictionary_en_82_765.txt",
     "pairs": "https://raw.githubusercontent.com/wolfgarbe/SymSpell/91fe939e9c1259813ee817e95239629c5badf8ec/SymSpell/frequency_bigramdictionary_en_243_342.txt",
     "hunspell": "https://raw.githubusercontent.com/wooorm/dictionaries/8cfea406b505e4d7df52d5a19bce525df98c54ab/dictionaries/en/index.dic",
+    "hunspell-affixes": "https://raw.githubusercontent.com/wooorm/dictionaries/8cfea406b505e4d7df52d5a19bce525df98c54ab/dictionaries/en/index.aff",
     "blocked": "https://raw.githubusercontent.com/LDNOOBW/List-of-Dirty-Naughty-Obscene-and-Otherwise-Bad-Words/5faf2ba42d7b1c0977169ec3611df25a3c08eb13/en",
-    # Emoji 15.0 is the newest set iOS 17.0, the deployment target, draws.
-    "emoji": "https://unicode.org/Public/emoji/15.0/emoji-test.txt",
+    # Emoji 17.0, the newest set any iOS draws (iOS 26.4). Newer emoji carry
+    # their version so the keyboard hides them where iOS can't draw them.
+    "emoji": "https://www.unicode.org/Public/17.0.0/emoji/emoji-test.txt",
     # GitHub's gemoji names, aliases and tags (MIT), as FUTO Keyboard ships it.
     "gemoji": "https://raw.githubusercontent.com/futo-org/android-keyboard/31e720ddcc2df6259069b2ae7cf0f1defaf2cb74/java/res/raw/gemoji.json",
 }
 TONES = ["\U0001F3FB", "\U0001F3FC", "\U0001F3FD", "\U0001F3FE", "\U0001F3FF"]
+# iOS 17.0, the deployment target, draws Emoji 15.0. Newer emoji are written
+# with their version, "🫩@16.0", for EmojiData.drawable.
+DRAWN_EVERYWHERE = 15.0
 # Words too vague to turn into an emoji on their own (FUTO's list).
 VAGUE = {"flag", "united", "japanese", "mrs", "lady", "empty", "small", "last", "flat", "high",
          "old", "low", "long", "american", "cape", "costa", "cook", "diego", "central", "south",
@@ -74,7 +79,8 @@ FLAG_NO_SUGGEST, FLAG_PREFERRED = 1, 2
 
 def fetch(name):
     os.makedirs(CACHE, exist_ok=True)
-    path = os.path.join(CACHE, name)
+    # Keyed by URL too, so moving a pin never reuses the old file.
+    path = os.path.join(CACHE, name + "-" + hashlib.sha256(SOURCES[name].encode()).hexdigest()[:12])
     if not os.path.exists(path):
         urllib.request.urlretrieve(SOURCES[name], path)
     data = open(path, "rb").read()
@@ -86,19 +92,71 @@ def key_of(word):
     return word.lower().replace("'", "")
 
 
-def cased_forms(hunspell):
+def affix_rules(aff):
+    """Flag -> (is prefix, combines with the other kind, [(strip, add, condition)])."""
+    rules = {}
+    for line in aff.splitlines():
+        parts = line.split()
+        if len(parts) < 4 or parts[0] not in ("PFX", "SFX"):
+            continue
+        kind, flag = parts[0], parts[1]
+        if flag not in rules:
+            rules[flag] = (kind == "PFX", parts[2] == "Y", [])
+            continue
+        strip, add = ("" if parts[2] == "0" else parts[2]), ("" if parts[3] == "0" else parts[3])
+        condition = parts[4] if len(parts) > 4 else "."
+        anchored = f"^(?:{condition})" if kind == "PFX" else f"(?:{condition})$"
+        rules[flag][2].append((strip, add.split("/")[0], re.compile(anchored)))
+    return rules
+
+
+def expand(stem, flags, rules):
+    """Every word Hunspell builds from a stem and its affix flags."""
+    def apply(word, flag):
+        prefix, _, forms = rules[flag]
+        for strip, add, condition in forms:
+            if not condition.search(word):
+                continue
+            if prefix and word.startswith(strip):
+                yield add + word[len(strip):]
+            elif not prefix and word.endswith(strip):
+                yield word[:len(word) - len(strip)] + add
+
+    flags = [f for f in flags if f in rules]
+    words = {stem}
+    suffixed = {w: rules[f][1] for f in flags if not rules[f][0] for w in apply(stem, f)}
+    words |= set(suffixed)
+    for f in flags:
+        if rules[f][0]:
+            words |= set(apply(stem, f))
+            if rules[f][1]:
+                words |= {w for s, combines in suffixed.items() if combines for w in apply(s, f)}
+    return words
+
+
+def cased_forms(hunspell, aff):
     """Lowercase word -> its dictionary spelling, for words never written lowercase."""
-    entries = [line.split("/")[0] for line in hunspell.splitlines()[1:] if line]
-    lower = {w for w in entries if w == w.lower()}
+    lines = [line.split("/", 1) for line in hunspell.splitlines()[1:] if line]
+    entries = [parts[0] for parts in lines]
+    rules = affix_rules(aff)
+    # The dictionary lists stems with affix flags, so "jobs" is only
+    # "job/SM" and "independence" only "dependence/IM"; expanding them keeps
+    # "Jobs" and "Independence" from winning.
+    stems = {w for w in entries if w == w.lower()}
+    lower = set()
+    for parts in lines:
+        if parts[0] in stems:
+            lower |= expand(parts[0], parts[1].split()[0] if len(parts) > 1 else "", rules)
 
     def lowercase_word(word):
-        # The dictionary lists stems with affix flags, so "jobs" is only
-        # "job/SM" and "as" is missing; "Jobs" and "As" must not win.
         if word in lower:
             return True
+        # Words the dictionary lacks altogether ("as") fall back to the
+        # common endings on a listed stem. Not on built words: "kissing"
+        # would make "Kissinger" lowercase.
         for suffix, stem_end in (("ies", "y"), ("es", ""), ("s", ""), ("ed", ""), ("ed", "e"),
                                  ("ing", ""), ("ing", "e"), ("ers", ""), ("er", ""), ("ly", "")):
-            if word.endswith(suffix) and word[:-len(suffix)] + stem_end in lower:
+            if word.endswith(suffix) and word[:-len(suffix)] + stem_end in stems:
                 return True
         return False
 
@@ -114,7 +172,7 @@ def main():
     print("▸ Sources")
     words_raw, pairs_raw = fetch("words"), fetch("pairs")
     hunspell, blocked_raw, emoji_raw = fetch("hunspell"), fetch("blocked"), fetch("emoji")
-    cased, apostrophe_words = cased_forms(hunspell)
+    cased, apostrophe_words = cased_forms(hunspell, fetch("hunspell-affixes"))
     blocked = {line.strip().lower() for line in blocked_raw.splitlines() if line.strip() and " " not in line.strip()}
 
     counts = {}
@@ -179,7 +237,7 @@ def main():
         f.write(body)
     print(f"✓ lexicon.bin: {len(entries)} words, {len(pairs)} pairs, {len(body)} bytes")
 
-    groups, group = [], None
+    groups, group, versions = [], None, {}
     for line in emoji_raw.splitlines():
         if line.startswith("# group: "):
             name = line[9:].strip()
@@ -187,33 +245,36 @@ def main():
             if group:
                 groups.append(group)
             continue
-        m = re.match(r"([0-9A-F ]+);\s*fully-qualified\s*#\s*(\S+)", line)
-        if not m or group is None:
+        m = re.match(r"([0-9A-F ]+);\s*fully-qualified\s*#\s*\S+\s+E(\d+\.\d+)", line)
+        if not m:
             continue
         codes = m.group(1).split()
-        if any(c in ("1F3FB", "1F3FC", "1F3FD", "1F3FE", "1F3FF") for c in codes):
+        emoji = "".join(chr(int(c, 16)) for c in codes)
+        versions[emoji] = m.group(2)
+        if group is None or any(c in ("1F3FB", "1F3FC", "1F3FD", "1F3FE", "1F3FF") for c in codes):
             continue
-        group[1].append("".join(chr(int(c, 16)) for c in codes))
+        group[1].append(emoji)
     if groups and groups[0][0] == "Smileys & Emotion" and groups[1][0] == "People & Body":
         groups[0][1] += groups.pop(1)[1]
         groups[0][0] = "Smileys & People"
+
+    def tagged(emoji):
+        return emoji + "@" + versions[emoji] if float(versions[emoji]) > DRAWN_EVERYWHERE else emoji
+
     with open(os.path.join(OUT, "emoji.txt"), "w") as f:
         for name, items in groups:
-            f.write(name + "\t" + " ".join(items) + "\n")
+            f.write(name + "\t" + " ".join(map(tagged, items)) + "\n")
     print(f"✓ emoji.txt: {sum(len(g[1]) for g in groups)} emoji in {len(groups)} groups")
-    write_emoji_words(fetch("gemoji"), emoji_raw, {e for _, items in groups for e in items})
+    write_emoji_words(fetch("gemoji"), tagged, versions, {e for _, items in groups for e in items})
 
 
-def write_emoji_words(gemoji_raw, emoji_raw, shown):
+def write_emoji_words(gemoji_raw, tagged, qualified, shown):
     """emoji-words.txt: per emoji, its five skin tones (if it takes them) and
     the words search matches. emoji-shortcuts.txt: the word that suggests an
     emoji while typing ("pizza" -> pizza), best source first: a one-word name,
-    then aliases, tags, and the first part of a two-part alias."""
-    qualified = set()
-    for line in emoji_raw.splitlines():
-        m = re.match(r"([0-9A-F ]+);\s*fully-qualified", line)
-        if m:
-            qualified.add("".join(chr(int(c, 16)) for c in m.group(1).split()))
+    then aliases, tags, and the first part of a two-part alias. When the best
+    is newer than every iOS draws, the next best follow ("ballet" -> ballet
+    dancer, ballet shoes). Emoji are tagged with their version like emoji.txt."""
     entries = [e for e in json.loads(gemoji_raw) if e["emoji"] in shown]
     people = {e["emoji"].replace("\uFE0F", "") for e in entries if e["category"] == "People & Body"}
 
@@ -232,17 +293,32 @@ def write_emoji_words(gemoji_raw, emoji_raw, shown):
             tones = []
         names = [e["description"]] + e["aliases"] + e["tags"]
         words = sorted({w for n in names for w in re.split(r"[^a-z0-9]+", n.lower()) if w})
-        lines.append(emoji + "\t" + " ".join(tones) + "\t" + " ".join(words))
+        lines.append((float(qualified[emoji]) > DRAWN_EVERYWHERE,
+                      tagged(emoji) + "\t" + " ".join(map(tagged, tones)) + "\t" + " ".join(words)))
         candidates = ([(e["description"], 10)] if " " not in e["description"] else []) \
             + [(a, 5) for a in e["aliases"]] + [(t, 4) for t in e["tags"]] \
             + [(x.split("_")[0], 0) for x in e["aliases"] + e["tags"] if "_" in x and x.split("_")[0] not in VAGUE]
         for word, score in candidates:
-            if len(word) > 2 and word.isalpha() and word.islower() and score > shortcuts.get(word, ("", -1))[1]:
-                shortcuts[word] = (emoji, score)
+            if len(word) > 2 and word.isalpha() and word.islower():
+                shortcuts.setdefault(word, []).append((score, emoji))
+    # Search shows matches in file order and the bar takes the first eight, so
+    # emoji newer than every iOS draws go last: "right" still finds ➡️ before
+    # the people facing right.
+    lines = [line for _, line in sorted(lines, key=lambda l: l[0])]
     with open(os.path.join(OUT, "emoji-words.txt"), "w") as f:
         f.write("\n".join(lines) + "\n")
+
+    def fallbacks(candidates):
+        chain = []
+        for _, emoji in sorted(candidates, key=lambda c: -c[0]):
+            if emoji not in chain:
+                chain.append(emoji)
+                if float(qualified[emoji]) <= DRAWN_EVERYWHERE:
+                    break
+        return " ".join(map(tagged, chain))
+
     with open(os.path.join(OUT, "emoji-shortcuts.txt"), "w") as f:
-        f.write("".join(f"{w}\t{shortcuts[w][0]}\n" for w in sorted(shortcuts)))
+        f.write("".join(f"{w}\t{fallbacks(shortcuts[w])}\n" for w in sorted(shortcuts)))
     print(f"✓ emoji-words.txt: {len(lines)} emoji; emoji-shortcuts.txt: {len(shortcuts)} words")
 
 

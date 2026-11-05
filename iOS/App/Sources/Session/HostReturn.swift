@@ -138,7 +138,10 @@ final class HostReturn: ObservableObject {
             completion(false)
             return
         }
-        UIApplication.shared.open(url, options: [:]) { [weak self] opened in
+        // A universal link must open the app or fail: in Safari it would
+        // count as a return while leaving the user's draft behind.
+        let web = url.scheme == "https" || url.scheme == "http"
+        UIApplication.shared.open(url, options: web ? [.universalLinksOnly: true] : [:]) { [weak self] opened in
             self?.note(host: host, outcome: opened ? .returned : .openFailed)
             SessionDiagnostics.note("return to \(host): url \(opened ? "opened" : "failed")")
             completion(opened)
