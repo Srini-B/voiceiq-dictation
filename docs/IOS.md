@@ -119,7 +119,8 @@ point at the wrong app. iOS offers no list of installed apps.
    Safari. The app confirms it left the foreground a second later; if not,
    it falls through.
 2. The app's return URL: a user override from Settings, or the
-   `KnownAppSchemes` table.
+   `KnownAppSchemes` table. An `https` URL opens only as a universal link
+   (`universalLinksOnly`), so it never lands in Safari.
 3. The swipe-back screen.
 
 System UI hosts (SpringBoard, Spotlight, SafariViewService, Shortcuts UI and
