@@ -48,11 +48,14 @@
 😮‍💨		exhaling face
 🤥		face liar lying
 🫨		face shaking shock
+🙂‍↔️@15.1		head horizontally shaking
+🙂‍↕️@15.1		head shaking vertically
 😌		face relieved whew
 😔		face pensive
 😪		face sleepy tired
 🤤		drooling face
 😴		face sleep sleeping zzz
+🫩@16.0		bags eyes face under with
 😷		face ill mask medical sick with
 🤒		face sick thermometer with
 🤕		bandage face head hurt with
@@ -80,6 +83,7 @@
 😯		face hushed silence speechless
 😲		amazed astonished face gasp
 😳		embarrassed face flushed shy
+🫪@17.0		distorted face
 🥺		eyes face pleading please puppy
 🥹		back face gratitude holding tears
 😦		face frowning mouth open with
@@ -153,6 +157,7 @@
 💋		kiss lipstick mark
 💯		100 hundred perfect points score
 💢		anger angry symbol
+🫯@17.0		cloud fight
 💥		boom collision explode
 💫		dizzy star
 💦		droplets drops sweat water workout
@@ -397,6 +402,7 @@
 🧟‍♂️		man zombie
 🧟‍♀️		woman zombie
 🧌		troll
+🫈@17.0		creature hairy
 💆	💆🏻 💆🏼 💆🏽 💆🏾 💆🏿	getting massage person spa
 💆‍♂️	💆🏻‍♂️ 💆🏼‍♂️ 💆🏽‍♂️ 💆🏾‍♂️ 💆🏿‍♂️	getting man massage spa
 💆‍♀️	💆🏻‍♀️ 💆🏼‍♀️ 💆🏽‍♀️ 💆🏾‍♀️ 💆🏿‍♀️	getting massage spa woman
@@ -406,30 +412,49 @@
 🚶	🚶🏻 🚶🏼 🚶🏽 🚶🏾 🚶🏿	person walking
 🚶‍♂️	🚶🏻‍♂️ 🚶🏼‍♂️ 🚶🏽‍♂️ 🚶🏾‍♂️ 🚶🏿‍♂️	man walking
 🚶‍♀️	🚶🏻‍♀️ 🚶🏼‍♀️ 🚶🏽‍♀️ 🚶🏾‍♀️ 🚶🏿‍♀️	walking woman
+🚶‍➡️@15.1	🚶🏻‍➡️@15.1 🚶🏼‍➡️@15.1 🚶🏽‍➡️@15.1 🚶🏾‍➡️@15.1 🚶🏿‍➡️@15.1	facing person right walking
+🚶‍♀️‍➡️@15.1	🚶🏻‍♀️‍➡️@15.1 🚶🏼‍♀️‍➡️@15.1 🚶🏽‍♀️‍➡️@15.1 🚶🏾‍♀️‍➡️@15.1 🚶🏿‍♀️‍➡️@15.1	facing right walking woman
+🚶‍♂️‍➡️@15.1	🚶🏻‍♂️‍➡️@15.1 🚶🏼‍♂️‍➡️@15.1 🚶🏽‍♂️‍➡️@15.1 🚶🏾‍♂️‍➡️@15.1 🚶🏿‍♂️‍➡️@15.1	facing man right walking
 🧍	🧍🏻 🧍🏼 🧍🏽 🧍🏾 🧍🏿	person standing
 🧍‍♂️	🧍🏻‍♂️ 🧍🏼‍♂️ 🧍🏽‍♂️ 🧍🏾‍♂️ 🧍🏿‍♂️	man standing
 🧍‍♀️	🧍🏻‍♀️ 🧍🏼‍♀️ 🧍🏽‍♀️ 🧍🏾‍♀️ 🧍🏿‍♀️	standing woman
 🧎	🧎🏻 🧎🏼 🧎🏽 🧎🏾 🧎🏿	kneeling person
 🧎‍♂️	🧎🏻‍♂️ 🧎🏼‍♂️ 🧎🏽‍♂️ 🧎🏾‍♂️ 🧎🏿‍♂️	kneeling man
 🧎‍♀️	🧎🏻‍♀️ 🧎🏼‍♀️ 🧎🏽‍♀️ 🧎🏾‍♀️ 🧎🏿‍♀️	kneeling woman
+🧎‍➡️@15.1	🧎🏻‍➡️@15.1 🧎🏼‍➡️@15.1 🧎🏽‍➡️@15.1 🧎🏾‍➡️@15.1 🧎🏿‍➡️@15.1	facing kneeling person right
+🧎‍♀️‍➡️@15.1	🧎🏻‍♀️‍➡️@15.1 🧎🏼‍♀️‍➡️@15.1 🧎🏽‍♀️‍➡️@15.1 🧎🏾‍♀️‍➡️@15.1 🧎🏿‍♀️‍➡️@15.1	facing kneeling right woman
+🧎‍♂️‍➡️@15.1	🧎🏻‍♂️‍➡️@15.1 🧎🏼‍♂️‍➡️@15.1 🧎🏽‍♂️‍➡️@15.1 🧎🏾‍♂️‍➡️@15.1 🧎🏿‍♂️‍➡️@15.1	facing kneeling man right
 🧑‍🦯	🧑🏻‍🦯 🧑🏼‍🦯 🧑🏽‍🦯 🧑🏾‍🦯 🧑🏿‍🦯	cane person probing white with
+🧑‍🦯‍➡️@15.1	🧑🏻‍🦯‍➡️@15.1 🧑🏼‍🦯‍➡️@15.1 🧑🏽‍🦯‍➡️@15.1 🧑🏾‍🦯‍➡️@15.1 🧑🏿‍🦯‍➡️@15.1	cane facing person right white with
 👨‍🦯	👨🏻‍🦯 👨🏼‍🦯 👨🏽‍🦯 👨🏾‍🦯 👨🏿‍🦯	cane man probing white with
+👨‍🦯‍➡️@15.1	👨🏻‍🦯‍➡️@15.1 👨🏼‍🦯‍➡️@15.1 👨🏽‍🦯‍➡️@15.1 👨🏾‍🦯‍➡️@15.1 👨🏿‍🦯‍➡️@15.1	cane facing man right white with
 👩‍🦯	👩🏻‍🦯 👩🏼‍🦯 👩🏽‍🦯 👩🏾‍🦯 👩🏿‍🦯	cane probing white with woman
+👩‍🦯‍➡️@15.1	👩🏻‍🦯‍➡️@15.1 👩🏼‍🦯‍➡️@15.1 👩🏽‍🦯‍➡️@15.1 👩🏾‍🦯‍➡️@15.1 👩🏿‍🦯‍➡️@15.1	cane facing right white with woman
 🧑‍🦼	🧑🏻‍🦼 🧑🏼‍🦼 🧑🏽‍🦼 🧑🏾‍🦼 🧑🏿‍🦼	in motorized person wheelchair
+🧑‍🦼‍➡️@15.1	🧑🏻‍🦼‍➡️@15.1 🧑🏼‍🦼‍➡️@15.1 🧑🏽‍🦼‍➡️@15.1 🧑🏾‍🦼‍➡️@15.1 🧑🏿‍🦼‍➡️@15.1	facing in motorized person right wheelchair
 👨‍🦼	👨🏻‍🦼 👨🏼‍🦼 👨🏽‍🦼 👨🏾‍🦼 👨🏿‍🦼	in man motorized wheelchair
+👨‍🦼‍➡️@15.1	👨🏻‍🦼‍➡️@15.1 👨🏼‍🦼‍➡️@15.1 👨🏽‍🦼‍➡️@15.1 👨🏾‍🦼‍➡️@15.1 👨🏿‍🦼‍➡️@15.1	facing in man motorized right wheelchair
 👩‍🦼	👩🏻‍🦼 👩🏼‍🦼 👩🏽‍🦼 👩🏾‍🦼 👩🏿‍🦼	in motorized wheelchair woman
+👩‍🦼‍➡️@15.1	👩🏻‍🦼‍➡️@15.1 👩🏼‍🦼‍➡️@15.1 👩🏽‍🦼‍➡️@15.1 👩🏾‍🦼‍➡️@15.1 👩🏿‍🦼‍➡️@15.1	facing in motorized right wheelchair woman
 🧑‍🦽	🧑🏻‍🦽 🧑🏼‍🦽 🧑🏽‍🦽 🧑🏾‍🦽 🧑🏿‍🦽	in manual person wheelchair
+🧑‍🦽‍➡️@15.1	🧑🏻‍🦽‍➡️@15.1 🧑🏼‍🦽‍➡️@15.1 🧑🏽‍🦽‍➡️@15.1 🧑🏾‍🦽‍➡️@15.1 🧑🏿‍🦽‍➡️@15.1	facing in manual person right wheelchair
 👨‍🦽	👨🏻‍🦽 👨🏼‍🦽 👨🏽‍🦽 👨🏾‍🦽 👨🏿‍🦽	in man manual wheelchair
+👨‍🦽‍➡️@15.1	👨🏻‍🦽‍➡️@15.1 👨🏼‍🦽‍➡️@15.1 👨🏽‍🦽‍➡️@15.1 👨🏾‍🦽‍➡️@15.1 👨🏿‍🦽‍➡️@15.1	facing in man manual right wheelchair
 👩‍🦽	👩🏻‍🦽 👩🏼‍🦽 👩🏽‍🦽 👩🏾‍🦽 👩🏿‍🦽	in manual wheelchair woman
+👩‍🦽‍➡️@15.1	👩🏻‍🦽‍➡️@15.1 👩🏼‍🦽‍➡️@15.1 👩🏽‍🦽‍➡️@15.1 👩🏾‍🦽‍➡️@15.1 👩🏿‍🦽‍➡️@15.1	facing in manual right wheelchair woman
 🏃	🏃🏻 🏃🏼 🏃🏽 🏃🏾 🏃🏿	exercise marathon person runner running workout
 🏃‍♂️	🏃🏻‍♂️ 🏃🏼‍♂️ 🏃🏽‍♂️ 🏃🏾‍♂️ 🏃🏿‍♂️	exercise man marathon running workout
 🏃‍♀️	🏃🏻‍♀️ 🏃🏼‍♀️ 🏃🏽‍♀️ 🏃🏾‍♀️ 🏃🏿‍♀️	exercise marathon running woman workout
+🏃‍➡️@15.1	🏃🏻‍➡️@15.1 🏃🏼‍➡️@15.1 🏃🏽‍➡️@15.1 🏃🏾‍➡️@15.1 🏃🏿‍➡️@15.1	facing person right running
+🏃‍♀️‍➡️@15.1	🏃🏻‍♀️‍➡️@15.1 🏃🏼‍♀️‍➡️@15.1 🏃🏽‍♀️‍➡️@15.1 🏃🏾‍♀️‍➡️@15.1 🏃🏿‍♀️‍➡️@15.1	facing right running woman
+🏃‍♂️‍➡️@15.1	🏃🏻‍♂️‍➡️@15.1 🏃🏼‍♂️‍➡️@15.1 🏃🏽‍♂️‍➡️@15.1 🏃🏾‍♂️‍➡️@15.1 🏃🏿‍♂️‍➡️@15.1	facing man right running
+🧑‍🩰@17.0	🧑🏻‍🩰@17.0 🧑🏼‍🩰@17.0 🧑🏽‍🩰@17.0 🧑🏾‍🩰@17.0 🧑🏿‍🩰@17.0	ballet dancer
 💃	💃🏻 💃🏼 💃🏽 💃🏾 💃🏿	dancer dancing dress lady woman
 🕺	🕺🏻 🕺🏼 🕺🏽 🕺🏾 🕺🏿	dancer dancing man
 🕴️	🕴🏻 🕴🏼 🕴🏽 🕴🏾 🕴🏿	business in levitating person suit
-👯		bunny dancers ears people with
-👯‍♂️		bunny dancing ears men with
-👯‍♀️		bunny dancing ears with women
+👯	👯🏻@17.0 👯🏼@17.0 👯🏽@17.0 👯🏾@17.0 👯🏿@17.0	bunny dancers ears people with
+👯‍♂️	👯🏻‍♂️@17.0 👯🏼‍♂️@17.0 👯🏽‍♂️@17.0 👯🏾‍♂️@17.0 👯🏿‍♂️@17.0	bunny dancing ears men with
+👯‍♀️	👯🏻‍♀️@17.0 👯🏼‍♀️@17.0 👯🏽‍♀️@17.0 👯🏾‍♀️@17.0 👯🏿‍♀️@17.0	bunny dancing ears with women
 🧖	🧖🏻 🧖🏼 🧖🏽 🧖🏾 🧖🏿	in person room sauna steamy
 🧖‍♂️	🧖🏻‍♂️ 🧖🏼‍♂️ 🧖🏽‍♂️ 🧖🏾‍♂️ 🧖🏿‍♂️	in man room sauna steamy
 🧖‍♀️	🧖🏻‍♀️ 🧖🏼‍♀️ 🧖🏽‍♀️ 🧖🏾‍♀️ 🧖🏿‍♀️	in room sauna steamy woman
@@ -467,9 +492,9 @@
 🤸	🤸🏻 🤸🏼 🤸🏽 🤸🏾 🤸🏿	cartwheeling person
 🤸‍♂️	🤸🏻‍♂️ 🤸🏼‍♂️ 🤸🏽‍♂️ 🤸🏾‍♂️ 🤸🏿‍♂️	cartwheeling man
 🤸‍♀️	🤸🏻‍♀️ 🤸🏼‍♀️ 🤸🏽‍♀️ 🤸🏾‍♀️ 🤸🏿‍♀️	cartwheeling woman
-🤼		people wrestling
-🤼‍♂️		men wrestling
-🤼‍♀️		women wrestling
+🤼	🤼🏻@17.0 🤼🏼@17.0 🤼🏽@17.0 🤼🏾@17.0 🤼🏿@17.0	people wrestling
+🤼‍♂️	🤼🏻‍♂️@17.0 🤼🏼‍♂️@17.0 🤼🏽‍♂️@17.0 🤼🏾‍♂️@17.0 🤼🏿‍♂️@17.0	men wrestling
+🤼‍♀️	🤼🏻‍♀️@17.0 🤼🏼‍♀️@17.0 🤼🏽‍♀️@17.0 🤼🏾‍♀️@17.0 🤼🏿‍♀️@17.0	women wrestling
 🤽	🤽🏻 🤽🏼 🤽🏽 🤽🏾 🤽🏿	person playing polo water
 🤽‍♂️	🤽🏻‍♂️ 🤽🏼‍♂️ 🤽🏽‍♂️ 🤽🏾‍♂️ 🤽🏿‍♂️	man playing polo water
 🤽‍♀️	🤽🏻‍♀️ 🤽🏼‍♀️ 🤽🏽‍♀️ 🤽🏾‍♀️ 🤽🏿‍♀️	playing polo water woman
@@ -526,7 +551,12 @@
 👥		busts group in silhouette team users
 🫂		hugging people
 👪		child family home parents
+🧑‍🧑‍🧒@15.1		adult child family
+🧑‍🧑‍🧒‍🧒@15.1		adult child family
+🧑‍🧒@15.1		adult child family
+🧑‍🧒‍🧒@15.1		adult child family
 👣		feet footprints tracks
+🫆@16.0		fingerprint
 🐵		face monkey
 🐒		monkey
 🦍		gorilla
@@ -614,6 +644,7 @@
 🪽		fly wing
 🐦‍⬛		bird black
 🪿		goose honk
+🐦‍🔥@15.1		phoenix
 🐸		frog
 🐊		crocodile
 🐢		slow turtle
@@ -626,6 +657,7 @@
 🐳		sea spouting whale
 🐋		whale whale2
 🐬		dolphin flipper
+🫍@17.0		orca
 🦭		seal
 🐟		fish
 🐠		fish tropical
@@ -684,11 +716,13 @@
 🪹		empty nest
 🪺		eggs nest with
 🍄		fungus mushroom
+🪾@16.0		leafless tree
 🍇		grapes
 🍈		melon
 🍉		watermelon
 🍊		mandarin orange tangerine
 🍋		lemon
+🍋‍🟩@15.1		lime
 🍌		banana fruit
 🍍		pineapple
 🥭		mango
@@ -720,6 +754,8 @@
 🌰		chestnut
 🫚		ginger root
 🫛		pea pod
+🍄‍🟫@15.1		brown mushroom
+🫜@16.0		root vegetable
 🍞		bread toast
 🥐		croissant
 🥖		baguette bread
@@ -821,6 +857,7 @@
 🧭		compass
 🏔️		capped mountain snow
 ⛰️		mountain
+🛘@17.0		landslide
 🌋		volcano
 🗻		fuji mount
 🏕️		camping
@@ -1182,6 +1219,7 @@
 📻		podcast radio
 🎷		saxophone
 🎺		trumpet
+🪊@17.0		trombone
 🪗		accordion
 🎸		guitar rock
 🎹		keyboard musical piano
@@ -1191,6 +1229,7 @@
 🪘		drum long
 🪇		maracas shaker
 🪈		flute recorder
+🪉@16.0		harp
 📱		iphone mobile phone smartphone
 📲		arrow call calling incoming mobile phone with
 ☎️		phone telephone
@@ -1246,6 +1285,7 @@
 🏷️		label tag
 🪙		coin
 💰		bag cream dollar money moneybag
+🪎@17.0		chest treasure
 💴		banknote yen
 💵		banknote dollar money
 💶		banknote euro
@@ -1323,11 +1363,13 @@
 ⚖️		balance scale
 🦯		cane probing white
 🔗		link
+⛓️‍💥@15.1		broken chain
 ⛓️		chains
 🪝		hook
 🧰		toolbox
 🧲		magnet
 🪜		ladder
+🪏@16.0		shovel
 ⚗️		alembic
 🧪		test tube
 🧫		dish petri
@@ -1513,6 +1555,7 @@
 ©️		copyright
 ®️		registered
 ™️		mark tm trade trademark
+🫟@16.0		splatter
 #️⃣		hash keycap number
 *️⃣		asterisk keycap
 0️⃣		0 keycap zero
@@ -1658,6 +1701,7 @@
 🇨🇳		china cn flag
 🇨🇴		colombia flag
 🇨🇵		clipperton flag island
+🇨🇶@16.0		flag sark
 🇨🇷		costa flag rica
 🇨🇺		cuba flag
 🇨🇻		cape flag verde

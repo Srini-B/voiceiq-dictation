@@ -4,10 +4,30 @@ import Foundation
 /// category, by the words that find them, and with their skin tones. Recents
 /// and the last skin tone live in the keyboard's own defaults.
 enum EmojiData {
+    /// The newest Emoji version this iOS draws; newer ones would show as empty
+    /// boxes. Per Emojipedia's Apple changelogs: Emoji 15.1 arrived in iOS 17.4,
+    /// 16.0 in iOS 18.4, 17.0 in iOS 26.4. iOS 17.0 draws 15.0.
+    private static let newestDrawn: Double = {
+        if #available(iOS 26.4, *) { return 17.0 }
+        if #available(iOS 18.4, *) { return 16.0 }
+        if #available(iOS 17.4, *) { return 15.1 }
+        return 15.0
+    }()
+
+    /// The data writes emoji newer than Emoji 15.0 with their version
+    /// ("🫩@16.0"). Every emoji the keyboard offers passes through here, so
+    /// one this iOS can't draw is nil and left out.
+    private static func drawable(_ token: Substring) -> String? {
+        let parts = token.split(separator: "@", maxSplits: 1)
+        guard let emoji = parts.first else { return nil }
+        if parts.count == 2, Double(parts[1]).map({ $0 > newestDrawn }) ?? true { return nil }
+        return String(emoji)
+    }
+
     static let groups: [(name: String, emoji: [String])] = lines("emoji").compactMap { line in
         let parts = line.split(separator: "\t", maxSplits: 1)
         guard parts.count == 2 else { return nil }
-        return (String(parts[0]), parts[1].split(separator: " ").map(String.init))
+        return (String(parts[0]), parts[1].split(separator: " ").compactMap(drawable))
     }
 
     private struct Named {
@@ -16,10 +36,12 @@ enum EmojiData {
         let words: [Substring]
     }
 
-    private static let named: [Named] = lines("emoji-words").map { line in
+    private static let named: [Named] = lines("emoji-words").compactMap { line in
         let parts = line.split(separator: "\t", omittingEmptySubsequences: false)
-        return Named(emoji: String(parts[0]),
-                     tones: parts.count > 1 ? parts[1].split(separator: " ").map(String.init) : [],
+        guard let emoji = drawable(parts[0]) else { return nil }
+        let tones = parts.count > 1 ? parts[1].split(separator: " ").map(drawable) : []
+        return Named(emoji: emoji,
+                     tones: tones.contains(nil) ? [] : tones.compactMap { $0 },
                      words: parts.count > 2 ? parts[2].split(separator: " ") : [])
     }
 
@@ -27,11 +49,17 @@ enum EmojiData {
     private static let tones: [String: [String]] = Dictionary(
         named.filter { !$0.tones.isEmpty }.map { ($0.emoji, $0.tones) }, uniquingKeysWith: { a, _ in a })
 
-    /// The word that brings up an emoji while typing ("pizza" → 🍕).
+    /// Everything above, for recents saved where newer emoji were drawn.
+    private static let offered = Set(groups.flatMap(\.emoji) + tones.values.joined())
+
+    /// The word that brings up an emoji while typing ("pizza" → 🍕), the
+    /// first this iOS draws when the best is too new.
     private static let shortcuts: [Substring: String] = Dictionary(
         lines("emoji-shortcuts").compactMap { line in
             let parts = line.split(separator: "\t")
-            return parts.count == 2 ? (parts[0], String(parts[1])) : nil
+            guard parts.count == 2, let emoji = parts[1].split(separator: " ").lazy.compactMap(drawable).first
+            else { return nil }
+            return (parts[0], emoji)
         }, uniquingKeysWith: { a, _ in a })
 
     private static func lines(_ name: String) -> [Substring] {
@@ -93,7 +121,7 @@ enum EmojiData {
         return tones.first { $0.value.contains(emoji) }?.key ?? emoji
     }
 
-    static var recents: [String] { UserDefaults.standard.stringArray(forKey: recentsKey) ?? [] }
+    static var recents: [String] { (UserDefaults.standard.stringArray(forKey: recentsKey) ?? []).filter(offered.contains) }
 
     static func noteUsed(_ emoji: String) {
         UserDefaults.standard.set(Array(([emoji] + recents.filter { $0 != emoji }).prefix(30)), forKey: recentsKey)

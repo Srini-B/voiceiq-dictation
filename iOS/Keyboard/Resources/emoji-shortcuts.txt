@@ -85,7 +85,7 @@ bahamas	🇧🇸
 bahrain	🇧🇭
 balance	⚖️
 bald	👨‍🦲
-ballet	🩰
+ballet	🧑‍🩰@17.0 🩰
 balloon	🎈
 ballot	🗳️
 bamboo	🎍
@@ -433,6 +433,7 @@ disco	🪩
 disguised	🥸
 disgusted	🤢
 disk	💿
+distorted	🫪@17.0
 divide	➗
 diving	🤿
 diya	🪔
@@ -534,9 +535,11 @@ ferris	🎡
 ferry	⛴️
 festival	🎆
 field	🏑
+fight	🫯@17.0
 fiji	🇫🇯
 file	📁
 film	🎥
+fingerprint	🫆@16.0
 finish	🏁
 finland	🇫🇮
 fire	🔥
@@ -668,6 +671,7 @@ gym	🏋️
 haha	😃
 hair	🪮
 haircut	💇
+hairy	🫈@17.0
 haiti	🇭🇹
 halloween	👻
 halt	🙅
@@ -681,10 +685,12 @@ handball	🤾
 handshake	🤝
 hankey	💩
 happy	😀
+harp	🪉@16.0
 hash	#️⃣
 hat	🎩
 hatched	🐥
 hatching	🐣
+head	🙂‍↔️@15.1 🙂‍↕️@15.1
 headphone	🎧
 headphones	🎧
 headstone	🪦
@@ -820,6 +826,7 @@ lacrosse	🥍
 ladder	🪜
 lady	💃
 ladybug	🐞
+landslide	🛘@17.0
 lantern	🏮
 laos	🇱🇦
 laptop	💻
@@ -831,6 +838,7 @@ laughing	😆
 launch	🚀
 law	👮
 leaf	🍃
+leafless	🪾@16.0
 leafy	🥬
 leaves	🍃
 lebanon	🇱🇧
@@ -854,6 +862,7 @@ lick	😋
 liechtenstein	🇱🇮
 light	💡
 lightning	⚡
+lime	🍋‍🟩@15.1
 limit	⛔
 link	🔗
 lion	🦁
@@ -1060,6 +1069,7 @@ ophiuchus	⛎
 orange	🍊
 orangutan	🦧
 orbit	🛰️
+orca	🫍@17.0
 orthodox	☦️
 otter	🦦
 outbox	📤
@@ -1122,6 +1132,7 @@ pet	🐶
 petri	🧫
 phew	😥
 philippines	🇵🇭
+phoenix	🐦‍🔥@15.1
 phone	☎️
 photo	📷
 piano	🎹
@@ -1268,6 +1279,7 @@ roll	🙄
 roller	🎢
 romania	🇷🇴
 rooster	🐓
+root	🫜@16.0
 rose	🌹
 rosette	🏵️
 rotating	🚨
@@ -1361,6 +1373,7 @@ shoot	🔫
 shopping	🛍️
 shortcake	🍰
 shorts	🩳
+shovel	🪏@16.0
 shower	🚿
 shrimp	🦐
 shrug	🤷
@@ -1444,6 +1457,7 @@ speedboat	🚤
 spicy	🌶️
 spider	🕷️
 spiral	🗒️
+splatter	🫟@16.0
 spock	🖖
 sponge	🧽
 spoon	🥄
@@ -1590,6 +1604,7 @@ trans	🏳️‍⚧️
 transgender	🏳️‍⚧️
 trash	🗑️
 travel	🗺️
+treasure	🪎@17.0
 triangular	📐
 trident	🔱
 trinidad	🇹🇹
@@ -1597,6 +1612,7 @@ tristan	🇹🇦
 triumph	😤
 troll	🧌
 trolleybus	🚎
+trombone	🪊@17.0
 trophy	🏆
 tropical	🐠
 truck	🚚

@@ -132,7 +132,8 @@ and `emoji.txt` from these files, pinned by commit in the script.
 
 ### Unicode emoji
 
-- `emoji-test.txt`, Emoji 15.0, from unicode.org.
+- `emoji-test.txt`, Emoji 17.0, from
+  https://www.unicode.org/Public/17.0.0/emoji/emoji-test.txt.
 - License: Unicode License v3.
 
 ### gemoji (emoji names)
