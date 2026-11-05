@@ -74,6 +74,10 @@ vocabulary does not have.
   model (+0.7 DailyDialog, −0.9 BBC), not the code. Completions trail the
   eval because the eval re-ranked every slot, and 75-78% of mid-sentence
   2-letter positions have a pending correction whose slots stay the list's.
+  After review on PR #38, a typed word that is a word keeps the first slot,
+  as without the model and as on the iOS keyboard. That costs a little
+  (DailyDialog 2 / 3 letters 57.6 / 76.7, savings 21.3%; BBC 49.8 / 66.1,
+  savings 19.7%), still well above before.
 - Misspellings (the 33 from 2026-10-30, reconstructed): 30/33 alone and
   27/33 mid-sentence, before and after; the autocorrection is identical in
   every case.

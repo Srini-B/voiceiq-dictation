@@ -293,13 +293,18 @@ def write_emoji_words(gemoji_raw, tagged, qualified, shown):
             tones = []
         names = [e["description"]] + e["aliases"] + e["tags"]
         words = sorted({w for n in names for w in re.split(r"[^a-z0-9]+", n.lower()) if w})
-        lines.append(tagged(emoji) + "\t" + " ".join(map(tagged, tones)) + "\t" + " ".join(words))
+        lines.append((float(qualified[emoji]) > DRAWN_EVERYWHERE,
+                      tagged(emoji) + "\t" + " ".join(map(tagged, tones)) + "\t" + " ".join(words)))
         candidates = ([(e["description"], 10)] if " " not in e["description"] else []) \
             + [(a, 5) for a in e["aliases"]] + [(t, 4) for t in e["tags"]] \
             + [(x.split("_")[0], 0) for x in e["aliases"] + e["tags"] if "_" in x and x.split("_")[0] not in VAGUE]
         for word, score in candidates:
             if len(word) > 2 and word.isalpha() and word.islower():
                 shortcuts.setdefault(word, []).append((score, emoji))
+    # Search shows matches in file order and the bar takes the first eight, so
+    # emoji newer than every iOS draws go last: "right" still finds ➡️ before
+    # the people facing right.
+    lines = [line for _, line in sorted(lines, key=lambda l: l[0])]
     with open(os.path.join(OUT, "emoji-words.txt"), "w") as f:
         f.write("\n".join(lines) + "\n")
 

@@ -198,8 +198,11 @@ struct TypingEngine: Sendable {
         let correction = isKnown(partial, key: typedKey)
             ? ranked.first { $0.overridesTypedWord }
             : ranked.first { $0.isCorrection && $0.score > Self.autocorrectFloor }
-        // With the model, its completions go first; the correction stays the list's.
-        let words = (model.map { completions(of: partial, typedKey: typedKey, previousID: previousID, previousKey: previousKey, model: $0) } ?? [])
+        // With the model, its completions go first, after the typed word when
+        // it is a word; the correction stays the list's.
+        let typedWord = model == nil ? nil : ranked.first { $0.text.lowercased() == partial.lowercased() }
+        let words = (typedWord.map { [$0.text] } ?? [])
+            + (model.map { completions(of: partial, typedKey: typedKey, previousID: previousID, previousKey: previousKey, model: $0) } ?? [])
             + ranked.map(\.text)
         if let correction {
             let rest = words.first { $0 != correction.text && $0.lowercased() != partial.lowercased() }

@@ -506,7 +506,8 @@ to type, plus the user's own words. A word the model does not know gets the
 lowest logit of the others. The words the user usually types next still come
 first, blocked and offensive words are never offered, and the autocorrection
 applied on space stays the word list's: with a correction pending the model
-only picks the third slot. At a sentence start the model is not used: with no
+only picks the third slot, and a typed word that is a word keeps the first.
+At a sentence start the model is not used: with no
 sentence-start token it put the first word in its top three 3.5% of the time
 against 16.9% for the starters (DailyDialog).
 
