@@ -22,7 +22,9 @@ notices did not credit VivaDicta.
 **Verified.** The file compiles; a scratch check confirmed every value parses
 as a URL, no bundle ID is in both lists, Messages still uses `ichat://`, and
 Claude and Orca return nil and are not reported as gaps. None of the new
-entries was tested on a device; a wrong one falls back to the swipe-back
-screen.
+entries was tested on a device. A URL iOS cannot open falls back to the
+swipe-back screen (an `https` one too, since it opens only as a universal
+link); a URL that opens the app on the wrong screen does not, because the
+return counts as done once iOS opens it.
 
 **Rollback.** Revert the commit.
