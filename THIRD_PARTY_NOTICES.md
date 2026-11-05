@@ -119,7 +119,8 @@ and `emoji.txt` from these files, pinned by commit in the script.
 ### SCOWL / Hunspell en_US
 
 - Used for the capitalized spelling of names and brands ("iPhone", "Monday")
-  and which contractions are words. From
+  and which contractions are words. `index.dic` and its affix rules,
+  `index.aff`, from
   [wooorm/dictionaries](https://github.com/wooorm/dictionaries) at `8cfea40`.
 - License: the SCOWL copyright and permission notice, Copyright 2000-2018 by
   Kevin Atkinson, with the Ispell BSD license for the parts it derives from.

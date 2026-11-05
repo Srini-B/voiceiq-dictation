@@ -30,6 +30,7 @@ SOURCES = {
     "words": "https://raw.githubusercontent.com/wolfgarbe/SymSpell/91fe939e9c1259813ee817e95239629c5badf8ec/SymSpell/frequency_dictionary_en_82_765.txt",
     "pairs": "https://raw.githubusercontent.com/wolfgarbe/SymSpell/91fe939e9c1259813ee817e95239629c5badf8ec/SymSpell/frequency_bigramdictionary_en_243_342.txt",
     "hunspell": "https://raw.githubusercontent.com/wooorm/dictionaries/8cfea406b505e4d7df52d5a19bce525df98c54ab/dictionaries/en/index.dic",
+    "hunspell-affixes": "https://raw.githubusercontent.com/wooorm/dictionaries/8cfea406b505e4d7df52d5a19bce525df98c54ab/dictionaries/en/index.aff",
     "blocked": "https://raw.githubusercontent.com/LDNOOBW/List-of-Dirty-Naughty-Obscene-and-Otherwise-Bad-Words/5faf2ba42d7b1c0977169ec3611df25a3c08eb13/en",
     # Emoji 17.0, the newest set any iOS draws (iOS 26.4). Newer emoji carry
     # their version so the keyboard hides them where iOS can't draw them.
@@ -91,19 +92,71 @@ def key_of(word):
     return word.lower().replace("'", "")
 
 
-def cased_forms(hunspell):
+def affix_rules(aff):
+    """Flag -> (is prefix, combines with the other kind, [(strip, add, condition)])."""
+    rules = {}
+    for line in aff.splitlines():
+        parts = line.split()
+        if len(parts) < 4 or parts[0] not in ("PFX", "SFX"):
+            continue
+        kind, flag = parts[0], parts[1]
+        if flag not in rules:
+            rules[flag] = (kind == "PFX", parts[2] == "Y", [])
+            continue
+        strip, add = ("" if parts[2] == "0" else parts[2]), ("" if parts[3] == "0" else parts[3])
+        condition = parts[4] if len(parts) > 4 else "."
+        anchored = f"^(?:{condition})" if kind == "PFX" else f"(?:{condition})$"
+        rules[flag][2].append((strip, add.split("/")[0], re.compile(anchored)))
+    return rules
+
+
+def expand(stem, flags, rules):
+    """Every word Hunspell builds from a stem and its affix flags."""
+    def apply(word, flag):
+        prefix, _, forms = rules[flag]
+        for strip, add, condition in forms:
+            if not condition.search(word):
+                continue
+            if prefix and word.startswith(strip):
+                yield add + word[len(strip):]
+            elif not prefix and word.endswith(strip):
+                yield word[:len(word) - len(strip)] + add
+
+    flags = [f for f in flags if f in rules]
+    words = {stem}
+    suffixed = {w: rules[f][1] for f in flags if not rules[f][0] for w in apply(stem, f)}
+    words |= set(suffixed)
+    for f in flags:
+        if rules[f][0]:
+            words |= set(apply(stem, f))
+            if rules[f][1]:
+                words |= {w for s, combines in suffixed.items() if combines for w in apply(s, f)}
+    return words
+
+
+def cased_forms(hunspell, aff):
     """Lowercase word -> its dictionary spelling, for words never written lowercase."""
-    entries = [line.split("/")[0] for line in hunspell.splitlines()[1:] if line]
-    lower = {w for w in entries if w == w.lower()}
+    lines = [line.split("/", 1) for line in hunspell.splitlines()[1:] if line]
+    entries = [parts[0] for parts in lines]
+    rules = affix_rules(aff)
+    # The dictionary lists stems with affix flags, so "jobs" is only
+    # "job/SM" and "independence" only "dependence/IM"; expanding them keeps
+    # "Jobs" and "Independence" from winning.
+    stems = {w for w in entries if w == w.lower()}
+    lower = set()
+    for parts in lines:
+        if parts[0] in stems:
+            lower |= expand(parts[0], parts[1].split()[0] if len(parts) > 1 else "", rules)
 
     def lowercase_word(word):
-        # The dictionary lists stems with affix flags, so "jobs" is only
-        # "job/SM" and "as" is missing; "Jobs" and "As" must not win.
         if word in lower:
             return True
+        # Words the dictionary lacks altogether ("as") fall back to the
+        # common endings on a listed stem. Not on built words: "kissing"
+        # would make "Kissinger" lowercase.
         for suffix, stem_end in (("ies", "y"), ("es", ""), ("s", ""), ("ed", ""), ("ed", "e"),
                                  ("ing", ""), ("ing", "e"), ("ers", ""), ("er", ""), ("ly", "")):
-            if word.endswith(suffix) and word[:-len(suffix)] + stem_end in lower:
+            if word.endswith(suffix) and word[:-len(suffix)] + stem_end in stems:
                 return True
         return False
 
@@ -119,7 +172,7 @@ def main():
     print("▸ Sources")
     words_raw, pairs_raw = fetch("words"), fetch("pairs")
     hunspell, blocked_raw, emoji_raw = fetch("hunspell"), fetch("blocked"), fetch("emoji")
-    cased, apostrophe_words = cased_forms(hunspell)
+    cased, apostrophe_words = cased_forms(hunspell, fetch("hunspell-affixes"))
     blocked = {line.strip().lower() for line in blocked_raw.splitlines() if line.strip() and " " not in line.strip()}
 
     counts = {}

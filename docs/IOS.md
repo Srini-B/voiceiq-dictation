@@ -476,10 +476,13 @@ memory-mapped so it does not count against the extension's memory limit. A
 word's key is lowercase without apostrophes, so one binary search finds `dont`
 and `don't`. `scripts/generate-keyboard-data.py` rebuilds it and `emoji.txt`
 from pinned sources (THIRD_PARTY_NOTICES.md, "Keyboard data"). A word takes
-Hunspell's capitalized spelling only when Hunspell has no lowercase form of it,
-counting inflections of a lowercase stem: Hunspell stores "job/SM" and no "as",
-so "jobs" and "as" must not become "Jobs" and "As". A learned word drops a
-capital that only started its sentence.
+Hunspell's capitalized spelling only when Hunspell has no lowercase form of it.
+Lowercase forms are every word Hunspell builds from a lowercase stem with the
+prefix and suffix rules in its `.aff` file: it stores "independence" only as
+"dependence/IM" and "jobs" only as "job/SM", so neither may become
+"Independence" or "Jobs". A word Hunspell lacks altogether ("as") stays
+lowercase when it is a listed lowercase stem plus a common ending. A learned
+word drops a capital that only started its sentence.
 
 **Scoring.** Every candidate gets ln P(word | previous word), using the pair
 when the list has it and the word's frequency times 0.05 when it does not,
