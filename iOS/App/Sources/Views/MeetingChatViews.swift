@@ -35,6 +35,11 @@ struct MeetingChatTurns: View {
             }
             Color.clear.frame(height: 0).id(Self.end)
         }
+        .onAppear {
+            // Reopening a note while its question is out: that change happened before this view existed.
+            guard chat.isAsking else { return }
+            DispatchQueue.main.async { scroller.scrollTo(Self.end, anchor: .bottom) }
+        }
         .onChange(of: chat.state) { _, state in
             // A new answer opens at its question; a question in flight or an error shows at the end.
             withAnimation {

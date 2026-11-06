@@ -72,6 +72,24 @@ final class MeetingChatTests: XCTestCase {
         XCTAssertEqual(MeetingStore(root: root).loadChat(id: id), history)
     }
 
+    func testUnreadableChatIsKeptWhenTheNextAnswerIsSaved() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("MeetingChatTests-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = MeetingStore(root: root)
+        let id = MeetingID()
+        let folder = try store.create(meta: MeetingMeta(id: id, startedAt: Date()))
+        let damaged = Data(#"[{"question":"Who owns the launch?"}]"#.utf8)
+        try damaged.write(to: folder.appendingPathComponent("chat.json"))
+
+        XCTAssertEqual(store.loadChat(id: id), [])
+        try store.save(chat: history, id: id)
+
+        XCTAssertEqual(store.loadChat(id: id), history)
+        let names = try FileManager.default.contentsOfDirectory(atPath: folder.path)
+        let aside = try XCTUnwrap(names.first { $0.hasPrefix("chat-unreadable-") })
+        XCTAssertEqual(try Data(contentsOf: folder.appendingPathComponent(aside)), damaged)
+    }
+
     private func transport(_ format: AgentAPIFormat, model: String = "claude-sonnet-5-5") -> AgentTransport {
         let config = URLSessionConfiguration.ephemeral
         config.protocolClasses = [StubHost.self]

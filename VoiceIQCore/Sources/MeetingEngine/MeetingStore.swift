@@ -29,8 +29,16 @@ public final class MeetingStore: @unchecked Sendable {
     public func save(transcript: [TranscriptSegment], id: MeetingID) throws { try save(transcript, in: requiredFolder(id), name: "transcript.json") }
     public func save(notes: MeetingNotes, id: MeetingID) throws { try save(notes, in: requiredFolder(id), name: "notes.json") }
     /// Questions asked about the meeting and their answers; empty before the first.
+    /// A chat.json that no longer decodes is moved aside to chat-unreadable-<time>.json,
+    /// so the next answer starts a new chat instead of overwriting the old one.
     public func loadChat(id: MeetingID) -> [MeetingChatTurn] {
-        (try? load([MeetingChatTurn].self, from: requiredFolder(id).appendingPathComponent("chat.json"))) ?? []
+        guard let folder = try? requiredFolder(id) else { return [] }
+        let url = folder.appendingPathComponent("chat.json")
+        guard FileManager.default.fileExists(atPath: url.path) else { return [] }
+        if let turns = try? load([MeetingChatTurn].self, from: url) { return turns }
+        let aside = folder.appendingPathComponent("chat-unreadable-\(Int(Date().timeIntervalSince1970)).json")
+        try? FileManager.default.moveItem(at: url, to: aside)
+        return []
     }
     public func save(chat: [MeetingChatTurn], id: MeetingID) throws { try save(chat, in: requiredFolder(id), name: "chat.json") }
     public func delete(id: MeetingID) throws { try FileManager.default.removeItem(at: requiredFolder(id)) }
