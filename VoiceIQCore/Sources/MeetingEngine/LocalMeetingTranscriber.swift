@@ -4,8 +4,8 @@ import os
 import VoiceIQSpeech
 
 /// A meeting transcribed on device: the selected speech model (Fluid Speech
-/// Mini or Pro) for the words, Nemotron
-/// 3 Diarization for who spoke when, joined by time. This is how FluidMeet
+/// Mini or Pro) for the words, pyannote community-1 for who spoke when,
+/// joined by time. This is how FluidMeet
 /// does it; the cloud path (`MeetingTranscriber`) asks one model for both.
 ///
 /// A call with an echo-free mic is decoded one track at a time (`byTrack`).
@@ -25,21 +25,23 @@ public struct LocalMeetingTranscriber: Sendable {
         }
     }
 
-    /// v2: words split at Fluid Speech Mini's lone space tokens; v1 caches glued digits to the word before.
-    static let cacheName = "local-words-v2.json"
-    /// A call's mic and system tracks, each decoded alone (`byTrack`).
+    /// v3: speakers from pyannote community-1; v2 split words at Fluid Speech
+    /// Mini's lone space tokens; v1 glued digits to the word before.
+    static let cacheName = "local-words-v3.json"
+    /// A call's mic and system tracks, each decoded alone (`byTrack`). The mic
+    /// track is never diarized, so its cache outlived the diarizer change.
     static let ownerCacheName = "local-words-mic-v1.json"
-    static let farCacheName = "local-words-system-v1.json"
+    static let farCacheName = "local-words-system-v2.json"
     /// Speaker stretches alone, for words heard in the cloud (`relabel`).
-    static let farSpeakersCacheName = "speakers-system-v1.json"
-    static let speakersCacheName = "speakers-v1.json"
+    static let farSpeakersCacheName = "speakers-system-v2.json"
+    static let speakersCacheName = "speakers-v2.json"
     static let mixName = "local-mix.caf"
     /// The mix is written a minute at a time.
     static let piece = 60.0
     /// A dictation keeps the models for seconds; a meeting waits this long for one.
     static let busyWait: Duration = .seconds(600)
 
-    /// The Mac labels speakers with Nemotron 3 Diarization. iPhone and iPad
+    /// The Mac labels speakers with pyannote community-1. iPhone and iPad
     /// record the microphone only and skip the diarizer: one speaker.
     #if os(macOS)
     public static let diarizes = true

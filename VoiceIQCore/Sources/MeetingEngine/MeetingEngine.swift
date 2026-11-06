@@ -258,7 +258,7 @@ import VoiceIQSpeech
         }
     }
 
-    /// Nemotron 3 Diarization over words from a provider that labels no
+    /// The on-device speaker diarizer over words from a provider that labels no
     /// speakers. Without the model, or if it fails, the words keep the track
     /// labels: the owner, and one speaker for the far side.
     private var relabel: (@Sendable ([TimedWord], URL) async -> [TimedWord])? {

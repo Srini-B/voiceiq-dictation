@@ -1,7 +1,7 @@
 import Foundation
 
 /// One saved meeting mix to transcribe on device: the selected Fluid Speech
-/// model for the words, Nemotron 3 Diarization for who spoke when. Without a diarizer the
+/// model for the words, pyannote community-1 for who spoke when. Without a diarizer the
 /// words come back unlabelled (one speaker); iPhone and iPad run this way.
 /// Without a speech model only the speaker stretches come back, for words
 /// heard in the cloud.
@@ -29,7 +29,8 @@ public struct LocalMeetingResult: Codable, Sendable, Equatable {
         }
     }
     public struct Segment: Codable, Sendable, Equatable {
-        /// Diarizer slot, 0...7, in order of first appearance.
+        /// Diarizer slot from 0, in order of first appearance. The count of
+        /// speakers has no fixed limit.
         public var speaker: Int
         public var start: Double
         public var end: Double

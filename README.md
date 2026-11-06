@@ -103,7 +103,7 @@ under Settings → Meetings. Recording never stops on its own. Meetings run on
 the selected provider, or on the other provider when only its key is saved.
 With no usable key the recording is kept and marked failed with the reason,
 ready to Retry once a key is added. Set **Meeting transcription** to On
-device and download Fluid Speech Mini plus Nemotron 3 Diarization (199 MB) to
+device and download Fluid Speech Mini plus Speaker separation (21.6 MB) to
 get the words and speakers on device, FluidMeet-style; only the transcript
 then goes to the writing model for notes. On iPhone and iPad, Fluid Speech
 Mini alone transcribes the meeting after it ends, as one speaker.

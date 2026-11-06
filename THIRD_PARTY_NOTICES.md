@@ -56,14 +56,27 @@ repository's Apache 2.0 license. See `App/Resources/Sounds/ATTRIBUTION.md`.
   VoiceiQ downloads those files on explicit request. Weights are not bundled.
   File hashes are in `FluidSpeechProManifest.swift`.
 
-### Optional NVIDIA Nemotron 3 Diarization model
+### Optional speaker separation model (pyannote community-1)
 
-- Original model: https://huggingface.co/nvidia/Nemotron-3-Diarization (NVIDIA).
-- Core ML conversion: https://huggingface.co/FluidInference/nemotron-3-diarization-coreml (Fluid Inference), revision `25a90f97f254428d4b30374b76af9c74fdee8327`.
-- License: [OpenMDW-1.1](https://openmdw.ai/license/1-1/).
-- VoiceiQ downloads the converted `monolithic/v2/` offline bundle and
-  `learnable_sil_emb.bin` unmodified on explicit request, for on-device meeting
-  speakers. Weights are not bundled. File hashes are in `NemotronDiarizerManifest.swift`.
+- Original pipeline: https://huggingface.co/pyannote/speaker-diarization-community-1
+  (pyannote), with speaker segmentation by Plaquet and Bredin ("Powerset
+  multi-class cross entropy loss for neural speaker diarization", Interspeech
+  2023), the WeSpeaker speaker embedding (Wang et al., "Wespeaker: A research
+  and production oriented speaker embedding learning toolkit", ICASSP 2023),
+  and PLDA parameters from Brno University of Technology / BUT Speech@FIT for
+  VBx clustering (Landini et al., Computer Speech & Language, 2022).
+- Modified: Core ML conversion by Fluid Inference, https://huggingface.co/FluidInference/speaker-diarization-coreml,
+  revision `df2625ac79a7ac6b65ad868fee6d80f320da4232` (fixed input shapes,
+  mixed-precision storage, the FBank frontend split from the embedding model).
+- License: [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/), as the
+  repository's `NOTICE.md` scopes it to `Segmentation.mlmodelc`,
+  `FBank.mlmodelc`, `Embedding.mlmodelc`, `PLDA.mlmodelc`, `PldaRho.mlmodelc`,
+  `plda-parameters.json` and `xvector-transform.json`. VoiceiQ downloads only
+  files from that set.
+- VoiceiQ downloads `Segmentation`, `FBank`, `Embedding` and `PldaRho`
+  (`.mlmodelc`) and `plda-parameters.json` unmodified on explicit request, for
+  on-device meeting speakers. Weights are not bundled. File hashes are in
+  `SpeakerDiarizerManifest.swift`.
 
 ### Optional English tools pack
 

@@ -46,7 +46,7 @@ public final class LocalModelStore: ObservableObject {
 
     /// Who spoke when, for meetings transcribed on device. Words come from
     /// Fluid Speech Mini; this model only tells the speakers apart.
-    public static let speakerDiarizer = LocalModelStore(manifest: .nemotronDiarizer, displayName: "Nemotron 3 Diarization")
+    public static let speakerDiarizer = LocalModelStore(manifest: .speakerDiarizer, displayName: "Speaker Separation (pyannote community-1)")
 
     public static func store(for model: LocalSpeechModel) -> LocalModelStore {
         switch model {

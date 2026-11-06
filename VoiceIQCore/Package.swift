@@ -17,7 +17,7 @@ let package = Package(
         .package(url: "https://github.com/groue/GRDB.swift.git", from: "7.12.0"),
         .package(url: "https://github.com/Clipy/Sauce.git", from: "2.2.0"),
         // Listing traits turns FluidAudio's defaults off: TTS stays out, and
-        // Diarizer gates Nemotron3Diarizer (LocalMeetingJob).
+        // Diarizer gates OfflineDiarizerManager (LocalMeetingJob).
         .package(url: "https://github.com/FluidInference/FluidAudio.git", exact: "0.18.2", traits: ["NemoTextProcessing", "Diarizer"]),
     ],
     targets: [

@@ -443,9 +443,9 @@ segments (`SettingsStore.meetingSource`, key `meetingSource`, read from the old
 `localMeetingTranscriptionEnabled` boolean when absent). On device is a
 separate choice from on-device dictation. On the Mac it needs two downloads:
 the selected speech model (Fluid Speech Mini or Pro, the one checked in the
-model list) for the words and **Nemotron 3 Diarization** (199 MB) for who
-spoke when. This is the FluidMeet recipe: one ASR model and one diarizer,
-joined by time. While the switch is on, the model rows stay offered and
+model list) for the words and **Speaker Separation (pyannote community-1)**
+(21.6 MB) for who spoke when. This is the FluidMeet recipe: one ASR model and
+one diarizer, joined by time. While the switch is on, the model rows stay offered and
 selectable even with dictation on the cloud, and the diarizer row appears
 under the picker. Until 2026-11-02 meetings always used Fluid Speech Mini,
 so a phone with only Pro downloaded sent notes to the cloud. Until both are `.ready`, meetings use the cloud path and the
@@ -472,15 +472,26 @@ The flow, in `MeetingEngine.transcribe(folder:config:)`:
    hands a `LocalMeetingRequest` to the runner. The file is removed after.
 3. The runner (`LocalMeetingJob.run`) loads the selected speech model, runs
    `AsrManager.transcribeDiskBacked` with no language hint (as dictation), groups token timings into words at
-   leading-space boundaries, frees the ASR, then (Mac only) loads the diarizer
-   with `Nemotron3Config.offline`, streams the file through it in 60 s chunks,
-   and turns the speaker probabilities into `Segment(speaker:start:end)` with
-   `Nemotron3Diarizer.segments`. On macOS the runner is
+   leading-space boundaries, frees the ASR, then (Mac only) runs FluidAudio's
+   `OfflineDiarizerManager` at its community-1 defaults (segmentation,
+   WeSpeaker embeddings, VBx clustering). The defaults can merge two similar
+   voices, so the same prepared audio is re-clustered with one more speaker
+   at a time (up to 3 more, 8 in all) while every speaker keeps at least 3
+   chunk embeddings and the two closest mean voices stay at least 0.275 apart
+   in cosine distance (`LocalMeetingJob.voicesApart`). Re-clustering repeats
+   no model inference: about 1.1 s per hour of audio each. The models
+   load straight from the install folder with `MLModel(contentsOf:)` into
+   `OfflineDiarizerModels`, because FluidAudio's own loader downloads when its
+   revision marker is missing. FluidAudio's disk-backed source converts the
+   mix to a temporary memory-mapped file, so the audio is never held in memory. Speaker ids
+   become `Segment(speaker:start:end)` slots in order of first appearance,
+   with overlapping speech kept. A track with no speech gives no segments.
+   On macOS the runner is
    `LocalMeetingHelper.run`, which spawns its own copy of the speech helper
    (so a dictation's helper is never blocked), kills it on cancel, and times
    out at `max(600 s, 3 × duration)`. On iOS it is
    `LocalSpeechInference.transcribeMeeting`, in process.
-4. Words and segments are cached as `local-words-v2.json` beside the audio, so
+4. Words and segments are cached as `local-words-v3.json` beside the audio, so
    a Retry after the notes fail does not decode twice. Each word takes the
    speaker active at its midpoint, else the one overlapping it most, else the
    nearest within 2 s, else the previous word's. Speakers are renumbered in
@@ -491,7 +502,7 @@ The flow, in `MeetingEngine.transcribe(folder:config:)`:
    (`CallAudio.isOnline && micIsEchoFree`), the tracks are not mixed. The mic
    is decoded alone, and every word on it is the owner's
    (`local-words-mic-v1.json`). The system track is decoded and diarized
-   alone, and its speakers are everyone else (`local-words-system-v1.json`).
+   alone, and its speakers are everyone else (`local-words-system-v2.json`).
    `LocalMeetingTranscriber.byTrack` joins them by time. A mix keeps only one
    voice where two overlap. On a 2.5-minute Meet call (2026-10-27) it lost a
    far-side "Yeah" said over the owner and gave the owner a far-side
@@ -541,12 +552,17 @@ Unlike Mini's, its joint has top-K outputs. It installs to
 installation. Conversion and parity checks against NeMo are recorded in
 `activities/2026-11-02-fluid-speech-pro-replaces-nemotron.md`.
 
-Nemotron 3 Diarization comes from `FluidInference/nemotron-3-diarization-coreml`,
-revision `25a90f97f254428d4b30374b76af9c74fdee8327`: the offline monolithic v2
-bundle under `monolithic/v2/` plus `learnable_sil_emb.bin` at the repository
-root, installed flat as `Models/nemotron-3-diarization-offline/<revision>`,
-the layout `Nemotron3Models.load(config: .offline, directory:)` reads.
-`NemotronDiarizerManifest.swift` pins its 5 files, totalling 199,162,403 bytes.
+The speaker diarizer is the pyannote community-1 Core ML set from
+`FluidInference/speaker-diarization-coreml`, revision
+`df2625ac79a7ac6b65ad868fee6d80f320da4232`, the revision FluidAudio 0.18.2
+pins: `Segmentation`, `FBank`, `Embedding` and `PldaRho` (`.mlmodelc`) plus
+`plda-parameters.json`, all at the repository root, installed flat as
+`Models/speaker-diarization-community-1/<revision>`.
+`SpeakerDiarizerManifest.swift` pins its 21 files, totalling 21,599,417 bytes.
+On 2026-11-06 it replaced Nemotron 3 Diarization, which merged similar voices
+(`activities/2026-11-06-offline-speaker-diarizer.md`). The first launch after
+the change removes an old `Models/nemotron-3-diarization-offline` download, and
+the row shows Download again.
 
 English tools come from two Hugging Face repositories, each pinned to one
 commit. `EnglishToolsManifest.swift` pins all 17 files, sizes and SHA-256
@@ -564,7 +580,7 @@ FluidAudio's `NemoTextProcessing` trait is enabled for inverse text
 normalization. It links the prebuilt `text-processing-rs` v0.3.1 static library,
 which contains compiled grammars and no model weights. Only the inference
 binaries link it: the Mac speech helper and the iOS app. The Mac UI does not.
-The `Diarizer` trait is enabled for the meeting diarizer (`Nemotron3Diarizer`).
+The `Diarizer` trait is enabled for the meeting diarizer (`OfflineDiarizerManager`).
 Listing traits turns FluidAudio's defaults off, so the `TTS` trait and its
 resources are not built.
 
