@@ -381,11 +381,11 @@ private struct ClaudeVoiceAlert: ViewModifier {
     let openDictation: () -> Void
     @State private var missing: Missing?
 
-    /// The models not downloaded. Dictation needs only the speech model;
-    /// meetings on the Mac also need the diarizer.
+    /// The models not downloaded, by name. Dictation needs only the speech
+    /// model; meetings on the Mac also need the diarizer.
     private struct Missing {
-        var names: [String]
-        var speechReady: Bool
+        var speech: String?
+        var diarizer: String?
     }
 
     func body(content: Content) -> some View {
@@ -393,7 +393,7 @@ private struct ClaudeVoiceAlert: ViewModifier {
             .onChange(of: provider) { _, value in
                 guard !value.transcribes else { return }
                 let found = Self.missingModels
-                if !found.names.isEmpty { missing = found }
+                if found.speech != nil || found.diarizer != nil { missing = found }
             }
             .alert("Claude needs on-device models for voice",
                    isPresented: Binding(get: { missing != nil }, set: { if !$0 { missing = nil } })) {
@@ -410,12 +410,11 @@ private struct ClaudeVoiceAlert: ViewModifier {
 
     private static var missingModels: Missing {
         let speech = LocalModelStore.store(for: SettingsStore().localSpeechModel)
-        var found = Missing(names: [], speechReady: speech.state == .ready)
-        if !found.speechReady { found.names.append(speech.displayName) }
-        if LocalMeetingTranscriber.diarizes, LocalModelStore.speakerDiarizer.state != .ready {
-            found.names.append(LocalModelStore.speakerDiarizer.displayName)
-        }
-        return found
+        let diarizer = LocalModelStore.speakerDiarizer
+        return Missing(
+            speech: speech.state == .ready ? nil : speech.displayName,
+            diarizer: LocalMeetingTranscriber.diarizes && diarizer.state != .ready ? diarizer.displayName : nil
+        )
     }
 
     private var message: String {
@@ -427,10 +426,15 @@ private struct ClaudeVoiceAlert: ViewModifier {
         guard LocalModelSupport.isAvailable else {
             return "Claude has no speech model, and \(device) can't run on-device models, so dictation and meetings won't be transcribed with Claude."
         }
-        let names = ListFormatter.localizedString(byJoining: missing?.names ?? [])
-        guard missing?.speechReady == true else {
-            return "Claude has no speech model, so dictation and meetings are transcribed on \(device). Download \(names) in \(place); until then, nothing you say is transcribed with Claude."
+        switch (missing?.speech, missing?.diarizer) {
+        case let (speech?, diarizer?):
+            return "Claude has no speech model, so dictation and meetings are transcribed on \(device). Download \(speech) in \(place) to dictate, and \(diarizer) as well for meetings; until then, nothing you say is transcribed with Claude."
+        case let (speech?, nil):
+            return "Claude has no speech model, so dictation and meetings are transcribed on \(device). Download \(speech) in \(place); until then, nothing you say is transcribed with Claude."
+        case let (nil, diarizer?):
+            return "Claude has no speech model, so meetings are transcribed on \(device). Dictation already works on device; download \(diarizer) in \(place) to transcribe meetings with Claude."
+        case (nil, nil):
+            return ""
         }
-        return "Claude has no speech model, so meetings are transcribed on \(device). Dictation already works on device; download \(names) in \(place) to transcribe meetings with Claude."
     }
 }

@@ -102,7 +102,9 @@ speaker-labelled transcript plus a summary, decisions, and owned action items
 under Settings → Meetings. Recording never stops on its own. Meetings run on
 the selected provider, or on the other provider when only its key is saved.
 With no usable key the recording is kept and marked failed with the reason,
-ready to Retry once a key is added. Set **Meeting transcription** to On
+ready to Retry once a key is added. With Claude, meetings are transcribed on
+device only, so Retry works once the on-device models are downloaded, or after
+switching to Gemini or OpenAI with its key. Set **Meeting transcription** to On
 device and download Fluid Speech Mini plus Speaker separation (21.6 MB) to
 get the words and speakers on device, FluidMeet-style; only the transcript
 then goes to the writing model for notes. On iPhone and iPad, Fluid Speech

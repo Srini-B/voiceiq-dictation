@@ -122,7 +122,7 @@ With no usable key, nothing is sent and the recording stays on your Mac.
    Speech model alone on iPhone and iPad, where the transcript has one speaker), the audio never leaves the
    device: the words and speakers are worked out locally, and only the
    transcript is sent, for the notes. If that on-device pass fails and a key is saved, the audio is sent
-   as above. Turn the setting off and no call detection runs.
+   as above, except with Claude, whose meetings never send audio. Turn the setting off and no call detection runs.
    With "Read names from the screen" on (Settings → Dictation, on by default,
    macOS only) and Screen Recording already granted, VoiceiQ takes a snapshot
    of the call window every 3 seconds while recording. It captures only a
