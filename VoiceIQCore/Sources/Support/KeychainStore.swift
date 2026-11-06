@@ -17,7 +17,6 @@ public enum KeychainStore {
         case openAI = "openai-api-key"
         case agentProvider = "agent-provider-api-key"
         case anthropic = "anthropic-api-key"
-        case deepInfra = "deepinfra-api-key"
 
         var label: String {
             switch self {
@@ -26,7 +25,6 @@ public enum KeychainStore {
             case .openAI: return "VoiceiQ — OpenAI API key"
             case .agentProvider: return "VoiceiQ — Agent provider API key"
             case .anthropic: return "VoiceiQ — Anthropic API key"
-            case .deepInfra: return "VoiceiQ — DeepInfra API key"
             }
         }
 
@@ -38,7 +36,6 @@ public enum KeychainStore {
             case .openAI: return "openAIKey"
             case .agentProvider: return "agentProviderKey"
             case .anthropic: return "anthropicKey"
-            case .deepInfra: return "deepInfraKey"
             }
         }
     }
@@ -103,7 +100,7 @@ public enum KeychainStore {
     @discardableResult
     public static func deleteOpenAIKey(notify: Bool = false) -> Bool { delete(.openAI, notify: notify) }
 
-    // MARK: - Claude and DeepInfra
+    // MARK: - Claude
 
     public static func loadKey(_ secret: Secret) -> String? { load(secret, service: service) }
 
@@ -122,10 +119,9 @@ public enum KeychainStore {
         }
     }
 
-    /// Whether the provider can also transcribe in the cloud. Claude needs
-    /// the optional DeepInfra key for that.
+    /// Whether the provider can also transcribe in the cloud. Claude cannot.
     public static func canTranscribe(with provider: ModelProvider) -> Bool {
-        hasKey(for: provider) && (provider != .anthropic || loadKey(.deepInfra) != nil)
+        provider.transcribes && hasKey(for: provider)
     }
 
     public static var canTranscribeInCloud: Bool { canTranscribe(with: SettingsStore().preferredProvider) }

@@ -291,7 +291,7 @@ public struct LocalMeetingPrivacyRow: View {
                 cloudDescription: cloudDescription)
             .onReceive(NotificationCenter.default.publisher(for: .gtSettingDidChange).receive(on: RunLoop.main)) { note in
                 switch note.object as? String {
-                case "meetingSource": enabled = SettingsStore().localMeetingTranscriptionEnabled
+                case "meetingSource", "modelProvider": enabled = SettingsStore().localMeetingTranscriptionEnabled
                 case "localSpeechModel": model = SettingsStore().localSpeechModel
                 default: break
                 }
@@ -335,7 +335,7 @@ public struct LocalAudioPrivacyRow: View {
         Content(store: .store(for: model), localEnabled: localEnabled, provider: provider, cloudDescription: cloudDescription)
             .onReceive(NotificationCenter.default.publisher(for: .gtSettingDidChange).receive(on: RunLoop.main)) { note in
                 switch note.object as? String {
-                case "dictationSource": localEnabled = SettingsStore().localTranscriptionEnabled
+                case "dictationSource", "modelProvider": localEnabled = SettingsStore().localTranscriptionEnabled
                 case "localSpeechModel": model = SettingsStore().localSpeechModel
                 default: break
                 }
@@ -355,7 +355,7 @@ public struct LocalAudioPrivacyRow: View {
         private var value: String {
             let name = store.displayName
             guard let provider else {
-                guard localEnabled else { return "Not sent until you add a DeepInfra key" }
+                guard localEnabled else { return "Not sent: Claude doesn't transcribe" }
                 return store.state == .ready ? "Transcribed on device by \(name)" : "\(name) unavailable, so not sent anywhere"
             }
             guard localEnabled else { return cloudDescription }
@@ -363,5 +363,65 @@ public struct LocalAudioPrivacyRow: View {
                 ? "Transcribed on device by \(name); sent to \(provider) only if that fails"
                 : "\(name) unavailable, so sent to \(provider)"
         }
+    }
+}
+
+extension View {
+    /// Picking Claude, which has no speech model, warns when the on-device
+    /// models that dictation and meetings then need are not downloaded.
+    /// `openDictation` shows the Dictation settings, where they download.
+    @MainActor public func claudeVoiceAlert(provider: ModelProvider, openDictation: @escaping () -> Void) -> some View {
+        modifier(ClaudeVoiceAlert(provider: provider, openDictation: openDictation))
+    }
+}
+
+@MainActor
+private struct ClaudeVoiceAlert: ViewModifier {
+    let provider: ModelProvider
+    let openDictation: () -> Void
+    @State private var missing: [String]?
+
+    func body(content: Content) -> some View {
+        content
+            .onChange(of: provider) { _, value in
+                guard !value.transcribes else { return }
+                let names = Self.missingModels
+                if !names.isEmpty { missing = names }
+            }
+            .alert("Claude needs on-device models for voice",
+                   isPresented: Binding(get: { missing != nil }, set: { if !$0 { missing = nil } })) {
+                if LocalModelSupport.isAvailable {
+                    Button("Open Dictation Settings", action: openDictation)
+                    Button("Later", role: .cancel) {}
+                } else {
+                    Button("OK", role: .cancel) {}
+                }
+            } message: {
+                Text(message)
+            }
+    }
+
+    /// The selected speech model and, where meetings separate speakers, the
+    /// diarizer, each while it is not downloaded.
+    private static var missingModels: [String] {
+        let speech = LocalModelStore.store(for: SettingsStore().localSpeechModel)
+        var names = speech.state == .ready ? [] : [speech.displayName]
+        if LocalMeetingTranscriber.diarizes, LocalModelStore.speakerDiarizer.state != .ready {
+            names.append(LocalModelStore.speakerDiarizer.displayName)
+        }
+        return names
+    }
+
+    private var message: String {
+        #if os(macOS)
+        let device = "this Mac", place = "Settings → Dictation"
+        #else
+        let device = "this iPhone", place = "Settings › Dictation"
+        #endif
+        guard LocalModelSupport.isAvailable else {
+            return "Claude has no speech model, and \(device) can't run on-device models, so dictation and meetings won't be transcribed with Claude."
+        }
+        let names = ListFormatter.localizedString(byJoining: missing ?? [])
+        return "Claude has no speech model, so dictation and meetings are transcribed on \(device). Download \(names) in \(place); until then, nothing you say is transcribed with Claude."
     }
 }

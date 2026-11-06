@@ -26,16 +26,12 @@ public struct MeetingTranscriber: Sendable {
     /// Providers to try in order; see `ModelProvider.meetingOrder`.
     private let providers: @Sendable () -> [ModelProvider]
     private let sleep: @Sendable (TimeInterval) async throws -> Void
-    /// Speaker labels for DeepInfra Nemotron's words, which come with none
-    /// (`LocalMeetingTranscriber.relabel`). Nil keeps the track labels.
-    private let relabel: (@Sendable ([TimedWord], URL) async -> [TimedWord])?
 
     public init(client: GeminiClient, models: Models, endpoint: URL,
                 providers: @escaping @Sendable () -> [ModelProvider],
-                relabel: (@Sendable ([TimedWord], URL) async -> [TimedWord])? = nil,
                 sleep: @escaping @Sendable (TimeInterval) async throws -> Void = { try await Task.sleep(nanoseconds: UInt64($0 * 1_000_000_000)) }) {
         self.client = client; self.models = models; self.endpoint = endpoint; self.providers = providers
-        self.relabel = relabel; self.sleep = sleep
+        self.sleep = sleep
     }
 
     /// Seconds of speech per request. Diarized requests are capped at 30
@@ -45,12 +41,6 @@ public struct MeetingTranscriber: Sendable {
     /// OpenAI's diarizing model gets the same window; it is not measured on a
     /// long call yet.
     static let windowSpeech: Double = 600
-    /// DeepInfra's Nemotron 3.5 Transcribe returns the whole text of a longer
-    /// request but word timings for only its last part, placed past the end
-    /// of the audio. MEASURED 2026-10-29 on one call's far side: 30 to 300 s
-    /// cuts timed every word; 360 s timed 33 of 309 words, and the whole
-    /// 639 s track 38 of 421, at 797 to 860 s.
-    static let deepInfraWindowSpeech: Double = 240
     /// A Tier 1 key needs about one minute of waiting per window; a two-hour
     /// call has twenty windows.
     static let rateLimitBudget: TimeInterval = 45 * 60
@@ -61,14 +51,11 @@ public struct MeetingTranscriber: Sendable {
         // The provider names the window cache, so a redo after switching it
         // transcribes again instead of reusing the other model's windows.
         let first = providers().first
-        // DeepInfra may get any window as a fallback, so every window must fit it.
-        let reachesDeepInfra = providers().contains(.anthropic)
-        let window = reachesDeepInfra ? Self.deepInfraWindowSpeech : Self.windowSpeech
         let cache = folder.appendingPathComponent(
-            "transcribe-\(Self.cacheVersion)-\(first?.rawValue ?? "none")-\(Int(window))", isDirectory: true)
+            "transcribe-\(Self.cacheVersion)-\(first?.rawValue ?? "none")-\(Int(Self.windowSpeech))", isDirectory: true)
         try FileManager.default.createDirectory(at: cache, withIntermediateDirectories: true)
         var budget = Self.rateLimitBudget
-        let windows = Self.windows(audio.activeRegions(), speech: window)
+        let windows = Self.windows(audio.activeRegions(), speech: Self.windowSpeech)
         var words: [TimedWord] = []
         for (index, regions) in windows.enumerated() {
             let file = cache.appendingPathComponent("\(index).json")
@@ -88,15 +75,11 @@ public struct MeetingTranscriber: Sendable {
             if let data = try? Data(contentsOf: file), let cached = try? JSONDecoder().decode([TimedWord].self, from: data) {
                 owner = cached
             } else {
-                owner = try await transcribeOwner(overlaps, audio: audio, window: window, budget: &budget)
+                owner = try await transcribeOwner(overlaps, audio: audio, budget: &budget)
                 try JSONEncoder().encode(owner).write(to: file, options: .atomic)
             }
             words = Self.mergeOwner(owner, into: words, overlaps: overlaps)
         }
-        // DeepInfra labels by track alone, so its far side is one voice; a
-        // diarizing provider that found several keeps its own labels.
-        let farVoices = Set(words.lazy.filter { $0.speaker != MeetingSpeaker.you }.map(\.speaker))
-        if reachesDeepInfra, farVoices.count <= 1, let relabel { words = await relabel(words, folder) }
         words = BrowserSpeakers.apply(words, folder: folder)
         return SpeakerLinker.overlappingTurns(words).map { turn in
             TranscriptSegment(speaker: turn.speaker, text: turn.text, chunkIndex: 0, start: turn.start, end: turn.end)
@@ -110,10 +93,10 @@ public struct MeetingTranscriber: Sendable {
     /// So those stretches are sent again from the echo-cancelled mic alone,
     /// and every word in that answer is the owner's. This is how FluidVoice
     /// keeps double-talk: separate tracks, merged by time.
-    /// Overlaps go in windows of the same size as the main pass, so a long
-    /// call's double talk stays within what DeepInfra can time.
-    private func transcribeOwner(_ regions: [ClosedRange<Double>], audio: CallAudio, window: Double,
+    /// Overlaps go in windows of the same size as the main pass.
+    private func transcribeOwner(_ regions: [ClosedRange<Double>], audio: CallAudio,
                                  budget: inout TimeInterval) async throws -> [TimedWord] {
+        let window = Self.windowSpeech
         // `windows` keeps a long region whole, and one overlap can outlast a window.
         let pieces = regions.flatMap { region in
             stride(from: region.lowerBound, to: region.upperBound, by: window).map {
@@ -335,38 +318,18 @@ public struct MeetingTranscriber: Sendable {
         case .openAI:
             return try await client.openAIDiarize(audio: flac, references: references, deadline: 600)
         case .anthropic:
-            return try await client.deepInfraWords(audio: flac, deadline: 600)
+            // No speech model; `SettingsStore.meetingTranscribers` never lists Claude.
+            throw TranscriptionError.auth
         }
     }
 
     /// Gemini: reference clips go inside the audio and the labels the API
     /// gives them name the speakers (`SpeakerLinker.link`). OpenAI: up to
     /// four named voice references go alongside, and the model labels their
-    /// segments with those names. Claude with DeepInfra: no speaker labels, so
-    /// each word is labelled by the track it was heard on (`labelByTrack`),
-    /// and on the Mac the diarizer splits the far side afterwards (`relabel`).
+    /// segments with those names.
     private func transcribe(window regions: [ClosedRange<Double>], audio: CallAudio, clips: [(key: String, value: [ClosedRange<Double>])],
                             known: [TimedWord], via provider: ModelProvider) async throws -> [TimedWord] {
         var request = AssembledAudio()
-        if provider == .anthropic {
-            try request.appendBody(regions, from: audio)
-            let raw = try await transcribeSpeakers(try FLACEncoder.encode(samples: request.samples), seconds: request.duration,
-                                                   references: [], via: provider)
-            // Untimed words would all land at one moment, under one speaker.
-            // DeepInfra bills by audio length, so the halves bill the window's audio a second time.
-            if !Self.timed(raw, in: request), let (left, right) = Self.halves(regions) {
-                Log.meeting.info("DeepInfra timed \(raw.filter { $0.start != nil }.count, privacy: .public) of \(raw.count, privacy: .public) words in \(Int(request.duration), privacy: .public)s; asking again in halves")
-                let first = try await transcribe(window: left, audio: audio, clips: clips, known: known, via: provider)
-                return first + (try await transcribe(window: right, audio: audio, clips: clips, known: known + first, via: provider))
-            }
-            // Too short to split: a word whose time `place` would drop goes in as untimed text instead.
-            let kept = raw.map { word in
-                word.start.map { request.trackSpan($0, word.end ?? $0) == nil } == true ? DiarizedWord(text: word.text, speaker: word.speaker) : word
-            }
-            let remote = known.first { $0.speaker != MeetingSpeaker.you }?.speaker
-            return Self.place(Self.labelByTrack(kept, audio: request, call: audio), audio: request, call: audio,
-                              known: known, mapping: remote.map { [Self.farLabel: $0] } ?? [:])
-        }
         if provider == .gemini {
             for (id, ranges) in clips { try request.appendAnchor(id: id, clips: ranges, from: audio) }
             try request.appendBody(regions, from: audio)
@@ -387,55 +350,6 @@ public struct MeetingTranscriber: Sendable {
                                                references: references, via: provider)
         let mapping = Dictionary(uniqueKeysWithValues: references.map { ($0.id, $0.id) })
         return Self.place(raw, audio: request, call: audio, known: known, mapping: mapping)
-    }
-
-    static let farLabel = "far"
-
-    /// Every word carries a time inside the request. DeepInfra's Nemotron has
-    /// timed none of a 240 s request's words (the Nov 2 call: about 1 KB of
-    /// plain text per window) and, on longer ones, only the last few, placed
-    /// past the end of the audio. A time `place` would drop (before the
-    /// request starts, say) counts as no time.
-    static func timed(_ words: [DiarizedWord], in request: AssembledAudio) -> Bool {
-        words.allSatisfy { word in
-            word.start.map { (word.end ?? $0) <= request.duration + 1 && request.trackSpan($0, word.end ?? $0) != nil } ?? false
-        }
-    }
-
-    /// The shortest half a window is split into; shorter untimed text stays one turn.
-    static let shortestWindow: Double = 30
-
-    static func halves(_ regions: [ClosedRange<Double>]) -> ([ClosedRange<Double>], [ClosedRange<Double>])? {
-        let total = regions.reduce(0) { $0 + $1.upperBound - $1.lowerBound }
-        guard total >= 2 * shortestWindow else { return nil }
-        var left: [ClosedRange<Double>] = [], right: [ClosedRange<Double>] = [], before = 0.0
-        for region in regions {
-            let length = region.upperBound - region.lowerBound
-            if before + length <= total / 2 { left.append(region) }
-            else if before >= total / 2 { right.append(region) }
-            else {
-                let cut = region.lowerBound + total / 2 - before
-                left.append(region.lowerBound...cut); right.append(cut...region.upperBound)
-            }
-            before += length
-        }
-        return (left, right)
-    }
-
-    /// Words with no speaker, labelled by track: on a call, a word heard more
-    /// on the mic than the far side is "mic" (`place` turns that into the
-    /// owner) and the rest is the far side, one speaker for everyone there.
-    /// Without a far side every word is one speaker.
-    static func labelByTrack(_ words: [DiarizedWord], audio request: AssembledAudio, call: CallAudio) -> [DiarizedWord] {
-        words.map { word in
-            var labelled = word
-            labelled.speaker = farLabel
-            if call.isOnline, let start = word.start, let span = request.trackSpan(start, word.end ?? start) {
-                let source = call.sources(span)
-                if source.mic > source.system { labelled.speaker = "mic" }
-            }
-            return labelled
-        }
     }
 
     /// The owner first, then the speakers with the most reference audio, up

@@ -49,7 +49,6 @@ public actor GeminiClient {
     /// Read per call, like `provider`, so a model override applies at once.
     let openAIConfig: @Sendable () -> OpenAIConfig
     let anthropicKey: @Sendable () -> String?
-    let deepInfraKey: @Sendable () -> String?
     /// Read per call, so flipping the provider in Settings takes effect on
     /// the next request without rebuilding the client.
     let provider: @Sendable () -> ModelProvider
@@ -59,7 +58,6 @@ public actor GeminiClient {
         openAIKey: @escaping @Sendable () -> String? = { nil },
         openAIConfig: @escaping @Sendable () -> OpenAIConfig = { OpenAIConfig() },
         anthropicKey: @escaping @Sendable () -> String? = { nil },
-        deepInfraKey: @escaping @Sendable () -> String? = { nil },
         provider: @escaping @Sendable () -> ModelProvider = { .gemini }
     ) {
         self.session = Self.makeSession()
@@ -67,7 +65,6 @@ public actor GeminiClient {
         self.openAIKey = openAIKey
         self.openAIConfig = openAIConfig
         self.anthropicKey = anthropicKey
-        self.deepInfraKey = deepInfraKey
         self.provider = provider
     }
 
@@ -237,7 +234,7 @@ public actor GeminiClient {
             let usage: TokenUsage? = switch via {
             case .gemini: TokenUsage.fromGenerateContent(data) ?? TokenUsage.fromInteraction(data)
             case .openAI: TokenUsage.fromOpenAIDuration(data, model: modelLabel) ?? TokenUsage.fromOpenAI(data)
-            case .anthropic: TokenUsage.fromAnthropic(data) ?? TokenUsage.fromTranscriptDuration(data, model: modelLabel)
+            case .anthropic: TokenUsage.fromAnthropic(data)
             }
             if let usage {
                 UsageMeter.record(stage: stage, model: modelLabel, usage: usage)
@@ -323,7 +320,8 @@ public actor GeminiClient {
             // cleanup pass does the formatting.
             return try await openAITranscribe(audio: audio, mimeType: mimeType, keywords: customVocabulary, deadline: deadline)
         case .anthropic:
-            return try await deepInfraTranscribe(audio: audio, mimeType: mimeType, vocabulary: customVocabulary, deadline: deadline)
+            // Claude has no speech model; dictation with it is transcribed on device.
+            throw TranscriptionError.auth
         case .gemini: break
         }
         var body: [String: Any] = [
@@ -463,10 +461,7 @@ public actor GeminiClient {
                 request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
             }
         case .anthropic:
-            // Two hosts under one provider: each key goes only to its own host.
-            if request.url?.host == Self.deepInfraEndpoint.host {
-                if let key = deepInfraKey() { request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization") }
-            } else if let key = anthropicKey() {
+            if let key = anthropicKey() {
                 request.setValue(key, forHTTPHeaderField: "x-api-key")
                 request.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
             }

@@ -1,12 +1,10 @@
 import Foundation
 
 /// Claude's models for each role: Claude Sonnet 5.5 does all the writing:
-/// cleanup, Ask Anything, Translate, meeting notes and agent mode. With the
-/// optional DeepInfra key, NVIDIA Nemotron 3.5 Transcribe on DeepInfra hears
-/// recordings that are not transcribed on device. Haiku 5.5 wrote cleanup until 2026-10-30, when the user
-/// found its cleanups too weak.
+/// cleanup, Ask Anything, Translate, meeting notes and agent mode. Claude has
+/// no speech model, so with it recordings are transcribed on device. Haiku 5.5
+/// wrote cleanup until 2026-10-30, when the user found its cleanups too weak.
 public struct AnthropicConfig: Sendable, Equatable {
-    public var transcribeModel = "nvidia/NVIDIA-Nemotron-3.5-Transcribe-30B-A4B"
     public var writingModel = "claude-sonnet-5-5"
     public var notesModel = "claude-sonnet-5-5"
     public var agentModel = "claude-sonnet-5-5"
@@ -14,72 +12,9 @@ public struct AnthropicConfig: Sendable, Equatable {
     public init() {}
 }
 
-/// Anthropic's Messages API and DeepInfra's OpenAI-compatible speech API.
-///
-/// Probed 2026-10-29 with real keys:
-///  - DeepInfra `/audio/transcriptions` takes the app's FLAC as is, uses
-///    `prompt` as context (a dictionary word came back spelled as given), and
-///    with `verbose_json` returns word timestamps and the audio `duration`.
-///  - It has no speaker labels: the model card's `<spk:N>` instruction, sent
-///    as `prompt`, came back as plain text, and DeepInfra does not serve the
-///    model on chat completions (404). Meetings label words by the track they
-///    were heard on instead (`MeetingTranscriber`).
+/// Anthropic's Messages API.
 extension GeminiClient {
     static let anthropicEndpoint = URL(string: "https://api.anthropic.com/v1")!
-    static let deepInfraEndpoint = URL(string: "https://api.deepinfra.com/v1/openai")!
-
-    /// Dictation: the transcript text. The dictionary rides along as `prompt`.
-    func deepInfraTranscribe(audio: Data, mimeType: String = "audio/flac", vocabulary: [String],
-                             deadline: TimeInterval) async throws -> String {
-        let data = try await deepInfraTranscription(audio: audio, mimeType: mimeType, vocabulary: vocabulary,
-                                                    words: false, deadline: deadline, stage: .transcribe)
-        return try Self.extractTranscriptText(from: data)
-    }
-
-    /// Meetings: timed words with no speaker; the caller labels them.
-    func deepInfraWords(audio: Data, deadline: TimeInterval) async throws -> [DiarizedWord] {
-        let data = try await deepInfraTranscription(audio: audio, mimeType: "audio/flac", vocabulary: [],
-                                                    words: true, deadline: deadline, stage: .meetingTranscribe)
-        return try Self.parseDeepInfraWords(data)
-    }
-
-    /// Live dictation: one piece of the recording (`DeepInfraLiveTranscriber`).
-    func deepInfraLiveText(wav: Data, vocabulary: [String], deadline: TimeInterval) async throws -> String {
-        let data = try await deepInfraTranscription(audio: wav, mimeType: "audio/wav", vocabulary: vocabulary,
-                                                    words: false, deadline: deadline, stage: .liveTranscribe)
-        return try Self.extractTranscriptText(from: data).trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    private func deepInfraTranscription(audio: Data, mimeType: String, vocabulary: [String], words: Bool,
-                                        deadline: TimeInterval, stage: UsageStage) async throws -> Data {
-        // No DeepInfra key: audio must not reach a host the user never set up.
-        guard deepInfraKey() != nil else { throw TranscriptionError.auth }
-        let model = AnthropicConfig().transcribeModel
-        var form = MultipartForm()
-        form.field("model", model)
-        form.file("file", filename: "audio.\(Self.audioFormat(mimeType))", mimeType: mimeType, data: audio)
-        // verbose_json carries `duration`, which is what DeepInfra bills.
-        form.field("response_format", "verbose_json")
-        if words { form.field("timestamp_granularities[]", "word") }
-        if !vocabulary.isEmpty { form.field("prompt", vocabulary.joined(separator: ", ")) }
-        return try await post(path: "audio/transcriptions", body: form.body, endpoint: Self.deepInfraEndpoint,
-                              deadline: deadline, modelLabel: model, modelIsInPath: false, stage: stage,
-                              via: .anthropic, extraHeaders: ["Content-Type": form.contentType])
-    }
-
-    static func parseDeepInfraWords(_ data: Data) throws -> [DiarizedWord] {
-        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            throw TranscriptionError.network("unparseable_response")
-        }
-        let words = (json["words"] as? [[String: Any]] ?? []).compactMap { word -> DiarizedWord? in
-            guard let text = word["word"] as? String else { return nil }
-            return DiarizedWord(text: text, speaker: nil, start: (word["start"] as? NSNumber)?.doubleValue,
-                                end: (word["end"] as? NSNumber)?.doubleValue)
-        }
-        if !words.isEmpty { return words }
-        let text = (json["text"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        return text.isEmpty ? [] : [DiarizedWord(text: text, speaker: nil)]
-    }
 
     /// One Claude reply. A cleanup prompt's rules go in `system` and the user
     /// turn holds the labelled screenshots and the dictation, the layout
@@ -132,13 +67,6 @@ extension GeminiClient {
         var request = URLRequest(url: anthropicEndpoint.appendingPathComponent("models"))
         request.setValue(key, forHTTPHeaderField: "x-api-key")
         request.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
-        return await check(request)
-    }
-
-    /// `GET /v1/me`, which needs a key; DeepInfra's model list answers 200 without one.
-    public static func validateDeepInfraKey(_ key: String) async -> KeyCheck {
-        var request = URLRequest(url: URL(string: "https://api.deepinfra.com/v1/me")!)
-        request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
         return await check(request)
     }
 

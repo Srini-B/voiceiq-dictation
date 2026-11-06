@@ -174,8 +174,11 @@ struct DictationSettingsView: View {
                 }))
             }
             Section {
-                TranscriptionSourcePicker("Transcription", selection: $dictationSource)
-                    .onChange(of: dictationSource) { _, value in settings.setDictationSource(value) }
+                // Saved only on a user change, not when the provider changes what it reads as.
+                TranscriptionSourcePicker("Transcription", selection: Binding(get: { dictationSource }, set: {
+                    dictationSource = $0
+                    settings.setDictationSource($0)
+                }))
                     // Here, not on the controls: they expand to several rows.
                     .onChange(of: localModel) { _, value in settings.setLocalSpeechModel(value) }
                 LocalModelControls(localEnabled: dictationSource == .onDevice, meetingsLocal: meetingSource == .onDevice,
@@ -184,8 +187,10 @@ struct DictationSettingsView: View {
                 LocalModelFooter(localEnabled: dictationSource == .onDevice, selection: localModel)
             }
             Section {
-                TranscriptionSourcePicker("Notes transcription", selection: $meetingSource)
-                    .onChange(of: meetingSource) { _, value in settings.setMeetingSource(value) }
+                TranscriptionSourcePicker("Notes transcription", selection: Binding(get: { meetingSource }, set: {
+                    meetingSource = $0
+                    settings.setMeetingSource($0)
+                }))
                 LocalMeetingControls(meetingsLocal: meetingSource == .onDevice)
             } header: { SettingsSectionHeader("Notes transcription") } footer: {
                 LocalMeetingFooter(enabled: meetingSource == .onDevice, model: localModel)
@@ -226,7 +231,10 @@ struct DictationSettingsView: View {
             case "dictationSource":
                 dictationSource = settings.dictationSource
                 liveTranscription = settings.liveTranscriptionEnabled
-            case "modelProvider": liveTranscription = settings.liveTranscriptionEnabled
+            case "modelProvider":
+                liveTranscription = settings.liveTranscriptionEnabled
+                dictationSource = settings.dictationSource
+                meetingSource = settings.meetingSource
             case "meetingSource": meetingSource = settings.meetingSource
             case "localSpeechModel": localModel = settings.localSpeechModel
             case "liveDictationEnabled": liveTranscription = settings.liveTranscriptionEnabled
@@ -379,13 +387,11 @@ struct PrivacyView: View {
 
     @State private var meetingTranscribers = SettingsStore().meetingTranscribers
 
-    /// Who hears the audio: Claude sends it to DeepInfra only.
-    private var audioOwner: String { provider == .anthropic ? "DeepInfra" : provider.directName }
-    private var destination: String { "\(audioOwner), with your key" }
+    private var destination: String { "\(provider.directName), with your key" }
     /// Meetings go to the first provider with a key, then to each other one
     /// in turn while the earlier ones fail.
     private var meetingOwner: String {
-        let names = meetingTranscribers.map { $0 == .anthropic ? "DeepInfra" : $0.directName }
+        let names = meetingTranscribers.map(\.directName)
         guard let first = names.first else { return provider.directName }
         let rest = names.dropFirst()
         guard let last = rest.last else { return first }
@@ -414,12 +420,13 @@ struct PrivacyView: View {
                 }
             }
             Section {
-                LocalAudioPrivacyRow(provider: SettingsStore().providerTranscribes ? audioOwner : nil, cloudDescription: destination)
+                LocalAudioPrivacyRow(provider: SettingsStore().providerTranscribes ? provider.directName : nil, cloudDescription: destination)
                 LabeledContent("Transcript text", value: "For writing rules, Ask and Translate")
                 LocalMeetingPrivacyRow(
                     label: "Notes audio",
                     localDescription: { "Transcribed on device by \($0); transcript to \(provider.displayName) for notes" },
-                    cloudDescription: "\(meetingOwner), then notes by \(provider.displayName)")
+                    cloudDescription: SettingsStore().providerTranscribes
+                        ? "\(meetingOwner), then notes by \(provider.displayName)" : "Not sent: Claude doesn't transcribe")
                 LabeledContent("Dictionary terms", value: "With cloud transcription and cleanup")
                 LabeledContent("Dictionary", value: "Your iCloud, to sync")
                 LabeledContent("History", value: "Your iCloud, to sync final text")

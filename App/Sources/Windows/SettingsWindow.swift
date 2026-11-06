@@ -213,7 +213,7 @@ private struct MainView: View {
             case .privacy:
                 PrivacyPane(onDeleteAllHistory: onDeleteAllHistory).formStyle(.grouped)
             case .advanced:
-                AdvancedPane().formStyle(.grouped)
+                AdvancedPane(openDictation: { model.selection = .dictation }).formStyle(.grouped)
             case .about:
                 AboutPane()
             }
@@ -274,22 +274,18 @@ struct PrivacyPane: View {
         case .anthropic: return "Anthropic"
         }
     }
-    /// Who hears the audio: Claude sends it to DeepInfra only.
-    private var audioOwner: String { provider == .anthropic ? "DeepInfra" : Self.host(provider) }
-    /// Every host this setup can send to: the provider, its audio host, and
-    /// the meeting transcript and notes fallbacks.
+    /// Every host this setup can send to: the provider, and the meeting
+    /// transcript and notes fallbacks.
     private var hosts: String {
-        let audio = settings.providerTranscribes ? [audioOwner] : []
-        let meetingAudio = meetingTranscribers.map { $0 == .anthropic ? "DeepInfra" : Self.host($0) }
         var names: [String] = []
-        for name in [Self.host(provider)] + audio + meetingAudio + settings.meetingProviders.map(Self.host)
+        for name in [Self.host(provider)] + meetingTranscribers.map(Self.host) + settings.meetingProviders.map(Self.host)
         where !names.contains(name) { names.append(name) }
         return ListFormatter.localizedString(byJoining: names)
     }
     /// Meetings go to the first provider with a key, then to each other one
     /// in turn while the earlier ones fail.
     private var meetingOwner: String {
-        let names = meetingTranscribers.map { $0 == .anthropic ? "DeepInfra" : $0.displayName }
+        let names = meetingTranscribers.map(\.displayName)
         guard let first = names.first else { return provider.displayName }
         let rest = names.dropFirst()
         guard let last = rest.last else { return first }
@@ -359,14 +355,16 @@ struct PrivacyPane: View {
             }
 
             Section {
-                LocalAudioPrivacyRow(provider: settings.providerTranscribes ? audioOwner : nil, cloudDescription: "Sent to \(audioOwner) with your key, transcribed every time")
+                LocalAudioPrivacyRow(provider: settings.providerTranscribes ? Self.host(provider) : nil, cloudDescription: "Sent to \(Self.host(provider)) with your key, transcribed every time")
                 LabeledContent("Transcript text") { Text("Sent back only for writing rules, Ask Anything and Translate") }
                 LabeledContent("Text around the cursor") { Text("Only if Fit to existing text and writing rules are on") }
                 LabeledContent("Where you are typing") { Text("App name, window title and browser page address, only with writing rules") }
                 LocalMeetingPrivacyRow(
                     label: "Meeting audio",
                     localDescription: { "Transcribed on device by \($0); only the transcript goes to \(provider.displayName) for notes" },
-                    cloudDescription: "Only if call recording is on; transcribed by \(meetingOwner), notes are made by \(provider.displayName)")
+                    cloudDescription: settings.providerTranscribes
+                        ? "Only if call recording is on; transcribed by \(meetingOwner), notes are made by \(provider.displayName)"
+                        : "Not sent: Claude doesn't transcribe")
                 LabeledContent("Dictionary terms") { Text("Sent with cloud transcription and cleanup, so names are spelled right") }
                 LabeledContent("Dictionary") { Text("Synced to your iPhone through your iCloud account") }
                 LabeledContent("History") { Text("Final text synced to your iPhone through your iCloud account") }
@@ -410,6 +408,7 @@ struct PrivacyPane: View {
 
 struct AdvancedPane: View {
     private let settings = SettingsStore()
+    private let openDictation: () -> Void
     /// Placeholders derive from the REAL defaults — a hardcoded string went
     /// stale the day the preview model was retired (dogfood).
     private static let defaultConfig = GeminiConfig()
@@ -431,16 +430,18 @@ struct AdvancedPane: View {
     }
     @State private var provider = SettingsStore().preferredProvider
 
+    init(openDictation: @escaping () -> Void) {
+        self.openDictation = openDictation
+    }
+
     var body: some View {
         Form {
-            ProviderSection(provider: $provider)
+            ProviderSection(provider: $provider, openDictation: openDictation)
 
             switch provider {
             case .gemini: geminiKeySection
             case .openAI: ProviderKeySection.openAI
-            case .anthropic:
-                ProviderKeySection.anthropic
-                ProviderKeySection.deepInfra
+            case .anthropic: ProviderKeySection.anthropic
             }
 
             TinyFishKeySection()

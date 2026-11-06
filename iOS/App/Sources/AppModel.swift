@@ -53,7 +53,6 @@ final class AppModel: ObservableObject {
             openAIKey: { KeychainStore.loadOpenAIKey() },
             openAIConfig: { SettingsStore().openAIConfig },
             anthropicKey: { KeychainStore.loadKey(.anthropic) },
-            deepInfraKey: { KeychainStore.loadKey(.deepInfra) },
             provider: { SettingsStore().preferredProvider }
         )
         transcription = GeminiTranscriptionService(client: client)
@@ -601,7 +600,7 @@ final class AppModel: ObservableObject {
             switch failure {
             case .auth:
                 return KeychainStore.hasModelKey && !KeychainStore.canTranscribeInCloud
-                    ? "Claude needs On device or a DeepInfra key. It's in History."
+                    ? "Claude transcribes only on device. It's in History."
                     : "API key rejected. Check it in VoiceiQ."
             case .modelAccess: return "Model unavailable. Check Settings › Advanced."
             case .network: return "Couldn't reach the model. It's saved in History."

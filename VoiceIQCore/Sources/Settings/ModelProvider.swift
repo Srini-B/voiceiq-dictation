@@ -2,8 +2,8 @@ import Foundation
 
 /// Whose models run: Gemini's, OpenAI's, or Claude's, each on its own API with
 /// its own key. Settings calls this the provider. Gemini and OpenAI also
-/// transcribe. Claude only writes: it transcribes in the cloud only with an
-/// optional DeepInfra key for Nemotron 3.5 Transcribe, otherwise on device.
+/// transcribe. Claude only writes, so with Claude recordings are transcribed
+/// on device.
 public enum ModelProvider: String, CaseIterable, Sendable, Codable, Identifiable {
     case gemini
     case openAI
@@ -28,9 +28,13 @@ public enum ModelProvider: String, CaseIterable, Sendable, Codable, Identifiable
         }
     }
 
+    /// Whether the provider has a speech model of its own.
+    public var transcribes: Bool { self != .anthropic }
+
     /// Usage records store only the model ID; the provider is read off it.
     /// The `google/` and `openai/` prefixes match rows booked before the
-    /// gateways were removed.
+    /// gateways were removed, and `nvidia/` rows booked while Claude
+    /// transcribed with Nemotron on DeepInfra.
     public init?(modelID: String) {
         let id = modelID.lowercased()
         if Self.gemini.modelPrefixes.contains(where: id.hasPrefix) { self = .gemini }
@@ -53,7 +57,7 @@ public enum ModelProvider: String, CaseIterable, Sendable, Codable, Identifiable
         switch self {
         case .gemini: return "Paid-tier Standard prices from the Gemini API pricing page. A free-tier key is billed nothing."
         case .openAI: return "Standard prices from the OpenAI API pricing page."
-        case .anthropic: return "Standard prices from Anthropic's pricing page; Nemotron at DeepInfra's per-minute price."
+        case .anthropic: return "Standard prices from Anthropic's pricing page."
         }
     }
 
@@ -76,7 +80,7 @@ public enum TranscriptionSource: String, CaseIterable, Sendable, Identifiable {
     public func displayName(for provider: ModelProvider) -> String {
         switch self {
         case .onDevice: return "On device"
-        case .provider: return provider == .anthropic ? "Nemotron 3.5" : provider.displayName
+        case .provider: return provider.transcribes ? provider.displayName : "Cloud"
         }
     }
 }

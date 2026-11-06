@@ -55,7 +55,6 @@ final class DictationController {
             openAIKey: { KeychainStore.loadOpenAIKey() },
             openAIConfig: { SettingsStore().openAIConfig },
             anthropicKey: { KeychainStore.loadKey(.anthropic) },
-            deepInfraKey: { KeychainStore.loadKey(.deepInfra) },
             provider: { SettingsStore().preferredProvider }
         )
         let service = GeminiTranscriptionService(client: client)
@@ -434,7 +433,7 @@ final class DictationController {
             if !engineActive {
                 activateEngine()
             }
-        case "apiKey", "openAIKey", "anthropicKey", "deepInfraKey", "modelProvider":
+        case "apiKey", "openAIKey", "anthropicKey", "modelProvider":
             if KeychainStore.hasModelKey {
                 // Covers the "I'll add it later" onboarding path, where the
                 // engine was never started: a key arriving in Settings must
@@ -1211,7 +1210,7 @@ final class DictationController {
             if !KeychainStore.hasModelKey { return "Add your API key in Settings — recording saved to History" }
             return KeychainStore.canTranscribeInCloud
                 ? "API key isn't working — saved to History"
-                : "Claude needs On device or a DeepInfra key — saved to History"
+                : "Claude transcribes only on device — saved to History"
         case .modelAccess:
             return SettingsStore().transcribeModelOverride != nil
                 ? "That model isn't available to your key — check Settings → Advanced. Saved to History"

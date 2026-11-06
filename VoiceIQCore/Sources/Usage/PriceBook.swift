@@ -79,8 +79,6 @@ public enum PriceBook {
         ("gpt-4o-transcribe", 0.006),
         // No longer called; prices rows booked by older builds.
         ("whisper-1", 0.006),
-        // DeepInfra, copied 2026-10-29.
-        ("nvidia-nemotron-3.5-transcribe", 0.002),
     ]
 
     public static func perMinutePrice(for model: String) -> Double? {

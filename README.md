@@ -51,7 +51,7 @@ listening until you actually stop.
 
 **It is private by architecture.** Your voice is transcribed on device, or goes
 from your Mac straight to the provider you choose with *your* key: Gemini or
-OpenAI, or for Claude, DeepInfra hears the audio and Anthropic gets the text. No middleman server, no
+OpenAI. Claude only writes, so with Claude your voice is transcribed on device and Anthropic gets the text. No middleman server, no
 account, no analytics, no keystroke logging — one network host per dictation step,
 and you can read every line of the code that talks to it. Screen context (a few downscaled screenshots sent with each
 dictation so on-screen names and paths are spelled right) can be switched off

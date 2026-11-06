@@ -1,7 +1,8 @@
 import Foundation
 
 /// Whose bill a usage record lands on, for the Cost pane: Gemini, OpenAI, or
-/// Claude (Anthropic, and DeepInfra for its optional cloud transcription).
+/// Claude (Anthropic, and DeepInfra for rows booked while Claude transcribed
+/// with Nemotron there).
 /// Records store only the model ID, so the source is read off its prefix.
 public enum CostSource: String, CaseIterable, Sendable, Identifiable {
     case gemini

@@ -90,12 +90,8 @@ public struct SettingsStore: Sendable {
     /// On by default since 2026-10-13: the transcript is finished when the
     /// user stops, so the wait is the writing model alone (measured 2.95 s
     /// end to end against 4.45 s median for batch). A refused socket falls
-    /// back to the saved recording on its own. Off by default for Claude
-    /// with Nemotron 3.5 picked: its live path re-sends audio and costs
-    /// several times an upload, so it starts only once the user turns it on.
-    public var liveTranscriptionEnabled: Bool {
-        liveTranscriptionChosen ?? !(preferredProvider == .anthropic && dictationSource == .provider)
-    }
+    /// back to the saved recording on its own.
+    public var liveTranscriptionEnabled: Bool { liveTranscriptionChosen ?? true }
 
     /// The user's own setting, nil until they change the toggle.
     public var liveTranscriptionChosen: Bool? {
@@ -110,9 +106,10 @@ public struct SettingsStore: Sendable {
     /// Who transcribes dictation. Reads the pre-picker boolean when the key
     /// is absent: on-device on → `.onDevice`, otherwise the provider. A value
     /// this build no longer offers (ElevenLabs) reads as the provider. On a
-    /// device without local models `.onDevice` reads as the provider.
+    /// device without local models `.onDevice` reads as the provider. Where
+    /// local models run, Claude reads as `.onDevice`: it has no speech model.
     public var dictationSource: TranscriptionSource {
-        Self.source(forKey: "dictationSource", legacyLocalKey: "localTranscriptionEnabled")
+        source(forKey: "dictationSource", legacyLocalKey: "localTranscriptionEnabled")
     }
 
     public func setDictationSource(_ source: TranscriptionSource) {
@@ -121,22 +118,21 @@ public struct SettingsStore: Sendable {
 
     public var localTranscriptionEnabled: Bool { dictationSource == .onDevice }
 
-    private static func source(forKey key: String, legacyLocalKey: String) -> TranscriptionSource {
+    private func source(forKey key: String, legacyLocalKey: String) -> TranscriptionSource {
         let stored: TranscriptionSource
-        if let raw = defaults.string(forKey: key) {
+        if let raw = Self.defaults.string(forKey: key) {
             stored = TranscriptionSource(rawValue: raw) ?? .provider
-        } else if defaults.bool(forKey: legacyLocalKey) {
+        } else if Self.defaults.bool(forKey: legacyLocalKey) {
             stored = .onDevice
         } else {
             stored = .provider
         }
-        return stored == .onDevice && !LocalModelSupport.isAvailable ? .provider : stored
+        guard LocalModelSupport.isAvailable else { return .provider }
+        return preferredProvider.transcribes ? stored : .onDevice
     }
 
-    /// False for Claude without a DeepInfra key: no cloud speech model.
-    public var providerTranscribes: Bool {
-        preferredProvider != .anthropic || KeychainStore.loadKey(.deepInfra) != nil
-    }
+    /// False for Claude: no cloud speech model.
+    public var providerTranscribes: Bool { preferredProvider.transcribes }
 
     /// The on-device model to download and use. Unknown, missing, or
     /// platform-unavailable values read as Fluid Speech Mini.
@@ -169,9 +165,9 @@ public struct SettingsStore: Sendable {
 
     /// Who transcribes meetings. On device needs the selected model and, on the
     /// Mac, the speaker diarizer downloaded; notes still come from the cloud writing
-    /// model. Same legacy reading as `dictationSource`.
+    /// model. Same legacy reading and Claude rule as `dictationSource`.
     public var meetingSource: TranscriptionSource {
-        Self.source(forKey: "meetingSource", legacyLocalKey: "localMeetingTranscriptionEnabled")
+        source(forKey: "meetingSource", legacyLocalKey: "localMeetingTranscriptionEnabled")
     }
 
     public func setMeetingSource(_ source: TranscriptionSource) {
@@ -186,9 +182,9 @@ public struct SettingsStore: Sendable {
     }
 
     /// Providers for cloud meeting transcription: `meetingProviders` that can
-    /// transcribe.
+    /// transcribe. None on Claude, whose meetings are transcribed only on device.
     public var meetingTranscribers: [ModelProvider] {
-        meetingProviders.filter(KeychainStore.canTranscribe(with:))
+        preferredProvider.transcribes ? meetingProviders.filter(KeychainStore.canTranscribe(with:)) : []
     }
 
     /// Show the resting dot at the bottom of the screen when idle. Off = the pill

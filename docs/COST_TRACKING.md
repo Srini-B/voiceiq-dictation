@@ -61,12 +61,6 @@ OpenAI live transcription estimates cost from accepted audio duration at
 $0.017/minute. Live and batch fallback attempts appear as separate stages
 under the same dictation. A failed live attempt can therefore add cost even
 when the final transcript comes from a batch upload.
-The Mac's live Nemotron 3.5 Transcribe (`DeepInfraLiveTranscriber`) books
-each DeepInfra request, the last piece included, as `liveTranscribe` from its
-reported `duration`. Every request carries the whole open tail (up to about
-13 s), so a dictation bills three to four times its length: 81 s for a 22 s
-dictation and 156 s for a 50 s one, measured 2026-11-02. When it falls back,
-the upload is booked as `transcribe` too.
 
 On OpenAI's own API, the transcription models (`gpt-transcribe`,
 `gpt-4o-transcribe`, and `whisper-1`, which older builds also called
@@ -77,9 +71,9 @@ counts. Chat models (GPT-6.1 Terra, GPT-6 Astra, GPT-6 Luna, and
 `gpt-4o-transcribe-diarize`, which bills tokens) use the OpenAI-shaped
 `usage` block (`TokenUsage.fromOpenAI`).
 
-On Claude with the DeepInfra key, DeepInfra's `verbose_json` transcript has no usage block;
-`TokenUsage.fromTranscriptDuration` books its `duration` at Nemotron 3.5
-Transcribe's $0.002 per minute. Claude calls use `TokenUsage.fromAnthropic`.
+Claude calls use `TokenUsage.fromAnthropic`. Rows booked before 2026-11-06,
+when Claude could transcribe with Nemotron 3.5 Transcribe on DeepInfra, keep
+their stored cost and still count under Claude (`nvidia/` model IDs).
 Cleanup marks the rules up to `PromptV1.layoutReminder` with Anthropic's
 `cache_control` with a one-hour TTL (`GeminiClient.anthropicCleanupSplit`), so
 dictations within an hour of the last one read them from the cache. Measured

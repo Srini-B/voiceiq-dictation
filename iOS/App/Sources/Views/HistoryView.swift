@@ -267,6 +267,10 @@ private struct HistoryDetail: View {
                 divider
                 DetailRow(label: "Length", value: Duration.seconds(seconds).formatted(.time(pattern: .minuteSecond)))
             }
+            if let pipeline = record.pipelineSeconds {
+                divider
+                DetailRow(label: "Pipeline", value: String(format: "%.2fs", pipeline))
+            }
             if !calls.isEmpty {
                 divider
                 DetailRow(label: "Cost", value: UsageView.money(

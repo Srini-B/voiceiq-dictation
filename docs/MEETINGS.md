@@ -123,66 +123,18 @@ Before 2026-10-27 every recording needed 20 s. A 2.5-minute Meet call had
 15.9 s, so the owner became an ordinary speaker and got a participant's name
 from the screen.
 
-## Speakers on Claude with DeepInfra
+## Meetings on Claude
 
-DeepInfra serves Nemotron 3.5 Transcribe without speaker labels: the model
-card's `<spk:N>` instruction, sent as the `prompt`, comes back as plain text,
-and the model is not on DeepInfra's chat completions. So on this provider
-`MeetingTranscriber` asks for timed words (`GeminiClient.deepInfraWords`) and
-labels each word by the track it was heard on (`MeetingTranscriber.labelByTrack`):
-
-- On a call, a word heard more on the mic than the far side is the note owner
-  (`you`); everyone on the far side is one speaker (`s1`).
-- Off a call (in person, or on iPhone, which records the mic alone), the whole
-  meeting is one speaker.
-
-Measured 2026-10-29 on a synthetic 41 s two-person call started as a detected
-Zoom call: all six turns landed on the right side.
-
-Each request holds 240 s of speech (`MeetingTranscriber.deepInfraWindowSpeech`),
-not the 600 s other providers get. The shorter window applies whenever a
-DeepInfra key is saved, even with another provider first, because a failed
-window can fall back to DeepInfra. Above 300 s of audio DeepInfra still returns
-the whole text, but word timings for only the last part, stamped past the end
-of the file (measured 2026-10-29: 38 of 421 words timed on a 639 s track).
-
-DeepInfra can also return a window with no word times. On 2026-11-02 it
-returned about 1 KB of plain text for each 240 s window, so all the words of
-a window landed at one moment and became one speaker.
-`MeetingTranscriber.timed` checks that every word has a start time that
-`AssembledAudio.trackSpan` accepts (not before the request's body, say) and
-that the word ends no more than 1 s past the end of the request. When a
-window fails that check, `MeetingTranscriber.halves` cuts its speech into two
-halves of about equal length, and each half is requested and checked again.
-A window under 60 s is not cut, so the shortest request is 30 s
-(`shortestWindow`), and its untimed text stays one turn. In a window that is
-not cut, a word whose time `trackSpan` rejects is kept as untimed text
-rather than dropped. DeepInfra bills by
-audio length, so each split bills that window's audio a second time. The cached
-windows moved from `transcribe-v6-*` to `transcribe-v7-*` (`cacheVersion`),
-so a Retry of an older meeting requests every window again. Scratch tests on
-the Mac mini checked the split; it was not run against DeepInfra, because
-that Mac has no DeepInfra key.
-
-On the Mac, when Speaker Separation (pyannote community-1) is downloaded
-(Settings → Dictation) and the far side came back as one voice (as every
-DeepInfra window does), the on-device diarizer splits those words by speaker
-(`LocalMeetingTranscriber.relabel`, hooked in as `MeetingTranscriber.relabel`).
-The diarizer picks the number of speakers from the audio, as
-[On-device meetings](LOCAL_TRANSCRIPTION.md#on-device-meetings) describes.
-It splits the words in one of two ways:
-
-- On a call with an echo-free mic, the owner's words stay `you` and only the
-  system track is diarized. Its far-side words take the diarizer's speakers the
-  same way on-device words do (`label`, then `settled`).
-- Otherwise the whole mix is diarized, and on a call the id heard mostly from
-  the mic becomes the owner (`markOwner`).
-
-The diarizer runs alone, without Fluid Speech Mini
-(`LocalMeetingRequest.speechDirectory` is nil), in the same helper process as
-on-device meetings. Its speaker stretches are cached beside the audio as
-`speakers-system-v2.json` or `speakers-v2.json`. Without the model, while
-another meeting holds it, or if it fails, the track labels stay.
+Claude has no speech model, so with Claude picked meetings are transcribed on
+device only (`SettingsStore.meetingSource` reads as On device, and
+`SettingsStore.meetingTranscribers` is empty), and Claude writes the notes
+from the transcript. Before the on-device models are downloaded, a meeting is
+saved without a transcript (`MeetingFailure.noRoute`), and Retry runs it once
+they are. Until
+2026-11-06 Claude meetings could also be transcribed by DeepInfra's Nemotron
+3.5 Transcribe; that path was removed, as
+[activities/2026-11-06-remove-deepinfra.md](../activities/2026-11-06-remove-deepinfra.md)
+records. Cached windows are still named `transcribe-v7-*` (`cacheVersion`).
 
 ## Speakers in browser calls from the Chrome extension
 
@@ -254,7 +206,7 @@ VoiceiQ does not need to run while the extension reports.
 2. Each event lasts until the next one, for at most 3 s (`hold`), widened by
    0.3 s on each side (`slack`). These are each source's loud stretches.
 3. `BrowserSpeakers.apply` runs before turns are built, in
-   `MeetingTranscriber` (after the diarizer's `relabel`, for every provider)
+   `MeetingTranscriber` (for every cloud provider)
    and in `LocalMeetingTranscriber`. The owner's words stay `you`.
 4. A far-side word goes to the source whose loud stretches overlap the
    word's time more than twice as much as any other source's. The rule uses
