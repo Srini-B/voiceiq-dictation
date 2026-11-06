@@ -76,6 +76,16 @@ import VoiceIQSpeech
             meta.status = .failed("interrupted")
             meta.endedAt = meta.endedAt ?? meta.startedAt.addingTimeInterval(meta.durationSeconds)
             try? store.save(meta: meta)
+            #if os(macOS)
+            // The tracks were written until the process died; a Retry needs the browser's speakers too.
+            if let folder = store.folder(for: meta.id) {
+                var written = meta
+                written.endedAt = ["mic.caf", "system.caf"].compactMap {
+                    try? folder.appendingPathComponent($0).resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
+                }.max() ?? meta.endedAt
+                BrowserSpeakers.save(meta: written, folder: folder)
+            }
+            #endif
         }
     }
 

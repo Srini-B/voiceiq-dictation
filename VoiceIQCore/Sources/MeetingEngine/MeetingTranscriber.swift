@@ -354,7 +354,7 @@ public struct MeetingTranscriber: Sendable {
                                                    references: [], via: provider)
             // Untimed words would all land at one moment, under one speaker.
             // DeepInfra bills by audio length, so the halves bill the window's audio a second time.
-            if !Self.timed(raw, seconds: request.duration), let (left, right) = Self.halves(regions) {
+            if !Self.timed(raw, in: request), let (left, right) = Self.halves(regions) {
                 Log.meeting.info("DeepInfra timed \(raw.filter { $0.start != nil }.count, privacy: .public) of \(raw.count, privacy: .public) words in \(Int(request.duration), privacy: .public)s; asking again in halves")
                 let first = try await transcribe(window: left, audio: audio, clips: clips, known: known, via: provider)
                 return first + (try await transcribe(window: right, audio: audio, clips: clips, known: known + first, via: provider))
@@ -390,9 +390,12 @@ public struct MeetingTranscriber: Sendable {
     /// Every word carries a time inside the request. DeepInfra's Nemotron has
     /// timed none of a 240 s request's words (the Nov 2 call: about 1 KB of
     /// plain text per window) and, on longer ones, only the last few, placed
-    /// past the end of the audio.
-    static func timed(_ words: [DiarizedWord], seconds: Double) -> Bool {
-        words.allSatisfy { word in word.start.map { $0 <= seconds + 1 && (word.end ?? $0) <= seconds + 1 } ?? false }
+    /// past the end of the audio. A time `place` would drop (before the
+    /// request starts, say) counts as no time.
+    static func timed(_ words: [DiarizedWord], in request: AssembledAudio) -> Bool {
+        words.allSatisfy { word in
+            word.start.map { (word.end ?? $0) <= request.duration + 1 && request.trackSpan($0, word.end ?? $0) != nil } ?? false
+        }
     }
 
     /// The shortest half a window is split into; shorter untimed text stays one turn.

@@ -40,11 +40,15 @@ public enum BrowserSpeakerLog {
     public static func append(_ event: BrowserSpeakerEvent, root: URL? = nil) throws {
         let url = file(for: Date(timeIntervalSince1970: event.t / 1000), root: root)
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-        if !FileManager.default.fileExists(atPath: url.path) { FileManager.default.createFile(atPath: url.path, contents: nil) }
-        let handle = try FileHandle(forWritingTo: url)
-        defer { try? handle.close() }
-        try handle.seekToEnd()
-        try handle.write(contentsOf: try JSONEncoder().encode(event) + Data("\n".utf8))
+        let line = try JSONEncoder().encode(event) + Data("\n".utf8)
+        // Each browser profile starts its own host, all writing this file:
+        // O_APPEND moves to the end and writes in one step, so no host's line
+        // lands on top of another's.
+        let fd = open(url.path, O_WRONLY | O_APPEND | O_CREAT | O_CLOEXEC, 0o644)
+        guard fd >= 0 else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
+        defer { close(fd) }
+        let written = line.withUnsafeBytes { write(fd, $0.baseAddress, $0.count) }
+        guard written == line.count else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
     }
 
     /// Events between two times, from every day file they span. A line that

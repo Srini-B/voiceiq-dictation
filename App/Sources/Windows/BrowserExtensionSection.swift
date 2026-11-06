@@ -89,7 +89,7 @@ struct BrowserExtensionSection: View {
         } header: {
             Text("Chrome extension for meetings")
         } footer: {
-            Text("For Google Meet, Teams, Zoom and other calls in Chrome, Edge, Brave or Arc. The extension tells VoiceiQ which participant is talking, from the call's own audio streams, so people who sound alike are kept apart. It sends only stream numbers and times, never audio, names or page content.")
+            Text("For Google Meet, Teams, Zoom and other calls in Chrome, Edge, Brave or Arc. The extension tells VoiceiQ which participant is talking, from the call's own audio streams, so people who sound alike are kept apart. It sends stream numbers, times, the tab's number and the page's address without its query, such as meet.google.com/abc-defg-hij, never audio, names or page content. VoiceiQ keeps these reports on this Mac for a week, and a meeting keeps its own until you delete it.")
         }
         .onAppear { installed = BrowserExtension.isInstalled; lastHeard = BrowserExtension.lastHeard }
     }
@@ -97,7 +97,7 @@ struct BrowserExtensionSection: View {
     private var status: String {
         guard installed else { return "Not installed" }
         guard let lastHeard else { return "Waiting for Chrome to load it" }
-        return "Working, last heard \(lastHeard.formatted(.relative(presentation: .named)))"
+        return "Last heard from it \(lastHeard.formatted(.relative(presentation: .named)))"
     }
 
     private func install() {

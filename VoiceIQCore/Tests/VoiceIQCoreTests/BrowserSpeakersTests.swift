@@ -70,8 +70,9 @@ final class BrowserSpeakersTests: XCTestCase {
     }
 
     func testATimelineThatMissesTheMeetingLeavesTheWordsAlone() throws {
-        let folder = try meeting(events("csrc:11", from: 17, to: 19))
-        let words = (0..<10).map { word("w\($0)", $0 < 5 ? "s1" : "s2", Double($0)) } + [word("end", "s1", 17.5)]
+        let folder = try meeting(events("csrc:22", from: 2, to: 3) + events(nil, from: 3, to: 4)
+            + events("csrc:11", from: 17, to: 18) + events("csrc:22", from: 18, to: 19))
+        let words = (0..<10).map { word("w\($0)", $0 < 5 ? "s1" : "s2", Double($0)) } + [word("end", "s1", 17.2)]
 
         XCTAssertEqual(BrowserSpeakers.apply(words, folder: folder), words)
     }
@@ -80,6 +81,13 @@ final class BrowserSpeakersTests: XCTestCase {
         // Zoom web, say: every voice arrives on one stream, so one source is loud throughout.
         let folder = try meeting(events("ssrc:5", from: 0, to: 10))
         let words = (0..<10).map { word("w\($0)", $0 < 5 ? "s1" : "s2", Double($0)) }
+
+        XCTAssertEqual(BrowserSpeakers.apply(words, folder: folder), words)
+    }
+
+    func testAMixedStreamThatReconnectsUnderANewIdDoesNotUndoTheDiarizer() throws {
+        let folder = try meeting(events("ssrc:5", from: 0, to: 5) + events("ssrc:6", from: 5, to: 10))
+        let words = (0..<10).map { word("w\($0)", $0 % 2 == 0 ? "s1" : "s2", Double($0)) }
 
         XCTAssertEqual(BrowserSpeakers.apply(words, folder: folder), words)
     }

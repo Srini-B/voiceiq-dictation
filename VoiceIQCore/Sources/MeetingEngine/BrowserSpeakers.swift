@@ -17,14 +17,20 @@ public enum BrowserSpeakers {
 
     /// Copies the events of the meeting's tab from the extension's log into
     /// the meeting folder, where a retry finds them too. With several call
-    /// tabs open, the one on the detected meeting page, else the busiest.
+    /// tabs open, the one on the detected meeting page, else the busiest. A
+    /// call in a known call app has none: a browser tab is another call.
     public static func save(meta: MeetingMeta, folder: URL, logRoot: URL? = nil) {
         guard let end = meta.endedAt else { return }
+        #if os(macOS)
+        // An app the detector only found to look like a call can be a Chromium browser it does not list.
+        if case let .app(id, _) = meta.source, CallApps.known[id] != nil { return }
+        #endif
         let events = BrowserSpeakerLog.events(from: meta.startedAt.addingTimeInterval(-5), to: end.addingTimeInterval(5), root: logRoot)
         let tabs = Dictionary(grouping: events) { "\($0.tab) \($0.page)" }.values
             .filter { tab in tab.contains { !$0.active.isEmpty } }
         var host: String?
         if case let .browser(_, page) = meta.source { host = page }
+        // `host` can be a title match ("Meet - ") rather than a host, so no match still falls back.
         let onPage = tabs.filter { tab in host.map { tab[0].page.hasPrefix($0) } ?? false }
         guard let tab = (onPage.isEmpty ? Array(tabs) : onPage).max(by: { busy($0) < busy($1) }) else { return }
         let saved = Saved(start: meta.startedAt.timeIntervalSince1970 * 1000, events: tab)
@@ -55,22 +61,28 @@ public enum BrowserSpeakers {
     }
 
     static func apply(_ words: [TimedWord], saved: Saved) -> [TimedWord] {
-        let spans = spans(saved)
         // One source is a call with one person, or a service that mixes
         // everyone into one stream with no contributing sources; the diarizer
         // knows that better.
-        guard Set(spans.map(\.id)).count >= 2 else { return words }
+        guard tellsPeopleApart(saved.events) else { return words }
+        let spans = Dictionary(grouping: spans(saved), by: \.id).mapValues { $0.map(\.range).sorted { $0.lowerBound < $1.lowerBound } }
+        let longest = hold + 2 * slack
         // Judged by overlap, not the word's midpoint: the recognizer often
         // starts a word half a second early or stretches the last word of a
         // turn over the silence after it.
         func loudest(from start: Double, to end: Double) -> String? {
-            let covered = Dictionary(grouping: spans, by: \.id).mapValues { own -> Double in
-                let pieces = own.map { (max($0.range.lowerBound, start), min($0.range.upperBound, end)) }
-                    .filter { $0.0 < $0.1 }.sorted { $0.0 < $1.0 }
+            let covered = spans.mapValues { ranges -> Double in
+                // No stretch is longer than `longest`, so earlier ones end before `start`.
+                var low = 0, high = ranges.count
+                while low < high {
+                    let middle = (low + high) / 2
+                    if ranges[middle].lowerBound < start - longest { low = middle + 1 } else { high = middle }
+                }
                 var total = 0.0, reached = start
-                for (lower, upper) in pieces where upper > reached {
-                    total += upper - max(lower, reached)
-                    reached = upper
+                for range in ranges[low...] {
+                    guard range.lowerBound < end else { break }
+                    let upper = min(range.upperBound, end)
+                    if upper > reached { total += upper - max(range.lowerBound, reached); reached = upper }
                 }
                 return total
             }.filter { $0.value > 0 }.sorted { $0.value > $1.value }
@@ -92,6 +104,16 @@ public enum BrowserSpeakers {
             out[index].speaker = "browser " + (heard[index] ?? likely[words[index].speaker] ?? "diarizer \(words[index].speaker)")
         }
         return LocalMeetingTranscriber.renumber(out)
+    }
+
+    /// At least two sources were loud. Stream ids alone (`ssrc`) must also
+    /// take turns: a mixed stream that reconnects comes back under a new id,
+    /// so its ids follow one another and none is loud again.
+    static func tellsPeopleApart(_ events: [BrowserSpeakerEvent]) -> Bool {
+        var order: [String] = []
+        for id in events.flatMap(\.active) where id != order.last { order.append(id) }
+        let ids = Set(order)
+        return ids.count >= 2 && (ids.contains { $0.hasPrefix("csrc:") } || ids.count < order.count)
     }
 
     /// Each source's loud stretches, in meeting seconds.

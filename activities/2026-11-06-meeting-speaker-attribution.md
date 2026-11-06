@@ -115,6 +115,39 @@ All on the Mac mini with a notarized build.
 - Real Google Meet or Teams calls, where the extension reports contributing
   sources (CSRC).
 
+## Review fixes (PR #40)
+
+Codex and CodeRabbit reviewed the PR. Fixed:
+
+- The helper appended to the shared day log with a seek and a write, so
+  two browser profiles could overwrite each other's events. It now writes
+  each event once with `O_APPEND`. With 4 writers of 3000 events each, the
+  old method kept 6683 to 6964 valid lines of 12000 over three runs; the
+  new one kept all 12000.
+- A call in a known call app took a browser tab's timeline if one was busy.
+  It now gets none.
+- A mixed stream (`ssrc` ids only) that reconnects under a new id passed as
+  two people. `ssrc` ids now need to take turns.
+- `BrowserSpeakers.apply` searches each source's stretches instead of
+  scanning the whole timeline for each word. On a random hour (6575 words,
+  1521 events) it took 0.020 s against 3.16 s and gave the same labels; 500
+  random timelines gave the same labels too.
+- The helper prunes the log at each start, an interrupted meeting saves its
+  timeline at the next launch, `timed` rejects times `place` drops,
+  `MicTap` waits 60 s before trying a failed call input again, a browser
+  window that is not a meeting page is not read for names, and Settings
+  states what the extension sends and no longer claims "Working".
+
+Not changed, with replies on the PR: a reload prompt for extension updates
+(none shipped yet), browser session ids (two browsers would need the same
+tab and page in one meeting), switching a global tap to the call later
+(documented fallback; switching a running tap is untested), and untimed
+owner-overlap requests (older than this PR, left for its own change).
+
+Verified on the Mac mini: `scripts/test.sh` 156 tests, 0 failures; macOS
+and iOS builds with no new warnings; the notarized build's Settings section
+shows the new footer and status.
+
 ## Rollback
 
 Revert the commits of this change. The speaker model download replaced the

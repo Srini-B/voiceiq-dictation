@@ -47,6 +47,10 @@ public final class MicTap: @unchecked Sendable {
     /// The input the call itself captures (a headset, a USB mic picked in the
     /// call app). Nil records the default input. Changed through `use(device:)`.
     private var preferred: AudioDeviceID?
+    /// The call's input that failed every retry, and when. The call keeps
+    /// reporting it, and each new try stops the default for the retries.
+    private var failed: (device: AudioDeviceID, at: Date)?
+    static let failedBackoff: TimeInterval = 60
 
     public init(url: URL, device: AudioDeviceID? = nil) { self.url = url; preferred = device }
 
@@ -54,7 +58,10 @@ public final class MicTap: @unchecked Sendable {
         writer = try CAFWriter(url: url, format: target); frames = 0
         try control.sync {
             do { try attach(to: wanted) }
-            catch where preferred != nil { preferred = nil; try attach(to: wanted) }
+            catch {
+                guard let device = preferred else { throw error }
+                failed = (device, Date()); preferred = nil; try attach(to: wanted)
+            }
         }
         _ = AudioObjectAddPropertyListenerBlock(AudioObjectID(kAudioObjectSystemObject), &defaultInputAddress, control, deviceListener)
         listening = true
@@ -111,6 +118,7 @@ public final class MicTap: @unchecked Sendable {
     public func use(device: AudioDeviceID) {
         control.async { [weak self] in
             guard let self, self.preferred != device else { return }
+            if let failed = self.failed, failed.device == device, Date().timeIntervalSince(failed.at) < Self.failedBackoff { return }
             self.preferred = device
             self.moveToWantedDevice()
         }
@@ -127,7 +135,9 @@ public final class MicTap: @unchecked Sendable {
         catch {
             Log.meeting.error("mic move failed (attempt \(attempt + 1)): \(String(describing: error), privacy: .public)")
             // The call's device went away (AirPods taken out): back to the default.
-            if attempt >= Self.attachRetries, preferred != nil { preferred = nil; moveToWantedDevice(force: true); return }
+            if attempt >= Self.attachRetries, let device = preferred {
+                failed = (device, Date()); preferred = nil; moveToWantedDevice(force: true); return
+            }
             guard attempt < Self.attachRetries else { return }
             control.asyncAfter(deadline: .now() + 0.5) { [weak self] in self?.moveToWantedDevice(force: true, attempt: attempt + 1) }
         }

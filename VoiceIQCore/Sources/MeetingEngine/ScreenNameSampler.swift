@@ -99,11 +99,13 @@ public final class ScreenNameSampler: @unchecked Sendable {
         guard let bundleID else { return nil }
         let content = try await SCShareableContent.excludingDesktopWindows(true, onScreenWindowsOnly: false)
         let windows = content.windows.filter { $0.owningApplication?.bundleIdentifier == bundleID && $0.windowLayer == 0 && $0.frame.width >= 320 }
-        // A browser has other windows; the meeting tab's title says which one is the call.
+        // A browser has other windows; the meeting tab's title says which one
+        // is the call, and with no such title none is.
         let meeting = windows.filter { window in CallApps.meetingPages.contains { window.title?.localizedCaseInsensitiveContains($0) == true } }
+        let candidates = meeting.isEmpty && !CallApps.browsers.contains(bundleID) ? windows : meeting
         // On screen first (a window on another Space still counts), then the largest.
         let rank = { (window: SCWindow) in (window.isOnScreen ? 1 : 0, window.frame.width * window.frame.height) }
-        guard let window = (meeting.isEmpty ? windows : meeting).max(by: { rank($0) < rank($1) }) else { return nil }
+        guard let window = candidates.max(by: { rank($0) < rank($1) }) else { return nil }
         let filter = SCContentFilter(desktopIndependentWindow: window)
         let pixels = CGSize(width: filter.contentRect.width * CGFloat(filter.pointPixelScale),
                             height: filter.contentRect.height * CGFloat(filter.pointPixelScale))

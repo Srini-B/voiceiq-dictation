@@ -84,7 +84,9 @@ before it reaches an output device, so music, notifications, and other apps
 stay out of `system.caf`, and the speakers or headphones the call plays to
 make no difference. `MicTap` records `inputDevice` (`MicTap(url:device:)`).
 If that device fails to start, or fails after its retries later on, it
-records the default input instead.
+records the default input instead, and `MicTap.use(device:)` ignores that
+device for 60 s (`failedBackoff`), so a call that keeps reporting it does not
+stop the default every 5 s.
 
 While the meeting records, `MeetingEngine.follow` resolves the processes
 again every 5 s. `SystemAudioTap.follow(processes:)` writes a new tap
@@ -97,6 +99,11 @@ call app's processes has audio open at the start, `system.caf` is a global
 tap of all system audio and `mic.caf` records the default input. Nothing
 follows the call then. Before macOS 14.2 there is no process list, and
 `processes(for:)` returns nil.
+
+A call in a browser is tapped as the browser's processes, and Chrome plays
+every tab through one audio service. Sound from another tab of the same
+browser (a video, say) is in `system.caf` with the call. Core Audio has no
+per-tab process, so this is not fixable at the tap.
 
 Measured on the Mac mini with a notarized build: during a call in Chrome,
 `afplay` played other speech. The sound envelope of `system.caf` matched the
@@ -231,8 +238,15 @@ VoiceiQ does not need to run while the extension reports.
    them by tab and page, and keeps the tabs where a source was loud. It takes
    the tab on the detected meeting page, else the busiest one, and writes its
    events to `browser-speakers.json` in the meeting folder, where Retry and
-   Redo find them. It then calls `BrowserSpeakerLog.prune`, which deletes day
-   files older than 7 days.
+   Redo find them. A call in a known call app (`CallApps.known`, Zoom or
+   FaceTime, say) gets no timeline, because any browser tab is another call.
+   An app detected only because it looks like a call keeps the fallback: it
+   can be a Chromium browser that `CallApps.browsers` does not list. A recording that
+   was interrupted gets its timeline at the next launch
+   (`MeetingEngine.failInterruptedRecordings`), up to the last write to its
+   tracks. `save` then calls `BrowserSpeakerLog.prune`, which deletes day
+   files older than 7 days. The native host prunes the same way each time
+   Chrome starts it, so the log is pruned even when no meeting is recorded.
 2. Each event lasts until the next one, for at most 3 s (`hold`), widened by
    0.3 s on each side (`slack`). These are each source's loud stretches.
 3. `BrowserSpeakers.apply` runs before turns are built, in
@@ -251,7 +265,10 @@ The words stay as they were unless the timeline has at least 2 sources and
 covers at least 30 % of the far-side words. One source means a call with one
 other person, or a service that sends everyone in one stream with no CSRCs,
 and the diarizer knows those better. Too little coverage means the timeline
-is from another call.
+is from another call. When every source is a stream id (`ssrc:`), at least
+one must be loud again after another source was (`tellsPeopleApart`): a
+mixed stream that reconnects comes back under a new id, so its ids follow
+one another and none returns.
 
 ### Install the extension
 
@@ -275,8 +292,9 @@ only through MDM, so you load it once as an unpacked extension.
 At each launch, VoiceiQ copies the files and writes the host manifests again
 when the extension is installed (`BrowserExtension.refreshIfInstalled`), so
 both follow app updates. **Status** shows "Not installed", "Waiting for
-Chrome to load it", or "Working, last heard" with the time of the newest
-write to the log.
+Chrome to load it", or "Last heard from it" with the time of the newest
+write to the log. It does not claim the extension works now: a disabled
+extension leaves the old log behind.
 
 ### Measured
 
@@ -306,7 +324,8 @@ meeting never raises the prompt (`CGPreflightScreenCaptureAccess`).
    with ScreenCaptureKit (`SCContentFilter(desktopIndependentWindow:)`, so it
    works when the window is covered). It picks a window whose title names a
    page in `CallApps.meetingPages` first, then a window on screen, then the
-   largest. It never captures the whole display, because other apps' windows
+   largest. A browser with no such window gives no image, because its other
+   windows are other pages. It never captures the whole display, because other apps' windows
    (a dictation app, a chat, a document) hold names that are not the
    meeting's. When the call app has no window to read, the sample has no
    image. The long side is capped at 2560 px.

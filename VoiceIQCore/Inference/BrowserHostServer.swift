@@ -20,6 +20,9 @@ public enum BrowserHostServer {
 
     public static func run() -> Never {
         signal(SIGPIPE, SIG_IGN)
+        // Chrome starts a host with each browser start, so old days go even
+        // when no meeting is ever recorded.
+        BrowserSpeakerLog.prune()
         let input = FileHandle.standardInput
         while let length = read(4, from: input).map({ $0.withUnsafeBytes { $0.loadUnaligned(as: UInt32.self) } }),
               length <= largestMessage, let body = read(Int(length), from: input) {

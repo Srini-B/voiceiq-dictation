@@ -109,7 +109,9 @@ With no usable key, nothing is sent and the recording stays on your Mac.
    recording, VoiceiQ writes two tracks to
    `~/Library/Application Support/VoiceiQ/meetings/` and sends nothing. On a
    detected call, they are the microphone the call uses and the sound of the
-   call app alone; other apps, music and notifications are not recorded. A
+   call app alone; other apps, music and notifications are not recorded. In
+   a browser call that is the browser's sound, so other tabs of the same
+   browser that play sound are recorded too. A
    recording with no call detected records the default microphone and all
    system sound.
    Recording stops only when you stop it; the stretches with speech are then
@@ -124,7 +126,8 @@ With no usable key, nothing is sent and the recording stays on your Mac.
    With "Read names from the screen" on (Settings → Dictation, on by default,
    macOS only) and Screen Recording already granted, VoiceiQ takes a snapshot
    of the call window every 3 seconds while recording. It captures only a
-   window of the call app, never the whole display. A recording with no call
+   window of the call app, never the whole display; in a browser, only a
+   window whose title is a meeting page. A recording with no call
    detected reads the frontmost calling app, and with none open it takes no
    snapshots. Each snapshot
    is read with Apple's on-device text recognition and dropped at once; it is
@@ -194,8 +197,8 @@ while Chrome runs, whether or not VoiceiQ records it. It also sends one
 Chrome starts. When a recording stops, VoiceiQ copies the
 reports from that meeting's tab to `browser-speakers.json` in the meeting's
 folder and uses them to tell the other speakers apart. That file is deleted
-with the meeting. When a meeting with reports stops, day files older than
-7 days are deleted. To stop the reports, remove the extension on Chrome's
+with the meeting. Day files older than 7 days are deleted when a meeting
+with reports stops and each time Chrome starts the helper. To stop the reports, remove the extension on Chrome's
 Extensions page.
 
 ## What never leaves
