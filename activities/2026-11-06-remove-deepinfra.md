@@ -25,8 +25,9 @@ Released as 0.6.27 (72).
   Claude exception existed only for DeepInfra's live path.
 - **Alert on picking Claude.** On the Mac and the iPhone, picking Claude
   while the on-device models are not downloaded shows an alert that names
-  the missing models, because no voice feature works with Claude until they
-  are downloaded. Its Open Dictation Settings button goes straight to them.
+  the missing models and what each blocks: the speech model for any voice
+  feature, and Speaker Separation (Mac) for meetings. Its Open Dictation
+  Settings button goes straight to them.
 - **Meeting code.** The DeepInfra-only paths in `MeetingTranscriber` (timed
   words, track labels, the 240 s window, `timed` and `halves`) and the
   diarizer-only relabel in `LocalMeetingTranscriber` are removed. Every

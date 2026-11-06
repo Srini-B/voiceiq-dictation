@@ -44,8 +44,10 @@ With no usable key, nothing is sent and the recording stays on your Mac.
    252.7 MB for Fluid Speech Mini or 1.23 GB for Fluid Speech Pro from Hugging Face and its CDN, exposing your IP address
    to those hosts, but sending no recordings or API keys. Missing models use the
    configured cloud transcription. Failed local results upload the saved
-   recording through the existing cloud path. This option is not an offline-only
-   privacy mode. See [local transcription](LOCAL_TRANSCRIPTION.md).
+   recording through the existing cloud path. Neither applies with Claude:
+   its dictations and meetings are transcribed on device only, and one that
+   can't be is saved without a transcript and sends no audio. This option is
+   not an offline-only privacy mode. See [local transcription](LOCAL_TRANSCRIPTION.md).
 2. **Your dictionary terms**, alongside that audio. The transcription model uses
    them to bias what it hears, which is why names and jargon come out spelled
    right as you speak rather than being corrected afterwards. Only the correct

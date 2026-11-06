@@ -48,14 +48,22 @@ is kept, so switching back to Gemini or OpenAI restores it.
 `SettingsStore.meetingTranscribers` is empty on Claude, so a meeting never
 falls back to a Gemini or OpenAI key. Without local models, or before they are
 downloaded, a dictation fails with `.auth` and a meeting is saved with
-`MeetingFailure.noRoute`, without sending audio anywhere. Picking Claude in
+`MeetingFailure.noRoute`, without sending audio anywhere. A dictation whose
+model is still loading waits for it (`cloudOnColdLoad` is false), and a failed
+local pass is not uploaded. The cloud fallbacks described below (cold loads,
+missing models, failed local passes, meetings) apply to Gemini and OpenAI
+only. Picking Claude in
 the Provider picker (Settings → Advanced on the Mac, Provider & Keys and
 onboarding on the iPhone) shows an alert, "Claude needs on-device models for
 voice", when the selected speech model is not downloaded or, on the Mac,
-Speaker Separation is not (`claudeVoiceAlert`). It names the missing models,
-and its **Open Dictation Settings** button goes to where they download: the
+Speaker Separation is not (`claudeVoiceAlert`). It names the missing models
+and what each blocks: without the speech model nothing is transcribed, and
+with only Speaker Separation missing, dictation works and meetings do not.
+Its **Open Dictation Settings** button goes to where they download: the
 Dictation pane on the Mac, and a Dictation sheet on the iPhone (a sheet so it
-works in onboarding too). With every model downloaded, no alert appears.
+works in onboarding too). With every model downloaded, no alert appears. On a
+device that can't run local models (an Intel Mac), the alert says voice is not
+transcribed with Claude, names no models, and has only an OK button.
 
 Fluid Speech Pro replaced the on-device Nemotron 3.5 ASR Streaming model on
 2026-11-02. A stored `nemotron` selection reads as Fluid Speech Pro

@@ -291,7 +291,7 @@ import VoiceIQSpeech
         meta.status = .failed(reason); try? store.save(meta: meta)
         processing[id] = nil
         switch error as? MeetingFailure {
-        case .noRoute: onNotice?("\(MeetingFailure.noun) saved without a transcript — download the on-device models or add a key, then Retry in \(MeetingFailure.listName)")
+        case .noRoute: onNotice?("\(MeetingFailure.noun) saved without a transcript — download the on-device models or use Gemini or OpenAI with a key, then Retry in \(MeetingFailure.listName)")
         case .noNotesRoute: onNotice?("\(MeetingFailure.noun) transcribed on device — add a key for notes, then Retry in \(MeetingFailure.listName)")
         case nil: onNotice?("\(MeetingFailure.noun) transcript failed — see \(MeetingFailure.listName)")
         }
