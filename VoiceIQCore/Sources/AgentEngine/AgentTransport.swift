@@ -6,15 +6,23 @@ import os
 /// reads back one `AgentReply`. Usage is metered here, once per call.
 public struct AgentTransport: Sendable {
     public var endpoint: AgentEndpoint
+    /// What the Cost pane books each call as.
+    let stage: UsageStage
     private let session: URLSession
     /// Shared by every copy of the transport, so one loop keeps one cache key.
-    let hostState = HostState()
+    let hostState: HostState
     /// Hosts answer a 1,500-token prompt with a screenshot in a few seconds;
     /// a reasoning model on a proxy can take a minute.
     static let deadline: TimeInterval = 120
 
-    public init(endpoint: AgentEndpoint, session: URLSession? = nil) {
+    /// `cacheKey` names the OpenAI cache the calls share. Nil gives this
+    /// transport a key of its own; a conversation that outlives the app,
+    /// such as a meeting chat, passes a stable one.
+    public init(endpoint: AgentEndpoint, stage: UsageStage = .agentStep, cacheKey: String? = nil,
+                session: URLSession? = nil) {
         self.endpoint = endpoint
+        self.stage = stage
+        hostState = HostState(promptCacheKey: cacheKey ?? "voiceiq-agent-" + UUID().uuidString)
         if let session {
             self.session = session
         } else {
@@ -80,7 +88,7 @@ public struct AgentTransport: Sendable {
 
     func record(_ usage: TokenUsage?) {
         guard let usage else { return }
-        UsageMeter.record(stage: .agentStep, model: endpoint.modelID, usage: usage)
+        UsageMeter.record(stage: stage, model: endpoint.modelID, usage: usage)
     }
 
     static func dataURL(_ data: Data, mimeType: String) -> String {
@@ -127,9 +135,11 @@ public extension Log {
 /// Session-wide facts shared by every copy of the transport.
 final class HostState: @unchecked Sendable {
     /// One per session, so every call lands on the same OpenAI cache.
-    let promptCacheKey = "voiceiq-agent-" + UUID().uuidString
+    let promptCacheKey: String
     private let lock = NSLock()
     private var rejected = false
+
+    init(promptCacheKey: String) { self.promptCacheKey = promptCacheKey }
 
     /// Set once a host has answered 400 to a cache field; the session then
     /// sends plain bodies rather than failing every call.

@@ -42,6 +42,13 @@ public struct AgentEndpoint: Equatable, Sendable {
                 isCustom: true
             )
         }
+        return writingModel(settings: settings, anthropicModel: AnthropicConfig().agentModel)
+    }
+
+    /// The selected provider's writing model on its own API, ignoring Agent
+    /// mode's custom provider. Nil when that provider has no key.
+    public static func writingModel(settings: SettingsStore = SettingsStore(),
+                                    anthropicModel: String = AnthropicConfig().writingModel) -> AgentEndpoint? {
         let provider = settings.preferredProvider
         let gemini = settings.geminiConfig
         let openAI = settings.openAIConfig
@@ -58,7 +65,7 @@ public struct AgentEndpoint: Equatable, Sendable {
         case .anthropic:
             guard let key = KeychainStore.loadKey(.anthropic) else { return nil }
             return AgentEndpoint(baseURL: URL(string: "https://api.anthropic.com")!, apiKey: key, format: .anthropicMessages,
-                                 modelID: AnthropicConfig().agentModel, label: "Anthropic API", isCustom: false)
+                                 modelID: anthropicModel, label: "Anthropic API", isCustom: false)
         }
     }
 

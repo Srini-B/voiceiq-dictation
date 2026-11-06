@@ -77,13 +77,13 @@ extension AgentTransport {
             last["content"] = parts
             messages[messages.count - 1] = last
         }
-        return [
-            "model": endpoint.modelID,
-            "messages": messages,
-            "tools": conversation.tools.map { tool in
+        var body: [String: Any] = ["model": endpoint.modelID, "messages": messages]
+        if !conversation.tools.isEmpty {
+            body["tools"] = conversation.tools.map { tool in
                 ["type": "function", "function": ["name": tool.rawValue, "description": tool.description, "parameters": tool.parameters]]
-            },
-        ]
+            }
+        }
+        return body
     }
 
     private static func chatParts(_ content: [AgentContent]) -> [[String: Any]] {
@@ -111,10 +111,12 @@ extension AgentTransport {
                 "model": endpoint.modelID,
                 "instructions": conversation.system,
                 "input": items,
-                "tools": conversation.tools.map { tool in
-                    ["type": "function", "name": tool.rawValue, "description": tool.description, "parameters": tool.parameters]
-                },
             ]
+            if !conversation.tools.isEmpty {
+                body["tools"] = conversation.tools.map { tool in
+                    ["type": "function", "name": tool.rawValue, "description": tool.description, "parameters": tool.parameters]
+                }
+            }
             if cacheFields, let cacheKey = promptCacheKey { body["prompt_cache_key"] = cacheKey }
             return body
         }

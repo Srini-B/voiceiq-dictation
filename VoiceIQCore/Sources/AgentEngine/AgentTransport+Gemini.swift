@@ -48,11 +48,11 @@ extension AgentTransport {
             }
             return declaration
         }
-        let body: [String: Any] = [
+        var body: [String: Any] = [
             "systemInstruction": ["parts": [["text": conversation.system]]],
             "contents": contents,
-            "tools": [["functionDeclarations": declarations]],
         ]
+        if !declarations.isEmpty { body["tools"] = [["functionDeclarations": declarations]] }
         let (data, root) = try await post(path: "v1beta/models/\(endpoint.modelID):generateContent") { _ in body }
         guard let candidate = (root["candidates"] as? [[String: Any]])?.first else {
             if let feedback = root["promptFeedback"] as? [String: Any], let reason = feedback["blockReason"] as? String {
