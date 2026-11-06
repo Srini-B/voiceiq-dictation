@@ -359,8 +359,12 @@ public struct MeetingTranscriber: Sendable {
                 let first = try await transcribe(window: left, audio: audio, clips: clips, known: known, via: provider)
                 return first + (try await transcribe(window: right, audio: audio, clips: clips, known: known + first, via: provider))
             }
+            // Too short to split: a word whose time `place` would drop goes in as untimed text instead.
+            let kept = raw.map { word in
+                word.start.map { request.trackSpan($0, word.end ?? $0) == nil } == true ? DiarizedWord(text: word.text, speaker: word.speaker) : word
+            }
             let remote = known.first { $0.speaker != MeetingSpeaker.you }?.speaker
-            return Self.place(Self.labelByTrack(raw, audio: request, call: audio), audio: request, call: audio,
+            return Self.place(Self.labelByTrack(kept, audio: request, call: audio), audio: request, call: audio,
                               known: known, mapping: remote.map { [Self.farLabel: $0] } ?? [:])
         }
         if provider == .gemini {

@@ -111,7 +111,9 @@ With no usable key, nothing is sent and the recording stays on your Mac.
    detected call, they are the microphone the call uses and the sound of the
    call app alone; other apps, music and notifications are not recorded. In
    a browser call that is the browser's sound, so other tabs of the same
-   browser that play sound are recorded too. A
+   browser that play sound are recorded too. When the call app has no audio
+   open as the recording starts, the recording falls back to all system
+   sound and the default microphone, as with no call. A
    recording with no call detected records the default microphone and all
    system sound.
    Recording stops only when you stop it; the stretches with speech are then
@@ -198,7 +200,8 @@ Chrome starts. When a recording stops, VoiceiQ copies the
 reports from that meeting's tab to `browser-speakers.json` in the meeting's
 folder and uses them to tell the other speakers apart. That file is deleted
 with the meeting. Day files older than 7 days are deleted when a meeting
-with reports stops and each time Chrome starts the helper. To stop the reports, remove the extension on Chrome's
+with reports stops, when Chrome starts the helper, and every hour while it
+runs. To stop the reports, remove the extension on Chrome's
 Extensions page.
 
 ## What never leaves

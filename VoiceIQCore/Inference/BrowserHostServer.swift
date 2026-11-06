@@ -20,14 +20,16 @@ public enum BrowserHostServer {
 
     public static func run() -> Never {
         signal(SIGPIPE, SIG_IGN)
-        // Chrome starts a host with each browser start, so old days go even
-        // when no meeting is ever recorded.
+        // Old days go even when no meeting is ever recorded: at start, and
+        // hourly, since Chrome keeps a host running while the browser is open.
         BrowserSpeakerLog.prune()
+        var pruned = Date()
         let input = FileHandle.standardInput
         while let length = read(4, from: input).map({ $0.withUnsafeBytes { $0.loadUnaligned(as: UInt32.self) } }),
               length <= largestMessage, let body = read(Int(length), from: input) {
             guard let event = try? JSONDecoder().decode(BrowserSpeakerEvent.self, from: body) else { continue }
             try? BrowserSpeakerLog.append(event)
+            if Date().timeIntervalSince(pruned) > 3600 { BrowserSpeakerLog.prune(); pruned = Date() }
         }
         exit(0)
     }

@@ -149,12 +149,15 @@ of the file (measured 2026-10-29: 38 of 421 words timed on a 639 s track).
 DeepInfra can also return a window with no word times. On 2026-11-02 it
 returned about 1 KB of plain text for each 240 s window, so all the words of
 a window landed at one moment and became one speaker.
-`MeetingTranscriber.timed` checks that every word has a start time and that
-the word starts and ends no more than 1 s past the end of the request. When a
+`MeetingTranscriber.timed` checks that every word has a start time that
+`AssembledAudio.trackSpan` accepts (not before the request's body, say) and
+that the word ends no more than 1 s past the end of the request. When a
 window fails that check, `MeetingTranscriber.halves` cuts its speech into two
 halves of about equal length, and each half is requested and checked again.
 A window under 60 s is not cut, so the shortest request is 30 s
-(`shortestWindow`), and its untimed text stays one turn. DeepInfra bills by
+(`shortestWindow`), and its untimed text stays one turn. In a window that is
+not cut, a word whose time `trackSpan` rejects is kept as untimed text
+rather than dropped. DeepInfra bills by
 audio length, so each split bills that window's audio a second time. The cached
 windows moved from `transcribe-v6-*` to `transcribe-v7-*` (`cacheVersion`),
 so a Retry of an older meeting requests every window again. Scratch tests on
@@ -245,8 +248,9 @@ VoiceiQ does not need to run while the extension reports.
    was interrupted gets its timeline at the next launch
    (`MeetingEngine.failInterruptedRecordings`), up to the last write to its
    tracks. `save` then calls `BrowserSpeakerLog.prune`, which deletes day
-   files older than 7 days. The native host prunes the same way each time
-   Chrome starts it, so the log is pruned even when no meeting is recorded.
+   files older than 7 days. The native host prunes the same way when Chrome
+   starts it and then hourly, so the log is pruned even when no meeting is
+   recorded.
 2. Each event lasts until the next one, for at most 3 s (`hold`), widened by
    0.3 s on each side (`slack`). These are each source's loud stretches.
 3. `BrowserSpeakers.apply` runs before turns are built, in
@@ -268,7 +272,8 @@ and the diarizer knows those better. Too little coverage means the timeline
 is from another call. When every source is a stream id (`ssrc:`), at least
 one must be loud again after another source was (`tellsPeopleApart`): a
 mixed stream that reconnects comes back under a new id, so its ids follow
-one another and none returns.
+one another and none returns. Only events with one loud stream count, because
+the old and new stream can both be loud for a moment.
 
 ### Install the extension
 

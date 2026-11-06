@@ -108,12 +108,15 @@ public enum BrowserSpeakers {
 
     /// At least two sources were loud. Stream ids alone (`ssrc`) must also
     /// take turns: a mixed stream that reconnects comes back under a new id,
-    /// so its ids follow one another and none is loud again.
+    /// so its ids follow one another and none is loud again. Turns count only
+    /// where one stream was loud, because the old and new stream can overlap.
     static func tellsPeopleApart(_ events: [BrowserSpeakerEvent]) -> Bool {
+        let ids = Set(events.flatMap(\.active))
+        guard ids.count >= 2 else { return false }
+        if ids.contains(where: { $0.hasPrefix("csrc:") }) { return true }
         var order: [String] = []
-        for id in events.flatMap(\.active) where id != order.last { order.append(id) }
-        let ids = Set(order)
-        return ids.count >= 2 && (ids.contains { $0.hasPrefix("csrc:") } || ids.count < order.count)
+        for event in events where event.active.count == 1 && event.active[0] != order.last { order.append(event.active[0]) }
+        return Set(order).count < order.count
     }
 
     /// Each source's loud stretches, in meeting seconds.

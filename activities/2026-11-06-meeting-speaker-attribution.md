@@ -138,6 +138,14 @@ Codex and CodeRabbit reviewed the PR. Fixed:
   window that is not a meeting page is not read for names, and Settings
   states what the extension sends and no longer claims "Working".
 
+CodeRabbit's follow-ups, also fixed: `ssrc` turns count only on events
+with one loud stream, since an old and new stream can overlap while one
+takes over; the helper also prunes hourly, since Chrome keeps it running
+while the browser is open; a DeepInfra window too short to split keeps a
+word with an unusable time as untimed text; and PRIVACY.md says a detected
+call falls back to all system sound when the call app has no audio open at
+the start.
+
 Not changed, with replies on the PR: a reload prompt for extension updates
 (none shipped yet), browser session ids (two browsers would need the same
 tab and page in one meeting), switching a global tap to the call later

@@ -86,7 +86,11 @@ final class BrowserSpeakersTests: XCTestCase {
     }
 
     func testAMixedStreamThatReconnectsUnderANewIdDoesNotUndoTheDiarizer() throws {
-        let folder = try meeting(events("ssrc:5", from: 0, to: 5) + events("ssrc:6", from: 5, to: 10))
+        // Both streams loud for two events while the new one takes over.
+        let overlap = [5.0, 6.0].map {
+            BrowserSpeakerEvent(t: (start.timeIntervalSince1970 + $0) * 1000, page: "meet.google.com/abc-defg-hij", tab: 7, active: ["ssrc:5", "ssrc:6"])
+        }
+        let folder = try meeting(events("ssrc:5", from: 0, to: 5) + overlap + events("ssrc:6", from: 7, to: 10))
         let words = (0..<10).map { word("w\($0)", $0 % 2 == 0 ? "s1" : "s2", Double($0)) }
 
         XCTAssertEqual(BrowserSpeakers.apply(words, folder: folder), words)
