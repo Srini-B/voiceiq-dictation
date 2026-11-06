@@ -1,7 +1,8 @@
 # Meetings on the Mac
 
-How VoiceiQ notices a call, how a recorded meeting gets speaker names from
-the call screen, and how the Meetings window shows and exports it. Recording, transcription and the notes
+How VoiceiQ notices a call, what audio it records, how each line goes to the
+right person (the diarizer, the VoiceiQ Meetings Chrome extension, and names
+from the call screen), and how the Meetings window shows and exports it. Recording, transcription and the notes
 prompt are covered in [LOCAL_TRANSCRIPTION.md](LOCAL_TRANSCRIPTION.md#on-device-meetings),
 [PRIVACY.md](PRIVACY.md) and [design/meeting-prompt-rulebook.md](design/meeting-prompt-rulebook.md).
 
@@ -11,7 +12,9 @@ prompt are covered in [LOCAL_TRANSCRIPTION.md](LOCAL_TRANSCRIPTION.md#on-device-
 offer) and reads which processes have running input and output from Core
 Audio's process objects (`kAudioHardwarePropertyProcessObjectList`, macOS
 14.2+). A helper process is mapped to its app with
-`responsibility_get_pid_responsible_for_pid`. It offers to record when:
+`responsibility_get_pid_responsible_for_pid`. It offers to record when one
+of these rules matches. Rules 1 to 3 win over rule 4, whatever order the apps
+come in:
 
 1. a system call daemon (`avconferenced`, `callservicesd`) captures the mic:
    FaceTime and iPhone calls relayed to the Mac, which have no app process on
@@ -28,8 +31,16 @@ Audio's process objects (`kAudioHardwarePropertyProcessObjectList`, macOS
    levels deep, 300 elements at most, as FluidVoice does for Safari);
 4. any other app, or a browser on any other page, both captures the mic and
    plays sound. Two-way audio is what a call looks like whatever the app is.
-   `CallApps.notCalls` and `notCallPages` leave out voice assistants,
-   recorders and music software.
+   `CallDetector` keeps the first such app as `lookalike` and returns it only
+   when no app or page matches rules 2 and 3. `CallApps.notCalls` and
+   `notCallPages` leave out voice assistants, recorders, music software, and
+   dictation and meeting-note apps (Superwhisper, Wispr Flow
+   `com.electron.wispr-flow`, MacWhisper, Granola).
+
+On 2026-11-02 Superwhisper was recording during a call in Chrome. It sorted
+first, matched rule 4, and became the meeting, so names were read from
+Superwhisper's window. Since 2026-11-06 a known call app or a meeting page
+wins over rule 4, and Superwhisper is in `notCalls`.
 
 VoiceiQ's own processes never count. Neither does an app whose audio goes
 only through devices its own developer's driver provides: that is a remote
@@ -53,6 +64,54 @@ Before macOS 14.2 only rules 2 and 3 apply, on the global "mic in use" bit.
 
 The daemon names in rule 1 come from Apple's process layout; a relayed
 iPhone call was not available to test on the development Mac.
+
+## What a meeting records
+
+A meeting folder holds two tracks: `mic.caf` and `system.caf`. On a detected
+call, both come from the call alone. When the recording starts,
+`CallDetector.processes(for:)` returns the call's `CallProcesses`:
+
+- `objects`: the Core Audio process objects of the call app, of every helper
+  it is responsible for (Chrome's audio service, Safari's WebKit GPU
+  process), and, for FaceTime and Phone (`CallApps.daemonCallApps`), of the
+  call daemons that carry the audio.
+- `inputDevice`: the input device that the first of those processes with
+  running input captures.
+
+`SystemAudioTap` taps only those processes
+(`CATapDescription(stereoMixdownOfProcesses:)`). The tap takes their sound
+before it reaches an output device, so music, notifications, and other apps
+stay out of `system.caf`, and the speakers or headphones the call plays to
+make no difference. `MicTap` records `inputDevice` (`MicTap(url:device:)`).
+If that device fails to start, or fails after its retries later on, it
+records the default input instead, and `MicTap.use(device:)` ignores that
+device for 60 s (`failedBackoff`), so a call that keeps reporting it does not
+stop the default every 5 s.
+
+While the meeting records, `MeetingEngine.follow` resolves the processes
+again every 5 s. `SystemAudioTap.follow(processes:)` writes a new tap
+description with the same UUID onto the running tap when the set changed,
+for example when Chrome restarts its audio service mid-call. `MicTap.use(device:)`
+moves the mic track when the call moves to another input.
+
+With no call detected (a recording started by hand), or when none of the
+call app's processes has audio open at the start, `system.caf` is a global
+tap of all system audio and `mic.caf` records the default input. Nothing
+follows the call then. Before macOS 14.2 there is no process list, and
+`processes(for:)` returns nil.
+
+A call in a browser is tapped as the browser's processes, and Chrome plays
+every tab through one audio service. Sound from another tab of the same
+browser (a video, say) is in `system.caf` with the call. Core Audio has no
+per-tab process, so this is not fixable at the tap.
+
+Measured on the Mac mini with a notarized build: during a call in Chrome,
+`afplay` played other speech. The sound envelope of `system.caf` matched the
+call clip at 0.998 and the other speech at 0.391. Two unrelated clips match
+at about 0.30. With no call detected, the recording held all the audio. A
+call that uses a mic other than the default was not tested, because the Mac
+mini has one input. The decisions are in
+[activities/2026-11-06-meeting-speaker-attribution.md](../activities/2026-11-06-meeting-speaker-attribution.md).
 
 ## The note owner
 
@@ -87,10 +146,31 @@ window can fall back to DeepInfra. Above 300 s of audio DeepInfra still returns
 the whole text, but word timings for only the last part, stamped past the end
 of the file (measured 2026-10-29: 38 of 421 words timed on a 639 s track).
 
-On the Mac, when Nemotron 3 Diarization is downloaded (Settings → Dictation),
-and the far side came back as one voice (as every DeepInfra window does),
-the on-device diarizer then splits those words by speaker
-(`LocalMeetingTranscriber.relabel`, hooked in as `MeetingTranscriber.relabel`):
+DeepInfra can also return a window with no word times. On 2026-11-02 it
+returned about 1 KB of plain text for each 240 s window, so all the words of
+a window landed at one moment and became one speaker.
+`MeetingTranscriber.timed` checks that every word has a start time that
+`AssembledAudio.trackSpan` accepts (not before the request's body, say) and
+that the word ends no more than 1 s past the end of the request. When a
+window fails that check, `MeetingTranscriber.halves` cuts its speech into two
+halves of about equal length, and each half is requested and checked again.
+A window under 60 s is not cut, so the shortest request is 30 s
+(`shortestWindow`), and its untimed text stays one turn. In a window that is
+not cut, a word whose time `trackSpan` rejects is kept as untimed text
+rather than dropped. DeepInfra bills by
+audio length, so each split bills that window's audio a second time. The cached
+windows moved from `transcribe-v6-*` to `transcribe-v7-*` (`cacheVersion`),
+so a Retry of an older meeting requests every window again. Scratch tests on
+the Mac mini checked the split; it was not run against DeepInfra, because
+that Mac has no DeepInfra key.
+
+On the Mac, when Speaker Separation (pyannote community-1) is downloaded
+(Settings → Dictation) and the far side came back as one voice (as every
+DeepInfra window does), the on-device diarizer splits those words by speaker
+(`LocalMeetingTranscriber.relabel`, hooked in as `MeetingTranscriber.relabel`).
+The diarizer picks the number of speakers from the audio, as
+[On-device meetings](LOCAL_TRANSCRIPTION.md#on-device-meetings) describes.
+It splits the words in one of two ways:
 
 - On a call with an echo-free mic, the owner's words stay `you` and only the
   system track is diarized. Its far-side words take the diarizer's speakers the
@@ -101,8 +181,135 @@ the on-device diarizer then splits those words by speaker
 The diarizer runs alone, without Fluid Speech Mini
 (`LocalMeetingRequest.speechDirectory` is nil), in the same helper process as
 on-device meetings. Its speaker stretches are cached beside the audio as
-`speakers-system-v1.json` or `speakers-v1.json`. Without the model, while
+`speakers-system-v2.json` or `speakers-v2.json`. Without the model, while
 another meeting holds it, or if it fails, the track labels stay.
+
+## Speakers in browser calls from the Chrome extension
+
+In a browser call, everyone on the far side arrives in one audio track, and
+the diarizer can merge two people who sound alike. The VoiceiQ Meetings
+extension for Chrome reports which of the call's WebRTC audio sources is loud,
+and when. Each source is one participant, so the extension tells people
+apart however alike they sound. It reads no audio, page text, or names. What
+it reports and where that is kept is in [PRIVACY.md](PRIVACY.md).
+
+### What the extension reports
+
+The extension is in `App/Resources/ChromeExtension` (Manifest V3, Chrome 116
+or later). Its manifest `key` fixes the extension ID at
+`gjobkaplebdoedjfopfmogibphjmglaa`, so the native host manifest can name it.
+The only permission is `nativeMessaging`. Its content scripts run at
+`document_start`, in every frame, on Google Meet, Teams
+(`teams.microsoft.com`, `teams.live.com`, `teams.cloud.microsoft`), Zoom
+(`*.zoom.us`, `*.zoom.com`), Jitsi Meet (`meet.jit.si`), Whereby, Slack,
+Discord, and Webex.
+
+- `page.js` runs in the page's MAIN world, before the page's own scripts. It
+  replaces `RTCPeerConnection` with a subclass that keeps each connection.
+  Every 250 ms it reads the sources of each live remote audio receiver. It
+  uses the contributing sources (CSRC) when the receiver has them: Meet and
+  Teams mix people into a few streams and mark each person with a CSRC.
+  Otherwise it uses the synchronization sources (SSRC), one stream per
+  person. A source is loud when its `audioLevel` was at least 0.01 (about
+  -40 dBov) within the last 400 ms. The script posts the sorted loud ids
+  (such as `csrc:3141` or `ssrc:2718`) with the time and the page's host and
+  path. It posts when the list changes, and every 1 s while the list is not
+  empty, so a pause in the call differs from a page that stopped reporting.
+- `relay.js` runs in the content script world and passes on only messages
+  of that shape: a numeric time, a page cut to 300 characters, and at most 64
+  ids of up to 40 characters each.
+- `background.js` adds the tab id and sends each event to the native
+  messaging host `io.blue.voiceiq.browser`. When the host cannot be reached,
+  it waits 30 s before it connects again. On install and at browser start it
+  sends a `hello` event (tab `-1`), so Settings can show that the extension
+  works.
+
+### The native host
+
+The host is the speech helper, `VoiceiQLocalSpeech`, so the app bundle has no
+second signed executable. Chrome starts it with the extension's origin as
+the first argument, and `BrowserHostServer.isBrowserLaunch` sends that launch
+to `BrowserHostServer.run`. The host reads length-prefixed JSON messages of up
+to 64 KB from stdin. `BrowserSpeakerLog.append` writes each event as one JSON
+line to `~/Library/Application Support/VoiceiQ/browser-speakers/<UTC day>.jsonl`.
+VoiceiQ does not need to run while the extension reports.
+
+### How the events label the words
+
+1. `MeetingEngine.stopRecording` calls `BrowserSpeakers.save`. It reads the
+   events from 5 s before the meeting started to 5 s after it ended, groups
+   them by tab and page, and keeps the tabs where a source was loud. It takes
+   the tab on the detected meeting page, else the busiest one, and writes its
+   events to `browser-speakers.json` in the meeting folder, where Retry and
+   Redo find them. A call in a known call app (`CallApps.known`, Zoom or
+   FaceTime, say) gets no timeline, because any browser tab is another call.
+   An app detected only because it looks like a call keeps the fallback: it
+   can be a Chromium browser that `CallApps.browsers` does not list. A recording that
+   was interrupted gets its timeline at the next launch
+   (`MeetingEngine.failInterruptedRecordings`), up to the last write to its
+   tracks. `save` then calls `BrowserSpeakerLog.prune`, which deletes day
+   files older than 7 days. The native host prunes the same way when Chrome
+   starts it and then hourly, so the log is pruned even when no meeting is
+   recorded.
+2. Each event lasts until the next one, for at most 3 s (`hold`), widened by
+   0.3 s on each side (`slack`). These are each source's loud stretches.
+3. `BrowserSpeakers.apply` runs before turns are built, in
+   `MeetingTranscriber` (after the diarizer's `relabel`, for every provider)
+   and in `LocalMeetingTranscriber`. The owner's words stay `you`.
+4. A far-side word goes to the source whose loud stretches overlap the
+   word's time more than twice as much as any other source's. The rule uses
+   overlap, not the word's midpoint, because the recognizer often starts a
+   word early or stretches a turn's last word over the silence after it.
+5. A far-side word with no such source goes where most of its diarizer
+   speaker's words went, weighted by word length.
+6. The speakers are renumbered `s1`, `s2`, and so on, in order of first
+   appearance. Screen names are matched to them afterwards as usual.
+
+The words stay as they were unless the timeline has at least 2 sources and
+covers at least 30 % of the far-side words. One source means a call with one
+other person, or a service that sends everyone in one stream with no CSRCs,
+and the diarizer knows those better. Too little coverage means the timeline
+is from another call. When every source is a stream id (`ssrc:`), at least
+one must be loud again after another source was (`tellsPeopleApart`): a
+mixed stream that reconnects comes back under a new id, so its ids follow
+one another and none returns. Only events with one loud stream count, because
+the old and new stream can both be loud for a moment.
+
+### Install the extension
+
+The extension is not on the Chrome Web Store. Chrome 137 removed
+`--load-extension`, and on a Mac an extension from outside the store installs
+only through MDM, so you load it once as an unpacked extension.
+
+1. In Settings → Advanced → **Chrome extension for meetings**
+   (`BrowserExtensionSection`), click **Install in Chrome…**.
+   VoiceiQ copies the extension to
+   `~/Library/Application Support/VoiceiQ/ChromeExtension`. It writes the host
+   manifest `io.blue.voiceiq.browser.json` into the `NativeMessagingHosts`
+   folder of each Chromium browser that has a support folder: Chrome, Chrome
+   Beta, Chrome Canary, Chrome for Testing, Chromium, Edge, Brave, Arc, and
+   Vivaldi. Then it opens `chrome://extensions` in Chrome and selects the
+   folder in Finder.
+2. On the Extensions page, turn on **Developer mode**.
+3. Drag the `ChromeExtension` folder onto the page, or click **Load unpacked**
+   and choose it.
+
+At each launch, VoiceiQ copies the files and writes the host manifests again
+when the extension is installed (`BrowserExtension.refreshIfInstalled`), so
+both follow app updates. **Status** shows "Not installed", "Waiting for
+Chrome to load it", or "Last heard from it" with the time of the newest
+write to the log. It does not claim the extension works now: a disabled
+extension leaves the old log behind.
+
+### Measured
+
+On the Mac mini, with a notarized build and Chrome for Testing, a call with
+two similar voices (Samantha and Karen, 10 turns): the diarizer alone found
+one speaker. With the extension, all 10 turns went to the right person. An
+earlier rule that used each word's midpoint put 6 words at turn edges on the
+wrong person. The overlap rule puts them right
+(`BrowserSpeakersTests.testWordsTheRecognizerTimesPastTheirTurnStillGoToTheirSpeaker`).
+Real Google Meet and Teams calls, which use the CSRC path, were not tested.
 
 ## Speaker names from the screen
 
@@ -115,13 +322,18 @@ on). It needs Screen Recording, which the dictation onboarding asks for; a
 meeting never raises the prompt (`CGPreflightScreenCaptureAccess`).
 
 1. `MeetingEngine.startRecording` starts a `ScreenNameSampler` with the
-   detected call source.
-2. Every 3 s the sampler captures one image with ScreenCaptureKit:
-   - the call app's or browser's largest on-screen window, when a source was
-     detected (`SCContentFilter(desktopIndependentWindow:)`, so it works when
-     the window is covered);
-   - otherwise the main display, without VoiceiQ's own windows.
-   The long side is capped at 2560 px.
+   detected call source. A recording started by hand with no call detected
+   reads the frontmost known call app (`ScreenNameSampler.frontCallApp`).
+   With no call app, the sampler does not run.
+2. Every 3 s the sampler captures one window of the call app or browser
+   with ScreenCaptureKit (`SCContentFilter(desktopIndependentWindow:)`, so it
+   works when the window is covered). It picks a window whose title names a
+   page in `CallApps.meetingPages` first, then a window on screen, then the
+   largest. A browser with no such window gives no image, because its other
+   windows are other pages. It never captures the whole display, because other apps' windows
+   (a dictation app, a chat, a document) hold names that are not the
+   meeting's. When the call app has no window to read, the sample has no
+   image. The long side is capped at 2560 px.
 3. Vision reads the text of the whole frame and of four overlapping quarters
    (name tags are small). `ScreenSpeakerNames.candidates(in:)` keeps lines that
    look like name tags: two to four capitalised words, or one word followed by
@@ -138,8 +350,7 @@ meeting never raises the prompt (`CGPreflightScreenCaptureAccess`).
    `AccessibilityWaker`. Either permission is enough for sampling to run.
    Zoom 7.2 exposes each video tile as an `AXTabGroup` described "Name,
    Computer audio unmuted", and the participants list as `AXStaticText`
-   rows such as "Name (me)". A recording started by hand with no call
-   detected reads the frontmost known call app (`ScreenNameSampler.frontCallApp`).
+   rows such as "Name (me)".
 6. Lines the call app marks as the user's own ("Priya Raman (me)", Zoom's
    "(Host, me)", Meet's and Teams' "(You)") are kept as `me` on the sample
    (`ScreenSpeakerNames.owner(in:)`).
@@ -196,8 +407,8 @@ docs/design/meeting-prompt-rulebook.md. Fixes from 2026-10-29:
 - **Redo notes** writes the notes again from the saved transcript.
 - **Redo transcript and notes** (`MeetingEngine.retry(id:fresh: true)`) drops
   the cached words (`transcribe-*`, `local-words-*`, `speakers-*`) and hears
-  the whole meeting again. **Retry** after a failure keeps the finished
-  windows.
+  the whole meeting again. `browser-speakers.json` stays. **Retry** after a
+  failure keeps the finished windows.
 - `MeetingEngine.processing` maps each meeting being processed to its step
   (`.transcribing` or `.summarizing`). The Mac header shows a spinner with
   "Transcribing" or "Making notes" while old notes stay on screen; iOS shows

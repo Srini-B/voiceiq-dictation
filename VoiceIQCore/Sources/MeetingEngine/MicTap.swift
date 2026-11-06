@@ -4,7 +4,7 @@ import AVFoundation
 import CoreAudio
 import Foundation
 
-/// Records the default input device to a 16 kHz mono CAF file.
+/// Records the call's input device, or the default input, to a 16 kHz mono CAF file.
 ///
 /// Uses a Core Audio IOProc rather than AVAudioEngine: while `SystemAudioTap`'s
 /// aggregate device is running, an AVAudioEngine input tap in this process
@@ -30,7 +30,7 @@ public final class MicTap: @unchecked Sendable {
         mSelector: kAudioHardwarePropertyDefaultInputDevice,
         mScope: kAudioObjectPropertyScopeGlobal, mElement: kAudioObjectPropertyElementMain)
     private lazy var deviceListener: AudioObjectPropertyListenerBlock = { [weak self] _, _ in
-        self?.control.async { self?.moveToDefaultDevice() }
+        self?.control.async { self?.moveToWantedDevice() }
     }
     private var formatAddress = AudioObjectPropertyAddress(mSelector: kAudioDevicePropertyStreamFormat,
                                                           mScope: kAudioDevicePropertyScopeInput,
@@ -44,11 +44,25 @@ public final class MicTap: @unchecked Sendable {
     /// device still settling does not leave the rest of the meeting silent.
     static let attachRetries = 5
 
-    public init(url: URL) { self.url = url }
+    /// The input the call itself captures (a headset, a USB mic picked in the
+    /// call app). Nil records the default input. Changed through `use(device:)`.
+    private var preferred: AudioDeviceID?
+    /// The call's input that failed every retry, and when. The call keeps
+    /// reporting it, and each new try stops the default for the retries.
+    private var failed: (device: AudioDeviceID, at: Date)?
+    static let failedBackoff: TimeInterval = 60
+
+    public init(url: URL, device: AudioDeviceID? = nil) { self.url = url; preferred = device }
 
     public func start() throws {
         writer = try CAFWriter(url: url, format: target); frames = 0
-        try control.sync { try attach(to: Self.defaultInputDevice()) }
+        try control.sync {
+            do { try attach(to: wanted) }
+            catch {
+                guard let device = preferred else { throw error }
+                failed = (device, Date()); preferred = nil; try attach(to: wanted)
+            }
+        }
         _ = AudioObjectAddPropertyListenerBlock(AudioObjectID(kAudioObjectSystemObject), &defaultInputAddress, control, deviceListener)
         listening = true
     }
@@ -99,17 +113,33 @@ public final class MicTap: @unchecked Sendable {
         deviceID = kAudioObjectUnknown; procID = nil; converter = nil; inputFormat = nil
     }
 
-    /// Default input changed (headset plugged in, user switched mics): follow it.
-    private func moveToDefaultDevice(force: Bool = false, attempt: Int = 0) {
+    /// The call moved to another input (the user picked a different mic in the
+    /// call app): record that one from now on.
+    public func use(device: AudioDeviceID) {
+        control.async { [weak self] in
+            guard let self, self.preferred != device else { return }
+            if let failed = self.failed, failed.device == device, Date().timeIntervalSince(failed.at) < Self.failedBackoff { return }
+            self.preferred = device
+            self.moveToWantedDevice()
+        }
+    }
+
+    private var wanted: AudioDeviceID { preferred ?? Self.defaultInputDevice() }
+
+    private func moveToWantedDevice(force: Bool = false, attempt: Int = 0) {
         guard writer != nil else { return }
-        let device = Self.defaultInputDevice()
+        let device = wanted
         guard force || device != deviceID else { return }
         detach()
         do { try attach(to: device); Log.meeting.notice("mic moved to device \(device) (frames=\(self.frames))") }
         catch {
             Log.meeting.error("mic move failed (attempt \(attempt + 1)): \(String(describing: error), privacy: .public)")
+            // The call's device went away (AirPods taken out): back to the default.
+            if attempt >= Self.attachRetries, let device = preferred {
+                failed = (device, Date()); preferred = nil; moveToWantedDevice(force: true); return
+            }
             guard attempt < Self.attachRetries else { return }
-            control.asyncAfter(deadline: .now() + 0.5) { [weak self] in self?.moveToDefaultDevice(force: true, attempt: attempt + 1) }
+            control.asyncAfter(deadline: .now() + 0.5) { [weak self] in self?.moveToWantedDevice(force: true, attempt: attempt + 1) }
         }
     }
 
@@ -119,7 +149,7 @@ public final class MicTap: @unchecked Sendable {
         guard AudioObjectGetPropertyData(deviceID, &formatAddress, 0, nil, &size, &stream) == noErr,
               stream.mSampleRate != inputFormat.sampleRate || stream.mChannelsPerFrame != inputFormat.channelCount else { return }
         Log.meeting.notice("mic format changed to \(stream.mSampleRate) Hz, \(stream.mChannelsPerFrame) ch")
-        moveToDefaultDevice(force: true)
+        moveToWantedDevice(force: true)
     }
 
     private func consume(_ list: UnsafePointer<AudioBufferList>) {

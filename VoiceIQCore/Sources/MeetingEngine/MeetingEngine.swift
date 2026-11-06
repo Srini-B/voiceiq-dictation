@@ -37,6 +37,20 @@ import VoiceIQSpeech
     private let readsScreenNames: () -> Bool
     #if os(macOS)
     private var screenNames: ScreenNameSampler?
+    private var following: Task<Void, Never>?
+
+    /// A call app can start a helper mid-call (Chrome's audio service after a
+    /// crash) or move to another mic; every few seconds the recording follows.
+    private static func follow(_ source: CallSource, mic: MicTap, system: SystemAudioTap) -> Task<Void, Never> {
+        Task.detached(priority: .utility) {
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(5))
+                guard !Task.isCancelled, let call = CallDetector.processes(for: source) else { continue }
+                system.follow(processes: call.objects)
+                if let device = call.inputDevice { mic.use(device: device) }
+            }
+        }
+    }
     #endif
     /// The call the detector currently sees, whether or not it was accepted.
     public private(set) var detectedSource: CallSource?
@@ -62,6 +76,16 @@ import VoiceIQSpeech
             meta.status = .failed("interrupted")
             meta.endedAt = meta.endedAt ?? meta.startedAt.addingTimeInterval(meta.durationSeconds)
             try? store.save(meta: meta)
+            #if os(macOS)
+            // The tracks were written until the process died; a Retry needs the browser's speakers too.
+            if let folder = store.folder(for: meta.id) {
+                var written = meta
+                written.endedAt = ["mic.caf", "system.caf"].compactMap {
+                    try? folder.appendingPathComponent($0).resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
+                }.max() ?? meta.endedAt
+                BrowserSpeakers.save(meta: written, folder: folder)
+            }
+            #endif
         }
     }
 
@@ -92,8 +116,14 @@ import VoiceIQSpeech
         let id = MeetingID(), now = Date(), meta = MeetingMeta(id: id, startedAt: now, source: source)
         do {
             let folder = try store.create(meta: meta)
+            #if os(macOS)
+            let call = source.flatMap(CallDetector.processes(for:))
+            let mic = MicTap(url: folder.appendingPathComponent("mic.caf"), device: call?.inputDevice)
+            let system = SystemAudioTap(url: folder.appendingPathComponent("system.caf"), processes: call?.objects ?? [])
+            #else
             let mic = MicTap(url: folder.appendingPathComponent("mic.caf"))
             let system = SystemAudioTap(url: folder.appendingPathComponent("system.caf"))
+            #endif
             // Mic first. MEASURED 2026-09-26 (macOS 26.5, built-in mic): with the
             // tap's aggregate device already running, `AudioDeviceStart` on the
             // mic blocked the main thread for 9 s to forever while coreaudiod
@@ -106,6 +136,7 @@ import VoiceIQSpeech
             currentFolder = folder; currentMeta = meta
             #if os(macOS)
             if readsScreenNames() { screenNames = ScreenNameSampler(source: source); screenNames?.start() }
+            if let source, call != nil { following = Self.follow(source, mic: mic, system: system) }
             #endif
             phase = .recording(id, since: now)
         } catch { fail(id, error) }
@@ -113,6 +144,9 @@ import VoiceIQSpeech
 
     public func stopRecording() {
         guard case let .recording(id, _) = phase, let folder = currentFolder, var meta = currentMeta else { return }
+        #if os(macOS)
+        following?.cancel(); following = nil
+        #endif
         let micDuration = mic?.stop() ?? 0, systemDuration = system?.stop() ?? 0
         mic = nil; system = nil; currentFolder = nil; currentMeta = nil
         #if os(macOS)
@@ -120,6 +154,9 @@ import VoiceIQSpeech
         screenNames = nil
         #endif
         meta.endedAt = Date(); meta.durationSeconds = max(micDuration, systemDuration)
+        #if os(macOS)
+        BrowserSpeakers.save(meta: meta, folder: folder)
+        #endif
         try? mark(&meta, .transcribing)
         phase = .idle
         Task { await UsageMeter.$scope.withValue(UsageScope(activity: .meeting, sessionID: id.uuid.uuidString)) {
@@ -231,7 +268,7 @@ import VoiceIQSpeech
         }
     }
 
-    /// Nemotron 3 Diarization over words from a provider that labels no
+    /// The on-device speaker diarizer over words from a provider that labels no
     /// speakers. Without the model, or if it fails, the words keep the track
     /// labels: the owner, and one speaker for the far side.
     private var relabel: (@Sendable ([TimedWord], URL) async -> [TimedWord])? {

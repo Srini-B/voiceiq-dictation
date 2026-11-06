@@ -1,12 +1,10 @@
-import AVFoundation
+import CoreML
 import FluidAudio
 import Foundation
 import VoiceIQSpeech
 
 /// Transcribes and diarizes one saved meeting mix with the two on-device
 /// models, one after the other so only one model is in memory at a time.
-/// Both read the file from disk in pieces, so a two-hour meeting costs no
-/// more memory than a short one.
 enum LocalMeetingJob {
     enum Failure: LocalizedError {
         case noTimings
@@ -16,9 +14,6 @@ enum LocalMeetingJob {
             }
         }
     }
-
-    /// Diarizer input per read: one minute of 16 kHz audio.
-    static let diarizerChunk = 60 * 16_000
 
     static func run(_ request: LocalMeetingRequest) async throws -> LocalMeetingResult {
         let started = Date()
@@ -81,28 +76,124 @@ enum LocalMeetingJob {
         return out
     }
 
+    /// pyannote community-1 at FluidAudio's defaults, then more speakers while
+    /// their voices stay clearly apart: the defaults merge two similar voices
+    /// (Samantha and Karen) into one. MEASURED 2026-11-06 on 33 files, the
+    /// threshold tuned on half and checked on the other half: exact speaker
+    /// count on 31 by leave-one-out, against 28 at the defaults; no
+    /// single-voice file split; one person recorded in two sessions split in
+    /// two. See `activities/2026-11-06-offline-speaker-diarizer.md`.
     private static func diarize(_ audio: URL, models directory: URL) async throws -> [LocalMeetingResult.Segment] {
-        let config = Nemotron3Config.offline
-        let models = try await Nemotron3Models.load(config: config, directory: directory)
-        let diarizer = Nemotron3Diarizer(config: config, models: models)
-        let file = try AVAudioFile(forReading: audio, commonFormat: .pcmFormatFloat32, interleaved: false)
-        var probabilities: [Float] = []
-        var frames = 0
-        var speakers = 8
-        func collect(_ results: [Nemotron3ChunkResult]) {
-            for result in results {
-                probabilities += result.probabilities
-                frames += result.frameCount
-                speakers = result.numSpeakers
+        let models = try loadDiarizer(from: directory)
+        func manager(speakers: Int?) -> OfflineDiarizerManager {
+            var config = OfflineDiarizerConfig.default
+            config.exposeChunkEmbeddings = true
+            config.clustering.numSpeakers = speakers
+            let manager = OfflineDiarizerManager(config: config)
+            manager.initialize(models: models)
+            return manager
+        }
+        let (source, _) = try AudioSourceFactory().makeDiskBackedSource(
+            from: audio, targetSampleRate: OfflineDiarizerConfig.default.segmentation.sampleRate)
+        defer { source.cleanup() }
+        do {
+            let defaults = manager(speakers: nil)
+            let prepared = try await defaults.prepare(audioSource: source)
+            var best = try defaults.cluster(prepared)
+            let found = Set(best.segments.map(\.speakerId)).count
+            for count in stride(from: found + 1, through: min(found + extraSpeakers, maxSpeakers), by: 1) {
+                let candidate = try manager(speakers: count).cluster(prepared)
+                guard voicesApart(candidate.chunkEmbeddings ?? [], speakers: count) else { break }
+                best = candidate
+            }
+            return slots(best.segments)
+        } catch OfflineDiarizationError.noSpeechDetected {
+            return []
+        }
+    }
+
+    static let extraSpeakers = 3
+    static let maxSpeakers = 8
+    /// Cosine distance between the two closest speakers' mean voices, tuned
+    /// the same in every leave-one-out fold. A single voice forced into two
+    /// scored at most 0.111.
+    static let closestVoices: Float = 0.275
+    static let embeddingsPerSpeaker = 3
+
+    static func voicesApart(_ chunks: [ChunkEmbedding], speakers: Int) -> Bool {
+        var sums: [String: [Float]] = [:], counts: [String: Int] = [:]
+        for chunk in chunks {
+            let norm = chunk.embedding256.reduce(0) { $0 + $1 * $1 }.squareRoot()
+            guard norm.isFinite, norm > 0 else { continue }
+            var sum = sums[chunk.speakerId] ?? [Float](repeating: 0, count: chunk.embedding256.count)
+            for index in sum.indices { sum[index] += chunk.embedding256[index] / norm }
+            sums[chunk.speakerId] = sum
+            counts[chunk.speakerId, default: 0] += 1
+        }
+        guard sums.count == speakers, let fewest = counts.values.min(), fewest >= embeddingsPerSpeaker else { return false }
+        let centroids = sums.values.map { sum -> [Float] in
+            let norm = sum.reduce(0) { $0 + $1 * $1 }.squareRoot()
+            return sum.map { $0 / norm }
+        }
+        var closest = Float.infinity
+        for i in centroids.indices {
+            for j in centroids.indices where j > i {
+                closest = min(closest, 1 - zip(centroids[i], centroids[j]).reduce(0) { $0 + $1.0 * $1.1 })
             }
         }
-        try await SpeechAudio.forEachChunk(audio, frames: file.length, size: diarizerChunk) { samples in
-            diarizer.appendAudio(samples)
-            collect(try diarizer.processBufferedAudio())
+        return closest >= closestVoices
+    }
+
+    /// The diarizer's ids ("S1", "S2", ...) as slots numbered in order of
+    /// first appearance; its cluster numbers follow no such order.
+    private static func slots(_ segments: [TimedSpeakerSegment]) -> [LocalMeetingResult.Segment] {
+        var seen: [String: Int] = [:]
+        return segments.map { segment in
+            let slot = seen[segment.speakerId] ?? seen.count
+            seen[segment.speakerId] = slot
+            return .init(speaker: slot, start: Double(segment.startTimeSeconds), end: Double(segment.endTimeSeconds))
         }
-        collect(try diarizer.finishStream())
-        return Nemotron3Diarizer.segments(probabilities: probabilities, frameCount: frames, numSpeakers: speakers).map {
-            .init(speaker: $0.speakerIndex, start: Double($0.startSeconds), end: Double($0.endSeconds))
+    }
+
+    /// The same models and compute units `OfflineDiarizerModels.load` uses.
+    /// That loader and `prepareModels` download, or purge the folder and
+    /// download again, whenever FluidAudio's own revision marker is missing,
+    /// which it always is in a verified install.
+    private static func loadDiarizer(from directory: URL) throws -> OfflineDiarizerModels {
+        let started = Date()
+        func model(_ name: String, _ units: MLComputeUnits) throws -> MLModel {
+            let configuration = MLModelConfiguration()
+            configuration.computeUnits = units
+            configuration.allowLowPrecisionAccumulationOnGPU = true
+            return try MLModel(contentsOf: directory.appendingPathComponent(name), configuration: configuration)
         }
+        return OfflineDiarizerModels(
+            segmentationModel: try model(ModelNames.OfflineDiarizer.segmentationFile, .all),
+            fbankModel: try model(ModelNames.OfflineDiarizer.fbankFile, .cpuOnly),
+            embeddingModel: try model(ModelNames.OfflineDiarizer.embeddingFile, .all),
+            pldaRhoModel: try model(ModelNames.OfflineDiarizer.pldaRhoFile, .all),
+            pldaPsi: try pldaPsi(from: directory.appendingPathComponent(ModelNames.OfflineDiarizer.pldaParameters)),
+            compilationDuration: Date().timeIntervalSince(started)
+        )
+    }
+
+    /// A copy of FluidAudio's private PLDA reader (`loadPLDAPsi`).
+    private static func pldaPsi(from url: URL) throws -> [Double] {
+        struct Parameters: Decodable {
+            struct Tensor: Decodable {
+                let base64: String
+                enum CodingKeys: String, CodingKey { case base64 = "data_base64" }
+            }
+            let tensors: [String: Tensor]
+        }
+        let parameters = try JSONDecoder().decode(Parameters.self, from: Data(contentsOf: url))
+        guard let encoded = parameters.tensors["psi"]?.base64,
+              let data = Data(base64Encoded: encoded, options: .ignoreUnknownCharacters),
+              data.count >= MemoryLayout<Float>.size else {
+            throw CocoaError(.fileReadCorruptFile)
+        }
+        var psi = [Float](repeating: 0, count: data.count / MemoryLayout<Float>.size)
+        _ = psi.withUnsafeMutableBytes { data.copyBytes(to: $0) }
+        return psi.map(Double.init)
     }
 }

@@ -54,7 +54,7 @@ public struct MeetingTranscriber: Sendable {
     /// A Tier 1 key needs about one minute of waiting per window; a two-hour
     /// call has twenty windows.
     static let rateLimitBudget: TimeInterval = 45 * 60
-    static let cacheVersion = "v6"
+    static let cacheVersion = "v7"
 
     public func transcribe(folder: URL) async throws -> [TranscriptSegment] {
         let audio = try Self.callAudio(folder: folder)
@@ -97,6 +97,7 @@ public struct MeetingTranscriber: Sendable {
         // diarizing provider that found several keeps its own labels.
         let farVoices = Set(words.lazy.filter { $0.speaker != MeetingSpeaker.you }.map(\.speaker))
         if reachesDeepInfra, farVoices.count <= 1, let relabel { words = await relabel(words, folder) }
+        words = BrowserSpeakers.apply(words, folder: folder)
         return SpeakerLinker.overlappingTurns(words).map { turn in
             TranscriptSegment(speaker: turn.speaker, text: turn.text, chunkIndex: 0, start: turn.start, end: turn.end)
         }
@@ -351,8 +352,19 @@ public struct MeetingTranscriber: Sendable {
             try request.appendBody(regions, from: audio)
             let raw = try await transcribeSpeakers(try FLACEncoder.encode(samples: request.samples), seconds: request.duration,
                                                    references: [], via: provider)
+            // Untimed words would all land at one moment, under one speaker.
+            // DeepInfra bills by audio length, so the halves bill the window's audio a second time.
+            if !Self.timed(raw, in: request), let (left, right) = Self.halves(regions) {
+                Log.meeting.info("DeepInfra timed \(raw.filter { $0.start != nil }.count, privacy: .public) of \(raw.count, privacy: .public) words in \(Int(request.duration), privacy: .public)s; asking again in halves")
+                let first = try await transcribe(window: left, audio: audio, clips: clips, known: known, via: provider)
+                return first + (try await transcribe(window: right, audio: audio, clips: clips, known: known + first, via: provider))
+            }
+            // Too short to split: a word whose time `place` would drop goes in as untimed text instead.
+            let kept = raw.map { word in
+                word.start.map { request.trackSpan($0, word.end ?? $0) == nil } == true ? DiarizedWord(text: word.text, speaker: word.speaker) : word
+            }
             let remote = known.first { $0.speaker != MeetingSpeaker.you }?.speaker
-            return Self.place(Self.labelByTrack(raw, audio: request, call: audio), audio: request, call: audio,
+            return Self.place(Self.labelByTrack(kept, audio: request, call: audio), audio: request, call: audio,
                               known: known, mapping: remote.map { [Self.farLabel: $0] } ?? [:])
         }
         if provider == .gemini {
@@ -378,6 +390,37 @@ public struct MeetingTranscriber: Sendable {
     }
 
     static let farLabel = "far"
+
+    /// Every word carries a time inside the request. DeepInfra's Nemotron has
+    /// timed none of a 240 s request's words (the Nov 2 call: about 1 KB of
+    /// plain text per window) and, on longer ones, only the last few, placed
+    /// past the end of the audio. A time `place` would drop (before the
+    /// request starts, say) counts as no time.
+    static func timed(_ words: [DiarizedWord], in request: AssembledAudio) -> Bool {
+        words.allSatisfy { word in
+            word.start.map { (word.end ?? $0) <= request.duration + 1 && request.trackSpan($0, word.end ?? $0) != nil } ?? false
+        }
+    }
+
+    /// The shortest half a window is split into; shorter untimed text stays one turn.
+    static let shortestWindow: Double = 30
+
+    static func halves(_ regions: [ClosedRange<Double>]) -> ([ClosedRange<Double>], [ClosedRange<Double>])? {
+        let total = regions.reduce(0) { $0 + $1.upperBound - $1.lowerBound }
+        guard total >= 2 * shortestWindow else { return nil }
+        var left: [ClosedRange<Double>] = [], right: [ClosedRange<Double>] = [], before = 0.0
+        for region in regions {
+            let length = region.upperBound - region.lowerBound
+            if before + length <= total / 2 { left.append(region) }
+            else if before >= total / 2 { right.append(region) }
+            else {
+                let cut = region.lowerBound + total / 2 - before
+                left.append(region.lowerBound...cut); right.append(cut...region.upperBound)
+            }
+            before += length
+        }
+        return (left, right)
+    }
 
     /// Words with no speaker, labelled by track: on a call, a word heard more
     /// on the mic than the far side is "mic" (`place` turns that into the

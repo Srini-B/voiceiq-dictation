@@ -12,8 +12,8 @@ options:
 # CURRENT_PROJECT_VERSION is the build number: raise it with every release.
 settings:
   base:
-    MARKETING_VERSION: "0.6.25"
-    CURRENT_PROJECT_VERSION: "70"
+    MARKETING_VERSION: "0.6.26"
+    CURRENT_PROJECT_VERSION: "71"
 
 packages:
   VoiceIQCore:
@@ -80,6 +80,9 @@ targets:
         type: folder
         buildPhase: resources
       - path: App/Resources/Sounds
+        type: folder
+        buildPhase: resources
+      - path: App/Resources/ChromeExtension
         type: folder
         buildPhase: resources
     dependencies:

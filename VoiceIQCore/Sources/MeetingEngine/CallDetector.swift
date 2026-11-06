@@ -64,9 +64,7 @@ import os
             let input = flag(object, kAudioProcessPropertyIsRunningInput), output = flag(object, kAudioProcessPropertyIsRunningOutput)
             guard input || output else { continue }
             var pids: [pid_t] = []
-            var pid: pid_t = 0; var pidSize = UInt32(MemoryLayout<pid_t>.size)
-            var pidAddress = Self.address(kAudioProcessPropertyPID)
-            if AudioObjectGetPropertyData(object, &pidAddress, 0, nil, &pidSize, &pid) == noErr, pid > 0 {
+            if let pid = pid(of: object) {
                 pids.append(pid)
                 if let owner = Self.responsiblePID?(pid), owner > 0 { pids.append(owner) }
             }
@@ -135,6 +133,41 @@ import os
         return Array(list.prefix(Int(size) / MemoryLayout<AudioObjectID>.size))
     }
 
+    /// The Core Audio processes behind `source`: the app, every helper it is
+    /// responsible for (Chrome's audio service, Safari's WebKit GPU process),
+    /// and for FaceTime and the phone the call daemons that carry the audio.
+    /// Read from the process list, so the speakers, headphones, or AirPods the
+    /// call plays to make no difference. Nil when none of them has audio open,
+    /// and before macOS 14.2.
+    public nonisolated static func processes(for source: CallSource) -> CallProcesses? {
+        guard #available(macOS 14.2, *), let list = objects(system, kAudioHardwarePropertyProcessObjectList) else { return nil }
+        let bundleID: String
+        switch source { case let .app(id, _), let .browser(id, _): bundleID = id }
+        let appPIDs = Set(NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).map(\.processIdentifier))
+        let viaDaemons = CallApps.daemonCallApps.contains(bundleID)
+        var matched: [AudioObjectID] = [], input: AudioDeviceID?
+        for object in list {
+            guard let pid = pid(of: object), pid != getpid() else { continue }
+            let owner = responsiblePID?(pid)
+            let ours = appPIDs.contains(pid) || owner.map(appPIDs.contains) == true
+                || string(object, kAudioProcessPropertyBundleID).map { $0 == bundleID || $0.hasPrefix(bundleID + ".helper") } == true
+                || (viaDaemons && callDaemon(pid))
+            guard ours else { continue }
+            matched.append(object)
+            if input == nil, flag(object, kAudioProcessPropertyIsRunningInput),
+               let devices = objects(object, kAudioProcessPropertyDevices, scope: kAudioObjectPropertyScopeInput) {
+                input = devices.first
+            }
+        }
+        return matched.isEmpty ? nil : CallProcesses(objects: matched, inputDevice: input)
+    }
+
+    private nonisolated static func pid(of process: AudioObjectID) -> pid_t? {
+        var pid: pid_t = 0, size = UInt32(MemoryLayout<pid_t>.size)
+        var address = Self.address(kAudioProcessPropertyPID)
+        return AudioObjectGetPropertyData(process, &address, 0, nil, &size, &pid) == noErr && pid > 0 ? pid : nil
+    }
+
     private nonisolated static func string(_ object: AudioObjectID, _ selector: AudioObjectPropertySelector) -> String? {
         var value: Unmanaged<CFString>? = nil; var size = UInt32(MemoryLayout<Unmanaged<CFString>?>.size)
         var address = Self.address(selector)
@@ -177,6 +210,7 @@ import os
         let apps = NSWorkspace.shared.runningApplications.sorted {
             (audio?.directInputPIDs.contains($0.processIdentifier) ?? false) && !(audio?.directInputPIDs.contains($1.processIdentifier) ?? false)
         }
+        var lookalike: CallSource?
         for app in apps {
             // WebKit's XPC services are listed as apps ("Safari Graphics and
             // Media") and capture the mic themselves, so they would sort first
@@ -197,12 +231,12 @@ import os
             if isBrowser {
                 let page = BrowserPages.read(pid: pid)
                 if let match = page.meeting { return .browser(bundleID: id, host: match) }
-                if playing, !page.excluded { return .browser(bundleID: id, host: page.host ?? app.localizedName ?? id) }
-            } else if playing, !CallApps.notCalls.contains(id) {
-                return .app(bundleID: id, name: app.localizedName ?? id)
+                if playing, !page.excluded, lookalike == nil { lookalike = .browser(bundleID: id, host: page.host ?? app.localizedName ?? id) }
+            } else if playing, !CallApps.notCalls.contains(id), lookalike == nil {
+                lookalike = .app(bundleID: id, name: app.localizedName ?? id)
             }
         }
-        return nil
+        return lookalike
     }
 
     private nonisolated static func microphoneInUse() -> Bool {
@@ -213,6 +247,14 @@ import os
         var running: UInt32 = 0; size = UInt32(MemoryLayout.size(ofValue: running))
         return AudioObjectGetPropertyData(device, &address, 0, nil, &size, &running) == noErr && running != 0
     }
+}
+
+/// The Core Audio side of the call being recorded: the processes whose sound
+/// the system track records, and the input device the call captures, which
+/// the mic track follows.
+public struct CallProcesses: Equatable, Sendable {
+    public var objects: [AudioObjectID]
+    public var inputDevice: AudioDeviceID?
 }
 
 /// The pages a browser shows, read through the Accessibility API.

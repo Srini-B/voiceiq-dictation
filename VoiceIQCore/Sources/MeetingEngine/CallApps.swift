@@ -41,6 +41,8 @@ enum CallApps {
     /// the Mac (Continuity). The call itself has no app process using the mic.
     static let callDaemons: Set<String> = ["avconferenced", "callservicesd"]
     static let callDaemonSource = CallSource.app(bundleID: "com.apple.FaceTime", name: "FaceTime or phone")
+    /// Apps whose call audio the daemons above play, not the app itself.
+    static let daemonCallApps: Set<String> = ["com.apple.FaceTime", "com.apple.mobilephone"]
 
     static let browsers: Set<String> = [
         "com.google.Chrome", "com.apple.Safari", "org.mozilla.firefox", "com.microsoft.edgemac",
@@ -64,6 +66,7 @@ enum CallApps {
         "com.apple.QuickTimePlayerX", "com.apple.GarageBand10", "com.apple.logic10", "com.ableton.live",
         "com.obsproject.obs-studio", "com.loom.desktop", "com.rogueamoeba.audiohijack", "com.apple.iphonesimulator",
         "com.apple.dt.Xcode", "com.apple.Music", "com.spotify.client",
+        "com.superduper.superwhisper", "com.electron.wispr-flow", "com.goodsnooze.MacWhisper", "com.granola.app",
     ]
     /// The same, for pages in a browser.
     static let notCallPages = ["chatgpt.com", "claude.ai", "gemini.google.com"]

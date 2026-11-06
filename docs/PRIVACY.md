@@ -106,21 +106,32 @@ With no usable key, nothing is sent and the recording stays on your Mac.
    shows in the pill. To tell a meeting page apart, it reads the browser's
    window titles and page addresses through the Accessibility API. Nothing is recorded until you accept it, press the meeting
    shortcut (⌥M by default), or start one from Settings → Meetings. While
-   recording, mic and system audio are written to
-   `~/Library/Application Support/VoiceiQ/meetings/` and nothing is sent.
+   recording, VoiceiQ writes two tracks to
+   `~/Library/Application Support/VoiceiQ/meetings/` and sends nothing. On a
+   detected call, they are the microphone the call uses and the sound of the
+   call app alone; other apps, music and notifications are not recorded. In
+   a browser call that is the browser's sound, so other tabs of the same
+   browser that play sound are recorded too. When the call app has no audio
+   open as the recording starts, the recording falls back to all system
+   sound and the default microphone, as with no call. A
+   recording with no call detected records the default microphone and all
+   system sound.
    Recording stops only when you stop it; the stretches with speech are then
    sent to the provider for a speaker-labelled transcript, and that
    transcript is sent back for a summary and action items. With "Meeting
    transcription" on device and the models downloaded (the selected Fluid
-   Speech model and Nemotron 3 Diarization on the Mac; the selected Fluid
+   Speech model and Speaker separation on the Mac; the selected Fluid
    Speech model alone on iPhone and iPad, where the transcript has one speaker), the audio never leaves the
    device: the words and speakers are worked out locally, and only the
    transcript is sent, for the notes. If that on-device pass fails and a key is saved, the audio is sent
    as above. Turn the setting off and no call detection runs.
    With "Read names from the screen" on (Settings → Dictation, on by default,
    macOS only) and Screen Recording already granted, VoiceiQ takes a snapshot
-   of the call window every 3 seconds while recording (the main display,
-   minus VoiceiQ's own windows, when no call app was detected). Each snapshot
+   of the call window every 3 seconds while recording. It captures only a
+   window of the call app, never the whole display; in a browser, only a
+   window whose title is a meeting page. A recording with no call
+   detected reads the frontmost calling app, and with none open it takes no
+   snapshots. Each snapshot
    is read with Apple's on-device text recognition and dropped at once; it is
    never written to disk or sent anywhere. Only the name-like text and its time
    are kept, in `screen-names.json` in the meeting's folder, and only the names
@@ -164,6 +175,34 @@ VoiceiQ app, which adds them to the Dictionary as Auto-learned. From there
 they sync through your iCloud account and reach the cleanup prompt like any
 other term. Word pairs and the rest of the learned words stay in the keyboard
 on the iPhone.
+
+The VoiceiQ Meetings extension for Chrome sends nothing off your Mac. It is
+optional: you install it from Settings → Advanced and load it in Chrome
+yourself. On Google Meet, Teams, Zoom, Jitsi Meet, Whereby, Slack, Discord
+and Webex pages, it checks four times a second which of the call's incoming
+WebRTC audio streams is loud, from the level number the browser reports for
+each stream. It does not read the audio itself, the page text, the video or
+anyone's name. Each report holds only:
+
+- the time;
+- the ids of the loud streams, numbers the call service gives each stream or
+  speaker (such as `csrc:3141`);
+- the page's host and path, such as `meet.google.com/abc-defg-hij`, never
+  the query string;
+- Chrome's number for the tab.
+
+Chrome passes the reports to VoiceiQ's speech helper on this Mac, which
+appends them to `~/Library/Application Support/VoiceiQ/browser-speakers/`,
+one file per day. The extension reports during every call on those sites
+while Chrome runs, whether or not VoiceiQ records it. It also sends one
+"hello" report, with no streams and no page, when it is installed and when
+Chrome starts. When a recording stops, VoiceiQ copies the
+reports from that meeting's tab to `browser-speakers.json` in the meeting's
+folder and uses them to tell the other speakers apart. That file is deleted
+with the meeting. Day files older than 7 days are deleted when a meeting
+with reports stops, when Chrome starts the helper, and every hour while it
+runs. To stop the reports, remove the extension on Chrome's
+Extensions page.
 
 ## What never leaves
 

@@ -26,8 +26,8 @@ public final class ScreenNameSampler: @unchecked Sendable {
     private let samples = OSAllocatedUnfairLock(initialState: [ScreenNameSample]())
     private var task: Task<Void, Never>?
 
-    /// `source` is the call app or browser, when one was detected; its largest
-    /// window is read even when other windows cover it. Otherwise the main display.
+    /// `source` is the call app or browser, when one was detected. With none,
+    /// the frontmost known call app is read; with no call app, nothing is.
     public init(source: CallSource?) {
         switch source {
         case let .app(bundleID, _), let .browser(bundleID, _): self.bundleID = bundleID
@@ -47,8 +47,8 @@ public final class ScreenNameSampler: @unchecked Sendable {
             pid = app.processIdentifier
             AccessibilityWaker.wakeIfNeeded(bundleID: bundleID, pid: app.processIdentifier)
         }
-        guard snapshots || pid != nil else {
-            Log.meeting.info("screen names off: no Screen Recording or Accessibility access")
+        guard bundleID != nil, snapshots || pid != nil else {
+            Log.meeting.info("screen names off: no call window, or no Screen Recording or Accessibility access")
             return
         }
         task = Task.detached(priority: .utility) { [weak self] in
@@ -81,7 +81,7 @@ public final class ScreenNameSampler: @unchecked Sendable {
     private func sample() async {
         let time = Date().timeIntervalSince(startedAt)
         do {
-            var lines = snapshots ? try Self.read(try await capture()) : []
+            var lines = snapshots ? try await capture().map(Self.read) ?? [] : []
             if let pid { lines += CallWindowText.lines(pid: pid) }
             let names = ScreenSpeakerNames.candidates(in: lines), me = ScreenSpeakerNames.owner(in: lines)
             samples.withLock { $0.append(ScreenNameSample(time: time, names: names, me: me.isEmpty ? nil : me)) }
@@ -91,20 +91,22 @@ public final class ScreenNameSampler: @unchecked Sendable {
         }
     }
 
-    private func capture() async throws -> CGImage {
-        let content = try await SCShareableContent.excludingDesktopWindows(true, onScreenWindowsOnly: true)
-        let filter: SCContentFilter
-        if let bundleID, let window = content.windows
-            .filter({ $0.owningApplication?.bundleIdentifier == bundleID && $0.windowLayer == 0 && $0.frame.width >= 320 })
-            .max(by: { $0.frame.width * $0.frame.height < $1.frame.width * $1.frame.height }) {
-            filter = SCContentFilter(desktopIndependentWindow: window)
-        } else if let display = content.displays.first(where: { $0.displayID == CGMainDisplayID() }) ?? content.displays.first {
-            // VoiceiQ's own windows hold transcripts full of names; they are not the meeting.
-            let own = content.applications.filter { $0.processID == ProcessInfo.processInfo.processIdentifier }
-            filter = SCContentFilter(display: display, excludingApplications: own, exceptingWindows: [])
-        } else {
-            throw CocoaError(.featureUnsupported)
-        }
+    /// The call's own window, read even while other windows cover it (a shared
+    /// screen, a document the user works in). Never the whole display: other
+    /// apps' names (a dictation app, a chat, a document) are not the meeting's.
+    /// Nil when the call has no window to read, a minimized one say.
+    private func capture() async throws -> CGImage? {
+        guard let bundleID else { return nil }
+        let content = try await SCShareableContent.excludingDesktopWindows(true, onScreenWindowsOnly: false)
+        let windows = content.windows.filter { $0.owningApplication?.bundleIdentifier == bundleID && $0.windowLayer == 0 && $0.frame.width >= 320 }
+        // A browser has other windows; the meeting tab's title says which one
+        // is the call, and with no such title none is.
+        let meeting = windows.filter { window in CallApps.meetingPages.contains { window.title?.localizedCaseInsensitiveContains($0) == true } }
+        let candidates = meeting.isEmpty && !CallApps.browsers.contains(bundleID) ? windows : meeting
+        // On screen first (a window on another Space still counts), then the largest.
+        let rank = { (window: SCWindow) in (window.isOnScreen ? 1 : 0, window.frame.width * window.frame.height) }
+        guard let window = candidates.max(by: { rank($0) < rank($1) }) else { return nil }
+        let filter = SCContentFilter(desktopIndependentWindow: window)
         let pixels = CGSize(width: filter.contentRect.width * CGFloat(filter.pointPixelScale),
                             height: filter.contentRect.height * CGFloat(filter.pointPixelScale))
         let scale = min(1, Self.maxPixels / max(pixels.width, pixels.height, 1))
