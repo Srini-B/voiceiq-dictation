@@ -67,7 +67,7 @@ extension AgentTransport {
         }
         var system: [String: Any] = ["type": "text", "text": conversation.system]
         if breakpoints {
-            tools[tools.count - 1]["cache_control"] = AgentCachePolicy.staticTTL
+            if !tools.isEmpty { tools[tools.count - 1]["cache_control"] = AgentCachePolicy.staticTTL }
             system["cache_control"] = AgentCachePolicy.staticTTL
             if var last = messages.last, var blocks = last["content"] as? [[String: Any]], !blocks.isEmpty {
                 blocks[blocks.count - 1]["cache_control"] = AgentCachePolicy.movingTTL
@@ -75,13 +75,16 @@ extension AgentTransport {
                 messages[messages.count - 1] = last
             }
         }
-        return [
+        var body: [String: Any] = [
             "model": endpoint.modelID,
             "max_tokens": 4096,
             "system": [system],
             "messages": messages,
-            "tools": tools,
         ]
+        // A conversation without tools (a meeting chat) sends no list: hosts
+        // reject an empty one.
+        if !tools.isEmpty { body["tools"] = tools }
+        return body
     }
 
     private static func anthropicParts(_ content: [AgentContent]) -> [[String: Any]] {

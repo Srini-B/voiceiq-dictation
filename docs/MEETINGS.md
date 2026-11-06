@@ -227,7 +227,7 @@ mirrored or AirPlay display, still shows the pill.
 | File | Shows |
 | --- | --- |
 | `MeetingsView.swift` | Record button above the list, the detail header (title, progress while transcribing or making notes, Update notes after a speaker is renamed, Export menu, `…` menu with Redo notes / Redo transcript and notes / Retry / Delete, transcript toggle), the export message |
-| `MeetingNotesColumn.swift` | Title, Summary, the meeting type's sections, Decisions, Action items as open circles ("Owner: task"), Notes |
+| `MeetingNotesColumn.swift` | Title, Summary, the meeting type's sections, Decisions, Action items as open circles ("Owner: task"), Notes, then the meeting's questions and answers (`MeetingChatView.swift`, which also has the question box `MeetingsView.swift` puts under both columns) |
 | `MeetingTranscriptColumn.swift` | The transcript in one `NSTextView`: speaker names in their own colour (`SpeakerPalette`), time on a right tab stop, search that filters and highlights |
 | `AssignSpeakersView.swift` | One card per speaker: name, a sample line, shuffle (next line), play (that line's audio) |
 
@@ -239,6 +239,48 @@ notes**, which runs `MeetingEngine.regenerateNotes` with the typed names. A
 name typed while the notes are written is kept and shows the button again. Play uses `mic-aec.caf` (else
 `mic.caf`) for "you" and `system.caf` for everyone else, from the turn's start
 to its end, through `AVAudioPlayer`.
+
+## Asking about a meeting
+
+Once a meeting has a transcript, a question box sits along its bottom
+(macOS: under both columns, so it stays while the transcript is open; in a
+narrow window, sending switches back to the notes, where the answers are
+listed after the Notes section. iOS: pinned to the bottom of the note, with
+the answers after the notes). A question
+goes to the selected provider's writing model on its own API
+(`AgentEndpoint.writingModel`: Gemini's formatting model, OpenAI's writing
+model, or Claude Sonnet 5.5), never to Agent mode's custom provider.
+`MeetingChat` builds the request:
+
+- **System prompt.** Short answering rules, then the meeting as
+  `MeetingStore.markdown(id:parts: .both)` builds it for Export: notes above
+  the transcript, with speaker names and times. It is rebuilt for each
+  question, so renamed speakers and redone notes are used from the next one.
+- **Turns.** Every earlier question and answer, in order, then the new
+  question. The model sees its own earlier answers, so follow-ups work.
+
+It is sent through `AgentTransport` with no tools, the same adapters Agent
+mode uses: Gemini `generateContent`, OpenAI's Responses API, Anthropic
+Messages. Caching follows `AgentCachePolicy`:
+
+- Claude: a one-hour breakpoint on the system prompt (the meeting) and a
+  five-minute one on the newest question. A follow-up reads the meeting and
+  the earlier turns from cache, and so does a question asked within the hour.
+- OpenAI: automatic prefix caching, with `prompt_cache_key`
+  `voiceiq-meeting-chat-<meeting id>`, so every question about a meeting
+  lands on the same cache, also after a relaunch. GPT-5.6 and later keep it
+  for 30 minutes.
+- Gemini: implicit caching of the repeated prefix. Nothing is sent. Gemini
+  3.x caches only from 4,096 tokens, so a short meeting is not cached.
+
+Each answered question is saved with its answer, time and model in
+`chat.json` in the meeting's folder (`MeetingStore.loadChat` /
+`save(chat:id:)`), and the chat is there when the meeting is opened again. A
+question that fails is not saved; the chat shows the error with Try again.
+`MeetingChatModel.shared` keeps one chat per meeting while the app runs, so
+leaving a meeting while a question is out and coming back shows it still
+waiting. Usage is booked as Meetings › Meeting chat against the meeting.
+Deleting the meeting deletes its chat.
 
 ## Export
 

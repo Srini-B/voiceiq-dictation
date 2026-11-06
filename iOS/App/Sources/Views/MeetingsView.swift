@@ -168,18 +168,29 @@ private struct MeetingDetail: View {
 
     init(meta: MeetingMeta) { _meta = State(initialValue: meta) }
 
+    /// Nil until the note has a transcript to ask about.
+    private var chat: MeetingChatModel? {
+        transcript.isEmpty ? nil : MeetingChatModel.shared(meta.id, store: model.meetings.store)
+    }
+
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: Theme.Spacing.xl) {
-                if let step { processingCard(step) }
-                if let notes { notesContent(notes) }
-                else if case .failed(let reason) = meta.status { failureCard(reason) }
-                else if step == nil { processingCard(.summarizing) }
-                if !transcript.isEmpty { transcriptContent }
+        ScrollViewReader { scroller in
+            ScrollView {
+                VStack(alignment: .leading, spacing: Theme.Spacing.xl) {
+                    if let step { processingCard(step) }
+                    if let notes { notesContent(notes) }
+                    else if case .failed(let reason) = meta.status { failureCard(reason) }
+                    else if step == nil { processingCard(.summarizing) }
+                    if let chat { MeetingChatTurns(chat: chat, scroller: scroller) }
+                    if !transcript.isEmpty { transcriptContent }
+                }
+                .padding(.horizontal, Theme.Spacing.page)
+                .padding(.vertical, Theme.Spacing.l)
+                .readableWidth()
             }
-            .padding(.horizontal, Theme.Spacing.page)
-            .padding(.vertical, Theme.Spacing.l)
-            .readableWidth()
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if let chat { MeetingChatInput(chat: chat) }
         }
         .themedBackground()
         .navigationTitle(notes?.title ?? meta.title ?? "Notes")
