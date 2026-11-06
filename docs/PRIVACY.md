@@ -128,6 +128,10 @@ With no usable key, nothing is sent and the recording stays on your Mac.
    also reads the call app's window text (name tags, the participants list)
    through the Accessibility API, with the same rule: only name-like text is
    kept. A meeting never asks for Screen Recording or Accessibility itself.
+   A question you type in a meeting's question box is sent to the selected
+   provider with that meeting's notes, transcript and your earlier questions
+   and answers. The questions and answers are kept in `chat.json` in the
+   meeting's folder and deleted with the meeting.
 7. **The selected text, when you use Ask Anything** (⌃⌥A by default). At the
    moment you press the shortcut, VoiceiQ reads the text selected in the
    frontmost app through the Accessibility API and sends it with your spoken

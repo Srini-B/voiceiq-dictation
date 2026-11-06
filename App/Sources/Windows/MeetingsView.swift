@@ -94,8 +94,9 @@ struct MeetingsPane: View {
             }
             HStack(spacing: 0) {
                 if wide || !transcriptShown {
-                    MeetingNotesColumn(meeting: meeting, notes: notes, step: step(meeting))
+                    MeetingNotesColumn(meeting: meeting, notes: notes, step: step(meeting), chat: chat(meeting))
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .id(meeting.id)
                 }
                 if transcriptShown {
                     if wide { Divider() }
@@ -116,7 +117,18 @@ struct MeetingsPane: View {
                     .background(wide ? VoiceIQUI.Colors.surfaceContainer.opacity(0.35) : .clear)
                 }
             }
+            if let chat = chat(meeting) {
+                // Under both columns, so a question can be asked while the
+                // transcript is open; narrow, the answer shows in the notes.
+                MeetingChatInput(chat: chat) { if !wide { narrowShowsTranscript = false } }
+                    .id(meeting.id)
+            }
         }
+    }
+
+    /// Nil until the meeting has a transcript to ask about.
+    private func chat(_ meeting: MeetingMeta) -> MeetingChatModel? {
+        transcript.isEmpty ? nil : MeetingChatModel.shared(meeting.id, store: store)
     }
 
     private func header(_ meeting: MeetingMeta, wide: Bool, transcriptShown: Bool) -> some View {

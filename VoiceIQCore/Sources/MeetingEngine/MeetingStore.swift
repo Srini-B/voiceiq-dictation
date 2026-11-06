@@ -28,6 +28,11 @@ public final class MeetingStore: @unchecked Sendable {
     public func save(meta: MeetingMeta) throws { try save(meta, in: requiredFolder(meta.id), name: "meta.json") }
     public func save(transcript: [TranscriptSegment], id: MeetingID) throws { try save(transcript, in: requiredFolder(id), name: "transcript.json") }
     public func save(notes: MeetingNotes, id: MeetingID) throws { try save(notes, in: requiredFolder(id), name: "notes.json") }
+    /// Questions asked about the meeting and their answers; empty before the first.
+    public func loadChat(id: MeetingID) -> [MeetingChatTurn] {
+        (try? load([MeetingChatTurn].self, from: requiredFolder(id).appendingPathComponent("chat.json"))) ?? []
+    }
+    public func save(chat: [MeetingChatTurn], id: MeetingID) throws { try save(chat, in: requiredFolder(id), name: "chat.json") }
     public func delete(id: MeetingID) throws { try FileManager.default.removeItem(at: requiredFolder(id)) }
     public func renameSpeaker(id: MeetingID, label: String, name: String) throws {
         var meta = try load(MeetingMeta.self, from: requiredFolder(id).appendingPathComponent("meta.json"))
