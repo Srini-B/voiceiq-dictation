@@ -452,6 +452,8 @@ struct AdvancedPane: View {
             }
 
             AgentProviderSection()
+
+            BrowserExtensionSection()
         }
         // Key saved elsewhere (onboarding, dev-file migration) while this pane is
         // open: refresh the badge — but never clobber in-flight feedback.

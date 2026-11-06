@@ -97,6 +97,7 @@ public struct MeetingTranscriber: Sendable {
         // diarizing provider that found several keeps its own labels.
         let farVoices = Set(words.lazy.filter { $0.speaker != MeetingSpeaker.you }.map(\.speaker))
         if reachesDeepInfra, farVoices.count <= 1, let relabel { words = await relabel(words, folder) }
+        words = BrowserSpeakers.apply(words, folder: folder)
         return SpeakerLinker.overlappingTurns(words).map { turn in
             TranscriptSegment(speaker: turn.speaker, text: turn.text, chunkIndex: 0, start: turn.start, end: turn.end)
         }

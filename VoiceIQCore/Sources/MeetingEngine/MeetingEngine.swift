@@ -144,6 +144,9 @@ import VoiceIQSpeech
         screenNames = nil
         #endif
         meta.endedAt = Date(); meta.durationSeconds = max(micDuration, systemDuration)
+        #if os(macOS)
+        BrowserSpeakers.save(meta: meta, folder: folder)
+        #endif
         try? mark(&meta, .transcribing)
         phase = .idle
         Task { await UsageMeter.$scope.withValue(UsageScope(activity: .meeting, sessionID: id.uuid.uuidString)) {

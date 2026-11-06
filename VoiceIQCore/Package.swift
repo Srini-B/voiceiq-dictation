@@ -67,7 +67,7 @@ let package = Package(
         ),
         .testTarget(
             name: "VoiceIQCoreTests",
-            dependencies: ["VoiceIQCore"],
+            dependencies: ["VoiceIQCore", "VoiceIQSpeech"],
             path: "Tests"
         ),
     ],

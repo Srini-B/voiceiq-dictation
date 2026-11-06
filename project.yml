@@ -82,6 +82,9 @@ targets:
       - path: App/Resources/Sounds
         type: folder
         buildPhase: resources
+      - path: App/Resources/ChromeExtension
+        type: folder
+        buildPhase: resources
     dependencies:
       - package: VoiceIQCore
       - package: Sparkle

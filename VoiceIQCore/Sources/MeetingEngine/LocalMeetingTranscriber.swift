@@ -121,7 +121,7 @@ public struct LocalMeetingTranscriber: Sendable {
         }
         UsageMeter.record(stage: .meetingTranscribe, model: (model ?? .parakeet).modelID,
                           usage: TokenUsage(reportedCostUSD: 0, audioSeconds: audio.duration))
-        words = Self.renumber(words)
+        words = BrowserSpeakers.apply(Self.renumber(words), folder: folder)
         return SpeakerLinker.overlappingTurns(words).map { turn in
             TranscriptSegment(speaker: turn.speaker, text: turn.text, chunkIndex: 0, start: turn.start, end: turn.end)
         }
