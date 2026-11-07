@@ -8,7 +8,7 @@ public final class LocalTranscriber: DictationStreaming, Sendable {
     public var runsOnDevice: Bool { true }
     public let partials: AsyncStream<String>
     private let partialSink: AsyncStream<String>.Continuation
-    private let id: UUID
+    let id: UUID
     private let model: LocalSpeechModel
     private let worker: any LocalSpeechSession
     /// Live PCM is pumped into the session for display-only previews. They

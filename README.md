@@ -51,7 +51,7 @@ listening until you actually stop.
 
 **It is private by architecture.** Your voice is transcribed on device, or goes
 from your Mac straight to the provider you choose with *your* key: Gemini or
-OpenAI, or for Claude, DeepInfra hears the audio and Anthropic gets the text. No middleman server, no
+OpenAI. Claude only writes, so with Claude your voice is transcribed on device and Anthropic gets the text when cleanup runs. No middleman server, no
 account, no analytics, no keystroke logging — one network host per dictation step,
 and you can read every line of the code that talks to it. Screen context (a few downscaled screenshots sent with each
 dictation so on-screen names and paths are spelled right) can be switched off
@@ -102,7 +102,9 @@ speaker-labelled transcript plus a summary, decisions, and owned action items
 under Settings → Meetings. Recording never stops on its own. Meetings run on
 the selected provider, or on the other provider when only its key is saved.
 With no usable key the recording is kept and marked failed with the reason,
-ready to Retry once a key is added. Set **Meeting transcription** to On
+ready to Retry once a key is added. With Claude, meetings are transcribed on
+device only, so Retry works once the on-device models are downloaded, or after
+switching to Gemini or OpenAI with its key. Set **Meeting transcription** to On
 device and download Fluid Speech Mini plus Speaker separation (21.6 MB) to
 get the words and speakers on device, FluidMeet-style; only the transcript
 then goes to the writing model for notes. On iPhone and iPad, Fluid Speech

@@ -106,18 +106,7 @@ public final class LiveTranscriber: DictationStreaming {
                         dialect: OpenAILiveDialect(model: model, delay: .low, keywords: vocabulary),
                         transport: { WebSocketTransport.openAI(apiKey: { key }) })
         case .anthropic:
-            // Nemotron 3.5 Transcribe takes whole files only, so the recording
-            // is sent in pieces while it is made. Only when the user turned
-            // real-time on: the default covers an on-device dictation falling
-            // back here. Mac only for now: iPhone and iPad upload the saved
-            // recording after stop.
-            #if os(macOS)
-            guard settings.liveTranscriptionChosen == true,
-                  let key = KeychainStore.loadKey(.deepInfra), !key.isEmpty else { return nil }
-            return DeepInfraLiveTranscriber(client: GeminiClient(apiKey: { nil }, deepInfraKey: { key }), vocabulary: vocabulary)
-            #else
             return nil
-            #endif
         }
     }
 

@@ -2,15 +2,14 @@ import SwiftUI
 
 /// The segmented source picker shared by the macOS and iOS settings. On
 /// device appears only where local models run; the provider segment follows
-/// the Provider setting. Claude's segment is DeepInfra's Nemotron, so picking
-/// it without a DeepInfra key adds a row saying where to add one. The caller
-/// owns the selection and persists it.
+/// the Provider setting. Claude has no speech model, so with it dictation and
+/// meetings offer only On device. The caller owns the selection and persists
+/// it.
 @MainActor
 public struct TranscriptionSourcePicker: View {
     private let label: String
     @Binding private var selection: TranscriptionSource
     @State private var provider = SettingsStore().preferredProvider
-    @State private var providerTranscribes = SettingsStore().providerTranscribes
 
     public init(_ label: String, selection: Binding<TranscriptionSource>) {
         self.label = label
@@ -25,25 +24,22 @@ public struct TranscriptionSourcePicker: View {
         }
         .pickerStyle(.segmented)
         .onReceive(NotificationCenter.default.publisher(for: .gtSettingDidChange).receive(on: RunLoop.main)) { note in
-            guard let key = note.object as? String,
-                  key == "modelProvider" || key == KeychainStore.Secret.deepInfra.settingKey else { return }
+            guard note.object as? String == "modelProvider" else { return }
             provider = SettingsStore().preferredProvider
-            providerTranscribes = SettingsStore().providerTranscribes
         }
-        if selection == .provider, !providerTranscribes {
-            Text("Add a DeepInfra key in \(Self.keysLocation) to use Nemotron 3.5.")
+        if selection == .provider, !provider.transcribes {
+            Text("Claude doesn't transcribe. Pick Gemini or OpenAI to transcribe in the cloud.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
         }
     }
 
-    #if os(macOS)
-    private static let keysLocation = "Settings → Advanced"
-    #else
-    private static let keysLocation = "Provider & Keys"
-    #endif
-
     private var options: [TranscriptionSource] {
-        TranscriptionSource.allCases.filter { $0 != .onDevice || LocalModelSupport.isAvailable }
+        TranscriptionSource.allCases.filter { source in
+            switch source {
+            case .onDevice: return LocalModelSupport.isAvailable
+            case .provider: return provider.transcribes || !LocalModelSupport.isAvailable
+            }
+        }
     }
 }

@@ -55,7 +55,6 @@ final class DictationController {
             openAIKey: { KeychainStore.loadOpenAIKey() },
             openAIConfig: { SettingsStore().openAIConfig },
             anthropicKey: { KeychainStore.loadKey(.anthropic) },
-            deepInfraKey: { KeychainStore.loadKey(.deepInfra) },
             provider: { SettingsStore().preferredProvider }
         )
         let service = GeminiTranscriptionService(client: client)
@@ -434,7 +433,7 @@ final class DictationController {
             if !engineActive {
                 activateEngine()
             }
-        case "apiKey", "openAIKey", "anthropicKey", "deepInfraKey", "modelProvider":
+        case "apiKey", "openAIKey", "anthropicKey", "modelProvider":
             if KeychainStore.hasModelKey {
                 // Covers the "I'll add it later" onboarding path, where the
                 // engine was never started: a key arriving in Settings must
@@ -485,14 +484,15 @@ final class DictationController {
             }
         }
 
-        let scanner = RecoveryScanner(store: historyStore, transcription: transcriptionService)
+        let saved = SavedRecordingTranscription(cloud: transcriptionService)
+        let scanner = RecoveryScanner(store: historyStore, transcription: saved)
         scanner.onRecovered = { [weak self] text in
             let copied = Self.copyRecovered([text])
             self?.showBackgroundNotice(RecoveryNotice.message(for: .relaunch, copied: copied), for: 4.0, sound: .success)
         }
         recoveryScanner = scanner
 
-        let queue = RetryQueue(store: historyStore, transcription: transcriptionService)
+        let queue = RetryQueue(store: historyStore, transcription: saved)
         queue.onDrained = { [weak self] texts in
             let copied = Self.copyRecovered(texts)
             let message = RecoveryNotice.message(for: .queue(count: texts.count), copied: copied)
@@ -500,7 +500,9 @@ final class DictationController {
         }
         queue.onDrainBlocked = { [weak self] error in
             let message: String
-            if case .auth = error {
+            if case .auth = error, KeychainStore.hasModelKey, !KeychainStore.canTranscribeInCloud {
+                message = "Queued dictations are waiting — download the on-device model in Settings → Dictation"
+            } else if case .auth = error {
                 message = "Queued dictations are waiting — fix your API key in Settings → Advanced"
             } else {
                 message = "Daily quota reached — queued dictations will retry later"
@@ -1211,7 +1213,7 @@ final class DictationController {
             if !KeychainStore.hasModelKey { return "Add your API key in Settings — recording saved to History" }
             return KeychainStore.canTranscribeInCloud
                 ? "API key isn't working — saved to History"
-                : "Claude needs On device or a DeepInfra key — saved to History"
+                : "Claude transcribes only on device — saved to History"
         case .modelAccess:
             return SettingsStore().transcribeModelOverride != nil
                 ? "That model isn't available to your key — check Settings → Advanced. Saved to History"

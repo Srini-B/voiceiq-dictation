@@ -4,11 +4,9 @@ import SwiftUI
 /// One API key: paste, validate against its host, save to the Keychain.
 struct ProviderKeySection: View {
     let secret: KeychainStore.Secret
-    /// "OpenAI", "Anthropic", "DeepInfra".
+    /// "OpenAI", "Anthropic".
     let vendor: String
     let keyPage: URL
-    /// Leads the footer, for an optional key.
-    var purpose: String?
     let validate: @Sendable (String) async -> GeminiClient.KeyCheck
 
     @State private var apiKey = ""
@@ -63,7 +61,7 @@ struct ProviderKeySection: View {
         } header: {
             Text("\(vendor) API key")
         } footer: {
-            Text([purpose, "Stored in your Mac's Keychain and only ever sent to \(vendor)."].compactMap { $0 }.joined(separator: " "))
+            Text("Stored in your Mac's Keychain and only ever sent to \(vendor).")
         }
         .onAppear { keyStatus = KeychainStore.loadKey(secret) == nil ? .missing : .stored }
         .onReceive(NotificationCenter.default.publisher(for: .gtSettingDidChange).receive(on: RunLoop.main)) { note in
@@ -112,10 +110,6 @@ extension ProviderKeySection {
     static let anthropic = ProviderKeySection(
         secret: .anthropic, vendor: "Anthropic", keyPage: URL(string: "https://console.anthropic.com/settings/keys")!,
         validate: { key in await GeminiClient.validateAnthropicKey(key) })
-    static let deepInfra = ProviderKeySection(
-        secret: .deepInfra, vendor: "DeepInfra", keyPage: URL(string: "https://deepinfra.com/dash/api_keys")!,
-        purpose: "Optional. Lets Claude transcribe in the cloud with Nemotron 3.5 Transcribe.",
-        validate: { key in await GeminiClient.validateDeepInfraKey(key) })
 }
 
 struct OpenAIModelsSection: View {
@@ -152,6 +146,7 @@ struct OpenAIModelsSection: View {
 
 struct ProviderSection: View {
     @Binding var provider: ModelProvider
+    let openDictation: () -> Void
     private let settings = SettingsStore()
 
     var body: some View {
@@ -161,6 +156,7 @@ struct ProviderSection: View {
             }
             .pickerStyle(.segmented)
             .onChange(of: provider) { _, value in settings.setPreferredProvider(value) }
+            .claudeVoiceAlert(provider: provider, openDictation: openDictation)
         }
     }
 }

@@ -32,9 +32,6 @@ public struct LocalMeetingTranscriber: Sendable {
     /// track is never diarized, so its cache outlived the diarizer change.
     static let ownerCacheName = "local-words-mic-v1.json"
     static let farCacheName = "local-words-system-v2.json"
-    /// Speaker stretches alone, for words heard in the cloud (`relabel`).
-    static let farSpeakersCacheName = "speakers-system-v2.json"
-    static let speakersCacheName = "speakers-v2.json"
     static let mixName = "local-mix.caf"
     /// The mix is written a minute at a time.
     static let piece = 60.0
@@ -50,10 +47,8 @@ public struct LocalMeetingTranscriber: Sendable {
     #endif
 
     private let runner: LocalMeetingRunner
-    /// The speech model this session holds; nil for a diarizer-only session.
-    private let model: LocalSpeechModel?
-    /// Nil for a diarizer-only session (`acquireDiarizer`).
-    private let speech: URL?
+    private let model: LocalSpeechModel
+    private let speech: URL
     private let diarizer: URL?
     private let id: UUID
     private let job: Job
@@ -84,17 +79,6 @@ public struct LocalMeetingTranscriber: Sendable {
         }
     }
 
-    /// The diarizer alone, for a meeting whose words come from a provider
-    /// that labels no speakers (Claude with DeepInfra). Nil on iPhone and iPad,
-    /// when the diarizer is not downloaded, or while another meeting holds it.
-    @MainActor
-    public static func acquireDiarizer(runner: @escaping LocalMeetingRunner) -> LocalMeetingTranscriber? {
-        guard diarizes else { return nil }
-        let id = UUID(), job = Job()
-        guard let diarizer = LocalModelStore.speakerDiarizer.acquireSession(id: id, cancel: { await job.cancel() }) else { return nil }
-        return LocalMeetingTranscriber(runner: runner, model: nil, speech: nil, diarizer: diarizer, id: id, job: job)
-    }
-
     /// The setting is on and the needed models are downloaded.
     @MainActor public static var isReady: Bool { isReady(SettingsStore().localSpeechModel) }
 
@@ -121,7 +105,7 @@ public struct LocalMeetingTranscriber: Sendable {
             words = Self.label(result.words, segments: result.segments)
             if audio.isOnline { words = MeetingTranscriber.markOwner(words, audio: audio) }
         }
-        UsageMeter.record(stage: .meetingTranscribe, model: (model ?? .parakeet).modelID,
+        UsageMeter.record(stage: .meetingTranscribe, model: model.modelID,
                           usage: TokenUsage(reportedCostUSD: 0, audioSeconds: audio.duration))
         words = BrowserSpeakers.apply(Self.renumber(words), folder: folder)
         return SpeakerLinker.overlappingTurns(words).map { turn in
@@ -129,34 +113,10 @@ public struct LocalMeetingTranscriber: Sendable {
         }
     }
 
-    /// Cloud words labelled the way `transcribe` labels its own: on a call
-    /// with an echo-free mic the owner's words stay and only the far side is
-    /// diarized; otherwise the whole mix is.
-    public func relabel(_ words: [TimedWord], folder: URL) async throws -> [TimedWord] {
-        defer { release() }
-        let audio = try MeetingTranscriber.callAudio(folder: folder)
-        var out: [TimedWord]
-        func plain(_ words: [TimedWord]) -> [LocalMeetingResult.Word] { words.map { .init(text: $0.text, start: $0.start, end: $0.end) } }
-        if audio.isOnline, audio.micIsEchoFree {
-            let far = try await decode(Self.farSpeakersCacheName, duration: audio.system.duration, diarize: true,
-                                       folder: folder, samples: audio.system.samples)
-            let others = words.filter { $0.speaker != MeetingSpeaker.you }
-            out = (words.filter { $0.speaker == MeetingSpeaker.you }
-                + Self.settled(Self.label(plain(others), segments: far.segments), segments: far.segments))
-                .sorted { $0.start < $1.start }
-        } else {
-            let mix = try await decode(Self.speakersCacheName, duration: audio.duration, diarize: true,
-                                       folder: folder, samples: audio.samples)
-            out = Self.label(plain(words), segments: mix.segments)
-            if audio.isOnline { out = MeetingTranscriber.markOwner(out, audio: audio) }
-        }
-        return Self.renumber(out)
-    }
-
     private func release() {
         let model = model, holdsDiarizer = diarizer != nil, id = id
         Task { @MainActor in
-            if let model { LocalModelStore.store(for: model).releaseSession(id: id) }
+            LocalModelStore.store(for: model).releaseSession(id: id)
             if holdsDiarizer { LocalModelStore.speakerDiarizer.releaseSession(id: id) }
         }
     }

@@ -271,8 +271,7 @@ SOFTWARE.
 
 "Google", the Google logo, the Gemini spark, and related marks are trademarks of
 Google LLC. "OpenAI" and its logo are trademarks of OpenAI. "Anthropic",
-"Claude" and the Anthropic logo are trademarks of Anthropic, PBC. "DeepInfra"
-and its logo are trademarks of Deep Infra Inc. "NVIDIA" and "Nemotron" are
+"Claude" and the Anthropic logo are trademarks of Anthropic, PBC. "NVIDIA" and "Nemotron" are
 trademarks of NVIDIA Corporation. "TinyFish" and its
 logo are trademarks of TinyFish. The iOS app bundles each service's favicon
 (`iOS/App/Resources/Assets.xcassets/Provider*.imageset`) only to label the key

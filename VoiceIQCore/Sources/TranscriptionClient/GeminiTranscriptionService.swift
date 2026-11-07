@@ -169,8 +169,8 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
             let openAI = settings.openAIConfig
             return (openAI.transcribeModel, openAI.writingModel)
         case .anthropic:
-            let anthropic = AnthropicConfig()
-            return (anthropic.transcribeModel, anthropic.writingModel)
+            // Claude never transcribes (`ModelProvider.transcribes`): the client refuses first.
+            return ("", AnthropicConfig().writingModel)
         case .gemini: break
         }
         let config = settings.geminiConfig

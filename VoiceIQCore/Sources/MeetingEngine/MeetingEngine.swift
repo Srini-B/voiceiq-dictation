@@ -252,7 +252,7 @@ import VoiceIQSpeech
     /// that fails.
     private func transcribe(folder: URL, config cfg: GeminiConfig) async throws -> [TranscriptSegment] {
         let cloud = MeetingTranscriber(client: client, models: .init(transcribe: transcribeModel ?? cfg.transcribeModel),
-                                       endpoint: cfg.endpoint, providers: transcribers, relabel: relabel)
+                                       endpoint: cfg.endpoint, providers: transcribers)
         guard let local = try await acquireLocal() else {
             guard !transcribers().isEmpty else { throw MeetingFailure.noRoute }
             return try await cloud.transcribe(folder: folder)
@@ -265,27 +265,6 @@ import VoiceIQSpeech
             guard !transcribers().isEmpty, !(error is CancellationError) else { throw error }
             Log.meeting.error("on-device transcription failed, using cloud: \(String(describing: error), privacy: .public)")
             return try await cloud.transcribe(folder: folder)
-        }
-    }
-
-    /// The on-device speaker diarizer over words from a provider that labels no
-    /// speakers. Without the model, or if it fails, the words keep the track
-    /// labels: the owner, and one speaker for the far side.
-    private var relabel: (@Sendable ([TimedWord], URL) async -> [TimedWord])? {
-        guard let runner = localMeeting else { return nil }
-        return { words, folder in
-            guard let diarizer = await LocalMeetingTranscriber.acquireDiarizer(runner: runner) else {
-                Log.meeting.info("speaker diarizer not available; far side stays one speaker")
-                return words
-            }
-            do {
-                let labelled = try await diarizer.relabel(words, folder: folder)
-                Log.meeting.info("diarized cloud words: \(Set(labelled.map(\.speaker)).count, privacy: .public) speakers")
-                return labelled
-            } catch {
-                Log.meeting.error("diarizing cloud words failed: \(String(describing: error), privacy: .public)")
-                return words
-            }
         }
     }
 
@@ -312,7 +291,7 @@ import VoiceIQSpeech
         meta.status = .failed(reason); try? store.save(meta: meta)
         processing[id] = nil
         switch error as? MeetingFailure {
-        case .noRoute: onNotice?("\(MeetingFailure.noun) saved without a transcript — add a key, then Retry in \(MeetingFailure.listName)")
+        case .noRoute: onNotice?("\(MeetingFailure.noun) saved without a transcript — download the on-device models or use Gemini or OpenAI with a key, then Retry in \(MeetingFailure.listName)")
         case .noNotesRoute: onNotice?("\(MeetingFailure.noun) transcribed on device — add a key for notes, then Retry in \(MeetingFailure.listName)")
         case nil: onNotice?("\(MeetingFailure.noun) transcript failed — see \(MeetingFailure.listName)")
         }
@@ -382,7 +361,8 @@ import VoiceIQSpeech
 /// Why a meeting has no transcript or notes, in words the Meetings list can
 /// show. The raw error goes to the log.
 public enum MeetingFailure: Error, Equatable {
-    /// No stored key reaches a model that can transcribe a meeting.
+    /// The on-device models are not ready and no stored key reaches a model
+    /// that can transcribe a meeting (none does on Claude).
     case noRoute
     /// The transcript was made on device, but no stored key reaches a model
     /// that can write the notes.
@@ -401,7 +381,7 @@ public enum MeetingFailure: Error, Equatable {
     static func reason(for error: Error, tried: String) -> String {
         switch error {
         case MeetingFailure.noRoute:
-            return "No key can transcribe meetings. Add a provider's keys in \(keysPlace). The recording is saved; press Retry once a key is added."
+            return "Nothing can transcribe meetings yet. Download the on-device models, or pick Gemini or OpenAI and add its key in \(keysPlace). The recording is saved; press Retry once one is ready."
         case MeetingFailure.noNotesRoute:
             return "The transcript was made on device, but no key can write the notes. Add a provider's keys in \(keysPlace), then press Retry."
         case let error as TranscriptionError:

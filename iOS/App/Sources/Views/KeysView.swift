@@ -20,6 +20,7 @@ struct KeysView: View {
 /// The selected model provider and the optional web search key.
 struct ModelKeysForm: View {
     @State private var provider = SettingsStore().preferredProvider
+    @State private var showingDictation = false
 
     private var providerSlots: [KeySlot] {
         switch provider {
@@ -35,7 +36,7 @@ struct ModelKeysForm: View {
                 Image(systemName: "info.circle.fill")
                     .foregroundStyle(Theme.Colors.accent)
                     .font(.system(size: 17))
-                Text("Pick **Gemini**, **OpenAI** or **Claude** and add its key. Claude needs On device transcription or a DeepInfra key. The other keys are optional.")
+                Text("Pick **Gemini**, **OpenAI** or **Claude** and add its key. Claude transcribes only on device. The other keys are optional.")
                     .font(Theme.Fonts.subheadline())
                     .foregroundStyle(Theme.Colors.inkSecondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -55,6 +56,18 @@ struct ModelKeysForm: View {
                     SettingsStore().setPreferredProvider(value)
                     reload()
                 }
+                .claudeVoiceAlert(provider: provider) { showingDictation = true }
+                // A sheet, as onboarding has no Settings stack to push onto.
+                .sheet(isPresented: $showingDictation) {
+                    NavigationStack {
+                        DictationSettingsView()
+                            .toolbar {
+                                ToolbarItem(placement: .confirmationAction) {
+                                    Button("Done") { showingDictation = false }
+                                }
+                            }
+                    }
+                }
                 ForEach(providerSlots, id: \.self) { slot in
                     KeyCard(slot: slot, onChange: reload)
                 }
@@ -62,7 +75,6 @@ struct ModelKeysForm: View {
 
             VStack(alignment: .leading, spacing: Theme.Spacing.m) {
                 GroupLabel(text: "Optional")
-                if provider == .anthropic { KeyCard(slot: .deepInfra, onChange: reload) }
                 KeyCard(slot: .tinyFish, onChange: reload)
             }
         }
@@ -207,14 +219,13 @@ private struct TrailingIconLabelStyle: LabelStyle {
 
 /// A place a key can be stored, with what it is for.
 enum KeySlot: Hashable, CaseIterable {
-    case gemini, openAI, anthropic, deepInfra, tinyFish
+    case gemini, openAI, anthropic, tinyFish
 
     var title: String {
         switch self {
         case .gemini: return "Gemini"
         case .openAI: return "OpenAI"
         case .anthropic: return "Anthropic"
-        case .deepInfra: return "DeepInfra"
         case .tinyFish: return "TinyFish"
         }
     }
@@ -225,7 +236,6 @@ enum KeySlot: Hashable, CaseIterable {
         case .gemini: return "ProviderGemini"
         case .openAI: return "ProviderOpenAI"
         case .anthropic: return "ProviderAnthropic"
-        case .deepInfra: return "ProviderDeepInfra"
         case .tinyFish: return "ProviderTinyFish"
         }
     }
@@ -238,8 +248,6 @@ enum KeySlot: Hashable, CaseIterable {
             return "OpenAI's API. Stored in your \(UIDevice.current.localizedModel)'s Keychain and only ever sent to OpenAI."
         case .anthropic:
             return "Claude writes, translates and answers. Stored in your \(UIDevice.current.localizedModel)'s Keychain and only ever sent to Anthropic."
-        case .deepInfra:
-            return "Lets Claude transcribe in the cloud with Nemotron 3.5 Transcribe. Stored in your \(UIDevice.current.localizedModel)'s Keychain and only ever sent to DeepInfra."
         case .tinyFish:
             return "Lets Ask Anything look up current information on the web. Stored in your \(UIDevice.current.localizedModel)'s Keychain and only ever sent to TinyFish."
         }
@@ -250,7 +258,6 @@ enum KeySlot: Hashable, CaseIterable {
         case .gemini: return URL(string: "https://aistudio.google.com/apikey")!
         case .openAI: return URL(string: "https://platform.openai.com/api-keys")!
         case .anthropic: return URL(string: "https://console.anthropic.com/settings/keys")!
-        case .deepInfra: return URL(string: "https://deepinfra.com/dash/api_keys")!
         case .tinyFish: return URL(string: "https://agent.tinyfish.ai/api-keys")!
         }
     }
@@ -260,7 +267,6 @@ enum KeySlot: Hashable, CaseIterable {
         case .gemini: return KeychainStore.loadAPIKey()
         case .openAI: return KeychainStore.loadOpenAIKey()
         case .anthropic: return KeychainStore.loadKey(.anthropic)
-        case .deepInfra: return KeychainStore.loadKey(.deepInfra)
         case .tinyFish: return KeychainStore.loadTinyFishKey()
         }
     }
@@ -270,7 +276,6 @@ enum KeySlot: Hashable, CaseIterable {
         case .gemini: return KeychainStore.saveAPIKey(key)
         case .openAI: return KeychainStore.saveOpenAIKey(key)
         case .anthropic: return KeychainStore.saveKey(.anthropic, key)
-        case .deepInfra: return KeychainStore.saveKey(.deepInfra, key)
         case .tinyFish: return KeychainStore.saveTinyFishKey(key)
         }
     }
@@ -280,7 +285,6 @@ enum KeySlot: Hashable, CaseIterable {
         case .gemini: _ = KeychainStore.deleteAPIKey(notify: true)
         case .openAI: _ = KeychainStore.deleteOpenAIKey(notify: true)
         case .anthropic: _ = KeychainStore.deleteKey(.anthropic, notify: true)
-        case .deepInfra: _ = KeychainStore.deleteKey(.deepInfra, notify: true)
         case .tinyFish: _ = KeychainStore.deleteTinyFishKey(notify: true)
         }
     }
@@ -296,8 +300,6 @@ enum KeySlot: Hashable, CaseIterable {
             check = await GeminiClient(apiKey: { nil }, openAIKey: { key }).validateOpenAIKey()
         case .anthropic:
             check = await GeminiClient.validateAnthropicKey(key)
-        case .deepInfra:
-            check = await GeminiClient.validateDeepInfraKey(key)
         case .tinyFish:
             switch await TinyFishClient(apiKey: { key }).validateKey() {
             case .valid: return .accepted(offline: false)
