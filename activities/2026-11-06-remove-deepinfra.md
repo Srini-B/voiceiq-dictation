@@ -46,6 +46,19 @@ finished text, which the Mac's detail already showed. The shared
 the iOS view lacked the row. Dictations synced from the Mac carry no pipeline
 time, because `HistorySync` does not sync it, so they show no row.
 
+## Retry and recovery on Claude
+
+CodeRabbit found that History's Retry, the retry queue and crash recovery
+always sent the saved recording to the cloud, so with Claude they failed with
+a key error even when the on-device model was ready. Claude users without a
+DeepInfra key already had this; DeepInfra users would have lost Retry with this
+release. The user asked for it to be fixed before the release.
+`SavedRecordingTranscription` wraps the cloud service for those three paths:
+on Claude it decodes the recording with `LocalTranscriber` (no previews, no
+cloud fallback) and passes the text to the same cleanup step a dictation uses.
+Without the model it throws `.auth`, which keeps queued rows queued, and the
+notice says to download the model instead of fixing the key.
+
 ## Decisions
 
 - **Meetings on device too.** A first draft kept Claude meetings in the

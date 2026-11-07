@@ -50,7 +50,12 @@ falls back to a Gemini or OpenAI key. Without local models, or before they are
 downloaded, a dictation fails with `.auth` and a meeting is saved with
 `MeetingFailure.noRoute`, without sending audio anywhere. A dictation whose
 model is still loading waits for it (`cloudOnColdLoad` is false), and a failed
-local pass is not uploaded. The cloud fallbacks described below (cold loads,
+local pass is not uploaded. History's Retry, the retry queue and crash
+recovery transcribe the saved recording on device too
+(`SavedRecordingTranscription`): the selected model decodes the whole
+recording, and the text then goes through cleanup like any dictation. Until
+the model is downloaded, a queued dictation stays queued and Retry says to
+download it. The cloud fallbacks described below (cold loads,
 missing models, failed local passes, meetings) apply to Gemini and OpenAI
 only. Picking Claude in
 the Provider picker (Settings → Advanced on the Mac, Provider & Keys and

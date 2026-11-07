@@ -186,10 +186,11 @@ final class AppModel: ObservableObject {
 
     private func startHistoryServices() {
         guard let historyStore else { return }
-        let scanner = RecoveryScanner(store: historyStore, transcription: transcription)
+        let saved = SavedRecordingTranscription(cloud: transcription, makeSession: LocalSpeechInference.makeSession)
+        let scanner = RecoveryScanner(store: historyStore, transcription: saved)
         scanner.onRecovered = { [weak self] _ in self?.banner = RecoveryNotice.message(for: .relaunch, copied: false) }
         recoveryScanner = scanner
-        let queue = RetryQueue(store: historyStore, transcription: transcription)
+        let queue = RetryQueue(store: historyStore, transcription: saved)
         queue.onDrained = { [weak self] texts in
             let count = texts.count
             self?.banner = count == 1 ? "A queued dictation is ready in History" : "\(count) queued dictations are ready in History"
@@ -209,7 +210,10 @@ final class AppModel: ObservableObject {
         case .alreadyDone: return "Couldn't find this recording"
         case .stillOffline: return "Still offline. It will retry when you're back online."
         case .rateLimited(let wait): return "Rate limited. Retrying in \(Int(wait.rounded()))s."
-        case .blocked: return "Check your API key in Settings"
+        case .blocked:
+            return KeychainStore.hasModelKey && !KeychainStore.canTranscribeInCloud
+                ? "Claude transcribes only on device. Download the model in Settings › Dictation."
+                : "Check your API key in Settings"
         case .failed: return record.rawTranscript != nil ? "Couldn't transcribe it again. The earlier text is kept." : "Retry failed"
         case .busy: return "Already retrying"
         }

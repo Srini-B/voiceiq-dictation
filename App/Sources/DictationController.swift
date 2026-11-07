@@ -484,14 +484,15 @@ final class DictationController {
             }
         }
 
-        let scanner = RecoveryScanner(store: historyStore, transcription: transcriptionService)
+        let saved = SavedRecordingTranscription(cloud: transcriptionService)
+        let scanner = RecoveryScanner(store: historyStore, transcription: saved)
         scanner.onRecovered = { [weak self] text in
             let copied = Self.copyRecovered([text])
             self?.showBackgroundNotice(RecoveryNotice.message(for: .relaunch, copied: copied), for: 4.0, sound: .success)
         }
         recoveryScanner = scanner
 
-        let queue = RetryQueue(store: historyStore, transcription: transcriptionService)
+        let queue = RetryQueue(store: historyStore, transcription: saved)
         queue.onDrained = { [weak self] texts in
             let copied = Self.copyRecovered(texts)
             let message = RecoveryNotice.message(for: .queue(count: texts.count), copied: copied)
@@ -499,7 +500,9 @@ final class DictationController {
         }
         queue.onDrainBlocked = { [weak self] error in
             let message: String
-            if case .auth = error {
+            if case .auth = error, KeychainStore.hasModelKey, !KeychainStore.canTranscribeInCloud {
+                message = "Queued dictations are waiting — download the on-device model in Settings → Dictation"
+            } else if case .auth = error {
                 message = "Queued dictations are waiting — fix your API key in Settings → Advanced"
             } else {
                 message = "Daily quota reached — queued dictations will retry later"
