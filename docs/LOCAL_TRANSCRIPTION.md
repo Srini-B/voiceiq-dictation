@@ -55,7 +55,11 @@ recovery transcribe the saved recording on device too
 (`SavedRecordingTranscription`): the selected model decodes the whole
 recording, and the text then goes through cleanup like any dictation. Until
 the model is downloaded, a queued dictation stays queued and Retry says to
-download it. The cloud fallbacks described below (cold loads,
+download it; a finished download drains the queue. The decode holds the model
+as a warm-up does (`LocalModelWarmup.adopt`), so a dictation started meanwhile
+takes the model and loads once the decode ends instead of failing. A model
+held by a dictation or meeting is waited for, up to 10 minutes as on-device
+meetings wait, rather than reported as missing. The cloud fallbacks described below (cold loads,
 missing models, failed local passes, meetings) apply to Gemini and OpenAI
 only. Picking Claude in
 the Provider picker (Settings → Advanced on the Mac, Provider & Keys and

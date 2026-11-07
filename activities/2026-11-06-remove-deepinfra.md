@@ -57,7 +57,13 @@ release. The user asked for it to be fixed before the release.
 on Claude it decodes the recording with `LocalTranscriber` (no previews, no
 cloud fallback) and passes the text to the same cleanup step a dictation uses.
 Without the model it throws `.auth`, which keeps queued rows queued, and the
-notice says to download the model instead of fixing the key.
+notice says to download the model instead of fixing the key. Codex then found
+two gaps, both fixed: a background decode held the model's only session, so a
+dictation started meanwhile failed (the decode is now held like a warm-up,
+which a dictation takes over and waits for), and a finished download did not
+restart the queue (`RetryQueue` now drains when a speech model becomes ready).
+CodeRabbit added that a busy model read as a missing one; a busy model is now
+waited for.
 
 ## Decisions
 
