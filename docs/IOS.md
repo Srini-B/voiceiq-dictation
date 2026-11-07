@@ -670,7 +670,7 @@ runs. Everything needs Full Access.
 | Dictionary with search, CSV and Auto-learned | Same, synced through iCloud, plus adding a selection or a copied word from the keyboard |
 | Writing rules, smart transcription, live, noise handling | Same settings |
 | On-device transcription: Fluid Speech Mini, Fluid Speech Pro (macOS 15+), English tools, live preview | Fluid Speech Mini, Fluid Speech Pro (iOS 18+) and English tools, in-process; no live preview (see [local transcription](LOCAL_TRANSCRIPTION.md)) |
-| History, retry, crash recovery, retention | Same. The detail shows Pipeline, the seconds from Stop to the text being ready (`DictationRecord.pipelineSeconds`, as on the Mac; absent for dictations synced from the Mac), the cost and one row per model call (stage, model, cost) from `UsageStore.records(forSession:)`, and Copy turns into "Copied" with a checkmark and a success haptic for 1.5 s |
+| History, retry, crash recovery, retention | Same. The detail shows Pipeline, the seconds from Stop to the text being ready (`DictationRecord.pipelineSeconds`, as on the Mac; absent for dictations synced from the Mac), the cost and one row per stage and model (stage, model, call count when above one, summed cost; `UsageLine.lines` over `UsageStore.records(forSession:)`), and Copy turns into "Copied" with a checkmark and a success haptic for 1.5 s |
 | Cost with the Gemini and OpenAI toggle, periods and Detailed | Same |
 | Advanced: the selected provider's models | Same, plus the session log |
 | Screen context, auto-learn, shortcuts, call detection, mute other audio, sounds | Not on iOS |

@@ -94,10 +94,12 @@ struct DictationDetail: View {
                         approximate: calls.contains { $0.isEstimated || $0.costUSD == nil }
                     ))
                 }
-                ForEach(calls) { call in
+                ForEach(UsageLine.lines(calls)) { line in
+                    let call = line.total
+                    let count = line.calls > 1 ? " · \(line.calls) calls" : ""
                     GridRow {
                         metaLabel(call.stageValue?.displayName ?? call.stage)
-                        metaValue("\(call.model) · \(UsageFormat.measure(call)) · \(CostPane.money(call.costUSD, approximate: call.isEstimated))")
+                        metaValue("\(call.model)\(count) · \(UsageFormat.measure(call)) · \(CostPane.money(call.costUSD, approximate: call.isEstimated))")
                     }
                 }
             }

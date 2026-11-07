@@ -277,10 +277,12 @@ private struct HistoryDetail: View {
                     calls.reduce(0) { $0 + ($1.costUSD ?? 0) },
                     approximate: calls.contains { $0.isEstimated || $0.costUSD == nil }
                 ))
-                ForEach(calls) { call in
+                ForEach(UsageLine.lines(calls)) { line in
+                    let call = line.total
+                    let count = line.calls > 1 ? " · \(line.calls) calls" : ""
                     divider
                     DetailRow(label: call.stageValue?.displayName ?? call.stage,
-                              value: "\(call.model) · \(UsageView.money(call.costUSD, approximate: call.isEstimated))")
+                              value: "\(call.model)\(count) · \(UsageView.money(call.costUSD, approximate: call.isEstimated))")
                 }
             }
             if let error = record.errorMessage ?? record.errorCode { divider; DetailRow(label: "Error", value: error) }

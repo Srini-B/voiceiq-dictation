@@ -35,3 +35,42 @@ public enum UsageFormat {
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 }
+
+/// One row of a dictation's cost breakdown: every call of one stage to one
+/// model, summed. Real-time transcription books each request it makes, which
+/// listed a row per few seconds of speech.
+public struct UsageLine: Identifiable, Sendable {
+    /// The calls' tokens, audio and cost added up, under the first call's id.
+    public let total: UsageRecord
+    public let calls: Int
+    public var id: String { total.id }
+
+    /// In the order each stage and model was first called.
+    public static func lines(_ records: [UsageRecord]) -> [UsageLine] {
+        var order: [String] = []
+        var groups: [String: [UsageRecord]] = [:]
+        for record in records {
+            let key = record.stage + "\u{1F}" + record.model
+            if groups[key] == nil { order.append(key) }
+            groups[key, default: []].append(record)
+        }
+        return order.compactMap { groups[$0] }.map { group in
+            var total = group[0]
+            for record in group.dropFirst() {
+                total.textIn += record.textIn; total.audioIn += record.audioIn; total.imageIn += record.imageIn
+                total.cachedIn += record.cachedIn; total.textOut += record.textOut; total.audioOut += record.audioOut
+                total.thoughtOut += record.thoughtOut
+                total.isEstimated = total.isEstimated || record.isEstimated
+                total.costUSD = add(total.costUSD, record.costUSD)
+                total.audioSeconds = add(total.audioSeconds, record.audioSeconds)
+            }
+            // A call with no price makes the sum a lower bound.
+            if total.costUSD != nil, group.contains(where: { $0.costUSD == nil }) { total.isEstimated = true }
+            return UsageLine(total: total, calls: group.count)
+        }
+    }
+
+    private static func add(_ a: Double?, _ b: Double?) -> Double? {
+        a == nil && b == nil ? nil : (a ?? 0) + (b ?? 0)
+    }
+}
