@@ -1,0 +1,5 @@
+module CLlama {
+    header "llama.h"
+    link "c++"
+    export *
+}
