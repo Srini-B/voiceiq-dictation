@@ -107,8 +107,14 @@ private actor ParakeetHelperClient {
             cancel(id: id)
             return nil
         }
-        let reply = await exchange(.write(model: model, directory: directory, request: request), id: id,
-                                   timeout: TimeoutPolicy.localWrite(maxTokens: request.maxTokens))
+        // A cancelled dictation stops the helper mid-write, so the writer is
+        // free for the next one. A finished write leaves it loaded.
+        let reply = await withTaskCancellationHandler {
+            await exchange(.write(model: model, directory: directory, request: request), id: id,
+                           timeout: TimeoutPolicy.localWrite(maxTokens: request.maxTokens))
+        } onCancel: {
+            Task { await self.cancel(id: id) }
+        }
         guard case .written(let output) = reply else {
             cancel(id: id)
             return nil
