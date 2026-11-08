@@ -48,6 +48,7 @@ final class VoiceSession: ObservableObject {
     private var delivery: Delivery?
     private var notice: Notice?
     private var lastPublished: SessionSnapshot?
+    private var bars = LevelBars()
     private var backgroundTask: UIBackgroundTaskIdentifier = .invalid
     /// The Action button started this session, so it carries a Live Activity.
     private var startedByActionButton = false
@@ -108,7 +109,7 @@ final class VoiceSession: ObservableObject {
         heartbeat?.invalidate()
         heartbeat = nil
         store.heartbeat = nil
-        store.level = 0
+        clearDictationTrace()
         audio.stop()
         activity.end()
         publish(force: true)
@@ -118,6 +119,8 @@ final class VoiceSession: ObservableObject {
     // MARK: - Warm window
 
     private func phaseChanged() {
+        // Each dictation starts with an empty glow and no words.
+        clearDictationTrace()
         guard isActive else { return }
         switch dictationPhase {
         case .recording:
@@ -221,8 +224,21 @@ final class VoiceSession: ObservableObject {
     }
 
     func setLevel(_ level: Float) {
-        guard isActive else { return }
-        store.level = level
+        guard isActive, dictationPhase == .recording else { return }
+        bars.append(level)
+        store.levelBars = bars.heights
+    }
+
+    /// The live transcriber's words so far, for the keyboard to show.
+    func setLiveText(_ text: String) {
+        guard isActive, dictationPhase == .recording else { return }
+        store.liveText = text
+    }
+
+    private func clearDictationTrace() {
+        bars = LevelBars()
+        store.levelBars = []
+        store.liveText = ""
     }
 
     // MARK: - Background time

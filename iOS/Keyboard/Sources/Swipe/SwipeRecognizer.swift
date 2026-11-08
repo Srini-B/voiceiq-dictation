@@ -18,6 +18,20 @@ final class SwipeRecognizer: @unchecked Sendable {
     /// Main thread only.
     private var frame: CGRect?
 
+    /// iOS can keep an earlier keyboard alive while it shows the next one,
+    /// and a second copy of the models would put the extension near its
+    /// memory limit. Keyboards alive at the same time share one recognizer;
+    /// it is freed with the last of them.
+    /// Main thread only.
+    private static weak var live: SwipeRecognizer?
+
+    static func shared() -> SwipeRecognizer {
+        if let live { return live }
+        let recognizer = SwipeRecognizer()
+        live = recognizer
+        return recognizer
+    }
+
     private static let alphabet = Array("abcdefghijklmnopqrstuvwxyz")
     private static let qwertyRows = ["qwertyuiop", "asdfghjkl", "zxcvbnm"]
 

@@ -349,20 +349,28 @@ one speaker; there is no diarizer, real-time path, or Nemotron on iOS (see
 The keyboard opens on letter keys. A bar above them shows three suggestions,
 with the VoiceiQ button (waveform) on the left and the mic on the right. The
 mic starts a dictation at once; the waveform opens the voice panel with
-Dictate, Translate and Ask. A running dictation shows the recording panel
-until the text is delivered, then the keys come back.
+Dictate, Translate and Ask. A running dictation keeps the keys and replaces
+the suggestion bar with the recording strip until the text is delivered.
 
-**Recording panel** (`RecordingPanel`, `LiveWaveform`). A red waveform fills
-the panel while recording: one bar every 0.06 s from `SharedStore.level`, which
-the app writes on each mic level callback. Bars rise fast and fall slowly,
-scroll right to left and fade with age. Below it: cancel (x), the elapsed
-time with the mode ("Listening", "Listening to translate", "Listening to your
-question"), and a red stop button that finishes the dictation. While the text
-is written the bars turn blue and a slow pulse runs across them with
-"Writing…" or "Thinking…"; the buttons hide. Reduce Motion freezes the bars.
-The bars are plain `Capsule` views advanced by a 0.06 s timer. Until 0.6.23
-they were drawn by a `Canvas` inside `TimelineView(.animation)`, which drew in
-the Simulator but left the panel empty on an iPhone.
+**Recording strip** (`RecordingStrip`, `LevelGlow`), modelled on Gboard's
+Rambler. Cancel (x) on the left, a red stop button on the right, the elapsed
+time in the middle. Behind them a red glow rises from the bottom edge as loud
+as the voice was. It is blurred and fades out at every edge, the bottom too,
+so it never draws a line between the strip and the keys; its top edge is a
+smooth curve through the recent levels, newest on the right. The app keeps
+the levels (`LevelBars`: one per mic level it writes, at most every 0.06 s,
+smoothed with a fast attack and slow release, newest 256 kept) and publishes
+them as `SharedStore.levelBars`; the keyboard redraws every 0.06 s. A keyboard
+that appears mid-dictation, after an app switch or after being hidden, shows
+the dictation so far instead of starting empty. With Real-time transcription
+on, the words heard so far (`SharedStore.liveText`, from the dictation's live
+transcriber) replace the time and the glow once they arrive: one line, newest
+words last, the start cut off. The final text still comes from the saved
+recording and is typed as before. While the text is written the strip shows
+only a spinner with "Writing…" or "Thinking…". Reduce Motion holds the glow
+flat at the latest level. The glow is a plain `Shape` on a 0.06 s timer: a
+`Canvas` inside `TimelineView(.animation)` drew in the Simulator but nothing
+on an iPhone (0.6.23).
 
 **Add to Dictionary.** With Full Access, selecting text in the field replaces
 the suggestions with "Add “word” to Dictionary". Text selected in another app
@@ -669,7 +677,7 @@ runs. Everything needs Full Access.
 | History stats: words, dictations, WPM, audio time | Home's stats grid |
 | Dictionary with search, CSV and Auto-learned | Same, synced through iCloud, plus adding a selection or a copied word from the keyboard |
 | Writing rules, smart transcription, live, noise handling | Same settings |
-| On-device transcription: Fluid Speech Mini, Fluid Speech Pro (macOS 15+), English tools, live preview | Fluid Speech Mini, Fluid Speech Pro (iOS 18+) and English tools, in-process; no live preview (see [local transcription](LOCAL_TRANSCRIPTION.md)) |
+| On-device transcription: Fluid Speech Mini, Fluid Speech Pro (macOS 15+), English tools, live preview | Fluid Speech Mini, Fluid Speech Pro (iOS 18+) and English tools, in-process; the live preview shows on the keyboard's recording strip (see [local transcription](LOCAL_TRANSCRIPTION.md)) |
 | History, retry, crash recovery, retention | Same. The detail shows Pipeline, the seconds from Stop to the text being ready (`DictationRecord.pipelineSeconds`, as on the Mac; absent for dictations synced from the Mac), the cost and one row per stage and model (stage, model, call count when above one, summed cost; `UsageLine.lines` over `UsageStore.records(forSession:)`), and Copy turns into "Copied" with a checkmark and a success haptic for 1.5 s |
 | Cost with the Gemini and OpenAI toggle, periods and Detailed | Same |
 | Advanced: the selected provider's models | Same, plus the session log |

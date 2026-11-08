@@ -20,14 +20,15 @@ struct KeyboardView: View {
     @ObservedObject var model: KeyboardModel
     @ObservedObject var offer: DictionaryOffer
     @ObservedObject var typing: TypingController
-    /// The voice panel, opened from the bar; a running session shows it too.
+    /// The voice panel, opened from the bar. It also shows a session that
+    /// is starting or needs the app; a running dictation keeps the keys.
     @State private var voiceOpen = false
 
     private enum Panel { case keys, voice, emoji, edit, answer }
 
     private var panel: Panel {
         if model.answer != nil { return .answer }
-        if voiceOpen || model.phase == .recording || model.phase == .processing || model.waitingForApp { return .voice }
+        if !isLive, voiceOpen || model.phase == .recording || model.phase == .processing || model.waitingForApp { return .voice }
         if typing.emojiQuery != nil { return .keys }
         if typing.showsEdit { return .edit }
         return typing.showsEmoji ? .emoji : .keys
@@ -35,13 +36,14 @@ struct KeyboardView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            topBar.frame(height: typing.compact ? 36 : 44)
+            Group {
+                if isLive { RecordingStrip(model: model) } else { topBar }
+            }
+            .frame(height: typing.compact ? 36 : 44)
             Group {
                 switch panel {
                 case .answer:
                     if let answer = model.answer { AnswerPanel(answer: answer, model: model).padding(8) }
-                case .voice where isLive:
-                    RecordingPanel(model: model).padding(8)
                 case .voice:
                     VStack(spacing: 8) {
                         Spacer(minLength: 0)
@@ -135,11 +137,10 @@ struct KeyboardView: View {
         } else {
             VStack(spacing: 6) {
                 HStack(spacing: 8) {
-                    cancelSlot
+                    Color.clear.frame(width: 36, height: 36)
                     MicBar(
                         phase: model.phase,
                         waiting: model.waitingForApp,
-                        level: model.level,
                         title: micTitle,
                         action: model.micTapped
                     )
@@ -160,22 +161,6 @@ struct KeyboardView: View {
                 }
                 .frame(height: DictionaryOfferChip.height)
             }
-        }
-    }
-
-    @ViewBuilder private var cancelSlot: some View {
-        if model.phase == .recording {
-            Button(action: model.cancelTapped) {
-                Image(systemName: "xmark")
-                    .font(.system(size: 14, weight: .semibold))
-                    .frame(width: 36, height: 36)
-                    .background(Circle().fill(Color(.secondarySystemFill)))
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(.primary)
-            .accessibilityLabel("Cancel")
-        } else {
-            Color.clear.frame(width: 36, height: 36)
         }
     }
 
@@ -248,7 +233,6 @@ private struct ModePicker: View {
 private struct MicBar: View {
     let phase: SessionSnapshot.Phase
     let waiting: Bool
-    let level: Float
     let title: String
     let action: () -> Void
 
@@ -271,10 +255,7 @@ private struct MicBar: View {
     }
 
     @ViewBuilder private var leadingContent: some View {
-        if phase == .recording {
-            RoundedRectangle(cornerRadius: 2).fill(.white).frame(width: 12, height: 12)
-            Waveform(level: level)
-        } else if phase == .processing || waiting {
+        if phase == .processing || waiting {
             ProgressView().tint(phase == .processing ? KeyboardPalette.accent : .white)
         } else {
             Image(systemName: "mic.fill").font(.system(size: 18, weight: .semibold))
@@ -291,28 +272,6 @@ private struct MicBar: View {
 
     private var foregroundColor: Color {
         phase == .processing ? .primary : .white
-    }
-}
-
-private struct Waveform: View {
-    let level: Float
-    private let pattern: [CGFloat] = [0.45, 0.7, 0.35, 0.9, 0.55, 1, 0.42, 0.78, 0.58, 0.88, 0.4, 0.68, 0.95, 0.5, 0.82, 0.38, 0.72, 0.52]
-
-    var body: some View {
-        HStack(spacing: 2) {
-            ForEach(pattern.indices, id: \.self) { index in
-                Capsule()
-                    .fill(.white)
-                    .frame(width: 2, height: barHeight(index))
-            }
-        }
-        .frame(height: 24)
-        .animation(.easeOut(duration: 0.12), value: level)
-    }
-
-    private func barHeight(_ index: Int) -> CGFloat {
-        let energy = 0.25 + CGFloat(min(max(level, 0), 1)) * 0.75
-        return max(4, 24 * pattern[index] * energy)
     }
 }
 
@@ -342,52 +301,56 @@ private struct AnswerPanel: View {
     }
 }
 
-/// What the keyboard shows while it listens: the live waveform, the time,
-/// and Cancel and Done. While the text is written the waveform pulses.
-private struct RecordingPanel: View {
+/// Stands in for the suggestion bar while a dictation runs, with the keys
+/// still below it: Cancel, the time over a glow that rises with the voice,
+/// Done. With Real-time transcription the words heard so far replace the
+/// time and the glow once they arrive. While the text is written: a spinner.
+private struct RecordingStrip: View {
     @ObservedObject var model: KeyboardModel
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
 
     private var recording: Bool { model.phase == .recording }
-
-    private var status: String {
-        guard recording else { return model.mode == .ask ? "Thinking…" : "Writing…" }
-        switch model.mode {
-        case .dictate: return "Listening"
-        case .translate: return "Listening to translate"
-        case .ask: return "Listening to your question"
-        }
-    }
+    /// The landscape strip is 36 pt tall.
+    private var buttonSize: CGFloat { verticalSizeClass == .compact ? 28 : 32 }
 
     var body: some View {
-        VStack(spacing: 10) {
-            LiveWaveform(listening: recording, color: recording ? KeyboardPalette.recording : KeyboardPalette.accent)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .padding(.horizontal, 4)
-            HStack {
+        HStack(spacing: 8) {
+            if recording {
                 CircleButton(systemImage: "xmark", label: "Cancel", fill: Color(.secondarySystemFill),
-                             foreground: .primary, action: model.cancelTapped)
-                    .opacity(recording ? 1 : 0)
-                    .disabled(!recording)
-                Spacer()
-                VStack(spacing: 2) {
-                    if let started = model.snapshot.recordingStartedAt, recording {
-                        Text(timerInterval: started...Date.distantFuture, countsDown: false)
-                            .font(.system(size: 20, weight: .semibold).monospacedDigit())
-                    } else {
-                        ProgressView()
-                    }
-                    Text(status)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
-                CircleButton(systemImage: "stop.fill", label: "Done", fill: KeyboardPalette.recording,
-                             foreground: .white, action: model.micTapped)
-                    .opacity(recording ? 1 : 0)
-                    .disabled(!recording)
+                             foreground: .primary, size: buttonSize, action: model.cancelTapped)
             }
-            .padding(.horizontal, 8)
-            .padding(.bottom, 6)
+            Group {
+                if !recording {
+                    HStack(spacing: 8) {
+                        ProgressView()
+                        Text(model.mode == .ask ? "Thinking…" : "Writing…")
+                            .font(.subheadline.weight(.medium))
+                            .foregroundStyle(.secondary)
+                    }
+                } else if !model.liveText.isEmpty {
+                    // One line, newest words last.
+                    Text(model.liveText)
+                        .font(.system(size: 16))
+                        .lineLimit(1)
+                        .truncationMode(.head)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .accessibilityLabel("Heard so far: \(model.liveText)")
+                } else if let started = model.snapshot.recordingStartedAt {
+                    Text(timerInterval: started...Date.distantFuture, countsDown: false)
+                        .font(.system(size: 16, weight: .semibold).monospacedDigit())
+                }
+            }
+            .frame(maxWidth: .infinity)
+            if recording {
+                CircleButton(systemImage: "stop.fill", label: "Done", fill: KeyboardPalette.recording,
+                             foreground: .white, size: buttonSize, action: model.micTapped)
+            }
+        }
+        .padding(.horizontal, 6)
+        .background {
+            if recording, model.liveText.isEmpty {
+                LevelGlow(color: KeyboardPalette.recording)
+            }
         }
     }
 }
@@ -397,14 +360,15 @@ private struct CircleButton: View {
     let label: String
     let fill: Color
     let foreground: Color
+    let size: CGFloat
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
             Image(systemName: systemImage)
-                .font(.system(size: 18, weight: .bold))
+                .font(.system(size: size * 0.4, weight: .bold))
                 .foregroundStyle(foreground)
-                .frame(width: 52, height: 52)
+                .frame(width: size, height: size)
                 .background(Circle().fill(fill))
         }
         .buttonStyle(MicBarButtonStyle())
