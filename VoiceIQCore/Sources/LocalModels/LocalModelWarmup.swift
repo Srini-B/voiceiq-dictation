@@ -115,7 +115,9 @@ public enum LocalModelWarmup {
         let id = UUID()
         let work = Task { await operation() }
         current = Entry(id: id, model: nil, task: Task { _ = await work.value })
-        let value = await work.value
+        // `work` is unstructured, so a cancelled dictation must reach it here
+        // for the writer to stop and let the next dictation load.
+        let value = await withTaskCancellationHandler { await work.value } onCancel: { work.cancel() }
         ended(id)
         return value
     }

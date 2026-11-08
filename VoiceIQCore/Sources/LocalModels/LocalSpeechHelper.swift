@@ -63,7 +63,8 @@ actor LocalRemoteWriter: LocalWriterSession {
     }
 
     /// The helper keeps the writer loaded for the next dictation and exits
-    /// after a minute idle. Deleting the model stops it at once (`kill`).
+    /// after a minute idle. Deleting the model stops it at once
+    /// (`LocalModelStore.deleteModel` calls `kill`).
     func stop() async {}
 
     static func kill() async {

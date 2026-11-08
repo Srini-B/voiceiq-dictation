@@ -66,9 +66,9 @@ public final class LocalModelStore: ObservableObject {
     }
 
     private static let writer2B = LocalModelStore(manifest: LocalWriterModel.qwen3_5_2b.manifest,
-                                                  displayName: LocalWriterModel.qwen3_5_2b.displayName)
+                                                  displayName: LocalWriterModel.qwen3_5_2b.displayName, isWriter: true)
     private static let writer06B = LocalModelStore(manifest: LocalWriterModel.qwen3_0_6b.manifest,
-                                                   displayName: LocalWriterModel.qwen3_0_6b.displayName)
+                                                   displayName: LocalWriterModel.qwen3_0_6b.displayName, isWriter: true)
 
     public static func store(for model: LocalWriterModel) -> LocalModelStore {
         switch model {
@@ -85,6 +85,9 @@ public final class LocalModelStore: ObservableObject {
     /// until counted, which hashes the installed files once.
     @Published public private(set) var updateBytes: Int64?
     private let manifest: LocalModelManifest
+    /// A VoiceIQ Writer size. On the Mac its helper keeps the model loaded
+    /// between dictations, so deleting it stops the helper too.
+    private let isWriter: Bool
     /// The revision sessions load: the pinned one, or a previous one until
     /// its update is installed.
     private var installedRevision: String?
@@ -101,9 +104,10 @@ public final class LocalModelStore: ObservableObject {
         self.init(manifest: model.manifest, displayName: model.displayName)
     }
 
-    private init(manifest: LocalModelManifest, displayName: String) {
+    private init(manifest: LocalModelManifest, displayName: String, isWriter: Bool = false) {
         self.displayName = displayName
         self.manifest = manifest
+        self.isWriter = isWriter
         guard LocalModelSupport.isAvailable else {
             state = .unsupported
             return
@@ -229,6 +233,9 @@ public final class LocalModelStore: ObservableObject {
             await withTaskGroup(of: Void.self) { group in
                 for cancel in cancels { group.addTask { await cancel() } }
             }
+            #if os(macOS)
+            if isWriter { await LocalRemoteWriter.kill() }
+            #endif
             let manifest = manifest
             let removed = await Task.detached(priority: .userInitiated) { () -> Bool in
                 (try? LocalModelInstaller.removeAll(manifest)) != nil
