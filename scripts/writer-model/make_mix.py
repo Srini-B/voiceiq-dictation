@@ -24,11 +24,17 @@ def lines(folder, split):
 
 
 def raw(line):
-    return next(m["content"] for m in json.loads(line)["messages"] if m["role"] == "user")
+    """The RAW transcript of a common.student_user turn, without its context lines.
+    Vocabulary and Place lines are single-line, so RAW starts at the first line
+    that begins with "RAW: ", unless field context (free text) precedes it."""
+    user = next(m["content"] for m in json.loads(line)["messages"] if m["role"] == "user")
+    if "</field>\nRAW: " in user:
+        return user.rpartition("</field>\nRAW: ")[2]
+    return ("\n" + user).partition("\nRAW: ")[2]
 
 
 # filter.py splits each corpus on its own, so a RAW in one corpus's valid or
-# test slice can sit in another's train split.
+# test slice can sit in another's train split, with or without context lines.
 folders = {spec.partition(":")[0] for spec in args.train} | set(args.valid)
 held = {raw(l) for folder in folders for split in ("valid", "test")
         if Path(folder, f"{split}.jsonl").exists() for l in lines(folder, split)}
