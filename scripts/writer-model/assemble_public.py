@@ -55,7 +55,7 @@ def rows_api(dataset, config, split, n, filt=lambda r: True, pool=None):
     """Random rows through datasets-server, 100 per request, text columns only."""
     size = requests.get("https://datasets-server.huggingface.co/size", params={"dataset": dataset}, timeout=60).json()
     total = next(s["num_rows"] for s in size["size"]["splits"] if s["config"] == config and s["split"] == split)
-    out, seen, tries = [], set(), 0
+    out, seen, taken, tries = [], set(), set(), 0
     while len(out) < (pool or n) and tries < 400:
         tries += 1
         off = rng.randrange(0, max(1, total - 100))
@@ -70,8 +70,12 @@ def rows_api(dataset, config, split, n, filt=lambda r: True, pool=None):
             time.sleep(2 + attempt * 3)
         else:
             continue
-        for row in r.json()["rows"]:
-            row = {k: v for k, v in row["row"].items() if k != "audio"}
+        for item in r.json()["rows"]:
+            # Windows can overlap, and AMI joins consecutive rows into one input.
+            if item["row_idx"] in taken:
+                continue
+            taken.add(item["row_idx"])
+            row = {k: v for k, v in item["row"].items() if k != "audio"}
             if filt(row):
                 out.append(row)
     rng.shuffle(out)

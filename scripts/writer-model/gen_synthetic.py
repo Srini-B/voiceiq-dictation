@@ -209,6 +209,9 @@ def run(job):
     for attempt in range(3):
         msg = client.messages.create(model=args.model, max_tokens=16000, system=GEN_SYSTEM,
                                      messages=[{"role": "user", "content": text}])
+        with lock:
+            usage["input"] += msg.usage.input_tokens
+            usage["output"] += msg.usage.output_tokens
         body = "".join(b.text for b in msg.content if b.type == "text")
         m = re.search(r"\[.*\]", body, re.S)
         try:
@@ -217,8 +220,6 @@ def run(job):
         except (AttributeError, json.JSONDecodeError):
             items = None
     with lock:
-        usage["input"] += msg.usage.input_tokens
-        usage["output"] += msg.usage.output_tokens
         if not items:
             print(f"{call}: unparseable ({msg.stop_reason}) {body[:300]!r}")
             return

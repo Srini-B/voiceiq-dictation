@@ -73,12 +73,30 @@ def to_hf(mlx_dir: Path, hf_dir: Path):
     return group
 
 
+# Groups per batch: the 2B's embedding (508M values) as one batch held more
+# than 18 GB of float64 temporaries.
+GROUPS_PER_BATCH = 1 << 18
+
+
 def grid_blocks(values: np.ndarray):
     """Q4_1 blocks for float32 rows that lie on a 64-group affine 4-bit grid,
-    or None when a group does not: the smallest gap between a group's
-    distinct values is its step, and every value must be a whole number of
-    steps, at most 15, above the group's minimum."""
-    groups = values.reshape(-1, 64).astype(np.float64)
+    or None when a group does not. Groups are independent, so batching does
+    not change the result."""
+    groups = values.reshape(-1, 64)
+    batches = []
+    for start in range(0, len(groups), GROUPS_PER_BATCH):
+        blocks = grid_batch(groups[start:start + GROUPS_PER_BATCH])
+        if blocks is None:
+            return None
+        batches.append(blocks)
+    return np.concatenate(batches)
+
+
+def grid_batch(groups: np.ndarray):
+    """The smallest gap between a group's distinct values is its step, and
+    every value must be a whole number of steps, at most 15, above the
+    group's minimum."""
+    groups = groups.astype(np.float64)
     low = groups.min(axis=1, keepdims=True)
     ordered = np.sort(groups, axis=1)
     gaps = np.diff(ordered, axis=1)

@@ -83,11 +83,14 @@ else:
     rv = emb.encode(raws, normalize_embeddings=True, batch_size=64, show_progress_bar=True)
     cache.parent.mkdir(parents=True, exist_ok=True)
     np.save(cache, rv)
-sims = rv @ cv.T
-best = sims.max(axis=1)
-near = sorted(((float(best[i]), kept[i]["raw"], cases[int(sims[i].argmax())]["id"]) for i in range(len(kept))),
-              reverse=True)[:15]
-kept2 = [r for i, r in enumerate(kept) if best[i] < args.sim]
+if kept:
+    sims = rv @ cv.T
+    best = sims.max(axis=1)
+    near = sorted(((float(best[i]), kept[i]["raw"], cases[int(sims[i].argmax())]["id"]) for i in range(len(kept))),
+                  reverse=True)[:15]
+    kept2 = [r for i, r in enumerate(kept) if best[i] < args.sim]
+else:
+    near, kept2 = [], []
 drops["overlap_embedding"] = len(kept) - len(kept2)
 kept = kept2
 
@@ -118,6 +121,8 @@ rest.sort(key=lambda r: hashlib.sha1(r["id"].encode()).hexdigest())
 valid, train = rest[: args.valid], rest[args.valid:]
 
 out = Path(args.out)
+# trim_long.py's backup of an earlier train.jsonl would replace these rows.
+(out / "train_full.jsonl").unlink(missing_ok=True)
 for name, part in (("train", train), ("valid", valid), ("test", test)):
     write_jsonl(out / f"{name}.jsonl", [{"messages": student_messages(r, r["target"])} for r in part])
 meta_keys = ["id", "source", "license", "category", "raw", "vocabulary", "place", "field", "target"]

@@ -10,6 +10,7 @@ import json
 import re
 import time
 from collections import defaultdict
+from pathlib import Path
 
 from mlx_lm import generate, load
 from mlx_lm.sample_utils import make_sampler
@@ -36,6 +37,7 @@ def norm(s):
 per_cat = defaultdict(lambda: dict(n=0, gate_ok=0, exact=0, sim=0.0, banned=0))
 tot = dict(n=0, gate_ok=0, exact=0, sim=0.0, banned=0)
 t0 = time.time()
+Path(args.out).parent.mkdir(parents=True, exist_ok=True)
 with open(args.out, "w") as f:
     for r in rows:
         prompt = tok.apply_chat_template(student_messages(r), add_generation_prompt=True, tokenize=False,

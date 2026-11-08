@@ -151,5 +151,8 @@ if __name__ == "__main__":
         g1 = mx.grad(loss(ref), argnums=(0, 1, 2, 3, 4))(q, k, v, a, b)
         g2 = mx.grad(loss(new), argnums=(0, 1, 2, 3, 4))(q, k, v, a, b)
         rel = lambda x, y: (mx.abs(x - y).max() / (mx.abs(x).max() + 1e-9)).item()
-        print(f"B={B} T={T} Hk={Hk} Hv={Hv} D={D}{' hard' if hard else ''}: y {rel(y1, y2):.2e} state {rel(s1, s2):.2e} "
-              f"grads {' '.join(f'{rel(x, y):.1e}' for x, y in zip(g1, g2))}")
+        errors = [rel(y1, y2), rel(s1, s2)] + [rel(x, y) for x, y in zip(g1, g2)]
+        print(f"B={B} T={T} Hk={Hk} Hv={Hv} D={D}{' hard' if hard else ''}: y {errors[0]:.2e} state {errors[1]:.2e} "
+              f"grads {' '.join(f'{e:.1e}' for e in errors[2:])}")
+        # Measured errors are at most about 4e-5; NaN fails too.
+        assert all(e <= 1e-3 for e in errors), f"chunked path differs from the reference: {errors}"

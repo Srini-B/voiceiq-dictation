@@ -37,7 +37,8 @@ for path in args.inputs:
         r["id"] = rid(r)
         pool.append(r)
 out = Path(args.out)
-done = {r["id"] for r in read_jsonl(out)} if out.exists() else set()
+# Failed, expired or cancelled requests stay eligible for the next run.
+done = {r["id"] for r in read_jsonl(out) if r.get("target") is not None} if out.exists() else set()
 todo = [r for r in {r["id"]: r for r in pool}.values() if r["id"] not in done]
 if args.sample:
     rng = random.Random(args.seed)
@@ -81,6 +82,7 @@ warm = teacher_request({"raw": "okay"})
 warm["max_tokens"] = 16
 client.messages.create(**warm)
 
+out.parent.mkdir(parents=True, exist_ok=True)
 state = out.with_suffix(".batches.json")
 batches = json.loads(state.read_text()) if state.exists() else []
 by_id = {r["id"]: r for r in pool}
@@ -114,7 +116,8 @@ for bid in batches:
                            teacher=m.model, usage=u, cost_usd=cost(u))
             else:
                 row.update(target=None, stop_reason=res.result.type, error=str(getattr(res.result, "error", "")))
-            done.add(res.custom_id)
+            if row["target"] is not None:
+                done.add(res.custom_id)
             written.append(row)
             f.write(json.dumps(row, ensure_ascii=False) + "\n")
     print(f"{bid}: wrote {len(written)} rows in {time.time() - t0:.0f}s")

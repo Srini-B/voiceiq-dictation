@@ -6,7 +6,7 @@ Large files never go into git. Inputs, teacher labels and training files are in 
 
 ## Data
 
-Run the data steps from this directory with Python 3.11 or later and `ANTHROPIC_API_KEY` set. They append to their output files and skip finished work, so a rerun resumes.
+Run the data steps from this directory with Python 3.11 or later and `ANTHROPIC_API_KEY` set. `gen_synthetic.py` and `label.py` append to their output files and skip finished work, so a rerun resumes. `assemble_public.py` and `filter.py` replace their output; give a run with another seed or scale its own `--out` to keep earlier records.
 
 ```sh
 python -m venv .venv && . .venv/bin/activate && pip install -r requirements.txt
@@ -36,7 +36,8 @@ python filter.py data/labelled_targeted.jsonl --cases bench/cases.jsonl --out da
 Run these on Apple silicon with `mlx==0.32.4` and `mlx-lm==0.32.2`. Set `VOICEIQ_REPO` when the scripts run outside a checkout; `common.py` reads the prompt from the Swift sources under it.
 
 ```sh
-# Drop the 11 training rows over 1,024 tokens, then build the shipped model's mix.
+# Drop the 11 training rows over 1,024 tokens, then build the shipped model's mix. The shipped 2B mix reused
+# this Qwen3-0.6B trim; for a new run, trim with the tokenizer of the model it trains.
 python trim_long.py data/mlx --model Qwen/Qwen3-0.6B --max 1024
 python make_mix.py --out data/mix2b --train data/mlx_targeted --train data/mlx:10000 --valid data/mlx --valid data/mlx_targeted
 

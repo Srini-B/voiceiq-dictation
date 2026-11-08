@@ -12,6 +12,7 @@ import argparse
 import json
 import os
 import re
+import tempfile
 import time
 
 import mlx.core as mx
@@ -42,7 +43,8 @@ def peak():
 
 
 prefix = open(args.prefix).read() if args.prefix else ""
-system = open(args.system).read() if args.system else None
+# Stripped as common.STUDENT_SYSTEM is: Qwen3's template keeps a trailing newline.
+system = open(args.system).read().strip() if args.system else None
 cases = [json.loads(l) for l in open(args.cases)]
 if args.only:
     keep = set(args.only.split(","))
@@ -75,7 +77,8 @@ while shared < min(len(a), len(b)) and a[shared] == b[shared]:
 shared -= 1  # leave the boundary token to the per-case suffix
 prefix_tokens = a[:shared]
 
-cache_path = f"/tmp/wb-cache-{re.sub(r'[^A-Za-z0-9]+', '_', args.model)}.safetensors"
+fd, cache_path = tempfile.mkstemp(prefix=f"wb-cache-{re.sub(r'[^A-Za-z0-9]+', '_', args.model)}-", suffix=".safetensors")
+os.close(fd)
 peak_reset()
 cache = make_prompt_cache(model)
 t0 = time.time()
