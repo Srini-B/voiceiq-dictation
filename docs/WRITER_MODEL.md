@@ -80,5 +80,16 @@ The cloud cleanup stays the default. The model would be a third writing option n
 - **iPhone.** The writing step runs in the app's background voice session, and iOS does not allow Metal work in the background, so the model must run on the CPU. Two routes:
   - llama.cpp with a GGUF Q4_K_M export (about 1.2 GB for the 2B model), CPU only. Qwen3.5's gated-delta layers need a llama.cpp build with the Qwen3.5 architecture; measure CPU speed on an iPhone before committing to 2B.
   - Core ML on CPU with a converted model, following the Fluid Speech Pro conversion. That needs a stateful KV-cache export and is more work.
-  If 2B is too slow on the iPhone CPU, Qwen3-0.6B round 1 (35/42 at 4-bit, 36/42 at bf16, 0.34 GB) is the fallback: standard attention and a third of the weights. Its 4-bit build is kept in the private repo `cyron/voiceiq-writer-qwen3-0_6b` (revision `b2cbc5c689c2719c1f1162255ca6cd47a4fd70c0`); it would have to be made public before an app could download it.
+  Both sizes are public so the iPhone can offer both. Qwen3-0.6B ([`cyron/voiceiq-writer-qwen3-0_6b`](https://huggingface.co/cyron/voiceiq-writer-qwen3-0_6b), 35/42 at 4-bit) has standard attention and a third of the weights. Its files at revision `2c328e68fc4c6e902682304a34263aeb3c23bbdd`:
+
+  | File | Bytes | SHA-256 |
+  | --- | --- | --- |
+  | `chat_template.jinja` | 4,168 | `a55ee1b1660128b7098723e0abcd92caa0788061051c62d51cbe87d9cf1974d8` |
+  | `config.json` | 1,021 | `d8cbd096f758add51a940656710a0319cfb3ad4ae4591507ab29c2e8bebecc54` |
+  | `generation_config.json` | 113 | `8fa633e0a044c8c3b194bffb4e71a915e24dafa0f97ca23f4420a5bd94e28932` |
+  | `model.safetensors` | 335,450,548 | `da813cf1a2c114807dfcf25736fd532bfa03c0481098a1b1d7898751d37875ec` |
+  | `model.safetensors.index.json` | 49,770 | `5ee67e4efeb75dfacb8dd3892dd6208473771264fdeff6b9eba4a79db5b1435e` |
+  | `tokenizer.json` | 11,422,650 | `be75606093db2094d7cd20f3c2f385c212750648bd6ea4fb2bf507a6a4c55506` |
+  | `tokenizer_config.json` | 728 | `5aa5069e1b0c0d623ce38e0df387e506b843e5c4d612a36d2e79e46a400e6450` |
+- **Prompt and decoding.** Both sizes take the same input. The system message is `system.txt` and the user turn is the context lines, then `RAW: <transcript>`, one per line: `Vocabulary: a, b, c` (up to 100 terms, newlines turned to spaces, each cut to 60 characters), `Place: app <app>, title <window title>, page <url>` (only the parts present; newlines turned to spaces, `<` and `>` to `‹` and `›`, cut to 80, 160 and 120 characters), then `Before cursor: <field>…</field>` (the last 300 characters before the cursor, as is) and `After cursor: <field>…</field>` (the first 100 after it), both only when the field holds more than whitespace. `common.student_user` builds it. Render with the bundled chat template and `enable_thinking: false`, which ends the prompt with an empty think block (`<|im_start|>assistant\n<think>\n\n</think>\n\n`). Decode greedily and stop at the tokenizer's end-of-turn tokens: `<|im_end|>` or `<|endoftext|>` for 0.6B, `<|im_end|>` for 2B. `bench.py` caps output at max(160, 2.5 × RAW words + 80) tokens.
 - **Prompt context.** Vocabulary, PLACE and the field text map onto the student's `Vocabulary:`, `Place:` and cursor lines. Custom writing rules and the spelling-variant line do not carry over: the student learned the default rules only. The question-answered retry has no reminder to send; on that rejection, insert the transcript.

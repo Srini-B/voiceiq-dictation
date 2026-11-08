@@ -7,7 +7,7 @@ The owner wants the writing step offline. Transcription already runs on device, 
 ## Outcome
 
 - `cyron/voiceiq-writer-qwen3_5-2b` (public, MLX 4-bit, 1.06 GB of weights) passes 40/42 with no answered or injected output. Median total 0.33 s and cached time to first token 0.10 s on an M2; peak memory 1.24 GB. See [docs/WRITER_MODEL.md](../docs/WRITER_MODEL.md).
-- Repository revision: `0efe70d13ec7981acd39e36a537d2e628bd36dbb`. Private fallback `cyron/voiceiq-writer-qwen3-0_6b` (35/42, 0.34 GB) at `b2cbc5c689c2719c1f1162255ca6cd47a4fd70c0`. Private dataset `cyron/voiceiq-writer-data` at `863d219161bfc2e5fe8c8d3823d067743519c488` (data, cards and evaluation results under `eval/`).
+- Repository revision: `0efe70d13ec7981acd39e36a537d2e628bd36dbb`. The smaller `cyron/voiceiq-writer-qwen3-0_6b` (35/42, 0.34 GB) is public too, at `2c328e68fc4c6e902682304a34263aeb3c23bbdd`, so the iPhone can offer both sizes. Private dataset `cyron/voiceiq-writer-data` at `863d219161bfc2e5fe8c8d3823d067743519c488` (data, cards and evaluation results under `eval/`).
 - The model is not wired into the apps yet. The docs describe how it would plug in.
 
 ## Decisions
