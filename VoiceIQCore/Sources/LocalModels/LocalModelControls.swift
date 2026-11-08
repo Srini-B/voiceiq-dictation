@@ -121,6 +121,22 @@ private struct LocalModelRow: View {
                     ProgressView(value: progress)
                         .accessibilityLabel("Downloading \(name)")
                 }
+                switch store.update {
+                case .available?:
+                    Text("An update is available. This version keeps working until the update is installed.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                case .downloading(let progress)?:
+                    ProgressView(value: progress)
+                        .accessibilityLabel("Updating \(name)")
+                case .failed(let message)?:
+                    Text("The update failed: \(message) This version still works.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                case nil:
+                    EmptyView()
+                }
                 if case .failed(let message) = store.state {
                     Text(message)
                         .font(.caption)
@@ -178,12 +194,34 @@ private struct LocalModelRow: View {
                 }
             }
         case .ready:
-            iconButton("trash", label: "Delete \(name)") { confirmingDelete = true }
-                .confirmationDialog("Delete \(name)?", isPresented: $confirmingDelete, titleVisibility: .visible) {
-                    Button("Delete", role: .destructive) {
-                        Task { await store.deleteModel() }
+            HStack(spacing: 6) {
+                switch store.update {
+                case .available?, .failed?:
+                    Button(updateTitle) { store.download() }
+                        .buttonStyle(.borderless)
+                        // Progress counts against the update's size, known a few seconds after launch.
+                        .disabled(store.updateBytes == nil)
+                        .frame(minHeight: Self.minTarget)
+                        .contentShape(Rectangle())
+                        .accessibilityLabel("Update \(name)")
+                case .downloading(let progress)?:
+                    Text(progress.formatted(.percent.precision(.fractionLength(0))))
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                        .accessibilityHidden(true)
+                    iconButton("xmark.circle.fill", label: "Cancel updating \(name)") {
+                        store.cancelDownload()
                     }
+                case nil:
+                    EmptyView()
                 }
+                iconButton("trash", label: "Delete \(name)") { confirmingDelete = true }
+                    .confirmationDialog("Delete \(name)?", isPresented: $confirmingDelete, titleVisibility: .visible) {
+                        Button("Delete", role: .destructive) {
+                            Task { await store.deleteModel() }
+                        }
+                    }
+            }
         case .deleting:
             ProgressView()
                 .controlSize(.small)
@@ -207,6 +245,11 @@ private struct LocalModelRow: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel(label)
+    }
+
+    private var updateTitle: String {
+        guard let bytes = store.updateBytes else { return "Update" }
+        return "Update (\(ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)))"
     }
 
     private var size: String {

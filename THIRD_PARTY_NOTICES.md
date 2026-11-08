@@ -47,12 +47,12 @@ repository's Apache 2.0 license. See `App/Resources/Sounds/ATTRIBUTION.md`.
 
 ### Optional Fluid Speech Pro model (macOS 15 and iOS 18 or later)
 
-- Fluid Speech Pro by FluidVoice: https://huggingface.co/FluidVoice-Labs/fluid-speech-pro, revision `53f490b9292c5943847f635b7abfc3f123018964`.
+- Fluid Speech Pro by FluidVoice: https://huggingface.co/FluidVoice-Labs/fluid-speech-pro, revision `36481f6c9d353a301df1524dd0124eaf9212713e`.
 - Built on NVIDIA Parakeet TDT 0.6B v3 (https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3) and Moondream Parakeet Ultra (https://huggingface.co/moondream/parakeet-ultra).
 - License: [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
 - Modified: converted from NeMo to 16-bit Core ML for VoiceiQ (format and
   numeric precision only; clean mode not included), published at
-  https://huggingface.co/cyron/fluid-speech-pro-coreml, revision `ec52e16204b3d2c4c8bf60e576728fc58a825689`.
+  https://huggingface.co/cyron/fluid-speech-pro-coreml, revision `42d66fdd64541b88cf70223701f59e76b766567c`.
   VoiceiQ downloads those files on explicit request. Weights are not bundled.
   File hashes are in `FluidSpeechProManifest.swift`.
 

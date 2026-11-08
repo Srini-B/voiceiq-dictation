@@ -55,9 +55,48 @@ enum LocalModelInstaller {
         }
     }
 
-    /// Clears staging folders left by a crash or quit, folders from other
-    /// revisions, and the retired model this one replaced.
-    static func removeStaleItems(_ manifest: LocalModelManifest) {
+    /// A folder of one of `previousRevisions` that stays in use until the
+    /// pinned revision is installed: its marker names its revision, so it was
+    /// verified when it was installed, and it holds every file the manifest
+    /// lists. Sizes are not compared, because an update may change them. The
+    /// newest wins.
+    static func previousRevision(_ manifest: LocalModelManifest) -> String? {
+        let fileManager = FileManager.default
+        let root = manifest.rootDirectory
+        let usable = manifest.previousRevisions.filter { isPreviousUsable(manifest, revision: $0) }
+        let installed = { (name: String) -> Date in
+            let marker = root.appendingPathComponent(name).appendingPathComponent(LocalModelManifest.markerName)
+            return (try? fileManager.attributesOfItem(atPath: marker.path))?[.modificationDate] as? Date ?? .distantPast
+        }
+        return usable.max { installed($0) < installed($1) }
+    }
+
+    /// The pinned revision, or a previous one, is still on disk and whole.
+    static func isUsable(_ manifest: LocalModelManifest, revision: String) -> Bool {
+        revision == manifest.revision ? isInstalled(manifest) : isPreviousUsable(manifest, revision: revision)
+    }
+
+    private static func isPreviousUsable(_ manifest: LocalModelManifest, revision: String) -> Bool {
+        let directory = manifest.rootDirectory.appendingPathComponent(revision, isDirectory: true)
+        guard let data = try? Data(contentsOf: directory.appendingPathComponent(LocalModelManifest.markerName)),
+              String(decoding: data, as: UTF8.self) == revision else { return false }
+        return manifest.files.allSatisfy {
+            FileManager.default.fileExists(atPath: directory.appendingPathComponent($0.path).path)
+        }
+    }
+
+    /// Bytes an update from `previous` downloads: the pinned files that folder
+    /// does not already hold byte for byte. Hashes every same-size file.
+    static func updateBytes(_ manifest: LocalModelManifest, from previous: URL) -> Int64 {
+        manifest.files.reduce(0) { total, file in
+            (try? verify(previous.appendingPathComponent(file.path), against: file)) != nil ? total : total + file.size
+        }
+    }
+
+    /// Clears staging folders left by a crash or quit, the retired model this
+    /// one replaced, and folders of other revisions except `keeping`, the
+    /// previous revision still in use until its update is installed.
+    static func removeStaleItems(_ manifest: LocalModelManifest, keeping: String?) {
         let fileManager = FileManager.default
         if let replaces = manifest.replaces {
             try? fileManager.removeItem(at: manifest.rootDirectory.deletingLastPathComponent()
@@ -65,7 +104,7 @@ enum LocalModelInstaller {
         }
         let root = manifest.rootDirectory
         guard let names = try? fileManager.contentsOfDirectory(atPath: root.path) else { return }
-        for name in names where name != manifest.revision {
+        for name in names where name != manifest.revision && name != keeping {
             try? fileManager.removeItem(at: root.appendingPathComponent(name))
         }
     }
@@ -77,8 +116,11 @@ enum LocalModelInstaller {
     }
 
     /// Downloads every file into a staging folder, verifies each one, then
-    /// renames the folder into place. `progress` receives total bytes received.
-    static func install(_ manifest: LocalModelManifest, progress: @escaping @Sendable (Int64) -> Void) async throws {
+    /// renames the folder into place. `progress` receives total bytes downloaded.
+    /// With `previous`, the folder of the revision in use, a file it already
+    /// holds byte for byte is copied from it instead of downloaded.
+    static func install(_ manifest: LocalModelManifest, reusing previous: URL? = nil,
+                        progress: @escaping @Sendable (Int64) -> Void) async throws {
         let fileManager = FileManager.default
         let root = manifest.rootDirectory
         let staging = root.appendingPathComponent(stagingPrefix + UUID().uuidString, isDirectory: true)
@@ -92,6 +134,13 @@ enum LocalModelInstaller {
                 try Task.checkCancellation()
                 let destination = staging.appendingPathComponent(file.path)
                 try fileManager.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
+                // APFS clones the copy, so reusing costs neither time nor space.
+                // Not counted in `progress`, which reports downloaded bytes only.
+                if let previous, (try? fileManager.copyItem(at: previous.appendingPathComponent(file.path), to: destination)) != nil,
+                   (try? verify(destination, against: file)) != nil {
+                    continue
+                }
+                try? fileManager.removeItem(at: destination)
                 let base = completed
                 try await downloader.download(manifest.remoteURL(for: file), to: destination) { written in
                     progress(base + min(written, file.size))

@@ -37,16 +37,21 @@ public struct LocalModelManifest: Sendable {
     public let directoryName: String
     /// Folder of a retired model this one replaced, removed with the stale items.
     public let replaces: String?
+    /// Earlier revisions with the same inputs and outputs. One on disk stays in
+    /// use, and the row offers an update, until this revision is installed.
+    /// Any other revision is removed at launch.
+    public let previousRevisions: [String]
     public let files: [File]
     public let totalBytes: Int64
 
     init(repository: String, revision: String, remotePrefix: String = "", directoryName: String,
-         replaces: String? = nil, files: [File]) {
+         replaces: String? = nil, previousRevisions: [String] = [], files: [File]) {
         self.repository = repository
         self.revision = revision
         self.remotePrefix = remotePrefix
         self.directoryName = directoryName
         self.replaces = replaces
+        self.previousRevisions = previousRevisions
         self.files = files
         totalBytes = files.reduce(0) { $0 + $1.size }
     }

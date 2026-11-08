@@ -511,17 +511,43 @@ sizes. No FluidAudio auto-download API is called.
 
 Fluid Speech Pro by FluidVoice comes only as a NeMo checkpoint
 (`FluidVoice-Labs/fluid-speech-pro`, revision
-`53f490b9292c5943847f635b7abfc3f123018964`). It is Parakeet TDT 0.6B v3 with
+`36481f6c9d353a301df1524dd0124eaf9212713e`). It is Parakeet TDT 0.6B v3 with
 one extra encoder block (`fv_insert`) after subsampling. VoiceiQ converted it
 to 16-bit Core ML with FluidInference's mobius Parakeet v3 converter, with
 the block traced into the encoder, and published the package at
-`cyron/fluid-speech-pro-coreml`, revision `ec52e16204b3d2c4c8bf60e576728fc58a825689`.
+`cyron/fluid-speech-pro-coreml`, revision `42d66fdd64541b88cf70223701f59e76b766567c`.
 `FluidSpeechProManifest.swift` pins its 21 files and SHA-256 digests, totalling
 1,228,362,429 bytes, in Mini's layout (`JointDecisionv3.mlmodelc` included).
 Unlike Mini's, its joint has top-K outputs. It installs to
 `Models/fluid-speech-pro/<revision>` with the same verification and atomic
 installation. Conversion and parity checks against NeMo are recorded in
 `activities/2026-11-02-fluid-speech-pro-replaces-nemotron.md`.
+
+To take an upstream update, set the new revision, `.nemo` SHA-256 and
+`fluid_speech.py` git hash in `scripts/fluid-speech-pro-coreml/setup.sh` and
+`convert_fluid_speech_pro.py`. Then convert and verify, upload a new revision
+of `cyron/fluid-speech-pro-coreml` (keeping the old one), and pin its revision
+and 21 file entries in `FluidSpeechProManifest.swift`, and add the old revision
+to `previousRevisions`. Fluid Speech Mini is pinned separately
+(`ParakeetManifest.swift`) and only changes when
+`FluidVoice-Labs/fluid-speech-mini-coreml` does.
+
+Model updates never take a working model away. When a manifest's pinned
+revision is not on disk but one of its `previousRevisions` is (marker matching
+its folder name, every listed path present), `LocalModelStore` keeps that
+folder in use: the state stays `ready` and dictations, meetings and warm-ups
+load it. The store's `update` is `available`, and the row shows "Update
+(size)" with a note that the current version keeps working. The size counts
+only files the old folder does not already hold byte for byte; the store
+hashes them once, off the main thread. Update installs into a staging folder
+as usual, but clones each matching file from the old folder (APFS clone, no
+extra space) and downloads only the rest, verifying every file. Only then do
+new sessions switch to the pinned revision. The old folder is removed right
+away if no session holds it, otherwise at the next launch. Cancelling or a
+failed update leaves the old revision in use. Nothing downloads on its own.
+List a revision in `previousRevisions` only when it has the same inputs,
+outputs and file paths; any other revision, and a retired model named in
+`replaces`, is still removed at launch and the row shows Download.
 
 The speaker diarizer is the pyannote community-1 Core ML set from
 `FluidInference/speaker-diarization-coreml`, revision

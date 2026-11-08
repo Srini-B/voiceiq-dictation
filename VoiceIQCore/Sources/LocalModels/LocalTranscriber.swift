@@ -62,7 +62,7 @@ public final class LocalTranscriber: DictationStreaming, Sendable {
         }
         let options = LocalSpeechOptions(
             vocabulary: vocabulary,
-            toolsDirectory: toolsReady ? LocalModelManifest.englishTools.installDirectory : nil,
+            toolsDirectory: toolsReady ? LocalModelStore.englishTools.installedDirectory : nil,
             language: language.code
         )
         return (options, toolsReady)
