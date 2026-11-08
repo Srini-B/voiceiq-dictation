@@ -34,6 +34,11 @@ public enum TimeoutPolicy {
     public static func localTranscribe(frames: Int64) -> TimeInterval {
         max(120, Double(frames) / 8_000)
     }
+    /// One on-device writing pass on the Mac: loading the writer, then
+    /// generating at well over 10 tokens a second.
+    public static func localWrite(maxTokens: Int) -> TimeInterval {
+        30 + Double(maxTokens) / 10
+    }
     /// On-device meeting: model loading plus a decode and a diarizer pass.
     /// Both run faster than real time on Apple silicon, so three times the
     /// audio covers a slow machine with the fans already on.

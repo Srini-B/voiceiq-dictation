@@ -40,13 +40,28 @@ def main():
         helper = app / "Contents/Helpers/VoiceiQLocalSpeech.app/Contents/MacOS/VoiceiQLocalSpeech"
         if "10FluidAudio" in symbols or "_nemo_normalize" in symbols:
             raise SystemExit("Mac UI still links the inference runtime")
+        # MLX runs VoiceIQ Writer in the helper only; its Metal library comes
+        # with it as the Cmlx resource bundle.
+        if "6MLXLLM" in symbols or "_mlx_" in symbols or any(app.glob("Contents/Resources/mlx-swift_Cmlx.bundle")):
+            raise SystemExit("Mac UI still links the MLX runtime")
         symbols = subprocess.run(["nm", str(helper)], check=True, capture_output=True, text=True).stdout
         if any(name in symbols for name in ["11VoiceIQCore", "GRDB"]):
             raise SystemExit("Speech helper still links app/database code")
         if "10FluidAudio" not in symbols:
             raise SystemExit("Speech helper lacks the expected inference runtime")
-    elif "10FluidAudio" not in symbols:
-        raise SystemExit("iOS app lacks the expected inference runtime")
+        if "6MLXLLM" not in symbols:
+            raise SystemExit("Speech helper lacks the MLX writer runtime")
+        if not (app / "Contents/Helpers/VoiceiQLocalSpeech.app/Contents/Resources/mlx-swift_Cmlx.bundle").exists():
+            raise SystemExit("Speech helper lacks MLX's Metal library")
+    else:
+        if "10FluidAudio" not in symbols:
+            raise SystemExit("iOS app lacks the expected inference runtime")
+        # llama.cpp runs VoiceIQ Writer on the CPU; the vendored build has no
+        # Metal backend, and MLX stays on the Mac.
+        if "_llama_model_load_from_file" not in symbols:
+            raise SystemExit("iOS app lacks the llama.cpp writer runtime")
+        if "_ggml_backend_metal" in symbols or "6MLXLLM" in symbols:
+            raise SystemExit("iOS app links a GPU writer runtime")
     if "_nemo_normalize_sentence" not in symbols:
         raise SystemExit("Inference lacks the required English normalization runtime")
 

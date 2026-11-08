@@ -32,6 +32,8 @@ repository's Apache 2.0 license. See `App/Resources/Sounds/ATTRIBUTION.md`.
 | [GRDB.swift](https://github.com/groue/GRDB.swift) (Gwendal Roué) | MIT |
 | [FluidAudio](https://github.com/FluidInference/FluidAudio) 0.18.2 (Fluid Inference), with the `NemoTextProcessing` and `Diarizer` traits | Apache 2.0; bundled dependencies retain their upstream notices |
 | [Sparkle](https://github.com/sparkle-project/Sparkle) (from M8) | Sparkle License (permissive, MIT-style) |
+| [mlx-swift](https://github.com/ml-explore/mlx-swift) 0.32.3 and [mlx-swift-lm](https://github.com/ml-explore/mlx-swift-lm) 3.32.3 (ml-explore), Mac speech helper only | MIT |
+| [swift-transformers](https://github.com/huggingface/swift-transformers) 1.4.0 (Hugging Face), Mac speech helper only, with its dependencies [swift-jinja](https://github.com/huggingface/swift-jinja), [swift-crypto](https://github.com/apple/swift-crypto), [swift-collections](https://github.com/apple/swift-collections), [swift-numerics](https://github.com/apple/swift-numerics) and [yyjson](https://github.com/ibireme/yyjson) | Apache 2.0; yyjson MIT |
 
 ## Vendored libraries
 
@@ -110,6 +112,19 @@ one pack. No weights are bundled with the app. File hashes are in
   It contains no neural network weights.
 - Full notice: `ThirdPartyLicenses/NemoTextProcessing-LICENSE.md` in the
   FluidAudio 0.18.2 source.
+
+### Optional VoiceIQ Writer models
+
+- VoiceIQ Writer 2B: https://huggingface.co/cyron/voiceiq-writer-qwen3_5-2b, fine-tuned from Qwen3.5-2B (https://huggingface.co/Qwen/Qwen3.5-2B). The Mac downloads the MLX 4-bit files at revision `0efe70d13ec7981acd39e36a537d2e628bd36dbb`; iPhone and iPad download the GGUF at revision `683b58638ad4ace63de63b28ca716690dbf42a00`.
+- VoiceIQ Writer 0.6B (iPhone and iPad): https://huggingface.co/cyron/voiceiq-writer-qwen3-0_6b, fine-tuned from Qwen3-0.6B (https://huggingface.co/Qwen/Qwen3-0.6B), GGUF at revision `4dafcd49fed095730bffb162aeba3482a1c14b8e`.
+- License: Apache 2.0, as the Qwen base models.
+- VoiceiQ downloads the files unmodified, on explicit request. Weights are not
+  bundled. File hashes are in `LocalWriterManifest.swift`.
+
+### llama.cpp (iPhone and iPad)
+- File: `VoiceIQCore/Vendor/LlamaCPU/CLlama.xcframework` (static library: iOS arm64, Simulator arm64 and x86_64)
+- Source: https://github.com/ggml-org/llama.cpp release `b12198` (`f477f795cb071baf5b8af6488378366a72034ac4`), built CPU only by `VoiceIQCore/Vendor/LlamaCPU/build.sh`
+- License: MIT. Full text: `VoiceIQCore/Vendor/LlamaCPU/LICENSE`.
 
 ### WebRTC audio processing (AEC3 echo canceller)
 - File: `VoiceIQCore/Vendor/WebRTCAEC/CVoiceIQAEC.xcframework` (static library, arm64 and x86_64)

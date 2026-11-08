@@ -19,6 +19,9 @@ let package = Package(
         // Listing traits turns FluidAudio's defaults off: TTS stays out, and
         // Diarizer gates OfflineDiarizerManager (LocalMeetingJob).
         .package(url: "https://github.com/FluidInference/FluidAudio.git", exact: "0.18.2", traits: ["NemoTextProcessing", "Diarizer"]),
+        // VoiceIQ Writer on the Mac, on the GPU in the speech helper.
+        .package(url: "https://github.com/ml-explore/mlx-swift-lm", exact: "3.32.3"),
+        .package(url: "https://github.com/huggingface/swift-transformers", exact: "1.4.0"),
     ],
     targets: [
         // WebRTC's AEC3 echo canceller and a small C bridge, built by
@@ -26,6 +29,12 @@ let package = Package(
         .binaryTarget(
             name: "CVoiceIQAEC",
             path: "Vendor/WebRTCAEC/CVoiceIQAEC.xcframework"
+        ),
+        // llama.cpp b12198, CPU only, for VoiceIQ Writer on iPhone and iPad.
+        // Built by Vendor/LlamaCPU/build.sh. MIT-licensed.
+        .binaryTarget(
+            name: "CLlama",
+            path: "Vendor/LlamaCPU/CLlama.xcframework"
         ),
         // Catches Objective-C exceptions that Swift cannot (AVFAudio raises
         // them while the input device is changing).
@@ -57,6 +66,10 @@ let package = Package(
             dependencies: [
                 "VoiceIQSpeech",
                 .product(name: "FluidAudio", package: "FluidAudio"),
+                .product(name: "MLXLLM", package: "mlx-swift-lm", condition: .when(platforms: [.macOS])),
+                .product(name: "MLXLMCommon", package: "mlx-swift-lm", condition: .when(platforms: [.macOS])),
+                .product(name: "Tokenizers", package: "swift-transformers", condition: .when(platforms: [.macOS])),
+                .target(name: "CLlama", condition: .when(platforms: [.iOS])),
             ],
             path: "Inference"
         ),

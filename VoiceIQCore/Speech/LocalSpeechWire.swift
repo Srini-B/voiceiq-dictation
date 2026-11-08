@@ -8,6 +8,9 @@ public enum ParakeetCommand: Codable {
     /// A whole saved meeting, sent once to a helper the client spawns for it
     /// and kills after the reply.
     case meeting(LocalMeetingRequest)
+    /// One writing pass. The helper keeps the writer loaded for the next
+    /// request until it exits idle.
+    case write(model: LocalWriterModel, directory: URL, request: LocalWriterRequest)
 }
 
 public enum ParakeetReply: Codable {
@@ -18,6 +21,8 @@ public enum ParakeetReply: Codable {
     case transcript(LocalSpeechOutput?)
     case meeting(LocalMeetingResult)
     case meetingFailed(String)
+    /// Nil when the writer did not load or failed.
+    case written(LocalWriterOutput?)
 }
 
 public enum ParakeetWire {

@@ -12,6 +12,16 @@ public enum LocalSpeechInference {
         ParakeetSession(audioURL: audioURL, streaming: streaming, options: options)
     }
 
+    /// VoiceIQ Writer: MLX on the GPU in the Mac's speech helper, llama.cpp on
+    /// the CPU in the iPhone and iPad app.
+    public static let makeWriter: LocalWriterSessionFactory = { model in
+        #if os(macOS)
+        MLXWriterSession(model: model)
+        #else
+        LlamaWriterSession(model: model)
+        #endif
+    }
+
     /// Runs in this process. The Mac app goes through its helper instead.
     public static let transcribeMeeting: LocalMeetingRunner = { request in
         try await LocalMeetingJob.run(request)

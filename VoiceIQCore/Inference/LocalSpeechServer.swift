@@ -27,6 +27,9 @@ public enum ParakeetHelperServer {
 
 private actor HelperLifetime {
     private var session: (any LocalSpeechSession)?
+    /// The app runs the writer in its own helper instance, so this is never
+    /// set beside `session`.
+    private var writer: (model: LocalWriterModel, session: any LocalWriterSession)?
     private var idleExit: Task<Void, Never>?
 
     func handle(_ command: ParakeetCommand) async -> ParakeetReply {
@@ -49,11 +52,16 @@ private actor HelperLifetime {
             let output = await session?.transcribe(framesWritten: frames)
             await session?.stop()
             session = nil
-            idleExit = Task {
-                do { try await Task.sleep(for: .seconds(60)) } catch { return }
-                exit(0)
-            }
+            exitWhenIdle()
             return .transcript(output)
+        case .write(let model, let directory, let request):
+            if writer?.model != model {
+                await writer?.session.stop()
+                writer = (model, LocalSpeechInference.makeWriter(model))
+            }
+            let output = await writer?.session.write(request, directory: directory)
+            exitWhenIdle()
+            return .written(output)
         case .meeting(let request):
             await session?.stop()
             session = nil
@@ -63,6 +71,14 @@ private actor HelperLifetime {
             } catch {
                 return .meetingFailed(error.localizedDescription)
             }
+        }
+    }
+
+    /// Exiting is what releases a model for good on the Mac.
+    private func exitWhenIdle() {
+        idleExit = Task {
+            do { try await Task.sleep(for: .seconds(60)) } catch { return }
+            exit(0)
         }
     }
 }

@@ -48,8 +48,32 @@ actor LocalRemoteSession: LocalSpeechSession {
     }
 }
 
+/// VoiceIQ Writer in its own instance of the speech helper, so a writing
+/// pass never waits on, or interleaves with, a dictation's speech exchanges.
+actor LocalRemoteWriter: LocalWriterSession {
+    private let id = UUID()
+    private let model: LocalWriterModel
+
+    init(model: LocalWriterModel) {
+        self.model = model
+    }
+
+    func write(_ request: LocalWriterRequest, directory: URL) async -> LocalWriterOutput? {
+        await ParakeetHelperClient.writer.write(id: id, model: model, directory: directory, request: request)
+    }
+
+    /// The helper keeps the writer loaded for the next dictation and exits
+    /// after a minute idle. Deleting the model stops it at once (`kill`).
+    func stop() async {}
+
+    static func kill() async {
+        await ParakeetHelperClient.writer.terminateNow()
+    }
+}
+
 private actor ParakeetHelperClient {
     static let shared = ParakeetHelperClient()
+    static let writer = ParakeetHelperClient()
     private var process: Process?
     private var input: FileHandle?
     private var output: FileHandle?
@@ -59,25 +83,7 @@ private actor ParakeetHelperClient {
         guard owner == nil, !Task.isCancelled else { return false }
         owner = id
         do {
-            if process?.isRunning != true {
-                terminate()
-                let child = Process()
-                child.executableURL = Bundle.main.bundleURL.appendingPathComponent(
-                    "Contents/Helpers/VoiceiQLocalSpeech.app/Contents/MacOS/VoiceiQLocalSpeech")
-                let commands = Pipe()
-                let replies = Pipe()
-                // An idle helper can exit between isRunning and the write.
-                _ = fcntl(commands.fileHandleForWriting.fileDescriptor, F_SETNOSIGPIPE, 1)
-                child.standardInput = commands
-                child.standardOutput = replies
-                child.standardError = FileHandle.standardError
-                try child.run()
-                commands.fileHandleForReading.closeFile()
-                replies.fileHandleForWriting.closeFile()
-                process = child
-                input = commands.fileHandleForWriting
-                output = replies.fileHandleForReading
-            }
+            try startIfNeeded()
             guard case .ready = await exchange(.load(model: model, directory: directory, audio: audio, streaming: streaming, options: options), id: id, timeout: TimeoutPolicy.localLoad) else {
                 cancel(id: id)
                 return false
@@ -88,6 +94,52 @@ private actor ParakeetHelperClient {
             cancel(id: id)
             return false
         }
+    }
+
+    func write(id: UUID, model: LocalWriterModel, directory: URL, request: LocalWriterRequest) async -> LocalWriterOutput? {
+        guard owner == nil, !Task.isCancelled else { return nil }
+        owner = id
+        do {
+            try startIfNeeded()
+        } catch {
+            Log.transcription.notice("Local helper could not start for writing: \(error.localizedDescription, privacy: .public)")
+            cancel(id: id)
+            return nil
+        }
+        let reply = await exchange(.write(model: model, directory: directory, request: request), id: id,
+                                   timeout: TimeoutPolicy.localWrite(maxTokens: request.maxTokens))
+        guard case .written(let output) = reply else {
+            cancel(id: id)
+            return nil
+        }
+        owner = nil
+        return output
+    }
+
+    func terminateNow() {
+        owner = nil
+        terminate()
+    }
+
+    private func startIfNeeded() throws {
+        guard process?.isRunning != true else { return }
+        terminate()
+        let child = Process()
+        child.executableURL = Bundle.main.bundleURL.appendingPathComponent(
+            "Contents/Helpers/VoiceiQLocalSpeech.app/Contents/MacOS/VoiceiQLocalSpeech")
+        let commands = Pipe()
+        let replies = Pipe()
+        // An idle helper can exit between isRunning and the write.
+        _ = fcntl(commands.fileHandleForWriting.fileDescriptor, F_SETNOSIGPIPE, 1)
+        child.standardInput = commands
+        child.standardOutput = replies
+        child.standardError = FileHandle.standardError
+        try child.run()
+        commands.fileHandleForReading.closeFile()
+        replies.fileHandleForWriting.closeFile()
+        process = child
+        input = commands.fileHandleForWriting
+        output = replies.fileHandleForReading
     }
 
     func append(_ pcm: Data, id: UUID) async -> String? {
