@@ -398,6 +398,11 @@ When writing rules are off or skipped for a short dictation, a local result
 inserts the original with dictionary replacements. This preserves the raw-text
 five-second rule and avoids accepting an ambiguous normalization without the
 writing model. Rejected or unavailable cleanup also keeps the original.
+With **On device** writing selected and VoiceIQ Writer downloaded, the writing
+rules pass runs on this device instead of the provider
+([VoiceIQ Writer](WRITER_MODEL.md#in-the-apps)). It receives the original
+transcript, not the normalized candidate, because the model was trained on
+`RAW` alone. Translate, Ask Anything and Agent stay on the provider.
 Meetings do not use the English tools or this cleanup; their transcript goes
 to the writing model for notes as it does from the cloud path.
 

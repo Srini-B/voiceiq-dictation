@@ -1,6 +1,6 @@
 # VoiceIQ Writer: the on-device writing model
 
-VoiceIQ Writer is a small English model that does the writing step offline: it turns a raw transcript into the text the speaker meant to type, as Claude Sonnet 5.5 does today with `PromptV1.cleanupPrompt`. It is not wired into the apps yet. This page covers how it is built, how it scores and how it would plug in.
+VoiceIQ Writer is a small English model that does the writing step offline: it turns a raw transcript into the text the speaker meant to type, as Claude Sonnet 5.5 does today with `PromptV1.cleanupPrompt`. The Mac and iOS apps offer it as the "On device" writing option. This page covers how it is built, how it scores and how the apps run it.
 
 ## How it is built
 
@@ -63,9 +63,68 @@ Teacher and generator calls, from the logged usage fields at PriceBook prices (b
 
 Training and evaluation ran on the Mac mini; no cloud GPU was used.
 
-## How it would plug in
+## In the apps
 
-The cloud cleanup stays the default. The model would be a third writing option next to the cloud providers, offered once it is downloaded, and installed like the Fluid Speech models: a `LocalModelManifest` pinned to a Hugging Face revision with file sizes and SHA-256 digests, downloaded anonymously from the public repo. The files at revision `0efe70d13ec7981acd39e36a537d2e628bd36dbb` (the README is not needed on device):
+The cloud cleanup stays the default. Settings › Writing rules (Mac) and Settings › Writing (iPhone and iPad) add a picker between the provider's writing model and **On device**, and a download row per size that works like the Fluid Speech rows: anonymous download from the public repo, pinned to a revision with byte sizes and SHA-256 digests (`LocalWriterManifest.swift`), verified in a staging folder, update and delete in place. Nothing downloads on its own. The Mac offers the 2B. iPhone and iPad offer the 2B and the 0.6B, so the two can be compared on a real device, and only on chips with the dot-product instructions the llama.cpp build needs (A13 and later).
+
+When **On device** is selected and the size is downloaded, `cleanupOrFallback` (`GeminiTranscriptionService+Cleanup.swift`) runs the writer instead of the provider's request. The output goes through `ValidationGate.stripArtifacts` and `validate` and the same `settle` fallback as the cloud path, so a rejected or failed output inserts the transcript. On the question-answered rejection there is no reminder retry. History records the model as `<transcription model>+voiceiq-writer-qwen3_5-2b-local` (or `…-qwen3-0_6b-local`), and usage records a cleanup row with the prompt and generated tokens at $0. If the size is not downloaded, the provider writes. Translate, Ask Anything, Agent and meeting notes always use the provider.
+
+The prompt carries the dictionary as `Vocabulary:`, the app, window title and page as `Place:`, and the field text as the cursor lines when Fit to existing text is on. Custom writing rules and the spelling-variant line do not reach the model, which learned the default rules only; the settings footer says so.
+
+With on-device transcription and on-device writing, a dictation needs no network and no API key. On the Mac nothing blocked this before: dictation never required a key. On iPhone, the keyboard's setup check (`AppModel.setupBlocker`) no longer asks for a key when both models are downloaded and selected (or writing rules are off). Onboarding still asks for a provider key, because its key page is a required step; an owner who wants a keyless phone gets past it once by adding any key.
+
+### Runtimes
+
+| | Mac | iPhone and iPad |
+| --- | --- | --- |
+| Runtime | mlx-swift-lm 3.32.3 (`MLXLLM`), GPU | llama.cpp b12198, CPU only |
+| Weights | MLX 4-bit, revision `0efe70d` | GGUF Q4_1 repacked from the MLX weights |
+| Process | a second instance of the speech helper (`VoiceiQLocalSpeech`) | the app, in the background voice session |
+| Lifetime | stays loaded between dictations; the helper exits after 60 s idle | loads per dictation and is freed before the dictation ends |
+
+The `LocalWriterSession` protocol and `LocalSpeechInference.makeWriter` keep both runtimes in `VoiceIQInference`, so the Mac UI process never links MLX. `scripts/check-app-bundle.py` checks that the Mac app's main binary has no MLX symbols and no `Cmlx` bundle, that the helper has both, and that the iOS app links llama.cpp with no Metal backend and no MLX.
+
+The Mac writer runs in its own helper instance (`ParakeetHelperClient.writer`) so a writing pass never interleaves with a dictation's speech exchanges. It renders the prompt with the bundled chat template and `enable_thinking: false` and decodes greedily. It does not cache the system-prompt prefix: in a spike that matched Python mlx-lm token for token, the split prefill changed two or three of the 42 bench outputs to save about 0.1 s.
+
+In the installed, notarized app on the Mac mini (M2, 16 GB), with Fluid Speech Mini transcribing, the 2B's first write after a new install took 1.56 s to load and 4.32 s to its first token (MLX compiles its Metal kernels once). A fresh helper with compiled kernels loads in 0.44 s. Warm, the first token comes in 0.24–0.30 s and the write finishes in 0.49–0.82 s, and a whole dictation (stop to insert) takes 0.97–1.34 s. The helper's footprint is about 1.2 GB with the 2B loaded and peaks at 1.53 GB; MLX reports 1.21–1.24 GB peak.
+
+iOS forbids GPU work in the background, and MLX's CPU path runs single-threaded (29 s to first token for the 2B in a spike), so iPhone and iPad use llama.cpp instead. `Vendor/LlamaCPU/build.sh` builds `CLlama.xcframework` from llama.cpp b12198 (`f477f795`) with Metal, BLAS and Accelerate off, `armv8.2-a+dotprod+fp16`, and slices for iOS arm64 and the Simulator. The official release xcframework has no Simulator slice and carries Metal. `LlamaWriterSession` sets `n_gpu_layers = 0`, turns KV and op offload off, and uses one thread per performance core (`hw.perflevel0.physicalcpu`).
+
+### GGUF builds
+
+`scripts/writer-model/to_gguf.py` dequantizes the MLX weights (exact), converts them with llama.cpp's `convert_hf_to_gguf.py`, quantizes to Q4_1, then rewrites each Q4_1 block from the MLX grid: a 64-group splits into two 32-blocks that share its scale and offset, so the 4-bit codes carry over unchanged and only the scale and offset round from bfloat16 to float16. Both GGUFs are new commits on the existing repos; the MLX files stay.
+
+| Size | Revision | File | Bytes | SHA-256 |
+| --- | --- | --- | --- | --- |
+| 2B | `683b58638ad4ace63de63b28ca716690dbf42a00` | `voiceiq-writer-qwen3_5-2b-q4_1.gguf` | 1,188,953,728 | `5cc57b8b0bf4f85cb6b9ed38abcd40b25f8963169cb5ec9352ad82bc73e3b0fa` |
+| 0.6B | `4dafcd49fed095730bffb162aeba3482a1c14b8e` | `voiceiq-writer-qwen3-0_6b-q4_1.gguf` | 378,703,584 | `6703b323576659b92d9a6fedc9f43211a2630cfd04675d870a71f5bb654cd6b4` |
+
+`bench/bench_llama.py` runs the bench through `llama-server` on the Mac CPU (`-ngl 0`) with the app's prompt text, greedy decoding and the same stop tokens. The 2B scores 40/42 and the 0.6B 35/42, the same as MLX, with no answered or injected output. For each size, 41 of the 42 outputs are identical to MLX's (on the 2B the one that differs is `long_status`). On the M2 CPU with 4 threads, the median total is 1.12 s for the 2B (45 tokens/s) and 0.38 s for the 0.6B (128 tokens/s).
+
+### Memory on iPhone
+
+A dictation never holds the speech model and the writer at once:
+
+1. The dictation stops and Parakeet with the English tools CTC decodes the transcript.
+2. `LocalTranscriber.finish` releases both speech models.
+3. `LocalModelWarmup.alone` waits for any warm-up, then holds warm-ups and the next dictation's load while the writer loads, writes and is freed (`llama_model_free`).
+
+Footprint in the iOS Simulator (iPhone 17 Pro, 2026-11-08). Footprint leaves out the memory-mapped weights, so resident size is shown too:
+
+| Phase | Footprint | Resident |
+| --- | --- | --- |
+| Idle | 48–62 MB | |
+| Parakeet decoding | 110–119 MB | about 1.66 GB |
+| Speech model released, writer not loaded | 51–59 MB | 407–417 MB |
+| 2B writing | 145–156 MB | about 1.63 GB |
+| 0.6B writing | about 117 MB | about 840 MB |
+| Writer freed | 53–62 MB | about 450 MB |
+
+The Simulator runs on the Mac's CPU (M2), so its timings are not iPhone timings. There, the 2B loads in 0.17–0.81 s, reaches its first token in 0.83–0.97 s and finishes in 1.26–1.77 s; the 0.6B takes 0.09–0.27 s, 0.28–0.34 s and 0.49–0.67 s.
+
+### Files
+
+The Mac's files at revision `0efe70d13ec7981acd39e36a537d2e628bd36dbb` (the README is not needed on device):
 
 | File | Bytes | SHA-256 |
 | --- | --- | --- |
@@ -76,20 +135,18 @@ The cloud cleanup stays the default. The model would be a third writing option n
 | `tokenizer.json` | 19,989,339 | `a5cd9732badce41de57e6efce8302930ded1c1188c5f81feb2bd6c24c4a1941f` |
 | `tokenizer_config.json` | 1,501 | `86f01837a638275f2d3479804e79802aaff0e3ccef15e5f29dd6afbe6551daed` |
 
-- **Mac.** Run the MLX 4-bit weights in-process with mlx-swift (`MLXLLM`). Peak memory is 1.24 GB, so it fits an 8 GB Mac next to Fluid Speech. The system prompt is static, so its KV cache is computed once at warm-up and reused, as `bench.py` measures. The output goes through `ValidationGate` and the same fallback to the raw transcript as the cloud path, so a bad output never reaches the cursor.
-- **iPhone.** The writing step runs in the app's background voice session, and iOS does not allow Metal work in the background, so the model must run on the CPU. Two routes:
-  - llama.cpp with a GGUF Q4_K_M export (about 1.2 GB for the 2B model), CPU only. Qwen3.5's gated-delta layers need a llama.cpp build with the Qwen3.5 architecture; measure CPU speed on an iPhone before committing to 2B.
-  - Core ML on CPU with a converted model, following the Fluid Speech Pro conversion. That needs a stateful KV-cache export and is more work.
-  Both sizes are public so the iPhone can offer both. Qwen3-0.6B ([`cyron/voiceiq-writer-qwen3-0_6b`](https://huggingface.co/cyron/voiceiq-writer-qwen3-0_6b), 35/42 at 4-bit) has standard attention and a third of the weights. Its files at revision `2c328e68fc4c6e902682304a34263aeb3c23bbdd`:
+Qwen3-0.6B ([`cyron/voiceiq-writer-qwen3-0_6b`](https://huggingface.co/cyron/voiceiq-writer-qwen3-0_6b), 35/42 at 4-bit) has standard attention and a third of the weights. Its MLX files at revision `2c328e68fc4c6e902682304a34263aeb3c23bbdd`, from which its GGUF was built:
 
-  | File | Bytes | SHA-256 |
-  | --- | --- | --- |
-  | `chat_template.jinja` | 4,168 | `a55ee1b1660128b7098723e0abcd92caa0788061051c62d51cbe87d9cf1974d8` |
-  | `config.json` | 1,021 | `d8cbd096f758add51a940656710a0319cfb3ad4ae4591507ab29c2e8bebecc54` |
-  | `generation_config.json` | 113 | `8fa633e0a044c8c3b194bffb4e71a915e24dafa0f97ca23f4420a5bd94e28932` |
-  | `model.safetensors` | 335,450,548 | `da813cf1a2c114807dfcf25736fd532bfa03c0481098a1b1d7898751d37875ec` |
-  | `model.safetensors.index.json` | 49,770 | `5ee67e4efeb75dfacb8dd3892dd6208473771264fdeff6b9eba4a79db5b1435e` |
-  | `tokenizer.json` | 11,422,650 | `be75606093db2094d7cd20f3c2f385c212750648bd6ea4fb2bf507a6a4c55506` |
-  | `tokenizer_config.json` | 728 | `5aa5069e1b0c0d623ce38e0df387e506b843e5c4d612a36d2e79e46a400e6450` |
-- **Prompt and decoding.** Both sizes take the same input. The system message is `system.txt` and the user turn is the context lines, then `RAW: <transcript>`, one per line: `Vocabulary: a, b, c` (up to 100 terms, newlines turned to spaces, each cut to 60 characters), `Place: app <app>, title <window title>, page <url>` (only the parts present; newlines turned to spaces, `<` and `>` to `‹` and `›`, cut to 80, 160 and 120 characters), then `Before cursor: <field>…</field>` (the last 300 characters before the cursor, as is) and `After cursor: <field>…</field>` (the first 100 after it), both only when the field holds more than whitespace. `common.student_user` builds it. Render with the bundled chat template and `enable_thinking: false`, which ends the prompt with an empty think block (`<|im_start|>assistant\n<think>\n\n</think>\n\n`). Decode greedily and stop at the tokenizer's end-of-turn tokens: `<|im_end|>` or `<|endoftext|>` for 0.6B, `<|im_end|>` for 2B. `bench.py` caps output at max(160, 2.5 × RAW words + 80) tokens.
-- **Prompt context.** Vocabulary, PLACE and the field text map onto the student's `Vocabulary:`, `Place:` and cursor lines. Custom writing rules and the spelling-variant line do not carry over: the student learned the default rules only. The question-answered retry has no reminder to send; on that rejection, insert the transcript.
+| File | Bytes | SHA-256 |
+| --- | --- | --- |
+| `chat_template.jinja` | 4,168 | `a55ee1b1660128b7098723e0abcd92caa0788061051c62d51cbe87d9cf1974d8` |
+| `config.json` | 1,021 | `d8cbd096f758add51a940656710a0319cfb3ad4ae4591507ab29c2e8bebecc54` |
+| `generation_config.json` | 113 | `8fa633e0a044c8c3b194bffb4e71a915e24dafa0f97ca23f4420a5bd94e28932` |
+| `model.safetensors` | 335,450,548 | `da813cf1a2c114807dfcf25736fd532bfa03c0481098a1b1d7898751d37875ec` |
+| `model.safetensors.index.json` | 49,770 | `5ee67e4efeb75dfacb8dd3892dd6208473771264fdeff6b9eba4a79db5b1435e` |
+| `tokenizer.json` | 11,422,650 | `be75606093db2094d7cd20f3c2f385c212750648bd6ea4fb2bf507a6a4c55506` |
+| `tokenizer_config.json` | 728 | `5aa5069e1b0c0d623ce38e0df387e506b843e5c4d612a36d2e79e46a400e6450` |
+
+### Prompt
+
+Both sizes take the same input. The system message is `system.txt` and the user turn is the context lines, then `RAW: <transcript>`, one per line: `Vocabulary: a, b, c` (up to 100 terms, newlines turned to spaces, each cut to 60 characters), `Place: app <app>, title <window title>, page <url>` (only the parts present; newlines turned to spaces, `<` and `>` to `‹` and `›`, cut to 80, 160 and 120 characters), then `Before cursor: <field>…</field>` (the last 300 characters before the cursor, as is) and `After cursor: <field>…</field>` (the first 100 after it), both only when the field holds more than whitespace. `common.student_user` builds it. Render with the bundled chat template and `enable_thinking: false`, which ends the prompt with an empty think block (`<|im_start|>assistant\n<think>\n\n</think>\n\n`). Decode greedily and stop at the tokenizer's end-of-turn tokens: `<|im_end|>` or `<|endoftext|>` for 0.6B, `<|im_end|>` for 2B. `bench.py` and both apps cap output at max(160, 2.5 × RAW words + 80) tokens. Any `<think>…</think>` left in the output is stripped.
