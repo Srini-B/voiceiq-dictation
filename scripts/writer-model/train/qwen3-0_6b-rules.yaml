@@ -1,0 +1,27 @@
+# Rules round for Qwen3-0.6B: one epoch of the main set plus the custom-rules set (data/mix06r from make_mix.py), from the base model (mlx_lm.lora --config).
+model: Qwen/Qwen3-0.6B
+train: true
+fine_tune_type: lora
+data: data/mix06r
+adapter_path: adapters/qwen3-0_6b-rules
+seed: 0
+num_layers: -1
+lora_parameters:
+  rank: 32
+  scale: 2.0
+  dropout: 0.05
+batch_size: 4
+grad_accumulation_steps: 4  # iters count micro-batches; the schedule counts updates
+iters: 6776  # one epoch of 27,104 rows
+learning_rate: 2.0e-4
+lr_schedule:
+  name: cosine_decay
+  warmup: 50
+  arguments: [2.0e-4, 1694, 2.0e-5]
+max_seq_length: 1024
+mask_prompt: true
+grad_checkpoint: true
+steps_per_report: 20
+steps_per_eval: 1000
+val_batches: 25
+save_every: 500

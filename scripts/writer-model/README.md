@@ -29,6 +29,17 @@ python filter.py data/labelled.jsonl --cases bench/cases.jsonl --out data/mlx
 python gen_synthetic.py --set targeted --model claude-haiku-5-5 --seed 21 --out data/inputs_targeted.jsonl
 python label.py data/inputs_targeted.jsonl --out data/labelled_targeted.jsonl
 python filter.py data/labelled_targeted.jsonl --cases bench/cases.jsonl --out data/mlx_targeted --test 140 --valid 70
+
+# 6. Custom writing rules and spelling variants. Haiku writes 95 users' settings (rule boxes, spelling) and
+#    dictations for each; existing inputs are paired with them too. Sonnet labels each with that user's
+#    production prompt, warming the cache once per user. filter.py also drops rows where the teacher kept
+#    a word the spelling variant spells differently.
+python gen_rules.py profiles --out data/rule_profiles.jsonl
+python gen_rules.py inputs --profiles data/rule_profiles.jsonl --out data/inputs_rules.jsonl --pool data/mlx/all_filtered.jsonl
+python label.py data/inputs_rules.jsonl --out data/labelled_rules.jsonl
+python filter.py data/labelled_rules.jsonl --cases bench/cases.jsonl --cases bench/rules_cases.jsonl --out data/rules --test 120 --valid 60
+# Rows filtered before the rules cases existed that overlap them; make_mix.py --drop leaves them out.
+python holdout.py data/mlx/all_filtered.jsonl data/mlx_targeted/all_filtered.jsonl --cases bench/rules_cases.jsonl --out data/holdout_rules_cases.jsonl
 ```
 
 ## Training and evaluation
@@ -56,10 +67,26 @@ python eval_heldout.py q4/qwen3_5-2b --meta data/mlx_targeted/test_meta.jsonl --
 
 The Qwen3-0.6B configs (`train/qwen3-0_6b.yaml`, then `train/qwen3-0_6b-r2.yaml`) run with `mlx_lm.lora` directly.
 
+The rules round trains both sizes again from their bases, on the earlier data plus `data/rules`:
+
+```sh
+python make_mix.py --out data/mix06r --train data/mlx --train data/rules --valid data/mlx --valid data/rules --drop data/holdout_rules_cases.jsonl
+python make_mix.py --out data/mix2br --train data/mlx_targeted --train data/mlx:10000 --train data/rules --valid data/mlx --valid data/mlx_targeted --valid data/rules --drop data/holdout_rules_cases.jsonl
+python trim_long.py data/mix06r --model Qwen/Qwen3-0.6B --max 1024
+python trim_long.py data/mix2br --model Qwen/Qwen3.5-2B --max 1024
+mlx_lm.lora --config train/qwen3-0_6b-rules.yaml
+python train.py --config train/qwen3_5-2b-rules.yaml
+
+# The rules benchmark: --student renders each case's rules and spelling with common.student_user.
+cd bench && python bench.py ../q4/qwen3_5-2b --system ../system.txt --student --cases rules_cases.jsonl --out results/rules-q4-qwen3_5-2b.jsonl
+python score.py --cases rules_cases.jsonl --detail results/rules-*.jsonl
+cd .. && python eval_heldout.py q4/qwen3_5-2b --meta data/rules/test_meta.jsonl --out results/heldout-rules-q4-qwen3_5-2b.jsonl
+```
+
 ## Files
 
 - `common.py` rebuilds the production prompt from the Swift sources and holds the student prompt, the `ValidationGate` port and the banned-form checks.
-- `system.txt` is the student's system prompt. The user turn is `RAW: <transcript>`, optionally preceded by `Vocabulary:`, `Place:` and cursor lines.
+- `system.txt` is the student's system prompt. The user turn is `RAW: <transcript>`, optionally preceded by `Spelling:`, `Rules:`, `Vocabulary:`, `Place:` and cursor lines (`common.student_user`; `LocalWriterPrompt.user` in the app matches it).
 - `chunked_gdn.py` is a chunked, differentiable gated-delta rule for training Qwen3.5's linear-attention layers. `python chunked_gdn.py` checks it against mlx-lm's per-token reference, including nearly parallel keys.
 - `cards/` holds the model and dataset cards.
-- `bench/` is the 42-case held-out benchmark. Its cases are never used as seeds or training data. `filter.py` drops any row that shares a 13-word sequence with a case or whose embedding is close to one.
+- `bench/` is the 42-case held-out benchmark (`cases.py`) and the 41-case custom-rules benchmark (`rules_cases.py`). Their cases are never used as seeds or training data. `filter.py` drops any row that shares a 13-word sequence with a case or whose embedding is close to one, and `holdout.py` finds such rows in data filtered before a case set existed.

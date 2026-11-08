@@ -16,10 +16,7 @@ from pathlib import Path
 
 import anthropic
 
-from common import TEACHER_MODEL, read_jsonl
-
-# USD per million tokens (PriceBook.swift).
-GEN_PRICE = {"claude-sonnet-5-5": (2.00, 10.00), "claude-haiku-5-5": (0.10, 0.50)}
+from common import DOMAINS, GEN_PRICE, GEN_SYSTEM, PEOPLE, STYLES, TEACHER_MODEL, read_jsonl
 
 p = argparse.ArgumentParser()
 p.add_argument("--out", default="data/inputs_synthetic.jsonl")
@@ -143,34 +140,6 @@ TARGETED = {
                        "position, worded naturally (often 'keep it at ...'). Negatives: reported changes of mind "
                        "('my sister changed her mind about the date')."),
 }
-
-DOMAINS = ["software engineering", "product management", "sales", "customer support", "hospital administration",
-           "primary school teaching", "university research", "law firm", "construction site", "retail store",
-           "restaurant kitchen", "real estate", "marketing agency", "finance and accounting", "logistics and shipping",
-           "family and household", "travel planning", "fitness and health", "personal finance", "wedding planning",
-           "home renovation", "startup founder", "HR and recruiting", "journalism", "nonprofit fundraising",
-           "game development", "data science", "IT helpdesk", "freelance design", "school parent group"]
-PEOPLE = ["South Asian", "East Asian", "Western European", "American", "African", "Latin American", "Middle Eastern",
-          "Australian", "mixed international"]
-STYLES = {
-    "cased": "Write RAW the way a good modern recognizer (Parakeet, Whisper) does: capitalized and punctuated, but "
-             "with punctuation guessed from pauses, run-on sentences, misplaced periods, and digits sometimes where "
-             "words were spoken.",
-    "lower": "Write RAW the way a plain streaming recognizer does: all lower case, no punctuation at all, numbers "
-             "mostly as words.",
-}
-
-GEN_SYSTEM = """You write realistic raw speech-recognition transcripts of people dictating text on a Mac or iPhone, for training a dictation clean-up model. You only write the raw transcripts (RAW), never the cleaned text.
-
-Rules for every RAW:
-- It is what the recognizer heard: natural spoken English with fillers (um, uh, like, you know, so), restarts, repeated words, thinking aloud, and the recognizer's own small errors where the brief asks for them.
-- Vary length (3 to 120 words unless the brief says otherwise), register, speaker and purpose. Use varied, realistic names of people, products and places. Do not reuse names or topics across items.
-- Never write a cleaned version, an explanation, or a label inside RAW.
-- About a quarter of the items are negatives for the category ("leave it alone" cases) as the brief describes.
-
-Reply with only a JSON array. Each element: {"raw": string, "negative": bool, "vocabulary": array of strings or null, "field": null or {"before": string, "after": string}}.
-- "vocabulary": only when the brief asks for it, or for roughly one item in ten: a short dictionary of names or terms the user saved (3 to 12 entries, correct spellings), which may or may not appear in RAW.
-- "field": for roughly one item in twelve: text already in the text field around the cursor (before: up to 200 characters, possibly ending mid-sentence; after: often empty). The dictation continues or follows that text."""
 
 
 def brief(cat, rng, n):

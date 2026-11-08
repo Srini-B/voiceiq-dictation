@@ -2,7 +2,7 @@
 and similarity to the reference. `python score.py --self-test` scores the
 references themselves (every check must pass).
 
-usage: python score.py results/*.jsonl > report.md
+usage: python score.py [--cases rules_cases.jsonl] results/*.jsonl > report.md
 """
 import difflib
 import json
@@ -10,7 +10,8 @@ import re
 import sys
 from collections import defaultdict
 
-cases = {c["id"]: c for c in map(json.loads, open("cases.jsonl"))}
+CASES = sys.argv[sys.argv.index("--cases") + 1] if "--cases" in sys.argv else "cases.jsonl"
+cases = {c["id"]: c for c in map(json.loads, open(CASES))}
 
 # --- Port of ValidationGate.swift ------------------------------------------
 NUM = [("zero", "0"), ("one", "1"), ("two", "2"), ("three", "3"), ("four", "4"), ("five", "5"), ("six", "6"),
@@ -103,7 +104,7 @@ if "--self-test" in sys.argv:
     sys.exit(1 if bad else 0)
 
 rows, detail = [], []
-for path in [a for a in sys.argv[1:] if a.endswith(".jsonl")]:
+for path in [a for a in sys.argv[1:] if a.endswith(".jsonl") and a != CASES]:
     lines = [json.loads(l) for l in open(path)]
     meta, recs = lines[0]["meta"], lines[1:]
     by_cat = defaultdict(lambda: [0, 0])

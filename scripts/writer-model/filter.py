@@ -2,11 +2,13 @@
 
 Drops a row when the teacher failed or was cut off, when the ported
 ValidationGate rejects its target, when the target has a banned form (dashes,
-preambles, labels, prompt leaks), or when the row overlaps the 42 held-out
-benchmark cases (a shared 13-word sequence, or embedding similarity above
---sim). Then splits train/valid/test and writes mlx-lm chat jsonl.
+preambles, labels, prompt leaks), when a spelling variant was set and the
+target keeps a word the variant spells differently, or when the row overlaps
+the held-out benchmark cases (a shared 13-word sequence, or embedding
+similarity above --sim). Then splits train/valid/test and writes mlx-lm chat
+jsonl.
 
-usage: python filter.py data/labelled.jsonl --cases bench/cases.jsonl --out data/mlx [--test 600 --valid 400]
+usage: python filter.py data/labelled.jsonl --cases bench/cases.jsonl [--cases bench/rules_cases.jsonl] --out data/mlx [--test 600 --valid 400]
 """
 import argparse
 import hashlib
@@ -17,11 +19,11 @@ from pathlib import Path
 
 import numpy as np
 
-from common import banned_forms, gate, read_jsonl, strip_artifacts, student_messages, write_jsonl
+from common import banned_forms, gate, read_jsonl, spelling_misses, strip_artifacts, student_messages, write_jsonl
 
 p = argparse.ArgumentParser()
 p.add_argument("labelled", nargs="+")
-p.add_argument("--cases", required=True)
+p.add_argument("--cases", action="append", required=True, help="benchmark cases to hold out; repeatable")
 p.add_argument("--out", required=True)
 p.add_argument("--test", type=int, default=600)
 p.add_argument("--valid", type=int, default=400)
@@ -34,7 +36,7 @@ for path in args.labelled:
     for r in read_jsonl(path):
         rows[r["id"]] = r
 rows = list(rows.values())
-cases = read_jsonl(args.cases)
+cases = [c for path in args.cases for c in read_jsonl(path)]
 drops = Counter()
 kept = []
 for r in rows:
@@ -49,6 +51,11 @@ for r in rows:
     b = banned_forms(r["raw"], t)
     if b:
         drops[f"banned_{b[0]}"] += 1
+        continue
+    # The teacher often leaves the recognizer's spelling under a spelling
+    # variant; the student learns only rows where it switched every word.
+    if spelling_misses(r["raw"], t, r.get("spelling")):
+        drops["spelling_ignored"] += 1
         continue
     r["target"] = t
     kept.append(r)
@@ -125,7 +132,8 @@ out = Path(args.out)
 (out / "train_full.jsonl").unlink(missing_ok=True)
 for name, part in (("train", train), ("valid", valid), ("test", test)):
     write_jsonl(out / f"{name}.jsonl", [{"messages": student_messages(r, r["target"])} for r in part])
-meta_keys = ["id", "source", "license", "category", "raw", "vocabulary", "place", "field", "target"]
+meta_keys = ["id", "source", "license", "category", "raw", "vocabulary", "place", "field", "spelling", "rules",
+             "profile", "target"]
 write_jsonl(out / "test_meta.jsonl", [{k: r.get(k) for k in meta_keys} for r in test])
 write_jsonl(out / "all_filtered.jsonl", [{**{k: r.get(k) for k in meta_keys}, "split": s}
                                          for s, part in (("train", train), ("valid", valid), ("test", test))

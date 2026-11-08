@@ -7,13 +7,16 @@ template's tail. The first case is also run cold (whole prompt, no cache) to
 measure the uncached cost and peak memory.
 
 usage: python bench.py MODEL_REPO --prefix prompt_prefix.txt --cases cases.jsonl --out results/NAME.jsonl
+       python bench.py MODEL_DIR --system ../system.txt --student --cases rules_cases.jsonl --out results/NAME.jsonl
 """
 import argparse
 import json
 import os
 import re
+import sys
 import tempfile
 import time
+from pathlib import Path
 
 import mlx.core as mx
 from mlx_lm import load, stream_generate
@@ -31,6 +34,8 @@ p.add_argument("--only", default=None, help="comma-separated case ids")
 p.add_argument("--system", default=None, help="file holding a system message")
 p.add_argument("--user-format", default="{prefix}RAW: {raw}\nCLEAN:")
 p.add_argument("--no-chat", action="store_true")
+p.add_argument("--student", action="store_true",
+               help="user message from common.student_user(case), with the case's rules and spelling")
 args = p.parse_args()
 
 
@@ -57,8 +62,16 @@ weights_gb = peak()
 bos = getattr(tokenizer, "bos_token", None)
 
 
-def render(raw):
-    content = args.user_format.replace("{prefix}", prefix).replace("{raw}", raw)
+if args.student:
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    from common import student_user
+
+
+def render(case):
+    if args.student:
+        content = student_user(case)
+    else:
+        content = args.user_format.replace("{prefix}", prefix).replace("{raw}", case["raw"])
     if args.no_chat:
         return tokenizer.encode(content)
     msgs = ([{"role": "system", "content": system}] if system else []) + [{"role": "user", "content": content}]
@@ -70,7 +83,7 @@ def render(raw):
     return tokenizer.encode(text, add_special_tokens=add_special)
 
 
-a, b = render("alpha"), render("omega zeta")
+a, b = render({"raw": "alpha"}), render({"raw": "omega zeta"})
 shared = 0
 while shared < min(len(a), len(b)) and a[shared] == b[shared]:
     shared += 1
@@ -122,7 +135,7 @@ def clean(text):
 with open(args.out, "w") as f:
     f.write(json.dumps({"meta": meta}) + "\n")
     for n, c in enumerate(cases):
-        tokens = render(c["raw"])
+        tokens = render(c)
         max_tokens = max(160, int(len(c["raw"].split()) * 2.5) + 80)
         cold = None
         if n == 0:

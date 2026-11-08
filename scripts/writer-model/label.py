@@ -24,6 +24,8 @@ p.add_argument("--out", required=True)
 p.add_argument("--sample", type=int, default=0, help="label a stratified sample of this many new inputs")
 p.add_argument("--seed", type=int, default=3)
 p.add_argument("--dry-run", action="store_true", help="print the projection without submitting")
+p.add_argument("--no-cache", action="store_true",
+               help="no warm-up and no cache writes: cheaper for a few rows per profile, such as benchmark cases")
 args = p.parse_args()
 
 
@@ -49,13 +51,13 @@ if args.sample:
 print(f"{len(todo)} to label ({len(done)} already labelled)")
 
 
-def cost(u):
+def cost(u, discount=BATCH_DISCOUNT):
     cw = u.get("cache_creation") or {}
     w1h = cw.get("ephemeral_1h_input_tokens", 0)
     w5m = cw.get("ephemeral_5m_input_tokens", u.get("cache_creation_input_tokens", 0) - w1h)
     usd = (u["input_tokens"] * PRICE["input"] + u.get("cache_read_input_tokens", 0) * PRICE["cache_read"]
            + w1h * PRICE["cache_write_1h"] + w5m * PRICE["input"] * 1.25 + u["output_tokens"] * PRICE["output"]) / 1e6
-    return usd * BATCH_DISCOUNT
+    return usd * discount
 
 
 def report(rows, remaining):
@@ -63,9 +65,14 @@ def report(rows, remaining):
     if not rows:
         return
     tot = sum(r["cost_usd"] for r in rows)
+    warm_log = out.with_suffix(".warm.jsonl")
+    warm = sum(w["cost_usd"] for w in read_jsonl(warm_log)) if warm_log.exists() else 0.0
     keys = ["input_tokens", "cache_read_input_tokens", "cache_creation_input_tokens", "output_tokens"]
     mean = {k: round(sum(r["usage"].get(k, 0) for r in rows) / len(rows)) for k in keys}
     print(f"labelled {len(rows)}: ${tot:.2f} total, ${tot / len(rows):.5f} per example (batch price), mean usage {mean}")
+    if warm:
+        print(f"cache warm-up calls: ${warm:.2f}; ${(tot + warm) / len(rows):.5f} per example with them")
+        tot += warm
     print(f"stop reasons {Counter(r['stop_reason'] for r in rows)}")
     if remaining:
         print(f"projected for {remaining} more: ${tot / len(rows) * remaining:.2f}")
@@ -77,13 +84,34 @@ if args.dry_run or not todo:
 
 client = anthropic.Anthropic(max_retries=8)
 # Batches share the prompt cache only on a best-effort basis; one synchronous
-# call first writes the shared rules into the one-hour cache.
-warm = teacher_request({"raw": "okay"})
-warm["max_tokens"] = 16
-client.messages.create(**warm)
+# call per user profile (spelling and custom rules) first writes its prompt
+# into the one-hour cache, and requests go out grouped by profile. The warm-up
+# calls bill at the synchronous price and are logged next to the output.
+def profile_key(r):
+    return (r.get("spelling") or "", r.get("rules") or "")
+
+
+todo.sort(key=profile_key)
+
+
+def request(r):
+    body = teacher_request(r)
+    if args.no_cache:
+        body["system"] = [{k: v for k, v in block.items() if k != "cache_control"} for block in body["system"]]
+    return body
+
 
 out.parent.mkdir(parents=True, exist_ok=True)
 state = out.with_suffix(".batches.json")
+warm_log = out.with_suffix(".warm.jsonl")
+# A rerun that only collects submitted batches needs no warm-up.
+for key in [] if args.no_cache or state.exists() else dict.fromkeys(profile_key(r) for r in todo):
+    warm = teacher_request({"raw": "okay", "spelling": key[0] or None, "rules": key[1] or None})
+    warm["max_tokens"] = 16
+    u = client.messages.create(**warm).usage.model_dump()
+    with open(warm_log, "a") as f:
+        f.write(json.dumps({"profile": list(key), "usage": u, "cost_usd": cost(u, 1.0)}) + "\n")
+
 batches = json.loads(state.read_text()) if state.exists() else []
 by_id = {r["id"]: r for r in pool}
 # A rerun with a state file only collects the batches it already submitted.
@@ -92,7 +120,7 @@ by_id = {r["id"]: r for r in pool}
 CHUNK = 2500
 for i in range(0, len(todo) if not batches else 0, CHUNK):
     chunk = todo[i:i + CHUNK]
-    b = client.messages.batches.create(requests=[{"custom_id": r["id"], "params": teacher_request(r)} for r in chunk])
+    b = client.messages.batches.create(requests=[{"custom_id": r["id"], "params": request(r)} for r in chunk])
     batches.append(b.id)
     state.write_text(json.dumps(batches))
     print(f"submitted {b.id} ({len(chunk)} requests)")

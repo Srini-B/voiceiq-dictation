@@ -23,13 +23,13 @@ BATCH_DISCOUNT = 0.5
 
 
 def read_jsonl(path):
-    with open(path) as f:
+    with open(path, encoding="utf-8") as f:
         return [json.loads(line) for line in f if line.strip()]
 
 
 def write_jsonl(path, rows):
     Path(path).parent.mkdir(parents=True, exist_ok=True)
-    with open(path, "w") as f:
+    with open(path, "w", encoding="utf-8") as f:
         for r in rows:
             f.write(json.dumps(r, ensure_ascii=False) + "\n")
 
@@ -66,14 +66,34 @@ def _single(src, decl):
     return _unescape(m.group(1))
 
 
-_prompt_src = (PIPELINE / "PromptV1.swift").read_text()
+_prompt_src = (PIPELINE / "PromptV1.swift").read_text(encoding="utf-8")
 RULES = _multiline(_prompt_src, "static let rules = ")
 EXAMPLES = _multiline(_prompt_src, "static let examples = ")
 LAYOUT_REMINDER = _single(_prompt_src, "static let layoutReminder")
 FIELD_SECTION = _single(_prompt_src, "static let fieldSection")
-DEFAULT_WRITING_RULES = _multiline((PIPELINE / "DefaultWritingRules.swift").read_text(), "public static let text = ")
+DEFAULT_WRITING_RULES = _multiline((PIPELINE / "DefaultWritingRules.swift").read_text(encoding="utf-8"),
+                                   "public static let text = ")
 WRITING_RULES = ("Writing rules from the user (follow these; they refine the rules above):\n"
                  f"<rules>\n{DEFAULT_WRITING_RULES}\n</rules>")
+# SpellingVariant.promptLine, with \(language) and \(name) left to fill in.
+_SPELLING = re.search(r'return "(Spelling: when the dictation is in .*?)"\n',
+                      (REPO / "VoiceIQCore/Sources/Settings/SpellingVariant.swift").read_text(encoding="utf-8")).group(1)
+# The student is English only, so it takes the English variants' names.
+SPELLING_VARIANTS = ["English (US)", "English (UK)", "English (Australia)", "English (Canada)", "English (India)"]
+
+
+def spelling_line(name):
+    """SpellingVariant.promptLine for an English variant name such as "English (UK)"."""
+    assert name in SPELLING_VARIANTS, name
+    return _SPELLING.replace("\\(language)", "English").replace("\\(name)", name)
+
+
+def writing_rules(custom=None):
+    """The writing-rules section of PromptV1.sharedSections, with the user's custom rules appended."""
+    if not custom or not custom.strip():
+        return WRITING_RULES
+    return ("Writing rules from the user (follow these; they refine the rules above):\n"
+            f"<rules>\n{DEFAULT_WRITING_RULES}\n\n{custom[:12_000]}\n</rules>")
 VOCAB_HEADER = ("Vocabulary — these spellings are authoritative. Replace a similar-sounding or phonetically close "
                 "transcription mistake with the exact spelling below when the speech clearly refers to it; do not "
                 "force a replacement when the speech clearly means something else:\n")
@@ -118,14 +138,16 @@ def vocab_section(vocabulary):
 def teacher_request(rec):
     """The Messages API body production sends for this dictation
     (GeminiClient.anthropicMessage + anthropicCleanupSplit), with the stable
-    system text split in two so the shared rules stay cached when a
-    dictation carries its own vocabulary."""
+    system text split in three so the fixed rules stay cached across users'
+    spelling and custom rules, and those across dictations with their own
+    vocabulary. The text is the same as production's."""
     vocab = rec.get("vocabulary") or []
     field = field_context(rec.get("field"))
-    stable_a = RULES + "\n\n" + WRITING_RULES
+    user_rules = ([spelling_line(rec["spelling"])] if rec.get("spelling") else []) + [writing_rules(rec.get("rules"))]
     stable_b = "\n\n".join(([vocab_section(vocab)] if vocab else []) + [EXAMPLES, LAYOUT_REMINDER])
     cache = {"type": "ephemeral", "ttl": "1h"}
-    system = [{"type": "text", "text": stable_a, "cache_control": cache},
+    system = [{"type": "text", "text": RULES, "cache_control": cache},
+              {"type": "text", "text": "\n\n" + "\n\n".join(user_rules), "cache_control": cache},
               {"type": "text", "text": "\n\n" + stable_b, **({} if vocab else {"cache_control": cache})}]
     pl = place_line(rec.get("place"))
     # Production: everything between layoutReminder and the FIELD/RAW label is
@@ -140,7 +162,8 @@ def teacher_request(rec):
 
 def production_prompt(rec):
     """PromptV1.cleanupPrompt as one string, for checks and documentation."""
-    sections = [RULES, WRITING_RULES]
+    sections = [RULES] + ([spelling_line(rec["spelling"])] if rec.get("spelling") else []) + [
+        writing_rules(rec.get("rules"))]
     if rec.get("vocabulary"):
         sections.append(vocab_section(rec["vocabulary"]))
     sections += [EXAMPLES, LAYOUT_REMINDER]
@@ -151,15 +174,66 @@ def production_prompt(rec):
     return "\n\n".join(sections)
 
 
+# --- Input generators (gen_synthetic.py, gen_rules.py) ---------------------------
+
+# USD per million tokens (PriceBook.swift).
+GEN_PRICE = {"claude-sonnet-5-5": (2.00, 10.00), "claude-haiku-5-5": (0.10, 0.50)}
+
+DOMAINS = ["software engineering", "product management", "sales", "customer support", "hospital administration",
+           "primary school teaching", "university research", "law firm", "construction site", "retail store",
+           "restaurant kitchen", "real estate", "marketing agency", "finance and accounting", "logistics and shipping",
+           "family and household", "travel planning", "fitness and health", "personal finance", "wedding planning",
+           "home renovation", "startup founder", "HR and recruiting", "journalism", "nonprofit fundraising",
+           "game development", "data science", "IT helpdesk", "freelance design", "school parent group"]
+PEOPLE = ["South Asian", "East Asian", "Western European", "American", "African", "Latin American", "Middle Eastern",
+          "Australian", "mixed international"]
+STYLES = {
+    "cased": "Write RAW the way a good modern recognizer (Parakeet, Whisper) does: capitalized and punctuated, but "
+             "with punctuation guessed from pauses, run-on sentences, misplaced periods, and digits sometimes where "
+             "words were spoken.",
+    "lower": "Write RAW the way a plain streaming recognizer does: all lower case, no punctuation at all, numbers "
+             "mostly as words.",
+}
+
+GEN_SYSTEM = """You write realistic raw speech-recognition transcripts of people dictating text on a Mac or iPhone, for training a dictation clean-up model. You only write the raw transcripts (RAW), never the cleaned text.
+
+Rules for every RAW:
+- It is what the recognizer heard: natural spoken English with fillers (um, uh, like, you know, so), restarts, repeated words, thinking aloud, and the recognizer's own small errors where the brief asks for them.
+- Vary length (3 to 120 words unless the brief says otherwise), register, speaker and purpose. Use varied, realistic names of people, products and places. Do not reuse names or topics across items.
+- Never write a cleaned version, an explanation, or a label inside RAW.
+- About a quarter of the items are negatives for the category ("leave it alone" cases) as the brief describes.
+
+Reply with only a JSON array. Each element: {"raw": string, "negative": bool, "vocabulary": array of strings or null, "field": null or {"before": string, "after": string}}.
+- "vocabulary": only when the brief asks for it, or for roughly one item in ten: a short dictionary of names or terms the user saved (3 to 12 entries, correct spellings), which may or may not appear in RAW.
+- "field": for roughly one item in twelve: text already in the text field around the cursor (before: up to 200 characters, possibly ending mid-sentence; after: often empty). The dictation continues or follows that text."""
+
+
 # --- Student prompt -----------------------------------------------------------
 
-STUDENT_SYSTEM = (HERE / "system.txt").read_text().strip()
+STUDENT_SYSTEM = (HERE / "system.txt").read_text(encoding="utf-8").strip()
+
+
+STUDENT_RULES_LIMIT = 1200
+
+
+def student_rules(text):
+    """The user's custom rules as the student sees them: line breaks
+    normalised, trimmed, the first 1,200 code points."""
+    if not text:
+        return ""
+    return text.replace("\r\n", "\n").replace("\r", "\n").strip()[:STUDENT_RULES_LIMIT]
 
 
 def student_user(rec):
-    """The student's user turn: optional context lines, then RAW. The bench
-    renders cases with --user-format 'RAW: {raw}', the same shape without context."""
+    """The student's user turn: optional context lines, then RAW. Spelling and
+    Rules come first because they change least, so an on-device prompt cache
+    keeps them; with neither, the turn is what the first models were trained on."""
     lines = []
+    if rec.get("spelling"):
+        lines.append(f"Spelling: {rec['spelling']}")
+    rules = student_rules(rec.get("rules"))
+    if rules:
+        lines.append(f"Rules: <rules>{rules}</rules>")
     if rec.get("vocabulary"):
         lines.append("Vocabulary: " + ", ".join(t.replace("\n", " ")[:60] for t in rec["vocabulary"][:100]))
     place = rec.get("place") or {}
@@ -265,6 +339,39 @@ BANNED = [
     (r"(?m)^(Subject|Re|To|Cc):", "subject_line", r"(?i)\b(subject|re|to|cc)\b"),
     (r"(FIELD BEFORE CURSOR|NORMALIZED CANDIDATE|Vocabulary —|PLACE:)", "prompt_leak", None),
 ]
+
+
+# American and British forms the teacher should switch under a spelling
+# variant. Canada keeps -ize; the -our, -re and doubled-l forms are shared.
+_OUR = ["color", "favorite", "favor", "honor", "neighbor", "behavior", "labor", "humor", "flavor", "harbor"]
+_RE = [("center", "centre"), ("theater", "theatre"), ("liter", "litre"), ("fiber", "fibre")]
+_LL = ["travel", "cancel", "model", "label", "fuel", "signal"]
+_IZE = ["organiz", "realiz", "recogniz", "apologiz", "prioritiz", "customiz", "finaliz", "summariz", "analyz"]
+_OTHER = [("catalog", "catalogue"), ("gray", "grey"), ("defense", "defence"), ("aluminum", "aluminium"),
+          ("jewelry", "jewellery")]
+
+
+def _spelling_pairs(variant):
+    pairs = [(w, w.replace("or", "our")) for w in _OUR] + _RE + _OTHER
+    pairs += [(f"{w}{s1}", f"{w}l{s1}") for w in _LL for s1 in ("ed", "ing", "er")]
+    if variant != "English (Canada)":
+        pairs += [(f"{w}{e}", f"{w[:-1]}s{e}") for w in _IZE for e in ("e", "ed", "es", "ing", "ation")]
+        pairs.append(("mom", "mum"))
+    return pairs
+
+
+def spelling_misses(raw, target, variant):
+    """Words RAW spells the other way that the target still spells that way,
+    for an English spelling variant. Empty when there is nothing to check."""
+    if not variant:
+        return []
+    misses = []
+    for us, uk in _spelling_pairs(variant):
+        wrong = uk if variant == "English (US)" else us
+        pattern = rf"\b{wrong}s?\b"
+        if re.search(pattern, raw, re.I) and re.search(pattern, target, re.I):
+            misses.append(wrong)
+    return misses
 
 
 def _letters(s):

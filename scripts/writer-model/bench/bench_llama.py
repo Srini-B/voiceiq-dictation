@@ -18,7 +18,7 @@ import urllib.request
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from common import STUDENT_SYSTEM  # noqa: E402
+from common import STUDENT_SYSTEM, student_user  # noqa: E402
 
 p = argparse.ArgumentParser()
 p.add_argument("model_dir")
@@ -53,7 +53,7 @@ os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)
 with open(args.out, "w") as f:
     f.write(json.dumps({"meta": meta}) + "\n")
     for c in cases:
-        user = "RAW: " + c["raw"]
+        user = student_user(c)
         text = prompt(user)
         reference = hf.apply_chat_template([{"role": "system", "content": STUDENT_SYSTEM},
                                             {"role": "user", "content": user}],
