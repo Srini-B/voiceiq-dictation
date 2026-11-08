@@ -292,6 +292,12 @@ final class AppModel: ObservableObject {
             session.post(notice: problem)
             return
         }
+        // Translate and Ask always use the provider, even when dictation
+        // runs fully on device without a key.
+        if command.mode != .dictate, !KeychainStore.hasModelKey {
+            session.post(notice: "Add an API key in VoiceiQ")
+            return
+        }
         target.host = command.hostBundleID
         currentMode = command.mode
         session.mode = command.mode

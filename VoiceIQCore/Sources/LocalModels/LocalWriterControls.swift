@@ -81,12 +81,19 @@ public struct LocalWriterFooter: View {
     }
 
     public var body: some View {
-        if LocalModelSupport.isAvailable, enabled {
-            if store.state == .ready {
-                Text("VoiceIQ Writer follows the default writing rules. Custom rules and spelling apply when \(provider.displayName) writes.")
-            } else {
-                Text("\(provider.displayName) writes until \(store.displayName) is downloaded.")
+        Group {
+            if LocalModelSupport.isAvailable, enabled {
+                if store.state == .ready {
+                    Text("VoiceIQ Writer follows the default writing rules. Custom rules and spelling apply when \(provider.displayName) writes.")
+                } else {
+                    Text("\(provider.displayName) writes until \(store.displayName) is downloaded.")
+                }
             }
+        }
+        .onAppear { provider = SettingsStore().preferredProvider }
+        .onReceive(NotificationCenter.default.publisher(for: .gtSettingDidChange).receive(on: RunLoop.main)) { note in
+            guard note.object as? String == "modelProvider" else { return }
+            provider = SettingsStore().preferredProvider
         }
     }
 }

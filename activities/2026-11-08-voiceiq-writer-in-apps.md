@@ -6,8 +6,8 @@ The owner wants a dictation to run fully offline. Fluid Speech already transcrib
 
 ## Outcome
 
-- **Mac.** Settings › Writing rules has a Writing picker (provider or **On device**) and a VoiceIQ Writer 2B row with download, update and delete, like the Fluid Speech rows. The 2B runs with mlx-swift-lm on the GPU in a second instance of the speech helper. The UI process does not link MLX.
-- **iPhone and iPad.** Settings › Writing offers the 2B and the 0.6B, so the owner can compare them. Both run with llama.cpp on the CPU, in-process. The speech models are released before the writer loads, and the writer is freed before the dictation ends.
+- **Mac.** Settings › Dictation › Writing rules has a Writing picker (provider or **On device**) and a VoiceIQ Writer 2B row with download, update and delete, like the Fluid Speech rows. The 2B runs with mlx-swift-lm on the GPU in a second instance of the speech helper. The UI process does not link MLX.
+- **iPhone and iPad.** Settings › Dictation › Writing offers the 2B and the 0.6B, so the owner can compare them. Both run with llama.cpp on the CPU, in-process. The speech models are released before the writer loads, and the writer is freed before the dictation ends.
 - The output goes through the same gate and fallback as the cloud cleanup. History and usage name the model (`voiceiq-writer-qwen3_5-2b-local`, `voiceiq-writer-qwen3-0_6b-local`).
 - With on-device transcription and writing, a dictation needs no network and no API key. iOS onboarding still asks for a key.
 - GGUF builds of both sizes are new commits on the public model repos: 2B at `683b58638ad4ace63de63b28ca716690dbf42a00` and 0.6B at `4dafcd49fed095730bffb162aeba3482a1c14b8e`. The MLX files are kept.
