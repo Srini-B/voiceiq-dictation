@@ -132,8 +132,8 @@ has its own trash icon, including the model that is not selected.
 
 | Selected, downloaded model | Real-time on | Real-time off |
 |---|---|---|
-| Fluid Speech Mini | Mac: live preview while speaking, then transcribe the saved recording after stop. iPhone and iPad: transcribe the saved recording after stop | Transcribe the saved recording after stop |
-| Fluid Speech Pro | Mac: live preview while speaking, then transcribe the saved recording after stop. iPhone and iPad: transcribe the saved recording after stop | Transcribe the saved recording after stop |
+| Fluid Speech Mini | Live preview while speaking (Mac: the pill; iPhone and iPad: the keyboard), then transcribe the saved recording after stop | Transcribe the saved recording after stop |
+| Fluid Speech Pro | Live preview while speaking (Mac: the pill; iPhone and iPad: the keyboard), then transcribe the saved recording after stop | Transcribe the saved recording after stop |
 | Selected model missing | Cloud real-time, if available | Cloud file transcription |
 
 Both models decode whole recordings; the live preview re-decodes the open
@@ -273,10 +273,10 @@ final transcript. Dropped PCM only affects the preview. A missing model ends
 the preview; the final decode still returns nil and cloud transcription takes
 over as before.
 
-The preview runs only where the app shows live text, the Mac pill
-(`LocalTranscriber.previews`). On iPhone and iPad the real-time toggle does not
-change Fluid Speech Mini behaviour; it still selects cloud real-time
-transcription when no local session starts.
+The preview runs with Real-time transcription on, on every platform. The Mac
+shows it in the pill; iPhone and iPad show it on the keyboard's recording
+strip (`SharedStore.liveText`, see [iOS](IOS.md)). With Real-time off there is
+no preview decode.
 
 ## Model lifecycle
 

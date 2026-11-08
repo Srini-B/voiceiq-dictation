@@ -27,16 +27,6 @@ public final class LocalTranscriber: DictationStreaming, Sendable {
     /// later `abort` must then leave it running.
     private let handedOff = OSAllocatedUnfairLock(initialState: false)
 
-    /// Previews cost one decode per second of speech, so they run only where
-    /// the app shows live text: the Mac pill. iPhone and iPad have no such surface.
-    static func previews(realtime: Bool) -> Bool {
-        #if os(macOS)
-        return realtime
-        #else
-        return false
-        #endif
-    }
-
     public enum LoadEvent: Sendable {
         /// The model loaded, in `seconds` from the start of the recording.
         case loaded(LocalSpeechModel, seconds: TimeInterval)
@@ -73,7 +63,10 @@ public final class LocalTranscriber: DictationStreaming, Sendable {
     @MainActor public init?(audioURL: URL, model: LocalSpeechModel, language: LocalSpeechLanguage, realtime: Bool,
                            cloudOnColdLoad: Bool, makeSession: LocalSpeechSessionFactory) {
         let id = UUID()
-        let previewing = Self.previews(realtime: realtime)
+        // Previews cost one decode per second of speech, so they run only with
+        // Real-time transcription on. The Mac shows them in the pill, iPhone
+        // and iPad on the keyboard.
+        let previewing = realtime
         let (options, toolsReady) = Self.sessionOptions(language: language)
         let worker = makeSession(model, audioURL, previewing, options)
         let signals = AsyncStream<Void>.makeStream(bufferingPolicy: .bufferingNewest(1))

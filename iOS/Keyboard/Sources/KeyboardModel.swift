@@ -8,7 +8,8 @@ import VoiceIQBridge
 final class KeyboardModel: ObservableObject {
     @Published private(set) var snapshot = SessionSnapshot()
     @Published private(set) var appAlive = false
-    @Published private(set) var level: Float = 0
+    /// The words heard so far in the dictation being recorded.
+    @Published private(set) var liveText = ""
     @Published private(set) var answer: Delivery?
     @Published private(set) var notice: String?
     @Published private(set) var waitingForApp = false
@@ -74,7 +75,7 @@ final class KeyboardModel: ObservableObject {
         timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.tick() }
         }
-        refresh()
+        tick()
     }
 
     func refreshHostTraits() {
@@ -94,8 +95,8 @@ final class KeyboardModel: ObservableObject {
     /// also polls while it is on screen. Reads are local and cheap.
     private func tick() {
         refresh()
-        let newLevel = phase == .recording ? store.level : 0
-        if newLevel != level { level = newLevel }
+        let newText = phase == .recording ? store.liveText : ""
+        if newText != liveText { liveText = newText }
     }
 
     private func refresh() {

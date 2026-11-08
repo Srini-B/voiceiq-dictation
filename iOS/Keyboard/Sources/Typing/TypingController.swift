@@ -34,7 +34,7 @@ final class TypingController: ObservableObject, KeyboardKeysDelegate {
 
     private static let lexicon = Bundle.main.url(forResource: "lexicon", withExtension: "bin").flatMap(Lexicon.init(url:))
     var engine: TypingEngine?
-    let swipe = SwipeRecognizer()
+    let swipe = SwipeRecognizer.shared()
     private let checker = UITextChecker()
 
     /// Shift follows the text (sentence starts) until the user presses it.

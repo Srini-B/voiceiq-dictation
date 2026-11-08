@@ -135,6 +135,10 @@ final class AppModel: ObservableObject {
         coordinator.$micLevel
             .sink { [weak self] level in self?.levelChanged(level) }
             .store(in: &cancellables)
+        coordinator.$partialTranscript
+            .removeDuplicates()
+            .sink { [weak self] text in self?.session.setLiveText(text) }
+            .store(in: &cancellables)
         coordinator.onAnswerReady = { [weak self] answer in
             self?.deliver(answer, mode: .ask)
         }
