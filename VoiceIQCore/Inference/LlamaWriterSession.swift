@@ -61,6 +61,7 @@ actor LlamaWriterSession: LocalWriterSession {
         var bytes: [CChar] = []
         var generated = 0
         var firstToken: Double?
+        var finished = false
         while generated < request.maxTokens, !Task.isCancelled {
             let decoded = next.withUnsafeMutableBufferPointer {
                 llama_decode(context, llama_batch_get_one($0.baseAddress, Int32($0.count)))
@@ -68,10 +69,19 @@ actor LlamaWriterSession: LocalWriterSession {
             guard decoded == 0 else { return nil }
             let token = llama_sampler_sample(sampler, context, -1)
             if firstToken == nil { firstToken = Date().timeIntervalSince(started) }
-            if stops.contains(token) || llama_vocab_is_eog(vocab, token) { break }
+            if stops.contains(token) || llama_vocab_is_eog(vocab, token) {
+                finished = true
+                break
+            }
             bytes += Self.piece(token, vocab: vocab)
             generated += 1
             next = [token]
+        }
+        // Out of tokens or cancelled: an unfinished rewrite would pass the
+        // gate as a shortened text, so the transcript goes in instead.
+        guard finished else {
+            Log.transcription.error("Writer stopped before its end token after \(generated, privacy: .public) tokens")
+            return nil
         }
         let text = String(decoding: bytes.map { UInt8(bitPattern: $0) }, as: UTF8.self)
         return LocalWriterOutput(

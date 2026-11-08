@@ -53,10 +53,20 @@ actor MLXWriterSession: LocalWriterSession {
             let stops = model.stopTokens
             var generated: [Int] = []
             var firstToken: Double?
-            while let token = iterator.next() {
+            var finished = false
+            while let token = iterator.next(), !Task.isCancelled {
                 if firstToken == nil { firstToken = Date().timeIntervalSince(started) }
-                if stops.contains(Int32(token)) || Task.isCancelled { break }
+                if stops.contains(Int32(token)) {
+                    finished = true
+                    break
+                }
                 generated.append(token)
+            }
+            // Out of tokens or cancelled: an unfinished rewrite would pass the
+            // gate as a shortened text, so the transcript goes in instead.
+            guard finished else {
+                Log.transcription.error("Writer stopped before its end token after \(generated.count, privacy: .public) tokens")
+                return nil
             }
             let text = context.tokenizer.decode(tokenIds: generated, skipSpecialTokens: false)
             return LocalWriterOutput(
