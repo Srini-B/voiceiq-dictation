@@ -73,9 +73,9 @@ final class KeyboardModel: ObservableObject {
             Task { @MainActor in self?.refresh() }
         }
         timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.tick() }
+            Task { @MainActor in self?.refresh() }
         }
-        tick()
+        refresh()
     }
 
     func refreshHostTraits() {
@@ -93,15 +93,12 @@ final class KeyboardModel: ObservableObject {
 
     /// Darwin pings are dropped while a process is suspended, so the keyboard
     /// also polls while it is on screen. Reads are local and cheap.
-    private func tick() {
-        refresh()
-        let newText = phase == .recording ? store.liveText : ""
-        if newText != liveText { liveText = newText }
-    }
-
     private func refresh() {
         let fresh = store.snapshot
         if fresh != snapshot { snapshot = fresh }
+        // With the snapshot, so a new recording never shows the last one's words.
+        let newText = phase == .recording ? store.liveText : ""
+        if newText != liveText { liveText = newText }
         let alive = store.appIsAlive()
         if alive != appAlive { appAlive = alive }
         if let pendingCommandID, store.handledCommandID == pendingCommandID {
