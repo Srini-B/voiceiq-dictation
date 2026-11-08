@@ -20,6 +20,7 @@ actor LlamaWriterSession: LocalWriterSession {
     }
 
     func write(_ request: LocalWriterRequest, directory: URL) async -> LocalWriterOutput? {
+        guard !Task.isCancelled else { return nil }
         var loadSeconds: Double?
         if weights == nil {
             let started = Date()
@@ -39,7 +40,14 @@ actor LlamaWriterSession: LocalWriterSession {
         let started = Date()
         let vocab = llama_model_get_vocab(weights)
         let prompt = Self.tokenize(LocalWriterPrompt.chat(user: request.user), vocab: vocab)
-        guard !prompt.isEmpty else { return nil }
+        guard !prompt.isEmpty, !Task.isCancelled else { return nil }
+        // The KV cache grows with the context: about 450 MB for the 0.6B at
+        // this size (the 2B's few attention layers take a tenth of that).
+        // Longer dictations, over roughly 1,000 words, insert the transcript.
+        guard prompt.count + request.maxTokens + 1 <= Self.maxContext else {
+            Log.transcription.notice("Writer skipped: \(prompt.count) prompt + \(request.maxTokens) tokens is over \(Self.maxContext)")
+            return nil
+        }
 
         var params = llama_context_default_params()
         params.n_ctx = UInt32(prompt.count + request.maxTokens + 1)
@@ -95,6 +103,8 @@ actor LlamaWriterSession: LocalWriterSession {
         if let weights { llama_model_free(weights) }
         weights = nil
     }
+
+    private static let maxContext = 4096
 
     /// Once per process: the CPU backend, and llama.cpp's own logging off.
     private static let setUp: Void = {

@@ -33,7 +33,8 @@ extension GeminiTranscriptionService {
     }
 
     /// VoiceIQ Writer, when on-device writing is on and the selected size is
-    /// downloaded; nil leaves the dictation to the provider. The output goes
+    /// downloaded; nil leaves the dictation to the provider, which writes
+    /// until the selected size is downloaded. The output goes
     /// through the same gate as the cloud's. There is no reminder retry: the
     /// model learned the default rules only, so a dictated question it
     /// answered inserts the transcript.
@@ -42,9 +43,13 @@ extension GeminiTranscriptionService {
         let model = settings.localWriterModel
         let id = UUID()
         let session = makeWriter(model)
-        guard let directory = await MainActor.run(body: {
-            LocalModelStore.store(for: model).acquireSession(id: id, cancel: { await session.stop() })
-        }) else { return nil }
+        let (directory, downloaded) = await MainActor.run {
+            let store = LocalModelStore.store(for: model)
+            return (store.acquireSession(id: id, cancel: { await session.stop() }), store.state == .ready)
+        }
+        // Downloaded but in use (a retry is writing): keep the text on this
+        // device and insert the transcript rather than send it to the provider.
+        guard let directory else { return downloaded ? (model, .unavailable(reason: "busy (on-device writer)")) : nil }
         let field = settings.fitToExistingText ? context.focusedField?.surroundingText : nil
         let user = LocalWriterPrompt.user(
             raw: raw, vocabulary: DictionaryStore().sanitizedVocabulary(), app: context.targetAppName,

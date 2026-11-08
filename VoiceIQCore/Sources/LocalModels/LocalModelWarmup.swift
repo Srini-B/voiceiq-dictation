@@ -108,10 +108,11 @@ public enum LocalModelWarmup {
     /// Runs the on-device writer with no speech model in memory beside it,
     /// for iPhone and iPad: waits for warm-ups and adopted loads to end, then
     /// holds them, and the next dictation's load, until `operation` returns.
-    /// Nil when the caller was cancelled while waiting.
+    /// Nil when the caller was cancelled while waiting, or when a speech
+    /// model is still held, as by a dictation recording while a retry writes.
     static func alone<T: Sendable>(_ operation: @escaping @Sendable () async -> T) async -> T? {
         await finished()
-        guard current == nil else { return nil }
+        guard current == nil, !LocalModelStore.speechInUse else { return nil }
         let id = UUID()
         let work = Task { await operation() }
         current = Entry(id: id, model: nil, task: Task { _ = await work.value })

@@ -70,6 +70,12 @@ public final class LocalModelStore: ObservableObject {
     private static let writer06B = LocalModelStore(manifest: LocalWriterModel.qwen3_0_6b.manifest,
                                                    displayName: LocalWriterModel.qwen3_0_6b.displayName, isWriter: true)
 
+    /// A speech model, the English tools or the diarizer is held by a
+    /// dictation, meeting or retry: the writer must not load beside it.
+    static var speechInUse: Bool {
+        [parakeet, fluidSpeechPro, englishTools, speakerDiarizer].contains { !$0.sessions.isEmpty }
+    }
+
     public static func store(for model: LocalWriterModel) -> LocalModelStore {
         switch model {
         case .qwen3_5_2b: return writer2B

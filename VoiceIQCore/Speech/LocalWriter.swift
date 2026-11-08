@@ -132,7 +132,8 @@ public struct LocalWriterOutput: Codable, Sendable, Equatable {
     public let text: String
     /// Nil when the model was already loaded.
     public let loadSeconds: Double?
-    /// From the request to the first generated token, prefill included.
+    /// From the start of prefill to the first generated token. A cold load
+    /// comes before it and is `loadSeconds`.
     public let firstTokenSeconds: Double
     public let totalSeconds: Double
     public let promptTokens: Int
