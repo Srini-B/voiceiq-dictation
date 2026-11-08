@@ -1,0 +1,28 @@
+# Top-up for the rules round: resumes the qwen3_5-2b rules adapter on the value-rewriting format rules (data/rules_format) plus replay of the rules and main sets (data/mix2brf from make_mix.py). Run with train.py.
+model: Qwen/Qwen3.5-2B
+train: true
+fine_tune_type: lora
+data: data/mix2brf
+adapter_path: adapters/qwen3_5-2b-rules-r2
+resume_adapter_file: adapters/qwen3_5-2b-rules/adapters.safetensors
+seed: 0
+num_layers: -1
+lora_parameters:
+  rank: 32
+  scale: 2.0
+  dropout: 0.05
+batch_size: 4
+grad_accumulation_steps: 4  # iters count micro-batches; the schedule counts updates
+iters: ITERS  # one epoch
+learning_rate: 1.0e-4
+lr_schedule:
+  name: cosine_decay
+  warmup: 20
+  arguments: [1.0e-4, DECAY, 1.0e-5]
+max_seq_length: 1024
+mask_prompt: true
+grad_checkpoint: true
+steps_per_report: 20
+steps_per_eval: 200
+val_batches: 25
+save_every: 200

@@ -34,6 +34,8 @@ p.add_argument("step", choices=["profiles", "inputs"])
 p.add_argument("--out", required=True)
 p.add_argument("--profiles", default="data/rule_profiles.jsonl")
 p.add_argument("--model", default="claude-haiku-5-5")
+p.add_argument("--set", default="broad", choices=["broad", "format"])
+p.add_argument("--prefix", default="p", help="profile id prefix, so a second set's ids stay distinct")
 p.add_argument("--per-theme", type=int, default=7)
 p.add_argument("--per-profile", type=int, default=28, help="Haiku dictations per rules profile")
 p.add_argument("--per-spelling", type=int, default=60, help="Haiku dictations per spelling-only profile")
@@ -77,6 +79,24 @@ THEMES = {
     "mixed": "a realistic mix of three to six unrelated preferences from any of: punctuation, numbers, house terms, "
              "sign-off, list style, tone",
 }
+# The second set, after the first rules model: rules that rewrite a value
+# (a time, a date, a number, a word) were learned per user, not per rule, and
+# the model sometimes changed the value while reformatting it. Many users with
+# one to three such rules each, a few dictations apiece.
+FORMAT_THEMES = {
+    "time": "time formats: 24-hour clock, 'am/pm' in lower or upper case, 'noon' and 'midnight' as words, no ':00' "
+            "on the hour, a time zone after times",
+    "date": "date formats: DD/MM/YYYY, MM/DD/YYYY, ISO 2027-03-04, '4 March 2027', 'March 4th', weekday before the "
+            "date, no ordinals",
+    "numbers": "number style: numbers under ten (or under 100) as words, always digits, thousands separators or "
+               "none, 'percent' or '%', ordinals as words, fractions as words or digits",
+    "units_money": "units and money: metric abbreviations (km, kg), currency symbols or codes (₹, £, EUR), 'k' for "
+                   "thousands, money with or without cents",
+    "words": "word swaps the user always wants: OK not okay, email not e-mail, customers not clients, team or "
+             "product names with exact capitalisation, no contractions, 'and' not '&'",
+    "layout": "list and message shape: lists with dashes, numbered steps, checkboxes '- [ ] task', a fixed email "
+              "sign-off with a name ('Best,\\nPriya'), the Oxford comma, no exclamation marks",
+}
 FORMATS = [
     "one rule per line, plain sentences",
     "a dashed list ('- rule')",
@@ -105,6 +125,8 @@ Write {n} raw dictations by this user.
 - {apply} of them give at least one of the rules above something to act on, naturally (the speaker never mentions the rules). Spread them across the rules; a rule about emails needs an email, a rule about lists needs a list, a rule about a word needs that word.
 - The other {skip} are ordinary dictations of the same kinds that none of the rules touches: no list for a list rule, no email for a sign-off rule, no number for a number rule, the avoided word absent or used in a different sense ("client library" for a rule about clients).
 Mark each item with "applies": the indexes (0-based) of the rules it triggers, [] for none."""
+
+VALUE_ASK = """Where a rule rewrites a value, use values that are easy to get wrong: afternoon and evening times spoken as "half past four", "quarter to six in the evening" or "three thirty in the afternoon", dates whose day is 12 or less ("March fourth", "the second of June"), years spoken as "twenty twenty seven", amounts with hundreds and thousands, and number words next to digits. Each value must be stated once and clearly, so the right written form is certain."""
 
 PLAIN_BRIEF = """Write {n} raw dictations of every kind: chat messages, emails, notes, lists, status updates, questions. Mark each item with "applies": []."""
 
@@ -142,17 +164,19 @@ def profiles():
     have = read_jsonl(out) if out.exists() else []
     done = {r["theme"] for r in have}
     rng = random.Random(args.seed)
+    themes = FORMAT_THEMES if args.set == "format" else THEMES
 
-    fmts = {t: [rng.choice(FORMATS) for _ in range(args.per_theme)] for t in THEMES}
+    fmts = {t: [rng.choice(FORMATS) for _ in range(args.per_theme)] for t in themes}
 
     def run(theme):
-        text = (f"Theme: {THEMES[theme]}\n\nWrite {args.per_theme} different users' rule boxes, each with 1 to 5 "
-                f"rules (mostly 2 to 4). Formats, in order: {'; '.join(fmts[theme])}.")
+        size = "1 to 3 rules" if args.set == "format" else "1 to 5 rules (mostly 2 to 4)"
+        text = (f"Theme: {themes[theme]}\n\nWrite {args.per_theme} different users' rule boxes, each with {size}. "
+                f"Formats, in order: {'; '.join(fmts[theme])}.")
         items = ask(PROFILE_SYSTEM, text) or []
         return theme, [it for it in items if isinstance(it, dict) and str(it.get("rules_text", "")).strip()]
 
     with ThreadPoolExecutor(args.workers) as ex:
-        results = list(ex.map(run, [t for t in THEMES if t not in done]))
+        results = list(ex.map(run, [t for t in themes if t not in done]))
     rows = list(have)
     for theme, items in sorted(results):
         for j, it in enumerate(items):
@@ -162,17 +186,17 @@ def profiles():
             rows.append(dict(theme=theme, rules=str(it["rules_text"]).strip(), rule_list=it.get("rules") or [],
                              spelling=spelling))
     # Users who keep many rules: three or four other users' boxes joined.
-    if "long" not in done:
+    if args.set == "broad" and "long" not in done:
         boxes = [r for r in rows if r["theme"] in THEMES]
         for _ in range(6):
             picks = rng.sample(boxes, rng.choice([3, 4]))
             rows.append(dict(theme="long", rules="\n".join(r["rules"] for r in picks),
                              rule_list=[x for r in picks for x in r["rule_list"]],
                              spelling=rng.choice([None, None, "English (UK)"])))
-    if "spelling" not in done:
+    if args.set == "broad" and "spelling" not in done:
         rows += [dict(theme="spelling", rules=None, rule_list=[], spelling=s) for s in SPELLING_VARIANTS]
     for i, r in enumerate(rows):
-        r["profile"] = f"p{i:03d}"
+        r["profile"] = f"{args.prefix}{i:03d}"
     write_jsonl(out, rows)
     print(f"{len(rows)} profiles")
 
@@ -194,7 +218,10 @@ def inputs():
         spelling = prof.get("spelling")
         if prof["rules"]:
             n = args.per_profile
-            parts = [RULES_BRIEF.format(rules=prof["rules"], n=n, apply=round(n * 0.65), skip=n - round(n * 0.65))]
+            share = 0.8 if args.set == "format" else 0.65
+            parts = [RULES_BRIEF.format(rules=prof["rules"], n=n, apply=round(n * share), skip=n - round(n * share))]
+            if args.set == "format":
+                parts.append(VALUE_ASK)
         else:
             parts = [PLAIN_BRIEF.format(n=args.per_spelling)]
         if spelling:

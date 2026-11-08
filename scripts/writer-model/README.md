@@ -38,6 +38,11 @@ python gen_rules.py profiles --out data/rule_profiles.jsonl
 python gen_rules.py inputs --profiles data/rule_profiles.jsonl --out data/inputs_rules.jsonl --pool data/mlx/all_filtered.jsonl
 python label.py data/inputs_rules.jsonl --out data/labelled_rules.jsonl
 python filter.py data/labelled_rules.jsonl --cases bench/cases.jsonl --cases bench/rules_cases.jsonl --out data/rules --test 120 --valid 60
+# A second set for rules that rewrite a value (time, date, number, word): many users, a few rows each.
+python gen_rules.py profiles --set format --prefix f --per-theme 14 --seed 41 --out data/rule_profiles_format.jsonl
+python gen_rules.py inputs --set format --per-profile 6 --seed 41 --profiles data/rule_profiles_format.jsonl --out data/inputs_rules_format.jsonl
+python label.py data/inputs_rules_format.jsonl --out data/labelled_rules_format.jsonl
+python filter.py data/labelled_rules_format.jsonl --cases bench/cases.jsonl --cases bench/rules_cases.jsonl --out data/rules_format --test 40 --valid 20
 # Rows filtered before the rules cases existed that overlap them; make_mix.py --drop leaves them out.
 python holdout.py data/mlx/all_filtered.jsonl data/mlx_targeted/all_filtered.jsonl --cases bench/rules_cases.jsonl --out data/holdout_rules_cases.jsonl
 ```
@@ -76,6 +81,9 @@ python trim_long.py data/mix06r --model Qwen/Qwen3-0.6B --max 1024
 python trim_long.py data/mix2br --model Qwen/Qwen3.5-2B --max 1024
 mlx_lm.lora --config train/qwen3-0_6b-rules.yaml
 python train.py --config train/qwen3_5-2b-rules.yaml
+# Top-up on the format set with replay, resuming each rules adapter (train/*-rules-r2.yaml).
+python make_mix.py --out data/mix06rf --train data/rules_format --train data/rules:800 --train data/mlx:800 --valid data/rules_format --valid data/rules --valid data/mlx --drop data/holdout_rules_cases.jsonl
+python make_mix.py --out data/mix2brf --train data/rules_format --train data/rules:800 --train data/mlx:600 --train data/mlx_targeted:200 --valid data/rules_format --valid data/rules --valid data/mlx --valid data/mlx_targeted --drop data/holdout_rules_cases.jsonl
 
 # The rules benchmark: --student renders each case's rules and spelling with common.student_user.
 cd bench && python bench.py ../q4/qwen3_5-2b --system ../system.txt --student --cases rules_cases.jsonl --out results/rules-q4-qwen3_5-2b.jsonl
