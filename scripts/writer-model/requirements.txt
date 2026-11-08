@@ -1,0 +1,10 @@
+# Data pipeline (any machine)
+anthropic>=0.70
+huggingface_hub>=1.0
+pandas
+pyarrow
+requests
+sentence-transformers  # overlap filter only; pulls in torch (CPU wheels are enough)
+# Training and evaluation (Apple silicon)
+# mlx==0.32.4
+# mlx-lm==0.32.2
