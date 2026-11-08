@@ -157,6 +157,9 @@ public final class LocalTranscriber: DictationStreaming, Sendable {
         }
         if case .finished = outcome {
             await worker.stop()
+            #if os(iOS)
+            Log.transcription.notice("Speech model released; footprint \(ProcessFootprint.bytes / 1_048_576, privacy: .public) MB")
+            #endif
         } else {
             Log.transcription.notice("On-device transcription passed \(deadline, format: .fixed(precision: 0))s; using saved audio with cloud transcription")
             Task { await worker.stop() }

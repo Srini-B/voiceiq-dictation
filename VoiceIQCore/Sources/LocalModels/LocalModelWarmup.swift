@@ -10,7 +10,8 @@ import VoiceIQSpeech
 public enum LocalModelWarmup {
     private struct Entry {
         let id: UUID
-        let model: LocalSpeechModel
+        /// Nil for the writer (`alone`), which holds no speech model.
+        let model: LocalSpeechModel?
         let task: Task<Void, Never>
     }
 
@@ -98,9 +99,25 @@ public enum LocalModelWarmup {
     /// after them (`finished(before:)`), so two model compiles never overlap.
     static func yieldToDictation() {
         for entry in [current].compactMap({ $0 }) + pending {
-            LocalModelStore.store(for: entry.model).releaseSession(id: entry.id)
+            guard let model = entry.model else { continue }
+            LocalModelStore.store(for: model).releaseSession(id: entry.id)
             LocalModelStore.englishTools.releaseSession(id: entry.id)
         }
+    }
+
+    /// Runs the on-device writer with no speech model in memory beside it,
+    /// for iPhone and iPad: waits for warm-ups and adopted loads to end, then
+    /// holds them, and the next dictation's load, until `operation` returns.
+    /// Nil when the caller was cancelled while waiting.
+    static func alone<T: Sendable>(_ operation: @escaping @Sendable () async -> T) async -> T? {
+        await finished()
+        guard current == nil else { return nil }
+        let id = UUID()
+        let work = Task { await operation() }
+        current = Entry(id: id, model: nil, task: Task { _ = await work.value })
+        let value = await work.value
+        ended(id)
+        return value
     }
 
     /// A warm-up or an adopted dictation load is in progress.

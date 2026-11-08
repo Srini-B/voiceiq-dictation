@@ -163,6 +163,32 @@ public struct SettingsStore: Sendable {
         Self.set(model.rawValue, forKey: "localSpeechModel")
     }
 
+    /// Who writes dictation by the writing rules: the provider's writing
+    /// model, or VoiceIQ Writer on this device. On device writes only once
+    /// the selected size is downloaded; until then the provider writes.
+    public var writingSource: TranscriptionSource {
+        guard LocalModelSupport.isAvailable, !LocalWriterModel.available.isEmpty,
+              Self.defaults.string(forKey: "writingSource") == TranscriptionSource.onDevice.rawValue else { return .provider }
+        return .onDevice
+    }
+
+    public func setWritingSource(_ source: TranscriptionSource) {
+        Self.set(source.rawValue, forKey: "writingSource")
+    }
+
+    /// The VoiceIQ Writer size to use. Unknown or unavailable values read as
+    /// the first size this device offers.
+    public var localWriterModel: LocalWriterModel {
+        let stored = LocalWriterModel(rawValue: Self.defaults.string(forKey: "localWriterModel") ?? "")
+        guard let stored, LocalWriterModel.available.contains(stored) else { return LocalWriterModel.available.first ?? .qwen3_5_2b }
+        return stored
+    }
+
+    public func setLocalWriterModel(_ model: LocalWriterModel) {
+        guard model != localWriterModel else { return }
+        Self.set(model.rawValue, forKey: "localWriterModel")
+    }
+
     /// Who transcribes meetings. On device needs the selected model and, on the
     /// Mac, the speaker diarizer downloaded; notes still come from the cloud writing
     /// model. Same legacy reading and Claude rule as `dictationSource`.

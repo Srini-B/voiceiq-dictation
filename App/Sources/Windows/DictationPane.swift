@@ -13,6 +13,8 @@ struct DictationPane: View {
     @State private var meetingSource = SettingsStore().meetingSource
     @State private var smartTranscription = SettingsStore().smartTranscriptionEnabled
     @State private var cleanupPass = SettingsStore().smartCleanupPassEnabled
+    @State private var writingSource = SettingsStore().writingSource
+    @State private var localWriter = SettingsStore().localWriterModel
     @State private var skipShortCleanup = SettingsStore().skipShortDictationCleanup
     @State private var customRules = SettingsStore().customWritingRules
     @State private var autoLearn = SettingsStore().autoLearnEnabled
@@ -120,6 +122,15 @@ struct DictationPane: View {
                         guard enabled != settings.smartCleanupPassEnabled else { return }
                         settings.setSmartCleanupPass(enabled)
                     }
+                WritingSourcePicker(selection: Binding(get: { writingSource }, set: {
+                    writingSource = $0
+                    settings.setWritingSource($0)
+                }))
+                .disabled(!cleanupPass)
+                LocalWriterControls(enabled: writingSource == .onDevice, selection: Binding(get: { localWriter }, set: {
+                    localWriter = $0
+                    settings.setLocalWriterModel($0)
+                }))
                 Toggle("Skip cleanup for dictations of 5 seconds or less", isOn: $skipShortCleanup)
                     .disabled(!cleanupPass)
                     .onChange(of: skipShortCleanup) { _, enabled in
@@ -137,7 +148,10 @@ struct DictationPane: View {
             } header: {
                 Text("Writing rules")
             } footer: {
-                Text("A second model rewrites the transcript by these rules: corrections you speak later fix what you said earlier, sentences are split by grammar rather than pauses, and the layout follows what you said: a message stays a message, several requests become a numbered list.")
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("A second model rewrites the transcript by these rules: corrections you speak later fix what you said earlier, sentences are split by grammar rather than pauses, and the layout follows what you said: a message stays a message, several requests become a numbered list.")
+                    LocalWriterFooter(enabled: writingSource == .onDevice, selection: localWriter)
+                }
             }
 
             Section("Custom rules") {
@@ -206,6 +220,8 @@ struct DictationPane: View {
             case "smartTranscription": smartTranscription = settings.smartTranscriptionEnabled
             case "agentModeEnabled": agentMode = settings.agentModeEnabled
             case "smartCleanupPass": cleanupPass = settings.smartCleanupPassEnabled
+            case "writingSource": writingSource = settings.writingSource
+            case "localWriterModel": localWriter = settings.localWriterModel
             case "skipShortDictationCleanup": skipShortCleanup = settings.skipShortDictationCleanup
             case SettingsStore.customWritingRulesKey: customRules = settings.customWritingRules
             case "autoLearn": autoLearn = settings.autoLearnEnabled

@@ -134,6 +134,8 @@ struct DictationSettingsView: View {
     @State private var translationTarget = SettingsStore().translationTargetLanguage
     @State private var smartTranscription = SettingsStore().smartTranscriptionEnabled
     @State private var cleanupPass = SettingsStore().smartCleanupPassEnabled
+    @State private var writingSource = SettingsStore().writingSource
+    @State private var localWriter = SettingsStore().localWriterModel
     @State private var skipShortCleanup = SettingsStore().skipShortDictationCleanup
     @State private var customRules = SettingsStore().customWritingRules
     @State private var noiseHandling = SettingsStore().experimentalNoiseHandling
@@ -206,6 +208,19 @@ struct DictationSettingsView: View {
                 if cleanupPass { NavigationLink("Custom rules") { CustomRulesView(text: $customRules) } }
             }
             Section {
+                WritingSourcePicker(selection: Binding(get: { writingSource }, set: {
+                    writingSource = $0
+                    settings.setWritingSource($0)
+                }))
+                .disabled(!cleanupPass)
+                LocalWriterControls(enabled: writingSource == .onDevice, selection: Binding(get: { localWriter }, set: {
+                    localWriter = $0
+                    settings.setLocalWriterModel($0)
+                }))
+            } header: { SettingsSectionHeader("Writing") } footer: {
+                LocalWriterFooter(enabled: writingSource == .onDevice, selection: localWriter)
+            }
+            Section {
                 Toggle("Better hearing in loud rooms", isOn: $noiseHandling)
                     .onChange(of: noiseHandling) { _, value in settings.setExperimentalNoiseHandling(value) }
             }
@@ -240,6 +255,8 @@ struct DictationSettingsView: View {
             case "liveDictationEnabled": liveTranscription = settings.liveTranscriptionEnabled
             case "smartTranscription": smartTranscription = settings.smartTranscriptionEnabled
             case "smartCleanupPass": cleanupPass = settings.smartCleanupPassEnabled
+            case "writingSource": writingSource = settings.writingSource
+            case "localWriterModel": localWriter = settings.localWriterModel
             case "skipShortDictationCleanup": skipShortCleanup = settings.skipShortDictationCleanup
             case SettingsStore.customWritingRulesKey: customRules = settings.customWritingRules
             case "experimentalNoiseHandling": noiseHandling = settings.experimentalNoiseHandling

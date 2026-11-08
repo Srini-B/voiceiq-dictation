@@ -55,7 +55,7 @@ final class AppModel: ObservableObject {
             anthropicKey: { KeychainStore.loadKey(.anthropic) },
             provider: { SettingsStore().preferredProvider }
         )
-        transcription = GeminiTranscriptionService(client: client)
+        transcription = GeminiTranscriptionService(client: client, makeWriter: LocalSpeechInference.makeWriter)
         historyStore = try? HistoryStore.standard()
         UsageMeter.store = try? UsageStore.standard()
         meetings = MeetingEngine(
@@ -322,9 +322,19 @@ final class AppModel: ObservableObject {
     /// onboarding: the key deleted, or the microphone switched off in Settings
     /// (iOS then ends the app, so this is read fresh on the next launch).
     private func setupBlocker() -> String? {
-        if !KeychainStore.hasModelKey { return "Add an API key in VoiceiQ" }
+        if !KeychainStore.hasModelKey, !Self.dictatesOnDevice { return "Add an API key in VoiceiQ" }
         if AVAudioApplication.shared.recordPermission != .granted { return "Allow the microphone in VoiceiQ" }
         return nil
+    }
+
+    /// Transcription and, with writing rules on, writing both run on this
+    /// device with their models downloaded, so dictation needs no API key.
+    private static var dictatesOnDevice: Bool {
+        let settings = SettingsStore()
+        guard settings.localTranscriptionEnabled,
+              LocalModelStore.store(for: settings.localSpeechModel).state == .ready else { return false }
+        return !settings.formattingPolicy.cleanupPass
+            || (settings.writingSource == .onDevice && LocalModelStore.store(for: settings.localWriterModel).state == .ready)
     }
 
     /// Keeps the user in the app, on the screen that fixes the problem,

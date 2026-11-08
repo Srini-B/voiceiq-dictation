@@ -1,5 +1,6 @@
 import AVFoundation
 import Foundation
+import VoiceIQSpeech
 
 /// The transcription pipeline.
 ///
@@ -15,6 +16,8 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
     static let untranslatableToken = "<<UNTRANSLATABLE>>"
     let client: GeminiClient
     let settings: SettingsStore
+    /// VoiceIQ Writer for on-device writing; nil leaves writing to the provider.
+    let makeWriter: LocalWriterSessionFactory?
 
     /// Cleanup budget. The pass reads the whole transcript and writes it back, so
     /// the budget grows with the text: a one-line dictation gets ~12 s, a
@@ -29,10 +32,20 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
         min(60, 12 + Double(count) / 350)
     }
 
-    public init(client: GeminiClient, settings: SettingsStore = SettingsStore()) {
+    /// On the Mac the writer runs in the speech helper by default; iPhone and
+    /// iPad pass `LocalSpeechInference.makeWriter` to run it in-process.
+    public init(client: GeminiClient, settings: SettingsStore = SettingsStore(),
+                makeWriter: LocalWriterSessionFactory? = Self.helperWriter) {
         self.client = client
         self.settings = settings
+        self.makeWriter = makeWriter
     }
+
+    #if os(macOS)
+    public static let helperWriter: LocalWriterSessionFactory? = { LocalRemoteWriter(model: $0) }
+    #else
+    public static let helperWriter: LocalWriterSessionFactory? = nil
+    #endif
 
     public func transcribe(audioURL: URL, durationSeconds: Double, context: DictationContext) async throws -> TranscriptionResult {
         let config = settings.geminiConfig
@@ -156,7 +169,7 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
         return TranscriptionResult(
             rawTranscript: trimmedRaw,
             cleanedTranscript: cleanup.text,
-            modelID: "\(transcript.modelID)+\(writingModel)",
+            modelID: "\(transcript.modelID)+\(cleanup.localWriter ?? writingModel)",
             cleanupSkip: cleanup.skip
         )
     }

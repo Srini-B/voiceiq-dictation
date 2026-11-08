@@ -1,5 +1,6 @@
 import Foundation
 import VoiceIQBridge
+import VoiceIQSpeech
 
 /// The writing-rules pass of a dictation, and what is inserted when it fails.
 extension GeminiTranscriptionService {
@@ -14,14 +15,67 @@ extension GeminiTranscriptionService {
     struct SettledCleanup {
         var text: String
         var skip: CleanupSkip?
+        /// The on-device writer's model ID when it wrote, or tried to.
+        var localWriter: String?
     }
 
     func cleanupOrFallback(
         raw: String, context: DictationContext, config: GeminiConfig, rawHasFillers: Bool,
         normalized: String? = nil
     ) async -> SettledCleanup {
-        settle(await runCleanup(raw: raw, context: context, config: config, normalized: normalized),
-               raw: raw, rawHasFillers: rawHasFillers)
+        if let local = await runLocalCleanup(raw: raw, context: context) {
+            var settled = settle(local.outcome, raw: raw, rawHasFillers: rawHasFillers)
+            settled.localWriter = local.model.modelID
+            return settled
+        }
+        return settle(await runCleanup(raw: raw, context: context, config: config, normalized: normalized),
+                      raw: raw, rawHasFillers: rawHasFillers)
+    }
+
+    /// VoiceIQ Writer, when on-device writing is on and the selected size is
+    /// downloaded; nil leaves the dictation to the provider. The output goes
+    /// through the same gate as the cloud's. There is no reminder retry: the
+    /// model learned the default rules only, so a dictated question it
+    /// answered inserts the transcript.
+    private func runLocalCleanup(raw: String, context: DictationContext) async -> (model: LocalWriterModel, outcome: CleanupOutcome)? {
+        guard settings.writingSource == .onDevice, let makeWriter else { return nil }
+        let model = settings.localWriterModel
+        let id = UUID()
+        let session = makeWriter(model)
+        guard let directory = await MainActor.run(body: {
+            LocalModelStore.store(for: model).acquireSession(id: id, cancel: { await session.stop() })
+        }) else { return nil }
+        let field = settings.fitToExistingText ? context.focusedField?.surroundingText : nil
+        let user = LocalWriterPrompt.user(
+            raw: raw, vocabulary: DictionaryStore().sanitizedVocabulary(), app: context.targetAppName,
+            title: context.focusedField?.windowTitle, page: context.focusedField?.pageURL,
+            before: field?.before, after: field?.after
+        )
+        let request = LocalWriterRequest(user: user, maxTokens: LocalWriterPrompt.maxTokens(raw: raw))
+        #if os(iOS)
+        // The speech model is already released (`LocalTranscriber.finish`).
+        // Holding warm-ups and the next dictation's load until the writer is
+        // freed keeps the two models out of memory together.
+        let output = await LocalModelWarmup.alone {
+            Log.transcription.notice("Writer loading; footprint \(ProcessFootprint.bytes / 1_048_576, privacy: .public) MB")
+            let output = await session.write(request, directory: directory)
+            await session.stop()
+            Log.transcription.notice("Writer released; footprint \(ProcessFootprint.bytes / 1_048_576, privacy: .public) MB")
+            return output
+        } ?? nil
+        #else
+        let output = await session.write(request, directory: directory)
+        await session.stop()
+        #endif
+        await MainActor.run { LocalModelStore.store(for: model).releaseSession(id: id) }
+        guard let output else { return (model, .unavailable(reason: "failed (on-device writer)")) }
+        Log.transcription.notice("Writer \(model.modelID, privacy: .public): load \(output.loadSeconds.map { String(format: "%.2fs", $0) } ?? "warm", privacy: .public), first token \(output.firstTokenSeconds, format: .fixed(precision: 2))s, total \(output.totalSeconds, format: .fixed(precision: 2))s, \(output.promptTokens) prompt + \(output.generatedTokens) generated tokens, memory \(output.memoryBytes / 1_048_576) MB")
+        UsageMeter.record(stage: .cleanup, model: model.modelID,
+                          usage: TokenUsage(textIn: output.promptTokens, textOut: output.generatedTokens, reportedCostUSD: 0))
+        let cleaned = ValidationGate.stripArtifacts(output.text)
+        let verdict = ValidationGate.validate(raw: raw, cleaned: cleaned)
+        guard verdict.accepted else { return (model, .rejected(reason: verdict.reason ?? "?")) }
+        return (model, .accepted(cleaned))
     }
 
     /// Whether the transcript can still carry "uh" and "um". Gemini's

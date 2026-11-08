@@ -65,6 +65,18 @@ public final class LocalModelStore: ObservableObject {
         }
     }
 
+    private static let writer2B = LocalModelStore(manifest: LocalWriterModel.qwen3_5_2b.manifest,
+                                                  displayName: LocalWriterModel.qwen3_5_2b.displayName)
+    private static let writer06B = LocalModelStore(manifest: LocalWriterModel.qwen3_0_6b.manifest,
+                                                   displayName: LocalWriterModel.qwen3_0_6b.displayName)
+
+    public static func store(for model: LocalWriterModel) -> LocalModelStore {
+        switch model {
+        case .qwen3_5_2b: return writer2B
+        case .qwen3_0_6b: return writer06B
+        }
+    }
+
     public let displayName: String
     @Published public private(set) var state: LocalModelState
     /// Nil while the pinned revision is installed, or nothing is.

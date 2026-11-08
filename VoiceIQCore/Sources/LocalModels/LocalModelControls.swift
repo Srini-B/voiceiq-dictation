@@ -74,7 +74,7 @@ public struct LocalMeetingControls: View {
 }
 
 @MainActor
-private struct LocalModelRow: View {
+struct LocalModelRow: View {
     @ObservedObject var store: LocalModelStore
     /// Shown even before download; off, a row stays only while there is
     /// something on disk or in transit to cancel or delete.
