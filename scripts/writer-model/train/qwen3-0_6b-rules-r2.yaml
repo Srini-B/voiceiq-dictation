@@ -13,12 +13,12 @@ lora_parameters:
   dropout: 0.05
 batch_size: 4
 grad_accumulation_steps: 4  # iters count micro-batches; the schedule counts updates
-iters: ITERS  # one epoch
+iters: 505  # one epoch of 2,022 rows
 learning_rate: 1.0e-4
 lr_schedule:
   name: cosine_decay
   warmup: 20
-  arguments: [1.0e-4, DECAY, 1.0e-5]
+  arguments: [1.0e-4, 126, 1.0e-5]
 max_seq_length: 1024
 mask_prompt: true
 grad_checkpoint: true
