@@ -28,11 +28,13 @@ def lines(folder, split):
 
 def raw(line):
     """The RAW transcript of a common.student_user turn, without its context lines.
-    Vocabulary and Place lines are single-line, so RAW starts at the first line
-    that begins with "RAW: ", unless field context (free text) precedes it."""
+    Rules and field context are free text; the other lines are single-line, so
+    RAW starts at the first line that begins with "RAW: " after the last of them."""
     user = next(m["content"] for m in json.loads(line)["messages"] if m["role"] == "user")
     if "</field>\nRAW: " in user:
         return user.rpartition("</field>\nRAW: ")[2]
+    if user.startswith(("Rules: <rules>", "Spelling: ")) and "</rules>\n" in user:
+        user = user.partition("</rules>\n")[2]
     return ("\n" + user).partition("\nRAW: ")[2]
 
 
