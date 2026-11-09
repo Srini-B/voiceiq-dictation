@@ -190,8 +190,8 @@ def profiles():
             rows.append(dict(theme=theme, rules=str(it["rules_text"]).strip(), rule_list=it.get("rules") or [],
                              spelling=spelling))
     # Users who keep many rules: three or four other users' boxes joined.
-    if args.set == "broad" and "long" not in done:
-        boxes = [r for r in rows if r["theme"] in THEMES]
+    boxes = [r for r in rows if r["theme"] in THEMES]
+    if args.set == "broad" and "long" not in done and len(boxes) >= 4:  # else on a later run
         for _ in range(6):
             picks = rng.sample(boxes, rng.choice([3, 4]))
             rows.append(dict(theme="long", rules="\n".join(r["rules"] for r in picks),
