@@ -61,6 +61,7 @@ Measured on the Mac mini (M2, 16 GB) with `bench.py`: greedy decoding, the 25-to
 | Qwen3.5-2B untuned, production prompt (earlier checks) | 18/42 | 1 | | | | | | |
 
 - The shipped 2B fails `change_of_mind` ("keep the standup at ten" where the check wants "10"), `side_note_answer` (keeps "the designer from the Pune office"), `word_order` ("log in with my phone to the admin panel" kept as spoken) and `technical_ids` ("get user by id" and "fetch user" left as words). Revision `0efe70d` failed `list_short_items` instead of the first two.
+- **Known gap:** the acceptance bars stay at 39/42 for the 2B and 34/42 for the 0.6B. The shipped 2B scores 38/42, one case short, since `technical_ids` began requiring the code names (`1e18473`); the 0.6B clears its bar at 36/42. Teaching the writer to write code identifiers is deferred to the next round of writing-model work.
 - Every fine-tune has the same held-out gate rejection: a dictated injection-style question written without its question mark. The others are expansions, a few of them repetition loops.
 - On the 140-case targeted held-out slice (short lists, parentheses, sound-alikes, spelled identifiers, word order, money, changes of mind), revision `0efe70d` has 140/140 gate ok, 44% exact and 0.957 similarity.
 - The 4-bit build scores higher than bf16 on the bench by one case. Treat a one-case difference as noise.

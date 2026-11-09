@@ -54,7 +54,7 @@ CodeRabbit and the owner found loose checks, so `9c8c503`, `607b800` and `1e1847
 
 - Each fine-tune lost `technical_ids`: it writes "get user by id" and "fetch user" as spoken words. The r2 2B wrote `getUserById` but dropped fetchUser. The r2 0.6B lost `spelled` instead ("Jordan9").
 - No other check flipped, no saved output hit its token budget, and there are 0 gate rejects.
-- This round's bars were at least 39/42 for the 2B and 34/42 for the 0.6B. The 0.6B still clears its bar at 36/42; the 2B now misses its bar by one case at 38/42. The bars were left for the owner to decide.
+- This round's bars were at least 39/42 for the 2B and 34/42 for the 0.6B. The 0.6B still clears its bar at 36/42; the 2B now misses its bar by one case at 38/42. The owner kept both bars and recorded the 2B's 38/42 as a known gap; code identifiers are deferred to the next writing-model round, not retrained now.
 - s1-mini (26/42) and untuned Qwen3.5-2B (18/42) keep their earlier scores, because their outputs were deleted on 2026-11-07.
 - `1e18473` also gives the teacher the student's rules (normalised, first 1,200 code points). None of the 2,789 rule-bearing training rows in `mix2br` or `mix06r` exceeds 1,200 code points; the longest rules text in the dataset is 839. So no label follows a rule beyond the cut.
 - `train/*-rules-r2.yaml` now holds the values that ran: 505 iterations (one epoch of 2,022 rows) and cosine decay `[1.0e-4, 126, 1.0e-5]`.
