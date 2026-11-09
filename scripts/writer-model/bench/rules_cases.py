@@ -47,8 +47,10 @@ case("customers_word", "rule_applied",
 case("dash_lists", "rule_applied",
      "a few things for tomorrow first send the invoice to Acme second update the roadmap doc and third book flights for the offsite",
      "A few things for tomorrow:\n\n- Send the invoice to Acme.\n- Update the roadmap doc.\n- Book flights for the offsite.",
-     rules="Format lists with dashes, not numbers.", must=["Acme", "roadmap", "flights"],
-     regex=[r"(?m)^- .*\n\n?- .*\n\n?- "], not_regex=[r"(?m)^\d+[.)] "])
+     rules="Format lists with dashes, not numbers.", regex=[r"(?m)^- .*\n\n?- .*\n\n?- ",
+            # each task in its own item
+            r"(?im)^- (?!.*(roadmap|flights)).*Acme", r"(?im)^- (?!.*(Acme|flights)).*roadmap",
+            r"(?im)^- (?!.*(Acme|roadmap)).*flights"], not_regex=[r"(?m)^\d+[.)] "])
 case("ok_not_okay", "rule_applied", "so the build passed and I think we're okay to ship on Monday",
      "So the build passed, and I think we're OK to ship on Monday.",
      rules="Write OK, not okay.", must=["OK to ship"], must_not=["okay"])
@@ -77,7 +79,10 @@ case("metric_abbrev", "rule_applied", "the box weighs about twelve kilograms so 
      rules="Abbreviate metric units (km, kg, cm).", must=["12 kg"], must_not=["kilograms"])
 case("checkbox_todos", "rule_applied", "things to do today call the bank renew my passport and pick up the dry cleaning",
      "Things to do today:\n\n- [ ] Call the bank\n- [ ] Renew my passport\n- [ ] Pick up the dry cleaning",
-     rules="When I list tasks, make each one a checkbox: - [ ] task", must=["bank", "passport", "dry cleaning"], regex=[r"(?m)^- \[ \] .*\n\n?- \[ \] .*\n\n?- \[ \] "])
+     rules="When I list tasks, make each one a checkbox: - [ ] task", regex=[r"(?m)^- \[ \] .*\n\n?- \[ \] .*\n\n?- \[ \] ",
+            r"(?im)^- \[ \] (?!.*(passport|dry cleaning)).*bank",
+            r"(?im)^- \[ \] (?!.*(bank|dry cleaning)).*passport",
+            r"(?im)^- \[ \] (?!.*(bank|passport)).*dry cleaning"])
 case("multi_rules", "rule_applied", "great news we hired three engineers two designers and a product manager this month",
      "Great news. We hired three engineers, two designers, and a product manager this month.",
      rules="1. Always use the Oxford comma.\n2. Write numbers under ten as words.\n3. No exclamation marks.",
