@@ -28,7 +28,7 @@ case("corr_marker_far", "correction",
 case("corr_dependent", "correction",
      "the demo is on the fifth the fifth works for the client too sorry I meant the sixth",
      "The demo is on the 6th. The 6th works for the client too.",
-     must=["client"], must_not=["fifth", "5th", "sorry", "I meant"], regex=[r"(?i)sixth|6th"],
+     must_not=["fifth", "5th", "sorry", "I meant"], regex=[r"(?i)sixth|6th", r"(?i)\bworks? for the client"],
      not_regex=[r"(?i)\b(?!6th\b)\d{1,2}(st|nd|rd|th)\b|\b(first|second|third|fourth|seventh|eighth|ninth|tenth)\b"])
 case("restatement_nomarker", "restatement",
      "can you send the invoice to the accounts team by can you send the invoice to the accounts payable team by end of day tomorrow",

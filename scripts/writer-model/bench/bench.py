@@ -31,7 +31,7 @@ p.add_argument("--out", required=True)
 p.add_argument("--only", default=None, help="comma-separated case ids")
 # For fine-tunes trained on their own prompt: an optional system message, the
 # user message format ({prefix} and {raw}), and --no-chat for raw completion.
-p.add_argument("--system", default=None, help="file holding a system message")
+p.add_argument("--system", default=None, help="file holding a system message; stripped, as the app sends system.txt")
 p.add_argument("--user-format", default="{prefix}RAW: {raw}\nCLEAN:")
 p.add_argument("--no-chat", action="store_true")
 p.add_argument("--student", action="store_true",

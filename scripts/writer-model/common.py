@@ -143,7 +143,9 @@ def teacher_request(rec):
     vocabulary. The text is the same as production's."""
     vocab = rec.get("vocabulary") or []
     field = field_context(rec.get("field"))
-    user_rules = ([spelling_line(rec["spelling"])] if rec.get("spelling") else []) + [writing_rules(rec.get("rules"))]
+    # The rules the student sees, so no label follows a rule cut from its input.
+    user_rules = ([spelling_line(rec["spelling"])] if rec.get("spelling") else []) + [
+        writing_rules(student_rules(rec.get("rules")))]
     stable_b = "\n\n".join(([vocab_section(vocab)] if vocab else []) + [EXAMPLES, LAYOUT_REMINDER])
     cache = {"type": "ephemeral", "ttl": "1h"}
     system = [{"type": "text", "text": RULES, "cache_control": cache},

@@ -28,6 +28,9 @@ def shingles(s, n=13):
 
 cases = read_jsonl(args.cases)
 rows = [r for path in args.rows for r in read_jsonl(path)]
+if not rows:
+    write_jsonl(args.out, [])
+    raise SystemExit("0 rows to check")
 bench = set().union(*(shingles(c["raw"]) | shingles(c["reference"]) for c in cases))
 emb = SentenceTransformer(args.embed_model, device="cpu")
 cv = emb.encode([c["raw"] for c in cases], normalize_embeddings=True)

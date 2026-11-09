@@ -172,7 +172,11 @@ def profiles():
         size = "1 to 3 rules" if args.set == "format" else "1 to 5 rules (mostly 2 to 4)"
         text = (f"Theme: {themes[theme]}\n\nWrite {args.per_theme} different users' rule boxes, each with {size}. "
                 f"Formats, in order: {'; '.join(fmts[theme])}.")
-        items = ask(PROFILE_SYSTEM, text) or []
+        try:
+            items = ask(PROFILE_SYSTEM, text) or []
+        except Exception as e:  # saved themes stay saved; this one is retried on the next run
+            print(f"{theme}: {e}")
+            items = []
         return theme, [it for it in items if isinstance(it, dict) and str(it.get("rules_text", "")).strip()]
 
     with ThreadPoolExecutor(args.workers) as ex:
@@ -207,8 +211,9 @@ def inputs():
         keep = set(args.only.split(","))
         profs = [p for p in profs if p["profile"] in keep]
     out = Path(args.out)
+    out.parent.mkdir(parents=True, exist_ok=True)
     have = read_jsonl(out) if out.exists() else []
-    done = {r["call"] for r in have}
+    done = {r["call"] for r in have if "call" in r}  # --pool rows have none
 
     def run(prof):
         call = f"{prof['profile']}-s{args.seed}"
