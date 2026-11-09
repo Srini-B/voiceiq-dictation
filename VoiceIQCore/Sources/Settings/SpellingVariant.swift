@@ -46,6 +46,12 @@ public enum SpellingVariant: String, CaseIterable, Sendable {
         return "Spelling: when the dictation is in \(language), use \(name) spelling, vocabulary, and conventions for dates and units. Never translate into another language."
     }
 
+    /// The variant VoiceIQ Writer's prompt names (`LocalWriterPrompt.user`),
+    /// or nil: the model writes English only.
+    public var writerName: String? {
+        language == "English" ? name : nil
+    }
+
     private var language: String {
         switch self {
         case .automatic: return ""

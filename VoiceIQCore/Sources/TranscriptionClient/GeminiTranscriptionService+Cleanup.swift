@@ -36,8 +36,8 @@ extension GeminiTranscriptionService {
     /// downloaded; nil leaves the dictation to the provider, which writes
     /// until the selected size is downloaded. The output goes
     /// through the same gate as the cloud's. There is no reminder retry: the
-    /// model learned the default rules only, so a dictated question it
-    /// answered inserts the transcript.
+    /// model was not trained with one, so a dictated question it answered
+    /// inserts the transcript.
     private func runLocalCleanup(raw: String, context: DictationContext) async -> (model: LocalWriterModel, outcome: CleanupOutcome)? {
         guard settings.writingSource == .onDevice, let makeWriter else { return nil }
         let model = settings.localWriterModel
@@ -51,8 +51,13 @@ extension GeminiTranscriptionService {
         // device and insert the transcript rather than send it to the provider.
         guard let directory else { return downloaded ? (model, .unavailable(reason: "busy (on-device writer)")) : nil }
         let field = settings.fitToExistingText ? context.focusedField?.surroundingText : nil
+        // A previous revision, still in use until its update is installed,
+        // learned the default rules only.
+        let followsRules = directory == model.manifest.installDirectory
         let user = LocalWriterPrompt.user(
-            raw: raw, vocabulary: DictionaryStore().sanitizedVocabulary(), app: context.targetAppName,
+            raw: raw, spelling: followsRules ? settings.spellingVariant.writerName : nil,
+            rules: followsRules ? settings.customWritingRules : nil,
+            vocabulary: DictionaryStore().sanitizedVocabulary(), app: context.targetAppName,
             title: context.focusedField?.windowTitle, page: context.focusedField?.pageURL,
             before: field?.before, after: field?.after
         )

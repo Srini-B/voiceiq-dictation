@@ -67,8 +67,7 @@ public struct LocalWriterControls: View {
 }
 
 /// Section footer while on-device writing is on: the provider writes until
-/// the selected size is downloaded, and the model knows only the default
-/// rules.
+/// the selected size is downloaded.
 @MainActor
 public struct LocalWriterFooter: View {
     private let enabled: Bool
@@ -82,12 +81,8 @@ public struct LocalWriterFooter: View {
 
     public var body: some View {
         Group {
-            if LocalModelSupport.isAvailable, enabled {
-                if store.state == .ready {
-                    Text("VoiceIQ Writer follows the default writing rules. Custom rules and spelling apply when \(provider.displayName) writes.")
-                } else {
-                    Text("\(provider.displayName) writes until \(store.displayName) is downloaded.")
-                }
+            if LocalModelSupport.isAvailable, enabled, store.state != .ready {
+                Text("\(provider.displayName) writes until \(store.displayName) is downloaded.")
             }
         }
         .onAppear { provider = SettingsStore().preferredProvider }
