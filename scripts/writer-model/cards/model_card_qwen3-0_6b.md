@@ -55,12 +55,14 @@ Measured with mlx-lm 0.32.2 on a Mac mini (M2, 16 GB), greedy decoding, the syst
 
 | Model | Passed | Answered or injected | Median total | Cached time to first token | Generation | Peak memory |
 | --- | --- | --- | --- | --- | --- | --- |
-| **This revision (4-bit)** | **37/42** | 0 | 0.13 s | 0.04 s | 200 tok/s | 0.53 GB |
-| Previous revision `2c328e6` (default rules only) | 35/42 | 0 | 0.13 s | 0.04 s | 195 tok/s | 0.53 GB |
-| VoiceIQ Writer Qwen3.5-2B, this round, 4-bit | 39/42 | 0 | 0.34 s | 0.10 s | 77 tok/s | 1.24 GB |
-| superwhisper/s1-mini (own prompt) | 26/42 | 0 | | | | |
+| **This revision (4-bit)** | **36/42** | 0 | 0.13 s | 0.04 s | 200 tok/s | 0.53 GB |
+| Previous revision `2c328e6` (default rules only) | 34/42 | 0 | 0.13 s | 0.04 s | 195 tok/s | 0.53 GB |
+| VoiceIQ Writer Qwen3.5-2B, this round, 4-bit | 38/42 | 0 | 0.34 s | 0.10 s | 77 tok/s | 1.24 GB |
+| superwhisper/s1-mini (own prompt), earlier checks | 26/42 | 0 | | | | |
 
-The five failures: a change of mind kept at the proposal instead of the final position, a short shopping list written as plain lines instead of bullets, sound-alikes left uncorrected ("there going"), a clarification not put in parentheses, and one tangled word order left as spoken. Use the 2B model where memory and speed allow; this one is for devices where 2B is too slow, such as an iPhone CPU.
+The six failures: a change of mind kept at the proposal instead of the final position, a short shopping list written as plain lines instead of bullets, sound-alikes left uncorrected ("there going"), a clarification not put in parentheses, one tangled word order left as spoken, and the function names in "rename get user by id to fetch user" left as spoken words instead of `getUserById` and `fetchUser`.
+
+Scored with the benchmark's checks as of 2026-11-09 (VoiceIQ commit `1e18473`), which require the dictated function names written as identifiers and fail any output cut off at its token budget. The s1-mini row was scored with the earlier checks; its outputs were not kept. Use the 2B model where memory and speed allow; this one is for devices where 2B is too slow, such as an iPhone CPU.
 
 **VoiceIQ's 41-case custom-rules benchmark** (held out; each case carries a user's rules and/or spelling variant):
 
@@ -78,7 +80,7 @@ It applies house terms ("customers"), product names, metric abbreviations, check
 
 ## Files
 
-The MLX 4-bit model is for Macs (mlx-lm, mlx-swift-lm). `voiceiq-writer-qwen3-0_6b-q4_1.gguf` is the same weights for llama.cpp (b12198 or later), repacked exactly from the MLX 4-bit grid as Q4_1 (`scripts/writer-model/to_gguf.py`); the VoiceIQ iPhone app runs it on the CPU. Its outputs on both benchmarks are identical to MLX's on 82 of 83 cases. Earlier revisions stay available by commit.
+The MLX 4-bit model is for Macs (mlx-lm, mlx-swift-lm). `voiceiq-writer-qwen3-0_6b-q4_1.gguf` is the same weights for llama.cpp (b12198 or later), repacked exactly from the MLX 4-bit grid as Q4_1 (`scripts/writer-model/to_gguf.py`); the VoiceIQ iPhone app runs it on the CPU. Its outputs on both benchmarks are identical to MLX's on 82 of 83 cases, and it scores the same. Earlier revisions stay available by commit.
 
 ## Training data
 

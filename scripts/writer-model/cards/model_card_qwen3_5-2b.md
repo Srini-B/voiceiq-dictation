@@ -55,13 +55,15 @@ Measured with mlx-lm 0.32.2 on a Mac mini (M2, 16 GB), greedy decoding, the syst
 
 | Model | Passed | Answered or injected | Median total | Cached time to first token | Generation | Peak memory |
 | --- | --- | --- | --- | --- | --- | --- |
-| **This revision (4-bit)** | **39/42** | 0 | 0.34 s | 0.10 s | 77 tok/s | 1.24 GB |
-| Previous revision `0efe70d` (default rules only) | 40/42 | 0 | 0.33 s | 0.10 s | 76 tok/s | 1.24 GB |
-| VoiceIQ Writer Qwen3-0.6B, this round, 4-bit | 37/42 | 0 | | | | 0.53 GB |
-| superwhisper/s1-mini (own prompt) | 26/42 | 0 | | | | |
-| Qwen3.5-2B, untuned, full production prompt | 18/42 | 1 | | | | |
+| **This revision (4-bit)** | **38/42** | 0 | 0.34 s | 0.10 s | 77 tok/s | 1.24 GB |
+| Previous revision `0efe70d` (default rules only) | 39/42 | 0 | 0.33 s | 0.10 s | 76 tok/s | 1.24 GB |
+| VoiceIQ Writer Qwen3-0.6B, this round, 4-bit | 36/42 | 0 | | | | 0.53 GB |
+| superwhisper/s1-mini (own prompt), earlier checks | 26/42 | 0 | | | | |
+| Qwen3.5-2B, untuned, full production prompt, earlier checks | 18/42 | 1 | | | | |
 
-The three failures: a change of mind written "keep the standup at ten" where the check wants "10", a side note ("the designer from the Pune office") kept, and one tangled word order left as spoken.
+The four failures: a change of mind written "keep the standup at ten" where the check wants "10", a side note ("the designer from the Pune office") kept, one tangled word order left as spoken, and the function names in "rename get user by id to fetch user" left as spoken words instead of `getUserById` and `fetchUser`. The previous revision fails the last one too.
+
+Scored with the benchmark's checks as of 2026-11-09 (VoiceIQ commit `1e18473`), which require the dictated function names written as identifiers and fail any output cut off at its token budget. The s1-mini and untuned Qwen3.5-2B rows were scored with the earlier checks; their outputs were not kept.
 
 **VoiceIQ's 41-case custom-rules benchmark** (held out; each case carries a user's rules and/or spelling variant):
 

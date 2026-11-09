@@ -9,7 +9,7 @@ The cloud cleanup follows each user's custom writing rules and spelling variant.
 - New public revisions: `cyron/voiceiq-writer-qwen3_5-2b` at `f9e2204333dfcd43432e983f8cd3f221150f72c9` and `cyron/voiceiq-writer-qwen3-0_6b` at `ad95a957445c6dcfd9bd515dda4f73140e64924b`. Each holds the MLX 4-bit files and the Q4_1 GGUF. The earlier revisions stay reachable.
 - Private dataset `cyron/voiceiq-writer-data` is at `03f4e151cf5a985b4db66c8bdf25db2cf5b9d461`. The rules data, both training mixes and the round's evaluation results are under `eval/rules-round/`.
 - On the new 41-case custom-rules benchmark, the 2B scores 33/41, up from 20/41. The 0.6B scores 26/41, also up from 20/41.
-- On the 42-case benchmark, the 2B scores 39/42 (previously 40) and the 0.6B 37/42 (previously 35), with no answered or injected output.
+- On the 42-case benchmark, the 2B scores 38/42 (previously 39) and the 0.6B 36/42 (previously 34), with no answered or injected output. These use the checks as of `1e18473`; see "Rescore on the tightened bench" below.
 - The student prompt gains optional `Spelling:` and `Rules: <rules>…</rules>` lines before the context lines. With neither, it is unchanged.
 - The apps send both lines to the new revisions. The footer saying they apply only in the cloud is gone.
 - See [docs/WRITER_MODEL.md](../docs/WRITER_MODEL.md).
@@ -28,8 +28,8 @@ The cloud cleanup follows each user's custom writing rules and spelling variant.
 - `score.py --self-test`: 42/42 and 41/41 references pass.
 - Anonymous download of both repos at the new revisions:
   - Every file's size and SHA-256 match the app manifest.
-  - MLX: 2B 39/42 and 33/41; 0.6B 37/42 and 26/41.
-  - GGUF through llama-server on CPU: 2B 39/42 and 31/41; 0.6B 37/42 and 26/41.
+  - MLX: 2B 39/42 and 33/41; 0.6B 37/42 and 26/41 (with the checks of the time; 38/42 and 36/42 after the rescore).
+  - GGUF through llama-server on CPU: 2B 39/42 and 31/41; 0.6B 37/42 and 26/41 (38/42 and 36/42 after the rescore).
   - All 166 outputs per size are byte-identical to the pre-upload runs, and llama.cpp tokenizes every prompt as the Hugging Face tokenizer does.
 - Held-out slices, similarity to Sonnet:
   - 600 general rows: 2B 0.886 (previously 0.874), 0.6B 0.867 (previously 0.871).
@@ -37,6 +37,28 @@ The cloud cleanup follows each user's custom writing rules and spelling variant.
   - No gate rejection is an answered or injected output.
 - Cost: about $15.51 of Anthropic API, $0.51 over the $15 cap. The format set's labels cost $4.52 against a $3.2 projection, because of fewer cache hits and longer outputs. No cloud GPU was used.
 - All downloads and intermediates were deleted on the Mac mini (30 GB) and in the orb.
+
+## Rescore on the tightened bench (2026-11-09)
+
+CodeRabbit and the owner found loose checks, so `9c8c503`, `607b800` and `1e18473` tightened `corr_dependent`, `spelled`, `technical_ids`, `dash_lists`, `checkbox_todos` and `no_contractions`, and `score.py` now fails an output stopped at its token budget. Every saved result was rescored without rerunning the models. The default-rules GGUFs' 42-case files had been lost from the Mac's `/tmp`, so `683b586` and `4dafcd4` were downloaded anonymously, rerun with `bench_llama.py` (0 prompt mismatches) and deleted.
+
+| Variant | 42 cases, before → after | Rules cases (unchanged) |
+| --- | --- | --- |
+| 2B shipped `f9e2204`, MLX and GGUF | 39 → 38 | 33/41 MLX, 31/41 GGUF |
+| 2B previous MLX `0efe70d` / GGUF `683b586` | 40 → 39 | 20/41 / 19/41 |
+| 0.6B shipped `ad95a95`, MLX and GGUF | 37 → 36 | 26/41 |
+| 0.6B previous MLX `2c328e6` / GGUF `4dafcd4` | 35 → 34 | 20/41 / 21/41 |
+| 2B r2 (unshipped), MLX / GGUF | 36 → 35 | 33/41 / 32/41 |
+| 0.6B r2 (unshipped), MLX / GGUF | 34 → 33, 33 → 32 | 36/41 / 37/41 |
+| Teacher, Sonnet 5.5 | | 36/41 |
+
+- Each fine-tune lost `technical_ids`: it writes "get user by id" and "fetch user" as spoken words. The r2 2B wrote `getUserById` but dropped fetchUser. The r2 0.6B lost `spelled` instead ("Jordan9").
+- No other check flipped, no saved output hit its token budget, and there are 0 gate rejects.
+- This round's bars were at least 39/42 for the 2B and 34/42 for the 0.6B. The 0.6B still clears its bar at 36/42; the 2B now misses its bar by one case at 38/42. The bars were left for the owner to decide.
+- s1-mini (26/42) and untuned Qwen3.5-2B (18/42) keep their earlier scores, because their outputs were deleted on 2026-11-07.
+- `1e18473` also gives the teacher the student's rules (normalised, first 1,200 code points). None of the 2,789 rule-bearing training rows in `mix2br` or `mix06r` exceeds 1,200 code points; the longest rules text in the dataset is 839. So no label follows a rule beyond the cut.
+- `train/*-rules-r2.yaml` now holds the values that ran: 505 iterations (one epoch of 2,022 rows) and cosine decay `[1.0e-4, 126, 1.0e-5]`.
+- Both model cards got README-only commits; the weights and the app manifests' pins did not change.
 
 ## Rollback
 
