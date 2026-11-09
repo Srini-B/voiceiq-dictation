@@ -178,13 +178,13 @@ public final class LocalModelStore: ObservableObject {
         default:
             return
         }
-        let manifest = manifest
+        let manifest = manifest, downloadBytes = updateBytes
         downloadTask = Task { [weak self] in
             await self?.cleanupTask?.value
             var failure: String?
             var cancelled = false
             do {
-                try await LocalModelInstaller.install(manifest, reusing: previous) { bytes in
+                try await LocalModelInstaller.install(manifest, reusing: previous, downloadBytes: downloadBytes) { bytes in
                     Task { @MainActor in self?.report(bytes: bytes) }
                 }
             } catch is CancellationError {

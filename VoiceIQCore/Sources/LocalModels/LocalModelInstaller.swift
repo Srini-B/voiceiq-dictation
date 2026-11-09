@@ -118,9 +118,11 @@ enum LocalModelInstaller {
     /// Downloads every file into a staging folder, verifies each one, then
     /// renames the folder into place. `progress` receives total bytes downloaded.
     /// With `previous`, the folder of the revision in use, a file it already
-    /// holds byte for byte is copied from it instead of downloaded.
-    static func install(_ manifest: LocalModelManifest, reusing previous: URL? = nil,
+    /// holds byte for byte is copied from it instead of downloaded, and only
+    /// `downloadBytes` (`updateBytes`) need to be free.
+    static func install(_ manifest: LocalModelManifest, reusing previous: URL? = nil, downloadBytes: Int64? = nil,
                         progress: @escaping @Sendable (Int64) -> Void) async throws {
+        let required = previous == nil ? manifest.totalBytes : downloadBytes ?? manifest.totalBytes
         let fileManager = FileManager.default
         let root = manifest.rootDirectory
         let staging = root.appendingPathComponent(stagingPrefix + UUID().uuidString, isDirectory: true)
@@ -128,7 +130,7 @@ enum LocalModelInstaller {
         defer { downloader.invalidate() }
         do {
             try fileManager.createDirectory(at: staging, withIntermediateDirectories: true)
-            try checkFreeSpace(at: root, required: manifest.totalBytes)
+            try checkFreeSpace(at: root, required: required)
             var completed: Int64 = 0
             for file in manifest.files {
                 try Task.checkCancellation()
@@ -159,7 +161,7 @@ enum LocalModelInstaller {
             try fileManager.moveItem(at: staging, to: target)
         } catch {
             try? fileManager.removeItem(at: staging)
-            throw LocalModelInstallError.normalize(error, required: manifest.totalBytes)
+            throw LocalModelInstallError.normalize(error, required: required)
         }
     }
 
