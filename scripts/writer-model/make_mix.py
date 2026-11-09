@@ -57,4 +57,6 @@ out = Path(args.out)
 out.mkdir(parents=True, exist_ok=True)
 (out / "train.jsonl").write_text("\n".join(train) + "\n")
 (out / "valid.jsonl").write_text("\n".join(valid) + "\n")
+# trim_long.py reads train_full.jsonl when present; a stale one would replace this mix.
+(out / "train_full.jsonl").unlink(missing_ok=True)
 print(f"train {len(train)} valid {len(valid)} (dropped {dropped} held-out train rows)")
