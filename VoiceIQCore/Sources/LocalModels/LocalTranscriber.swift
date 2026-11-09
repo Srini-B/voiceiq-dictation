@@ -94,6 +94,9 @@ public final class LocalTranscriber: DictationStreaming, Sendable {
         let ring = ring
         let load = Task {
             await LocalModelWarmup.finished(before: id)
+            // A dictation cancelled while it waited, as behind an iPhone
+            // writer, must not load beside that writer.
+            guard !Task.isCancelled else { return }
             let loadStarted = Date()
             let loaded = await worker.load(from: directory)
             if !Task.isCancelled {

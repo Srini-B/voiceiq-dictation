@@ -287,16 +287,18 @@ final class AppModel: ObservableObject {
         }
     }
 
-    private func start(_ command: KeyboardCommand) {
+    /// Starts the command's dictation, or posts why it can't and returns that.
+    @discardableResult
+    private func start(_ command: KeyboardCommand) -> String? {
         if let problem = startBlocker() {
             session.post(notice: problem)
-            return
+            return problem
         }
         // Translate and Ask always use the provider, even when dictation
         // runs fully on device without a key.
         if command.mode != .dictate, !KeychainStore.hasModelKey {
             session.post(notice: "Add an API key in VoiceiQ")
-            return
+            return "Add an API key to use Translate and Ask"
         }
         target.host = command.hostBundleID
         currentMode = command.mode
@@ -308,10 +310,12 @@ final class AppModel: ObservableObject {
         case .ask: mode = .askAnything(selectedText: command.context)
         }
         guard coordinator.handle(.begin, mode: mode) else {
-            session.post(notice: coordinator.coachingHint ?? "Still working on the last one")
-            return
+            let problem = coordinator.coachingHint ?? "Still working on the last one"
+            session.post(notice: problem)
+            return problem
         }
         coordinator.handle(.lockIn)
+        return nil
     }
 
     private func startBlocker() -> String? {
@@ -389,12 +393,12 @@ final class AppModel: ObservableObject {
             showSetupProblem()
             return
         }
-        let command = processed.contains(commandID) ? nil
-            : store.commands.first(where: { $0.id == commandID && $0.isFresh() })
-        // Translate and Ask need the provider; stay here so the user can add a key.
+        // Translate and Ask need the provider; stay here so the user can add a
+        // key, also when the command was already refused in place.
+        let command = store.commands.first { $0.id == commandID }
         if let command, command.mode != .dictate, !KeychainStore.hasModelKey {
             SessionDiagnostics.note("keyboard start refused: \(command.mode) needs a key")
-            accept(command)
+            if !processed.contains(commandID) { accept(command) }
             banner = "Add an API key to use Translate and Ask"
             return
         }
@@ -406,9 +410,14 @@ final class AppModel: ObservableObject {
                 return
             }
         }
-        if let command {
+        // Freshness is checked after the session starts, which can take a moment.
+        if let command, !processed.contains(commandID), command.isFresh() {
             accept(command)
-            start(command)
+            if let problem = start(command) {
+                SessionDiagnostics.note("keyboard start refused: \(problem)")
+                banner = problem
+                return
+            }
         }
         hostReturn.returnToHost(host, isRecording: { [weak self] in
             if case .recording = self?.coordinator.state { return true }
