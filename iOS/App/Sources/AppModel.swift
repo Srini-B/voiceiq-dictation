@@ -389,6 +389,15 @@ final class AppModel: ObservableObject {
             showSetupProblem()
             return
         }
+        let command = processed.contains(commandID) ? nil
+            : store.commands.first(where: { $0.id == commandID && $0.isFresh() })
+        // Translate and Ask need the provider; stay here so the user can add a key.
+        if let command, command.mode != .dictate, !KeychainStore.hasModelKey {
+            SessionDiagnostics.note("keyboard start refused: \(command.mode) needs a key")
+            accept(command)
+            banner = "Add an API key to use Translate and Ask"
+            return
+        }
         if !session.isActive {
             do {
                 try session.begin()
@@ -397,8 +406,7 @@ final class AppModel: ObservableObject {
                 return
             }
         }
-        if !processed.contains(commandID), let command = store.commands.first(where: { $0.id == commandID }),
-           command.isFresh() {
+        if let command {
             accept(command)
             start(command)
         }

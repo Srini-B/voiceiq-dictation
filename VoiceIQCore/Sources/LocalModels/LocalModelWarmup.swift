@@ -126,6 +126,9 @@ public enum LocalModelWarmup {
     /// A warm-up or an adopted dictation load is in progress.
     public static var isLoading: Bool { current != nil }
 
+    /// The writer is running (`alone`); no speech model may load beside it.
+    static var isWriting: Bool { current.map { $0.model == nil } ?? false }
+
     /// Waits for every warm-up and adopted load to end. Polls rather than
     /// awaiting their tasks, so a cancelled caller stops waiting at once.
     public static func finished() async {

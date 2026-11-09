@@ -64,7 +64,10 @@ public struct LocalMeetingTranscriber: Sendable {
         let cancel: @Sendable () async -> Void = { await job.cancel() }
         let clock = ContinuousClock(), deadline = clock.now + busyWait
         while true {
-            if let speech = LocalModelStore.store(for: model).acquireSession(id: id, cancel: cancel) {
+            // On iPhone and iPad the writer runs with no speech model beside
+            // it; checked and claimed in one main-actor turn.
+            if !LocalModelWarmup.isWriting,
+               let speech = LocalModelStore.store(for: model).acquireSession(id: id, cancel: cancel) {
                 guard diarizes else {
                     return LocalMeetingTranscriber(runner: runner, model: model, speech: speech, diarizer: nil, id: id, job: job)
                 }
