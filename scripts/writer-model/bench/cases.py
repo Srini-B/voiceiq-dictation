@@ -28,7 +28,8 @@ case("corr_marker_far", "correction",
 case("corr_dependent", "correction",
      "the demo is on the fifth the fifth works for the client too sorry I meant the sixth",
      "The demo is on the 6th. The 6th works for the client too.",
-     must_not=["fifth", "5th", "sorry", "I meant"], regex=[r"(?i)sixth|6th"])
+     must_not=["fifth", "5th", "sorry", "I meant"], regex=[r"(?i)sixth|6th"],
+     not_regex=[r"(?i)\b(?!6th\b)\d{1,2}(st|nd|rd|th)\b|\b(first|second|third|fourth|seventh|eighth|ninth|tenth)\b"])
 case("restatement_nomarker", "restatement",
      "can you send the invoice to the accounts team by can you send the invoice to the accounts payable team by end of day tomorrow",
      "Can you send the invoice to the accounts payable team by end of day tomorrow?",
@@ -182,7 +183,7 @@ case("no_dashes", "punctuation",
 case("spelled", "spelling",
      "my username is capital J o r d a n underscore nine",
      "My username is Jordan_9.",
-     regex=[r"Jordan_?(9|nine)"])
+     regex=[r"\bJordan_9\b"])
 case("word_order", "word_order",
      "I'll log in with my phone to the admin panel later",
      "I'll log in to the admin panel with my phone later.",
@@ -190,7 +191,7 @@ case("word_order", "word_order",
 case("technical_ids", "technical",
      "rename get user by id to fetch user and update the user service dot ts file",
      "Rename getUserById to fetchUser and update the userService.ts file.",
-     regex=[r"(?i)user[_ ]?service\.ts"])
+     regex=[r"(?i)user[_ ]?service\.ts", r"(?i)\bget_?user_?by_?id\b", r"(?i)\bfetch_?user\b"])
 
 # --- Preserve voice, no additions, long input --------------------------------
 case("voice_casual", "voice",

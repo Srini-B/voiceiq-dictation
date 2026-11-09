@@ -114,7 +114,9 @@ for path in [a for a in sys.argv[1:] if a.endswith(".jsonl") and a != CASES]:
     for r in recs:
         c = cases[r["id"]]
         out = strip_artifacts(r["output"])
-        f = check(c, out)
+        # The app inserts the transcript when generation stops at its token
+        # budget (mlx-lm "length", llama-server "limit"), so a capped output fails.
+        f = check(c, out) + (["hit max_tokens"] if r.get("finish") in ("length", "limit") else [])
         g = gate(c["raw"], out)
         ok = not f and g == "ok"
         passed += ok
