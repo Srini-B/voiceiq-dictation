@@ -22,6 +22,7 @@ import json
 import random
 import re
 import threading
+from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -165,6 +166,11 @@ def profiles():
     done = {r["theme"] for r in have}
     rng = random.Random(args.seed)
     themes = FORMAT_THEMES if args.set == "format" else THEMES
+    # A theme is kept once it has any profile; rerunning one would renumber the
+    # profile IDs that inputs already use. Report short themes instead.
+    short = {t: n for t, n in Counter(r["theme"] for r in have).items() if t in themes and n < args.per_theme}
+    if short:
+        print(f"themes with fewer than {args.per_theme} profiles (kept): {short}")
 
     fmts = {t: [rng.choice(FORMATS) for _ in range(args.per_theme)] for t in themes}
 
@@ -214,6 +220,13 @@ def inputs():
     out.parent.mkdir(parents=True, exist_ok=True)
     have = read_jsonl(out) if out.exists() else []
     done = {r["call"] for r in have if "call" in r}  # --pool rows have none
+    # A finished call is not repeated, as its rows are already labelled downstream;
+    # report calls that returned fewer rows than asked.
+    asked = {p["profile"]: args.per_profile if p["rules"] else args.per_spelling for p in profs}
+    short = {c: n for c, n in Counter(r["call"] for r in have if "call" in r).items()
+             if n < asked.get(c.rsplit("-s", 1)[0], 0)}
+    if short:
+        print(f"{len(short)} calls returned fewer rows than asked (kept): {dict(list(short.items())[:10])}")
 
     def run(prof):
         call = f"{prof['profile']}-s{args.seed}"
