@@ -223,7 +223,9 @@ Extensions page.
   folder, and on the Mac the helper's cache in
   `~/Library/Caches/io.blue.voiceiq.localspeech` (`FileLayout.removeRetiredModels`).
   That cleanup can be removed once every install has launched a build from
-  2026-11-10 or later.
+  2026-11-10 or later. On that first launch the app also switches to the
+  provider that has a saved key when the selected one has none
+  (`SettingsStore.adoptProviderWithKeyOnce`).
 
 ## The provider's side of the wire
 

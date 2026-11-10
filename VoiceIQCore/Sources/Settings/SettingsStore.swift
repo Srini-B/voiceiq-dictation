@@ -87,6 +87,23 @@ public struct SettingsStore: Sendable {
         Self.set(provider.rawValue, forKey: "modelProvider")
     }
 
+    /// Runs once per install, on the first cloud-only build. Older builds
+    /// dictated on device without a key, or kept Claude selected, so the
+    /// selected provider may have no key while the other one does: switch to
+    /// that one. Also drops the on-device settings those builds stored.
+    public func adoptProviderWithKeyOnce() {
+        guard !Self.defaults.bool(forKey: "didAdoptProviderWithKey") else { return }
+        Self.defaults.set(true, forKey: "didAdoptProviderWithKey")
+        let selected = preferredProvider
+        let provider = KeychainStore.hasKey(for: selected) ? selected
+            : ModelProvider.allCases.first(where: KeychainStore.hasKey(for:)) ?? selected
+        setPreferredProvider(provider)
+        for key in ["dictationSource", "meetingSource", "localTranscriptionEnabled", "localMeetingTranscriptionEnabled",
+                    "localSpeechModel", "localSpeechLanguage", "writingSource", "localWriterModel"] {
+            Self.defaults.removeObject(forKey: key)
+        }
+    }
+
     /// On by default since 2026-10-13: the transcript is finished when the
     /// user stops, so the wait is the writing model alone (measured 2.95 s
     /// end to end against 4.45 s median for batch). A refused socket falls

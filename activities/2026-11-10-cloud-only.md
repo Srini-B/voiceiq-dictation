@@ -32,6 +32,15 @@ dropped Claude as a provider.
   (`FileLayout.removeRetiredModels`). The Mac app is not sandboxed, so both
   paths are the real ones. Remove the cleanup once every install has launched
   a build from 2026-11-10 or later.
+- **Provider switch on upgrade.** Older builds dictated on device without a
+  key, or kept Claude selected. On the first launch of this build, on the Mac
+  and on iOS, `SettingsStore.adoptProviderWithKeyOnce` keeps the selected
+  provider if it has a saved key; otherwise it switches to the provider that
+  does. With no key saved, nothing changes and the app asks for one. It also
+  deletes the stored on-device settings (`dictationSource`, `meetingSource`,
+  `localSpeechModel`, `writingSource` and the like). The flag
+  `didAdoptProviderWithKey` keeps it from running again, so a later choice of
+  a provider without a key is left alone.
 - **Keyboard start.** A refused keyboard start now stays in VoiceiQ and shows
   the reason, instead of returning to the host app.
 

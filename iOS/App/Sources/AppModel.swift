@@ -48,6 +48,7 @@ final class AppModel: ObservableObject {
         FormattingSettingsMigration.splitWritingRulesOnce()
         FormattingSettingsMigration.removeLiveTranscriptionSettings()
         FileLayout.removeRetiredModels()
+        SettingsStore().adoptProviderWithKeyOnce()
         let client = GeminiClient(
             apiKey: { KeychainStore.loadAPIKey() },
             openAIKey: { KeychainStore.loadOpenAIKey() },

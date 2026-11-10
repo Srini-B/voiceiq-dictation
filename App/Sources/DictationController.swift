@@ -51,6 +51,7 @@ final class DictationController {
     init() {
         KeychainStore.migrateDevKeyFileIfPresent()
         FileLayout.removeRetiredModels()
+        SettingsStore().adoptProviderWithKeyOnce()
         let client = GeminiClient(
             apiKey: { KeychainStore.loadAPIKey() },
             openAIKey: { KeychainStore.loadOpenAIKey() },
