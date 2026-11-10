@@ -52,7 +52,6 @@ final class AppModel: ObservableObject {
             apiKey: { KeychainStore.loadAPIKey() },
             openAIKey: { KeychainStore.loadOpenAIKey() },
             openAIConfig: { SettingsStore().openAIConfig },
-            anthropicKey: { KeychainStore.loadKey(.anthropic) },
             provider: { SettingsStore().preferredProvider }
         )
         transcription = GeminiTranscriptionService(client: client)
@@ -63,7 +62,6 @@ final class AppModel: ObservableObject {
             config: { SettingsStore().geminiConfig },
             summaryModel: SettingsStore().geminiConfig.cleanupModel,
             providers: { SettingsStore().meetingProviders },
-            transcribers: { SettingsStore().meetingTranscribers },
             localMeeting: LocalSpeechInference.transcribeMeeting
         )
         let inserter = self.inserter
@@ -190,11 +188,10 @@ final class AppModel: ObservableObject {
 
     private func startHistoryServices() {
         guard let historyStore else { return }
-        let saved = SavedRecordingTranscription(cloud: transcription, makeSession: LocalSpeechInference.makeSession)
-        let scanner = RecoveryScanner(store: historyStore, transcription: saved)
+        let scanner = RecoveryScanner(store: historyStore, transcription: transcription)
         scanner.onRecovered = { [weak self] _ in self?.banner = RecoveryNotice.message(for: .relaunch, copied: false) }
         recoveryScanner = scanner
-        let queue = RetryQueue(store: historyStore, transcription: saved)
+        let queue = RetryQueue(store: historyStore, transcription: transcription)
         queue.onDrained = { [weak self] texts in
             let count = texts.count
             self?.banner = count == 1 ? "A queued dictation is ready in History" : "\(count) queued dictations are ready in History"
@@ -214,10 +211,7 @@ final class AppModel: ObservableObject {
         case .alreadyDone: return "Couldn't find this recording"
         case .stillOffline: return "Still offline. It will retry when you're back online."
         case .rateLimited(let wait): return "Rate limited. Retrying in \(Int(wait.rounded()))s."
-        case .blocked:
-            return KeychainStore.hasModelKey && !KeychainStore.canTranscribeInCloud
-                ? "Claude transcribes only on device. Download the model in Settings › Dictation."
-                : "Check your API key in Settings"
+        case .blocked: return "Check your API key in Settings"
         case .failed: return record.rawTranscript != nil ? "Couldn't transcribe it again. The earlier text is kept." : "Retry failed"
         case .busy: return "Already retrying"
         }
@@ -606,10 +600,7 @@ final class AppModel: ObservableObject {
         case .failed(let failure):
             if let message = coordinator.modeFailureMessage { return message }
             switch failure {
-            case .auth:
-                return KeychainStore.hasModelKey && !KeychainStore.canTranscribeInCloud
-                    ? "Claude transcribes only on device. It's in History."
-                    : "API key rejected. Check it in VoiceiQ."
+            case .auth: return "API key rejected. Check it in VoiceiQ."
             case .modelAccess: return "Model unavailable. Check Settings › Advanced."
             case .network: return "Couldn't reach the model. It's saved in History."
             case .rateLimited: return "Rate limited. Retry from History."

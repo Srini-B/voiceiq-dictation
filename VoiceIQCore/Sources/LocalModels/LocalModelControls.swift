@@ -319,14 +319,14 @@ public struct LocalMeetingPrivacyRow: View {
 /// claims audio stays local while the model is missing.
 @MainActor
 public struct LocalAudioPrivacyRow: View {
-    private let provider: String?
+    private let provider: String
     private let cloudDescription: String
     @State private var localEnabled = SettingsStore().localTranscriptionEnabled
     @State private var model = SettingsStore().localSpeechModel
 
-    /// `provider` names the cloud provider, nil when it cannot transcribe;
-    /// `cloudDescription` is the row's text while on-device transcription is off.
-    public init(provider: String?, cloudDescription: String) {
+    /// `provider` names the cloud provider; `cloudDescription` is the row's
+    /// text while on-device transcription is off.
+    public init(provider: String, cloudDescription: String) {
         self.provider = provider
         self.cloudDescription = cloudDescription
     }
@@ -345,7 +345,7 @@ public struct LocalAudioPrivacyRow: View {
     private struct Content: View {
         @ObservedObject var store: LocalModelStore
         let localEnabled: Bool
-        let provider: String?
+        let provider: String
         let cloudDescription: String
 
         var body: some View {
@@ -354,87 +354,10 @@ public struct LocalAudioPrivacyRow: View {
 
         private var value: String {
             let name = store.displayName
-            guard let provider else {
-                guard localEnabled else { return "Not sent: Claude doesn't transcribe" }
-                return store.state == .ready ? "Transcribed on device by \(name)" : "\(name) unavailable, so not sent anywhere"
-            }
             guard localEnabled else { return cloudDescription }
             return store.state == .ready
                 ? "Transcribed on device by \(name); sent to \(provider) only if that fails"
                 : "\(name) unavailable, so sent to \(provider)"
-        }
-    }
-}
-
-extension View {
-    /// Picking Claude, which has no speech model, warns when the on-device
-    /// models that dictation and meetings then need are not downloaded.
-    /// `openDictation` shows the Dictation settings, where they download.
-    @MainActor public func claudeVoiceAlert(provider: ModelProvider, openDictation: @escaping () -> Void) -> some View {
-        modifier(ClaudeVoiceAlert(provider: provider, openDictation: openDictation))
-    }
-}
-
-@MainActor
-private struct ClaudeVoiceAlert: ViewModifier {
-    let provider: ModelProvider
-    let openDictation: () -> Void
-    @State private var missing: Missing?
-
-    /// The models not downloaded, by name. Dictation needs only the speech
-    /// model; meetings on the Mac also need the diarizer.
-    private struct Missing {
-        var speech: String?
-        var diarizer: String?
-    }
-
-    func body(content: Content) -> some View {
-        content
-            .onChange(of: provider) { _, value in
-                guard !value.transcribes else { return }
-                let found = Self.missingModels
-                if found.speech != nil || found.diarizer != nil { missing = found }
-            }
-            .alert("Claude needs on-device models for voice",
-                   isPresented: Binding(get: { missing != nil }, set: { if !$0 { missing = nil } })) {
-                if LocalModelSupport.isAvailable {
-                    Button("Open Dictation Settings", action: openDictation)
-                    Button("Later", role: .cancel) {}
-                } else {
-                    Button("OK", role: .cancel) {}
-                }
-            } message: {
-                Text(message)
-            }
-    }
-
-    private static var missingModels: Missing {
-        let speech = LocalModelStore.store(for: SettingsStore().localSpeechModel)
-        let diarizer = LocalModelStore.speakerDiarizer
-        return Missing(
-            speech: speech.state == .ready ? nil : speech.displayName,
-            diarizer: LocalMeetingTranscriber.diarizes && diarizer.state != .ready ? diarizer.displayName : nil
-        )
-    }
-
-    private var message: String {
-        #if os(macOS)
-        let device = "this Mac", place = "Settings → Dictation"
-        #else
-        let device = "this iPhone", place = "Settings › Dictation"
-        #endif
-        guard LocalModelSupport.isAvailable else {
-            return "Claude has no speech model, and \(device) can't run on-device models, so dictation and meetings won't be transcribed with Claude."
-        }
-        switch (missing?.speech, missing?.diarizer) {
-        case let (speech?, diarizer?):
-            return "Claude has no speech model, so dictation and meetings are transcribed on \(device). Download \(speech) in \(place) to dictate, and \(diarizer) as well for meetings; until then, nothing you say is transcribed with Claude."
-        case let (speech?, nil):
-            return "Claude has no speech model, so dictation and meetings are transcribed on \(device). Download \(speech) in \(place); until then, nothing you say is transcribed with Claude."
-        case let (nil, diarizer?):
-            return "Claude has no speech model, so meetings are transcribed on \(device). Dictation already works on device; download \(diarizer) in \(place) to transcribe meetings with Claude."
-        case (nil, nil):
-            return ""
         }
     }
 }

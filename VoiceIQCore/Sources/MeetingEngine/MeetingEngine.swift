@@ -24,10 +24,9 @@ import VoiceIQSpeech
     private let config: () -> GeminiConfig
     private let transcribeModel: String?
     private let summaryModel: String
-    /// Providers to try in order for the notes; see `ModelProvider.meetingOrder`.
+    /// Providers to try in order for a cloud transcript and for the notes;
+    /// see `ModelProvider.meetingOrder`.
     private let providers: @Sendable () -> [ModelProvider]
-    /// Providers to try in order for a cloud transcript. Defaults to `providers`.
-    private let transcribers: @Sendable () -> [ModelProvider]
     /// On-device transcription, used when `LocalMeetingTranscriber` is ready.
     private let localMeeting: LocalMeetingRunner?
     private lazy var detector = CallDetector()
@@ -58,11 +57,9 @@ import VoiceIQSpeech
     public init(client: GeminiClient, store: MeetingStore = MeetingStore(), config: @escaping () -> GeminiConfig,
                 transcribeModel: String? = nil, summaryModel: String = "gemini-3.8-flash",
                 providers: @escaping @Sendable () -> [ModelProvider] = { [.gemini] },
-                transcribers: (@Sendable () -> [ModelProvider])? = nil,
                 localMeeting: LocalMeetingRunner? = nil, readsScreenNames: @escaping () -> Bool = { false }) {
         self.client = client; self.store = store; self.config = config; self.readsScreenNames = readsScreenNames
         self.transcribeModel = transcribeModel; self.summaryModel = summaryModel; self.providers = providers
-        self.transcribers = transcribers ?? providers
         self.localMeeting = localMeeting
         detector.onChange = { [weak self] source in self?.detected(source) }
         failInterruptedRecordings()
@@ -252,9 +249,9 @@ import VoiceIQSpeech
     /// that fails.
     private func transcribe(folder: URL, config cfg: GeminiConfig) async throws -> [TranscriptSegment] {
         let cloud = MeetingTranscriber(client: client, models: .init(transcribe: transcribeModel ?? cfg.transcribeModel),
-                                       endpoint: cfg.endpoint, providers: transcribers)
+                                       endpoint: cfg.endpoint, providers: providers)
         guard let local = try await acquireLocal() else {
-            guard !transcribers().isEmpty else { throw MeetingFailure.noRoute }
+            guard !providers().isEmpty else { throw MeetingFailure.noRoute }
             return try await cloud.transcribe(folder: folder)
         }
         do {
@@ -262,7 +259,7 @@ import VoiceIQSpeech
             Log.meeting.info("transcribed on device: \(transcript.count, privacy: .public) turns")
             return transcript
         } catch {
-            guard !transcribers().isEmpty, !(error is CancellationError) else { throw error }
+            guard !providers().isEmpty, !(error is CancellationError) else { throw error }
             Log.meeting.error("on-device transcription failed, using cloud: \(String(describing: error), privacy: .public)")
             return try await cloud.transcribe(folder: folder)
         }
@@ -276,7 +273,7 @@ import VoiceIQSpeech
         do {
             return try await LocalMeetingTranscriber.acquire(runner: runner)
         } catch {
-            guard !transcribers().isEmpty, !(error is CancellationError) else { throw error }
+            guard !providers().isEmpty, !(error is CancellationError) else { throw error }
             Log.meeting.error("on-device models unavailable, using cloud: \(String(describing: error), privacy: .public)")
             return nil
         }
@@ -362,7 +359,7 @@ import VoiceIQSpeech
 /// show. The raw error goes to the log.
 public enum MeetingFailure: Error, Equatable {
     /// The on-device models are not ready and no stored key reaches a model
-    /// that can transcribe a meeting (none does on Claude).
+    /// that can transcribe a meeting.
     case noRoute
     /// The transcript was made on device, but no stored key reaches a model
     /// that can write the notes.

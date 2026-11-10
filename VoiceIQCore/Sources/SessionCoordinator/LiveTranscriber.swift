@@ -78,7 +78,7 @@ public final class LiveTranscriber: DictationStreaming {
            let local = LocalTranscriber(audioURL: audioURL, model: settings.localSpeechModel,
                                         language: settings.localSpeechLanguage,
                                         realtime: settings.liveTranscriptionEnabled,
-                                        cloudOnColdLoad: KeychainStore.canTranscribeInCloud,
+                                        cloudOnColdLoad: KeychainStore.hasModelKey,
                                         makeSession: localSessionFactory) {
             return local
         }
@@ -105,8 +105,6 @@ public final class LiveTranscriber: DictationStreaming {
             return make(model: model, key: key, renewAfter: 3300,
                         dialect: OpenAILiveDialect(model: model, delay: .low, keywords: vocabulary),
                         transport: { WebSocketTransport.openAI(apiKey: { key }) })
-        case .anthropic:
-            return nil
         }
     }
 

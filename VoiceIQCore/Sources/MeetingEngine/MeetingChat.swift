@@ -22,9 +22,6 @@ public struct MeetingChatTurn: Codable, Equatable, Sendable, Identifiable {
 ///
 /// Caching rides on `AgentTransport`. The system prompt is the same bytes for
 /// every question until the meeting changes, and each question only appends:
-/// - Claude: a one-hour breakpoint on the system prompt and a five-minute one
-///   on the newest question, so a follow-up reads the meeting and the earlier
-///   turns from cache, and so does a user who comes back within the hour.
 /// - OpenAI (Responses API): automatic prefix caching, with a
 ///   `prompt_cache_key` per meeting so every question lands on one cache.
 /// - Gemini: implicit caching of the repeated prefix; nothing to send.

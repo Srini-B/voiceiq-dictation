@@ -16,7 +16,6 @@ public enum KeychainStore {
         case tinyFish = "tinyfish-api-key"
         case openAI = "openai-api-key"
         case agentProvider = "agent-provider-api-key"
-        case anthropic = "anthropic-api-key"
 
         var label: String {
             switch self {
@@ -24,7 +23,6 @@ public enum KeychainStore {
             case .tinyFish: return "VoiceiQ — TinyFish API key"
             case .openAI: return "VoiceiQ — OpenAI API key"
             case .agentProvider: return "VoiceiQ — Agent provider API key"
-            case .anthropic: return "VoiceiQ — Anthropic API key"
             }
         }
 
@@ -35,7 +33,6 @@ public enum KeychainStore {
             case .tinyFish: return "tinyFishKey"
             case .openAI: return "openAIKey"
             case .agentProvider: return "agentProviderKey"
-            case .anthropic: return "anthropicKey"
             }
         }
     }
@@ -100,7 +97,7 @@ public enum KeychainStore {
     @discardableResult
     public static func deleteOpenAIKey(notify: Bool = false) -> Bool { delete(.openAI, notify: notify) }
 
-    // MARK: - Claude
+    // MARK: - Any secret
 
     public static func loadKey(_ secret: Secret) -> String? { load(secret, service: service) }
 
@@ -115,16 +112,8 @@ public enum KeychainStore {
         switch provider {
         case .gemini: return loadAPIKey() != nil
         case .openAI: return loadOpenAIKey() != nil
-        case .anthropic: return loadKey(.anthropic) != nil
         }
     }
-
-    /// Whether the provider can also transcribe in the cloud. Claude cannot.
-    public static func canTranscribe(with provider: ModelProvider) -> Bool {
-        provider.transcribes && hasKey(for: provider)
-    }
-
-    public static var canTranscribeInCloud: Bool { canTranscribe(with: SettingsStore().preferredProvider) }
 
     /// Whether the selected provider can be reached at all; a Gemini key
     /// alone does not let an OpenAI selection work.

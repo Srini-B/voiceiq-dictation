@@ -2,9 +2,7 @@ import SwiftUI
 
 /// The segmented source picker shared by the macOS and iOS settings. On
 /// device appears only where local models run; the provider segment follows
-/// the Provider setting. Claude has no speech model, so with it dictation and
-/// meetings offer only On device. The caller owns the selection and persists
-/// it.
+/// the Provider setting. The caller owns the selection and persists it.
 @MainActor
 public struct TranscriptionSourcePicker: View {
     private let label: String
@@ -27,19 +25,9 @@ public struct TranscriptionSourcePicker: View {
             guard note.object as? String == "modelProvider" else { return }
             provider = SettingsStore().preferredProvider
         }
-        if selection == .provider, !provider.transcribes {
-            Text("Claude doesn't transcribe. Pick Gemini or OpenAI to transcribe in the cloud.")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-        }
     }
 
     private var options: [TranscriptionSource] {
-        TranscriptionSource.allCases.filter { source in
-            switch source {
-            case .onDevice: return LocalModelSupport.isAvailable
-            case .provider: return provider.transcribes || !LocalModelSupport.isAvailable
-            }
-        }
+        TranscriptionSource.allCases.filter { $0 == .provider || LocalModelSupport.isAvailable }
     }
 }

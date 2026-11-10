@@ -4,7 +4,7 @@ import SwiftUI
 /// One API key: paste, validate against its host, save to the Keychain.
 struct ProviderKeySection: View {
     let secret: KeychainStore.Secret
-    /// "OpenAI", "Anthropic".
+    /// "OpenAI".
     let vendor: String
     let keyPage: URL
     let validate: @Sendable (String) async -> GeminiClient.KeyCheck
@@ -107,9 +107,6 @@ extension ProviderKeySection {
     static let openAI = ProviderKeySection(
         secret: .openAI, vendor: "OpenAI", keyPage: URL(string: "https://platform.openai.com/api-keys")!,
         validate: { key in await GeminiClient(apiKey: { nil }, openAIKey: { key }).validateOpenAIKey() })
-    static let anthropic = ProviderKeySection(
-        secret: .anthropic, vendor: "Anthropic", keyPage: URL(string: "https://console.anthropic.com/settings/keys")!,
-        validate: { key in await GeminiClient.validateAnthropicKey(key) })
 }
 
 struct OpenAIModelsSection: View {
@@ -146,7 +143,6 @@ struct OpenAIModelsSection: View {
 
 struct ProviderSection: View {
     @Binding var provider: ModelProvider
-    let openDictation: () -> Void
     private let settings = SettingsStore()
 
     var body: some View {
@@ -156,7 +152,6 @@ struct ProviderSection: View {
             }
             .pickerStyle(.segmented)
             .onChange(of: provider) { _, value in settings.setPreferredProvider(value) }
-            .claudeVoiceAlert(provider: provider, openDictation: openDictation)
         }
     }
 }

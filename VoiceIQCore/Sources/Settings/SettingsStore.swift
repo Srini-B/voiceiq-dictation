@@ -77,8 +77,9 @@ public struct SettingsStore: Sendable {
         return value
     }
 
-    /// Gemini, OpenAI or Claude, chosen in Settings → Advanced. Any other stored
-    /// value (an older build's gateway) reads as Gemini.
+    /// Gemini or OpenAI, chosen in Settings → Advanced. Any other stored
+    /// value (an older build's gateway, or Claude, removed 2026-11-10) reads
+    /// as Gemini.
     public var preferredProvider: ModelProvider {
         ModelProvider(rawValue: Self.defaults.string(forKey: "modelProvider") ?? "") ?? .gemini
     }
@@ -106,8 +107,7 @@ public struct SettingsStore: Sendable {
     /// Who transcribes dictation. Reads the pre-picker boolean when the key
     /// is absent: on-device on → `.onDevice`, otherwise the provider. A value
     /// this build no longer offers (ElevenLabs) reads as the provider. On a
-    /// device without local models `.onDevice` reads as the provider. Where
-    /// local models run, Claude reads as `.onDevice`: it has no speech model.
+    /// device without local models `.onDevice` reads as the provider.
     public var dictationSource: TranscriptionSource {
         source(forKey: "dictationSource", legacyLocalKey: "localTranscriptionEnabled")
     }
@@ -127,12 +127,8 @@ public struct SettingsStore: Sendable {
         } else {
             stored = .provider
         }
-        guard LocalModelSupport.isAvailable else { return .provider }
-        return preferredProvider.transcribes ? stored : .onDevice
+        return LocalModelSupport.isAvailable ? stored : .provider
     }
-
-    /// False for Claude: no cloud speech model.
-    public var providerTranscribes: Bool { preferredProvider.transcribes }
 
     /// The on-device model to download and use. Unknown, missing, or
     /// platform-unavailable values read as Fluid Speech Mini.
@@ -165,7 +161,7 @@ public struct SettingsStore: Sendable {
 
     /// Who transcribes meetings. On device needs the selected model and, on the
     /// Mac, the speaker diarizer downloaded; notes still come from the cloud writing
-    /// model. Same legacy reading and Claude rule as `dictationSource`.
+    /// model. Same legacy reading as `dictationSource`.
     public var meetingSource: TranscriptionSource {
         source(forKey: "meetingSource", legacyLocalKey: "localMeetingTranscriptionEnabled")
     }
@@ -176,15 +172,9 @@ public struct SettingsStore: Sendable {
 
     public var localMeetingTranscriptionEnabled: Bool { meetingSource == .onDevice }
 
-    /// Providers for meeting notes; see `ModelProvider.meetingOrder`.
+    /// Providers for a meeting's transcript and notes; see `ModelProvider.meetingOrder`.
     public var meetingProviders: [ModelProvider] {
         ModelProvider.meetingOrder(selected: preferredProvider, hasKey: KeychainStore.hasKey(for:))
-    }
-
-    /// Providers for cloud meeting transcription: `meetingProviders` that can
-    /// transcribe. None on Claude, whose meetings are transcribed only on device.
-    public var meetingTranscribers: [ModelProvider] {
-        preferredProvider.transcribes ? meetingProviders.filter(KeychainStore.canTranscribe(with:)) : []
     }
 
     /// Show the resting dot at the bottom of the screen when idle. Off = the pill

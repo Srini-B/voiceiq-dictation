@@ -385,13 +385,13 @@ struct PrivacyView: View {
     @State private var transcriptRetentionDays = SettingsStore().transcriptRetentionDays
     @State private var provider = SettingsStore().preferredProvider
 
-    @State private var meetingTranscribers = SettingsStore().meetingTranscribers
+    @State private var meetingProviders = SettingsStore().meetingProviders
 
     private var destination: String { "\(provider.directName), with your key" }
     /// Meetings go to the first provider with a key, then to each other one
     /// in turn while the earlier ones fail.
     private var meetingOwner: String {
-        let names = meetingTranscribers.map(\.directName)
+        let names = meetingProviders.map(\.directName)
         guard let first = names.first else { return provider.directName }
         let rest = names.dropFirst()
         guard let last = rest.last else { return first }
@@ -420,13 +420,12 @@ struct PrivacyView: View {
                 }
             }
             Section {
-                LocalAudioPrivacyRow(provider: SettingsStore().providerTranscribes ? provider.directName : nil, cloudDescription: destination)
+                LocalAudioPrivacyRow(provider: provider.directName, cloudDescription: destination)
                 LabeledContent("Transcript text", value: "For writing rules, Ask and Translate")
                 LocalMeetingPrivacyRow(
                     label: "Notes audio",
                     localDescription: { "Transcribed on device by \($0); transcript to \(provider.displayName) for notes" },
-                    cloudDescription: SettingsStore().providerTranscribes
-                        ? "\(meetingOwner), then notes by \(provider.displayName)" : "Not sent: Claude doesn't transcribe")
+                    cloudDescription: "\(meetingOwner), then notes by \(provider.displayName)")
                 LabeledContent("Dictionary terms", value: "With cloud transcription and cleanup")
                 LabeledContent("Dictionary", value: "Your iCloud, to sync")
                 LabeledContent("History", value: "Your iCloud, to sync final text")
@@ -440,7 +439,7 @@ struct PrivacyView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .gtSettingDidChange).receive(on: RunLoop.main)) { _ in
             provider = SettingsStore().preferredProvider
-            meetingTranscribers = SettingsStore().meetingTranscribers
+            meetingProviders = SettingsStore().meetingProviders
         }
     }
 }

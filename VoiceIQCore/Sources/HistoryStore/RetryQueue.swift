@@ -1,7 +1,5 @@
-import Combine
 import Foundation
 import Network
-import VoiceIQSpeech
 
 /// The offline queue (F1, critic reconciliation #5): drains on network-restored
 /// and on launch; one session at a time; drained results NOTIFY and land in
@@ -16,7 +14,6 @@ public final class RetryQueue {
     public private(set) var draining = false
     private var lastPathSatisfied = false
     private var scheduledDrain: Task<Void, Never>?
-    private var modelReady: AnyCancellable?
 
     /// The text of each dictation a drain recovered, oldest first.
     public var onDrained: (([String]) -> Void)?
@@ -44,14 +41,6 @@ public final class RetryQueue {
             }
         }
         monitor.start(queue: .main)
-        // On Claude a drain waits for the on-device model, so a finished
-        // download is a retry signal too.
-        modelReady = Publishers.MergeMany(LocalSpeechModel.allCases.map { LocalModelStore.store(for: $0).$state.dropFirst() })
-            .filter { $0 == .ready }
-            .sink { [weak self] _ in
-                Log.history.info("RetryQueue: speech model ready — draining")
-                Task { await self?.drain() }
-            }
         Task { await drain() } // launch drain
     }
 

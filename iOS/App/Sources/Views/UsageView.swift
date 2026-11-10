@@ -1,7 +1,8 @@
 import SwiftUI
 import VoiceIQCore
 
-/// Cost for Gemini or OpenAI, opening on the selected provider.
+/// Cost for Gemini or OpenAI, opening on the selected provider, and for
+/// Claude while it has rows from before it was removed as a provider.
 /// Period totals, cost per action, and in Detailed the per-model table and
 /// the most recent calls.
 struct UsageView: View {
@@ -29,6 +30,8 @@ struct UsageView: View {
     }
 
     @State private var source = CostSource(SettingsStore().preferredProvider)
+    /// The current providers, plus Claude while it has rows (`reload`).
+    @State private var sources = CostSource.allCases.filter(\.isCurrent)
     @State private var period: Period = .month
     @AppStorage("costPaneDetailed") private var detailed = false
     @State private var total = UsageStore.Total.zero
@@ -41,7 +44,7 @@ struct UsageView: View {
             Section {
                 VStack(alignment: .leading, spacing: Theme.Spacing.m) {
                     Picker("Source", selection: $source) {
-                        ForEach(CostSource.allCases) { Text($0.displayName).tag($0) }
+                        ForEach(sources) { Text($0.displayName).tag($0) }
                     }
                     .pickerStyle(.segmented)
                     Picker("Period", selection: $period) {
@@ -127,6 +130,8 @@ struct UsageView: View {
 
     private func reload() {
         guard let store = UsageMeter.store else { return }
+        sources = CostSource.allCases.filter { $0.isCurrent || store.total(source: $0).calls > 0 }
+        if !sources.contains(source) { source = CostSource(SettingsStore().preferredProvider) }
         total = store.total(since: period.start, source: source)
         byActivity = store.totalsByActivity(since: period.start, source: source)
         byModel = store.totalsByModel(since: period.start, source: source)
