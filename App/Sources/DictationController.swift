@@ -50,6 +50,7 @@ final class DictationController {
 
     init() {
         KeychainStore.migrateDevKeyFileIfPresent()
+        FileLayout.removeRetiredModels()
         let client = GeminiClient(
             apiKey: { KeychainStore.loadAPIKey() },
             openAIKey: { KeychainStore.loadOpenAIKey() },
@@ -65,7 +66,6 @@ final class DictationController {
             config: { SettingsStore().geminiConfig },
             summaryModel: SettingsStore().geminiConfig.cleanupModel,
             providers: { SettingsStore().meetingProviders },
-            localMeeting: LocalMeetingHelper.run,
             readsScreenNames: { SettingsStore().meetingScreenNamesEnabled }
         )
         coordinator = DictationCoordinator(
@@ -94,7 +94,7 @@ final class DictationController {
                     focusedField: field
                 )
             },
-            liveFactory: { LiveTranscriber.makeFromSettings(audioURL: $0) }
+            liveFactory: { _ in LiveTranscriber.makeFromSettings() }
         )
         sleepGuard = SessionSleepGuard(dictation: coordinator, meetings: meetings)
     }

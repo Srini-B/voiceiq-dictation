@@ -1,5 +1,4 @@
 import Foundation
-import VoiceIQSpeech
 
 public extension Notification.Name {
     /// Posted after any SettingsStore write and after Keychain API-key writes,
@@ -103,74 +102,6 @@ public struct SettingsStore: Sendable {
         if enabled && !liveTranscriptionEnabled { LiveAvailability.shared.resetRefusals() }
         Self.set(enabled, forKey: "liveDictationEnabled")
     }
-
-    /// Who transcribes dictation. Reads the pre-picker boolean when the key
-    /// is absent: on-device on → `.onDevice`, otherwise the provider. A value
-    /// this build no longer offers (ElevenLabs) reads as the provider. On a
-    /// device without local models `.onDevice` reads as the provider.
-    public var dictationSource: TranscriptionSource {
-        source(forKey: "dictationSource", legacyLocalKey: "localTranscriptionEnabled")
-    }
-
-    public func setDictationSource(_ source: TranscriptionSource) {
-        Self.set(source.rawValue, forKey: "dictationSource")
-    }
-
-    public var localTranscriptionEnabled: Bool { dictationSource == .onDevice }
-
-    private func source(forKey key: String, legacyLocalKey: String) -> TranscriptionSource {
-        let stored: TranscriptionSource
-        if let raw = Self.defaults.string(forKey: key) {
-            stored = TranscriptionSource(rawValue: raw) ?? .provider
-        } else if Self.defaults.bool(forKey: legacyLocalKey) {
-            stored = .onDevice
-        } else {
-            stored = .provider
-        }
-        return LocalModelSupport.isAvailable ? stored : .provider
-    }
-
-    /// The on-device model to download and use. Unknown, missing, or
-    /// platform-unavailable values read as Fluid Speech Mini.
-    public var localSpeechModel: LocalSpeechModel {
-        let stored = LocalSpeechModel(stored: Self.defaults.string(forKey: "localSpeechModel") ?? "")
-        guard let stored, LocalSpeechModel.available.contains(stored) else { return .parakeet }
-        return stored
-    }
-
-    /// The language the on-device model transcribes. A stored code the
-    /// selected model lacks (German, then Fluid Speech Mini) reads as English,
-    /// and comes back when that model is picked again.
-    public var localSpeechLanguage: LocalSpeechLanguage {
-        localSpeechModel.language(code: localSpeechLanguageCode)
-    }
-
-    /// The stored code as chosen, which the selected model may not offer.
-    public var localSpeechLanguageCode: String? {
-        Self.defaults.string(forKey: "localSpeechLanguage")
-    }
-
-    public func setLocalSpeechLanguage(_ code: String) {
-        Self.set(code, forKey: "localSpeechLanguage")
-    }
-
-    public func setLocalSpeechModel(_ model: LocalSpeechModel) {
-        guard model != localSpeechModel else { return }
-        Self.set(model.rawValue, forKey: "localSpeechModel")
-    }
-
-    /// Who transcribes meetings. On device needs the selected model and, on the
-    /// Mac, the speaker diarizer downloaded; notes still come from the cloud writing
-    /// model. Same legacy reading as `dictationSource`.
-    public var meetingSource: TranscriptionSource {
-        source(forKey: "meetingSource", legacyLocalKey: "localMeetingTranscriptionEnabled")
-    }
-
-    public func setMeetingSource(_ source: TranscriptionSource) {
-        Self.set(source.rawValue, forKey: "meetingSource")
-    }
-
-    public var localMeetingTranscriptionEnabled: Bool { meetingSource == .onDevice }
 
     /// Providers for a meeting's transcript and notes; see `ModelProvider.meetingOrder`.
     public var meetingProviders: [ModelProvider] {

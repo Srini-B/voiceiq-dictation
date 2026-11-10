@@ -30,86 +30,9 @@ repository's Apache 2.0 license. See `App/Resources/Sounds/ATTRIBUTION.md`.
 |---|---|
 | [Sauce](https://github.com/Clipy/Sauce) (Clipy) | MIT |
 | [GRDB.swift](https://github.com/groue/GRDB.swift) (Gwendal Roué) | MIT |
-| [FluidAudio](https://github.com/FluidInference/FluidAudio) 0.18.2 (Fluid Inference), with the `NemoTextProcessing` and `Diarizer` traits | Apache 2.0; bundled dependencies retain their upstream notices |
 | [Sparkle](https://github.com/sparkle-project/Sparkle) (from M8) | Sparkle License (permissive, MIT-style) |
 
 ## Vendored libraries
-
-### Optional Fluid Speech Mini model
-
-- Fluid Speech Mini by FluidVoice: https://huggingface.co/FluidVoice-Labs/fluid-speech-mini-coreml, revision `d81c3160dfe5a5e1f8f7267164a07d30617a3a1a` (https://fluidvoice.com/labs/fluid-speech-mini).
-- Built on NVIDIA Parakeet TDT 0.6B v3 (https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3) and Moondream Parakeet Ultra, with the audio preprocessor from FluidInference's Parakeet v3 Core ML package.
-- License: [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
-- VoiceiQ downloads the model files unmodified, on explicit request; the joint
-  network folder is saved as `JointDecisionv3.mlmodelc` instead of
-  `JointDecision.mlmodelc`. Weights are not bundled with the app. File hashes
-  are in `ParakeetManifest.swift`.
-
-### Optional Fluid Speech Pro model (macOS 15 and iOS 18 or later)
-
-- Fluid Speech Pro by FluidVoice: https://huggingface.co/FluidVoice-Labs/fluid-speech-pro, revision `53f490b9292c5943847f635b7abfc3f123018964`.
-- Built on NVIDIA Parakeet TDT 0.6B v3 (https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3) and Moondream Parakeet Ultra (https://huggingface.co/moondream/parakeet-ultra).
-- License: [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
-- Modified: converted from NeMo to 16-bit Core ML for VoiceiQ (format and
-  numeric precision only; clean mode not included), published at
-  https://huggingface.co/cyron/fluid-speech-pro-coreml, revision `ec52e16204b3d2c4c8bf60e576728fc58a825689`.
-  VoiceiQ downloads those files on explicit request. Weights are not bundled.
-  File hashes are in `FluidSpeechProManifest.swift`.
-
-### Optional speaker separation model (pyannote community-1)
-
-- Original pipeline: https://huggingface.co/pyannote/speaker-diarization-community-1
-  (pyannote), with speaker segmentation by Plaquet and Bredin ("Powerset
-  multi-class cross entropy loss for neural speaker diarization", Interspeech
-  2023), the WeSpeaker speaker embedding (Wang et al., "Wespeaker: A research
-  and production oriented speaker embedding learning toolkit", ICASSP 2023),
-  and PLDA parameters from Brno University of Technology / BUT Speech@FIT for
-  VBx clustering (Landini et al., Computer Speech & Language, 2022).
-- Modified: Core ML conversion by Fluid Inference, https://huggingface.co/FluidInference/speaker-diarization-coreml,
-  revision `df2625ac79a7ac6b65ad868fee6d80f320da4232` (fixed input shapes,
-  mixed-precision storage, the FBank frontend split from the embedding model).
-- License: [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/), as the
-  repository's `NOTICE.md` scopes it to `Segmentation.mlmodelc`,
-  `FBank.mlmodelc`, `Embedding.mlmodelc`, `PLDA.mlmodelc`, `PldaRho.mlmodelc`,
-  `plda-parameters.json` and `xvector-transform.json`. VoiceiQ downloads only
-  files from that set.
-- VoiceiQ downloads `Segmentation`, `FBank`, `Embedding` and `PldaRho`
-  (`.mlmodelc`) and `plda-parameters.json` unmodified on explicit request, for
-  on-device meeting speakers. Weights are not bundled. File hashes are in
-  `SpeakerDiarizerManifest.swift`.
-
-### Optional English tools pack
-
-VoiceiQ downloads these Core ML conversions unmodified, on explicit request, as
-one pack. No weights are bundled with the app. File hashes are in
-`EnglishToolsManifest.swift`.
-
-- **Silero VAD v6.2.1 (speech detection).** Original model:
-  https://github.com/snakers4/silero-vad (Copyright (c) 2020-present Silero Team),
-  via https://huggingface.co/onnx-community/silero-vad. Core ML conversion:
-  https://huggingface.co/FluidInference/silero-vad-coreml (Fluid Inference),
-  revision `b419383c55c110e2c9271fa6ee0ea83d03c70d96`. License: MIT.
-- **Parakeet TDT-CTC 110M, CTC branch (dictionary correction).** Original
-  model: https://huggingface.co/nvidia/parakeet-tdt_ctc-110m (NVIDIA). Core ML
-  conversion with tokenizer and vocabulary files:
-  https://huggingface.co/FluidInference/parakeet-ctc-110m-coreml (Fluid
-  Inference), revision `accdafd8cf8a2ff1cabe3c11e54416b405d409aa`. License:
-  [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
-
-### NeMo text processing (inverse text normalization)
-
-- Linked through FluidAudio's `NemoTextProcessing` trait into the Mac speech
-  helper and the iOS app, not the Mac UI.
-- Binary: `NemoTextProcessing.xcframework` from
-  https://github.com/FluidInference/text-processing-rs release v0.3.1
-  (Fluid Inference). License: Apache 2.0.
-- Includes compiled weighted-FST grammars derived from
-  https://github.com/NVIDIA/NeMo-text-processing (Copyright (c) NVIDIA
-  CORPORATION & AFFILIATES), Apache 2.0. It statically links rustfst and
-  flate2, each MIT OR Apache 2.0, and their MIT or Apache 2.0 dependencies.
-  It contains no neural network weights.
-- Full notice: `ThirdPartyLicenses/NemoTextProcessing-LICENSE.md` in the
-  FluidAudio 0.18.2 source.
 
 ### WebRTC audio processing (AEC3 echo canceller)
 - File: `VoiceIQCore/Vendor/WebRTCAEC/CVoiceIQAEC.xcframework` (static library, arm64 and x86_64)
@@ -271,8 +194,7 @@ SOFTWARE.
 
 "Google", the Google logo, the Gemini spark, and related marks are trademarks of
 Google LLC. "OpenAI" and its logo are trademarks of OpenAI. "Anthropic",
-"Claude" and the Anthropic logo are trademarks of Anthropic, PBC. "NVIDIA" and "Nemotron" are
-trademarks of NVIDIA Corporation. "TinyFish" and its
+"Claude" and the Anthropic logo are trademarks of Anthropic, PBC. "TinyFish" and its
 logo are trademarks of TinyFish. The iOS app bundles each service's favicon
 (`iOS/App/Resources/Assets.xcassets/Provider*.imageset`) only to label the key
 field for that service; no endorsement is implied. The app icon and menu bar

@@ -1,6 +1,5 @@
 import Combine
 import Foundation
-import VoiceIQSpeech
 
 @MainActor public final class MeetingEngine: ObservableObject {
     /// The recorder: offering, recording, or free. Notes are made apart from
@@ -27,8 +26,6 @@ import VoiceIQSpeech
     /// Providers to try in order for a cloud transcript and for the notes;
     /// see `ModelProvider.meetingOrder`.
     private let providers: @Sendable () -> [ModelProvider]
-    /// On-device transcription, used when `LocalMeetingTranscriber` is ready.
-    private let localMeeting: LocalMeetingRunner?
     private lazy var detector = CallDetector()
     private var mic: MicTap?, system: SystemAudioTap?
     private var currentFolder: URL?, currentMeta: MeetingMeta?
@@ -57,10 +54,9 @@ import VoiceIQSpeech
     public init(client: GeminiClient, store: MeetingStore = MeetingStore(), config: @escaping () -> GeminiConfig,
                 transcribeModel: String? = nil, summaryModel: String = "gemini-3.8-flash",
                 providers: @escaping @Sendable () -> [ModelProvider] = { [.gemini] },
-                localMeeting: LocalMeetingRunner? = nil, readsScreenNames: @escaping () -> Bool = { false }) {
+                readsScreenNames: @escaping () -> Bool = { false }) {
         self.client = client; self.store = store; self.config = config; self.readsScreenNames = readsScreenNames
         self.transcribeModel = transcribeModel; self.summaryModel = summaryModel; self.providers = providers
-        self.localMeeting = localMeeting
         detector.onChange = { [weak self] source in self?.detected(source) }
         failInterruptedRecordings()
     }
@@ -202,8 +198,8 @@ import VoiceIQSpeech
     }
 
     /// The words cached beside the audio by `MeetingTranscriber` (the
-    /// `transcribe-*` windows) and `LocalMeetingTranscriber` (`local-words-*`,
-    /// `speakers-*`).
+    /// `transcribe-*` windows), and by the local transcription of builds before
+    /// 2026-11-10 (`local-words-*`, `speakers-*`).
     static func dropTranscriptCaches(_ folder: URL) {
         let fm = FileManager.default
         for name in (try? fm.contentsOfDirectory(atPath: folder.path)) ?? []
@@ -243,40 +239,13 @@ import VoiceIQSpeech
         } catch { saveFailure(id: id, meta: &meta, error: error) }
     }
 
-    /// On device when the user asked for it and both models are downloaded;
-    /// otherwise, or if the on-device pass fails and a key is stored, the
-    /// cloud path. This mirrors dictation: on-device first, a provider only if
-    /// that fails.
+    /// The provider's diarizing model, then each other provider with a key
+    /// while the earlier ones fail.
     private func transcribe(folder: URL, config cfg: GeminiConfig) async throws -> [TranscriptSegment] {
+        guard !providers().isEmpty else { throw MeetingFailure.noRoute }
         let cloud = MeetingTranscriber(client: client, models: .init(transcribe: transcribeModel ?? cfg.transcribeModel),
                                        endpoint: cfg.endpoint, providers: providers)
-        guard let local = try await acquireLocal() else {
-            guard !providers().isEmpty else { throw MeetingFailure.noRoute }
-            return try await cloud.transcribe(folder: folder)
-        }
-        do {
-            let transcript = try await local.transcribe(folder: folder)
-            Log.meeting.info("transcribed on device: \(transcript.count, privacy: .public) turns")
-            return transcript
-        } catch {
-            guard !providers().isEmpty, !(error is CancellationError) else { throw error }
-            Log.meeting.error("on-device transcription failed, using cloud: \(String(describing: error), privacy: .public)")
-            return try await cloud.transcribe(folder: folder)
-        }
-    }
-
-    /// Nil when the meeting should go to the cloud: on-device is off or not
-    /// downloaded, or the models stayed busy and a key is stored. Without a
-    /// key the busy error is the meeting's failure.
-    private func acquireLocal() async throws -> LocalMeetingTranscriber? {
-        guard let runner = localMeeting else { return nil }
-        do {
-            return try await LocalMeetingTranscriber.acquire(runner: runner)
-        } catch {
-            guard !providers().isEmpty, !(error is CancellationError) else { throw error }
-            Log.meeting.error("on-device models unavailable, using cloud: \(String(describing: error), privacy: .public)")
-            return nil
-        }
+        return try await cloud.transcribe(folder: folder)
     }
 
     /// The recording stays; the meeting is marked failed with a reason the
@@ -288,8 +257,8 @@ import VoiceIQSpeech
         meta.status = .failed(reason); try? store.save(meta: meta)
         processing[id] = nil
         switch error as? MeetingFailure {
-        case .noRoute: onNotice?("\(MeetingFailure.noun) saved without a transcript — download the on-device models or use Gemini or OpenAI with a key, then Retry in \(MeetingFailure.listName)")
-        case .noNotesRoute: onNotice?("\(MeetingFailure.noun) transcribed on device — add a key for notes, then Retry in \(MeetingFailure.listName)")
+        case .noRoute: onNotice?("\(MeetingFailure.noun) saved without a transcript — add a Gemini or OpenAI key, then Retry in \(MeetingFailure.listName)")
+        case .noNotesRoute: onNotice?("\(MeetingFailure.noun) transcribed — add a key for notes, then Retry in \(MeetingFailure.listName)")
         case nil: onNotice?("\(MeetingFailure.noun) transcript failed — see \(MeetingFailure.listName)")
         }
     }
@@ -358,11 +327,10 @@ import VoiceIQSpeech
 /// Why a meeting has no transcript or notes, in words the Meetings list can
 /// show. The raw error goes to the log.
 public enum MeetingFailure: Error, Equatable {
-    /// The on-device models are not ready and no stored key reaches a model
-    /// that can transcribe a meeting.
+    /// No stored key reaches a model that can transcribe a meeting.
     case noRoute
-    /// The transcript was made on device, but no stored key reaches a model
-    /// that can write the notes.
+    /// The transcript is saved, but no stored key reaches a model that can
+    /// write the notes (the key was removed since).
     case noNotesRoute
 
     static let fixHint = "The recording is saved. Press Retry after fixing this."
@@ -378,9 +346,9 @@ public enum MeetingFailure: Error, Equatable {
     static func reason(for error: Error, tried: String) -> String {
         switch error {
         case MeetingFailure.noRoute:
-            return "Nothing can transcribe meetings yet. Download the on-device models, or pick Gemini or OpenAI and add its key in \(keysPlace). The recording is saved; press Retry once one is ready."
+            return "Nothing can transcribe meetings yet. Pick Gemini or OpenAI and add its key in \(keysPlace). The recording is saved; press Retry once it is added."
         case MeetingFailure.noNotesRoute:
-            return "The transcript was made on device, but no key can write the notes. Add a provider's keys in \(keysPlace), then press Retry."
+            return "The transcript is saved, but no key can write the notes. Add a provider's key in \(keysPlace), then press Retry."
         case let error as TranscriptionError:
             switch error {
             case .auth:

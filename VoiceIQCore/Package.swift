@@ -8,7 +8,6 @@ let package = Package(
     products: [
         .library(name: "VoiceIQCore", targets: ["VoiceIQCore"]),
         .library(name: "VoiceIQSpeech", targets: ["VoiceIQSpeech"]),
-        .library(name: "VoiceIQInference", targets: ["VoiceIQInference"]),
         // The keyboard and Live Activity extensions link only this: it is
         // extension-safe and carries no network or audio code.
         .library(name: "VoiceIQBridge", targets: ["VoiceIQBridge"]),
@@ -16,9 +15,6 @@ let package = Package(
     dependencies: [
         .package(url: "https://github.com/groue/GRDB.swift.git", from: "7.12.0"),
         .package(url: "https://github.com/Clipy/Sauce.git", from: "2.2.0"),
-        // Listing traits turns FluidAudio's defaults off: TTS stays out, and
-        // Diarizer gates OfflineDiarizerManager (LocalMeetingJob).
-        .package(url: "https://github.com/FluidInference/FluidAudio.git", exact: "0.18.2", traits: ["NemoTextProcessing", "Diarizer"]),
     ],
     targets: [
         // WebRTC's AEC3 echo canceller and a small C bridge, built by
@@ -52,14 +48,8 @@ let package = Package(
                 .linkedFramework("CoreFoundation"),
             ]
         ),
-        .target(
-            name: "VoiceIQInference",
-            dependencies: [
-                "VoiceIQSpeech",
-                .product(name: "FluidAudio", package: "FluidAudio"),
-            ],
-            path: "Inference"
-        ),
+        // The VoiceiQ Meetings Chrome extension's speaker log and its native
+        // messaging host, which the VoiceiQLocalSpeech helper runs.
         .target(name: "VoiceIQSpeech", path: "Speech"),
         .target(
             name: "VoiceIQBridge",

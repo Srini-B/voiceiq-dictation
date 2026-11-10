@@ -1,7 +1,6 @@
 #if os(macOS)
 import Darwin
 import Foundation
-import VoiceIQSpeech
 
 /// The native messaging host of the VoiceiQ Meetings Chrome extension. Chrome
 /// starts it from the manifest VoiceiQ installs (`BrowserExtension` in the

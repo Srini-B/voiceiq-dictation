@@ -3,7 +3,6 @@ import Combine
 import UIKit
 import VoiceIQBridge
 import VoiceIQCore
-import VoiceIQInference
 
 /// Composition root for the iOS app: the same dictation pipeline as macOS,
 /// driven by keyboard commands instead of a hotkey, delivering to the keyboard
@@ -48,6 +47,7 @@ final class AppModel: ObservableObject {
         FormattingSettingsMigration.restoreAutoDegradedWritingRulesOnce()
         FormattingSettingsMigration.splitWritingRulesOnce()
         FormattingSettingsMigration.removeLiveTranscriptionSettings()
+        FileLayout.removeRetiredModels()
         let client = GeminiClient(
             apiKey: { KeychainStore.loadAPIKey() },
             openAIKey: { KeychainStore.loadOpenAIKey() },
@@ -61,8 +61,7 @@ final class AppModel: ObservableObject {
             client: client,
             config: { SettingsStore().geminiConfig },
             summaryModel: SettingsStore().geminiConfig.cleanupModel,
-            providers: { SettingsStore().meetingProviders },
-            localMeeting: LocalSpeechInference.transcribeMeeting
+            providers: { SettingsStore().meetingProviders }
         )
         let inserter = self.inserter
         coordinator = DictationCoordinator(
@@ -80,32 +79,10 @@ final class AppModel: ObservableObject {
                     targetAppName: target.host.map(AppNames.displayName(for:))
                 )
             },
-            liveFactory: {
-                LiveTranscriber.makeFromSettings(audioURL: $0, localSessionFactory: LocalSpeechInference.makeSession)
-            }
+            liveFactory: { _ in LiveTranscriber.makeFromSettings() }
         )
         sleepGuard = SessionSleepGuard(dictation: coordinator, meetings: meetings)
         inserter.onDeliver = { [weak self] text, mode in self?.deliver(text, mode: mode) }
-        // The load overlaps the recording; a load longer than the recording
-        // is what the user waits for in "processing".
-        LocalTranscriber.onLoadEvent = { event in
-            let age = SessionDiagnostics.processAge
-            switch event {
-            case .loaded(let model, let seconds):
-                Task {
-                    SessionDiagnostics.note(String(format: "%@ loaded in %.1fs (%@, %@)", model.displayName, seconds,
-                                                  age, await PreparedModelCache.describe()))
-                }
-            case .failed(let model, let seconds):
-                Task {
-                    SessionDiagnostics.note(String(format: "%@ failed to load after %.1fs (%@, %@)", model.displayName, seconds,
-                                                  age, await PreparedModelCache.describe()))
-                }
-            case .stillLoading(let model, let waited):
-                SessionDiagnostics.note(String(format: "%@ still loading %.0fs after the recording; sent to the cloud, load goes on",
-                                              model.displayName, waited))
-            }
-        }
 
         // Commands already in the App Group belong to an earlier process. Only
         // a command named in a launch URL may still be acted on.
@@ -153,10 +130,9 @@ final class AppModel: ObservableObject {
         }
         coordinator.onStageTimes = { stages in
             // Splits "processed in" so a slow result can be blamed on the mic
-            // teardown, the decode, the cleanup request, or typing it in.
+            // teardown, the transcript, the cleanup request, or typing it in.
             var parts = [String(format: "finalize %.1fs", stages.finalize)]
             switch stages.source {
-            case .onDevice: parts.append(String(format: "decode %.1fs", stages.transcribe))
             case .cloudLive: parts.append(String(format: "cloud live final %.1fs", stages.transcribe))
             case .cloudUpload: parts.append(String(format: "cloud transcribe+cleanup %.1fs", stages.transcribe))
             }
@@ -478,12 +454,10 @@ final class AppModel: ObservableObject {
         DictionaryBridge.appBecameActive()
         WritingRulesSync.shared.refresh()
         Task { await HistorySync.shared.refresh() }
-        ModelWarmer.warmIfSystemUpdated()
     }
 
     func appEnteredBackground() {
         showSwipeBack = false
-        ModelWarmer.schedule()
     }
 
     func prepareForTermination() {
@@ -513,8 +487,7 @@ final class AppModel: ObservableObject {
             if processingSince == nil { processingSince = Date() }
         case .idle, .done, .cancelled, .failed:
             if let since = processingSince {
-                // A first on-device load after an iOS update or a long break
-                // can take minutes; this shows it, and where the app was.
+                // How long the transcript and cleanup took, and where the app was.
                 let place = UIApplication.shared.applicationState == .active ? "foreground" : "background"
                 SessionDiagnostics.note(String(format: "processed in %.1fs (%@)", Date().timeIntervalSince(since), place))
                 processingSince = nil

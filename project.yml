@@ -157,7 +157,7 @@ targets:
       - path: LocalSpeech/Sources
     dependencies:
       - package: VoiceIQCore
-        product: VoiceIQInference
+        product: VoiceIQSpeech
     info:
       path: LocalSpeech/Info.plist
       properties:
@@ -212,8 +212,6 @@ targets:
       - package: VoiceIQCore
         product: VoiceIQCore
       - package: VoiceIQCore
-        product: VoiceIQInference
-      - package: VoiceIQCore
         product: VoiceIQBridge
       - target: VoiceIQKeyboard
       - target: VoiceIQLiveActivity
@@ -237,8 +235,7 @@ targets:
           - UIInterfaceOrientationPortraitUpsideDown
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
-        UIBackgroundModes: [audio, processing]
-        BGTaskSchedulerPermittedIdentifiers: [io.blue.voiceiq.ios.warm-model]
+        UIBackgroundModes: [audio]
         NSSupportsLiveActivities: true
         ITSAppUsesNonExemptEncryption: false
         NSMicrophoneUsageDescription: VoiceiQ records audio when you tap the microphone in the VoiceiQ keyboard or record notes, so it can transcribe what you say.

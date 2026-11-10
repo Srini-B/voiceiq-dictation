@@ -1,5 +1,4 @@
 import VoiceIQCore
-import VoiceIQSpeech
 import SwiftUI
 
 // MARK: - Dictation
@@ -8,9 +7,6 @@ struct DictationPane: View {
     private let settings = SettingsStore()
     @State private var sounds = SettingsStore().soundsEnabled
     @State private var liveTranscription = SettingsStore().liveTranscriptionEnabled
-    @State private var dictationSource = SettingsStore().dictationSource
-    @State private var localModel = SettingsStore().localSpeechModel
-    @State private var meetingSource = SettingsStore().meetingSource
     @State private var smartTranscription = SettingsStore().smartTranscriptionEnabled
     @State private var cleanupPass = SettingsStore().smartCleanupPassEnabled
     @State private var skipShortCleanup = SettingsStore().skipShortDictationCleanup
@@ -77,32 +73,11 @@ struct DictationPane: View {
             }
 
             Section {
-                // Saved only on a user change, not when the provider changes what it reads as.
-                TranscriptionSourcePicker("Transcription", selection: Binding(get: { dictationSource }, set: {
-                    dictationSource = $0
-                    settings.setDictationSource($0)
-                }))
-                    // Here, not on the controls: they expand to several rows.
-                    .onChange(of: localModel) { _, model in
-                        settings.setLocalSpeechModel(model)
-                    }
-                LocalModelControls(localEnabled: dictationSource == .onDevice, meetingsLocal: meetingSource == .onDevice,
-                                   selection: $localModel)
                 // Saved only on a user change, not when its default is refreshed.
                 Toggle("Real-time transcription", isOn: Binding(get: { liveTranscription }, set: {
                     liveTranscription = $0
                     settings.setLiveTranscriptionEnabled($0)
                 }))
-                TranscriptionSourcePicker("Meeting transcription", selection: Binding(get: { meetingSource }, set: {
-                    meetingSource = $0
-                    settings.setMeetingSource($0)
-                }))
-                LocalMeetingControls(meetingsLocal: meetingSource == .onDevice)
-            } footer: {
-                VStack(alignment: .leading, spacing: 4) {
-                    LocalModelFooter(localEnabled: dictationSource == .onDevice, selection: localModel)
-                    LocalMeetingFooter(enabled: meetingSource == .onDevice, model: localModel)
-                }
             }
 
             Section {
@@ -193,15 +168,6 @@ struct DictationPane: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .gtSettingDidChange).receive(on: RunLoop.main)) { note in
             switch note.object as? String {
-            case "dictationSource":
-                dictationSource = settings.dictationSource
-                liveTranscription = settings.liveTranscriptionEnabled
-            case "modelProvider":
-                liveTranscription = settings.liveTranscriptionEnabled
-                dictationSource = settings.dictationSource
-                meetingSource = settings.meetingSource
-            case "meetingSource": meetingSource = settings.meetingSource
-            case "localSpeechModel": localModel = settings.localSpeechModel
             case "liveDictationEnabled": liveTranscription = settings.liveTranscriptionEnabled
             case "smartTranscription": smartTranscription = settings.smartTranscriptionEnabled
             case "agentModeEnabled": agentMode = settings.agentModeEnabled

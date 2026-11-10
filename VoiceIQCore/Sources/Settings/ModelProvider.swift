@@ -29,20 +29,3 @@ public enum ModelProvider: String, CaseIterable, Sendable, Codable, Identifiable
         ([selected] + allCases.filter { $0 != selected }).filter(hasKey)
     }
 }
-
-/// Who turns audio into text for dictation or for meetings: a model on this
-/// device or the provider's speech model. The provider's writing model always
-/// runs after whichever is picked.
-public enum TranscriptionSource: String, CaseIterable, Sendable, Identifiable {
-    case onDevice
-    case provider
-
-    public var id: String { rawValue }
-
-    public func displayName(for provider: ModelProvider) -> String {
-        switch self {
-        case .onDevice: return "On device"
-        case .provider: return provider.displayName
-        }
-    }
-}

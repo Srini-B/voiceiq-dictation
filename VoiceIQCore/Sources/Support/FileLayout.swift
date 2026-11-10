@@ -35,6 +35,21 @@ public enum FileLayout {
         appSupportRoot.appendingPathComponent("agent-runs", isDirectory: true)
     }
 
+    /// Deletes the on-device models that builds before 2026-11-10 downloaded
+    /// (the whole `Models` folder), and on the Mac the speech helper's Core ML
+    /// cache. Runs at every launch, off the main thread; a missing folder or a
+    /// failed delete is ignored.
+    public static func removeRetiredModels() {
+        Task.detached(priority: .utility) {
+            let fileManager = FileManager.default
+            try? fileManager.removeItem(at: FileLayout.appSupportRoot.appendingPathComponent("Models", isDirectory: true))
+            #if os(macOS)
+            let caches = fileManager.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+            try? fileManager.removeItem(at: caches.appendingPathComponent("io.blue.voiceiq.localspeech", isDirectory: true))
+            #endif
+        }
+    }
+
     /// Creates (if needed) and returns a fresh session folder. Name is
     /// timestamp-prefixed for human sortability in Finder.
     public static func makeSessionFolder(id: UUID, now: Date = Date()) throws -> URL {

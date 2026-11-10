@@ -103,7 +103,17 @@ public enum BrowserSpeakers {
         for index in far {
             out[index].speaker = "browser " + (heard[index] ?? likely[words[index].speaker] ?? "diarizer \(words[index].speaker)")
         }
-        return LocalMeetingTranscriber.renumber(out)
+        return renumber(out)
+    }
+
+    /// Ids other than the owner's renumbered in order of first appearance, so
+    /// the list reads Speaker 1, Speaker 2 with no gaps.
+    static func renumber(_ words: [TimedWord]) -> [TimedWord] {
+        var mapping: [String: String] = [MeetingSpeaker.you: MeetingSpeaker.you]
+        return words.map { word in
+            if mapping[word.speaker] == nil { mapping[word.speaker] = "s\(mapping.count)" }
+            var renamed = word; renamed.speaker = mapping[word.speaker]!; return renamed
+        }
     }
 
     /// At least two sources were loud. Stream ids alone (`ssrc`) must also
