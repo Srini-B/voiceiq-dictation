@@ -147,9 +147,9 @@ public struct LevelBars: Sendable {
         let target = min(max(level, 0), 1)
         // Fast attack, slow release: syllables jump up and fall back gently.
         smoothed += (target - smoothed) * (target > smoothed ? 0.7 : 0.3)
-        // The level saturates for close or loud speech; this spreads the top
-        // of the range so loud speech still rises and falls.
-        heights.append(pow(smoothed, 1.4))
+        // The level as is: `AudioLevelCurve` already puts ordinary speech in
+        // the upper half. Raising it to 1.4 here kept speech under 40%.
+        heights.append(smoothed)
         if heights.count > Self.capacity { heights.removeFirst(heights.count - Self.capacity) }
     }
 }

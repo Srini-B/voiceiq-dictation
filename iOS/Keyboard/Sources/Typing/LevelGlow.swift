@@ -26,7 +26,9 @@ struct LevelGlow: View {
         GeometryReader { geometry in
             let count = max(2, Int(geometry.size.width / Self.spacing) + 1)
             GlowShape(levels: Array(levels.suffix(count)), count: count)
-                .fill(LinearGradient(colors: [color.opacity(0.6), color.opacity(0)],
+                // The top keeps some colour, so a loud peak stays visible
+                // instead of fading out before the strip's top.
+                .fill(LinearGradient(colors: [color.opacity(0.6), color.opacity(0.18)],
                                      startPoint: .bottom, endPoint: .top))
                 .blur(radius: 2)
                 // Soft on every side, so no edge reads as a line: a bright
@@ -66,8 +68,8 @@ private struct GlowShape: Shape {
         let points = padded.enumerated().map { index, level in
             CGPoint(x: CGFloat(index) * step,
                     // Silence keeps a low glow; the loudest speech reaches
-                    // three quarters of the way up, so it reads as rising.
-                    y: rect.maxY - rect.height * (0.12 + 0.63 * CGFloat(min(max(level, 0), 1))))
+                    // the top of the strip.
+                    y: rect.maxY - rect.height * (0.08 + 0.92 * CGFloat(min(max(level, 0), 1))))
         }
         var path = Path()
         path.move(to: CGPoint(x: rect.minX, y: rect.maxY))

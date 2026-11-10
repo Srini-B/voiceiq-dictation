@@ -41,6 +41,13 @@ dropped Claude as a provider.
   `localSpeechModel`, `writingSource` and the like). The flag
   `didAdoptProviderWithKey` keeps it from running again, so a later choice of
   a provider without a key is left alone.
+- **Real-time transcription off by default.** The owner's choice. A user
+  who set the toggle keeps their setting.
+- **Taller keyboard glow.** On a phone the glow stayed under about 40% of the
+  strip. Two curves stacked: `LevelBars` raised each level to the 1.4th
+  power, and `LevelGlow` mapped the result to 12–75% of the height, with the
+  fill fading to clear at the top. Levels now map linearly to 8–100%, and the
+  fill keeps some colour at the top.
 - **Keyboard start.** A refused keyboard start now stays in VoiceiQ and shows
   the reason, instead of returning to the host app.
 

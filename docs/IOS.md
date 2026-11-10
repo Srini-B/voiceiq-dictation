@@ -350,7 +350,9 @@ the suggestion bar with the recording strip until the text is delivered.
 **Recording strip** (`RecordingStrip`, `LevelGlow`), modelled on Gboard's
 Rambler. Cancel (x) on the left, a red stop button on the right, the elapsed
 time in the middle. Behind them a red glow rises from the bottom edge as loud
-as the voice was. It is blurred and fades out at every edge, the bottom too,
+as the voice was: silence keeps 8% of the strip's height, and the height grows
+linearly with the mic level up to the full strip for the loudest speech. It is
+blurred and fades out at every edge, the bottom too,
 so it never draws a line between the strip and the keys; its top edge is a
 smooth curve through the recent levels, newest on the right. The app keeps
 the levels (`LevelBars`: one per mic level it writes, at most every 0.06 s,
