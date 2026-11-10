@@ -6,7 +6,7 @@
 
 **Press a key. Speak. It types.**
 
-Smart dictation, Ask Anything, Translate, and meeting notes for macOS and iPhone, on Gemini, OpenAI, or Claude with your own keys.
+Smart dictation, Ask Anything, Translate, and meeting notes for macOS and iPhone, on Gemini or OpenAI with your own keys.
 
 </div>
 
@@ -49,9 +49,8 @@ recovered on next launch. Offline, dictations queue and land when you reconnect.
 Every failure is retryable from History, and Retry transcribes any dictation again. Release the key mid-word and it keeps
 listening until you actually stop.
 
-**It is private by architecture.** Your voice is transcribed on device, or goes
-from your Mac straight to the provider you choose with *your* key: Gemini or
-OpenAI. Claude only writes, so with Claude your voice is transcribed on device and Anthropic gets the text when cleanup runs. No middleman server, no
+**It is private by architecture.** Your voice goes from your Mac straight to
+the provider you choose with *your* key: Gemini or OpenAI. No middleman server, no
 account, no analytics, no keystroke logging — one network host per dictation step,
 and you can read every line of the code that talks to it. Screen context (a few downscaled screenshots sent with each
 dictation so on-screen names and paths are spelled right) can be switched off
@@ -102,18 +101,13 @@ speaker-labelled transcript plus a summary, decisions, and owned action items
 under Settings → Meetings. Recording never stops on its own. Meetings run on
 the selected provider, or on the other provider when only its key is saved.
 With no usable key the recording is kept and marked failed with the reason,
-ready to Retry once a key is added. With Claude, meetings are transcribed on
-device only, so Retry works once the on-device models are downloaded, or after
-switching to Gemini or OpenAI with its key. Set **Meeting transcription** to On
-device and download Fluid Speech Mini plus Speaker separation (21.6 MB) to
-get the words and speakers on device, FluidMeet-style; only the transcript
-then goes to the writing model for notes. On iPhone and iPad, Fluid Speech
-Mini alone transcribes the meeting after it ends, as one speaker.
+ready to Retry once a key is added.
 
 **Cost Analysis.** Every model call is metered: tokens or audio seconds from the
 API response, priced at the provider's list prices. Settings → Cost Analysis shows today, this week, this month, and all
 time, broken down by action and by model, for Gemini or OpenAI (a
-toggle switches between them); each dictation in History shows what it cost. Details in
+toggle switches between them, with Claude added while there is spend from
+when it was a provider); each dictation in History shows what it cost. Details in
 [docs/COST_TRACKING.md](docs/COST_TRACKING.md).
 
 ## Setup
@@ -146,10 +140,6 @@ typical dictation is a few seconds of audio. VoiceiQ itself is free and has no a
 | Transcription | `gemini-3.5-transcribe` | `gpt-transcribe` |
 | Writing rules, Ask Anything, Translate, meeting notes | `gemini-3.8-flash` | `gpt-6.1-terra` |
 | Meeting speakers | `gemini-3.5-transcribe` | `gpt-4o-transcribe-diarize` |
-
-With **Meeting transcription** on device, Fluid Speech Mini and Nemotron 3
-Diarization (Mac) or Fluid Speech Mini alone (iPhone, iPad) replace the
-meeting speakers row; the notes row is unchanged.
 
 Every dictation is a transcription followed, with writing rules on, by a
 writing-rules pass. Screenshots go only to the writing model.
@@ -219,8 +209,9 @@ generated from `project.yml`, not checked in. One project holds both apps:
 `VoiceIQ` (macOS) and `VoiceIQiOS` with its `VoiceIQKeyboard` and
 `VoiceIQLiveActivity` extensions. All of them build on the `VoiceIQCore`
 package; the extensions link only its small `VoiceIQBridge` library.
-The Mac speech helper and iOS app also link `VoiceIQInference`. The Mac UI
-does not link the local inference runtime.
+The Mac's `VoiceiQLocalSpeech` helper links only `VoiceIQSpeech`: it is the
+VoiceiQ Meetings Chrome extension's native messaging host. It keeps its old
+name because installed browser manifests point at it.
 
 ```bash
 brew install xcodegen

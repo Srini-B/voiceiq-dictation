@@ -8,7 +8,8 @@ import VoiceIQBridge
 final class KeyboardModel: ObservableObject {
     @Published private(set) var snapshot = SessionSnapshot()
     @Published private(set) var appAlive = false
-    @Published private(set) var level: Float = 0
+    /// The words heard so far in the dictation being recorded.
+    @Published private(set) var liveText = ""
     @Published private(set) var answer: Delivery?
     @Published private(set) var notice: String?
     @Published private(set) var waitingForApp = false
@@ -45,8 +46,8 @@ final class KeyboardModel: ObservableObject {
 
     /// The session phase, trusting the snapshot only while the app is alive.
     /// A dictation the app was still writing when it stopped answering stays
-    /// `.processing`: iOS suspended the app (a first on-device load can take
-    /// minutes) or ended it, and opening the app finishes or recovers it.
+    /// `.processing`: iOS suspended the app or ended it, and opening the app
+    /// finishes or recovers it.
     var phase: SessionSnapshot.Phase {
         if appAlive { return snapshot.phase }
         return needsAppToFinish ? .processing : .off
@@ -72,7 +73,7 @@ final class KeyboardModel: ObservableObject {
             Task { @MainActor in self?.refresh() }
         }
         timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.tick() }
+            Task { @MainActor in self?.refresh() }
         }
         refresh()
     }
@@ -92,15 +93,12 @@ final class KeyboardModel: ObservableObject {
 
     /// Darwin pings are dropped while a process is suspended, so the keyboard
     /// also polls while it is on screen. Reads are local and cheap.
-    private func tick() {
-        refresh()
-        let newLevel = phase == .recording ? store.level : 0
-        if newLevel != level { level = newLevel }
-    }
-
     private func refresh() {
         let fresh = store.snapshot
         if fresh != snapshot { snapshot = fresh }
+        // With the snapshot, so a new recording never shows the last one's words.
+        let newText = phase == .recording ? store.liveText : ""
+        if newText != liveText { liveText = newText }
         let alive = store.appIsAlive()
         if alive != appAlive { appAlive = alive }
         if let pendingCommandID, store.handledCommandID == pendingCommandID {

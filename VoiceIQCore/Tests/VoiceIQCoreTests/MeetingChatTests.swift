@@ -18,9 +18,10 @@ final class MeetingChatTests: XCTestCase {
         super.tearDown()
     }
 
-    func testClaudeRequestCachesTheMeetingAndTheNewestQuestion() async throws {
+    /// Agent mode's custom provider can still speak Anthropic Messages.
+    func testAnthropicMessagesRequestCachesTheMeetingAndTheNewestQuestion() async throws {
         StubHost.reply = #"{"content":[{"type":"text","text":"Friday."}],"usage":{"input_tokens":10,"output_tokens":2}}"#
-        let reply = try await transport(.anthropicMessages).send(conversation)
+        let reply = try await transport(.anthropicMessages, model: "claude-sonnet-5-5").send(conversation)
 
         let body = try StubHost.lastBody()
         XCTAssertNil(body["tools"])
@@ -90,7 +91,7 @@ final class MeetingChatTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: folder.appendingPathComponent(aside)), damaged)
     }
 
-    private func transport(_ format: AgentAPIFormat, model: String = "claude-sonnet-5-5") -> AgentTransport {
+    private func transport(_ format: AgentAPIFormat, model: String) -> AgentTransport {
         let config = URLSessionConfiguration.ephemeral
         config.protocolClasses = [StubHost.self]
         let endpoint = AgentEndpoint(baseURL: URL(string: "https://stub.test")!, apiKey: "key", format: format,

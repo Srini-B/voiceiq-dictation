@@ -1,5 +1,4 @@
 import Foundation
-import VoiceIQSpeech
 
 public protocol DictationStreaming: Sendable {
     /// Display-only replacement text. Never a source for insertion or History.
@@ -7,12 +6,6 @@ public protocol DictationStreaming: Sendable {
     func enqueue(_ pcm: Data)
     func finish(framesWritten: Int64) async -> TranscriptionResult?
     func abort() async
-    /// True when `finish` decodes on this device rather than on a cloud socket.
-    var runsOnDevice: Bool { get }
-}
-
-public extension DictationStreaming {
-    var runsOnDevice: Bool { false }
 }
 
 /// A live result is usable only when the socket accepted the entire saved recording.
@@ -59,33 +52,10 @@ public final class LiveTranscriber: DictationStreaming {
         await session.abort()
     }
 
-    #if os(macOS)
-    /// The Mac UI never links inference: local sessions run in the speech helper.
-    @MainActor public static func makeFromSettings(audioURL: URL) -> (any DictationStreaming)? {
-        makeFromSettings(audioURL: audioURL, localSessionFactory: {
-            LocalRemoteSession(audioURL: $1, model: $0, streaming: $2, options: $3)
-        })
-    }
-    #endif
-
-    /// On iOS the app passes `LocalSpeechInference.makeSession`, so inference
-    /// runs in-process.
-    @MainActor public static func makeFromSettings(
-        audioURL: URL, localSessionFactory: LocalSpeechSessionFactory
-    ) -> (any DictationStreaming)? {
-        let settings = SettingsStore()
-        if settings.localTranscriptionEnabled,
-           let local = LocalTranscriber(audioURL: audioURL, model: settings.localSpeechModel,
-                                        language: settings.localSpeechLanguage,
-                                        realtime: settings.liveTranscriptionEnabled,
-                                        cloudOnColdLoad: KeychainStore.canTranscribeInCloud,
-                                        makeSession: localSessionFactory) {
-            return local
-        }
-        return makeCloudFromSettings()
-    }
-
-    @MainActor private static func makeCloudFromSettings() -> (any DictationStreaming)? {
+    /// The provider's live socket (Gemini Live or OpenAI Realtime) while
+    /// Real-time transcription is on; nil otherwise, or when the provider has
+    /// no key. Its partials are what the Mac pill and the iPhone keyboard show.
+    @MainActor public static func makeFromSettings() -> (any DictationStreaming)? {
         let settings = SettingsStore()
         let vocabulary = DictionaryStore().sanitizedVocabulary()
         guard settings.liveTranscriptionEnabled else { return nil }
@@ -105,8 +75,6 @@ public final class LiveTranscriber: DictationStreaming {
             return make(model: model, key: key, renewAfter: 3300,
                         dialect: OpenAILiveDialect(model: model, delay: .low, keywords: vocabulary),
                         transport: { WebSocketTransport.openAI(apiKey: { key }) })
-        case .anthropic:
-            return nil
         }
     }
 

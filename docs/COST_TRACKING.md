@@ -71,24 +71,13 @@ counts. Chat models (GPT-6.1 Terra, GPT-6 Astra, GPT-6 Luna, and
 `gpt-4o-transcribe-diarize`, which bills tokens) use the OpenAI-shaped
 `usage` block (`TokenUsage.fromOpenAI`).
 
-Claude calls use `TokenUsage.fromAnthropic`. Rows booked before 2026-11-06,
-when Claude could transcribe with Nemotron 3.5 Transcribe on DeepInfra, keep
-their stored cost and still count under Claude (`nvidia/` model IDs).
-Cleanup marks the rules up to `PromptV1.layoutReminder` with Anthropic's
-`cache_control` with a one-hour TTL (`GeminiClient.anthropicCleanupSplit`), so
-dictations within an hour of the last one read them from the cache. Measured
-2026-10-29 on Haiku: the second of two dictations into different apps sent 146
-new tokens and read 12,573 from the cache. Editing the Dictionary or the writing
-rules, including a word the app learns on its own, changes the block, so the
-next dictation writes it again.
-
-Cleanup runs on Claude Sonnet 5.5 since 2026-10-30 (Haiku 5.5 before): $2 in,
-$10 out, $2.50 five-minute write, $4 one-hour write, $0.10 cache hit per
-million tokens. On the 12.6k-token rules block a write costs about $0.05 and
-a hit $0.0013, against $0.025 uncached. The one-hour TTL stays: on the nine
-dictations of 2026-10-29 (seven within an hour of the previous one, three
-within five minutes) the rules cost about $0.11 with it, $0.19 with five
-minutes and $0.23 without caching.
+Claude was a provider until 2026-11-10. Its rows keep their stored cost and
+count under the Claude source (`claude`, `anthropic/` and `nvidia/` model IDs;
+`nvidia/` rows were booked before 2026-11-06, when Claude transcribed with
+Nemotron 3.5 Transcribe on DeepInfra). `PriceBook` keeps the Claude prices, so
+those rows still price. Agent mode's custom provider can still call Claude
+models in the Anthropic Messages format; those calls use
+`TokenUsage.fromAnthropic`.
 
 A cache write counts as input tokens. `fromAnthropic` also keeps the write's
 TTL from `usage.cache_creation`, and `ModelPrice.cost` adds the write surcharge:
@@ -125,7 +114,9 @@ shows the paid-tier figure.
 Settings → Advanced, and a Gemini/OpenAI toggle (`CostSource`)
 switches between them; every read filters `usage` rows by model ID
 (`CostSource.modelPrefixes`: `gemini` and `google/` for Gemini, `gpt`,
-`whisper` and `openai/` for OpenAI). Rows from services older builds supported
+`whisper` and `openai/` for OpenAI). A Claude segment joins the toggle only
+while the ledger has Claude rows (`CostSource.isCurrent` is false for it; each
+reload counts its rows). Rows from services older builds supported
 (MAI Transcribe 2, Sarvam, and ElevenLabs `scribe_v2`) match no tab. It shows
 today, this week, this month, and all time totals; a period picker drives the by-action
 and by-model tables and the recent-calls list. The footer names the price
@@ -133,12 +124,11 @@ source (`CostSource.pricingNote`): the provider's pricing page. The iPhone's
 Cost page has the same source toggle.
 `HistoryPane` shows the summed session cost on each row and the detail column
 (`DictationDetail`) lists each call with its model, what it was billed on, and its cost.
-Successful on-device calls use model ID `fluid-speech-mini-local`
-(`parakeet-v3-local` before 2026-10-14) or
-`nemotron-3.5-multilingual-local`, stage `transcribe`, and explicit zero cost.
-They appear in session details but match neither cloud provider tab. Cleanup
-and saved-audio fallback retain their normal provider costs.
-See [local transcription](LOCAL_TRANSCRIPTION.md).
+Builds before 2026-11-10 could transcribe on device. Those rows have model
+IDs such as `fluid-speech-mini-local`, `fluid-speech-pro-local`,
+`parakeet-v3-local` and `nemotron-3.5-multilingual-local`, stage `transcribe`,
+and an explicit zero cost. They still appear in session details but match no
+provider tab.
 
 `UsageFormat.measure` writes what a call was billed on: "in 1.2k · out 300"
 for token-priced calls, "6m 30s of audio" for audio-priced ones, and "billed

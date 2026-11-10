@@ -2,52 +2,39 @@
 
 ## The promise
 
-By default, your voice goes from your Mac directly to the model provider you chose in
-Settings → Advanced, using your own API key: Google's Gemini API, OpenAI's API,
-or Claude (Anthropic gets the text; Claude has no speech model, so with
-Claude your voice is transcribed by an on-device model).
-Optional Fluid Speech Mini or Fluid Speech Pro transcription processes audio on-device on supported systems
-(Fluid Speech Pro needs macOS 15 or iOS 18).
-Cleanup and screen context still use your selected cloud provider. Failed local
-transcription falls back to sending the saved audio to that provider; with
-Claude nothing is sent and the dictation fails.
+Your voice goes from your Mac directly to the model provider you chose in
+Settings → Advanced, using your own API key: Google's Gemini API or OpenAI's API.
+Transcription, cleanup and screen context all use that provider. VoiceiQ runs
+no speech model on your Mac or iPhone.
 There is no VoiceiQ server, no account, no analytics, no telemetry.
 Everything else stays on your Mac. The code is open — verify all of this.
 
 "The provider" below means the one you selected:
-`generativelanguage.googleapis.com` (Gemini), `api.openai.com` (OpenAI), or,
-for Claude, `api.anthropic.com`. Anthropic gets text, screenshots and agent
-turns, never audio. Only it receives a given dictation;
+`generativelanguage.googleapis.com` (Gemini) or `api.openai.com` (OpenAI).
+Only it receives a given dictation;
 nothing is sent to the others. Meetings are
 the one exception: a meeting goes to the selected provider when its key is
 saved, otherwise to the next provider you have a key for, and a meeting whose
 provider fails moves on to each other provider you have a key for in turn
-(in the order Gemini, OpenAI, Claude). With Claude selected, no meeting audio
-leaves your Mac: meetings are transcribed on device only, and Claude gets the
-transcript to write the notes.
+(the selected provider first, then the other).
+If you set a custom provider for Agent mode, it also receives each Agent
+command's text and its observations: screenshots, accessibility summaries
+of the screen and tool results ([AGENT-MODE.md](AGENT-MODE.md)); the command is still transcribed by the
+selected provider.
 With no usable key, nothing is sent and the recording stays on your Mac.
 
 ## What leaves your machine (the complete list)
 
-1. **The audio of each cloud dictation**, sent to the provider. With "Real-time
+1. **The audio of each dictation**, sent to the provider. With "Real-time
    transcription" off, VoiceiQ sends FLAC-compressed audio after you stop.
    With it on, VoiceiQ sends PCM audio while you speak in Dictation, Ask
    Anything, Translate and Agent. It uses the selected provider's existing
-   key. Claude takes no audio. Cancelled dictations may already have been
+   key. Cancelled dictations may already have been
    sent in part. If the live connection fails or
    does not return every completed turn, VoiceiQ uploads the saved recording
-   to that provider after you stop. Real-time transcription is on by default
-   (since 2026-10-13, so the result lands about 1.5 s sooner after you stop).
+   to that provider after you stop. Real-time transcription is off by default
+   (since 2026-11-10); turn it on in Settings › Dictation.
    It does not affect meetings.
-   With "On-device transcription" on and the selected model downloaded,
-   successful transcription sends no audio. The explicit Download button fetches
-   252.7 MB for Fluid Speech Mini or 1.23 GB for Fluid Speech Pro from Hugging Face and its CDN, exposing your IP address
-   to those hosts, but sending no recordings or API keys. Missing models use the
-   configured cloud transcription. Failed local results upload the saved
-   recording through the existing cloud path. Neither applies with Claude:
-   its dictations and meetings are transcribed on device only, and one that
-   can't be is saved without a transcript and sends no audio. This option is
-   not an offline-only privacy mode. See [local transcription](LOCAL_TRANSCRIPTION.md).
 2. **Your dictionary terms**, alongside that audio. The transcription model uses
    them to bias what it hears, which is why names and jargon come out spelled
    right as you speak rather than being corrected afterwards. Only the correct
@@ -116,13 +103,8 @@ With no usable key, nothing is sent and the recording stays on your Mac.
    system sound.
    Recording stops only when you stop it; the stretches with speech are then
    sent to the provider for a speaker-labelled transcript, and that
-   transcript is sent back for a summary and action items. With "Meeting
-   transcription" on device and the models downloaded (the selected Fluid
-   Speech model and Speaker separation on the Mac; the selected Fluid
-   Speech model alone on iPhone and iPad, where the transcript has one speaker), the audio never leaves the
-   device: the words and speakers are worked out locally, and only the
-   transcript is sent, for the notes. If that on-device pass fails and a key is saved, the audio is sent
-   as above, except with Claude, whose meetings never send audio. Turn the setting off and no call detection runs.
+   transcript is sent back for a summary and action items. Turn the setting
+   off and no call detection runs.
    With "Read names from the screen" on (Settings → Dictation, on by default,
    macOS only) and Screen Recording already granted, VoiceiQ takes a snapshot
    of the call window every 3 seconds while recording. It captures only a
@@ -147,8 +129,7 @@ With no usable key, nothing is sent and the recording stays on your Mac.
    instruction to the provider. Nothing else in the window is read. Translate (⌃⌥T)
    sends only your dictation, as a normal dictation does.
 8. **Your API keys**, each only in the request header to its own service: the
-   Gemini key to Google, the OpenAI key to OpenAI and the Anthropic key to
-   Anthropic. They are stored in the
+   Gemini key to Google and the OpenAI key to OpenAI. They are stored in the
    macOS Keychain, never in files or preferences.
 9. **Update checks.** Every six hours, and when you choose Check for Updates, the
    app downloads the update feed (`appcast.xml`) from the project's GitHub
@@ -241,6 +222,14 @@ Extensions page.
   kept), plus one-click **Delete all history**.
 - Local files are protected by FileVault if enabled; they are not separately
   encrypted (stated honestly).
+- Builds before 2026-11-10 could download speech models into
+  `~/Library/Application Support/VoiceiQ/Models`. Every launch deletes that
+  folder, and on the Mac the helper's cache in
+  `~/Library/Caches/io.blue.voiceiq.localspeech` (`FileLayout.removeRetiredModels`).
+  That cleanup can be removed once every install has launched a build from
+  2026-11-10 or later. On that first launch the app also switches to the
+  provider that has a saved key when the selected one has none
+  (`SettingsStore.adoptProviderWithKeyOnce`).
 
 ## The provider's side of the wire
 

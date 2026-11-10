@@ -1,13 +1,10 @@
 import Foundation
 
-/// Whose models run: Gemini's, OpenAI's, or Claude's, each on its own API with
-/// its own key. Settings calls this the provider. Gemini and OpenAI also
-/// transcribe. Claude only writes, so with Claude recordings are transcribed
-/// on device.
+/// Whose models run: Gemini's or OpenAI's, each on its own API with its own
+/// key. Settings calls this the provider. Both transcribe and write.
 public enum ModelProvider: String, CaseIterable, Sendable, Codable, Identifiable {
     case gemini
     case openAI
-    case anthropic
 
     public var id: String { rawValue }
 
@@ -15,7 +12,6 @@ public enum ModelProvider: String, CaseIterable, Sendable, Codable, Identifiable
         switch self {
         case .gemini: return "Gemini"
         case .openAI: return "OpenAI"
-        case .anthropic: return "Claude"
         }
     }
 
@@ -24,40 +20,6 @@ public enum ModelProvider: String, CaseIterable, Sendable, Codable, Identifiable
         switch self {
         case .gemini: return "Google AI Studio"
         case .openAI: return "OpenAI API"
-        case .anthropic: return "Anthropic API"
-        }
-    }
-
-    /// Whether the provider has a speech model of its own.
-    public var transcribes: Bool { self != .anthropic }
-
-    /// Usage records store only the model ID; the provider is read off it.
-    /// The `google/` and `openai/` prefixes match rows booked before the
-    /// gateways were removed, and `nvidia/` rows booked while Claude
-    /// transcribed with Nemotron on DeepInfra.
-    public init?(modelID: String) {
-        let id = modelID.lowercased()
-        if Self.gemini.modelPrefixes.contains(where: id.hasPrefix) { self = .gemini }
-        else if Self.openAI.modelPrefixes.contains(where: id.hasPrefix) { self = .openAI }
-        else if Self.anthropic.modelPrefixes.contains(where: id.hasPrefix) { self = .anthropic }
-        else { return nil }
-    }
-
-    /// Model ID prefixes, for `init(modelID:)` and SQL `LIKE` filters.
-    public var modelPrefixes: [String] {
-        switch self {
-        case .gemini: return ["gemini", "google/"]
-        case .openAI: return ["gpt", "whisper", "openai/"]
-        case .anthropic: return ["claude", "nvidia/", "anthropic/"]
-        }
-    }
-
-    /// Where the pricing on the Cost pane comes from.
-    public var pricingNote: String {
-        switch self {
-        case .gemini: return "Paid-tier Standard prices from the Gemini API pricing page. A free-tier key is billed nothing."
-        case .openAI: return "Standard prices from the OpenAI API pricing page."
-        case .anthropic: return "Standard prices from Anthropic's pricing page."
         }
     }
 
@@ -65,22 +27,5 @@ public enum ModelProvider: String, CaseIterable, Sendable, Codable, Identifiable
     /// others, each only while `hasKey`. Empty when none has a key.
     public static func meetingOrder(selected: ModelProvider, hasKey: (ModelProvider) -> Bool) -> [ModelProvider] {
         ([selected] + allCases.filter { $0 != selected }).filter(hasKey)
-    }
-}
-
-/// Who turns audio into text for dictation or for meetings: a model on this
-/// device or the provider's speech model. The provider's writing model always
-/// runs after whichever is picked.
-public enum TranscriptionSource: String, CaseIterable, Sendable, Identifiable {
-    case onDevice
-    case provider
-
-    public var id: String { rawValue }
-
-    public func displayName(for provider: ModelProvider) -> String {
-        switch self {
-        case .onDevice: return "On device"
-        case .provider: return provider.transcribes ? provider.displayName : "Cloud"
-        }
     }
 }

@@ -23,7 +23,7 @@ def main():
     for path in app.rglob("*"):
         if path.suffix in {".mlmodel", ".mlmodelc", ".mlpackage", ".onnx", ".safetensors", ".gguf", ".cact"}:
             forbidden.append(str(path.relative_to(app)))
-        # FluidAudio's resource bundles (LuxTTS G2P data) come only with its TTS trait.
+        # FluidAudio's resource bundles: the app no longer links any speech runtime.
         if (path.name.startswith("FluidAudio_") and path.suffix == ".bundle") or path.name.startswith("ggml-"):
             forbidden.append(str(path.relative_to(app)))
     if forbidden:
@@ -37,18 +37,14 @@ def main():
     )
     symbols = subprocess.run(["nm", str(symbol_file)], check=True, capture_output=True, text=True).stdout
     if mac:
+        # The helper is only the browser extension's native messaging host.
         helper = app / "Contents/Helpers/VoiceiQLocalSpeech.app/Contents/MacOS/VoiceiQLocalSpeech"
-        if "10FluidAudio" in symbols or "_nemo_normalize" in symbols:
-            raise SystemExit("Mac UI still links the inference runtime")
-        symbols = subprocess.run(["nm", str(helper)], check=True, capture_output=True, text=True).stdout
-        if any(name in symbols for name in ["11VoiceIQCore", "GRDB"]):
-            raise SystemExit("Speech helper still links app/database code")
-        if "10FluidAudio" not in symbols:
-            raise SystemExit("Speech helper lacks the expected inference runtime")
-    elif "10FluidAudio" not in symbols:
-        raise SystemExit("iOS app lacks the expected inference runtime")
-    if "_nemo_normalize_sentence" not in symbols:
-        raise SystemExit("Inference lacks the required English normalization runtime")
+        helper_symbols = subprocess.run(["nm", str(helper)], check=True, capture_output=True, text=True).stdout
+        if any(name in helper_symbols for name in ["11VoiceIQCore", "GRDB"]):
+            raise SystemExit("Browser host helper still links app/database code")
+        symbols += helper_symbols
+    if "10FluidAudio" in symbols or "_nemo_normalize" in symbols:
+        raise SystemExit("The on-device speech runtime is still linked")
 
     print(json.dumps({
         "app": str(app),

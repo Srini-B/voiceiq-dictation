@@ -43,11 +43,10 @@ final class VoiceSession: ObservableObject {
     private let store = SharedStore.shared
     private var heartbeat: Timer?
     private var warmTimer: Timer?
-    /// Waits for a model load that is finishing as a warm-up before ending.
-    private var warmHold: Task<Void, Never>?
     private var delivery: Delivery?
     private var notice: Notice?
     private var lastPublished: SessionSnapshot?
+    private var bars = LevelBars()
     private var backgroundTask: UIBackgroundTaskIdentifier = .invalid
     /// The Action button started this session, so it carries a Live Activity.
     private var startedByActionButton = false
@@ -90,7 +89,7 @@ final class VoiceSession: ObservableObject {
         // The dictation that opened the session starts right after this. If
         // none does (it was refused), count the warm window from now.
         DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
-            guard let self, self.isActive, self.dictationPhase == .warm, self.warmTimer == nil, self.warmHold == nil else { return }
+            guard let self, self.isActive, self.dictationPhase == .warm, self.warmTimer == nil else { return }
             self.scheduleWarmEnd()
         }
     }
@@ -108,7 +107,7 @@ final class VoiceSession: ObservableObject {
         heartbeat?.invalidate()
         heartbeat = nil
         store.heartbeat = nil
-        store.level = 0
+        clearDictationTrace()
         audio.stop()
         activity.end()
         publish(force: true)
@@ -118,6 +117,8 @@ final class VoiceSession: ObservableObject {
     // MARK: - Warm window
 
     private func phaseChanged() {
+        // Each dictation starts with an empty glow and no words.
+        clearDictationTrace()
         guard isActive else { return }
         switch dictationPhase {
         case .recording:
@@ -141,7 +142,7 @@ final class VoiceSession: ObservableObject {
         cancelWarmEnd()
         let seconds = MobileSettings.warmWindow.seconds
         guard seconds > 0 else {
-            endAfterModelLoad()
+            end()
             return
         }
         warmUntil = Date().addingTimeInterval(seconds)
@@ -149,42 +150,8 @@ final class VoiceSession: ObservableObject {
             Task { @MainActor in
                 guard let self, self.dictationPhase == .warm, self.meetingStartedAt == nil else { return }
                 SessionDiagnostics.note("warm window over")
-                self.endAfterModelLoad()
+                self.end()
             }
-        }
-    }
-
-    /// A cold model load that outlived its dictation goes on as a warm-up
-    /// (`LocalModelWarmup`). The mic stays open until it ends, so iOS does not
-    /// suspend the app with the load half done; the next dictation then loads
-    /// fast. Without a load in progress the session ends now. The hold is
-    /// bounded by `TimeoutPolicy.localLoad`: a stalled load must not keep the
-    /// mic open indefinitely.
-    private func endAfterModelLoad() {
-        guard LocalModelWarmup.isLoading else {
-            end()
-            return
-        }
-        SessionDiagnostics.note("session held open for the model load")
-        warmHold = Task { [weak self] in
-            let ended = await Self.modelLoadEnded(within: TimeoutPolicy.localLoad)
-            guard let self, !Task.isCancelled, self.dictationPhase == .warm, self.meetingStartedAt == nil else { return }
-            if !ended {
-                SessionDiagnostics.note(String(format: "model load still running after %.0fs; session ended", TimeoutPolicy.localLoad))
-            }
-            self.warmHold = nil
-            self.end()
-        }
-    }
-
-    /// True when every model load ended within `seconds`.
-    private static func modelLoadEnded(within seconds: TimeInterval) async -> Bool {
-        await withTaskGroup(of: Bool.self) { group in
-            group.addTask { await LocalModelWarmup.finished(); return true }
-            group.addTask { try? await Task.sleep(for: .seconds(seconds)); return false }
-            let first = await group.next() ?? false
-            group.cancelAll()
-            return first
         }
     }
 
@@ -200,8 +167,6 @@ final class VoiceSession: ObservableObject {
         warmTimer?.invalidate()
         warmTimer = nil
         warmUntil = nil
-        warmHold?.cancel()
-        warmHold = nil
     }
 
     func setPreferBuiltInMic(_ prefer: Bool) {
@@ -221,8 +186,21 @@ final class VoiceSession: ObservableObject {
     }
 
     func setLevel(_ level: Float) {
-        guard isActive else { return }
-        store.level = level
+        guard isActive, dictationPhase == .recording else { return }
+        bars.append(level)
+        store.levelBars = bars.heights
+    }
+
+    /// The live transcriber's words so far, for the keyboard to show.
+    func setLiveText(_ text: String) {
+        guard isActive, dictationPhase == .recording else { return }
+        store.liveText = text
+    }
+
+    private func clearDictationTrace() {
+        bars = LevelBars()
+        store.levelBars = []
+        store.liveText = ""
     }
 
     // MARK: - Background time

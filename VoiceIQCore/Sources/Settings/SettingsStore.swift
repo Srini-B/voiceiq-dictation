@@ -1,5 +1,4 @@
 import Foundation
-import VoiceIQSpeech
 
 public extension Notification.Name {
     /// Posted after any SettingsStore write and after Keychain API-key writes,
@@ -77,8 +76,9 @@ public struct SettingsStore: Sendable {
         return value
     }
 
-    /// Gemini, OpenAI or Claude, chosen in Settings → Advanced. Any other stored
-    /// value (an older build's gateway) reads as Gemini.
+    /// Gemini or OpenAI, chosen in Settings → Advanced. Any other stored
+    /// value (an older build's gateway, or Claude, removed 2026-11-10) reads
+    /// as Gemini.
     public var preferredProvider: ModelProvider {
         ModelProvider(rawValue: Self.defaults.string(forKey: "modelProvider") ?? "") ?? .gemini
     }
@@ -87,11 +87,27 @@ public struct SettingsStore: Sendable {
         Self.set(provider.rawValue, forKey: "modelProvider")
     }
 
-    /// On by default since 2026-10-13: the transcript is finished when the
-    /// user stops, so the wait is the writing model alone (measured 2.95 s
-    /// end to end against 4.45 s median for batch). A refused socket falls
-    /// back to the saved recording on its own.
-    public var liveTranscriptionEnabled: Bool { liveTranscriptionChosen ?? true }
+    /// Runs once per install, on the first cloud-only build. Older builds
+    /// dictated on device without a key, or kept Claude selected, so the
+    /// selected provider may have no key while the other one does: switch to
+    /// that one. Also drops the on-device settings those builds stored.
+    public func adoptProviderWithKeyOnce() {
+        guard !Self.defaults.bool(forKey: "didAdoptProviderWithKey") else { return }
+        Self.defaults.set(true, forKey: "didAdoptProviderWithKey")
+        let selected = preferredProvider
+        let provider = KeychainStore.hasKey(for: selected) ? selected
+            : ModelProvider.allCases.first(where: KeychainStore.hasKey(for:)) ?? selected
+        setPreferredProvider(provider)
+        for key in ["dictationSource", "meetingSource", "localTranscriptionEnabled", "localMeetingTranscriptionEnabled",
+                    "localSpeechModel", "localSpeechLanguage", "writingSource", "localWriterModel"] {
+            Self.defaults.removeObject(forKey: key)
+        }
+    }
+
+    /// Off by default since 2026-11-10, the owner's choice; it was on from
+    /// 2026-10-13. A user who turned it on or off keeps their choice. A
+    /// refused socket falls back to the saved recording on its own.
+    public var liveTranscriptionEnabled: Bool { liveTranscriptionChosen ?? false }
 
     /// The user's own setting, nil until they change the toggle.
     public var liveTranscriptionChosen: Bool? {
@@ -103,88 +119,9 @@ public struct SettingsStore: Sendable {
         Self.set(enabled, forKey: "liveDictationEnabled")
     }
 
-    /// Who transcribes dictation. Reads the pre-picker boolean when the key
-    /// is absent: on-device on → `.onDevice`, otherwise the provider. A value
-    /// this build no longer offers (ElevenLabs) reads as the provider. On a
-    /// device without local models `.onDevice` reads as the provider. Where
-    /// local models run, Claude reads as `.onDevice`: it has no speech model.
-    public var dictationSource: TranscriptionSource {
-        source(forKey: "dictationSource", legacyLocalKey: "localTranscriptionEnabled")
-    }
-
-    public func setDictationSource(_ source: TranscriptionSource) {
-        Self.set(source.rawValue, forKey: "dictationSource")
-    }
-
-    public var localTranscriptionEnabled: Bool { dictationSource == .onDevice }
-
-    private func source(forKey key: String, legacyLocalKey: String) -> TranscriptionSource {
-        let stored: TranscriptionSource
-        if let raw = Self.defaults.string(forKey: key) {
-            stored = TranscriptionSource(rawValue: raw) ?? .provider
-        } else if Self.defaults.bool(forKey: legacyLocalKey) {
-            stored = .onDevice
-        } else {
-            stored = .provider
-        }
-        guard LocalModelSupport.isAvailable else { return .provider }
-        return preferredProvider.transcribes ? stored : .onDevice
-    }
-
-    /// False for Claude: no cloud speech model.
-    public var providerTranscribes: Bool { preferredProvider.transcribes }
-
-    /// The on-device model to download and use. Unknown, missing, or
-    /// platform-unavailable values read as Fluid Speech Mini.
-    public var localSpeechModel: LocalSpeechModel {
-        let stored = LocalSpeechModel(stored: Self.defaults.string(forKey: "localSpeechModel") ?? "")
-        guard let stored, LocalSpeechModel.available.contains(stored) else { return .parakeet }
-        return stored
-    }
-
-    /// The language the on-device model transcribes. A stored code the
-    /// selected model lacks (German, then Fluid Speech Mini) reads as English,
-    /// and comes back when that model is picked again.
-    public var localSpeechLanguage: LocalSpeechLanguage {
-        localSpeechModel.language(code: localSpeechLanguageCode)
-    }
-
-    /// The stored code as chosen, which the selected model may not offer.
-    public var localSpeechLanguageCode: String? {
-        Self.defaults.string(forKey: "localSpeechLanguage")
-    }
-
-    public func setLocalSpeechLanguage(_ code: String) {
-        Self.set(code, forKey: "localSpeechLanguage")
-    }
-
-    public func setLocalSpeechModel(_ model: LocalSpeechModel) {
-        guard model != localSpeechModel else { return }
-        Self.set(model.rawValue, forKey: "localSpeechModel")
-    }
-
-    /// Who transcribes meetings. On device needs the selected model and, on the
-    /// Mac, the speaker diarizer downloaded; notes still come from the cloud writing
-    /// model. Same legacy reading and Claude rule as `dictationSource`.
-    public var meetingSource: TranscriptionSource {
-        source(forKey: "meetingSource", legacyLocalKey: "localMeetingTranscriptionEnabled")
-    }
-
-    public func setMeetingSource(_ source: TranscriptionSource) {
-        Self.set(source.rawValue, forKey: "meetingSource")
-    }
-
-    public var localMeetingTranscriptionEnabled: Bool { meetingSource == .onDevice }
-
-    /// Providers for meeting notes; see `ModelProvider.meetingOrder`.
+    /// Providers for a meeting's transcript and notes; see `ModelProvider.meetingOrder`.
     public var meetingProviders: [ModelProvider] {
         ModelProvider.meetingOrder(selected: preferredProvider, hasKey: KeychainStore.hasKey(for:))
-    }
-
-    /// Providers for cloud meeting transcription: `meetingProviders` that can
-    /// transcribe. None on Claude, whose meetings are transcribed only on device.
-    public var meetingTranscribers: [ModelProvider] {
-        preferredProvider.transcribes ? meetingProviders.filter(KeychainStore.canTranscribe(with:)) : []
     }
 
     /// Show the resting dot at the bottom of the screen when idle. Off = the pill

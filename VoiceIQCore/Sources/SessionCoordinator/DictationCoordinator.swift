@@ -139,8 +139,6 @@ public final class DictationCoordinator: ObservableObject {
     /// Where the time after key-up went, for the session log.
     public struct StageTimes: Equatable, Sendable {
         public enum Source: Equatable, Sendable {
-            /// Decoded in-process or in the speech helper.
-            case onDevice
             /// A cloud socket that streamed during the recording.
             case cloudLive
             /// The saved recording uploaded after the fact; one request transcribes and cleans up.
@@ -149,7 +147,7 @@ public final class DictationCoordinator: ObservableObject {
         public var source: Source
         /// Trailing speech kept after key-up, then the microphone teardown.
         public var finalize: TimeInterval
-        /// Decode, the live socket's final result, or the whole upload round-trip.
+        /// The live socket's final result, or the whole upload round-trip.
         public var transcribe: TimeInterval
         /// The cleanup request; nil for `.cloudUpload`, whose one request includes it.
         public var cleanup: TimeInterval?
@@ -604,7 +602,6 @@ public final class DictationCoordinator: ObservableObject {
         let finalizeStartedAt = Date()
         let finalizeSeconds = finalizeStartedAt.timeIntervalSince(finalizeRequestedAt ?? finalizeStartedAt)
         let live = liveTranscriber
-        let source: StageTimes.Source = live?.runsOnDevice == true ? .onDevice : .cloudLive
         let usageScope = UsageScope(mode: session.context.mode, sessionID: sessionID.uuidString)
         inFlightTask = Task { [weak self] in
           await UsageMeter.$scope.withValue(usageScope) {
@@ -620,7 +617,7 @@ public final class DictationCoordinator: ObservableObject {
                         liveResult, durationSeconds: result.durationSeconds, context: session.context
                     )
                     stages = StageTimes(
-                        source: source, finalize: finalizeSeconds,
+                        source: .cloudLive, finalize: finalizeSeconds,
                         transcribe: decodeDoneAt.timeIntervalSince(finalizeStartedAt),
                         cleanup: Date().timeIntervalSince(decodeDoneAt), insert: nil
                     )
@@ -630,8 +627,8 @@ public final class DictationCoordinator: ObservableObject {
                         durationSeconds: result.durationSeconds,
                         context: session.context
                     )
-                    // Counted from the recording's end so a cloud fallback after a
-                    // slow on-device load shows that wait too.
+                    // Counted from the recording's end so a fallback after the
+                    // live socket's final result timed out shows that wait too.
                     stages = StageTimes(
                         source: .cloudUpload, finalize: finalizeSeconds,
                         transcribe: Date().timeIntervalSince(finalizeStartedAt), cleanup: nil, insert: nil

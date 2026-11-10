@@ -42,13 +42,12 @@ public struct AgentEndpoint: Equatable, Sendable {
                 isCustom: true
             )
         }
-        return writingModel(settings: settings, anthropicModel: AnthropicConfig().agentModel)
+        return writingModel(settings: settings)
     }
 
     /// The selected provider's writing model on its own API, ignoring Agent
     /// mode's custom provider. Nil when that provider has no key.
-    public static func writingModel(settings: SettingsStore = SettingsStore(),
-                                    anthropicModel: String = AnthropicConfig().writingModel) -> AgentEndpoint? {
+    public static func writingModel(settings: SettingsStore = SettingsStore()) -> AgentEndpoint? {
         let provider = settings.preferredProvider
         let gemini = settings.geminiConfig
         let openAI = settings.openAIConfig
@@ -62,10 +61,6 @@ public struct AgentEndpoint: Equatable, Sendable {
             // Responses, because GPT-6.1 Terra and GPT-6 Astra call tools only through it.
             return AgentEndpoint(baseURL: URL(string: "https://api.openai.com")!, apiKey: key, format: .openAIResponses,
                                  modelID: openAI.writingModel, label: provider.directName, isCustom: false)
-        case .anthropic:
-            guard let key = KeychainStore.loadKey(.anthropic) else { return nil }
-            return AgentEndpoint(baseURL: URL(string: "https://api.anthropic.com")!, apiKey: key, format: .anthropicMessages,
-                                 modelID: anthropicModel, label: "Anthropic API", isCustom: false)
         }
     }
 

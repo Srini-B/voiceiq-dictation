@@ -362,9 +362,8 @@ private struct APIKeyScreen: View {
     var body: some View {
         ScreenScaffold("Bring your own key.", "VoiceiQ uses your \(provider.displayName) API key. It's stored in your Mac's Keychain and only ever sent to \(host).") {
             VStack(spacing: VoiceIQUI.Spacing.s) {
-                // Claude cannot transcribe without an on-device model, so it is set up in Settings.
                 Picker("Provider", selection: $provider) {
-                    ForEach(ModelProvider.allCases.filter { $0 != .anthropic }) { Text($0.displayName).tag($0) }
+                    ForEach(ModelProvider.allCases) { Text($0.displayName).tag($0) }
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()

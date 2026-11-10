@@ -317,9 +317,6 @@ public struct MeetingTranscriber: Sendable {
             return try await client.transcribeSpeakers(audio: flac, model: models.transcribe, endpoint: endpoint, deadline: 600)
         case .openAI:
             return try await client.openAIDiarize(audio: flac, references: references, deadline: 600)
-        case .anthropic:
-            // No speech model; `SettingsStore.meetingTranscribers` never lists Claude.
-            throw TranscriptionError.auth
         }
     }
 

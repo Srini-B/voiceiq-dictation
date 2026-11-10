@@ -131,6 +131,29 @@ public struct SessionSnapshot: Codable, Equatable, Sendable {
     }
 }
 
+/// The keyboard's recording glow: one height per microphone level the app
+/// samples, newest last. The app keeps it, so a keyboard that appears in the
+/// middle of a dictation shows what came before instead of starting empty.
+public struct LevelBars: Sendable {
+    public static let capacity = 256
+    public private(set) var heights: [Float] = []
+    private var smoothed: Float = 0
+
+    public init() {}
+
+    public mutating func append(_ level: Float) {
+        // A NaN would stick in `smoothed`, and `SharedStore.levelBars` traps converting it.
+        guard level.isFinite else { return }
+        let target = min(max(level, 0), 1)
+        // Fast attack, slow release: syllables jump up and fall back gently.
+        smoothed += (target - smoothed) * (target > smoothed ? 0.7 : 0.3)
+        // The level as is: `AudioLevelCurve` already puts ordinary speech in
+        // the upper half. Raising it to 1.4 here kept speech under 40%.
+        heights.append(smoothed)
+        if heights.count > Self.capacity { heights.removeFirst(heights.count - Self.capacity) }
+    }
+}
+
 /// A button pressed in the Live Activity. Its intents run in the app process.
 public struct ActivityRequest: Codable, Equatable, Sendable, Identifiable {
     public enum Action: String, Codable, Sendable {

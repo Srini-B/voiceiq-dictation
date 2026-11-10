@@ -33,6 +33,8 @@ struct CostPane: View {
 
     @State private var period: Period = .month
     @State private var source = CostSource(SettingsStore().preferredProvider)
+    /// The current providers, plus Claude while it has rows (`reload`).
+    @State private var sources = CostSource.allCases.filter(\.isCurrent)
     /// Simple view: period totals and cost per action. Detailed adds tokens,
     /// the per-model table, and the recent-call list.
     @AppStorage("costPaneDetailed") private var detailed = false
@@ -50,7 +52,7 @@ struct CostPane: View {
                 // into "$0.01…".
                 HStack {
                     Picker("Source", selection: $source) {
-                        ForEach(CostSource.allCases) { Text($0.displayName).tag($0) }
+                        ForEach(sources) { Text($0.displayName).tag($0) }
                     }
                     .pickerStyle(.segmented)
                     .labelsHidden()
@@ -194,6 +196,8 @@ struct CostPane: View {
     // MARK: - Data
 
     private func reload() {
+        sources = CostSource.allCases.filter { $0.isCurrent || store.total(source: $0).calls > 0 }
+        if !sources.contains(source) { source = CostSource(SettingsStore().preferredProvider) }
         var next: [Period: UsageStore.Total] = [:]
         for p in Period.allCases { next[p] = store.total(since: p.start, source: source) }
         totals = next

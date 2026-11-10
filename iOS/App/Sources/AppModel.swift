@@ -3,7 +3,6 @@ import Combine
 import UIKit
 import VoiceIQBridge
 import VoiceIQCore
-import VoiceIQInference
 
 /// Composition root for the iOS app: the same dictation pipeline as macOS,
 /// driven by keyboard commands instead of a hotkey, delivering to the keyboard
@@ -48,11 +47,12 @@ final class AppModel: ObservableObject {
         FormattingSettingsMigration.restoreAutoDegradedWritingRulesOnce()
         FormattingSettingsMigration.splitWritingRulesOnce()
         FormattingSettingsMigration.removeLiveTranscriptionSettings()
+        FileLayout.removeRetiredModels()
+        SettingsStore().adoptProviderWithKeyOnce()
         let client = GeminiClient(
             apiKey: { KeychainStore.loadAPIKey() },
             openAIKey: { KeychainStore.loadOpenAIKey() },
             openAIConfig: { SettingsStore().openAIConfig },
-            anthropicKey: { KeychainStore.loadKey(.anthropic) },
             provider: { SettingsStore().preferredProvider }
         )
         transcription = GeminiTranscriptionService(client: client)
@@ -62,9 +62,7 @@ final class AppModel: ObservableObject {
             client: client,
             config: { SettingsStore().geminiConfig },
             summaryModel: SettingsStore().geminiConfig.cleanupModel,
-            providers: { SettingsStore().meetingProviders },
-            transcribers: { SettingsStore().meetingTranscribers },
-            localMeeting: LocalSpeechInference.transcribeMeeting
+            providers: { SettingsStore().meetingProviders }
         )
         let inserter = self.inserter
         coordinator = DictationCoordinator(
@@ -82,32 +80,10 @@ final class AppModel: ObservableObject {
                     targetAppName: target.host.map(AppNames.displayName(for:))
                 )
             },
-            liveFactory: {
-                LiveTranscriber.makeFromSettings(audioURL: $0, localSessionFactory: LocalSpeechInference.makeSession)
-            }
+            liveFactory: { _ in LiveTranscriber.makeFromSettings() }
         )
         sleepGuard = SessionSleepGuard(dictation: coordinator, meetings: meetings)
         inserter.onDeliver = { [weak self] text, mode in self?.deliver(text, mode: mode) }
-        // The load overlaps the recording; a load longer than the recording
-        // is what the user waits for in "processing".
-        LocalTranscriber.onLoadEvent = { event in
-            let age = SessionDiagnostics.processAge
-            switch event {
-            case .loaded(let model, let seconds):
-                Task {
-                    SessionDiagnostics.note(String(format: "%@ loaded in %.1fs (%@, %@)", model.displayName, seconds,
-                                                  age, await PreparedModelCache.describe()))
-                }
-            case .failed(let model, let seconds):
-                Task {
-                    SessionDiagnostics.note(String(format: "%@ failed to load after %.1fs (%@, %@)", model.displayName, seconds,
-                                                  age, await PreparedModelCache.describe()))
-                }
-            case .stillLoading(let model, let waited):
-                SessionDiagnostics.note(String(format: "%@ still loading %.0fs after the recording; sent to the cloud, load goes on",
-                                              model.displayName, waited))
-            }
-        }
 
         // Commands already in the App Group belong to an earlier process. Only
         // a command named in a launch URL may still be acted on.
@@ -135,6 +111,10 @@ final class AppModel: ObservableObject {
         coordinator.$micLevel
             .sink { [weak self] level in self?.levelChanged(level) }
             .store(in: &cancellables)
+        coordinator.$partialTranscript
+            .removeDuplicates()
+            .sink { [weak self] text in self?.session.setLiveText(text) }
+            .store(in: &cancellables)
         coordinator.onAnswerReady = { [weak self] answer in
             self?.deliver(answer, mode: .ask)
         }
@@ -151,10 +131,9 @@ final class AppModel: ObservableObject {
         }
         coordinator.onStageTimes = { stages in
             // Splits "processed in" so a slow result can be blamed on the mic
-            // teardown, the decode, the cleanup request, or typing it in.
+            // teardown, the transcript, the cleanup request, or typing it in.
             var parts = [String(format: "finalize %.1fs", stages.finalize)]
             switch stages.source {
-            case .onDevice: parts.append(String(format: "decode %.1fs", stages.transcribe))
             case .cloudLive: parts.append(String(format: "cloud live final %.1fs", stages.transcribe))
             case .cloudUpload: parts.append(String(format: "cloud transcribe+cleanup %.1fs", stages.transcribe))
             }
@@ -186,11 +165,10 @@ final class AppModel: ObservableObject {
 
     private func startHistoryServices() {
         guard let historyStore else { return }
-        let saved = SavedRecordingTranscription(cloud: transcription, makeSession: LocalSpeechInference.makeSession)
-        let scanner = RecoveryScanner(store: historyStore, transcription: saved)
+        let scanner = RecoveryScanner(store: historyStore, transcription: transcription)
         scanner.onRecovered = { [weak self] _ in self?.banner = RecoveryNotice.message(for: .relaunch, copied: false) }
         recoveryScanner = scanner
-        let queue = RetryQueue(store: historyStore, transcription: saved)
+        let queue = RetryQueue(store: historyStore, transcription: transcription)
         queue.onDrained = { [weak self] texts in
             let count = texts.count
             self?.banner = count == 1 ? "A queued dictation is ready in History" : "\(count) queued dictations are ready in History"
@@ -210,10 +188,7 @@ final class AppModel: ObservableObject {
         case .alreadyDone: return "Couldn't find this recording"
         case .stillOffline: return "Still offline. It will retry when you're back online."
         case .rateLimited(let wait): return "Rate limited. Retrying in \(Int(wait.rounded()))s."
-        case .blocked:
-            return KeychainStore.hasModelKey && !KeychainStore.canTranscribeInCloud
-                ? "Claude transcribes only on device. Download the model in Settings › Dictation."
-                : "Check your API key in Settings"
+        case .blocked: return "Check your API key in Settings"
         case .failed: return record.rawTranscript != nil ? "Couldn't transcribe it again. The earlier text is kept." : "Retry failed"
         case .busy: return "Already retrying"
         }
@@ -283,10 +258,12 @@ final class AppModel: ObservableObject {
         }
     }
 
-    private func start(_ command: KeyboardCommand) {
+    /// Starts the command's dictation, or posts why it can't and returns that.
+    @discardableResult
+    private func start(_ command: KeyboardCommand) -> String? {
         if let problem = startBlocker() {
             session.post(notice: problem)
-            return
+            return problem
         }
         target.host = command.hostBundleID
         currentMode = command.mode
@@ -298,10 +275,12 @@ final class AppModel: ObservableObject {
         case .ask: mode = .askAnything(selectedText: command.context)
         }
         guard coordinator.handle(.begin, mode: mode) else {
-            session.post(notice: coordinator.coachingHint ?? "Still working on the last one")
-            return
+            let problem = coordinator.coachingHint ?? "Still working on the last one"
+            session.post(notice: problem)
+            return problem
         }
         coordinator.handle(.lockIn)
+        return nil
     }
 
     private func startBlocker() -> String? {
@@ -377,10 +356,17 @@ final class AppModel: ObservableObject {
                 return
             }
         }
+        // Freshness is checked after the session starts, which can take a moment.
         if !processed.contains(commandID), let command = store.commands.first(where: { $0.id == commandID }),
            command.isFresh() {
             accept(command)
-            start(command)
+            // A refused start stays here, with the reason, instead of
+            // returning to an app where nothing is recording.
+            if let problem = start(command) {
+                SessionDiagnostics.note("keyboard start refused: \(problem)")
+                banner = problem
+                return
+            }
         }
         hostReturn.returnToHost(host, isRecording: { [weak self] in
             if case .recording = self?.coordinator.state { return true }
@@ -480,12 +466,10 @@ final class AppModel: ObservableObject {
         DictionaryBridge.appBecameActive()
         WritingRulesSync.shared.refresh()
         Task { await HistorySync.shared.refresh() }
-        ModelWarmer.warmIfSystemUpdated()
     }
 
     func appEnteredBackground() {
         showSwipeBack = false
-        ModelWarmer.schedule()
     }
 
     func prepareForTermination() {
@@ -515,8 +499,7 @@ final class AppModel: ObservableObject {
             if processingSince == nil { processingSince = Date() }
         case .idle, .done, .cancelled, .failed:
             if let since = processingSince {
-                // A first on-device load after an iOS update or a long break
-                // can take minutes; this shows it, and where the app was.
+                // How long the transcript and cleanup took, and where the app was.
                 let place = UIApplication.shared.applicationState == .active ? "foreground" : "background"
                 SessionDiagnostics.note(String(format: "processed in %.1fs (%@)", Date().timeIntervalSince(since), place))
                 processingSince = nil
@@ -602,10 +585,7 @@ final class AppModel: ObservableObject {
         case .failed(let failure):
             if let message = coordinator.modeFailureMessage { return message }
             switch failure {
-            case .auth:
-                return KeychainStore.hasModelKey && !KeychainStore.canTranscribeInCloud
-                    ? "Claude transcribes only on device. It's in History."
-                    : "API key rejected. Check it in VoiceiQ."
+            case .auth: return "API key rejected. Check it in VoiceiQ."
             case .modelAccess: return "Model unavailable. Check Settings › Advanced."
             case .network: return "Couldn't reach the model. It's saved in History."
             case .rateLimited: return "Rate limited. Retry from History."
