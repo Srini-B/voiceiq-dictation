@@ -257,10 +257,12 @@ final class AppModel: ObservableObject {
         }
     }
 
-    private func start(_ command: KeyboardCommand) {
+    /// Starts the command's dictation, or posts why it can't and returns that.
+    @discardableResult
+    private func start(_ command: KeyboardCommand) -> String? {
         if let problem = startBlocker() {
             session.post(notice: problem)
-            return
+            return problem
         }
         target.host = command.hostBundleID
         currentMode = command.mode
@@ -272,10 +274,12 @@ final class AppModel: ObservableObject {
         case .ask: mode = .askAnything(selectedText: command.context)
         }
         guard coordinator.handle(.begin, mode: mode) else {
-            session.post(notice: coordinator.coachingHint ?? "Still working on the last one")
-            return
+            let problem = coordinator.coachingHint ?? "Still working on the last one"
+            session.post(notice: problem)
+            return problem
         }
         coordinator.handle(.lockIn)
+        return nil
     }
 
     private func startBlocker() -> String? {
@@ -351,10 +355,17 @@ final class AppModel: ObservableObject {
                 return
             }
         }
+        // Freshness is checked after the session starts, which can take a moment.
         if !processed.contains(commandID), let command = store.commands.first(where: { $0.id == commandID }),
            command.isFresh() {
             accept(command)
-            start(command)
+            // A refused start stays here, with the reason, instead of
+            // returning to an app where nothing is recording.
+            if let problem = start(command) {
+                SessionDiagnostics.note("keyboard start refused: \(problem)")
+                banner = problem
+                return
+            }
         }
         hostReturn.returnToHost(host, isRecording: { [weak self] in
             if case .recording = self?.coordinator.state { return true }
