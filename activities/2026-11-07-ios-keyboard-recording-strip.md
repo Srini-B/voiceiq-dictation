@@ -27,8 +27,10 @@ The owner reported four things about the iPhone keyboard:
 - **Live words.** While recording, the app forwards the coordinator's
   `partialTranscript` to `SharedStore.liveText` (writer: app). The strip shows
   it on one line, newest words last, in place of the timer and the glow. With
-  Real-time on, the local Fluid Speech previews now run on iOS too, as they
-  already did on the Mac. The final text still comes from the saved recording.
+  Real-time on, the words come from the provider's live socket (Gemini Live or
+  OpenAI Realtime), which also gives the final text; the saved recording is
+  sent only when the socket is refused or incomplete. (This branch first used
+  local Fluid Speech previews; the 2026-11-10 cloud-only change removed them.)
 - **Glow history.** `LevelBars` (VoiceIQBridge) holds the smoothed levels. The
   app appends one per level write and publishes them as
   `SharedStore.levelBars`, so a keyboard that reappears mid-dictation draws

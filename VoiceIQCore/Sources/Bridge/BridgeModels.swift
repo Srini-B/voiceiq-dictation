@@ -142,6 +142,8 @@ public struct LevelBars: Sendable {
     public init() {}
 
     public mutating func append(_ level: Float) {
+        // A NaN would stick in `smoothed`, and `SharedStore.levelBars` traps converting it.
+        guard level.isFinite else { return }
         let target = min(max(level, 0), 1)
         // Fast attack, slow release: syllables jump up and fall back gently.
         smoothed += (target - smoothed) * (target > smoothed ? 0.7 : 0.3)

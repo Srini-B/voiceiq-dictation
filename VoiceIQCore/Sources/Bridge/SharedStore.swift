@@ -222,7 +222,8 @@ public final class SharedStore: @unchecked Sendable {
     }
 
     /// The words heard so far in the dictation being recorded, display only:
-    /// the final text comes from the saved recording. Writer: app.
+    /// the final text comes from the live socket's result or the saved
+    /// recording, never from this. Writer: app.
     public var liveText: String {
         get { defaults.string(forKey: Key.liveText) ?? "" }
         set { defaults.set(newValue, forKey: Key.liveText) }

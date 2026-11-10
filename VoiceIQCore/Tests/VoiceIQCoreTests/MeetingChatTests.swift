@@ -18,6 +18,24 @@ final class MeetingChatTests: XCTestCase {
         super.tearDown()
     }
 
+    /// Agent mode's custom provider can still speak Anthropic Messages.
+    func testAnthropicMessagesRequestCachesTheMeetingAndTheNewestQuestion() async throws {
+        StubHost.reply = #"{"content":[{"type":"text","text":"Friday."}],"usage":{"input_tokens":10,"output_tokens":2}}"#
+        let reply = try await transport(.anthropicMessages, model: "claude-sonnet-5-5").send(conversation)
+
+        let body = try StubHost.lastBody()
+        XCTAssertNil(body["tools"])
+        let system = try XCTUnwrap((body["system"] as? [[String: Any]])?.first)
+        XCTAssertTrue((system["text"] as? String ?? "").contains("I'll own the launch."))
+        XCTAssertEqual((system["cache_control"] as? [String: Any])?["ttl"] as? String, "1h")
+        let messages = try XCTUnwrap(body["messages"] as? [[String: Any]])
+        XCTAssertEqual(messages.map { $0["role"] as? String }, ["user", "assistant", "user"])
+        XCTAssertEqual(texts(messages), ["Who owns the launch?", "Rohan.", "By when?"])
+        let newest = try XCTUnwrap((messages.last?["content"] as? [[String: Any]])?.last)
+        XCTAssertNotNil(newest["cache_control"])
+        XCTAssertEqual(reply.text, "Friday.")
+    }
+
     func testOpenAIRequestKeepsOneCacheKeyPerMeeting() async throws {
         StubHost.reply = #"{"id":"resp_1","output":[{"type":"message","content":[{"type":"output_text","text":"Friday."}]}]}"#
         let reply = try await transport(.openAIResponses, model: "gpt-6.1-terra").send(conversation)

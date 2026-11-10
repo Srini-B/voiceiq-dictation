@@ -16,7 +16,11 @@ nothing is sent to the others. Meetings are
 the one exception: a meeting goes to the selected provider when its key is
 saved, otherwise to the next provider you have a key for, and a meeting whose
 provider fails moves on to each other provider you have a key for in turn
-(in the order Gemini, OpenAI).
+(the selected provider first, then the other).
+If you set a custom provider for Agent mode, it also receives each Agent
+command's text and its observations: screenshots, accessibility summaries
+of the screen and tool results ([AGENT-MODE.md](AGENT-MODE.md)); the command is still transcribed by the
+selected provider.
 With no usable key, nothing is sent and the recording stays on your Mac.
 
 ## What leaves your machine (the complete list)
