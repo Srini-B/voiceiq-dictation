@@ -104,11 +104,10 @@ public struct SettingsStore: Sendable {
         }
     }
 
-    /// On by default since 2026-10-13: the transcript is finished when the
-    /// user stops, so the wait is the writing model alone (measured 2.95 s
-    /// end to end against 4.45 s median for batch). A refused socket falls
-    /// back to the saved recording on its own.
-    public var liveTranscriptionEnabled: Bool { liveTranscriptionChosen ?? true }
+    /// Off by default since 2026-11-10, the owner's choice; it was on from
+    /// 2026-10-13. A user who turned it on or off keeps their choice. A
+    /// refused socket falls back to the saved recording on its own.
+    public var liveTranscriptionEnabled: Bool { liveTranscriptionChosen ?? false }
 
     /// The user's own setting, nil until they change the toggle.
     public var liveTranscriptionChosen: Bool? {

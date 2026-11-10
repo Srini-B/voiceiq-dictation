@@ -32,8 +32,8 @@ With no usable key, nothing is sent and the recording stays on your Mac.
    key. Cancelled dictations may already have been
    sent in part. If the live connection fails or
    does not return every completed turn, VoiceiQ uploads the saved recording
-   to that provider after you stop. Real-time transcription is on by default
-   (since 2026-10-13, so the result lands about 1.5 s sooner after you stop).
+   to that provider after you stop. Real-time transcription is off by default
+   (since 2026-11-10); turn it on in Settings › Dictation.
    It does not affect meetings.
 2. **Your dictionary terms**, alongside that audio. The transcription model uses
    them to bias what it hears, which is why names and jargon come out spelled
