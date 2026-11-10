@@ -42,8 +42,7 @@ the right to contribute it under this repository's license.
    frameworks only. Gemini or OpenAI models, each reached on its own API with
    the provider's own key. A change to the transcription or writing path has
    to work on both providers (`ModelProvider` picks the calls; see
-   `docs/design/architecture.md`). The on-device models are the only other
-   speech source; they write no text or notes. No other
+   `docs/design/architecture.md`). No on-device speech models, no other
    model families, no gateways, no cross-platform layers.
 2. **Share code through `VoiceIQCore`.** Logic both apps need goes in the
    package, not in `App/` or `iOS/`. Mac-only code is wrapped in

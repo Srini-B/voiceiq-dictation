@@ -1,9 +1,10 @@
 # Meetings on the Mac
 
 How VoiceiQ notices a call, what audio it records, how each line goes to the
-right person (the diarizer, the VoiceiQ Meetings Chrome extension, and names
-from the call screen), and how the Meetings window shows and exports it. Recording, transcription and the notes
-prompt are covered in [LOCAL_TRANSCRIPTION.md](LOCAL_TRANSCRIPTION.md#on-device-meetings),
+right person (the provider's speaker labels, the VoiceiQ Meetings Chrome
+extension, and names from the call screen), and how the Meetings window shows
+and exports it. Meetings are always transcribed by the provider (Gemini or
+OpenAI). What is sent, and the notes prompt, are covered in
 [PRIVACY.md](PRIVACY.md) and [design/meeting-prompt-rulebook.md](design/meeting-prompt-rulebook.md).
 
 ## Call detection
@@ -123,19 +124,6 @@ Before 2026-10-27 every recording needed 20 s. A 2.5-minute Meet call had
 15.9 s, so the owner became an ordinary speaker and got a participant's name
 from the screen.
 
-## Meetings on Claude
-
-Claude has no speech model, so with Claude picked meetings are transcribed on
-device only (`SettingsStore.meetingSource` reads as On device, and
-`SettingsStore.meetingTranscribers` is empty), and Claude writes the notes
-from the transcript. Before the on-device models are downloaded, a meeting is
-saved without a transcript (`MeetingFailure.noRoute`), and Retry runs it once
-they are. Until
-2026-11-06 Claude meetings could also be transcribed by DeepInfra's Nemotron
-3.5 Transcribe; that path was removed, as
-[activities/2026-11-06-remove-deepinfra.md](../activities/2026-11-06-remove-deepinfra.md)
-records. Cached windows are still named `transcribe-v7-*` (`cacheVersion`).
-
 ## Speakers in browser calls from the Chrome extension
 
 In a browser call, everyone on the far side arrives in one audio track, and
@@ -178,8 +166,9 @@ Discord, and Webex.
 
 ### The native host
 
-The host is the speech helper, `VoiceiQLocalSpeech`, so the app bundle has no
-second signed executable. Chrome starts it with the extension's origin as
+The host is the `VoiceiQLocalSpeech` helper. It ran the on-device speech
+models until 2026-11-10 and keeps its name and bundle id, because installed
+host manifests point at it; it now links only `VoiceIQSpeech`. Chrome starts it with the extension's origin as
 the first argument, and `BrowserHostServer.isBrowserLaunch` sends that launch
 to `BrowserHostServer.run`. The host reads length-prefixed JSON messages of up
 to 64 KB from stdin. `BrowserSpeakerLog.append` writes each event as one JSON
@@ -206,8 +195,7 @@ VoiceiQ does not need to run while the extension reports.
 2. Each event lasts until the next one, for at most 3 s (`hold`), widened by
    0.3 s on each side (`slack`). These are each source's loud stretches.
 3. `BrowserSpeakers.apply` runs before turns are built, in
-   `MeetingTranscriber` (for every cloud provider)
-   and in `LocalMeetingTranscriber`. The owner's words stay `you`.
+   `MeetingTranscriber`, for every provider. The owner's words stay `you`.
 4. A far-side word goes to the source whose loud stretches overlap the
    word's time more than twice as much as any other source's. The rule uses
    overlap, not the word's midpoint, because the recognizer often starts a
@@ -351,14 +339,13 @@ docs/design/meeting-prompt-rulebook.md. Fixes from 2026-10-29:
   person, product and term, with every transcript spelling that means it
   (`"Nitin": ["Nithin", "Lithin", "Nathan"]`). Every other field uses those
   spellings. `MeetingNotes` ignores the field when decoding.
-- **Model.** On Claude the notes are written by
-  `claude-sonnet-5-5` (`AnthropicConfig.notesModel`).
 
 ## Redo and progress
 
 - **Redo notes** writes the notes again from the saved transcript.
 - **Redo transcript and notes** (`MeetingEngine.retry(id:fresh: true)`) drops
-  the cached words (`transcribe-*`, `local-words-*`, `speakers-*`) and hears
+  the cached words (`transcribe-*`, and `local-words-*` and `speakers-*` from
+  builds before 2026-11-10) and hears
   the whole meeting again. `browser-speakers.json` stays. **Retry** after a
   failure keeps the finished windows.
 - `MeetingEngine.processing` maps each meeting being processed to its step
@@ -411,8 +398,8 @@ narrow window, sending switches back to the notes, where the answers are
 listed after the Notes section. iOS: pinned to the bottom of the note, with
 the answers after the notes). A question
 goes to the selected provider's writing model on its own API
-(`AgentEndpoint.writingModel`: Gemini's formatting model, OpenAI's writing
-model, or Claude Sonnet 5.5), never to Agent mode's custom provider.
+(`AgentEndpoint.writingModel`: Gemini's formatting model or OpenAI's writing
+model), never to Agent mode's custom provider.
 `MeetingChat` builds the request:
 
 - **System prompt.** Short answering rules, then the meeting as
@@ -423,12 +410,9 @@ model, or Claude Sonnet 5.5), never to Agent mode's custom provider.
   question. The model sees its own earlier answers, so follow-ups work.
 
 It is sent through `AgentTransport` with no tools, the same adapters Agent
-mode uses: Gemini `generateContent`, OpenAI's Responses API, Anthropic
-Messages. Caching follows `AgentCachePolicy`:
+mode uses: Gemini `generateContent` and OpenAI's Responses API. Caching
+follows `AgentCachePolicy`:
 
-- Claude: a one-hour breakpoint on the system prompt (the meeting) and a
-  five-minute one on the newest question. A follow-up reads the meeting and
-  the earlier turns from cache, and so does a question asked within the hour.
 - OpenAI: automatic prefix caching, with `prompt_cache_key`
   `voiceiq-meeting-chat-<meeting id>`, so every question about a meeting
   lands on the same cache, also after a relaunch. GPT-5.6 and later keep it

@@ -21,5 +21,4 @@ last claim ends. iOS does not let VoiceiQ prevent another foreground app from
 auto-locking, or override the lock button. The existing background audio session
 continues to govern recording while the keyboard's host app is in front.
 
-This feature neither changes system sleep settings nor keeps local speech
-models warm.
+This feature does not change system sleep settings.

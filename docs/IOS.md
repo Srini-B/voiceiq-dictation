@@ -82,8 +82,7 @@ because pings are dropped while a process is suspended.
    that log, the app's and the keyboard's, starts with the date and time
    (`SharedStore.logStamp`, "2026-10-22 06:52:04", device time zone).
 6. If the heartbeat stops while the snapshot says `processing`, iOS suspended
-   or ended the app mid-dictation (a first on-device load after an iOS update
-   or a long break can take minutes). The keyboard keeps the spinner and shows
+   or ended the app mid-dictation. The keyboard keeps the spinner and shows
    "Open VoiceiQ to finish" (`KeyboardModel.needsAppToFinish`); a tap opens
    `BridgeURL.app`. A suspended app resumes the dictation; an ended one
    recovers the saved recording at launch. The session log records each
@@ -163,9 +162,8 @@ default 30 s; key `warmWindowSeconds`), counted from when the text is
 delivered; Home shows "Turns off in" with the countdown. With "Never" the
 session ends once the text is delivered, so the next keyboard tap opens
 VoiceiQ again. The audio session stays open until then: it is what keeps iOS
-from suspending the app while a slow transcription runs (a first on-device
-load can take minutes), at the cost of the mic dot showing until the text
-arrives.
+from suspending the app while a slow transcription runs, at the cost of the
+mic dot showing until the text arrives.
 `AudioCaptureEngine` never configures the session, so each dictation's capture engine records into it.
 
 The session also ends when the user taps End (app or Dynamic Island) or when
@@ -339,10 +337,7 @@ far-side reference, so `MeetingTranscriber.callAudio` skips echo cancellation
 (the WebRTC AEC3 xcframework ships a macOS slice only and is not linked on
 iOS). Speaker linking, meeting-type notes, suggested speaker names and Redo
 (notes only, or transcript and notes) work as on the Mac. Dictation is refused
-while notes record. With **Notes transcription** set to On device and Fluid
-Speech Mini downloaded, the recording is transcribed in process after Stop as
-one speaker; there is no diarizer, real-time path, or Nemotron on iOS (see
-[On-device meetings](LOCAL_TRANSCRIPTION.md#on-device-meetings)).
+while notes record. Notes are always transcribed by the provider.
 
 ### Typing
 
@@ -363,10 +358,11 @@ smoothed with a fast attack and slow release, newest 256 kept) and publishes
 them as `SharedStore.levelBars`; the keyboard redraws every 0.06 s. A keyboard
 that appears mid-dictation, after an app switch or after being hidden, shows
 the dictation so far instead of starting empty. With Real-time transcription
-on, the words heard so far (`SharedStore.liveText`, from the dictation's live
-transcriber) replace the time and the glow once they arrive: one line, newest
-words last, the start cut off. The final text still comes from the saved
-recording and is typed as before. While the text is written the strip shows
+on, the words heard so far (`SharedStore.liveText`, from the provider's live
+socket: Gemini Live or OpenAI Realtime) replace the time and the glow once they
+arrive: one line, newest words last, the start cut off. The words shown are a
+preview; the final text comes from the live socket's final result, or from
+the saved recording when that is incomplete, and is typed as before. While the text is written the strip shows
 only a spinner with "Writing…" or "Thinking…". Reduce Motion holds the glow
 flat at the latest level. The glow is a plain `Shape` on a 0.06 s timer: a
 `Canvas` inside `TimelineView(.animation)` drew in the Simulator but nothing
@@ -672,14 +668,12 @@ runs. Everything needs Full Access.
 | Pill | Keyboard status plus Dynamic Island |
 | AX and paste insertion | `textDocumentProxy.insertText` |
 | Ask Anything, Translate, Paste last | Keyboard modes and Paste last |
-| Provider (Gemini, OpenAI, or Claude with an Anthropic key; Claude transcribes only on device), TinyFish | Same, in Settings › Provider & Keys and the iOS Keychain. Each key card carries the service's favicon from `Assets.xcassets/Provider*.imageset` (`BrandTile`); the OpenAI and Anthropic marks are template images so they take the ink colour in dark mode |
-| Transcription and Meeting transcription pickers (On device, provider) | Same; the second is **Notes transcription**, each in its own section because an iOS Form hides a segmented picker's label |
+| Provider (Gemini or OpenAI), TinyFish | Same, in Settings › Provider & Keys and the iOS Keychain. Each key card carries the service's favicon from `Assets.xcassets/Provider*.imageset` (`BrandTile`); the OpenAI mark is a template image so it takes the ink colour in dark mode |
 | History stats: words, dictations, WPM, audio time | Home's stats grid |
 | Dictionary with search, CSV and Auto-learned | Same, synced through iCloud, plus adding a selection or a copied word from the keyboard |
 | Writing rules, smart transcription, live, noise handling | Same settings |
-| On-device transcription: Fluid Speech Mini, Fluid Speech Pro (macOS 15+), English tools, live preview | Fluid Speech Mini, Fluid Speech Pro (iOS 18+) and English tools, in-process; the live preview shows on the keyboard's recording strip (see [local transcription](LOCAL_TRANSCRIPTION.md)) |
 | History, retry, crash recovery, retention | Same. The detail shows Pipeline, the seconds from Stop to the text being ready (`DictationRecord.pipelineSeconds`, as on the Mac; absent for dictations synced from the Mac), the cost and one row per stage and model (stage, model, call count when above one, summed cost; `UsageLine.lines` over `UsageStore.records(forSession:)`), and Copy turns into "Copied" with a checkmark and a success haptic for 1.5 s |
-| Cost with the Gemini and OpenAI toggle, periods and Detailed | Same |
+| Cost with the Gemini and OpenAI toggle (plus Claude while it has rows), periods and Detailed | Same |
 | Advanced: the selected provider's models | Same, plus the session log |
 | Screen context, auto-learn, shortcuts, call detection, mute other audio, sounds | Not on iOS |
 
