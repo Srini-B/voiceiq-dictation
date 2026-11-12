@@ -97,6 +97,25 @@ final class ElevenLabsTests: XCTestCase {
         XCTAssertEqual(speakers, ["a=s1", "b=s1", "c=s1", "d=s1"])
     }
 
+    /// The Spoken languages picker: the main language comes first, clearing
+    /// it clears the others (Scribe v3 refuses others without a main one), and
+    /// codes from the old free-text field read as the list's codes.
+    func testSpokenLanguagesPicker() {
+        XCTAssertEqual(ScribeLanguage.choosing(main: "hin", in: []), ["hin"])
+        XCTAssertEqual(ScribeLanguage.choosing(main: "eng", in: ["hin", "eng", "tam"]), ["eng", "tam"])
+        XCTAssertEqual(ScribeLanguage.choosing(main: "", in: ["hin", "eng"]), [])
+        XCTAssertEqual(ScribeLanguage.toggling("eng", in: ["hin"]), ["hin", "eng"])
+        XCTAssertEqual(ScribeLanguage.toggling("eng", in: ["hin", "eng", "tam"]), ["hin", "tam"])
+        XCTAssertEqual(ScribeLanguage.toggling("hin", in: ["hin", "eng"]), ["hin", "eng"])
+        XCTAssertEqual(ScribeLanguage.toggling("eng", in: []), [])
+        XCTAssertEqual(ScribeLanguage.names(["hin", "eng"].dropFirst(), none: "None"), "English")
+
+        let saved = UserDefaults.standard.object(forKey: "spokenLanguages")
+        defer { UserDefaults.standard.set(saved, forKey: "spokenLanguages") }
+        UserDefaults.standard.set(["hi", "en", "xx", "tam"], forKey: "spokenLanguages")
+        XCTAssertEqual(SettingsStore().spokenLanguages, ["hin", "eng", "tam"])
+    }
+
     func testUsedUpCreditIsNotABadKey() {
         let quota = GeminiClient.elevenLabsErrorDetail(from: Data(#"{"detail":{"status":"quota_exceeded","message":"This request exceeds your quota"}}"#.utf8))
         XCTAssertTrue(GeminiClient.isElevenLabsQuota(quota))

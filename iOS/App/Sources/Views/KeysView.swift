@@ -23,7 +23,8 @@ struct ModelKeysForm: View {
     @State private var provider = SettingsStore().preferredProvider
     @State private var elevenLabs = SettingsStore().elevenLabsTranscriptionChosen
     @State private var hasElevenLabsKey = KeychainStore.loadKey(.elevenLabs) != nil
-    @State private var languages = SettingsStore().spokenLanguages.joined(separator: ", ")
+    @State private var languages = SettingsStore().spokenLanguages
+    @State private var choosingOthers = false
     @State private var redacts = SettingsStore().redactsMeetingSecrets
 
     private var providerSlots: [KeySlot] {
@@ -81,14 +82,42 @@ struct ModelKeysForm: View {
                         .fixedSize(horizontal: false, vertical: true)
                     if elevenLabs {
                         GroupLabel(text: "Spoken languages")
-                        TextField("Detect automatically", text: $languages)
-                            .textInputAutocapitalization(.never)
-                            .autocorrectionDisabled()
-                            .padding(Theme.Spacing.m)
-                            .background(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
-                                .fill(Theme.Colors.accent.opacity(0.06)))
-                            .onChange(of: languages) { _, value in SettingsStore().setSpokenLanguages(value) }
-                        Text("Language codes, main one first, such as en or en, hi. The others are languages Scribe may also hear.")
+                        VStack(spacing: 0) {
+                            HStack {
+                                Text("Main language").font(Theme.Fonts.subheadline()).foregroundStyle(Theme.Colors.ink)
+                                Spacer()
+                                Picker("Main language", selection: Binding(get: { languages.first ?? "" }, set: {
+                                    saveLanguages(ScribeLanguage.choosing(main: $0, in: languages))
+                                })) {
+                                    Text("Automatic detection").tag("")
+                                    ForEach(ScribeLanguage.all) { Text($0.name).tag($0.code) }
+                                }
+                                .pickerStyle(.menu)
+                                .tint(Theme.Colors.accent)
+                            }
+                            if !languages.isEmpty {
+                                Divider()
+                                Button { choosingOthers = true } label: {
+                                    HStack {
+                                        Text("Also spoken").font(Theme.Fonts.subheadline()).foregroundStyle(Theme.Colors.ink)
+                                        Spacer()
+                                        Text(ScribeLanguage.names(languages.dropFirst(), none: "None"))
+                                            .font(Theme.Fonts.subheadline()).foregroundStyle(Theme.Colors.muted).lineLimit(1)
+                                        Image(systemName: "chevron.right").font(.footnote).foregroundStyle(Theme.Colors.muted)
+                                    }
+                                    .frame(minHeight: 44)
+                                    .contentShape(Rectangle())
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                        .padding(.horizontal, Theme.Spacing.m)
+                        .background(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
+                            .fill(Theme.Colors.accent.opacity(0.06)))
+                        .sheet(isPresented: $choosingOthers) {
+                            OtherLanguagesSheet(languages: languages) { saveLanguages($0) }
+                        }
+                        Text("Automatic detection works out the language each time. Pick your main language, and any others you mix in, when Scribe gets it wrong.")
                             .font(Theme.Fonts.footnote())
                             .foregroundStyle(Theme.Colors.muted)
                             .fixedSize(horizontal: false, vertical: true)
@@ -114,6 +143,11 @@ struct ModelKeysForm: View {
         .onReceive(NotificationCenter.default.publisher(for: .gtSettingDidChange).receive(on: RunLoop.main)) { _ in
             reload()
         }
+    }
+
+    private func saveLanguages(_ codes: [String]) {
+        languages = codes
+        SettingsStore().setSpokenLanguages(codes)
     }
 
     private func reload() {
@@ -346,6 +380,35 @@ enum KeySlot: Hashable, CaseIterable {
         case .valid: return .accepted(offline: false)
         case .unreachable: return .accepted(offline: true)
         case .rejected(let detail): return .rejected(detail ?? "\(title) rejected that key.")
+        }
+    }
+}
+
+/// Other languages Scribe may hear besides the main one, ticked in a list.
+private struct OtherLanguagesSheet: View {
+    @State var languages: [String]
+    let save: ([String]) -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            List(ScribeLanguage.all.filter { $0.code != languages.first }) { language in
+                Button {
+                    languages = ScribeLanguage.toggling(language.code, in: languages)
+                    save(languages)
+                } label: {
+                    HStack {
+                        Text(language.name).foregroundStyle(Theme.Colors.ink)
+                        Spacer()
+                        if languages.dropFirst().contains(language.code) {
+                            Image(systemName: "checkmark").foregroundStyle(Theme.Colors.accent)
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Also spoken")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
         }
     }
 }

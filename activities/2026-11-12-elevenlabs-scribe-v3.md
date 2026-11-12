@@ -154,3 +154,20 @@ Result (test Mac, final tree):
 - OpenAI on top of Scribe: writing rules, Ask answers, meeting notes and
   Redo worked.
 - The notarized Mac app was installed over 0.7.0 on a second Mac.
+
+## Spoken languages from a list (2026-11-12, PR #44)
+
+The maintainer asked for the free-text Spoken languages field to become a list of
+the languages Scribe supports, with automatic detection as the default.
+Both apps now show a main-language picker (Automatic detection plus the
+101 languages on ElevenLabs' speech to text page, ISO 639-3 codes) and,
+once a main language is set, an "Also spoken" list for the others: a menu
+of toggles on the Mac, a checklist sheet on iPhone. Clearing the main
+language clears the others, since batch Scribe v3 answers 500 to other
+languages without a main one. Checked against the API: `language_code=hin`
+with `secondary_language_codes=eng` answered 200 in Devanagari, and the
+live socket accepted `secondary_languages=hin,eng` with `multilang_mode`.
+
+The same push fixed two review findings in the debug log: custom writing
+rules and the meeting owner's name are logged by size only, and a browser
+meeting's page is logged by host only (no meeting code).

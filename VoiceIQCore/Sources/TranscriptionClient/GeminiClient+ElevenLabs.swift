@@ -179,6 +179,140 @@ public enum ElevenLabs {
     }
 }
 
+/// A language Scribe v3 and v3 Live transcribe, by its ISO 639-3 code.
+public struct ScribeLanguage: Hashable, Identifiable, Sendable {
+    public let code: String
+    public let name: String
+    public var id: String { code }
+
+    /// Every language on the ElevenLabs speech to text page (read
+    /// 2026-11-12), by English name. Settings offers only these.
+    public static let all: [ScribeLanguage] = [
+        ScribeLanguage(code: "afr", name: "Afrikaans"),
+        ScribeLanguage(code: "amh", name: "Amharic"),
+        ScribeLanguage(code: "ara", name: "Arabic"),
+        ScribeLanguage(code: "hye", name: "Armenian"),
+        ScribeLanguage(code: "asm", name: "Assamese"),
+        ScribeLanguage(code: "ast", name: "Asturian"),
+        ScribeLanguage(code: "aze", name: "Azerbaijani"),
+        ScribeLanguage(code: "bel", name: "Belarusian"),
+        ScribeLanguage(code: "ben", name: "Bengali"),
+        ScribeLanguage(code: "bos", name: "Bosnian"),
+        ScribeLanguage(code: "bul", name: "Bulgarian"),
+        ScribeLanguage(code: "mya", name: "Burmese"),
+        ScribeLanguage(code: "yue", name: "Cantonese"),
+        ScribeLanguage(code: "cat", name: "Catalan"),
+        ScribeLanguage(code: "ceb", name: "Cebuano"),
+        ScribeLanguage(code: "nya", name: "Chichewa"),
+        ScribeLanguage(code: "hrv", name: "Croatian"),
+        ScribeLanguage(code: "ces", name: "Czech"),
+        ScribeLanguage(code: "dan", name: "Danish"),
+        ScribeLanguage(code: "nld", name: "Dutch"),
+        ScribeLanguage(code: "eng", name: "English"),
+        ScribeLanguage(code: "est", name: "Estonian"),
+        ScribeLanguage(code: "fil", name: "Filipino"),
+        ScribeLanguage(code: "fin", name: "Finnish"),
+        ScribeLanguage(code: "fra", name: "French"),
+        ScribeLanguage(code: "ful", name: "Fulah"),
+        ScribeLanguage(code: "glg", name: "Galician"),
+        ScribeLanguage(code: "lug", name: "Ganda"),
+        ScribeLanguage(code: "kat", name: "Georgian"),
+        ScribeLanguage(code: "deu", name: "German"),
+        ScribeLanguage(code: "ell", name: "Greek"),
+        ScribeLanguage(code: "guj", name: "Gujarati"),
+        ScribeLanguage(code: "hau", name: "Hausa"),
+        ScribeLanguage(code: "heb", name: "Hebrew"),
+        ScribeLanguage(code: "hin", name: "Hindi"),
+        ScribeLanguage(code: "hun", name: "Hungarian"),
+        ScribeLanguage(code: "isl", name: "Icelandic"),
+        ScribeLanguage(code: "ibo", name: "Igbo"),
+        ScribeLanguage(code: "ind", name: "Indonesian"),
+        ScribeLanguage(code: "gle", name: "Irish"),
+        ScribeLanguage(code: "ita", name: "Italian"),
+        ScribeLanguage(code: "jpn", name: "Japanese"),
+        ScribeLanguage(code: "jav", name: "Javanese"),
+        ScribeLanguage(code: "kea", name: "Kabuverdianu"),
+        ScribeLanguage(code: "kan", name: "Kannada"),
+        ScribeLanguage(code: "kaz", name: "Kazakh"),
+        ScribeLanguage(code: "khm", name: "Khmer"),
+        ScribeLanguage(code: "kor", name: "Korean"),
+        ScribeLanguage(code: "kur", name: "Kurdish"),
+        ScribeLanguage(code: "kir", name: "Kyrgyz"),
+        ScribeLanguage(code: "lao", name: "Lao"),
+        ScribeLanguage(code: "lav", name: "Latvian"),
+        ScribeLanguage(code: "lin", name: "Lingala"),
+        ScribeLanguage(code: "lit", name: "Lithuanian"),
+        ScribeLanguage(code: "luo", name: "Luo"),
+        ScribeLanguage(code: "ltz", name: "Luxembourgish"),
+        ScribeLanguage(code: "mkd", name: "Macedonian"),
+        ScribeLanguage(code: "msa", name: "Malay"),
+        ScribeLanguage(code: "mal", name: "Malayalam"),
+        ScribeLanguage(code: "mlt", name: "Maltese"),
+        ScribeLanguage(code: "zho", name: "Mandarin Chinese"),
+        ScribeLanguage(code: "mri", name: "Māori"),
+        ScribeLanguage(code: "mar", name: "Marathi"),
+        ScribeLanguage(code: "mon", name: "Mongolian"),
+        ScribeLanguage(code: "nep", name: "Nepali"),
+        ScribeLanguage(code: "nso", name: "Northern Sotho"),
+        ScribeLanguage(code: "nor", name: "Norwegian"),
+        ScribeLanguage(code: "oci", name: "Occitan"),
+        ScribeLanguage(code: "ori", name: "Odia"),
+        ScribeLanguage(code: "pus", name: "Pashto"),
+        ScribeLanguage(code: "fas", name: "Persian"),
+        ScribeLanguage(code: "pol", name: "Polish"),
+        ScribeLanguage(code: "por", name: "Portuguese"),
+        ScribeLanguage(code: "pan", name: "Punjabi"),
+        ScribeLanguage(code: "ron", name: "Romanian"),
+        ScribeLanguage(code: "rus", name: "Russian"),
+        ScribeLanguage(code: "srp", name: "Serbian"),
+        ScribeLanguage(code: "sna", name: "Shona"),
+        ScribeLanguage(code: "snd", name: "Sindhi"),
+        ScribeLanguage(code: "sin", name: "Sinhala"),
+        ScribeLanguage(code: "slk", name: "Slovak"),
+        ScribeLanguage(code: "slv", name: "Slovenian"),
+        ScribeLanguage(code: "som", name: "Somali"),
+        ScribeLanguage(code: "spa", name: "Spanish"),
+        ScribeLanguage(code: "swa", name: "Swahili"),
+        ScribeLanguage(code: "swe", name: "Swedish"),
+        ScribeLanguage(code: "tgk", name: "Tajik"),
+        ScribeLanguage(code: "tam", name: "Tamil"),
+        ScribeLanguage(code: "tel", name: "Telugu"),
+        ScribeLanguage(code: "tha", name: "Thai"),
+        ScribeLanguage(code: "tur", name: "Turkish"),
+        ScribeLanguage(code: "ukr", name: "Ukrainian"),
+        ScribeLanguage(code: "umb", name: "Umbundu"),
+        ScribeLanguage(code: "urd", name: "Urdu"),
+        ScribeLanguage(code: "uzb", name: "Uzbek"),
+        ScribeLanguage(code: "vie", name: "Vietnamese"),
+        ScribeLanguage(code: "cym", name: "Welsh"),
+        ScribeLanguage(code: "wol", name: "Wolof"),
+        ScribeLanguage(code: "xho", name: "Xhosa"),
+        ScribeLanguage(code: "yor", name: "Yoruba"),
+        ScribeLanguage(code: "zul", name: "Zulu"),
+    ]
+
+    public static func isListed(_ code: String) -> Bool { all.contains { $0.code == code } }
+
+    /// `codes` with `main` as the main language ("" for automatic
+    /// detection, which also clears the others: Scribe v3 refuses other
+    /// languages without a main one).
+    public static func choosing(main: String, in codes: [String]) -> [String] {
+        main.isEmpty ? [] : [main] + codes.dropFirst().filter { $0 != main }
+    }
+
+    /// `codes` with `code` added to or removed from the other languages.
+    public static func toggling(_ code: String, in codes: [String]) -> [String] {
+        guard let main = codes.first, code != main else { return codes }
+        let others = codes.dropFirst()
+        return [main] + (others.contains(code) ? others.filter { $0 != code } : others + [code])
+    }
+
+    /// "Hindi, Tamil", or `none` when there are no other languages.
+    public static func names(_ codes: some Collection<String>, none: String) -> String {
+        codes.isEmpty ? none : codes.map { code in all.first { $0.code == code }?.name ?? code }.joined(separator: ", ")
+    }
+}
+
 extension GeminiClient {
     /// One dictation to Scribe v3. With `smart`, fillers are dropped and the
     /// formatting instruction is applied; the edited text is returned when it

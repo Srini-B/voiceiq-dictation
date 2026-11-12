@@ -18,12 +18,18 @@ public struct SettingsStore: Sendable {
 
     private static func set(_ value: Any?, forKey key: String) {
         defaults.set(value, forKey: key)
-        Log.ui.info("setting \(key, privacy: .public) changed to \(logDescription(of: value))")
+        let shown = privateTextKeys.contains(key) ? (value as? String).map { "\($0.count) characters" } ?? "default"
+                                                  : logDescription(of: value)
+        Log.ui.info("setting \(key, privacy: .public) changed to \(shown)")
         NotificationCenter.default.post(name: .gtSettingDidChange, object: key)
     }
 
+    /// Text the user wrote about themselves or their work, logged by size
+    /// only however short it is.
+    private static let privateTextKeys: Set<String> = [customWritingRulesKey, "meetingOwnerName"]
+
     /// Short values as they are; long text, lists and data by size only, so
-    /// custom rules and dictionaries stay out of the log.
+    /// dictionaries stay out of the log.
     private static func logDescription(of value: Any?) -> String {
         switch value {
         case nil: return "default"
@@ -159,19 +165,21 @@ public struct SettingsStore: Sendable {
         elevenLabsTranscriptionChosen && KeychainStore.loadKey(.elevenLabs) != nil
     }
 
-    /// The languages the user speaks, as ISO 639 codes, for Scribe v3: the
-    /// first is the main language and the rest are the others it may hear.
-    /// Empty detects the language.
+    /// The languages the user speaks, as ISO 639-3 codes from
+    /// `ScribeLanguage.all`, for Scribe v3: the first is the main language
+    /// and the rest are the others it may hear. Empty detects the language.
+    /// Codes typed into the earlier free-text field read as their
+    /// three-letter form ("hi" as "hin"); ones Scribe does not list are dropped.
     public var spokenLanguages: [String] {
-        Self.defaults.stringArray(forKey: "spokenLanguages") ?? []
+        (Self.defaults.stringArray(forKey: "spokenLanguages") ?? []).map { code in
+            code.count == 2 ? Locale.LanguageCode(code).identifier(.alpha3) ?? code : code
+        }.filter(ScribeLanguage.isListed)
     }
 
-    /// Keeps two- and three-letter codes ("en, hi; TA" → en, hi, ta), each once.
-    public func setSpokenLanguages(_ text: String) {
+    /// Main language first; each code once. Empty is automatic detection.
+    public func setSpokenLanguages(_ codes: [String]) {
         var seen = Set<String>()
-        let codes = text.lowercased().split { !$0.isLetter }.map(String.init)
-            .filter { (2...3).contains($0.count) && $0.allSatisfy(\.isASCII) && seen.insert($0).inserted }
-        Self.set(codes, forKey: "spokenLanguages")
+        Self.set(codes.filter { seen.insert($0).inserted }, forKey: "spokenLanguages")
     }
 
     /// Hide card numbers, ID and account numbers and passwords in meeting

@@ -121,7 +121,7 @@ struct ElevenLabsTranscriptionSection: View {
     private let settings = SettingsStore()
     @State private var chosen = SettingsStore().elevenLabsTranscriptionChosen
     @State private var hasKey = KeychainStore.loadKey(.elevenLabs) != nil
-    @State private var languages = SettingsStore().spokenLanguages.joined(separator: ", ")
+    @State private var languages = SettingsStore().spokenLanguages
     @State private var redacts = SettingsStore().redactsMeetingSecrets
 
     var body: some View {
@@ -136,13 +136,26 @@ struct ElevenLabsTranscriptionSection: View {
             .pickerStyle(.segmented)
             .disabled(!hasKey)
             if chosen && hasKey {
-                LabeledContent("Spoken languages") {
-                    TextField("", text: $languages, prompt: Text("Detect"))
-                        .labelsHidden()
-                        .multilineTextAlignment(.trailing)
+                Picker("Spoken language", selection: Binding(get: { languages.first ?? "" }, set: {
+                    save(ScribeLanguage.choosing(main: $0, in: languages))
+                })) {
+                    Text("Automatic detection").tag("")
+                    Divider()
+                    ForEach(ScribeLanguage.all) { Text($0.name).tag($0.code) }
                 }
-                .help("Language codes, main one first, such as en or en, hi. The others are languages Scribe may also hear.")
-                .onChange(of: languages) { _, value in settings.setSpokenLanguages(value) }
+                .help("The language you speak most. Automatic detection lets Scribe work it out each time.")
+                if let main = languages.first {
+                    LabeledContent("Also spoken") {
+                        Menu(ScribeLanguage.names(languages.dropFirst(), none: "None")) {
+                            ForEach(ScribeLanguage.all.filter { $0.code != main }) { language in
+                                Toggle(language.name, isOn: Binding(get: { languages.dropFirst().contains(language.code) },
+                                                                    set: { _ in save(ScribeLanguage.toggling(language.code, in: languages)) }))
+                            }
+                        }
+                        .fixedSize()
+                    }
+                    .help("Other languages Scribe may hear, such as English mixed into Hindi.")
+                }
                 Toggle("Hide card and ID numbers in meetings", isOn: $redacts)
                     .help("Scribe v3 writes card details, ID, account and health-card numbers and passwords as {CREDIT_CARD} and the like in meeting transcripts, so they are never saved or sent for notes. ElevenLabs charges 30% more for it.")
                     .onChange(of: redacts) { _, value in settings.setRedactsMeetingSecrets(value) }
@@ -158,6 +171,11 @@ struct ElevenLabsTranscriptionSection: View {
             chosen = settings.elevenLabsTranscriptionChosen
             hasKey = KeychainStore.loadKey(.elevenLabs) != nil
         }
+    }
+
+    private func save(_ codes: [String]) {
+        languages = codes
+        settings.setSpokenLanguages(codes)
     }
 }
 

@@ -35,7 +35,7 @@ public enum BrowserSpeakers {
         guard let tab = (onPage.isEmpty ? Array(tabs) : onPage).max(by: { busy($0) < busy($1) }) else { return }
         let saved = Saved(start: meta.startedAt.timeIntervalSince1970 * 1000, events: tab)
         try? JSONEncoder().encode(saved).write(to: folder.appendingPathComponent(fileName), options: .atomic)
-        Log.meeting.info("browser speakers: \(Set(tab.flatMap(\.active)).count, privacy: .public) sources on \(tab[0].page, privacy: .public)")
+        Log.meeting.info("browser speakers: \(Set(tab.flatMap(\.active)).count, privacy: .public) sources on \(URL(string: "https://\(tab[0].page)")?.host ?? "a page", privacy: .public)")
         BrowserSpeakerLog.prune(root: logRoot)
     }
 
