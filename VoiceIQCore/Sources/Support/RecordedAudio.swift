@@ -57,8 +57,11 @@ public struct RecordedAudio: Equatable, Sendable {
         let fm = FileManager.default
         if fm.fileExists(atPath: url.path) { return url }
         // Rendered on the caller's task, off the main actor, so stopping Play cancels it.
-        // Play and Download can both ask at once; each renders its own file.
-        let partial = fm.temporaryDirectory.appendingPathComponent("\(UUID().uuidString).m4a")
+        // Play and Download can both ask at once; each renders its own file,
+        // in the folder launch empties in case the app quits mid-render.
+        let partials = FileLayout.partialRendersFolder
+        try fm.createDirectory(at: partials, withIntermediateDirectories: true)
+        let partial = partials.appendingPathComponent("\(UUID().uuidString).m4a")
         defer { try? fm.removeItem(at: partial) }
         try await Self.render(source, to: partial)
         try Task.checkCancellation()

@@ -52,7 +52,7 @@ struct DebugLogSection: View {
     private func export() {
         do {
             let file = try DebugLog.export()
-            defer { try? FileManager.default.removeItem(at: file) }
+            defer { DebugLog.discardExport(file) }
             let panel = NSSavePanel()
             panel.nameFieldStringValue = file.lastPathComponent
             panel.allowedContentTypes = [.plainText]

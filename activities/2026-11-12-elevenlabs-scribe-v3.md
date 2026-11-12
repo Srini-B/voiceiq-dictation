@@ -223,3 +223,12 @@ Follow-ups from CodeRabbit's replies:
   back out (removal deletes the audio before `playback/`).
 - iOS debug log: a load that ends after Clear or leaving is dropped, and an
   export that reuses the previous name is not deleted.
+- Naming skips the first 1.5 s after the speaker changes, so a short reply
+  under the last speaker's tile can't take their name
+  (`testAWordUnderTheLastSpeakersTileDoesNotTakeTheirName`, fails on the
+  previous code).
+- Renders go in the temporary `recorded-audio` folder that launch empties,
+  so a render cut short by the app quitting leaves nothing behind.
+- Each debug-log export gets its own folder (`DebugLog.discardExport`
+  removes it), and Clear removes every export, so a late load can't
+  overwrite the current share file.

@@ -37,14 +37,15 @@ public enum FileLayout {
 
     /// Deletes the on-device models that builds before 2026-11-10 downloaded
     /// (the whole `Models` folder), on the Mac the speech helper's Core ML
-    /// cache, and the playback copies 0.7.1 (75) kept in the temporary folder.
+    /// cache, and the temporary `recorded-audio` folder: the playback copies
+    /// 0.7.1 (75) kept there, and renders cut short by the app quitting.
     /// Runs at every launch, off the main thread; a missing folder or a
     /// failed delete is ignored.
     public static func removeRetiredModels() {
         Task.detached(priority: .utility) {
             let fileManager = FileManager.default
             try? fileManager.removeItem(at: FileLayout.appSupportRoot.appendingPathComponent("Models", isDirectory: true))
-            try? fileManager.removeItem(at: fileManager.temporaryDirectory.appendingPathComponent("recorded-audio", isDirectory: true))
+            try? fileManager.removeItem(at: FileLayout.partialRendersFolder)
             #if os(macOS)
             let caches = fileManager.urls(for: .cachesDirectory, in: .userDomainMask)[0]
             try? fileManager.removeItem(at: caches.appendingPathComponent("io.blue.voiceiq.localspeech", isDirectory: true))
@@ -77,6 +78,10 @@ public enum FileLayout {
     /// The `.m4a` that Play and Download make from a recording (`RecordedAudio`),
     /// kept beside the audio so deleting either removes it too.
     public static func playbackFolder(in folder: URL) -> URL { folder.appendingPathComponent("playback", isDirectory: true) }
+    /// Where `RecordedAudio` renders before moving the file into `playbackFolder`.
+    public static var partialRendersFolder: URL {
+        FileManager.default.temporaryDirectory.appendingPathComponent("recorded-audio", isDirectory: true)
+    }
     public static func metaJSON(in folder: URL) -> URL { folder.appendingPathComponent("meta.json") }
     /// Transcripts of the chunks that already succeeded on a multi-request
     /// upload, so a retry after a mid-way failure re-sends only what is missing.

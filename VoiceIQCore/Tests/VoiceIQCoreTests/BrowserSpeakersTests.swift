@@ -120,6 +120,19 @@ final class BrowserSpeakersTests: XCTestCase {
         XCTAssertEqual(out, Array(repeating: "s1", count: 6) + ["s2"] + Array(repeating: "s1", count: 4))
     }
 
+    func testAWordUnderTheLastSpeakersTileDoesNotTakeTheirName() throws {
+        // Priya says 0.2 s, then Max 0.4 s while her tile is still lit.
+        let folder = try meeting(events("csrc:11", names: ["Priya Raman"], from: 0, to: 3) + events(nil, names: [], from: 3, to: 4))
+        let transcript = [
+            TranscriptSegment(speaker: "s1", text: "so", chunkIndex: 0, start: 0.2, end: 0.4),
+            TranscriptSegment(speaker: "s2", text: "right", chunkIndex: 0, start: 0.6, end: 1.0),
+        ]
+
+        let named = BrowserSpeakers.name(nil, transcript: transcript, folder: folder)
+
+        XCTAssertNotEqual(named?.speakers["s2"]?.name, "Priya Raman")
+    }
+
     func testTalkBeforeTheRecordingStartedIsNotCounted() throws {
         let folder = try meeting(events("csrc:11", names: ["Priya Raman"], from: -2, to: 3)
             + events("csrc:22", names: ["Max Woolf"], from: 3, to: 6) + events(nil, names: [], from: 6, to: 7))

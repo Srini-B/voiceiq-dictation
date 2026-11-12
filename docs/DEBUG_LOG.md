@@ -67,7 +67,9 @@ files until they age out or the user taps **Clear**.
   button sends the whole log as one file.
 
 The export merges every process's lines in time order under a header with the
-version, OS and device (`DebugLog.export`).
+version, OS and device (`DebugLog.export`), in a folder of its own in the
+temporary folder; `DebugLog.discardExport` removes it once saved or shared,
+and Clear removes every export.
 
 ### What is never written
 

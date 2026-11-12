@@ -184,7 +184,8 @@ public enum DebugLog {
     }
 
     /// One file with every day kept, oldest line first, under a header that
-    /// names the build and device. For a share sheet or a save panel.
+    /// names the build and device. For a share sheet or a save panel. Each
+    /// export is its own copy, in its own folder; `discardExport` removes it.
     public static func export(now: Date = Date()) throws -> URL {
         let body: [Substring] = queue.sync { folder.map { mergedLines(files(in: $0)) } ?? [] }
         let exported = DateFormatter()
@@ -198,9 +199,20 @@ public enum DebugLog {
 
         """
         let name = "VoiceiQ-debug-log-\(dayFormatter.string(from: now))-\(Int(now.timeIntervalSince1970)).txt"
-        let url = FileManager.default.temporaryDirectory.appendingPathComponent(name)
+        let folder = exportsFolder.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let url = folder.appendingPathComponent(name)
         try Data((header + body.joined(separator: "\n") + "\n").utf8).write(to: url, options: .atomic)
         return url
+    }
+
+    /// Removes a file `export` made.
+    public static func discardExport(_ url: URL) {
+        try? FileManager.default.removeItem(at: url.deletingLastPathComponent())
+    }
+
+    private static var exportsFolder: URL {
+        FileManager.default.temporaryDirectory.appendingPathComponent("debug-log-exports", isDirectory: true)
     }
 
     // MARK: - Removing
@@ -209,6 +221,7 @@ public enum DebugLog {
         queue.sync {
             guard let folder else { return }
             for url in files(in: folder) { try? FileManager.default.removeItem(at: url) }
+            try? FileManager.default.removeItem(at: exportsFolder)
             wroteLaunchLine = false
         }
     }

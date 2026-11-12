@@ -44,7 +44,7 @@ struct DebugLogView: View {
     /// The exported copy holds the whole log, so it goes as soon as it is replaced or unused.
     private func discardExport() {
         generation += 1
-        if let file { try? FileManager.default.removeItem(at: file) }
+        if let file { DebugLog.discardExport(file) }
         file = nil
     }
 
@@ -56,12 +56,11 @@ struct DebugLogView: View {
             return (recent, exported)
         }.value
         guard generation == started else {
-            if let exported, exported != file { try? FileManager.default.removeItem(at: exported) }
+            if let exported { DebugLog.discardExport(exported) }
             return
         }
         lines = recent
-        // An export in the same second reuses the name; that file is the new one.
-        if let file, file != exported { try? FileManager.default.removeItem(at: file) }
+        if let file { DebugLog.discardExport(file) }
         file = exported
     }
 }

@@ -182,7 +182,8 @@ public enum BrowserSpeakers {
     /// Names the far-side speakers of a finished transcript, from any
     /// provider, by the names the meeting page lit while they talked. A
     /// speaker takes a name lit for at least half of their talk and more than
-    /// twice as long as any other; a name goes to one speaker only, the one
+    /// twice as long as any other, not counting the first `tileLag` seconds
+    /// after the speaker changes; a name goes to one speaker only, the one
     /// it overlaps most. These names win over the ones read off the screen,
     /// and every lit name joins `seen`. Without names in the folder, `screen`
     /// comes back as it was.
@@ -200,8 +201,15 @@ public enum BrowserSpeakers {
         let lit = Dictionary(grouping: spans(named), by: \.id).mapValues { merged($0.map(\.range)) }
         guard !lit.isEmpty else { return screen }
         var overlap: [String: [String: Double]] = [:], talked: [String: Double] = [:]
-        for segment in transcript where segment.speaker != MeetingSpeaker.you {
-            guard let start = segment.start, let end = segment.end, end > start else { continue }
+        var previous: String?
+        for segment in transcript {
+            defer { previous = segment.speaker }
+            guard segment.speaker != MeetingSpeaker.you,
+                  let first = segment.start, let end = segment.end else { continue }
+            // Tiles trail the voices: the first `tileLag` seconds after the
+            // speaker changes still show who spoke before.
+            let start = segment.speaker == previous ? first : first + tileLag
+            guard end > start else { continue }
             talked[segment.speaker, default: 0] += end - start
             for (name, ranges) in lit {
                 let covered = ranges.reduce(0) { $0 + max(0, min($1.upperBound, end) - max($1.lowerBound, start)) }

@@ -296,7 +296,8 @@ saved, after the screen names are matched, and on every Retry or Redo:
 3. A speaker takes a name that was lit for at least half of their talk and
    more than twice as long as any other name. The tile lights about a second
    after the voice starts and can stay lit into the next turn, so the rule
-   uses overlap over whole turns, not the moment a turn starts.
+   uses overlap over whole turns and skips the first 1.5 s after the
+   speaker changes (`BrowserSpeakers.tileLag`).
 4. A name goes to one speaker only, the one it overlaps most. It replaces a
    name read off the screen for that speaker, and the screen's match is
    dropped wherever it gave that name to someone else.
