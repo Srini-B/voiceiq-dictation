@@ -129,7 +129,7 @@ public struct AgentTransport: Sendable {
 }
 
 public extension Log {
-    static let agent = Logger(subsystem: subsystem, category: "agent")
+    static let agent = LogChannel("agent")
 }
 
 /// Session-wide facts shared by every copy of the transport.

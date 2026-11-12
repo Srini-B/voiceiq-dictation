@@ -198,35 +198,33 @@ private struct SetupLine: View {
     }
 }
 
+/// All-time figures; tapping them opens Statistics, with its period menu.
 private struct StatsRow: View {
     let stats: HistoryStore.Stats
 
     var body: some View {
-        Grid(horizontalSpacing: Theme.Spacing.m, verticalSpacing: Theme.Spacing.m) {
-            GridRow {
-                tile(stats.totalWords.formatted(.number.notation(.compactName)), "Words")
-                tile(stats.totalDictations.formatted(), "Dictations")
+        VStack(alignment: .leading, spacing: Theme.Spacing.m) {
+            HStack {
+                GroupLabel(text: "Statistics")
+                Spacer()
+                NavigationLink("See all") { StatsView() }
+                    .font(Theme.Fonts.label())
+                    .foregroundStyle(Theme.Colors.accent)
             }
-            GridRow {
-                tile(stats.averageWPM > 0 ? "\(stats.averageWPM)" : "–", "Words / min")
-                tile(stats.audioLabel, "Audio")
+            NavigationLink { StatsView() } label: {
+                Grid(horizontalSpacing: Theme.Spacing.m, verticalSpacing: Theme.Spacing.m) {
+                    GridRow {
+                        StatTile(value: stats.totalWords.formatted(.number.notation(.compactName)), label: "Words")
+                        StatTile(value: stats.totalDictations.formatted(), label: "Dictations")
+                    }
+                    GridRow {
+                        StatTile(value: stats.averageWPM > 0 ? "\(stats.averageWPM)" : "–", label: "Words / min")
+                        StatTile(value: stats.audioLabel, label: "Audio")
+                    }
+                }
             }
+            .buttonStyle(.plain)
         }
-    }
-
-    private func tile(_ value: String, _ label: String) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(value)
-                .font(Theme.Fonts.numeric(26, weight: 300))
-                .foregroundStyle(Theme.Colors.ink)
-                .lineLimit(1)
-                .minimumScaleFactor(0.6)
-            Text(label).font(Theme.Fonts.caption()).foregroundStyle(Theme.Colors.muted)
-        }
-        .padding(Theme.Spacing.l)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous).fill(Theme.Colors.surface))
-        .overlay(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous).strokeBorder(Theme.Colors.hairline, lineWidth: 0.5))
     }
 }
 

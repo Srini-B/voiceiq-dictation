@@ -50,7 +50,7 @@ let package = Package(
         ),
         // The VoiceiQ Meetings Chrome extension's speaker log and its native
         // messaging host, which the VoiceiQLocalSpeech helper runs.
-        .target(name: "VoiceIQSpeech", path: "Speech"),
+        .target(name: "VoiceIQSpeech", dependencies: ["VoiceIQBridge"], path: "Speech"),
         .target(
             name: "VoiceIQBridge",
             path: "Sources/Bridge"

@@ -125,6 +125,8 @@ struct SettingsView: View {
 
 struct DictationSettingsView: View {
     @State private var liveTranscription = SettingsStore().liveTranscriptionEnabled
+    /// ElevenLabs transcribes the recording after it stops; nothing streams.
+    @State private var elevenLabs = SettingsStore().transcribesWithElevenLabs
     @EnvironmentObject private var session: VoiceSession
     private let settings = SettingsStore()
     @State private var translationTarget = SettingsStore().translationTargetLanguage
@@ -164,10 +166,15 @@ struct DictationSettingsView: View {
             }
             Section {
                 // Saved only on a user change, not when its default is refreshed.
-                Toggle("Real-time transcription", isOn: Binding(get: { liveTranscription }, set: {
+                Toggle("Real-time transcription", isOn: Binding(get: { liveTranscription && !elevenLabs }, set: {
                     liveTranscription = $0
                     settings.setLiveTranscriptionEnabled($0)
                 }))
+                .disabled(elevenLabs)
+            } footer: {
+                if elevenLabs {
+                    Text("Off while ElevenLabs is the transcription provider: Scribe v3 transcribes the recording after you stop.")
+                }
             }
             Section {
                 Toggle("Smart transcription", isOn: $smartTranscription)
@@ -203,6 +210,7 @@ struct DictationSettingsView: View {
         .onReceive(NotificationCenter.default.publisher(for: .gtSettingDidChange).receive(on: RunLoop.main)) { note in
             switch note.object as? String {
             case "liveDictationEnabled": liveTranscription = settings.liveTranscriptionEnabled
+            case "elevenLabsTranscription": elevenLabs = settings.transcribesWithElevenLabs
             case "smartTranscription": smartTranscription = settings.smartTranscriptionEnabled
             case "smartCleanupPass": cleanupPass = settings.smartCleanupPassEnabled
             case "skipShortDictationCleanup": skipShortCleanup = settings.skipShortDictationCleanup
@@ -351,11 +359,14 @@ struct PrivacyView: View {
     @State private var provider = SettingsStore().preferredProvider
 
     @State private var meetingProviders = SettingsStore().meetingProviders
+    @State private var elevenLabs = SettingsStore().transcribesWithElevenLabs
 
-    private var destination: String { "\(provider.directName), with your key" }
-    /// Meetings go to the first provider with a key, then to each other one
-    /// in turn while the earlier ones fail.
+    private var destination: String { "\(elevenLabs ? ModelEndpoint.elevenLabs.directName : provider.directName), with your key" }
+    /// Meetings go to ElevenLabs when it transcribes; otherwise to the first
+    /// provider with a key, then to each other one in turn while the earlier
+    /// ones fail.
     private var meetingOwner: String {
+        if elevenLabs { return ModelEndpoint.elevenLabs.directName }
         let names = meetingProviders.map(\.directName)
         guard let first = names.first else { return provider.directName }
         let rest = names.dropFirst()
@@ -402,6 +413,7 @@ struct PrivacyView: View {
         .onReceive(NotificationCenter.default.publisher(for: .gtSettingDidChange).receive(on: RunLoop.main)) { _ in
             provider = SettingsStore().preferredProvider
             meetingProviders = SettingsStore().meetingProviders
+            elevenLabs = SettingsStore().transcribesWithElevenLabs
         }
     }
 }
@@ -416,6 +428,7 @@ struct AdvancedView: View {
     @State private var cleanupModel = SettingsStore().cleanupModelOverride ?? ""
     @State private var openAITranscribe = SettingsStore().openAITranscribeModelOverride ?? ""
     @State private var openAIWriting = SettingsStore().openAIWritingModelOverride ?? ""
+    @State private var debugLog = DebugLog.isEnabled
     private let geminiDefaults = GeminiConfig()
     private let openAIDefaults = OpenAIConfig()
 
@@ -429,6 +442,13 @@ struct AdvancedView: View {
         Form {
             Section {
                 NavigationLink("Session log") { SessionLogView() }
+            }
+            Section {
+                Toggle("Write a debug log", isOn: $debugLog)
+                    .onChange(of: debugLog) { _, on in DebugLog.setEnabled(on) }
+                NavigationLink("Debug log") { DebugLogView() }
+            } footer: {
+                Text("While this is on, VoiceiQ and its keyboard write down everything they do: dictation, transcription with each provider, meetings, settings changes, sync, network requests and errors. Share the file with a bug report. API keys and tokens are removed, and transcripts are never written. VoiceiQ keeps the last \(DebugLog.keepDays) days, up to \(DebugLog.maxTotalBytes / 1_000_000) MB, and deletes older entries on its own.")
             }
             if provider == .gemini {
                 Section {

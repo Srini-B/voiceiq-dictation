@@ -79,7 +79,39 @@ public enum PriceBook {
         ("gpt-4o-transcribe", 0.006),
         // No longer called; prices rows booked by older builds.
         ("whisper-1", 0.006),
+        // ElevenLabs, elevenlabs.io/pricing/api (copied 2026-11-12): the same
+        // rate on every plan, hours included in a plan not subtracted.
+        ("scribe_v3", 0.20 / 60),
+        ("scribe_v3_live", 0.22 / 60),
+        // No longer called; prices rows booked in 2026-09 and 2026-10.
+        ("scribe_v2_realtime", 0.22 / 60),
+        ("scribe_v2", 0.20 / 60),
     ]
+
+    /// ElevenLabs add-ons per audio hour, same source. The pricing page's
+    /// table is used where the guides give other percentages (keyterms +20%,
+    /// editing +30%), because it is what the bill shows.
+    public enum ElevenLabsAddOn {
+        /// `keyterms`, the dictionary terms.
+        case keyterms
+        /// `keyterms` and the keyterm library on Scribe v3 Live, billed once
+        /// for both (the realtime guide).
+        case liveKeyterms
+        /// `transcript_edit`, the formatting instruction.
+        case transcriptEdit
+        /// `entity_detection`, which redaction needs. Not in the pricing
+        /// page's table; its help center says 30% on top of the base price.
+        case entityDetection
+
+        public var perHour: Double {
+            switch self {
+            case .keyterms: return 0.05
+            case .liveKeyterms: return 0.08
+            case .transcriptEdit: return 0.07
+            case .entityDetection: return 0.06
+            }
+        }
+    }
 
     public static func perMinutePrice(for model: String) -> Double? {
         let id = model.lowercased().split(separator: "/").last.map(String.init) ?? model.lowercased()

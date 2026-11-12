@@ -107,6 +107,58 @@ extension ProviderKeySection {
     static let openAI = ProviderKeySection(
         secret: .openAI, vendor: "OpenAI", keyPage: URL(string: "https://platform.openai.com/api-keys")!,
         validate: { key in await GeminiClient(apiKey: { nil }, openAIKey: { key }).validateOpenAIKey() })
+
+    static let elevenLabs = ProviderKeySection(
+        secret: .elevenLabs, vendor: "ElevenLabs", keyPage: URL(string: "https://elevenlabs.io/app/settings/api-keys")!,
+        validate: { key in await GeminiClient(apiKey: { nil }, elevenLabsKey: { key }).validateElevenLabsKey() })
+}
+
+/// The transcription provider: the model provider, or ElevenLabs, whose
+/// Scribe v3 then transcribes dictation and meetings. Needs the ElevenLabs
+/// key above; the model provider still writes.
+struct ElevenLabsTranscriptionSection: View {
+    let provider: ModelProvider
+    private let settings = SettingsStore()
+    @State private var chosen = SettingsStore().elevenLabsTranscriptionChosen
+    @State private var hasKey = KeychainStore.loadKey(.elevenLabs) != nil
+    @State private var languages = SettingsStore().spokenLanguages.joined(separator: ", ")
+    @State private var redacts = SettingsStore().redactsMeetingSecrets
+
+    var body: some View {
+        Section {
+            Picker("Transcription provider", selection: Binding(get: { chosen && hasKey }, set: {
+                chosen = $0
+                settings.setElevenLabsTranscription($0)
+            })) {
+                Text(provider.displayName).tag(false)
+                Text("ElevenLabs").tag(true)
+            }
+            .pickerStyle(.segmented)
+            .disabled(!hasKey)
+            if chosen && hasKey {
+                LabeledContent("Spoken languages") {
+                    TextField("", text: $languages, prompt: Text("Detect"))
+                        .labelsHidden()
+                        .multilineTextAlignment(.trailing)
+                }
+                .help("Language codes, main one first, such as en or en, hi. The others are languages Scribe may also hear.")
+                .onChange(of: languages) { _, value in settings.setSpokenLanguages(value) }
+                Toggle("Hide card and ID numbers in meetings", isOn: $redacts)
+                    .help("Scribe v3 writes card details, ID, account and health-card numbers and passwords as {CREDIT_CARD} and the like in meeting transcripts, so they are never saved or sent for notes. ElevenLabs charges 30% more for it.")
+                    .onChange(of: redacts) { _, value in settings.setRedactsMeetingSecrets(value) }
+            }
+        } footer: {
+            Text(!hasKey
+                 ? "Add an ElevenLabs key above to transcribe with Scribe v3."
+                 : chosen
+                 ? "Scribe v3 transcribes dictation from the recording, after you stop; Real-time transcription is not used with it. With Smart transcription on, Scribe also drops filler words and formats the text before \(provider.displayName) applies your writing rules. Meetings show a live transcript from Scribe v3 Live while they record, and Scribe v3 makes the saved transcript when they stop. Meeting notes still come from \(provider.displayName)."
+                 : "\(provider.displayName) transcribes dictation and meetings.")
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .gtSettingDidChange).receive(on: RunLoop.main)) { _ in
+            chosen = settings.elevenLabsTranscriptionChosen
+            hasKey = KeychainStore.loadKey(.elevenLabs) != nil
+        }
+    }
 }
 
 struct OpenAIModelsSection: View {

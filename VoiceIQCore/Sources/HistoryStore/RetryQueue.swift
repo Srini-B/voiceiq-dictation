@@ -133,6 +133,16 @@ public final class RetryQueue {
         case rateLimited(retryIn: TimeInterval)
     }
 
+    /// Whether History's Retry can do anything for `record`: transcribe its
+    /// recording again, or recover the words of an unfinished dictation that
+    /// was transcribed before the audio went. A finished dictation without
+    /// its audio has nothing to retry (`process` answers `.failed`).
+    public static func canRetry(_ record: DictationRecord) -> Bool {
+        if FileManager.default.fileExists(atPath: FileLayout.audioCAF(in: record.folderURL).path) { return true }
+        guard record.rawTranscript != nil, let status = SessionMeta.Status(rawValue: record.status) else { return false }
+        return !finishedStatuses.contains(status)
+    }
+
     /// Delivered one way or another; the drain leaves these alone.
     private static let finishedStatuses: Set<SessionMeta.Status> = [
         .inserted, .copiedToClipboard, .awaitingChip, .heldSecure, .recovered,

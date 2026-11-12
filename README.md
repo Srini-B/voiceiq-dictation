@@ -50,7 +50,8 @@ Every failure is retryable from History, and Retry transcribes any dictation aga
 listening until you actually stop.
 
 **It is private by architecture.** Your voice goes from your Mac straight to
-the provider you choose with *your* key: Gemini or OpenAI. No middleman server, no
+the provider you choose with *your* key: Gemini or OpenAI, or, if you add an
+ElevenLabs key and pick it as the transcription provider, ElevenLabs Scribe v3 for the transcription. No middleman server, no
 account, no analytics, no keystroke logging — one network host per dictation step,
 and you can read every line of the code that talks to it. Screen context (a few downscaled screenshots sent with each
 dictation so on-screen names and paths are spelled right) can be switched off
@@ -99,13 +100,15 @@ record it. Accept, or press ⌥M at any time, and VoiceiQ records both sides.
 Press ⌥M again (or the pill's stop button) to finish: you get a
 speaker-labelled transcript plus a summary, decisions, and owned action items
 under Settings → Meetings. Recording never stops on its own. Meetings run on
-the selected provider, or on the other provider when only its key is saved.
+the selected provider, or on the other provider when only its key is saved,
+and are transcribed by ElevenLabs Scribe v3 instead when it is the
+transcription provider.
 With no usable key the recording is kept and marked failed with the reason,
 ready to Retry once a key is added.
 
 **Cost Analysis.** Every model call is metered: tokens or audio seconds from the
 API response, priced at the provider's list prices. Settings → Cost Analysis shows today, this week, this month, and all
-time, broken down by action and by model, for Gemini or OpenAI (a
+time, broken down by action and by model, for Gemini, OpenAI or ElevenLabs (a
 toggle switches between them, with Claude added while there is spend from
 when it was a provider); each dictation in History shows what it cost. Details in
 [docs/COST_TRACKING.md](docs/COST_TRACKING.md).

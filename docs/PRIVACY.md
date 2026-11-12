@@ -35,6 +35,19 @@ With no usable key, nothing is sent and the recording stays on your Mac.
    to that provider after you stop. Real-time transcription is off by default
    (since 2026-11-10); turn it on in Settings › Dictation.
    It does not affect meetings.
+   With ElevenLabs picked as the transcription provider (Settings › Advanced
+   on the Mac, Provider & Keys on iPhone; not picked by default, and only with
+   an ElevenLabs key), the saved recording goes to ElevenLabs Scribe v3
+   instead of the provider, with your ElevenLabs key, after you stop;
+   Real-time transcription is off then, so dictation does not stream. With Smart transcription on,
+   the request also carries a fixed formatting instruction written by
+   VoiceiQ (punctuation, paragraphs, spoken marks, numbers, your spelling setting).
+   The spoken languages you set are sent with it.
+   The transcript then goes to the provider for the writing rules, as below.
+   Meetings are the one exception to "after you stop": while a meeting
+   records with ElevenLabs chosen, its audio (mic and call audio mixed, the
+   mic alone on iPhone) also streams to Scribe v3 Live for the live
+   transcript in the window.
 2. **Your dictionary terms**, alongside that audio. The transcription model uses
    them to bias what it hears, which is why names and jargon come out spelled
    right as you speak rather than being corrected afterwards. Only the correct
@@ -102,8 +115,11 @@ With no usable key, nothing is sent and the recording stays on your Mac.
    recording with no call detected records the default microphone and all
    system sound.
    Recording stops only when you stop it; the stretches with speech are then
-   sent to the provider for a speaker-labelled transcript, and that
-   transcript is sent back for a summary and action items. Turn the setting
+   sent to the provider (or to ElevenLabs Scribe v3 when it transcribes, with
+   your dictionary terms and spoken languages, and with card and ID numbers
+   hidden when that setting is on) for a speaker-labelled
+   transcript, and that transcript is sent back to the provider for a summary
+   and action items. Turn the setting
    off and no call detection runs.
    With "Read names from the screen" on (Settings → Dictation, on by default,
    macOS only) and Screen Recording already granted, VoiceiQ takes a snapshot
@@ -160,12 +176,15 @@ optional: you install it from Settings → Advanced and load it in Chrome
 yourself. On Google Meet, Teams, Zoom, Jitsi Meet, Whereby, Slack, Discord
 and Webex pages, it checks four times a second which of the call's incoming
 WebRTC audio streams is loud, from the level number the browser reports for
-each stream. It does not read the audio itself, the page text, the video or
-anyone's name. Each report holds only:
+each stream. While a stream is loud, on Google Meet, Teams, Zoom and Jitsi
+Meet, it also reads the name on each participant tile the page lights as
+talking, leaving out your own tile. It does not read the audio itself, the
+video, or any other page text. Each report holds only:
 
 - the time;
 - the ids of the loud streams, numbers the call service gives each stream or
   speaker (such as `csrc:3141`);
+- the names on the tiles lit as talking, as the call service shows them;
 - the page's host and path, such as `meet.google.com/abc-defg-hij`, never
   the query string;
 - Chrome's number for the tab.
@@ -177,7 +196,9 @@ while Chrome runs, whether or not VoiceiQ records it. It also sends one
 "hello" report, with no streams and no page, when it is installed and when
 Chrome starts. When a recording stops, VoiceiQ copies the
 reports from that meeting's tab to `browser-speakers.json` in the meeting's
-folder and uses them to tell the other speakers apart. That file is deleted
+folder and uses them to tell the other speakers apart and name them. The
+names given to speakers go to your provider with the transcript when the
+notes are written, like names read off the screen. That file is deleted
 with the meeting. Day files older than 7 days are deleted when a meeting
 with reports stops, when Chrome starts the helper, and every hour while it
 runs. To stop the reports, remove the extension on Chrome's
@@ -220,6 +241,13 @@ Extensions page.
   7d / 30d / 1 year / forever; finished dictations older than that are
   deleted with their folders, rows waiting for Retry or your attention are
   kept), plus one-click **Delete all history**.
+- Meeting audio has no retention setting: it stays until the meeting is
+  deleted, so a meeting can be transcribed again. Play and Download write an
+  `.m4a` copy of a recording to the app's temporary folder, which the system
+  clears; Download also saves one where you choose (Downloads on the Mac).
+- Logs. See [DEBUG_LOG.md](DEBUG_LOG.md). The opt-in debug log (Settings ›
+  Advanced) stays on the device until you export or share it. It never holds
+  API keys, tokens or text the app marks private, and keeps 7 days.
 - Local files are protected by FileVault if enabled; they are not separately
   encrypted (stated honestly).
 - Builds before 2026-11-10 could download speech models into
@@ -236,9 +264,10 @@ Extensions page.
 Your audio is governed by your own terms with whoever receives it. With Gemini,
 that is the Gemini API terms with Google; as of writing, paid-tier API usage is
 not used for model training, and free-tier usage may be. With OpenAI, it is
-OpenAI's API terms. That relationship is yours — this app doesn't broker it. Review the
-[Gemini API terms](https://ai.google.dev/gemini-api/terms) and the
-[OpenAI API data controls](https://platform.openai.com/docs/guides/your-data).
+OpenAI's API terms, and with ElevenLabs, its terms of service. That relationship is yours — this app doesn't broker it. Review the
+[Gemini API terms](https://ai.google.dev/gemini-api/terms), the
+[OpenAI API data controls](https://platform.openai.com/docs/guides/your-data) and
+[ElevenLabs' privacy policy](https://elevenlabs.io/privacy-policy).
 
 ## Secure input
 

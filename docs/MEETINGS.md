@@ -3,9 +3,44 @@
 How VoiceiQ notices a call, what audio it records, how each line goes to the
 right person (the provider's speaker labels, the VoiceiQ Meetings Chrome
 extension, and names from the call screen), and how the Meetings window shows
-and exports it. Meetings are always transcribed by the provider (Gemini or
-OpenAI). What is sent, and the notes prompt, are covered in
+and exports it. Meetings are transcribed by the provider (Gemini or
+OpenAI), or by ElevenLabs Scribe v3 when it is the transcription provider,
+always from the saved tracks after the recording stops. With ElevenLabs, the
+Meetings window (and the iPhone recorder card) also shows a live transcript
+from Scribe v3 Live while the meeting records; it is replaced by the saved
+transcript when the meeting stops. Notes always come
+from the provider. What is sent, and the notes prompt, are covered in
 [PRIVACY.md](PRIVACY.md) and [design/meeting-prompt-rulebook.md](design/meeting-prompt-rulebook.md).
+
+### Live transcript with ElevenLabs
+
+`LiveMeetingSession` mixes the mic and system tracks (the mic alone on
+iPhone) into one 16 kHz stream to Scribe v3 Live with:
+
+- `commit_strategy=turn_prediction`: the server's voice activity detection
+  ends a segment at a pause, or the model ends it earlier when it predicts the
+  speaker finished. Batch Scribe v3 has no VAD option, so this is where VAD is
+  used.
+- `diarize=true`: speakers in real time. `speakers_merged` events rewrite
+  earlier turns when two ids turn out to be one person.
+- `no_verbatim`, the dictionary as `keyterms` (50 terms of up to 20
+  characters) plus the whole dictionary as the keyterm library (up to 10,000
+  terms, first audio chunk), and the spoken languages (several turn on
+  `multilang_mode`).
+
+The live transcript is for watching the call. Measured 2026-11-12 on two real
+four-person meetings (AMI corpus, 180 s each, scored against its speaker
+labels): Live gave the right speaker to 95.0% and 73.7% of its words, batch
+to 93.6% and 67.6%, but Live wrote 8% and 17% fewer words. So the saved
+transcript still comes from batch Scribe v3 after the meeting stops, where
+only stretches with speech are sent (`CallAudio.activeRegions`), which also
+keeps billed silence down. A live session that fails says so in the window;
+the recording and the saved transcript are not affected.
+
+"Hide card and ID numbers in meetings" (off by default) asks batch Scribe v3
+to write card details, ID, account and health-card numbers and passwords as
+`{CREDIT_CARD}` and the like (`entity_redaction`), in the saved transcript and
+so in what the notes model sees. Names, places, dates and money stay.
 
 ## Call detection
 
@@ -130,8 +165,14 @@ In a browser call, everyone on the far side arrives in one audio track, and
 the diarizer can merge two people who sound alike. The VoiceiQ Meetings
 extension for Chrome reports which of the call's WebRTC audio sources is loud,
 and when. Each source is one participant, so the extension tells people
-apart however alike they sound. It reads no audio, page text, or names. What
-it reports and where that is kept is in [PRIVACY.md](PRIVACY.md).
+apart however alike they sound. While a source is loud it also reports the
+names on the tiles the meeting page lights as talking, which name the
+speakers. It reads no audio and no other page text. What it reports and
+where that is kept is in [PRIVACY.md](PRIVACY.md).
+
+Everything here runs after the provider's transcript is back, on its
+speaker-labelled words, so it works the same for every transcription
+provider: Gemini, OpenAI and ElevenLabs.
 
 ### What the extension reports
 
@@ -155,9 +196,28 @@ Discord, and Webex.
   (such as `csrc:3141` or `ssrc:2718`) with the time and the page's host and
   path. It posts when the list changes, and every 1 s while the list is not
   empty, so a pause in the call differs from a page that stopped reporting.
+- While at least one source is loud, `page.js` also reads `names`: the name
+  on each tile the page lights as talking, from the site's entry in `SITES`.
+  It leaves out the user's own tile, and it reads nothing while every source
+  is quiet, because Zoom and Jitsi keep the last speaker lit after they stop.
+  A change of names is posted like a change of sources.
+
+  | Site | Tiles | Lit as talking | Name | Own tile |
+  | --- | --- | --- | --- | --- |
+  | Google Meet | `[data-participant-id]` | class `Oaajhc`, `HX2H7`, `wEsLMd` or `OgVli` on the tile or inside it | `span.notranslate` | has `[data-self-name]` |
+  | Teams | `[data-stream-type][data-tid]` | its `[data-tid="voice-level-stream-outline"]` has `vdi-frame-occlusion` | the tile's `data-tid`, unless it looks like a machine id (`video-stream-2`, `videoTile`) | not detected |
+  | Zoom web | the active-speaker frame (`.speaker-active-container__video-frame` and the `single-…-container__video-frame` family) | always | `.video-avatar__avatar-footer` | not detected |
+  | Jitsi Meet | `.videocontainer.dominant-speaker` | always | `.displayname` | id `localVideoContainer…` |
+
+  Whereby, Slack, Discord and Webex report sources only. The selectors are
+  the services' own markup, taken from Vexa's open-source meeting bots
+  (Meet, Teams, Zoom) and Jitsi's source; Meet's classes are obfuscated and
+  Teams' speaking mark is unconfirmed even there. A service that changes its
+  markup usually gives no names rather than wrong ones, and a name is used
+  only where it agrees with the transcript's timing (see below).
 - `relay.js` runs in the content script world and passes on only messages
-  of that shape: a numeric time, a page cut to 300 characters, and at most 64
-  ids of up to 40 characters each.
+  of that shape: a numeric time, a page cut to 300 characters, at most 64
+  ids of up to 40 characters each, and at most 16 names of up to 80.
 - `background.js` adds the tab id and sends each event to the native
   messaging host `io.blue.voiceiq.browser`. When the host cannot be reached,
   it waits 30 s before it connects again. On install and at browser start it
@@ -215,6 +275,38 @@ mixed stream that reconnects comes back under a new id, so its ids follow
 one another and none returns. Only events with one loud stream count, because
 the old and new stream can both be loud for a moment.
 
+When the sources do not tell people apart but the page lit two or more
+names (Zoom web, which sends everyone on one stream), the lit names stand in
+for the sources in steps 2 to 6 (`BrowserSpeakers.byName`). The same 30 %
+coverage rule applies.
+
+### How the names name the speakers
+
+`MeetingEngine.process` calls `BrowserSpeakers.name` once the transcript is
+saved, after the screen names are matched, and on every Retry or Redo:
+
+1. Each name's lit stretches are built as in step 2 above, from the events'
+   `names`, and joined where they overlap.
+2. For each far-side speaker in the transcript, it adds up how long each
+   name was lit during that speaker's turns.
+3. A speaker takes a name that was lit for at least half of their talk and
+   more than twice as long as any other name. The tile lights about a second
+   after the voice starts and can stay lit into the next turn, so the rule
+   uses overlap over whole turns, not the moment a turn starts.
+4. A name goes to one speaker only, the one it overlaps most. It replaces a
+   name read off the screen for that speaker, and the screen's match is
+   dropped wherever it gave that name to someone else.
+5. Each match keeps when the page first lit the name (`talkStart`, seconds
+   from the start of the recording) and how long it was lit in all
+   (`talkSeconds`); `seen` and `of` hold the overlap and the speaker's talk
+   in seconds. They are stored in `MeetingMeta.screenNames`, so the
+   Meetings window, Assign speakers and the notes request use them like
+   screen names. Every lit name also goes to the front of `seen`, longest
+   first, so the notes model knows the participants.
+
+The owner's words are never named this way; their name comes from the
+owner marker, the typed name or Settings, as before.
+
 ### Install the extension
 
 The extension is not on the Chrome Web Store. Chrome 137 removed
@@ -238,8 +330,10 @@ At each launch, VoiceiQ copies the files and writes the host manifests again
 when the extension is installed (`BrowserExtension.refreshIfInstalled`), so
 both follow app updates. **Status** shows "Not installed", "Waiting for
 Chrome to load it", or "Last heard from it" with the time of the newest
-write to the log. It does not claim the extension works now: a disabled
-extension leaves the old log behind.
+write to the log. The native host, not the app, writes that log, so the row
+reads it again every second while Settings is open: it turns to "Last heard"
+as soon as Chrome loads the extension and sends its first event. It does not
+claim the extension works now: a disabled extension leaves the old log behind.
 
 ### Measured
 
@@ -250,6 +344,18 @@ earlier rule that used each word's midpoint put 6 words at turn edges on the
 wrong person. The overlap rule puts them right
 (`BrowserSpeakersTests.testWordsTheRecognizerTimesPastTheirTurnStillGoToTheirSpeaker`).
 Real Google Meet and Teams calls, which use the CSRC path, were not tested.
+
+Names, 2026-11-12, on Linux with Chrome for Testing 157 and the unpacked
+extension: fixture pages served as `meet.google.com`, `teams.microsoft.com`,
+`app.zoom.us` and `meet.jit.si` built each site's tiles as in the table
+above, ran a real WebRTC audio loopback, lit Priya's tile for 3.5 s and then
+Max's, then went silent with Max still lit. On all four, the native host
+received Priya's name with the first loud event, Max's within 250 ms of the
+switch, and no names once the audio stopped; the user's own tile and Teams'
+`video-stream-2` tile never appeared. The Zoom log, put through `save`,
+`apply` and `name`, split one diarizer speaker into Priya and Max and named
+both. No real Meet, Teams, Zoom or Jitsi call has been tested, so whether
+those services still use this markup is not known.
 
 ## Speaker names from the screen
 
@@ -311,7 +417,9 @@ meeting never raises the prompt (`CGPreflightScreenCaptureAccess`).
    `seen`; the notes model returns `participants`, the people among them.
 
 Name shown for a speaker (`MeetingMeta.displayName`): the name the user typed,
-then the screen match, then the notes model's suggestion, then "Speaker N".
+then the screen match (where the Chrome extension's name, when it has one,
+has replaced what was read off the screen), then the notes model's
+suggestion, then "Speaker N".
 `MeetingMeta.knownNames` lists every name from those sources for Assign speakers.
 
 Limits: a gallery view with every tile always visible gives no signal (a name
@@ -348,10 +456,33 @@ docs/design/meeting-prompt-rulebook.md. Fixes from 2026-10-29:
   builds before 2026-11-10) and hears
   the whole meeting again. `browser-speakers.json` stays. **Retry** after a
   failure keeps the finished windows.
+- Redo and Retry transcribe from the saved tracks with the providers in
+  `SettingsStore.meetingProviders` at that moment: the provider selected now
+  first. `mic.caf` and `system.caf` stay until the meeting is deleted; the
+  audio retention setting applies to dictations only.
 - `MeetingEngine.processing` maps each meeting being processed to its step
   (`.transcribing` or `.summarizing`). The Mac header shows a spinner with
   "Transcribing" or "Making notes" while old notes stay on screen; iOS shows
   the same step as a card above the notes.
+
+## Play and Download
+
+Every meeting and dictation detail has Play and Download for its audio, on
+the Mac (icon buttons in the header) and on iPhone (an Audio card). Both are
+disabled when the audio is not on the device: a dictation synced from the
+other device or removed by audio retention, or a meeting still recording.
+Redo transcript and notes is disabled the same way.
+
+`RecordedAudio` (VoiceIQCore, `Support/RecordedAudio.swift`) makes one AAC
+`.m4a` per recording in the temporary folder and both buttons use it. A
+dictation is its `audio.caf`. A meeting is `mic.caf` and `system.caf` mixed
+as `CallAudio.samples` hears them: each track levelled to about -20 dBFS and
+the raw mic ducked while the far side talks. It never reads or writes
+`mic-aec.caf`, so it can run while the transcriber is echo-cancelling.
+`RecordingPlayer` plays the file; on iPhone, outside a voice session, it takes
+a `.playback` session so the silent switch does not mute it. Download on the
+Mac copies the file to Downloads and shows the export message; on iPhone it
+is a share sheet, so Save to Files keeps it.
 
 ## The pill in screen shares
 
@@ -376,7 +507,7 @@ mirrored or AirPlay display, still shows the pill.
 
 | File | Shows |
 | --- | --- |
-| `MeetingsView.swift` | Record button above the list, the detail header (title, progress while transcribing or making notes, Update notes after a speaker is renamed, Export menu, `…` menu with Redo notes / Redo transcript and notes / Retry / Delete, transcript toggle), the export message |
+| `MeetingsView.swift` | Record button above the list, the detail header (title, progress while transcribing or making notes, Update notes after a speaker is renamed, Play and Download audio (`RecordingAudioButtons.swift`), Export menu, `…` menu with Redo notes / Redo transcript and notes / Retry / Delete, transcript toggle), the export message |
 | `MeetingNotesColumn.swift` | Title, Summary, the meeting type's sections, Decisions, Action items as open circles ("Owner: task"), Notes, then the meeting's questions and answers (`MeetingChatView.swift`, which also has the question box `MeetingsView.swift` puts under both columns) |
 | `MeetingTranscriptColumn.swift` | The transcript in one `NSTextView`: speaker names in their own colour (`SpeakerPalette`), time on a right tab stop, search that filters and highlights |
 | `AssignSpeakersView.swift` | One card per speaker: name, a sample line, shuffle (next line), play (that line's audio) |

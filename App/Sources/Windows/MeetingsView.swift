@@ -38,9 +38,12 @@ struct MeetingsPane: View {
             if let exported { ExportToast(result: exported) { self.exported = nil }.padding(.bottom, VoiceIQUI.Spacing.l) }
         }
         .animation(.easeOut(duration: 0.2), value: exported)
-        .onAppear(perform: reload)
+        .onAppear { reload(); if engine.liveTranscript != nil { narrowShowsTranscript = true } }
         .onChange(of: selection) { _, _ in assigning = false; loadSelection() }
         .onChange(of: engine.phase) { _, _ in reload() }
+        // A narrow window shows the notes or the transcript. While a meeting
+        // records, the notes are only a spinner, so the live transcript shows.
+        .onChange(of: engine.liveTranscript != nil) { _, live in narrowShowsTranscript = live }
         .onChange(of: engine.processing) { _, _ in reload() }
         .confirmationDialog("Delete this meeting?", isPresented: $confirmingDelete) {
             Button("Delete", role: .destructive, action: remove)
@@ -78,7 +81,8 @@ struct MeetingsPane: View {
 
     private func detail(_ meeting: MeetingMeta, width paneWidth: CGFloat) -> some View {
         let wide = paneWidth >= Self.wideWidth
-        let transcriptShown = !transcript.isEmpty && (wide ? !hidesTranscript : narrowShowsTranscript)
+        let shown = shownTranscript(meeting)
+        let transcriptShown = !shown.isEmpty && (wide ? !hidesTranscript : narrowShowsTranscript)
         return VStack(spacing: 0) {
             header(meeting, wide: wide, transcriptShown: transcriptShown)
             Divider()
@@ -108,8 +112,8 @@ struct MeetingsPane: View {
                                                rename: { speaker, name in rename(meeting, speaker, name) },
                                                back: { assigning = false })
                         } else {
-                            MeetingTranscriptColumn(meeting: meeting, notes: notes, transcript: transcript,
-                                                    width: width) { assigning = true }
+                            MeetingTranscriptColumn(meeting: meeting, notes: notes, transcript: shown,
+                                                    width: width, live: isRecording(meeting)) { assigning = true }
                         }
                     }
                     .frame(width: width)
@@ -126,6 +130,21 @@ struct MeetingsPane: View {
         }
     }
 
+    /// The saved transcript, or while this meeting records with ElevenLabs,
+    /// what Scribe v3 Live has heard so far, with the turn still being heard
+    /// last. The saved transcript replaces it after the meeting stops. Only
+    /// the last 100 turns, since the column redraws with every partial.
+    private func shownTranscript(_ meeting: MeetingMeta) -> [TranscriptSegment] {
+        guard isRecording(meeting), let live = engine.liveTranscript else { return transcript }
+        let hearing = live.stopped ? "Live transcript stopped. The transcript is made when you stop." : live.partial
+        return live.segments.suffix(100) + (hearing.isEmpty ? [] : [TranscriptSegment(speaker: "…", text: hearing, chunkIndex: 0)])
+    }
+
+    private func isRecording(_ meeting: MeetingMeta) -> Bool {
+        if case .recording(meeting.id, _) = engine.phase { return true }
+        return false
+    }
+
     /// Nil until the meeting has a transcript to ask about.
     private func chat(_ meeting: MeetingMeta) -> MeetingChatModel? {
         transcript.isEmpty ? nil : MeetingChatModel.shared(meeting.id, store: store)
@@ -133,6 +152,8 @@ struct MeetingsPane: View {
 
     private func header(_ meeting: MeetingMeta, wide: Bool, transcriptShown: Bool) -> some View {
         let busy = engine.isBusy(meeting.id)
+        let audio = RecordedAudio.meeting(folder: meeting.status == .recording ? nil : store.folder(for: meeting.id),
+                                          name: title(meeting))
         return HStack(spacing: VoiceIQUI.Spacing.xs) {
             Text(title(meeting)).font(VoiceIQUI.TypeScale.title()).lineLimit(1)
             Spacer(minLength: VoiceIQUI.Spacing.s)
@@ -152,6 +173,7 @@ struct MeetingsPane: View {
                 .disabled(busy)
                 .help("Write the notes again with the speaker names you set")
             }
+            RecordingAudioButtons(audio: audio) { exported = $0 }
             Menu {
                 Section("Save to Downloads") { exportItems { export(meeting, $0) } }
                 Section("Copy") { exportItems { copy(meeting, $0) } }
@@ -166,6 +188,7 @@ struct MeetingsPane: View {
                 } else {
                     Button("Redo notes") { engine.regenerateNotes(id: meeting.id) }.disabled(transcript.isEmpty)
                     Button("Redo transcript and notes") { engine.retry(id: meeting.id, fresh: true) }
+                        .disabled(!audio.isAvailable)
                 }
                 Divider()
                 Button("Delete…", role: .destructive) { confirmingDelete = true }
@@ -190,7 +213,7 @@ struct MeetingsPane: View {
                 Image(systemName: wide ? "sidebar.right" : transcriptShown ? "doc.text" : "text.bubble")
             }
             .help(transcriptShown ? (wide ? "Hide transcript" : "Show notes") : "Show transcript")
-            .disabled(transcript.isEmpty)
+            .disabled(shownTranscript(meeting).isEmpty)
         }
         .padding(.horizontal, VoiceIQUI.Spacing.l)
         .padding(.top, VoiceIQUI.Spacing.l)
@@ -293,7 +316,7 @@ enum ExportResult: Equatable {
     case failed(String)
 }
 
-private struct ExportToast: View {
+struct ExportToast: View {
     let result: ExportResult
     let dismiss: () -> Void
 

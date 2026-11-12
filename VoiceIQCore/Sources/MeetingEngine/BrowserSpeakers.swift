@@ -2,10 +2,10 @@ import Foundation
 import VoiceIQSpeech
 
 /// The far side's speakers from the VoiceiQ Meetings Chrome extension: which
-/// WebRTC source was loud when, one source per participant
-/// (`BrowserSpeakerEvent`). It knows people apart that sound alike, which
-/// diarizing the audio cannot always do, so where it has a word covered it
-/// decides who said it.
+/// WebRTC source was loud when, one source per participant, and the names the
+/// meeting page lit as talking (`BrowserSpeakerEvent`). It knows people apart
+/// that sound alike, which diarizing the audio cannot always do, so where it
+/// has a word covered it decides who said it, and the names name them.
 public enum BrowserSpeakers {
     static let fileName = "browser-speakers.json"
 
@@ -62,10 +62,14 @@ public enum BrowserSpeakers {
 
     static func apply(_ words: [TimedWord], saved: Saved) -> [TimedWord] {
         // One source is a call with one person, or a service that mixes
-        // everyone into one stream with no contributing sources; the diarizer
-        // knows that better.
-        guard tellsPeopleApart(saved.events) else { return words }
-        let spans = Dictionary(grouping: spans(saved), by: \.id).mapValues { $0.map(\.range).sorted { $0.lowerBound < $1.lowerBound } }
+        // everyone into one stream with no contributing sources (Zoom). There
+        // the names the page lit as talking tell people apart when it lit two
+        // or more; otherwise the diarizer knows better.
+        let timeline: Saved
+        if tellsPeopleApart(saved.events) { timeline = saved }
+        else if Set(saved.events.flatMap { $0.names ?? [] }).count >= 2 { timeline = byName(saved) }
+        else { return words }
+        let spans = Dictionary(grouping: spans(timeline), by: \.id).mapValues { $0.map(\.range).sorted { $0.lowerBound < $1.lowerBound } }
         let longest = hold + 2 * slack
         // Judged by overlap, not the word's midpoint: the recognizer often
         // starts a word half a second early or stretches the last word of a
@@ -139,5 +143,87 @@ public enum BrowserSpeakers {
             let end = min(next, start + hold)
             return event.active.map { ($0, (start - slack)...(end + slack)) }
         }
+    }
+
+    /// The timeline with the names the page lit in place of the sources.
+    static func byName(_ saved: Saved) -> Saved {
+        Saved(start: saved.start, events: saved.events.map { event in
+            var named = event; named.active = event.names ?? []; return named
+        })
+    }
+
+    /// Names the far-side speakers of a finished transcript, from any
+    /// provider, by the names the meeting page lit while they talked. A
+    /// speaker takes a name lit for at least half of their talk and more than
+    /// twice as long as any other; a name goes to one speaker only, the one
+    /// it overlaps most. These names win over the ones read off the screen,
+    /// and every lit name joins `seen`. Without names in the folder, `screen`
+    /// comes back as it was.
+    public static func name(_ screen: ScreenNames?, transcript: [TranscriptSegment], folder: URL) -> ScreenNames? {
+        guard let data = try? Data(contentsOf: folder.appendingPathComponent(fileName)),
+              let saved = try? JSONDecoder().decode(Saved.self, from: data) else { return screen }
+        return name(screen, transcript: transcript, saved: saved)
+    }
+
+    static func name(_ screen: ScreenNames?, transcript: [TranscriptSegment], saved: Saved) -> ScreenNames? {
+        // A redo keeps the meta, and its speaker ids may have changed since these names were given.
+        var screen = screen
+        if let fromScreen = screen?.speakers.filter({ $0.value.talkSeconds == nil }) { screen?.speakers = fromScreen }
+        let named = byName(saved)
+        let lit = Dictionary(grouping: spans(named), by: \.id).mapValues { merged($0.map(\.range)) }
+        guard !lit.isEmpty else { return screen }
+        var overlap: [String: [String: Double]] = [:], talked: [String: Double] = [:]
+        for segment in transcript where segment.speaker != MeetingSpeaker.you {
+            guard let start = segment.start, let end = segment.end, end > start else { continue }
+            talked[segment.speaker, default: 0] += end - start
+            for (name, ranges) in lit {
+                let covered = ranges.reduce(0) { $0 + max(0, min($1.upperBound, end) - max($1.lowerBound, start)) }
+                if covered > 0 { overlap[segment.speaker, default: [:]][name, default: 0] += covered }
+            }
+        }
+        let candidates = overlap.compactMap { speaker, names -> (speaker: String, name: String, seconds: Double)? in
+            let ranked = names.sorted { $0.value > $1.value }
+            let best = ranked[0], talk = talked[speaker] ?? 0
+            guard best.value >= 0.5 * talk, ranked.count == 1 || best.value > 2 * ranked[1].value else { return nil }
+            return (speaker, best.key, best.value)
+        }.sorted { $0.seconds != $1.seconds ? $0.seconds > $1.seconds : $0.speaker < $1.speaker }
+        let talk = self.talk(named)
+        var out = screen ?? ScreenNames(seen: [], speakers: [:]), used = Set<String>()
+        for candidate in candidates where !used.contains(candidate.name) {
+            used.insert(candidate.name)
+            out.speakers = out.speakers.filter { $0.value.name != candidate.name }
+            out.speakers[candidate.speaker] = .init(
+                name: candidate.name, seen: Int(candidate.seconds.rounded()), of: Int((talked[candidate.speaker] ?? 0).rounded()),
+                talkStart: talk[candidate.name]?.start, talkSeconds: talk[candidate.name]?.seconds)
+        }
+        let byTime = talk.sorted { $0.value.seconds != $1.value.seconds ? $0.value.seconds > $1.value.seconds : $0.key < $1.key }.map(\.key)
+        out.seen = Array((byTime + out.seen.filter { !talk.keys.contains($0) }).prefix(ScreenSpeakerNames.seenLimit))
+        return out
+    }
+
+    /// When the page first lit each name, in meeting seconds, and for how
+    /// many seconds in all; an event lasts as in `spans`, without the slack.
+    static func talk(_ saved: Saved) -> [String: (start: Double, seconds: Double)] {
+        var out: [String: (start: Double, seconds: Double)] = [:]
+        for (index, event) in saved.events.enumerated() {
+            let start = (event.t - saved.start) / 1000
+            let next = index + 1 < saved.events.count ? (saved.events[index + 1].t - saved.start) / 1000 : start + hold
+            for name in event.active {
+                let before = out[name] ?? (start, 0)
+                out[name] = (min(before.start, max(start, 0)), before.seconds + min(next - start, hold))
+            }
+        }
+        return out
+    }
+
+    /// Overlapping ranges joined, in order.
+    static func merged(_ ranges: [ClosedRange<Double>]) -> [ClosedRange<Double>] {
+        var out: [ClosedRange<Double>] = []
+        for range in ranges.sorted(by: { $0.lowerBound < $1.lowerBound }) {
+            if let last = out.last, range.lowerBound <= last.upperBound {
+                out[out.count - 1] = last.lowerBound...max(last.upperBound, range.upperBound)
+            } else { out.append(range) }
+        }
+        return out
     }
 }

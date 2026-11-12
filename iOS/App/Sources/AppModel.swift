@@ -53,7 +53,8 @@ final class AppModel: ObservableObject {
             apiKey: { KeychainStore.loadAPIKey() },
             openAIKey: { KeychainStore.loadOpenAIKey() },
             openAIConfig: { SettingsStore().openAIConfig },
-            provider: { SettingsStore().preferredProvider }
+            provider: { SettingsStore().preferredProvider },
+            elevenLabsKey: { KeychainStore.loadKey(.elevenLabs) }
         )
         transcription = GeminiTranscriptionService(client: client)
         historyStore = try? HistoryStore.standard()
@@ -62,7 +63,9 @@ final class AppModel: ObservableObject {
             client: client,
             config: { SettingsStore().geminiConfig },
             summaryModel: SettingsStore().geminiConfig.cleanupModel,
-            providers: { SettingsStore().meetingProviders }
+            providers: { SettingsStore().meetingProviders },
+            speechEndpoints: { SettingsStore().meetingSpeechEndpoints },
+            liveMeetingKey: { SettingsStore().transcribesWithElevenLabs ? KeychainStore.loadKey(.elevenLabs) : nil }
         )
         let inserter = self.inserter
         coordinator = DictationCoordinator(

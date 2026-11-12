@@ -7,6 +7,8 @@ struct DictationPane: View {
     private let settings = SettingsStore()
     @State private var sounds = SettingsStore().soundsEnabled
     @State private var liveTranscription = SettingsStore().liveTranscriptionEnabled
+    /// ElevenLabs transcribes the recording after it stops; nothing streams.
+    @State private var elevenLabs = SettingsStore().transcribesWithElevenLabs
     @State private var smartTranscription = SettingsStore().smartTranscriptionEnabled
     @State private var cleanupPass = SettingsStore().smartCleanupPassEnabled
     @State private var skipShortCleanup = SettingsStore().skipShortDictationCleanup
@@ -74,10 +76,15 @@ struct DictationPane: View {
 
             Section {
                 // Saved only on a user change, not when its default is refreshed.
-                Toggle("Real-time transcription", isOn: Binding(get: { liveTranscription }, set: {
+                Toggle("Real-time transcription", isOn: Binding(get: { liveTranscription && !elevenLabs }, set: {
                     liveTranscription = $0
                     settings.setLiveTranscriptionEnabled($0)
                 }))
+                .disabled(elevenLabs)
+            } footer: {
+                if elevenLabs {
+                    Text("Off while ElevenLabs is the transcription provider: Scribe v3 transcribes the recording after you stop.")
+                }
             }
 
             Section {
@@ -169,6 +176,7 @@ struct DictationPane: View {
         .onReceive(NotificationCenter.default.publisher(for: .gtSettingDidChange).receive(on: RunLoop.main)) { note in
             switch note.object as? String {
             case "liveDictationEnabled": liveTranscription = settings.liveTranscriptionEnabled
+            case "elevenLabsTranscription": elevenLabs = settings.transcribesWithElevenLabs
             case "smartTranscription": smartTranscription = settings.smartTranscriptionEnabled
             case "agentModeEnabled": agentMode = settings.agentModeEnabled
             case "smartCleanupPass": cleanupPass = settings.smartCleanupPassEnabled

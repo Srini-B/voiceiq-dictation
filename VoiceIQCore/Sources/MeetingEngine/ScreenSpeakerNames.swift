@@ -15,8 +15,14 @@ public struct ScreenNames: Codable, Equatable, Sendable {
     public struct Match: Codable, Equatable, Sendable {
         public var name: String
         /// Snapshots showing the name while only this speaker talked, out of all such snapshots.
+        /// Seconds instead when the Chrome extension gave the name (`talkSeconds` is set).
         public var seen: Int
         public var of: Int
+        /// From the Chrome extension: when the meeting page first lit the name
+        /// as talking, in seconds from the start of the recording, and for how
+        /// many seconds in all.
+        public var talkStart: Double?
+        public var talkSeconds: Double?
     }
     /// Name-like text seen on screen, most frequent first. Can hold titles or
     /// product names; the notes model picks out the people.

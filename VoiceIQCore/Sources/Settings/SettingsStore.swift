@@ -18,7 +18,21 @@ public struct SettingsStore: Sendable {
 
     private static func set(_ value: Any?, forKey key: String) {
         defaults.set(value, forKey: key)
+        Log.ui.info("setting \(key, privacy: .public) changed to \(logDescription(of: value))")
         NotificationCenter.default.post(name: .gtSettingDidChange, object: key)
+    }
+
+    /// Short values as they are; long text, lists and data by size only, so
+    /// custom rules and dictionaries stay out of the log.
+    private static func logDescription(of value: Any?) -> String {
+        switch value {
+        case nil: return "default"
+        case let text as String: return text.count <= 80 ? "\"\(text)\"" : "\(text.count) characters"
+        case let data as Data: return "\(data.count) bytes"
+        case let list as [Any]: return "\(list.count) items"
+        case let map as [String: Any]: return "\(map.count) entries"
+        case let value?: return String(describing: value)
+        }
     }
 
     /// Single source of truth for endpoint-override validity — the Settings UI
@@ -119,15 +133,73 @@ public struct SettingsStore: Sendable {
         Self.set(enabled, forKey: "liveDictationEnabled")
     }
 
-    /// Providers for a meeting's transcript and notes; see `ModelProvider.meetingOrder`.
+    /// Providers for a meeting's notes, and for its transcript unless
+    /// ElevenLabs transcribes; see `ModelProvider.meetingOrder`.
     public var meetingProviders: [ModelProvider] {
         ModelProvider.meetingOrder(selected: preferredProvider, hasKey: KeychainStore.hasKey(for:))
     }
 
+    /// The user's choice to transcribe dictation and meetings with ElevenLabs
+    /// Scribe v3 instead of the provider. Off by default. A new key on
+    /// purpose: builds from 2026-09 stored `transcriptionSource`, and reading
+    /// it would move someone who still has an old ElevenLabs key in the
+    /// Keychain onto ElevenLabs without asking.
+    public var elevenLabsTranscriptionChosen: Bool {
+        Self.defaults.bool(forKey: "elevenLabsTranscription")
+    }
+
+    public func setElevenLabsTranscription(_ enabled: Bool) {
+        Self.set(enabled, forKey: "elevenLabsTranscription")
+    }
+
+    /// Whether ElevenLabs transcribes right now: chosen, with its key
+    /// stored. A removed key falls back to the provider rather than
+    /// stranding dictation. The provider's writing model runs either way.
+    public var transcribesWithElevenLabs: Bool {
+        elevenLabsTranscriptionChosen && KeychainStore.loadKey(.elevenLabs) != nil
+    }
+
+    /// The languages the user speaks, as ISO 639 codes, for Scribe v3: the
+    /// first is the main language and the rest are the others it may hear.
+    /// Empty detects the language.
+    public var spokenLanguages: [String] {
+        Self.defaults.stringArray(forKey: "spokenLanguages") ?? []
+    }
+
+    /// Keeps two- and three-letter codes ("en, hi; TA" → en, hi, ta), each once.
+    public func setSpokenLanguages(_ text: String) {
+        var seen = Set<String>()
+        let codes = text.lowercased().split { !$0.isLetter }.map(String.init)
+            .filter { (2...3).contains($0.count) && $0.allSatisfy(\.isASCII) && seen.insert($0).inserted }
+        Self.set(codes, forKey: "spokenLanguages")
+    }
+
+    /// Hide card numbers, ID and account numbers and passwords in meeting
+    /// transcripts made by Scribe v3 (`ElevenLabs.redactedEntities`), so the
+    /// notes model and the saved transcript never hold them. Off by default:
+    /// ElevenLabs bills it at 30% more, and it changes what the transcript
+    /// says. Dictation never redacts: `transcript_edit` cannot be combined
+    /// with it, and the user is the one speaking.
+    public var redactsMeetingSecrets: Bool {
+        Self.defaults.bool(forKey: "elevenLabsRedaction")
+    }
+
+    public func setRedactsMeetingSecrets(_ enabled: Bool) {
+        Self.set(enabled, forKey: "elevenLabsRedaction")
+    }
+
+    /// Where a meeting's transcript is made, in order: ElevenLabs alone when
+    /// it transcribes (no silent switch to another company's servers), the
+    /// providers with keys otherwise.
+    public var meetingSpeechEndpoints: [ModelEndpoint] {
+        transcribesWithElevenLabs ? [.elevenLabs] : meetingProviders.map(ModelEndpoint.init)
+    }
+
     /// Show the resting dot at the bottom of the screen when idle. Off = the pill
-    /// only appears while dictating.
+    /// only appears while dictating. Off by default since 2026-11-12, the
+    /// owner's choice; it was on before. A user who set the toggle keeps it.
     public var showIdleIndicator: Bool {
-        Self.defaults.object(forKey: "showIdleIndicator") as? Bool ?? true
+        Self.defaults.object(forKey: "showIdleIndicator") as? Bool ?? false
     }
 
     public func setShowIdleIndicator(_ show: Bool) {
@@ -413,14 +485,14 @@ public struct SettingsStore: Sendable {
 
     /// Experimental: judge speech RELATIVE to the room instead of against fixed
     /// thresholds that assume a quiet one, and (once probed) let macOS suppress
-    /// background voices. Off by default until dogfood data earns the flip.
+    /// background voices. On by default since 2026-11-12, the owner's choice; it
+    /// was off before. A user who set the toggle keeps their choice.
     ///
     /// One key gates every behaviour in the noise work, so there is exactly one
-    /// thing to turn on, one thing to turn off, and one thing to flip when the
-    /// numbers are in. The measurements it would act on are recorded either way —
-    /// `NoiseFloorEstimator` runs unconditionally.
+    /// thing to turn on and one thing to turn off. The measurements it acts on
+    /// are recorded either way — `NoiseFloorEstimator` runs unconditionally.
     public var experimentalNoiseHandling: Bool {
-        Self.defaults.bool(forKey: "experimentalNoiseHandling")
+        Self.defaults.object(forKey: "experimentalNoiseHandling") as? Bool ?? true
     }
 
     public func setExperimentalNoiseHandling(_ enabled: Bool) {

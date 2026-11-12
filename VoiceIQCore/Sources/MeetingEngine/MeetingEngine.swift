@@ -8,6 +8,9 @@ import Foundation
     /// Meetings whose transcript and notes are being made in the background,
     /// with the step each is on (`.transcribing` or `.summarizing`).
     @Published public private(set) var processing: [MeetingID: MeetingStatus] = [:]
+    /// What Scribe v3 Live hears while ElevenLabs transcribes and a meeting
+    /// records; nil otherwise. See `LiveMeetingSession`.
+    @Published public private(set) var liveTranscript: LiveMeetingTranscript?
     public var onNotice: ((String) -> Void)?
     /// The notes for a stopped recording are saved. The caller shows the same
     /// success mark a finished dictation gets.
@@ -23,9 +26,14 @@ import Foundation
     private let config: () -> GeminiConfig
     private let transcribeModel: String?
     private let summaryModel: String
-    /// Providers to try in order for a cloud transcript and for the notes;
-    /// see `ModelProvider.meetingOrder`.
+    /// Providers to try in order for the notes; see `ModelProvider.meetingOrder`.
     private let providers: @Sendable () -> [ModelProvider]
+    /// Where the transcript is made, in order; see `SettingsStore.meetingSpeechEndpoints`.
+    private let speechEndpoints: @Sendable () -> [ModelEndpoint]
+    /// The ElevenLabs key when ElevenLabs transcribes, which turns on the
+    /// live transcript while a meeting records.
+    private let liveMeetingKey: () -> String?
+    private var live: LiveMeetingSession?
     private lazy var detector = CallDetector()
     private var mic: MicTap?, system: SystemAudioTap?
     private var currentFolder: URL?, currentMeta: MeetingMeta?
@@ -54,9 +62,12 @@ import Foundation
     public init(client: GeminiClient, store: MeetingStore = MeetingStore(), config: @escaping () -> GeminiConfig,
                 transcribeModel: String? = nil, summaryModel: String = "gemini-3.8-flash",
                 providers: @escaping @Sendable () -> [ModelProvider] = { [.gemini] },
-                readsScreenNames: @escaping () -> Bool = { false }) {
+                speechEndpoints: @escaping @Sendable () -> [ModelEndpoint] = { [.gemini] },
+                readsScreenNames: @escaping () -> Bool = { false },
+                liveMeetingKey: @escaping () -> String? = { nil }) {
         self.client = client; self.store = store; self.config = config; self.readsScreenNames = readsScreenNames
         self.transcribeModel = transcribeModel; self.summaryModel = summaryModel; self.providers = providers
+        self.speechEndpoints = speechEndpoints; self.liveMeetingKey = liveMeetingKey
         detector.onChange = { [weak self] source in self?.detected(source) }
         failInterruptedRecordings()
     }
@@ -123,8 +134,11 @@ import Foundation
             // retried "StartIOThread ... Error: 0x3C" every 14 s (4 of 7 runs).
             // Mic-then-tap started in 40 ms in every run and the tap still
             // delivered system audio.
-            try mic.start()
-            do { try system.start() } catch { _ = mic.stop(); throw error }
+            let live = liveSession(mic: mic, system: system)
+            do {
+                try mic.start()
+                do { try system.start() } catch { _ = mic.stop(); throw error }
+            } catch { if let live { Task { await live.abort() } }; throw error }
             self.mic = mic; self.system = system
             currentFolder = folder; currentMeta = meta
             #if os(macOS)
@@ -132,7 +146,48 @@ import Foundation
             if let source, call != nil { following = Self.follow(source, mic: mic, system: system) }
             #endif
             phase = .recording(id, since: now)
+            if let live {
+                self.live = live; liveTranscript = LiveMeetingTranscript()
+                Task {
+                    do { try await live.start() } catch {
+                        Log.meeting.error("live meeting transcript did not start: \(String(describing: error), privacy: .public)")
+                        await live.abort()
+                        if self.live === live { var shown = LiveMeetingTranscript(); shown.stopped = true; liveTranscript = shown }
+                    }
+                }
+            }
         } catch { fail(id, error) }
+    }
+
+    /// Scribe v3 Live fed by both taps (the mic alone on iOS), or nil when
+    /// ElevenLabs does not transcribe.
+    private func liveSession(mic: MicTap, system: SystemAudioTap) -> LiveMeetingSession? {
+        guard let key = liveMeetingKey() else { return nil }
+        #if os(macOS)
+        let tracks = 2
+        #else
+        let tracks = 1
+        #endif
+        let live = LiveMeetingSession.elevenLabs(key: key, tracks: tracks, vocabulary: DictionaryStore().sanitizedVocabulary(),
+                                                 languages: SettingsStore().spokenLanguages) { [weak self] shown in
+            Task { @MainActor in
+                guard let self, self.live != nil else { return }
+                self.liveTranscript = shown
+            }
+        }
+        mic.onPCM = { live.push(.mic, $0) }
+        #if os(macOS)
+        system.onPCM = { live.push(.system, $0) }
+        #endif
+        return live
+    }
+
+    /// Closes the live session and books the audio it sent.
+    private static func finish(live: LiveMeetingSession) async {
+        let seconds = await live.finish()
+        guard seconds > 0, let usage = ElevenLabs.usage(model: LiveMeetingSession.model, seconds: seconds,
+                                                        keyterms: !live.library.isEmpty, editedTurns: 0) else { return }
+        UsageMeter.record(stage: .liveTranscribe, model: LiveMeetingSession.model, usage: usage)
     }
 
     public func stopRecording() {
@@ -142,6 +197,8 @@ import Foundation
         #endif
         let micDuration = mic?.stop() ?? 0, systemDuration = system?.stop() ?? 0
         mic = nil; system = nil; currentFolder = nil; currentMeta = nil
+        let live = self.live
+        self.live = nil; liveTranscript = nil
         #if os(macOS)
         if let samples = screenNames?.stop() { try? store.save(screenSamples: samples, id: id) }
         screenNames = nil
@@ -153,6 +210,7 @@ import Foundation
         try? mark(&meta, .transcribing)
         phase = .idle
         Task { await UsageMeter.$scope.withValue(UsageScope(activity: .meeting, sessionID: id.uuid.uuidString)) {
+            if let live { await Self.finish(live: live) }
             await process(id: id, folder: folder, meta: meta)
         } }
     }
@@ -232,6 +290,9 @@ import Foundation
                 meta.screenNames = ScreenSpeakerNames.match(samples: samples, transcript: transcript)
                 Log.meeting.info("screen names: \(meta.screenNames?.speakers.count ?? 0, privacy: .public) speakers named, \(meta.screenNames?.seen.count ?? 0, privacy: .public) names seen")
             }
+            meta.screenNames = BrowserSpeakers.name(meta.screenNames, transcript: transcript, folder: folder)
+            let fromPage = meta.screenNames?.speakers.values.filter { $0.talkSeconds != nil }.count ?? 0
+            Log.meeting.info("browser names: \(fromPage, privacy: .public) speakers named")
             guard !providers().isEmpty else { throw MeetingFailure.noNotesRoute }
             try mark(&meta, .summarizing)
             let notes = try await writeNotes(transcript: transcript, meta: meta)
@@ -239,19 +300,22 @@ import Foundation
         } catch { saveFailure(id: id, meta: &meta, error: error) }
     }
 
-    /// The provider's diarizing model, then each other provider with a key
-    /// while the earlier ones fail.
+    /// ElevenLabs Scribe v3 when it transcribes; otherwise the provider's
+    /// diarizing model, then each other provider with a key while the
+    /// earlier ones fail.
     private func transcribe(folder: URL, config cfg: GeminiConfig) async throws -> [TranscriptSegment] {
-        guard !providers().isEmpty else { throw MeetingFailure.noRoute }
+        guard !speechEndpoints().isEmpty else { throw MeetingFailure.noRoute }
         let cloud = MeetingTranscriber(client: client, models: .init(transcribe: transcribeModel ?? cfg.transcribeModel),
-                                       endpoint: cfg.endpoint, providers: providers)
+                                       endpoint: cfg.endpoint, endpoints: speechEndpoints)
         return try await cloud.transcribe(folder: folder)
     }
 
     /// The recording stays; the meeting is marked failed with a reason the
     /// Meetings list shows, and Retry runs it again with the keys stored then.
     private func saveFailure(id: MeetingID, meta: inout MeetingMeta, error: Error) {
-        let tried = providers().map(\.directName).joined(separator: ", ")
+        var seen = Set<String>()
+        let tried = (speechEndpoints().map(\.directName) + providers().map(\.directName))
+            .filter { seen.insert($0).inserted }.joined(separator: ", ")
         let reason = MeetingFailure.reason(for: error, tried: tried)
         Log.meeting.error("meeting \(id.uuid.uuidString, privacy: .public) failed: \(String(describing: error), privacy: .public)")
         meta.status = .failed(reason); try? store.save(meta: meta)
