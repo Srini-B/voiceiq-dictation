@@ -155,6 +155,15 @@ Result (test Mac, final tree):
   Redo worked.
 - The notarized Mac app was installed over 0.7.0 on a second Mac.
 
+## Release 0.7.2 (76)
+
+The maintainer asked for a new TestFlight build and Mac install once the
+review rounds on PR #44 were settled, so the fixes can be tested on real
+devices before merging. Version 0.7.2, build 76 (0.7.1 was 75). It adds
+the Spoken languages picker, the PNGs from PR #1 and every review fix
+since 0.7.1. The live transcript stays off while "Hide card and ID
+numbers" is on.
+
 ## Spoken languages from a list (2026-11-12, PR #44)
 
 The maintainer asked for the free-text Spoken languages field to become a list of
