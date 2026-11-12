@@ -414,7 +414,7 @@ extension GeminiClient {
               let http = response as? HTTPURLResponse else { return .unreachable }
         switch http.statusCode {
         case 200: return .valid
-        case 500...599: return .unreachable
+        case 429, 500...599: return .unreachable
         case 401, 403:
             let detail = Self.elevenLabsErrorDetail(from: data)
             if (detail.kinds + [detail.message ?? ""]).contains(where: { $0.lowercased().contains("permission") }) { return .valid }

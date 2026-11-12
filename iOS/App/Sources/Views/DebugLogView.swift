@@ -29,13 +29,20 @@ struct DebugLogView: View {
                 Button("Clear") {
                     DebugLog.clear()
                     lines = []
-                    file = nil
+                    discardExport()
                 }
                 .disabled(lines.isEmpty)
             }
         }
         .task { await load() }
         .refreshable { await load() }
+        .onDisappear { discardExport() }
+    }
+
+    /// The exported copy holds the whole log, so it goes as soon as it is replaced or unused.
+    private func discardExport() {
+        if let file { try? FileManager.default.removeItem(at: file) }
+        file = nil
     }
 
     private func load() async {
@@ -45,6 +52,7 @@ struct DebugLogView: View {
             return (recent, exported)
         }.value
         lines = recent
+        discardExport()
         file = exported
     }
 }

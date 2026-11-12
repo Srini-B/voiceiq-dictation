@@ -55,7 +55,8 @@ processes never write the same file. A line looks like:
 
 `DebugLog.keepDays` (7) and `DebugLog.maxTotalBytes` (30 MB). Day files older
 than 7 days are deleted at launch, every 6 hours on the Mac
-(`RetentionPolicy.purge`), and on each process's first line of a day. When
+(`RetentionPolicy.purge`), on each process's first line of a day, and after
+every 1 MB a process writes. When
 all files pass 30 MB, the oldest days go first. Turning the log off keeps the
 files until they age out or the user taps **Clear**.
 

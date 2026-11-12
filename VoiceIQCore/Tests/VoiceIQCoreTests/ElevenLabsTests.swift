@@ -97,6 +97,23 @@ final class ElevenLabsTests: XCTestCase {
         XCTAssertEqual(speakers, ["a=s1", "b=s1", "c=s1", "d=s1"])
     }
 
+    /// A mic that drops out for 3 s (a device reconnecting) is heard again
+    /// once it comes back, not traded against the audio it lost.
+    func testLiveMixKeepsTheMicAfterItDropsOut() {
+        var mix = LiveCallMix(tracks: 2), out: [[Int16]] = []
+        let tick = [Int16](repeating: 0, count: LiveCallMix.chunk)
+        func step(mic: Bool) {
+            out += mix.push(.system, tick.map { _ in 100 })
+            if mic { out += mix.push(.mic, tick.map { _ in 1_000 }) }
+        }
+        for _ in 0..<5 { step(mic: true) }
+        for _ in 0..<30 { step(mic: false) }
+        for _ in 0..<20 { step(mic: true) }
+
+        XCTAssertEqual(out.last?.first, 1_100)
+        XCTAssertGreaterThanOrEqual(out.count, 45)
+    }
+
     /// The Spoken languages picker: the main language comes first, clearing
     /// it clears the others (Scribe v3 refuses others without a main one), and
     /// codes from the old free-text field read as the list's codes.

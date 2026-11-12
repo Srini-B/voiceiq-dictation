@@ -19,6 +19,9 @@ public enum DebugLog {
     private static let enabledKey = "debugLogEnabled"
     private static let queue = DispatchQueue(label: "io.blue.voiceiq.debug-log")
     nonisolated(unsafe) private static var prunedDay: String?
+    /// Bytes this process appended since its last prune, so a busy day stays
+    /// under `maxTotalBytes` too.
+    nonisolated(unsafe) private static var bytesSincePrune = 0
     nonisolated(unsafe) private static var wroteLaunchLine = false
     private static let secretsLock = NSLock()
     nonisolated(unsafe) private static var secrets: Set<String> = []
@@ -57,8 +60,9 @@ public enum DebugLog {
         let now = Date(), text = message()
         queue.async {
             let day = dayFormatter.string(from: now)
-            if prunedDay != day {
+            if prunedDay != day || bytesSincePrune > 1_000_000 {
                 prunedDay = day
+                bytesSincePrune = 0
                 pruneOnQueue(folder: folder, now: now)
             }
             var lines = ""
@@ -67,6 +71,7 @@ public enum DebugLog {
                 lines += line(now, "info", "launch", launchDescription)
             }
             lines += line(now, level, category, redact(text))
+            bytesSincePrune += lines.utf8.count
             append(lines, to: folder.appendingPathComponent("debug-\(day)-\(process).log"))
         }
     }

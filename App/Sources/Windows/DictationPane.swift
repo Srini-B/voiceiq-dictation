@@ -176,7 +176,7 @@ struct DictationPane: View {
         .onReceive(NotificationCenter.default.publisher(for: .gtSettingDidChange).receive(on: RunLoop.main)) { note in
             switch note.object as? String {
             case "liveDictationEnabled": liveTranscription = settings.liveTranscriptionEnabled
-            case "elevenLabsTranscription": elevenLabs = settings.transcribesWithElevenLabs
+            case "elevenLabsTranscription", KeychainStore.Secret.elevenLabs.settingKey: elevenLabs = settings.transcribesWithElevenLabs
             case "smartTranscription": smartTranscription = settings.smartTranscriptionEnabled
             case "agentModeEnabled": agentMode = settings.agentModeEnabled
             case "smartCleanupPass": cleanupPass = settings.smartCleanupPassEnabled

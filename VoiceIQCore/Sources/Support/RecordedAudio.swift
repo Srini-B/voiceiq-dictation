@@ -54,29 +54,46 @@ public struct RecordedAudio: Equatable, Sendable {
         }
         let folder = FileLayout.playbackFolder(in: recording)
         let url = folder.appendingPathComponent(name + ".m4a")
-        if FileManager.default.fileExists(atPath: url.path) { return url }
-        try await Task.detached(priority: .userInitiated) {
-            let fm = FileManager.default
-            // Play and Download can both ask at once; each renders its own file.
-            let partial = fm.temporaryDirectory.appendingPathComponent("\(UUID().uuidString).m4a")
-            defer { try? fm.removeItem(at: partial) }
-            try Self.render(source, to: partial)
-            guard !fm.fileExists(atPath: url.path) else { return }
-            // One copy per recording: a renamed meeting replaces its old one.
-            try? fm.removeItem(at: folder)
-            try fm.createDirectory(at: folder, withIntermediateDirectories: true)
-            try fm.moveItem(at: partial, to: url)
-        }.value
+        let fm = FileManager.default
+        if fm.fileExists(atPath: url.path) { return url }
+        // Rendered on the caller's task, off the main actor, so stopping Play cancels it.
+        // Play and Download can both ask at once; each renders its own file.
+        let partial = fm.temporaryDirectory.appendingPathComponent("\(UUID().uuidString).m4a")
+        defer { try? fm.removeItem(at: partial) }
+        try await Self.render(source, to: partial)
+        try Task.checkCancellation()
+        if fm.fileExists(atPath: url.path) { return url }
+        // Deleted, or its audio purged, while this ran: never bring it back.
+        guard Self.isPresent(source) else { throw CocoaError(.fileNoSuchFile) }
+        // One copy per recording: a renamed meeting replaces its old one.
+        for old in (try? fm.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)) ?? []
+        where old.lastPathComponent != url.lastPathComponent {
+            try? fm.removeItem(at: old)
+        }
+        if !fm.fileExists(atPath: folder.path) {
+            // Never the recording's own folder: that is gone only when the recording is.
+            try fm.createDirectory(at: folder, withIntermediateDirectories: false)
+        }
+        // A render that finished first already put the same file there.
+        do { try fm.moveItem(at: partial, to: url) } catch where fm.fileExists(atPath: url.path) {}
         return url
     }
 
-    private static func render(_ source: Source, to url: URL) throws {
+    private static func isPresent(_ source: Source) -> Bool {
+        switch source {
+        case .dictation(let caf): return FileManager.default.fileExists(atPath: caf.path)
+        case .meeting(let folder): return meeting(folder: folder, name: "").isAvailable
+        }
+    }
+
+    private static func render(_ source: Source, to url: URL) async throws {
         switch source {
         case .dictation(let caf):
             let input = try AVAudioFile(forReading: caf, commonFormat: .pcmFormatInt16, interleaved: true)
             let output = try aac(url, like: input.processingFormat)
             guard let buffer = AVAudioPCMBuffer(pcmFormat: input.processingFormat, frameCapacity: 65_536) else { return }
             while input.framePosition < input.length {
+                try Task.checkCancellation()
                 try input.read(into: buffer)
                 guard buffer.frameLength > 0 else { break }
                 try output.write(from: buffer)
@@ -89,6 +106,7 @@ public struct RecordedAudio: Equatable, Sendable {
             let output = try aac(url, like: format)
             var start = 0.0
             while start < audio.duration {
+                try Task.checkCancellation()
                 let samples = try audio.samples(start...min(audio.duration, start + 60))
                 start += 60
                 guard !samples.isEmpty,
@@ -146,6 +164,8 @@ extension RecordedAudio: Transferable {
                 state = .playing
             } catch is CancellationError {
             } catch {
+                // A stopped preparation must not stop what played after it.
+                guard !Task.isCancelled else { return }
                 Log.audio.error("RecordingPlayer: \(String(describing: error), privacy: .public)")
                 stop()
             }
@@ -173,8 +193,8 @@ extension RecordedAudio: Transferable {
     private static func activateSession() {
         #if os(iOS)
         let session = AVAudioSession.sharedInstance()
-        guard session.category != .playAndRecord else { return }
-        try? session.setCategory(.playback)
+        // A voice session keeps its category, but may have been deactivated.
+        if session.category != .playAndRecord { try? session.setCategory(.playback) }
         try? session.setActive(true)
         #endif
     }

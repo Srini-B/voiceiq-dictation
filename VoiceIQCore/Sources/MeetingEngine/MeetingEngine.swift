@@ -34,6 +34,8 @@ import Foundation
     /// live transcript while a meeting records.
     private let liveMeetingKey: () -> String?
     private var live: LiveMeetingSession?
+    /// Counts live sessions, so a late update from one never reaches the next.
+    private var liveGeneration = 0
     private lazy var detector = CallDetector()
     private var mic: MicTap?, system: SystemAudioTap?
     private var currentFolder: URL?, currentMeta: MeetingMeta?
@@ -168,10 +170,12 @@ import Foundation
         #else
         let tracks = 1
         #endif
+        liveGeneration += 1
+        let generation = liveGeneration
         let live = LiveMeetingSession.elevenLabs(key: key, tracks: tracks, vocabulary: DictionaryStore().sanitizedVocabulary(),
                                                  languages: SettingsStore().spokenLanguages) { [weak self] shown in
             Task { @MainActor in
-                guard let self, self.live != nil else { return }
+                guard let self, self.live != nil, self.liveGeneration == generation else { return }
                 self.liveTranscript = shown
             }
         }

@@ -46,6 +46,9 @@ public enum BrowserSpeakers {
     static let hold: Double = 3
     /// A word counts as said while its source was loud this close to it.
     static let slack: Double = 0.3
+    /// How long a meeting page may keep the last speaker's tile lit, or take
+    /// to light the next one, after the voice changed.
+    static let tileLag: Double = 1.5
 
     /// Far-side words relabelled by the extension's timeline; the owner's
     /// words stay theirs. A word whose time overlaps one source's loud
@@ -65,9 +68,9 @@ public enum BrowserSpeakers {
         // everyone into one stream with no contributing sources (Zoom). There
         // the names the page lit as talking tell people apart when it lit two
         // or more; otherwise the diarizer knows better.
-        let timeline: Saved
-        if tellsPeopleApart(saved.events) { timeline = saved }
-        else if Set(saved.events.flatMap { $0.names ?? [] }).count >= 2 { timeline = byName(saved) }
+        let timeline: Saved, byNames: Bool
+        if tellsPeopleApart(saved.events) { (timeline, byNames) = (saved, false) }
+        else if Set(saved.events.flatMap { $0.names ?? [] }).count >= 2 { (timeline, byNames) = (byName(saved), true) }
         else { return words }
         let spans = Dictionary(grouping: spans(timeline), by: \.id).mapValues { $0.map(\.range).sorted { $0.lowerBound < $1.lowerBound } }
         let longest = hold + 2 * slack
@@ -102,12 +105,33 @@ public enum BrowserSpeakers {
             votes[word.speaker, default: [:]][id, default: 0] += max(word.end - word.start, 0.1)
         }
         guard !far.isEmpty, Double(heard.count) >= 0.3 * Double(far.count) else { return words }
+        if byNames { heard = steadied(heard, words: words) }
         let likely = votes.mapValues { $0.max { $0.value < $1.value }!.key }
         var out = words
         for index in far {
             out[index].speaker = "browser " + (heard[index] ?? likely[words[index].speaker] ?? "diarizer \(words[index].speaker)")
         }
         return renumber(out)
+    }
+
+    /// Lit tiles trail the voices, so the first `tileLag` seconds of a
+    /// diarizer turn can still show the previous speaker's name. Those words
+    /// take the name heard first after that stretch of the same turn. Later
+    /// changes of name within a turn still split it: that is how one mixed
+    /// stream is told apart.
+    static func steadied(_ heard: [Int: String], words: [TimedWord]) -> [Int: String] {
+        var out = heard, index = 0
+        while index < words.count {
+            var end = index
+            while end + 1 < words.count, words[end + 1].speaker == words[index].speaker { end += 1 }
+            let settle = words[index].start + tileLag
+            if words[index].speaker != MeetingSpeaker.you,
+               let settled = (index...end).first(where: { words[$0].start >= settle && heard[$0] != nil }).flatMap({ heard[$0] }) {
+                for word in index...end where words[word].start < settle && heard[word] != nil { out[word] = settled }
+            }
+            index = end + 1
+        }
+        return out
     }
 
     /// Ids other than the owner's renumbered in order of first appearance, so
@@ -203,14 +227,17 @@ public enum BrowserSpeakers {
 
     /// When the page first lit each name, in meeting seconds, and for how
     /// many seconds in all; an event lasts as in `spans`, without the slack.
+    /// Only time after the recording started counts.
     static func talk(_ saved: Saved) -> [String: (start: Double, seconds: Double)] {
         var out: [String: (start: Double, seconds: Double)] = [:]
         for (index, event) in saved.events.enumerated() {
             let start = (event.t - saved.start) / 1000
             let next = index + 1 < saved.events.count ? (saved.events[index + 1].t - saved.start) / 1000 : start + hold
+            let from = max(start, 0), to = min(next, start + hold)
+            guard to > from else { continue }
             for name in event.active {
-                let before = out[name] ?? (start, 0)
-                out[name] = (min(before.start, max(start, 0)), before.seconds + min(next - start, hold))
+                let before = out[name] ?? (from, 0)
+                out[name] = (min(before.start, from), before.seconds + to - from)
             }
         }
         return out

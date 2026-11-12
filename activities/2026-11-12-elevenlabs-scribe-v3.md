@@ -176,3 +176,36 @@ A second review round found that a meeting retried after turning on "Hide
 card and ID numbers" reused windows transcribed without redaction. The
 window cache name now includes the redaction mode for ElevenLabs, so such a
 retry transcribes again.
+
+## Review fixes, round 3 (PR #44)
+
+From the CodeRabbit and Codex reviews of the branch:
+
+- Live meetings: a track more than a second behind the other is now padded
+  with silence up to it and nothing is skipped later. The old "debt" skipped
+  the same amount of the track's later audio, and after a real dropout (a
+  mic reconnecting) the other track's backlog kept re-padding it, so the
+  resumed mic was dropped for the rest of the meeting.
+  `ElevenLabsTests.testLiveMixKeepsTheMicAfterItDropsOut` fails on the old
+  mix (the last chunk had no mic).
+- A late live-transcript update from one recording can no longer show on the
+  next (`MeetingEngine.liveGeneration`).
+- An ElevenLabs key check answered 429 counts as unreachable, so the key can
+  still be saved, instead of being rejected.
+- The Dictation pane follows the ElevenLabs key being added or removed.
+- Browser speaker names: lit tiles trail voices, so the first 1.5 s of a
+  diarizer turn take the name heard after it (name-only path), and talk
+  statistics count only time after the recording started. Two
+  `BrowserSpeakersTests` cover them and fail on the old code.
+- Playback copies: a render cancelled by Stop stops rendering, a render that
+  finishes after its recording was deleted or purged never recreates it, two
+  renders at once both succeed, a stopped preparation cannot stop newer
+  playback, and iOS reactivates an inactive voice session before playing.
+- Debug log: the size limit is checked after every 1 MB written, not only
+  once a day; the Mac section refreshes its size every 2 s; iOS deletes its
+  exported copy when it is replaced, cleared or left.
+- `docs/PRIVACY.md`: redaction changes the transcript ElevenLabs returns,
+  not the audio it receives.
+
+Not changed: the build number stays 75, matching the uploaded build; it
+must be raised before merging.

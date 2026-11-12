@@ -276,8 +276,10 @@ public struct LiveMeetingTranscript: Equatable, Sendable {
 /// The two tracks as one stream, in 100 ms chunks on the recording's
 /// timeline. The mic is turned down while the far side talks, as
 /// `CallAudio.samples` does, so its echo of the far side is not heard twice.
-/// A track more than a second behind the other is padded with silence, and
-/// as much of its late audio is skipped when it arrives.
+/// A track more than a second behind the other has lost that audio (a tap
+/// delivers in real time or not at all, as when a device reconnects), so it
+/// is padded with silence up to the other and what it sends next lines up
+/// with now.
 struct LiveCallMix {
     static let chunk = 1_600
     static let maxLag = 16_000
@@ -290,15 +292,14 @@ struct LiveCallMix {
     /// 1 records the mic alone (iOS).
     let tracks: Int
     private var mic: [Int16] = [], system: [Int16] = []
-    private var micDebt = 0, systemDebt = 0
     private var ducked = 0
 
     init(tracks: Int) { self.tracks = tracks }
 
     mutating func push(_ track: LiveMeetingSession.Track, _ samples: [Int16]) -> [[Int16]] {
         switch track {
-        case .mic: Self.append(samples, to: &mic, debt: &micDebt)
-        case .system: Self.append(samples, to: &system, debt: &systemDebt)
+        case .mic: mic += samples
+        case .system: system += samples
         }
         var out: [[Int16]] = []
         let n = Self.chunk
@@ -307,8 +308,8 @@ struct LiveCallMix {
                 guard mic.count >= n else { break }
                 out.append(Array(mic.prefix(n))); mic.removeFirst(n); continue
             }
-            if mic.count < n, system.count >= n + Self.maxLag { micDebt += n - mic.count; mic += Array(repeating: 0, count: n - mic.count) }
-            if system.count < n, mic.count >= n + Self.maxLag { systemDebt += n - system.count; system += Array(repeating: 0, count: n - system.count) }
+            if mic.count < n, system.count >= n + Self.maxLag { mic += Array(repeating: 0, count: system.count - mic.count) }
+            if system.count < n, mic.count >= n + Self.maxLag { system += Array(repeating: 0, count: mic.count - system.count) }
             guard mic.count >= n, system.count >= n else { break }
             out.append(mixChunk(n))
         }
@@ -323,12 +324,6 @@ struct LiveCallMix {
         let mixed = zip(far, near).map { Int16(clamping: Int((Double($0) + gain * Double($1)).rounded())) }
         system.removeFirst(n); mic.removeFirst(n)
         return mixed
-    }
-
-    private static func append(_ samples: [Int16], to buffer: inout [Int16], debt: inout Int) {
-        let skip = min(debt, samples.count)
-        debt -= skip
-        buffer += samples.dropFirst(skip)
     }
 }
 

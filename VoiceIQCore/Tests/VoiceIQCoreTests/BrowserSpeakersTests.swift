@@ -96,6 +96,32 @@ final class BrowserSpeakersTests: XCTestCase {
         XCTAssertEqual(out, Array(repeating: "s1", count: 6) + Array(repeating: "s2", count: 6))
     }
 
+    func testATileLitLateDoesNotMoveTheStartOfTheNextTurn() throws {
+        // Max starts at 6 s, but the page keeps Priya's tile lit until 7 s.
+        let folder = try meeting(events("ssrc:5", names: ["Priya Raman"], from: 0, to: 7)
+            + events("ssrc:5", names: ["Max Woolf"], from: 7, to: 12) + events(nil, names: [], from: 12, to: 13))
+        let words = (0..<6).map { word("p\($0)", "a", Double($0) + 0.2) } + (6..<12).map { word("m\($0)", "b", Double($0) + 0.2) }
+
+        let out = BrowserSpeakers.apply(words, folder: folder).map(\.speaker)
+
+        XCTAssertEqual(out, Array(repeating: "s1", count: 6) + Array(repeating: "s2", count: 6))
+    }
+
+    func testTalkBeforeTheRecordingStartedIsNotCounted() throws {
+        let folder = try meeting(events("csrc:11", names: ["Priya Raman"], from: -2, to: 3)
+            + events("csrc:22", names: ["Max Woolf"], from: 3, to: 6) + events(nil, names: [], from: 6, to: 7))
+        let transcript = [
+            TranscriptSegment(speaker: "s1", text: "the budget is late", chunkIndex: 0, start: 0.2, end: 2.8),
+            TranscriptSegment(speaker: "s2", text: "no it shipped", chunkIndex: 0, start: 3.2, end: 5.8),
+        ]
+
+        let named = try XCTUnwrap(BrowserSpeakers.name(nil, transcript: transcript, folder: folder))
+
+        XCTAssertEqual(named.speakers["s1"]?.name, "Priya Raman")
+        XCTAssertEqual(named.speakers["s1"]?.talkStart, 0)
+        XCTAssertEqual(named.speakers["s1"]?.talkSeconds, 3)
+    }
+
     func testAWordWithNoSingleLoudSourceFollowsWhereItsDiarizerSpeakerMostlyWent() throws {
         let folder = try meeting(events("csrc:11", from: 0, to: 5) + events("csrc:22", from: 6, to: 8)
             + [BrowserSpeakerEvent(t: (start.timeIntervalSince1970 + 5) * 1000, page: "meet.google.com/abc-defg-hij", tab: 7, active: ["csrc:11", "csrc:22"])]

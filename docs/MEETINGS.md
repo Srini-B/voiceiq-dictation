@@ -278,7 +278,10 @@ the old and new stream can both be loud for a moment.
 When the sources do not tell people apart but the page lit two or more
 names (Zoom web, which sends everyone on one stream), the lit names stand in
 for the sources in steps 2 to 6 (`BrowserSpeakers.byName`). The same 30 %
-coverage rule applies.
+coverage rule applies. Tiles trail the voices, so on this path the words in
+the first 1.5 s of a diarizer turn (`BrowserSpeakers.tileLag`) take the name
+heard first after that stretch (`BrowserSpeakers.steadied`); a later change
+of name within one turn still splits it.
 
 ### How the names name the speakers
 
@@ -298,7 +301,7 @@ saved, after the screen names are matched, and on every Retry or Redo:
    dropped wherever it gave that name to someone else.
 5. Each match keeps when the page first lit the name (`talkStart`, seconds
    from the start of the recording) and how long it was lit in all
-   (`talkSeconds`); `seen` and `of` hold the overlap and the speaker's talk
+   (`talkSeconds`), counting only time after the recording started; `seen` and `of` hold the overlap and the speaker's talk
    in seconds. They are stored in `MeetingMeta.screenNames`, so the
    Meetings window, Assign speakers and the notes request use them like
    screen names. Every lit name also goes to the front of `seen`, longest
