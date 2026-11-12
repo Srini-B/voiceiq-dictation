@@ -57,8 +57,15 @@ struct DebugLogSection: View {
             panel.nameFieldStringValue = file.lastPathComponent
             panel.allowedContentTypes = [.plainText]
             guard panel.runModal() == .OK, let url = panel.url else { return }
-            try? FileManager.default.removeItem(at: url)
-            try FileManager.default.copyItem(at: file, to: url)
+            // Copied beside the chosen file first, so a failed copy leaves it as it was.
+            let fm = FileManager.default
+            let staged = url.deletingLastPathComponent().appendingPathComponent(".\(UUID().uuidString).txt")
+            try fm.copyItem(at: file, to: staged)
+            if fm.fileExists(atPath: url.path) {
+                do { _ = try fm.replaceItemAt(url, withItemAt: staged) } catch { try? fm.removeItem(at: staged); throw error }
+            } else {
+                try fm.moveItem(at: staged, to: url)
+            }
             feedback = "Exported \(url.lastPathComponent)"
         } catch {
             Log.ui.error("debug log export failed: \(error)")

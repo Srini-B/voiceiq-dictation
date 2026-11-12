@@ -27,6 +27,8 @@ public struct MeetingTranscriber: Sendable {
     private var endpoints: @Sendable () -> [ModelEndpoint]
     /// ElevenLabs redaction; see `SettingsStore.redactsMeetingSecrets`.
     private var redacts: @Sendable () -> Bool = { SettingsStore().redactsMeetingSecrets }
+    /// Spoken languages for ElevenLabs; see `SettingsStore.spokenLanguages`.
+    private var languages: @Sendable () -> [String] = { SettingsStore().spokenLanguages }
     private let sleep: @Sendable (TimeInterval) async throws -> Void
 
     public init(client: GeminiClient, models: Models, endpoint: URL,
@@ -51,9 +53,9 @@ public struct MeetingTranscriber: Sendable {
     public func transcribe(folder: URL) async throws -> [TranscriptSegment] {
         // A run keeps the settings it started with, so every window it saves
         // matches the cache it is saved in.
-        let endpoints = self.endpoints(), redacts = self.redacts()
+        let endpoints = self.endpoints(), redacts = self.redacts(), languages = self.languages()
         var run = self
-        run.endpoints = { endpoints }; run.redacts = { redacts }
+        run.endpoints = { endpoints }; run.redacts = { redacts }; run.languages = { languages }
         return try await run.transcribeRun(folder: folder)
     }
 
@@ -61,12 +63,16 @@ public struct MeetingTranscriber: Sendable {
         let audio = try Self.callAudio(folder: folder)
         // The endpoint names the window cache, so a redo after switching it
         // transcribes again instead of reusing the other model's windows; so
-        // does ElevenLabs redaction, so a retry with it on never reuses
-        // windows that still hold the numbers.
+        // do ElevenLabs redaction and spoken languages, so a retry after
+        // changing them never reuses windows made without them.
         let first = endpoints().first
-        let redacted = first == .elevenLabs && redacts() ? "-redacted" : ""
+        var options = ""
+        if first == .elevenLabs {
+            if redacts() { options += "-redacted" }
+            if !languages().isEmpty { options += "-" + languages().joined(separator: "+") }
+        }
         let cache = folder.appendingPathComponent(
-            "transcribe-\(Self.cacheVersion)-\(first?.rawValue ?? "none")\(redacted)-\(Int(Self.windowSpeech))", isDirectory: true)
+            "transcribe-\(Self.cacheVersion)-\(first?.rawValue ?? "none")\(options)-\(Int(Self.windowSpeech))", isDirectory: true)
         try FileManager.default.createDirectory(at: cache, withIntermediateDirectories: true)
         var budget = Self.rateLimitBudget
         let windows = Self.windows(audio.activeRegions(), speech: Self.windowSpeech)
@@ -333,7 +339,7 @@ public struct MeetingTranscriber: Sendable {
             return try await client.openAIDiarize(audio: flac, references: references, deadline: 600)
         case .elevenLabs:
             return try await client.elevenLabsDiarize(audio: flac, keyterms: DictionaryStore().sanitizedVocabulary(),
-                                                      languages: SettingsStore().spokenLanguages,
+                                                      languages: languages(),
                                                       redact: redacts(),
                                                       audioSeconds: seconds, deadline: 600)
         }

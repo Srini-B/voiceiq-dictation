@@ -119,7 +119,8 @@ With no usable key, nothing is sent and the recording stays on your Mac.
    your dictionary terms and spoken languages) for a speaker-labelled
    transcript. With "Hide card and ID numbers in meetings" on, ElevenLabs
    still receives the full audio but returns those numbers replaced, so they
-   are never saved or sent for notes. That transcript is sent back to the provider for a summary
+   are never saved or sent for notes, and no live transcript runs while
+   the meeting records. That transcript is sent back to the provider for a summary
    and action items. Turn the setting
    off and no call detection runs.
    With "Read names from the screen" on (Settings → Dictation, on by default,

@@ -162,9 +162,11 @@ import Foundation
     }
 
     /// Scribe v3 Live fed by both taps (the mic alone on iOS), or nil when
-    /// ElevenLabs does not transcribe.
+    /// ElevenLabs does not transcribe. Also nil while "Hide card and ID
+    /// numbers" is on: Live redacts only finished segments, so its running
+    /// text and speaker words would show the numbers.
     private func liveSession(mic: MicTap, system: SystemAudioTap) -> LiveMeetingSession? {
-        guard let key = liveMeetingKey() else { return nil }
+        guard let key = liveMeetingKey(), !SettingsStore().redactsMeetingSecrets else { return nil }
         #if os(macOS)
         let tracks = 2
         #else

@@ -44,8 +44,9 @@ New code is covered by logging through `Log` as before; nothing else is needed.
 | iOS | `Library/Logs/VoiceiQ/` in the App Group container (the app and the keyboard) |
 
 Each process writes its own file per day, such as
-`debug-2026-11-12-app.log` and `debug-2026-11-12-keyboard.log`, so two
-processes never write the same file. A line looks like:
+`debug-2026-11-12-app.log` and `debug-2026-11-12-keyboard.log`; each Chrome
+host process adds its process id (`debug-2026-11-12-chrome-host-4211.log`),
+since Chrome starts one per profile. Two processes never write the same file. A line looks like:
 
 ```text
 2026-11-12 14:03:22.481 app notice [transcription] call transcribe via gemini (gemini-3.8-flash) id=… attempt=1 h2 ok in 812ms, first byte 640ms, sent 52311 bytes

@@ -38,9 +38,12 @@ keeps billed silence down. A live session that fails says so in the window;
 the recording and the saved transcript are not affected.
 
 "Hide card and ID numbers in meetings" (off by default) asks batch Scribe v3
-to write card details, ID, account and health-card numbers and passwords as
-`{CREDIT_CARD}` and the like (`entity_redaction`), in the saved transcript and
-so in what the notes model sees. Names, places, dates and money stay.
+to write card details, ID, account and health-card numbers, other
+identifiers and numeric personal data, and passwords as `{CREDIT_CARD}` and
+the like (`entity_redaction`), in the saved transcript and so in what the
+notes model sees. Names, places, dates and money stay. While it is on, no
+live transcript runs: Scribe v3 Live redacts only finished segments, so its
+running text would show the numbers.
 
 ## Call detection
 
@@ -462,9 +465,13 @@ docs/design/meeting-prompt-rulebook.md. Fixes from 2026-10-29:
   builds before 2026-11-10) and hears
   the whole meeting again. `browser-speakers.json` stays. **Retry** after a
   failure keeps the finished windows.
-- Redo and Retry transcribe from the saved tracks with the providers in
-  `SettingsStore.meetingProviders` at that moment: the provider selected now
-  first. `mic.caf` and `system.caf` stay until the meeting is deleted; the
+- Redo and Retry transcribe from the saved tracks through
+  `SettingsStore.meetingSpeechEndpoints` at that moment: ElevenLabs alone
+  when it is the transcription provider, otherwise
+  `SettingsStore.meetingProviders` with the provider selected now first.
+  After an ElevenLabs failure, Retry goes to ElevenLabs again; to use Gemini
+  or OpenAI instead, choose the model provider as the transcription provider
+  first. Notes always come from `meetingProviders`. `mic.caf` and `system.caf` stay until the meeting is deleted; the
   audio retention setting applies to dictations only.
 - `MeetingEngine.processing` maps each meeting being processed to its step
   (`.transcribing` or `.summarizing`). The Mac header shows a spinner with

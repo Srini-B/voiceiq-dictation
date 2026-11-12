@@ -122,17 +122,21 @@ public enum BrowserSpeakers {
     /// too short to have one keeps no name there, so its words follow the
     /// diarizer. Later changes of name within a turn still split it: that is
     /// how one mixed stream is told apart.
+    /// Turns are read in time order: the owner's overlap words come after
+    /// everyone else's in `words`.
     static func steadied(_ heard: [Int: String], words: [TimedWord]) -> [Int: String] {
-        var out = heard, index = 0
-        while index < words.count {
-            var end = index
-            while end + 1 < words.count, words[end + 1].speaker == words[index].speaker { end += 1 }
-            let settle = words[index].start + tileLag
-            if words[index].speaker != MeetingSpeaker.you {
-                let settled = (index...end).first(where: { words[$0].start >= settle && heard[$0] != nil }).flatMap { heard[$0] }
-                for word in index...end where words[word].start < settle && heard[word] != nil { out[word] = settled }
+        let order = words.indices.sorted { (words[$0].start, $0) < (words[$1].start, $1) }
+        var out = heard, position = 0
+        while position < order.count {
+            var end = position
+            while end + 1 < order.count, words[order[end + 1]].speaker == words[order[position]].speaker { end += 1 }
+            let turn = order[position...end]
+            let settle = words[turn.first!].start + tileLag
+            if words[turn.first!].speaker != MeetingSpeaker.you {
+                let settled = turn.first(where: { words[$0].start >= settle && heard[$0] != nil }).flatMap { heard[$0] }
+                for word in turn where words[word].start < settle && heard[word] != nil { out[word] = settled }
             }
-            index = end + 1
+            position = end + 1
         }
         return out
     }

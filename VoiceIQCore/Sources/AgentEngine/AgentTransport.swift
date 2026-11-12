@@ -77,7 +77,8 @@ public struct AgentTransport: Sendable {
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         guard (200..<300).contains(status) else {
             let message = AgentTransportError.message(in: data)
-            Log.agent.error("agent call \(status, privacy: .public): \(message ?? "", privacy: .public)")
+            // The body can quote the request, so only its size is logged.
+            Log.agent.error("agent call \(status, privacy: .public): error message of \(message?.count ?? 0, privacy: .public) characters")
             throw AgentTransportError.http(status, message)
         }
         guard let root = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else {

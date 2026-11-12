@@ -157,7 +157,7 @@ struct ElevenLabsTranscriptionSection: View {
                     .help("Other languages Scribe may hear, such as English mixed into Hindi.")
                 }
                 Toggle("Hide card and ID numbers in meetings", isOn: $redacts)
-                    .help("Scribe v3 writes card details, ID, account and health-card numbers and passwords as {CREDIT_CARD} and the like in meeting transcripts, so they are never saved or sent for notes. ElevenLabs charges 30% more for it.")
+                    .help("Scribe v3 writes card details, ID, account and health-card numbers and passwords as {CREDIT_CARD} and the like in meeting transcripts, so they are never saved or sent for notes. ElevenLabs charges 30% more for it. While it is on, meetings show no live transcript.")
                     .onChange(of: redacts) { _, value in settings.setRedactsMeetingSecrets(value) }
             }
         } footer: {

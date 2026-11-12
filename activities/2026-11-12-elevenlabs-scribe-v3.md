@@ -238,3 +238,27 @@ Follow-ups from CodeRabbit's replies:
 - Renders go in a folder per launch, and launch cleanup removes only other
   launches' folders, so it can't delete a render that started right after
   launch.
+
+## Review fixes, round 4 (PR #44)
+
+From a full CodeRabbit review of the branch:
+
+- Meeting redaction also covers `generic_id` and `numerical_pii` (other
+  identifiers and numeric personal data). Checked against the API: batch
+  Scribe v3 answered 200 to the full list.
+- While redaction is on, no live transcript runs. Live redacts only finished
+  segments, so its running text and speaker words would show the numbers.
+- Meeting window caches are named after the spoken languages too, and a run
+  snapshots them, so a retry after changing them transcribes again.
+- Browser speaker names read turns in time order; the owner's overlap words
+  sit at the end of the word list
+  (`testTurnsAreReadInTimeOrderWithTheOwnersWordsLast`, fails on the
+  previous code).
+- Playback: file names are capped at 200 bytes; on iPhone the player
+  deactivates the audio session only when it activated it and no voice
+  session holds it.
+- Debug log: each Chrome host process writes its own file; agent errors log
+  the size of the server's message, not its text; the Mac export copies
+  beside the chosen file before replacing it; on iPhone only the latest
+  load's result is shown.
+- `docs/MEETINGS.md`: Retry follows `meetingSpeechEndpoints`.

@@ -107,6 +107,19 @@ final class BrowserSpeakersTests: XCTestCase {
         XCTAssertEqual(out, Array(repeating: "s1", count: 6) + Array(repeating: "s2", count: 6))
     }
 
+    func testTurnsAreReadInTimeOrderWithTheOwnersWordsLast() throws {
+        // One mixed stream; the owner's word at 6.2 s comes last, as `mergeOwner` leaves it,
+        // and Priya's tile stays lit for the first second of Max's turn.
+        let folder = try meeting(events("ssrc:5", names: ["Priya Raman"], from: 0, to: 8)
+            + events("ssrc:5", names: ["Max Woolf"], from: 8, to: 12) + events(nil, names: [], from: 12, to: 13))
+        let words = (0..<6).map { word("p\($0)", "s1", Double($0) + 0.2) } + (7..<12).map { word("m\($0)", "s1", Double($0) + 0.2) }
+            + [word("why", MeetingSpeaker.you, 6.2)]
+
+        let out = BrowserSpeakers.apply(words, folder: folder).map(\.speaker)
+
+        XCTAssertEqual(out, Array(repeating: "s1", count: 6) + Array(repeating: "s2", count: 5) + [MeetingSpeaker.you])
+    }
+
     func testAOneWordTurnUnderALateTileKeepsItsDiarizerSpeaker() throws {
         // Max says one word at 6.2 s while Priya's tile is still lit.
         let folder = try meeting(events("ssrc:5", names: ["Priya Raman"], from: 0, to: 7)

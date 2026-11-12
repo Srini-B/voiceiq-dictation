@@ -100,6 +100,7 @@ final class AppModel: ObservableObject {
         let deviceName = UIDevice.current.name
         Task { await HistorySync.shared.start(deviceName: deviceName) }
         ActionButtonBridge.toggle = { [weak self] in await self?.toggleFromActionButton() }
+        RecordingPlayer.voiceSessionIsActive = { [weak self] in self?.session.isActive ?? false }
         commandObserver = DarwinNotifier.observe(.command) { [weak self] in
             Task { @MainActor in self?.drainCommands() }
         }

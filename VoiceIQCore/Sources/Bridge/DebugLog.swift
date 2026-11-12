@@ -5,7 +5,8 @@ import Foundation
 /// plus the keyboard, the Chrome extension's host and every network request,
 /// so a user can send support one file.
 ///
-/// Each process writes its own file per day, `debug-<day>-<process>.log`, so
+/// Each process writes its own file per day, `debug-<day>-<process>.log`
+/// (Chrome hosts add their process id), so
 /// two processes never write the same file. Files older than `keepDays` days
 /// go, and the oldest go first once all of them pass `maxTotalBytes`.
 /// API keys and tokens are removed from every line before it is written.
@@ -72,7 +73,7 @@ public enum DebugLog {
             }
             lines += line(now, level, category, redact(text))
             bytesSincePrune += lines.utf8.count
-            append(lines, to: folder.appendingPathComponent("debug-\(day)-\(process).log"))
+            append(lines, to: folder.appendingPathComponent("debug-\(day)-\(fileProcess).log"))
         }
     }
 
@@ -261,6 +262,10 @@ public enum DebugLog {
         case nil: return ProcessInfo.processInfo.processName
         }
     }()
+
+    /// `process` in the file name. Chrome starts one host per profile, so
+    /// each host process writes its own file.
+    static let fileProcess = process == "chrome-host" ? "chrome-host-\(ProcessInfo.processInfo.processIdentifier)" : process
 
     static let launchDescription: String = {
         let info = Bundle.main.infoDictionary ?? [:]

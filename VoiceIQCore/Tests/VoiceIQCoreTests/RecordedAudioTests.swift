@@ -66,4 +66,9 @@ final class RecordedAudioTests: XCTestCase {
         XCTAssertFalse(RecordedAudio.meeting(folder: folder, name: "No system track").isAvailable)
         XCTAssertFalse(RecordedAudio.meeting(folder: nil, name: "Recording").isAvailable)
     }
+
+    /// A long title still makes a file name the file system accepts (255 bytes).
+    func testALongTitleMakesAFileNameThatFits() {
+        XCTAssertEqual(RecordedAudio.meeting(folder: nil, name: String(repeating: "é", count: 300)).name.utf8.count, 200)
+    }
 }

@@ -5,7 +5,8 @@ import VoiceIQBridge
 struct DebugLogView: View {
     @State private var lines: [String] = []
     @State private var file: URL?
-    /// Bumped by Clear and by leaving, so a load that ends later is dropped.
+    /// Bumped by every load, by Clear and by leaving, so only the latest
+    /// load's result is shown.
     @State private var generation = 0
 
     var body: some View {
@@ -49,6 +50,7 @@ struct DebugLogView: View {
     }
 
     private func load() async {
+        generation += 1
         let started = generation
         let (recent, exported) = await Task.detached(priority: .userInitiated) {
             let recent = DebugLog.recentLines(limit: 500)

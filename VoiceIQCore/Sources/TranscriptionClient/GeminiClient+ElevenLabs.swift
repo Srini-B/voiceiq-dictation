@@ -39,14 +39,16 @@ public enum ElevenLabs {
     static let editMinimumSeconds = 10.0
     /// What `SettingsStore.redactsMeetingSecrets` hides in a meeting
     /// transcript (`entity_detection` and `entity_redaction`): card details
-    /// (the `pci` category), ID, account and health-card numbers, and
-    /// passwords. Names, places, dates and money stay, since the notes need
+    /// (the `pci` category), ID, account and health-card numbers, other
+    /// identifiers and numeric personal data (`generic_id`, `numerical_pii`),
+    /// and passwords. Names, places, dates and money stay, since the notes need
     /// them. Written as `{CREDIT_CARD}` and the like (`entity_type` mode), in
     /// the text and the words. MEASURED 2026-11-12 on a real meeting with
     /// `name` added: every name came back as `{NAME}`, speakers and word
     /// times intact.
     static let redactedEntities = ["pci", "ssn", "passport_number", "driver_license", "bank_account",
-                                   "account_number", "routing_number", "password", "healthcare_number"]
+                                   "account_number", "routing_number", "password", "healthcare_number",
+                                   "generic_id", "numerical_pii"]
 
     /// Dictionary terms ElevenLabs will accept, in dictionary order, deduped.
     static func keyterms(_ vocabulary: [String], limit: Int, maxCharacters: Int) -> [String] {

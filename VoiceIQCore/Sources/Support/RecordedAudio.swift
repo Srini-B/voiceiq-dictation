@@ -25,7 +25,10 @@ public struct RecordedAudio: Equatable, Sendable {
 
     init(source: Source?, name: String) {
         self.source = source
-        self.name = name.replacingOccurrences(of: "/", with: "-").replacingOccurrences(of: ":", with: ".")
+        // A file name holds at most 255 bytes, ".m4a" and a copy number included.
+        var name = name.replacingOccurrences(of: "/", with: "-").replacingOccurrences(of: ":", with: ".")
+        while name.utf8.count > 200 { name.removeLast() }
+        self.name = name
     }
 
     public static func dictation(folder: URL, startedAt: Date) -> RecordedAudio {
@@ -197,23 +200,33 @@ extension RecordedAudio: Transferable {
         }
     }
 
-    // A voice session holds `.playAndRecord` with the speaker as output, and
-    // the player plays through it. Otherwise iPhone's default category is
-    // silenced by the ring/silent switch, so playback takes the session.
+    /// Whether the iPhone app's voice session is running; the app sets it.
+    /// A running voice session holds `.playAndRecord` with the speaker as
+    /// output, and the player plays through it.
+    public static var voiceSessionIsActive: @MainActor () -> Bool = { false }
+    /// The player activated the audio session itself, so it deactivates it.
+    private static var ownsSession = false
+
+    // Without a voice session iPhone's default category is silenced by the
+    // ring/silent switch, so playback takes the session as `.playback`.
     private static func activateSession() {
         #if os(iOS)
         let session = AVAudioSession.sharedInstance()
-        // A voice session keeps its category, but may have been deactivated.
-        if session.category != .playAndRecord { try? session.setCategory(.playback) }
+        if !voiceSessionIsActive() {
+            try? session.setCategory(.playback)
+            ownsSession = true
+        }
         try? session.setActive(true)
         #endif
     }
 
     private static func deactivateSession() {
         #if os(iOS)
-        let session = AVAudioSession.sharedInstance()
-        guard session.category == .playback else { return }
-        try? session.setActive(false, options: .notifyOthersOnDeactivation)
+        guard ownsSession else { return }
+        ownsSession = false
+        // A voice session that started meanwhile now holds the session.
+        guard !voiceSessionIsActive() else { return }
+        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
         #endif
     }
 }
