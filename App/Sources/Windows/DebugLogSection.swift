@@ -60,9 +60,10 @@ struct DebugLogSection: View {
             // Copied beside the chosen file first, so a failed copy leaves it as it was.
             let fm = FileManager.default
             let staged = url.deletingLastPathComponent().appendingPathComponent(".\(UUID().uuidString).txt")
+            defer { try? fm.removeItem(at: staged) }
             try fm.copyItem(at: file, to: staged)
             if fm.fileExists(atPath: url.path) {
-                do { _ = try fm.replaceItemAt(url, withItemAt: staged) } catch { try? fm.removeItem(at: staged); throw error }
+                _ = try fm.replaceItemAt(url, withItemAt: staged)
             } else {
                 try fm.moveItem(at: staged, to: url)
             }
