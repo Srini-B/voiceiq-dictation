@@ -164,6 +164,26 @@ the Spoken languages picker, the PNGs from PR #1 and every review fix
 since 0.7.1. The live transcript stays off while "Hide card and ID
 numbers" is on.
 
+Result (test Mac, commit 716f2f7):
+- `scripts/test.sh` exit 0 (175 tests), `scripts/build-ios.sh` exit 0,
+  `scripts/release.sh` exit 0 (app and DMG notarized and stapled).
+- `scripts/release-ios.sh` exit 0; build 76 processed and in TestFlight
+  internal testing.
+- Spoken languages: Automatic detection by default on both apps; a main
+  language plus "Also spoken" sends both codes; going back to Automatic
+  clears the others. An English and Hindi dictation kept the Hindi.
+- Meetings: the live transcript ran with redaction off. Turning redaction
+  on mid-recording stopped and cleared it, and the saved transcript came
+  back with the card, expiry, CVV and passport number replaced. With
+  redaction on from the start there was no live transcript.
+- Play and Download worked for a meeting and a dictation (downloads match
+  the recordings). Deleting a meeting while it played stopped playback and
+  it did not come back.
+- Debug log: two exports on each app, no key in any export, Clear emptied
+  it.
+- The notarized Mac app was installed over 0.7.1 on a second Mac and
+  reads 0.7.2 (76).
+
 ## Spoken languages from a list (2026-11-12, PR #44)
 
 The maintainer asked for the free-text Spoken languages field to become a list of
