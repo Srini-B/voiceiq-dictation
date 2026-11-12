@@ -201,15 +201,16 @@ public enum BrowserSpeakers {
         let lit = Dictionary(grouping: spans(named), by: \.id).mapValues { merged($0.map(\.range)) }
         guard !lit.isEmpty else { return screen }
         var overlap: [String: [String: Double]] = [:], talked: [String: Double] = [:]
-        var previous: String?
+        // Tiles trail the voices: until `tileLag` seconds after the speaker
+        // changes, they still show who spoke before, across every segment of
+        // that turn.
+        var previous: String?, settled = -Double.infinity
         for segment in transcript {
-            defer { previous = segment.speaker }
-            guard segment.speaker != MeetingSpeaker.you,
-                  let first = segment.start, let end = segment.end else { continue }
-            // Tiles trail the voices: the first `tileLag` seconds after the
-            // speaker changes still show who spoke before.
-            let start = segment.speaker == previous ? first : first + tileLag
-            guard end > start else { continue }
+            guard let first = segment.start, let end = segment.end else { continue }
+            if segment.speaker != previous { settled = first + tileLag }
+            previous = segment.speaker
+            let start = max(first, settled)
+            guard segment.speaker != MeetingSpeaker.you, end > start else { continue }
             talked[segment.speaker, default: 0] += end - start
             for (name, ranges) in lit {
                 let covered = ranges.reduce(0) { $0 + max(0, min($1.upperBound, end) - max($1.lowerBound, start)) }

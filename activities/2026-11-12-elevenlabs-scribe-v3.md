@@ -232,3 +232,9 @@ Follow-ups from CodeRabbit's replies:
 - Each debug-log export gets its own folder (`DebugLog.discardExport`
   removes it), and Clear removes every export, so a late load can't
   overwrite the current share file.
+- The 1.5 s naming skip now spans a turn the transcript split at a pause
+  (`testATurnSplitAtAPauseStillWaitsForTheTile`, fails on the previous
+  code).
+- Renders go in a folder per launch, and launch cleanup removes only other
+  launches' folders, so it can't delete a render that started right after
+  launch.

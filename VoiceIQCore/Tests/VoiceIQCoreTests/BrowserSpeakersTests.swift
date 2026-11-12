@@ -133,6 +133,20 @@ final class BrowserSpeakersTests: XCTestCase {
         XCTAssertNotEqual(named?.speakers["s2"]?.name, "Priya Raman")
     }
 
+    func testATurnSplitAtAPauseStillWaitsForTheTile() throws {
+        // Max's turn is two segments, both before his tile could light.
+        let folder = try meeting(events("csrc:11", names: ["Priya Raman"], from: 0, to: 3) + events(nil, names: [], from: 3, to: 4))
+        let transcript = [
+            TranscriptSegment(speaker: "s1", text: "so", chunkIndex: 0, start: 0.2, end: 0.4),
+            TranscriptSegment(speaker: "s2", text: "right", chunkIndex: 0, start: 0.6, end: 0.8),
+            TranscriptSegment(speaker: "s2", text: "yes", chunkIndex: 0, start: 1.9, end: 2.0),
+        ]
+
+        let named = BrowserSpeakers.name(nil, transcript: transcript, folder: folder)
+
+        XCTAssertNotEqual(named?.speakers["s2"]?.name, "Priya Raman")
+    }
+
     func testTalkBeforeTheRecordingStartedIsNotCounted() throws {
         let folder = try meeting(events("csrc:11", names: ["Priya Raman"], from: -2, to: 3)
             + events("csrc:22", names: ["Max Woolf"], from: 3, to: 6) + events(nil, names: [], from: 6, to: 7))
