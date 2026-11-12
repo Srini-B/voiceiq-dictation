@@ -43,7 +43,8 @@ identifiers and numeric personal data, and passwords as `{CREDIT_CARD}` and
 the like (`entity_redaction`), in the saved transcript and so in what the
 notes model sees. Names, places, dates and money stay. While it is on, no
 live transcript runs: Scribe v3 Live redacts only finished segments, so its
-running text would show the numbers.
+running text would show the numbers. Turning it on during a recording stops
+the live transcript and clears its text (`MeetingEngine.stopLiveForRedaction`).
 
 ## Call detection
 

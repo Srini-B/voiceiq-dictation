@@ -189,12 +189,15 @@ public struct SettingsStore: Sendable {
     /// says. Dictation never redacts: `transcript_edit` cannot be combined
     /// with it, and the user is the one speaking.
     public var redactsMeetingSecrets: Bool {
-        Self.defaults.bool(forKey: "elevenLabsRedaction")
+        Self.defaults.bool(forKey: Self.redactionKey)
     }
 
     public func setRedactsMeetingSecrets(_ enabled: Bool) {
-        Self.set(enabled, forKey: "elevenLabsRedaction")
+        Self.set(enabled, forKey: Self.redactionKey)
     }
+
+    /// `object` of `.gtSettingDidChange` when `redactsMeetingSecrets` changes.
+    public static let redactionKey = "elevenLabsRedaction"
 
     /// Where a meeting's transcript is made, in order: ElevenLabs alone when
     /// it transcribes (no silent switch to another company's servers), the

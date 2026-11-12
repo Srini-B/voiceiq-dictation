@@ -262,3 +262,6 @@ From a full CodeRabbit review of the branch:
   beside the chosen file before replacing it; on iPhone only the latest
   load's result is shown.
 - `docs/MEETINGS.md`: Retry follows `meetingSpeechEndpoints`.
+- Turning redaction on during a recording stops the live session, clears
+  its text and drops its late updates. Not tested: nothing in the test suite
+  drives a recording `MeetingEngine`.

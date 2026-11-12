@@ -36,6 +36,7 @@ import Foundation
     private var live: LiveMeetingSession?
     /// Counts live sessions, so a late update from one never reaches the next.
     private var liveGeneration = 0
+    private var redactionObserver: NSObjectProtocol?
     private lazy var detector = CallDetector()
     private var mic: MicTap?, system: SystemAudioTap?
     private var currentFolder: URL?, currentMeta: MeetingMeta?
@@ -72,6 +73,21 @@ import Foundation
         self.speechEndpoints = speechEndpoints; self.liveMeetingKey = liveMeetingKey
         detector.onChange = { [weak self] source in self?.detected(source) }
         failInterruptedRecordings()
+        redactionObserver = NotificationCenter.default.addObserver(forName: .gtSettingDidChange, object: nil, queue: .main) { [weak self] note in
+            guard note.object as? String == SettingsStore.redactionKey else { return }
+            Task { @MainActor in self?.stopLiveForRedaction() }
+        }
+    }
+
+    /// Redaction turned on while a meeting records: Live cannot redact its
+    /// running text, so the live transcript stops and its text goes. The
+    /// saved transcript is still redacted.
+    private func stopLiveForRedaction() {
+        guard SettingsStore().redactsMeetingSecrets, let live, case let .recording(id, _) = phase else { return }
+        self.live = nil; liveGeneration += 1; liveTranscript = nil
+        Task { await UsageMeter.$scope.withValue(UsageScope(activity: .meeting, sessionID: id.uuid.uuidString)) {
+            await Self.finish(live: live)
+        } }
     }
 
     /// A meeting still marked `.recording` at launch belonged to a process that
