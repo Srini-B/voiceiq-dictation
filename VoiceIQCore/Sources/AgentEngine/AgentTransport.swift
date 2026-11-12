@@ -57,7 +57,7 @@ public struct AgentTransport: Sendable {
         do {
             return try await postOnce(path: path, extraQuery: extraQuery, body: body(withCache))
         } catch AgentTransportError.http(400, let message) where withCache && AgentCachePolicy.rejectsCacheFields(message) {
-            Log.agent.notice("host refused cache fields, retrying without: \(message ?? "", privacy: .public)")
+            Log.agent.notice("host refused cache fields, retrying without")
             hostState.cacheFieldsRejected = true
             return try await postOnce(path: path, extraQuery: extraQuery, body: body(false))
         }
