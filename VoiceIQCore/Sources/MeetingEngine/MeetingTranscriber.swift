@@ -49,10 +49,13 @@ public struct MeetingTranscriber: Sendable {
     public func transcribe(folder: URL) async throws -> [TranscriptSegment] {
         let audio = try Self.callAudio(folder: folder)
         // The endpoint names the window cache, so a redo after switching it
-        // transcribes again instead of reusing the other model's windows.
+        // transcribes again instead of reusing the other model's windows; so
+        // does ElevenLabs redaction, so a retry with it on never reuses
+        // windows that still hold the numbers.
         let first = endpoints().first
+        let redacted = first == .elevenLabs && SettingsStore().redactsMeetingSecrets ? "-redacted" : ""
         let cache = folder.appendingPathComponent(
-            "transcribe-\(Self.cacheVersion)-\(first?.rawValue ?? "none")-\(Int(Self.windowSpeech))", isDirectory: true)
+            "transcribe-\(Self.cacheVersion)-\(first?.rawValue ?? "none")\(redacted)-\(Int(Self.windowSpeech))", isDirectory: true)
         try FileManager.default.createDirectory(at: cache, withIntermediateDirectories: true)
         var budget = Self.rateLimitBudget
         let windows = Self.windows(audio.activeRegions(), speech: Self.windowSpeech)

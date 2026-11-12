@@ -61,7 +61,7 @@ public struct RetentionPolicy: Sendable {
                   meta.startedAt < cutoff,
                   meta.rawTranscript != nil || meta.status == .silent
             else { continue }
-            for audio in [FileLayout.audioCAF(in: folder), FileLayout.audioFLAC(in: folder)] {
+            for audio in [FileLayout.audioCAF(in: folder), FileLayout.audioFLAC(in: folder), FileLayout.playbackFolder(in: folder)] {
                 if FileManager.default.fileExists(atPath: audio.path) {
                     try? FileManager.default.removeItem(at: audio)
                     purged += 1

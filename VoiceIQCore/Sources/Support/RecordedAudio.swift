@@ -42,8 +42,9 @@ public struct RecordedAudio: Equatable, Sendable {
         return RecordedAudio(source: complete ? folder.map(Source.meeting) : nil, name: name)
     }
 
-    /// The recording as `<name>.m4a` in the temporary folder, made once and
-    /// reused by Play and Download.
+    /// The recording as `<name>.m4a` in its own folder's `playback` folder,
+    /// made once and reused by Play and Download. It lives beside the audio
+    /// so deleting the recording, or its audio by retention, removes it too.
     public func m4a() async throws -> URL {
         guard let source else { throw CocoaError(.fileNoSuchFile) }
         let recording: URL
@@ -51,19 +52,20 @@ public struct RecordedAudio: Equatable, Sendable {
         case .dictation(let caf): recording = caf.deletingLastPathComponent()
         case .meeting(let folder): recording = folder
         }
-        let folder = FileManager.default.temporaryDirectory
-            .appendingPathComponent("recorded-audio", isDirectory: true)
-            .appendingPathComponent(recording.lastPathComponent, isDirectory: true)
+        let folder = FileLayout.playbackFolder(in: recording)
         let url = folder.appendingPathComponent(name + ".m4a")
         if FileManager.default.fileExists(atPath: url.path) { return url }
         try await Task.detached(priority: .userInitiated) {
             let fm = FileManager.default
-            try fm.createDirectory(at: folder, withIntermediateDirectories: true)
-            // Play and Download can both ask at once; each writes its own file.
-            let partial = folder.appendingPathComponent("\(UUID().uuidString).m4a")
+            // Play and Download can both ask at once; each renders its own file.
+            let partial = fm.temporaryDirectory.appendingPathComponent("\(UUID().uuidString).m4a")
             defer { try? fm.removeItem(at: partial) }
             try Self.render(source, to: partial)
-            if !fm.fileExists(atPath: url.path) { try fm.moveItem(at: partial, to: url) }
+            guard !fm.fileExists(atPath: url.path) else { return }
+            // One copy per recording: a renamed meeting replaces its old one.
+            try? fm.removeItem(at: folder)
+            try fm.createDirectory(at: folder, withIntermediateDirectories: true)
+            try fm.moveItem(at: partial, to: url)
         }.value
         return url
     }

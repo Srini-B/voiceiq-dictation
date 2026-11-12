@@ -243,8 +243,9 @@ Extensions page.
   kept), plus one-click **Delete all history**.
 - Meeting audio has no retention setting: it stays until the meeting is
   deleted, so a meeting can be transcribed again. Play and Download write an
-  `.m4a` copy of a recording to the app's temporary folder, which the system
-  clears; Download also saves one where you choose (Downloads on the Mac).
+  `.m4a` copy of a recording into its own folder (`playback/`), which goes
+  when the recording is deleted or its audio is removed by retention;
+  Download also saves one where you choose (Downloads on the Mac).
 - Logs. See [DEBUG_LOG.md](DEBUG_LOG.md). The opt-in debug log (Settings ›
   Advanced) stays on the device until you export or share it. It never holds
   API keys, tokens or text the app marks private, and keeps 7 days.

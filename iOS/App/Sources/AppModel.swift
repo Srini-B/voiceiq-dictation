@@ -124,7 +124,7 @@ final class AppModel: ObservableObject {
         coordinator.onSessionUpdate = { [weak self] meta, folder in
             self?.historyStore?.upsert(meta: meta, folder: folder)
             if SettingsStore().audioRetentionDays < 0, meta.rawTranscript != nil || meta.status == .silent {
-                for audio in [FileLayout.audioCAF(in: folder), FileLayout.audioFLAC(in: folder)] {
+                for audio in [FileLayout.audioCAF(in: folder), FileLayout.audioFLAC(in: folder), FileLayout.playbackFolder(in: folder)] {
                     try? FileManager.default.removeItem(at: audio)
                 }
             }

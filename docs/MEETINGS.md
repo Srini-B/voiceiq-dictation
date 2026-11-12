@@ -474,7 +474,10 @@ other device or removed by audio retention, or a meeting still recording.
 Redo transcript and notes is disabled the same way.
 
 `RecordedAudio` (VoiceIQCore, `Support/RecordedAudio.swift`) makes one AAC
-`.m4a` per recording in the temporary folder and both buttons use it. A
+`.m4a` per recording in its folder's `playback/` folder and both buttons use
+it. Deleting the recording, or its audio by retention or "never keep audio",
+removes the copy too; copies 0.7.1 (75) left in the temporary folder are
+deleted at launch. A
 dictation is its `audio.caf`. A meeting is `mic.caf` and `system.caf` mixed
 as `CallAudio.samples` hears them: each track levelled to about -20 dBFS and
 the raw mic ducked while the far side talks. It never reads or writes

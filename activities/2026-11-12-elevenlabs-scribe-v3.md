@@ -171,3 +171,8 @@ live socket accepted `secondary_languages=hin,eng` with `multilang_mode`.
 The same push fixed two review findings in the debug log: custom writing
 rules and the meeting owner's name are logged by size only, and a browser
 meeting's page is logged by host only (no meeting code).
+
+A second review round found that a meeting retried after turning on "Hide
+card and ID numbers" reused windows transcribed without redaction. The
+window cache name now includes the redaction mode for ElevenLabs, so such a
+retry transcribes again.

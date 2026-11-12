@@ -44,6 +44,9 @@ final class RecordedAudioTests: XCTestCase {
         let url = try await audio.m4a()
         XCTAssertEqual(url.pathExtension, "m4a")
         XCTAssertEqual(try seconds(url), 2.5, accuracy: 0.1)
+        // No copy of deleted audio is left behind.
+        try FileManager.default.removeItem(at: folder)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: url.path))
     }
 
     /// The longer track sets the length; an empty system track still mixes.

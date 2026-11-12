@@ -30,7 +30,7 @@ transcript can be transcribed again with the provider chosen now.
 ## What changed
 
 - `RecordedAudio` (VoiceIQCore) names a recording's audio and renders it once
-  to an AAC `.m4a` in the temporary folder. A meeting is mixed through
+  to an AAC `.m4a` in the recording's `playback/` folder. A meeting is mixed through
   `CallAudio.samples`, the transcriber's levelled and ducked mix, without
   touching `mic-aec.caf`. `RecordingPlayer` plays it.
 - Mac: `RecordingAudioButtons` (Play/Stop and Download) in the dictation and
@@ -54,3 +54,13 @@ only answer "failed" for a finished dictation. The iPhone offered it too
 whenever a raw transcript existed. Both now use `RetryQueue.canRetry`: the
 recording is there, or an unfinished dictation already has its words.
 Covered by `RecoveryClipboardTests.testRetryIsOfferedOnlyWithSomethingToRetry`.
+
+## Review fix: no playback copy outlives its recording (PR #44)
+
+A review found that the `.m4a` made for Play and Download sat in the
+temporary folder, so deleting a recording, or its audio expiring, left a
+full copy until the system cleared temporary files. The copy now lives in
+the recording's own `playback/` folder: deleting the dictation or meeting
+removes it with the folder, and audio retention and "never keep audio"
+remove it with `audio.caf`. Launch deletes the old temporary copies.
+`RecordedAudioTests` checks the copy is gone once its recording is.
