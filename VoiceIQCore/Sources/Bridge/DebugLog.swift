@@ -199,9 +199,9 @@ public enum DebugLog {
 
         """
         let name = "VoiceiQ-debug-log-\(dayFormatter.string(from: now))-\(Int(now.timeIntervalSince1970)).txt"
-        let folder = exportsFolder.appendingPathComponent(UUID().uuidString, isDirectory: true)
-        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        let url = folder.appendingPathComponent(name)
+        let exportFolder = exportsFolder.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: exportFolder, withIntermediateDirectories: true)
+        let url = exportFolder.appendingPathComponent(name)
         try Data((header + body.joined(separator: "\n") + "\n").utf8).write(to: url, options: .atomic)
         return url
     }
