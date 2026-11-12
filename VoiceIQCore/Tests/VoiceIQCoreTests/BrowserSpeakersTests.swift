@@ -107,6 +107,19 @@ final class BrowserSpeakersTests: XCTestCase {
         XCTAssertEqual(out, Array(repeating: "s1", count: 6) + Array(repeating: "s2", count: 6))
     }
 
+    func testAOneWordTurnUnderALateTileKeepsItsDiarizerSpeaker() throws {
+        // Max says one word at 6.2 s while Priya's tile is still lit.
+        let folder = try meeting(events("ssrc:5", names: ["Priya Raman"], from: 0, to: 7)
+            + events("ssrc:5", names: ["Max Woolf"], from: 7, to: 8)
+            + events("ssrc:5", names: ["Priya Raman"], from: 8, to: 12) + events(nil, names: [], from: 12, to: 13))
+        let words = (0..<6).map { word("p\($0)", "a", Double($0) + 0.2) } + [word("yes", "b", 6.2)]
+            + (8..<12).map { word("p\($0)", "a", Double($0) + 0.2) }
+
+        let out = BrowserSpeakers.apply(words, folder: folder).map(\.speaker)
+
+        XCTAssertEqual(out, Array(repeating: "s1", count: 6) + ["s2"] + Array(repeating: "s1", count: 4))
+    }
+
     func testTalkBeforeTheRecordingStartedIsNotCounted() throws {
         let folder = try meeting(events("csrc:11", names: ["Priya Raman"], from: -2, to: 3)
             + events("csrc:22", names: ["Max Woolf"], from: 3, to: 6) + events(nil, names: [], from: 6, to: 7))

@@ -97,15 +97,17 @@ public enum BrowserSpeakers {
             return covered.count == 1 || best.value > 2 * covered[1].value ? best.key : nil
         }
         let far = words.indices.filter { words[$0].speaker != MeetingSpeaker.you }
-        var heard: [Int: String] = [:], votes: [String: [String: Double]] = [:]
+        var heard: [Int: String] = [:]
         for index in far {
             let word = words[index]
-            guard let id = loudest(from: word.start, to: max(word.end, word.start + 0.01)) else { continue }
-            heard[index] = id
-            votes[word.speaker, default: [:]][id, default: 0] += max(word.end - word.start, 0.1)
+            if let id = loudest(from: word.start, to: max(word.end, word.start + 0.01)) { heard[index] = id }
         }
         guard !far.isEmpty, Double(heard.count) >= 0.3 * Double(far.count) else { return words }
         if byNames { heard = steadied(heard, words: words) }
+        var votes: [String: [String: Double]] = [:]
+        for (index, id) in heard {
+            votes[words[index].speaker, default: [:]][id, default: 0] += max(words[index].end - words[index].start, 0.1)
+        }
         let likely = votes.mapValues { $0.max { $0.value < $1.value }!.key }
         var out = words
         for index in far {
@@ -116,17 +118,18 @@ public enum BrowserSpeakers {
 
     /// Lit tiles trail the voices, so the first `tileLag` seconds of a
     /// diarizer turn can still show the previous speaker's name. Those words
-    /// take the name heard first after that stretch of the same turn. Later
-    /// changes of name within a turn still split it: that is how one mixed
-    /// stream is told apart.
+    /// take the name heard first after that stretch of the same turn; a turn
+    /// too short to have one keeps no name there, so its words follow the
+    /// diarizer. Later changes of name within a turn still split it: that is
+    /// how one mixed stream is told apart.
     static func steadied(_ heard: [Int: String], words: [TimedWord]) -> [Int: String] {
         var out = heard, index = 0
         while index < words.count {
             var end = index
             while end + 1 < words.count, words[end + 1].speaker == words[index].speaker { end += 1 }
             let settle = words[index].start + tileLag
-            if words[index].speaker != MeetingSpeaker.you,
-               let settled = (index...end).first(where: { words[$0].start >= settle && heard[$0] != nil }).flatMap({ heard[$0] }) {
+            if words[index].speaker != MeetingSpeaker.you {
+                let settled = (index...end).first(where: { words[$0].start >= settle && heard[$0] != nil }).flatMap { heard[$0] }
                 for word in index...end where words[word].start < settle && heard[word] != nil { out[word] = settled }
             }
             index = end + 1

@@ -24,7 +24,9 @@ public struct MeetingTranscriber: Sendable {
     private let models: Models
     private let endpoint: URL
     /// Where to transcribe, in order; see `SettingsStore.meetingSpeechEndpoints`.
-    private let endpoints: @Sendable () -> [ModelEndpoint]
+    private var endpoints: @Sendable () -> [ModelEndpoint]
+    /// ElevenLabs redaction; see `SettingsStore.redactsMeetingSecrets`.
+    private var redacts: @Sendable () -> Bool = { SettingsStore().redactsMeetingSecrets }
     private let sleep: @Sendable (TimeInterval) async throws -> Void
 
     public init(client: GeminiClient, models: Models, endpoint: URL,
@@ -47,13 +49,22 @@ public struct MeetingTranscriber: Sendable {
     static let cacheVersion = "v7"
 
     public func transcribe(folder: URL) async throws -> [TranscriptSegment] {
+        // A run keeps the settings it started with, so every window it saves
+        // matches the cache it is saved in.
+        let endpoints = self.endpoints(), redacts = self.redacts()
+        var run = self
+        run.endpoints = { endpoints }; run.redacts = { redacts }
+        return try await run.transcribeRun(folder: folder)
+    }
+
+    private func transcribeRun(folder: URL) async throws -> [TranscriptSegment] {
         let audio = try Self.callAudio(folder: folder)
         // The endpoint names the window cache, so a redo after switching it
         // transcribes again instead of reusing the other model's windows; so
         // does ElevenLabs redaction, so a retry with it on never reuses
         // windows that still hold the numbers.
         let first = endpoints().first
-        let redacted = first == .elevenLabs && SettingsStore().redactsMeetingSecrets ? "-redacted" : ""
+        let redacted = first == .elevenLabs && redacts() ? "-redacted" : ""
         let cache = folder.appendingPathComponent(
             "transcribe-\(Self.cacheVersion)-\(first?.rawValue ?? "none")\(redacted)-\(Int(Self.windowSpeech))", isDirectory: true)
         try FileManager.default.createDirectory(at: cache, withIntermediateDirectories: true)
@@ -323,7 +334,7 @@ public struct MeetingTranscriber: Sendable {
         case .elevenLabs:
             return try await client.elevenLabsDiarize(audio: flac, keyterms: DictionaryStore().sanitizedVocabulary(),
                                                       languages: SettingsStore().spokenLanguages,
-                                                      redact: SettingsStore().redactsMeetingSecrets,
+                                                      redact: redacts(),
                                                       audioSeconds: seconds, deadline: 600)
         }
     }

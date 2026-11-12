@@ -76,6 +76,13 @@ public struct RecordedAudio: Equatable, Sendable {
         }
         // A render that finished first already put the same file there.
         do { try fm.moveItem(at: partial, to: url) } catch where fm.fileExists(atPath: url.path) {}
+        // Retention and "never keep audio" remove the audio before `playback/`.
+        // If the audio went between the check above and the move, take the
+        // copy back out; if it goes after this check, `playback/` goes with it.
+        guard Self.isPresent(source) else {
+            try? fm.removeItem(at: folder)
+            throw CocoaError(.fileNoSuchFile)
+        }
         return url
     }
 

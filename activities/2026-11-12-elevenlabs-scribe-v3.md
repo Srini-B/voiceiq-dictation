@@ -209,3 +209,17 @@ From the CodeRabbit and Codex reviews of the branch:
 
 Not changed: the build number stays 75, matching the uploaded build; it
 must be raised before merging.
+
+Follow-ups from CodeRabbit's replies:
+
+- A meeting run reads the transcription endpoints and the redaction setting
+  once and uses them for its cache name and every request, so a setting
+  changed mid-run can't put unredacted windows in the redacted cache.
+- A turn too short to settle a lit name keeps no name for its first 1.5 s,
+  so a one-word turn under a late tile keeps its diarizer speaker
+  (`testAOneWordTurnUnderALateTileKeepsItsDiarizerSpeaker`, fails on the
+  previous code).
+- A playback copy published just as retention removed the audio is taken
+  back out (removal deletes the audio before `playback/`).
+- iOS debug log: a load that ends after Clear or leaving is dropped, and an
+  export that reuses the previous name is not deleted.

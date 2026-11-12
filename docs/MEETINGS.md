@@ -280,8 +280,9 @@ names (Zoom web, which sends everyone on one stream), the lit names stand in
 for the sources in steps 2 to 6 (`BrowserSpeakers.byName`). The same 30 %
 coverage rule applies. Tiles trail the voices, so on this path the words in
 the first 1.5 s of a diarizer turn (`BrowserSpeakers.tileLag`) take the name
-heard first after that stretch (`BrowserSpeakers.steadied`); a later change
-of name within one turn still splits it.
+heard first after that stretch (`BrowserSpeakers.steadied`), or none when
+the turn ends before then, so a short turn follows the diarizer; a later
+change of name within one turn still splits it.
 
 ### How the names name the speakers
 

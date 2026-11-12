@@ -5,6 +5,8 @@ import VoiceIQBridge
 struct DebugLogView: View {
     @State private var lines: [String] = []
     @State private var file: URL?
+    /// Bumped by Clear and by leaving, so a load that ends later is dropped.
+    @State private var generation = 0
 
     var body: some View {
         ScrollView {
@@ -41,18 +43,25 @@ struct DebugLogView: View {
 
     /// The exported copy holds the whole log, so it goes as soon as it is replaced or unused.
     private func discardExport() {
+        generation += 1
         if let file { try? FileManager.default.removeItem(at: file) }
         file = nil
     }
 
     private func load() async {
+        let started = generation
         let (recent, exported) = await Task.detached(priority: .userInitiated) {
             let recent = DebugLog.recentLines(limit: 500)
             let exported = recent.isEmpty ? nil : (try? DebugLog.export())
             return (recent, exported)
         }.value
+        guard generation == started else {
+            if let exported, exported != file { try? FileManager.default.removeItem(at: exported) }
+            return
+        }
         lines = recent
-        discardExport()
+        // An export in the same second reuses the name; that file is the new one.
+        if let file, file != exported { try? FileManager.default.removeItem(at: file) }
         file = exported
     }
 }
