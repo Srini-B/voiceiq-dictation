@@ -143,13 +143,13 @@ struct ElevenLabsTranscriptionSection: View {
                 SearchablePicker("Spoken language", selection: Binding(get: { languages.first ?? "" }, set: {
                     save(ScribeLanguage.choosing(main: $0, in: languages))
                 }), options: [SearchOption(value: "", name: "Automatic")] + Self.options(ScribeLanguage.all))
-                .help("The language you speak most. Automatic detection lets Scribe work it out each time.")
+                .help("The language you speak most. Automatic lets Scribe work it out each time, which can go wrong on a short phrase; pick a main language to add others.")
                 if let main = languages.first {
                     SearchablePicker("Also spoken", summary: ScribeLanguage.names(languages.dropFirst(), none: "None"),
                                      options: Self.options(ScribeLanguage.all.filter { $0.code != main }),
                                      isSelected: { languages.dropFirst().contains($0) },
                                      toggle: { save(ScribeLanguage.toggling($0, in: languages)) })
-                    .help("Other languages Scribe may hear, such as English mixed into Tamil.")
+                    .help("Other languages you dictate in, whole sentences or mixed into your main language. Each dictation is transcribed once per language and Scribe keeps the result it is most sure of, so every language comes out in its own script. Each language adds one transcription to the cost; the menu bar's Spoken Language menu switches the main one.")
                 }
                 Toggle("Hide card and ID numbers in meetings", isOn: $redacts)
                     .help("Scribe v3 writes card details, ID, account and health-card numbers and passwords as {CREDIT_CARD} and the like in meeting transcripts, so they are never saved or sent for notes. ElevenLabs charges 30% more for it. The live transcript shows each turn once it is redacted, a moment after it is said.")
@@ -165,6 +165,7 @@ struct ElevenLabsTranscriptionSection: View {
         .onReceive(NotificationCenter.default.publisher(for: .gtSettingDidChange).receive(on: RunLoop.main)) { _ in
             chosen = settings.elevenLabsTranscriptionChosen
             hasKey = KeychainStore.loadKey(.elevenLabs) != nil
+            languages = settings.spokenLanguages
         }
     }
 

@@ -60,6 +60,33 @@ final class ElevenLabsTests: XCTestCase {
         XCTAssertEqual(fields(["en", "hi", "ta"]), ["language_code=en", "secondary_language_codes=hi", "secondary_language_codes=ta"])
     }
 
+    /// With several spoken languages, each is tried as the main one and the
+    /// transcript Scribe is clearly more sure of wins; otherwise the main
+    /// language's stays. Scores are the mean word logprobs measured
+    /// 2026-11-13 on a real 2.6 s Japanese dictation (English main) and on a
+    /// real English one.
+    func testThePerLanguageTranscriptScribeIsSureOfIsKept() {
+        let japanese = ElevenLabs.Transcript([
+            "text": " また明日。",
+            "words": [["text": "ま", "type": "word", "logprob": -0.4], ["text": " ", "type": "spacing"],
+                      ["text": "た", "type": "word", "logprob": -0.2], ["text": "(laughs)", "type": "audio_event", "logprob": -9.0]],
+        ])
+        XCTAssertEqual(japanese.text, "また明日。")
+        XCTAssertEqual(japanese.meanWordLogprob!, -0.3, accuracy: 1e-9)
+        XCTAssertNil(ElevenLabs.Transcript(["text": "Hi."]).meanWordLogprob)
+
+        // English main, then Japanese and Tamil: Japanese speech.
+        XCTAssertEqual(ElevenLabs.pickCandidate([-1.080, -0.219, -1.448]), 1)
+        XCTAssertEqual(ElevenLabs.pickCandidate([-0.570, -0.284, -0.573]), 1)
+        // English speech: Tamil was slightly more sure of the same words.
+        XCTAssertEqual(ElevenLabs.pickCandidate([-0.031, -0.013, -0.004]), 0)
+        XCTAssertEqual(ElevenLabs.pickCandidate([-0.015, -0.084, -0.130]), 0)
+        // A transcript without words loses; nothing to compare keeps the first.
+        XCTAssertEqual(ElevenLabs.pickCandidate([nil, -0.5]), 1)
+        XCTAssertEqual(ElevenLabs.pickCandidate([-0.5, nil]), 0)
+        XCTAssertEqual(ElevenLabs.pickCandidate([nil, nil]), 0)
+    }
+
     /// The live meeting socket: turn prediction, diarization, no fillers;
     /// several spoken languages switch on multilingual mode instead of
     /// fixing one; a keyterm cannot split the query.
@@ -156,6 +183,8 @@ final class ElevenLabsTests: XCTestCase {
         XCTAssertEqual(ScribeLanguage.toggling("eng", in: ["hin", "eng", "tam"]), ["hin", "tam"])
         XCTAssertEqual(ScribeLanguage.toggling("hin", in: ["hin", "eng"]), ["hin", "eng"])
         XCTAssertEqual(ScribeLanguage.toggling("eng", in: []), [])
+        XCTAssertEqual(ScribeLanguage.promoting("jpn", in: ["eng", "tam", "jpn"]), ["jpn", "eng", "tam"])
+        XCTAssertEqual(ScribeLanguage.promoting("hin", in: ["eng", "tam"]), ["eng", "tam"])
         XCTAssertEqual(ScribeLanguage.names(["hin", "eng"].dropFirst(), none: "None"), "English")
 
         let saved = UserDefaults.standard.object(forKey: "spokenLanguages")

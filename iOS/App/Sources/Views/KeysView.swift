@@ -118,7 +118,7 @@ struct ModelKeysForm: View {
                                 saveLanguages(ScribeLanguage.toggling($0, in: languages))
                             }
                         }
-                        Text("Automatic detection works out the language each time. Pick your main language, and any others you mix in, when Scribe gets it wrong.")
+                        Text("Automatic works out the language each time, which can go wrong on a short phrase. Pick your main language, then every other language you dictate in, whole sentences or mixed in. Each dictation is transcribed once per language and Scribe keeps the result it is most sure of, so each language comes out in its own script. Each language adds one transcription to the cost.")
                             .font(Theme.Fonts.footnote())
                             .foregroundStyle(Theme.Colors.muted)
                             .fixedSize(horizontal: false, vertical: true)

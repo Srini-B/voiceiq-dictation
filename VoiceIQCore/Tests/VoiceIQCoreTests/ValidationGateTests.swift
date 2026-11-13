@@ -33,6 +33,17 @@ final class ValidationGateTests: XCTestCase {
         XCTAssertTrue(ValidationGate.validate(raw: "um yeah", cleaned: "Yeah.").accepted)
     }
 
+    /// Japanese has no spaces between words. Counting each clause as one
+    /// word made a cleanup that only added commas look like expansion
+    /// (3 → 5 "words"). A translation and an answer still fail.
+    func testJapaneseCleanupIsJudgedByCharacter() {
+        let raw = "今日はちょっと遅れます。明日また連絡します。それでいいですか"
+        XCTAssertTrue(ValidationGate.validate(raw: raw, cleaned: "今日は、ちょっと遅れます。明日、また連絡します。それでいいですか？").accepted)
+        XCTAssertFalse(ValidationGate.validate(raw: "明日の会議は三時からです", cleaned: "The meeting tomorrow starts at three.").accepted)
+        XCTAssertEqual(ValidationGate.validate(raw: "東京の人口は何人ですか？", cleaned: "東京の人口は約千四百万人です。").reason,
+                       ValidationGate.questionAnswered)
+    }
+
     // MARK: Reject — the documented failure modes
 
     func testRejectsAnswerInsteadOfCleanup() {

@@ -88,6 +88,7 @@ final class StatusItemController: NSObject {
 
     private var statusLine: NSMenuItem?
     private var updatesItem: NSMenuItem?
+    private var spokenLanguageItem: NSMenuItem?
 
     func setStatusLine(_ text: String) {
         statusLine?.title = text
@@ -103,6 +104,7 @@ final class StatusItemController: NSObject {
 
     private func makeMenu() -> NSMenu {
         let menu = NSMenu()
+        menu.delegate = self
 
         let status = NSMenuItem(title: "Starting up…", action: nil, keyEquivalent: "")
         status.isEnabled = false
@@ -132,6 +134,15 @@ final class StatusItemController: NSObject {
         micMenu.delegate = self
         micItem.submenu = micMenu
         menu.addItem(micItem)
+
+        // Which spoken language is the main one, when Scribe has several:
+        // the main language wins when Scribe is about as sure of every one.
+        let languageItem = NSMenuItem(title: "Spoken Language", action: nil, keyEquivalent: "")
+        let languageMenu = NSMenu(title: "Spoken Language")
+        languageMenu.delegate = self
+        languageItem.submenu = languageMenu
+        spokenLanguageItem = languageItem
+        menu.addItem(languageItem)
 
         let settings = NSMenuItem(title: "Settings…", action: #selector(openSettings), keyEquivalent: ",")
         settings.target = self
@@ -178,6 +189,12 @@ final class StatusItemController: NSObject {
         onCheckForUpdates()
     }
 
+    @objc private func selectMainLanguage(_ sender: NSMenuItem) {
+        guard let code = sender.representedObject as? String else { return }
+        let settings = SettingsStore()
+        settings.setSpokenLanguages(ScribeLanguage.promoting(code, in: settings.spokenLanguages))
+    }
+
     @objc private func selectMicrophone(_ sender: NSMenuItem) {
         guard let id = sender.representedObject as? AudioDeviceID else { return }
         AudioInputDevices.setDefault(id: id)
@@ -186,8 +203,32 @@ final class StatusItemController: NSObject {
 
 extension StatusItemController: NSMenuDelegate {
     /// Rebuild the Microphone submenu each open — devices come and go
-    /// (AirPods connect, headsets unplug) and the checkmark must be live.
+    /// (AirPods connect, headsets unplug) and the checkmark must be live. The
+    /// Spoken Language submenu follows Settings the same way, and shows only
+    /// while Scribe transcribes with more than one spoken language.
     func menuNeedsUpdate(_ menu: NSMenu) {
+        if menu === statusItem.menu {
+            let settings = SettingsStore()
+            spokenLanguageItem?.isHidden = !settings.transcribesWithElevenLabs || settings.spokenLanguages.count < 2
+            return
+        }
+        if menu.title == "Spoken Language" {
+            menu.removeAllItems()
+            let languages = SettingsStore().spokenLanguages
+            for code in languages {
+                let item = NSMenuItem(title: ScribeLanguage.names([code], none: code), action: #selector(selectMainLanguage(_:)),
+                                      keyEquivalent: "")
+                item.target = self
+                item.representedObject = code
+                item.state = code == languages.first ? .on : .off
+                menu.addItem(item)
+            }
+            menu.addItem(.separator())
+            let note = NSMenuItem(title: "Main language; the others are still heard", action: nil, keyEquivalent: "")
+            note.isEnabled = false
+            menu.addItem(note)
+            return
+        }
         guard menu.title == "Microphone" else { return }
         menu.removeAllItems()
         let current = AudioInputDevices.currentDefaultID()

@@ -73,9 +73,13 @@ public enum ValidationGate {
         // content checks below. A question can also end in the spoken words
         // "question mark".
         let rawEnd = raw.trimmingCharacters(in: .whitespacesAndNewlines.union(.punctuationCharacters))
-        if raw.trimmingCharacters(in: .whitespacesAndNewlines).hasSuffix("?")
-            || rawEnd.lowercased().hasSuffix("question mark"),
-           !cleaned.trimmingCharacters(in: .whitespacesAndNewlines).hasSuffix("?"),
+        // "？" is the full-width question mark of Chinese and Japanese.
+        func isQuestion(_ text: String) -> Bool {
+            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.hasSuffix("?") || trimmed.hasSuffix("？")
+        }
+        if isQuestion(raw) || rawEnd.lowercased().hasSuffix("question mark"),
+           !isQuestion(cleaned),
            cleanWords.contains(where: { !Set(rawWords).contains($0) }) {
             return .fail(questionAnswered)
         }
@@ -111,11 +115,39 @@ public enum ValidationGate {
     )
 
     /// Lowercased alphanumeric words with spoken numbers normalized to digits so
-    /// "three" (raw) matches "3" (cleaned ITN output).
+    /// "three" (raw) matches "3" (cleaned ITN output). Scripts written without
+    /// spaces between words count one word per character: otherwise a whole
+    /// Japanese clause is one "word", and a cleanup that only adds commas
+    /// splits three of them into five and fails the expansion ratio.
     static func contentWords(of text: String) -> [String] {
         normalize(text)
             .components(separatedBy: CharacterSet.alphanumerics.inverted)
             .filter { !$0.isEmpty }
+            .flatMap { word -> [String] in
+                guard word.unicodeScalars.contains(where: isUnspacedScript) else { return [word] }
+                var parts: [String] = [], run = ""
+                for character in word {
+                    if character.unicodeScalars.contains(where: isUnspacedScript) {
+                        if !run.isEmpty { parts.append(run); run = "" }
+                        parts.append(String(character))
+                    } else {
+                        run.append(character)
+                    }
+                }
+                if !run.isEmpty { parts.append(run) }
+                return parts
+            }
+    }
+
+    /// Kana, CJK ideographs, Thai, Lao, Myanmar and Khmer.
+    private static func isUnspacedScript(_ scalar: Unicode.Scalar) -> Bool {
+        switch scalar.value {
+        case 0x3040...0x30FF, 0x31F0...0x31FF, 0x3400...0x4DBF, 0x4E00...0x9FFF, 0xF900...0xFAFF,
+             0xFF66...0xFF9F, 0x20000...0x2FA1F, 0x0E00...0x0EFF, 0x1000...0x109F, 0x1780...0x17FF:
+            return true
+        default:
+            return false
+        }
     }
 
     static func normalize(_ text: String) -> String {
