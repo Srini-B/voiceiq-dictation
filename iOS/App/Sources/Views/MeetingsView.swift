@@ -182,9 +182,8 @@ private struct MeetingDetail: View {
     @State private var transcript: [TranscriptSegment] = []
     /// Markdown files to share, one per export choice.
     @State private var exports: [(label: String, url: URL)] = []
-    /// The speaker whose name is being typed.
+    /// The speaker whose name is being chosen.
     @State private var naming: String?
-    @State private var draft = ""
     /// What the note is doing in the background; nil when idle.
     @State private var step: MeetingStatus?
 
@@ -242,10 +241,8 @@ private struct MeetingDetail: View {
                 } label: { Label("Export", systemImage: "square.and.arrow.up") }
             }
         }
-        .alert("Name", isPresented: Binding(get: { naming != nil }, set: { if !$0 { naming = nil } })) {
-            TextField("Name", text: $draft)
-            Button("Save") { if let naming { rename(naming, draft) } }
-            Button("Cancel", role: .cancel) {}
+        .sheet(isPresented: Binding(get: { naming != nil }, set: { if !$0 { naming = nil } })) {
+            if let speaker = naming { speakerNames(speaker) }
         }
         .onAppear(perform: load)
         .onReceive(model.meetings.$processing) { busy in
@@ -335,27 +332,26 @@ private struct MeetingDetail: View {
         }
     }
 
-    /// The speaker's name in their colour; tapping it offers the names this note knows.
+    /// The speaker's name in their colour; tapping it offers the names this
+    /// note knows, under a search field that also takes a new name.
     private func speakerMenu(_ speaker: String) -> some View {
         let hex = MeetingSpeaker.colorHex(speaker, others: MeetingSpeaker.others(in: transcript))
         let name = meta.displayName(speaker, notes: notes)
-        return Menu {
-            ForEach(meta.knownNames(notes), id: \.self) { candidate in
-                Button { rename(speaker, candidate) } label: {
-                    if candidate == name { Label(candidate, systemImage: "checkmark") } else { Text(candidate) }
-                }
-            }
-            Button("Other name…") { draft = ""; naming = speaker }
-            if !(meta.speakerNames[speaker] ?? "").isEmpty {
-                Button("Reset", role: .destructive) { rename(speaker, "") }
-            }
-        } label: {
+        return Button { naming = speaker } label: {
             HStack(spacing: 3) {
                 Text(name).font(Theme.Fonts.label())
                 Image(systemName: "chevron.down").font(.system(size: 9, weight: .semibold))
             }
             .foregroundStyle(Theme.Colors.dynamic(light: hex.light, dark: hex.dark))
         }
+    }
+
+    private func speakerNames(_ speaker: String) -> some View {
+        let name = meta.displayName(speaker, notes: notes)
+        let pick: (String) -> Void = { rename(speaker, $0); naming = nil }
+        return SearchableListSheet(title: "Speaker name", options: meta.knownNames(notes).map { SearchOption(value: $0, name: $0) },
+                                   isSelected: { $0 == name }, prompt: "Search or type a name", other: pick,
+                                   reset: (meta.speakerNames[speaker] ?? "").isEmpty ? nil : { pick("") }, choose: pick)
     }
 
     private func rename(_ speaker: String, _ name: String) {

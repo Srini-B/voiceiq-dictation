@@ -318,3 +318,19 @@ still carry the numbers.
   measurement, fed through the session, showed one redacted turn and none
   of the 129 partials.
 - Not run in the app yet: no build was made.
+
+## Searchable choice lists (2026-11-13, PR #44)
+
+The maintainer found that the Mac's Also spoken menu closed after one pick,
+so it looked single-select although it is multi-select, and asked for a
+search field at the top of every choice list on both apps and a Done button
+on iPhone.
+
+- One shared picker per app (`SearchablePicker`): a popover with a search
+  field on the Mac, a sheet with a search field and Done on iPhone. Also
+  spoken stays open with checks until it is dismissed.
+- Converted: 13 lists on the Mac and 13 on iPhone, including the
+  translation targets (whose own searchable popover it replaces) and the
+  speaker-name choosers, where the search field now also takes a new name.
+- Left native: segmented controls, the API format radio group, action menus
+  and the menu-bar microphone menu.

@@ -44,12 +44,9 @@ struct DictationPane: View {
             }
 
             Section {
-                Picker("Microphone", selection: $preferredMicrophone) {
-                    Text("System default").tag(String?.none)
-                    ForEach(microphones) { device in
-                        Text(device.name).tag(Optional(device.uid))
-                    }
-                }
+                SearchablePicker("Microphone", selection: $preferredMicrophone,
+                                 options: [SearchOption(value: String?.none, name: "System default")]
+                                     + microphones.map { SearchOption(value: Optional($0.uid), name: $0.name) })
                 .onChange(of: preferredMicrophone) { _, uid in
                     settings.setPreferredInputDeviceUID(uid)
                 }
@@ -108,9 +105,8 @@ struct DictationPane: View {
                         guard enabled != settings.skipShortDictationCleanup else { return }
                         settings.setSkipShortDictationCleanup(enabled)
                     }
-                Picker("Spelling", selection: $spelling) {
-                    ForEach(SpellingVariant.allCases, id: \.self) { Text($0.name).tag($0) }
-                }
+                SearchablePicker("Spelling", selection: $spelling,
+                                 options: SpellingVariant.allCases.map { SearchOption(value: $0, name: $0.name) })
                 .disabled(!cleanupPass)
                 .onChange(of: spelling) { _, variant in
                     guard variant != settings.spellingVariant else { return }

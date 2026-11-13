@@ -108,42 +108,24 @@ private struct SpeakerNamePicker: View {
     let color: Color
     let save: (String) -> Void
     @State private var open = false
-    @State private var draft = ""
 
     var body: some View {
-        Button { draft = ""; open = true } label: {
+        Button { open = true } label: {
             HStack(spacing: 3) {
                 Text(name).font(GTFont.flex(12, weight: 600)).foregroundStyle(color)
                 Image(systemName: "chevron.down").font(.system(size: 8, weight: .semibold)).foregroundStyle(.secondary)
             }
         }
         .popover(isPresented: $open, arrowEdge: .bottom) {
-            VStack(alignment: .leading, spacing: 2) {
-                ForEach(known, id: \.self) { candidate in
-                    Button { choose(candidate) } label: {
-                        HStack {
-                            Text(candidate)
-                            Spacer()
-                            if candidate == name { Image(systemName: "checkmark").foregroundStyle(.secondary) }
-                        }
-                        .contentShape(Rectangle())
-                        .padding(.horizontal, VoiceIQUI.Spacing.xs)
-                        .padding(.vertical, VoiceIQUI.Spacing.xxs)
-                    }
-                    .buttonStyle(.plain)
-                }
-                if !known.isEmpty { Divider().padding(.vertical, VoiceIQUI.Spacing.xxs) }
-                TextField("Other name", text: $draft)
-                    .textFieldStyle(.roundedBorder)
-                    .onSubmit { if !draft.trimmingCharacters(in: .whitespaces).isEmpty { choose(draft) } }
+            VStack(alignment: .leading, spacing: 0) {
+                SearchableList(options: known.map { SearchOption(value: $0, name: $0) }, isSelected: { $0 == name },
+                               prompt: "Search or type a name", other: choose, choose: choose)
                 if typed {
                     Button("Reset") { choose("") }
                         .buttonStyle(.link)
-                        .padding(.top, VoiceIQUI.Spacing.xxs)
+                        .padding([.horizontal, .bottom], VoiceIQUI.Spacing.s)
                 }
             }
-            .padding(VoiceIQUI.Spacing.s)
-            .frame(width: 220)
         }
     }
 

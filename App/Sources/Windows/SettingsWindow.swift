@@ -321,13 +321,11 @@ struct PrivacyPane: View {
             }
 
             Section {
-                Picker("Keep audio recordings", selection: $retentionDays) {
-                    Text("Never (disables Retry)").tag(-1)
-                    Text("24 hours").tag(1)
-                    Text("7 days").tag(7)
-                    Text("30 days").tag(30)
-                    Text("Forever").tag(0)
-                }
+                SearchablePicker("Keep audio recordings", selection: $retentionDays, options: [
+                    SearchOption(value: -1, name: "Never (disables Retry)"), SearchOption(value: 1, name: "24 hours"),
+                    SearchOption(value: 7, name: "7 days"), SearchOption(value: 30, name: "30 days"),
+                    SearchOption(value: 0, name: "Forever"),
+                ])
                 .onChange(of: retentionDays) { _, days in
                     settings.setAudioRetentionDays(days)
                     // Off the main thread — the purge walks every recording folder
@@ -337,14 +335,11 @@ struct PrivacyPane: View {
                         RetentionPolicy(audioRetentionDays: days).purgeExpiredAudio()
                     }
                 }
-                Picker("Keep dictations", selection: $transcriptRetentionDays) {
-                    Text("Never (no History)").tag(-1)
-                    Text("24 hours").tag(1)
-                    Text("7 days").tag(7)
-                    Text("30 days").tag(30)
-                    Text("1 year").tag(365)
-                    Text("Forever").tag(0)
-                }
+                SearchablePicker("Keep dictations", selection: $transcriptRetentionDays, options: [
+                    SearchOption(value: -1, name: "Never (no History)"), SearchOption(value: 1, name: "24 hours"),
+                    SearchOption(value: 7, name: "7 days"), SearchOption(value: 30, name: "30 days"),
+                    SearchOption(value: 365, name: "1 year"), SearchOption(value: 0, name: "Forever"),
+                ])
                 .onChange(of: transcriptRetentionDays) { _, days in
                     settings.setTranscriptRetentionDays(days)
                     Task.detached(priority: .utility) {

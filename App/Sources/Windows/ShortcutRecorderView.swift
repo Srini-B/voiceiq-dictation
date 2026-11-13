@@ -41,14 +41,8 @@ struct ShortcutRecorderRow: View {
                 }
 
                 Text("Side")
-                Picker("Side", selection: sideBinding) {
-                    ForEach(KeyShortcut.Side.allCases, id: \.self) { side in
-                        Text(side.displayName).tag(side)
-                    }
-                }
-                .labelsHidden()
-                .pickerStyle(.menu)
-                .frame(width: 74)
+                SearchablePicker("", selection: sideBinding,
+                                 options: KeyShortcut.Side.allCases.map { SearchOption(value: $0, name: $0.displayName) })
 
                 Button {
                     stopRecording()

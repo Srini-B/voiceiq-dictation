@@ -106,11 +106,8 @@ struct AgentProviderSection: View {
                     .foregroundStyle(.secondary)
             }
         } else {
-            Picker("Model", selection: $override.selectedModelID) {
-                ForEach(override.models) { model in
-                    Text(model.label).tag(Optional(model.id))
-                }
-            }
+            SearchablePicker("Model", selection: $override.selectedModelID,
+                             options: override.models.map { SearchOption(value: Optional($0.id), name: $0.label, keywords: $0.id) })
             ForEach(override.models) { model in
                 HStack(spacing: VoiceIQUI.Spacing.xs) {
                     Text(model.id)

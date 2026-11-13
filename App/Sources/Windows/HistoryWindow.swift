@@ -81,12 +81,8 @@ struct HistoryPane: View {
     }
 
     private var periodPicker: some View {
-        Picker("Period", selection: $statsPeriod) {
-            ForEach(HistoryStore.StatsPeriod.allCases) { Text($0.title).tag($0) }
-        }
-        .pickerStyle(.menu)
-        .labelsHidden()
-        .fixedSize()
+        SearchablePicker("", selection: $statsPeriod,
+                         options: HistoryStore.StatsPeriod.allCases.map { SearchOption(value: $0, name: $0.title) })
         .font(VoiceIQUI.TypeScale.labelSmall(grad: grad))
         .frame(maxWidth: .infinity, alignment: .leading)
         .onChange(of: statsPeriod) { _, _ in reload() }

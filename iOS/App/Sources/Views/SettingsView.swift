@@ -141,9 +141,8 @@ struct DictationSettingsView: View {
     var body: some View {
         Form {
             Section {
-                Picker("Keep mic on after dictating", selection: $warmWindow) {
-                    ForEach(MobileSettings.WarmWindow.allCases) { Text($0.label).tag($0) }
-                }
+                SearchablePicker("Keep mic on after dictating", selection: $warmWindow,
+                                 options: MobileSettings.WarmWindow.allCases.map { SearchOption(value: $0, name: $0.label) })
                 .onChange(of: warmWindow) { _, value in
                     MobileSettings.warmWindow = value
                     session.warmWindowChanged()
@@ -378,18 +377,20 @@ struct PrivacyView: View {
     var body: some View {
         Form {
             Section {
-                Picker("Keep audio recordings", selection: $retentionDays) {
-                    Text("Never").tag(-1); Text("24 hours").tag(1); Text("7 days").tag(7)
-                    Text("30 days").tag(30); Text("Forever").tag(0)
-                }
+                SearchablePicker("Keep audio recordings", selection: $retentionDays, options: [
+                    SearchOption(value: -1, name: "Never"), SearchOption(value: 1, name: "24 hours"),
+                    SearchOption(value: 7, name: "7 days"), SearchOption(value: 30, name: "30 days"),
+                    SearchOption(value: 0, name: "Forever"),
+                ])
                 .onChange(of: retentionDays) { _, days in
                     SettingsStore().setAudioRetentionDays(days)
                     Task.detached(priority: .utility) { RetentionPolicy().purge() }
                 }
-                Picker("Keep dictations", selection: $transcriptRetentionDays) {
-                    Text("Never").tag(-1); Text("24 hours").tag(1); Text("7 days").tag(7)
-                    Text("30 days").tag(30); Text("1 year").tag(365); Text("Forever").tag(0)
-                }
+                SearchablePicker("Keep dictations", selection: $transcriptRetentionDays, options: [
+                    SearchOption(value: -1, name: "Never"), SearchOption(value: 1, name: "24 hours"),
+                    SearchOption(value: 7, name: "7 days"), SearchOption(value: 30, name: "30 days"),
+                    SearchOption(value: 365, name: "1 year"), SearchOption(value: 0, name: "Forever"),
+                ])
                 .onChange(of: transcriptRetentionDays) { _, days in
                     SettingsStore().setTranscriptRetentionDays(days)
                     Task.detached(priority: .utility) { RetentionPolicy().purge() }

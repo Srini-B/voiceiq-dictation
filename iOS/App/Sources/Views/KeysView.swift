@@ -86,14 +86,10 @@ struct ModelKeysForm: View {
                             HStack {
                                 Text("Main language").font(Theme.Fonts.subheadline()).foregroundStyle(Theme.Colors.ink)
                                 Spacer()
-                                Picker("Main language", selection: Binding(get: { languages.first ?? "" }, set: {
+                                SearchablePicker("Main language", selection: Binding(get: { languages.first ?? "" }, set: {
                                     saveLanguages(ScribeLanguage.choosing(main: $0, in: languages))
-                                })) {
-                                    Text("Automatic").tag("")
-                                    ForEach(ScribeLanguage.all) { Text($0.name).tag($0.code) }
-                                }
-                                .pickerStyle(.menu)
-                                .tint(Theme.Colors.accent)
+                                }), options: [SearchOption(value: "", name: "Automatic")] + Self.options(ScribeLanguage.all), hidesTitle: true)
+                                .font(Theme.Fonts.subheadline())
                                 .fixedSize()
                             }
                             .frame(minHeight: 44)
@@ -117,7 +113,10 @@ struct ModelKeysForm: View {
                         .background(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
                             .fill(Theme.Colors.accent.opacity(0.06)))
                         .sheet(isPresented: $choosingOthers) {
-                            OtherLanguagesSheet(languages: languages) { saveLanguages($0) }
+                            SearchableListSheet(title: "Also spoken", options: Self.options(ScribeLanguage.all.filter { $0.code != languages.first }),
+                                                isSelected: { languages.dropFirst().contains($0) }, multiple: true) {
+                                saveLanguages(ScribeLanguage.toggling($0, in: languages))
+                            }
                         }
                         Text("Automatic detection works out the language each time. Pick your main language, and any others you mix in, when Scribe gets it wrong.")
                             .font(Theme.Fonts.footnote())
@@ -145,6 +144,10 @@ struct ModelKeysForm: View {
         .onReceive(NotificationCenter.default.publisher(for: .gtSettingDidChange).receive(on: RunLoop.main)) { _ in
             reload()
         }
+    }
+
+    private static func options(_ languages: [ScribeLanguage]) -> [SearchOption<String>] {
+        languages.map { SearchOption(value: $0.code, name: $0.name, keywords: $0.code) }
     }
 
     private func saveLanguages(_ codes: [String]) {
@@ -382,35 +385,6 @@ enum KeySlot: Hashable, CaseIterable {
         case .valid: return .accepted(offline: false)
         case .unreachable: return .accepted(offline: true)
         case .rejected(let detail): return .rejected(detail ?? "\(title) rejected that key.")
-        }
-    }
-}
-
-/// Other languages Scribe may hear besides the main one, ticked in a list.
-private struct OtherLanguagesSheet: View {
-    @State var languages: [String]
-    let save: ([String]) -> Void
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        NavigationStack {
-            List(ScribeLanguage.all.filter { $0.code != languages.first }) { language in
-                Button {
-                    languages = ScribeLanguage.toggling(language.code, in: languages)
-                    save(languages)
-                } label: {
-                    HStack {
-                        Text(language.name).foregroundStyle(Theme.Colors.ink)
-                        Spacer()
-                        if languages.dropFirst().contains(language.code) {
-                            Image(systemName: "checkmark").foregroundStyle(Theme.Colors.accent)
-                        }
-                    }
-                }
-            }
-            .navigationTitle("Also spoken")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
         }
     }
 }

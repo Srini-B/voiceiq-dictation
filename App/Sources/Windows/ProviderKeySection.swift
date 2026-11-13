@@ -124,6 +124,10 @@ struct ElevenLabsTranscriptionSection: View {
     @State private var languages = SettingsStore().spokenLanguages
     @State private var redacts = SettingsStore().redactsMeetingSecrets
 
+    private static func options(_ languages: [ScribeLanguage]) -> [SearchOption<String>] {
+        languages.map { SearchOption(value: $0.code, name: $0.name, keywords: $0.code) }
+    }
+
     var body: some View {
         Section {
             Picker("Transcription provider", selection: Binding(get: { chosen && hasKey }, set: {
@@ -136,24 +140,15 @@ struct ElevenLabsTranscriptionSection: View {
             .pickerStyle(.segmented)
             .disabled(!hasKey)
             if chosen && hasKey {
-                Picker("Spoken language", selection: Binding(get: { languages.first ?? "" }, set: {
+                SearchablePicker("Spoken language", selection: Binding(get: { languages.first ?? "" }, set: {
                     save(ScribeLanguage.choosing(main: $0, in: languages))
-                })) {
-                    Text("Automatic").tag("")
-                    Divider()
-                    ForEach(ScribeLanguage.all) { Text($0.name).tag($0.code) }
-                }
+                }), options: [SearchOption(value: "", name: "Automatic")] + Self.options(ScribeLanguage.all))
                 .help("The language you speak most. Automatic detection lets Scribe work it out each time.")
                 if let main = languages.first {
-                    LabeledContent("Also spoken") {
-                        Menu(ScribeLanguage.names(languages.dropFirst(), none: "None")) {
-                            ForEach(ScribeLanguage.all.filter { $0.code != main }) { language in
-                                Toggle(language.name, isOn: Binding(get: { languages.dropFirst().contains(language.code) },
-                                                                    set: { _ in save(ScribeLanguage.toggling(language.code, in: languages)) }))
-                            }
-                        }
-                        .fixedSize()
-                    }
+                    SearchablePicker("Also spoken", summary: ScribeLanguage.names(languages.dropFirst(), none: "None"),
+                                     options: Self.options(ScribeLanguage.all.filter { $0.code != main }),
+                                     isSelected: { languages.dropFirst().contains($0) },
+                                     toggle: { save(ScribeLanguage.toggling($0, in: languages)) })
                     .help("Other languages Scribe may hear, such as English mixed into Tamil.")
                 }
                 Toggle("Hide card and ID numbers in meetings", isOn: $redacts)

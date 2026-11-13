@@ -14,11 +14,9 @@ struct StatsView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: Theme.Spacing.l) {
                 // The titles are too long for a segmented control on a phone.
-                Picker("Period", selection: $period) {
-                    ForEach(HistoryStore.StatsPeriod.allCases) { Text($0.title).tag($0) }
-                }
-                .pickerStyle(.menu)
-                .tint(Theme.Colors.accent)
+                SearchablePicker("Period", selection: $period,
+                                 options: HistoryStore.StatsPeriod.allCases.map { SearchOption(value: $0, name: $0.title) },
+                                 hidesTitle: true)
                 Grid(horizontalSpacing: Theme.Spacing.m, verticalSpacing: Theme.Spacing.m) {
                     GridRow {
                         StatTile(value: stats.totalWords.formatted(), label: "Words")
