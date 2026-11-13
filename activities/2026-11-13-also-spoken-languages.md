@@ -61,3 +61,22 @@ Scribe's `transcript_edit` sometimes appends commentary such as "(This is a
 single paragraph.)" to an English dictation (3 of 4 runs on one synthetic
 clip, with the instruction before this change too), and `ValidationGate`
 accepts it.
+
+## Follow-up: remarks added by transcript_edit (fixed)
+
+The maintainer asked that the formatting edit only reformat what was said
+and never add notes or remarks. Measured again on the same 8 s English clip,
+regenerated with the same text: with the paragraph line in the instruction,
+10 of 10 edits appended a remark ("(This is a single paragraph.)", "(This is
+a separate paragraph.)", "It's Monday."), also with a new "never add a
+note, comment, label or explanation" line. Without the paragraph line, 0 of
+6 did, and a 30 s dictation stayed one paragraph either way.
+
+- The paragraph line is gone and the no-notes line is in.
+- `ElevenLabs.addsNothing` rejects an edit with a word the speaker did not
+  say (as often as said), allowing digits, a two-letter spelling or meaning
+  fix and short abbreviations. The transcript as heard is used instead.
+  Other scripts stay under `keepsNonLatinWords`.
+- `testAnEditThatAddsARemarkIsNotUsed` uses the real transcript and the
+  four remarks; all four pass without the guard. Real clean edits,
+  Japanese punctuation and Tamil mixed into English still pass.

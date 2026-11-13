@@ -32,6 +32,27 @@ final class ElevenLabsTests: XCTestCase {
     /// Real Scribe v3 output for 25 s of a Hindi-English podcast
     /// (2026-11-12): the edit translated Hindi, which `ValidationGate` let
     /// through. Punctuation and English-side changes still pass.
+    /// The edit may only format what was said. The transcript and the four
+    /// remarks are real Scribe v3 output for one 8 s English clip (every edit
+    /// of it added one); the formats are real edits or ordinary formatting,
+    /// including Japanese punctuation and Tamil mixed into English.
+    func testAnEditThatAddsARemarkIsNotUsed() {
+        let heard = "Can you check the build logs on the server? The deploy failed again last night, and I think it's the same certificate problem we saw on Monday."
+        for remark in ["(This is a single paragraph.)", "(This is a separate paragraph.)", "It's Monday.", "It's a Monday."] {
+            XCTAssertEqual(ElevenLabs.accepted(edit: "\(heard) \(remark)", original: heard), heard, remark)
+        }
+        let formats = [
+            ("Increase the build number and version number and-", "Increase the build number and version number, and—"),
+            ("MacBook so that I can test out", "MacBook. So that I can test out."),
+            ("um so the uh plan is to run ten kilometers on saturday", "So the plan is to run 10 km on Saturday."),
+            ("we should pick a color for the logo", "We should pick a colour for the logo."),
+            ("ナウミさんまた明日", "ナウミさん、また明日。"),
+            ("The meeting is at three. ஆனா இன்னைக்கு கொஞ்சம் லேட் ஆகும். So please wait for me",
+             "The meeting is at 3:00. ஆனா இன்னைக்கு கொஞ்சம் லேட் ஆகும். So, please wait for me."),
+        ]
+        for (raw, edit) in formats { XCTAssertEqual(ElevenLabs.accepted(edit: edit, original: raw), edit, raw) }
+    }
+
     func testAnEditThatTranslatesIsNotUsed() {
         let raw = "You know over the years I have seen this. 2 सवाल है। तो आपको क्यों लगता है कि divine ने आपको क्यों bless किया है इस creative cloud के साथ?"
         let translated = "Over the years, I have seen this. There are two questions. So, why do you think divine has blessed you with this creative cloud?"
