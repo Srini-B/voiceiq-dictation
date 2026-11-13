@@ -199,6 +199,8 @@ final class StatusItemController: NSObject {
         let settings = SettingsStore()
         let languages = settings.spokenLanguages
         if code.isEmpty {
+            // Picking Automatic again must not replace the remembered list with an empty one.
+            guard !languages.isEmpty else { return }
             UserDefaults.standard.set(languages, forKey: Self.languagesBeforeAutomatic)
             settings.setSpokenLanguages([])
         } else {
