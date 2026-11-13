@@ -14,7 +14,9 @@ struct SearchOption<Value: Hashable>: Identifiable {
 /// search field on top. With one value, picking closes the list; with
 /// several (`staysOpen`), the list stays open and shows a check by each
 /// chosen value until the user clicks away or presses Return on an empty
-/// search. The list is as tall as its matches, up to 320 pt.
+/// search. The list opens above the button so it never covers the row
+/// below, and keeps its height while the search narrows it: a popover that
+/// shrinks can move to the other side of its button.
 struct SearchablePicker<Value: Hashable>: View {
     let title: String
     let options: [SearchOption<Value>]
@@ -52,7 +54,7 @@ struct SearchablePicker<Value: Hashable>: View {
         }
         .fixedSize()
         .accessibilityLabel(title.isEmpty ? summary : "\(title): \(summary)")
-        .popover(isPresented: $open, arrowEdge: .bottom) {
+        .popover(isPresented: $open, arrowEdge: .top) {
             SearchableList(options: options, isSelected: isSelected, multiple: staysOpen) { value in
                 choose(value)
                 if !staysOpen { open = false }
@@ -121,7 +123,7 @@ struct SearchableList<Value: Hashable>: View {
                     }
                 }
             }
-            .frame(height: min(320, CGFloat(max(1, matches.count + (typed == nil ? 0 : 1))) * 26))
+            .frame(height: min(320, CGFloat(max(1, options.count + (other == nil ? 0 : 1))) * 26), alignment: .top)
         }
         .environment(\.layoutDirection, .leftToRight)
         .padding(VoiceIQUI.Spacing.s)

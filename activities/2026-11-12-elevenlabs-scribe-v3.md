@@ -334,3 +334,13 @@ on iPhone.
   speaker-name choosers, where the search field now also takes a new name.
 - Left native: segmented controls, the API format radio group, action menus
   and the menu-bar microphone menu.
+
+Follow-up after the 0.7.2 checks on the Mac:
+- The Spoken language popover opened above its button and, once a search
+  shrank it to the matches, AppKit moved it below the button, over the Also
+  spoken row. The popover now prefers the side above its button and keeps
+  the height of the full list while searching, so it stays where it opened.
+  The cost is empty space under a short list of matches.
+- The menu-bar Spoken Language submenu had no way back to automatic
+  detection. Its first item is now Automatic; it remembers the languages
+  it cleared and keeps offering them, so one more pick restores them.

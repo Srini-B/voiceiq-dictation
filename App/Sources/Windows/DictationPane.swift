@@ -234,5 +234,6 @@ struct SpokenLanguagesSection: View {
     private func save(_ codes: [String]) {
         languages = codes
         settings.setSpokenLanguages(codes)
+        UserDefaults.standard.removeObject(forKey: StatusItemController.languagesBeforeAutomatic)
     }
 }
