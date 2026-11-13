@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 /// One choice in a `SearchablePicker`: what it sets and what it shows.
@@ -13,7 +14,7 @@ struct SearchOption<Value: Hashable>: Identifiable {
 /// search field on top. With one value, picking closes the list; with
 /// several (`staysOpen`), the list stays open and shows a check by each
 /// chosen value until the user clicks away or presses Return on an empty
-/// search.
+/// search. The list is as tall as its matches, up to 320 pt.
 struct SearchablePicker<Value: Hashable>: View {
     let title: String
     let options: [SearchOption<Value>]
@@ -95,10 +96,18 @@ struct SearchableList<Value: Hashable>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: VoiceIQUI.Spacing.xs) {
-            TextField(prompt, text: $search)
-                .textFieldStyle(.roundedBorder)
-                .focused($searching)
-                .onSubmit(submit)
+            HStack(spacing: VoiceIQUI.Spacing.xxs) {
+                Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
+                TextField(prompt, text: $search)
+                    .textFieldStyle(.plain)
+                    .labelsHidden()
+                    .multilineTextAlignment(.leading)
+                    .focused($searching)
+                    .onSubmit(submit)
+            }
+            .padding(.horizontal, VoiceIQUI.Spacing.xs)
+            .padding(.vertical, 5)
+            .background(RoundedRectangle(cornerRadius: VoiceIQUI.Radius.small).fill(Color.primary.opacity(0.06)))
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
                     if let typed {
@@ -112,22 +121,28 @@ struct SearchableList<Value: Hashable>: View {
                     }
                 }
             }
-            .frame(height: min(320, CGFloat(max(1, options.count + (other == nil ? 0 : 1))) * 26))
+            .frame(height: min(320, CGFloat(max(1, matches.count + (typed == nil ? 0 : 1))) * 26))
         }
         .environment(\.layoutDirection, .leftToRight)
         .padding(VoiceIQUI.Spacing.s)
         .frame(width: 260)
         .onAppear { searching = true }
+        // Closing the popover would otherwise hand focus to the window's
+        // first text field, such as an API key.
+        .onDisappear { DispatchQueue.main.async { NSApp.keyWindow?.makeFirstResponder(nil) } }
     }
 
-    /// Return picks the first match, or uses the typed name; on an empty
-    /// search it closes a list of several values.
+    /// Return picks the first match, or uses the typed name. In a list of
+    /// several values it toggles only a single match, and on an empty search
+    /// it closes the list.
     private func submit() {
         if search.trimmingCharacters(in: .whitespaces).isEmpty {
             if multiple { done() }
             return
         }
-        if let typed { other?(typed) } else if let first = matches.first { choose(first.value) }
+        if let typed { other?(typed); return }
+        guard let first = matches.first, !multiple || matches.count == 1 else { return }
+        choose(first.value)
         if multiple { search = "" }
     }
 }

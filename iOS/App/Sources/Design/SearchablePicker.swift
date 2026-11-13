@@ -47,7 +47,7 @@ struct SearchablePicker<Value: Hashable>: View {
                 }
                 Group {
                     Text(summary).lineLimit(1)
-                    Image(systemName: "chevron.up.chevron.down").font(.footnote)
+                    Image(systemName: "chevron.right").font(.footnote)
                 }
                 .foregroundStyle(hidesTitle ? Theme.Colors.accent : Theme.Colors.muted)
             }
@@ -64,8 +64,10 @@ struct SearchablePicker<Value: Hashable>: View {
 }
 
 /// The sheet behind a `SearchablePicker`: the choices under a search field,
-/// with Done. With `other`, a typed name that matches no choice can be used
-/// as it is; with `reset`, a Reset button undoes an earlier choice.
+/// with Done. The field is the sheet's own rather than `.searchable`, which
+/// on iOS 27 hides the title and Done while searching. With `other`, a typed
+/// name that matches no choice can be used as it is; with `reset`, a Reset
+/// button undoes an earlier choice.
 struct SearchableListSheet<Value: Hashable>: View {
     let title: String
     let options: [SearchOption<Value>]
@@ -98,6 +100,36 @@ struct SearchableListSheet<Value: Hashable>: View {
         return query
     }
 
+    private var searchField: some View {
+        HStack(spacing: Theme.Spacing.xs) {
+            Image(systemName: "magnifyingglass").foregroundStyle(Theme.Colors.muted)
+            TextField(prompt, text: $search)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .submitLabel(.search)
+                .onSubmit(submit)
+            if !search.isEmpty {
+                Button { search = "" } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(Theme.Colors.muted) }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Clear search")
+            }
+        }
+        .padding(.horizontal, Theme.Spacing.m)
+        .padding(.vertical, Theme.Spacing.s)
+        .background(Capsule().fill(Color(.tertiarySystemFill)))
+        .padding(.horizontal, Theme.Spacing.l)
+        .padding(.vertical, Theme.Spacing.s)
+    }
+
+    /// Return picks the first match, or uses the typed name; in a list of
+    /// several values it toggles only a single match.
+    private func submit() {
+        if let typed { other?(typed); return }
+        guard let first = matches.first, !multiple || matches.count == 1 else { return }
+        choose(first.value)
+        if multiple { search = "" }
+    }
+
     var body: some View {
         NavigationStack {
             List {
@@ -120,11 +152,7 @@ struct SearchableListSheet<Value: Hashable>: View {
             .overlay {
                 if matches.isEmpty && typed == nil && !query.isEmpty { ContentUnavailableView.search(text: query) }
             }
-            .searchable(text: $search, placement: .navigationBarDrawer(displayMode: .always), prompt: prompt)
-            .onSubmit(of: .search) {
-                if let typed { other?(typed) } else if let first = matches.first { choose(first.value) }
-                if multiple { search = "" }
-            }
+            .safeAreaInset(edge: .top, spacing: 0) { searchField }
             .navigationTitle(title)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
