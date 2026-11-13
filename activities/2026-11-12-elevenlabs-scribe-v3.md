@@ -193,6 +193,22 @@ request per recording, the guard against remarks in Scribe's formatting
 edit, and the popover and menu-bar Automatic follow-ups. Version 0.7.3,
 build 77 (0.7.2 was 76).
 
+Result (test Mac, commit c4b04fd):
+- `scripts/test.sh` exit 0 (179 tests), `scripts/build-ios.sh` exit 0,
+  `scripts/release.sh` exit 0 (app and DMG notarized and stapled).
+- `scripts/release-ios.sh` exit 0; build 77 processed and in TestFlight
+  internal testing.
+- Searchable lists on the installed app: Spoken language, Also spoken and
+  Spelling open above their buttons and keep their size and place while
+  searching. With the Languages section scrolled to the top of the window
+  there is no room above, and the list opens below its button.
+- Menu-bar Spoken Language: Automatic first; picking it cleared the
+  languages and the submenu kept offering Tamil and English; picking
+  English restored English with Tamil also spoken; changing the languages
+  in Settings hid the submenu again.
+- The notarized Mac app was installed over 0.7.2 on a second Mac and
+  reads 0.7.3 (77).
+
 ## Spoken languages from a list (2026-11-12, PR #44)
 
 The maintainer asked for the free-text Spoken languages field to become a list of
