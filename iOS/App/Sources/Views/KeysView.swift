@@ -23,8 +23,6 @@ struct ModelKeysForm: View {
     @State private var provider = SettingsStore().preferredProvider
     @State private var elevenLabs = SettingsStore().elevenLabsTranscriptionChosen
     @State private var hasElevenLabsKey = KeychainStore.loadKey(.elevenLabs) != nil
-    @State private var languages = SettingsStore().spokenLanguages
-    @State private var choosingOthers = false
     @State private var redacts = SettingsStore().redactsMeetingSecrets
 
     private var providerSlots: [KeySlot] {
@@ -81,47 +79,6 @@ struct ModelKeysForm: View {
                         .foregroundStyle(Theme.Colors.muted)
                         .fixedSize(horizontal: false, vertical: true)
                     if elevenLabs {
-                        GroupLabel(text: "Spoken languages")
-                        VStack(spacing: 0) {
-                            HStack {
-                                Text("Main language").font(Theme.Fonts.subheadline()).foregroundStyle(Theme.Colors.ink)
-                                Spacer()
-                                SearchablePicker("Main language", selection: Binding(get: { languages.first ?? "" }, set: {
-                                    saveLanguages(ScribeLanguage.choosing(main: $0, in: languages))
-                                }), options: [SearchOption(value: "", name: "Automatic")] + Self.options(ScribeLanguage.all), hidesTitle: true)
-                                .font(Theme.Fonts.subheadline())
-                                .fixedSize()
-                            }
-                            .frame(minHeight: 44)
-                            if !languages.isEmpty {
-                                Divider()
-                                Button { choosingOthers = true } label: {
-                                    HStack {
-                                        Text("Also spoken").font(Theme.Fonts.subheadline()).foregroundStyle(Theme.Colors.ink)
-                                        Spacer()
-                                        Text(ScribeLanguage.names(languages.dropFirst(), none: "None"))
-                                            .font(Theme.Fonts.subheadline()).foregroundStyle(Theme.Colors.muted).lineLimit(1)
-                                        Image(systemName: "chevron.right").font(.footnote).foregroundStyle(Theme.Colors.muted)
-                                    }
-                                    .frame(minHeight: 44)
-                                    .contentShape(Rectangle())
-                                }
-                                .buttonStyle(.plain)
-                            }
-                        }
-                        .padding(.horizontal, Theme.Spacing.m)
-                        .background(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
-                            .fill(Theme.Colors.accent.opacity(0.06)))
-                        .sheet(isPresented: $choosingOthers) {
-                            SearchableListSheet(title: "Also spoken", options: Self.options(ScribeLanguage.all.filter { $0.code != languages.first }),
-                                                isSelected: { languages.dropFirst().contains($0) }, multiple: true) {
-                                saveLanguages(ScribeLanguage.toggling($0, in: languages))
-                            }
-                        }
-                        Text("Automatic works out the language each time, which can go wrong on a short phrase. Pick your main language, then every other language you dictate in, whole sentences or mixed in. Each dictation is transcribed once per language and Scribe keeps the result it is most sure of, so each language comes out in its own script. Each language adds one transcription to the cost.")
-                            .font(Theme.Fonts.footnote())
-                            .foregroundStyle(Theme.Colors.muted)
-                            .fixedSize(horizontal: false, vertical: true)
                         Toggle("Hide card and ID numbers in notes", isOn: $redacts)
                             .font(Theme.Fonts.subheadline())
                             .tint(Theme.Colors.accent)
@@ -144,15 +101,6 @@ struct ModelKeysForm: View {
         .onReceive(NotificationCenter.default.publisher(for: .gtSettingDidChange).receive(on: RunLoop.main)) { _ in
             reload()
         }
-    }
-
-    private static func options(_ languages: [ScribeLanguage]) -> [SearchOption<String>] {
-        languages.map { SearchOption(value: $0.code, name: $0.name, keywords: $0.code) }
-    }
-
-    private func saveLanguages(_ codes: [String]) {
-        languages = codes
-        SettingsStore().setSpokenLanguages(codes)
     }
 
     private func reload() {

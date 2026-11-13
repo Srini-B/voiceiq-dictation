@@ -192,7 +192,7 @@ final class StatusItemController: NSObject {
     @objc private func selectMainLanguage(_ sender: NSMenuItem) {
         guard let code = sender.representedObject as? String else { return }
         let settings = SettingsStore()
-        settings.setSpokenLanguages(ScribeLanguage.promoting(code, in: settings.spokenLanguages))
+        settings.setSpokenLanguages(SpokenLanguage.promoting(code, in: settings.spokenLanguages))
     }
 
     @objc private func selectMicrophone(_ sender: NSMenuItem) {
@@ -205,7 +205,9 @@ extension StatusItemController: NSMenuDelegate {
     /// Rebuild the Microphone submenu each open — devices come and go
     /// (AirPods connect, headsets unplug) and the checkmark must be live. The
     /// Spoken Language submenu follows Settings the same way, and shows only
-    /// while Scribe transcribes with more than one spoken language.
+    /// while Scribe transcribes with more than one spoken language: only
+    /// Scribe writes ambiguous speech as the main language. OpenAI takes the
+    /// languages as an unordered list and Gemini detects them itself.
     func menuNeedsUpdate(_ menu: NSMenu) {
         if menu === statusItem.menu {
             let settings = SettingsStore()
@@ -216,7 +218,7 @@ extension StatusItemController: NSMenuDelegate {
             menu.removeAllItems()
             let languages = SettingsStore().spokenLanguages
             for code in languages {
-                let item = NSMenuItem(title: ScribeLanguage.names([code], none: code), action: #selector(selectMainLanguage(_:)),
+                let item = NSMenuItem(title: SpokenLanguage.names([code], none: code), action: #selector(selectMainLanguage(_:)),
                                       keyEquivalent: "")
                 item.target = self
                 item.representedObject = code

@@ -321,6 +321,11 @@ public actor GeminiClient {
     /// place `mode: "smart"` works — on `:generateContent` the same field parses
     /// but returns an empty text part with finishReason STOP (probed on the
     /// transcribe models).
+    ///
+    /// `languages` (the spoken languages) reach OpenAI only. Gemini's
+    /// transcribe models take no prompt, and with no `language_codes` they
+    /// detect each language and its switches themselves (ai.google.dev
+    /// transcription guide, read 2026-11-13).
     public func transcribeInteraction(
         audio: Data,
         mimeType: String = "audio/flac",
@@ -328,13 +333,15 @@ public actor GeminiClient {
         endpoint: URL,
         mode: TranscriptionMode,
         customVocabulary: [String],
+        languages: [String] = [],
         deadline: TimeInterval
     ) async throws -> String {
         switch provider() {
         case .openAI:
             // No smart mode; the dictionary rides along as keywords, and the
             // cleanup pass does the formatting.
-            return try await openAITranscribe(audio: audio, mimeType: mimeType, keywords: customVocabulary, deadline: deadline)
+            return try await openAITranscribe(audio: audio, mimeType: mimeType, keywords: customVocabulary,
+                                              languages: languages, deadline: deadline)
         case .gemini: break
         }
         var body: [String: Any] = [

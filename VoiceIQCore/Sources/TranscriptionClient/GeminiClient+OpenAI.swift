@@ -33,16 +33,31 @@ public struct OpenAIConfig: Sendable, Equatable {
 extension GeminiClient {
     static let openAIEndpoint = URL(string: "https://api.openai.com/v1")!
 
-    func openAITranscribe(audio: Data, mimeType: String = "audio/flac", keywords: [String],
+    /// `languages` are the spoken languages (`SettingsStore.spokenLanguages`),
+    /// sent as `languages[]` and `prompt` (`SpokenLanguage.openAICodes`,
+    /// `SpokenLanguage.transcriptionPrompt`). A model that refuses them (an
+    /// override such as `whisper-1` has no `languages[]`) gets the request
+    /// again without them, so they can never cost a dictation.
+    func openAITranscribe(audio: Data, mimeType: String = "audio/flac", keywords: [String], languages: [String] = [],
                           deadline: TimeInterval, model override: String? = nil) async throws -> String {
         let model = override ?? openAIConfig().transcribeModel
+        let codes = SpokenLanguage.openAICodes(languages), prompt = SpokenLanguage.transcriptionPrompt(languages)
         var form = MultipartForm()
         form.field("model", model)
         form.file("file", filename: "audio.\(Self.audioFormat(mimeType))", mimeType: mimeType, data: audio)
         for keyword in Self.openAIKeywords(keywords) { form.field("keywords[]", keyword) }
-        let data = try await post(path: "audio/transcriptions", body: form.body, endpoint: Self.openAIEndpoint,
+        for code in codes { form.field("languages[]", code) }
+        if let prompt { form.field("prompt", prompt) }
+        let data: Data
+        do {
+            data = try await post(path: "audio/transcriptions", body: form.body, endpoint: Self.openAIEndpoint,
                                   deadline: deadline, modelLabel: model, stage: .transcribe, via: .openAI,
                                   extraHeaders: ["Content-Type": form.contentType])
+        } catch TranscriptionError.badRequest(let message) where !codes.isEmpty || prompt != nil {
+            Log.transcription.error("transcribe rejected with spoken languages (\(message, privacy: .private)), retrying without them")
+            return try await openAITranscribe(audio: audio, mimeType: mimeType, keywords: keywords,
+                                              deadline: deadline, model: override)
+        }
         return try Self.extractTranscriptText(from: data)
     }
 

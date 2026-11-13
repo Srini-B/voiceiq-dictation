@@ -208,65 +208,6 @@ public enum ElevenLabs {
         return (edit["edited_text"] ?? edit["text"]) as? String
     }
 
-    /// What a dictation request returns: the text as heard, the formatting
-    /// edit when one was asked for and made, and how sure Scribe was of the
-    /// words (nil without word times or words).
-    struct Transcript: Sendable {
-        var text: String
-        var edit: String?
-        var meanWordLogprob: Double?
-
-        init(text: String, edit: String? = nil, meanWordLogprob: Double? = nil) {
-            self.text = text
-            self.edit = edit
-            self.meanWordLogprob = meanWordLogprob
-        }
-
-        init(_ json: [String: Any]) {
-            let logprobs = (json["words"] as? [[String: Any]] ?? []).compactMap { word -> Double? in
-                guard (word["type"] as? String ?? "word") == "word" else { return nil }
-                return (word["logprob"] as? NSNumber)?.doubleValue
-            }
-            self.init(text: (json["text"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines),
-                      edit: ElevenLabs.editedText(json),
-                      meanWordLogprob: logprobs.isEmpty ? nil : logprobs.reduce(0, +) / Double(logprobs.count))
-        }
-    }
-
-    /// How much more sure another language's transcript must be, in mean
-    /// word logprob, to replace the main language's.
-    static let languagePickMargin = 0.1
-
-    /// Which of the per-language transcripts of one dictation to keep: the
-    /// first (the main language's, or the first that answered) unless another
-    /// is more sure of its words by more than `languagePickMargin`. Nil scores
-    /// lose to any score.
-    ///
-    /// Why: `language_code` makes Scribe write the speech as that language,
-    /// and `secondary_language_codes` did not bring a whole sentence in
-    /// another language back. MEASURED 2026-11-13 on a real 2.6 s Japanese
-    /// dictation by a non-native speaker with English main and Japanese and
-    /// Tamil secondary: every request with `language_code=eng` returned
-    /// romanized English-looking words ("No, Misson, Mataasta."), automatic
-    /// detection returned a run of zeros, and Scribe v3 Live's multilang mode
-    /// "Navmisan matha asta."; only `language_code=jpn` returned the
-    /// Japanese ("…さん、また明日。"). OpenAI's gpt-transcribe with `languages` and a
-    /// prompt also returned romanized text. Scribe's request takes no prompt.
-    /// The mean word logprob of the transcripts told them apart: English
-    /// -1.08, Japanese -0.22, Tamil -1.45, and a 1.6 s cut -0.57 against
-    /// -0.28. On the same speaker's English (a 17.9 s dictation and six 3 s
-    /// cuts) no other language beat English by more than 0.03, all with the
-    /// same English text; the margin keeps the main language's wording there.
-    /// On synthetic English, Japanese, Tamil and code-switched clips the pick
-    /// kept every language in its own script. Mean, not sum: Japanese comes
-    /// back one character per word.
-    static func pickCandidate(_ scores: [Double?]) -> Int {
-        guard let best = scores.indices.max(by: { (scores[$0] ?? -.infinity) < (scores[$1] ?? -.infinity) }),
-              let bestScore = scores[best] else { return 0 }
-        if let first = scores.first, let firstScore = first, bestScore - firstScore <= languagePickMargin { return 0 }
-        return best
-    }
-
     /// The spoken words of a diarized response, and its audio events
     /// ("(laughter)") with `events`; spacing is dropped.
     static func diarizedWords(_ json: [String: Any], events: Bool = false) -> [DiarizedWord] {
@@ -329,209 +270,21 @@ public enum ElevenLabs {
     }
 }
 
-/// A language Scribe v3 and v3 Live transcribe, by its ISO 639-3 code.
-public struct ScribeLanguage: Hashable, Identifiable, Sendable {
-    public let code: String
-    public let name: String
-    public var id: String { code }
-
-    /// Every language on the ElevenLabs speech to text page (read
-    /// 2026-11-12), by English name. Settings offers only these.
-    public static let all: [ScribeLanguage] = [
-        ScribeLanguage(code: "afr", name: "Afrikaans"),
-        ScribeLanguage(code: "amh", name: "Amharic"),
-        ScribeLanguage(code: "ara", name: "Arabic"),
-        ScribeLanguage(code: "hye", name: "Armenian"),
-        ScribeLanguage(code: "asm", name: "Assamese"),
-        ScribeLanguage(code: "ast", name: "Asturian"),
-        ScribeLanguage(code: "aze", name: "Azerbaijani"),
-        ScribeLanguage(code: "bel", name: "Belarusian"),
-        ScribeLanguage(code: "ben", name: "Bengali"),
-        ScribeLanguage(code: "bos", name: "Bosnian"),
-        ScribeLanguage(code: "bul", name: "Bulgarian"),
-        ScribeLanguage(code: "mya", name: "Burmese"),
-        ScribeLanguage(code: "yue", name: "Cantonese"),
-        ScribeLanguage(code: "cat", name: "Catalan"),
-        ScribeLanguage(code: "ceb", name: "Cebuano"),
-        ScribeLanguage(code: "nya", name: "Chichewa"),
-        ScribeLanguage(code: "hrv", name: "Croatian"),
-        ScribeLanguage(code: "ces", name: "Czech"),
-        ScribeLanguage(code: "dan", name: "Danish"),
-        ScribeLanguage(code: "nld", name: "Dutch"),
-        ScribeLanguage(code: "eng", name: "English"),
-        ScribeLanguage(code: "est", name: "Estonian"),
-        ScribeLanguage(code: "fil", name: "Filipino"),
-        ScribeLanguage(code: "fin", name: "Finnish"),
-        ScribeLanguage(code: "fra", name: "French"),
-        ScribeLanguage(code: "ful", name: "Fulah"),
-        ScribeLanguage(code: "glg", name: "Galician"),
-        ScribeLanguage(code: "lug", name: "Ganda"),
-        ScribeLanguage(code: "kat", name: "Georgian"),
-        ScribeLanguage(code: "deu", name: "German"),
-        ScribeLanguage(code: "ell", name: "Greek"),
-        ScribeLanguage(code: "guj", name: "Gujarati"),
-        ScribeLanguage(code: "hau", name: "Hausa"),
-        ScribeLanguage(code: "heb", name: "Hebrew"),
-        ScribeLanguage(code: "hin", name: "Hindi"),
-        ScribeLanguage(code: "hun", name: "Hungarian"),
-        ScribeLanguage(code: "isl", name: "Icelandic"),
-        ScribeLanguage(code: "ibo", name: "Igbo"),
-        ScribeLanguage(code: "ind", name: "Indonesian"),
-        ScribeLanguage(code: "gle", name: "Irish"),
-        ScribeLanguage(code: "ita", name: "Italian"),
-        ScribeLanguage(code: "jpn", name: "Japanese"),
-        ScribeLanguage(code: "jav", name: "Javanese"),
-        ScribeLanguage(code: "kea", name: "Kabuverdianu"),
-        ScribeLanguage(code: "kan", name: "Kannada"),
-        ScribeLanguage(code: "kaz", name: "Kazakh"),
-        ScribeLanguage(code: "khm", name: "Khmer"),
-        ScribeLanguage(code: "kor", name: "Korean"),
-        ScribeLanguage(code: "kur", name: "Kurdish"),
-        ScribeLanguage(code: "kir", name: "Kyrgyz"),
-        ScribeLanguage(code: "lao", name: "Lao"),
-        ScribeLanguage(code: "lav", name: "Latvian"),
-        ScribeLanguage(code: "lin", name: "Lingala"),
-        ScribeLanguage(code: "lit", name: "Lithuanian"),
-        ScribeLanguage(code: "luo", name: "Luo"),
-        ScribeLanguage(code: "ltz", name: "Luxembourgish"),
-        ScribeLanguage(code: "mkd", name: "Macedonian"),
-        ScribeLanguage(code: "msa", name: "Malay"),
-        ScribeLanguage(code: "mal", name: "Malayalam"),
-        ScribeLanguage(code: "mlt", name: "Maltese"),
-        ScribeLanguage(code: "zho", name: "Mandarin Chinese"),
-        ScribeLanguage(code: "mri", name: "Māori"),
-        ScribeLanguage(code: "mar", name: "Marathi"),
-        ScribeLanguage(code: "mon", name: "Mongolian"),
-        ScribeLanguage(code: "nep", name: "Nepali"),
-        ScribeLanguage(code: "nso", name: "Northern Sotho"),
-        ScribeLanguage(code: "nor", name: "Norwegian"),
-        ScribeLanguage(code: "oci", name: "Occitan"),
-        ScribeLanguage(code: "ori", name: "Odia"),
-        ScribeLanguage(code: "pus", name: "Pashto"),
-        ScribeLanguage(code: "fas", name: "Persian"),
-        ScribeLanguage(code: "pol", name: "Polish"),
-        ScribeLanguage(code: "por", name: "Portuguese"),
-        ScribeLanguage(code: "pan", name: "Punjabi"),
-        ScribeLanguage(code: "ron", name: "Romanian"),
-        ScribeLanguage(code: "rus", name: "Russian"),
-        ScribeLanguage(code: "srp", name: "Serbian"),
-        ScribeLanguage(code: "sna", name: "Shona"),
-        ScribeLanguage(code: "snd", name: "Sindhi"),
-        ScribeLanguage(code: "sin", name: "Sinhala"),
-        ScribeLanguage(code: "slk", name: "Slovak"),
-        ScribeLanguage(code: "slv", name: "Slovenian"),
-        ScribeLanguage(code: "som", name: "Somali"),
-        ScribeLanguage(code: "spa", name: "Spanish"),
-        ScribeLanguage(code: "swa", name: "Swahili"),
-        ScribeLanguage(code: "swe", name: "Swedish"),
-        ScribeLanguage(code: "tgk", name: "Tajik"),
-        ScribeLanguage(code: "tam", name: "Tamil"),
-        ScribeLanguage(code: "tel", name: "Telugu"),
-        ScribeLanguage(code: "tha", name: "Thai"),
-        ScribeLanguage(code: "tur", name: "Turkish"),
-        ScribeLanguage(code: "ukr", name: "Ukrainian"),
-        ScribeLanguage(code: "umb", name: "Umbundu"),
-        ScribeLanguage(code: "urd", name: "Urdu"),
-        ScribeLanguage(code: "uzb", name: "Uzbek"),
-        ScribeLanguage(code: "vie", name: "Vietnamese"),
-        ScribeLanguage(code: "cym", name: "Welsh"),
-        ScribeLanguage(code: "wol", name: "Wolof"),
-        ScribeLanguage(code: "xho", name: "Xhosa"),
-        ScribeLanguage(code: "yor", name: "Yoruba"),
-        ScribeLanguage(code: "zul", name: "Zulu"),
-    ]
-
-    public static func isListed(_ code: String) -> Bool { all.contains { $0.code == code } }
-
-    /// `codes` with `main` as the main language ("" for automatic
-    /// detection, which also clears the others: Scribe v3 refuses other
-    /// languages without a main one).
-    public static func choosing(main: String, in codes: [String]) -> [String] {
-        main.isEmpty ? [] : [main] + codes.dropFirst().filter { $0 != main }
-    }
-
-    /// `codes` with `code` added to or removed from the other languages.
-    public static func toggling(_ code: String, in codes: [String]) -> [String] {
-        guard let main = codes.first, code != main else { return codes }
-        let others = codes.dropFirst()
-        return [main] + (others.contains(code) ? others.filter { $0 != code } : others + [code])
-    }
-
-    /// `codes` with `code`, one of them, as the main language and the old
-    /// main language moved to the others: the menu bar's quick switch.
-    public static func promoting(_ code: String, in codes: [String]) -> [String] {
-        codes.contains(code) ? [code] + codes.filter { $0 != code } : codes
-    }
-
-    /// "Hindi, Tamil", or `none` when there are no other languages.
-    public static func names(_ codes: some Collection<String>, none: String) -> String {
-        codes.isEmpty ? none : codes.map { code in all.first { $0.code == code }?.name ?? code }.joined(separator: ", ")
-    }
-}
-
 extension GeminiClient {
     /// One dictation to Scribe v3. With `smart`, fillers are dropped and the
     /// formatting instruction is applied; the edited text is returned when it
     /// passes `ElevenLabs.accepted`. `audioSeconds` prices the call when the
-    /// response leaves out `audio_duration_secs`.
-    ///
-    /// With more than one spoken language, the recording is transcribed once
-    /// per language, each as the main language with the others as secondary,
-    /// and `ElevenLabs.pickCandidate` keeps one (see there for why).
+    /// response leaves out `audio_duration_secs`. One request whatever the
+    /// spoken languages (`MultipartForm.languages` says how they are sent).
     func elevenLabsTranscribe(audio: Data, keyterms vocabulary: [String], languages: [String], smart: Bool,
                               spelling: SpellingVariant, audioSeconds: Double, deadline: TimeInterval) async throws -> String {
         let keyterms = ElevenLabs.keyterms(vocabulary, limit: ElevenLabs.batchKeytermLimit,
                                            maxCharacters: ElevenLabs.batchKeytermCharacters)
-        let chosen: ElevenLabs.Transcript
-        if languages.count < 2 {
-            chosen = try await elevenLabsDictation(audio: audio, keyterms: keyterms, languages: languages, smart: smart,
-                                                   spelling: spelling, wordTimes: false, audioSeconds: audioSeconds, deadline: deadline)
-        } else {
-            // Every language as the main one, in settings order. A failed
-            // request drops out; only when all fail does the first error stand.
-            var results = [Result<ElevenLabs.Transcript, Error>?](repeating: nil, count: languages.count)
-            await withTaskGroup(of: (Int, Result<ElevenLabs.Transcript, Error>).self) { group in
-                for (index, code) in languages.enumerated() {
-                    let order = [code] + languages.filter { $0 != code }
-                    group.addTask {
-                        do {
-                            return (index, .success(try await self.elevenLabsDictation(
-                                audio: audio, keyterms: keyterms, languages: order, smart: smart, spelling: spelling,
-                                wordTimes: true, audioSeconds: audioSeconds, deadline: deadline)))
-                        } catch {
-                            return (index, .failure(error))
-                        }
-                    }
-                }
-                for await (index, result) in group { results[index] = result }
-            }
-            let answered = results.enumerated().compactMap { index, result -> (code: String, transcript: ElevenLabs.Transcript)? in
-                guard case .success(let transcript)? = result else { return nil }
-                return (languages[index], transcript)
-            }
-            guard !answered.isEmpty else {
-                if case .failure(let error)?? = results.first { throw error }
-                throw TranscriptionError.network("no_response")
-            }
-            let pick = ElevenLabs.pickCandidate(answered.map { $0.transcript.meanWordLogprob })
-            let summary = answered.map { "\($0.code) \($0.transcript.meanWordLogprob.map { String(format: "%.2f", $0) } ?? "-")" }
-            Log.transcription.info("Scribe language pick: \(summary.joined(separator: ", "), privacy: .public) → \(answered[pick].code, privacy: .public)")
-            chosen = answered[pick].transcript
-        }
-        return smart ? ElevenLabs.accepted(edit: chosen.edit, original: chosen.text) : chosen.text
-    }
-
-    /// One Scribe v3 request for a dictation, booked in the usage meter.
-    /// `languages` as in `MultipartForm.languages`; `wordTimes` asks for the
-    /// words, which carry the logprobs `pickCandidate` compares.
-    private func elevenLabsDictation(audio: Data, keyterms: [String], languages: [String], smart: Bool,
-                                     spelling: SpellingVariant, wordTimes: Bool, audioSeconds: Double,
-                                     deadline: TimeInterval) async throws -> ElevenLabs.Transcript {
         var form = MultipartForm()
         form.field("model_id", ElevenLabs.batchModel)
         form.file("file", filename: "audio.flac", mimeType: "audio/flac", data: audio)
         form.field("tag_audio_events", "false")
-        form.field("timestamps_granularity", wordTimes ? "word" : "none")
+        form.field("timestamps_granularity", "none")
         form.field("diarize", "false")
         form.languages(languages)
         // `numbers_format` switches `no_verbatim` off (see the
@@ -549,7 +302,8 @@ extension GeminiClient {
                                         keyterms: !keyterms.isEmpty, editedTurns: smart ? 1 : 0) {
             UsageMeter.record(stage: .transcribe, model: ElevenLabs.batchModel, usage: usage)
         }
-        return ElevenLabs.Transcript(json)
+        let text = (json["text"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        return smart ? ElevenLabs.accepted(edit: ElevenLabs.editedText(json), original: text) : text
     }
 
     /// Speaker-labelled, word-timed transcript of one meeting window from
@@ -658,6 +412,17 @@ extension MultipartForm {
     /// `secondary_language_codes`, one field each. MEASURED 2026-11-12:
     /// secondary codes without a `language_code` answer 500
     /// `service_unavailable` every time (en+hi and eng+hin); with one, 200.
+    ///
+    /// MEASURED 2026-11-13, one request each, English main with Tamil and
+    /// Japanese secondary: whole Tamil and Japanese sentences and an
+    /// English-Tamil code-switched sentence came back in their own scripts,
+    /// but a 2.6 s Japanese phrase by a non-native speaker came back as
+    /// English-looking words ("No, Miss, I'm not hasta."). Only
+    /// `language_code=jpn` returned the Japanese, and automatic detection
+    /// returned romanized words or a run of zeros. With Tamil main, English
+    /// speech was written in Tamil script. So the main language decides
+    /// ambiguous speech, and no single request covers both; the menu bar's
+    /// Spoken Language submenu switches it.
     mutating func languages(_ codes: [String]) {
         guard let first = codes.first else { return }
         field("language_code", first)

@@ -27,7 +27,11 @@ public struct MeetingTranscriber: Sendable {
     private var endpoints: @Sendable () -> [ModelEndpoint]
     /// ElevenLabs redaction; see `SettingsStore.redactsMeetingSecrets`.
     private var redacts: @Sendable () -> Bool = { SettingsStore().redactsMeetingSecrets }
-    /// Spoken languages for ElevenLabs; see `SettingsStore.spokenLanguages`.
+    /// Spoken languages; see `SettingsStore.spokenLanguages`. Only Scribe
+    /// takes them for a meeting: OpenAI's diarizing model
+    /// (`gpt-4o-transcribe-diarize`) takes no prompt and no language list,
+    /// only one `language`, which would shut out every other speaker's, and
+    /// Gemini detects each language and every switch itself.
     private var languages: @Sendable () -> [String] = { SettingsStore().spokenLanguages }
     private let sleep: @Sendable (TimeInterval) async throws -> Void
 

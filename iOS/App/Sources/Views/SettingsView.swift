@@ -137,6 +137,16 @@ struct DictationSettingsView: View {
     @State private var noiseHandling = SettingsStore().experimentalNoiseHandling
     @State private var builtInMic = MobileSettings.preferBuiltInMic
     @State private var warmWindow = MobileSettings.warmWindow
+    @State private var languages = SettingsStore().spokenLanguages
+
+    private static func options(_ languages: [SpokenLanguage]) -> [SearchOption<String>] {
+        languages.map { SearchOption(value: $0.code, name: $0.name, keywords: $0.code) }
+    }
+
+    private func saveLanguages(_ codes: [String]) {
+        languages = codes
+        settings.setSpokenLanguages(codes)
+    }
 
     var body: some View {
         Form {
@@ -162,6 +172,21 @@ struct DictationSettingsView: View {
                         MobileSettings.preferBuiltInMic = value
                         session.setPreferBuiltInMic(value)
                     }
+            }
+            Section {
+                SearchablePicker("Main language", selection: Binding(get: { languages.first ?? "" }, set: {
+                    saveLanguages(SpokenLanguage.choosing(main: $0, in: languages))
+                }), options: [SearchOption(value: "", name: "Automatic")] + Self.options(SpokenLanguage.all))
+                if let main = languages.first {
+                    SearchablePicker("Also spoken", summary: SpokenLanguage.names(languages.dropFirst(), none: "None"),
+                                     options: Self.options(SpokenLanguage.all.filter { $0.code != main }),
+                                     isSelected: { languages.dropFirst().contains($0) },
+                                     toggle: { saveLanguages(SpokenLanguage.toggling($0, in: languages)) })
+                }
+            } header: {
+                SettingsSectionHeader("Languages")
+            } footer: {
+                Text("For dictation and meetings. Automatic works out the language each time, which can go wrong on a short phrase. Add every other language you or the people in your meetings speak, whole sentences or mixed in: each recording is transcribed once, with each language in its own script. A short or accented phrase can still come out as the main language. ElevenLabs and OpenAI listen for these languages; Gemini works them out by itself.")
             }
             Section {
                 // Saved only on a user change, not when its default is refreshed.
@@ -216,6 +241,7 @@ struct DictationSettingsView: View {
             case SettingsStore.customWritingRulesKey: customRules = settings.customWritingRules
             case "experimentalNoiseHandling": noiseHandling = settings.experimentalNoiseHandling
             case "translationTargetLanguages": translationTarget = settings.translationTargetLanguage
+            case "spokenLanguages": languages = settings.spokenLanguages
             default: break
             }
         }

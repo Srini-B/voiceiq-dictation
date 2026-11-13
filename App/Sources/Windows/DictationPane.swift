@@ -60,6 +60,8 @@ struct DictationPane: View {
                     }
             }
 
+            SpokenLanguagesSection()
+
             Section {
                 Toggle("Sounds", isOn: $sounds)
                     .onChange(of: sounds) { _, enabled in settings.setSoundsEnabled(enabled) }
@@ -193,5 +195,44 @@ struct DictationPane: View {
             default: break
             }
         }
+    }
+}
+
+/// The languages the user and their meetings speak, for every transcription
+/// provider (`SettingsStore.spokenLanguages`).
+struct SpokenLanguagesSection: View {
+    private let settings = SettingsStore()
+    @State private var languages = SettingsStore().spokenLanguages
+
+    private static func options(_ languages: [SpokenLanguage]) -> [SearchOption<String>] {
+        languages.map { SearchOption(value: $0.code, name: $0.name, keywords: $0.code) }
+    }
+
+    var body: some View {
+        Section {
+            SearchablePicker("Spoken language", selection: Binding(get: { languages.first ?? "" }, set: {
+                save(SpokenLanguage.choosing(main: $0, in: languages))
+            }), options: [SearchOption(value: "", name: "Automatic")] + Self.options(SpokenLanguage.all))
+            .help("The language you speak most, in dictation and meetings. Automatic works it out each time, which can go wrong on a short phrase; pick a main language to add others.")
+            if let main = languages.first {
+                SearchablePicker("Also spoken", summary: SpokenLanguage.names(languages.dropFirst(), none: "None"),
+                                 options: Self.options(SpokenLanguage.all.filter { $0.code != main }),
+                                 isSelected: { languages.dropFirst().contains($0) },
+                                 toggle: { save(SpokenLanguage.toggling($0, in: languages)) })
+                .help("Other languages you or the people in your meetings speak, in whole sentences or mixed into the main language. Each recording is transcribed once, with each language in its own script. A short or accented phrase can still come out as the main language. With ElevenLabs, switch the main language for a stretch in another one from the menu bar's Spoken Language menu.")
+            }
+        } header: {
+            Text("Languages")
+        } footer: {
+            Text("ElevenLabs and OpenAI listen for these languages. Gemini works out each language and every switch between them by itself.")
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .gtSettingDidChange).receive(on: RunLoop.main)) { _ in
+            languages = settings.spokenLanguages
+        }
+    }
+
+    private func save(_ codes: [String]) {
+        languages = codes
+        settings.setSpokenLanguages(codes)
     }
 }

@@ -1,4 +1,4 @@
-# Also spoken languages that work for whole sentences (2026-11-13, PR #44)
+# Also spoken languages (2026-11-13, PR #44)
 
 ## Why
 
@@ -80,3 +80,55 @@ note, comment, label or explanation" line. Without the paragraph line, 0 of
 - `testAnEditThatAddsARemarkIsNotUsed` uses the real transcript and the
   four remarks; all four pass without the guard. Real clean edits,
   Japanese punctuation and Tamil mixed into English still pass.
+
+## Follow-up: one request per recording, languages for every provider
+
+The maintainer rejected paying for one transcription per spoken language
+and asked for the main language and Also spoken to apply to every provider,
+for dictation and meetings, with every recording treated as possibly
+multilingual.
+
+- The per-language requests and the logprob pick are gone. Each dictation
+  and meeting window is one request again.
+- The language pickers moved from the ElevenLabs settings to Settings ›
+  Dictation › Languages on Mac and iPhone (`SpokenLanguage`, formerly
+  `ScribeLanguage`).
+- OpenAI dictation, batch and live, now sends `languages[]` and, with two or
+  more languages, a one-sentence prompt naming them. Gemini and OpenAI
+  meeting windows get nothing (no prompt field, and a language list would
+  either disable Gemini's smart mode or shut out other speakers).
+- Help text says plainly that a short or accented phrase can still come out
+  as the main language.
+
+What a transcriber can use from the writing rules, and what it cannot:
+
+| Writing-rules part | Sent to transcription | Why |
+| --- | --- | --- |
+| Spoken languages, code-switching | Yes (OpenAI prompt and `languages[]`, Scribe codes) | The model listens for them |
+| Dictionary terms | Yes (`keywords[]`, `keyterms`, `custom_vocabulary`, as before) | Dedicated field |
+| "Each language in its own script, never translated or romanized" | No | Made one short Japanese clip part Devanagari on OpenAI (4 of 6 runs) |
+| Self-corrections, lists, email layout, tone, numbers, dashes | No | Rewriting, the writing model's job |
+| Mishearing repair, sound-alikes, screen and field context | No | Needs the whole transcript or the screen |
+| Question and injection rules, custom writing rules | No | About how to treat the text, not how to hear it |
+
+### Measured, one request each (English main, Tamil and Japanese also spoken)
+
+| Clip | ElevenLabs Scribe v3 | OpenAI gpt-transcribe (`languages[]` + prompt) |
+| --- | --- | --- |
+| Real 2.6 s Japanese phrase, non-native speaker | "No, Miss, I'm not hasta." | "Now miss on Mata Ashta." |
+| Same, `language_code=jpn` (Scribe) | "直美さん、また明日。" | not applicable |
+| Real 17.9 s English dictation | English, correct | English, correct |
+| Synthetic Japanese sentence | Japanese script | Japanese script |
+| Synthetic Tamil sentence | Tamil script | Tamil script |
+| English with a Tamil clause | each in its own script | each in its own script ("late" kept in Latin) |
+
+OpenAI's live session (`gpt-live-transcribe`) accepted the `languages` and
+`prompt` fields (`session.updated` echoed them) and returned Japanese and
+Tamil in their own scripts; the short Japanese phrase came back romanized
+there too. Gemini was not run (no key); its behavior here is from the docs.
+
+Conclusion: no single request on any provider tested brings back that short
+accented Japanese phrase while English is the main language. Whole sentences
+in clear speech and mixed sentences work. For a stretch in another language,
+switching the main language from the menu bar is the reliable path on
+ElevenLabs.

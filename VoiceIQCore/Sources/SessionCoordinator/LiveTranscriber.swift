@@ -75,7 +75,8 @@ public final class LiveTranscriber: DictationStreaming {
             guard let key = KeychainStore.loadOpenAIKey(), !key.isEmpty else { return nil }
             let model = "gpt-live-transcribe"
             return make(model: model, key: key, renewAfter: 3300,
-                        dialect: OpenAILiveDialect(model: model, delay: .low, keywords: vocabulary),
+                        dialect: OpenAILiveDialect(model: model, delay: .low, keywords: vocabulary,
+                                                   languages: settings.spokenLanguages),
                         transport: { WebSocketTransport.openAI(apiKey: { key }) })
         }
     }

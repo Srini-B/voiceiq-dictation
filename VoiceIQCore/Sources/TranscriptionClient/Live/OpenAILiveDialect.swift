@@ -27,16 +27,22 @@ public struct OpenAILiveDialect: LiveDialect {
     public let model: String
     public let delay: OpenAILiveDelay
     public let keywords: [String]
+    /// The spoken languages (`SettingsStore.spokenLanguages`), sent as
+    /// `languages` and `prompt` the way batch transcription sends them
+    /// (`GeminiClient.openAITranscribe`).
+    public let languages: [String]
     private let resampler = PCMResampler16to24()
 
     static let sampleRate = 24_000
     /// The realtime API refuses to commit less than 100 ms of audio.
     static let minimumCommitBytes = PCMRing.bytesPerSecond / 10
 
-    public init(model: String = "gpt-live-transcribe", delay: OpenAILiveDelay = .low, keywords: [String] = []) {
+    public init(model: String = "gpt-live-transcribe", delay: OpenAILiveDelay = .low, keywords: [String] = [],
+                languages: [String] = []) {
         self.model = model
         self.delay = delay
         self.keywords = GeminiClient.openAIKeywords(keywords)
+        self.languages = languages
     }
 
     /// Every item is ordered by its commit, so a rolled turn need not wait.
@@ -46,6 +52,9 @@ public struct OpenAILiveDialect: LiveDialect {
     public func setupFrame() -> Data? {
         var transcription: [String: Any] = ["model": model, "delay": delay.rawValue]
         if !keywords.isEmpty { transcription["keywords"] = keywords }
+        let codes = SpokenLanguage.openAICodes(languages)
+        if !codes.isEmpty { transcription["languages"] = codes }
+        if let prompt = SpokenLanguage.transcriptionPrompt(languages) { transcription["prompt"] = prompt }
         return LiveProtocol.json([
             "type": "session.update",
             "session": [

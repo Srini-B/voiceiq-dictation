@@ -165,15 +165,17 @@ public struct SettingsStore: Sendable {
         elevenLabsTranscriptionChosen && KeychainStore.loadKey(.elevenLabs) != nil
     }
 
-    /// The languages the user speaks, as ISO 639-3 codes from
-    /// `ScribeLanguage.all`, for Scribe v3: the first is the main language
-    /// and the rest are the others it may hear. Empty detects the language.
+    /// The languages the user and their meetings speak, as ISO 639-3 codes
+    /// from `SpokenLanguage.all`, for every transcription provider (see
+    /// `SpokenLanguage` for how each takes them): the first is the main
+    /// language and the rest are the others it may hear. Empty detects the
+    /// language.
     /// Codes typed into the earlier free-text field read as their
     /// three-letter form ("hi" as "hin"); ones Scribe does not list are dropped.
     public var spokenLanguages: [String] {
         (Self.defaults.stringArray(forKey: "spokenLanguages") ?? []).map { code in
             code.count == 2 ? Locale.LanguageCode(code).identifier(.alpha3) ?? code : code
-        }.filter(ScribeLanguage.isListed)
+        }.filter(SpokenLanguage.isListed)
     }
 
     /// Main language first; each code once. Empty is automatic detection.

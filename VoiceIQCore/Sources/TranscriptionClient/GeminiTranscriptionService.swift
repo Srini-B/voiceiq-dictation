@@ -333,7 +333,7 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
             }
             return try await client.transcribeInteraction(
                 audio: flacData, model: config.transcribeModel, endpoint: config.endpoint,
-                mode: policy.mode, customVocabulary: terms, deadline: deadline
+                mode: policy.mode, customVocabulary: terms, languages: settings.spokenLanguages, deadline: deadline
             )
         }
 
