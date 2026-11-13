@@ -34,6 +34,8 @@ import Foundation
     /// live transcript while a meeting records.
     private let liveMeetingKey: () -> String?
     private var live: LiveMeetingSession?
+    /// What the taps feed; the session behind it can change while they run.
+    private let feed = LiveFeed()
     /// Counts live sessions, so a late update from one never reaches the next.
     private var liveGeneration = 0
     private var redactionObserver: NSObjectProtocol?
@@ -75,19 +77,21 @@ import Foundation
         failInterruptedRecordings()
         redactionObserver = NotificationCenter.default.addObserver(forName: .gtSettingDidChange, object: nil, queue: .main) { [weak self] note in
             guard note.object as? String == SettingsStore.redactionKey else { return }
-            Task { @MainActor in self?.stopLiveForRedaction() }
+            Task { @MainActor in self?.restartLiveForRedaction() }
         }
     }
 
-    /// Redaction turned on while a meeting records: Live cannot redact its
-    /// running text, so the live transcript stops and its text goes. The
-    /// saved transcript is still redacted.
-    private func stopLiveForRedaction() {
-        guard SettingsStore().redactsMeetingSecrets, let live, case let .recording(id, _) = phase else { return }
+    /// Redaction turned on while a meeting records: the live transcript so
+    /// far was not redacted, so it closes and its text goes, and a redacting
+    /// one takes over. Turned off, the redacting one carries on.
+    private func restartLiveForRedaction() {
+        guard SettingsStore().redactsMeetingSecrets, let old = live, !old.redacts,
+              case let .recording(id, _) = phase else { return }
         self.live = nil; liveGeneration += 1; liveTranscript = nil
         Task { await UsageMeter.$scope.withValue(UsageScope(activity: .meeting, sessionID: id.uuid.uuidString)) {
-            await Self.finish(live: live)
+            await Self.finish(live: old)
         } }
+        if let live = liveSession() { begin(live) }
     }
 
     /// A meeting still marked `.recording` at launch belonged to a process that
@@ -152,7 +156,14 @@ import Foundation
             // retried "StartIOThread ... Error: 0x3C" every 14 s (4 of 7 runs).
             // Mic-then-tap started in 40 ms in every run and the tap still
             // delivered system audio.
-            let live = liveSession(mic: mic, system: system)
+            let live = liveSession()
+            if live != nil {
+                let feed = self.feed
+                mic.onPCM = { feed.push(.mic, $0) }
+                #if os(macOS)
+                system.onPCM = { feed.push(.system, $0) }
+                #endif
+            }
             do {
                 try mic.start()
                 do { try system.start() } catch { _ = mic.stop(); throw error }
@@ -164,25 +175,26 @@ import Foundation
             if let source, call != nil { following = Self.follow(source, mic: mic, system: system) }
             #endif
             phase = .recording(id, since: now)
-            if let live {
-                self.live = live; liveTranscript = LiveMeetingTranscript()
-                Task {
-                    do { try await live.start() } catch {
-                        Log.meeting.error("live meeting transcript did not start: \(String(describing: error), privacy: .public)")
-                        await live.abort()
-                        if self.live === live { var shown = LiveMeetingTranscript(); shown.stopped = true; liveTranscript = shown }
-                    }
-                }
-            }
+            if let live { begin(live) }
         } catch { fail(id, error) }
     }
 
+    private func begin(_ live: LiveMeetingSession) {
+        self.live = live; liveTranscript = LiveMeetingTranscript()
+        Task {
+            do { try await live.start() } catch {
+                Log.meeting.error("live meeting transcript did not start: \(String(describing: error), privacy: .public)")
+                await live.abort()
+                if self.live === live { var shown = LiveMeetingTranscript(); shown.stopped = true; liveTranscript = shown }
+            }
+        }
+    }
+
     /// Scribe v3 Live fed by both taps (the mic alone on iOS), or nil when
-    /// ElevenLabs does not transcribe. Also nil while "Hide card and ID
-    /// numbers" is on: Live redacts only finished segments, so its running
-    /// text and speaker words would show the numbers.
-    private func liveSession(mic: MicTap, system: SystemAudioTap) -> LiveMeetingSession? {
-        guard let key = liveMeetingKey(), !SettingsStore().redactsMeetingSecrets else { return nil }
+    /// ElevenLabs does not transcribe. With "Hide card and ID numbers" it
+    /// redacts, and shows each turn once its redacted text arrives.
+    private func liveSession() -> LiveMeetingSession? {
+        guard let key = liveMeetingKey() else { return nil }
         #if os(macOS)
         let tracks = 2
         #else
@@ -191,16 +203,14 @@ import Foundation
         liveGeneration += 1
         let generation = liveGeneration
         let live = LiveMeetingSession.elevenLabs(key: key, tracks: tracks, vocabulary: DictionaryStore().sanitizedVocabulary(),
-                                                 languages: SettingsStore().spokenLanguages) { [weak self] shown in
+                                                 languages: SettingsStore().spokenLanguages,
+                                                 redacts: SettingsStore().redactsMeetingSecrets) { [weak self] shown in
             Task { @MainActor in
                 guard let self, self.live != nil, self.liveGeneration == generation else { return }
                 self.liveTranscript = shown
             }
         }
-        mic.onPCM = { live.push(.mic, $0) }
-        #if os(macOS)
-        system.onPCM = { live.push(.system, $0) }
-        #endif
+        feed.use(live)
         return live
     }
 
@@ -208,7 +218,8 @@ import Foundation
     private static func finish(live: LiveMeetingSession) async {
         let seconds = await live.finish()
         guard seconds > 0, let usage = ElevenLabs.usage(model: LiveMeetingSession.model, seconds: seconds,
-                                                        keyterms: !live.library.isEmpty, editedTurns: 0) else { return }
+                                                        keyterms: !live.library.isEmpty, editedTurns: 0,
+                                                        redacted: live.redacts) else { return }
         UsageMeter.record(stage: .liveTranscribe, model: LiveMeetingSession.model, usage: usage)
     }
 
@@ -220,7 +231,7 @@ import Foundation
         let micDuration = mic?.stop() ?? 0, systemDuration = system?.stop() ?? 0
         mic = nil; system = nil; currentFolder = nil; currentMeta = nil
         let live = self.live
-        self.live = nil; liveTranscript = nil
+        self.live = nil; liveTranscript = nil; feed.use(nil)
         #if os(macOS)
         if let samples = screenNames?.stop() { try? store.save(screenSamples: samples, id: id) }
         screenNames = nil
@@ -460,4 +471,16 @@ public enum MeetingFailure: Error, Equatable {
             return "Transcription failed: \(error.localizedDescription). \(fixHint)"
         }
     }
+}
+
+/// The live session the taps feed, behind a lock: the taps call it from
+/// their audio threads, and redaction turned on mid-recording swaps the
+/// session while they run.
+private final class LiveFeed: @unchecked Sendable {
+    private let lock = NSLock()
+    private var session: LiveMeetingSession?
+
+    func use(_ session: LiveMeetingSession?) { lock.withLock { self.session = session } }
+
+    func push(_ track: LiveMeetingSession.Track, _ pcm: Data) { lock.withLock { session }?.push(track, pcm) }
 }

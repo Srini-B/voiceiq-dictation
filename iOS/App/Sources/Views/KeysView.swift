@@ -127,7 +127,7 @@ struct ModelKeysForm: View {
                             .font(Theme.Fonts.subheadline())
                             .tint(Theme.Colors.accent)
                             .onChange(of: redacts) { _, value in SettingsStore().setRedactsMeetingSecrets(value) }
-                        Text("Card details, ID, account and health-card numbers and passwords are written as {CREDIT_CARD} and the like, so they are never saved or sent for notes. ElevenLabs charges 30% more for it. While it is on, meetings show no live transcript.")
+                        Text("Card details, ID, account and health-card numbers and passwords are written as {CREDIT_CARD} and the like, so they are never saved or sent for notes. ElevenLabs charges 30% more for it. The live transcript shows each turn once it is redacted, a moment after it is said.")
                             .font(Theme.Fonts.footnote())
                             .foregroundStyle(Theme.Colors.muted)
                             .fixedSize(horizontal: false, vertical: true)

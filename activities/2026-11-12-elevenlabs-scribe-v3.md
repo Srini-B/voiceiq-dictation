@@ -294,3 +294,27 @@ From a full CodeRabbit review of the branch:
 - Turning redaction on during a recording stops the live session, clears
   its text and drops its late updates. Not tested: nothing in the test suite
   drives a recording `MeetingEngine`.
+
+## Live transcript with redaction on (2026-11-13, PR #44)
+
+The maintainer chose to keep the live transcript while "Hide card and ID
+numbers" is on, instead of turning it off. ElevenLabs added entity
+redaction to the realtime socket on 2026-11-02, after the first build left
+it out. Measured with a spoken card number, expiry, security code and
+passport number: each commit is followed by a `redacted_transcript` with
+`{CREDIT_CARD}`, `{CREDIT_CARD_EXPIRATION}`, `{CVV}` and
+`{PASSPORT_NUMBER}`, but the partial transcript and the diarized words
+still carry the numbers.
+
+- A redacting live session asks for the same entities as the saved
+  transcript, shows no running text, and shows each turn only once its
+  redacted text arrives. The redacted words take the speakers and times of
+  the words they replace.
+- Turning redaction on mid-recording closes the unredacted session, clears
+  its text and starts a redacting one.
+- Live redaction is priced at 30% of the live rate ($0.066/h).
+- `testRedactingLiveSessionShowsOnlyRedactedTurns` fails if the partial is
+  shown or the diarized words are used. The real API frames from the
+  measurement, fed through the session, showed one redacted turn and none
+  of the 129 partials.
+- Not run in the app yet: no build was made.

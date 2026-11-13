@@ -34,6 +34,12 @@ import Foundation
 ///    never reused.
 ///  - Not with `filter_background_audio` (refused with `diarize`, and the
 ///    other voices are the meeting) or `transcript_edit` (no word times).
+///  - `entity_redaction` (realtime since 2026-11-02) follows each commit with
+///    a `redacted_transcript` `{text, redacted_text}`, without a segment
+///    index. MEASURED 2026-11-13 with a spoken card number: the partial
+///    transcript and the diarized words still carry it, so a redacting
+///    session shows no partial and holds each turn until its redacted text
+///    arrives, then shows only that text (`ElevenLabs.redacting`).
 ///  - The longest session is not documented (`session_time_limit_exceeded`
 ///    exists). A failed session shows that it stopped; the recording goes on.
 public actor LiveMeetingSession {
@@ -57,6 +63,8 @@ public actor LiveMeetingSession {
 
     public let keyterms: [String]
     public let library: [String]
+    /// Card and ID numbers come back as {CREDIT_CARD} and the like.
+    public let redacts: Bool
     private let transport: LiveTransport
     private let onUpdate: @Sendable (LiveMeetingTranscript) -> Void
     private let audio: AsyncStream<(Track, Data)>
@@ -64,15 +72,19 @@ public actor LiveMeetingSession {
     private var mix: LiveCallMix
     private var sentSamples = 0
     private var segments: [Int: [DiarizedWord]] = [:]
+    /// While redacting: committed segments still waiting for their redacted
+    /// text, in commit order, and the words and texts heard for them so far.
+    private var awaitingRedaction: [Int] = []
+    private var heard: [Int: [DiarizedWord]] = [:], redactedTexts: [Int: String] = [:]
     private var merges: [String: String] = [:]
     private var lines: [TranscriptSegment] = []
     private var problem: String?
     private var closing = false
     private var sending: Task<Void, Never>?, receiving: Task<Void, Never>?
 
-    init(transport: LiveTransport, vocabulary: [String], tracks: Int,
+    init(transport: LiveTransport, vocabulary: [String], tracks: Int, redacts: Bool = false,
          onUpdate: @escaping @Sendable (LiveMeetingTranscript) -> Void) {
-        self.transport = transport; self.onUpdate = onUpdate
+        self.transport = transport; self.onUpdate = onUpdate; self.redacts = redacts
         keyterms = ElevenLabs.keyterms(vocabulary, limit: Self.keytermLimit, maxCharacters: Self.keytermCharacters)
         library = ElevenLabs.keyterms(vocabulary, limit: Self.libraryLimit, maxCharacters: Self.libraryCharacters)
         mix = LiveCallMix(tracks: tracks)
@@ -80,24 +92,26 @@ public actor LiveMeetingSession {
     }
 
     /// Scribe v3 Live over `key`, with the dictionary and the spoken languages.
-    public static func elevenLabs(key: String, tracks: Int, vocabulary: [String], languages: [String],
+    public static func elevenLabs(key: String, tracks: Int, vocabulary: [String], languages: [String], redacts: Bool,
                                   onUpdate: @escaping @Sendable (LiveMeetingTranscript) -> Void) -> LiveMeetingSession {
         let terms = ElevenLabs.keyterms(vocabulary, limit: keytermLimit, maxCharacters: keytermCharacters)
-        let url = socketURL(keyterms: terms, languages: languages)
+        let url = socketURL(keyterms: terms, languages: languages, redacts: redacts)
         let transport = WebSocketTransport(sendsText: true) {
             var request = URLRequest(url: url)
             request.setValue(key, forHTTPHeaderField: "xi-api-key")
             return request
         }
-        return LiveMeetingSession(transport: transport, vocabulary: vocabulary, tracks: tracks, onUpdate: onUpdate)
+        return LiveMeetingSession(transport: transport, vocabulary: vocabulary, tracks: tracks, redacts: redacts,
+                                  onUpdate: onUpdate)
     }
 
     /// One spoken language fixes `language_code`. Several limit detection to
     /// them (`secondary_languages`) and turn on `multilang_mode` (v3 Live
     /// only), which writes each language in its own script, even when the
-    /// speaker switches mid-sentence. List values repeat; `+`, `&` and `=`
-    /// are escaped so a term cannot split the query.
-    static func socketURL(keyterms: [String], languages: [String]) -> URL {
+    /// speaker switches mid-sentence. Redaction asks for the same entities as
+    /// the saved transcript. List values repeat; `+`, `&` and `=` are escaped
+    /// so a term cannot split the query.
+    static func socketURL(keyterms: [String], languages: [String], redacts: Bool = false) -> URL {
         var items: [(String, String)] = [
             ("model_id", model), ("audio_format", "pcm_16000"), ("commit_strategy", "turn_prediction"),
             ("diarize", "true"), ("no_verbatim", "true"),
@@ -108,6 +122,10 @@ public actor LiveMeetingSession {
             items.append(("multilang_mode", "true"))
         }
         items += keyterms.map { ("keyterms", $0) }
+        if redacts {
+            items += ElevenLabs.redactedEntities.map { ("entity_redaction", $0) }
+            items.append(("entity_redaction_mode", "entity_type"))
+        }
         var allowed = CharacterSet.urlQueryAllowed
         allowed.remove(charactersIn: "+&=")
         let query = items.map { name, value in
@@ -186,19 +204,39 @@ public actor LiveMeetingSession {
     func handle(_ frame: Data) {
         guard let root = Self.object(frame), let kind = root["message_type"] as? String else { return }
         switch kind {
+        case "committed_transcript":
+            guard redacts, let index = (root["segment_index"] as? NSNumber)?.intValue else { return }
+            awaitingRedaction.append(index)
         case "diarized_transcript":
             guard let index = (root["segment_index"] as? NSNumber)?.intValue else { return }
-            segments[index] = ElevenLabs.diarizedWords(root)
-            publish(partial: "")
+            if redacts { heard[index] = ElevenLabs.diarizedWords(root); showRedacted(index) } else {
+                segments[index] = ElevenLabs.diarizedWords(root)
+                publish(partial: "")
+            }
+        case "redacted_transcript":
+            guard redacts, !awaitingRedaction.isEmpty, let text = root["redacted_text"] as? String else { return }
+            let index = awaitingRedaction.removeFirst()
+            redactedTexts[index] = text
+            showRedacted(index)
         case "speakers_merged":
             guard let from = root["from_speaker_id"] as? String, let to = root["to_speaker_id"] as? String, from != to else { return }
             merges[from] = to
             publish(partial: "")
         case "partial_transcript":
+            guard !redacts else { return }
             update(partial: (root["text"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines))
         default:
             if Self.errorKinds.contains(kind) { fail("\(kind): \(root["error"] as? String ?? "no detail")") }
         }
+    }
+
+    /// A redacted segment is shown once both its words and its redacted
+    /// text have arrived.
+    private func showRedacted(_ index: Int) {
+        guard let words = heard[index], let text = redactedTexts[index] else { return }
+        segments[index] = ElevenLabs.redacting(words, as: text)
+        heard[index] = nil; redactedTexts[index] = nil
+        publish(partial: "")
     }
 
     private func publish(partial: String) {

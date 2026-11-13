@@ -160,6 +160,30 @@ public enum ElevenLabs {
         }
     }
 
+    /// A segment's redacted text as words, each with the speaker and times of
+    /// the heard words it stands for. Only the redacted text is kept, so a
+    /// heard word never shows; a placeholder such as {CREDIT_CARD} stands for
+    /// the heard words up to the next word both share.
+    static func redacting(_ words: [DiarizedWord], as text: String) -> [DiarizedWord] {
+        let tokens = text.split(whereSeparator: \.isWhitespace).map(String.init)
+        var out: [DiarizedWord] = [], next = 0
+        for (position, token) in tokens.enumerated() {
+            var taken: ArraySlice<DiarizedWord> = []
+            if token.contains("{") {
+                let following = tokens[(position + 1)...].first { !$0.contains("{") }
+                var end = min(next + 1, words.count)
+                while end < words.count, words[end].text != following { end += 1 }
+                taken = words[min(next, words.count)..<end]; next = end
+            } else if let found = words[min(next, words.count)...].prefix(4).firstIndex(where: { $0.text == token }) {
+                taken = words[found...found]; next = found + 1
+            }
+            let base = taken.first ?? out.last ?? words.first
+            out.append(DiarizedWord(text: token, speaker: base?.speaker,
+                                    start: taken.first?.start ?? base?.end, end: taken.last?.end ?? base?.end))
+        }
+        return out
+    }
+
     /// What a call costs: the list price for its audio plus each add-on it
     /// used. `editedTurns` is how many edits were billed, each at least
     /// `editMinimumSeconds`.
@@ -171,7 +195,10 @@ public enum ElevenLabs {
             let addOn: PriceBook.ElevenLabsAddOn = model == LiveMeetingSession.model ? .liveKeyterms : .keyterms
             addOns += seconds * addOn.perHour
         }
-        if redacted { addOns += seconds * PriceBook.ElevenLabsAddOn.entityDetection.perHour }
+        if redacted {
+            let addOn: PriceBook.ElevenLabsAddOn = model == LiveMeetingSession.model ? .liveEntityDetection : .entityDetection
+            addOns += seconds * addOn.perHour
+        }
         if editedTurns > 0 {
             let billed = max(seconds, Double(editedTurns) * editMinimumSeconds)
             addOns += billed * PriceBook.ElevenLabsAddOn.transcriptEdit.perHour

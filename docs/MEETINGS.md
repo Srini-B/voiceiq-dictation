@@ -41,10 +41,16 @@ the recording and the saved transcript are not affected.
 to write card details, ID, account and health-card numbers, other
 identifiers and numeric personal data, and passwords as `{CREDIT_CARD}` and
 the like (`entity_redaction`), in the saved transcript and so in what the
-notes model sees. Names, places, dates and money stay. While it is on, no
-live transcript runs: Scribe v3 Live redacts only finished segments, so its
-running text would show the numbers. Turning it on during a recording stops
-the live transcript and clears its text (`MeetingEngine.stopLiveForRedaction`).
+notes model sees. Names, places, dates and money stay. The live transcript
+redacts the same entities (`entity_redaction` on the Scribe v3 Live socket,
++$0.066/h): Live redacts only finished turns and still sends the running
+text and the diarized words unredacted, so a redacting session shows no
+running text and shows each turn only once its `redacted_transcript`
+arrives, a moment after it is said (`ElevenLabs.redacting` gives the
+redacted words the speakers of the words they replace). Turning it on during
+a recording closes the unredacted session, clears its text and starts a
+redacting one (`MeetingEngine.restartLiveForRedaction`); turning it off
+leaves the redacting one running.
 
 ## Call detection
 

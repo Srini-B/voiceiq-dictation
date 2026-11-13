@@ -12,11 +12,13 @@ final class ElevenLabsTests: XCTestCase {
         XCTAssertEqual(short.reportedCostUSD!, 2 * 0.20 / 3600 + 10 * 0.07 / 3600, accuracy: 1e-12)
         XCTAssertEqual(PriceBook.perMinutePrice(for: "scribe_v3")!, 0.20 / 60, accuracy: 1e-12)
         XCTAssertEqual(PriceBook.perMinutePrice(for: "scribe_v2_realtime")!, 0.22 / 60, accuracy: 1e-12)
-        // Live: $0.22/h, keyterms $0.08/h. Batch redaction: 30% of $0.20.
+        // Live: $0.22/h, keyterms $0.08/h. Redaction: 30% of $0.20 batch, of $0.22 live.
         let live = ElevenLabs.usage(model: LiveMeetingSession.model, seconds: 3600, keyterms: true, editedTurns: 0)!
         XCTAssertEqual(live.reportedCostUSD!, 0.22 + 0.08, accuracy: 1e-9)
         let redacted = ElevenLabs.usage(model: "scribe_v3", seconds: 3600, keyterms: false, editedTurns: 0, redacted: true)!
         XCTAssertEqual(redacted.reportedCostUSD!, 0.20 + 0.06, accuracy: 1e-9)
+        let liveRedacted = ElevenLabs.usage(model: LiveMeetingSession.model, seconds: 3600, keyterms: false, editedTurns: 0, redacted: true)!
+        XCTAssertEqual(liveRedacted.reportedCostUSD!, 0.22 * 1.3, accuracy: 1e-9)
 
         XCTAssertEqual(ElevenLabs.editedText(["edited_transcript": ["kind": "transcript", "text": "A.", "edited_text": "A."]]), "A.")
         XCTAssertNil(ElevenLabs.editedText(["edited_transcript": ["kind": "error", "error_type": "edit_failed"]]))
@@ -73,6 +75,35 @@ final class ElevenLabsTests: XCTestCase {
         XCTAssertEqual(try query(["hi"]), common + ["language_code=hi", "keyterms=C++ & Go"])
         XCTAssertEqual(try query(["en", "hi"]), common + ["secondary_languages=en", "secondary_languages=hi",
                                                           "multilang_mode=true", "keyterms=C++ & Go"])
+        let redacting = try XCTUnwrap(URLComponents(url: LiveMeetingSession.socketURL(keyterms: [], languages: [], redacts: true),
+                                                    resolvingAgainstBaseURL: false)?.queryItems)
+            .map { "\($0.name)=\($0.value ?? "")" }
+        XCTAssertEqual(Array(redacting.dropFirst(common.count)),
+                       ElevenLabs.redactedEntities.map { "entity_redaction=\($0)" } + ["entity_redaction_mode=entity_type"])
+    }
+
+    /// A redacting live session never shows a heard card number: the partial
+    /// is not shown, and a turn waits for its redacted text, which keeps the
+    /// speakers of the words it replaced.
+    func testRedactingLiveSessionShowsOnlyRedactedTurns() async {
+        let shown = Shown()
+        let session = LiveMeetingSession(transport: NoTransport(), vocabulary: [], tracks: 1, redacts: true) { shown.add($0) }
+        func frame(_ object: [String: Any]) -> Data { try! JSONSerialization.data(withJSONObject: object) }
+        let heard = "My card is 4111 1111 1111 1111. Thanks."
+        let words: [[String: Any]] = [("My", "speaker_0", 0.0), ("card", "speaker_0", 0.3), ("is", "speaker_0", 0.6),
+                                      ("4111", "speaker_0", 1.0), ("1111", "speaker_0", 1.5), ("1111", "speaker_0", 2.0),
+                                      ("1111.", "speaker_0", 2.5), ("Thanks.", "speaker_1", 3.5)]
+            .map { ["text": $0.0, "type": "word", "speaker_id": $0.1, "start": $0.2, "end": $0.2 + 0.4] }
+        await session.handle(frame(["message_type": "partial_transcript", "text": "My card is 4111"]))
+        await session.handle(frame(["message_type": "committed_transcript", "segment_index": 0, "text": heard]))
+        await session.handle(frame(["message_type": "diarized_transcript", "segment_index": 0, "text": heard, "words": words]))
+        XCTAssertTrue(shown.all.isEmpty)
+        await session.handle(frame(["message_type": "redacted_transcript", "text": heard,
+                                    "redacted_text": "My card is {CREDIT_CARD}. Thanks."]))
+
+        XCTAssertFalse(shown.all.contains { $0.partial.contains("4111") || $0.segments.contains { $0.text.contains("4111") } })
+        XCTAssertEqual(shown.all.last?.segments.map { "\($0.speaker) \($0.start ?? -1)-\($0.end ?? -1): \($0.text)" },
+                       ["s1 0.0-2.9: My card is {CREDIT_CARD}.", "s2 3.5-3.9: Thanks."])
     }
 
     /// `speakers_merged` rewrites every earlier use of the merged id, and
@@ -141,6 +172,13 @@ final class ElevenLabsTests: XCTestCase {
         XCTAssertEqual(GeminiClient.errorMessage(from: Data(#"{"detail":[{"loc":["body","keyterms"],"msg":"bad term","type":"value_error"}]}"#.utf8)), "bad term")
         XCTAssertEqual(ElevenLabs.keyterms(["Kubernetes", "kubernetes", "a b c d e f", "<tag>", ""], limit: 100, maxCharacters: 49), ["Kubernetes", "tag"])
     }
+}
+
+private final class Shown: @unchecked Sendable {
+    private let lock = NSLock()
+    private var items: [LiveMeetingTranscript] = []
+    func add(_ item: LiveMeetingTranscript) { lock.withLock { items.append(item) } }
+    var all: [LiveMeetingTranscript] { lock.withLock { items } }
 }
 
 private final class NoTransport: LiveTransport, @unchecked Sendable {

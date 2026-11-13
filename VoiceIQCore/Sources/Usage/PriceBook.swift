@@ -102,6 +102,8 @@ public enum PriceBook {
         /// `entity_detection`, which redaction needs. Not in the pricing
         /// page's table; its help center says 30% on top of the base price.
         case entityDetection
+        /// `entity_redaction` on Scribe v3 Live: the same 30%, of its price.
+        case liveEntityDetection
 
         public var perHour: Double {
             switch self {
@@ -109,6 +111,7 @@ public enum PriceBook {
             case .liveKeyterms: return 0.08
             case .transcriptEdit: return 0.07
             case .entityDetection: return 0.06
+            case .liveEntityDetection: return 0.066
             }
         }
     }
