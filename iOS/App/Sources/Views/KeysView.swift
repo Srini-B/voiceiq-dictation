@@ -89,12 +89,14 @@ struct ModelKeysForm: View {
                                 Picker("Main language", selection: Binding(get: { languages.first ?? "" }, set: {
                                     saveLanguages(ScribeLanguage.choosing(main: $0, in: languages))
                                 })) {
-                                    Text("Automatic detection").tag("")
+                                    Text("Automatic").tag("")
                                     ForEach(ScribeLanguage.all) { Text($0.name).tag($0.code) }
                                 }
                                 .pickerStyle(.menu)
                                 .tint(Theme.Colors.accent)
+                                .lineLimit(1)
                             }
+                            .frame(minHeight: 44)
                             if !languages.isEmpty {
                                 Divider()
                                 Button { choosingOthers = true } label: {

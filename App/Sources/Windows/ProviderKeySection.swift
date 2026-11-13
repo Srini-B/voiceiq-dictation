@@ -139,7 +139,7 @@ struct ElevenLabsTranscriptionSection: View {
                 Picker("Spoken language", selection: Binding(get: { languages.first ?? "" }, set: {
                     save(ScribeLanguage.choosing(main: $0, in: languages))
                 })) {
-                    Text("Automatic detection").tag("")
+                    Text("Automatic").tag("")
                     Divider()
                     ForEach(ScribeLanguage.all) { Text($0.name).tag($0.code) }
                 }
