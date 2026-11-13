@@ -184,6 +184,15 @@ Result (test Mac, commit 716f2f7):
 - The notarized Mac app was installed over 0.7.1 on a second Mac and
   reads 0.7.2 (76).
 
+## Release 0.7.3 (77)
+
+The maintainer asked for a new TestFlight build and Mac install with
+everything on PR #44 since 0.7.2: the searchable choice lists, the live
+transcript with redaction on, spoken languages for every provider with one
+request per recording, the guard against remarks in Scribe's formatting
+edit, and the popover and menu-bar Automatic follow-ups. Version 0.7.3,
+build 77 (0.7.2 was 76).
+
 ## Spoken languages from a list (2026-11-12, PR #44)
 
 The maintainer asked for the free-text Spoken languages field to become a list of
