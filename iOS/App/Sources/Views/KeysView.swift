@@ -94,7 +94,7 @@ struct ModelKeysForm: View {
                                 }
                                 .pickerStyle(.menu)
                                 .tint(Theme.Colors.accent)
-                                .lineLimit(1)
+                                .fixedSize()
                             }
                             .frame(minHeight: 44)
                             if !languages.isEmpty {
