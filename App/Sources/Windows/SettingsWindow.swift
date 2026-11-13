@@ -267,23 +267,25 @@ struct PrivacyPane: View {
     private let settings = SettingsStore()
     @State private var provider = SettingsStore().preferredProvider
     @State private var meetingProviders = SettingsStore().meetingProviders
+    @State private var elevenLabs = SettingsStore().transcribesWithElevenLabs
     private static func host(_ provider: ModelProvider) -> String {
         switch provider {
         case .gemini: return "Google"
         case .openAI: return "OpenAI"
         }
     }
-    /// Every host this setup can send to: the provider, and the meeting
-    /// transcript and notes fallbacks.
+    /// Every host this setup can send to: ElevenLabs when it transcribes,
+    /// the provider, and the meeting transcript and notes fallbacks.
     private var hosts: String {
         var names: [String] = []
-        for name in [Self.host(provider)] + meetingProviders.map(Self.host)
+        for name in (elevenLabs ? ["ElevenLabs"] : []) + [Self.host(provider)] + meetingProviders.map(Self.host)
         where !names.contains(name) { names.append(name) }
         return ListFormatter.localizedString(byJoining: names)
     }
     /// Meetings go to the first provider with a key, then to each other one
     /// in turn while the earlier ones fail.
     private var meetingOwner: String {
+        if elevenLabs { return "ElevenLabs Scribe v3" }
         let names = meetingProviders.map(\.displayName)
         guard let first = names.first else { return provider.displayName }
         let rest = names.dropFirst()
@@ -319,13 +321,11 @@ struct PrivacyPane: View {
             }
 
             Section {
-                Picker("Keep audio recordings", selection: $retentionDays) {
-                    Text("Never (disables Retry)").tag(-1)
-                    Text("24 hours").tag(1)
-                    Text("7 days").tag(7)
-                    Text("30 days").tag(30)
-                    Text("Forever").tag(0)
-                }
+                SearchablePicker("Keep audio recordings", selection: $retentionDays, options: [
+                    SearchOption(value: -1, name: "Never (disables Retry)"), SearchOption(value: 1, name: "24 hours"),
+                    SearchOption(value: 7, name: "7 days"), SearchOption(value: 30, name: "30 days"),
+                    SearchOption(value: 0, name: "Forever"),
+                ])
                 .onChange(of: retentionDays) { _, days in
                     settings.setAudioRetentionDays(days)
                     // Off the main thread — the purge walks every recording folder
@@ -335,14 +335,11 @@ struct PrivacyPane: View {
                         RetentionPolicy(audioRetentionDays: days).purgeExpiredAudio()
                     }
                 }
-                Picker("Keep dictations", selection: $transcriptRetentionDays) {
-                    Text("Never (no History)").tag(-1)
-                    Text("24 hours").tag(1)
-                    Text("7 days").tag(7)
-                    Text("30 days").tag(30)
-                    Text("1 year").tag(365)
-                    Text("Forever").tag(0)
-                }
+                SearchablePicker("Keep dictations", selection: $transcriptRetentionDays, options: [
+                    SearchOption(value: -1, name: "Never (no History)"), SearchOption(value: 1, name: "24 hours"),
+                    SearchOption(value: 7, name: "7 days"), SearchOption(value: 30, name: "30 days"),
+                    SearchOption(value: 365, name: "1 year"), SearchOption(value: 0, name: "Forever"),
+                ])
                 .onChange(of: transcriptRetentionDays) { _, days in
                     settings.setTranscriptRetentionDays(days)
                     Task.detached(priority: .utility) {
@@ -354,7 +351,7 @@ struct PrivacyPane: View {
             }
 
             Section {
-                LabeledContent("Audio") { Text("Sent to \(Self.host(provider)) with your key, transcribed every time") }
+                LabeledContent("Audio") { Text("Sent to \(elevenLabs ? "ElevenLabs" : Self.host(provider)) with your key, transcribed every time") }
                 LabeledContent("Transcript text") { Text("Sent back only for writing rules, Ask Anything and Translate") }
                 LabeledContent("Text around the cursor") { Text("Only if Fit to existing text and writing rules are on") }
                 LabeledContent("Where you are typing") { Text("App name, window title and browser page address, only with writing rules") }
@@ -394,6 +391,7 @@ struct PrivacyPane: View {
         .onReceive(NotificationCenter.default.publisher(for: .gtSettingDidChange).receive(on: RunLoop.main)) { _ in
             provider = settings.preferredProvider
             meetingProviders = settings.meetingProviders
+            elevenLabs = settings.transcribesWithElevenLabs
         }
     }
 }
@@ -434,6 +432,9 @@ struct AdvancedPane: View {
 
             TinyFishKeySection()
 
+            ProviderKeySection.elevenLabs
+            ElevenLabsTranscriptionSection(provider: provider)
+
             switch provider {
             case .gemini: geminiModelSections
             case .openAI: OpenAIModelsSection()
@@ -442,6 +443,8 @@ struct AdvancedPane: View {
             AgentProviderSection()
 
             BrowserExtensionSection()
+
+            DebugLogSection()
         }
         // Key saved elsewhere (onboarding, dev-file migration) while this pane is
         // open: refresh the badge — but never clobber in-flight feedback.

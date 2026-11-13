@@ -27,6 +27,10 @@ public final class SystemAudioTap: @unchecked Sendable {
     private var writer: CAFWriter?
     private var frames: Int64 = 0
 
+    /// Each converted 16 kHz mono Int16 buffer, after it is written; set
+    /// before `start`. Feeds the live meeting transcript.
+    public var onPCM: (@Sendable (Data) -> Void)?
+
     public init(url: URL, processes: [AudioObjectID] = []) { self.url = url; self.processes = processes; tapped = processes }
 
     public func start() throws {
@@ -109,6 +113,7 @@ public final class SystemAudioTap: @unchecked Sendable {
         guard status != .error, output.frameLength > 0 else { return }
         do { try writer.write(output); frames += Int64(output.frameLength) }
         catch { Log.meeting.error("system write failed: \(String(describing: error), privacy: .public)") }
+        onPCM?(output.int16Data)
     }
 
     private func check(_ status: OSStatus) throws { if status != noErr { throw TapError.coreAudio(status) } }

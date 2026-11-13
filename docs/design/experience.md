@@ -42,7 +42,7 @@ Bezier/duration tokens for non-spring cases: `emphasizedDecelerate = timingCurve
 
 ### 1.3 States (state machine: `hidden → idleDot ↔ listening → processing → inserting → success → idleDot`, with `locked`, `error`, `secureField`, `offline` branches)
 
-**hidden** — nothing on screen (user setting "Show idle indicator: Always / Only while dictating"; default Always). Menu bar icon remains.
+**hidden** — nothing on screen (user setting "Show resting indicator", on = Always / off = Only while dictating; default off since 2026-11-12, it was Always before). Menu bar icon remains.
 
 **idleDot** — 40×8pt capsule, `onSurface` at 25% over blur material. Hover: grows to 48×20 (`.fastSpatial`), shows mic glyph, tooltip "Hold fn to dictate" (rotates tips). Click = start hands-free; right-click = mini menu (Hide for 1 hour / History / Settings — the Wispr pattern users love). Draggable to bottom-left/center/right snap zones.
 

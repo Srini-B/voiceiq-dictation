@@ -56,7 +56,8 @@ final class DictationController {
             apiKey: { KeychainStore.loadAPIKey() },
             openAIKey: { KeychainStore.loadOpenAIKey() },
             openAIConfig: { SettingsStore().openAIConfig },
-            provider: { SettingsStore().preferredProvider }
+            provider: { SettingsStore().preferredProvider },
+            elevenLabsKey: { KeychainStore.loadKey(.elevenLabs) }
         )
         let service = GeminiTranscriptionService(client: client)
         transcriptionService = service
@@ -67,7 +68,9 @@ final class DictationController {
             config: { SettingsStore().geminiConfig },
             summaryModel: SettingsStore().geminiConfig.cleanupModel,
             providers: { SettingsStore().meetingProviders },
-            readsScreenNames: { SettingsStore().meetingScreenNamesEnabled }
+            speechEndpoints: { SettingsStore().meetingSpeechEndpoints },
+            readsScreenNames: { SettingsStore().meetingScreenNamesEnabled },
+            liveMeetingKey: { SettingsStore().transcribesWithElevenLabs ? KeychainStore.loadKey(.elevenLabs) : nil }
         )
         coordinator = DictationCoordinator(
             audioFactory: { [warmEngines] in warmEngines.take() },
@@ -477,7 +480,7 @@ final class DictationController {
             historyStore.upsert(meta: meta, folder: folder)
             // "Never keep audio": purge the moment a transcript exists (audit #2).
             if SettingsStore().audioRetentionDays < 0, meta.rawTranscript != nil || meta.status == .silent {
-                for audio in [FileLayout.audioCAF(in: folder), FileLayout.audioFLAC(in: folder)] {
+                for audio in [FileLayout.audioCAF(in: folder), FileLayout.audioFLAC(in: folder), FileLayout.playbackFolder(in: folder)] {
                     try? FileManager.default.removeItem(at: audio)
                 }
             }

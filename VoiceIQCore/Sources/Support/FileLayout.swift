@@ -36,13 +36,21 @@ public enum FileLayout {
     }
 
     /// Deletes the on-device models that builds before 2026-11-10 downloaded
-    /// (the whole `Models` folder), and on the Mac the speech helper's Core ML
-    /// cache. Runs at every launch, off the main thread; a missing folder or a
+    /// (the whole `Models` folder), on the Mac the speech helper's Core ML
+    /// cache, and everything in the temporary `recorded-audio` folder but
+    /// this launch's renders: the playback copies 0.7.1 (75) kept there, and
+    /// renders cut short by the app quitting.
+    /// Runs at every launch, off the main thread; a missing folder or a
     /// failed delete is ignored.
     public static func removeRetiredModels() {
         Task.detached(priority: .utility) {
             let fileManager = FileManager.default
             try? fileManager.removeItem(at: FileLayout.appSupportRoot.appendingPathComponent("Models", isDirectory: true))
+            let renders = FileLayout.partialRendersFolder.deletingLastPathComponent()
+            for old in (try? fileManager.contentsOfDirectory(at: renders, includingPropertiesForKeys: nil)) ?? []
+            where old.lastPathComponent != FileLayout.partialRendersFolder.lastPathComponent {
+                try? fileManager.removeItem(at: old)
+            }
             #if os(macOS)
             let caches = fileManager.urls(for: .cachesDirectory, in: .userDomainMask)[0]
             try? fileManager.removeItem(at: caches.appendingPathComponent("io.blue.voiceiq.localspeech", isDirectory: true))
@@ -72,6 +80,15 @@ public enum FileLayout {
         return Double(bytes) / 32_000
     }
     public static func audioFLAC(in folder: URL) -> URL { folder.appendingPathComponent("audio.flac") }
+    /// The `.m4a` that Play and Download make from a recording (`RecordedAudio`),
+    /// kept beside the audio so deleting either removes it too.
+    public static func playbackFolder(in folder: URL) -> URL { folder.appendingPathComponent("playback", isDirectory: true) }
+    /// Where `RecordedAudio` renders before moving the file into
+    /// `playbackFolder`: one folder per launch, so the launch cleanup never
+    /// touches a render already running.
+    public static let partialRendersFolder = FileManager.default.temporaryDirectory
+        .appendingPathComponent("recorded-audio", isDirectory: true)
+        .appendingPathComponent("launch-\(UUID().uuidString)", isDirectory: true)
     public static func metaJSON(in folder: URL) -> URL { folder.appendingPathComponent("meta.json") }
     /// Transcripts of the chunks that already succeeded on a multi-request
     /// upload, so a retry after a mid-way failure re-sends only what is missing.

@@ -17,9 +17,13 @@ struct KeysView: View {
     }
 }
 
-/// The selected model provider and the optional web search key.
+/// The selected model provider, the transcription choice once an ElevenLabs
+/// key is stored, and the optional ElevenLabs and web search keys.
 struct ModelKeysForm: View {
     @State private var provider = SettingsStore().preferredProvider
+    @State private var elevenLabs = SettingsStore().elevenLabsTranscriptionChosen
+    @State private var hasElevenLabsKey = KeychainStore.loadKey(.elevenLabs) != nil
+    @State private var redacts = SettingsStore().redactsMeetingSecrets
 
     private var providerSlots: [KeySlot] {
         switch provider {
@@ -34,7 +38,7 @@ struct ModelKeysForm: View {
                 Image(systemName: "info.circle.fill")
                     .foregroundStyle(Theme.Colors.accent)
                     .font(.system(size: 17))
-                Text("Pick **Gemini** or **OpenAI** and add its key. The other keys are optional.")
+                Text("Pick **Gemini** or **OpenAI** and add its key. The other keys are optional; an ElevenLabs key lets Scribe v3 transcribe.")
                     .font(Theme.Fonts.subheadline())
                     .foregroundStyle(Theme.Colors.inkSecondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -59,8 +63,37 @@ struct ModelKeysForm: View {
                 }
             }
 
+            if hasElevenLabsKey {
+                VStack(alignment: .leading, spacing: Theme.Spacing.m) {
+                    GroupLabel(text: "Transcription")
+                    Picker("Transcription", selection: $elevenLabs) {
+                        Text(provider.displayName).tag(false)
+                        Text("ElevenLabs").tag(true)
+                    }
+                    .pickerStyle(.segmented)
+                    .onChange(of: elevenLabs) { _, value in SettingsStore().setElevenLabsTranscription(value) }
+                    Text(elevenLabs
+                         ? "Scribe v3 transcribes dictation from the recording, after you stop; Real-time transcription is not used with it. Notes show a live transcript from Scribe v3 Live while they record, and Scribe v3 makes the saved transcript when they stop. \(provider.displayName) still applies the writing rules and writes the notes."
+                         : "\(provider.displayName) transcribes dictation and meetings.")
+                        .font(Theme.Fonts.footnote())
+                        .foregroundStyle(Theme.Colors.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if elevenLabs {
+                        Toggle("Hide card and ID numbers in notes", isOn: $redacts)
+                            .font(Theme.Fonts.subheadline())
+                            .tint(Theme.Colors.accent)
+                            .onChange(of: redacts) { _, value in SettingsStore().setRedactsMeetingSecrets(value) }
+                        Text("Card details, ID, account and health-card numbers and passwords are written as {CREDIT_CARD} and the like, so they are never saved or sent for notes. ElevenLabs charges 30% more for it. The live transcript shows each turn once it is redacted, a moment after it is said.")
+                            .font(Theme.Fonts.footnote())
+                            .foregroundStyle(Theme.Colors.muted)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
+
             VStack(alignment: .leading, spacing: Theme.Spacing.m) {
                 GroupLabel(text: "Optional")
+                KeyCard(slot: .elevenLabs, onChange: reload)
                 KeyCard(slot: .tinyFish, onChange: reload)
             }
         }
@@ -71,7 +104,10 @@ struct ModelKeysForm: View {
     }
 
     private func reload() {
-        provider = SettingsStore().preferredProvider
+        let settings = SettingsStore()
+        provider = settings.preferredProvider
+        hasElevenLabsKey = KeychainStore.loadKey(.elevenLabs) != nil
+        elevenLabs = settings.elevenLabsTranscriptionChosen
     }
 }
 
@@ -205,12 +241,13 @@ private struct TrailingIconLabelStyle: LabelStyle {
 
 /// A place a key can be stored, with what it is for.
 enum KeySlot: Hashable, CaseIterable {
-    case gemini, openAI, tinyFish
+    case gemini, openAI, elevenLabs, tinyFish
 
     var title: String {
         switch self {
         case .gemini: return "Gemini"
         case .openAI: return "OpenAI"
+        case .elevenLabs: return "ElevenLabs"
         case .tinyFish: return "TinyFish"
         }
     }
@@ -220,6 +257,7 @@ enum KeySlot: Hashable, CaseIterable {
         switch self {
         case .gemini: return "ProviderGemini"
         case .openAI: return "ProviderOpenAI"
+        case .elevenLabs: return "ProviderElevenLabs"
         case .tinyFish: return "ProviderTinyFish"
         }
     }
@@ -230,6 +268,8 @@ enum KeySlot: Hashable, CaseIterable {
             return "Google's Gemini API, with a free tier. Stored in your \(UIDevice.current.localizedModel)'s Keychain and only ever sent to Google."
         case .openAI:
             return "OpenAI's API. Stored in your \(UIDevice.current.localizedModel)'s Keychain and only ever sent to OpenAI."
+        case .elevenLabs:
+            return "Lets ElevenLabs Scribe v3 transcribe dictation and meetings in place of the provider. Stored in your \(UIDevice.current.localizedModel)'s Keychain and only ever sent to ElevenLabs."
         case .tinyFish:
             return "Lets Ask Anything look up current information on the web. Stored in your \(UIDevice.current.localizedModel)'s Keychain and only ever sent to TinyFish."
         }
@@ -239,6 +279,7 @@ enum KeySlot: Hashable, CaseIterable {
         switch self {
         case .gemini: return URL(string: "https://aistudio.google.com/apikey")!
         case .openAI: return URL(string: "https://platform.openai.com/api-keys")!
+        case .elevenLabs: return URL(string: "https://elevenlabs.io/app/settings/api-keys")!
         case .tinyFish: return URL(string: "https://agent.tinyfish.ai/api-keys")!
         }
     }
@@ -247,6 +288,7 @@ enum KeySlot: Hashable, CaseIterable {
         switch self {
         case .gemini: return KeychainStore.loadAPIKey()
         case .openAI: return KeychainStore.loadOpenAIKey()
+        case .elevenLabs: return KeychainStore.loadKey(.elevenLabs)
         case .tinyFish: return KeychainStore.loadTinyFishKey()
         }
     }
@@ -255,6 +297,7 @@ enum KeySlot: Hashable, CaseIterable {
         switch self {
         case .gemini: return KeychainStore.saveAPIKey(key)
         case .openAI: return KeychainStore.saveOpenAIKey(key)
+        case .elevenLabs: return KeychainStore.saveKey(.elevenLabs, key)
         case .tinyFish: return KeychainStore.saveTinyFishKey(key)
         }
     }
@@ -263,6 +306,7 @@ enum KeySlot: Hashable, CaseIterable {
         switch self {
         case .gemini: _ = KeychainStore.deleteAPIKey(notify: true)
         case .openAI: _ = KeychainStore.deleteOpenAIKey(notify: true)
+        case .elevenLabs: _ = KeychainStore.deleteKey(.elevenLabs, notify: true)
         case .tinyFish: _ = KeychainStore.deleteTinyFishKey(notify: true)
         }
     }
@@ -276,6 +320,8 @@ enum KeySlot: Hashable, CaseIterable {
             check = await GeminiClient(apiKey: { key }).validateKey(endpoint: SettingsStore().geminiConfig.endpoint)
         case .openAI:
             check = await GeminiClient(apiKey: { nil }, openAIKey: { key }).validateOpenAIKey()
+        case .elevenLabs:
+            check = await GeminiClient(apiKey: { nil }, elevenLabsKey: { key }).validateElevenLabsKey()
         case .tinyFish:
             switch await TinyFishClient(apiKey: { key }).validateKey() {
             case .valid: return .accepted(offline: false)

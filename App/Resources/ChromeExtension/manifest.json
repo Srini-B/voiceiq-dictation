@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "VoiceiQ Meetings",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Tells VoiceiQ who is talking in browser meetings, so each line of your meeting notes goes to the right person.",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAuuA9SreEazKNfhVa076ifnGZ46PALeL0WpsUoJbQEIHMNocR1y/LhgKY6Nx0AvzITJZzQeUMyPUVnrT4TfV7NhqOLDLt4P3PVBVVz7nuAZ2YVQoK3S2nW9rutQCVmOcv+9Rxn6ufBUW9j5kguxILfzYLxgoghyPSwY3eb1gdEkS/O0eaYrdxsPslBbTI8jtjWqYqFS2q4Qcvp4L8FxKhs03vwlyuH8MU1feUVqKO/htGFppYtmTlBb1BuKG9MsvGG0yJPHOroYygSIxj7Erbe2ynFfRbyUkEmjtii2p7cOiAkc3AuIMyxFueXUoUf+tQnUkjqvepss0M73GMc7XzsQIDAQAB",
   "minimum_chrome_version": "116",

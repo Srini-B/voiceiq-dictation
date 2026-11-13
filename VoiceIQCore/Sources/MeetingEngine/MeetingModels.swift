@@ -275,8 +275,9 @@ public struct MeetingMeta: Codable, Equatable, Sendable, Identifiable {
     /// they talked first, then what the notes model found in the conversation.
     public func suggestions(_ notes: MeetingNotes?) -> [SpeakerSuggestion] {
         let screen = (screenNames?.speakers ?? [:]).sorted { $0.key < $1.key }.map { id, match in
-            SpeakerSuggestion(label: MeetingSpeaker.defaultName(id), name: match.name,
-                              evidence: "On screen while this speaker talked (\(match.seen) of \(match.of) snapshots)")
+            SpeakerSuggestion(label: MeetingSpeaker.defaultName(id), name: match.name, evidence: match.talkSeconds == nil
+                              ? "On screen while this speaker talked (\(match.seen) of \(match.of) snapshots)"
+                              : "Shown talking in the meeting page for \(match.seen) of the \(match.of) s this speaker talked")
         }
         return screen + (notes?.speakers ?? [])
     }

@@ -46,6 +46,7 @@ public actor GeminiClient {
     let session: URLSession
     private let apiKey: @Sendable () -> String?
     let openAIKey: @Sendable () -> String?
+    let elevenLabsKey: @Sendable () -> String?
     /// Read per call, like `provider`, so a model override applies at once.
     let openAIConfig: @Sendable () -> OpenAIConfig
     /// Read per call, so flipping the provider in Settings takes effect on
@@ -56,11 +57,13 @@ public actor GeminiClient {
         apiKey: @escaping @Sendable () -> String?,
         openAIKey: @escaping @Sendable () -> String? = { nil },
         openAIConfig: @escaping @Sendable () -> OpenAIConfig = { OpenAIConfig() },
-        provider: @escaping @Sendable () -> ModelProvider = { .gemini }
+        provider: @escaping @Sendable () -> ModelProvider = { .gemini },
+        elevenLabsKey: @escaping @Sendable () -> String? = { nil }
     ) {
         self.session = Self.makeSession()
         self.apiKey = apiKey
         self.openAIKey = openAIKey
+        self.elevenLabsKey = elevenLabsKey
         self.openAIConfig = openAIConfig
         self.provider = provider
     }
@@ -188,9 +191,10 @@ public actor GeminiClient {
         /// Attributed to the current `UsageMeter.scope` for the Cost pane.
         stage: UsageStage,
         isRetryAfter429: Bool = false,
-        /// OpenAI calls share this transport: same deadline, same status →
-        /// error mapping, different base URL, auth header and usage envelope.
-        via: ModelProvider = .gemini,
+        /// OpenAI and ElevenLabs calls share this transport: same deadline,
+        /// same status → error mapping, different base URL, auth header and
+        /// usage envelope.
+        via: ModelEndpoint = .gemini,
         extraHeaders: [String: String] = [:]
     ) async throws -> Data {
         let url = endpoint.appendingPathComponent(path)
@@ -230,12 +234,26 @@ public actor GeminiClient {
             let usage: TokenUsage? = switch via {
             case .gemini: TokenUsage.fromGenerateContent(data) ?? TokenUsage.fromInteraction(data)
             case .openAI: TokenUsage.fromOpenAIDuration(data, model: modelLabel) ?? TokenUsage.fromOpenAI(data)
+            // No usage block, and the price depends on the request's options:
+            // `elevenLabsTranscribe` books it.
+            case .elevenLabs: nil
             }
             if let usage {
                 UsageMeter.record(stage: stage, model: modelLabel, usage: usage)
             }
         case 401:
+            // ElevenLabs answers 401 for a used-up credit balance as well as
+            // for a bad key (`quota_exceeded`). That is "add credits", not "fix
+            // your key", and it clears on top-up, so it holds the queue like a
+            // daily quota instead of failing the row (fixed in 0.5.10).
+            if via == .elevenLabs, Self.isElevenLabsQuota(Self.elevenLabsErrorDetail(from: data)) {
+                Log.transcription.error("GeminiClient: 401 quota on \(path, privacy: .public) via elevenLabs")
+                throw TranscriptionError.rateLimitedDaily
+            }
             throw TranscriptionError.auth
+        case 402 where via == .elevenLabs:
+            Log.transcription.error("GeminiClient: 402 on \(path, privacy: .public) via elevenLabs — \(Self.errorMessage(from: data) ?? "no detail", privacy: .private)")
+            throw TranscriptionError.rateLimitedDaily
         case 403, 404:
             // Key authenticated but this model is not available to it — gated,
             // renamed, or unknown. "Fix your key" would misdirect — name the
@@ -274,8 +292,11 @@ public actor GeminiClient {
                 throw TranscriptionError.rateLimitedDaily
             }
             throw TranscriptionError.rateLimitedTransient(retryAfter: retryAfter)
-        case 400:
-            // Permanent: malformed request — retrying is pointless.
+        case 400,
+             422 where via == .elevenLabs:
+            // Permanent: malformed request — retrying is pointless. ElevenLabs
+            // reports a refused keyterm as 422, which the vocabulary fail-open
+            // retry covers.
             let message = Self.errorMessage(from: data) ?? "http_\(http.statusCode)"
             Log.transcription.error("GeminiClient: \(http.statusCode) — \(message, privacy: .private)")
             throw TranscriptionError.badRequest(message)
@@ -300,6 +321,11 @@ public actor GeminiClient {
     /// place `mode: "smart"` works — on `:generateContent` the same field parses
     /// but returns an empty text part with finishReason STOP (probed on the
     /// transcribe models).
+    ///
+    /// `languages` (the spoken languages) reach OpenAI only. Gemini's
+    /// transcribe models take no prompt, and with no `language_codes` they
+    /// detect each language and its switches themselves (ai.google.dev
+    /// transcription guide, read 2026-11-13).
     public func transcribeInteraction(
         audio: Data,
         mimeType: String = "audio/flac",
@@ -307,13 +333,15 @@ public actor GeminiClient {
         endpoint: URL,
         mode: TranscriptionMode,
         customVocabulary: [String],
+        languages: [String] = [],
         deadline: TimeInterval
     ) async throws -> String {
         switch provider() {
         case .openAI:
             // No smart mode; the dictionary rides along as keywords, and the
             // cleanup pass does the formatting.
-            return try await openAITranscribe(audio: audio, mimeType: mimeType, keywords: customVocabulary, deadline: deadline)
+            return try await openAITranscribe(audio: audio, mimeType: mimeType, keywords: customVocabulary,
+                                              languages: languages, deadline: deadline)
         case .gemini: break
         }
         var body: [String: Any] = [
@@ -441,7 +469,7 @@ public actor GeminiClient {
         session.invalidateAndCancel() // transient clients (key validation) must not leak (audit L33)
     }
 
-    func applyAuth(_ request: inout URLRequest, via: ModelProvider = .gemini) {
+    func applyAuth(_ request: inout URLRequest, via: ModelEndpoint = .gemini) {
         // Header, never ?key= — query strings leak into logs and proxies.
         switch via {
         case .gemini:
@@ -451,6 +479,10 @@ public actor GeminiClient {
         case .openAI:
             if let key = openAIKey() {
                 request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
+            }
+        case .elevenLabs:
+            if let key = elevenLabsKey() {
+                request.setValue(key, forHTTPHeaderField: "xi-api-key")
             }
         }
     }
@@ -502,7 +534,7 @@ public actor GeminiClient {
         } else {
             object = nil
         }
-        let error = object?["error"] as? [String: Any]
-        return error?["message"] as? String
+        guard let error = object?["error"] as? [String: Any] else { return elevenLabsErrorDetail(from: data).message }
+        return error["message"] as? String
     }
 }

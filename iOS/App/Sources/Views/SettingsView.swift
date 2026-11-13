@@ -125,6 +125,8 @@ struct SettingsView: View {
 
 struct DictationSettingsView: View {
     @State private var liveTranscription = SettingsStore().liveTranscriptionEnabled
+    /// ElevenLabs transcribes the recording after it stops; nothing streams.
+    @State private var elevenLabs = SettingsStore().transcribesWithElevenLabs
     @EnvironmentObject private var session: VoiceSession
     private let settings = SettingsStore()
     @State private var translationTarget = SettingsStore().translationTargetLanguage
@@ -135,13 +137,22 @@ struct DictationSettingsView: View {
     @State private var noiseHandling = SettingsStore().experimentalNoiseHandling
     @State private var builtInMic = MobileSettings.preferBuiltInMic
     @State private var warmWindow = MobileSettings.warmWindow
+    @State private var languages = SettingsStore().spokenLanguages
+
+    private static func options(_ languages: [SpokenLanguage]) -> [SearchOption<String>] {
+        languages.map { SearchOption(value: $0.code, name: $0.name, keywords: $0.code) }
+    }
+
+    private func saveLanguages(_ codes: [String]) {
+        languages = codes
+        settings.setSpokenLanguages(codes)
+    }
 
     var body: some View {
         Form {
             Section {
-                Picker("Keep mic on after dictating", selection: $warmWindow) {
-                    ForEach(MobileSettings.WarmWindow.allCases) { Text($0.label).tag($0) }
-                }
+                SearchablePicker("Keep mic on after dictating", selection: $warmWindow,
+                                 options: MobileSettings.WarmWindow.allCases.map { SearchOption(value: $0, name: $0.label) })
                 .onChange(of: warmWindow) { _, value in
                     MobileSettings.warmWindow = value
                     session.warmWindowChanged()
@@ -163,11 +174,31 @@ struct DictationSettingsView: View {
                     }
             }
             Section {
+                SearchablePicker("Main language", selection: Binding(get: { languages.first ?? "" }, set: {
+                    saveLanguages(SpokenLanguage.choosing(main: $0, in: languages))
+                }), options: [SearchOption(value: "", name: "Automatic")] + Self.options(SpokenLanguage.all))
+                if let main = languages.first {
+                    SearchablePicker("Also spoken", summary: SpokenLanguage.names(languages.dropFirst(), none: "None"),
+                                     options: Self.options(SpokenLanguage.all.filter { $0.code != main }),
+                                     isSelected: { languages.dropFirst().contains($0) },
+                                     toggle: { saveLanguages(SpokenLanguage.toggling($0, in: languages)) })
+                }
+            } header: {
+                SettingsSectionHeader("Languages")
+            } footer: {
+                Text("For dictation and meetings. Automatic works out the language each time, which can go wrong on a short phrase. Add every other language you or the people in your meetings speak, whole sentences or mixed in: each recording is transcribed once, with each language in its own script. A short or accented phrase can still come out as the main language. ElevenLabs and OpenAI listen for these languages; Gemini works them out by itself.")
+            }
+            Section {
                 // Saved only on a user change, not when its default is refreshed.
-                Toggle("Real-time transcription", isOn: Binding(get: { liveTranscription }, set: {
+                Toggle("Real-time transcription", isOn: Binding(get: { liveTranscription && !elevenLabs }, set: {
                     liveTranscription = $0
                     settings.setLiveTranscriptionEnabled($0)
                 }))
+                .disabled(elevenLabs)
+            } footer: {
+                if elevenLabs {
+                    Text("Off while ElevenLabs is the transcription provider: Scribe v3 transcribes the recording after you stop.")
+                }
             }
             Section {
                 Toggle("Smart transcription", isOn: $smartTranscription)
@@ -203,12 +234,14 @@ struct DictationSettingsView: View {
         .onReceive(NotificationCenter.default.publisher(for: .gtSettingDidChange).receive(on: RunLoop.main)) { note in
             switch note.object as? String {
             case "liveDictationEnabled": liveTranscription = settings.liveTranscriptionEnabled
+            case "elevenLabsTranscription", KeychainStore.Secret.elevenLabs.settingKey: elevenLabs = settings.transcribesWithElevenLabs
             case "smartTranscription": smartTranscription = settings.smartTranscriptionEnabled
             case "smartCleanupPass": cleanupPass = settings.smartCleanupPassEnabled
             case "skipShortDictationCleanup": skipShortCleanup = settings.skipShortDictationCleanup
             case SettingsStore.customWritingRulesKey: customRules = settings.customWritingRules
             case "experimentalNoiseHandling": noiseHandling = settings.experimentalNoiseHandling
             case "translationTargetLanguages": translationTarget = settings.translationTargetLanguage
+            case "spokenLanguages": languages = settings.spokenLanguages
             default: break
             }
         }
@@ -351,11 +384,14 @@ struct PrivacyView: View {
     @State private var provider = SettingsStore().preferredProvider
 
     @State private var meetingProviders = SettingsStore().meetingProviders
+    @State private var elevenLabs = SettingsStore().transcribesWithElevenLabs
 
-    private var destination: String { "\(provider.directName), with your key" }
-    /// Meetings go to the first provider with a key, then to each other one
-    /// in turn while the earlier ones fail.
+    private var destination: String { "\(elevenLabs ? ModelEndpoint.elevenLabs.directName : provider.directName), with your key" }
+    /// Meetings go to ElevenLabs when it transcribes; otherwise to the first
+    /// provider with a key, then to each other one in turn while the earlier
+    /// ones fail.
     private var meetingOwner: String {
+        if elevenLabs { return ModelEndpoint.elevenLabs.directName }
         let names = meetingProviders.map(\.directName)
         guard let first = names.first else { return provider.directName }
         let rest = names.dropFirst()
@@ -367,18 +403,20 @@ struct PrivacyView: View {
     var body: some View {
         Form {
             Section {
-                Picker("Keep audio recordings", selection: $retentionDays) {
-                    Text("Never").tag(-1); Text("24 hours").tag(1); Text("7 days").tag(7)
-                    Text("30 days").tag(30); Text("Forever").tag(0)
-                }
+                SearchablePicker("Keep audio recordings", selection: $retentionDays, options: [
+                    SearchOption(value: -1, name: "Never"), SearchOption(value: 1, name: "24 hours"),
+                    SearchOption(value: 7, name: "7 days"), SearchOption(value: 30, name: "30 days"),
+                    SearchOption(value: 0, name: "Forever"),
+                ])
                 .onChange(of: retentionDays) { _, days in
                     SettingsStore().setAudioRetentionDays(days)
                     Task.detached(priority: .utility) { RetentionPolicy().purge() }
                 }
-                Picker("Keep dictations", selection: $transcriptRetentionDays) {
-                    Text("Never").tag(-1); Text("24 hours").tag(1); Text("7 days").tag(7)
-                    Text("30 days").tag(30); Text("1 year").tag(365); Text("Forever").tag(0)
-                }
+                SearchablePicker("Keep dictations", selection: $transcriptRetentionDays, options: [
+                    SearchOption(value: -1, name: "Never"), SearchOption(value: 1, name: "24 hours"),
+                    SearchOption(value: 7, name: "7 days"), SearchOption(value: 30, name: "30 days"),
+                    SearchOption(value: 365, name: "1 year"), SearchOption(value: 0, name: "Forever"),
+                ])
                 .onChange(of: transcriptRetentionDays) { _, days in
                     SettingsStore().setTranscriptRetentionDays(days)
                     Task.detached(priority: .utility) { RetentionPolicy().purge() }
@@ -402,6 +440,7 @@ struct PrivacyView: View {
         .onReceive(NotificationCenter.default.publisher(for: .gtSettingDidChange).receive(on: RunLoop.main)) { _ in
             provider = SettingsStore().preferredProvider
             meetingProviders = SettingsStore().meetingProviders
+            elevenLabs = SettingsStore().transcribesWithElevenLabs
         }
     }
 }
@@ -416,6 +455,7 @@ struct AdvancedView: View {
     @State private var cleanupModel = SettingsStore().cleanupModelOverride ?? ""
     @State private var openAITranscribe = SettingsStore().openAITranscribeModelOverride ?? ""
     @State private var openAIWriting = SettingsStore().openAIWritingModelOverride ?? ""
+    @State private var debugLog = DebugLog.isEnabled
     private let geminiDefaults = GeminiConfig()
     private let openAIDefaults = OpenAIConfig()
 
@@ -429,6 +469,13 @@ struct AdvancedView: View {
         Form {
             Section {
                 NavigationLink("Session log") { SessionLogView() }
+            }
+            Section {
+                Toggle("Write a debug log", isOn: $debugLog)
+                    .onChange(of: debugLog) { _, on in DebugLog.setEnabled(on) }
+                NavigationLink("Debug log") { DebugLogView() }
+            } footer: {
+                Text("While this is on, VoiceiQ and its keyboard write down everything they do: dictation, transcription with each provider, meetings, settings changes, sync, network requests and errors. Share the file with a bug report. API keys and tokens are removed, and transcripts are never written. VoiceiQ keeps the last \(DebugLog.keepDays) days, up to \(DebugLog.maxTotalBytes / 1_000_000) MB, and deletes older entries on its own.")
             }
             if provider == .gemini {
                 Section {

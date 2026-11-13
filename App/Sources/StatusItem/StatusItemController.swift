@@ -88,6 +88,7 @@ final class StatusItemController: NSObject {
 
     private var statusLine: NSMenuItem?
     private var updatesItem: NSMenuItem?
+    private var spokenLanguageItem: NSMenuItem?
 
     func setStatusLine(_ text: String) {
         statusLine?.title = text
@@ -103,6 +104,7 @@ final class StatusItemController: NSObject {
 
     private func makeMenu() -> NSMenu {
         let menu = NSMenu()
+        menu.delegate = self
 
         let status = NSMenuItem(title: "Starting up…", action: nil, keyEquivalent: "")
         status.isEnabled = false
@@ -132,6 +134,15 @@ final class StatusItemController: NSObject {
         micMenu.delegate = self
         micItem.submenu = micMenu
         menu.addItem(micItem)
+
+        // Which spoken language is the main one, or Automatic: Scribe writes
+        // a short or ambiguous phrase in the main language.
+        let languageItem = NSMenuItem(title: "Spoken Language", action: nil, keyEquivalent: "")
+        let languageMenu = NSMenu(title: "Spoken Language")
+        languageMenu.delegate = self
+        languageItem.submenu = languageMenu
+        spokenLanguageItem = languageItem
+        menu.addItem(languageItem)
 
         let settings = NSMenuItem(title: "Settings…", action: #selector(openSettings), keyEquivalent: ",")
         settings.target = self
@@ -178,6 +189,33 @@ final class StatusItemController: NSObject {
         onCheckForUpdates()
     }
 
+    /// The spoken languages from before Automatic was picked in the menu bar,
+    /// so the submenu still offers them as the way back. Settings forgets
+    /// them when it sets the languages (`SpokenLanguagesSection`).
+    static let languagesBeforeAutomatic = "menuBarLanguagesBeforeAutomatic"
+
+    @objc private func selectMainLanguage(_ sender: NSMenuItem) {
+        guard let code = sender.representedObject as? String else { return }
+        let settings = SettingsStore()
+        let languages = settings.spokenLanguages
+        if code.isEmpty {
+            // Picking Automatic again must not replace the remembered list with an empty one.
+            guard !languages.isEmpty else { return }
+            UserDefaults.standard.set(languages, forKey: Self.languagesBeforeAutomatic)
+            settings.setSpokenLanguages([])
+        } else {
+            settings.setSpokenLanguages(SpokenLanguage.promoting(code, in: languages.isEmpty ? Self.offeredLanguages(settings) : languages))
+        }
+    }
+
+    /// The languages the Spoken Language submenu offers: the chosen ones, or
+    /// under Automatic the ones chosen before it.
+    private static func offeredLanguages(_ settings: SettingsStore) -> [String] {
+        let languages = settings.spokenLanguages
+        guard languages.isEmpty else { return languages }
+        return (UserDefaults.standard.stringArray(forKey: languagesBeforeAutomatic) ?? []).filter(SpokenLanguage.isListed)
+    }
+
     @objc private func selectMicrophone(_ sender: NSMenuItem) {
         guard let id = sender.representedObject as? AudioDeviceID else { return }
         AudioInputDevices.setDefault(id: id)
@@ -186,8 +224,37 @@ final class StatusItemController: NSObject {
 
 extension StatusItemController: NSMenuDelegate {
     /// Rebuild the Microphone submenu each open — devices come and go
-    /// (AirPods connect, headsets unplug) and the checkmark must be live.
+    /// (AirPods connect, headsets unplug) and the checkmark must be live. The
+    /// Spoken Language submenu follows Settings the same way, and shows only
+    /// while Scribe transcribes with more than one spoken language (or with
+    /// Automatic picked here over several): only
+    /// Scribe writes ambiguous speech as the main language. OpenAI takes the
+    /// languages as an unordered list and Gemini detects them itself.
     func menuNeedsUpdate(_ menu: NSMenu) {
+        if menu === statusItem.menu {
+            let settings = SettingsStore()
+            spokenLanguageItem?.isHidden = !settings.transcribesWithElevenLabs || Self.offeredLanguages(settings).count < 2
+            return
+        }
+        if menu.title == "Spoken Language" {
+            menu.removeAllItems()
+            let settings = SettingsStore()
+            let main = settings.spokenLanguages.first ?? ""
+            for code in [""] + Self.offeredLanguages(settings) {
+                let title = code.isEmpty ? "Automatic" : SpokenLanguage.names([code], none: code)
+                let item = NSMenuItem(title: title, action: #selector(selectMainLanguage(_:)), keyEquivalent: "")
+                item.target = self
+                item.representedObject = code
+                item.state = code == main ? .on : .off
+                menu.addItem(item)
+                if code.isEmpty { menu.addItem(.separator()) }
+            }
+            menu.addItem(.separator())
+            let note = NSMenuItem(title: "Main language; the others are still heard", action: nil, keyEquivalent: "")
+            note.isEnabled = false
+            menu.addItem(note)
+            return
+        }
         guard menu.title == "Microphone" else { return }
         menu.removeAllItems()
         let current = AudioInputDevices.currentDefaultID()

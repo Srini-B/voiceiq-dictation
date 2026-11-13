@@ -23,14 +23,22 @@ public struct MeetingTranscriber: Sendable {
     private let client: GeminiClient
     private let models: Models
     private let endpoint: URL
-    /// Providers to try in order; see `ModelProvider.meetingOrder`.
-    private let providers: @Sendable () -> [ModelProvider]
+    /// Where to transcribe, in order; see `SettingsStore.meetingSpeechEndpoints`.
+    private var endpoints: @Sendable () -> [ModelEndpoint]
+    /// ElevenLabs redaction; see `SettingsStore.redactsMeetingSecrets`.
+    private var redacts: @Sendable () -> Bool = { SettingsStore().redactsMeetingSecrets }
+    /// Spoken languages; see `SettingsStore.spokenLanguages`. Only Scribe
+    /// takes them for a meeting: OpenAI's diarizing model
+    /// (`gpt-4o-transcribe-diarize`) takes no prompt and no language list,
+    /// only one `language`, which would shut out every other speaker's, and
+    /// Gemini detects each language and every switch itself.
+    private var languages: @Sendable () -> [String] = { SettingsStore().spokenLanguages }
     private let sleep: @Sendable (TimeInterval) async throws -> Void
 
     public init(client: GeminiClient, models: Models, endpoint: URL,
-                providers: @escaping @Sendable () -> [ModelProvider],
+                endpoints: @escaping @Sendable () -> [ModelEndpoint],
                 sleep: @escaping @Sendable (TimeInterval) async throws -> Void = { try await Task.sleep(nanoseconds: UInt64($0 * 1_000_000_000)) }) {
-        self.client = client; self.models = models; self.endpoint = endpoint; self.providers = providers
+        self.client = client; self.models = models; self.endpoint = endpoint; self.endpoints = endpoints
         self.sleep = sleep
     }
 
@@ -47,12 +55,28 @@ public struct MeetingTranscriber: Sendable {
     static let cacheVersion = "v7"
 
     public func transcribe(folder: URL) async throws -> [TranscriptSegment] {
+        // A run keeps the settings it started with, so every window it saves
+        // matches the cache it is saved in.
+        let endpoints = self.endpoints(), redacts = self.redacts(), languages = self.languages()
+        var run = self
+        run.endpoints = { endpoints }; run.redacts = { redacts }; run.languages = { languages }
+        return try await run.transcribeRun(folder: folder)
+    }
+
+    private func transcribeRun(folder: URL) async throws -> [TranscriptSegment] {
         let audio = try Self.callAudio(folder: folder)
-        // The provider names the window cache, so a redo after switching it
-        // transcribes again instead of reusing the other model's windows.
-        let first = providers().first
+        // The endpoint names the window cache, so a redo after switching it
+        // transcribes again instead of reusing the other model's windows; so
+        // do ElevenLabs redaction and spoken languages, so a retry after
+        // changing them never reuses windows made without them.
+        let first = endpoints().first
+        var options = ""
+        if first == .elevenLabs {
+            if redacts() { options += "-redacted" }
+            if !languages().isEmpty { options += "-" + languages().joined(separator: "+") }
+        }
         let cache = folder.appendingPathComponent(
-            "transcribe-\(Self.cacheVersion)-\(first?.rawValue ?? "none")-\(Int(Self.windowSpeech))", isDirectory: true)
+            "transcribe-\(Self.cacheVersion)-\(first?.rawValue ?? "none")\(options)-\(Int(Self.windowSpeech))", isDirectory: true)
         try FileManager.default.createDirectory(at: cache, withIntermediateDirectories: true)
         var budget = Self.rateLimitBudget
         let windows = Self.windows(audio.activeRegions(), speech: Self.windowSpeech)
@@ -278,11 +302,11 @@ public struct MeetingTranscriber: Sendable {
     /// Runs `body` with each provider in turn. A throttled provider is waited
     /// out only when no other provider has a key.
     private func withProviders<T>(label: String, budget: inout TimeInterval,
-                                  _ body: (ModelProvider) async throws -> T) async throws -> T {
+                                  _ body: (ModelEndpoint) async throws -> T) async throws -> T {
         var lastError: Error = TranscriptionError.network("no_provider")
         while true {
             var waits: [TimeInterval] = []
-            for via in providers() {
+            for via in endpoints() {
                 do {
                     do { return try await body(via) } catch TranscriptionError.safetyBlocked {
                         // MEASURED 2026-09-27: the flash model blocked one window of a
@@ -309,25 +333,30 @@ public struct MeetingTranscriber: Sendable {
         }
     }
 
-    /// Speaker-labelled words on the provider's diarizing model.
+    /// Speaker-labelled words on the endpoint's diarizing model.
     private func transcribeSpeakers(_ flac: Data, seconds: Double, references: [(id: String, audio: Data)],
-                                    via provider: ModelProvider) async throws -> [DiarizedWord] {
-        switch provider {
+                                    via endpoint: ModelEndpoint) async throws -> [DiarizedWord] {
+        switch endpoint {
         case .gemini:
-            return try await client.transcribeSpeakers(audio: flac, model: models.transcribe, endpoint: endpoint, deadline: 600)
+            return try await client.transcribeSpeakers(audio: flac, model: models.transcribe, endpoint: self.endpoint, deadline: 600)
         case .openAI:
             return try await client.openAIDiarize(audio: flac, references: references, deadline: 600)
+        case .elevenLabs:
+            return try await client.elevenLabsDiarize(audio: flac, keyterms: DictionaryStore().sanitizedVocabulary(),
+                                                      languages: languages(),
+                                                      redact: redacts(),
+                                                      audioSeconds: seconds, deadline: 600)
         }
     }
 
-    /// Gemini: reference clips go inside the audio and the labels the API
-    /// gives them name the speakers (`SpeakerLinker.link`). OpenAI: up to
+    /// Gemini and ElevenLabs: reference clips go inside the audio and the
+    /// labels the API gives them name the speakers (`SpeakerLinker.link`). OpenAI: up to
     /// four named voice references go alongside, and the model labels their
     /// segments with those names.
     private func transcribe(window regions: [ClosedRange<Double>], audio: CallAudio, clips: [(key: String, value: [ClosedRange<Double>])],
-                            known: [TimedWord], via provider: ModelProvider) async throws -> [TimedWord] {
+                            known: [TimedWord], via provider: ModelEndpoint) async throws -> [TimedWord] {
         var request = AssembledAudio()
-        if provider == .gemini {
+        if provider != .openAI {
             for (id, ranges) in clips { try request.appendAnchor(id: id, clips: ranges, from: audio) }
             try request.appendBody(regions, from: audio)
             let raw = try await transcribeSpeakers(try FLACEncoder.encode(samples: request.samples), seconds: request.duration,

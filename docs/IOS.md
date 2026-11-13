@@ -337,7 +337,9 @@ far-side reference, so `MeetingTranscriber.callAudio` skips echo cancellation
 (the WebRTC AEC3 xcframework ships a macOS slice only and is not linked on
 iOS). Speaker linking, meeting-type notes, suggested speaker names and Redo
 (notes only, or transcript and notes) work as on the Mac. Dictation is refused
-while notes record. Notes are always transcribed by the provider.
+while notes record. Notes are transcribed by the provider, or by ElevenLabs
+Scribe v3 when Provider & Keys picks ElevenLabs under Transcription; then the
+recorder card also shows the last lines Scribe v3 Live heard.
 
 ### Typing
 
@@ -670,8 +672,8 @@ runs. Everything needs Full Access.
 | Pill | Keyboard status plus Dynamic Island |
 | AX and paste insertion | `textDocumentProxy.insertText` |
 | Ask Anything, Translate, Paste last | Keyboard modes and Paste last |
-| Provider (Gemini or OpenAI), TinyFish | Same, in Settings › Provider & Keys and the iOS Keychain. Each key card carries the service's favicon from `Assets.xcassets/Provider*.imageset` (`BrandTile`); the OpenAI mark is a template image so it takes the ink colour in dark mode |
-| History stats: words, dictations, WPM, audio time | Home's stats grid |
+| Provider (Gemini or OpenAI), ElevenLabs, TinyFish | Same, in Settings › Provider & Keys and the iOS Keychain. With an ElevenLabs key stored, a Transcription picker (provider or ElevenLabs) appears there. Each key card carries the service's favicon from `Assets.xcassets/Provider*.imageset` (`BrandTile`); the OpenAI mark is a template image so it takes the ink colour in dark mode |
+| History stats: words, dictations, WPM, audio time, time saved, day streak, with a period menu | Statistics (`StatsView`), opened from the row above History's days or from Home's stats grid. Same `HistoryStore.stats(period:)` and the same remembered period (`historyStatsPeriod`); the Mac's streak tooltip (longest streak, active days) is a line under the tiles. Home's grid shows all time |
 | Dictionary with search, CSV and Auto-learned | Same, synced through iCloud, plus adding a selection or a copied word from the keyboard |
 | Writing rules, smart transcription, live, noise handling | Same settings |
 | History, retry, crash recovery, retention | Same. The detail shows Pipeline, the seconds from Stop to the text being ready (`DictationRecord.pipelineSeconds`, as on the Mac; absent for dictations synced from the Mac), the cost and one row per stage and model (stage, model, call count when above one, summed cost; `UsageLine.lines` over `UsageStore.records(forSession:)`), and Copy turns into "Copied" with a checkmark and a success haptic for 1.5 s |

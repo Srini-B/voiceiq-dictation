@@ -600,7 +600,7 @@ private struct MicScreen: View {
                             .transition(.opacity)
                     }
                     if inputs.count > 1 {
-                        Picker("", selection: Binding(
+                        SearchablePicker("", selection: Binding(
                             get: { selectedInput ?? AudioInputDevices.currentDefaultID() },
                             set: { newValue in
                                 guard let newValue, newValue != selectedInput else { return }
@@ -618,13 +618,7 @@ private struct MicScreen: View {
                                 stopMeter()
                                 startMeter()
                             }
-                        )) {
-                            ForEach(inputs) { device in
-                                Text(device.name).tag(Optional(device.id))
-                            }
-                        }
-                        .labelsHidden()
-                        .pickerStyle(.menu)
+                        ), options: inputs.map { SearchOption(value: Optional($0.id), name: $0.name) })
                         .frame(maxWidth: 260)
                         .font(VoiceIQUI.TypeScale.labelSmall())
                     }
