@@ -60,15 +60,15 @@ final class KeyCapView: UIView {
         CATransaction.commit()
         image.frame = faceFrame
         hint.frame = CGRect(x: faceFrame.minX, y: faceFrame.minY + 1.5, width: faceFrame.width - 3.5, height: 11)
-        label.frame = faceFrame.insetBy(dx: 2, dy: 0).offsetBy(dx: 0, dy: labelOffset)
+        label.frame = faceFrame.insetBy(dx: 2, dy: 0).offsetBy(dx: 0, dy: Self.labelOffset(label.text, label.font))
         layer.shadowPath = UIBezierPath(roundedRect: bounds, cornerRadius: layer.cornerRadius).cgPath
     }
 
     /// UILabel centres the font's whole line box, which leaves letters low on
     /// the key. Centre capitals, digits and punctuation on the cap height and
     /// lowercase words on the x-height instead, as the iOS keyboard does.
-    private var labelOffset: CGFloat {
-        guard let text = label.text, let font = label.font else { return 0 }
+    static func labelOffset(_ text: String?, _ font: UIFont?) -> CGFloat {
+        guard let text, let font else { return 0 }
         let lowercase = text.contains(where: \.isLowercase) && !text.contains(where: \.isUppercase)
         let visible = lowercase ? font.xHeight : font.capHeight
         // UILabel still draws about 1.2 pt below the line box centre
@@ -193,7 +193,8 @@ final class KeyPreview: UIView {
 
     required init?(coder: NSCoder) { fatalError() }
 
-    func show(text: String, over key: CGRect, in parent: UIView, theme: KeyTheme) {
+    /// `top` is the highest the preview may reach, the top of the keyboard.
+    func show(text: String, over key: CGRect, in parent: UIView, top: CGFloat, theme: KeyTheme) {
         if superview !== parent { parent.addSubview(self) }
         parent.bringSubviewToFront(self)
         backgroundColor = theme.popup
@@ -201,10 +202,10 @@ final class KeyPreview: UIView {
         label.font = theme.font(size: 34)
         label.text = text
         let width = key.width + 18, height = key.height + 14
-        frame = CGRect(x: key.midX - width / 2, y: key.minY - height - 4, width: width, height: height)
+        frame = CGRect(x: key.midX - width / 2, y: max(key.minY - height - 4, top + 2), width: width, height: height)
         // Keep it on screen at the edges.
         frame.origin.x = min(max(frame.minX, 0), parent.bounds.width - width)
-        label.frame = bounds
+        label.frame = bounds.offsetBy(dx: 0, dy: KeyCapView.labelOffset(text, label.font))
         isHidden = false
     }
 }
@@ -212,32 +213,52 @@ final class KeyPreview: UIView {
 /// The accents or alternates shown by holding a key; sliding picks one.
 final class AccentPopup: UIView {
     private var labels: [UILabel] = []
+    private let highlight = UIView()
     private let cell: CGSize
 
     private let theme: KeyTheme
+    /// Between the popup's edge and its options.
+    private static let padding: CGFloat = 5
 
-    init(key: CGRect, options: [String], in bounds: CGRect, theme: KeyTheme) {
+    /// `top` is the highest the popup may reach, the top of the keyboard.
+    init(key: CGRect, options: [String], in bounds: CGRect, top: CGFloat, theme: KeyTheme) {
         self.theme = theme
+        let padding = Self.padding
         // Narrower than the key when the options would not fit the screen.
-        cell = CGSize(width: min(max(key.width, 30), (bounds.width - 4) / CGFloat(options.count)), height: key.height + 8)
-        let width = cell.width * CGFloat(options.count)
-        var x = key.midX - cell.width / 2
-        if x + width > bounds.width - 2 { x = key.maxX - width }
-        x = max(2, x)
-        super.init(frame: CGRect(x: x, y: key.minY - cell.height - 6, width: width, height: cell.height))
+        cell = CGSize(width: min(max(key.width, 30), (bounds.width - 4 - 2 * padding) / CGFloat(options.count)),
+                      height: key.height)
+        let width = cell.width * CGFloat(options.count) + 2 * padding
+        let height = cell.height + 2 * padding
+        var x = key.midX - cell.width / 2 - padding
+        if x + width > bounds.width - 2 { x = key.maxX + padding - width }
+        // The padding can push a popup on the row's last key past the edge.
+        x = max(2, min(x, bounds.width - 2 - width))
+        // Above the key, but over the top row's keys rather than cut off by
+        // the top of the keyboard.
+        let y = max(key.minY - height - 4, top + 2)
+        super.init(frame: CGRect(x: x, y: y, width: width, height: height))
         isUserInteractionEnabled = false
         backgroundColor = theme.popup
-        layer.cornerRadius = 8
+        layer.cornerRadius = 10
         layer.shadowColor = UIColor.black.cgColor
         layer.shadowOpacity = 0.25
         layer.shadowRadius = 4
+        layer.shadowOffset = CGSize(width: 0, height: 1)
+        highlight.backgroundColor = .tintColor
+        highlight.layer.cornerRadius = 6
+        highlight.layer.cornerCurve = .continuous
+        addSubview(highlight)
+        // One offset for every option, so they share a baseline.
+        let joined = options.joined()
         for (i, option) in options.enumerated() {
-            let label = UILabel(frame: CGRect(x: CGFloat(i) * cell.width, y: 0, width: cell.width, height: cell.height))
+            let font = theme.font(size: option.count > 2 ? 16 : 24)
+            let frame = CGRect(x: padding + CGFloat(i) * cell.width, y: padding, width: cell.width, height: cell.height)
+            let label = UILabel(frame: frame.offsetBy(dx: 0, dy: KeyCapView.labelOffset(joined, font)))
             label.text = option
             label.textAlignment = .center
-            label.font = theme.font(size: option.count > 2 ? 16 : 24)
-            label.layer.cornerRadius = 6
-            label.clipsToBounds = true
+            label.font = font
+            label.adjustsFontSizeToFitWidth = true
+            label.minimumScaleFactor = 0.6
             addSubview(label)
             labels.append(label)
         }
@@ -250,9 +271,10 @@ final class AccentPopup: UIView {
 
     /// Highlights the option under the finger and returns its index.
     func select(at point: CGPoint) -> Int {
-        let index = min(labels.count - 1, max(0, Int(point.x / cell.width)))
+        let index = min(labels.count - 1, max(0, Int((point.x - Self.padding) / cell.width)))
+        highlight.frame = CGRect(x: Self.padding + CGFloat(index) * cell.width, y: Self.padding,
+                                 width: cell.width, height: cell.height).insetBy(dx: 1, dy: 0)
         for (i, label) in labels.enumerated() {
-            label.backgroundColor = i == index ? .tintColor : .clear
             label.textColor = i == index ? .white : theme.character.label
         }
         return index

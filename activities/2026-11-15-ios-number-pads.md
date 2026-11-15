@@ -45,3 +45,25 @@ Revert the commit.
 - Slid-word capitals (`TypingEngine.userSpelling`): a lowercase saved
   spelling such as "cant" → "can't" was dropped as if it were a lone
   capital. It is kept now (regression case in `KeyboardTypingTests`).
+
+## Follow-up: long-press popups on the top row (2026-11-15)
+
+The maintainer saw the alternates popup on the top row run above the
+keyboard and get cut off: no border at the top, and the highlight touching
+the cut edge. The option glyphs also sat unevenly.
+
+- The alternates popup and the key preview now stay below the top of the
+  keyboard, over the suggestion bar or the top row's keys.
+- The popup has 5 pt of padding on every side, and the highlight is one
+  rounded box inside it rather than each label's background.
+- Every option shares one baseline (`KeyCapView.labelOffset` over all of
+  them), and long options shrink to fit their cell.
+- A popup on a row's last key (p, the number pad's −) is kept on screen:
+  with the padding it had run about 2 pt past the right edge.
+
+Evidence (Simulator, iOS 27.0, Debug): `scripts/build-ios.sh` exit 0. On
+iPhone SE and iPhone 17, holding e, o, p, a and the number pad's − shows the
+whole popup inside the keyboard; measured on the screenshots, the − and p
+popups have 2 pt on both sides. A slide onto % moves the highlight to the
+last cell. A q press shows its preview inside the keyboard. e on iPad Air
+11-inch (M4) too. Not tried on a device.

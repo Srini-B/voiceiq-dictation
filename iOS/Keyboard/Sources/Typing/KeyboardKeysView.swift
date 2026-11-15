@@ -280,7 +280,8 @@ final class KeyboardKeysView: UIView {
                         MainActor.assumeIsolated {
                             guard let self, let state, case .press = state.gesture else { return }
                             self.hidePreview()
-                            let popup = AccentPopup(key: self.keys[index].frame, options: spec.alternates.map { self.cased($0) }, in: self.bounds, theme: self.theme)
+                            let popup = AccentPopup(key: self.keys[index].frame, options: spec.alternates.map { self.cased($0) }, in: self.bounds,
+                                                    top: self.keyboardTop, theme: self.theme)
                             self.addSubview(popup)
                             state.gesture = .accents(popup, selected: 0)
                         }
@@ -466,10 +467,17 @@ final class KeyboardKeysView: UIView {
 
     private func showPreview(for index: Int) {
         guard case .insert(let text) = keys[index].spec.action, text.count == 1 else { return }
-        preview.show(text: keys[index].spec.isLetter ? cased(text) : text, over: keys[index].frame, in: self, theme: theme)
+        preview.show(text: keys[index].spec.isLetter ? cased(text) : text, over: keys[index].frame, in: self, top: keyboardTop, theme: theme)
     }
 
     private func hidePreview() { preview.isHidden = true }
+
+    /// The top of the keyboard in this view's coordinates: the suggestion bar
+    /// sits between it and the keys.
+    private var keyboardTop: CGFloat {
+        guard let host = inputController?.view ?? window else { return 0 }
+        return convert(host.bounds.origin, from: host).y
+    }
 
     private func drawTrail(_ points: [CGPoint]) {
         let path = UIBezierPath()
