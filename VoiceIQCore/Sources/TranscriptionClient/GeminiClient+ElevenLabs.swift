@@ -131,7 +131,10 @@ public enum ElevenLabs {
     static func addsNothing(original: String, edit: String) -> Bool {
         var heard = ValidationGate.contentWords(of: original).reduce(into: [String: Int]()) { $0[$1, default: 0] += 1 }
         var added: [String] = []
-        for word in ValidationGate.contentWords(of: edit) where !word.contains(where: \.isNumber) {
+        // Words with decimal digits go to `saysEveryNumber`; any other numeral
+        // ("Ⅷ", "½") must have been heard like a word.
+        for word in ValidationGate.contentWords(of: edit)
+        where !word.unicodeScalars.contains(where: { $0.properties.numericType == .decimal }) {
             if let count = heard[word], count > 0 { heard[word] = count - 1 } else { added.append(word) }
         }
         func near(_ word: String, _ said: String) -> Bool {
