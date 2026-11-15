@@ -167,8 +167,11 @@ public enum ElevenLabs {
         // Any script's digits, read as 0-9 ("٢٥" is "25"), keeping the
         // decimal point: "1.50" is not "150". A comma before three digits
         // groups thousands ("1,500"); any other comma or a period is the
-        // decimal point. Colons ("3:30") are dropped.
-        let numeral = try! NSRegularExpression(pattern: #"\p{Nd}[\p{Nd},.:]*\p{Nd}|\p{Nd}"#)
+        // decimal point. Colons ("3:30") are dropped. A minus sign not after
+        // a letter or digit is kept: "-25" is not "25", but "555-1234" and
+        // "COVID-19" have no sign.
+        let number = #"(?:(?<![\p{L}\p{Nd}])[-−])?(?:\p{Nd}[\p{Nd},.:]*\p{Nd}|\p{Nd})"#
+        let numeral = try! NSRegularExpression(pattern: number)
         func digits(_ text: Substring) -> String {
             var figure = "", index = text.startIndex
             while index < text.endIndex {
@@ -176,6 +179,7 @@ public enum ElevenLabs {
                 let after = text[text.index(after: index)...]
                 if let value = character.wholeNumberValue { figure += String(value) }
                 else if character == "." { figure += "." }
+                else if character == "-" || character == "−" { figure += "-" }
                 else if character == ",", after.prefix(while: \.isNumber).count != 3 { figure += "." }
                 index = text.index(after: index)
             }
@@ -189,12 +193,12 @@ public enum ElevenLabs {
         }
 
         // The original's numbers, split into runs of number words and digits.
-        let token = try! NSRegularExpression(pattern: #"\p{Nd}[\p{Nd},.:]*\p{Nd}|\p{Nd}|\p{L}+"#)
+        let token = try! NSRegularExpression(pattern: number + #"|\p{L}+"#)
         var runs: [[String]] = [[]]
         for match in token.matches(in: original, range: NSRange(original.startIndex..., in: original)) {
             guard let range = Range(match.range, in: original) else { continue }
             let word = original[range].lowercased()
-            if word.first?.isNumber == true { runs[runs.count - 1].append(digits(Substring(word))) }
+            if word.contains(where: \.isNumber) { runs[runs.count - 1].append(digits(Substring(word))) }
             else if spokenNumbers[word] != nil || numberJoiners.contains(word) { runs[runs.count - 1].append(word) }
             else if !runs[runs.count - 1].isEmpty { runs.append([]) }
         }
@@ -248,8 +252,9 @@ public enum ElevenLabs {
     /// cardinal; nil when they do not read as one number ("five twenty").
     private static func chunkValue(_ chunk: ArraySlice<String>) -> String? {
         if chunk.count == 1, let only = chunk.first {
-            if only.first?.isNumber == true { return only }
+            if only.contains(where: \.isNumber) { return only }
             if only == "point" { return "." }
+            if only == "minus" || only == "negative" { return "-" }
             if only == "and" { return "" }
         }
         var total = 0, current: Int?, read = false
@@ -271,7 +276,7 @@ public enum ElevenLabs {
     }
 
     /// Words between the parts of a spoken number.
-    private static let numberJoiners: Set<String> = ["point", "and"]
+    private static let numberJoiners: Set<String> = ["point", "and", "minus", "negative"]
 
     private static let spokenNumbers: [String: Int] = {
         let units = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten",

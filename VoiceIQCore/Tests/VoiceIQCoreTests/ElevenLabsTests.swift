@@ -69,7 +69,9 @@ final class ElevenLabsTests: XCTestCase {
         // Digits must stand for the whole spoken number, not part of it.
         for (raw, edit) in [("Pay one hundred dollars", "Pay 1 dollar."), ("Pay twenty five dollars", "Pay 20 dollars."),
                             ("Pay 1.50 dollars today", "Pay 150 dollars today."),
-                            ("Pay three point five dollars today", "Pay 35 dollars today.")] {
+                            ("Pay three point five dollars today", "Pay 35 dollars today."),
+                            ("The temperature is -25 degrees today", "The temperature is 25 degrees today."),
+                            ("The temperature is 25 degrees today", "The temperature is -25 degrees today.")] {
             XCTAssertEqual(ElevenLabs.accepted(edit: edit, original: raw), raw, edit)
         }
         XCTAssertEqual(ElevenLabs.accepted(edit: "Please send one 1 invoice to accounting today.",
@@ -84,6 +86,7 @@ final class ElevenLabsTests: XCTestCase {
             ("we sold fifteen hundred units in two thousand twenty six", "We sold 1,500 units in 2026."),
             ("the twenty first floor", "The 21st floor."),
             ("one more thing at three thirty", "One more thing at 3:30."),
+            ("it was minus five outside", "It was -5 outside."),
         ]
         for (raw, edit) in formats { XCTAssertEqual(ElevenLabs.accepted(edit: edit, original: raw), edit, raw) }
     }
