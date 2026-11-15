@@ -187,7 +187,7 @@ public enum ElevenLabs {
 
         // Each said number accounts for one written number: "25" said once
         // is not "25 25".
-        var used = runs.map { [Bool](repeating: false, count: $0.count) }
+        var used = runs.map { [Bool](repeating: false, count: $0.count) }, touched = Set<Int>()
         // A number word the edit keeps ("one invoice") uses up the same said
         // word, so it cannot also stand behind digits ("one 1 invoice").
         for match in token.matches(in: edit, range: NSRange(edit.startIndex..., in: edit)) {
@@ -214,12 +214,19 @@ public enum ElevenLabs {
                 for start in run.indices {
                     guard let end = matches(number.startIndex, start) else { continue }
                     for index in start..<end { used[r][index] = true }
+                    touched.insert(r)
                     return true
                 }
             }
             return false
         }
-        return written.allSatisfy(said)
+        // Digits stand for whole spoken numbers: "one hundred" is not "1",
+        // and "twenty five" is not "20". A run the digits drew on is used up,
+        // all but "and", "point" and a filler "oh".
+        guard written.allSatisfy(said) else { return false }
+        return touched.allSatisfy { r in
+            runs[r].indices.allSatisfy { used[r][$0] || ["and", "point", "oh"].contains(runs[r][$0]) }
+        }
     }
 
     /// The digits a few words of a run read as: one numeral as it is, "point"
