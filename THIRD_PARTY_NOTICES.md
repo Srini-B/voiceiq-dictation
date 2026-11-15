@@ -94,23 +94,24 @@ its Apache 2.0 license, which is compatible with GPL-3.0.
 - Files: `iOS/Vendor/FUTOSwipe/` (headers and static libraries built from the
   source, unmodified); used by `iOS/Keyboard/Sources/Swipe/`.
 - Source: [keyboard/swipe-library](https://gitlab.futo.org/keyboard/swipe-library)
-  at `1b13f2c85d6b347f6ea3fbc4b3aaf01fce42429a`.
+  at `e8ade0e03bc18e9609e1f56afbd4394049185a99`.
 - License: GNU General Public License v3.0, Copyright FUTO Holdings, Inc.
   Full text in `iOS/Vendor/FUTOSwipe/LICENSE`.
-- Linked into the same libraries, from the library's pinned ExecuTorch
-  v1.2.0 submodule: ExecuTorch (BSD 3-Clause, Meta Platforms), XNNPACK
+- Linked into the same libraries, from ExecuTorch v1.6.0 (the library's
+  submodule moved forward from its pinned v1.2.0): ExecuTorch (BSD 3-Clause, Meta Platforms), XNNPACK
   (BSD 3-Clause, Google and Facebook), cpuinfo and pthreadpool (BSD 2-Clause),
   KleidiAI (Apache 2.0, Arm), flatcc runtime (Apache 2.0).
 
 ### FUTO Swipe models
 
-- Files: `iOS/Keyboard/Resources/swipe/` `honorable_sturgeon` (encoder),
+- Files: `iOS/Keyboard/Resources/swipe/` `honorable_sturgeon` (encoder, its int8
+  `model_int8.pte`),
   `magic_macaw` (QWERTY decoder), `chosen_planarian` (context model, which
   replaced `hungry_jellyfish` on 2026-11-05 and also ranks the suggestion
   bar's predictions and completions), and `scoring.json` (the scoring
   weights for these models), unmodified.
 - Source: [futo-org/futo-swipe](https://huggingface.co/futo-org/futo-swipe) at
-  `315d42583233b71d75665d076cfa2f2c7c6f43ad`.
+  `0a9a44bbe4d5b8aa8d1ff579ffc40d4861ae2467`.
 - License: FUTO Model Weights License 1.0, in
   `iOS/Keyboard/Resources/swipe/LICENSE.md`. It requires a visible "powered by
   FUTO Swipe" notice, which is the footer of Settings › Typing.

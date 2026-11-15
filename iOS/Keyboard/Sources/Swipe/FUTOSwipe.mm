@@ -39,7 +39,7 @@ static swipe_decoder::KeyboardLayout Layout(NSArray<NSNumber *> *xs, NSArray<NSN
     _words = std::make_unique<MappedTrie>([self path:@"words.trie"]);
     if (!_words->ok()) return nil;
     swipe_decoder::SwipeEngine::Config config;
-    config.encoder_path = [self path:@"honorable_sturgeon/model_fp32.pte"];
+    config.encoder_path = [self path:@"honorable_sturgeon/model_int8.pte"];
     config.decoder_path = decoder ? [self path:@"magic_macaw/model_fp32.pte"] : "";
     config.lm_model_path = [self path:@"chosen_planarian/context_lm.pte"];
     config.lm_vocab_path = [self path:@"chosen_planarian/vocab.txt"];

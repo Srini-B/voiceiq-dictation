@@ -410,7 +410,9 @@ otherwise hold back touches near the screen edges.
 
 **Slide to type: FUTO Swipe.** FUTO Keyboard's swipe engine
 (`iOS/Vendor/FUTOSwipe`, GPL-3.0) runs three models on ExecuTorch with
-XNNPACK: an encoder that reads the path for any layout, a decoder trained on
+XNNPACK: an encoder that reads the path for any layout (FUTO's int8
+export, `model_int8.pte`: same accuracy as fp32, faster, about 10 MB less
+keyboard memory), a decoder trained on
 QWERTY, and a context model (`chosen_planarian`) that weighs the words before
 the cursor. The same context model ranks the suggestion bar (see Scoring). A beam
 search keeps the results to words in `swipe/words.trie` and the user's own
@@ -460,7 +462,8 @@ model license and GPL-3.0 section 5(d) require.
   keyboard extension. `scripts/generate-swipe-trie.py` writes the same trie as
   12-byte nodes that `MappedTrie.cpp` memory-maps (5.2 MB, 142,507 words).
   The three models add about 21 MB; the keyboard measured 40 MB in the
-  iPhone 17e Simulator after slides. On a Mac the loaded engine takes
+  iPhone 17e Simulator after slides (fp32 encoder; with the int8 encoder
+  52 MB fell to 42 MB in the iPhone 18 Pro Simulator). On a Mac the loaded engine takes
   19 MB and the model's scores for a context about 1 MB more; a second
   `ContextLMScorer` for predictions would have added 11.5 MB, so predictions
   share the swipe engine. After typing and slides in the iPhone Air Simulator
@@ -469,8 +472,9 @@ model license and GPL-3.0 section 5(d) require.
   both off; runs vary by about 5 MB. The model files are mapped and do not
   count.
 - Rebuilding: `scripts/build-futo-swipe.sh` clones the library at its pinned
-  commit, builds ExecuTorch and the library for iPhone and Simulator (about
-  five minutes on an M2), and downloads the pinned models. The output is
+  commit, builds it against ExecuTorch v1.6.0 (newer than the library's own
+  v1.2.0 pin, with the library's XNNPACK patch) for iPhone and Simulator
+  (about ten minutes on an Apple Silicon Mac), and downloads the pinned models. The output is
   committed, so app builds need neither step. The keyboard target force-loads
   `libfutoswipe_registry.a` (kernels register themselves), builds C++17
   without RTTI, and excludes x86_64 Simulators.
