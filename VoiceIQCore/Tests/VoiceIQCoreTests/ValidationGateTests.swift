@@ -42,6 +42,11 @@ final class ValidationGateTests: XCTestCase {
         XCTAssertFalse(ValidationGate.validate(raw: "明日の会議は三時からです", cleaned: "The meeting tomorrow starts at three.").accepted)
         XCTAssertEqual(ValidationGate.validate(raw: "東京の人口は何人ですか？", cleaned: "東京の人口は約千四百万人です。").reason,
                        ValidationGate.questionAnswered)
+        // A question may end on its particle and "。", and a fixed mishearing stays a question.
+        XCTAssertTrue(ValidationGate.validate(raw: "明日の快気は何時ですか？", cleaned: "明日の会議は何時ですか。").accepted)
+        // Dropping the particle answers it, though every character was said.
+        XCTAssertEqual(ValidationGate.validate(raw: "明日は雨ですか？", cleaned: "明日は雨です。").reason,
+                       ValidationGate.questionAnswered)
     }
 
     // MARK: Reject — the documented failure modes

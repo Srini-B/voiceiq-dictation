@@ -53,6 +53,42 @@ final class ElevenLabsTests: XCTestCase {
         for (raw, edit) in formats { XCTAssertEqual(ElevenLabs.accepted(edit: edit, original: raw), edit, raw) }
     }
 
+    /// A number the edit writes must have been said, as digits or as words
+    /// that read as it; one it made up sends the transcript on as heard.
+    func testAnEditThatAddsANumberIsNotUsed() {
+        let heard = "Please send the invoice to accounting today."
+        XCTAssertEqual(ElevenLabs.accepted(edit: "Please send the invoice 99999 to accounting today.", original: heard), heard)
+        XCTAssertEqual(ElevenLabs.accepted(edit: "Call me at 3:40.", original: "call me at three thirty"), "call me at three thirty")
+        let formats = [
+            ("it costs twenty five dollars", "It costs $25."),
+            ("call me at three thirty", "Call me at 3:30."),
+            ("born in nineteen ninety nine", "Born in 1999."),
+            ("the rate is three point five percent", "The rate is 3.5%."),
+            ("my number is five five five one two three four", "My number is 555-1234."),
+            ("we sold fifteen hundred units in two thousand twenty six", "We sold 1,500 units in 2026."),
+            ("the twenty first floor", "The 21st floor."),
+        ]
+        for (raw, edit) in formats { XCTAssertEqual(ElevenLabs.accepted(edit: edit, original: raw), edit, raw) }
+    }
+
+    /// Redacted live text keeps each heard word's speaker and time: in
+    /// Japanese, written without spaces, and after placeholders in a row.
+    func testRedactedWordsKeepTheirSpeakers() {
+        func words(_ list: [(String, String, Double)]) -> [DiarizedWord] {
+            list.map { DiarizedWord(text: $0.0, speaker: $0.1, start: $0.2, end: $0.2 + 0.5) }
+        }
+        func shown(_ redacted: [DiarizedWord]) -> [String] { redacted.map { "\($0.speaker ?? "?") \($0.start ?? -1): \($0.text)" } }
+
+        XCTAssertEqual(shown(ElevenLabs.redacting(words([("はい。", "a", 0), ("いいえ。", "b", 1)]), as: "はい。いいえ。")),
+                       ["a 0.0: はい。", "b 1.0: いいえ。"])
+        XCTAssertEqual(shown(ElevenLabs.redacting(words([("番号は", "a", 0), ("4111", "a", 1), ("です。", "a", 2), ("了解。", "b", 3)]),
+                                                  as: "番号は{CREDIT_CARD}です。了解。")),
+                       ["a 0.0: 番号は", "a 1.0: {CREDIT_CARD}", "a 2.0: です。", "b 3.0: 了解。"])
+        XCTAssertEqual(shown(ElevenLabs.redacting(words([("4111-1111", "a", 0), ("hunter2", "a", 1), ("Thanks.", "b", 2), ("Next.", "b", 3)]),
+                                                  as: "{CREDIT_CARD} {PASSWORD} Thanks. Next.")),
+                       ["a 0.0: {CREDIT_CARD}", "a 1.0: {PASSWORD}", "b 2.0: Thanks.", "b 3.0: Next."])
+    }
+
     func testAnEditThatTranslatesIsNotUsed() {
         let raw = "You know over the years I have seen this. 2 सवाल है। तो आपको क्यों लगता है कि divine ने आपको क्यों bless किया है इस creative cloud के साथ?"
         let translated = "Over the years, I have seen this. There are two questions. So, why do you think divine has blessed you with this creative cloud?"

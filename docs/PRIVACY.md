@@ -118,8 +118,10 @@ With no usable key, nothing is sent and the recording stays on your Mac.
    sent to the provider (or to ElevenLabs Scribe v3 when it transcribes, with
    your dictionary terms and spoken languages) for a speaker-labelled
    transcript. With "Hide card and ID numbers in meetings" on, ElevenLabs
-   still receives the full audio but returns those numbers replaced, so they
-   are never saved or sent for notes; the live transcript shows each turn
+   still receives the full audio but returns those numbers replaced, so the
+   saved transcript and the notes request never hold them. The meeting's
+   audio recording, kept on your device for as long as you keep audio, still
+   contains them as spoken. The live transcript shows each turn
    only once those numbers are replaced. That transcript is sent back to the provider for a summary
    and action items. Turn the setting
    off and no call detection runs.

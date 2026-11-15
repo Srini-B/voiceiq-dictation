@@ -44,6 +44,8 @@ struct DictationKeySection: View {
                         Text("Side")
                         SearchablePicker("", selection: sideBinding(shortcut),
                                          options: KeyShortcut.Side.allCases.map { SearchOption(value: $0, name: $0.displayName) })
+                        // The capture monitor would swallow the list's search typing.
+                        .disabled(isRecording)
                     }
 
                     Button {

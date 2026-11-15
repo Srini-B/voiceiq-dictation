@@ -73,14 +73,21 @@ public enum ValidationGate {
         // content checks below. A question can also end in the spoken words
         // "question mark".
         let rawEnd = raw.trimmingCharacters(in: .whitespacesAndNewlines.union(.punctuationCharacters))
-        // "？" is the full-width question mark of Chinese and Japanese.
+        // "？" is the full-width question mark of Chinese and Japanese. A
+        // Japanese or Chinese question can also end on its particle and "。"
+        // ("何時ですか。"); dropping that particle ("明日は雨ですか？" →
+        // "明日は雨です。") turns it into a statement without a new character.
+        func endsOnParticle(_ text: String) -> Bool {
+            let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines.union(.punctuationCharacters))
+            return trimmed.hasSuffix("か") || trimmed.hasSuffix("吗")
+        }
         func isQuestion(_ text: String) -> Bool {
             let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-            return trimmed.hasSuffix("?") || trimmed.hasSuffix("？")
+            return trimmed.hasSuffix("?") || trimmed.hasSuffix("？") || endsOnParticle(text)
         }
         if isQuestion(raw) || rawEnd.lowercased().hasSuffix("question mark"),
            !isQuestion(cleaned),
-           cleanWords.contains(where: { !Set(rawWords).contains($0) }) {
+           endsOnParticle(raw) || cleanWords.contains(where: { !Set(rawWords).contains($0) }) {
             return .fail(questionAnswered)
         }
 
@@ -140,7 +147,7 @@ public enum ValidationGate {
     }
 
     /// Kana, CJK ideographs, Thai, Lao, Myanmar and Khmer.
-    private static func isUnspacedScript(_ scalar: Unicode.Scalar) -> Bool {
+    static func isUnspacedScript(_ scalar: Unicode.Scalar) -> Bool {
         switch scalar.value {
         case 0x3040...0x30FF, 0x31F0...0x31FF, 0x3400...0x4DBF, 0x4E00...0x9FFF, 0xF900...0xFAFF,
              0xFF66...0xFF9F, 0x20000...0x2FA1F, 0x0E00...0x0EFF, 0x1000...0x109F, 0x1780...0x17FF:

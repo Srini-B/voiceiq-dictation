@@ -132,3 +132,24 @@ accented Japanese phrase while English is the main language. Whole sentences
 in clear speech and mixed sentences work. For a stretch in another language,
 switching the main language from the menu bar is the reliable path on
 ElevenLabs.
+
+## Follow-up: review findings before the next build (2026-11-15)
+
+An automated review of PR #44 found these; each is fixed with a regression
+test that fails on the previous code (Linux run of ElevenLabsTests and
+ValidationGateTests: 7 failures before, 0 after).
+
+- Scribe's formatting edit could add a number nobody said ("send the
+  invoice 99999 to accounting"): digits were skipped by `addsNothing`. Now
+  every number written in digits must have been said, as digits or as
+  English number words that read as it (`saysEveryNumber`).
+- `ValidationGate`: a Japanese question that keeps its particle and ends on
+  "。" is still a question, and one that loses its particle
+  ("明日は雨ですか？" → "明日は雨です。") is an answer.
+- Live redaction: redacted Japanese text without spaces became one word
+  with the first speaker, and placeholders in a row took the words after
+  them. `ElevenLabs.redacting` now matches heard words from the front.
+- docs/PRIVACY.md: the saved recording still holds spoken card numbers;
+  only the transcript and the notes request are redacted.
+- Mac: the shortcut Side list is disabled while a shortcut is being
+  recorded, since the capture would swallow its search typing.

@@ -143,8 +143,99 @@ public enum ElevenLabs {
             guard let said = heard.keys.sorted().first(where: { heard[$0, default: 0] > 0 && near(word, $0) }) else { return false }
             heard[said, default: 0] -= 1
         }
-        return true
+        return saysEveryNumber(original: original, edit: edit)
     }
+
+    /// Whether every number the edit writes in digits was said: as digits,
+    /// or as English number words that read as it. Only the digits count, so
+    /// "1,500", "$25", "25%", "3:30" and "3.5" match "1500", "twenty five",
+    /// "three thirty" and "three point five", and whole hours or amounts may
+    /// gain ":00" or ".00" ("three" as "3:00"). Number words may read as one
+    /// number ("two thousand twenty six") or as several written together
+    /// ("nineteen ninety nine", "five five five one two").
+    static func saysEveryNumber(original: String, edit: String) -> Bool {
+        let numeral = try! NSRegularExpression(pattern: #"[0-9][0-9,.:]*[0-9]|[0-9]"#)
+        func digits(_ text: Substring) -> String { String(text.filter(\.isNumber)) }
+        let written = numeral.matches(in: edit, range: NSRange(edit.startIndex..., in: edit)).compactMap { match in
+            Range(match.range, in: edit).map { range -> String in
+                let text = edit[range]
+                return digits(text.hasSuffix(":00") || text.hasSuffix(".00") ? text.dropLast(3) : text)
+            }
+        }
+        guard !written.isEmpty else { return true }
+
+        // The original's numbers, split into runs of number words and digits.
+        let token = try! NSRegularExpression(pattern: #"[0-9][0-9,.:]*[0-9]|[0-9]|\p{L}+"#)
+        var runs: [[String]] = [[]]
+        for match in token.matches(in: original, range: NSRange(original.startIndex..., in: original)) {
+            guard let range = Range(match.range, in: original) else { continue }
+            let word = original[range].lowercased()
+            if word.first?.isNumber == true { runs[runs.count - 1].append(digits(Substring(word))) }
+            else if spokenNumbers[word] != nil || numberJoiners.contains(word) { runs[runs.count - 1].append(word) }
+            else if !runs[runs.count - 1].isEmpty { runs.append([]) }
+        }
+
+        func reads(_ number: String, from run: [String]) -> Bool {
+            // Whether `number` from `at` is the run read from `index` on, a chunk at a time.
+            func matches(_ at: String.Index, _ index: Int) -> Bool {
+                for end in (index + 1)...min(index + 6, run.count) {
+                    guard let value = chunkValue(run[index..<end]), number[at...].hasPrefix(value) else { continue }
+                    let next = number.index(at, offsetBy: value.count)
+                    if next == number.endIndex, !value.isEmpty { return true }
+                    if end < run.count, matches(next, end) { return true }
+                }
+                return false
+            }
+            return run.indices.contains { matches(number.startIndex, $0) }
+        }
+        return written.allSatisfy { number in runs.contains { reads(number, from: $0) } }
+    }
+
+    /// The digits a few words of a run read as: one numeral as it is, "point"
+    /// and "and" as nothing, number words as one English cardinal; nil when
+    /// they do not read as one number ("five twenty").
+    private static func chunkValue(_ chunk: ArraySlice<String>) -> String? {
+        if chunk.count == 1, let only = chunk.first {
+            if only.first?.isNumber == true { return only }
+            if numberJoiners.contains(only) { return "" }
+        }
+        var total = 0, current: Int?, read = false
+        for word in chunk {
+            if word == "and" { continue }
+            guard let value = spokenNumbers[word] else { return nil }
+            read = true
+            let c = current ?? 0
+            switch value {
+            case 0..<10 where current == nil || (c % 10 == 0 && !(10..<20).contains(c % 100)): current = c + value
+            case 10..<100 where current == nil || c % 100 == 0: current = c + value
+            case 100 where c < 100: current = (current ?? 1) * 100
+            case 1_000, 1_000_000, 1_000_000_000:
+                total += (current ?? 1) * value; current = nil
+            default: return nil
+            }
+        }
+        return read ? String(total + (current ?? 0)) : nil
+    }
+
+    /// Words between the parts of a spoken number.
+    private static let numberJoiners: Set<String> = ["point", "and"]
+
+    private static let spokenNumbers: [String: Int] = {
+        let units = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten",
+                     "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen"]
+        let ordinals = ["", "first", "second", "third", "fourth", "fifth", "sixth", "seventh", "eighth", "ninth", "tenth",
+                        "eleventh", "twelfth", "thirteenth", "fourteenth", "fifteenth", "sixteenth", "seventeenth",
+                        "eighteenth", "nineteenth"]
+        let tens = ["twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety"]
+        var numbers: [String: Int] = ["oh": 0, "hundred": 100, "thousand": 1_000, "million": 1_000_000, "billion": 1_000_000_000]
+        for (value, word) in units.enumerated() { numbers[word] = value }
+        for (value, word) in ordinals.enumerated() where !word.isEmpty { numbers[word] = value }
+        for (index, word) in tens.enumerated() {
+            numbers[word] = (index + 2) * 10
+            numbers[String(word.dropLast()) + "ieth"] = (index + 2) * 10
+        }
+        return numbers
+    }()
 
     private static func isSubsequence(_ short: String, of long: String) -> Bool {
         var rest = Substring(long)
@@ -225,23 +316,59 @@ public enum ElevenLabs {
     /// A segment's redacted text as words, each with the speaker and times of
     /// the heard words it stands for. Only the redacted text is kept, so a
     /// heard word never shows; a placeholder such as {CREDIT_CARD} stands for
-    /// the heard words up to the next word both share.
+    /// the heard words up to the next word both share. The text is matched
+    /// word by word from the front, not split on spaces, so Japanese and
+    /// other scripts without spaces keep each speaker's words apart.
     static func redacting(_ words: [DiarizedWord], as text: String) -> [DiarizedWord] {
-        let tokens = text.split(whereSeparator: \.isWhitespace).map(String.init)
-        var out: [DiarizedWord] = [], next = 0
-        for (position, token) in tokens.enumerated() {
-            var taken: ArraySlice<DiarizedWord> = []
-            if token.contains("{") {
-                let following = tokens[(position + 1)...].first { !$0.contains("{") }
-                var end = min(next + 1, words.count)
-                while end < words.count, words[end].text != following { end += 1 }
-                taken = words[min(next, words.count)..<end]; next = end
-            } else if let found = words[min(next, words.count)...].prefix(4).firstIndex(where: { $0.text == token }) {
-                taken = words[found...found]; next = found + 1
+        var out: [DiarizedWord] = [], rest = Substring(text), next = 0
+        func trim() { rest = rest.drop(while: \.isWhitespace) }
+        func unspaced(_ character: Character) -> Bool {
+            character.unicodeScalars.contains(where: ValidationGate.isUnspacedScript)
+        }
+        /// The heard word at or after `start` (within `limit`) that the text
+        /// goes on with, ending where a word can end.
+        func resumes(from start: Int, within limit: Int) -> Int? {
+            guard start < words.count else { return nil }
+            return words[start...].prefix(limit).firstIndex { word in
+                guard !word.text.isEmpty, rest.hasPrefix(word.text) else { return false }
+                guard let after = rest.dropFirst(word.text.count).first, let last = word.text.last else { return true }
+                return after.isWhitespace || after == "{" || unspaced(after) || unspaced(last)
             }
+        }
+        func append(_ token: String, _ taken: ArraySlice<DiarizedWord>) {
             let base = taken.first ?? out.last ?? words.first
             out.append(DiarizedWord(text: token, speaker: base?.speaker,
                                     start: taken.first?.start ?? base?.end, end: taken.last?.end ?? base?.end))
+        }
+        trim()
+        while !rest.isEmpty {
+            if rest.first == "{", rest.contains("}") {
+                // Placeholders in a row stand for the heard words up to the
+                // one the text resumes with, one word each and the rest to the last.
+                var placeholders: [String] = []
+                while rest.first == "{", let close = rest.firstIndex(of: "}") {
+                    // Punctuation after it ("{CREDIT_CARD}.") is part of the placeholder.
+                    let after = rest[rest.index(after: close)...]
+                    let end = after.firstIndex { !$0.isPunctuation || $0 == "{" } ?? after.endIndex
+                    placeholders.append(String(rest[..<end])); rest = rest[end...]; trim()
+                }
+                let start = min(next, words.count)
+                let end = rest.isEmpty ? words.count
+                    : resumes(from: min(start + 1, words.count), within: words.count) ?? min(start + placeholders.count, words.count)
+                for (k, placeholder) in placeholders.enumerated() {
+                    let lo = min(start + k, end)
+                    append(placeholder, words[lo..<(k == placeholders.count - 1 ? end : min(lo + 1, end))])
+                }
+                next = end
+            } else if let found = resumes(from: min(next, words.count), within: 4) {
+                append(words[found].text, words[found...found])
+                rest = rest.dropFirst(words[found].text.count); next = found + 1; trim()
+            } else {
+                // A word the heard words do not have: up to the next space or placeholder.
+                let token = rest.prefix { !$0.isWhitespace && $0 != "{" }
+                let taken = token.isEmpty ? rest.prefix(1) : token
+                append(String(taken), []); rest = rest.dropFirst(taken.count); trim()
+            }
         }
         return out
     }
