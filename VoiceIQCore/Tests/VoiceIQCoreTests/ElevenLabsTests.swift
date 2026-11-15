@@ -67,7 +67,9 @@ final class ElevenLabsTests: XCTestCase {
                        "Please send the invoice 25 to accounting today.")
         XCTAssertEqual(ElevenLabs.accepted(edit: "Pay invoice 25 25 today.", original: "pay invoice 25 today"), "pay invoice 25 today")
         // Digits must stand for the whole spoken number, not part of it.
-        for (raw, edit) in [("Pay one hundred dollars", "Pay 1 dollar."), ("Pay twenty five dollars", "Pay 20 dollars.")] {
+        for (raw, edit) in [("Pay one hundred dollars", "Pay 1 dollar."), ("Pay twenty five dollars", "Pay 20 dollars."),
+                            ("Pay 1.50 dollars today", "Pay 150 dollars today."),
+                            ("Pay three point five dollars today", "Pay 35 dollars today.")] {
             XCTAssertEqual(ElevenLabs.accepted(edit: edit, original: raw), raw, edit)
         }
         XCTAssertEqual(ElevenLabs.accepted(edit: "Please send one 1 invoice to accounting today.",

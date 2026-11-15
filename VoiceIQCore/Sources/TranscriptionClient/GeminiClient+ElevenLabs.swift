@@ -164,9 +164,23 @@ public enum ElevenLabs {
         }
         let heardNumerals = otherNumerals(original)
         guard otherNumerals(edit).allSatisfy({ heardNumerals[$0.key, default: 0] >= $0.value }) else { return false }
-        // Any script's digits, read as 0-9 ("٢٥" is "25").
+        // Any script's digits, read as 0-9 ("٢٥" is "25"), keeping the
+        // decimal point: "1.50" is not "150". A comma before three digits
+        // groups thousands ("1,500"); any other comma or a period is the
+        // decimal point. Colons ("3:30") are dropped.
         let numeral = try! NSRegularExpression(pattern: #"\p{Nd}[\p{Nd},.:]*\p{Nd}|\p{Nd}"#)
-        func digits(_ text: Substring) -> String { text.compactMap(\.wholeNumberValue).map(String.init).joined() }
+        func digits(_ text: Substring) -> String {
+            var figure = "", index = text.startIndex
+            while index < text.endIndex {
+                let character = text[index]
+                let after = text[text.index(after: index)...]
+                if let value = character.wholeNumberValue { figure += String(value) }
+                else if character == "." { figure += "." }
+                else if character == ",", after.prefix(while: \.isNumber).count != 3 { figure += "." }
+                index = text.index(after: index)
+            }
+            return figure
+        }
         let written = numeral.matches(in: edit, range: NSRange(edit.startIndex..., in: edit)).compactMap { match in
             Range(match.range, in: edit).map { range -> String in
                 let text = edit[range]
@@ -230,12 +244,13 @@ public enum ElevenLabs {
     }
 
     /// The digits a few words of a run read as: one numeral as it is, "point"
-    /// and "and" as nothing, number words as one English cardinal; nil when
-    /// they do not read as one number ("five twenty").
+    /// as the decimal point, "and" as nothing, number words as one English
+    /// cardinal; nil when they do not read as one number ("five twenty").
     private static func chunkValue(_ chunk: ArraySlice<String>) -> String? {
         if chunk.count == 1, let only = chunk.first {
             if only.first?.isNumber == true { return only }
-            if numberJoiners.contains(only) { return "" }
+            if only == "point" { return "." }
+            if only == "and" { return "" }
         }
         var total = 0, current: Int?, read = false
         for word in chunk {
