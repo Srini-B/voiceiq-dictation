@@ -154,8 +154,9 @@ public enum ElevenLabs {
     /// number ("two thousand twenty six") or as several written together
     /// ("nineteen ninety nine", "five five five one two").
     static func saysEveryNumber(original: String, edit: String) -> Bool {
-        let numeral = try! NSRegularExpression(pattern: #"[0-9][0-9,.:]*[0-9]|[0-9]"#)
-        func digits(_ text: Substring) -> String { String(text.filter(\.isNumber)) }
+        // Any script's digits, read as 0-9 ("٢٥" is "25").
+        let numeral = try! NSRegularExpression(pattern: #"\p{Nd}[\p{Nd},.:]*\p{Nd}|\p{Nd}"#)
+        func digits(_ text: Substring) -> String { text.compactMap(\.wholeNumberValue).map(String.init).joined() }
         let written = numeral.matches(in: edit, range: NSRange(edit.startIndex..., in: edit)).compactMap { match in
             Range(match.range, in: edit).map { range -> String in
                 let text = edit[range]
@@ -165,7 +166,7 @@ public enum ElevenLabs {
         guard !written.isEmpty else { return true }
 
         // The original's numbers, split into runs of number words and digits.
-        let token = try! NSRegularExpression(pattern: #"[0-9][0-9,.:]*[0-9]|[0-9]|\p{L}+"#)
+        let token = try! NSRegularExpression(pattern: #"\p{Nd}[\p{Nd},.:]*\p{Nd}|\p{Nd}|\p{L}+"#)
         var runs: [[String]] = [[]]
         for match in token.matches(in: original, range: NSRange(original.startIndex..., in: original)) {
             guard let range = Range(match.range, in: original) else { continue }
@@ -175,20 +176,30 @@ public enum ElevenLabs {
             else if !runs[runs.count - 1].isEmpty { runs.append([]) }
         }
 
-        func reads(_ number: String, from run: [String]) -> Bool {
-            // Whether `number` from `at` is the run read from `index` on, a chunk at a time.
-            func matches(_ at: String.Index, _ index: Int) -> Bool {
-                for end in (index + 1)...min(index + 6, run.count) {
-                    guard let value = chunkValue(run[index..<end]), number[at...].hasPrefix(value) else { continue }
-                    let next = number.index(at, offsetBy: value.count)
-                    if next == number.endIndex, !value.isEmpty { return true }
-                    if end < run.count, matches(next, end) { return true }
+        // Each said number accounts for one written number: "25" said once
+        // is not "25 25".
+        var used = runs.map { [Bool](repeating: false, count: $0.count) }
+        func said(_ number: String) -> Bool {
+            for (r, run) in runs.enumerated() {
+                // Where the run, read a chunk at a time from `index`, has said `number` from `at`.
+                func matches(_ at: String.Index, _ index: Int) -> Int? {
+                    for end in (index + 1)...min(index + 6, run.count) where !used[r][index..<end].contains(true) {
+                        guard let value = chunkValue(run[index..<end]), number[at...].hasPrefix(value) else { continue }
+                        let next = number.index(at, offsetBy: value.count)
+                        if next == number.endIndex, !value.isEmpty { return end }
+                        if end < run.count, let found = matches(next, end) { return found }
+                    }
+                    return nil
                 }
-                return false
+                for start in run.indices {
+                    guard let end = matches(number.startIndex, start) else { continue }
+                    for index in start..<end { used[r][index] = true }
+                    return true
+                }
             }
-            return run.indices.contains { matches(number.startIndex, $0) }
+            return false
         }
-        return written.allSatisfy { number in runs.contains { reads(number, from: $0) } }
+        return written.allSatisfy(said)
     }
 
     /// The digits a few words of a run read as: one numeral as it is, "point"
