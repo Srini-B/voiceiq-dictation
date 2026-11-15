@@ -140,6 +140,8 @@ final class KeyboardKeysView: UIView {
                 }
                 let view = KeyCapView(spec: spec)
                 view.theme = theme
+                // The number pad's empty corner is a gap, as on iOS, not a blank key.
+                view.isHidden = spec.label.isEmpty
                 if spec.action != .globe, !spec.label.isEmpty {
                     view.onActivate = { [weak self] in self?.activate(spec) }
                 }
@@ -163,26 +165,35 @@ final class KeyboardKeysView: UIView {
         var index = 0
         for (r, row) in rows.enumerated() {
             let y = 4 + CGFloat(r) * (rowHeight + Self.verticalGap)
+            let shares = row.map { spec -> CGFloat in
+                switch spec.width {
+                case .flexible: return 1
+                case .share(let n): return n
+                case .unit, .units: return 0
+                }
+            }
             let fixed = row.reduce(CGFloat(0)) { total, spec in
                 switch spec.width {
                 case .unit: return total + unit
                 case .units(let n): return total + unit * n
-                case .flexible: return total
+                case .flexible, .share: return total
                 }
             }
             let gaps = Self.horizontalGap * CGFloat(row.count - 1)
-            let flexibleCount = row.filter { $0.width == .flexible }.count
-            let flexible = flexibleCount > 0 ? max(0, (available - fixed - gaps) / CGFloat(flexibleCount)) : 0
+            let flexibleCount = CGFloat(shares.filter { $0 > 0 }.count)
+            let totalShare = shares.reduce(0, +)
+            // One share's width plus its gap, so two halves and the gap between them fill one share.
+            let pitch = totalShare > 0 ? max(0, (available - fixed - gaps + Self.horizontalGap * flexibleCount) / totalShare) : 0
             // A row too wide for the screen shrinks evenly; a short one is centred.
-            let total = fixed + gaps + flexible * CGFloat(flexibleCount)
+            let total = fixed + gaps + pitch * totalShare - Self.horizontalGap * flexibleCount
             let scale = total > available ? (available - gaps) / (total - gaps) : 1
             var x = Self.sideInset + (total < available ? (available - total) / 2 : 0)
-            for spec in row {
+            for (spec, share) in zip(row, shares) {
                 var width: CGFloat
                 switch spec.width {
                 case .unit: width = unit
                 case .units(let n): width = unit * n
-                case .flexible: width = flexible
+                case .flexible, .share: width = max(0, share * pitch - Self.horizontalGap)
                 }
                 width *= scale
                 let frame = CGRect(x: x, y: y, width: width, height: rowHeight)

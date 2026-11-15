@@ -137,6 +137,9 @@ final class KeyCapView: UIView {
                 label.font = theme.font(size: 16)
             }
             accessibilityLabel = spec.label
+        case .page(.numpad):
+            image.image = UIImage(systemName: "circle.grid.3x3", withConfiguration: symbol)
+            accessibilityLabel = "Number pad"
         case .page:
             label.text = spec.label
             label.font = theme.font(size: 16)
@@ -152,13 +155,17 @@ final class KeyCapView: UIView {
         var key = isFunction && !shiftOn ? theme.function : theme.character
         if isHighlighted { key = isFunction ? theme.character : theme.function }
         if primaryReturn { key = KeyFace(top: .tintColor, bottom: .tintColor, label: .white, body: key.body) }
+        // A plain key shows a face only while pressed, as iOS's number pad does.
+        if spec.plain { key = theme.character }
+        let faceless = spec.plain && !isHighlighted
         let traits = traitCollection
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        face.colors = [key.top.resolvedColor(with: traits).cgColor, key.bottom.resolvedColor(with: traits).cgColor]
-        face.borderColor = theme.border?.resolvedColor(with: traits).cgColor
-        layer.backgroundColor = key.body?.resolvedColor(with: traits).cgColor
-        layer.shadowColor = theme.shadow.resolvedColor(with: traits).cgColor
+        face.colors = faceless ? [UIColor.clear.cgColor, UIColor.clear.cgColor]
+            : [key.top.resolvedColor(with: traits).cgColor, key.bottom.resolvedColor(with: traits).cgColor]
+        face.borderColor = faceless ? nil : theme.border?.resolvedColor(with: traits).cgColor
+        layer.backgroundColor = faceless ? nil : key.body?.resolvedColor(with: traits).cgColor
+        layer.shadowColor = faceless ? UIColor.clear.cgColor : theme.shadow.resolvedColor(with: traits).cgColor
         CATransaction.commit()
         let text = returnEnabled || spec.action != .returnKey ? key.label : key.label.withAlphaComponent(0.35)
         label.textColor = text
@@ -211,7 +218,8 @@ final class AccentPopup: UIView {
 
     init(key: CGRect, options: [String], in bounds: CGRect, theme: KeyTheme) {
         self.theme = theme
-        cell = CGSize(width: max(key.width, 30), height: key.height + 8)
+        // Narrower than the key when the options would not fit the screen.
+        cell = CGSize(width: min(max(key.width, 30), (bounds.width - 4) / CGFloat(options.count)), height: key.height + 8)
         let width = cell.width * CGFloat(options.count)
         var x = key.midX - cell.width / 2
         if x + width > bounds.width - 2 { x = key.maxX - width }
@@ -233,7 +241,9 @@ final class AccentPopup: UIView {
             addSubview(label)
             labels.append(label)
         }
-        _ = select(at: CGPoint(x: key.midX - x, y: 0))
+        // The first option is what lifting without a slide types, also when
+        // the popup is pushed left off the key at the screen's edge.
+        _ = select(at: .zero)
     }
 
     required init?(coder: NSCoder) { fatalError() }
