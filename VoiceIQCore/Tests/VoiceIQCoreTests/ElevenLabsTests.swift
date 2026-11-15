@@ -71,7 +71,9 @@ final class ElevenLabsTests: XCTestCase {
                             ("Pay 1.50 dollars today", "Pay 150 dollars today."),
                             ("Pay three point five dollars today", "Pay 35 dollars today."),
                             ("The temperature is -25 degrees today", "The temperature is 25 degrees today."),
-                            ("The temperature is 25 degrees today", "The temperature is -25 degrees today.")] {
+                            ("The temperature is 25 degrees today", "The temperature is -25 degrees today."),
+                            ("Take five milligrams daily", "Take 5kg daily."),
+                            ("Pay twenty five dollars today", "Pay 25bitcoin today.")] {
             XCTAssertEqual(ElevenLabs.accepted(edit: edit, original: raw), raw, edit)
         }
         XCTAssertEqual(ElevenLabs.accepted(edit: "Please send one 1 invoice to accounting today.",
@@ -87,6 +89,7 @@ final class ElevenLabsTests: XCTestCase {
             ("the twenty first floor", "The 21st floor."),
             ("one more thing at three thirty", "One more thing at 3:30."),
             ("it was minus five outside", "It was -5 outside."),
+            ("run ten kilometers", "Run 10km."),
         ]
         for (raw, edit) in formats { XCTAssertEqual(ElevenLabs.accepted(edit: edit, original: raw), edit, raw) }
     }

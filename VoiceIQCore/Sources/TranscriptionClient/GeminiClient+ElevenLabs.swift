@@ -131,11 +131,16 @@ public enum ElevenLabs {
     static func addsNothing(original: String, edit: String) -> Bool {
         var heard = ValidationGate.contentWords(of: original).reduce(into: [String: Int]()) { $0[$1, default: 0] += 1 }
         var added: [String] = []
-        // Words with decimal digits go to `saysEveryNumber`; any other numeral
-        // ("Ⅷ", "½") must have been heard like a word.
-        for word in ValidationGate.contentWords(of: edit)
-        where !word.unicodeScalars.contains(where: { $0.properties.numericType == .decimal }) {
-            if let count = heard[word], count > 0 { heard[word] = count - 1 } else { added.append(word) }
+        // The digits of a word go to `saysEveryNumber`; its letters ("5kg",
+        // "25bitcoin") must have been heard like a word, apart from an
+        // ordinal ending ("21st"). Any other numeral ("Ⅷ", "½") counts as a letter.
+        for word in ValidationGate.contentWords(of: edit) {
+            let parts = word.split { $0.unicodeScalars.contains { $0.properties.numericType == .decimal } }.map(String.init)
+            let hasDigits = parts.joined().count < word.count
+            for part in parts {
+                if hasDigits, word.hasSuffix(part), ["st", "nd", "rd", "th"].contains(part) { continue }
+                if let count = heard[part], count > 0 { heard[part] = count - 1 } else { added.append(part) }
+            }
         }
         func near(_ word: String, _ said: String) -> Bool {
             if word.count >= 4, said.count >= 4 { return letterDistance(word, said) <= 2 }
