@@ -66,6 +66,9 @@ final class ElevenLabsTests: XCTestCase {
                                            original: "Please send the invoice 25 to accounting today."),
                        "Please send the invoice 25 to accounting today.")
         XCTAssertEqual(ElevenLabs.accepted(edit: "Pay invoice 25 25 today.", original: "pay invoice 25 today"), "pay invoice 25 today")
+        XCTAssertEqual(ElevenLabs.accepted(edit: "Please send one 1 invoice to accounting today.",
+                                           original: "Please send one invoice to accounting today."),
+                       "Please send one invoice to accounting today.")
         let formats = [
             ("it costs twenty five dollars", "It costs $25."),
             ("call me at three thirty", "Call me at 3:30."),
@@ -74,6 +77,7 @@ final class ElevenLabsTests: XCTestCase {
             ("my number is five five five one two three four", "My number is 555-1234."),
             ("we sold fifteen hundred units in two thousand twenty six", "We sold 1,500 units in 2026."),
             ("the twenty first floor", "The 21st floor."),
+            ("one more thing at three thirty", "One more thing at 3:30."),
         ]
         for (raw, edit) in formats { XCTAssertEqual(ElevenLabs.accepted(edit: edit, original: raw), edit, raw) }
     }

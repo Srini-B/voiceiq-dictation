@@ -173,7 +173,6 @@ public enum ElevenLabs {
                 return digits(text.hasSuffix(":00") || text.hasSuffix(".00") ? text.dropLast(3) : text)
             }
         }
-        guard !written.isEmpty else { return true }
 
         // The original's numbers, split into runs of number words and digits.
         let token = try! NSRegularExpression(pattern: #"\p{Nd}[\p{Nd},.:]*\p{Nd}|\p{Nd}|\p{L}+"#)
@@ -189,6 +188,17 @@ public enum ElevenLabs {
         // Each said number accounts for one written number: "25" said once
         // is not "25 25".
         var used = runs.map { [Bool](repeating: false, count: $0.count) }
+        // A number word the edit keeps ("one invoice") uses up the same said
+        // word, so it cannot also stand behind digits ("one 1 invoice").
+        for match in token.matches(in: edit, range: NSRange(edit.startIndex..., in: edit)) {
+            guard let range = Range(match.range, in: edit) else { continue }
+            let word = edit[range].lowercased()
+            guard spokenNumbers[word] != nil else { continue }
+            guard let (r, i) = runs.indices.lazy.compactMap({ r in
+                runs[r].indices.first { runs[r][$0] == word && !used[r][$0] }.map { (r, $0) }
+            }).first else { return false }
+            used[r][i] = true
+        }
         func said(_ number: String) -> Bool {
             for (r, run) in runs.enumerated() {
                 // Where the run, read a chunk at a time from `index`, has said `number` from `at`.
