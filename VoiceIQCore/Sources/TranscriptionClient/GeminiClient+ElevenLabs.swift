@@ -157,6 +157,13 @@ public enum ElevenLabs {
     /// number ("two thousand twenty six") or as several written together
     /// ("nineteen ninety nine", "five five five one two").
     static func saysEveryNumber(original: String, edit: String) -> Bool {
+        // Numerals that are not decimal digits ("Ⅷ", "½", "25Ⅷ") only as often as heard.
+        func otherNumerals(_ text: String) -> [Unicode.Scalar: Int] {
+            text.unicodeScalars.filter { $0.properties.numericType.map { $0 != .decimal } ?? false }
+                .reduce(into: [:]) { $0[$1, default: 0] += 1 }
+        }
+        let heardNumerals = otherNumerals(original)
+        guard otherNumerals(edit).allSatisfy({ heardNumerals[$0.key, default: 0] >= $0.value }) else { return false }
         // Any script's digits, read as 0-9 ("٢٥" is "25").
         let numeral = try! NSRegularExpression(pattern: #"\p{Nd}[\p{Nd},.:]*\p{Nd}|\p{Nd}"#)
         func digits(_ text: Substring) -> String { text.compactMap(\.wholeNumberValue).map(String.init).joined() }

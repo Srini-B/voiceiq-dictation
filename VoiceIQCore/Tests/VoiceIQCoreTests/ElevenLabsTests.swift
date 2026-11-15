@@ -62,6 +62,9 @@ final class ElevenLabsTests: XCTestCase {
         // Digits of any script count, and a number said once is written once.
         XCTAssertEqual(ElevenLabs.accepted(edit: "Please send the invoice ٩٩٩٩٩ to accounting today.", original: heard), heard)
         XCTAssertEqual(ElevenLabs.accepted(edit: "Please send the invoice Ⅷ to accounting today.", original: heard), heard)
+        XCTAssertEqual(ElevenLabs.accepted(edit: "Please send the invoice 25Ⅷ to accounting today.",
+                                           original: "Please send the invoice 25 to accounting today."),
+                       "Please send the invoice 25 to accounting today.")
         XCTAssertEqual(ElevenLabs.accepted(edit: "Pay invoice 25 25 today.", original: "pay invoice 25 today"), "pay invoice 25 today")
         let formats = [
             ("it costs twenty five dollars", "It costs $25."),
