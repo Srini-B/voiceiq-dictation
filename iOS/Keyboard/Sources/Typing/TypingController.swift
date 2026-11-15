@@ -511,7 +511,7 @@ final class TypingController: ObservableObject, KeyboardKeysDelegate {
         // The user's words come back as bare letters; give them their spelling.
         var seen = Set<String>()
         let blocked = blockedWords
-        let words = found.map { $0 == $0.lowercased() ? engine.user.display(key: TypingEngine.key(of: $0)) ?? $0 : $0 }
+        let words = found.map { $0 == $0.lowercased() ? engine.userSpelling(of: $0) ?? $0 : $0 }
             .filter { !blocked.contains(TypingEngine.key(of: $0)) && seen.insert($0.lowercased()).inserted }
         guard !words.isEmpty else { return }
         let generation = editGeneration

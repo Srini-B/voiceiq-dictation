@@ -433,7 +433,11 @@ apostrophes, with ’ read as '), so "don't" stays one word. The model's
 vocabulary is cased as mid-sentence text ("the", "I", "London"), so a word
 that starts a sentence, or that the word list lacks as typed, is lowercased
 when the list has it lowercase ("The" becomes "the"). Word results keep the dictionary's
-spelling ("I", "don't"); the user's words get their saved spelling. A slide
+spelling ("I", "don't"); the user's words get their saved spelling
+(`TypingEngine.userSpelling`), except a lone first capital on a word the list
+has lowercase: a contact "Apple Developer" or "Will" leaves "developer" and
+"will" lowercase, while "Srini", "London" and "GitHub" keep theirs. The
+field's auto-capitalization then decides the first letter. A slide
 records every sample from touch-down, so the turns made before it counted as
 a slide reach the model. A result that arrives after the user typed, moved
 the cursor or changed fields is dropped (`editGeneration`); a slid word does
