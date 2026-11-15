@@ -473,7 +473,8 @@ struct TypingEngine: Sendable {
         let key = Self.key(of: word)
         guard let display = user.display(key: key) else { return nil }
         let lower = display.lowercased()
-        let onlyFirstCapital = display.dropFirst() == lower.dropFirst()
+        // A lowercase spelling ("cant" saved as "can't") is never a lone capital.
+        let onlyFirstCapital = display != lower && display.dropFirst() == lower.dropFirst()
         if onlyFirstCapital, lexicon.words(key: key).contains(where: { lexicon.display($0) == lower }) { return nil }
         return display
     }

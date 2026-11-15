@@ -13,7 +13,7 @@ final class TypingEngineTests: XCTestCase {
     func testSlidDeveloperMidSentenceIgnoresContactCapital() throws {
         var engine = try engine()
         engine.user.contacts = ["developer": "Developer", "srini": "Srini", "london": "London"]
-        engine.user.dictionary = ["github": "GitHub"]
+        engine.user.dictionary = ["github": "GitHub", "cant": "can't"]
 
         XCTAssertFalse(TypingEngine.context(before: "I work as a ").sentenceStart)
         XCTAssertNil(engine.userSpelling(of: "developer"))
@@ -23,5 +23,7 @@ final class TypingEngineTests: XCTestCase {
         XCTAssertEqual(engine.userSpelling(of: "srini"), "Srini")
         XCTAssertEqual(engine.userSpelling(of: "london"), "London")
         XCTAssertEqual(engine.userSpelling(of: "github"), "GitHub")
+        // A lowercase spelling that restores an apostrophe is kept.
+        XCTAssertEqual(engine.userSpelling(of: "cant"), "can't")
     }
 }

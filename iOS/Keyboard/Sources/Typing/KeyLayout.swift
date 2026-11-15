@@ -182,10 +182,15 @@ enum KeyLayout {
             KeySpec(action: .insert(s), label: s, alternates: alternates, width: .flexible)
         }
         let separator = Locale.current.decimalSeparator ?? "."
+        // Where the system draws no globe, ABC shares its cell with one.
+        let corner = field.showsGlobe
+            ? [KeySpec(action: .page(.letters), label: "ABC", width: .share(0.5)),
+               KeySpec(action: .globe, label: "globe", width: .share(0.5))]
+            : [KeySpec(action: .page(.letters), label: "ABC", width: .flexible)]
         return [["1", "2", "3"].map { key($0) } + [key("-", alternates: ["+", "*", "/", "=", "%"])],
                 ["4", "5", "6"].map { key($0) } + [KeySpec(action: .space, label: "space", width: .flexible)],
                 ["7", "8", "9"].map { key($0) } + [KeySpec(action: .delete, label: "delete", width: .flexible)],
-                [KeySpec(action: .page(.letters), label: "ABC", width: .flexible), key("0"),
+                corner + [key("0"),
                  key(separator, alternates: [separator == "." ? "," : "."]),
                  KeySpec(action: .returnKey, label: field.returnLabel, width: .flexible)]]
     }

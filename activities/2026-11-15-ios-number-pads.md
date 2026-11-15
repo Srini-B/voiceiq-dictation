@@ -36,3 +36,12 @@ release typed 9. Not tried on a device.
 ## Rollback
 
 Revert the commit.
+
+## Follow-up: review findings (2026-11-15)
+
+- The 4×4 number pad had no globe where the system draws none, so
+  switching keyboards needed ABC first. ABC now shares its corner with the
+  globe there.
+- Slid-word capitals (`TypingEngine.userSpelling`): a lowercase saved
+  spelling such as "cant" → "can't" was dropped as if it were a lone
+  capital. It is kept now (regression case in `KeyboardTypingTests`).
