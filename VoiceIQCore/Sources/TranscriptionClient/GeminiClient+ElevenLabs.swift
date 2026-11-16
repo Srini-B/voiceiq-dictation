@@ -123,11 +123,11 @@ public enum ElevenLabs {
     /// heard, as often, and each heard word is kept, as listed below
     /// (`ValidationGate.contentWords`, so spoken numbers match
     /// digits and scripts without spaces count by character). Besides digits,
-    /// it may change the end of a heard word by up to two letters, keeping
-    /// its first three ("colour", "organise", "they're"; not "decrease" for
-    /// "increase" or "July" for "June"), never a negation, and write a unit
-    /// as its abbreviation ("km"). It keeps every question mark. Words in
-    /// other scripts are held to the stricter `keepsNonLatinWords`.
+    /// it may write a heard word only in another spelling of the same word
+    /// (`spelling`: "colour", "organise", "résumé"; never "hypotensive" for
+    /// "hypertensive") or a unit as its abbreviation ("km"). It keeps every
+    /// question mark. Words in other scripts are held to the stricter
+    /// `keepsNonLatinWords`.
     /// MEASURED 2026-11-13 on an 8 s English clip: every one of 8 edits
     /// appended a remark the speaker never said, such as "(This is a single
     /// paragraph.)" or "It's Monday.", and `ValidationGate` accepted them.
@@ -144,18 +144,12 @@ public enum ElevenLabs {
             let hasDigits = parts.joined().count < word.count
             for part in parts {
                 if hasDigits, word.hasSuffix(part), ["st", "nd", "rd", "th"].contains(part) { continue }
-                if let count = heard[part], count > 0 { heard[part] = count - 1; continue }
-                // The end of a contraction ("they're"); never "t", which negates.
-                if !hasDigits, ["s", "re", "ll", "ve", "d", "m"].contains(part) { continue }
-                added.append(part)
+                if let count = heard[part], count > 0 { heard[part] = count - 1 } else { added.append(part) }
             }
         }
         func near(_ word: String, _ said: String) -> Bool {
             if let full = abbreviations[word] { return full.contains(said) }
-            if said == word + "s" { return true }  // "its" as "it's"
-            guard word.count >= 3, said.count >= 3, !negations.contains(said) else { return false }
-            let a = word.folding(options: .diacriticInsensitive, locale: nil), b = said.folding(options: .diacriticInsensitive, locale: nil)
-            return a.prefix(3) == b.prefix(3) && letterDistance(a, b) <= 2
+            return spelling(word) == spelling(said)
         }
         for word in added {
             guard let said = heard.keys.sorted().first(where: { heard[$0, default: 0] > 0 && near(word, $0) }) else { return false }
@@ -428,8 +422,37 @@ public enum ElevenLabs {
         return numbers
     }()
 
-    /// Words an edit may never write in place of another ("not" as "note").
-    private static let negations: Set<String> = ["not", "never", "nor", "none", "nothing", "nobody", "neither", "cannot"]
+    /// A word in one spelling of it: without accents ("résumé"), in US
+    /// spelling where British and other spellings differ only by a regular
+    /// ending ("colour", "organise", "centre", "travelled", "defence",
+    /// "catalogue") or are listed ("grey", "programme"). Two words that
+    /// differ in anything else stay different, however close.
+    static func spelling(_ word: String) -> String {
+        var w = word.folding(options: .diacriticInsensitive, locale: nil)
+        if let us = spellingPairs[w] { return us }
+        guard w.count >= 5 else { return w }
+        let endings: [(String, String)] = [
+            ("isations", "izations"), ("isation", "ization"), ("ising", "izing"), ("ised", "ized"), ("ises", "izes"), ("ise", "ize"),
+            ("ysing", "yzing"), ("ysed", "yzed"), ("yses", "yzes"), ("yse", "yze"), ("ours", "ors"), ("our", "or"),
+            ("ourite", "orite"), ("tres", "ters"), ("tre", "ter"), ("elled", "eled"), ("elling", "eling"), ("eller", "eler"),
+            ("ences", "enses"), ("ence", "ense"), ("ogues", "ogs"), ("ogue", "og"),
+        ]
+        for (british, us) in endings where w.hasSuffix(british) {
+            w = String(w.dropLast(british.count)) + us
+            break
+        }
+        return w
+    }
+
+    private static let spellingPairs: [String: String] = [
+        "grey": "gray", "programme": "program", "programmes": "programs", "cheque": "check", "cheques": "checks",
+        "tyre": "tire", "tyres": "tires", "kerb": "curb", "aluminium": "aluminum", "mum": "mom", "plough": "plow",
+        "draught": "draft", "jewellery": "jewelry", "sceptic": "skeptic", "sceptical": "skeptical", "mould": "mold",
+        "pyjamas": "pajamas", "cosy": "cozy", "whisky": "whiskey", "okay": "ok", "practise": "practice",
+        "enrolment": "enrollment", "fulfil": "fulfill", "judgement": "judgment", "ageing": "aging", "storey": "story",
+        "anaesthesia": "anesthesia", "paediatric": "pediatric", "haemoglobin": "hemoglobin", "oestrogen": "estrogen",
+        "foetus": "fetus", "manoeuvre": "maneuver",
+    ]
 
     /// Abbreviations an edit may write, and the words they stand for.
     private static let abbreviations: [String: Set<String>] = {
@@ -447,20 +470,6 @@ public enum ElevenLabs {
         ]
         return Dictionary(uniqueKeysWithValues: units.map { ($0.0, Set($0.1)) })
     }()
-
-    /// Levenshtein distance: letters inserted, removed or replaced.
-    private static func letterDistance(_ a: String, _ b: String) -> Int {
-        let a = Array(a), b = Array(b)
-        var previous = Array(0...b.count)
-        for (i, x) in a.enumerated() {
-            var current = [i + 1]
-            for (j, y) in b.enumerated() {
-                current.append(min(previous[j + 1] + 1, current[j] + 1, previous[j] + (x == y ? 0 : 1)))
-            }
-            previous = current
-        }
-        return previous[b.count]
-    }
 
     /// Whether every word of the original written in a script other than
     /// Latin is still in the edit, as often. MEASURED 2026-11-12 on 25 s of a

@@ -133,13 +133,15 @@ final class ElevenLabsTests: XCTestCase {
         for (raw, edit) in formats { XCTAssertEqual(ElevenLabs.accepted(edit: edit, original: raw), edit, raw) }
     }
 
-    /// A word the edit changes keeps its first three letters and is not a
-    /// negation, an abbreviation stands only for its unit, a question stays
-    /// a question, and a leading decimal point counts.
+    /// A word the edit changes is only respelled ("colour") or a unit
+    /// abbreviated ("km"), a question stays a question, and a leading
+    /// decimal point counts.
     func testAnEditThatChangesAWordIsNotUsed() {
         for (raw, edit) in [("Increase the limit to five hundred", "Decrease the limit to 500."),
                             ("The meeting is in June", "The meeting is in July."),
                             ("The patient is able to walk", "The patient is unable to walk."),
+                            ("The patient is hypertensive today", "The patient is hypotensive today."),
+                            ("The tank was filled yesterday", "The tank was filed yesterday."),
                             ("Do not delete it", "Do note delete it."),
                             ("Ship five kilograms of rice", "Ship 5 km of rice."),
                             ("It weighs 5 pounds", "It weighs £5."),
@@ -150,8 +152,8 @@ final class ElevenLabsTests: XCTestCase {
         let formats = [
             ("meet me at the center", "Meet me at the centre."),
             ("send me your resume", "Send me your résumé."),
-            ("their going to the park", "They're going to the park."),
-            ("its about three hours", "It's about 3 hours."),
+            ("please organize the files", "Please organise the files."),
+            ("we traveled to the theater", "We travelled to the theatre."),
             ("take two to three tablets", "Take 2-3 tablets."),
             ("take point five milligrams", "Take 0.5 mg."),
             ("is it ready", "Is it ready?"),

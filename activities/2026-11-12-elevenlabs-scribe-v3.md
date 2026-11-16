@@ -245,6 +245,13 @@ currency word, question marks are kept, a leading decimal point counts
 found that removing a stray period ("increase. the") was rejected; fixed.
 Ten real transcripts from the history still pass unchanged. One case is
 left: "a second" can become "a 2nd", since "second" is also an ordinal.
+Review then showed that keeping the first three letters still let
+"hypertensive" become "hypotensive". A changed word must now be another
+spelling of the same word: accents dropped or added, regular British and
+US endings (-our/-or, -ise/-ize, -yse/-yze, -tre/-ter, -elled/-eled,
+-ence/-ense, -ogue/-og) and a short list of pairs ("grey", "programme").
+Homophone fixes such as "their" to "they're" are rejected now; the
+writing rules still make them from the transcript as heard.
 
 Result (test Mac, commit 4d7ffdb):
 - An earlier attempt on b591645 was stopped after the app was notarized and
