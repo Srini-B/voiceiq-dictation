@@ -184,6 +184,16 @@ Result (test Mac, commit 716f2f7):
 - The notarized Mac app was installed over 0.7.1 on a second Mac and
   reads 0.7.2 (76).
 
+## Release 0.7.4 (78)
+
+The maintainer asked for a new TestFlight build and Mac install with the
+keyboard work and review fixes on PR #44 since 0.7.3: iOS-style number and
+decimal pads with a number pad key, FUTO Swipe on ExecuTorch v1.6.0 with the
+int8 encoder, slid words that keep their case, long-press popups that stay
+on screen, the repeat-Automatic menu fix, and the review-bot fixes to
+Scribe's edit guard (numbers, signs, decimals, units), the Japanese
+question check and live redaction. Version 0.7.4, build 78 (0.7.3 was 77).
+
 ## Release 0.7.3 (77)
 
 The maintainer asked for a new TestFlight build and Mac install with
