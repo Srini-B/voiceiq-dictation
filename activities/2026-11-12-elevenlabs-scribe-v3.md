@@ -213,6 +213,11 @@ amounts cannot trade currencies ("25 dollars and 50 euros" as "€25 and
 $50").
 Numerals that are not decimal digits ("½", "Ⅷ") must also be kept exactly:
 before, an edit could leave out "½" ("Take ½ tablet daily").
+"Rupees" may be written as "₹": on build 79 the first real dictation with
+an amount in rupees had its edit rejected, most likely because the edit
+wrote "₹25,000" (the edit text is not logged; dropping the misheard word
+"valid" would also have rejected it). The writing rules then formatted it
+from the transcript as heard, keeping "Do not" and the amount.
 
 Result (test Mac, commit 4d7ffdb):
 - An earlier attempt on b591645 was stopped after the app was notarized and

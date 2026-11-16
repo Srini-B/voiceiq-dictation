@@ -215,7 +215,7 @@ public enum ElevenLabs {
     /// Words written as a symbol, and the symbol.
     private static let symbolWords: [String: Character] = [
         "dollar": "$", "dollars": "$", "cent": "¢", "cents": "¢", "percent": "%", "pound": "£", "pounds": "£",
-        "euro": "€", "euros": "€", "yen": "¥", "degree": "°", "degrees": "°", "at": "@", "dot": ".",
+        "euro": "€", "euros": "€", "rupee": "₹", "rupees": "₹", "yen": "¥", "degree": "°", "degrees": "°", "at": "@", "dot": ".",
         "slash": "/", "hash": "#", "hashtag": "#", "plus": "+", "ampersand": "&",
     ]
 

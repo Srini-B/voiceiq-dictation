@@ -121,6 +121,7 @@ final class ElevenLabsTests: XCTestCase {
             ("pay one hundred and five dollars", "Pay $105."),
             ("Give Alice 25 dollars and Bob 50 euros today", "Give Alice $25 and Bob €50 today."),
             ("It costs $25, not 25 euros", "It costs $25, not €25."),
+            ("It has 25,000 rupees of data in it", "It has ₹25,000 of data in it."),
         ]
         for (raw, edit) in formats { XCTAssertEqual(ElevenLabs.accepted(edit: edit, original: raw), edit, raw) }
     }
