@@ -227,6 +227,9 @@ stays in its number's token, so "½ tablet … ¼ tablet" cannot become
 A colon in a time now counts too: it must stand where the spoken number
 breaks ("three | thirty" as "3:30"), so "1:30 minutes" cannot become
 "130 minutes" or the other way round.
+Numbers heard as digits no longer join into one: "1-2 tablets" cannot
+become "12 tablets". Spoken number words still join ("five five five" as
+555).
 
 Result (test Mac, commit 4d7ffdb):
 - An earlier attempt on b591645 was stopped after the app was notarized and

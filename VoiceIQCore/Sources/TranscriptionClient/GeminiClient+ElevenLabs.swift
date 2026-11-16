@@ -328,9 +328,12 @@ public enum ElevenLabs {
                         // Chunks join only where the number words do not go on as
                         // one cardinal: "nineteen | ninety nine" is 1999, but
                         // "twenty five" is never "20" then "5".
+                        // Numbers heard as digits stay apart: "1-2" is not 12.
                         // A written colon is such a join, and only that.
                         let joined = next < number.endIndex && number[next] == ":" && !value.isEmpty ? number.index(after: next) : next
-                        if end < run.count, chunkValue(run[index...end]) == nil, let found = matches(joined, end) { return found }
+                        if end < run.count, chunkValue(run[index...end]) == nil,
+                           !run[index..<end].contains(where: { $0.contains(where: \.isNumber) }), !run[end].contains(where: \.isNumber),
+                           let found = matches(joined, end) { return found }
                     }
                     return nil
                 }
