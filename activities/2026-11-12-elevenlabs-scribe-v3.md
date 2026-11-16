@@ -192,6 +192,15 @@ review after 0.7.4: Scribe's formatting edit may no longer swap two amounts
 spoken number into another ("twenty five" as 205, "two hundred" as 2100).
 Version 0.7.5, build 79 (0.7.4 was 78).
 
+Review of the version bump then found that the edit could leave words out:
+"Do not delete the backup today" as "Delete the backup today." passed,
+since the check only looked for words added. The edit must now keep every
+word said, apart from fillers, a word said twice in a row ("I I think"),
+and words it writes as digits or a symbol ("dollars" in "$25", "o'clock"
+in "3:00", "at" and "dot" in an address); a spoken number it leaves out
+entirely also fails. A failing edit sends the transcript on as heard, as
+before. Build 79 was held until this landed so that it includes it.
+
 ## Release 0.7.4 (78)
 
 The maintainer asked for a new TestFlight build and Mac install with the

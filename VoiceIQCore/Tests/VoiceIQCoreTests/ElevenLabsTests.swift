@@ -98,6 +98,23 @@ final class ElevenLabsTests: XCTestCase {
         for (raw, edit) in formats { XCTAssertEqual(ElevenLabs.accepted(edit: edit, original: raw), edit, raw) }
     }
 
+    /// The edit keeps every word said apart from fillers, a word said twice
+    /// in a row, and words it writes as digits or a symbol.
+    func testAnEditThatLeavesOutWordsIsNotUsed() {
+        for (raw, edit) in [("Do not delete the backup today", "Delete the backup today."),
+                            ("Send it to Alice and Bob today", "Send it to Alice today."),
+                            ("Pay twenty five dollars to Bob", "Pay dollars to Bob.")] {
+            XCTAssertEqual(ElevenLabs.accepted(edit: edit, original: raw), raw, edit)
+        }
+        let formats = [
+            ("I I think we should go", "I think we should go."),
+            ("um it's a hundred dollars", "It's $100."),
+            ("meet at three o'clock", "Meet at 3:00."),
+            ("email john at example dot com", "Email john@example.com."),
+        ]
+        for (raw, edit) in formats { XCTAssertEqual(ElevenLabs.accepted(edit: edit, original: raw), edit, raw) }
+    }
+
     /// Redacted live text keeps each heard word's speaker and time: in
     /// Japanese, written without spaces, and after placeholders in a row.
     func testRedactedWordsKeepTheirSpeakers() {
