@@ -208,6 +208,9 @@ Bob" as "Bob owes Alice") or a currency ("25 dollars" as "€25"), and "and",
 heard words must now stay in order, a word left out for a symbol must be
 written as that symbol with no other symbol added, and "and", "point" and
 "minus" may be left out only before a number.
+A symbol is also checked in the place of the word it stands for, so two
+amounts cannot trade currencies ("25 dollars and 50 euros" as "€25 and
+$50").
 
 ## Release 0.7.4 (78)
 

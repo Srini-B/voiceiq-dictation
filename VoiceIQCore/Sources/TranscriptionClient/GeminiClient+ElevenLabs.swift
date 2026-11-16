@@ -181,15 +181,35 @@ public enum ElevenLabs {
             let needed = dropped[symbol, default: 0]
             guard symbol == "." || symbol == "/" ? written >= needed : written == needed else { return false }
         }
-        // And in the order said: "Bob owes Alice" is not "Alice owes Bob".
-        // Numbers keep their order in `saysEveryNumber`.
-        let heardWords = Set(said)
-        var rest = said[...]
-        for word in ValidationGate.contentWords(of: edit) where !word.contains(where: \.isNumber) && heardWords.contains(word) {
+        // And in the order said: "Bob owes Alice" is not "Alice owes Bob",
+        // and "25 dollars and 50 euros" is not "€25 and $50". Numbers keep
+        // their order in `saysEveryNumber`.
+        let inOrder = orderedWords(original), heardWords = Set(inOrder)
+        var rest = inOrder[...]
+        for word in orderedWords(edit) where !word.contains(where: \.isNumber) && heardWords.contains(word) {
             guard let index = rest.firstIndex(of: word) else { return false }
             rest = rest[(index + 1)...]
         }
         return saysEveryNumber(original: original, edit: edit)
+    }
+
+    /// `ValidationGate.contentWords` in order, with each currency or unit
+    /// symbol, and each word that names one, as that symbol.
+    private static func orderedWords(_ text: String) -> [String] {
+        var words: [String] = [], segment = ""
+        func flush() {
+            words += ValidationGate.contentWords(of: segment).map { symbolWords[$0].map(String.init) ?? $0 }
+            segment = ""
+        }
+        for character in text {
+            if character != ".", character != "/", Set(symbolWords.values).contains(character) {
+                flush(); words.append(String(character))
+            } else {
+                segment.append(character)
+            }
+        }
+        flush()
+        return words
     }
 
     /// Words written as a symbol, and the symbol.
