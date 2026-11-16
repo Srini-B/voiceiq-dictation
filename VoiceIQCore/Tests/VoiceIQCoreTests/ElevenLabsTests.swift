@@ -109,6 +109,8 @@ final class ElevenLabsTests: XCTestCase {
             ("take one point oh five milligrams", "Take 1.05 milligrams."),
             ("the code is five oh five", "The code is 505."),
             ("oh I see five of them", "Oh, I see 5 of them."),
+            ("take one point five tablets daily", "Take one point five tablets daily."),
+            ("please discuss point five at the meeting", "Please discuss point 5 at the meeting."),
         ]
         for (raw, edit) in formats { XCTAssertEqual(ElevenLabs.accepted(edit: edit, original: raw), edit, raw) }
     }

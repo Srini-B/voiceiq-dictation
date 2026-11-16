@@ -380,6 +380,9 @@ public enum ElevenLabs {
                 guard said(figure) || other.map(said) == true else { return false }
             } else if spokenNumbers[text.lowercased()] != nil {
                 guard keeps(text.lowercased()) else { return false }
+            } else if text.lowercased() == "point" {
+                // A "point" the edit keeps as a word ("one point five", "point 5") uses up the said one.
+                _ = keeps("point")
             }
         }
         // Digits stand for whole spoken numbers: "one hundred" is not "1",
