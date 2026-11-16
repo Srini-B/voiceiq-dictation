@@ -40,7 +40,7 @@ struct PillView: View {
                 .padding(.vertical, 20) // stable panel hit area
 
         case .listening(let locked):
-            pillSurface(width: model.partial.isEmpty ? (locked ? 268 : 200) : 520) {
+            pillSurface(width: model.partial.isEmpty ? (locked ? 308 : 200) : 520) {
                 HStack(spacing: VoiceIQUI.Spacing.s) {
                     if locked {
                         Image(systemName: "lock.fill")
@@ -66,6 +66,7 @@ struct PillView: View {
                             .accessibilityHidden(true)
                     }
                     if locked {
+                        cancelButton
                         stopButton
                     }
                 }
@@ -162,7 +163,28 @@ struct PillView: View {
             .frame(width: 32, height: 32)
         }
         .buttonStyle(.plain)
+        .help("Stop and insert")
         .accessibilityLabel("Stop dictation and insert text")
+    }
+
+    /// Next to Stop, not at the left edge: the left is the drag handle, and a
+    /// missed drag must not throw a recording away. Tonal, not `primary`, so it
+    /// never reads as the main action.
+    private var cancelButton: some View {
+        Button {
+            NotificationCenter.default.post(name: .pillCancelTapped, object: nil)
+        } label: {
+            ZStack {
+                Circle().fill(VoiceIQUI.Colors.onSurfaceVariant.opacity(0.14))
+                Image(systemName: "xmark")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(VoiceIQUI.Colors.onSurfaceVariant)
+            }
+            .frame(width: 32, height: 32)
+        }
+        .buttonStyle(.plain)
+        .help("Cancel without inserting (⌘Esc)")
+        .accessibilityLabel("Cancel dictation without inserting text")
     }
 
     private func successBadge(words: Int?) -> some View {
@@ -363,6 +385,7 @@ private struct CheckmarkShape: Shape {
 
 extension Notification.Name {
     static let pillStopTapped = Notification.Name("io.blue.voiceiq.pill.stop")
+    static let pillCancelTapped = Notification.Name("io.blue.voiceiq.pill.cancel")
     static let pillDotTapped = Notification.Name("io.blue.voiceiq.pill.dot")
     static let pillMeetingAccepted = Notification.Name("io.blue.voiceiq.pill.meeting.accept")
     static let pillMeetingDismissed = Notification.Name("io.blue.voiceiq.pill.meeting.dismiss")

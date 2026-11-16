@@ -38,7 +38,7 @@ Bezier/duration tokens for non-spring cases: `emphasizedDecelerate = timingCurve
 ### 1.2 Geometry
 - **Pill height 48pt, corner radius 24 (full pill)** in all active states. Surface: light `#FFFFFF` / dark `#1E1F20`, behind it `NSVisualEffectView` (.hudWindow material) so it sits on macOS like Google's own Gemini Mac app does — Google brand on native materials. 1px inner border `outlineVariant` at 8% opacity. Shadow: elevation-3 (y=2, blur=12, black 20%).
 - Content padding 16pt horizontal; internal elements on a 4pt grid.
-- Widths per state (animated): idle-dot 40, listening 200, locked 268, processing 132, inserting/success 48 (becomes circle), error/secure/offline: fit-to-text, max 320.
+- Widths per state (animated): idle-dot 40, listening 200, locked 308, processing 132, inserting/success 48 (becomes circle), error/secure/offline: fit-to-text, max 320.
 
 ### 1.3 States (state machine: `hidden → idleDot ↔ listening → processing → inserting → success → idleDot`, with `locked`, `error`, `secureField`, `offline` branches)
 
@@ -48,7 +48,7 @@ Bezier/duration tokens for non-spring cases: `emphasizedDecelerate = timingCurve
 
 **listening** (key down) — dot inflates to 200×48 with `.expressiveDefaultSpatial` (visible overshoot ~3%), content fades in with `.defaultEffects`. Content: **waveform centered** (spec §1.4) in the four-color traveling sweep (§1.5), the same colors as processing and meetings (both themes — brand pop is the point). After 10s a `Label M` timer fades in at left (tabular numerals, `onSurfaceVariant`). Hover reveals a 20pt ✕ cancel button at left edge (state-layer hover 8%). Esc cancels always. Appears **on key-down within one frame** — recording starts at t=0 regardless of animation.
 
-**locked (hands-free)** — entered by double-tap of the PTT key (Wispr/Hex pattern) or clicking the idle dot. Width → 268 (`.expressiveFastSpatial` — an eager, springy grow: the "settling in" moment). Layout: left = lock glyph (12pt) + elapsed timer `Label M`; center = waveform; right = **stop button**: 32pt circle, `primary` fill, 10pt white rounded-square stop icon. Press feedback on stop = M3E shape morph circle→rounded-square (`.fastSpatial`). Center of pill is NOT click-to-stop (Wispr's deliberate misclick protection). Esc or hotkey also ends.
+**locked (hands-free)** — entered by double-tap of the PTT key (Wispr/Hex pattern) or clicking the idle dot. Width → 308 (`.expressiveFastSpatial` — an eager, springy grow: the "settling in" moment). Layout: left = drag handle, lock glyph (12pt) + elapsed timer `Label M`; center = waveform; right = **cancel button** then **stop button**. Cancel: 32pt circle, `onSurfaceVariant` at 14% fill, ✕ glyph; tooltip "Cancel without inserting (⌘Esc)"; sends the same cancel as ⌘Esc. It sits beside stop, not at the left edge, because the left edge is the drag handle and a missed drag must not discard a recording. Stop: 32pt circle, `primary` fill, 10pt white rounded-square stop icon; tooltip "Stop and insert". Press feedback on stop = M3E shape morph circle→rounded-square (`.fastSpatial`). Center of pill is NOT click-to-stop (Wispr's deliberate misclick protection). Esc or hotkey also ends.
 
 **processing** (key released / stop pressed) — width → 132 (`.defaultSpatial`), waveform bars freeze then decouple from mic and run the **four-color treatment** (§1.5). If the API takes >4s: pill widens to fit "Still working…" `Label M` (Wispr's "taking longer than usual" pattern); audio is already safe on disk, so no anxiety copy.
 
