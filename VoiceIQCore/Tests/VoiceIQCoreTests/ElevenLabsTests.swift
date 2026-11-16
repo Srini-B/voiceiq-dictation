@@ -111,7 +111,8 @@ final class ElevenLabsTests: XCTestCase {
                             ("Transfer 25 dollars to Alice today", "Transfer 25 to Alice today."),
                             ("Give Alice 25 dollars and Bob 50 euros today", "Give Alice €25 and Bob $50 today."),
                             ("Take ½ tablet daily with water", "Take tablet daily with water."),
-                            ("We hired five engineers and fired contractors", "We hired engineers and fired 5 contractors.")] {
+                            ("We hired five engineers and fired contractors", "We hired engineers and fired 5 contractors."),
+                            ("Take ½ tablet in the morning and ¼ tablet at night", "Take ¼ tablet in the morning and ½ tablet at night.")] {
             XCTAssertEqual(ElevenLabs.accepted(edit: edit, original: raw), raw, edit)
         }
         let formats = [
@@ -123,6 +124,7 @@ final class ElevenLabsTests: XCTestCase {
             ("Give Alice 25 dollars and Bob 50 euros today", "Give Alice $25 and Bob €50 today."),
             ("It costs $25, not 25 euros", "It costs $25, not €25."),
             ("It has 25,000 rupees of data in it", "It has ₹25,000 of data in it."),
+            ("take ½ tablet in the morning and ¼ tablet at night", "Take ½ tablet in the morning and ¼ tablet at night."),
         ]
         for (raw, edit) in formats { XCTAssertEqual(ElevenLabs.accepted(edit: edit, original: raw), edit, raw) }
     }

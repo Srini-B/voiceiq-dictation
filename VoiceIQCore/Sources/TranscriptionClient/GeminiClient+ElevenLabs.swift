@@ -215,12 +215,20 @@ public enum ElevenLabs {
 
         func isNumber(_ word: String) -> Bool { word.contains(where: \.isNumber) || spokenNumbers[word] != nil }
         func isSymbol(_ word: String) -> Bool { word != "." && word != "/" && word.count == 1 && symbolWords.values.contains(word.first!) }
+        // Numerals other than decimal digits stay in the token: "½" is "#½", not "¼".
+        func otherNumerals(_ word: String) -> String {
+            String(String.UnicodeScalarView(word.unicodeScalars.filter { $0.properties.numericType.map { $0 != .decimal } ?? false }))
+        }
         var grouped: [String] = []
         for (index, word) in words.enumerated() {
             let inNumber = grouped.last?.hasPrefix("#") == true
             if isNumber(word) || inNumber && numberJoiners.contains(word) && index + 1 < words.count && isNumber(words[index + 1]) {
-                if inNumber { continue }
-                if let last = grouped.last, isSymbol(last) { grouped[grouped.count - 1] = "#" + last } else { grouped.append("#") }
+                if inNumber { grouped[grouped.count - 1] += otherNumerals(word); continue }
+                if let last = grouped.last, isSymbol(last) {
+                    grouped[grouped.count - 1] = "#" + otherNumerals(word) + last
+                } else {
+                    grouped.append("#" + otherNumerals(word))
+                }
             } else if isSymbol(word), inNumber {
                 grouped[grouped.count - 1] += word
             } else {
