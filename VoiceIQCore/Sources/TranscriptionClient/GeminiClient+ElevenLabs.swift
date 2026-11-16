@@ -227,7 +227,10 @@ public enum ElevenLabs {
                         guard let value = chunkValue(run[index..<end]), number[at...].hasPrefix(value) else { continue }
                         let next = number.index(at, offsetBy: value.count)
                         if next == number.endIndex, !value.isEmpty { return end }
-                        if end < run.count, let found = matches(next, end) { return found }
+                        // Chunks join only where the number words do not go on as
+                        // one cardinal: "nineteen | ninety nine" is 1999, but
+                        // "twenty five" is never "20" then "5".
+                        if end < run.count, chunkValue(run[index...end]) == nil, let found = matches(next, end) { return found }
                     }
                     return nil
                 }
