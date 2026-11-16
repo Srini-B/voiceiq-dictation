@@ -380,16 +380,24 @@ public enum ElevenLabs {
                 guard said(figure) || other.map(said) == true else { return false }
             } else if spokenNumbers[text.lowercased()] != nil {
                 guard keeps(text.lowercased()) else { return false }
+            } else if text.lowercased() == "point" {
+                // A "point" the edit keeps as a word ("one point five", "point 5") uses up the said one.
+                _ = keeps("point")
             }
         }
         // Digits stand for whole spoken numbers: "one hundred" is not "1",
         // and "twenty five" is not "20", and no said number is left out.
-        // Every run with a number is used up, all but "and" and "point". An
-        // "oh" on its own may be a filler ("Oh, I see"); among numbers it is
-        // a zero ("five oh five" is not "55").
+        // Every run with a number is used up, all but "and", and "point" not
+        // before a number: "one point five" is 1.5, never "1-5". An "oh" on
+        // its own may be a filler ("Oh, I see"); among numbers it is a zero
+        // ("five oh five" is not "55").
+        func isNumber(_ word: String) -> Bool { word.contains(where: \.isNumber) || spokenNumbers[word] != nil }
         return runs.indices.allSatisfy { r in
-            !runs[r].contains { $0 != "oh" && ($0.contains(where: \.isNumber) || spokenNumbers[$0] != nil) }
-                || runs[r].indices.allSatisfy { used[r][$0] || ["and", "point"].contains(runs[r][$0]) }
+            !runs[r].contains { $0 != "oh" && isNumber($0) }
+                || runs[r].indices.allSatisfy { i in
+                    used[r][i] || runs[r][i] == "and"
+                        || runs[r][i] == "point" && !(i + 1 < runs[r].count && isNumber(runs[r][i + 1]))
+                }
         }
     }
 

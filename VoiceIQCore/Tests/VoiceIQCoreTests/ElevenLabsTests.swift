@@ -86,7 +86,8 @@ final class ElevenLabsTests: XCTestCase {
                             ("Take two hundred tablets daily with water", "Take 2 100 tablets daily with water."),
                             ("Take one hundred and five tablets daily", "Take 100 and 5 tablets daily."),
                             ("Take one point oh five milligrams daily", "Take 1.5 milligrams daily."),
-                            ("The access code is five oh five today", "The access code is 5 5 today.")] {
+                            ("The access code is five oh five today", "The access code is 5 5 today."),
+                            ("Take one point five tablets daily with water", "Take 1-5 tablets daily with water.")] {
             XCTAssertEqual(ElevenLabs.accepted(edit: edit, original: raw), raw, edit)
         }
         XCTAssertEqual(ElevenLabs.accepted(edit: "Please send one 1 invoice to accounting today.",
@@ -108,6 +109,8 @@ final class ElevenLabsTests: XCTestCase {
             ("take one point oh five milligrams", "Take 1.05 milligrams."),
             ("the code is five oh five", "The code is 505."),
             ("oh I see five of them", "Oh, I see 5 of them."),
+            ("take one point five tablets daily", "Take one point five tablets daily."),
+            ("please discuss point five at the meeting", "Please discuss point 5 at the meeting."),
         ]
         for (raw, edit) in formats { XCTAssertEqual(ElevenLabs.accepted(edit: edit, original: raw), edit, raw) }
     }
