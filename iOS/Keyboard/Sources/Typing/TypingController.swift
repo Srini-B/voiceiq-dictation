@@ -28,6 +28,9 @@ final class TypingController: ObservableObject, KeyboardKeysDelegate {
     /// Nothing typed since the keyboard appeared, so the bar may show the
     /// Dictionary offer instead of predictions.
     @Published private(set) var typedSinceAppear = false
+    /// The text selected in the field, reread with the suggestions after
+    /// every edit, so the bar's Dictionary offer ends with the selection.
+    @Published private(set) var selection = ""
 
     weak var controller: UIInputViewController?
     var proxy: UITextDocumentProxy? { controller?.textDocumentProxy }
@@ -173,6 +176,8 @@ final class TypingController: ObservableObject, KeyboardKeysDelegate {
             if shift != wanted { shift = wanted }
         }
         returnEnabled = !(proxy.enablesReturnKeyAutomatically ?? false) || proxy.hasText
+        let selected = proxy.selectedText ?? ""
+        if selection != selected { selection = selected }
         updateSuggestions(before)
         lastBefore = before
         lastAfter = proxy.documentContextAfterInput

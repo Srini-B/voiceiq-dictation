@@ -75,7 +75,7 @@ struct KeyboardView: View {
 
     private var showsOffer: Bool {
         if offer.feedback != nil { return true }
-        switch offer.offer {
+        switch offer.offer(selection: typing.selection) {
         case .selection: return true
         case .copied: return !typing.typedSinceAppear
         case nil: return false
@@ -101,7 +101,7 @@ struct KeyboardView: View {
                     BlockWordChip(word: typing.blockOffer ?? "", block: { typing.block(typing.blockOffer ?? "") },
                                   cancel: { typing.blockOffer = nil })
                 case .keys where showsOffer:
-                    DictionaryOfferChip(offer: offer)
+                    DictionaryOfferChip(offer: offer, selection: typing.selection)
                 case .keys:
                     SuggestionStrip(suggestions: typing.suggestions, theme: typing.theme, pick: typing.pick, hold: typing.offerBlock)
                 default:
@@ -156,7 +156,7 @@ struct KeyboardView: View {
                             .foregroundStyle(KeyboardPalette.recording)
                             .lineLimit(1)
                     } else if model.phase == .off || model.phase == .warm {
-                        DictionaryOfferChip(offer: offer)
+                        DictionaryOfferChip(offer: offer, selection: typing.selection)
                     }
                 }
                 .frame(height: DictionaryOfferChip.height)
