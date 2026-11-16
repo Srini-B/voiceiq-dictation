@@ -184,6 +184,14 @@ Result (test Mac, commit 716f2f7):
 - The notarized Mac app was installed over 0.7.1 on a second Mac and
   reads 0.7.2 (76).
 
+## Release 0.7.5 (79)
+
+The maintainer asked for a build with the two number-check fixes found by
+review after 0.7.4: Scribe's formatting edit may no longer swap two amounts
+(its numbers must follow the order they were said) or join pieces of one
+spoken number into another ("twenty five" as 205, "two hundred" as 2100).
+Version 0.7.5, build 79 (0.7.4 was 78).
+
 ## Release 0.7.4 (78)
 
 The maintainer asked for a new TestFlight build and Mac install with the
