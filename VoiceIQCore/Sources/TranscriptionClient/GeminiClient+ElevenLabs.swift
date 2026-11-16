@@ -123,13 +123,17 @@ public enum ElevenLabs {
     /// heard, as often, and each heard word is kept, as listed below
     /// (`ValidationGate.contentWords`, so spoken numbers match
     /// digits and scripts without spaces count by character). Besides digits,
-    /// it may change a heard word by up to two letters (a spelling or meaning
-    /// fix) or shorten one to an abbreviation ("km"). Words in other scripts
-    /// are held to the stricter `keepsNonLatinWords`.
+    /// it may change the end of a heard word by up to two letters, keeping
+    /// its first three ("colour", "organise", "they're"; not "decrease" for
+    /// "increase" or "July" for "June"), never a negation, and write a unit
+    /// as its abbreviation ("km"). It keeps every question mark. Words in
+    /// other scripts are held to the stricter `keepsNonLatinWords`.
     /// MEASURED 2026-11-13 on an 8 s English clip: every one of 8 edits
     /// appended a remark the speaker never said, such as "(This is a single
     /// paragraph.)" or "It's Monday.", and `ValidationGate` accepted them.
     static func onlyFormats(original: String, edit: String) -> Bool {
+        func questionMarks(_ text: String) -> Int { text.filter { $0 == "?" || $0 == "？" }.count }
+        guard questionMarks(edit) >= questionMarks(original) else { return false }
         var heard = ValidationGate.contentWords(of: original).reduce(into: [String: Int]()) { $0[$1, default: 0] += 1 }
         var added: [String] = []
         // The digits of a word go to `saysEveryNumber`; its letters ("5kg",
@@ -140,13 +144,18 @@ public enum ElevenLabs {
             let hasDigits = parts.joined().count < word.count
             for part in parts {
                 if hasDigits, word.hasSuffix(part), ["st", "nd", "rd", "th"].contains(part) { continue }
-                if let count = heard[part], count > 0 { heard[part] = count - 1 } else { added.append(part) }
+                if let count = heard[part], count > 0 { heard[part] = count - 1; continue }
+                // The end of a contraction ("they're"); never "t", which negates.
+                if !hasDigits, ["s", "re", "ll", "ve", "d", "m"].contains(part) { continue }
+                added.append(part)
             }
         }
         func near(_ word: String, _ said: String) -> Bool {
-            if word.count >= 4, said.count >= 4 { return letterDistance(word, said) <= 2 }
-            return (2...3).contains(word.count) && said.count > word.count && word.first == said.first
-                && isSubsequence(word, of: said)
+            if let full = abbreviations[word] { return full.contains(said) }
+            if said == word + "s" { return true }  // "its" as "it's"
+            guard word.count >= 3, said.count >= 3, !negations.contains(said) else { return false }
+            let a = word.folding(options: .diacriticInsensitive, locale: nil), b = said.folding(options: .diacriticInsensitive, locale: nil)
+            return a.prefix(3) == b.prefix(3) && letterDistance(a, b) <= 2
         }
         for word in added {
             guard let said = heard.keys.sorted().first(where: { heard[$0, default: 0] > 0 && near(word, $0) }) else { return false }
@@ -154,14 +163,17 @@ public enum ElevenLabs {
         }
         // It keeps every word too ("do not delete" is not "delete"), apart
         // from fillers, a word said twice in a row ("I I think"), "and",
-        // "point" and "minus" before a number, and words it may write as
-        // digits or a symbol, whose numbers `saysEveryNumber` checks.
+        // "point" and "minus" before a number, "to" between two ("2-3"), and
+        // words it may write as digits or a symbol, whose numbers
+        // `saysEveryNumber` checks.
         let said = ValidationGate.contentWords(of: original)
+        func isNumber(_ word: String) -> Bool { word.contains(where: \.isNumber) || spokenNumbers[word] != nil }
         var allowed: [String: Int] = [:]
         for (index, word) in said.enumerated() {
             let next = index + 1 < said.count ? said[index + 1] : ""
             if index > 0 && said[index - 1] == word
-                || numberJoiners.contains(word) && (next.contains(where: \.isNumber) || spokenNumbers[next] != nil) {
+                || numberJoiners.contains(word) && isNumber(next)
+                || word == "to" && index > 0 && isNumber(said[index - 1]) && isNumber(next) {
                 allowed[word, default: 0] += 1
             }
         }
@@ -179,7 +191,7 @@ public enum ElevenLabs {
         for symbol in Set(symbolWords.values) {
             let written = edit.filter { $0 == symbol }.count - original.filter { $0 == symbol }.count
             let needed = dropped[symbol, default: 0]
-            guard symbol == "." || symbol == "/" ? written >= needed : written == needed else { return false }
+            guard symbol == "." || symbol == "/" ? needed == 0 || written >= needed : written == needed else { return false }
         }
         // And in the order said: "Bob owes Alice" is not "Alice owes Bob",
         // "25 dollars and 50 euros" is not "€25 and $50", and "hired five
@@ -240,7 +252,8 @@ public enum ElevenLabs {
 
     /// Words written as a symbol, and the symbol.
     private static let symbolWords: [String: Character] = [
-        "dollar": "$", "dollars": "$", "cent": "¢", "cents": "¢", "percent": "%", "pound": "£", "pounds": "£",
+        // Not "pounds", which is also a weight; "sterling" keeps "£" checked.
+        "dollar": "$", "dollars": "$", "cent": "¢", "cents": "¢", "percent": "%", "sterling": "£",
         "euro": "€", "euros": "€", "rupee": "₹", "rupees": "₹", "yen": "¥", "degree": "°", "degrees": "°", "at": "@", "dot": ".",
         "slash": "/", "hash": "#", "hashtag": "#", "plus": "+", "ampersand": "&",
     ]
@@ -267,13 +280,13 @@ public enum ElevenLabs {
         }
         guard otherNumerals(edit) == otherNumerals(original) else { return false }
         // Any script's digits, read as 0-9 ("٢٥" is "25"), keeping the
-        // decimal point: "1.50" is not "150". A comma before three digits
+        // decimal point, also a leading one: "1.50" is not "150", nor ".5" 5. A comma before three digits
         // groups thousands ("1,500"); any other comma or a period is the
         // decimal point. A colon ("3:30") is kept and stands where a spoken
         // number breaks ("three | thirty"), so "1:30" is not "130". A minus sign not after
         // a letter or digit is kept: "-25" is not "25", but "555-1234" and
         // "COVID-19" have no sign.
-        let number = #"(?:(?<![\p{L}\p{Nd}])[-−])?(?:\p{Nd}[\p{Nd},.:]*\p{Nd}|\p{Nd})"#
+        let number = #"(?:(?<![\p{L}\p{Nd}])[-−])?(?:(?<![\p{Nd}.])\.(?=\p{Nd}))?(?:\p{Nd}[\p{Nd},.:]*\p{Nd}|\p{Nd})"#
         func digits(_ text: Substring) -> String {
             var figure = "", index = text.startIndex
             while index < text.endIndex {
@@ -348,7 +361,11 @@ public enum ElevenLabs {
             guard let range = Range(match.range, in: edit) else { continue }
             let text = edit[range]
             if text.contains(where: \.isNumber) {
-                guard said(digits(text.hasSuffix(":00") || text.hasSuffix(".00") ? text.dropLast(3) : text)) else { return false }
+                // ".5" and "0.5" are the same number, never "5".
+                let figure = digits(text.hasSuffix(":00") || text.hasSuffix(".00") ? text.dropLast(3) : text)
+                let sign = figure.hasPrefix("-") ? "-" : "", body = figure.dropFirst(sign.count)
+                let other = body.hasPrefix(".") ? sign + "0" + body : body.hasPrefix("0.") ? sign + body.dropFirst() : nil
+                guard said(figure) || other.map(said) == true else { return false }
             } else if spokenNumbers[text.lowercased()] != nil {
                 guard keeps(text.lowercased()) else { return false }
             }
@@ -411,14 +428,25 @@ public enum ElevenLabs {
         return numbers
     }()
 
-    private static func isSubsequence(_ short: String, of long: String) -> Bool {
-        var rest = Substring(long)
-        for character in short {
-            guard let index = rest.firstIndex(of: character) else { return false }
-            rest = rest[rest.index(after: index)...]
-        }
-        return true
-    }
+    /// Words an edit may never write in place of another ("not" as "note").
+    private static let negations: Set<String> = ["not", "never", "nor", "none", "nothing", "nobody", "neither", "cannot"]
+
+    /// Abbreviations an edit may write, and the words they stand for.
+    private static let abbreviations: [String: Set<String>] = {
+        let units: [(String, [String])] = [
+            ("km", ["kilometer", "kilometers", "kilometre", "kilometres"]), ("cm", ["centimeter", "centimeters", "centimetre", "centimetres"]),
+            ("mm", ["millimeter", "millimeters", "millimetre", "millimetres"]), ("kg", ["kilogram", "kilograms", "kilo", "kilos"]),
+            ("mg", ["milligram", "milligrams"]), ("ml", ["milliliter", "milliliters", "millilitre", "millilitres"]),
+            ("lb", ["pound", "pounds"]), ("lbs", ["pounds"]), ("oz", ["ounce", "ounces"]), ("ft", ["foot", "feet"]),
+            ("mi", ["mile", "miles"]), ("mph", ["mph"]), ("hr", ["hour"]), ("hrs", ["hours"]), ("min", ["minute", "minutes"]),
+            ("mins", ["minutes"]), ("sec", ["second", "seconds"]), ("secs", ["seconds"]), ("ms", ["millisecond", "milliseconds"]),
+            ("kb", ["kilobyte", "kilobytes"]), ("mb", ["megabyte", "megabytes"]), ("gb", ["gigabyte", "gigabytes"]),
+            ("tb", ["terabyte", "terabytes"]), ("hz", ["hertz"]), ("khz", ["kilohertz"]), ("mhz", ["megahertz"]), ("ghz", ["gigahertz"]),
+            ("kw", ["kilowatt", "kilowatts"]), ("rs", ["rupee", "rupees"]), ("vs", ["versus"]), ("etc", ["etcetera"]),
+            ("approx", ["approximately"]), ("dr", ["doctor"]), ("mr", ["mister"]), ("mrs", ["missus"]),
+        ]
+        return Dictionary(uniqueKeysWithValues: units.map { ($0.0, Set($0.1)) })
+    }()
 
     /// Levenshtein distance: letters inserted, removed or replaced.
     private static func letterDistance(_ a: String, _ b: String) -> Int {

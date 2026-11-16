@@ -231,6 +231,21 @@ Numbers heard as digits no longer join into one: "1-2 tablets" cannot
 become "12 tablets". Spoken number words still join ("five five five" as
 555).
 
+After those, the maintainer asked for the whole class to be handled rather
+than one review finding at a time. A sweep of meaning-changing edits found
+the check still accepted "increase" as "decrease", "June" as "July",
+"able" as "unable", "senior" as "junior", "5 kilograms" as "5 km", "5
+pounds" (weight) as "£5", a dropped question mark and ".5" as "5"; most
+came from accepting any word within two letters of a heard one. Now a
+changed word keeps its first three letters and is never a negation, an
+abbreviation must stand for its unit (a fixed list), "pounds" is not a
+currency word, question marks are kept, a leading decimal point counts
+(".5" is "0.5"), contraction endings other than "t" may be added
+("they're"), and "to" may become "-" between two numbers. The sweep also
+found that removing a stray period ("increase. the") was rejected; fixed.
+Ten real transcripts from the history still pass unchanged. One case is
+left: "a second" can become "a 2nd", since "second" is also an ordinal.
+
 Result (test Mac, commit 4d7ffdb):
 - An earlier attempt on b591645 was stopped after the app was notarized and
   before anything was uploaded or installed, so that build 79 would include

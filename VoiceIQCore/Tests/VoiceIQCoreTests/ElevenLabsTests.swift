@@ -133,6 +133,33 @@ final class ElevenLabsTests: XCTestCase {
         for (raw, edit) in formats { XCTAssertEqual(ElevenLabs.accepted(edit: edit, original: raw), edit, raw) }
     }
 
+    /// A word the edit changes keeps its first three letters and is not a
+    /// negation, an abbreviation stands only for its unit, a question stays
+    /// a question, and a leading decimal point counts.
+    func testAnEditThatChangesAWordIsNotUsed() {
+        for (raw, edit) in [("Increase the limit to five hundred", "Decrease the limit to 500."),
+                            ("The meeting is in June", "The meeting is in July."),
+                            ("The patient is able to walk", "The patient is unable to walk."),
+                            ("Do not delete it", "Do note delete it."),
+                            ("Ship five kilograms of rice", "Ship 5 km of rice."),
+                            ("It weighs 5 pounds", "It weighs £5."),
+                            ("Are you coming tonight?", "Are you coming tonight."),
+                            ("Take .5 milligrams daily with water", "Take 5 milligrams daily with water.")] {
+            XCTAssertEqual(ElevenLabs.accepted(edit: edit, original: raw), raw, edit)
+        }
+        let formats = [
+            ("meet me at the center", "Meet me at the centre."),
+            ("send me your resume", "Send me your résumé."),
+            ("their going to the park", "They're going to the park."),
+            ("its about three hours", "It's about 3 hours."),
+            ("take two to three tablets", "Take 2-3 tablets."),
+            ("take point five milligrams", "Take 0.5 mg."),
+            ("is it ready", "Is it ready?"),
+            ("And increase. the version number", "And increase the version number"),
+        ]
+        for (raw, edit) in formats { XCTAssertEqual(ElevenLabs.accepted(edit: edit, original: raw), edit, raw) }
+    }
+
     /// Redacted live text keeps each heard word's speaker and time: in
     /// Japanese, written without spaces, and after placeholders in a row.
     func testRedactedWordsKeepTheirSpeakers() {
