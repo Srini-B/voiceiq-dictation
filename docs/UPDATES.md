@@ -45,10 +45,12 @@ tagged: `gh workflow run release.yml --ref <branch> -f dry_run=true`.
 
 ### How the previous version is found
 
-The notes cover the commits since the previous release. That is the tag
-`v<previous version>` when it exists (every release from this workflow has
-one), otherwise the commit that set `MARKETING_VERSION` to the previous
-version. Check it with:
+The notes cover the commits since the previous release. That is the newest
+earlier version with a tag `v<version>` (every release from this workflow has
+one). Versions a branch went through before merging, such as TestFlight-only
+builds, have no tag and are skipped, so the notes cover everything since the
+last public release. Without any tag, it is the commit that set
+`MARKETING_VERSION` to the previous version. Check it with:
 
 ```bash
 python3 scripts/generate-release-notes.py --base   # previous version, commit, build

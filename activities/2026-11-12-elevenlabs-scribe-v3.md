@@ -184,6 +184,16 @@ Result (test Mac, commit 716f2f7):
 - The notarized Mac app was installed over 0.7.1 on a second Mac and
   reads 0.7.2 (76).
 
+## Release 0.7.6 (80): merge to main
+
+The maintainer asked to raise the version and merge PR #44 so the changes
+are released by `release.yml`. Version 0.7.6, build 80. The release notes
+script took the previous version from the newest `MARKETING_VERSION`
+change, which after a merge commit would be the branch's untagged 0.7.5
+bump, so the notes would have covered only the last fixes. It now takes the
+newest earlier version with a tag (v0.7.0 here) and skips versions that
+only went to TestFlight from the branch.
+
 ## Release 0.7.5 (79)
 
 The maintainer asked for a build with the two number-check fixes found by
