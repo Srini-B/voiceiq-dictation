@@ -153,26 +153,58 @@ public enum ElevenLabs {
             heard[said, default: 0] -= 1
         }
         // It keeps every word too ("do not delete" is not "delete"), apart
-        // from fillers, a word said twice in a row ("I I think"), and words
-        // it may write as digits or a symbol, whose numbers
-        // `saysEveryNumber` checks.
+        // from fillers, a word said twice in a row ("I I think"), "and",
+        // "point" and "minus" before a number, and words it may write as
+        // digits or a symbol, whose numbers `saysEveryNumber` checks.
         let said = ValidationGate.contentWords(of: original)
-        let repeats = zip(said, said.dropFirst()).filter { $0 == $1 }.reduce(into: [String: Int]()) { $0[$1.0, default: 0] += 1 }
+        var allowed: [String: Int] = [:]
+        for (index, word) in said.enumerated() {
+            let next = index + 1 < said.count ? said[index + 1] : ""
+            if index > 0 && said[index - 1] == word
+                || numberJoiners.contains(word) && (next.contains(where: \.isNumber) || spokenNumbers[next] != nil) {
+                allowed[word, default: 0] += 1
+            }
+        }
         for (word, count) in heard where count > 0 && !droppable.contains(word) && !word.contains(where: \.isNumber)
-            && spokenNumbers[word] == nil && !numberJoiners.contains(word) {
-            guard repeats[word, default: 0] >= count else { return false }
+            && spokenNumbers[word] == nil {
+            guard allowed[word, default: 0] >= count else { return false }
+        }
+        // A word left out for a symbol is written as that symbol, and no
+        // other symbol appears: "25 dollars" is "$25", never "€25". Periods
+        // and slashes are also punctuation, so they need only be there.
+        var dropped: [Character: Int] = [:]
+        for (word, count) in heard where count > 0 {
+            if let symbol = symbolWords[word] { dropped[symbol, default: 0] += count }
+        }
+        for symbol in Set(symbolWords.values) {
+            let written = edit.filter { $0 == symbol }.count - original.filter { $0 == symbol }.count
+            let needed = dropped[symbol, default: 0]
+            guard symbol == "." || symbol == "/" ? written >= needed : written == needed else { return false }
+        }
+        // And in the order said: "Bob owes Alice" is not "Alice owes Bob".
+        // Numbers keep their order in `saysEveryNumber`.
+        let heardWords = Set(said)
+        var rest = said[...]
+        for word in ValidationGate.contentWords(of: edit) where !word.contains(where: \.isNumber) && heardWords.contains(word) {
+            guard let index = rest.firstIndex(of: word) else { return false }
+            rest = rest[(index + 1)...]
         }
         return saysEveryNumber(original: original, edit: edit)
     }
 
-    /// Words a formatted edit may leave out: fillers, and words written as a
-    /// symbol ("$25", "3.5%", "3:00" for "three o'clock", "@" and "." in an
-    /// address, "$100" for "a hundred dollars").
-    private static let droppable: Set<String> = [
-        "um", "umm", "uh", "uhh", "uhm", "er", "erm", "ah", "eh", "hm", "hmm", "mm", "mhm",
-        "dollar", "dollars", "cent", "cents", "percent", "pound", "pounds", "euro", "euros", "degree", "degrees",
-        "o", "clock", "at", "dot", "slash", "hash", "hashtag", "plus", "ampersand", "a",
+    /// Words written as a symbol, and the symbol.
+    private static let symbolWords: [String: Character] = [
+        "dollar": "$", "dollars": "$", "cent": "¢", "cents": "¢", "percent": "%", "pound": "£", "pounds": "£",
+        "euro": "€", "euros": "€", "yen": "¥", "degree": "°", "degrees": "°", "at": "@", "dot": ".",
+        "slash": "/", "hash": "#", "hashtag": "#", "plus": "+", "ampersand": "&",
     ]
+
+    /// Words a formatted edit may leave out: fillers, words written as a
+    /// symbol ("$25", "3.5%", "@" and "." in an address), "o'clock" in
+    /// "3:00" and "a" in "$100" for "a hundred dollars".
+    private static let droppable = Set(symbolWords.keys).union([
+        "um", "umm", "uh", "uhh", "uhm", "er", "erm", "ah", "eh", "hm", "hmm", "mm", "mhm", "o", "clock", "a",
+    ])
 
     /// Whether every number the edit writes in digits was said: as digits,
     /// or as English number words that read as it. Only the digits count, so

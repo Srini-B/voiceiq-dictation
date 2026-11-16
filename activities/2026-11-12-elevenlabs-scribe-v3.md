@@ -201,6 +201,14 @@ in "3:00", "at" and "dot" in an address); a spoken number it leaves out
 entirely also fails. A failing edit sends the transcript on as heard, as
 before. Build 79 was held until this landed so that it includes it.
 
+Review of that fix found two more gaps, fixed after build 79 had started
+from it (they go in the next build): an edit could swap words ("Alice owes
+Bob" as "Bob owes Alice") or a currency ("25 dollars" as "€25"), and "and",
+"point" or "minus" could be left out anywhere ("came back negative"). The
+heard words must now stay in order, a word left out for a symbol must be
+written as that symbol with no other symbol added, and "and", "point" and
+"minus" may be left out only before a number.
+
 ## Release 0.7.4 (78)
 
 The maintainer asked for a new TestFlight build and Mac install with the

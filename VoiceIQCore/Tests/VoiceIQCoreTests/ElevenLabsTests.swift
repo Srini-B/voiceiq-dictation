@@ -98,12 +98,17 @@ final class ElevenLabsTests: XCTestCase {
         for (raw, edit) in formats { XCTAssertEqual(ElevenLabs.accepted(edit: edit, original: raw), edit, raw) }
     }
 
-    /// The edit keeps every word said apart from fillers, a word said twice
-    /// in a row, and words it writes as digits or a symbol.
+    /// The edit keeps every word said, in order, apart from fillers, a word
+    /// said twice in a row, and words it writes as digits or as the symbol
+    /// they name.
     func testAnEditThatLeavesOutWordsIsNotUsed() {
         for (raw, edit) in [("Do not delete the backup today", "Delete the backup today."),
                             ("Send it to Alice and Bob today", "Send it to Alice today."),
-                            ("Pay twenty five dollars to Bob", "Pay dollars to Bob.")] {
+                            ("Pay twenty five dollars to Bob", "Pay dollars to Bob."),
+                            ("The test came back negative today", "The test came back today."),
+                            ("Alice owes Bob money today", "Bob owes Alice money today."),
+                            ("Transfer 25 dollars to Alice today", "Transfer €25 to Alice today."),
+                            ("Transfer 25 dollars to Alice today", "Transfer 25 to Alice today.")] {
             XCTAssertEqual(ElevenLabs.accepted(edit: edit, original: raw), raw, edit)
         }
         let formats = [
@@ -111,6 +116,7 @@ final class ElevenLabsTests: XCTestCase {
             ("um it's a hundred dollars", "It's $100."),
             ("meet at three o'clock", "Meet at 3:00."),
             ("email john at example dot com", "Email john@example.com."),
+            ("pay one hundred and five dollars", "Pay $105."),
         ]
         for (raw, edit) in formats { XCTAssertEqual(ElevenLabs.accepted(edit: edit, original: raw), edit, raw) }
     }
