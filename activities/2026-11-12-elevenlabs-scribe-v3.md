@@ -257,6 +257,9 @@ and "kg", and "kg", "kilos" and "kilograms" share one name, so "five
 milligrams … ten kilograms" cannot become "5kg … 10mg".
 A slash between digits now stays part of the number like a colon, so
 "1/2 tablet" cannot become "1-2 tablet" or the other way round.
+A written number must also end where the spoken one does, so "two
+hundred" cannot be written "2 100", nor "one hundred and five" "100 and
+5"; "two and three" may still be "2 and 3".
 
 Result (test Mac, commit 4d7ffdb):
 - An earlier attempt on b591645 was stopped after the app was notarized and

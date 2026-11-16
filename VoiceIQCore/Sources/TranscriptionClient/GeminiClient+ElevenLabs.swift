@@ -342,7 +342,14 @@ public enum ElevenLabs {
                     for end in (index + 1)...min(index + 6, run.count) where !used[r][index..<end].contains(true) {
                         guard let value = chunkValue(run[index..<end]), number[at...].hasPrefix(value) else { continue }
                         let next = number.index(at, offsetBy: value.count)
-                        if next == number.endIndex, !value.isEmpty { return end }
+                        // A written number ends where the spoken one does: "two
+                        // hundred" is not "2" then "100", nor "one hundred and
+                        // five" "100" then "5".
+                        if next == number.endIndex, !value.isEmpty {
+                            let after = run[end...].firstIndex { $0 != "and" } ?? run.count
+                            if after == run.count || chunkValue(run[index...after]) == nil { return end }
+                            continue
+                        }
                         // Chunks join only where the number words do not go on as
                         // one cardinal: "nineteen | ninety nine" is 1999, but
                         // "twenty five" is never "20" then "5".
