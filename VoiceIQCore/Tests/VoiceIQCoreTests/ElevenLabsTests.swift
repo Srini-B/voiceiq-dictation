@@ -144,6 +144,8 @@ final class ElevenLabsTests: XCTestCase {
                             ("The tank was filled yesterday", "The tank was filed yesterday."),
                             ("Do not delete it", "Do note delete it."),
                             ("Ship five kilograms of rice", "Ship 5 km of rice."),
+                            ("Take five milligrams in the morning and ten kilograms at night",
+                             "Take 5kg in the morning and 10mg at night."),
                             ("It weighs 5 pounds", "It weighs £5."),
                             ("Are you coming tonight?", "Are you coming tonight."),
                             ("Take .5 milligrams daily with water", "Take 5 milligrams daily with water.")] {
@@ -156,6 +158,7 @@ final class ElevenLabsTests: XCTestCase {
             ("we traveled to the theater", "We travelled to the theatre."),
             ("take two to three tablets", "Take 2-3 tablets."),
             ("take point five milligrams", "Take 0.5 mg."),
+            ("take five milligrams in the morning and ten kilograms at night", "Take 5mg in the morning and 10 kg at night."),
             ("is it ready", "Is it ready?"),
             ("And increase. the version number", "And increase the version number"),
         ]

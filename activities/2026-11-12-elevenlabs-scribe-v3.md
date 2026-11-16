@@ -252,6 +252,9 @@ US endings (-our/-or, -ise/-ize, -yse/-yze, -tre/-ter, -elled/-eled,
 -ence/-ense, -ogue/-og) and a short list of pairs ("grey", "programme").
 Homophone fixes such as "their" to "they're" are rejected now; the
 writing rules still make them from the transcript as heard.
+Units now keep their numbers in the word order: "5kg" reads as a number
+and "kg", and "kg", "kilos" and "kilograms" share one name, so "five
+milligrams … ten kilograms" cannot become "5kg … 10mg".
 
 Result (test Mac, commit 4d7ffdb):
 - An earlier attempt on b591645 was stopped after the app was notarized and

@@ -200,14 +200,24 @@ public enum ElevenLabs {
         return saysEveryNumber(original: original, edit: edit)
     }
 
-    /// `ValidationGate.contentWords` in order, with each currency or unit
+    /// `ValidationGate.contentWords` in order, each word in one spelling and
+    /// each unit by one name ("kg" and "kilograms" alike), with each currency or unit
     /// symbol, and each word that names one, as that symbol, and each number
     /// as "#" followed by the symbols written next to it: "25 dollars" and
     /// "$25" are both "#$", "three point five percent" and "3.5%" both "#%".
     private static func orderedWords(_ text: String) -> [String] {
         var words: [String] = [], segment = ""
         func flush() {
-            words += ValidationGate.contentWords(of: segment).map { symbolWords[$0].map(String.init) ?? $0 }
+            for word in ValidationGate.contentWords(of: segment) {
+                // "5kg" is a number and its unit; "21st" is a number.
+                var pieces: [String] = []
+                for character in word {
+                    if let last = pieces.last?.last, last.isNumber == character.isNumber { pieces[pieces.count - 1].append(character) }
+                    else { pieces.append(String(character)) }
+                }
+                if pieces.count == 2, pieces[0].first?.isNumber == true, ["st", "nd", "rd", "th"].contains(pieces[1]) { pieces.removeLast() }
+                words += pieces.map { symbolWords[$0].map(String.init) ?? unitNames[$0] ?? spelling($0) }
+            }
             segment = ""
         }
         for character in text {
@@ -469,6 +479,17 @@ public enum ElevenLabs {
             ("approx", ["approximately"]), ("dr", ["doctor"]), ("mr", ["mister"]), ("mrs", ["missus"]),
         ]
         return Dictionary(uniqueKeysWithValues: units.map { ($0.0, Set($0.1)) })
+    }()
+
+    /// One name for each unit, whether abbreviated or written out ("kg",
+    /// "kilos" and "kilograms" are all "kg"), so a number keeps its unit.
+    private static let unitNames: [String: String] = {
+        var names: [String: String] = [:]
+        for (abbreviation, words) in abbreviations.sorted(by: { $0.key < $1.key }) {
+            let name = words.lazy.compactMap { names[$0] }.first ?? names[abbreviation] ?? abbreviation
+            for word in words.union([abbreviation]) where names[word] == nil { names[word] = name }
+        }
+        return names
     }()
 
     /// Whether every word of the original written in a script other than
