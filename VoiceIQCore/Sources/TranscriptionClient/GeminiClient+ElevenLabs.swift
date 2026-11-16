@@ -253,8 +253,8 @@ public enum ElevenLabs {
     ])
 
     /// Whether every number the edit writes in digits was said: as digits,
-    /// or as English number words that read as it. Only the digits count, so
-    /// "1,500", "$25", "25%", "3:30" and "3.5" match "1500", "twenty five",
+    /// or as English number words that read as it. Digits, decimal points
+    /// and colons count, so "1,500", "$25", "25%", "3:30" and "3.5" match "1500", "twenty five",
     /// "three thirty" and "three point five", and whole hours or amounts may
     /// gain ":00" or ".00" ("three" as "3:00"). Number words may read as one
     /// number ("two thousand twenty six") or as several written together
@@ -269,7 +269,8 @@ public enum ElevenLabs {
         // Any script's digits, read as 0-9 ("٢٥" is "25"), keeping the
         // decimal point: "1.50" is not "150". A comma before three digits
         // groups thousands ("1,500"); any other comma or a period is the
-        // decimal point. Colons ("3:30") are dropped. A minus sign not after
+        // decimal point. A colon ("3:30") is kept and stands where a spoken
+        // number breaks ("three | thirty"), so "1:30" is not "130". A minus sign not after
         // a letter or digit is kept: "-25" is not "25", but "555-1234" and
         // "COVID-19" have no sign.
         let number = #"(?:(?<![\p{L}\p{Nd}])[-−])?(?:\p{Nd}[\p{Nd},.:]*\p{Nd}|\p{Nd})"#
@@ -279,7 +280,7 @@ public enum ElevenLabs {
                 let character = text[index]
                 let after = text[text.index(after: index)...]
                 if let value = character.wholeNumberValue { figure += String(value) }
-                else if character == "." { figure += "." }
+                else if character == "." || character == ":" { figure.append(character) }
                 else if character == "-" || character == "−" { figure += "-" }
                 else if character == ",", after.prefix(while: \.isNumber).count != 3 { figure += "." }
                 index = text.index(after: index)
@@ -327,7 +328,9 @@ public enum ElevenLabs {
                         // Chunks join only where the number words do not go on as
                         // one cardinal: "nineteen | ninety nine" is 1999, but
                         // "twenty five" is never "20" then "5".
-                        if end < run.count, chunkValue(run[index...end]) == nil, let found = matches(next, end) { return found }
+                        // A written colon is such a join, and only that.
+                        let joined = next < number.endIndex && number[next] == ":" && !value.isEmpty ? number.index(after: next) : next
+                        if end < run.count, chunkValue(run[index...end]) == nil, let found = matches(joined, end) { return found }
                     }
                     return nil
                 }

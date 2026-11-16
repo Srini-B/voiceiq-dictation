@@ -76,7 +76,10 @@ final class ElevenLabsTests: XCTestCase {
                             ("Pay twenty five dollars today", "Pay 25bitcoin today."),
                             ("Pay Alice twenty five dollars and Bob fifty dollars", "Pay Alice 50 dollars and Bob 25 dollars."),
                             ("Pay twenty five dollars today", "Pay 205 dollars today."),
-                            ("Pay two hundred dollars today", "Pay 2100 dollars today.")] {
+                            ("Pay two hundred dollars today", "Pay 2100 dollars today."),
+                            ("Wait 1:30 minutes before starting", "Wait 130 minutes before starting."),
+                            ("Wait 130 minutes before starting", "Wait 1:30 minutes before starting."),
+                            ("Wait one thirty minutes before starting", "Wait 13:0 minutes before starting.")] {
             XCTAssertEqual(ElevenLabs.accepted(edit: edit, original: raw), raw, edit)
         }
         XCTAssertEqual(ElevenLabs.accepted(edit: "Please send one 1 invoice to accounting today.",
