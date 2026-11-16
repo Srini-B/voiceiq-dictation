@@ -6,12 +6,19 @@ struct HistoryView: View {
     @State private var records: [DictationRecord] = []
     @State private var search = ""
     @State private var confirmDeleteAll = false
+    /// Stats outlive History, so Statistics stays after History is cleared.
+    @State private var hasStats = false
 
     private var sections: [HistoryDaySection] { HistoryDaySection.group(records) }
 
     var body: some View {
         ListDetailNavigation {
             List {
+                if search.isEmpty && hasStats {
+                    Section {
+                        NavigationLink { StatsView() } label: { StatsLinkRow() }
+                    }
+                }
                 ForEach(sections) { section in
                     Section(section.title) {
                         ForEach(section.records) { record in
@@ -30,7 +37,9 @@ struct HistoryView: View {
             .listRowBackground(Theme.Colors.surface)
             .themedBackground()
             .keyboardDismissable()
-            .overlay { if records.isEmpty { HistoryEmptyState(isSearching: !search.isEmpty) } }
+            .overlay {
+                if records.isEmpty && !(search.isEmpty && hasStats) { HistoryEmptyState(isSearching: !search.isEmpty) }
+            }
             .searchable(text: $search)
             .onChange(of: search) { _, _ in reload() }
             .navigationTitle("History")
@@ -51,8 +60,14 @@ struct HistoryView: View {
                     reload()
                 }
             }
-            .onAppear(perform: reload)
-            .onReceive(NotificationCenter.default.publisher(for: .gtHistoryDidChange).receive(on: RunLoop.main)) { _ in reload() }
+            .onAppear {
+                reload()
+                reloadStats()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .gtHistoryDidChange).receive(on: RunLoop.main)) { _ in
+                reload()
+                reloadStats()
+            }
         } placeholder: {
             DetailPlaceholder(systemImage: "text.alignleft", title: "No dictation selected")
         }
@@ -65,6 +80,35 @@ struct HistoryView: View {
 
     private func reload() {
         records = model.historyStore?.records(matching: search.isEmpty ? nil : search) ?? []
+    }
+
+    /// Not on each search keystroke: the query does not change the stats.
+    private func reloadStats() {
+        hasStats = (model.historyStore?.stats().activeDays ?? 0) > 0
+    }
+}
+
+/// The row above the days that opens Statistics, as the stats head the
+/// Mac's History list.
+private struct StatsLinkRow: View {
+    /// `.increased` while the row is selected in the iPad split view, on the
+    /// accent fill.
+    @Environment(\.backgroundProminence) private var prominence
+
+    var body: some View {
+        let selected = prominence == .increased
+        HStack(spacing: Theme.Spacing.m) {
+            IconTile(systemImage: "chart.bar.xaxis", tint: selected ? Theme.Colors.onAccent : Theme.Colors.accent)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Statistics")
+                    .font(Theme.Fonts.callout())
+                    .foregroundStyle(selected ? Theme.Colors.onAccent : Theme.Colors.ink)
+                Text("Words, speed, time saved and streaks")
+                    .font(Theme.Fonts.caption())
+                    .foregroundStyle(selected ? Theme.Colors.onAccent.opacity(0.8) : Theme.Colors.muted)
+            }
+        }
+        .padding(.vertical, Theme.Spacing.xs)
     }
 }
 
@@ -172,12 +216,9 @@ private struct HistoryDetail: View {
         self.reload = reload
     }
 
-    /// As on the Mac: Retry needs something to retry, the recording or a
-    /// transcript. A finished dictation is transcribed again.
-    private var canRetry: Bool {
-        FileManager.default.fileExists(atPath: FileLayout.audioCAF(in: record.folderURL).path)
-            || record.rawTranscript != nil
-    }
+    /// As on the Mac: Retry needs the recording, or the words of an
+    /// unfinished dictation (`RetryQueue.canRetry`).
+    private var canRetry: Bool { RetryQueue.canRetry(record) }
 
     var body: some View {
         ScrollView {
@@ -192,6 +233,9 @@ private struct HistoryDetail: View {
                     }
                 }
                 if canRetry { retryCard }
+                cardGroup("Audio") {
+                    RecordingAudioControls(audio: .dictation(folder: record.folderURL, startedAt: record.startedAt))
+                }
                 cardGroup("Details") { details }
             }
             .padding(.horizontal, Theme.Spacing.page)

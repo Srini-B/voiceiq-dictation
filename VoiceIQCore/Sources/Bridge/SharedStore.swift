@@ -60,6 +60,7 @@ public final class SharedStore: @unchecked Sendable {
         var lines = keyboardLog
         lines.append("\(Self.logStamp(Date())) \(line)")
         defaults.set(Array(lines.suffix(100)), forKey: Key.keyboardLog)
+        DebugLog.write(level: "info", category: "keyboard", line)
     }
 
     /// "2026-10-22 06:30:12" in the device's time zone, for the session log

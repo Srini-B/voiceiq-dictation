@@ -1,6 +1,6 @@
 # Cost tracking
 
-VoiceiQ meters every Gemini and OpenAI model call and shows the result under
+VoiceiQ meters every Gemini, OpenAI and ElevenLabs model call and shows the result under
 Settings → Cost Analysis (`voiceiq://settings/cost`) and per dictation in
 History. Costs are in US dollars.
 
@@ -108,16 +108,46 @@ a ≈ prefix.
 The app cannot tell whether a Gemini key is on the free tier, so it always
 shows the paid-tier figure.
 
+ElevenLabs Scribe returns no usage block, so `ElevenLabs.usage`
+(`GeminiClient+ElevenLabs.swift`) prices each call from its audio length
+(`audio_duration_secs`, else the length sent) at the list prices on
+elevenlabs.io/pricing/api, copied 2026-11-12 and the same on every plan:
+
+| Scribe v3 (`scribe_v3`, dictation and meetings) | Price |
+|---|---|
+| Base | $0.20 / hour |
+| Dictionary terms (`keyterms`) | +$0.05 / hour |
+| Formatting instruction (`transcript_edit`) | +$0.07 / hour, at least 10 s per request |
+| Hiding card and ID numbers (`entity_detection`, meetings, opt-in) | +$0.06 / hour (30%, from the help center; not in the table) |
+
+| Scribe v3 Live (`scribe_v3_live`, the live meeting transcript) | Price |
+|---|---|
+| Base | $0.22 / hour |
+| Dictionary terms and keyterm library | +$0.08 / hour, billed once for both |
+
+A meeting recorded with ElevenLabs is billed twice: Live for the whole
+recording while it runs (booked as "Live transcription" when it stops), and
+batch for its speech afterwards. With dictionary terms that is about $0.30
+plus up to $0.25 per hour of meeting.
+
+The guides give the add-ons as +20% and +30% instead; the table is used
+because it is what the bill shows. Silence is billed, which is why meetings
+send only their stretches of speech. `scribe_v2` and `scribe_v2_realtime`
+keep their prices for rows booked in 2026-09 and 2026-10. Hours included in
+an ElevenLabs plan are not subtracted.
+
 ## UI
 
 `CostPane` shows one source at a time. It opens on the provider selected in
 Settings → Advanced, and a Gemini/OpenAI toggle (`CostSource`)
 switches between them; every read filters `usage` rows by model ID
 (`CostSource.modelPrefixes`: `gemini` and `google/` for Gemini, `gpt`,
-`whisper` and `openai/` for OpenAI). A Claude segment joins the toggle only
+`whisper` and `openai/` for OpenAI). An ElevenLabs segment (`scribe` model IDs,
+including the `scribe_v2` rows of 2026-09 and 2026-10) joins while an
+ElevenLabs key is stored or the ledger has its rows. A Claude segment joins the toggle only
 while the ledger has Claude rows (`CostSource.isCurrent` is false for it; each
 reload counts its rows). Rows from services older builds supported
-(MAI Transcribe 2, Sarvam, and ElevenLabs `scribe_v2`) match no tab. It shows
+(MAI Transcribe 2, Sarvam) match no tab. It shows
 today, this week, this month, and all time totals; a period picker drives the by-action
 and by-model tables and the recent-calls list. The footer names the price
 source (`CostSource.pricingNote`): the provider's pricing page. The iPhone's

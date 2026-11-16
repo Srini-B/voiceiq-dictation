@@ -42,14 +42,10 @@ struct DictationKeySection: View {
 
                     if case .combo(let shortcut) = trigger {
                         Text("Side")
-                        Picker("Side", selection: sideBinding(shortcut)) {
-                            ForEach(KeyShortcut.Side.allCases, id: \.self) { side in
-                                Text(side.displayName).tag(side)
-                            }
-                        }
-                        .labelsHidden()
-                        .pickerStyle(.menu)
-                        .frame(width: 74)
+                        SearchablePicker("", selection: sideBinding(shortcut),
+                                         options: KeyShortcut.Side.allCases.map { SearchOption(value: $0, name: $0.displayName) })
+                        // The capture monitor would swallow the list's search typing.
+                        .disabled(isRecording)
                     }
 
                     Button {

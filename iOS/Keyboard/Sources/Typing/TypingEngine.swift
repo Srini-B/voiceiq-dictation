@@ -462,8 +462,21 @@ struct TypingEngine: Sendable {
     /// The word as the user or the list spells it: "so" for a capitalized
     /// "So", "I" for "i", a name as saved.
     func spelling(of word: String) -> String {
-        if let display = user.display(key: Self.key(of: word)) { return display }
-        return bestID(for: word).map(lexicon.display) ?? word
+        userSpelling(of: word) ?? bestID(for: word).map(lexicon.display) ?? word
+    }
+
+    /// The user's spelling of a word ("Srini", "GitHub"), but not a lone
+    /// first capital on a word the list has lowercase: a contact "Will" or
+    /// "Apple Developer", or a Dictionary "Developer", says nothing about how
+    /// "will" or "developer" is written mid-sentence.
+    func userSpelling(of word: String) -> String? {
+        let key = Self.key(of: word)
+        guard let display = user.display(key: key) else { return nil }
+        let lower = display.lowercased()
+        // A lowercase spelling ("cant" saved as "can't") is never a lone capital.
+        let onlyFirstCapital = display != lower && display.dropFirst() == lower.dropFirst()
+        if onlyFirstCapital, lexicon.words(key: key).contains(where: { lexicon.display($0) == lower }) { return nil }
+        return display
     }
 
     // MARK: - Casing

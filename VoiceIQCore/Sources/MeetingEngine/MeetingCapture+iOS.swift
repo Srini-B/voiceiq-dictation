@@ -19,6 +19,10 @@ public final class MicTap: @unchecked Sendable {
     private var frames: Int64 = 0
     private var configObserver: NSObjectProtocol?
 
+    /// Each converted 16 kHz mono Int16 buffer, after it is written; set
+    /// before `start`. Feeds the live meeting transcript.
+    public var onPCM: (@Sendable (Data) -> Void)?
+
     public init(url: URL) { self.url = url }
 
     public func start() throws {
@@ -83,6 +87,7 @@ public final class MicTap: @unchecked Sendable {
             try writer.write(out)
             frames += Int64(out.frameLength)
         } catch { Log.meeting.error("mic write failed: \(String(describing: error), privacy: .public)") }
+        onPCM?(out.int16Data)
     }
 }
 

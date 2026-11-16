@@ -102,6 +102,35 @@ final class RecoveryClipboardTests: XCTestCase {
         XCTAssertEqual(store.record(id: meta.id.uuidString)?.cleanedTranscript, "Retried text.")
     }
 
+    /// Retry is offered only when it can do something: a recording to
+    /// transcribe again, or the words of an unfinished dictation. A finished
+    /// one whose audio is gone would only fail.
+    func testRetryIsOfferedOnlyWithSomethingToRetry() throws {
+        func offered(_ meta: SessionMeta) throws -> Bool {
+            RetryQueue.canRetry(try XCTUnwrap(store.record(id: meta.id.uuidString)))
+        }
+        func dropAudio(_ meta: SessionMeta) throws {
+            try FileManager.default.removeItem(at: FileLayout.audioCAF(in: root.appendingPathComponent(meta.id.uuidString)))
+        }
+        let withAudio = try queuedSession("a", secondsAgo: 5)
+        XCTAssertTrue(try offered(withAudio))
+
+        var finished = try queuedSession("b", secondsAgo: 4, rawTranscript: "b")
+        finished.status = .inserted
+        let folder = root.appendingPathComponent(finished.id.uuidString, isDirectory: true)
+        finished.write(to: folder); store.upsert(meta: finished, folder: folder)
+        try dropAudio(finished)
+        XCTAssertFalse(try offered(finished))
+
+        let unfinished = try queuedSession("c", secondsAgo: 3, rawTranscript: "c")
+        try dropAudio(unfinished)
+        XCTAssertTrue(try offered(unfinished))
+
+        let nothing = try queuedSession("d", secondsAgo: 2)
+        try dropAudio(nothing)
+        XCTAssertFalse(try offered(nothing))
+    }
+
     func testPillNamesTheClipboardOnlyWhenCopied() {
         XCTAssertEqual(RecoveryNotice.message(for: .queue(count: 1), copied: true),
                        "Your queued dictation is ready — copied to the clipboard")

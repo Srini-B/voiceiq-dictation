@@ -12,8 +12,8 @@ options:
 # CURRENT_PROJECT_VERSION is the build number: raise it with every release.
 settings:
   base:
-    MARKETING_VERSION: "0.7.0"
-    CURRENT_PROJECT_VERSION: "74"
+    MARKETING_VERSION: "0.7.6"
+    CURRENT_PROJECT_VERSION: "80"
 
 packages:
   VoiceIQCore:
@@ -244,7 +244,7 @@ targets:
           - CFBundleURLName: io.blue.voiceiq.ios.url
             CFBundleURLSchemes: [voiceiq]
     scheme:
-      testTargets: []
+      testTargets: [KeyboardTypingTests]
       gatherCoverageData: false
 
   VoiceIQKeyboard:
@@ -314,6 +314,25 @@ targets:
             PrefersRightToLeft: false
             PrimaryLanguage: en-US
             RequestsOpenAccess: true
+
+  # The keyboard's word logic, compiled on its own: an extension cannot host
+  # tests. Runs in the VoiceIQiOS scheme on a Simulator.
+  KeyboardTypingTests:
+    type: bundle.unit-test
+    platform: iOS
+    deploymentTarget: "17.0"
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.blue.voiceiq.ios.keyboard.tests
+        SWIFT_VERSION: "5.10"
+        GENERATE_INFOPLIST_FILE: YES
+        CODE_SIGNING_ALLOWED: NO
+    sources:
+      - iOS/Keyboard/Tests
+      - iOS/Keyboard/Sources/Typing/TypingEngine.swift
+      - iOS/Keyboard/Sources/Typing/Lexicon.swift
+      - path: iOS/Keyboard/Resources/lexicon.bin
+        buildPhase: resources
 
   VoiceIQLiveActivity:
     type: app-extension

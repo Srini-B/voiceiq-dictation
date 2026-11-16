@@ -7,6 +7,8 @@ struct DictationPane: View {
     private let settings = SettingsStore()
     @State private var sounds = SettingsStore().soundsEnabled
     @State private var liveTranscription = SettingsStore().liveTranscriptionEnabled
+    /// ElevenLabs transcribes the recording after it stops; nothing streams.
+    @State private var elevenLabs = SettingsStore().transcribesWithElevenLabs
     @State private var smartTranscription = SettingsStore().smartTranscriptionEnabled
     @State private var cleanupPass = SettingsStore().smartCleanupPassEnabled
     @State private var skipShortCleanup = SettingsStore().skipShortDictationCleanup
@@ -42,12 +44,9 @@ struct DictationPane: View {
             }
 
             Section {
-                Picker("Microphone", selection: $preferredMicrophone) {
-                    Text("System default").tag(String?.none)
-                    ForEach(microphones) { device in
-                        Text(device.name).tag(Optional(device.uid))
-                    }
-                }
+                SearchablePicker("Microphone", selection: $preferredMicrophone,
+                                 options: [SearchOption(value: String?.none, name: "System default")]
+                                     + microphones.map { SearchOption(value: Optional($0.uid), name: $0.name) })
                 .onChange(of: preferredMicrophone) { _, uid in
                     settings.setPreferredInputDeviceUID(uid)
                 }
@@ -60,6 +59,8 @@ struct DictationPane: View {
                         settings.setCopyRecoveredToClipboard(enabled)
                     }
             }
+
+            SpokenLanguagesSection()
 
             Section {
                 Toggle("Sounds", isOn: $sounds)
@@ -74,10 +75,15 @@ struct DictationPane: View {
 
             Section {
                 // Saved only on a user change, not when its default is refreshed.
-                Toggle("Real-time transcription", isOn: Binding(get: { liveTranscription }, set: {
+                Toggle("Real-time transcription", isOn: Binding(get: { liveTranscription && !elevenLabs }, set: {
                     liveTranscription = $0
                     settings.setLiveTranscriptionEnabled($0)
                 }))
+                .disabled(elevenLabs)
+            } footer: {
+                if elevenLabs {
+                    Text("Off while ElevenLabs is the transcription provider: Scribe v3 transcribes the recording after you stop.")
+                }
             }
 
             Section {
@@ -101,9 +107,8 @@ struct DictationPane: View {
                         guard enabled != settings.skipShortDictationCleanup else { return }
                         settings.setSkipShortDictationCleanup(enabled)
                     }
-                Picker("Spelling", selection: $spelling) {
-                    ForEach(SpellingVariant.allCases, id: \.self) { Text($0.name).tag($0) }
-                }
+                SearchablePicker("Spelling", selection: $spelling,
+                                 options: SpellingVariant.allCases.map { SearchOption(value: $0, name: $0.name) })
                 .disabled(!cleanupPass)
                 .onChange(of: spelling) { _, variant in
                     guard variant != settings.spellingVariant else { return }
@@ -169,6 +174,7 @@ struct DictationPane: View {
         .onReceive(NotificationCenter.default.publisher(for: .gtSettingDidChange).receive(on: RunLoop.main)) { note in
             switch note.object as? String {
             case "liveDictationEnabled": liveTranscription = settings.liveTranscriptionEnabled
+            case "elevenLabsTranscription", KeychainStore.Secret.elevenLabs.settingKey: elevenLabs = settings.transcribesWithElevenLabs
             case "smartTranscription": smartTranscription = settings.smartTranscriptionEnabled
             case "agentModeEnabled": agentMode = settings.agentModeEnabled
             case "smartCleanupPass": cleanupPass = settings.smartCleanupPassEnabled
@@ -189,5 +195,45 @@ struct DictationPane: View {
             default: break
             }
         }
+    }
+}
+
+/// The languages the user and their meetings speak, for every transcription
+/// provider (`SettingsStore.spokenLanguages`).
+struct SpokenLanguagesSection: View {
+    private let settings = SettingsStore()
+    @State private var languages = SettingsStore().spokenLanguages
+
+    private static func options(_ languages: [SpokenLanguage]) -> [SearchOption<String>] {
+        languages.map { SearchOption(value: $0.code, name: $0.name, keywords: $0.code) }
+    }
+
+    var body: some View {
+        Section {
+            SearchablePicker("Spoken language", selection: Binding(get: { languages.first ?? "" }, set: {
+                save(SpokenLanguage.choosing(main: $0, in: languages))
+            }), options: [SearchOption(value: "", name: "Automatic")] + Self.options(SpokenLanguage.all))
+            .help("The language you speak most, in dictation and meetings. Automatic works it out each time, which can go wrong on a short phrase; pick a main language to add others.")
+            if let main = languages.first {
+                SearchablePicker("Also spoken", summary: SpokenLanguage.names(languages.dropFirst(), none: "None"),
+                                 options: Self.options(SpokenLanguage.all.filter { $0.code != main }),
+                                 isSelected: { languages.dropFirst().contains($0) },
+                                 toggle: { save(SpokenLanguage.toggling($0, in: languages)) })
+                .help("Other languages you or the people in your meetings speak, in whole sentences or mixed into the main language. Each recording is transcribed once, with each language in its own script. A short or accented phrase can still come out as the main language. With ElevenLabs, switch the main language for a stretch in another one from the menu bar's Spoken Language menu.")
+            }
+        } header: {
+            Text("Languages")
+        } footer: {
+            Text("ElevenLabs and OpenAI listen for these languages. Gemini works out each language and every switch between them by itself.")
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .gtSettingDidChange).receive(on: RunLoop.main)) { _ in
+            languages = settings.spokenLanguages
+        }
+    }
+
+    private func save(_ codes: [String]) {
+        languages = codes
+        settings.setSpokenLanguages(codes)
+        UserDefaults.standard.removeObject(forKey: StatusItemController.languagesBeforeAutomatic)
     }
 }

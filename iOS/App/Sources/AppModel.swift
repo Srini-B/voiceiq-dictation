@@ -53,7 +53,8 @@ final class AppModel: ObservableObject {
             apiKey: { KeychainStore.loadAPIKey() },
             openAIKey: { KeychainStore.loadOpenAIKey() },
             openAIConfig: { SettingsStore().openAIConfig },
-            provider: { SettingsStore().preferredProvider }
+            provider: { SettingsStore().preferredProvider },
+            elevenLabsKey: { KeychainStore.loadKey(.elevenLabs) }
         )
         transcription = GeminiTranscriptionService(client: client)
         historyStore = try? HistoryStore.standard()
@@ -62,7 +63,9 @@ final class AppModel: ObservableObject {
             client: client,
             config: { SettingsStore().geminiConfig },
             summaryModel: SettingsStore().geminiConfig.cleanupModel,
-            providers: { SettingsStore().meetingProviders }
+            providers: { SettingsStore().meetingProviders },
+            speechEndpoints: { SettingsStore().meetingSpeechEndpoints },
+            liveMeetingKey: { SettingsStore().transcribesWithElevenLabs ? KeychainStore.loadKey(.elevenLabs) : nil }
         )
         let inserter = self.inserter
         coordinator = DictationCoordinator(
@@ -97,6 +100,7 @@ final class AppModel: ObservableObject {
         let deviceName = UIDevice.current.name
         Task { await HistorySync.shared.start(deviceName: deviceName) }
         ActionButtonBridge.toggle = { [weak self] in await self?.toggleFromActionButton() }
+        RecordingPlayer.voiceSessionIsActive = { [weak self] in self?.session.isActive ?? false }
         commandObserver = DarwinNotifier.observe(.command) { [weak self] in
             Task { @MainActor in self?.drainCommands() }
         }
@@ -121,7 +125,7 @@ final class AppModel: ObservableObject {
         coordinator.onSessionUpdate = { [weak self] meta, folder in
             self?.historyStore?.upsert(meta: meta, folder: folder)
             if SettingsStore().audioRetentionDays < 0, meta.rawTranscript != nil || meta.status == .silent {
-                for audio in [FileLayout.audioCAF(in: folder), FileLayout.audioFLAC(in: folder)] {
+                for audio in [FileLayout.audioCAF(in: folder), FileLayout.audioFLAC(in: folder), FileLayout.playbackFolder(in: folder)] {
                     try? FileManager.default.removeItem(at: audio)
                 }
             }

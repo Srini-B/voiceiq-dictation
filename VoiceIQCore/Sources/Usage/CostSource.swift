@@ -1,13 +1,14 @@
 import Foundation
 
-/// Whose bill a usage record lands on, for the Cost pane: Gemini, OpenAI, or
-/// Claude. Claude is no longer a provider (removed 2026-11-10); its source
+/// Whose bill a usage record lands on, for the Cost pane: Gemini, OpenAI,
+/// ElevenLabs, or Claude. Claude is no longer a provider (removed 2026-11-10); its source
 /// stays so rows booked under it (on Anthropic, and on DeepInfra while Claude
 /// transcribed with Nemotron there) still show and price.
 /// Records store only the model ID, so the source is read off its prefix.
 public enum CostSource: String, CaseIterable, Sendable, Identifiable {
     case gemini
     case openAI
+    case elevenLabs
     case anthropic
 
     public init(_ provider: ModelProvider) {
@@ -23,13 +24,21 @@ public enum CostSource: String, CaseIterable, Sendable, Identifiable {
         switch self {
         case .gemini: return "Gemini"
         case .openAI: return "OpenAI"
+        case .elevenLabs: return "ElevenLabs"
         case .anthropic: return "Claude"
         }
     }
 
-    /// Whether the source belongs to a provider the app still offers. A
-    /// retired source is offered on the Cost pane only while it has rows.
-    public var isCurrent: Bool { self != .anthropic }
+    /// Whether the Cost pane always offers the source: a provider the app
+    /// still offers, or ElevenLabs while its key is stored. Any other source
+    /// is offered only while it has rows.
+    public var isCurrent: Bool {
+        switch self {
+        case .gemini, .openAI: return true
+        case .elevenLabs: return KeychainStore.loadKey(.elevenLabs) != nil
+        case .anthropic: return false
+        }
+    }
 
     /// For SQL `LIKE` filters on the stored model ID. The `google/` and
     /// `openai/` prefixes match rows booked before the gateways were removed,
@@ -39,6 +48,7 @@ public enum CostSource: String, CaseIterable, Sendable, Identifiable {
         switch self {
         case .gemini: return ["gemini", "google/"]
         case .openAI: return ["gpt", "whisper", "openai/"]
+        case .elevenLabs: return ["scribe"]
         case .anthropic: return ["claude", "nvidia/", "anthropic/"]
         }
     }
@@ -48,6 +58,8 @@ public enum CostSource: String, CaseIterable, Sendable, Identifiable {
         switch self {
         case .gemini: return "Paid-tier Standard prices from the Gemini API pricing page. A free-tier key is billed nothing."
         case .openAI: return "Standard prices from the OpenAI API pricing page."
+        case .elevenLabs:
+            return "List prices from the ElevenLabs API pricing page: Scribe v3 $0.20 an hour, plus dictionary terms ($0.05), the formatting instruction ($0.07) and hiding card and ID numbers ($0.06); Scribe v3 Live, for the live meeting transcript, $0.22 an hour plus dictionary terms ($0.08). Hours included in your plan are not subtracted."
         case .anthropic: return "Standard prices from Anthropic's pricing page."
         }
     }

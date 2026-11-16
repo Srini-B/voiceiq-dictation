@@ -38,11 +38,14 @@ enum BrowserExtension {
         ]
         let data = try JSONSerialization.data(withJSONObject: manifest, options: [.prettyPrinted, .sortedKeys])
         let support = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        var browsers: [String] = []
         for browser in browserFolders where fm.fileExists(atPath: support.appendingPathComponent(browser).path) {
             let hosts = support.appendingPathComponent(browser).appendingPathComponent("NativeMessagingHosts", isDirectory: true)
             try fm.createDirectory(at: hosts, withIntermediateDirectories: true)
             try data.write(to: hosts.appendingPathComponent("\(hostName).json"), options: .atomic)
+            browsers.append(browser)
         }
+        Log.meeting.info("browser extension copied out; host registered for \(browsers.joined(separator: ", "), privacy: .public)")
     }
 
     static func refreshIfInstalled() {
@@ -66,13 +69,18 @@ enum BrowserExtension {
 
 struct BrowserExtensionSection: View {
     @State private var installed = BrowserExtension.isInstalled
-    @State private var lastHeard = BrowserExtension.lastHeard
     @State private var failure: String?
 
     var body: some View {
         Section {
             LabeledContent("Status") {
-                Text(status).foregroundStyle(.secondary)
+                // The native host, a process Chrome starts, writes the log and
+                // nothing tells the app, so look again each second: the status
+                // changes as soon as the extension's first event lands, and
+                // "a minute ago" keeps counting.
+                TimelineView(.periodic(from: .now, by: 1)) { _ in
+                    Text(status).foregroundStyle(.secondary)
+                }
             }
             if installed {
                 Text("In Chrome's Extensions page, turn on Developer mode, then drag the selected ChromeExtension folder onto the page, or click Load unpacked and choose it. Chrome keeps it from then on.")
@@ -89,14 +97,14 @@ struct BrowserExtensionSection: View {
         } header: {
             Text("Chrome extension for meetings")
         } footer: {
-            Text("For Google Meet, Teams, Zoom and other calls in Chrome, Edge, Brave or Arc. The extension tells VoiceiQ which participant is talking, from the call's own audio streams, so people who sound alike are kept apart. It sends stream numbers, times, the tab's number and the page's address without its query, such as meet.google.com/abc-defg-hij, never audio, names or page content. VoiceiQ keeps these reports on this Mac for a week, and a meeting keeps its own until you delete it.")
+            Text("For Google Meet, Teams, Zoom and other calls in Chrome, Edge, Brave or Arc. The extension tells VoiceiQ which participant is talking, from the call's own audio streams, so people who sound alike are kept apart, and on Meet, Teams, Zoom and Jitsi the name the call shows on that person's tile, so the transcript uses real names. It sends stream numbers, those names, times, the tab's number and the page's address without its query, such as meet.google.com/abc-defg-hij, never audio or other page content. VoiceiQ keeps these reports on this Mac for a week, and a meeting keeps its own until you delete it.")
         }
-        .onAppear { installed = BrowserExtension.isInstalled; lastHeard = BrowserExtension.lastHeard }
+        .onAppear { installed = BrowserExtension.isInstalled }
     }
 
     private var status: String {
         guard installed else { return "Not installed" }
-        guard let lastHeard else { return "Waiting for Chrome to load it" }
+        guard let lastHeard = BrowserExtension.lastHeard else { return "Waiting for Chrome to load it" }
         return "Last heard from it \(lastHeard.formatted(.relative(presentation: .named)))"
     }
 

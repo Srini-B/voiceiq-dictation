@@ -17,6 +17,8 @@ enum KeyPage: Equatable {
     case letters, numbers, symbols
     /// Number, decimal and phone pads: digits only.
     case digits
+    /// The number pad opened from the 123 page in a text field.
+    case numpad
 }
 
 struct KeySpec: Equatable {
@@ -27,6 +29,8 @@ struct KeySpec: Equatable {
         case units(CGFloat)
         /// Shares what the row has left: the space bar.
         case flexible
+        /// A fraction of a flexible key, gap included: two halves fill one.
+        case share(CGFloat)
     }
     var action: KeyAction
     var label: String
@@ -34,6 +38,8 @@ struct KeySpec: Equatable {
     var width: Width = .unit
     /// A small character in the key's corner: what holding it types first.
     var hint: String?
+    /// Drawn without a key face, as the number pad's delete is on iOS.
+    var plain = false
 
     var isLetter: Bool {
         if case .insert(let text) = action { return text.count == 1 && text.first!.isLetter }
@@ -129,11 +135,15 @@ enum KeyLayout {
             }
             let toggle = page == .numbers ? KeySpec(action: .page(.symbols), label: "#+=", width: .units(1.4))
                 : KeySpec(action: .page(.numbers), label: "123", width: .units(1.4))
+            let numpad = KeySpec(action: .page(.numpad), label: "numpad", width: .units(1.4))
             rows = [top.map { key(String($0)) }, middle.map(key),
-                    [toggle] + [".", ",", "?", "!", "'"].map { var k = key($0); k.width = .units(1.4); return k }
+                    // The punctuation shares the row, so it spans the width like the digits above.
+                    [toggle, numpad] + [".", ",", "?", "!", "'"].map { var k = key($0); k.width = .flexible; return k }
                         + [KeySpec(action: .delete, label: "delete", width: .units(1.4))]]
         case .digits:
             return digitRows(field)
+        case .numpad:
+            return numpadRows(field)
         }
         rows.append(bottomRow(page: page, field: field))
         return rows
@@ -164,15 +174,53 @@ enum KeyLayout {
 
     static let domains = [".com", ".net", ".org", ".edu", ".in", ".co"]
 
+    /// A calculator-style pad for text fields: digits in a 3×3 grid with 0
+    /// below, and a column for minus, space, delete and return. ABC goes back
+    /// to letters; the pad stays up after space and return.
+    private static func numpadRows(_ field: FieldTraits) -> [[KeySpec]] {
+        func key(_ s: String, alternates: [String] = []) -> KeySpec {
+            KeySpec(action: .insert(s), label: s, alternates: alternates, width: .flexible)
+        }
+        let separator = Locale.current.decimalSeparator ?? "."
+        // Where the system draws no globe, ABC shares its cell with one.
+        let corner = field.showsGlobe
+            ? [KeySpec(action: .page(.letters), label: "ABC", width: .share(0.5)),
+               KeySpec(action: .globe, label: "globe", width: .share(0.5))]
+            : [KeySpec(action: .page(.letters), label: "ABC", width: .flexible)]
+        return [["1", "2", "3"].map { key($0) } + [key("-", alternates: ["+", "*", "/", "=", "%"])],
+                ["4", "5", "6"].map { key($0) } + [KeySpec(action: .space, label: "space", width: .flexible)],
+                ["7", "8", "9"].map { key($0) } + [KeySpec(action: .delete, label: "delete", width: .flexible)],
+                corner + [key("0"),
+                 key(separator, alternates: [separator == "." ? "," : "."]),
+                 KeySpec(action: .returnKey, label: field.returnLabel, width: .flexible)]]
+    }
+
+    /// iOS's number pads: digits without letters, and a flat corner key and
+    /// delete. Where the system draws no globe, the corner holds it, beside
+    /// the decimal separator on a decimal pad.
     private static func digitRows(_ field: FieldTraits) -> [[KeySpec]] {
         func digit(_ d: String) -> KeySpec { KeySpec(action: .insert(d), label: d, width: .flexible) }
-        let corner: KeySpec
+        func plain(_ action: KeyAction, _ label: String, alternates: [String] = [], width: KeySpec.Width) -> KeySpec {
+            KeySpec(action: action, label: label, alternates: alternates, width: width, plain: true)
+        }
+        let symbol: KeySpec?
         switch field.keyboardType {
-        case .decimalPad: corner = digit(Locale.current.decimalSeparator ?? ".")
-        case .phonePad: corner = KeySpec(action: .insert("+"), label: "+ * #", alternates: ["*", "#", ","], width: .flexible)
-        default: corner = KeySpec(action: .page(.letters), label: "", width: .flexible)
+        case .decimalPad:
+            let separator = Locale.current.decimalSeparator ?? "."
+            symbol = plain(.insert(separator), separator, width: .flexible)
+        case .phonePad: symbol = plain(.insert("+"), "+ * #", alternates: ["*", "#", ","], width: .flexible)
+        default: symbol = nil
+        }
+        let corner: [KeySpec]
+        switch (field.showsGlobe, symbol) {
+        case (true, var symbol?):
+            symbol.width = .share(0.5)
+            corner = [plain(.globe, "globe", width: .share(0.5)), symbol]
+        case (true, nil): corner = [plain(.globe, "globe", width: .flexible)]
+        case (false, let symbol?): corner = [symbol]
+        case (false, nil): corner = [KeySpec(action: .page(.letters), label: "", width: .flexible)]
         }
         return [["1", "2", "3"].map(digit), ["4", "5", "6"].map(digit), ["7", "8", "9"].map(digit),
-                [corner, digit("0"), KeySpec(action: .delete, label: "delete", width: .flexible)]]
+                corner + [digit("0"), plain(.delete, "delete", width: .flexible)]]
     }
 }

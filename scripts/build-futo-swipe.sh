@@ -15,9 +15,11 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 CACHE="$HOME/Library/Caches/voiceiq-futo-swipe"
-LIBRARY_COMMIT=1b13f2c85d6b347f6ea3fbc4b3aaf01fce42429a
-MODELS_REVISION=315d42583233b71d75665d076cfa2f2c7c6f43ad
-TORCH_VERSION=2.10.0
+LIBRARY_COMMIT=e8ade0e03bc18e9609e1f56afbd4394049185a99
+MODELS_REVISION=0a9a44bbe4d5b8aa8d1ff579ffc40d4861ae2467
+EXECUTORCH_VERSION=v1.6.0
+# torchgen must match ExecuTorch's torch_pin.py.
+TORCH_VERSION=2.15.0
 VENDOR="$ROOT/iOS/Vendor/FUTOSwipe"
 SRC="$CACHE/swipe-library"
 ET="$SRC/third_party/executorch"
@@ -28,6 +30,12 @@ fi
 git -C "$SRC" fetch --quiet origin "$LIBRARY_COMMIT" || true
 git -C "$SRC" checkout --quiet "$LIBRARY_COMMIT"
 git -C "$SRC" submodule update --init --recursive --depth 1
+# The library pins ExecuTorch v1.2.0; we build a newer release. v1.6.0 builds
+# the flatc and flatcc host tools for macOS itself when targeting iOS.
+git -C "$ET" fetch --quiet --depth 1 origin tag "$EXECUTORCH_VERSION"
+git -C "$ET" reset --quiet --hard
+git -C "$ET" checkout --quiet "$EXECUTORCH_VERSION"
+git -C "$ET" submodule update --init --recursive --depth 1 --force
 
 # The library's own ExecuTorch fixes (its Makefile's patch-et step).
 for patch in "$SRC"/patches/*.patch; do
@@ -35,13 +43,9 @@ for patch in "$SRC"/patches/*.patch; do
 done
 perl -pi -e 's/static char hexdigits\[16\]/static char hexdigits[17]/' \
   "$ET/third-party/flatcc/include/flatcc/portable/grisu3_print.h"
-# flatc and flatcc are Mac tools built during the iOS build, but they inherit
-# the iOS deployment target (17.0), which is not a macOS version.
-perl -pi -e 's/CMAKE_OSX_DEPLOYMENT_TARGET:STRING=\$\{CMAKE_OSX_DEPLOYMENT_TARGET\}/CMAKE_OSX_DEPLOYMENT_TARGET:STRING=12.0/' \
-  "$ET/third-party/CMakeLists.txt"
 
 # ExecuTorch's kernel code generation needs torchgen, which ships in torch.
-VENV="$CACHE/venv"
+VENV="$CACHE/venv-$TORCH_VERSION"
 if [ ! -x "$VENV/bin/python3" ]; then
   PYTHON="$(command -v python3.12 || command -v python3.13 || uv python find 3.12)"
   "$PYTHON" -m venv "$VENV"
@@ -100,7 +104,7 @@ cp "$SRC/LICENSE" "$VENDOR/LICENSE"
 echo "swipe-library $LIBRARY_COMMIT (https://gitlab.futo.org/keyboard/swipe-library), built by scripts/build-futo-swipe.sh" > "$VENDOR/SOURCE"
 
 MODELS="$ROOT/iOS/Keyboard/Resources/swipe"
-for file in honorable_sturgeon/model_fp32.pte honorable_sturgeon/metadata.json \
+for file in honorable_sturgeon/model_int8.pte honorable_sturgeon/metadata.json \
             magic_macaw/model_fp32.pte magic_macaw/metadata.json \
             chosen_planarian/context_lm.pte chosen_planarian/metadata.json chosen_planarian/vocab.txt \
             scoring.json LICENSE.md; do

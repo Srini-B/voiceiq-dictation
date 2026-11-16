@@ -1,6 +1,7 @@
 import Foundation
 import UIKit
 import VoiceIQBridge
+import VoiceIQCore
 
 /// Settings that exist only on iOS. Everything shared with macOS lives in
 /// `SettingsStore`.
@@ -11,7 +12,10 @@ enum MobileSettings {
     /// their audio stays in high quality. Default on, like Typeless.
     static var preferBuiltInMic: Bool {
         get { defaults.object(forKey: "preferBuiltInMic") as? Bool ?? true }
-        set { defaults.set(newValue, forKey: "preferBuiltInMic") }
+        set {
+            defaults.set(newValue, forKey: "preferBuiltInMic")
+            Log.ui.info("setting preferBuiltInMic changed to \(newValue)")
+        }
     }
 
     static var hasCompletedOnboarding: Bool {
@@ -52,7 +56,10 @@ enum MobileSettings {
         get {
             (defaults.object(forKey: "warmWindowSeconds") as? Int).flatMap(WarmWindow.init(rawValue:)) ?? .thirtySeconds
         }
-        set { defaults.set(newValue.rawValue, forKey: "warmWindowSeconds") }
+        set {
+            defaults.set(newValue.rawValue, forKey: "warmWindowSeconds")
+            Log.ui.info("setting warmWindowSeconds changed to \(newValue.rawValue)")
+        }
     }
 
     static let keyboardBundleID = "io.blue.voiceiq.ios.keyboard"

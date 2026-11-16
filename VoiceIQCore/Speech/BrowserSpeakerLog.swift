@@ -4,8 +4,9 @@ import Foundation
 /// extension sees it: the call's WebRTC audio sources that are loud right
 /// now. Each source is one participant: Meet and Teams mix people into a few
 /// streams and name each person by a contributing source (CSRC); other
-/// services send one stream (SSRC) per person. The page's layout plays no part,
-/// so a shared screen, a background tab, or another window in front change nothing.
+/// services send one stream (SSRC) per person. The page's layout plays no part
+/// in the sources, so a shared screen, a background tab, or another window in
+/// front change nothing. The names are the page's own talking marks.
 public struct BrowserSpeakerEvent: Codable, Equatable, Sendable {
     /// Unix time in milliseconds.
     public var t: Double
@@ -14,9 +15,13 @@ public struct BrowserSpeakerEvent: Codable, Equatable, Sendable {
     public var tab: Int
     /// The sources loud at `t`, such as `csrc:3141` or `ssrc:2718`. Empty when nobody is.
     public var active: [String]
+    /// Names on the tiles the meeting page lights as talking at `t`, read only
+    /// while a source is loud. Nil from extensions before 1.1 and on pages it
+    /// cannot read names on.
+    public var names: [String]?
 
-    public init(t: Double, page: String, tab: Int, active: [String]) {
-        self.t = t; self.page = page; self.tab = tab; self.active = active
+    public init(t: Double, page: String, tab: Int, active: [String], names: [String]? = nil) {
+        self.t = t; self.page = page; self.tab = tab; self.active = active; self.names = names
     }
 }
 

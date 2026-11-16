@@ -1,4 +1,5 @@
 import Foundation
+import VoiceIQBridge
 
 /// Audio retention (the setting Superwhisper lacks): purge audio files after N
 /// days while KEEPING transcripts + meta (until the user deletes them, or
@@ -15,10 +16,11 @@ public struct RetentionPolicy: Sendable {
     }
 
     /// Both purges, in the order that matters: whole dictations first, then
-    /// the audio of those that stay.
+    /// the audio of those that stay. Debug log days past their week go too.
     public func purge(now: Date = Date()) {
         purgeExpiredTranscripts(now: now)
         purgeExpiredAudio(now: now)
+        DebugLog.prune(now: now)
     }
 
     /// Statuses a dictation ends in. Anything else is in flight or waiting
@@ -59,7 +61,7 @@ public struct RetentionPolicy: Sendable {
                   meta.startedAt < cutoff,
                   meta.rawTranscript != nil || meta.status == .silent
             else { continue }
-            for audio in [FileLayout.audioCAF(in: folder), FileLayout.audioFLAC(in: folder)] {
+            for audio in [FileLayout.audioCAF(in: folder), FileLayout.audioFLAC(in: folder), FileLayout.playbackFolder(in: folder)] {
                 if FileManager.default.fileExists(atPath: audio.path) {
                     try? FileManager.default.removeItem(at: audio)
                     purged += 1

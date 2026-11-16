@@ -140,6 +140,8 @@ final class KeyboardKeysView: UIView {
                 }
                 let view = KeyCapView(spec: spec)
                 view.theme = theme
+                // The number pad's empty corner is a gap, as on iOS, not a blank key.
+                view.isHidden = spec.label.isEmpty
                 if spec.action != .globe, !spec.label.isEmpty {
                     view.onActivate = { [weak self] in self?.activate(spec) }
                 }
@@ -163,26 +165,35 @@ final class KeyboardKeysView: UIView {
         var index = 0
         for (r, row) in rows.enumerated() {
             let y = 4 + CGFloat(r) * (rowHeight + Self.verticalGap)
+            let shares = row.map { spec -> CGFloat in
+                switch spec.width {
+                case .flexible: return 1
+                case .share(let n): return n
+                case .unit, .units: return 0
+                }
+            }
             let fixed = row.reduce(CGFloat(0)) { total, spec in
                 switch spec.width {
                 case .unit: return total + unit
                 case .units(let n): return total + unit * n
-                case .flexible: return total
+                case .flexible, .share: return total
                 }
             }
             let gaps = Self.horizontalGap * CGFloat(row.count - 1)
-            let flexibleCount = row.filter { $0.width == .flexible }.count
-            let flexible = flexibleCount > 0 ? max(0, (available - fixed - gaps) / CGFloat(flexibleCount)) : 0
+            let flexibleCount = CGFloat(shares.filter { $0 > 0 }.count)
+            let totalShare = shares.reduce(0, +)
+            // One share's width plus its gap, so two halves and the gap between them fill one share.
+            let pitch = totalShare > 0 ? max(0, (available - fixed - gaps + Self.horizontalGap * flexibleCount) / totalShare) : 0
             // A row too wide for the screen shrinks evenly; a short one is centred.
-            let total = fixed + gaps + flexible * CGFloat(flexibleCount)
+            let total = fixed + gaps + pitch * totalShare - Self.horizontalGap * flexibleCount
             let scale = total > available ? (available - gaps) / (total - gaps) : 1
             var x = Self.sideInset + (total < available ? (available - total) / 2 : 0)
-            for spec in row {
+            for (spec, share) in zip(row, shares) {
                 var width: CGFloat
                 switch spec.width {
                 case .unit: width = unit
                 case .units(let n): width = unit * n
-                case .flexible: width = flexible
+                case .flexible, .share: width = max(0, share * pitch - Self.horizontalGap)
                 }
                 width *= scale
                 let frame = CGRect(x: x, y: y, width: width, height: rowHeight)
@@ -269,7 +280,8 @@ final class KeyboardKeysView: UIView {
                         MainActor.assumeIsolated {
                             guard let self, let state, case .press = state.gesture else { return }
                             self.hidePreview()
-                            let popup = AccentPopup(key: self.keys[index].frame, options: spec.alternates.map { self.cased($0) }, in: self.bounds, theme: self.theme)
+                            let popup = AccentPopup(key: self.keys[index].frame, options: spec.alternates.map { self.cased($0) }, in: self.bounds,
+                                                    top: self.keyboardTop, theme: self.theme)
                             self.addSubview(popup)
                             state.gesture = .accents(popup, selected: 0)
                         }
@@ -455,10 +467,17 @@ final class KeyboardKeysView: UIView {
 
     private func showPreview(for index: Int) {
         guard case .insert(let text) = keys[index].spec.action, text.count == 1 else { return }
-        preview.show(text: keys[index].spec.isLetter ? cased(text) : text, over: keys[index].frame, in: self, theme: theme)
+        preview.show(text: keys[index].spec.isLetter ? cased(text) : text, over: keys[index].frame, in: self, top: keyboardTop, theme: theme)
     }
 
     private func hidePreview() { preview.isHidden = true }
+
+    /// The top of the keyboard in this view's coordinates: the suggestion bar
+    /// sits between it and the keys.
+    private var keyboardTop: CGFloat {
+        guard let host = inputController?.view ?? window else { return 0 }
+        return convert(host.bounds.origin, from: host).y
+    }
 
     private func drawTrail(_ points: [CGPoint]) {
         let path = UIBezierPath()

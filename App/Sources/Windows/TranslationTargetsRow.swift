@@ -21,10 +21,8 @@ struct TranslationTargetsRow: View {
                                 get: { editing == index },
                                 set: { if !$0 { editing = nil } }
                             ), arrowEdge: .trailing) {
-                                LanguagePicker(selected: Binding(
-                                    get: { targets[index] },
-                                    set: { targets[index] = $0 }
-                                )) {
+                                languages(selected: target) {
+                                    targets[index] = $0
                                     save()
                                     editing = nil
                                 }
@@ -46,12 +44,8 @@ struct TranslationTargetsRow: View {
                     Button { adding = true } label: { Image(systemName: "plus") }
                         .accessibilityLabel("Add language")
                         .popover(isPresented: $adding, arrowEdge: .trailing) {
-                            LanguagePicker(selected: Binding(
-                                get: { "" },
-                                set: { name in
-                                    if !targets.contains(name) { targets.append(name) }
-                                }
-                            )) {
+                            languages(selected: "") { name in
+                                if !targets.contains(name) { targets.append(name) }
                                 save()
                                 adding = false
                             }
@@ -61,55 +55,13 @@ struct TranslationTargetsRow: View {
         }
     }
 
+    private func languages(selected: String, choose: @escaping (String) -> Void) -> some View {
+        SearchableList(options: GeminiLanguages.supported.map { SearchOption(value: $0.name, name: $0.name, keywords: $0.code) },
+                       isSelected: { $0 == selected }, prompt: "Search languages", choose: choose)
+    }
+
     private func save() {
         settings.setTranslationTargetLanguages(targets)
         targets = settings.translationTargetLanguages
-    }
-}
-
-struct LanguagePicker: View {
-    @Binding var selected: String
-    let onSelect: () -> Void
-    @State private var search = ""
-
-    private var languages: [GeminiLanguage] {
-        guard !search.isEmpty else { return GeminiLanguages.supported }
-        return GeminiLanguages.supported.filter {
-            $0.name.localizedCaseInsensitiveContains(search)
-                || $0.code.localizedCaseInsensitiveContains(search)
-        }
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            TextField("Search languages", text: $search)
-                .textFieldStyle(.roundedBorder)
-                .multilineTextAlignment(.leading)
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 0) {
-                    ForEach(languages) { language in
-                        Button {
-                            selected = language.name
-                            onSelect()
-                        } label: {
-                            Text(language.name)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 5)
-                                .background(
-                                    RoundedRectangle(cornerRadius: VoiceIQUI.Radius.small)
-                                        .fill(language.name == selected
-                                              ? Color.primary.opacity(VoiceIQUI.StateLayer.hover) : .clear)
-                                )
-                                .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-            }
-        }
-        .environment(\.layoutDirection, .leftToRight)
-        .padding(12)
-        .frame(width: 280, height: 360)
     }
 }

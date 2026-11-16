@@ -29,3 +29,28 @@ public enum ModelProvider: String, CaseIterable, Sendable, Codable, Identifiable
         ([selected] + allCases.filter { $0 != selected }).filter(hasKey)
     }
 }
+
+/// The host a request goes to, which decides its auth header, its usage
+/// envelope and how its error bodies read. ElevenLabs transcribes only, so
+/// it is never a `ModelProvider`: the provider's writing model still runs
+/// after it. Raw values are the `TransportEvent.via` strings.
+public enum ModelEndpoint: String, Sendable {
+    case gemini
+    case openAI
+    case elevenLabs
+
+    public init(_ provider: ModelProvider) {
+        switch provider {
+        case .gemini: self = .gemini
+        case .openAI: self = .openAI
+        }
+    }
+
+    public var directName: String {
+        switch self {
+        case .gemini: return ModelProvider.gemini.directName
+        case .openAI: return ModelProvider.openAI.directName
+        case .elevenLabs: return "ElevenLabs API"
+        }
+    }
+}

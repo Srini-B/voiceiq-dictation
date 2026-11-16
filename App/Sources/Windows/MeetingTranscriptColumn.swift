@@ -12,6 +12,8 @@ struct MeetingTranscriptColumn: View {
     let notes: MeetingNotes?
     let transcript: [TranscriptSegment]
     let width: CGFloat
+    /// The live transcript of a meeting still recording: the newest line stays in view.
+    var live = false
     let assign: () -> Void
     @State private var searching = false
     @State private var query = ""
@@ -46,7 +48,7 @@ struct MeetingTranscriptColumn: View {
             } else {
                 // One text view for the whole transcript. A SwiftUI Text per segment with
                 // selection enabled froze the window on scroll at twenty minutes of speech.
-                RichTextView(text: text, inset: Self.inset)
+                RichTextView(text: text, inset: Self.inset, followsEnd: live && trimmedQuery.isEmpty)
             }
         }
     }

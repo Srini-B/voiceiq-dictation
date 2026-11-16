@@ -19,7 +19,7 @@ function send(message) {
 
 chrome.runtime.onMessage.addListener((message, sender) => {
   if (sender.id !== chrome.runtime.id || !sender.tab) return;
-  send({ t: message.t, page: message.page, tab: sender.tab.id, active: message.active });
+  send({ t: message.t, page: message.page, tab: sender.tab.id, active: message.active, names: message.names });
 });
 
 function announceInstalled() { send({ t: Date.now(), page: 'hello', tab: -1, active: [] }); }

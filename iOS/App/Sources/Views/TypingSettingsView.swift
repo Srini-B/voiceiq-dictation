@@ -9,22 +9,18 @@ struct TypingSettingsView: View {
     var body: some View {
         Form {
             Section {
-                Picker("Layout", selection: $preferences.layout) {
-                    ForEach(KeyboardLetterLayout.allCases, id: \.self) { Text($0.title).tag($0) }
-                }
-                Picker("Height", selection: $preferences.height) {
-                    ForEach(KeyboardHeight.allCases, id: \.self) { Text($0.title).tag($0) }
-                }
+                SearchablePicker("Layout", selection: $preferences.layout,
+                                 options: KeyboardLetterLayout.allCases.map { SearchOption(value: $0, name: $0.title) })
+                SearchablePicker("Height", selection: $preferences.height,
+                                 options: KeyboardHeight.allCases.map { SearchOption(value: $0, name: $0.title) })
                 Toggle("Number Row", isOn: $preferences.numberRow)
             }
             Section {
-                Picker("Theme", selection: $preferences.theme) {
-                    ForEach(KeyboardTheme.allCases, id: \.self) { Text($0.title).tag($0) }
-                }
+                SearchablePicker("Theme", selection: $preferences.theme,
+                                 options: KeyboardTheme.allCases.map { SearchOption(value: $0, name: $0.title) })
                 if preferences.theme.hasKeyTone {
-                    Picker("Keys", selection: $preferences.keyTone) {
-                        ForEach(KeyboardKeyTone.allCases, id: \.self) { Text($0.title).tag($0) }
-                    }
+                    SearchablePicker("Keys", selection: $preferences.keyTone,
+                                     options: KeyboardKeyTone.allCases.map { SearchOption(value: $0, name: $0.title) })
                 }
             }
             Section {
@@ -40,12 +36,10 @@ struct TypingSettingsView: View {
                 Text("Slide to Type is powered by FUTO Swipe. © FUTO Holdings, Inc. GPL-3.0, with no warranty. [License](https://www.gnu.org/licenses/gpl-3.0.html) · [Source](https://github.com/Srini-B/voiceiq-dictation)")
             }
             Section {
-                Picker("Space Bar Slide", selection: $preferences.spaceSlide) {
-                    ForEach(KeyboardSpaceSlide.allCases, id: \.self) { Text($0.title).tag($0) }
-                }
-                Picker("Delete Slide", selection: $preferences.deleteSlide) {
-                    ForEach(KeyboardDeleteSlide.allCases, id: \.self) { Text($0.title).tag($0) }
-                }
+                SearchablePicker("Space Bar Slide", selection: $preferences.spaceSlide,
+                                 options: KeyboardSpaceSlide.allCases.map { SearchOption(value: $0, name: $0.title) })
+                SearchablePicker("Delete Slide", selection: $preferences.deleteSlide,
+                                 options: KeyboardDeleteSlide.allCases.map { SearchOption(value: $0, name: $0.title) })
             }
             Section {
                 NavigationLink {

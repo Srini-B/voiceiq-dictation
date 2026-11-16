@@ -1,5 +1,6 @@
 import Foundation
 import Security
+import VoiceIQBridge
 
 /// API-key storage per TN3137: SecItem + data-protection keychain when the build
 /// carries the keychain-access-groups entitlement (provisioned/notarized builds),
@@ -15,6 +16,9 @@ public enum KeychainStore {
         case gemini = "gemini-api-key"
         case tinyFish = "tinyfish-api-key"
         case openAI = "openai-api-key"
+        /// The same account the 2026-09 and 2026-10 builds used, so a key
+        /// saved then works again.
+        case elevenLabs = "elevenlabs-api-key"
         case agentProvider = "agent-provider-api-key"
 
         var label: String {
@@ -22,6 +26,7 @@ public enum KeychainStore {
             case .gemini: return "VoiceiQ — Gemini API key"
             case .tinyFish: return "VoiceiQ — TinyFish API key"
             case .openAI: return "VoiceiQ — OpenAI API key"
+            case .elevenLabs: return "VoiceiQ — ElevenLabs API key"
             case .agentProvider: return "VoiceiQ — Agent provider API key"
             }
         }
@@ -32,6 +37,7 @@ public enum KeychainStore {
             case .gemini: return "apiKey"
             case .tinyFish: return "tinyFishKey"
             case .openAI: return "openAIKey"
+            case .elevenLabs: return "elevenLabsKey"
             case .agentProvider: return "agentProviderKey"
             }
         }
@@ -128,14 +134,16 @@ public enum KeychainStore {
             query[kSecMatchLimit as String] = kSecMatchLimitOne
             var item: CFTypeRef?
             let status = SecItemCopyMatching(query as CFDictionary, &item)
-            if status == errSecSuccess, let data = item as? Data {
-                return String(data: data, encoding: .utf8)
+            if status == errSecSuccess, let data = item as? Data, let key = String(data: data, encoding: .utf8) {
+                DebugLog.registerSecret(key)
+                return key
             }
         }
         return nil
     }
 
     private static func save(_ key: String, for secret: Secret) -> Bool {
+        DebugLog.registerSecret(key)
         delete(secret, service: service)
         for dataProtection in [true, false] {
             var attributes = baseQuery(secret: secret, dataProtection: dataProtection)

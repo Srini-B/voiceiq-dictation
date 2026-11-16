@@ -337,7 +337,9 @@ far-side reference, so `MeetingTranscriber.callAudio` skips echo cancellation
 (the WebRTC AEC3 xcframework ships a macOS slice only and is not linked on
 iOS). Speaker linking, meeting-type notes, suggested speaker names and Redo
 (notes only, or transcript and notes) work as on the Mac. Dictation is refused
-while notes record. Notes are always transcribed by the provider.
+while notes record. Notes are transcribed by the provider, or by ElevenLabs
+Scribe v3 when Provider & Keys picks ElevenLabs under Transcription; then the
+recorder card also shows the last lines Scribe v3 Live heard.
 
 ### Typing
 
@@ -378,7 +380,7 @@ offers "Add copied text to Dictionary" until you start typing.
 | Feature | How |
 | --- | --- |
 | Layouts | QWERTY, QWERTZ, AZERTY, Dvorak, Colemak (`KeyLayout`). English words on each. Optional number row; Short, Default or Tall height (`KeyboardViewController.height`). Without the number row, holding a top-row letter types its digit (shown in the key's corner) on the 10-key layouts. |
-| Pages | Letters, 123, #+=, number pads for number, decimal and phone fields. Email fields get @ and `.`, URL fields `.` and `/`; search fields keep a full space bar. Return shows the field's label (go, send, search…). |
+| Pages | Letters, 123, #+=, number pads for number, decimal and phone fields. The number pads follow iOS's: digits without letters, a flat delete and decimal separator, and the globe in the bottom-left corner where the system draws none (beside the separator on a decimal pad). iOS shows its own pad in phone fields. In other fields, the number pad key on the 123 and #+= pages (beside #+= or 123) opens a 4×4 number pad: digits, minus (hold for + * / = %), the decimal separator (hold for the other), space, delete and return, with ABC to go back (sharing its corner with the globe where the system draws none). It stays up after space and return until ABC or the keyboard reappears. Email fields get @ and `.`, URL fields `.` and `/`; search fields keep a full space bar. Return shows the field's label (go, send, search…). |
 | Keys | Shift (tap once, double-tap for Caps Lock, hold and type), accents and alternates on long press (hold `.` for `.com`, the currency key for other currencies), key preview, repeat delete that moves to whole words. Space Bar Slide: Move Cursor (default) or Off. Delete Slide: sliding left from delete removes Words (default, one per 22 pt) or Characters (one per 9 pt), sliding back restores them, lifting keeps the result; Off. The slide first puts back what the press itself removed (a character, a slid word, a selection, a held run), recorded as each delete happens (`deleteRestore`) rather than as a snapshot, because iOS cuts the text before the cursor short in long fields. No delete or space-bar slide during emoji search. A touch goes to the nearest key in its row. |
 | Suggestions | Next-word predictions, completions and corrections. Mid-sentence, FUTO's context model ranks predictions and completions together with the word pairs (see Scoring); at a sentence start the words the user starts sentences with come first, then "I", "The" and "I'm". The typed letters show in quotes; picking them keeps and learns the word. |
 | Auto-correction | Delete right after a correction restores the typed word and learns it. On space or punctuation. Fixes a mistyped word one edit away (adjacent keys cost less), two edits away through `UITextChecker`, apostrophes (`dont` → `don't`), and capitals (`i` → `I`, `monday` → `Monday`). A real word is never replaced by another word. Off in URL, email and search fields and where the field turns it off. |
@@ -408,7 +410,9 @@ otherwise hold back touches near the screen edges.
 
 **Slide to type: FUTO Swipe.** FUTO Keyboard's swipe engine
 (`iOS/Vendor/FUTOSwipe`, GPL-3.0) runs three models on ExecuTorch with
-XNNPACK: an encoder that reads the path for any layout, a decoder trained on
+XNNPACK: an encoder that reads the path for any layout (FUTO's int8
+export, `model_int8.pte`: same accuracy as fp32, faster, about 10 MB less
+keyboard memory), a decoder trained on
 QWERTY, and a context model (`chosen_planarian`) that weighs the words before
 the cursor. The same context model ranks the suggestion bar (see Scoring). A beam
 search keeps the results to words in `swipe/words.trie` and the user's own
@@ -431,7 +435,11 @@ apostrophes, with ’ read as '), so "don't" stays one word. The model's
 vocabulary is cased as mid-sentence text ("the", "I", "London"), so a word
 that starts a sentence, or that the word list lacks as typed, is lowercased
 when the list has it lowercase ("The" becomes "the"). Word results keep the dictionary's
-spelling ("I", "don't"); the user's words get their saved spelling. A slide
+spelling ("I", "don't"); the user's words get their saved spelling
+(`TypingEngine.userSpelling`), except a lone first capital on a word the list
+has lowercase: a contact "Apple Developer" or "Will" leaves "developer" and
+"will" lowercase, while "Srini", "London" and "GitHub" keep theirs. The
+field's auto-capitalization then decides the first letter. A slide
 records every sample from touch-down, so the turns made before it counted as
 a slide reach the model. A result that arrives after the user typed, moved
 the cursor or changed fields is dropped (`editGeneration`); a slid word does
@@ -454,7 +462,8 @@ model license and GPL-3.0 section 5(d) require.
   keyboard extension. `scripts/generate-swipe-trie.py` writes the same trie as
   12-byte nodes that `MappedTrie.cpp` memory-maps (5.2 MB, 142,507 words).
   The three models add about 21 MB; the keyboard measured 40 MB in the
-  iPhone 17e Simulator after slides. On a Mac the loaded engine takes
+  iPhone 17e Simulator after slides (fp32 encoder; with the int8 encoder
+  52 MB fell to 42 MB in the iPhone 18 Pro Simulator). On a Mac the loaded engine takes
   19 MB and the model's scores for a context about 1 MB more; a second
   `ContextLMScorer` for predictions would have added 11.5 MB, so predictions
   share the swipe engine. After typing and slides in the iPhone Air Simulator
@@ -463,8 +472,9 @@ model license and GPL-3.0 section 5(d) require.
   both off; runs vary by about 5 MB. The model files are mapped and do not
   count.
 - Rebuilding: `scripts/build-futo-swipe.sh` clones the library at its pinned
-  commit, builds ExecuTorch and the library for iPhone and Simulator (about
-  five minutes on an M2), and downloads the pinned models. The output is
+  commit, builds it against ExecuTorch v1.6.0 (newer than the library's own
+  v1.2.0 pin, with the library's XNNPACK patch) for iPhone and Simulator
+  (about ten minutes on an Apple Silicon Mac), and downloads the pinned models. The output is
   committed, so app builds need neither step. The keyboard target force-loads
   `libfutoswipe_registry.a` (kernels register themselves), builds C++17
   without RTTI, and excludes x86_64 Simulators.
@@ -670,8 +680,8 @@ runs. Everything needs Full Access.
 | Pill | Keyboard status plus Dynamic Island |
 | AX and paste insertion | `textDocumentProxy.insertText` |
 | Ask Anything, Translate, Paste last | Keyboard modes and Paste last |
-| Provider (Gemini or OpenAI), TinyFish | Same, in Settings › Provider & Keys and the iOS Keychain. Each key card carries the service's favicon from `Assets.xcassets/Provider*.imageset` (`BrandTile`); the OpenAI mark is a template image so it takes the ink colour in dark mode |
-| History stats: words, dictations, WPM, audio time | Home's stats grid |
+| Provider (Gemini or OpenAI), ElevenLabs, TinyFish | Same, in Settings › Provider & Keys and the iOS Keychain. With an ElevenLabs key stored, a Transcription picker (provider or ElevenLabs) appears there. Each key card carries the service's favicon from `Assets.xcassets/Provider*.imageset` (`BrandTile`); the OpenAI mark is a template image so it takes the ink colour in dark mode |
+| History stats: words, dictations, WPM, audio time, time saved, day streak, with a period menu | Statistics (`StatsView`), opened from the row above History's days or from Home's stats grid. Same `HistoryStore.stats(period:)` and the same remembered period (`historyStatsPeriod`); the Mac's streak tooltip (longest streak, active days) is a line under the tiles. Home's grid shows all time |
 | Dictionary with search, CSV and Auto-learned | Same, synced through iCloud, plus adding a selection or a copied word from the keyboard |
 | Writing rules, smart transcription, live, noise handling | Same settings |
 | History, retry, crash recovery, retention | Same. The detail shows Pipeline, the seconds from Stop to the text being ready (`DictationRecord.pipelineSeconds`, as on the Mac; absent for dictations synced from the Mac), the cost and one row per stage and model (stage, model, call count when above one, summed cost; `UsageLine.lines` over `UsageStore.records(forSession:)`), and Copy turns into "Copied" with a checkmark and a success haptic for 1.5 s |

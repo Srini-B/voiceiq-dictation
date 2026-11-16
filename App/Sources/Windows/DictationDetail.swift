@@ -1,5 +1,4 @@
 import AppKit
-import AVFoundation
 import SwiftUI
 import VoiceIQCore
 
@@ -11,7 +10,8 @@ struct DictationDetail: View {
     let onDelete: () -> Void
 
     @Environment(\.colorScheme) private var scheme
-    @State private var player: AVAudioPlayer?
+    /// Download's result, shown as the same message as a meeting export.
+    @State private var exported: ExportResult?
     private var grad: CGFloat { scheme == .dark ? 25 : 0 }
 
     var body: some View {
@@ -42,7 +42,10 @@ struct DictationDetail: View {
                 .padding(.vertical, VoiceIQUI.Spacing.xl)
             }
         }
-        .onDisappear { player?.stop() }
+        .overlay(alignment: .bottom) {
+            if let exported { ExportToast(result: exported) { self.exported = nil }.padding(.bottom, VoiceIQUI.Spacing.l) }
+        }
+        .animation(.easeOut(duration: 0.2), value: exported)
     }
 
     private var header: some View {
@@ -51,15 +54,12 @@ struct DictationDetail: View {
                 .font(VoiceIQUI.TypeScale.title(grad: grad))
                 .lineLimit(1)
             Spacer(minLength: VoiceIQUI.Spacing.s)
-            if audioExists {
-                Button(player?.isPlaying == true ? "Stop" : "Play audio",
-                       systemImage: player?.isPlaying == true ? "stop.fill" : "play.fill", action: toggleAudio)
-                    .help(player?.isPlaying == true ? "Stop" : "Play audio")
-            }
+            RecordingAudioButtons(audio: audio) { exported = $0 }
             // Dictations synced from another device have no local folder to retry from.
             if !record.isFromOtherDevice {
                 Button("Retry transcription", systemImage: "arrow.clockwise", action: onRetry)
-                    .help("Retry transcription")
+                    .help(RetryQueue.canRetry(record) ? "Retry transcription" : "The audio isn't on this Mac")
+                    .disabled(!RetryQueue.canRetry(record))
             }
             Button("Copy", systemImage: "doc.on.doc") {
                 NSPasteboard.general.clearContents()
@@ -107,8 +107,11 @@ struct DictationDetail: View {
             if let message = record.errorMessage, !message.isEmpty {
                 GridRow { metaLabel("Details"); metaValue(String(message.prefix(160))) }
             }
-            if !audioExists && !record.isFromOtherDevice {
-                GridRow { metaLabel("Audio"); metaValue("Removed by retention policy") }
+            if !audio.isAvailable {
+                GridRow {
+                    metaLabel("Audio")
+                    metaValue(record.isFromOtherDevice ? "On the device it was dictated on" : "Removed by retention policy")
+                }
             }
         }
     }
@@ -117,18 +120,7 @@ struct DictationDetail: View {
         record.cleanedTranscript ?? record.rawTranscript ?? "—"
     }
 
-    private var audioURL: URL { FileLayout.audioCAF(in: record.folderURL) }
-    private var audioExists: Bool { FileManager.default.fileExists(atPath: audioURL.path) }
-
-    private func toggleAudio() {
-        if player?.isPlaying == true {
-            player?.stop()
-            player = nil
-        } else {
-            player = try? AVAudioPlayer(contentsOf: audioURL)
-            player?.play()
-        }
-    }
+    private var audio: RecordedAudio { .dictation(folder: record.folderURL, startedAt: record.startedAt) }
 
     private func metaLabel(_ text: String) -> some View {
         Text(text).font(VoiceIQUI.TypeScale.labelSmall(grad: grad)).foregroundStyle(.secondary)

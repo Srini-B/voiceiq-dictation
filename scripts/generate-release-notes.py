@@ -5,8 +5,9 @@ the previous version, with an OpenAI model reading the commits and the diff.
     OPENAI_API_KEY=... scripts/generate-release-notes.py [output-dir]
     scripts/generate-release-notes.py --base   # print the previous version and its commit
 
-The previous release is the tag v<previous version> when it exists, otherwise
-the commit that set MARKETING_VERSION to the previous version. Outputs, in
+The previous release is the newest earlier version with a tag v<version>
+(versions a branch went through before merging have none), otherwise the
+commit that set MARKETING_VERSION to the previous version. Outputs, in
 output-dir (default build/release-notes):
 
     github.md  every section, for the GitHub release
@@ -47,6 +48,10 @@ def build_at(commit):
     return match.group(1) if match else None
 
 
+def tag_exists(tag):
+    return subprocess.run(["git", "rev-parse", "-q", "--verify", f"refs/tags/{tag}"], capture_output=True).returncode == 0
+
+
 def previous_release(current):
     """(previous version, commit) or (None, None) when this is the first version."""
     commits = git("log", "--format=%H", "-G", "MARKETING_VERSION", "HEAD", "--", "project.yml").split()
@@ -55,10 +60,14 @@ def previous_release(current):
         index += 1
     if index == len(commits):
         return None, None
+    # The newest earlier version that was released (has a tag): versions a
+    # branch went through before merging (only on TestFlight) are skipped,
+    # so the notes cover everything since the last public release.
+    for commit in commits[index:]:
+        version = version_at(commit)
+        if version and version != current and tag_exists(f"v{version}"):
+            return version, git("rev-list", "-n", "1", f"v{version}").strip()
     previous = version_at(commits[index])
-    tag = f"v{previous}"
-    if subprocess.run(["git", "rev-parse", "-q", "--verify", f"refs/tags/{tag}"], capture_output=True).returncode == 0:
-        return previous, git("rev-list", "-n", "1", tag).strip()
     # The oldest commit of the run that carried the previous version introduced it.
     while index + 1 < len(commits) and version_at(commits[index + 1]) == previous:
         index += 1
