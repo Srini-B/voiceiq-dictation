@@ -255,6 +255,8 @@ writing rules still make them from the transcript as heard.
 Units now keep their numbers in the word order: "5kg" reads as a number
 and "kg", and "kg", "kilos" and "kilograms" share one name, so "five
 milligrams … ten kilograms" cannot become "5kg … 10mg".
+A slash between digits now stays part of the number like a colon, so
+"1/2 tablet" cannot become "1-2 tablet" or the other way round.
 
 Result (test Mac, commit 4d7ffdb):
 - An earlier attempt on b591645 was stopped after the app was notarized and

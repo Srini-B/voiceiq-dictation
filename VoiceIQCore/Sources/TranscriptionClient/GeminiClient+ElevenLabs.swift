@@ -287,17 +287,18 @@ public enum ElevenLabs {
         // decimal point, also a leading one: "1.50" is not "150", nor ".5" 5. A comma before three digits
         // groups thousands ("1,500"); any other comma or a period is the
         // decimal point. A colon ("3:30") is kept and stands where a spoken
-        // number breaks ("three | thirty"), so "1:30" is not "130". A minus sign not after
+        // number breaks ("three | thirty"), so "1:30" is not "130". A slash
+        // stays too: "1/2" is neither "1-2" nor "12". A minus sign not after
         // a letter or digit is kept: "-25" is not "25", but "555-1234" and
         // "COVID-19" have no sign.
-        let number = #"(?:(?<![\p{L}\p{Nd}])[-−])?(?:(?<![\p{Nd}.])\.(?=\p{Nd}))?(?:\p{Nd}[\p{Nd},.:]*\p{Nd}|\p{Nd})"#
+        let number = #"(?:(?<![\p{L}\p{Nd}])[-−])?(?:(?<![\p{Nd}.])\.(?=\p{Nd}))?(?:\p{Nd}[\p{Nd},.:/]*\p{Nd}|\p{Nd})"#
         func digits(_ text: Substring) -> String {
             var figure = "", index = text.startIndex
             while index < text.endIndex {
                 let character = text[index]
                 let after = text[text.index(after: index)...]
                 if let value = character.wholeNumberValue { figure += String(value) }
-                else if character == "." || character == ":" { figure.append(character) }
+                else if character == "." || character == ":" || character == "/" { figure.append(character) }
                 else if character == "-" || character == "−" { figure += "-" }
                 else if character == ",", after.prefix(while: \.isNumber).count != 3 { figure += "." }
                 index = text.index(after: index)
