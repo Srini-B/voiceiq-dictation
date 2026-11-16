@@ -184,6 +184,13 @@ Result (test Mac, commit 716f2f7):
 - The notarized Mac app was installed over 0.7.1 on a second Mac and
   reads 0.7.2 (76).
 
+## After 0.7.6: spoken decimal points
+
+Review of the merged branch found that "one point five tablets" could be
+written "1-5 tablets": the first number ended before "point", and an
+unused "point" was always allowed. A "point" before a number must now be
+used, so the decimal stays one number.
+
 ## Release 0.7.6 (80): merge to main
 
 The maintainer asked to raise the version and merge PR #44 so the changes
