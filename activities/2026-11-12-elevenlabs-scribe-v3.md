@@ -260,6 +260,10 @@ A slash between digits now stays part of the number like a colon, so
 A written number must also end where the spoken one does, so "two
 hundred" cannot be written "2 100", nor "one hundred and five" "100 and
 5"; "two and three" may still be "2 and 3".
+"oh" is now a zero among numbers: "oh five" read as 5, and an unused "oh"
+always passed as a filler, so "one point oh five" became "1.5" and "five
+oh five" "55". It may now be dropped only when no other number is around
+it ("Oh, I see"), and "1.05" and "505" pass where they were rejected.
 
 Result (test Mac, commit 4d7ffdb):
 - An earlier attempt on b591645 was stopped after the app was notarized and

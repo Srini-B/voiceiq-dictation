@@ -384,11 +384,12 @@ public enum ElevenLabs {
         }
         // Digits stand for whole spoken numbers: "one hundred" is not "1",
         // and "twenty five" is not "20", and no said number is left out.
-        // Every run with a number is used up, all but "and", "point" and a
-        // filler "oh".
+        // Every run with a number is used up, all but "and" and "point". An
+        // "oh" on its own may be a filler ("Oh, I see"); among numbers it is
+        // a zero ("five oh five" is not "55").
         return runs.indices.allSatisfy { r in
-            !runs[r].contains { $0.contains(where: \.isNumber) || spokenNumbers[$0] != nil }
-                || runs[r].indices.allSatisfy { used[r][$0] || ["and", "point", "oh"].contains(runs[r][$0]) }
+            !runs[r].contains { $0 != "oh" && ($0.contains(where: \.isNumber) || spokenNumbers[$0] != nil) }
+                || runs[r].indices.allSatisfy { used[r][$0] || ["and", "point"].contains(runs[r][$0]) }
         }
     }
 
@@ -405,6 +406,8 @@ public enum ElevenLabs {
         var total = 0, current: Int?, read = false
         for word in chunk {
             if word == "and" { continue }
+            // "oh" and "zero" are a digit alone: "oh five" is 0 then 5, never 5.
+            if word == "oh" || word == "zero", chunk.count > 1 { return nil }
             guard let value = spokenNumbers[word] else { return nil }
             read = true
             let c = current ?? 0
