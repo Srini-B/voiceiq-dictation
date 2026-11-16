@@ -234,13 +234,12 @@ public enum ElevenLabs {
     /// number ("two thousand twenty six") or as several written together
     /// ("nineteen ninety nine", "five five five one two").
     static func saysEveryNumber(original: String, edit: String) -> Bool {
-        // Numerals that are not decimal digits ("Ⅷ", "½", "25Ⅷ") only as often as heard.
+        // Numerals that are not decimal digits ("Ⅷ", "½", "25Ⅷ") exactly as often as heard.
         func otherNumerals(_ text: String) -> [Unicode.Scalar: Int] {
             text.unicodeScalars.filter { $0.properties.numericType.map { $0 != .decimal } ?? false }
                 .reduce(into: [:]) { $0[$1, default: 0] += 1 }
         }
-        let heardNumerals = otherNumerals(original)
-        guard otherNumerals(edit).allSatisfy({ heardNumerals[$0.key, default: 0] >= $0.value }) else { return false }
+        guard otherNumerals(edit) == otherNumerals(original) else { return false }
         // Any script's digits, read as 0-9 ("٢٥" is "25"), keeping the
         // decimal point: "1.50" is not "150". A comma before three digits
         // groups thousands ("1,500"); any other comma or a period is the

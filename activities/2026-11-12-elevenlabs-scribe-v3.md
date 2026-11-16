@@ -211,6 +211,21 @@ written as that symbol with no other symbol added, and "and", "point" and
 A symbol is also checked in the place of the word it stands for, so two
 amounts cannot trade currencies ("25 dollars and 50 euros" as "€25 and
 $50").
+Numerals that are not decimal digits ("½", "Ⅷ") must also be kept exactly:
+before, an edit could leave out "½" ("Take ½ tablet daily").
+
+Result (test Mac, commit 4d7ffdb):
+- An earlier attempt on b591645 was stopped after the app was notarized and
+  before anything was uploaded or installed, so that build 79 would include
+  the dropped-word fix.
+- `scripts/test.sh` exit 0 (182 tests), `scripts/build-ios.sh` exit 0,
+  `scripts/release.sh` exit 0 (app and DMG notarized and stapled).
+- `scripts/release-ios.sh` exit 0; build 79 processed and in TestFlight
+  internal testing.
+- The notarized Mac app was installed over 0.7.4 on the test Mac and on a
+  second Mac and reads 0.7.5 (79).
+- Not in build 79: the word-order, symbol and "½" fixes above, which landed
+  on the branch after it was built.
 
 ## Release 0.7.4 (78)
 

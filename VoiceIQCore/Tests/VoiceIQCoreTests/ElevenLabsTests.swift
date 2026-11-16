@@ -109,7 +109,8 @@ final class ElevenLabsTests: XCTestCase {
                             ("Alice owes Bob money today", "Bob owes Alice money today."),
                             ("Transfer 25 dollars to Alice today", "Transfer €25 to Alice today."),
                             ("Transfer 25 dollars to Alice today", "Transfer 25 to Alice today."),
-                            ("Give Alice 25 dollars and Bob 50 euros today", "Give Alice €25 and Bob $50 today.")] {
+                            ("Give Alice 25 dollars and Bob 50 euros today", "Give Alice €25 and Bob $50 today."),
+                            ("Take ½ tablet daily with water", "Take tablet daily with water.")] {
             XCTAssertEqual(ElevenLabs.accepted(edit: edit, original: raw), raw, edit)
         }
         let formats = [
