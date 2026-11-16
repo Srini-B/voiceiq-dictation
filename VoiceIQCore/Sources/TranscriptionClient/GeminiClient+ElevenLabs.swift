@@ -176,7 +176,6 @@ public enum ElevenLabs {
         // a letter or digit is kept: "-25" is not "25", but "555-1234" and
         // "COVID-19" have no sign.
         let number = #"(?:(?<![\p{L}\p{Nd}])[-−])?(?:\p{Nd}[\p{Nd},.:]*\p{Nd}|\p{Nd})"#
-        let numeral = try! NSRegularExpression(pattern: number)
         func digits(_ text: Substring) -> String {
             var figure = "", index = text.startIndex
             while index < text.endIndex {
@@ -190,13 +189,6 @@ public enum ElevenLabs {
             }
             return figure
         }
-        let written = numeral.matches(in: edit, range: NSRange(edit.startIndex..., in: edit)).compactMap { match in
-            Range(match.range, in: edit).map { range -> String in
-                let text = edit[range]
-                return digits(text.hasSuffix(":00") || text.hasSuffix(".00") ? text.dropLast(3) : text)
-            }
-        }
-
         // The original's numbers, split into runs of number words and digits.
         let token = try! NSRegularExpression(pattern: number + #"|\p{L}+"#)
         var runs: [[String]] = [[]]
@@ -208,22 +200,27 @@ public enum ElevenLabs {
             else if !runs[runs.count - 1].isEmpty { runs.append([]) }
         }
 
-        // Each said number accounts for one written number: "25" said once
-        // is not "25 25".
+        // Each said number accounts for one written number ("25" said once
+        // is not "25 25"), in the order said: the edit walks the original's
+        // numbers forward, so it cannot swap two amounts. A number word the
+        // edit keeps ("one invoice") uses up the same said word, so it
+        // cannot also stand behind digits ("one 1 invoice").
         var used = runs.map { [Bool](repeating: false, count: $0.count) }, touched = Set<Int>()
-        // A number word the edit keeps ("one invoice") uses up the same said
-        // word, so it cannot also stand behind digits ("one 1 invoice").
-        for match in token.matches(in: edit, range: NSRange(edit.startIndex..., in: edit)) {
-            guard let range = Range(match.range, in: edit) else { continue }
-            let word = edit[range].lowercased()
-            guard spokenNumbers[word] != nil else { continue }
-            guard let (r, i) = runs.indices.lazy.compactMap({ r in
-                runs[r].indices.first { runs[r][$0] == word && !used[r][$0] }.map { (r, $0) }
-            }).first else { return false }
-            used[r][i] = true
+        var cursor = (run: 0, index: 0)
+        /// The positions from the cursor on, in order.
+        func ahead() -> [(Int, Int)] {
+            runs.indices.filter { $0 >= cursor.run }.flatMap { r in
+                runs[r].indices.filter { r > cursor.run || $0 >= cursor.index }.map { (r, $0) }
+            }
+        }
+        func keeps(_ word: String) -> Bool {
+            guard let (r, i) = ahead().first(where: { runs[$0.0][$0.1] == word && !used[$0.0][$0.1] }) else { return false }
+            used[r][i] = true; cursor = (r, i + 1)
+            return true
         }
         func said(_ number: String) -> Bool {
-            for (r, run) in runs.enumerated() {
+            for (r, start) in ahead() {
+                let run = runs[r]
                 // Where the run, read a chunk at a time from `index`, has said `number` from `at`.
                 func matches(_ at: String.Index, _ index: Int) -> Int? {
                     for end in (index + 1)...min(index + 6, run.count) where !used[r][index..<end].contains(true) {
@@ -234,19 +231,25 @@ public enum ElevenLabs {
                     }
                     return nil
                 }
-                for start in run.indices {
-                    guard let end = matches(number.startIndex, start) else { continue }
-                    for index in start..<end { used[r][index] = true }
-                    touched.insert(r)
-                    return true
-                }
+                guard let end = matches(number.startIndex, start) else { continue }
+                for index in start..<end { used[r][index] = true }
+                touched.insert(r); cursor = (r, end)
+                return true
             }
             return false
+        }
+        for match in token.matches(in: edit, range: NSRange(edit.startIndex..., in: edit)) {
+            guard let range = Range(match.range, in: edit) else { continue }
+            let text = edit[range]
+            if text.contains(where: \.isNumber) {
+                guard said(digits(text.hasSuffix(":00") || text.hasSuffix(".00") ? text.dropLast(3) : text)) else { return false }
+            } else if spokenNumbers[text.lowercased()] != nil {
+                guard keeps(text.lowercased()) else { return false }
+            }
         }
         // Digits stand for whole spoken numbers: "one hundred" is not "1",
         // and "twenty five" is not "20". A run the digits drew on is used up,
         // all but "and", "point" and a filler "oh".
-        guard written.allSatisfy(said) else { return false }
         return touched.allSatisfy { r in
             runs[r].indices.allSatisfy { used[r][$0] || ["and", "point", "oh"].contains(runs[r][$0]) }
         }
