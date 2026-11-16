@@ -182,11 +182,12 @@ public enum ElevenLabs {
             guard symbol == "." || symbol == "/" ? written >= needed : written == needed else { return false }
         }
         // And in the order said: "Bob owes Alice" is not "Alice owes Bob",
-        // and "25 dollars and 50 euros" is not "€25 and $50". Numbers keep
-        // their order in `saysEveryNumber`.
+        // "25 dollars and 50 euros" is not "€25 and $50", and "hired five
+        // engineers and fired contractors" is not "hired engineers and fired
+        // 5 contractors". Which number is which is `saysEveryNumber`'s.
         let inOrder = orderedWords(original), heardWords = Set(inOrder)
         var rest = inOrder[...]
-        for word in orderedWords(edit) where !word.contains(where: \.isNumber) && heardWords.contains(word) {
+        for word in orderedWords(edit) where heardWords.contains(word) {
             guard let index = rest.firstIndex(of: word) else { return false }
             rest = rest[(index + 1)...]
         }
@@ -194,7 +195,9 @@ public enum ElevenLabs {
     }
 
     /// `ValidationGate.contentWords` in order, with each currency or unit
-    /// symbol, and each word that names one, as that symbol.
+    /// symbol, and each word that names one, as that symbol, and each number
+    /// as "#" followed by the symbols written next to it: "25 dollars" and
+    /// "$25" are both "#$", "three point five percent" and "3.5%" both "#%".
     private static func orderedWords(_ text: String) -> [String] {
         var words: [String] = [], segment = ""
         func flush() {
@@ -209,7 +212,22 @@ public enum ElevenLabs {
             }
         }
         flush()
-        return words
+
+        func isNumber(_ word: String) -> Bool { word.contains(where: \.isNumber) || spokenNumbers[word] != nil }
+        func isSymbol(_ word: String) -> Bool { word != "." && word != "/" && word.count == 1 && symbolWords.values.contains(word.first!) }
+        var grouped: [String] = []
+        for (index, word) in words.enumerated() {
+            let inNumber = grouped.last?.hasPrefix("#") == true
+            if isNumber(word) || inNumber && numberJoiners.contains(word) && index + 1 < words.count && isNumber(words[index + 1]) {
+                if inNumber { continue }
+                if let last = grouped.last, isSymbol(last) { grouped[grouped.count - 1] = "#" + last } else { grouped.append("#") }
+            } else if isSymbol(word), inNumber {
+                grouped[grouped.count - 1] += word
+            } else {
+                grouped.append(word)
+            }
+        }
+        return grouped
     }
 
     /// Words written as a symbol, and the symbol.

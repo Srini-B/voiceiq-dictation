@@ -218,6 +218,10 @@ an amount in rupees had its edit rejected, most likely because the edit
 wrote "₹25,000" (the edit text is not logged; dropping the misheard word
 "valid" would also have rejected it). The writing rules then formatted it
 from the transcript as heard, keeping "Do not" and the amount.
+Numbers now take their place in the word order too, each with the symbols
+written next to it ("25 dollars" and "$25" alike), so a number cannot move
+to another noun ("hired five engineers and fired contractors" as "hired
+engineers and fired 5 contractors").
 
 Result (test Mac, commit 4d7ffdb):
 - An earlier attempt on b591645 was stopped after the app was notarized and
