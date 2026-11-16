@@ -194,6 +194,21 @@ on screen, the repeat-Automatic menu fix, and the review-bot fixes to
 Scribe's edit guard (numbers, signs, decimals, units), the Japanese
 question check and live redaction. Version 0.7.4, build 78 (0.7.3 was 77).
 
+Result (test Mac, commit 6eaceb9):
+- `scripts/test.sh` exit 0 (181 tests), `scripts/build-ios.sh` exit 0,
+  KeyboardTypingTests passed, `scripts/release.sh` exit 0 (app and DMG
+  notarized and stapled).
+- `scripts/release-ios.sh` exit 0; build 78 processed and in TestFlight
+  internal testing.
+- iOS 27 Simulator, iPhone SE and iPhone 18 Pro: number and decimal pads
+  follow iOS's; the number pad key's globe switches keyboards where the
+  system draws none; long-press popups on the first and last keys of each
+  row and on the 123 page stay on screen; holding − shows + * / = % and
+  types the highlighted one; with a contact "Apple Developer", sliding
+  "see to up developer" mid-sentence kept "developer" lowercase.
+- The notarized Mac app was installed over 0.7.3 on a second Mac and
+  reads 0.7.4 (78).
+
 ## Release 0.7.3 (77)
 
 The maintainer asked for a new TestFlight build and Mac install with
