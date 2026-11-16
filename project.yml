@@ -12,8 +12,8 @@ options:
 # CURRENT_PROJECT_VERSION is the build number: raise it with every release.
 settings:
   base:
-    MARKETING_VERSION: "0.7.6"
-    CURRENT_PROJECT_VERSION: "80"
+    MARKETING_VERSION: "0.7.7"
+    CURRENT_PROJECT_VERSION: "81"
 
 packages:
   VoiceIQCore:
@@ -315,7 +315,7 @@ targets:
             PrimaryLanguage: en-US
             RequestsOpenAccess: true
 
-  # The keyboard's word logic, compiled on its own: an extension cannot host
+  # The keyboard's typing code, compiled on its own: an extension cannot host
   # tests. Runs in the VoiceIQiOS scheme on a Simulator.
   KeyboardTypingTests:
     type: bundle.unit-test
@@ -327,12 +327,24 @@ targets:
         SWIFT_VERSION: "5.10"
         GENERATE_INFOPLIST_FILE: YES
         CODE_SIGNING_ALLOWED: NO
+        # The typing controller holds the FUTO Swipe recognizer; linked as in
+        # VoiceIQKeyboard.
+        SWIFT_OBJC_BRIDGING_HEADER: iOS/Keyboard/Sources/Keyboard-Bridging-Header.h
+        HEADER_SEARCH_PATHS: $(SRCROOT)/iOS/Vendor/FUTOSwipe/include
+        LIBRARY_SEARCH_PATHS: $(SRCROOT)/iOS/Vendor/FUTOSwipe/lib/$(PLATFORM_NAME)
+        OTHER_LDFLAGS: -force_load $(SRCROOT)/iOS/Vendor/FUTOSwipe/lib/$(PLATFORM_NAME)/libfutoswipe_registry.a -lfutoswipe -lc++
+        CLANG_CXX_LANGUAGE_STANDARD: c++17
+        GCC_ENABLE_CPP_RTTI: NO
+        EXCLUDED_ARCHS[sdk=iphonesimulator*]: x86_64
     sources:
       - iOS/Keyboard/Tests
-      - iOS/Keyboard/Sources/Typing/TypingEngine.swift
-      - iOS/Keyboard/Sources/Typing/Lexicon.swift
+      - iOS/Keyboard/Sources/Typing
+      - iOS/Keyboard/Sources/Swipe
       - path: iOS/Keyboard/Resources/lexicon.bin
         buildPhase: resources
+    dependencies:
+      - package: VoiceIQCore
+        product: VoiceIQBridge
 
   VoiceIQLiveActivity:
     type: app-extension

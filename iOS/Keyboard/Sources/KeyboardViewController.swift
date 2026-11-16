@@ -12,9 +12,8 @@ final class KeyboardViewController: UIInputViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         model.controller = self
-        dictionaryOffer.controller = self
         model.onOwnCopy = { [weak dictionaryOffer] in dictionaryOffer?.noteOwnCopy() }
-        model.onInserted = { [weak typing] in typing?.refresh() }
+        model.onEdited = { [weak typing] in typing?.refresh() }
         typing.controller = self
         requestSupplementaryLexicon { [weak typing] lexicon in
             Task { @MainActor in typing?.setSupplementaryLexicon(lexicon.entries) }
@@ -91,7 +90,6 @@ final class KeyboardViewController: UIInputViewController {
     override func textDidChange(_ textInput: UITextInput?) {
         super.textDidChange(textInput)
         HostAppResolver.harvest()
-        dictionaryOffer.selectionChanged()
         typing.readField()
         typing.selectionChanged()
     }
@@ -99,7 +97,6 @@ final class KeyboardViewController: UIInputViewController {
     override func selectionDidChange(_ textInput: UITextInput?) {
         super.selectionDidChange(textInput)
         HostAppResolver.harvest()
-        dictionaryOffer.selectionChanged()
         typing.selectionChanged()
     }
 

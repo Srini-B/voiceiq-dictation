@@ -173,6 +173,12 @@ final class DictationController {
                 self?.coordinator.handle(.finalize)
             }
         }
+        // The same intent ⌘Esc sends, so both discard alike.
+        NotificationCenter.default.addObserver(forName: .pillCancelTapped, object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor in
+                self?.coordinator.handle(.cancel)
+            }
+        }
         NotificationCenter.default.addObserver(forName: .pillDotTapped, object: nil, queue: .main) { [weak self] _ in
             Task { @MainActor in
                 self?.startHandsFree()

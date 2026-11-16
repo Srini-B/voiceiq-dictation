@@ -373,7 +373,11 @@ flat at the latest level. The glow is a plain `Shape` on a 0.06 s timer: a
 on an iPhone (0.6.23).
 
 **Add to Dictionary.** With Full Access, selecting text in the field replaces
-the suggestions with "Add “word” to Dictionary". Text selected in another app
+the suggestions with "Add “word” to Dictionary"; the suggestions come back as
+soon as the selection ends, whether by typing, Delete, moving the cursor or a
+tap in the field. The bar reads the selection with the suggestions after every
+edit (`TypingController.selection`), because iOS does not report a keyboard's
+own edits to it. Text selected in another app
 or elsewhere on screen is not visible to a keyboard: copy it, and the bar
 offers "Add copied text to Dictionary" until you start typing.
 
