@@ -19,6 +19,9 @@ import CoreAudio
     public var onChange: ((CallSource?) -> Void)?
     private var timer: Timer?, hits = 0, misses = 0
     private var active: CallSource?, candidate: CallSource?
+    /// The active call came from a known app, a call daemon, or a meeting page,
+    /// not only from a tab that looked like one.
+    private var activeConfirmed = false
 
     public init() {}
     public func start() { stop(); poll(); timer = .scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in Task { @MainActor in self?.poll() } } }
@@ -33,16 +36,22 @@ import CoreAudio
         guard !polling else { return }
         polling = true
         Task { [weak self] in
-            let source = await Task.detached(priority: .utility) { Self.detectedSource() }.value
+            let found = await Task.detached(priority: .utility) { Self.detectedSource() }.value
             guard let self else { return }
             self.polling = false
-            if let source {
-                // A meeting page that turns up after a tab already looked like a call replaces it.
+            if let found {
+                let (source, confirmed) = found
                 self.hits = source == self.candidate ? self.hits + 1 : 1; self.candidate = source; self.misses = 0
-                if self.hits >= 2, source != self.active { self.active = source; self.onChange?(source) }
+                // A confirmed call replaces one that only looked like a call (a
+                // meeting page found after the tab played and captured). A
+                // look-alike never replaces anything: its name follows the front
+                // tab, while the audio it watches is the whole browser's.
+                if self.hits >= 2, source != self.active, self.active == nil || (confirmed && !self.activeConfirmed) {
+                    self.active = source; self.activeConfirmed = confirmed; self.onChange?(source)
+                }
             } else {
                 self.misses += 1; self.hits = 0; self.candidate = nil
-                if self.active != nil, self.misses >= 3 { self.active = nil; self.onChange?(nil) }
+                if self.active != nil, self.misses >= 3 { self.active = nil; self.activeConfirmed = false; self.onChange?(nil) }
             }
         }
     }
@@ -160,13 +169,14 @@ import CoreAudio
         return unsafeBitCast(symbol, to: (@convention(c) (pid_t) -> pid_t).self)
     }()
 
-    private nonisolated static func detectedSource() -> CallSource? {
+    /// The call, and whether it is confirmed rather than a browser that only looks like one.
+    private nonisolated static func detectedSource() -> (CallSource, confirmed: Bool)? {
         let audio = runningAudio()
         // Pre-14.2: only a global "mic is in use" bit exists. VoiceiQ's own meeting
         // tap trips it, so there the call ends only when the app or tab goes away,
         // and only known apps and meeting pages count.
         if audio == nil, !microphoneInUse() { return nil }
-        if audio?.inputDaemon == true { return CallApps.callDaemonSource }
+        if audio?.inputDaemon == true { return (CallApps.callDaemonSource, true) }
         let own = Bundle.main.bundleIdentifier ?? "io.blue.voiceiq"
         // An app on the mic itself comes before one only responsible for it: a
         // call app launched from a terminal has the terminal as its owner.
@@ -189,17 +199,17 @@ import CoreAudio
             guard capturing else { continue }
             let playing = audio.map { a in pids.contains(where: a.outputPIDs.contains) || a.outputBundleIDs.contains { $0.hasPrefix(id) } } ?? false
             if let name = CallApps.known[id] {
-                if audio == nil || playing || !CallApps.voiceNoteApps.contains(id) { return .app(bundleID: id, name: name) }
+                if audio == nil || playing || !CallApps.voiceNoteApps.contains(id) { return (.app(bundleID: id, name: name), true) }
                 continue
             }
             let name = app.localizedName ?? id
             guard CallApps.browsers.contains(id) || name.localizedCaseInsensitiveContains("Chrome")
                     || name.localizedCaseInsensitiveContains("Chromium") else { continue }
             let page = BrowserPages.read(pid: app.processIdentifier)
-            if let match = page.meeting { return .browser(bundleID: id, host: match) }
+            if let match = page.meeting { return (.browser(bundleID: id, host: match), true) }
             if playing, !page.excluded, lookalike == nil { lookalike = .browser(bundleID: id, host: page.host ?? name) }
         }
-        return lookalike
+        return lookalike.map { ($0, false) }
     }
 
     /// The app a process belongs to. A helper inside another app's bundle

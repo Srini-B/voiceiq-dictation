@@ -102,9 +102,12 @@ dictation, remote desktop clients, and virtual machines all capture and play
 sound, so the exclusion list could never be complete. A call app that is not
 in `CallApps.known` gets no offer; Option-M still records it.
 
-When a different call is seen on two polls in a row while one is offered,
-it replaces the offer: a tab that only looked like a call gives way to the
-meeting page found later. A recording in progress keeps its call.
+When a known app, a call daemon, or a meeting page is seen on two polls in a
+row while the offer is for a tab that only looked like a call (rule 4), it
+replaces the offer. A rule 4 call is never replaced by another rule 4 tab:
+its name comes from the front tab, but the audio is the whole browser's, so
+switching tabs during the call is not a new call. A recording in progress
+keeps its call.
 
 VoiceiQ's own processes never count.
 

@@ -43,8 +43,12 @@ exclusion list can never be complete.
 - A meeting page is named by its host ("meet.google.com"), or for a title
   match by `CallApps.meetingTitles` ("Google Meet"). Before this it showed
   the matched pattern, such as "meet.google.com/".
-- Two polls in a row on a different source replace the offer
-  (`CallDetector.poll`, `MeetingEngine.detected`). A recording keeps its call.
+- A known app, call daemon or meeting page seen on two polls in a row
+  replaces an offer for a tab that only looked like a call
+  (`CallDetector.poll`, `MeetingEngine.detected`). Another look-alike tab
+  never replaces one: the name follows the front tab while the audio is the
+  whole browser's, so switching tabs mid-call is not a new call (from
+  review). A recording keeps its call.
 
 ## More call apps, sites and browsers
 
