@@ -313,7 +313,9 @@ public actor LiveTranscriptionSession {
                     partialSink.yield(previewTail)
                     noteTranscriptActivity()
                 case .turnComplete:
-                    ledger.applyTurnComplete(closedTurns: turnsEnded)
+                    if !ledger.applyTurnComplete(closedTurns: turnsEnded), dialect.completesOnlyClosedTurns {
+                        recordFailure(LiveError.refused("server closed a turn the client did not"))
+                    }
                 case .committed(let itemID):
                     ledger.applyCommitted(itemID: itemID)
                 case .itemFinal(let itemID, let text):

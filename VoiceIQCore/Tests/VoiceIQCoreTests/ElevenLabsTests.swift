@@ -16,6 +16,12 @@ final class ElevenLabsTests: XCTestCase {
         // Scribe commits on its own at about 35 s of audio in a turn; the
         // client must always commit first.
         XCTAssertLessThan(dialect.activityRoll.hardLimit, 35)
+        // A commit the client did not send is caught, not taken as its turn.
+        XCTAssertTrue(dialect.completesOnlyClosedTurns)
+        var ledger = LiveTurnLedger()
+        XCTAssertFalse(ledger.applyTurnComplete(closedTurns: 0))
+        XCTAssertTrue(ledger.applyTurnComplete(closedTurns: 1))
+        XCTAssertFalse(ledger.applyTurnComplete(closedTurns: 1))
 
         let end = try XCTUnwrap(JSONSerialization.jsonObject(with: dialect.activityEndFrame()) as? [String: Any])
         XCTAssertEqual(end["commit"] as? Bool, true)

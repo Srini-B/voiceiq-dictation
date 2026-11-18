@@ -65,6 +65,9 @@ public struct ElevenLabsLiveDialect: LiveDialect {
     /// 30 s regardless. Streaming with a commit every 30 s drew no extra
     /// commit from the server.
     public var activityRoll: (roll: Int, hardLimit: Int) { (25, 30) }
+    /// If the server ever commits sooner than measured, the session sees a
+    /// commit it did not ask for and falls back to the batch upload.
+    public var completesOnlyClosedTurns: Bool { true }
 
     public func setupFrame() -> Data? { nil }
     public func activityStartFrame() -> Data? { nil }

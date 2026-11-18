@@ -109,6 +109,11 @@ public protocol LiveDialect: Sendable {
     /// Whether a rolled turn must be finished by the server before the next
     /// one opens. Gemini drops a turn it is closing when the next opens at once.
     var waitsForTurnCloseOnRoll: Bool { get }
+    /// True when the server completes only turns the client closed. A
+    /// completion with no closed turn waiting then means the server closed a
+    /// turn by itself, and could close the key-up turn early too, so the
+    /// session fails and the batch upload takes over.
+    var completesOnlyClosedTurns: Bool { get }
     /// The shortest turn the API accepts, in bytes of the app's 16 kHz PCM. A
     /// shorter final turn is padded with silence rather than refused.
     var minimumTurnBytes: Int { get }
@@ -134,6 +139,7 @@ extension LiveDialect {
         (LiveTranscriptionSession.activityRollSeconds, LiveTranscriptionSession.activityHardLimitSeconds)
     }
     public var waitsForTurnCloseOnRoll: Bool { true }
+    public var completesOnlyClosedTurns: Bool { false }
     public var minimumTurnBytes: Int { 0 }
     public func audioTailFrame() -> Data? { nil }
 }
