@@ -44,11 +44,12 @@ import CoreAudio
             self.candidate = source
             // Misses count polls without the active call, even when another
             // source shows, so a call that ended gives way to the next one. A
-            // look-alike stays the same call while its browser plays and
-            // captures: its name follows the front tab, the audio is the whole
-            // browser's.
+            // browser call, meeting page or look-alike, stays the same call
+            // while that browser plays and captures with no meeting page in
+            // front: the page read follows the front tab, the audio is the
+            // whole browser's.
             if let active = self.active {
-                let continues = source == active || (!confirmed && !self.activeConfirmed && Self.app(of: source) == Self.app(of: active))
+                let continues = source == active || (!confirmed && Self.app(of: source) == Self.app(of: active))
                 self.misses = continues ? 0 : self.misses + 1
                 if self.misses >= 3 { self.active = nil; self.activeConfirmed = false; self.onChange?(nil) }
             }

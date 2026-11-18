@@ -104,9 +104,10 @@ in `CallApps.known` gets no offer; Option-M still records it.
 
 When a known app, a call daemon, or a meeting page is seen on two polls in a
 row while the offer is for a tab that only looked like a call (rule 4), it
-replaces the offer. A rule 4 call is never replaced by another rule 4 tab:
-its name comes from the front tab, but the audio is the whole browser's, so
-switching tabs during the call is not a new call. The offer is dropped
+replaces the offer. A browser call is never replaced by a rule 4 tab of the
+same browser: the page is read from the front tab, but the audio is the
+whole browser's, so switching tabs during a call, on a meeting page or not,
+is not a new call. The offer is dropped
 after three polls without its call, even when another source shows on them,
 so a call that ended gives way to the next one. A recording in progress
 keeps its call.

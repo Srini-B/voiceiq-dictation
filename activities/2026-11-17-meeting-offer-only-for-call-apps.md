@@ -45,8 +45,8 @@ exclusion list can never be complete.
   the matched pattern, such as "meet.google.com/".
 - A known app, call daemon or meeting page seen on two polls in a row
   replaces an offer for a tab that only looked like a call
-  (`CallDetector.poll`, `MeetingEngine.detected`). Another look-alike tab
-  never replaces one: the name follows the front tab while the audio is the
+  (`CallDetector.poll`, `MeetingEngine.detected`). A look-alike tab of the
+  same browser never replaces a browser call, a meeting page included: the name follows the front tab while the audio is the
   whole browser's, so switching tabs mid-call is not a new call (from
   review). The offer is dropped after three polls without its call even
   when another source shows, so a finished call gives way to the next one.
