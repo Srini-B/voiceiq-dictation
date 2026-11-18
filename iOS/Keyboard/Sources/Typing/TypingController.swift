@@ -45,6 +45,9 @@ final class TypingController: ObservableObject, KeyboardKeysDelegate {
     private static let lexicon = Bundle.main.url(forResource: "lexicon", withExtension: "bin").flatMap(Lexicon.init(url:))
     var engine: TypingEngine?
     let swipe = SwipeRecognizer.shared()
+    /// The slide models were freed on a memory warning; they load again
+    /// when the keyboard next appears, not on a layout change before that.
+    private var modelsReleased = false
     private let checker = UITextChecker()
 
     /// Shift follows the text (sentence starts) until the user presses it.
@@ -87,6 +90,7 @@ final class TypingController: ObservableObject, KeyboardKeysDelegate {
     func appeared() {
         preferences = SharedStore.shared.keyboardPreferences
         loadUserWords()
+        modelsReleased = false
         if usesFUTOModels, let geometry = engine?.geometry { swipe.update(geometry) }
         page = .letters
         showsEmoji = false
@@ -120,7 +124,15 @@ final class TypingController: ObservableObject, KeyboardKeysDelegate {
             loadUserWords()
         }
         engine?.geometry = geometry
-        if usesFUTOModels { swipe.update(geometry) }
+        if usesFUTOModels, !modelsReleased { swipe.update(geometry) }
+        refresh()
+    }
+
+    func releaseModels() {
+        modelsReleased = true
+        nextWords = nil
+        requestedContext = nil
+        swipe.unload()
         refresh()
     }
 
@@ -248,7 +260,7 @@ final class TypingController: ObservableObject, KeyboardKeysDelegate {
     /// The context model's scores arrive a few milliseconds after the words
     /// before the cursor change; the bar then refreshes.
     private func requestNextWords(after context: [String]) {
-        guard requestedContext != context else { return }
+        guard !modelsReleased, requestedContext != context else { return }
         requestedContext = context
         swipe.nextWords(after: context) { [weak self] scores in
             guard let self, self.requestedContext == context else { return }

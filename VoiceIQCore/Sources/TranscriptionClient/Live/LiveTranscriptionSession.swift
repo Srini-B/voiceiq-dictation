@@ -313,7 +313,9 @@ public actor LiveTranscriptionSession {
                     partialSink.yield(previewTail)
                     noteTranscriptActivity()
                 case .turnComplete:
-                    ledger.applyTurnComplete(closedTurns: turnsEnded)
+                    if !ledger.applyTurnComplete(closedTurns: turnsEnded), dialect.completesOnlyClosedTurns {
+                        recordFailure(LiveError.refused("server closed a turn the client did not"))
+                    }
                 case .committed(let itemID):
                     ledger.applyCommitted(itemID: itemID)
                 case .itemFinal(let itemID, let text):
@@ -340,7 +342,7 @@ public actor LiveTranscriptionSession {
 
     private func recordFailure(_ error: Error) {
         guard failure == nil, phase != .closed, !Task.isCancelled else { return }
-        failure = String(describing: error)
+        failure = LiveFailure.loggable(error)
         onFailure(error as? LiveFailure ?? LiveFailure(message: String(describing: error)))
         partialSink.yield("")
         partialSink.finish()
@@ -373,7 +375,7 @@ public actor LiveTranscriptionSession {
             case .committed: return "committed"
             case .itemFinal(_, let t): return "itemFinal(\(t.count))"
             case .goAway: return "goAway"
-            case .failed(let w): return "failed(\(w))"
+            case .failed(let w): return "failed(\(w.summary))"
             case .setupComplete: return "setupComplete"
             }
         }.joined(separator: "+")

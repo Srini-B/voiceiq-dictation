@@ -57,6 +57,12 @@ final class SwipeRecognizer: @unchecked Sendable {
         }
     }
 
+    /// Frees the models under memory pressure. The next `update` loads them
+    /// again; until then slides and context predictions return nothing.
+    func unload() {
+        queue.async { [self] in engine = nil }
+    }
+
     /// Letters a to z only; others cannot be slid to.
     func setUserWords(_ keys: [String]) {
         let words = keys.filter { !$0.isEmpty && $0.allSatisfy { ("a"..."z").contains($0) } }.sorted()

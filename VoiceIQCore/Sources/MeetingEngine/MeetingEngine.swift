@@ -218,7 +218,7 @@ import Foundation
     private static func finish(live: LiveMeetingSession) async {
         let seconds = await live.finish()
         guard seconds > 0, let usage = ElevenLabs.usage(model: LiveMeetingSession.model, seconds: seconds,
-                                                        keyterms: !live.library.isEmpty, editedTurns: 0,
+                                                        keyterms: !live.library.isEmpty,
                                                         redacted: live.redacts) else { return }
         UsageMeter.record(stage: .liveTranscribe, model: LiveMeetingSession.model, usage: usage)
     }

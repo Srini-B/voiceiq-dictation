@@ -52,6 +52,27 @@ since Chrome starts one per profile. Two processes never write the same file. A 
 2026-11-12 14:03:22.481 app notice [transcription] call transcribe via gemini (gemini-3.8-flash) id=… attempt=1 h2 ok in 812ms, first byte 640ms, sent 52311 bytes
 ```
 
+A dictation whose recording was uploaded and transcribed also gets a
+`[transcription] timing:` line that splits the work after the microphone
+stops. It is written once the writing pass ends, also when that pass fails
+(`writing failed after …ms`); `writing skipped` means no writing model ran,
+as for a short dictation. A dictation whose text comes from the live stream
+has no such line, and an upload that fails before a transcript has none
+either. Every dictation that reaches insertion, or hands its text to Ask or
+Agent, gets one `[session] timing` line from key-up to the result; a
+dictation that fails before then has none:
+
+```text
+… app notice [transcription] timing: encode 31ms, transcribe 1604ms (scribe_v3/smart), writing 3012ms, 41 words, 18.2s audio
+… app notice [session] timing 26A1A1D4-…: finalize 233ms, upload (transcribe+writing) 4650ms, cleanup -, insert 133ms, key-up to done 5016ms
+```
+
+`writing` covers building the prompt, the writing-model requests and the
+validation gate. Each request attempt inside it has its own `call` line, so
+one interval can hold several: a second attempt of the same request, or the
+reminder request `runCleanup` sends when the model answered a dictated
+question instead of writing it down.
+
 ### Keeping and deleting
 
 `DebugLog.keepDays` (7) and `DebugLog.maxTotalBytes` (30 MB). Day files older

@@ -75,15 +75,12 @@ struct DictationPane: View {
 
             Section {
                 // Saved only on a user change, not when its default is refreshed.
-                Toggle("Real-time transcription", isOn: Binding(get: { liveTranscription && !elevenLabs }, set: {
+                Toggle("Real-time transcription", isOn: Binding(get: { liveTranscription }, set: {
                     liveTranscription = $0
                     settings.setLiveTranscriptionEnabled($0)
                 }))
-                .disabled(elevenLabs)
             } footer: {
-                if elevenLabs {
-                    Text("Off while ElevenLabs is the transcription provider: Scribe v3 transcribes the recording after you stop.")
-                }
+                Text("Transcribes while you speak\(elevenLabs ? " with Scribe v3 Live" : ""), so the text is ready about 1.5 s sooner after you stop. If the stream fails, the recording is uploaded as before.")
             }
 
             Section {
@@ -150,7 +147,7 @@ struct DictationPane: View {
                 TextField("Your name in meeting notes", text: $meetingOwnerName)
                     .onChange(of: meetingOwnerName) { _, name in settings.setMeetingOwnerName(name) }
             } footer: {
-                Text("Words you change after a dictation lands are added to the Dictionary. Screen context sends a snapshot of what you're looking at, taken when dictation starts and when you switch apps, so names and paths on screen are spelled right. Fit to existing text sends the text around the cursor with the transcript, so a dictation continues or follows what is already in the field. When a call app or a meeting tab is using the microphone, the pill asks before recording; the Meeting recording shortcut starts and stops a recording at any time. Notes appear under Meetings. Read names from the screen reads the name tags in the call window on this Mac while a meeting records, to name its speakers; no image is kept.")
+                Text("Words you change after a dictation lands are added to the Dictionary. Screen context sends a snapshot of what you're looking at, taken when dictation starts and when you switch apps, so names and paths on screen are spelled right; it adds about 0.2–0.9 s to a dictation when the writing pass uses it. Fit to existing text sends the text around the cursor with the transcript, so a dictation continues or follows what is already in the field. When a call app or a meeting tab is using the microphone, the pill asks before recording; the Meeting recording shortcut starts and stops a recording at any time. Notes appear under Meetings. Read names from the screen reads the name tags in the call window on this Mac while a meeting records, to name its speakers; no image is kept.")
             }
 
             Section {

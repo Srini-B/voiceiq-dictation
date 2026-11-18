@@ -674,7 +674,7 @@ public final class DictationCoordinator: ObservableObject {
             apply(.inserted)
             discardUnlessKept()
             session = nil
-            onStageTimes?(stages)
+            reportStageTimes(stages, sessionID: sessionID)
             return
         }
 
@@ -699,6 +699,18 @@ public final class DictationCoordinator: ObservableObject {
         lastResult = outcome.cleanedTranscript
         lastCleanupSkip = outcome.cleanupSkip
         session = nil
+        reportStageTimes(stages, sessionID: sessionID)
+    }
+
+    /// One line per dictation from key-up to the result, so a slow one can be
+    /// blamed on the mic teardown, the transcript, the cleanup or the typing.
+    /// `pipelineSeconds` in meta.json starts after the teardown, so it leaves
+    /// out the first part.
+    private func reportStageTimes(_ stages: StageTimes, sessionID: UUID) {
+        func ms(_ seconds: TimeInterval?) -> String { seconds.map { "\(Int($0 * 1000))ms" } ?? "-" }
+        let total = finalizeRequestedAt.map { Date().timeIntervalSince($0) }
+        let source = stages.source == .cloudLive ? "live final" : "upload (transcribe+writing)"
+        Log.session.notice("timing \(sessionID.uuidString, privacy: .public): finalize \(ms(stages.finalize), privacy: .public), \(source, privacy: .public) \(ms(stages.transcribe), privacy: .public), cleanup \(ms(stages.cleanup), privacy: .public), insert \(ms(stages.insert), privacy: .public), key-up to done \(ms(total), privacy: .public)")
         onStageTimes?(stages)
     }
 

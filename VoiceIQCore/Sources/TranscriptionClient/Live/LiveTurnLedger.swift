@@ -29,10 +29,13 @@ struct LiveTurnLedger {
 
     /// Ignored unless the client has closed the turn: a completion for a turn
     /// still open would mark it finished before its last words arrived.
-    mutating func applyTurnComplete(closedTurns: Int) {
-        guard cursor < closedTurns else { return }
+    /// False when ignored.
+    @discardableResult
+    mutating func applyTurnComplete(closedTurns: Int) -> Bool {
+        guard cursor < closedTurns else { return false }
         finished.insert(cursor)
         cursor += 1
+        return true
     }
 
     mutating func applyCommitted(itemID: String) {

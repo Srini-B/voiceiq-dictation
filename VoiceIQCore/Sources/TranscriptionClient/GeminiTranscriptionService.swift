@@ -5,7 +5,7 @@ import Foundation
 ///
 ///   CAF → FLAC → transcription model (gemini-3.5-transcribe in smart mode
 ///   with custom_vocabulary, gpt-transcribe, or ElevenLabs scribe_v3 with
-///   keyterms and a formatting instruction)
+///   keyterms)
 ///       → [writing rules] writing model cleanup, with any screenshots
 ///       → validation gate → ReplacementEngine → inserted text.
 ///
@@ -44,6 +44,9 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
         let provider = settings.preferredProvider
         let elevenLabs = settings.transcribesWithElevenLabs
         let names = modelNames(provider, elevenLabs: elevenLabs)
+        let clock = ContinuousClock()
+        let started = clock.now
+        var encoded = Duration.zero
 
         // One request per chunk. A short dictation is one chunk, so this is the
         // old single-request path for everything under ten minutes. Leading and
@@ -64,7 +67,9 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
                 if !earlier.isEmpty { pieces.append(earlier) }
                 continue
             }
+            let encodeStart = clock.now
             let flacData = try encodeChunk(audioURL: audioURL, range: range, index: index)
+            encoded += clock.now - encodeStart
             let seconds = durationSeconds * Double(range.count) / Double(max(1, fileFrames))
             let deadline = TimeoutPolicy.overallDeadline(audioDuration: seconds)
             var raw = try await transcribeWithRetry(
@@ -96,11 +101,29 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
         }
 
         let trimmedRaw = pieces.joined(separator: " ")
-        return try await process(
-            TranscriptionResult(rawTranscript: trimmedRaw, cleanedTranscript: trimmedRaw, modelID: names.transcribe),
-            durationSeconds: durationSeconds, context: context, config: config,
-            policy: policy, provider: provider, elevenLabs: elevenLabs, writingModel: names.writing
-        )
+        let transcribed = clock.now
+        // The upload path runs transcription and the writing pass inside one
+        // coordinator stage; this line splits it, also when the writing pass
+        // fails.
+        func ms(_ duration: Duration) -> Int { Int(duration / .milliseconds(1)) }
+        func logTiming(writing: String) {
+            Log.transcription.notice("timing: encode \(ms(encoded))ms, transcribe \(ms(transcribed - started - encoded))ms (\(names.transcribe, privacy: .public)), \(writing, privacy: .public), \(trimmedRaw.split(whereSeparator: \.isWhitespace).count) words, \(String(format: "%.1f", durationSeconds), privacy: .public)s audio")
+        }
+        let result: TranscriptionResult
+        do {
+            result = try await process(
+                TranscriptionResult(rawTranscript: trimmedRaw, cleanedTranscript: trimmedRaw, modelID: names.transcribe),
+                durationSeconds: durationSeconds, context: context, config: config,
+                policy: policy, provider: provider, elevenLabs: elevenLabs, writingModel: names.writing
+            )
+        } catch {
+            logTiming(writing: "writing failed after \(ms(clock.now - transcribed))ms")
+            throw error
+        }
+        // `process` names a writing model only when one ran.
+        logTiming(writing: result.modelID == names.transcribe
+            ? "writing skipped" : "writing \(ms(clock.now - transcribed))ms")
+        return result
     }
 
     public func process(_ transcript: TranscriptionResult, durationSeconds: Double, context: DictationContext) async throws -> TranscriptionResult {
@@ -320,14 +343,12 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
         config: GeminiConfig, policy: SettingsStore.FormattingPolicy,
         vocabulary: [String], elevenLabs: Bool, deadline: TimeInterval
     ) async throws -> String {
-        let spelling = settings.spellingVariant
         func send(_ terms: [String]) async throws -> String {
             if elevenLabs {
-                // Smart transcription maps onto Scribe's no-verbatim mode plus
-                // the formatting instruction.
+                // Smart transcription maps onto Scribe's no-verbatim mode.
                 return try await client.elevenLabsTranscribe(
                     audio: flacData, keyterms: terms, languages: settings.spokenLanguages,
-                    smart: policy.mode == .smart, spelling: spelling,
+                    smart: policy.mode == .smart,
                     audioSeconds: seconds, deadline: deadline
                 )
             }
