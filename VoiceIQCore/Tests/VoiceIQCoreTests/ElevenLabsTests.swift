@@ -4,6 +4,36 @@ import XCTest
 /// ElevenLabs Scribe v3: what a call costs, the live dictation stream,
 /// how spoken languages are sent, and a used-up balance.
 final class ElevenLabsTests: XCTestCase {
+    /// Scribe v3 Live for dictation: the hotkey commits the turn, and the
+    /// committed text is the turn's final.
+    func testLiveDictationDialect() throws {
+        let dialect = ElevenLabsLiveDialect(smart: true, vocabulary: ["VoiceiQ"], languages: ["eng"])
+        let query = try XCTUnwrap(URLComponents(url: dialect.socketURL, resolvingAgainstBaseURL: false)?.queryItems)
+        XCTAssertTrue(query.contains(URLQueryItem(name: "commit_strategy", value: "manual")))
+        XCTAssertTrue(query.contains(URLQueryItem(name: "no_verbatim", value: "true")))
+        XCTAssertTrue(query.contains(URLQueryItem(name: "keyterms", value: "VoiceiQ")))
+        XCTAssertFalse(query.contains { $0.name == "diarize" })
+
+        let end = try XCTUnwrap(JSONSerialization.jsonObject(with: dialect.activityEndFrame()) as? [String: Any])
+        XCTAssertEqual(end["commit"] as? Bool, true)
+        XCTAssertEqual(end["audio_base_64"] as? String, "")
+        let audio = try XCTUnwrap(JSONSerialization.jsonObject(with: dialect.audioFrame(Data([1, 0]))) as? [String: Any])
+        XCTAssertEqual(audio["commit"] as? Bool, false)
+        XCTAssertEqual(audio["audio_base_64"] as? String, Data([1, 0]).base64EncodedString())
+
+        func events(_ json: String) -> [LiveEvent] { dialect.decode(Data(json.utf8)) }
+        XCTAssertEqual(events(#"{"message_type":"session_started","session_id":"x"}"#), [.setupComplete])
+        XCTAssertEqual(events(#"{"message_type":"partial_transcript","text":"Hey can"}"#), [.partial("Hey can")])
+        XCTAssertEqual(events(#"{"message_type":"committed_transcript","text":" Hey, can you? "}"#),
+                       [.final("Hey, can you?"), .turnComplete])
+        XCTAssertEqual(events(#"{"message_type":"committed_transcript","text":""}"#), [.turnComplete])
+        guard case .failed(let failure) = events(#"{"message_type":"auth_error","error":"bad key"}"#).first else {
+            return XCTFail("auth_error must fail the session")
+        }
+        XCTAssertEqual(failure.status, 401)
+        XCTAssertEqual(events(#"{"message_type":"something_new"}"#), [])
+    }
+
     func testPrices() {
         let batch = ElevenLabs.usage(model: "scribe_v3", seconds: 3600, keyterms: true)!
         XCTAssertEqual(batch.reportedCostUSD!, 0.20 + 0.05, accuracy: 1e-9)

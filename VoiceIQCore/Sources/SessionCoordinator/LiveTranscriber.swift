@@ -52,15 +52,27 @@ public final class LiveTranscriber: DictationStreaming {
         await session.abort()
     }
 
-    /// The provider's live socket (Gemini Live or OpenAI Realtime) while
+    /// The transcription provider's live socket (Scribe v3 Live while
+    /// ElevenLabs transcribes, otherwise Gemini Live or OpenAI Realtime) while
     /// Real-time transcription is on; nil otherwise, or when the provider has
     /// no key. Its partials are what the Mac pill and the iPhone keyboard show.
-    /// Nil while ElevenLabs transcribes: Scribe v3 hears the saved recording
-    /// after the key comes up, and the audio must not also go to the provider.
     @MainActor public static func makeFromSettings() -> (any DictationStreaming)? {
         let settings = SettingsStore()
         let vocabulary = DictionaryStore().sanitizedVocabulary()
-        guard settings.liveTranscriptionEnabled, !settings.transcribesWithElevenLabs else { return nil }
+        guard settings.liveTranscriptionEnabled else { return nil }
+        if settings.transcribesWithElevenLabs {
+            // iOS settings still show Real-time transcription off for
+            // ElevenLabs, so a stale "on" there must not start a stream.
+            #if os(iOS)
+            return nil
+            #else
+            guard let key = KeychainStore.loadKey(.elevenLabs), !key.isEmpty else { return nil }
+            let dialect = ElevenLabsLiveDialect(smart: settings.smartTranscriptionEnabled, vocabulary: vocabulary,
+                                                languages: settings.spokenLanguages)
+            return make(model: dialect.model, key: key, renewAfter: 1800, dialect: dialect,
+                        transport: { dialect.transport(apiKey: { key }) })
+            #endif
+        }
         switch settings.preferredProvider {
         case .gemini:
             // Endpoint overrides must not send their credentials to Google's socket.
