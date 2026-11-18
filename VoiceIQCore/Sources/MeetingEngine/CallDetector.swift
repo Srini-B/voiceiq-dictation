@@ -39,21 +39,29 @@ import CoreAudio
             let found = await Task.detached(priority: .utility) { Self.detectedSource() }.value
             guard let self else { return }
             self.polling = false
-            if let found {
-                let (source, confirmed) = found
-                self.hits = source == self.candidate ? self.hits + 1 : 1; self.candidate = source; self.misses = 0
-                // A confirmed call replaces one that only looked like a call (a
-                // meeting page found after the tab played and captured). A
-                // look-alike never replaces anything: its name follows the front
-                // tab, while the audio it watches is the whole browser's.
-                if self.hits >= 2, source != self.active, self.active == nil || (confirmed && !self.activeConfirmed) {
-                    self.active = source; self.activeConfirmed = confirmed; self.onChange?(source)
-                }
-            } else {
-                self.misses += 1; self.hits = 0; self.candidate = nil
-                if self.active != nil, self.misses >= 3 { self.active = nil; self.activeConfirmed = false; self.onChange?(nil) }
+            let source = found?.0, confirmed = found?.confirmed ?? false
+            self.hits = source != nil && source == self.candidate ? self.hits + 1 : (source == nil ? 0 : 1)
+            self.candidate = source
+            // Misses count polls without the active call, even when another
+            // source shows, so a call that ended gives way to the next one. A
+            // look-alike stays the same call while its browser plays and
+            // captures: its name follows the front tab, the audio is the whole
+            // browser's.
+            if let active = self.active {
+                let continues = source == active || (!confirmed && !self.activeConfirmed && Self.app(of: source) == Self.app(of: active))
+                self.misses = continues ? 0 : self.misses + 1
+                if self.misses >= 3 { self.active = nil; self.activeConfirmed = false; self.onChange?(nil) }
+            }
+            // A confirmed call (known app, call daemon, meeting page) also
+            // replaces a look-alike that is still there.
+            if let source, self.hits >= 2, source != self.active, self.active == nil || (confirmed && !self.activeConfirmed) {
+                self.active = source; self.activeConfirmed = confirmed; self.misses = 0; self.onChange?(source)
             }
         }
+    }
+
+    private static func app(of source: CallSource?) -> String? {
+        switch source { case let .app(id, _), let .browser(id, _): return id; case nil: return nil }
     }
 
     /// Processes with running audio. Browsers capture from helper processes
@@ -115,7 +123,9 @@ import CoreAudio
         guard #available(macOS 14.2, *), let list = objects(system, kAudioHardwarePropertyProcessObjectList) else { return nil }
         let bundleID: String
         switch source { case let .app(id, _), let .browser(id, _): bundleID = id }
-        let appPIDs = Set(NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).map(\.processIdentifier))
+        let apps = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID)
+        let appPIDs = Set(apps.map(\.processIdentifier))
+        let appPaths = Set(apps.compactMap { $0.bundleURL?.standardizedFileURL.path })
         let viaDaemons = CallApps.daemonCallApps.contains(bundleID)
         var matched: [AudioObjectID] = [], input: AudioDeviceID?
         for object in list {
@@ -124,6 +134,8 @@ import CoreAudio
             let ours = appPIDs.contains(pid) || owner.map(appPIDs.contains) == true
                 || string(object, kAudioProcessPropertyBundleID).map { $0 == bundleID || $0.hasPrefix(bundleID + ".helper") } == true
                 || (viaDaemons && callDaemon(pid))
+                // A helper inside the app's bundle, as detection attributes it.
+                || executablePath(pid).flatMap(containingBundle).map(appPaths.contains) == true
             guard ours else { continue }
             matched.append(object)
             if input == nil, flag(object, kAudioProcessPropertyIsRunningInput),
@@ -153,9 +165,13 @@ import CoreAudio
     }
 
     private nonisolated static func callDaemon(_ pid: pid_t) -> Bool {
+        executablePath(pid).map { CallApps.callDaemons.contains(($0 as NSString).lastPathComponent) } ?? false
+    }
+
+    private nonisolated static func executablePath(_ pid: pid_t) -> String? {
         var buffer = [CChar](repeating: 0, count: Int(MAXPATHLEN))
-        guard proc_pidpath(pid, &buffer, UInt32(buffer.count)) > 0 else { return false }
-        return CallApps.callDaemons.contains((String(cString: buffer) as NSString).lastPathComponent)
+        guard proc_pidpath(pid, &buffer, UInt32(buffer.count)) > 0 else { return nil }
+        return (String(cString: buffer) as NSString).standardizingPath
     }
 
     private nonisolated static func address(_ selector: AudioObjectPropertySelector) -> AudioObjectPropertyAddress {

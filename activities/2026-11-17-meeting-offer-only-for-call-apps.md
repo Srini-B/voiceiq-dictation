@@ -48,7 +48,13 @@ exclusion list can never be complete.
   (`CallDetector.poll`, `MeetingEngine.detected`). Another look-alike tab
   never replaces one: the name follows the front tab while the audio is the
   whole browser's, so switching tabs mid-call is not a new call (from
-  review). A recording keeps its call.
+  review). The offer is dropped after three polls without its call even
+  when another source shows, so a finished call gives way to the next one.
+  A recording keeps its call.
+- `CallDetector.processes(for:)`, which picks the processes a recording
+  taps, also takes a helper whose executable sits inside the app's bundle,
+  the same rule detection uses, so a helper is recorded even when the
+  responsibility lookup fails.
 
 ## More call apps, sites and browsers
 

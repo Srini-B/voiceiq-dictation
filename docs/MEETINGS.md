@@ -106,7 +106,9 @@ When a known app, a call daemon, or a meeting page is seen on two polls in a
 row while the offer is for a tab that only looked like a call (rule 4), it
 replaces the offer. A rule 4 call is never replaced by another rule 4 tab:
 its name comes from the front tab, but the audio is the whole browser's, so
-switching tabs during the call is not a new call. A recording in progress
+switching tabs during the call is not a new call. The offer is dropped
+after three polls without its call, even when another source shows on them,
+so a call that ended gives way to the next one. A recording in progress
 keeps its call.
 
 VoiceiQ's own processes never count.
@@ -130,7 +132,7 @@ call, both come from the call alone. When the recording starts,
 
 - `objects`: the Core Audio process objects of the call app, of every helper
   it is responsible for (Chrome's audio service, Safari's WebKit GPU
-  process), and, for FaceTime and Phone (`CallApps.daemonCallApps`), of the
+  process) or whose executable sits inside the app's bundle, and, for FaceTime and Phone (`CallApps.daemonCallApps`), of the
   call daemons that carry the audio.
 - `inputDevice`: the input device that the first of those processes with
   running input captures.

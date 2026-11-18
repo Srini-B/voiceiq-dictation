@@ -72,7 +72,8 @@ enum CallApps {
     /// What the offer calls a meeting page: the host of the address that
     /// matched, else the name of a matched title, else the pattern itself.
     static func meetingName(match: String, in strings: [String]) -> String {
-        let address = strings.first { $0.localizedCaseInsensitiveContains(match) }.flatMap { URL(string: $0)?.host() }
+        // Titles come before addresses, and a title that names the site has no host.
+        let address = strings.lazy.filter { $0.localizedCaseInsensitiveContains(match) }.compactMap { URL(string: $0)?.host() }.first
         return address?.replacingOccurrences(of: "www.", with: "") ?? meetingTitles[match]
             ?? match.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
     }

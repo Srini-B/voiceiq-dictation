@@ -9,6 +9,9 @@ final class CallAppsTests: XCTestCase {
         XCTAssertEqual(CallApps.meetingName(match: "meet.google.com/", in: meet), "meet.google.com")
         XCTAssertEqual(CallApps.meetingName(match: "webex.com", in: ["https://www.webex.com/meet/pr123"]), "webex.com")
         XCTAssertEqual(CallApps.meetingName(match: "vc.larksuite.com", in: ["https://vc.larksuite.com/j/123456789"]), "vc.larksuite.com")
+        // Window titles come first; one that names the site must not hide the address's host.
+        XCTAssertEqual(CallApps.meetingName(match: "webex.com", in: ["Weekly sync - tenant.webex.com", "https://tenant.webex.com/meet/alice"]),
+                       "tenant.webex.com")
     }
 
     /// A page found only by its window title gets the meeting's name.
