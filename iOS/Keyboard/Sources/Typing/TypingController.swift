@@ -130,6 +130,8 @@ final class TypingController: ObservableObject, KeyboardKeysDelegate {
 
     func releaseModels() {
         modelsReleased = true
+        nextWords = nil
+        requestedContext = nil
         swipe.unload()
     }
 
