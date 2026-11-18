@@ -117,7 +117,6 @@ elevenlabs.io/pricing/api, copied 2026-11-12 and the same on every plan:
 |---|---|
 | Base | $0.20 / hour |
 | Dictionary terms (`keyterms`) | +$0.05 / hour |
-| Formatting instruction (`transcript_edit`) | +$0.07 / hour, at least 10 s per request |
 | Hiding card and ID numbers (`entity_detection`, meetings, opt-in) | +$0.06 / hour (30%, from the help center; not in the table) |
 
 | Scribe v3 Live (`scribe_v3_live`, the live meeting transcript) | Price |

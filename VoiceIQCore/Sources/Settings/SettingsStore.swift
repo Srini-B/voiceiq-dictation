@@ -188,8 +188,7 @@ public struct SettingsStore: Sendable {
     /// transcripts made by Scribe v3 (`ElevenLabs.redactedEntities`), so the
     /// notes model and the saved transcript never hold them. Off by default:
     /// ElevenLabs bills it at 30% more, and it changes what the transcript
-    /// says. Dictation never redacts: `transcript_edit` cannot be combined
-    /// with it, and the user is the one speaking.
+    /// says. Dictation never redacts: the user is the one speaking.
     public var redactsMeetingSecrets: Bool {
         Self.defaults.bool(forKey: Self.redactionKey)
     }

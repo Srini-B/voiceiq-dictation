@@ -97,8 +97,6 @@ public enum PriceBook {
         /// `keyterms` and the keyterm library on Scribe v3 Live, billed once
         /// for both (the realtime guide).
         case liveKeyterms
-        /// `transcript_edit`, the formatting instruction.
-        case transcriptEdit
         /// `entity_detection`, which redaction needs. Not in the pricing
         /// page's table; its help center says 30% on top of the base price.
         case entityDetection
@@ -109,7 +107,6 @@ public enum PriceBook {
             switch self {
             case .keyterms: return 0.05
             case .liveKeyterms: return 0.08
-            case .transcriptEdit: return 0.07
             case .entityDetection: return 0.06
             case .liveEntityDetection: return 0.066
             }

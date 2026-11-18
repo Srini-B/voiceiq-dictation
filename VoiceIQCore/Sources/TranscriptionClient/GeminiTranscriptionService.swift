@@ -5,7 +5,7 @@ import Foundation
 ///
 ///   CAF → FLAC → transcription model (gemini-3.5-transcribe in smart mode
 ///   with custom_vocabulary, gpt-transcribe, or ElevenLabs scribe_v3 with
-///   keyterms and a formatting instruction)
+///   keyterms)
 ///       → [writing rules] writing model cleanup, with any screenshots
 ///       → validation gate → ReplacementEngine → inserted text.
 ///
@@ -330,14 +330,12 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
         config: GeminiConfig, policy: SettingsStore.FormattingPolicy,
         vocabulary: [String], elevenLabs: Bool, deadline: TimeInterval
     ) async throws -> String {
-        let spelling = settings.spellingVariant
         func send(_ terms: [String]) async throws -> String {
             if elevenLabs {
-                // Smart transcription maps onto Scribe's no-verbatim mode plus
-                // the formatting instruction.
+                // Smart transcription maps onto Scribe's no-verbatim mode.
                 return try await client.elevenLabsTranscribe(
                     audio: flacData, keyterms: terms, languages: settings.spokenLanguages,
-                    smart: policy.mode == .smart, spelling: spelling,
+                    smart: policy.mode == .smart,
                     audioSeconds: seconds, deadline: deadline
                 )
             }

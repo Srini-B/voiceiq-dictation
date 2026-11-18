@@ -26,8 +26,7 @@ extension GeminiTranscriptionService {
 
     /// Whether the transcript can still carry "uh" and "um". Gemini's
     /// verbatim mode writes every one it hears; OpenAI's transcription model
-    /// has no smart mode; ElevenLabs drops them in smart mode (no-verbatim
-    /// and the formatting instruction).
+    /// has no smart mode; ElevenLabs drops them in smart mode (no-verbatim).
     func transcriptKeepsFillers(provider: ModelProvider, elevenLabs: Bool, policy: SettingsStore.FormattingPolicy) -> Bool {
         policy.mode != .smart || (!elevenLabs && provider != .gemini)
     }
