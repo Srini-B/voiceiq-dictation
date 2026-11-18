@@ -484,6 +484,11 @@ model license and GPL-3.0 section 5(d) require.
   `libfutoswipe_registry.a` (kernels register themselves), builds C++17
   without RTTI, and excludes x86_64 Simulators.
 
+**Memory warnings.** On `didReceiveMemoryWarning` the keyboard frees the
+slide models (`SwipeRecognizer.unload`), about 12 MB in the Simulator; they
+load again when the keyboard next appears. Until then slides insert nothing
+and the bar falls back to word-pair predictions.
+
 **Instances and touches.** iOS makes a new `KeyboardViewController` each
 time the keyboard appears. Nothing in the view tree may hold the controller
 strongly, and its `deinit` detaches the SwiftUI view, which iOS otherwise keeps

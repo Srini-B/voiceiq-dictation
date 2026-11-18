@@ -74,6 +74,13 @@ final class KeyboardViewController: UIInputViewController {
         return KeyboardView.miniBarHeight(compact: compact) + 2 * row + 11 + 4
     }
 
+    /// iOS ends a keyboard over its memory limit and shows its own; the slide
+    /// models are the largest thing the keyboard can give back.
+    override func didReceiveMemoryWarning() {
+        super.didReceiveMemoryWarning()
+        typing.swipe.unload()
+    }
+
     override func traitCollectionDidChange(_ previous: UITraitCollection?) {
         super.traitCollectionDidChange(previous)
         updateHeight()
