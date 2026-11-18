@@ -17,6 +17,14 @@ public struct LiveFailure: Error, Equatable, Sendable, CustomStringConvertible {
 
     public var description: String { "\(status.map(String.init) ?? "") \(code): \(message)" }
 
+    /// For public log lines: the server's error text is private.
+    public var summary: String { "\(status.map(String.init) ?? "-") \(code)" }
+
+    /// `error` for a public log line, with a server failure's text left out.
+    public static func loggable(_ error: Error) -> String {
+        (error as? LiveFailure).map { "failure \($0.summary)" } ?? String(describing: error)
+    }
+
     enum Recovery: Equatable {
         case retry, dailyQuota, configuration, billing
     }

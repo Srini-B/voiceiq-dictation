@@ -23,7 +23,7 @@ public final class LiveTranscriber: DictationStreaming {
             do {
                 try await session.start()
             } catch {
-                Log.transcription.notice("live setup failed; saved audio will be uploaded: \(String(describing: error), privacy: .public)")
+                Log.transcription.notice("live setup failed; saved audio will be uploaded: \(LiveFailure.loggable(error), privacy: .public)")
             }
         }
     }
