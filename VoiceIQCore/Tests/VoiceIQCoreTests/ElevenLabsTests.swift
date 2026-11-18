@@ -13,6 +13,9 @@ final class ElevenLabsTests: XCTestCase {
         XCTAssertTrue(query.contains(URLQueryItem(name: "no_verbatim", value: "true")))
         XCTAssertTrue(query.contains(URLQueryItem(name: "keyterms", value: "VoiceiQ")))
         XCTAssertFalse(query.contains { $0.name == "diarize" })
+        // Scribe commits on its own at about 35 s of audio in a turn; the
+        // client must always commit first.
+        XCTAssertLessThan(dialect.activityRoll.hardLimit, 35)
 
         let end = try XCTUnwrap(JSONSerialization.jsonObject(with: dialect.activityEndFrame()) as? [String: Any])
         XCTAssertEqual(end["commit"] as? Bool, true)

@@ -58,6 +58,14 @@ public struct ElevenLabsLiveDialect: LiveDialect {
         }
     }
 
+    /// MEASURED 2026-11-18: even with `commit_strategy=manual`, Scribe
+    /// commits by itself once a turn holds about 35 s of audio. That commit
+    /// would complete the turn the key-up closes before its last words
+    /// arrive, so the client commits first: at a pause after 25 s, and at
+    /// 30 s regardless. Streaming with a commit every 30 s drew no extra
+    /// commit from the server.
+    public var activityRoll: (roll: Int, hardLimit: Int) { (25, 30) }
+
     public func setupFrame() -> Data? { nil }
     public func activityStartFrame() -> Data? { nil }
     public func audioFrame(_ pcm: Data) -> Data { Self.chunk(pcm, commit: false) }
