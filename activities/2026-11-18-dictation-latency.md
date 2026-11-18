@@ -17,7 +17,7 @@ All of them used ElevenLabs Scribe v3 in smart mode, with OpenAI gpt-6.1-terra a
 | Writing request (connect 42 ms, 186 KB, ~9,900 tokens in, ~47 out) | 3.12 / 4.22 s | n/a |
 | Insert (AX insert, then ⌘V fallback in 30 of 37) | 0.13 s | 0.12 s |
 
-There were no retries or fallbacks. Every request opened a new connection.
+No model request was retried or switched to a fallback provider; the ⌘V fallback above is the insertion step. Every request opened a new connection.
 
 ## Measured from an orb in Oregon (2–6 runs each, same request shapes as the app)
 
@@ -26,7 +26,7 @@ There were no retries or fallbacks. Every request opened a new connection.
 - gpt-6.1-terra with the full 36.6k-character prompt: 1.7–2.8 s (median). Adding a screenshot adds ~0.2–0.8 s. A 4.5k-character prompt was not faster, because the long prompt is cached.
 - gpt-6-luna takes 0.8–1.4 s. On the 22 s email it dropped the numbered list and email layout that Terra produced.
 
-- ElevenLabs Scribe v3 Live with `commit_strategy=manual` returned `committed_transcript` 64–141 ms after the commit, on 3–22 s clips streamed in real time. An empty audio chunk with `commit: true` commits what was sent.
+- ElevenLabs Scribe v3 Live with `commit_strategy=manual` returned `committed_transcript` 64–141 ms after the commit, on 3–22 s clips streamed in real time. An empty audio chunk with `commit: true` commits what was sent. Despite `manual`, the server committed by itself at 35.2 s of uncommitted audio (67 s stream); with a client commit every 30 s, it sent exactly one `committed_transcript` per client commit (3 of 3). So the dictation stream rolls its turn after 25 s at a pause and at 30 s at the latest.
 
 ## Screen context: benefit vs cost
 

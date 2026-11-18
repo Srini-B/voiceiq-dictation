@@ -44,8 +44,9 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
         let provider = settings.preferredProvider
         let elevenLabs = settings.transcribesWithElevenLabs
         let names = modelNames(provider, elevenLabs: elevenLabs)
-        let started = Date()
-        var encodeSeconds = 0.0
+        let clock = ContinuousClock()
+        let started = clock.now
+        var encoded = Duration.zero
 
         // One request per chunk. A short dictation is one chunk, so this is the
         // old single-request path for everything under ten minutes. Leading and
@@ -66,9 +67,9 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
                 if !earlier.isEmpty { pieces.append(earlier) }
                 continue
             }
-            let encodeStart = Date()
+            let encodeStart = clock.now
             let flacData = try encodeChunk(audioURL: audioURL, range: range, index: index)
-            encodeSeconds += Date().timeIntervalSince(encodeStart)
+            encoded += clock.now - encodeStart
             let seconds = durationSeconds * Double(range.count) / Double(max(1, fileFrames))
             let deadline = TimeoutPolicy.overallDeadline(audioDuration: seconds)
             var raw = try await transcribeWithRetry(
@@ -100,16 +101,28 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
         }
 
         let trimmedRaw = pieces.joined(separator: " ")
-        let transcribed = Date()
-        let result = try await process(
-            TranscriptionResult(rawTranscript: trimmedRaw, cleanedTranscript: trimmedRaw, modelID: names.transcribe),
-            durationSeconds: durationSeconds, context: context, config: config,
-            policy: policy, provider: provider, elevenLabs: elevenLabs, writingModel: names.writing
-        )
+        let transcribed = clock.now
         // The upload path runs transcription and the writing pass inside one
-        // coordinator stage; this line splits it.
-        func ms(_ seconds: TimeInterval) -> Int { Int(seconds * 1000) }
-        Log.transcription.notice("timing: encode \(ms(encodeSeconds))ms, transcribe \(ms(transcribed.timeIntervalSince(started) - encodeSeconds))ms (\(names.transcribe, privacy: .public)), writing \(ms(Date().timeIntervalSince(transcribed)))ms, \(trimmedRaw.split(whereSeparator: \.isWhitespace).count) words, \(String(format: "%.1f", durationSeconds), privacy: .public)s audio")
+        // coordinator stage; this line splits it, also when the writing pass
+        // fails.
+        func ms(_ duration: Duration) -> Int { Int(duration / .milliseconds(1)) }
+        func logTiming(writing: String) {
+            Log.transcription.notice("timing: encode \(ms(encoded))ms, transcribe \(ms(transcribed - started - encoded))ms (\(names.transcribe, privacy: .public)), \(writing, privacy: .public), \(trimmedRaw.split(whereSeparator: \.isWhitespace).count) words, \(String(format: "%.1f", durationSeconds), privacy: .public)s audio")
+        }
+        let result: TranscriptionResult
+        do {
+            result = try await process(
+                TranscriptionResult(rawTranscript: trimmedRaw, cleanedTranscript: trimmedRaw, modelID: names.transcribe),
+                durationSeconds: durationSeconds, context: context, config: config,
+                policy: policy, provider: provider, elevenLabs: elevenLabs, writingModel: names.writing
+            )
+        } catch {
+            logTiming(writing: "writing failed after \(ms(clock.now - transcribed))ms")
+            throw error
+        }
+        // `process` names a writing model only when one ran.
+        logTiming(writing: result.modelID == names.transcribe
+            ? "writing skipped" : "writing \(ms(clock.now - transcribed))ms")
         return result
     }
 
