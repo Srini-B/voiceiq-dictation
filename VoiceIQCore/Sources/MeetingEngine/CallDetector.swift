@@ -2,21 +2,23 @@
 import AppKit
 import ApplicationServices
 import CoreAudio
-import os
 
 /// Polls for an active call. A call is "active" when:
 /// - a known calling app, or a browser showing a meeting page, is itself
 ///   capturing the microphone;
 /// - the system call daemons capture it (FaceTime, iPhone calls on the Mac);
-/// - any other app, or browser page, both captures the microphone and plays
-///   sound: two-way audio is what a call looks like, whatever app makes it.
-/// Mic use is read per process (macOS 14.2+ Core Audio process objects), so
-/// VoiceiQ's own recording never counts as a call and a call that ends while
-/// the app stays open is still noticed. Two consecutive hits start, three misses stop.
+/// - a browser page both captures the microphone and plays sound: two-way
+///   audio in a tab is what a call on a site not listed looks like.
+/// Any other app on the microphone is not a call, however it uses it:
+/// recorders, dictation, remote desktop clients, and virtual machines play
+/// and capture too. Mic use is read per process (macOS 14.2+ Core Audio
+/// process objects), so VoiceiQ's own recording never counts as a call and a
+/// call that ends while the app stays open is still noticed. Two consecutive
+/// hits on the same call start or replace the offer, three misses stop it.
 @MainActor public final class CallDetector {
     public var onChange: ((CallSource?) -> Void)?
     private var timer: Timer?, hits = 0, misses = 0
-    private var active: CallSource?
+    private var active: CallSource?, candidate: CallSource?
 
     public init() {}
     public func start() { stop(); poll(); timer = .scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in Task { @MainActor in self?.poll() } } }
@@ -34,11 +36,12 @@ import os
             let source = await Task.detached(priority: .utility) { Self.detectedSource() }.value
             guard let self else { return }
             self.polling = false
-            if source != nil {
-                self.hits += 1; self.misses = 0
-                if self.active == nil, self.hits >= 2 { self.active = source; self.onChange?(source) }
+            if let source {
+                // A meeting page that turns up after a tab already looked like a call replaces it.
+                self.hits = source == self.candidate ? self.hits + 1 : 1; self.candidate = source; self.misses = 0
+                if self.hits >= 2, source != self.active { self.active = source; self.onChange?(source) }
             } else {
-                self.misses += 1; self.hits = 0
+                self.misses += 1; self.hits = 0; self.candidate = nil
                 if self.active != nil, self.misses >= 3 { self.active = nil; self.onChange?(nil) }
             }
         }
@@ -69,7 +72,6 @@ import os
                 if let owner = Self.responsiblePID?(pid), owner > 0 { pids.append(owner) }
             }
             let id = string(object, kAudioProcessPropertyBundleID)
-            if routesOwnAudio(object, app: id ?? pids.last.flatMap { NSRunningApplication(processIdentifier: $0)?.bundleIdentifier }) { continue }
             if input, let pid = pids.first {
                 result.directInputPIDs.insert(pid)
                 if callDaemon(pid) { result.inputDaemon = true }
@@ -80,45 +82,6 @@ import os
         return result
     }
 
-    /// An app whose audio goes only through devices its own developer's driver
-    /// provides is routing sound, not on a call. Jump Desktop Connect, during a
-    /// remote session, records its "Jump Desktop Audio" device to stream the
-    /// Mac's sound and plays the client's mic into "Jump Desktop Microphone".
-    @available(macOS 14.2, *)
-    private nonisolated static func routesOwnAudio(_ process: AudioObjectID, app bundleID: String?) -> Bool {
-        guard let vendor = bundleID.flatMap(CallApps.vendor) else { return false }
-        guard let input = objects(process, kAudioProcessPropertyDevices, scope: kAudioObjectPropertyScopeInput),
-              let output = objects(process, kAudioProcessPropertyDevices, scope: kAudioObjectPropertyScopeOutput),
-              let drivers = deviceDrivers() else { return false }
-        let devices = Set(input + output)
-        return !devices.isEmpty && devices.allSatisfy { drivers[$0].flatMap(CallApps.vendor) == vendor }
-    }
-
-    /// The driver bundle ID of each audio device. Walking the plug-ins takes
-    /// about 0.6 s (AirPlay registers about a thousand), so a map that names
-    /// every device is kept until the device list changes. A plug-in whose
-    /// read fails is skipped (one on the development Mac always fails); a map
-    /// that misses a device is rebuilt after a minute. Nil when the device
-    /// or plug-in list cannot be read.
-    private nonisolated static func deviceDrivers() -> [AudioObjectID: String]? {
-        guard let devices = objects(system, kAudioHardwarePropertyDevices) else { return nil }
-        let now = Date()
-        if let map = driverCache.withLock({ $0.devices == devices && now < $0.until ? $0.map : nil }) { return map }
-        guard let plugIns = objects(system, kAudioHardwarePropertyPlugInList) else { return nil }
-        var map: [AudioObjectID: String] = [:]
-        for plugIn in plugIns {
-            guard let owned = objects(plugIn, kAudioPlugInPropertyDeviceList), !owned.isEmpty,
-                  let id = string(plugIn, kAudioPlugInPropertyBundleID) else { continue }
-            for device in owned { map[device] = id }
-        }
-        let built = map
-        let until = devices.allSatisfy { built[$0] != nil } ? Date.distantFuture : now.addingTimeInterval(60)
-        driverCache.withLock { $0 = (devices, built, until) }
-        return built
-    }
-
-    private nonisolated static let driverCache = OSAllocatedUnfairLock(
-        initialState: (devices: [AudioObjectID](), map: [AudioObjectID: String](), until: Date.distantPast))
     private nonisolated static let system = AudioObjectID(kAudioObjectSystemObject)
 
     /// Nil when Core Audio fails the read; an empty list is a successful read.
@@ -207,36 +170,51 @@ import os
         let own = Bundle.main.bundleIdentifier ?? "io.blue.voiceiq"
         // An app on the mic itself comes before one only responsible for it: a
         // call app launched from a terminal has the terminal as its owner.
-        let apps = NSWorkspace.shared.runningApplications.sorted {
+        let running = NSWorkspace.shared.runningApplications
+        let apps = running.sorted {
             (audio?.directInputPIDs.contains($0.processIdentifier) ?? false) && !(audio?.directInputPIDs.contains($1.processIdentifier) ?? false)
         }
-        var lookalike: CallSource?
-        for app in apps {
+        var lookalike: CallSource?, seen = Set<pid_t>()
+        for process in apps {
             // WebKit's XPC services are listed as apps ("Safari Graphics and
             // Media") and capture the mic themselves, so they would sort first
             // and hide the browser. The app responsible for them is the call;
             // without that lookup the helper is all there is to find.
-            guard let id = app.bundleIdentifier, !id.hasPrefix(own),
-                  !(id.hasPrefix("com.apple.WebKit.") && Self.responsiblePID != nil) else { continue }
-            let pid = app.processIdentifier
-            let capturing = audio.map { $0.inputPIDs.contains(pid) || $0.inputBundleIDs.contains { $0.hasPrefix(id) } } ?? true
+            guard let processID = process.bundleIdentifier,
+                  !(processID.hasPrefix("com.apple.WebKit.") && Self.responsiblePID != nil),
+                  let app = containingApp(of: process, in: running), let id = app.bundleIdentifier, !id.hasPrefix(own),
+                  seen.insert(app.processIdentifier).inserted else { continue }
+            let pids = [process.processIdentifier, app.processIdentifier]
+            let capturing = audio.map { a in pids.contains(where: a.inputPIDs.contains) || a.inputBundleIDs.contains { $0.hasPrefix(id) } } ?? true
             guard capturing else { continue }
-            let playing = audio.map { $0.outputPIDs.contains(pid) || $0.outputBundleIDs.contains { $0.hasPrefix(id) } } ?? false
+            let playing = audio.map { a in pids.contains(where: a.outputPIDs.contains) || a.outputBundleIDs.contains { $0.hasPrefix(id) } } ?? false
             if let name = CallApps.known[id] {
                 if audio == nil || playing || !CallApps.voiceNoteApps.contains(id) { return .app(bundleID: id, name: name) }
                 continue
             }
-            let isBrowser = CallApps.browsers.contains(id) || app.localizedName?.localizedCaseInsensitiveContains("Chrome") == true
-                || app.localizedName?.localizedCaseInsensitiveContains("Chromium") == true
-            if isBrowser {
-                let page = BrowserPages.read(pid: pid)
-                if let match = page.meeting { return .browser(bundleID: id, host: match) }
-                if playing, !page.excluded, lookalike == nil { lookalike = .browser(bundleID: id, host: page.host ?? app.localizedName ?? id) }
-            } else if playing, !CallApps.notCalls.contains(id), lookalike == nil {
-                lookalike = .app(bundleID: id, name: app.localizedName ?? id)
-            }
+            let name = app.localizedName ?? id
+            guard CallApps.browsers.contains(id) || name.localizedCaseInsensitiveContains("Chrome")
+                    || name.localizedCaseInsensitiveContains("Chromium") else { continue }
+            let page = BrowserPages.read(pid: app.processIdentifier)
+            if let match = page.meeting { return .browser(bundleID: id, host: match) }
+            if playing, !page.excluded, lookalike == nil { lookalike = .browser(bundleID: id, host: page.host ?? name) }
         }
         return lookalike
+    }
+
+    /// The app a process belongs to. A helper inside another app's bundle
+    /// (Chrome's "Google Chrome Helper", Granola's "Granola Helper
+    /// (MacOSMicAppsWithDevices)") is that app: the app is what the lists
+    /// match and what the offer names. Nil for a helper whose app is not running.
+    private nonisolated static func containingApp(of process: NSRunningApplication, in running: [NSRunningApplication]) -> NSRunningApplication? {
+        guard let path = process.bundleURL?.standardizedFileURL.path, let app = containingBundle(path) else { return process }
+        return running.first { $0.bundleURL?.standardizedFileURL.path == app }
+    }
+
+    /// The outermost app bundle that `path` sits inside; nil for a top-level app.
+    nonisolated static func containingBundle(_ path: String) -> String? {
+        guard let end = path.range(of: ".app/")?.lowerBound else { return nil }
+        return String(path[..<end]) + ".app"
     }
 
     private nonisolated static func microphoneInUse() -> Bool {
@@ -289,7 +267,7 @@ enum BrowserPages {
                 page.excluded = CallApps.notCallPages.contains { host.hasSuffix($0) }
             }
             if let match = CallApps.meetingPages.first(where: { needle in strings.contains { $0.localizedCaseInsensitiveContains(needle) } }) {
-                page.meeting = url.flatMap { $0.absoluteString.localizedCaseInsensitiveContains(match) ? $0.host() : nil } ?? match
+                page.meeting = CallApps.meetingName(match: match, in: strings)
                 return page
             }
         }

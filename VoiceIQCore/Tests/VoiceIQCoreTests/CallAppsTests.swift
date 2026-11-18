@@ -1,0 +1,35 @@
+#if os(macOS)
+import XCTest
+@testable import VoiceIQCore
+
+final class CallAppsTests: XCTestCase {
+    /// The offer shows the site, not the pattern that matched it.
+    func testMeetingPageIsNamedByItsHost() {
+        let meet = ["Meet - abc-defg-hij", "https://meet.google.com/abc-defg-hij"]
+        XCTAssertEqual(CallApps.meetingName(match: "meet.google.com/", in: meet), "meet.google.com")
+        XCTAssertEqual(CallApps.meetingName(match: "webex.com", in: ["https://www.webex.com/meet/pr123"]), "webex.com")
+        XCTAssertEqual(CallApps.meetingName(match: "vc.larksuite.com", in: ["https://vc.larksuite.com/j/123456789"]), "vc.larksuite.com")
+    }
+
+    /// A page found only by its window title gets the meeting's name.
+    func testTitleOnlyMatchIsNamedByTheService() {
+        XCTAssertEqual(CallApps.meetingName(match: "Meet - ", in: ["Meet - abc-defg-hij"]), "Google Meet")
+        XCTAssertEqual(CallApps.meetingName(match: "| Microsoft Teams", in: ["Weekly sync | Microsoft Teams"]), "Microsoft Teams")
+    }
+
+    /// Granola's helper stands for Granola, so the offer never names the helper.
+    func testHelperBelongsToTheOutermostApp() {
+        XCTAssertEqual(CallDetector.containingBundle("/Applications/Granola.app/Contents/Frameworks/Granola Helper (MacOSMicAppsWithDevices).app"),
+                       "/Applications/Granola.app")
+        XCTAssertEqual(CallDetector.containingBundle("/Applications/Zoom.app/Contents/Frameworks/cpthost.app/Contents/Helpers/x.app"),
+                       "/Applications/Zoom.app")
+        XCTAssertNil(CallDetector.containingBundle("/Applications/Granola.app"))
+    }
+
+    /// A voice-note entry or title name for something the lists do not match would never apply.
+    func testListsAgree() {
+        XCTAssertTrue(CallApps.voiceNoteApps.isSubset(of: Set(CallApps.known.keys)))
+        XCTAssertTrue(Set(CallApps.meetingTitles.keys).isSubset(of: Set(CallApps.meetingPages)))
+    }
+}
+#endif

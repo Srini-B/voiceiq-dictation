@@ -30,7 +30,7 @@ public enum BrowserSpeakers {
             .filter { tab in tab.contains { !$0.active.isEmpty } }
         var host: String?
         if case let .browser(_, page) = meta.source { host = page }
-        // `host` can be a title match ("Meet - ") rather than a host, so no match still falls back.
+        // `host` can name a title match ("Google Meet") rather than a host, so no match still falls back.
         let onPage = tabs.filter { tab in host.map { tab[0].page.hasPrefix($0) } ?? false }
         guard let tab = (onPage.isEmpty ? Array(tabs) : onPage).max(by: { busy($0) < busy($1) }) else { return }
         let saved = Saved(start: meta.startedAt.timeIntervalSince1970 * 1000, events: tab)

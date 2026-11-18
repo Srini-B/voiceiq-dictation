@@ -401,13 +401,15 @@ import Foundation
 
     /// Detection only ever offers. A recording in progress is never stopped by
     /// the detector losing sight of the call (muting in Meet drops the mic
-    /// capture it watches), and nothing starts until someone accepts.
+    /// capture it watches), and nothing starts until someone accepts. A
+    /// different call seen while one is offered replaces the offer.
     private func detected(_ source: CallSource?) {
         detectedSource = source
         if let source {
-            guard case .idle = phase else { return }
-            phase = .callDetected(source)
-            onCallDetected?(source)
+            switch phase {
+            case .idle, .callDetected: phase = .callDetected(source); onCallDetected?(source)
+            case .recording, .failed: return
+            }
         } else if case .callDetected = phase {
             phase = .idle
             onCallEnded?()

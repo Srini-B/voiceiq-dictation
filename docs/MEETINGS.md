@@ -54,13 +54,16 @@ leaves the redacting one running.
 
 ## Call detection
 
-`CallDetector` polls every 5 s (two hits to offer, three misses to drop the
-offer) and reads which processes have running input and output from Core
-Audio's process objects (`kAudioHardwarePropertyProcessObjectList`, macOS
-14.2+). A helper process is mapped to its app with
-`responsibility_get_pid_responsible_for_pid`. It offers to record when one
-of these rules matches. Rules 1 to 3 win over rule 4, whatever order the apps
-come in:
+`CallDetector` polls every 5 s (two hits on the same call to offer, three
+misses to drop the offer) and reads which processes have running input and
+output from Core Audio's process objects
+(`kAudioHardwarePropertyProcessObjectList`, macOS 14.2+). A helper process is
+mapped to its app with `responsibility_get_pid_responsible_for_pid`, and a
+running app whose bundle sits inside another app's bundle (Chrome's "Google
+Chrome Helper", Granola's "Granola Helper (MacOSMicAppsWithDevices)") stands
+for that app: the app is what the lists match and what the offer names
+(`CallDetector.containingApp`). It offers to record when one of these rules
+matches. Rules 1 to 3 win over rule 4, whatever order the apps come in:
 
 1. a system call daemon (`avconferenced`, `callservicesd`) captures the mic:
    FaceTime and iPhone calls relayed to the Mac, which have no app process on
@@ -68,37 +71,42 @@ come in:
 2. an app in `CallApps.known` (Zoom, Teams, FaceTime, Phone, WhatsApp, Slack,
    Discord, Webex, Skype, Messages, Telegram, Signal, Viber, LINE, WeChat,
    Messenger, Chime, GoTo, RingCentral, Tencent Meeting, DingTalk, Around,
-   Tuple, Element) captures the mic. Apps that also record voice notes
-   (`CallApps.voiceNoteApps`: WhatsApp, Messages, Telegram, Signal, Viber,
-   LINE, WeChat, Messenger) count only while they also play sound, so a voice
-   note does not raise the offer;
-3. a browser captures the mic on a page in `CallApps.meetingPages`, matched
+   Tuple, Element, Lark, Feishu, Pop, Zoho Meeting, Jitsi Meet, Gather, 8x8
+   Work, Dialpad, Vonage Business, Wire, Threema, Threema Work, KakaoTalk,
+   Zalo, Mattermost, Zoiper, Bria) captures the mic. Apps that also record
+   voice notes (`CallApps.voiceNoteApps`: WhatsApp, Messages, Telegram,
+   Signal, Viber, LINE, WeChat, Messenger, Lark, Feishu, Wire, Threema,
+   KakaoTalk, Zalo, Mattermost) count only while they also play sound, so a
+   voice note does not raise the offer. Each bundle ID added on 2026-11-17 was
+   read from the vendor's installer or the App Store, not guessed; Whereby is
+   browser-only;
+3. a browser (`CallApps.browsers`, which includes Dia, Comet, Orion, Safari
+   Technology Preview and Edge Beta, Dev and Canary, or any app named Chrome or
+   Chromium) captures the mic on a page in `CallApps.meetingPages`, matched
    against window titles and the URL of each window's `AXWebArea` (searched 9
-   levels deep, 300 elements at most, as FluidVoice does for Safari);
-4. any other app, or a browser on any other page, both captures the mic and
-   plays sound. Two-way audio is what a call looks like whatever the app is.
-   `CallDetector` keeps the first such app as `lookalike` and returns it only
-   when no app or page matches rules 2 and 3. `CallApps.notCalls` and
-   `notCallPages` leave out voice assistants, recorders, music software, and
-   dictation and meeting-note apps (Superwhisper, Wispr Flow
-   `com.electron.wispr-flow`, MacWhisper, Granola).
+   levels deep, 300 elements at most, as FluidVoice does for Safari). The
+   offer names the page's host ("meet.google.com"); a page found only by its
+   title gets the name in `CallApps.meetingTitles` ("Google Meet");
+4. a browser on any other page both captures the mic and plays sound, except
+   the pages in `CallApps.notCallPages` (ChatGPT, Claude, Gemini, Chrome
+   Remote Desktop). `CallDetector` keeps the first such browser as
+   `lookalike` and returns it only when no app or page matches rules 2 and 3.
 
-On 2026-11-02 Superwhisper was recording during a call in Chrome. It sorted
-first, matched rule 4, and became the meeting, so names were read from
-Superwhisper's window. Since 2026-11-06 a known call app or a meeting page
-wins over rule 4, and Superwhisper is in `notCalls`.
+No other app is a call, however it uses the mic. Until 2026-11-17 rule 4
+covered every app with two-way audio, and each new kind of app it caught
+needed an exclusion: Jump Desktop Connect (2026-10-23), Superwhisper
+(2026-11-02), and then Granola's helper and the Jump Desktop viewer, which
+have their own bundle IDs and so missed the list
+(`activities/2026-11-17-meeting-offer-only-for-call-apps.md`). Recorders,
+dictation, remote desktop clients, and virtual machines all capture and play
+sound, so the exclusion list could never be complete. A call app that is not
+in `CallApps.known` gets no offer; Option-M still records it.
 
-VoiceiQ's own processes never count. Neither does an app whose audio goes
-only through devices its own developer's driver provides: that is a remote
-desktop host or audio router moving sound, not a call. Jump Desktop Connect
-records "Jump Desktop Audio" and plays the client's mic into "Jump Desktop
-Microphone" for a whole remote session; both devices come from
-`com.p5sys.jump.audio.driver*` and the app is `com.p5sys.jump.connect`. The
-developer is the first two parts of the bundle ID (`CallApps.vendor`); a
-device's driver is the HAL plug-in that lists it (`kAudioPlugInPropertyDeviceList`).
-That walk takes about 0.6 s on a Mac with AirPlay's thousand plug-ins, so the
-map is cached until the device list changes. A call app used during a remote
-session still counts: its developer differs from the driver's.
+When a different call is seen on two polls in a row while one is offered,
+it replaces the offer: a tab that only looked like a call gives way to the
+meeting page found later. A recording in progress keeps its call.
+
+VoiceiQ's own processes never count.
 
 WebKit's XPC services (`com.apple.WebKit.*`, such as "Safari Graphics and
 Media") are skipped. macOS lists them as running apps, and Safari's GPU
