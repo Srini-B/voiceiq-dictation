@@ -34,12 +34,21 @@ struct KeyboardView: View {
         return typing.showsEmoji ? .emoji : .keys
     }
 
+    /// The mini keyboard's keys: only typing on a text field. Panels, the
+    /// voice screen, emoji search, which types letters, and the number pad
+    /// (reachable from emoji search) use the full height.
+    private var showsMini: Bool {
+        typing.mini && panel == .keys && typing.emojiQuery == nil && !typing.field.isDigitPad && typing.page != .numpad
+    }
+
+    static func miniBarHeight(compact: Bool) -> CGFloat { compact ? 44 : 58 }
+
     var body: some View {
         VStack(spacing: 0) {
             Group {
-                if isLive { RecordingStrip(model: model) } else { topBar }
+                if isLive { RecordingStrip(model: model) } else if showsMini { miniBar } else { topBar }
             }
-            .frame(height: typing.compact ? 36 : 44)
+            .frame(height: showsMini ? Self.miniBarHeight(compact: typing.compact) : (typing.compact ? 36 : 44))
             Group {
                 switch panel {
                 case .answer:
@@ -57,11 +66,12 @@ struct KeyboardView: View {
                 case .edit:
                     EditPanel(typing: typing)
                 case .keys:
-                    KeysArea(typing: typing)
+                    KeysArea(typing: typing, mini: showsMini)
                 }
             }
             .frame(maxHeight: .infinity)
         }
+        .onChange(of: showsMini, initial: true) { _, mini in typing.showsMini = mini }
         .onChange(of: model.phase) { old, new in
             // A finished session goes back to the keys.
             if old == .processing, new == .off || new == .warm { voiceOpen = false }
@@ -125,6 +135,22 @@ struct KeyboardView: View {
         .padding(.horizontal, 4)
     }
 
+    /// Leads the mini keyboard: the voice screen's button and the mic bar.
+    private var miniBar: some View {
+        HStack(spacing: 4) {
+            BarButton(systemImage: "waveform", label: "VoiceiQ") {
+                voiceOpen = true
+                typing.showsEmoji = false
+                typing.showsEdit = false
+            }
+            // Without Full Access the bar asks for it, and VoiceOver should say so.
+            MicBar(phase: model.phase, waiting: model.waitingForApp, title: micTitle,
+                   height: typing.compact ? 36 : 46, label: model.hasFullAccess ? nil : micTitle, action: model.micTapped)
+        }
+        .padding(.leading, 4)
+        .padding(.trailing, 7)
+    }
+
     @ViewBuilder private var center: some View {
         if !model.hasFullAccess {
             VStack(spacing: 8) {
@@ -165,6 +191,7 @@ struct KeyboardView: View {
     }
 
     private var micTitle: String {
+        if !model.hasFullAccess { return "Allow Full Access" }
         if model.waitingForApp, model.phase != .recording { return "Starting…" }
         switch model.phase {
         case .recording: return "Tap to finish"
@@ -234,6 +261,9 @@ private struct MicBar: View {
     let phase: SessionSnapshot.Phase
     let waiting: Bool
     let title: String
+    var height: CGFloat = 56
+    /// Replaces the spoken label, which otherwise follows the phase.
+    var label: String? = nil
     let action: () -> Void
 
     var body: some View {
@@ -245,13 +275,13 @@ private struct MicBar: View {
                     .lineLimit(1)
             }
             .frame(maxWidth: .infinity)
-            .frame(height: 56)
+            .frame(height: height)
             .foregroundStyle(foregroundColor)
             .background(Capsule().fill(fillColor))
             .shadow(color: .black.opacity(0.12), radius: 4, y: 2)
         }
         .buttonStyle(MicBarButtonStyle())
-        .accessibilityLabel(phase == .recording ? "Stop" : phase == .processing ? title : "Dictate")
+        .accessibilityLabel(label ?? (phase == .recording ? "Stop" : phase == .processing ? title : "Dictate"))
     }
 
     @ViewBuilder private var leadingContent: some View {

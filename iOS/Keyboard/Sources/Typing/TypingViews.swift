@@ -109,6 +109,7 @@ struct EmojiSearchBar: View {
 /// The UIKit key area inside the SwiftUI keyboard.
 struct KeysArea: UIViewRepresentable {
     @ObservedObject var typing: TypingController
+    var mini = false
 
     func makeUIView(context: Context) -> KeyboardKeysView {
         let view = KeyboardKeysView()
@@ -120,7 +121,7 @@ struct KeysArea: UIViewRepresentable {
 
     func updateUIView(_ view: KeyboardKeysView, context: Context) {
         view.rows = KeyLayout.rows(page: typing.page, layout: typing.preferences.layout, field: typing.field,
-                                   numberRow: typing.preferences.numberRow)
+                                   numberRow: typing.preferences.numberRow, mini: mini)
         view.shift = typing.shift
         view.slideToType = typing.preferences.slideToType
         view.spaceSlide = typing.preferences.spaceSlide

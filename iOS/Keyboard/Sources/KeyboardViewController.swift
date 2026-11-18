@@ -15,6 +15,7 @@ final class KeyboardViewController: UIInputViewController {
         model.onOwnCopy = { [weak dictionaryOffer] in dictionaryOffer?.noteOwnCopy() }
         model.onEdited = { [weak typing] in typing?.refresh() }
         typing.controller = self
+        typing.onHeightChange = { [weak self] in self?.updateHeight() }
         requestSupplementaryLexicon { [weak typing] lexicon in
             Task { @MainActor in typing?.setSupplementaryLexicon(lexicon.entries) }
         }
@@ -61,7 +62,16 @@ final class KeyboardViewController: UIInputViewController {
     private func updateHeight() {
         let compact = traitCollection.verticalSizeClass == .compact
         if typing.compact != compact { typing.compact = compact }
-        height?.constant = typing.preferences.keyboardHeight(compact: compact)
+        height?.constant = typing.showsMini ? miniHeight(compact: compact) : typing.preferences.keyboardHeight(compact: compact)
+    }
+
+    /// The mic bar over two rows as tall as the full keyboard's.
+    private func miniHeight(compact: Bool) -> CGFloat {
+        var full = typing.preferences
+        full.numberRow = false
+        let keys = full.keyboardHeight(compact: compact) - (compact ? 36 : 44)
+        let row = (keys - 3 * 11 - 4) / 4
+        return KeyboardView.miniBarHeight(compact: compact) + 2 * row + 11 + 4
     }
 
     override func traitCollectionDidChange(_ previous: UITraitCollection?) {

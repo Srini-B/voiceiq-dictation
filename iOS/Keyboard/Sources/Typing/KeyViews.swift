@@ -125,6 +125,9 @@ final class KeyCapView: UIView {
         case .emoji:
             image.image = UIImage(systemName: "face.smiling", withConfiguration: symbol)
             accessibilityLabel = "Emoji"
+        case .edit:
+            image.image = UIImage(systemName: "character.cursor.ibeam", withConfiguration: symbol)
+            accessibilityLabel = "Edit"
         case .space:
             label.text = "space"
             label.font = theme.font(size: 16)
@@ -137,6 +140,11 @@ final class KeyCapView: UIView {
                 label.font = theme.font(size: 16)
             }
             accessibilityLabel = spec.label
+        case .toggleSize:
+            let expand = spec.label == "expand"
+            image.image = UIImage(systemName: expand ? "rectangle.expand.vertical" : "rectangle.compress.vertical",
+                                  withConfiguration: symbol)
+            accessibilityLabel = expand ? "Full keyboard" : "Mini keyboard"
         case .page(.numpad):
             image.image = UIImage(systemName: "circle.grid.3x3", withConfiguration: symbol)
             accessibilityLabel = "Number pad"

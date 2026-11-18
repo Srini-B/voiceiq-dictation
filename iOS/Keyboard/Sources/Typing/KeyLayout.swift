@@ -10,7 +10,11 @@ enum KeyAction: Equatable {
     case returnKey
     case globe
     case emoji
+    /// Opens the edit panel: cursor, selection, copy, paste, undo.
+    case edit
     case page(KeyPage)
+    /// Switches between the mini and the full keyboard.
+    case toggleSize
 }
 
 enum KeyPage: Equatable {
@@ -106,8 +110,9 @@ enum KeyLayout {
         ".": ["…"], "?": ["¿"], "!": ["¡"], "'": ["‘", "’", "`"], "%": ["‰"],
     ]
 
-    static func rows(page: KeyPage, layout: KeyboardLetterLayout, field: FieldTraits, numberRow: Bool) -> [[KeySpec]] {
+    static func rows(page: KeyPage, layout: KeyboardLetterLayout, field: FieldTraits, numberRow: Bool, mini: Bool = false) -> [[KeySpec]] {
         if page == .digits || (field.isDigitPad && page == .letters) { return digitRows(field) }
+        if mini { return miniRows(digits: page == .numbers, field: field) }
         var rows: [[KeySpec]]
         switch page {
         case .letters:
@@ -150,10 +155,15 @@ enum KeyLayout {
     }
 
     private static func bottomRow(page: KeyPage, field: FieldTraits) -> [KeySpec] {
-        var row = [page == .letters ? KeySpec(action: .page(.numbers), label: "123", width: .units(1.4))
-                   : KeySpec(action: .page(.letters), label: "ABC", width: .units(1.4))]
-        if field.showsGlobe { row.append(KeySpec(action: .globe, label: "globe", width: .units(1.4))) }
-        row.append(KeySpec(action: .emoji, label: "emoji", width: .units(1.4)))
+        // Beside the globe, the size key and two field keys, wide function
+        // keys left the space bar a sliver on an SE or iPad (18 pt on an SE).
+        let crowded = field.showsGlobe && [.emailAddress, .URL].contains(field.keyboardType)
+        let function: KeySpec.Width = crowded ? .unit : .units(1.4)
+        var row = [page == .letters ? KeySpec(action: .page(.numbers), label: "123", width: function)
+                   : KeySpec(action: .page(.letters), label: "ABC", width: function)]
+        if field.showsGlobe { row.append(KeySpec(action: .globe, label: "globe", width: function)) }
+        row.append(KeySpec(action: .emoji, label: "emoji", width: function))
+        row.append(KeySpec(action: .toggleSize, label: "shrink", width: function))
         switch field.keyboardType {
         case .emailAddress:
             row.append(KeySpec(action: .insert("@"), label: "@"))
@@ -168,8 +178,33 @@ enum KeyLayout {
         default:
             row.append(KeySpec(action: .space, label: "space", width: .flexible))
         }
-        row.append(KeySpec(action: .returnKey, label: field.returnLabel, width: .units(2.2)))
+        row.append(KeySpec(action: .returnKey, label: field.returnLabel, width: .units(crowded ? 1.6 : 2.2)))
         return row
+    }
+
+    /// The mini keyboard under the mic bar: the edit key and the most used
+    /// punctuation, or the digits after 123, then emoji, the size toggle,
+    /// space and return. With no letters, shift would do nothing; the edit
+    /// panel fixes dictated text, and the mini view has no bar to open it
+    /// from. The digits take its place: ten keys and delete fill the row.
+    private static func miniRows(digits: Bool, field: FieldTraits) -> [[KeySpec]] {
+        let top: [KeySpec]
+        if digits {
+            top = "1234567890".map { KeySpec(action: .insert(String($0)), label: String($0), width: .flexible) }
+        } else {
+            top = [KeySpec(action: .edit, label: "edit", width: .units(1.4))]
+                + ["@", ".", ",", "?", "!", "'"].map {
+                    KeySpec(action: .insert($0), label: $0, alternates: symbolAlternates[$0] ?? [], width: .flexible)
+                }
+        }
+        var bottom = [digits ? KeySpec(action: .page(.letters), label: "@?!", width: .units(1.4))
+                      : KeySpec(action: .page(.numbers), label: "123", width: .units(1.4))]
+        if field.showsGlobe { bottom.append(KeySpec(action: .globe, label: "globe", width: .units(1.4))) }
+        bottom += [KeySpec(action: .emoji, label: "emoji", width: .units(1.4)),
+                   KeySpec(action: .toggleSize, label: "expand", width: .units(1.4)),
+                   KeySpec(action: .space, label: "space", width: .flexible),
+                   KeySpec(action: .returnKey, label: field.returnLabel, width: .units(2.2))]
+        return [top + [KeySpec(action: .delete, label: "delete", width: .units(1.4))], bottom]
     }
 
     static let domains = [".com", ".net", ".org", ".edu", ".in", ".co"]

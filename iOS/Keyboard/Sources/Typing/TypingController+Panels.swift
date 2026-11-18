@@ -65,7 +65,7 @@ extension TypingController {
         case .delete: if !query.isEmpty { query.removeLast() }
         case .returnKey, .emoji: return closeEmojiSearch()
         case .page(let target): page = target
-        case .shift, .globe: break
+        case .shift, .globe, .toggleSize, .edit: break
         }
         emojiQuery = query
     }

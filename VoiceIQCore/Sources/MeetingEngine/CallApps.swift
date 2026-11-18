@@ -3,7 +3,8 @@ import Foundation
 
 /// What `CallDetector` treats as a call.
 enum CallApps {
-    /// Apps whose microphone use is a call on its own.
+    /// Apps whose microphone use is a call on its own. No other app counts:
+    /// recorders, dictation, and remote desktop clients capture and play too.
     static let known: [String: String] = [
         "us.zoom.xos": "Zoom",
         "com.microsoft.teams2": "Microsoft Teams", "com.microsoft.teams": "Microsoft Teams",
@@ -19,6 +20,13 @@ enum CallApps {
         "com.amazon.Amazon-Chime": "Amazon Chime", "com.logmein.GoToMeeting": "GoTo Meeting", "com.logmein.goto": "GoTo",
         "com.ringcentral.glip": "RingCentral", "com.tencent.meeting": "Tencent Meeting", "com.alibaba.DingTalkMac": "DingTalk",
         "co.teamport.around": "Around", "app.tuple.app": "Tuple", "im.riot.app": "Element",
+        "com.larksuite.larkApp": "Lark", "com.larksuite.macos.lark": "Lark", "com.electron.lark": "Feishu",
+        "com.pop.pop.app": "Pop", "com.electron.zohomeeting": "Zoho Meeting", "org.jitsi.jitsi-meet": "Jitsi Meet",
+        "com.gather.Gather": "Gather", "com.electron.8x8---virtual-office": "8x8 Work", "com.electron.dialpad": "Dialpad",
+        "com.vonage.vbc": "Vonage Business", "com.wearezeta.zclient.mac": "Wire",
+        "threema-consumer-web": "Threema", "threema-work-web": "Threema Work", "com.kakao.KakaoTalkMac": "KakaoTalk",
+        "com.vng.zalo": "Zalo", "Mattermost.Desktop": "Mattermost", "com.securax.zoiper5": "Zoiper",
+        "com.CounterPath_Corporation.Bria": "Bria",
     ]
 
     /// Known apps that also record voice notes: their mic use is a call only
@@ -27,15 +35,9 @@ enum CallApps {
         "net.whatsapp.WhatsApp", "desktop.WhatsApp", "com.apple.MobileSMS", "ru.keepcoder.Telegram",
         "org.telegram.desktop", "org.whispersystems.signal-desktop", "com.viber.osx", "jp.naver.line.mac",
         "com.tencent.xinWeChat", "com.facebook.archon",
+        "com.larksuite.larkApp", "com.larksuite.macos.lark", "com.electron.lark", "com.wearezeta.zclient.mac",
+        "threema-consumer-web", "threema-work-web", "com.kakao.KakaoTalkMac", "com.vng.zalo", "Mattermost.Desktop",
     ]
-
-    /// The developer part of a bundle ID: "com.p5sys.jump.connect" and
-    /// "com.p5sys.jump.audio.driver" are both "com.p5sys". Nil for Apple's own.
-    static func vendor(_ bundleID: String) -> String? {
-        let parts = bundleID.lowercased().split(separator: ".").prefix(2)
-        let vendor = parts.joined(separator: ".")
-        return parts.count == 2 && vendor != "com.apple" ? vendor : nil
-    }
 
     /// System daemons that carry FaceTime audio and iPhone calls relayed to
     /// the Mac (Continuity). The call itself has no app process using the mic.
@@ -47,6 +49,8 @@ enum CallApps {
     static let browsers: Set<String> = [
         "com.google.Chrome", "com.apple.Safari", "org.mozilla.firefox", "com.microsoft.edgemac",
         "company.thebrowser.Browser", "com.brave.Browser", "com.vivaldi.Vivaldi", "com.operasoftware.Opera",
+        "company.thebrowser.dia", "ai.perplexity.comet", "com.kagi.kagimacOS", "com.apple.SafariTechnologyPreview",
+        "com.microsoft.edgemac.Beta", "com.microsoft.edgemac.Dev", "com.microsoft.edgemac.Canary",
     ]
 
     /// Pages whose microphone use is a call on its own, matched against the
@@ -56,19 +60,26 @@ enum CallApps {
         "whereby.com/", "meet.jit.si/", "app.slack.com/huddle", "discord.com/channels", "webex.com",
         "web.whatsapp.com", "web.telegram.org", "messenger.com", "app.gather.town", "around.co",
         "v.ringcentral.com", "app.goto.com", "meet.goto.com", "app.chime.aws", "meeting.zoho", "riverside.fm",
-        "streamyard.com", "talky.io", "vdo.ninja", "Meet - ", "| Microsoft Teams", "Zoom Meeting", "Huddle",
+        "streamyard.com", "talky.io", "vdo.ninja", "teams.cloud.microsoft", "pop.com/j/", "vc.larksuite.com",
+        "vc.feishu.cn", "meetings.dialpad.com", "app.dialpad.com", "8x8.vc/", "meetings.vonage.com", "app.vonage.com",
+        "Meet - ", "| Microsoft Teams", "Zoom Meeting", "Huddle",
+    ]
+    /// What the offer calls a meeting found only by its window title.
+    static let meetingTitles = [
+        "Meet - ": "Google Meet", "| Microsoft Teams": "Microsoft Teams", "Zoom Meeting": "Zoom", "Huddle": "Slack huddle",
     ]
 
-    /// Apps that capture the mic and play sound without being a call: voice
-    /// assistants, recorders, music software, the simulator.
-    static let notCalls: Set<String> = [
-        "com.openai.chat", "com.anthropic.claudefordesktop", "com.apple.Siri", "com.apple.VoiceMemos",
-        "com.apple.QuickTimePlayerX", "com.apple.GarageBand10", "com.apple.logic10", "com.ableton.live",
-        "com.obsproject.obs-studio", "com.loom.desktop", "com.rogueamoeba.audiohijack", "com.apple.iphonesimulator",
-        "com.apple.dt.Xcode", "com.apple.Music", "com.spotify.client",
-        "com.superduper.superwhisper", "com.electron.wispr-flow", "com.goodsnooze.MacWhisper", "com.granola.app",
-    ]
-    /// The same, for pages in a browser.
-    static let notCallPages = ["chatgpt.com", "claude.ai", "gemini.google.com"]
+    /// What the offer calls a meeting page: the host of the address that
+    /// matched, else the name of a matched title, else the pattern itself.
+    static func meetingName(match: String, in strings: [String]) -> String {
+        // Titles come before addresses, and a title that names the site has no host.
+        let address = strings.lazy.filter { $0.localizedCaseInsensitiveContains(match) }.compactMap { URL(string: $0)?.host() }.first
+        return address?.replacingOccurrences(of: "www.", with: "") ?? meetingTitles[match]
+            ?? match.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+    }
+
+    /// Pages that capture the mic and play sound without being a call: voice
+    /// assistants and remote desktops.
+    static let notCallPages = ["chatgpt.com", "claude.ai", "gemini.google.com", "remotedesktop.google.com"]
 }
 #endif

@@ -25,6 +25,13 @@ final class TypingController: ObservableObject, KeyboardKeysDelegate {
     @Published var blockOffer: String?
     /// Landscape on iPhone: shorter rows and bar.
     @Published var compact = false
+    /// The mini keyboard: the mic bar over two rows of keys. The user's last
+    /// choice, kept by the keyboard itself so it needs no Full Access.
+    @Published private(set) var mini = UserDefaults.standard.bool(forKey: "typing.mini")
+    /// The mini keys are on screen: set by `KeyboardView`, which knows when a
+    /// panel or the voice screen takes their place at full height.
+    var showsMini = false { didSet { if showsMini != oldValue { onHeightChange?() } } }
+    var onHeightChange: (() -> Void)?
     /// Nothing typed since the keyboard appeared, so the bar may show the
     /// Dictionary offer instead of predictions.
     @Published private(set) var typedSinceAppear = false
@@ -284,6 +291,12 @@ final class TypingController: ObservableObject, KeyboardKeysDelegate {
         case .shift: shiftTapped()
         case .page(let target): page = target
         case .emoji: showsEmoji = true
+        case .edit: showsEdit = true
+        case .toggleSize:
+            mini.toggle()
+            UserDefaults.standard.set(mini, forKey: "typing.mini")
+            // The mini keys have only punctuation and digits.
+            if mini, page != .numbers { page = .letters }
         case .globe: break
         }
     }
@@ -361,7 +374,8 @@ final class TypingController: ObservableObject, KeyboardKeysDelegate {
         guard let proxy else { return }
         checkpoint(.typing)
         typedSinceAppear = true
-        defer { if page == .numbers || page == .symbols { page = .letters } }
+        // The mini digits stay up: they are chosen, not a detour from letters.
+        defer { if !mini, page == .numbers || page == .symbols { page = .letters } }
         if pendingSpace {
             // The slid word's own space: a second space still makes ". ".
             pendingSpace = false
