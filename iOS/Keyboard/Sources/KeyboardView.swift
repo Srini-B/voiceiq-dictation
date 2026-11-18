@@ -35,9 +35,10 @@ struct KeyboardView: View {
     }
 
     /// The mini keyboard's keys: only typing on a text field. Panels, the
-    /// voice screen and emoji search, which types letters, use the full height.
+    /// voice screen, emoji search, which types letters, and the number pad
+    /// (reachable from emoji search) use the full height.
     private var showsMini: Bool {
-        typing.mini && panel == .keys && typing.emojiQuery == nil && !typing.field.isDigitPad
+        typing.mini && panel == .keys && typing.emojiQuery == nil && !typing.field.isDigitPad && typing.page != .numpad
     }
 
     static func miniBarHeight(compact: Bool) -> CGFloat { compact ? 44 : 58 }
