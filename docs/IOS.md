@@ -485,9 +485,10 @@ model license and GPL-3.0 section 5(d) require.
   without RTTI, and excludes x86_64 Simulators.
 
 **Memory warnings.** On `didReceiveMemoryWarning` the keyboard frees the
-slide models (`SwipeRecognizer.unload`), about 12 MB in the Simulator; they
-load again when the keyboard next appears. Until then slides insert nothing
-and the bar falls back to word-pair predictions.
+slide models (`TypingController.releaseModels`), about 12 MB in the
+Simulator. They load again when the keyboard next appears, not on a layout
+change before that. Until then slides insert nothing and the bar falls back
+to word-pair predictions.
 
 **Instances and touches.** iOS makes a new `KeyboardViewController` each
 time the keyboard appears. Nothing in the view tree may hold the controller

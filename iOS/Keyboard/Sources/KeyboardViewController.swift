@@ -78,7 +78,7 @@ final class KeyboardViewController: UIInputViewController {
     /// models are the largest thing the keyboard can give back.
     override func didReceiveMemoryWarning() {
         super.didReceiveMemoryWarning()
-        typing.swipe.unload()
+        typing.releaseModels()
     }
 
     override func traitCollectionDidChange(_ previous: UITraitCollection?) {
