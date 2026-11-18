@@ -143,8 +143,9 @@ struct KeyboardView: View {
                 typing.showsEmoji = false
                 typing.showsEdit = false
             }
+            // Without Full Access the bar asks for it, and VoiceOver should say so.
             MicBar(phase: model.phase, waiting: model.waitingForApp, title: micTitle,
-                   height: typing.compact ? 36 : 46, action: model.micTapped)
+                   height: typing.compact ? 36 : 46, label: model.hasFullAccess ? nil : micTitle, action: model.micTapped)
         }
         .padding(.leading, 4)
         .padding(.trailing, 7)
@@ -261,6 +262,8 @@ private struct MicBar: View {
     let waiting: Bool
     let title: String
     var height: CGFloat = 56
+    /// Replaces the spoken label, which otherwise follows the phase.
+    var label: String? = nil
     let action: () -> Void
 
     var body: some View {
@@ -278,7 +281,7 @@ private struct MicBar: View {
             .shadow(color: .black.opacity(0.12), radius: 4, y: 2)
         }
         .buttonStyle(MicBarButtonStyle())
-        .accessibilityLabel(phase == .recording ? "Stop" : phase == .processing ? title : "Dictate")
+        .accessibilityLabel(label ?? (phase == .recording ? "Stop" : phase == .processing ? title : "Dictate"))
     }
 
     @ViewBuilder private var leadingContent: some View {
