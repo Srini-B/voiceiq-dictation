@@ -31,8 +31,8 @@ final class UpdatePillController {
             return
         }
         if timer == nil {
-            timer = Timer.scheduledTimer(withTimeInterval: Self.checkInterval, repeats: true) { _ in
-                Task { @MainActor [weak self] in self?.installIfFree() }
+            timer = Timer.scheduledTimer(withTimeInterval: Self.checkInterval, repeats: true) { [weak self] _ in
+                Task { @MainActor in self?.installIfFree() }
             }
         }
         // The publisher fires before it stores the new value, so read it on the next turn.
