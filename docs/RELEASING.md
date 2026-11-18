@@ -230,8 +230,11 @@ variables when they are set (CI), otherwise with the stored profile `voiceiq`.
 
 The script performs this sequence:
 
-1. Checks xcodegen, the Apple Distribution identity, the three App Store
-   profiles and, for `UPLOAD=asc`, that the asc profile can see the app.
+1. Checks xcodegen, that the selected Xcode has the iOS 27 SDK or later
+   (App Store Connect requires it from April 2027, ITMS-90725), the Apple
+   Distribution identity, the three App Store profiles and, for
+   `UPLOAD=asc`, that the asc profile can see the app. The release workflow
+   runs on GitHub's `xcode-27` runner image for this reason.
 2. Runs the `VoiceIQCore` tests.
 3. Uses `CURRENT_PROJECT_VERSION` as the build number, the same as the Mac
    app's, and stops if TestFlight already has that build.
