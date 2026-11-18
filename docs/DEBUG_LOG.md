@@ -52,6 +52,18 @@ since Chrome starts one per profile. Two processes never write the same file. A 
 2026-11-12 14:03:22.481 app notice [transcription] call transcribe via gemini (gemini-3.8-flash) id=… attempt=1 h2 ok in 812ms, first byte 640ms, sent 52311 bytes
 ```
 
+Each dictation that uploads its recording also gets a line that splits the
+work after the microphone stops, and every finished dictation gets one line
+from key-up to the result:
+
+```text
+… app notice [transcription] timing: encode 31ms, transcribe 1604ms (scribe_v3/smart), writing 3012ms, 41 words, 18.2s audio
+… app notice [session] timing 26A1A1D4-…: finalize 233ms, upload (transcribe+writing) 4650ms, cleanup -, insert 133ms, key-up to done 5016ms
+```
+
+`writing` covers building the prompt, the writing-model request and the
+validation gate. Only the request inside it has its own `call` line.
+
 ### Keeping and deleting
 
 `DebugLog.keepDays` (7) and `DebugLog.maxTotalBytes` (30 MB). Day files older

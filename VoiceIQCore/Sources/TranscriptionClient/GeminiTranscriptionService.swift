@@ -44,6 +44,8 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
         let provider = settings.preferredProvider
         let elevenLabs = settings.transcribesWithElevenLabs
         let names = modelNames(provider, elevenLabs: elevenLabs)
+        let started = Date()
+        var encodeSeconds = 0.0
 
         // One request per chunk. A short dictation is one chunk, so this is the
         // old single-request path for everything under ten minutes. Leading and
@@ -64,7 +66,9 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
                 if !earlier.isEmpty { pieces.append(earlier) }
                 continue
             }
+            let encodeStart = Date()
             let flacData = try encodeChunk(audioURL: audioURL, range: range, index: index)
+            encodeSeconds += Date().timeIntervalSince(encodeStart)
             let seconds = durationSeconds * Double(range.count) / Double(max(1, fileFrames))
             let deadline = TimeoutPolicy.overallDeadline(audioDuration: seconds)
             var raw = try await transcribeWithRetry(
@@ -96,11 +100,17 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
         }
 
         let trimmedRaw = pieces.joined(separator: " ")
-        return try await process(
+        let transcribed = Date()
+        let result = try await process(
             TranscriptionResult(rawTranscript: trimmedRaw, cleanedTranscript: trimmedRaw, modelID: names.transcribe),
             durationSeconds: durationSeconds, context: context, config: config,
             policy: policy, provider: provider, elevenLabs: elevenLabs, writingModel: names.writing
         )
+        // The upload path runs transcription and the writing pass inside one
+        // coordinator stage; this line splits it.
+        func ms(_ seconds: TimeInterval) -> Int { Int(seconds * 1000) }
+        Log.transcription.notice("timing: encode \(ms(encodeSeconds))ms, transcribe \(ms(transcribed.timeIntervalSince(started) - encodeSeconds))ms (\(names.transcribe, privacy: .public)), writing \(ms(Date().timeIntervalSince(transcribed)))ms, \(trimmedRaw.split(whereSeparator: \.isWhitespace).count) words, \(String(format: "%.1f", durationSeconds), privacy: .public)s audio")
+        return result
     }
 
     public func process(_ transcript: TranscriptionResult, durationSeconds: Double, context: DictationContext) async throws -> TranscriptionResult {
