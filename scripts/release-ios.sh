@@ -42,6 +42,11 @@ if [[ -f "$signing_keychain" && -f "$HOME/.voiceiq-signing/keychain.pass" ]]; th
   security unlock-keychain -p "$(cat "$HOME/.voiceiq-signing/keychain.pass")" "$signing_keychain"
 fi
 command -v xcodegen >/dev/null || fail "xcodegen is missing: brew install xcodegen"
+# App Store Connect requires uploads built with the iOS 27 SDK (ITMS-90725).
+ios_sdk=$(xcrun --sdk iphoneos --show-sdk-version)
+(( ${ios_sdk%%.*} >= 27 )) \
+  || fail "the selected Xcode has the iOS $ios_sdk SDK; App Store uploads need iOS 27 or later (Xcode 27)"
+echo "  $(xcodebuild -version | head -1), iOS $ios_sdk SDK"
 # Captured before matching: with pipefail, `grep -q` exiting early can fail the
 # pipeline even when it matched.
 [[ "$(security find-identity -v -p codesigning)" == *"Apple Distribution: "*"($TEAM_ID)"* ]] \

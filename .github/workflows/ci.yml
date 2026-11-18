@@ -5,12 +5,13 @@ on:
     branches: [main]
   pull_request:
 
-# Same runner as release.yml, so a PR builds with the Xcode that ships it
-# (macos-latest's newer Swift accepted code Xcode 26.6 rejects, 2026-10-30).
+# Same runner image as release.yml, so a PR builds with the Xcode that ships it
+# (2026-10-30: a newer Swift accepted code the release's older Xcode rejected).
+# xcode-27 carries Xcode 27 and the iOS 27 SDK that App Store uploads need.
 jobs:
   core-tests:
     name: VoiceIQCore tests
-    runs-on: macos-26
+    runs-on: xcode-27
     steps:
       - uses: actions/checkout@v7
       - name: Run package tests
@@ -18,7 +19,7 @@ jobs:
 
   app-build:
     name: App build
-    runs-on: macos-26
+    runs-on: xcode-27
     steps:
       - uses: actions/checkout@v7
       - name: Install xcodegen
@@ -37,7 +38,7 @@ jobs:
 
   ios-build:
     name: iOS build
-    runs-on: macos-26
+    runs-on: xcode-27
     steps:
       - uses: actions/checkout@v7
       - name: Install xcodegen

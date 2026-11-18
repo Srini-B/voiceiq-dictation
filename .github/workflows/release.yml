@@ -8,6 +8,9 @@ name: Release
 #                                                           ▼
 #                     publish (GitHub release v<version>, Sparkle appcast, tag)
 #
+# The macOS jobs run on xcode-27: App Store Connect warns about uploads built
+# with an iOS SDK older than 27 (ITMS-90725) and rejects them from April 2027.
+#
 # The GitHub release and its tag are created only after both apps are built,
 # so the two never ship different versions. A manual run defaults to a dry run
 # that builds and checks everything and publishes nothing. docs/UPDATES.md.
@@ -72,7 +75,7 @@ jobs:
 
   ios:
     needs: [plan, notes]
-    runs-on: macos-26
+    runs-on: xcode-27
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v7
@@ -105,7 +108,7 @@ jobs:
 
   macos:
     needs: [plan, notes]
-    runs-on: macos-26
+    runs-on: xcode-27
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v7
@@ -140,7 +143,7 @@ jobs:
 
   publish:
     needs: [plan, notes, ios, macos]
-    runs-on: macos-26
+    runs-on: xcode-27
     permissions:
       contents: write
     steps:
