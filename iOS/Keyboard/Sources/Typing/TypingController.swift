@@ -133,6 +133,7 @@ final class TypingController: ObservableObject, KeyboardKeysDelegate {
         nextWords = nil
         requestedContext = nil
         swipe.unload()
+        refresh()
     }
 
     /// Text Replacements and contact names from iOS.
@@ -259,7 +260,7 @@ final class TypingController: ObservableObject, KeyboardKeysDelegate {
     /// The context model's scores arrive a few milliseconds after the words
     /// before the cursor change; the bar then refreshes.
     private func requestNextWords(after context: [String]) {
-        guard requestedContext != context else { return }
+        guard !modelsReleased, requestedContext != context else { return }
         requestedContext = context
         swipe.nextWords(after: context) { [weak self] scores in
             guard let self, self.requestedContext == context else { return }
