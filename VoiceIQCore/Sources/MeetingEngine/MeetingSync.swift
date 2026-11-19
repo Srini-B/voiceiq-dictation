@@ -85,7 +85,7 @@ public actor MeetingSync {
                 _ = await onMain { $0.applyFromCloud(meeting, systemFields: fields) }
             case .failure(let error as CKError) where error.code == .unknownItem:
                 // Deleted in iCloud meanwhile: nothing to bring in.
-                await onMain { $0.failedImports.remove(recordID.recordName) }
+                _ = await onMain { $0.failedImports.remove(recordID.recordName) }
             case .failure:
                 break
             }
