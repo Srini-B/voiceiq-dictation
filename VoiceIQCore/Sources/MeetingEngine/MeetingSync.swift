@@ -2,10 +2,9 @@ import CloudKit
 import Foundation
 
 /// Keeps meetings the same on the Mac and iPhone through the user's private
-/// CloudKit database, while "Sync meetings with iCloud" is on
-/// (`SettingsStore.syncsMeetings`, off by default, per device). Without an
-/// iCloud account, or without the container entitlement (Debug builds on the
-/// Mac), meetings stay local.
+/// CloudKit database. Always on, like History and the dictionary: there is
+/// no setting. Without an iCloud account, or without the container
+/// entitlement (Debug builds on the Mac), meetings stay local.
 ///
 /// One record per meeting, `Meeting` in zone `Meetings`, named by the meeting
 /// id. Its `payload` is a `SyncedMeeting` (meta, notes, transcript and chat;
@@ -14,8 +13,7 @@ import Foundation
 /// redone notes, a new question. When both devices changed it, the one that
 /// sends last keeps its notes and names, and the questions from both stay
 /// (`MeetingStore.applyFromCloud`). Deleting a meeting deletes its record,
-/// and the other device drops its copy. Turning the setting off stops
-/// syncing on this device and keeps every meeting it has.
+/// and the other device drops its copy.
 public actor MeetingSync {
     public static let shared = MeetingSync()
 
@@ -29,8 +27,8 @@ public actor MeetingSync {
     private var engine: CKSyncEngine?
     private let store = MeetingStore()
     private var observers: [any NSObjectProtocol] = []
-    /// Changes when sync stops, the account changes or the zone goes, so a
-    /// retry fetch that was out then is not applied.
+    /// Changes when the account changes or the zone goes, so a retry fetch
+    /// that was out then is not applied.
     private var generation = 0
 
     private init() {}
@@ -39,7 +37,6 @@ public actor MeetingSync {
         FileLayout.appSupportRoot.appendingPathComponent("meeting-sync-state.json")
     }
 
-    /// Syncs while the setting is on, from now on.
     public func start() {
         guard observers.isEmpty else { return }
         guard HistorySync.hasContainerEntitlement else {
@@ -47,10 +44,6 @@ public actor MeetingSync {
             return
         }
         observers = [
-            NotificationCenter.default.addObserver(forName: .gtSettingDidChange, object: nil, queue: nil) { note in
-                guard note.object as? String == SettingsStore.meetingSyncKey else { return }
-                Task { await MeetingSync.shared.settingChanged() }
-            },
             NotificationCenter.default.addObserver(forName: .gtMeetingsDidChange, object: nil, queue: nil) { note in
                 guard note.object as? String != "sync",
                       let id = (note.userInfo?[MeetingStore.idKey] as? String).flatMap(UUID.init(uuidString:)) else { return }
@@ -58,7 +51,7 @@ public actor MeetingSync {
                 Task { await MeetingSync.shared.localChanged(MeetingID(uuid: id), deleted: deleted) }
             },
         ]
-        if SettingsStore().syncsMeetings { enable() }
+        enable()
     }
 
     /// Call when the app comes to the front: iOS delivers no push to a
@@ -93,17 +86,6 @@ public actor MeetingSync {
             case .failure:
                 break
             }
-        }
-    }
-
-    private func settingChanged() async {
-        if SettingsStore().syncsMeetings {
-            enable()
-        } else if let engine {
-            self.engine = nil
-            generation += 1
-            await engine.cancelOperations()
-            Log.meeting.info("meeting sync stopped")
         }
     }
 
@@ -201,8 +183,6 @@ extension MeetingSync {
 
 extension MeetingSync: CKSyncEngineDelegate {
     public func handleEvent(_ event: CKSyncEngine.Event, syncEngine: CKSyncEngine) async {
-        // A turned-off engine can still deliver what it was doing.
-        guard syncEngine === engine else { return }
         switch event {
         case .stateUpdate(let event):
             if let data = try? JSONEncoder().encode(event.stateSerialization) {

@@ -380,7 +380,6 @@ private struct ReturnAppDetail: View {
 
 struct PrivacyView: View {
     @State private var retentionDays = SettingsStore().audioRetentionDays
-    @State private var syncsMeetings = SettingsStore().syncsMeetings
     @State private var transcriptRetentionDays = SettingsStore().transcriptRetentionDays
     @State private var provider = SettingsStore().preferredProvider
 
@@ -424,19 +423,13 @@ struct PrivacyView: View {
                 }
             }
             Section {
-                Toggle("Sync notes with iCloud", isOn: $syncsMeetings)
-                    .onChange(of: syncsMeetings) { _, enabled in SettingsStore().setSyncsMeetings(enabled) }
-            } footer: {
-                Text("Notes, transcripts, speaker names and questions go to your iCloud account and appear on your Mac when it syncs meetings too. Recordings stay on the device that made them. A note you delete is deleted on your other devices too, once this is on.")
-            }
-            Section {
                 LabeledContent("Audio", value: destination)
                 LabeledContent("Transcript text", value: "For writing rules, Ask and Translate")
                 LabeledContent("Notes audio", value: "\(meetingOwner), then notes by \(provider.displayName)")
                 LabeledContent("Dictionary terms", value: "With cloud transcription and cleanup")
                 LabeledContent("Dictionary", value: "Your iCloud, to sync")
                 LabeledContent("History", value: "Your iCloud, to sync final text")
-                LabeledContent("Notes", value: syncsMeetings ? "Your iCloud, to sync" : "Not synced")
+                LabeledContent("Notes", value: "Your iCloud, to sync; not the audio")
                 LabeledContent("Ask search queries", value: "TinyFish, if its key is saved")
                 LabeledContent("What you type", value: "Never")
             } header: { SettingsSectionHeader("What leaves your \(UIDevice.current.localizedModel)") }

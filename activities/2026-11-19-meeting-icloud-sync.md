@@ -14,9 +14,11 @@ was the sync.
   transcript and chat as LZFSE-compressed JSON. A single field keeps the
   Production schema step small, and compression keeps meetings several
   hours long under the 1 MB record limit.
-- Opt-in on each device (`SettingsStore.syncsMeetings`, off by default).
-  History sync has no setting, but a meeting transcript holds everyone's
-  words, and the request asked for an option.
+- Always on, with no setting, like History and the dictionary. The first
+  version had an opt-in toggle on each device, off by default; the owner
+  asked to remove it and keep sync on in both apps.
+- Chat syncs with the meeting: questions asked on either device appear on
+  both.
 - Audio is not synced. It can reach hundreds of MB per meeting in the
   user's iCloud storage. On the other device, Play, Download and Redo
   transcript are unavailable, and everything else works.
@@ -27,7 +29,7 @@ was the sync.
 - Review fixes: deletes are sent for any finished meeting, because its
   first upload may be in flight. Deleted ids are kept in
   `.sync/deletes.json` until iCloud confirms them, so a delete made
-  while sync is off still reaches iCloud. Fetched copies of those meetings
+  before the engine started or saved its state still reaches iCloud. Fetched copies of those meetings
   are ignored. Cloud changes, and the read of what goes up, run on the
   main actor, where every local meeting edit happens. A delete from
   another device wins over an edit here that has not gone up yet.

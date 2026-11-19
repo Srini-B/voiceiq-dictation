@@ -41,7 +41,7 @@ extension MeetingStore {
     /// confirmed gone. Written by `delete(id:)` and read by `applyFromCloud`,
     /// both on the main actor, so a meeting deleted here never comes back
     /// from a fetch that was already on its way. Kept apart from the sync
-    /// engine, so a delete made while sync is off is sent once it is on.
+    /// engine, so a delete made before sync started is still sent.
     var pendingDeletes: Set<String> {
         get { ids(in: "deletes.json") }
         set { save(ids: newValue, in: "deletes.json") }
