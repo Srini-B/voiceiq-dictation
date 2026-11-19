@@ -31,9 +31,12 @@ was the sync.
   are ignored. Cloud changes, and the read of what goes up, run on the
   main actor, where every local meeting edit happens. A delete from
   another device wins over an edit here that has not gone up yet.
+  A meeting that could not be written here (a full disk), new or half
+  updated, waits in `.sync/retry.json`: it is not sent, and it is fetched
+  again by id and taken whole.
 
 **Verification.**
-- Test Mac at 040c74a: `scripts/test.sh` 186 tests, 0 failures (3 new
+- Test Mac at 25282a5: `scripts/test.sh` 187 tests, 0 failures (4 new
   `MeetingSyncTests`). `scripts/build.sh` and `scripts/build-ios.sh` both
   exit 0. CI is green.
 - iOS 27 Simulator, Debug: Settings › Privacy shows "Sync notes with iCloud"
