@@ -134,6 +134,11 @@ for a release. For reference, or to redo it:
    Mac Release entitlements pin
    `com.apple.developer.icloud-container-environment` to Production so the
    Mac and the TestFlight iPhone app read the same records.
+4. Meeting sync (`MeetingSync`) needs record type `Meeting` with one field,
+   `payload` (Bytes), created in Development and deployed to Production the
+   same way, before the first release that ships it. Until then Production
+   rejects its saves and meetings stay local; dictations are not affected.
+   The app creates its zone `Meetings` itself.
 
 The shell must export these values before the script starts:
 

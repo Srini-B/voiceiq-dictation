@@ -595,7 +595,55 @@ question that fails is not saved; the chat shows the error with Try again.
 `MeetingChatModel.shared` keeps one chat per meeting while the app runs, so
 leaving a meeting while a question is out and coming back shows it still
 waiting. Usage is booked as Meetings › Meeting chat against the meeting.
-Deleting the meeting deletes its chat.
+Deleting the meeting deletes its chat. With meeting sync on, a chat model
+on screen reloads when questions asked on the other device arrive, and an
+answer that lands is appended to the chat as it is on disk then, so neither
+device's questions are lost.
+
+## Sync through iCloud
+
+"Sync meetings with iCloud" (Mac, Settings › Privacy) and "Sync notes with
+iCloud" (iPhone, Settings › Privacy) keep meetings the same on every device
+that has it on (`SettingsStore.syncsMeetings`, off by default on each
+device: a transcript holds what everyone on the call said). `MeetingSync`
+(VoiceIQCore) works like `HistorySync` (see IOS.md, History sync): one
+`Meeting` record per meeting in the `Meetings` zone of the same private
+CloudKit database, through `CKSyncEngine`.
+
+- **What goes.** A record's one field, `payload` (Bytes), is a
+  `SyncedMeeting` as LZFSE-compressed JSON: `meta.json`, `notes.json`,
+  `transcript.json` and `chat.json`. The audio, screen-name snapshots,
+  transcription caches and playback files stay on the device that recorded.
+  A record holds at most 1 MB; a meeting whose compressed payload is over
+  900 KB is logged and stays local (several hours of talk is a few hundred
+  KB).
+- **When.** A meeting goes up once its status is `done`, and again whenever
+  it changes: renamed speakers, redone notes, a new question.
+  `MeetingStore` posts `.gtMeetingsDidChange` for every write and delete;
+  `MeetingSync` compares the meeting's content digest with the one in its
+  `cloud.json` (`MeetingCloudState`: digest, the record's system fields,
+  and whether it arrived from another device) and queues a save when they
+  differ. A meeting being recorded or redone waits until it is done again.
+- **Both devices changed it.** A device with no change since it last synced
+  takes the other device's copy as it is. A device with its own change keeps
+  its notes, transcript and names, adds the questions asked on the other
+  device (each once, in the order they were asked), and sends that over the
+  copy in iCloud (`MeetingStore.applyFromCloud`). So the device that sends
+  last wins the notes and names, and no question is lost.
+- **On the other device.** A meeting from another device opens like any
+  other: notes, transcript, speaker names, Export and questions all work.
+  Play, Download and Redo transcript are unavailable because the audio is not
+  there; Redo notes works from the transcript.
+- **Deletes.** Deleting a meeting that was in iCloud deletes its record, and
+  the other device removes its copy. Retention never deletes meetings.
+- **Off, account changes.** Turning the setting off stops syncing on that
+  device and keeps every meeting it has; turning it on again sends what
+  changed meanwhile and fetches what the other device did. Signing out of
+  iCloud, switching accounts, or a deleted zone removes the meetings that
+  came from another device and forgets which local ones were sent.
+- The engine's state is `meeting-sync-state.json` next to
+  `history-sync-state.json`. The iPhone fetches on every return to the
+  foreground. Debug Mac builds have no container entitlement and stay local.
 
 ## Export
 

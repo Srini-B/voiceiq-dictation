@@ -223,7 +223,12 @@ Extensions page.
   account too (VoiceiQ's private CloudKit database), so History is the same
   on both. Audio, the "as heard" transcript and errors never go to iCloud.
   Deleting a dictation in History removes it from iCloud and from the other
-  device. Nothing else VoiceiQ stores goes to iCloud
+  device. Meetings go there only if you turn on "Sync meetings with iCloud"
+  (Mac) or "Sync notes with iCloud" (iPhone): then each finished meeting's
+  notes, transcript, speaker names and questions with their answers are kept
+  in the same private database, so the devices with it on share them.
+  Meeting audio never goes to iCloud. Deleting a meeting removes it from
+  iCloud and from the other devices. Nothing else VoiceiQ stores goes to iCloud
 - Which apps you use, when you dictate, or anything you type
 - Keystrokes: the event tap watches your dictation key, plus — only while a
   dictation is active — ⌘Esc (cancel), Space (the hands-free gesture), and the
