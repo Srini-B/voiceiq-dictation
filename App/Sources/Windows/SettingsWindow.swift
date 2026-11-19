@@ -359,6 +359,7 @@ struct PrivacyPane: View {
                 LabeledContent("Dictionary terms") { Text("Sent with cloud transcription and cleanup, so names are spelled right") }
                 LabeledContent("Dictionary") { Text("Synced to your iPhone through your iCloud account") }
                 LabeledContent("History") { Text("Final text synced to your iPhone through your iCloud account") }
+                LabeledContent("Meetings") { Text("Notes, transcripts and questions synced to your iPhone through your iCloud account; recordings stay on this Mac") }
                 LabeledContent("Screen snapshots") { Text("Only if screen context and writing rules are on; never stored") }
                 LabeledContent("Names on a call screen") { Text("Read on this Mac while a meeting records; only the names go to \(provider.displayName) for notes") }
                 LabeledContent("Ask Anything search") { Text("Only if a TinyFish key is saved; the search query goes to TinyFish") }

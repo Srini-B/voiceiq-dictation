@@ -435,6 +435,7 @@ struct PrivacyView: View {
                 LabeledContent("Dictionary terms", value: "With cloud transcription and cleanup")
                 LabeledContent("Dictionary", value: "Your iCloud, to sync")
                 LabeledContent("History", value: "Your iCloud, to sync final text")
+                LabeledContent("Notes", value: "Your iCloud, to sync; not the audio")
                 LabeledContent("Ask search queries", value: "TinyFish, if its key is saved")
                 LabeledContent("What you type", value: "Never")
             } header: { SettingsSectionHeader("What leaves your \(UIDevice.current.localizedModel)") }
