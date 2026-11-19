@@ -106,8 +106,12 @@ final class MeetingSyncTests: XCTestCase {
         XCTAssertNil(store.loadCloudState(id: own))
 
         let synced = try finishedMeeting()
-        store.markSent(try XCTUnwrap(store.synced(id: synced)), systemFields: fields)
+        let copy = try XCTUnwrap(store.synced(id: synced))
+        store.markSent(copy, systemFields: fields)
         try store.delete(id: synced)
         XCTAssertEqual(deletes[synced.uuid.uuidString], true)
+        // Its copy fetched before iCloud confirms the delete does not bring it back.
+        XCTAssertFalse(store.applyFromCloud(copy, systemFields: fields))
+        XCTAssertNil(store.folder(for: synced))
     }
 }

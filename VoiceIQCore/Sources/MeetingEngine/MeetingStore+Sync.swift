@@ -37,6 +37,29 @@ struct MeetingCloudState: Codable, Equatable {
 extension MeetingStore {
     private static let cloudFile = "cloud.json"
 
+    /// Meetings deleted on this device whose records iCloud has not yet
+    /// confirmed gone. Written by `delete(id:)` and read by `applyFromCloud`,
+    /// both on the main actor, so a meeting deleted here never comes back
+    /// from a fetch that was already on its way. Kept apart from the sync
+    /// engine, so a delete made while sync is off is sent once it is on.
+    var pendingDeletes: Set<String> {
+        get {
+            (try? Data(contentsOf: deletesURL)).flatMap { try? JSONDecoder().decode(Set<String>.self, from: $0) } ?? []
+        }
+        set {
+            if newValue.isEmpty { try? FileManager.default.removeItem(at: deletesURL) }
+            else if let data = try? JSONEncoder().encode(newValue) { try? data.write(to: deletesURL, options: .atomic) }
+        }
+    }
+
+    private var deletesURL: URL { root.appendingPathComponent(".sync-deletes.json") }
+
+    /// What goes up for a meeting: its content and the system fields of the
+    /// copy it goes over, read together.
+    func outgoing(id: MeetingID) -> (meeting: SyncedMeeting, systemFields: Data?)? {
+        synced(id: id).map { ($0, loadCloudState(id: id)?.systemFields) }
+    }
+
     func loadCloudState(id: MeetingID) -> MeetingCloudState? {
         guard let folder = folder(for: id) else { return nil }
         return try? load(MeetingCloudState.self, from: folder.appendingPathComponent(Self.cloudFile))
@@ -84,6 +107,7 @@ extension MeetingStore {
     @discardableResult
     func applyFromCloud(_ remote: SyncedMeeting, systemFields: Data) -> Bool {
         let id = remote.meta.id
+        guard !pendingDeletes.contains(id.uuid.uuidString) else { return false }
         guard folder(for: id) != nil else {
             let date = remote.meta.startedAt.formatted(.iso8601.year().month().day().dateSeparator(.dash))
             let folder = root.appendingPathComponent("\(date)-\(id.uuid.uuidString)")

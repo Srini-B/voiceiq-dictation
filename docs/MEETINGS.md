@@ -605,7 +605,8 @@ device's questions are lost.
 "Sync meetings with iCloud" (Mac, Settings › Privacy) and "Sync notes with
 iCloud" (iPhone, Settings › Privacy) keep meetings the same on every device
 that has it on (`SettingsStore.syncsMeetings`, off by default on each
-device: a transcript holds what everyone on the call said). `MeetingSync`
+device: a transcript holds what everyone on the call said). Both the Mac
+and the iPhone need it on. `MeetingSync`
 (VoiceIQCore) works like `HistorySync` (see IOS.md, History sync): one
 `Meeting` record per meeting in the `Meetings` zone of the same private
 CloudKit database, through `CKSyncEngine`.
@@ -637,8 +638,12 @@ CloudKit database, through `CKSyncEngine`.
 - **Deletes.** Deleting a meeting that may be in iCloud (it synced, or it is
   finished and its first upload may be on its way) deletes its record, and
   the other device removes its copy. The id waits in
-  `meeting-sync-deletes.json` until iCloud confirms the record gone, so a
-  delete made while the setting is off is sent once it is on again.
+  `.sync-deletes.json` in the meetings folder until iCloud confirms the
+  record gone, so a delete made while the setting is off is sent once it is
+  on again, and a copy fetched meanwhile does not bring the meeting back. A
+  delete from another device wins over an edit here that has not gone up
+  yet: the queued save is dropped. A note open on the iPhone when it is
+  deleted elsewhere closes.
   Retention never deletes meetings.
 - **Off, account changes.** Turning the setting off stops syncing on that
   device and keeps every meeting it has; turning it on again sends what

@@ -36,21 +36,6 @@ public actor MeetingSync {
         FileLayout.appSupportRoot.appendingPathComponent("meeting-sync-state.json")
     }
 
-    /// Meetings deleted on this device whose records iCloud has not yet
-    /// confirmed gone. Kept apart from the engine, so a delete made while
-    /// sync is off still reaches iCloud once it is on again.
-    private static var deletesURL: URL {
-        FileLayout.appSupportRoot.appendingPathComponent("meeting-sync-deletes.json")
-    }
-
-    private var deletes: Set<String> {
-        get { (try? Data(contentsOf: Self.deletesURL)).flatMap { try? JSONDecoder().decode(Set<String>.self, from: $0) } ?? [] }
-        set {
-            if newValue.isEmpty { try? FileManager.default.removeItem(at: Self.deletesURL) }
-            else if let data = try? JSONEncoder().encode(newValue) { try? data.write(to: Self.deletesURL, options: .atomic) }
-        }
-    }
-
     /// Syncs while the setting is on, from now on.
     public func start() {
         guard observers.isEmpty else { return }
@@ -107,19 +92,16 @@ public actor MeetingSync {
             engine.state.add(pendingDatabaseChanges: [.saveZone(CKRecordZone(zoneID: Self.zoneID))])
         }
         enqueueAll()
-        engine.state.add(pendingRecordZoneChanges: deletes.compactMap(UUID.init(uuidString:))
+        engine.state.add(pendingRecordZoneChanges: store.pendingDeletes.compactMap(UUID.init(uuidString:))
             .map { .deleteRecord(Self.recordID(MeetingID(uuid: $0))) })
         Log.meeting.info("meeting sync started")
     }
 
     private func localChanged(_ id: MeetingID, deleted: Bool) {
-        if deleted {
-            deletes.insert(id.uuid.uuidString)
-            engine?.state.add(pendingRecordZoneChanges: [.deleteRecord(Self.recordID(id))])
-            return
-        }
         guard let engine else { return }
-        if store.needsUpload(id: id) {
+        if deleted {
+            engine.state.add(pendingRecordZoneChanges: [.deleteRecord(Self.recordID(id))])
+        } else if store.needsUpload(id: id) {
             engine.state.add(pendingRecordZoneChanges: [.saveRecord(Self.recordID(id))])
         }
     }
@@ -220,17 +202,17 @@ extension MeetingSync: CKSyncEngineDelegate {
             }
         case .fetchedRecordZoneChanges(let event):
             var changedHere: [CKSyncEngine.PendingRecordZoneChange] = []
-            // Deleted here while its delete is still on its way: it must not come back.
-            let deleted = deletes
             for modification in event.modifications {
                 let record = modification.record
-                guard !deleted.contains(record.recordID.recordName), let meeting = Self.meeting(from: record) else { continue }
+                guard let meeting = Self.meeting(from: record) else { continue }
                 let fields = Self.systemFields(of: record)
                 if await onMain({ $0.applyFromCloud(meeting, systemFields: fields) }) {
                     changedHere.append(.saveRecord(record.recordID))
                 }
             }
             for deletion in event.deletions {
+                // A delete from another device wins over an edit here that has not gone up.
+                syncEngine.state.remove(pendingRecordZoneChanges: [.saveRecord(deletion.recordID)])
                 if let id = Self.meetingID(deletion.recordID) { await onMain { $0.deleteFromCloud(id: id) } }
             }
             syncEngine.state.add(pendingRecordZoneChanges: changedHere)
@@ -258,8 +240,9 @@ extension MeetingSync: CKSyncEngineDelegate {
         let changes = syncEngine.state.pendingRecordZoneChanges.filter { scope.contains($0) }
         let store = store
         return await CKSyncEngine.RecordZoneChangeBatch(pendingChanges: changes) { recordID in
-            guard let id = Self.meetingID(recordID), let meeting = store.synced(id: id),
-                  let record = Self.record(for: meeting, systemFields: store.loadCloudState(id: id)?.systemFields) else {
+            // On the main actor, so no change from iCloud lands between the content and the change tag.
+            let outgoing = await MainActor.run { Self.meetingID(recordID).flatMap(store.outgoing(id:)) }
+            guard let outgoing, let record = Self.record(for: outgoing.meeting, systemFields: outgoing.systemFields) else {
                 // Deleted, being redone, or too large: it goes up once it is done again.
                 syncEngine.state.remove(pendingRecordZoneChanges: [.saveRecord(recordID)])
                 return nil
@@ -289,13 +272,9 @@ extension MeetingSync: CKSyncEngineDelegate {
                     resend = true
                 }
             case .unknownItem:
-                // Gone from iCloud since this device last saw it: send it as new.
-                if let id = Self.meetingID(recordID), var state = store.loadCloudState(id: id) {
-                    state.systemFields = nil
-                    store.saveCloudState(state, id: id)
-                }
-                again.append(.saveRecord(recordID))
-                resend = true
+                // Deleted on another device since this one last saw it. The delete wins,
+                // as when it is fetched first.
+                if let id = Self.meetingID(recordID) { await onMain { $0.deleteFromCloud(id: id) } }
             case .zoneNotFound:
                 syncEngine.state.add(pendingDatabaseChanges: [.saveZone(CKRecordZone(zoneID: Self.zoneID))])
                 again.append(.saveRecord(recordID))
@@ -311,7 +290,7 @@ extension MeetingSync: CKSyncEngineDelegate {
             if error.code == .unknownItem { gone.insert(recordID.recordName); continue }
             Log.meeting.error("meeting sync: delete failed for \(recordID.recordName, privacy: .public): \(error)")
         }
-        if !gone.isEmpty { deletes.subtract(gone) }
+        if !gone.isEmpty { await onMain { $0.pendingDeletes.subtract(gone) } }
         syncEngine.state.add(pendingRecordZoneChanges: again)
         if resend {
             // The engine does not schedule another send for a save that failed

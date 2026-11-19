@@ -427,7 +427,7 @@ struct PrivacyView: View {
                 Toggle("Sync notes with iCloud", isOn: $syncsMeetings)
                     .onChange(of: syncsMeetings) { _, enabled in SettingsStore().setSyncsMeetings(enabled) }
             } footer: {
-                Text("Notes, transcripts, speaker names and questions go to your iCloud account and appear on your Mac when it syncs meetings too. Recordings stay on the device that made them. Deleting a note deletes it everywhere.")
+                Text("Notes, transcripts, speaker names and questions go to your iCloud account and appear on your Mac when it syncs meetings too. Recordings stay on the device that made them. A note you delete is deleted on your other devices too, once this is on.")
             }
             Section {
                 LabeledContent("Audio", value: destination)

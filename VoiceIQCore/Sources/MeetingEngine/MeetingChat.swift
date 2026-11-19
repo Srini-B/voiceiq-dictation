@@ -141,7 +141,10 @@ public final class MeetingChatModel: ObservableObject {
         observer = NotificationCenter.default.addObserver(forName: .gtMeetingsDidChange, object: nil, queue: .main) { [weak self] note in
             guard note.object as? String == "sync",
                   note.userInfo?[MeetingStore.idKey] as? String == meetingID.uuid.uuidString else { return }
-            MainActor.assumeIsolated { self?.turns = store.loadChat(id: meetingID) }
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.turns = MeetingStore.merge(store.loadChat(id: meetingID), self.turns)
+            }
         }
     }
 
@@ -156,7 +159,8 @@ public final class MeetingChatModel: ObservableObject {
             do {
                 let turn = try await MeetingChat.ask(question, meeting: meetingID, history: history, store: store)
                 // Read again: questions from another device may have arrived meanwhile.
-                turns = store.loadChat(id: meetingID) + [turn]
+                // Turns kept only in memory (an earlier save failed) stay.
+                turns = MeetingStore.merge(store.loadChat(id: meetingID), turns + [turn])
                 try? store.save(chat: turns, id: meetingID)
                 state = .idle
             } catch {

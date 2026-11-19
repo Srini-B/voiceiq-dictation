@@ -58,6 +58,7 @@ public final class MeetingStore: @unchecked Sendable {
         let mayBeInCloud = loadCloudState(id: id) != nil
             || (try? load(MeetingMeta.self, from: folder.appendingPathComponent("meta.json")))?.status == .done
         try FileManager.default.removeItem(at: folder)
+        if mayBeInCloud { pendingDeletes.insert(id.uuid.uuidString) }
         Self.notifyChanged(id, deletedFromCloud: mayBeInCloud)
     }
     public func renameSpeaker(id: MeetingID, label: String, name: String) throws {

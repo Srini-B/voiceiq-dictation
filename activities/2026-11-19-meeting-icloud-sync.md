@@ -26,10 +26,11 @@ was the sync.
   questions from both devices are merged by id.
 - Review fixes: deletes are sent for any finished meeting, because its
   first upload may be in flight. Deleted ids are kept in
-  `meeting-sync-deletes.json` until iCloud confirms them, so a delete made
+  `.sync-deletes.json` until iCloud confirms them, so a delete made
   while sync is off still reaches iCloud. Fetched copies of those meetings
-  are ignored. Cloud changes are applied on the main actor, where every
-  local meeting edit happens.
+  are ignored. Cloud changes, and the read of what goes up, run on the
+  main actor, where every local meeting edit happens. A delete from
+  another device wins over an edit here that has not gone up yet.
 
 **Verification.**
 - Test Mac at 040c74a: `scripts/test.sh` 186 tests, 0 failures (3 new

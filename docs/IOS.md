@@ -625,9 +625,10 @@ The value is capped at 64 KB so the dictionary keeps most of the 1 MB store.
 
 ### History sync
 
-Meetings sync the same way once "Sync notes with iCloud" is on; see
-MEETINGS.md, Sync through iCloud. Mac meetings then show under Notes on the
-iPhone with their chat.
+Meetings sync the same way once "Sync notes with iCloud" is on on the
+iPhone and "Sync meetings with iCloud" on the Mac; a device with it off
+neither sends nor receives meetings. See MEETINGS.md, Sync through iCloud.
+Mac meetings then show under Notes on the iPhone with their chat.
 
 History's final text is the same on the Mac and the iPhone, with no setting.
 `HistorySync` (VoiceIQCore) keeps one `Dictation` record per finished

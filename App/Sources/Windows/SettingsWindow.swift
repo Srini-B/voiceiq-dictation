@@ -355,7 +355,7 @@ struct PrivacyPane: View {
                 Toggle("Sync meetings with iCloud", isOn: $syncsMeetings)
                     .onChange(of: syncsMeetings) { _, enabled in settings.setSyncsMeetings(enabled) }
             } footer: {
-                Text("Notes, transcripts, speaker names and questions go to your iCloud account and appear on your iPhone when it syncs meetings too. Recordings stay on the device that made them. Deleting a meeting deletes it everywhere.")
+                Text("Notes, transcripts, speaker names and questions go to your iCloud account and appear on your iPhone when it syncs meetings too. Recordings stay on the device that made them. A meeting you delete is deleted on your other devices too, once this is on.")
             }
 
             Section {
