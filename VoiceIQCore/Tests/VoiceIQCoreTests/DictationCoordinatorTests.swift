@@ -184,7 +184,7 @@ final class DictationCoordinatorTests: XCTestCase {
         XCTAssertNotNil(steps.insert)
         let pipeline = try XCTUnwrap(last?.pipelineSeconds)
         let sum = steps.finishRecording + steps.transcription + (steps.writing ?? 0) + (steps.insert ?? 0)
-        XCTAssertEqual(pipeline, sum, accuracy: 0.05, "the steps add up to the pipeline shown above them")
+        XCTAssertEqual(pipeline, sum, accuracy: 0.01, "the steps add up to the pipeline shown above them")
     }
 
     func testLockInMarksHandsFree() async {

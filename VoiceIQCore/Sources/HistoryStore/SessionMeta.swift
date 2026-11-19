@@ -97,7 +97,8 @@ public struct DictationSteps: Codable, Equatable, Sendable {
     /// The writing model's request, its retries and the checks on its
     /// answer. Nil when no writing model ran.
     public var writing: TimeInterval?
-    /// Typing the result. Nil when it went to the answer card instead.
+    /// Saving the result and typing it. Nil when it went to the answer card
+    /// instead.
     public var insert: TimeInterval?
 
     public init(finishRecording: TimeInterval, transcription: TimeInterval, live: Bool,

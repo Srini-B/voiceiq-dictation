@@ -592,17 +592,10 @@ public final class DictationCoordinator: ObservableObject {
             do {
                 let liveResult = await live?.finish(framesWritten: result.framesWritten)
                 try Task.checkCancellation()
-                let decodeDoneAt = Date()
                 let outcome: TranscriptionResult
-                let stages: DictationSteps
                 if let liveResult {
                     outcome = try await self.transcription.process(
                         liveResult, durationSeconds: result.durationSeconds, context: session.context
-                    )
-                    stages = DictationSteps(
-                        finishRecording: finalizeSeconds,
-                        transcription: decodeDoneAt.timeIntervalSince(finalizeStartedAt),
-                        live: true, writing: outcome.writingSeconds
                     )
                 } else {
                     outcome = try await self.transcription.transcribe(
@@ -610,19 +603,20 @@ public final class DictationCoordinator: ObservableObject {
                         durationSeconds: result.durationSeconds,
                         context: session.context
                     )
-                    // Counted from the recording's end so a fallback after the
-                    // live socket's final result timed out shows that wait too.
-                    let uploaded = Date().timeIntervalSince(finalizeStartedAt)
-                    stages = DictationSteps(
-                        finishRecording: finalizeSeconds,
-                        transcription: uploaded - (outcome.writingSeconds ?? 0),
-                        live: false, writing: outcome.writingSeconds
-                    )
                 }
+                // Transcription is everything from the recording's end to the
+                // text, less the writing model: the live socket's wait or the
+                // upload, including a fallback after the live final timed out.
+                let readyAt = Date()
+                let stages = DictationSteps(
+                    finishRecording: finalizeSeconds,
+                    transcription: readyAt.timeIntervalSince(finalizeStartedAt) - (outcome.writingSeconds ?? 0),
+                    live: liveResult != nil, writing: outcome.writingSeconds
+                )
                 guard !Task.isCancelled else { return }
                 await self.completeTranscription(
                     sessionID: sessionID, outcome: outcome,
-                    startedAt: self.finalizeRequestedAt ?? finalizeStartedAt, stages: stages
+                    startedAt: self.finalizeRequestedAt ?? finalizeStartedAt, readyAt: readyAt, stages: stages
                 )
             } catch {
                 guard !Task.isCancelled else { return }
@@ -633,7 +627,7 @@ public final class DictationCoordinator: ObservableObject {
     }
 
     private func completeTranscription(
-        sessionID: UUID, outcome: TranscriptionResult, startedAt: Date, stages: DictationSteps
+        sessionID: UUID, outcome: TranscriptionResult, startedAt: Date, readyAt: Date, stages: DictationSteps
     ) async {
         guard session?.id == sessionID else { return } // stale completion
         var stages = stages
@@ -664,10 +658,10 @@ public final class DictationCoordinator: ObservableObject {
             return
         }
 
-        let insertStartedAt = Date()
         let insertionOutcome = await insertion.insert(outcome.cleanedTranscript, context: session?.context ?? DictationContext())
         let pipelineSeconds = Date().timeIntervalSince(startedAt)
-        stages.insert = Date().timeIntervalSince(insertStartedAt)
+        // From the text being ready, so saving it to History counts here too.
+        stages.insert = Date().timeIntervalSince(readyAt)
         switch insertionOutcome {
         case .inserted:
             updateMeta { $0.status = .inserted; $0.pipelineSeconds = pipelineSeconds; $0.steps = stages }
