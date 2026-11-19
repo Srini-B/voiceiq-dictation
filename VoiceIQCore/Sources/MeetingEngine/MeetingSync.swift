@@ -290,7 +290,7 @@ extension MeetingSync: CKSyncEngineDelegate {
             if error.code == .unknownItem { gone.insert(recordID.recordName); continue }
             Log.meeting.error("meeting sync: delete failed for \(recordID.recordName, privacy: .public): \(error)")
         }
-        if !gone.isEmpty { await onMain { $0.pendingDeletes.subtract(gone) } }
+        if !gone.isEmpty { await onMain { [gone] in $0.pendingDeletes.subtract(gone) } }
         syncEngine.state.add(pendingRecordZoneChanges: again)
         if resend {
             // The engine does not schedule another send for a save that failed
