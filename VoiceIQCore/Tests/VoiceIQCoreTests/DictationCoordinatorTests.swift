@@ -160,6 +160,62 @@ final class DictationCoordinatorTests: XCTestCase {
         XCTAssertEqual(c.lastResult, "clean")
     }
 
+    /// History shows each step of an uploaded dictation: the upload's
+    /// transcription without the writing model's share, which is its own row.
+    func testInsertedDictationKeepsItsStepTimes() async throws {
+        var transcription = FakeTranscription()
+        var result = TranscriptionResult(rawTranscript: "raw", cleanedTranscript: "clean", modelID: "test")
+        result.writingSeconds = 0.2
+        transcription.result = .success(result)
+        transcription.delayNanos = 300_000_000
+        let c = makeCoordinator(transcription: transcription)
+        var last: SessionMeta?
+        c.onSessionUpdate = { meta, _ in last = meta }
+        c.handle(.begin)
+        await pump()
+        c.handle(.finalize)
+        for _ in 0..<200 where !c.state.isTerminal { try await Task.sleep(nanoseconds: 10_000_000) }
+        XCTAssertEqual(c.state, .done(.inserted))
+
+        let steps = try XCTUnwrap(last?.steps)
+        XCTAssertFalse(steps.live)
+        XCTAssertEqual(steps.writing, 0.2)
+        XCTAssertEqual(steps.transcription, 0.1, accuracy: 0.08, "the 0.3 s upload minus its 0.2 s writing share")
+        XCTAssertNotNil(steps.insert)
+        let pipeline = try XCTUnwrap(last?.pipelineSeconds)
+        let sum = steps.finishRecording + steps.transcription + (steps.writing ?? 0) + (steps.insert ?? 0)
+        XCTAssertEqual(pipeline, sum, accuracy: 0.01, "the steps add up to the pipeline shown above them")
+    }
+
+    /// An Ask result goes to the answer card, not the field: its last step
+    /// is the hand-off, and the steps still add up to the pipeline.
+    func testAnsweredDictationKeepsItsHandoffTime() async throws {
+        var transcription = FakeTranscription()
+        var result = TranscriptionResult(rawTranscript: "raw", cleanedTranscript: "answer", modelID: "test")
+        result.writingSeconds = 0.2
+        transcription.result = .success(result)
+        transcription.delayNanos = 300_000_000
+        let c = makeCoordinator(transcription: transcription)
+        var last: SessionMeta?
+        var answer: String?
+        c.onSessionUpdate = { meta, _ in last = meta }
+        c.onAnswerReady = { answer = $0 }
+        c.handle(.begin, mode: .askAnything(selectedText: nil))
+        await pump()
+        c.handle(.finalize)
+        for _ in 0..<200 where !c.state.isTerminal { try await Task.sleep(nanoseconds: 10_000_000) }
+        XCTAssertEqual(answer, "answer")
+        XCTAssertNil(inserter.insertedText)
+
+        let steps = try XCTUnwrap(last?.steps)
+        XCTAssertNil(steps.insert)
+        XCTAssertNotNil(steps.handoff)
+        XCTAssertEqual(steps.rows.last?.label, "Hand-off")
+        let pipeline = try XCTUnwrap(last?.pipelineSeconds)
+        let sum = steps.finishRecording + steps.transcription + (steps.writing ?? 0) + (steps.handoff ?? 0)
+        XCTAssertEqual(pipeline, sum, accuracy: 0.01, "the steps add up to the pipeline shown above them")
+    }
+
     func testLockInMarksHandsFree() async {
         let c = makeCoordinator()
         c.handle(.begin)

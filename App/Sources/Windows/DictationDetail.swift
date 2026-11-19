@@ -86,6 +86,9 @@ struct DictationDetail: View {
             if let pipeline = record.pipelineSeconds {
                 GridRow { metaLabel("Pipeline"); metaValue(String(format: "%.2fs", pipeline)) }
             }
+            ForEach(record.steps?.rows ?? [], id: \.self) { step in
+                GridRow { metaLabel(step.label); metaValue(step.value) }
+            }
             if !calls.isEmpty {
                 GridRow {
                     metaLabel("Cost")

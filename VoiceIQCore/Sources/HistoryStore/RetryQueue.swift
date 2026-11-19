@@ -206,6 +206,7 @@ public final class RetryQueue {
             meta.rawTranscript = result.rawTranscript
             meta.cleanedTranscript = result.cleanedTranscript
             meta.modelID = result.modelID
+            meta.steps = nil // the earlier attempt's steps did not produce this text
             meta.errorCode = nil
             meta.errorMessage = result.cleanupNote
             // .recovered, NOT .awaitingChip: the text was never put on the

@@ -315,6 +315,10 @@ private struct HistoryDetail: View {
                 divider
                 DetailRow(label: "Pipeline", value: String(format: "%.2fs", pipeline))
             }
+            ForEach(record.steps?.rows ?? [], id: \.self) { step in
+                divider
+                DetailRow(label: step.label, value: step.value)
+            }
             if !calls.isEmpty {
                 divider
                 DetailRow(label: "Cost", value: UsageView.money(

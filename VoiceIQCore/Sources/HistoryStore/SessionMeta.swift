@@ -40,6 +40,9 @@ public struct SessionMeta: Codable, Equatable, Sendable {
     public var modelID: String?
     /// Key-up → terminal-state latency, for the local stats overlay.
     public var pipelineSeconds: Double?
+    /// Where `pipelineSeconds` went, step by step. Nil on failed dictations
+    /// and on those finished before 0.7.10.
+    public var steps: DictationSteps?
     /// How loud the room was (10th-percentile level, dBFS) and how loud the
     /// speech got. Recorded on EVERY session regardless of settings: these are
     /// the numbers that let the noise thresholds be calibrated from real
@@ -77,5 +80,56 @@ public struct SessionMeta: Codable, Equatable, Sendable {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         return try? decoder.decode(SessionMeta.self, from: data)
+    }
+}
+
+/// One dictation's time after key-up, step by step. The steps run one after
+/// another, so they add up to `SessionMeta.pipelineSeconds` within a few
+/// milliseconds of local work between them.
+public struct DictationSteps: Codable, Equatable, Sendable {
+    /// Trailing speech kept after key-up, then the microphone teardown.
+    public var finishRecording: TimeInterval
+    /// The wait for the live stream's last words, or the upload: encoding
+    /// and the transcription request.
+    public var transcription: TimeInterval
+    /// True when the live stream supplied the transcript.
+    public var live: Bool
+    /// The writing model's request, its retries and the checks on its
+    /// answer. Nil when no writing model ran.
+    public var writing: TimeInterval?
+    /// Saving the result and typing it. Nil when it went to the answer card
+    /// instead.
+    public var insert: TimeInterval?
+    /// Saving the result and handing it to the answer card or the agent, for
+    /// results that are not typed.
+    public var handoff: TimeInterval?
+
+    public init(finishRecording: TimeInterval, transcription: TimeInterval, live: Bool,
+                writing: TimeInterval?, insert: TimeInterval? = nil) {
+        self.finishRecording = finishRecording
+        self.transcription = transcription
+        self.live = live
+        self.writing = writing
+        self.insert = insert
+    }
+}
+
+public extension DictationSteps {
+    struct Row: Hashable, Sendable {
+        public let label: String
+        public let value: String
+    }
+
+    /// History's rows under Pipeline, the same on Mac and iPhone.
+    var rows: [Row] {
+        func seconds(_ value: TimeInterval) -> String { String(format: "%.2fs", value) }
+        var rows = [
+            Row(label: "Finish recording", value: seconds(finishRecording)),
+            Row(label: live ? "Transcription (live)" : "Transcription", value: seconds(transcription)),
+            Row(label: "Writing model", value: writing.map(seconds) ?? "skipped"),
+        ]
+        if let insert { rows.append(Row(label: "Insert", value: seconds(insert))) }
+        if let handoff { rows.append(Row(label: "Hand-off", value: seconds(handoff))) }
+        return rows
     }
 }
