@@ -48,8 +48,18 @@ final class MeetingSyncTests: XCTestCase {
         let again = try XCTUnwrap(MeetingSync.record(for: sent, systemFields: store.loadCloudState(id: id)?.systemFields))
         XCTAssertEqual(again.recordID, record.recordID)
 
+        // A copy without notes, taken as it is, leaves none here to send back.
+        var noNotes = sent
+        noNotes.notes = nil
+        XCTAssertFalse(store.applyFromCloud(noNotes, systemFields: fields))
+        XCTAssertThrowsError(try store.loadNotes(id: id))
+        XCTAssertEqual(store.pendingUploads(), [])
+
         try store.renameSpeaker(id: id, label: "s1", name: "Rohan")
         XCTAssertEqual(store.pendingUploads(), [id])
+        // A transcript that cannot be read does not go up as an empty one.
+        try Data("[{".utf8).write(to: XCTUnwrap(store.folder(for: id)).appendingPathComponent("transcript.json"))
+        XCTAssertEqual(store.pendingUploads(), [])
     }
 
     func testAnUnchangedCopyTakesTheCloudVersionAndAChangedOneKeepsItsOwnWithBothDevicesQuestions() throws {

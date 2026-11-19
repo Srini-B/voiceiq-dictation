@@ -32,6 +32,8 @@ public actor MeetingSync {
     private var generation = 0
     /// When the fetch now running started; see `MeetingStore.heldUploads`.
     private var fetchStarted: Date?
+    /// The current fetch could not read the zone, so it may have missed deletes.
+    private var zoneFetchFailed = false
 
     private init() {}
 
@@ -243,17 +245,23 @@ extension MeetingSync: CKSyncEngineDelegate {
             }
         case .willFetchChanges:
             fetchStarted = Date()
+            zoneFetchFailed = false
+        case .didFetchRecordZoneChanges(let event):
+            if let error = event.error {
+                zoneFetchFailed = true
+                Log.meeting.error("meeting sync: zone fetch failed: \(error)")
+            }
         case .didFetchChanges:
             // Held meetings that this whole fetch did not delete go up as new records.
-            if let started = fetchStarted {
+            // A fetch that could not read the zone may have missed their deletes.
+            if let started = fetchStarted, !zoneFetchFailed {
                 fetchStarted = nil
                 let released = await onMain { $0.releaseHeld(before: started) }
                 syncEngine.state.add(pendingRecordZoneChanges: released.map { .saveRecord(Self.recordID($0)) })
             }
             // After every fetch, pushed or asked for, on the Mac as on the iPhone.
             await retryFailedImports()
-        case .willFetchRecordZoneChanges, .didFetchRecordZoneChanges,
-             .willSendChanges, .didSendChanges:
+        case .willFetchRecordZoneChanges, .willSendChanges, .didSendChanges:
             break
         @unknown default:
             break
@@ -303,7 +311,17 @@ extension MeetingSync: CKSyncEngineDelegate {
                 // its zone was made again. Held back until a later fetch says which, so
                 // a delete still wins. The meeting stays meanwhile: it may hold the
                 // only recording.
-                if let id = Self.meetingID(recordID) { await onMain { $0.hold(id: id) } }
+                if let id = Self.meetingID(recordID) {
+                    await onMain { $0.hold(id: id) }
+                    // Released only by a later fetch, which the engine may not run soon.
+                    Task.detached {
+                        do {
+                            try await syncEngine.fetchChanges()
+                        } catch {
+                            Log.meeting.error("meeting sync: fetch after unknown item failed: \(error)")
+                        }
+                    }
+                }
             case .zoneNotFound:
                 // The zone is made again; the old change tag would only meet unknownItem.
                 if let id = Self.meetingID(recordID) {
