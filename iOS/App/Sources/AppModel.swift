@@ -99,6 +99,7 @@ final class AppModel: ObservableObject {
         WritingRulesSync.shared.start()
         let deviceName = UIDevice.current.name
         Task { await HistorySync.shared.start(deviceName: deviceName) }
+        Task { await MeetingSync.shared.start() }
         ActionButtonBridge.toggle = { [weak self] in await self?.toggleFromActionButton() }
         RecordingPlayer.voiceSessionIsActive = { [weak self] in self?.session.isActive ?? false }
         commandObserver = DarwinNotifier.observe(.command) { [weak self] in
@@ -467,6 +468,7 @@ final class AppModel: ObservableObject {
         DictionaryBridge.appBecameActive()
         WritingRulesSync.shared.refresh()
         Task { await HistorySync.shared.refresh() }
+        Task { await MeetingSync.shared.refresh() }
     }
 
     func appEnteredBackground() {

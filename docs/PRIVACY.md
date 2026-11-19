@@ -38,11 +38,13 @@ With no usable key, nothing is sent and the recording stays on your Mac.
    With ElevenLabs picked as the transcription provider (Settings › Advanced
    on the Mac, Provider & Keys on iPhone; not picked by default, and only with
    an ElevenLabs key), the saved recording goes to ElevenLabs Scribe v3
-   instead of the provider, with your ElevenLabs key, after you stop;
-   Real-time transcription is off then, so dictation does not stream. With Smart transcription on,
-   the request also carries a fixed formatting instruction written by
-   VoiceiQ (punctuation, paragraphs, spoken marks, numbers, your spelling setting).
-   The spoken languages you set are sent with it.
+   instead of the provider, with your ElevenLabs key, after you stop. With
+   Real-time transcription on, the audio streams to ElevenLabs Scribe v3 Live
+   while you speak instead, on the Mac and on iPhone, and the saved recording
+   goes to Scribe v3 only if that stream fails or cannot start (for example
+   after ElevenLabs refused a recent live stream). With Smart transcription on,
+   Scribe is asked to drop filler words (`no_verbatim`); no other instruction
+   is sent. The spoken languages you set are sent with it.
    The transcript then goes to the provider for the writing rules, as below.
    Meetings are the one exception to "after you stop": while a meeting
    records with ElevenLabs chosen, its audio (mic and call audio mixed, the
@@ -223,7 +225,11 @@ Extensions page.
   account too (VoiceiQ's private CloudKit database), so History is the same
   on both. Audio, the "as heard" transcript and errors never go to iCloud.
   Deleting a dictation in History removes it from iCloud and from the other
-  device. Nothing else VoiceiQ stores goes to iCloud
+  device. Each finished meeting's notes, transcript, speaker names and
+  questions with their answers are kept in the same private database, so
+  the Mac and iPhone share them. Meeting audio never goes to iCloud.
+  Deleting a meeting removes it from iCloud and from the other device.
+  Nothing else VoiceiQ stores goes to iCloud
 - Which apps you use, when you dictate, or anything you type
 - Keystrokes: the event tap watches your dictation key, plus — only while a
   dictation is active — ⌘Esc (cancel), Space (the hands-free gesture), and the

@@ -1,5 +1,12 @@
 import Foundation
 
+public extension Notification.Name {
+    /// Posted after a meeting's files are written or its folder is deleted,
+    /// with `object` = "sync" when `MeetingSync` made the change and
+    /// `userInfo[MeetingStore.idKey]` = the meeting's id.
+    static let gtMeetingsDidChange = Notification.Name("io.blue.voiceiq.meetings-changed")
+}
+
 public final class MeetingStore: @unchecked Sendable {
     public let root: URL
     private let encoder: JSONEncoder = { let value = JSONEncoder(); value.outputFormatting = [.prettyPrinted, .sortedKeys]; return value }()
@@ -15,7 +22,8 @@ public final class MeetingStore: @unchecked Sendable {
         let date = meta.startedAt.formatted(.iso8601.year().month().day().dateSeparator(.dash))
         let folder = root.appendingPathComponent("\(date)-\(meta.id.uuid.uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        try save(meta, in: folder, name: "meta.json")
+        try encoder.encode(meta).write(to: folder.appendingPathComponent("meta.json"), options: .atomic)
+        Self.notifyChanged(meta.id)
         return folder
     }
     public func list() -> [MeetingMeta] {
@@ -25,9 +33,9 @@ public final class MeetingStore: @unchecked Sendable {
     }
     public func loadTranscript(id: MeetingID) throws -> [TranscriptSegment] { try load([TranscriptSegment].self, from: requiredFolder(id).appendingPathComponent("transcript.json")) }
     public func loadNotes(id: MeetingID) throws -> MeetingNotes { try load(MeetingNotes.self, from: requiredFolder(id).appendingPathComponent("notes.json")) }
-    public func save(meta: MeetingMeta) throws { try save(meta, in: requiredFolder(meta.id), name: "meta.json") }
-    public func save(transcript: [TranscriptSegment], id: MeetingID) throws { try save(transcript, in: requiredFolder(id), name: "transcript.json") }
-    public func save(notes: MeetingNotes, id: MeetingID) throws { try save(notes, in: requiredFolder(id), name: "notes.json") }
+    public func save(meta: MeetingMeta) throws { try save(meta, id: meta.id, name: "meta.json") }
+    public func save(transcript: [TranscriptSegment], id: MeetingID) throws { try save(transcript, id: id, name: "transcript.json") }
+    public func save(notes: MeetingNotes, id: MeetingID) throws { try save(notes, id: id, name: "notes.json") }
     /// Questions asked about the meeting and their answers; empty before the first.
     /// A chat.json that no longer decodes is moved aside to chat-unreadable-<time>.json,
     /// so the next answer starts a new chat instead of overwriting the old one.
@@ -40,15 +48,26 @@ public final class MeetingStore: @unchecked Sendable {
         try? FileManager.default.moveItem(at: url, to: aside)
         return []
     }
-    public func save(chat: [MeetingChatTurn], id: MeetingID) throws { try save(chat, in: requiredFolder(id), name: "chat.json") }
-    public func delete(id: MeetingID) throws { try FileManager.default.removeItem(at: requiredFolder(id)) }
+    public func save(chat: [MeetingChatTurn], id: MeetingID) throws { try save(chat, id: id, name: "chat.json") }
+    /// A meeting that may be in iCloud tells `MeetingSync` to delete it there
+    /// too: one that synced, or a finished one whose first upload may be on
+    /// its way. Deleting a record that never went up fails with
+    /// `unknownItem`, which sync ignores.
+    public func delete(id: MeetingID) throws {
+        let folder = try requiredFolder(id)
+        let mayBeInCloud = loadCloudState(id: id) != nil
+            || (try? load(MeetingMeta.self, from: folder.appendingPathComponent("meta.json")))?.status == .done
+        try FileManager.default.removeItem(at: folder)
+        if mayBeInCloud { pendingDeletes.insert(id.uuid.uuidString) }
+        Self.notifyChanged(id, deletedFromCloud: mayBeInCloud)
+    }
     public func renameSpeaker(id: MeetingID, label: String, name: String) throws {
         var meta = try load(MeetingMeta.self, from: requiredFolder(id).appendingPathComponent("meta.json"))
         meta.speakerNames[label] = name.trimmingCharacters(in: .whitespacesAndNewlines)
         try save(meta: meta)
     }
     /// Name-like text read off the screen while recording; see `ScreenNameSampler`.
-    public func save(screenSamples: [ScreenNameSample], id: MeetingID) throws { try save(screenSamples, in: requiredFolder(id), name: "screen-names.json") }
+    public func save(screenSamples: [ScreenNameSample], id: MeetingID) throws { try save(screenSamples, id: id, name: "screen-names.json") }
     public func loadScreenSamples(id: MeetingID) -> [ScreenNameSample]? {
         try? load([ScreenNameSample].self, from: requiredFolder(id).appendingPathComponent("screen-names.json"))
     }
@@ -86,10 +105,22 @@ public final class MeetingStore: @unchecked Sendable {
         }
         return lines.joined(separator: "\n").trimmingCharacters(in: .newlines) + "\n"
     }
-    private func requiredFolder(_ id: MeetingID) throws -> URL {
+    func requiredFolder(_ id: MeetingID) throws -> URL {
         guard let folder = folder(for: id) else { throw CocoaError(.fileNoSuchFile) }; return folder
     }
-    private func load<T: Decodable>(_ type: T.Type, from url: URL) throws -> T { try decoder.decode(type, from: Data(contentsOf: url)) }
-    private func save<T: Encodable>(_ value: T, in folder: URL, name: String) throws { try encoder.encode(value).write(to: folder.appendingPathComponent(name), options: .atomic) }
+    func load<T: Decodable>(_ type: T.Type, from url: URL) throws -> T { try decoder.decode(type, from: Data(contentsOf: url)) }
+    func save<T: Encodable>(_ value: T, id: MeetingID, name: String, fromSync: Bool = false) throws {
+        try encoder.encode(value).write(to: requiredFolder(id).appendingPathComponent(name), options: .atomic)
+        Self.notifyChanged(id, fromSync: fromSync)
+    }
+
+    public static let idKey = "meetingID"
+    /// In `userInfo`: true when the deleted meeting may be in iCloud.
+    public static let deletedFromCloudKey = "deletedFromCloud"
+
+    static func notifyChanged(_ id: MeetingID, fromSync: Bool = false, deletedFromCloud: Bool = false) {
+        NotificationCenter.default.post(name: .gtMeetingsDidChange, object: fromSync ? "sync" : nil,
+                                        userInfo: [idKey: id.uuid.uuidString, deletedFromCloudKey: deletedFromCloud])
+    }
     private func append(_ title: String, _ items: [String], to lines: inout [String]) { if !items.isEmpty { lines += ["", "## \(title)"] + items.map { "- \($0)" } } }
 }

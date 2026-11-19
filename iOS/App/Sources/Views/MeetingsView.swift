@@ -33,6 +33,9 @@ struct MeetingsView: View {
             .onAppear(perform: reload)
             .onReceive(model.meetings.$phase) { _ in reload() }
             .onReceive(model.meetings.$processing) { _ in reload() }
+            .onReceive(NotificationCenter.default.publisher(for: .gtMeetingsDidChange).receive(on: RunLoop.main)) { note in
+                if note.object as? String == "sync" { reload() }
+            }
         } placeholder: {
             DetailPlaceholder(systemImage: "doc.text", title: "No note selected")
         }
@@ -177,6 +180,9 @@ private struct MeetingRow: View {
 
 private struct MeetingDetail: View {
     @EnvironmentObject private var model: AppModel
+    @Environment(\.dismiss) private var dismiss
+    /// Deleted on another device while open.
+    @State private var gone = false
     @State private var meta: MeetingMeta
     @State private var notes: MeetingNotes?
     @State private var transcript: [TranscriptSegment] = []
@@ -204,14 +210,19 @@ private struct MeetingDetail: View {
         ScrollViewReader { scroller in
             ScrollView {
                 VStack(alignment: .leading, spacing: Theme.Spacing.xl) {
+                    if gone {
+                        Card { Text("This note was deleted on another device.").font(Theme.Fonts.body()).foregroundStyle(Theme.Colors.muted) }
+                    }
                     if let step { processingCard(step) }
                     if let notes { notesContent(notes) }
                     else if case .failed(let reason) = meta.status { failureCard(reason) }
-                    else if step == nil { processingCard(.summarizing) }
+                    else if step == nil && !gone { processingCard(.summarizing) }
                     if let chat { MeetingChatTurns(chat: chat, scroller: scroller) }
-                    VStack(alignment: .leading, spacing: Theme.Spacing.m) {
-                        GroupLabel(text: "Audio")
-                        Card { RecordingAudioControls(audio: audio) }
+                    if !gone {
+                        VStack(alignment: .leading, spacing: Theme.Spacing.m) {
+                            GroupLabel(text: "Audio")
+                            Card { RecordingAudioControls(audio: audio) }
+                        }
                     }
                     if !transcript.isEmpty { transcriptContent }
                 }
@@ -227,7 +238,7 @@ private struct MeetingDetail: View {
         .navigationTitle(notes?.title ?? meta.title ?? "Notes")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            if meta.status == .done {
+            if meta.status == .done && !gone {
                 Menu {
                     Button("Notes") { model.meetings.regenerateNotes(id: meta.id) }.disabled(transcript.isEmpty)
                     Button("Transcript and notes") { model.meetings.retry(id: meta.id, fresh: true) }
@@ -248,6 +259,9 @@ private struct MeetingDetail: View {
         .onReceive(model.meetings.$processing) { busy in
             step = busy[meta.id]
             if step == nil { load() }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .gtMeetingsDidChange).receive(on: RunLoop.main)) { note in
+            if note.object as? String == "sync", note.userInfo?[MeetingStore.idKey] as? String == meta.id.uuid.uuidString { load() }
         }
     }
 
@@ -377,7 +391,12 @@ private struct MeetingDetail: View {
 
     private func load() {
         let store = model.meetings.store
-        meta = store.list().first { $0.id == meta.id } ?? meta
+        guard let current = store.list().first(where: { $0.id == meta.id }) else {
+            gone = true; notes = nil; transcript = []; exports = []
+            dismiss()
+            return
+        }
+        meta = current
         notes = try? store.loadNotes(id: meta.id)
         transcript = (try? store.loadTranscript(id: meta.id)) ?? []
         // Shared as files so "Save to Files" keeps a .md named after the note.

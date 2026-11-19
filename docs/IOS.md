@@ -363,7 +363,8 @@ them as `SharedStore.levelBars`; the keyboard redraws every 0.06 s. A keyboard
 that appears mid-dictation, after an app switch or after being hidden, shows
 the dictation so far instead of starting empty. With Real-time transcription
 on, the words heard so far (`SharedStore.liveText`, from the provider's live
-socket: Gemini Live or OpenAI Realtime) replace the time and the glow once they
+socket: Gemini Live, OpenAI Realtime, or Scribe v3 Live while ElevenLabs
+transcribes) replace the time and the glow once they
 arrive: one line, newest words last, the start cut off. The words shown are a
 preview; the final text comes from the live socket's final result, or from
 the saved recording when that is incomplete, and is typed as before. While the text is written the strip shows
@@ -625,6 +626,10 @@ The value is capped at 64 KB so the dictionary keeps most of the 1 MB store.
 
 ### History sync
 
+Meetings sync the same way, also with no setting; see MEETINGS.md, Sync
+through iCloud. Mac meetings show under Notes on the iPhone with their
+chat, and questions asked on either device appear on both.
+
 History's final text is the same on the Mac and the iPhone, with no setting.
 `HistorySync` (VoiceIQCore) keeps one `Dictation` record per finished
 dictation in the `History` zone of the private CloudKit database of the
@@ -694,11 +699,19 @@ runs. Everything needs Full Access.
 | Provider (Gemini or OpenAI), ElevenLabs, TinyFish | Same, in Settings › Provider & Keys and the iOS Keychain. With an ElevenLabs key stored, a Transcription picker (provider or ElevenLabs) appears there. Each key card carries the service's favicon from `Assets.xcassets/Provider*.imageset` (`BrandTile`); the OpenAI mark is a template image so it takes the ink colour in dark mode |
 | History stats: words, dictations, WPM, audio time, time saved, day streak, with a period menu | Statistics (`StatsView`), opened from the row above History's days or from Home's stats grid. Same `HistoryStore.stats(period:)` and the same remembered period (`historyStatsPeriod`); the Mac's streak tooltip (longest streak, active days) is a line under the tiles. Home's grid shows all time |
 | Dictionary with search, CSV and Auto-learned | Same, synced through iCloud, plus adding a selection or a copied word from the keyboard |
-| Writing rules, smart transcription, live, noise handling | Same settings |
+| Writing rules (with Spelling), smart transcription, real-time transcription (Gemini Live, OpenAI Realtime or Scribe v3 Live), noise handling, spoken languages | Same settings |
+| `[transcription] timing:` and `[session] timing` debug log lines | Same lines, in the app's debug log file |
+| Microphone picker | "Use iPhone microphone" (prefer the built-in mic over a headset) |
 | History, retry, crash recovery, retention | Same. The detail shows Pipeline, the seconds from Stop to the text being ready (`DictationRecord.pipelineSeconds`, as on the Mac; absent for dictations synced from the Mac), the cost and one row per stage and model (stage, model, call count when above one, summed cost; `UsageLine.lines` over `UsageStore.records(forSession:)`), and Copy turns into "Copied" with a checkmark and a success haptic for 1.5 s |
 | Cost with the Gemini and OpenAI toggle (plus Claude while it has rows), periods and Detailed | Same |
 | Advanced: the selected provider's models | Same, plus the session log |
-| Screen context, auto-learn, shortcuts, call detection, mute other audio, sounds | Not on iOS |
+| Screen context | Not on iOS: an app cannot capture other apps' screens (`PlatformStubs+iOS.swift`) |
+| Fit to existing text | Not yet: the keyboard can read the text around the cursor, but does not hand it to the app |
+| Learn from your edits | Not yet: needs the keyboard to read the field again after the text lands |
+| Call detection, read names from the screen, Agent mode | Not on iOS: an app cannot see other apps' microphone use, screen or windows |
+| Mute other audio, sounds, resting indicator, hide pill from screen sharing, copy recovered dictations | Not on iOS |
+| Shortcuts, up to three Translate targets | Keyboard modes and one Translate target |
+| Not on the Mac | Keep mic on after dictating, Action Button |
 
 ## Building
 

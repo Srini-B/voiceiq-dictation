@@ -99,7 +99,7 @@ public actor HistorySync {
 
     /// CloudKit raises an Objective-C exception when the container is not in
     /// the entitlements, which is the case for ad-hoc Debug builds on the Mac.
-    private static var hasContainerEntitlement: Bool {
+    static var hasContainerEntitlement: Bool {
         #if os(macOS)
         guard let task = SecTaskCreateFromSelf(nil),
               let value = SecTaskCopyValueForEntitlement(task, "com.apple.developer.icloud-container-identifiers" as CFString, nil)

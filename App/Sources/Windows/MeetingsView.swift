@@ -45,6 +45,9 @@ struct MeetingsPane: View {
         // records, the notes are only a spinner, so the live transcript shows.
         .onChange(of: engine.liveTranscript != nil) { _, live in narrowShowsTranscript = live }
         .onChange(of: engine.processing) { _, _ in reload() }
+        .onReceive(NotificationCenter.default.publisher(for: .gtMeetingsDidChange).receive(on: RunLoop.main)) { note in
+            if note.object as? String == "sync" { reload() }
+        }
         .confirmationDialog("Delete this meeting?", isPresented: $confirmingDelete) {
             Button("Delete", role: .destructive, action: remove)
         }
@@ -232,7 +235,12 @@ struct MeetingsPane: View {
 
     private var selected: MeetingMeta? { meetings.first { $0.id == selection } }
     private var recording: Bool { if case .recording = engine.phase { return true }; return false }
-    private func reload() { meetings = store.list(); if selection == nil { selection = meetings.first?.id }; loadSelection() }
+    private func reload() {
+        meetings = store.list()
+        // A meeting deleted on another device leaves the list.
+        if !meetings.contains(where: { $0.id == selection }) { selection = meetings.first?.id }
+        loadSelection()
+    }
     private func loadSelection() {
         guard let id = selection else { notes = nil; transcript = []; return }
         notes = try? store.loadNotes(id: id); transcript = (try? store.loadTranscript(id: id)) ?? []
