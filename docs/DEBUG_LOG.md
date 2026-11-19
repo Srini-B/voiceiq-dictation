@@ -64,14 +64,17 @@ dictation that fails before then has none:
 
 ```text
 … app notice [transcription] timing: encode 31ms, transcribe 1604ms (scribe_v3/smart), writing 3012ms, 41 words, 18.2s audio
-… app notice [session] timing 26A1A1D4-…: finalize 233ms, upload (transcribe+writing) 4650ms, cleanup -, insert 133ms, key-up to done 5016ms
+… app notice [session] timing 26A1A1D4-…: finalize 233ms, upload 1638ms, writing 3012ms, insert 133ms, key-up to done 5016ms
 ```
 
 `writing` covers building the prompt, the writing-model requests and the
 validation gate. Each request attempt inside it has its own `call` line, so
 one interval can hold several: a second attempt of the same request, or the
 reminder request `runCleanup` sends when the model answered a dictated
-question instead of writing it down.
+question instead of writing it down. The session line names the
+transcript's source (`live final` or `upload`), and its `writing` is `-` when
+no writing model ran. History shows the same steps under **Pipeline** on the
+Mac and iPhone (`SessionMeta.steps`, `DictationSteps.rows`).
 
 ### Keeping and deleting
 

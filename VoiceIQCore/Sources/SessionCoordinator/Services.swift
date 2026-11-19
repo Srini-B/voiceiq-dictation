@@ -53,6 +53,9 @@ public struct TranscriptionResult: Equatable, Sendable {
     /// answer: it goes through the insertion ladder in place of the selected
     /// text instead of the answer pill.
     public var replacesSelection: Bool
+    /// How long the writing model took, its checks included. Nil when no
+    /// writing model ran.
+    public var writingSeconds: TimeInterval?
 
     /// Shown in History as the row's details.
     public var cleanupNote: String? { cleanupSkip?.note }

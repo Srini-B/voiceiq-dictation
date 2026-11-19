@@ -120,9 +120,7 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
             logTiming(writing: "writing failed after \(ms(clock.now - transcribed))ms")
             throw error
         }
-        // `process` names a writing model only when one ran.
-        logTiming(writing: result.modelID == names.transcribe
-            ? "writing skipped" : "writing \(ms(clock.now - transcribed))ms")
+        logTiming(writing: result.writingSeconds.map { "writing \(Int($0 * 1000))ms" } ?? "writing skipped")
         return result
     }
 
@@ -145,15 +143,21 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
             throw TranscriptionError.emptyTranscript
         }
 
+        let clock = ContinuousClock()
+        let writingStart = clock.now
+        func writingSeconds() -> TimeInterval { (clock.now - writingStart) / .seconds(1) }
+
         if context.mode != .dictate {
             let transformed = try await transform(raw: trimmedRaw, normalized: transcript.normalizedTranscript,
                                                   context: context, config: config)
-            return TranscriptionResult(
+            var result = TranscriptionResult(
                 rawTranscript: trimmedRaw,
                 cleanedTranscript: transformed.text,
                 modelID: context.mode == .agent ? transcript.modelID : "\(transcript.modelID)+\(writingModel)",
                 replacesSelection: transformed.replacesSelection
             )
+            if context.mode != .agent { result.writingSeconds = writingSeconds() }
+            return result
         }
 
         let skipShortCleanup = settings.skipShortDictationCleanup && durationSeconds <= 5
@@ -179,12 +183,14 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
             rawHasFillers: transcriptKeepsFillers(provider: provider, elevenLabs: elevenLabs, policy: policy),
             normalized: transcript.normalizedTranscript
         )
-        return TranscriptionResult(
+        var result = TranscriptionResult(
             rawTranscript: trimmedRaw,
             cleanedTranscript: cleanup.text,
             modelID: "\(transcript.modelID)+\(writingModel)",
             cleanupSkip: cleanup.skip
         )
+        result.writingSeconds = writingSeconds()
+        return result
     }
 
     /// The models that run, for History's model column. OpenAI's

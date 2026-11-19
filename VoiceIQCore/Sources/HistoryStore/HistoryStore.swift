@@ -18,6 +18,8 @@ public struct DictationRecord: Codable, Equatable, Identifiable, FetchableRecord
     public var errorCode: String?
     public var errorMessage: String?
     public var pipelineSeconds: Double?
+    /// Stored as JSON. Nil for rows from another device.
+    public var steps: DictationSteps?
     /// The device that dictated it, for rows that came from iCloud. Nil for
     /// dictations made on this device.
     public var origin: String?
@@ -50,6 +52,7 @@ public struct DictationRecord: Codable, Equatable, Identifiable, FetchableRecord
         self.errorCode = meta.errorCode
         self.errorMessage = meta.errorMessage
         self.pipelineSeconds = meta.pipelineSeconds
+        self.steps = meta.steps
     }
 }
 
@@ -144,6 +147,11 @@ public final class HistoryStore: @unchecked Sendable {
             }
         }
         migrator.registerMigration("v4-stats", migrate: Self.createStatTable)
+        migrator.registerMigration("v5-steps") { db in
+            try db.alter(table: DictationRecord.databaseTableName) { t in
+                t.add(column: "steps", .text)
+            }
+        }
         try migrator.migrate(queue)
     }
 

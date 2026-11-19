@@ -137,25 +137,8 @@ public final class DictationCoordinator: ObservableObject {
     public var onAgentCommandReady: ((TranscriptionResult) -> Void)?
 
     /// Where the time after key-up went, for the session log.
-    public struct StageTimes: Equatable, Sendable {
-        public enum Source: Equatable, Sendable {
-            /// A cloud socket that streamed during the recording.
-            case cloudLive
-            /// The saved recording uploaded after the fact; one request transcribes and cleans up.
-            case cloudUpload
-        }
-        public var source: Source
-        /// Trailing speech kept after key-up, then the microphone teardown.
-        public var finalize: TimeInterval
-        /// The live socket's final result, or the whole upload round-trip.
-        public var transcribe: TimeInterval
-        /// The cleanup request; nil for `.cloudUpload`, whose one request includes it.
-        public var cleanup: TimeInterval?
-        /// Typing the result; nil when it went to the answer card instead.
-        public var insert: TimeInterval?
-    }
     /// Fired once per completed session, after the result was handed over.
-    public var onStageTimes: ((StageTimes) -> Void)?
+    public var onStageTimes: ((DictationSteps) -> Void)?
 
     /// Cancelled recordings at least this long stay recoverable in History —
     /// an accidental Esc after minutes of dictation must not destroy the words.
@@ -611,15 +594,15 @@ public final class DictationCoordinator: ObservableObject {
                 try Task.checkCancellation()
                 let decodeDoneAt = Date()
                 let outcome: TranscriptionResult
-                let stages: StageTimes
+                let stages: DictationSteps
                 if let liveResult {
                     outcome = try await self.transcription.process(
                         liveResult, durationSeconds: result.durationSeconds, context: session.context
                     )
-                    stages = StageTimes(
-                        source: .cloudLive, finalize: finalizeSeconds,
-                        transcribe: decodeDoneAt.timeIntervalSince(finalizeStartedAt),
-                        cleanup: Date().timeIntervalSince(decodeDoneAt), insert: nil
+                    stages = DictationSteps(
+                        finishRecording: finalizeSeconds,
+                        transcription: decodeDoneAt.timeIntervalSince(finalizeStartedAt),
+                        live: true, writing: outcome.writingSeconds
                     )
                 } else {
                     outcome = try await self.transcription.transcribe(
@@ -629,14 +612,17 @@ public final class DictationCoordinator: ObservableObject {
                     )
                     // Counted from the recording's end so a fallback after the
                     // live socket's final result timed out shows that wait too.
-                    stages = StageTimes(
-                        source: .cloudUpload, finalize: finalizeSeconds,
-                        transcribe: Date().timeIntervalSince(finalizeStartedAt), cleanup: nil, insert: nil
+                    let uploaded = Date().timeIntervalSince(finalizeStartedAt)
+                    stages = DictationSteps(
+                        finishRecording: finalizeSeconds,
+                        transcription: uploaded - (outcome.writingSeconds ?? 0),
+                        live: false, writing: outcome.writingSeconds
                     )
                 }
                 guard !Task.isCancelled else { return }
                 await self.completeTranscription(
-                    sessionID: sessionID, outcome: outcome, startedAt: finalizeStartedAt, stages: stages
+                    sessionID: sessionID, outcome: outcome,
+                    startedAt: self.finalizeRequestedAt ?? finalizeStartedAt, stages: stages
                 )
             } catch {
                 guard !Task.isCancelled else { return }
@@ -647,7 +633,7 @@ public final class DictationCoordinator: ObservableObject {
     }
 
     private func completeTranscription(
-        sessionID: UUID, outcome: TranscriptionResult, startedAt: Date, stages: StageTimes
+        sessionID: UUID, outcome: TranscriptionResult, startedAt: Date, stages: DictationSteps
     ) async {
         guard session?.id == sessionID else { return } // stale completion
         var stages = stages
@@ -670,7 +656,7 @@ public final class DictationCoordinator: ObservableObject {
             } else {
                 onAnswerReady?(outcome.cleanedTranscript)
             }
-            updateMeta { $0.status = .inserted; $0.pipelineSeconds = Date().timeIntervalSince(startedAt) }
+            updateMeta { $0.status = .inserted; $0.pipelineSeconds = Date().timeIntervalSince(startedAt); $0.steps = stages }
             apply(.inserted)
             discardUnlessKept()
             session = nil
@@ -684,16 +670,16 @@ public final class DictationCoordinator: ObservableObject {
         stages.insert = Date().timeIntervalSince(insertStartedAt)
         switch insertionOutcome {
         case .inserted:
-            updateMeta { $0.status = .inserted; $0.pipelineSeconds = pipelineSeconds }
+            updateMeta { $0.status = .inserted; $0.pipelineSeconds = pipelineSeconds; $0.steps = stages }
             apply(.inserted)
         case .frontmostChanged:
-            updateMeta { $0.status = .awaitingChip; $0.pipelineSeconds = pipelineSeconds }
+            updateMeta { $0.status = .awaitingChip; $0.pipelineSeconds = pipelineSeconds; $0.steps = stages }
             apply(.frontmostChangedAwaitingChip)
         case .fellBackToClipboard:
-            updateMeta { $0.status = .copiedToClipboard; $0.pipelineSeconds = pipelineSeconds }
+            updateMeta { $0.status = .copiedToClipboard; $0.pipelineSeconds = pipelineSeconds; $0.steps = stages }
             apply(.insertionFellBackToClipboard)
         case .blockedSecureField:
-            updateMeta { $0.status = .heldSecure; $0.pipelineSeconds = pipelineSeconds }
+            updateMeta { $0.status = .heldSecure; $0.pipelineSeconds = pipelineSeconds; $0.steps = stages }
             apply(.insertionBlockedSecure)
         }
         lastResult = outcome.cleanedTranscript
@@ -703,14 +689,13 @@ public final class DictationCoordinator: ObservableObject {
     }
 
     /// One line per dictation from key-up to the result, so a slow one can be
-    /// blamed on the mic teardown, the transcript, the cleanup or the typing.
-    /// `pipelineSeconds` in meta.json starts after the teardown, so it leaves
-    /// out the first part.
-    private func reportStageTimes(_ stages: StageTimes, sessionID: UUID) {
+    /// blamed on the mic teardown, the transcript, the writing model or the
+    /// typing. History shows the same steps.
+    private func reportStageTimes(_ stages: DictationSteps, sessionID: UUID) {
         func ms(_ seconds: TimeInterval?) -> String { seconds.map { "\(Int($0 * 1000))ms" } ?? "-" }
         let total = finalizeRequestedAt.map { Date().timeIntervalSince($0) }
-        let source = stages.source == .cloudLive ? "live final" : "upload (transcribe+writing)"
-        Log.session.notice("timing \(sessionID.uuidString, privacy: .public): finalize \(ms(stages.finalize), privacy: .public), \(source, privacy: .public) \(ms(stages.transcribe), privacy: .public), cleanup \(ms(stages.cleanup), privacy: .public), insert \(ms(stages.insert), privacy: .public), key-up to done \(ms(total), privacy: .public)")
+        let source = stages.live ? "live final" : "upload"
+        Log.session.notice("timing \(sessionID.uuidString, privacy: .public): finalize \(ms(stages.finishRecording), privacy: .public), \(source, privacy: .public) \(ms(stages.transcription), privacy: .public), writing \(ms(stages.writing), privacy: .public), insert \(ms(stages.insert), privacy: .public), key-up to done \(ms(total), privacy: .public)")
         onStageTimes?(stages)
     }
 
