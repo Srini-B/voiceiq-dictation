@@ -47,8 +47,10 @@ extension MeetingStore {
         set { save(ids: newValue, in: "deletes.json") }
     }
 
-    /// Meetings from iCloud that could not be written here (a full disk).
-    /// `MeetingSync` fetches them again, since the engine will not.
+    /// Meetings from iCloud that could not be written here (a full disk),
+    /// new or half updated. `MeetingSync` fetches them again, since the
+    /// engine will not; until then they do not go up, and the copy fetched
+    /// again replaces whatever was half written.
     var failedImports: Set<String> {
         get { ids(in: "retry.json") }
         set { save(ids: newValue, in: "retry.json") }
@@ -100,7 +102,7 @@ extension MeetingStore {
 
     /// Finished, and changed since it was last sent or received.
     func needsUpload(id: MeetingID) -> Bool {
-        guard let meeting = synced(id: id) else { return false }
+        guard !failedImports.contains(id.uuid.uuidString), let meeting = synced(id: id) else { return false }
         return loadCloudState(id: id)?.digest != meeting.digest
     }
 
@@ -141,10 +143,12 @@ extension MeetingStore {
         }
         let state = loadCloudState(id: id)
         let local = synced(id: id)
-        let changedHere = local == nil || local?.digest != state?.digest
+        let retrying = failedImports.contains(id.uuid.uuidString)
+        let changedHere = !retrying && (local == nil || local?.digest != state?.digest)
         let stored = MeetingCloudState(digest: remote.digest, systemFields: systemFields, arrived: state?.arrived ?? false)
         guard local != remote else {
             saveCloudState(stored, id: id)
+            failedImports.remove(id.uuid.uuidString)
             return false
         }
         do {
@@ -157,9 +161,12 @@ extension MeetingStore {
             }
         } catch {
             Log.meeting.error("meeting sync: could not update \(id.uuid.uuidString, privacy: .public): \(error)")
+            // Its files may be half from each version: never sent, fetched again whole.
+            if !changedHere { failedImports.insert(id.uuid.uuidString) }
             return changedHere
         }
         saveCloudState(stored, id: id)
+        failedImports.remove(id.uuid.uuidString)
         return changedHere
     }
 

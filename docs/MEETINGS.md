@@ -619,7 +619,9 @@ CloudKit database, through `CKSyncEngine`.
   900 KB is logged and stays local (several hours of talk is a few hundred
   KB). A meeting that arrives but cannot be written (a full disk) leaves no
   partial folder; its id waits in `.sync/retry.json` and it is fetched
-  again by id when sync starts and on every `refresh()`.
+  again by id when sync starts and on every `refresh()`. An update that
+  fails partway waits there too: it is not sent as a local edit, and the
+  copy fetched again replaces it whole.
 - **When.** A meeting goes up once its status is `done`, and again whenever
   it changes: renamed speakers, redone notes, a new question.
   `MeetingStore` posts `.gtMeetingsDidChange` for every write and delete;

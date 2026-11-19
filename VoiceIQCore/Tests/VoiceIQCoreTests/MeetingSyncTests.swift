@@ -77,7 +77,7 @@ final class MeetingSyncTests: XCTestCase {
         XCTAssertTrue(store.needsUpload(id: id))
     }
 
-    func testAMeetingThatCouldNotBeWrittenIsLeftOutWholeAndImportedOnRetry() throws {
+    func testAMeetingThatCouldNotBeWrittenIsNeverSentHalfWrittenAndIsTakenWholeOnRetry() throws {
         var arriving = try XCTUnwrap(store.synced(id: try finishedMeeting()))
         arriving.meta.id = MeetingID()
         // The meetings folder cannot take a new meeting, as on a full disk.
@@ -91,6 +91,23 @@ final class MeetingSyncTests: XCTestCase {
         XCTAssertFalse(store.applyFromCloud(arriving, systemFields: fields))
         XCTAssertEqual(store.synced(id: arriving.meta.id), arriving)
         XCTAssertEqual(store.failedImports, [])
+
+        // An update that cannot be written is not sent as a local edit, and is taken whole on retry.
+        var update = arriving
+        update.notes?.title = "Redone on the Mac"
+        update.chat = [turn("Who owns it?", at: 10)]
+        let folder = try XCTUnwrap(store.folder(for: arriving.meta.id))
+        try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: folder.path)
+        XCTAssertFalse(store.applyFromCloud(update, systemFields: fields))
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: folder.path)
+        XCTAssertEqual(store.failedImports, [arriving.meta.id.uuid.uuidString])
+        try store.renameSpeaker(id: arriving.meta.id, label: "s1", name: "Rohan")
+        XCTAssertFalse(store.needsUpload(id: arriving.meta.id))
+
+        XCTAssertFalse(store.applyFromCloud(update, systemFields: fields))
+        XCTAssertEqual(store.synced(id: arriving.meta.id), update)
+        XCTAssertEqual(store.failedImports, [])
+        XCTAssertFalse(store.needsUpload(id: arriving.meta.id))
     }
 
     func testMeetingsFromAnotherDeviceGoWithTheAccountAndDeletesOfMeetingsThatMayBeInICloudReachIt() throws {
