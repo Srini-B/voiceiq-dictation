@@ -206,7 +206,12 @@ Do not distribute an artifact if any command fails. There is no unsigned or unno
 
 1. Complete the product reliability checklist in `docs/design/product-reliability.md`.
 2. Smoke-test onboarding, API-key storage, permissions, dictation, history, and the DMG install flow on a clean macOS account.
-3. Push the version change; the release workflow publishes the GitHub
+3. Check that every CloudKit record type and field the release writes is
+   deployed to Production (see History sync above): `Dictation` (history sync,
+   deployed 2026-10-14) and `Meeting` (meeting sync, deployed 2026-11-19 for 0.7.10).
+   Production rejects unknown types and fields, so the TestFlight and
+   Developer ID builds would fail to sync.
+4. Push the version change; the release workflow publishes the GitHub
    release with the ZIP, DMG and Sparkle appcast. By hand:
    `scripts/publish-github-release.sh` (dry run first with `DRY_RUN=1`). See
    [UPDATES.md](UPDATES.md).
