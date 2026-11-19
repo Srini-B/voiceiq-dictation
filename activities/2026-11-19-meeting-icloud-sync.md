@@ -1,0 +1,47 @@
+# Meeting sync through iCloud (2026-11-19)
+
+**Why.** The owner asked for meeting notes to sync through iCloud the way
+dictations and custom rules do, and for chat on meetings on iPhone like the
+Mac. Standing rule: every platform gets the same features where it can.
+The iPhone already had chat on notes (since 0.6.26), but only for notes
+recorded on it. Mac meetings never reached the iPhone, so the missing piece
+was the sync.
+
+**Decisions.**
+- `MeetingSync` copies `HistorySync`: `CKSyncEngine`, the same container
+  and private database, its own `Meetings` zone and `Meeting` record type.
+  The record has one field, `payload` (Bytes): the meeting's meta, notes,
+  transcript and chat as LZFSE-compressed JSON. A single field keeps the
+  Production schema step small, and compression keeps meetings several
+  hours long under the 1 MB record limit.
+- Opt-in on each device (`SettingsStore.syncsMeetings`, off by default).
+  History sync has no setting, but a meeting transcript holds everyone's
+  words, and the request asked for an option.
+- Audio is not synced. It can reach hundreds of MB per meeting in the
+  user's iCloud storage. On the other device, Play, Download and Redo
+  transcript are unavailable, and everything else works.
+- Unlike History, a meeting can be edited on both devices. Change
+  detection is a content digest kept in `cloud.json`, with the record's
+  system fields. The device that sends last keeps its notes and names, and
+  questions from both devices are merged by id.
+- Review fixes: deletes are sent for any finished meeting, because its
+  first upload may be in flight. Deleted ids are kept in
+  `meeting-sync-deletes.json` until iCloud confirms them, so a delete made
+  while sync is off still reaches iCloud. Fetched copies of those meetings
+  are ignored. Cloud changes are applied on the main actor, where every
+  local meeting edit happens.
+
+**Verification.**
+- Test Mac at 040c74a: `scripts/test.sh` 186 tests, 0 failures (3 new
+  `MeetingSyncTests`). `scripts/build.sh` and `scripts/build-ios.sh` both
+  exit 0. CI is green.
+- iOS 27 Simulator, Debug: Settings › Privacy shows "Sync notes with iCloud"
+  (off) and a "Notes: Not synced" row. A seeded finished meeting with no
+  audio opens with its notes and the "Ask about this note" field.
+- Not verified: a real round trip between two devices. It needs the
+  Production schema (below) and a signed Mac build plus an iPhone build on
+  the same Apple Account.
+
+**Before release.** Create record type `Meeting` with field `payload`
+(Bytes) in the CloudKit Console (Development) and deploy it to Production
+(RELEASING.md step 4).
