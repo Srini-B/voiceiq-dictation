@@ -29,6 +29,9 @@ public actor MeetingSync {
     private var engine: CKSyncEngine?
     private let store = MeetingStore()
     private var observers: [any NSObjectProtocol] = []
+    /// Changes when sync stops, the account changes or the zone goes, so a
+    /// retry fetch that was out then is not applied.
+    private var generation = 0
 
     private init() {}
 
@@ -75,8 +78,10 @@ public actor MeetingSync {
         let ids = store.failedImports.compactMap(UUID.init(uuidString:)).map { Self.recordID(MeetingID(uuid: $0)) }
         guard engine != nil, !ids.isEmpty else { return }
         let database = CKContainer(identifier: HistorySync.containerID).privateCloudDatabase
+        let started = generation
         guard let results = try? await database.records(for: ids) else { return }
         for (recordID, result) in results {
+            guard generation == started else { return }
             switch result {
             case .success(let record):
                 guard let meeting = Self.meeting(from: record) else { continue }
@@ -96,6 +101,7 @@ public actor MeetingSync {
             enable()
         } else if let engine {
             self.engine = nil
+            generation += 1
             await engine.cancelOperations()
             Log.meeting.info("meeting sync stopped")
         }
@@ -203,6 +209,7 @@ extension MeetingSync: CKSyncEngineDelegate {
                 try? data.write(to: Self.stateURL, options: .atomic)
             }
         case .accountChange(let event):
+            generation += 1
             switch event.changeType {
             case .signIn:
                 syncEngine.state.add(pendingDatabaseChanges: [.saveZone(CKRecordZone(zoneID: Self.zoneID))])
@@ -219,6 +226,7 @@ extension MeetingSync: CKSyncEngineDelegate {
         case .fetchedDatabaseChanges(let event):
             if event.deletions.contains(where: { $0.zoneID == Self.zoneID }) {
                 Log.meeting.info("meeting sync: zone deleted in iCloud, starting over")
+                generation += 1
                 await onMain { $0.forgetCloud() }
                 syncEngine.state.add(pendingDatabaseChanges: [.saveZone(CKRecordZone(zoneID: Self.zoneID))])
                 enqueueAll()
