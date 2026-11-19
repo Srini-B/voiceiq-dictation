@@ -637,9 +637,10 @@ CloudKit database, through `CKSyncEngine`.
   other: notes, transcript, speaker names, Export and questions all work.
   Play, Download and Redo transcript are unavailable because the audio is not
   there; Redo notes works from the transcript.
-- **Deletes.** Deleting a meeting that may be in iCloud (it synced, or it is
-  finished and its first upload may be on its way) deletes its record, and
-  the other device removes its copy. The id waits in
+- **Deletes.** Deleting a meeting deletes its record in iCloud, and the
+  other device removes its copy. Every delete is sent, because a first
+  upload may be on its way while a Redo has the meeting unfinished again;
+  a record that never went up answers "unknown item", which counts as gone. The id waits in
   `.sync/deletes.json` in the meetings folder until iCloud confirms the
   record gone, so a delete made before sync started (or before the engine
   saved its state) is still sent, and a copy fetched meanwhile does not
