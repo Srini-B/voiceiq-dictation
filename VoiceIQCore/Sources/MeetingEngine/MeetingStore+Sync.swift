@@ -85,14 +85,15 @@ extension MeetingStore {
     func applyFromCloud(_ remote: SyncedMeeting, systemFields: Data) -> Bool {
         let id = remote.meta.id
         guard folder(for: id) != nil else {
+            let date = remote.meta.startedAt.formatted(.iso8601.year().month().day().dateSeparator(.dash))
+            let folder = root.appendingPathComponent("\(date)-\(id.uuid.uuidString)")
             do {
-                try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-                let date = remote.meta.startedAt.formatted(.iso8601.year().month().day().dateSeparator(.dash))
-                try FileManager.default.createDirectory(at: root.appendingPathComponent("\(date)-\(id.uuid.uuidString)"),
-                                                        withIntermediateDirectories: true)
+                try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
                 try write(remote)
                 saveCloudState(MeetingCloudState(digest: remote.digest, systemFields: systemFields, arrived: true), id: id)
             } catch {
+                // Half written (a full disk): gone, so the next change to it in iCloud brings it in whole.
+                try? FileManager.default.removeItem(at: folder)
                 Log.meeting.error("meeting sync: could not save \(id.uuid.uuidString, privacy: .public): \(error)")
             }
             return false
