@@ -76,11 +76,13 @@ extension MeetingStore {
 
     /// Its copy in iCloud was not found: forget that copy, and hold it back.
     func hold(id: MeetingID, at date: Date = Date()) {
+        // The hold first: stopped between the two writes, the meeting is held
+        // with its old change tag, which can only meet unknownItem again.
+        heldUploads[id.uuid.uuidString] = date
         if var state = loadCloudState(id: id), state.systemFields != nil {
             state.systemFields = nil
             saveCloudState(state, id: id)
         }
-        heldUploads[id.uuid.uuidString] = date
     }
 
     /// Meetings held before `fetchStarted` that a finished fetch did not
@@ -109,8 +111,11 @@ extension MeetingStore {
 
     /// What goes up for a meeting: its content and the system fields of the
     /// copy it goes over, read together.
+    /// Nil for a meeting that must not go up now (see `needsUpload`), even
+    /// when a save of it was already queued.
     func outgoing(id: MeetingID) -> (meeting: SyncedMeeting, systemFields: Data?)? {
-        synced(id: id).map { ($0, loadCloudState(id: id)?.systemFields) }
+        guard !failedImports.contains(id.uuid.uuidString), heldUploads[id.uuid.uuidString] == nil else { return nil }
+        return synced(id: id).map { ($0, loadCloudState(id: id)?.systemFields) }
     }
 
     func loadCloudState(id: MeetingID) -> MeetingCloudState? {

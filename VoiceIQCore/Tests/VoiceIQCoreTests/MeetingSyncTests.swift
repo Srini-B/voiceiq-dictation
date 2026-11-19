@@ -129,6 +129,9 @@ final class MeetingSyncTests: XCTestCase {
         // Edited, or the app relaunched, before the fetch: still held.
         try store.renameSpeaker(id: kept, label: "s1", name: "Rohan")
         XCTAssertEqual(store.pendingUploads(), [])
+        // A save queued before the hold is not built either; a relaunch reads the hold from disk.
+        XCTAssertNil(store.outgoing(id: kept))
+        XCTAssertNil(MeetingStore(root: root).outgoing(id: kept))
         // A fetch that started before the hold proves nothing.
         XCTAssertEqual(store.releaseHeld(before: heldAt.addingTimeInterval(-1)), [])
 
