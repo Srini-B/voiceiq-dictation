@@ -81,7 +81,7 @@ extension MeetingStore {
         heldUploads[id.uuid.uuidString] = date
         if var state = loadCloudState(id: id), state.systemFields != nil {
             state.systemFields = nil
-            saveCloudState(state, id: id)
+            try? saveCloudState(state, id: id)
         }
     }
 
@@ -123,12 +123,12 @@ extension MeetingStore {
         return try? load(MeetingCloudState.self, from: folder.appendingPathComponent(Self.cloudFile))
     }
 
-    func saveCloudState(_ state: MeetingCloudState?, id: MeetingID) {
+    func saveCloudState(_ state: MeetingCloudState?, id: MeetingID) throws {
         guard let url = folder(for: id)?.appendingPathComponent(Self.cloudFile) else { return }
-        if let state, let data = try? JSONEncoder().encode(state) {
-            try? data.write(to: url, options: .atomic)
-        } else {
-            try? FileManager.default.removeItem(at: url)
+        if let state {
+            try JSONEncoder().encode(state).write(to: url, options: .atomic)
+        } else if FileManager.default.fileExists(atPath: url.path) {
+            try FileManager.default.removeItem(at: url)
         }
     }
 
@@ -155,7 +155,7 @@ extension MeetingStore {
         let id = sent.meta.id
         guard folder(for: id) != nil else { return }
         let arrived = loadCloudState(id: id)?.arrived ?? false
-        saveCloudState(MeetingCloudState(digest: sent.digest, systemFields: systemFields, arrived: arrived), id: id)
+        try? saveCloudState(MeetingCloudState(digest: sent.digest, systemFields: systemFields, arrived: arrived), id: id)
     }
 
     /// A meeting fetched from iCloud, or the copy there that refused this
@@ -173,7 +173,7 @@ extension MeetingStore {
             do {
                 try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
                 try write(remote)
-                saveCloudState(MeetingCloudState(digest: remote.digest, systemFields: systemFields, arrived: true), id: id)
+                try saveCloudState(MeetingCloudState(digest: remote.digest, systemFields: systemFields, arrived: true), id: id)
                 failedImports.remove(id.uuid.uuidString)
             } catch {
                 // Half written (a full disk): gone, and fetched again whole (`failedImports`).
@@ -189,7 +189,7 @@ extension MeetingStore {
         let changedHere = !retrying && (local == nil || local?.digest != state?.digest)
         let stored = MeetingCloudState(digest: remote.digest, systemFields: systemFields, arrived: state?.arrived ?? false)
         guard local != remote else {
-            saveCloudState(stored, id: id)
+            try? saveCloudState(stored, id: id)
             failedImports.remove(id.uuid.uuidString)
             return false
         }
@@ -201,6 +201,8 @@ extension MeetingStore {
             } else {
                 try write(remote)
             }
+            // Without its digest the import would read as an edit made here.
+            try saveCloudState(stored, id: id)
         } catch {
             Log.meeting.error("meeting sync: could not update \(id.uuid.uuidString, privacy: .public): \(error)")
             // Its files may be half from each version: never sent, fetched again whole.
@@ -210,7 +212,6 @@ extension MeetingStore {
             // pending and is merged again at the next edit or launch.
             return false
         }
-        saveCloudState(stored, id: id)
         failedImports.remove(id.uuid.uuidString)
         return changedHere
     }
@@ -245,7 +246,7 @@ extension MeetingStore {
         heldUploads = [:]
         for meta in list() {
             guard let state = loadCloudState(id: meta.id) else { continue }
-            if state.arrived { deleteFromCloud(id: meta.id) } else { saveCloudState(nil, id: meta.id) }
+            if state.arrived { deleteFromCloud(id: meta.id) } else { try? saveCloudState(nil, id: meta.id) }
         }
     }
 }
