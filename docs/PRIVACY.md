@@ -41,7 +41,8 @@ With no usable key, nothing is sent and the recording stays on your Mac.
    instead of the provider, with your ElevenLabs key, after you stop. With
    Real-time transcription on, the audio streams to ElevenLabs Scribe v3 Live
    while you speak instead, on the Mac and on iPhone, and the saved recording
-   goes to Scribe v3 only if that stream fails. With Smart transcription on,
+   goes to Scribe v3 only if that stream fails or cannot start (for example
+   after ElevenLabs refused a recent live stream). With Smart transcription on,
    Scribe is asked to drop filler words (`no_verbatim`); no other instruction
    is sent. The spoken languages you set are sent with it.
    The transcript then goes to the provider for the writing rules, as below.
