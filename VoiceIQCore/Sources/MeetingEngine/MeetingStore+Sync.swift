@@ -184,8 +184,10 @@ extension MeetingStore {
         try save(meeting.meta, id: id, name: "meta.json", fromSync: true)
     }
 
-    /// Deleted on another device. The audio goes with it.
+    /// Deleted on another device. The audio goes with it, and a retry of it
+    /// that is still out is not applied.
     func deleteFromCloud(id: MeetingID) {
+        failedImports.remove(id.uuid.uuidString)
         guard let folder = folder(for: id) else { return }
         try? FileManager.default.removeItem(at: folder)
         Self.notifyChanged(id, fromSync: true)

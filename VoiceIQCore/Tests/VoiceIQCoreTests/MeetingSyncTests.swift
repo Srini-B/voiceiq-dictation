@@ -108,6 +108,14 @@ final class MeetingSyncTests: XCTestCase {
         XCTAssertEqual(store.synced(id: arriving.meta.id), update)
         XCTAssertEqual(store.failedImports, [])
         XCTAssertFalse(store.needsUpload(id: arriving.meta.id))
+        // Deleted on the other device before a retry came back: the retry is dropped.
+        try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: root.path)
+        var other = update
+        other.meta.id = MeetingID()
+        XCTAssertFalse(store.applyFromCloud(other, systemFields: fields))
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: root.path)
+        store.deleteFromCloud(id: other.meta.id)
+        XCTAssertFalse(store.failedImports.contains(other.meta.id.uuid.uuidString))
     }
 
     func testMeetingsFromAnotherDeviceGoWithTheAccountAndDeletesOfMeetingsThatMayBeInICloudReachIt() throws {

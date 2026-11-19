@@ -79,7 +79,10 @@ public actor MeetingSync {
             case .success(let record):
                 guard let meeting = Self.meeting(from: record) else { continue }
                 let fields = Self.systemFields(of: record)
-                _ = await onMain { $0.applyFromCloud(meeting, systemFields: fields) }
+                // Still waiting: a delete fetched meanwhile takes it off the list.
+                _ = await onMain { store in
+                    store.failedImports.contains(recordID.recordName) && store.applyFromCloud(meeting, systemFields: fields)
+                }
             case .failure(let error as CKError) where error.code == .unknownItem:
                 // Deleted in iCloud meanwhile: nothing to bring in.
                 _ = await onMain { $0.failedImports.remove(recordID.recordName) }
