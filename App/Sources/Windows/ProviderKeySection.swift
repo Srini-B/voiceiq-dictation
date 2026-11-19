@@ -143,7 +143,7 @@ struct ElevenLabsTranscriptionSection: View {
             Text(!hasKey
                  ? "Add an ElevenLabs key above to transcribe with Scribe v3."
                  : chosen
-                 ? "Scribe v3 transcribes dictation from the recording, after you stop; Real-time transcription is not used with it. With Smart transcription on, Scribe also drops filler words and formats the text before \(provider.displayName) applies your writing rules. Meetings show a live transcript from Scribe v3 Live while they record, and Scribe v3 makes the saved transcript when they stop. Meeting notes still come from \(provider.displayName)."
+                 ? "Scribe v3 transcribes dictation from the recording after you stop, or Scribe v3 Live while you speak when Real-time transcription is on. With Smart transcription on, Scribe also drops filler words before \(provider.displayName) applies your writing rules. Meetings show a live transcript from Scribe v3 Live while they record, and Scribe v3 makes the saved transcript when they stop. Meeting notes still come from \(provider.displayName)."
                  : "\(provider.displayName) transcribes dictation and meetings.")
         }
         .onReceive(NotificationCenter.default.publisher(for: .gtSettingDidChange).receive(on: RunLoop.main)) { _ in
