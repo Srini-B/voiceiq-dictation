@@ -163,7 +163,10 @@ extension MeetingStore {
             Log.meeting.error("meeting sync: could not update \(id.uuid.uuidString, privacy: .public): \(error)")
             // Its files may be half from each version: never sent, fetched again whole.
             if !changedHere { failedImports.insert(id.uuid.uuidString) }
-            return changedHere
+            // A merge that could not be saved is not sent now, or the save would
+            // meet the same conflict and fail again at once. The change here stays
+            // pending and is merged again at the next edit or launch.
+            return false
         }
         saveCloudState(stored, id: id)
         failedImports.remove(id.uuid.uuidString)
