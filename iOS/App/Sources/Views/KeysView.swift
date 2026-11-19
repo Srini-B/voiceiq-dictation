@@ -73,7 +73,7 @@ struct ModelKeysForm: View {
                     .pickerStyle(.segmented)
                     .onChange(of: elevenLabs) { _, value in SettingsStore().setElevenLabsTranscription(value) }
                     Text(elevenLabs
-                         ? "Scribe v3 transcribes dictation from the recording, after you stop; Real-time transcription is not used with it. Notes show a live transcript from Scribe v3 Live while they record, and Scribe v3 makes the saved transcript when they stop. \(provider.displayName) still applies the writing rules and writes the notes."
+                         ? "Scribe v3 transcribes dictation from the recording after you stop, or Scribe v3 Live while you speak when Real-time transcription is on. Notes show a live transcript from Scribe v3 Live while they record, and Scribe v3 makes the saved transcript when they stop. \(provider.displayName) still applies the writing rules and writes the notes."
                          : "\(provider.displayName) transcribes dictation and meetings.")
                         .font(Theme.Fonts.footnote())
                         .foregroundStyle(Theme.Colors.muted)

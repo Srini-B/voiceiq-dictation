@@ -61,17 +61,11 @@ public final class LiveTranscriber: DictationStreaming {
         let vocabulary = DictionaryStore().sanitizedVocabulary()
         guard settings.liveTranscriptionEnabled else { return nil }
         if settings.transcribesWithElevenLabs {
-            // iOS settings still show Real-time transcription off for
-            // ElevenLabs, so a stale "on" there must not start a stream.
-            #if os(iOS)
-            return nil
-            #else
             guard let key = KeychainStore.loadKey(.elevenLabs), !key.isEmpty else { return nil }
             let dialect = ElevenLabsLiveDialect(smart: settings.smartTranscriptionEnabled, vocabulary: vocabulary,
                                                 languages: settings.spokenLanguages)
             return make(model: dialect.model, key: key, renewAfter: 1800, dialect: dialect,
                         transport: { dialect.transport(apiKey: { key }) })
-            #endif
         }
         switch settings.preferredProvider {
         case .gemini:

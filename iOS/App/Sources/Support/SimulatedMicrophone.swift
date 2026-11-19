@@ -15,6 +15,13 @@ final class SimulatedMicrophone: AudioCapturing {
     private let source: URL
     private var target: URL?
     private var timer: Timer?
+    /// The file as 16 kHz mono Int16, fed to the PCM sink in real time so a
+    /// Real-time transcription socket hears it as it would the microphone.
+    private var pcm = Data()
+    private var sent = 0
+    private var sink: (@Sendable (Data) -> Void)?
+
+    func setPCMSink(_ sink: (@Sendable (Data) -> Void)?) { self.sink = sink }
 
     static func make() -> AudioCapturing? {
         guard let path = ProcessInfo.processInfo.environment["VOICEIQ_SIMULATED_MIC"],
@@ -30,12 +37,29 @@ final class SimulatedMicrophone: AudioCapturing {
         target = url
         // The file's own loudness, 50 ms at a time and looping, so the
         // keyboard's waveform follows real speech.
-        let levels = (try? Self.converted(source)).flatMap { $0 }.map(Self.levels) ?? [0.3]
+        let buffer = (try? Self.converted(source)).flatMap { $0 }
+        pcm = buffer.map(Self.bytes) ?? Data()
+        sent = 0
+        let levels = buffer.map(Self.levels) ?? [0.3]
         var index = 0
         timer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] _ in
-            self?.onLevel?(levels[index % levels.count])
+            guard let self else { return }
+            onLevel?(levels[index % levels.count])
             index += 1
+            feed(upTo: sent + 1600)
         }
+    }
+
+    private func feed(upTo end: Int) {
+        let end = min(end, pcm.count)
+        guard end > sent else { return }
+        sink?(pcm.subdata(in: sent..<end))
+        sent = end
+    }
+
+    private static func bytes(_ buffer: AVAudioPCMBuffer) -> Data {
+        guard let samples = buffer.int16ChannelData?[0] else { return Data() }
+        return Data(bytes: samples, count: Int(buffer.frameLength) * 2)
     }
 
     private static func levels(_ buffer: AVAudioPCMBuffer) -> [Float] {
@@ -51,6 +75,8 @@ final class SimulatedMicrophone: AudioCapturing {
     func stop() async -> AudioCaptureResult {
         timer?.invalidate()
         timer = nil
+        // The saved file is the whole source, so the sink must have had all of it.
+        feed(upTo: pcm.count)
         guard let target, let frames = try? convert(source, to: target) else {
             return AudioCaptureResult(framesWritten: 0, durationSeconds: 0)
         }
