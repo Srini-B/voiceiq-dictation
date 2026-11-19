@@ -48,6 +48,9 @@ was the sync.
   Production schema (below) and a signed Mac build plus an iPhone build on
   the same Apple Account.
 
-**Before release.** Create record type `Meeting` with field `payload`
-(Bytes) in the CloudKit Console (Development) and deploy it to Production
-(RELEASING.md step 4).
+**CloudKit schema.** On the owner's go-ahead, record type `Meeting` with
+field `payload` (Bytes) was created in the CloudKit Console (Development)
+and deployed to Production. The deploy diff showed only the new type, its
+system fields and its default grants (`_creator` write, `_icloud` create,
+`_world` read); `Dictation` and `Users` were unchanged. Production now
+lists `Meeting` with `payload BYTES` and no extra indexes.
