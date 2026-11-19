@@ -49,17 +49,14 @@ public final class MeetingStore: @unchecked Sendable {
         return []
     }
     public func save(chat: [MeetingChatTurn], id: MeetingID) throws { try save(chat, id: id, name: "chat.json") }
-    /// A meeting that may be in iCloud tells `MeetingSync` to delete it there
-    /// too: one that synced, or a finished one whose first upload may be on
-    /// its way. Deleting a record that never went up fails with
-    /// `unknownItem`, which sync ignores.
+    /// Every delete is sent to iCloud too. Whether a meeting is there cannot
+    /// be told from its folder: a first upload may be on its way while a redo
+    /// has the meeting unfinished again. Deleting a record that never went up
+    /// fails with `unknownItem`, which sync takes as done.
     public func delete(id: MeetingID) throws {
-        let folder = try requiredFolder(id)
-        let mayBeInCloud = loadCloudState(id: id) != nil
-            || (try? load(MeetingMeta.self, from: folder.appendingPathComponent("meta.json")))?.status == .done
-        try FileManager.default.removeItem(at: folder)
-        if mayBeInCloud { pendingDeletes.insert(id.uuid.uuidString) }
-        Self.notifyChanged(id, deletedFromCloud: mayBeInCloud)
+        try FileManager.default.removeItem(at: requiredFolder(id))
+        pendingDeletes.insert(id.uuid.uuidString)
+        Self.notifyChanged(id, deletedFromCloud: true)
     }
     public func renameSpeaker(id: MeetingID, label: String, name: String) throws {
         var meta = try load(MeetingMeta.self, from: requiredFolder(id).appendingPathComponent("meta.json"))

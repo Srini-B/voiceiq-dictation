@@ -132,13 +132,17 @@ extension MeetingStore {
         }
     }
 
-    /// The meeting as it would go up, or nil while it is not finished.
+    /// The meeting as it would go up, or nil while it is not finished or a
+    /// file of it cannot be read, so a read error never goes up as no notes
+    /// or an empty transcript.
     func synced(id: MeetingID) -> SyncedMeeting? {
         guard let folder = folder(for: id),
               let meta = try? load(MeetingMeta.self, from: folder.appendingPathComponent("meta.json")),
               meta.status == .done else { return nil }
-        return SyncedMeeting(meta: meta, notes: try? loadNotes(id: id),
-                             transcript: (try? loadTranscript(id: id)) ?? [], chat: loadChat(id: id))
+        let notes = try? loadNotes(id: id), transcript = try? loadTranscript(id: id)
+        let exists = { FileManager.default.fileExists(atPath: folder.appendingPathComponent($0).path) }
+        if notes == nil && exists("notes.json") || transcript == nil && exists("transcript.json") { return nil }
+        return SyncedMeeting(meta: meta, notes: notes, transcript: transcript ?? [], chat: loadChat(id: id))
     }
 
     /// Finished, and changed since it was last sent or received.
@@ -224,7 +228,12 @@ extension MeetingStore {
 
     private func write(_ meeting: SyncedMeeting) throws {
         let id = meeting.meta.id
-        if let notes = meeting.notes { try save(notes, id: id, name: "notes.json", fromSync: true) }
+        if let notes = meeting.notes {
+            try save(notes, id: id, name: "notes.json", fromSync: true)
+        } else if let url = folder(for: id)?.appendingPathComponent("notes.json"),
+                  FileManager.default.fileExists(atPath: url.path) {
+            try FileManager.default.removeItem(at: url)
+        }
         try save(meeting.transcript, id: id, name: "transcript.json", fromSync: true)
         try save(meeting.chat, id: id, name: "chat.json", fromSync: true)
         try save(meeting.meta, id: id, name: "meta.json", fromSync: true)

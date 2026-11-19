@@ -48,8 +48,18 @@ final class MeetingSyncTests: XCTestCase {
         let again = try XCTUnwrap(MeetingSync.record(for: sent, systemFields: store.loadCloudState(id: id)?.systemFields))
         XCTAssertEqual(again.recordID, record.recordID)
 
+        // A copy without notes, taken as it is, leaves none here to send back.
+        var noNotes = sent
+        noNotes.notes = nil
+        XCTAssertFalse(store.applyFromCloud(noNotes, systemFields: fields))
+        XCTAssertThrowsError(try store.loadNotes(id: id))
+        XCTAssertEqual(store.pendingUploads(), [])
+
         try store.renameSpeaker(id: id, label: "s1", name: "Rohan")
         XCTAssertEqual(store.pendingUploads(), [id])
+        // A transcript that cannot be read does not go up as an empty one.
+        try Data("[{".utf8).write(to: XCTUnwrap(store.folder(for: id)).appendingPathComponent("transcript.json"))
+        XCTAssertEqual(store.pendingUploads(), [])
     }
 
     func testAnUnchangedCopyTakesTheCloudVersionAndAChangedOneKeepsItsOwnWithBothDevicesQuestions() throws {
@@ -142,13 +152,14 @@ final class MeetingSyncTests: XCTestCase {
         XCTAssertNil(store.folder(for: deleted))
     }
 
-    func testMeetingsFromAnotherDeviceGoWithTheAccountAndDeletesOfMeetingsThatMayBeInICloudReachIt() throws {
+    func testMeetingsFromAnotherDeviceGoWithTheAccountAndEveryDeleteReachesICloud() throws {
         let own = try finishedMeeting()
         store.markSent(try XCTUnwrap(store.synced(id: own)), systemFields: fields)
-        let unfinished = MeetingMeta(id: MeetingID(), startedAt: Date())
-        _ = try store.create(meta: unfinished)
-        // Finished but not sent yet: its first upload may be on its way.
-        let uploading = try finishedMeeting()
+        // Finished, its first upload on its way, and unfinished again for a redo.
+        let redoing = try finishedMeeting()
+        var meta = try XCTUnwrap(store.list().first { $0.id == redoing })
+        meta.status = .summarizing
+        try store.save(meta: meta)
         var arriving = try XCTUnwrap(store.synced(id: own))
         arriving.meta.id = MeetingID()
         XCTAssertFalse(store.applyFromCloud(arriving, systemFields: fields))
@@ -161,10 +172,9 @@ final class MeetingSyncTests: XCTestCase {
             deletes[id] = note.userInfo?[MeetingStore.deletedFromCloudKey] as? Bool
         }
         defer { NotificationCenter.default.removeObserver(observer) }
-        try store.delete(id: unfinished.id)
-        XCTAssertEqual(deletes[unfinished.id.uuid.uuidString], false)
-        try store.delete(id: uploading)
-        XCTAssertEqual(deletes[uploading.uuid.uuidString], true)
+        try store.delete(id: redoing)
+        XCTAssertEqual(deletes[redoing.uuid.uuidString], true)
+        XCTAssertTrue(store.pendingDeletes.contains(redoing.uuid.uuidString))
 
         store.forgetCloud()
         XCTAssertEqual(store.list().map(\.id), [own])
