@@ -67,7 +67,6 @@ public actor MeetingSync {
         } catch {
             Log.meeting.error("meeting sync: fetch failed: \(error)")
         }
-        await retryFailedImports()
     }
 
     /// Meetings that arrived but could not be written here. The engine has
@@ -249,7 +248,10 @@ extension MeetingSync: CKSyncEngineDelegate {
             for failure in event.failedZoneSaves {
                 Log.meeting.error("meeting sync: zone save failed: \(failure.error)")
             }
-        case .willFetchChanges, .willFetchRecordZoneChanges, .didFetchRecordZoneChanges, .didFetchChanges,
+        case .didFetchChanges:
+            // After every fetch, pushed or asked for, on the Mac as on the iPhone.
+            await retryFailedImports()
+        case .willFetchChanges, .willFetchRecordZoneChanges, .didFetchRecordZoneChanges,
              .willSendChanges, .didSendChanges:
             break
         @unknown default:
