@@ -310,7 +310,7 @@ extension MeetingSync: CKSyncEngineDelegate {
                     await onMain { store in
                         guard var state = store.loadCloudState(id: id) else { return }
                         state.systemFields = nil
-                        store.saveCloudState(state, id: id)
+                        try? store.saveCloudState(state, id: id)
                     }
                 }
                 syncEngine.state.add(pendingDatabaseChanges: [.saveZone(CKRecordZone(zoneID: Self.zoneID))])
