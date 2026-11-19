@@ -200,6 +200,21 @@ public struct SettingsStore: Sendable {
     /// `object` of `.gtSettingDidChange` when `redactsMeetingSecrets` changes.
     public static let redactionKey = "elevenLabsRedaction"
 
+    /// Keep meeting notes, transcripts and their questions the same on every
+    /// device signed in to the same iCloud account (`MeetingSync`). The audio
+    /// stays where it was recorded. Off by default: a transcript holds what
+    /// everyone on the call said, so each device opts in.
+    public var syncsMeetings: Bool {
+        Self.defaults.bool(forKey: Self.meetingSyncKey)
+    }
+
+    public func setSyncsMeetings(_ enabled: Bool) {
+        Self.set(enabled, forKey: Self.meetingSyncKey)
+    }
+
+    /// `object` of `.gtSettingDidChange` when `syncsMeetings` changes.
+    public static let meetingSyncKey = "meetingSync"
+
     /// Where a meeting's transcript is made, in order: ElevenLabs alone when
     /// it transcribes (no silent switch to another company's servers), the
     /// providers with keys otherwise.

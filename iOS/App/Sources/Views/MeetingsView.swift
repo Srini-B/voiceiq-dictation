@@ -33,6 +33,9 @@ struct MeetingsView: View {
             .onAppear(perform: reload)
             .onReceive(model.meetings.$phase) { _ in reload() }
             .onReceive(model.meetings.$processing) { _ in reload() }
+            .onReceive(NotificationCenter.default.publisher(for: .gtMeetingsDidChange).receive(on: RunLoop.main)) { note in
+                if note.object as? String == "sync" { reload() }
+            }
         } placeholder: {
             DetailPlaceholder(systemImage: "doc.text", title: "No note selected")
         }
@@ -248,6 +251,9 @@ private struct MeetingDetail: View {
         .onReceive(model.meetings.$processing) { busy in
             step = busy[meta.id]
             if step == nil { load() }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .gtMeetingsDidChange).receive(on: RunLoop.main)) { note in
+            if note.object as? String == "sync", note.userInfo?[MeetingStore.idKey] as? String == meta.id.uuid.uuidString { load() }
         }
     }
 

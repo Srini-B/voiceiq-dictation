@@ -296,6 +296,7 @@ struct PrivacyPane: View {
     @State private var retentionDays = SettingsStore().audioRetentionDays
     @State private var transcriptRetentionDays = SettingsStore().transcriptRetentionDays
     @State private var confirmingDelete = false
+    @State private var syncsMeetings = SettingsStore().syncsMeetings
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
 
     var body: some View {
@@ -351,6 +352,13 @@ struct PrivacyPane: View {
             }
 
             Section {
+                Toggle("Sync meetings with iCloud", isOn: $syncsMeetings)
+                    .onChange(of: syncsMeetings) { _, enabled in settings.setSyncsMeetings(enabled) }
+            } footer: {
+                Text("Notes, transcripts, speaker names and questions go to your iCloud account and appear on your iPhone when it syncs meetings too. Recordings stay on the device that made them. Deleting a meeting deletes it everywhere.")
+            }
+
+            Section {
                 LabeledContent("Audio") { Text("Sent to \(elevenLabs ? "ElevenLabs" : Self.host(provider)) with your key, transcribed every time") }
                 LabeledContent("Transcript text") { Text("Sent back only for writing rules, Ask Anything and Translate") }
                 LabeledContent("Text around the cursor") { Text("Only if Fit to existing text and writing rules are on") }
@@ -359,6 +367,7 @@ struct PrivacyPane: View {
                 LabeledContent("Dictionary terms") { Text("Sent with cloud transcription and cleanup, so names are spelled right") }
                 LabeledContent("Dictionary") { Text("Synced to your iPhone through your iCloud account") }
                 LabeledContent("History") { Text("Final text synced to your iPhone through your iCloud account") }
+                LabeledContent("Meetings") { Text(syncsMeetings ? "Notes and transcripts synced to your iPhone through your iCloud account" : "Not synced; turn on Sync meetings with iCloud above") }
                 LabeledContent("Screen snapshots") { Text("Only if screen context and writing rules are on; never stored") }
                 LabeledContent("Names on a call screen") { Text("Read on this Mac while a meeting records; only the names go to \(provider.displayName) for notes") }
                 LabeledContent("Ask Anything search") { Text("Only if a TinyFish key is saved; the search query goes to TinyFish") }

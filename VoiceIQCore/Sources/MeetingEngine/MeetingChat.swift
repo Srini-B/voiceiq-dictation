@@ -122,6 +122,7 @@ public final class MeetingChatModel: ObservableObject {
     @Published public private(set) var turns: [MeetingChatTurn]
     @Published public private(set) var state: State = .idle
     private let store: MeetingStore
+    private var observer: (any NSObjectProtocol)?
 
     private static var live: [MeetingID: MeetingChatModel] = [:]
 
@@ -136,6 +137,12 @@ public final class MeetingChatModel: ObservableObject {
         self.meetingID = meetingID
         self.store = store
         turns = store.loadChat(id: meetingID)
+        // Questions asked on another device arrive through `MeetingSync`.
+        observer = NotificationCenter.default.addObserver(forName: .gtMeetingsDidChange, object: nil, queue: .main) { [weak self] note in
+            guard note.object as? String == "sync",
+                  note.userInfo?[MeetingStore.idKey] as? String == meetingID.uuid.uuidString else { return }
+            MainActor.assumeIsolated { self?.turns = store.loadChat(id: meetingID) }
+        }
     }
 
     public var isAsking: Bool { if case .asking = state { return true }; return false }
@@ -148,7 +155,8 @@ public final class MeetingChatModel: ObservableObject {
         Task {
             do {
                 let turn = try await MeetingChat.ask(question, meeting: meetingID, history: history, store: store)
-                turns.append(turn)
+                // Read again: questions from another device may have arrived meanwhile.
+                turns = store.loadChat(id: meetingID) + [turn]
                 try? store.save(chat: turns, id: meetingID)
                 state = .idle
             } catch {

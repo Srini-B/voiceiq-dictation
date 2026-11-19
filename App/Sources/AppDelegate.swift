@@ -56,6 +56,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // History's final text too, through CloudKit; also always on.
         let deviceName = Host.current().localizedName ?? "Mac"
         Task { await HistorySync.shared.start(deviceName: deviceName) }
+        // Meetings too, once "Sync meetings with iCloud" is on.
+        Task { await MeetingSync.shared.start() }
         let controller = DictationController()
         statusItemController = StatusItemController(
             onOpenHistory: { [weak controller] in controller?.openHistory() },
