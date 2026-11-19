@@ -220,9 +220,11 @@ extension MeetingSync: CKSyncEngineDelegate {
             }
         case .fetchedRecordZoneChanges(let event):
             var changedHere: [CKSyncEngine.PendingRecordZoneChange] = []
+            // Deleted here while its delete is still on its way: it must not come back.
+            let deleted = deletes
             for modification in event.modifications {
                 let record = modification.record
-                guard let meeting = Self.meeting(from: record) else { continue }
+                guard !deleted.contains(record.recordID.recordName), let meeting = Self.meeting(from: record) else { continue }
                 let fields = Self.systemFields(of: record)
                 if await onMain({ $0.applyFromCloud(meeting, systemFields: fields) }) {
                     changedHere.append(.saveRecord(record.recordID))
