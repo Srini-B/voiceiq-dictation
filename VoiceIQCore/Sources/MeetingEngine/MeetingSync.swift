@@ -30,6 +30,8 @@ public actor MeetingSync {
     /// Changes when the account changes or the zone goes, so a retry fetch
     /// that was out then is not applied.
     private var generation = 0
+    /// When the fetch now running started; see `MeetingStore.heldUploads`.
+    private var fetchStarted: Date?
 
     private init() {}
 
@@ -239,10 +241,18 @@ extension MeetingSync: CKSyncEngineDelegate {
             for failure in event.failedZoneSaves {
                 Log.meeting.error("meeting sync: zone save failed: \(failure.error)")
             }
+        case .willFetchChanges:
+            fetchStarted = Date()
         case .didFetchChanges:
+            // Held meetings that this whole fetch did not delete go up as new records.
+            if let started = fetchStarted {
+                fetchStarted = nil
+                let released = await onMain { $0.releaseHeld(before: started) }
+                syncEngine.state.add(pendingRecordZoneChanges: released.map { .saveRecord(Self.recordID($0)) })
+            }
             // After every fetch, pushed or asked for, on the Mac as on the iPhone.
             await retryFailedImports()
-        case .willFetchChanges, .willFetchRecordZoneChanges, .didFetchRecordZoneChanges,
+        case .willFetchRecordZoneChanges, .didFetchRecordZoneChanges,
              .willSendChanges, .didSendChanges:
             break
         @unknown default:
@@ -290,14 +300,19 @@ extension MeetingSync: CKSyncEngineDelegate {
                 }
             case .unknownItem:
                 // The copy this device last saw is gone: deleted on another device, or
-                // its zone was made again. Not sent again now, so a delete still wins;
-                // that delete arrives with the next fetch and removes the meeting here.
-                // The meeting itself stays (it may hold the only recording), and a
-                // later change here sends it as a new record.
-                if let id = Self.meetingID(recordID) { await onMain { $0.forgetSystemFields(id: id) } }
+                // its zone was made again. Held back until a later fetch says which, so
+                // a delete still wins. The meeting stays meanwhile: it may hold the
+                // only recording.
+                if let id = Self.meetingID(recordID) { await onMain { $0.hold(id: id) } }
             case .zoneNotFound:
                 // The zone is made again; the old change tag would only meet unknownItem.
-                if let id = Self.meetingID(recordID) { await onMain { $0.forgetSystemFields(id: id) } }
+                if let id = Self.meetingID(recordID) {
+                    await onMain { store in
+                        guard var state = store.loadCloudState(id: id) else { return }
+                        state.systemFields = nil
+                        store.saveCloudState(state, id: id)
+                    }
+                }
                 syncEngine.state.add(pendingDatabaseChanges: [.saveZone(CKRecordZone(zoneID: Self.zoneID))])
                 again.append(.saveRecord(recordID))
             case .networkFailure, .networkUnavailable, .zoneBusy, .serviceUnavailable, .notAuthenticated,

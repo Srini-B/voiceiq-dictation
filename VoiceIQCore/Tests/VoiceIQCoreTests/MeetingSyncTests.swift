@@ -118,6 +118,27 @@ final class MeetingSyncTests: XCTestCase {
         XCTAssertFalse(store.failedImports.contains(other.meta.id.uuid.uuidString))
     }
 
+    func testAMeetingWhoseCopyWasNotFoundWaitsForAFetchBeforeItGoesUpAgain() throws {
+        let kept = try finishedMeeting(), deleted = try finishedMeeting()
+        for id in [kept, deleted] { store.markSent(try XCTUnwrap(store.synced(id: id)), systemFields: fields) }
+        let heldAt = Date(timeIntervalSinceReferenceDate: 1_000)
+        store.hold(id: kept, at: heldAt)
+        store.hold(id: deleted, at: heldAt)
+        XCTAssertNil(store.loadCloudState(id: kept)?.systemFields)
+
+        // Edited, or the app relaunched, before the fetch: still held.
+        try store.renameSpeaker(id: kept, label: "s1", name: "Rohan")
+        XCTAssertEqual(store.pendingUploads(), [])
+        // A fetch that started before the hold proves nothing.
+        XCTAssertEqual(store.releaseHeld(before: heldAt.addingTimeInterval(-1)), [])
+
+        // The next whole fetch brought a delete for one; the other's zone was made again.
+        store.deleteFromCloud(id: deleted)
+        XCTAssertEqual(store.releaseHeld(before: heldAt.addingTimeInterval(1)), [kept])
+        XCTAssertEqual(store.pendingUploads(), [kept])
+        XCTAssertNil(store.folder(for: deleted))
+    }
+
     func testMeetingsFromAnotherDeviceGoWithTheAccountAndDeletesOfMeetingsThatMayBeInICloudReachIt() throws {
         let own = try finishedMeeting()
         store.markSent(try XCTUnwrap(store.synced(id: own)), systemFields: fields)

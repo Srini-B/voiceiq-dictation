@@ -56,6 +56,42 @@ extension MeetingStore {
         set { save(ids: newValue, in: "retry.json") }
     }
 
+    /// Meetings whose copy in iCloud was not found when this device saved
+    /// over it, with when that was. They do not go up until a fetch that
+    /// started after then has finished: if it brought a delete from another
+    /// device, the meeting is gone; if not (the zone was made again), it goes
+    /// up as a new record (`releaseHeld`).
+    var heldUploads: [String: Date] {
+        get {
+            (try? Data(contentsOf: syncFolder.appendingPathComponent("held.json")))
+                .flatMap { try? JSONDecoder().decode([String: Date].self, from: $0) } ?? [:]
+        }
+        set {
+            let url = syncFolder.appendingPathComponent("held.json")
+            if newValue.isEmpty { try? FileManager.default.removeItem(at: url); return }
+            try? FileManager.default.createDirectory(at: syncFolder, withIntermediateDirectories: true)
+            if let data = try? JSONEncoder().encode(newValue) { try? data.write(to: url, options: .atomic) }
+        }
+    }
+
+    /// Its copy in iCloud was not found: forget that copy, and hold it back.
+    func hold(id: MeetingID, at date: Date = Date()) {
+        if var state = loadCloudState(id: id), state.systemFields != nil {
+            state.systemFields = nil
+            saveCloudState(state, id: id)
+        }
+        heldUploads[id.uuid.uuidString] = date
+    }
+
+    /// Meetings held before `fetchStarted` that a finished fetch did not
+    /// delete. They may go up again; returns those that should.
+    func releaseHeld(before fetchStarted: Date) -> [MeetingID] {
+        let released = heldUploads.filter { $0.value < fetchStarted }.keys
+        guard !released.isEmpty else { return [] }
+        heldUploads = heldUploads.filter { $0.value >= fetchStarted }
+        return released.compactMap(UUID.init(uuidString:)).map { MeetingID(uuid: $0) }.filter(needsUpload)
+    }
+
     /// Beside the meeting folders; `list()` skips it, having no meta.json.
     var syncFolder: URL { root.appendingPathComponent(".sync", isDirectory: true) }
 
@@ -102,7 +138,8 @@ extension MeetingStore {
 
     /// Finished, and changed since it was last sent or received.
     func needsUpload(id: MeetingID) -> Bool {
-        guard !failedImports.contains(id.uuid.uuidString), let meeting = synced(id: id) else { return false }
+        guard !failedImports.contains(id.uuid.uuidString), heldUploads[id.uuid.uuidString] == nil,
+              let meeting = synced(id: id) else { return false }
         return loadCloudState(id: id)?.digest != meeting.digest
     }
 
@@ -191,6 +228,7 @@ extension MeetingStore {
     /// that is still out is not applied.
     func deleteFromCloud(id: MeetingID) {
         failedImports.remove(id.uuid.uuidString)
+        heldUploads[id.uuid.uuidString] = nil
         guard let folder = folder(for: id) else { return }
         try? FileManager.default.removeItem(at: folder)
         Self.notifyChanged(id, fromSync: true)
@@ -198,14 +236,8 @@ extension MeetingStore {
 
     /// The iCloud account went away, or its data did. Meetings from other
     /// devices go; this device's meetings are no longer known to be in iCloud.
-    /// The record this device last saw is gone; the next save makes a new one.
-    func forgetSystemFields(id: MeetingID) {
-        guard var state = loadCloudState(id: id), state.systemFields != nil else { return }
-        state.systemFields = nil
-        saveCloudState(state, id: id)
-    }
-
     func forgetCloud() {
+        heldUploads = [:]
         for meta in list() {
             guard let state = loadCloudState(id: meta.id) else { continue }
             if state.arrived { deleteFromCloud(id: meta.id) } else { saveCloudState(nil, id: meta.id) }
