@@ -98,8 +98,10 @@ public final class SharedStore: @unchecked Sendable {
         set { defaults.set(newValue?.uuidString, forKey: Key.insertedDeliveryID) }
     }
 
-    /// When a keyboard with Full Access last ran. The app reads it to tell
-    /// whether setup is finished. Writer: keyboard.
+    /// When a keyboard with Full Access was last on screen, refreshed every
+    /// second while it is. The app reads it to tell whether setup is
+    /// finished, and holds the warm window open while it is recent.
+    /// Writer: keyboard.
     public var keyboardSeenAt: Date? {
         get { date(forKey: Key.keyboardSeenAt) }
         set { defaults.set(newValue?.timeIntervalSince1970, forKey: Key.keyboardSeenAt) }

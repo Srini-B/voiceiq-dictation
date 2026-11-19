@@ -159,7 +159,10 @@ so the mic stays open and the orange dot shows. `VoiceSession.isActive` says
 whether it is up. It lasts `MobileSettings.warmWindow` after each dictation
 (Settings › Dictation › "Keep mic on after dictating": Never, 5 s to 12 h,
 default 30 s; key `warmWindowSeconds`), counted from when the text is
-delivered; Home shows "Turns off in" with the countdown. With "Never" the
+delivered or the VoiceiQ keyboard was last on screen, whichever is later:
+the keyboard refreshes `SharedStore.keyboardSeenAt` every second while it
+shows, and when the timer fires the app restarts it from that time if it
+is still inside the window. Home shows "Turns off in" with the countdown. With "Never" the
 session ends once the text is delivered, so the next keyboard tap opens
 VoiceiQ again. The audio session stays open until then: it is what keeps iOS
 from suspending the app while a slow transcription runs, at the cost of the

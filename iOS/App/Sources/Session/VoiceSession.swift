@@ -136,19 +136,34 @@ final class VoiceSession: ObservableObject {
     }
 
     /// Counts the warm window from the end of the dictation (the text has
-    /// been delivered); a meeting in progress holds it open.
+    /// been delivered); a meeting in progress holds it open. While the
+    /// VoiceiQ keyboard is on screen the window keeps restarting, so it runs
+    /// out only once the keyboard has been gone for the whole window.
     private func scheduleWarmEnd() {
         guard isActive, meetingStartedAt == nil, dictationPhase == .warm else { return }
-        cancelWarmEnd()
         let seconds = MobileSettings.warmWindow.seconds
         guard seconds > 0 else {
+            cancelWarmEnd()
             end()
             return
         }
-        warmUntil = Date().addingTimeInterval(seconds)
-        warmTimer = Timer.scheduledTimer(withTimeInterval: seconds, repeats: false) { [weak self] _ in
+        scheduleWarmEnd(at: Date().addingTimeInterval(seconds))
+    }
+
+    private func scheduleWarmEnd(at deadline: Date) {
+        cancelWarmEnd()
+        warmUntil = deadline
+        warmTimer = Timer.scheduledTimer(withTimeInterval: max(deadline.timeIntervalSinceNow, 0), repeats: false) { [weak self] _ in
             Task { @MainActor in
                 guard let self, self.dictationPhase == .warm, self.meetingStartedAt == nil else { return }
+                self.store.reloadFromDisk()
+                if let seen = self.store.keyboardSeenAt {
+                    let extended = seen.addingTimeInterval(MobileSettings.warmWindow.seconds)
+                    if extended > Date() {
+                        self.scheduleWarmEnd(at: extended)
+                        return
+                    }
+                }
                 SessionDiagnostics.note("warm window over")
                 self.end()
             }

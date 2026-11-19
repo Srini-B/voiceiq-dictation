@@ -94,6 +94,9 @@ final class KeyboardModel: ObservableObject {
     /// Darwin pings are dropped while a process is suspended, so the keyboard
     /// also polls while it is on screen. Reads are local and cheap.
     private func refresh() {
+        if hasFullAccess, Self.onScreen === self, Date().timeIntervalSince(store.keyboardSeenAt ?? .distantPast) >= 1 {
+            store.keyboardSeenAt = Date()
+        }
         let fresh = store.snapshot
         if fresh != snapshot { snapshot = fresh }
         // With the snapshot, so a new recording never shows the last one's words.
