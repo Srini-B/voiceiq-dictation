@@ -130,6 +130,14 @@ public actor MeetingSync {
         engine.state.add(pendingRecordZoneChanges: pending.map { .saveRecord(Self.recordID($0)) })
     }
 
+    /// Every local edit to a meeting (the engine, the chat, the views) happens
+    /// on the main actor, so a change from iCloud is read, compared and
+    /// written there too, and no edit lands between its read and its write.
+    private func onMain<T: Sendable>(_ body: @MainActor @Sendable (MeetingStore) -> T) async -> T {
+        let store = store
+        return await MainActor.run { body(store) }
+    }
+
     private static func recordID(_ id: MeetingID) -> CKRecord.ID {
         CKRecord.ID(recordName: id.uuid.uuidString, zoneID: zoneID)
     }
@@ -195,18 +203,18 @@ extension MeetingSync: CKSyncEngineDelegate {
                 syncEngine.state.add(pendingDatabaseChanges: [.saveZone(CKRecordZone(zoneID: Self.zoneID))])
                 enqueueAll()
             case .switchAccounts:
-                store.forgetCloud()
+                await onMain { $0.forgetCloud() }
                 syncEngine.state.add(pendingDatabaseChanges: [.saveZone(CKRecordZone(zoneID: Self.zoneID))])
                 enqueueAll()
             case .signOut:
-                store.forgetCloud()
+                await onMain { $0.forgetCloud() }
             @unknown default:
                 break
             }
         case .fetchedDatabaseChanges(let event):
             if event.deletions.contains(where: { $0.zoneID == Self.zoneID }) {
                 Log.meeting.info("meeting sync: zone deleted in iCloud, starting over")
-                store.forgetCloud()
+                await onMain { $0.forgetCloud() }
                 syncEngine.state.add(pendingDatabaseChanges: [.saveZone(CKRecordZone(zoneID: Self.zoneID))])
                 enqueueAll()
             }
@@ -215,19 +223,20 @@ extension MeetingSync: CKSyncEngineDelegate {
             for modification in event.modifications {
                 let record = modification.record
                 guard let meeting = Self.meeting(from: record) else { continue }
-                if store.applyFromCloud(meeting, systemFields: Self.systemFields(of: record)) {
+                let fields = Self.systemFields(of: record)
+                if await onMain({ $0.applyFromCloud(meeting, systemFields: fields) }) {
                     changedHere.append(.saveRecord(record.recordID))
                 }
             }
             for deletion in event.deletions {
-                if let id = Self.meetingID(deletion.recordID) { store.deleteFromCloud(id: id) }
+                if let id = Self.meetingID(deletion.recordID) { await onMain { $0.deleteFromCloud(id: id) } }
             }
             syncEngine.state.add(pendingRecordZoneChanges: changedHere)
             if !event.modifications.isEmpty || !event.deletions.isEmpty {
                 Log.meeting.info("meeting sync: fetched \(event.modifications.count) meeting(s), \(event.deletions.count) deletion(s)")
             }
         case .sentRecordZoneChanges(let event):
-            sentRecordZoneChanges(event, syncEngine: syncEngine)
+            await sentRecordZoneChanges(event, syncEngine: syncEngine)
         case .sentDatabaseChanges(let event):
             for failure in event.failedZoneSaves {
                 Log.meeting.error("meeting sync: zone save failed: \(failure.error)")
@@ -257,7 +266,7 @@ extension MeetingSync: CKSyncEngineDelegate {
         }
     }
 
-    private func sentRecordZoneChanges(_ event: CKSyncEngine.Event.SentRecordZoneChanges, syncEngine: CKSyncEngine) {
+    private func sentRecordZoneChanges(_ event: CKSyncEngine.Event.SentRecordZoneChanges, syncEngine: CKSyncEngine) async {
         var again: [CKSyncEngine.PendingRecordZoneChange] = []
         var resend = false
         for record in event.savedRecords {
@@ -271,8 +280,9 @@ extension MeetingSync: CKSyncEngineDelegate {
             switch failure.error.code {
             case .serverRecordChanged:
                 // The other device saved it first: take its questions, then send ours over its copy.
-                if let server = failure.error.serverRecord, let meeting = Self.meeting(from: server),
-                   store.applyFromCloud(meeting, systemFields: Self.systemFields(of: server)) {
+                if let server = failure.error.serverRecord, let meeting = Self.meeting(from: server) {
+                    let fields = Self.systemFields(of: server)
+                    guard await onMain({ $0.applyFromCloud(meeting, systemFields: fields) }) else { continue }
                     again.append(.saveRecord(recordID))
                     resend = true
                 }
