@@ -77,10 +77,13 @@ final class MeetingSyncTests: XCTestCase {
         XCTAssertTrue(store.needsUpload(id: id))
     }
 
-    func testMeetingsFromAnotherDeviceGoWithTheAccountAndOnlySyncedDeletesReachICloud() throws {
+    func testMeetingsFromAnotherDeviceGoWithTheAccountAndDeletesOfMeetingsThatMayBeInICloudReachIt() throws {
         let own = try finishedMeeting()
         store.markSent(try XCTUnwrap(store.synced(id: own)), systemFields: fields)
-        let unsynced = try finishedMeeting()
+        let unfinished = MeetingMeta(id: MeetingID(), startedAt: Date())
+        _ = try store.create(meta: unfinished)
+        // Finished but not sent yet: its first upload may be on its way.
+        let uploading = try finishedMeeting()
         var arriving = try XCTUnwrap(store.synced(id: own))
         arriving.meta.id = MeetingID()
         XCTAssertFalse(store.applyFromCloud(arriving, systemFields: fields))
@@ -93,8 +96,10 @@ final class MeetingSyncTests: XCTestCase {
             deletes[id] = note.userInfo?[MeetingStore.deletedFromCloudKey] as? Bool
         }
         defer { NotificationCenter.default.removeObserver(observer) }
-        try store.delete(id: unsynced)
-        XCTAssertEqual(deletes[unsynced.uuid.uuidString], false)
+        try store.delete(id: unfinished.id)
+        XCTAssertEqual(deletes[unfinished.id.uuid.uuidString], false)
+        try store.delete(id: uploading)
+        XCTAssertEqual(deletes[uploading.uuid.uuidString], true)
 
         store.forgetCloud()
         XCTAssertEqual(store.list().map(\.id), [own])

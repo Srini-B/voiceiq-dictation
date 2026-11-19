@@ -49,12 +49,16 @@ public final class MeetingStore: @unchecked Sendable {
         return []
     }
     public func save(chat: [MeetingChatTurn], id: MeetingID) throws { try save(chat, id: id, name: "chat.json") }
-    /// A meeting that was in iCloud tells `MeetingSync` to delete it there too.
+    /// A meeting that may be in iCloud tells `MeetingSync` to delete it there
+    /// too: one that synced, or a finished one whose first upload may be on
+    /// its way. Deleting a record that never went up fails with
+    /// `unknownItem`, which sync ignores.
     public func delete(id: MeetingID) throws {
         let folder = try requiredFolder(id)
-        let inCloud = loadCloudState(id: id) != nil
+        let mayBeInCloud = loadCloudState(id: id) != nil
+            || (try? load(MeetingMeta.self, from: folder.appendingPathComponent("meta.json")))?.status == .done
         try FileManager.default.removeItem(at: folder)
-        Self.notifyChanged(id, deletedFromCloud: inCloud)
+        Self.notifyChanged(id, deletedFromCloud: mayBeInCloud)
     }
     public func renameSpeaker(id: MeetingID, label: String, name: String) throws {
         var meta = try load(MeetingMeta.self, from: requiredFolder(id).appendingPathComponent("meta.json"))
@@ -110,7 +114,7 @@ public final class MeetingStore: @unchecked Sendable {
     }
 
     public static let idKey = "meetingID"
-    /// In `userInfo`: true when the deleted meeting was in iCloud.
+    /// In `userInfo`: true when the deleted meeting may be in iCloud.
     public static let deletedFromCloudKey = "deletedFromCloud"
 
     static func notifyChanged(_ id: MeetingID, fromSync: Bool = false, deletedFromCloud: Bool = false) {

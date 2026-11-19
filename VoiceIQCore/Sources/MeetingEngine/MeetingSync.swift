@@ -36,6 +36,21 @@ public actor MeetingSync {
         FileLayout.appSupportRoot.appendingPathComponent("meeting-sync-state.json")
     }
 
+    /// Meetings deleted on this device whose records iCloud has not yet
+    /// confirmed gone. Kept apart from the engine, so a delete made while
+    /// sync is off still reaches iCloud once it is on again.
+    private static var deletesURL: URL {
+        FileLayout.appSupportRoot.appendingPathComponent("meeting-sync-deletes.json")
+    }
+
+    private var deletes: Set<String> {
+        get { (try? Data(contentsOf: Self.deletesURL)).flatMap { try? JSONDecoder().decode(Set<String>.self, from: $0) } ?? [] }
+        set {
+            if newValue.isEmpty { try? FileManager.default.removeItem(at: Self.deletesURL) }
+            else if let data = try? JSONEncoder().encode(newValue) { try? data.write(to: Self.deletesURL, options: .atomic) }
+        }
+    }
+
     /// Syncs while the setting is on, from now on.
     public func start() {
         guard observers.isEmpty else { return }
@@ -92,14 +107,19 @@ public actor MeetingSync {
             engine.state.add(pendingDatabaseChanges: [.saveZone(CKRecordZone(zoneID: Self.zoneID))])
         }
         enqueueAll()
+        engine.state.add(pendingRecordZoneChanges: deletes.compactMap(UUID.init(uuidString:))
+            .map { .deleteRecord(Self.recordID(MeetingID(uuid: $0))) })
         Log.meeting.info("meeting sync started")
     }
 
     private func localChanged(_ id: MeetingID, deleted: Bool) {
-        guard let engine else { return }
         if deleted {
-            engine.state.add(pendingRecordZoneChanges: [.deleteRecord(Self.recordID(id))])
-        } else if store.needsUpload(id: id) {
+            deletes.insert(id.uuid.uuidString)
+            engine?.state.add(pendingRecordZoneChanges: [.deleteRecord(Self.recordID(id))])
+            return
+        }
+        guard let engine else { return }
+        if store.needsUpload(id: id) {
             engine.state.add(pendingRecordZoneChanges: [.saveRecord(Self.recordID(id))])
         }
     }
@@ -274,9 +294,12 @@ extension MeetingSync: CKSyncEngineDelegate {
                 Log.meeting.error("meeting sync: save failed for \(recordID.recordName, privacy: .public): \(failure.error)")
             }
         }
-        for (recordID, error) in event.failedRecordDeletes where error.code != .unknownItem {
+        var gone = Set(event.deletedRecordIDs.map(\.recordName))
+        for (recordID, error) in event.failedRecordDeletes {
+            if error.code == .unknownItem { gone.insert(recordID.recordName); continue }
             Log.meeting.error("meeting sync: delete failed for \(recordID.recordName, privacy: .public): \(error)")
         }
+        if !gone.isEmpty { deletes.subtract(gone) }
         syncEngine.state.add(pendingRecordZoneChanges: again)
         if resend {
             // The engine does not schedule another send for a save that failed

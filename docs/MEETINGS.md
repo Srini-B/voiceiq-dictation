@@ -634,8 +634,12 @@ CloudKit database, through `CKSyncEngine`.
   other: notes, transcript, speaker names, Export and questions all work.
   Play, Download and Redo transcript are unavailable because the audio is not
   there; Redo notes works from the transcript.
-- **Deletes.** Deleting a meeting that was in iCloud deletes its record, and
-  the other device removes its copy. Retention never deletes meetings.
+- **Deletes.** Deleting a meeting that may be in iCloud (it synced, or it is
+  finished and its first upload may be on its way) deletes its record, and
+  the other device removes its copy. The id waits in
+  `meeting-sync-deletes.json` until iCloud confirms the record gone, so a
+  delete made while the setting is off is sent once it is on again.
+  Retention never deletes meetings.
 - **Off, account changes.** Turning the setting off stops syncing on that
   device and keeps every meeting it has; turning it on again sends what
   changed meanwhile and fetches what the other device did. Signing out of
