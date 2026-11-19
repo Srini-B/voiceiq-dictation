@@ -67,6 +67,29 @@ public actor MeetingSync {
         } catch {
             Log.meeting.error("meeting sync: fetch failed: \(error)")
         }
+        await retryFailedImports()
+    }
+
+    /// Meetings that arrived but could not be written here. The engine has
+    /// moved past them, so they are fetched by id.
+    private func retryFailedImports() async {
+        let ids = store.failedImports.compactMap(UUID.init(uuidString:)).map { Self.recordID(MeetingID(uuid: $0)) }
+        guard engine != nil, !ids.isEmpty else { return }
+        let database = CKContainer(identifier: HistorySync.containerID).privateCloudDatabase
+        guard let results = try? await database.records(for: ids) else { return }
+        for (recordID, result) in results {
+            switch result {
+            case .success(let record):
+                guard let meeting = Self.meeting(from: record) else { continue }
+                let fields = Self.systemFields(of: record)
+                _ = await onMain { $0.applyFromCloud(meeting, systemFields: fields) }
+            case .failure(let error as CKError) where error.code == .unknownItem:
+                // Deleted in iCloud meanwhile: nothing to bring in.
+                await onMain { $0.failedImports.remove(recordID.recordName) }
+            case .failure:
+                break
+            }
+        }
     }
 
     private func settingChanged() async {
@@ -92,6 +115,7 @@ public actor MeetingSync {
             engine.state.add(pendingDatabaseChanges: [.saveZone(CKRecordZone(zoneID: Self.zoneID))])
         }
         enqueueAll()
+        Task { await retryFailedImports() }
         engine.state.add(pendingRecordZoneChanges: store.pendingDeletes.compactMap(UUID.init(uuidString:))
             .map { .deleteRecord(Self.recordID(MeetingID(uuid: $0))) })
         Log.meeting.info("meeting sync started")

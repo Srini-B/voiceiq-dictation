@@ -43,16 +43,31 @@ extension MeetingStore {
     /// from a fetch that was already on its way. Kept apart from the sync
     /// engine, so a delete made while sync is off is sent once it is on.
     var pendingDeletes: Set<String> {
-        get {
-            (try? Data(contentsOf: deletesURL)).flatMap { try? JSONDecoder().decode(Set<String>.self, from: $0) } ?? []
-        }
-        set {
-            if newValue.isEmpty { try? FileManager.default.removeItem(at: deletesURL) }
-            else if let data = try? JSONEncoder().encode(newValue) { try? data.write(to: deletesURL, options: .atomic) }
-        }
+        get { ids(in: "deletes.json") }
+        set { save(ids: newValue, in: "deletes.json") }
     }
 
-    private var deletesURL: URL { root.appendingPathComponent(".sync-deletes.json") }
+    /// Meetings from iCloud that could not be written here (a full disk).
+    /// `MeetingSync` fetches them again, since the engine will not.
+    var failedImports: Set<String> {
+        get { ids(in: "retry.json") }
+        set { save(ids: newValue, in: "retry.json") }
+    }
+
+    /// Beside the meeting folders; `list()` skips it, having no meta.json.
+    var syncFolder: URL { root.appendingPathComponent(".sync", isDirectory: true) }
+
+    private func ids(in file: String) -> Set<String> {
+        (try? Data(contentsOf: syncFolder.appendingPathComponent(file)))
+            .flatMap { try? JSONDecoder().decode(Set<String>.self, from: $0) } ?? []
+    }
+
+    private func save(ids: Set<String>, in file: String) {
+        let url = syncFolder.appendingPathComponent(file)
+        if ids.isEmpty { try? FileManager.default.removeItem(at: url); return }
+        try? FileManager.default.createDirectory(at: syncFolder, withIntermediateDirectories: true)
+        if let data = try? JSONEncoder().encode(ids) { try? data.write(to: url, options: .atomic) }
+    }
 
     /// What goes up for a meeting: its content and the system fields of the
     /// copy it goes over, read together.
@@ -115,9 +130,11 @@ extension MeetingStore {
                 try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
                 try write(remote)
                 saveCloudState(MeetingCloudState(digest: remote.digest, systemFields: systemFields, arrived: true), id: id)
+                failedImports.remove(id.uuid.uuidString)
             } catch {
-                // Half written (a full disk): gone, so the next change to it in iCloud brings it in whole.
+                // Half written (a full disk): gone, and fetched again whole (`failedImports`).
                 try? FileManager.default.removeItem(at: folder)
+                failedImports.insert(id.uuid.uuidString)
                 Log.meeting.error("meeting sync: could not save \(id.uuid.uuidString, privacy: .public): \(error)")
             }
             return false

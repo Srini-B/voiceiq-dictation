@@ -617,7 +617,9 @@ CloudKit database, through `CKSyncEngine`.
   transcription caches and playback files stay on the device that recorded.
   A record holds at most 1 MB; a meeting whose compressed payload is over
   900 KB is logged and stays local (several hours of talk is a few hundred
-  KB).
+  KB). A meeting that arrives but cannot be written (a full disk) leaves no
+  partial folder; its id waits in `.sync/retry.json` and it is fetched
+  again by id when sync starts and on every `refresh()`.
 - **When.** A meeting goes up once its status is `done`, and again whenever
   it changes: renamed speakers, redone notes, a new question.
   `MeetingStore` posts `.gtMeetingsDidChange` for every write and delete;
@@ -638,7 +640,7 @@ CloudKit database, through `CKSyncEngine`.
 - **Deletes.** Deleting a meeting that may be in iCloud (it synced, or it is
   finished and its first upload may be on its way) deletes its record, and
   the other device removes its copy. The id waits in
-  `.sync-deletes.json` in the meetings folder until iCloud confirms the
+  `.sync/deletes.json` in the meetings folder until iCloud confirms the
   record gone, so a delete made while the setting is off is sent once it is
   on again, and a copy fetched meanwhile does not bring the meeting back. A
   delete from another device wins over an edit here that has not gone up

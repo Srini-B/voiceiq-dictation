@@ -77,6 +77,22 @@ final class MeetingSyncTests: XCTestCase {
         XCTAssertTrue(store.needsUpload(id: id))
     }
 
+    func testAMeetingThatCouldNotBeWrittenIsLeftOutWholeAndImportedOnRetry() throws {
+        var arriving = try XCTUnwrap(store.synced(id: try finishedMeeting()))
+        arriving.meta.id = MeetingID()
+        // The meetings folder cannot take a new meeting, as on a full disk.
+        try FileManager.default.createDirectory(at: store.syncFolder, withIntermediateDirectories: true)
+        try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: root.path)
+        XCTAssertFalse(store.applyFromCloud(arriving, systemFields: fields))
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: root.path)
+        XCTAssertNil(store.folder(for: arriving.meta.id))
+        XCTAssertEqual(store.failedImports, [arriving.meta.id.uuid.uuidString])
+
+        XCTAssertFalse(store.applyFromCloud(arriving, systemFields: fields))
+        XCTAssertEqual(store.synced(id: arriving.meta.id), arriving)
+        XCTAssertEqual(store.failedImports, [])
+    }
+
     func testMeetingsFromAnotherDeviceGoWithTheAccountAndDeletesOfMeetingsThatMayBeInICloudReachIt() throws {
         let own = try finishedMeeting()
         store.markSent(try XCTUnwrap(store.synced(id: own)), systemFields: fields)
