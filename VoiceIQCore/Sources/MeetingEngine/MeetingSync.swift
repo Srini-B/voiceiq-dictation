@@ -289,10 +289,15 @@ extension MeetingSync: CKSyncEngineDelegate {
                     resend = true
                 }
             case .unknownItem:
-                // Deleted on another device since this one last saw it. The delete wins,
-                // as when it is fetched first.
-                if let id = Self.meetingID(recordID) { await onMain { $0.deleteFromCloud(id: id) } }
+                // The copy this device last saw is gone: deleted on another device, or
+                // its zone was made again. Not sent again now, so a delete still wins;
+                // that delete arrives with the next fetch and removes the meeting here.
+                // The meeting itself stays (it may hold the only recording), and a
+                // later change here sends it as a new record.
+                if let id = Self.meetingID(recordID) { await onMain { $0.forgetSystemFields(id: id) } }
             case .zoneNotFound:
+                // The zone is made again; the old change tag would only meet unknownItem.
+                if let id = Self.meetingID(recordID) { await onMain { $0.forgetSystemFields(id: id) } }
                 syncEngine.state.add(pendingDatabaseChanges: [.saveZone(CKRecordZone(zoneID: Self.zoneID))])
                 again.append(.saveRecord(recordID))
             case .networkFailure, .networkUnavailable, .zoneBusy, .serviceUnavailable, .notAuthenticated,

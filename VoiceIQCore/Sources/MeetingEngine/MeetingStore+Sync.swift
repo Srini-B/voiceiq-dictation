@@ -198,6 +198,13 @@ extension MeetingStore {
 
     /// The iCloud account went away, or its data did. Meetings from other
     /// devices go; this device's meetings are no longer known to be in iCloud.
+    /// The record this device last saw is gone; the next save makes a new one.
+    func forgetSystemFields(id: MeetingID) {
+        guard var state = loadCloudState(id: id), state.systemFields != nil else { return }
+        state.systemFields = nil
+        saveCloudState(state, id: id)
+    }
+
     func forgetCloud() {
         for meta in list() {
             guard let state = loadCloudState(id: meta.id) else { continue }

@@ -645,7 +645,11 @@ CloudKit database, through `CKSyncEngine`.
   saved its state) is still sent, and a copy fetched meanwhile does not
   bring the meeting back. A
   delete from another device wins over an edit here that has not gone up
-  yet: the queued save is dropped. A note open on the iPhone when it is
+  yet: the queued save is dropped. A save answered with "unknown item" is
+  not sent again; the fetched delete removes the meeting, and if none comes
+  (the zone was made again) the next change here sends it as a new record.
+  The local meeting and its recording are never removed on that answer
+  alone. A note open on the iPhone when it is
   deleted elsewhere closes.
   Retention never deletes meetings.
 - **Account changes.** Signing out of iCloud, switching accounts, or a deleted zone removes the meetings that
