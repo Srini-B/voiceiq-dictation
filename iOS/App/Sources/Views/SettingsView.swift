@@ -125,7 +125,7 @@ struct SettingsView: View {
 
 struct DictationSettingsView: View {
     @State private var liveTranscription = SettingsStore().liveTranscriptionEnabled
-    /// ElevenLabs transcribes the recording after it stops; nothing streams.
+    /// Names Scribe v3 Live in the Real-time transcription footer.
     @State private var elevenLabs = SettingsStore().transcribesWithElevenLabs
     @EnvironmentObject private var session: VoiceSession
     private let settings = SettingsStore()
@@ -133,6 +133,7 @@ struct DictationSettingsView: View {
     @State private var smartTranscription = SettingsStore().smartTranscriptionEnabled
     @State private var cleanupPass = SettingsStore().smartCleanupPassEnabled
     @State private var skipShortCleanup = SettingsStore().skipShortDictationCleanup
+    @State private var spelling = SettingsStore().spellingVariant
     @State private var customRules = SettingsStore().customWritingRules
     @State private var noiseHandling = SettingsStore().experimentalNoiseHandling
     @State private var builtInMic = MobileSettings.preferBuiltInMic
@@ -190,15 +191,12 @@ struct DictationSettingsView: View {
             }
             Section {
                 // Saved only on a user change, not when its default is refreshed.
-                Toggle("Real-time transcription", isOn: Binding(get: { liveTranscription && !elevenLabs }, set: {
+                Toggle("Real-time transcription", isOn: Binding(get: { liveTranscription }, set: {
                     liveTranscription = $0
                     settings.setLiveTranscriptionEnabled($0)
                 }))
-                .disabled(elevenLabs)
             } footer: {
-                if elevenLabs {
-                    Text("Off while ElevenLabs is the transcription provider: Scribe v3 transcribes the recording after you stop.")
-                }
+                Text("Transcribes while you speak\(elevenLabs ? " with Scribe v3 Live" : ""), so the text is ready about 1.5 s sooner after you stop. If the stream fails, the recording is uploaded as before.")
             }
             Section {
                 Toggle("Smart transcription", isOn: $smartTranscription)
@@ -208,6 +206,13 @@ struct DictationSettingsView: View {
                 Toggle("Skip cleanup for dictations of 5 seconds or less", isOn: $skipShortCleanup)
                     .disabled(!cleanupPass)
                     .onChange(of: skipShortCleanup) { _, value in settings.setSkipShortDictationCleanup(value) }
+                SearchablePicker("Spelling", selection: $spelling,
+                                 options: SpellingVariant.allCases.map { SearchOption(value: $0, name: $0.name) })
+                    .disabled(!cleanupPass)
+                    .onChange(of: spelling) { _, value in
+                        guard value != settings.spellingVariant else { return }
+                        settings.setSpellingVariant(value)
+                    }
                 if cleanupPass { NavigationLink("Custom rules") { CustomRulesView(text: $customRules) } }
             }
             Section {
@@ -238,6 +243,7 @@ struct DictationSettingsView: View {
             case "smartTranscription": smartTranscription = settings.smartTranscriptionEnabled
             case "smartCleanupPass": cleanupPass = settings.smartCleanupPassEnabled
             case "skipShortDictationCleanup": skipShortCleanup = settings.skipShortDictationCleanup
+            case "spellingVariant": spelling = settings.spellingVariant
             case SettingsStore.customWritingRulesKey: customRules = settings.customWritingRules
             case "experimentalNoiseHandling": noiseHandling = settings.experimentalNoiseHandling
             case "translationTargetLanguages": translationTarget = settings.translationTargetLanguage

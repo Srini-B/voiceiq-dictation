@@ -38,11 +38,13 @@ With no usable key, nothing is sent and the recording stays on your Mac.
    With ElevenLabs picked as the transcription provider (Settings › Advanced
    on the Mac, Provider & Keys on iPhone; not picked by default, and only with
    an ElevenLabs key), the saved recording goes to ElevenLabs Scribe v3
-   instead of the provider, with your ElevenLabs key, after you stop;
-   Real-time transcription is off then, so dictation does not stream. With Smart transcription on,
-   the request also carries a fixed formatting instruction written by
-   VoiceiQ (punctuation, paragraphs, spoken marks, numbers, your spelling setting).
-   The spoken languages you set are sent with it.
+   instead of the provider, with your ElevenLabs key, after you stop. With
+   Real-time transcription on, the audio streams to ElevenLabs Scribe v3 Live
+   while you speak instead, on the Mac and on iPhone, and the saved recording
+   goes to Scribe v3 only if that stream fails or cannot start (for example
+   after ElevenLabs refused a recent live stream). With Smart transcription on,
+   Scribe is asked to drop filler words (`no_verbatim`); no other instruction
+   is sent. The spoken languages you set are sent with it.
    The transcript then goes to the provider for the writing rules, as below.
    Meetings are the one exception to "after you stop": while a meeting
    records with ElevenLabs chosen, its audio (mic and call audio mixed, the

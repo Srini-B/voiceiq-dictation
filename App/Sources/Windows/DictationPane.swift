@@ -7,7 +7,7 @@ struct DictationPane: View {
     private let settings = SettingsStore()
     @State private var sounds = SettingsStore().soundsEnabled
     @State private var liveTranscription = SettingsStore().liveTranscriptionEnabled
-    /// ElevenLabs transcribes the recording after it stops; nothing streams.
+    /// Names Scribe v3 Live in the Real-time transcription footer.
     @State private var elevenLabs = SettingsStore().transcribesWithElevenLabs
     @State private var smartTranscription = SettingsStore().smartTranscriptionEnabled
     @State private var cleanupPass = SettingsStore().smartCleanupPassEnabled
