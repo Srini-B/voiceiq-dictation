@@ -100,6 +100,9 @@ public struct DictationSteps: Codable, Equatable, Sendable {
     /// Saving the result and typing it. Nil when it went to the answer card
     /// instead.
     public var insert: TimeInterval?
+    /// Saving the result and handing it to the answer card or the agent, for
+    /// results that are not typed.
+    public var handoff: TimeInterval?
 
     public init(finishRecording: TimeInterval, transcription: TimeInterval, live: Bool,
                 writing: TimeInterval?, insert: TimeInterval? = nil) {
@@ -126,6 +129,7 @@ public extension DictationSteps {
             Row(label: "Writing model", value: writing.map(seconds) ?? "skipped"),
         ]
         if let insert { rows.append(Row(label: "Insert", value: seconds(insert))) }
+        if let handoff { rows.append(Row(label: "Hand-off", value: seconds(handoff))) }
         return rows
     }
 }

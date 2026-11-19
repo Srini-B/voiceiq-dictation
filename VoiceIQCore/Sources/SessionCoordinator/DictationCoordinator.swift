@@ -650,7 +650,9 @@ public final class DictationCoordinator: ObservableObject {
             } else {
                 onAnswerReady?(outcome.cleanedTranscript)
             }
-            updateMeta { $0.status = .inserted; $0.pipelineSeconds = Date().timeIntervalSince(startedAt); $0.steps = stages }
+            let handedOver = Date()
+            stages.handoff = handedOver.timeIntervalSince(readyAt)
+            updateMeta { $0.status = .inserted; $0.pipelineSeconds = handedOver.timeIntervalSince(startedAt); $0.steps = stages }
             apply(.inserted)
             discardUnlessKept()
             session = nil
@@ -659,9 +661,10 @@ public final class DictationCoordinator: ObservableObject {
         }
 
         let insertionOutcome = await insertion.insert(outcome.cleanedTranscript, context: session?.context ?? DictationContext())
-        let pipelineSeconds = Date().timeIntervalSince(startedAt)
+        let insertedAt = Date()
+        let pipelineSeconds = insertedAt.timeIntervalSince(startedAt)
         // From the text being ready, so saving it to History counts here too.
-        stages.insert = Date().timeIntervalSince(readyAt)
+        stages.insert = insertedAt.timeIntervalSince(readyAt)
         switch insertionOutcome {
         case .inserted:
             updateMeta { $0.status = .inserted; $0.pipelineSeconds = pipelineSeconds; $0.steps = stages }
@@ -689,7 +692,7 @@ public final class DictationCoordinator: ObservableObject {
         func ms(_ seconds: TimeInterval?) -> String { seconds.map { "\(Int($0 * 1000))ms" } ?? "-" }
         let total = finalizeRequestedAt.map { Date().timeIntervalSince($0) }
         let source = stages.live ? "live final" : "upload"
-        Log.session.notice("timing \(sessionID.uuidString, privacy: .public): finalize \(ms(stages.finishRecording), privacy: .public), \(source, privacy: .public) \(ms(stages.transcription), privacy: .public), writing \(ms(stages.writing), privacy: .public), insert \(ms(stages.insert), privacy: .public), key-up to done \(ms(total), privacy: .public)")
+        Log.session.notice("timing \(sessionID.uuidString, privacy: .public): finalize \(ms(stages.finishRecording), privacy: .public), \(source, privacy: .public) \(ms(stages.transcription), privacy: .public), writing \(ms(stages.writing), privacy: .public), insert \(ms(stages.insert ?? stages.handoff), privacy: .public), key-up to done \(ms(total), privacy: .public)")
         onStageTimes?(stages)
     }
 
