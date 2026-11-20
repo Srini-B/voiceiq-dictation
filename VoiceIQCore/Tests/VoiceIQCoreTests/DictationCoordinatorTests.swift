@@ -275,6 +275,27 @@ final class DictationCoordinatorTests: XCTestCase {
         XCTAssertEqual(c.state, .done(.silent), "0.19s can't contain a word — classified locally")
     }
 
+    /// A short word released at once is transcribed; a short quiet clip is not.
+    func testShortClipIsSentOnlyWhenClearlySpoken() async {
+        var t = FakeTranscription()
+        t.result = .failure(.network("should never be called"))
+        let quiet = makeCoordinator(transcription: t)
+        quiet.handle(.begin)
+        capture.result = AudioCaptureResult(framesWritten: 4_800, durationSeconds: 0.3, peakLevel: 0.12)
+        fakeNow += 2.0
+        quiet.handle(.finalize)
+        await settle()
+        XCTAssertEqual(quiet.state, .done(.silent), "room tone in a short tap is not a word")
+
+        let spoken = makeCoordinator()
+        spoken.handle(.begin)
+        capture.result = AudioCaptureResult(framesWritten: 4_800, durationSeconds: 0.3, peakLevel: 0.9)
+        fakeNow += 2.0
+        spoken.handle(.finalize)
+        await settle()
+        XCTAssertEqual(spoken.state, .done(.inserted), "a loud 0.3 s \"Hi\" must not be deleted unheard")
+    }
+
     func testEngineStartFailureNamesTheMissingMic() async {
         let c = makeCoordinator()
         capture.startError = AudioCaptureEngine.CaptureError.noInputDevice

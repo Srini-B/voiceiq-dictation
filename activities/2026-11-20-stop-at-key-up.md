@@ -17,6 +17,11 @@ Without it, Finish recording was 55–175 ms.
 - `DictationCoordinator.finalizeSession` stops the engine at key-up on Mac and
   iPhone, whatever the level. `captureTrailingSpeech`, the trailing thresholds
   and `latestLevel` are removed, with their tests.
+- Short clips: the trailing capture used to add at least 0.25 s to a word
+  released at once, which kept a short loud word ("Hi") above the 0.4 s
+  local discard. Review caught that it would now be deleted unheard. Clips
+  under 0.2 s are still discarded; 0.2–0.4 s clips are sent when their peak
+  reached 0.3, which room tone does not.
 - `AudioCaptureEngine.stop()` is unchanged. It still waits for the one tap
   buffer the input already holds (audio spoken before key-up), then stops the
   engine and closes the file. Tap buffers arrive about every 100 ms on macOS

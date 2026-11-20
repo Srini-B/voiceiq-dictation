@@ -40,7 +40,14 @@ public final class DictationCoordinator: ObservableObject {
     static let silencePeakThreshold: Float = 0.06
     /// Clips shorter than this can't contain a word — never sent to the API
     /// (dogfood: a 0.19s blip got uploaded, errored, and showed as Failed).
-    static let minimumSendableDuration: Double = 0.4
+    static let minimumSendableDuration: Double = 0.2
+    /// Up to this length a clip is sent only when it was clearly spoken. A
+    /// short word ("Hi") released at once can be this short now that recording
+    /// stops at key-up, while an accidental tap in a room is quieter.
+    static let shortClipDuration: Double = 0.4
+    /// ≈ −37 dBFS RMS: above room tone (about 0.1 in a −52 dBFS room), below
+    /// any spoken word, which peaks near 1.
+    static let shortClipSpeechPeak: Float = 0.3
     /// Zero frames on a hold shorter than this is an accidental blip, not an
     /// engine failure — the first buffer simply hadn't arrived yet.
     static let blipHoldThreshold: TimeInterval = 0.8
@@ -466,7 +473,9 @@ public final class DictationCoordinator: ObservableObject {
 
         // Micro-clips can't contain a word — classify locally, never upload
         // (the API errors on them, which used to surface as Failed).
-        guard result.durationSeconds >= Self.minimumSendableDuration else {
+        let spokeClearly = result.peakIsTrustworthy && result.peakLevel >= Self.shortClipSpeechPeak
+        guard result.durationSeconds >= Self.shortClipDuration
+                || (result.durationSeconds >= Self.minimumSendableDuration && spokeClearly) else {
             lastSilenceReason = .noSpeech
             apply(.silenceOnly)
             discardSessionArtifacts()
