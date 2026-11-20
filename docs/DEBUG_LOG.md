@@ -67,6 +67,12 @@ dictation that fails before then has none:
 … app notice [session] timing 26A1A1D4-…: finalize 233ms, upload 1638ms, writing 3012ms, insert 133ms, key-up to done 5016ms
 ```
 
+`finalize` is key-up to the recording being closed. Recording stops at
+key-up, even mid-word (there is no listening past it since 2026-11-20); what
+remains is collecting the one tap buffer the input already holds, audio from
+before key-up (`tail drained`, at most about 100 ms), then stopping the
+engine and closing the file.
+
 `writing` covers building the prompt, the writing-model requests and the
 validation gate. Each request attempt inside it has its own `call` line, so
 one interval can hold several: a second attempt of the same request, or the

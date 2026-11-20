@@ -6,8 +6,7 @@ import Foundation
 /// speech lands mid-range instead of hugging the floor and loud speech saturates
 /// gracefully. It lives here, alone and tested, because every "did they speak?"
 /// decision in the pipeline is arithmetic on its output: `silencePeakThreshold`
-/// discards whole recordings, `trailingSpeechThreshold` decides whether the last
-/// word is captured. A wrong constant here loses words silently.
+/// discards whole recordings. A wrong constant here loses words silently.
 ///
 /// The curve SATURATES at `rms = 1/gain` (≈ −20.8 dBFS): every level of 1.0 maps
 /// back to that same RMS. Any SNR computed from these numbers is therefore a

@@ -3,10 +3,9 @@ import Foundation
 /// Measures how loud the room is, so "did they speak?" can be asked relative to
 /// the room instead of against a constant that assumes a quiet one.
 ///
-/// VoiceiQ's absolute thresholds are `0.06` ≈ −58 dBFS and `0.08` ≈ −55 dBFS. Any
-/// occupied room clears both, which is why noise doesn't merely degrade accuracy
-/// — it makes the trailing-capture loop run to its full cap on every dictation
-/// and turns "nobody spoke" into a hard failure.
+/// VoiceiQ's absolute silence threshold is `0.06` ≈ −58 dBFS. Any occupied room
+/// clears it, which is why noise doesn't merely degrade accuracy — it turns
+/// "nobody spoke" into a hard failure.
 ///
 /// **This type always runs, and it decides nothing.** It observes the level
 /// stream and records numbers into `SessionMeta`; whether anything acts on them
