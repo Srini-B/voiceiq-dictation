@@ -125,6 +125,26 @@ public enum KeychainStore {
     /// alone does not let an OpenAI selection work.
     public static var hasModelKey: Bool { hasKey(for: SettingsStore().preferredProvider) }
 
+    #if os(iOS)
+    /// The iPhone keyboard records and transcribes by itself when no app
+    /// session runs, so it reads the keys too. On iOS every key is saved in
+    /// the App Group's access group (`save`); this moves keys saved by older
+    /// builds, which sit in the app's own group, once. Reads search every
+    /// group the process belongs to, so they need no change. Only processes
+    /// with the App Group entitlement (the app, the keyboard, the Live
+    /// Activity) can read the group, and the keyboard only with Full Access.
+    public static func shareWithKeyboard() {
+        let secrets: [Secret] = [.gemini, .openAI, .elevenLabs, .tinyFish, .agentProvider]
+        for secret in secrets {
+            var query = baseQuery(secret: secret, dataProtection: true)
+            query[kSecAttrAccessGroup as String] = SharedStore.appGroupID
+            guard SecItemCopyMatching(query as CFDictionary, nil) == errSecItemNotFound,
+                  let key = load(secret, service: service) else { continue }
+            _ = save(key, for: secret, notify: false)
+        }
+    }
+    #endif
+
     // MARK: - Generic
 
     private static func load(_ secret: Secret, service: String) -> String? {
@@ -142,7 +162,7 @@ public enum KeychainStore {
         return nil
     }
 
-    private static func save(_ key: String, for secret: Secret) -> Bool {
+    private static func save(_ key: String, for secret: Secret, notify: Bool = true) -> Bool {
         DebugLog.registerSecret(key)
         delete(secret, service: service)
         for dataProtection in [true, false] {
@@ -151,11 +171,14 @@ public enum KeychainStore {
             attributes[kSecValueData as String] = Data(key.utf8)
             if dataProtection {
                 attributes[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+                #if os(iOS)
+                attributes[kSecAttrAccessGroup as String] = SharedStore.appGroupID
+                #endif
             }
             let status = SecItemAdd(attributes as CFDictionary, nil)
             if status == errSecSuccess {
                 Log.permissions.info("KeychainStore: \(secret.rawValue, privacy: .public) saved (\(dataProtection ? "data-protection" : "login", privacy: .public) keychain)")
-                NotificationCenter.default.post(name: .gtSettingDidChange, object: secret.settingKey)
+                if notify { NotificationCenter.default.post(name: .gtSettingDidChange, object: secret.settingKey) }
                 return true
             }
             if status != errSecMissingEntitlement {

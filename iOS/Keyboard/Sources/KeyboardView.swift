@@ -365,7 +365,7 @@ private struct RecordingStrip: View {
                         .truncationMode(.head)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .accessibilityLabel("Heard so far: \(model.liveText)")
-                } else if let started = model.snapshot.recordingStartedAt {
+                } else if let started = model.recordingStartedAt {
                     Text(timerInterval: started...Date.distantFuture, countsDown: false)
                         .font(.system(size: 16, weight: .semibold).monospacedDigit())
                 }

@@ -165,9 +165,10 @@ targets:
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
 
-  # iOS: the app owns audio, keys and transcription; the keyboard is a remote
-  # control; the Live Activity shows the background session in the Dynamic
-  # Island. See docs/IOS.md.
+  # iOS: the app owns audio, keys and transcription; the keyboard sends it
+  # commands while a session is up and runs the same pipeline itself when none
+  # is; the Live Activity shows the background session in the Dynamic Island.
+  # See docs/IOS.md.
   VoiceIQiOS:
     type: application
     platform: iOS
@@ -196,6 +197,8 @@ targets:
     sources:
       - path: iOS/App/Sources
       - path: iOS/App/Resources
+      # Dictation wiring the keyboard runs too.
+      - path: iOS/Shared
       # The keyboard's key views, for the live preview in Settings › Typing.
       - path: iOS/Keyboard/Sources/Typing
         includes: [KeyTheme.swift, KeyViews.swift, KeyLayout.swift, KeyboardKeysView.swift, TypingEngine.swift, Lexicon.swift]
@@ -284,6 +287,7 @@ targets:
           PROVISIONING_PROFILE_SPECIFIER: "VoiceiQ Keyboard App Store"
     sources:
       - path: iOS/Keyboard/Sources
+      - path: iOS/Shared
       # Word list and emoji: scripts/generate-keyboard-data.py.
       - path: iOS/Keyboard/Resources
         buildPhase: resources
@@ -300,12 +304,17 @@ targets:
     dependencies:
       - package: VoiceIQCore
         product: VoiceIQBridge
+      # The app's dictation pipeline, for dictations the keyboard runs by
+      # itself when no app session is up (docs/IOS.md).
+      - package: VoiceIQCore
+        product: VoiceIQCore
     info:
       path: iOS/Keyboard/Info.plist
       properties:
         CFBundleDisplayName: VoiceiQ
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        NSMicrophoneUsageDescription: VoiceiQ records audio when you tap the microphone in the VoiceiQ keyboard, so it can transcribe what you say.
         NSExtension:
           NSExtensionPointIdentifier: com.apple.keyboard-service
           NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).KeyboardViewController

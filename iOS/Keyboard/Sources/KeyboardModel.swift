@@ -1,9 +1,12 @@
+import Combine
 import SwiftUI
 import UIKit
 import VoiceIQBridge
 
-/// The keyboard's side of the bridge. It never records or talks to a model:
-/// it sends commands to the app and inserts what comes back.
+/// The keyboard's side of the bridge. While the app runs a session it sends
+/// commands to the app and inserts what comes back. Without one, the keyboard
+/// dictates by itself with the app's own pipeline (`KeyboardDictation`), so
+/// the app never opens; when it cannot, the tap goes through the app.
 @MainActor
 final class KeyboardModel: ObservableObject {
     @Published private(set) var snapshot = SessionSnapshot()
@@ -39,6 +42,8 @@ final class KeyboardModel: ObservableObject {
     private var pendingCommandID: UUID?
     private var pendingSince: Date?
     private var shownNoticeID: UUID?
+    private let local = KeyboardDictation.shared
+    private var localObserver: AnyCancellable?
 
     init() {
         mode = UserDefaults.standard.string(forKey: Self.modeKey).flatMap(KeyboardMode.init(rawValue:)) ?? .dictate
@@ -49,13 +54,19 @@ final class KeyboardModel: ObservableObject {
     /// `.processing`: iOS suspended the app or ended it, and opening the app
     /// finishes or recovers it.
     var phase: SessionSnapshot.Phase {
+        if local.phase != .off { return local.phase }
         if appAlive { return snapshot.phase }
         return needsAppToFinish ? .processing : .off
     }
 
-    var needsAppToFinish: Bool { !appAlive && snapshot.phase == .processing }
+    var needsAppToFinish: Bool { !appAlive && local.phase == .off && snapshot.phase == .processing }
 
-    var lastText: String? { snapshot.delivery?.text }
+    var recordingStartedAt: Date? { local.recordingStartedAt ?? snapshot.recordingStartedAt }
+
+    /// The newest result, from the app or from a dictation run in the keyboard.
+    var lastText: String? {
+        [snapshot.delivery, store.keyboardDelivery].compactMap { $0 }.max { $0.createdAt < $1.createdAt }?.text
+    }
 
     // MARK: - Lifecycle
 
@@ -67,6 +78,11 @@ final class KeyboardModel: ObservableObject {
 
     func appeared() {
         Self.onScreen = self
+        // The bar follows a dictation the keyboard runs by itself too.
+        localObserver = local.objectWillChange.sink { [weak self] in self?.objectWillChange.send() }
+        if let view = controller?.view, controller?.hasFullAccess == true { local.keyboardAppeared(in: view) }
+        local.onDeliver = { text, mode in Self.deliverLocal(text, mode: mode) }
+        local.onNotice = { text in Self.onScreen?.show(notice: text) }
         hasFullAccess = controller?.hasFullAccess ?? false
         if hasFullAccess { store.noteKeyboardSeen() }
         observer = DarwinNotifier.observe(.state) { [weak self] in
@@ -84,7 +100,10 @@ final class KeyboardModel: ObservableObject {
     }
 
     func disappeared() {
-        if Self.onScreen === self { Self.onScreen = nil }
+        if Self.onScreen === self {
+            Self.onScreen = nil
+            local.keyboardHidden()
+        }
         if let observer { DarwinNotifier.removeObserver(observer) }
         observer = nil
         timer?.invalidate()
@@ -100,7 +119,7 @@ final class KeyboardModel: ObservableObject {
         let fresh = store.snapshot
         if fresh != snapshot { snapshot = fresh }
         // With the snapshot, so a new recording never shows the last one's words.
-        let newText = phase == .recording ? store.liveText : ""
+        let newText = local.phase != .off ? local.liveText : phase == .recording ? store.liveText : ""
         if newText != liveText { liveText = newText }
         let alive = store.appIsAlive()
         if alive != appAlive { appAlive = alive }
@@ -126,7 +145,7 @@ final class KeyboardModel: ObservableObject {
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
         switch phase {
         case .recording:
-            send(KeyboardCommand(action: .stop, mode: mode))
+            if local.phase == .recording { local.stop() } else { send(KeyboardCommand(action: .stop, mode: mode)) }
         case .processing:
             if needsAppToFinish { controller?.openURL(BridgeURL.app) }
         case .warm, .off:
@@ -137,7 +156,7 @@ final class KeyboardModel: ObservableObject {
     func cancelTapped() {
         guard phase == .recording else { return }
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
-        send(KeyboardCommand(action: .cancel, mode: mode))
+        if local.phase == .recording { local.cancel() } else { send(KeyboardCommand(action: .cancel, mode: mode)) }
     }
 
     func pasteLast() {
@@ -165,8 +184,22 @@ final class KeyboardModel: ObservableObject {
 
     private func start() {
         let host = controller.flatMap(HostAppResolver.currentHost(for:))
-        KeyboardLog.note("[\(instanceTag)] start in \(host ?? "an unresolved host")")
         let context = mode == .ask ? controller?.textDocumentProxy.selectedText : nil
+        // A running app session keeps recording in the app, as before.
+        if !appAlive {
+            if let blocker = local.blocker() {
+                KeyboardLog.note("[\(instanceTag)] in-keyboard dictation unavailable: \(blocker)")
+            } else {
+                let mode = self.mode
+                local.onStartFailed = { [weak self] in self?.startThroughApp(mode: mode, context: context, host: host) }
+                if local.start(mode: mode, selectedText: context, host: host) { return }
+            }
+        }
+        startThroughApp(mode: mode, context: context, host: host)
+    }
+
+    private func startThroughApp(mode: KeyboardMode, context: String?, host: String?) {
+        KeyboardLog.note("[\(instanceTag)] start in \(host ?? "an unresolved host")")
         let command = KeyboardCommand(action: .start, mode: mode, context: context, hostBundleID: host)
         let alive = appAlive
         send(command)
@@ -213,6 +246,39 @@ final class KeyboardModel: ObservableObject {
         store.insertedDeliveryID = delivery.id
         let typed = insert(delivery.text)
         KeyboardLog.note(typed ? "[\(instanceTag)] result typed" : "[\(instanceTag)] result not typed: no text field")
+    }
+
+    /// A result of an in-keyboard dictation. The keyboard on screen types it
+    /// (an Ask answer opens the answer panel); with none on screen it goes on
+    /// the clipboard after the same two seconds the app waits.
+    private static func deliverLocal(_ text: String, mode: KeyboardMode) {
+        if mode != .ask { SharedStore.shared.keyboardDelivery = Delivery(mode: mode, text: text, hostBundleID: nil) }
+        if let model = onScreen, model.controller?.viewIfLoaded?.window != nil {
+            if mode == .ask {
+                model.answer = Delivery(mode: .ask, text: text, hostBundleID: nil)
+            } else {
+                let typed = model.insert(text)
+                KeyboardLog.note(typed ? "[\(model.instanceTag)] result typed" : "[\(model.instanceTag)] result not typed: no text field")
+            }
+            return
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+            if mode == .ask, let model = onScreen {
+                model.answer = Delivery(mode: .ask, text: text, hostBundleID: nil)
+            } else if let model = onScreen, model.insert(text) {
+                KeyboardLog.note("[\(model.instanceTag)] result typed")
+            } else {
+                UIPasteboard.general.string = text
+                KeyboardLog.note("result not typed by a keyboard; copied to the clipboard (keyboard)")
+            }
+        }
+    }
+
+    private func show(notice text: String) {
+        notice = text
+        DispatchQueue.main.asyncAfter(deadline: .now() + 4) { [weak self] in
+            if self?.notice == text { self?.notice = nil }
+        }
     }
 
     private func showNoticeIfNeeded() {

@@ -39,6 +39,7 @@ public final class SharedStore: @unchecked Sendable {
         static let liveText = "bridge.liveText"
         static let insertedDeliveryID = "bridge.insertedDeliveryID"
         static let keyboardSeenAt = "bridge.keyboardSeenAt"
+        static let keyboardDelivery = "bridge.keyboardDelivery"
         static let activityRequest = "bridge.activityRequest"
         static let keyboardLog = "bridge.keyboardLog"
         static let dictionaryAdditions = "bridge.dictionaryAdditions"
@@ -105,6 +106,13 @@ public final class SharedStore: @unchecked Sendable {
     public var keyboardSeenAt: Date? {
         get { date(forKey: Key.keyboardSeenAt) }
         set { defaults.set(newValue?.timeIntervalSince1970, forKey: Key.keyboardSeenAt) }
+    }
+
+    /// The last result of a dictation the keyboard ran by itself, for Paste
+    /// last. Writer: keyboard.
+    public var keyboardDelivery: Delivery? {
+        get { decode(Delivery.self, forKey: Key.keyboardDelivery) }
+        set { encode(newValue, forKey: Key.keyboardDelivery) }
     }
 
     /// Called by the keyboard each time it appears with Full Access. Pings the

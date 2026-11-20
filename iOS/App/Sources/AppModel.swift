@@ -105,6 +105,38 @@ final class AppModel: ObservableObject {
         commandObserver = DarwinNotifier.observe(.command) { [weak self] in
             Task { @MainActor in self?.drainCommands() }
         }
+        // The keyboard runs this same pipeline when no session is up; it
+        // reads the keys and settings through the App Group.
+        KeychainStore.shareWithKeyboard()
+        AppSettingsMirror.publish()
+        NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification)
+            .debounce(for: .milliseconds(300), scheduler: RunLoop.main)
+            .sink { _ in AppSettingsMirror.publish() }
+            .store(in: &cancellables)
+    }
+
+    /// One dictation's meta.json changed: History mirrors it, and "Never"
+    /// audio retention drops the recording once the words exist.
+    private func mirror(_ meta: SessionMeta, folder: URL) {
+        historyStore?.upsert(meta: meta, folder: folder)
+        if SettingsStore().audioRetentionDays < 0, meta.rawTranscript != nil || meta.status == .silent {
+            for audio in [FileLayout.audioCAF(in: folder), FileLayout.audioFLAC(in: folder), FileLayout.playbackFolder(in: folder)] {
+                try? FileManager.default.removeItem(at: audio)
+            }
+        }
+    }
+
+    /// Adds the dictations the keyboard recorded and processed itself to
+    /// History and the usage totals. One it left unfinished is recovered or
+    /// queued like the app's own; a queued one is sent.
+    private func importKeyboardDictations() async {
+        let (sessions, usage) = KeyboardInbox.collect()
+        guard !sessions.isEmpty || !usage.isEmpty else { return }
+        for record in usage { UsageMeter.store?.append(record) }
+        for (meta, folder) in sessions { mirror(meta, folder: folder) }
+        SessionDiagnostics.note("imported \(sessions.count) keyboard dictation(s)")
+        if sessions.contains(where: { [.recording, .recorded, .transcribing].contains($0.meta.status) }) { await recoveryScanner?.scanAndRecover() }
+        await retryQueue?.drain()
     }
 
     // MARK: - Wiring
@@ -124,24 +156,13 @@ final class AppModel: ObservableObject {
             self?.deliver(answer, mode: .ask)
         }
         coordinator.onSessionUpdate = { [weak self] meta, folder in
-            self?.historyStore?.upsert(meta: meta, folder: folder)
-            if SettingsStore().audioRetentionDays < 0, meta.rawTranscript != nil || meta.status == .silent {
-                for audio in [FileLayout.audioCAF(in: folder), FileLayout.audioFLAC(in: folder), FileLayout.playbackFolder(in: folder)] {
-                    try? FileManager.default.removeItem(at: audio)
-                }
-            }
+            self?.mirror(meta, folder: folder)
         }
         coordinator.onSessionDiscard = { [weak self] id in
             self?.historyStore?.delete(id: id.uuidString, removeFolder: false)
         }
         coordinator.onStageTimes = { stages in
-            // Splits "processed in" so a slow result can be blamed on the mic
-            // teardown, the transcript, the cleanup request, or typing it in.
-            var parts = [String(format: "finalize %.1fs", stages.finishRecording)]
-            parts.append(String(format: stages.live ? "cloud live final %.1fs" : "cloud transcribe %.1fs", stages.transcription))
-            if let writing = stages.writing { parts.append(String(format: "writing %.1fs", writing)) }
-            if let insert = stages.insert { parts.append(String(format: "insert %.1fs", insert)) }
-            SessionDiagnostics.note(parts.joined(separator: ", "))
+            SessionDiagnostics.note(DictationNotice.stepsLine(stages))
         }
         meetings.$phase
             .sink { [weak self] phase in
@@ -177,6 +198,7 @@ final class AppModel: ObservableObject {
         }
         retryQueue = queue
         Task {
+            await importKeyboardDictations()
             await scanner.scanAndRecover()
             queue.start()
             Task.detached(priority: .utility) { RetentionPolicy().purge() }
@@ -466,6 +488,7 @@ final class AppModel: ObservableObject {
         setup.refresh()
         drainCommands()
         DictionaryBridge.appBecameActive()
+        Task { await importKeyboardDictations() }
         WritingRulesSync.shared.refresh()
         Task { await HistorySync.shared.refresh() }
         Task { await MeetingSync.shared.refresh() }
@@ -510,14 +533,14 @@ final class AppModel: ObservableObject {
             session.recordingStartedAt = nil
             session.dictationPhase = .warm
             session.releaseBackgroundTime()
-            if state != previousState, case .failed(let failure) = state, Self.isMicrophoneFailure(failure),
+            if state != previousState, case .failed(let failure) = state, DictationNotice.isMicrophoneFailure(failure),
                UIApplication.shared.applicationState != .active {
                 // iOS refused the microphone to a backgrounded app. The next tap
                 // opens the app once, which always works.
                 SessionDiagnostics.note("background microphone start refused (\(failure)) with mic open \(self.session.canRecordInBackground); next dictation goes through the app")
                 needsForeground = true
                 session.post(notice: "Tap the mic again")
-            } else if state != previousState, let message = Self.notice(for: state, coordinator: coordinator) {
+            } else if state != previousState, let message = DictationNotice.message(for: state, coordinator: coordinator) {
                 session.post(notice: message)
             }
         }
@@ -575,34 +598,6 @@ final class AppModel: ObservableObject {
     }
 
     static let typedCheckDelay: TimeInterval = 2
-
-    static func isMicrophoneFailure(_ failure: DictationFailure) -> Bool {
-        switch failure {
-        case .audio, .noMicrophone: return true
-        default: return false
-        }
-    }
-
-    static func notice(for state: DictationState, coordinator: DictationCoordinator) -> String? {
-        switch state {
-        case .failed(let failure):
-            if let message = coordinator.modeFailureMessage { return message }
-            switch failure {
-            case .auth: return "API key rejected. Check it in VoiceiQ."
-            case .modelAccess: return "Model unavailable. Check Settings › Advanced."
-            case .network: return "Couldn't reach the model. It's saved in History."
-            case .rateLimited: return "Rate limited. Retry from History."
-            case .quotaExhausted: return "Daily quota reached"
-            case .timeout: return "Timed out. Retry from History."
-            case .audio, .noMicrophone, .noAudio: return "Microphone unavailable"
-            case .storage: return "Storage is full"
-            case .badRequest, .validation, .safetyBlocked: return "Couldn't transcribe. It's in History."
-            }
-        case .done(.queuedForRetry): return "Offline. It will send when you're back."
-        case .done(.silent): return "Didn't catch that"
-        default: return nil
-        }
-    }
 }
 
 extension Notification.Name {

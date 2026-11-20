@@ -20,6 +20,8 @@
 	<string>$(MARKETING_VERSION)</string>
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>VoiceiQ records audio when you tap the microphone in the VoiceiQ keyboard, so it can transcribe what you say.</string>
 	<key>NSExtension</key>
 	<dict>
 		<key>NSExtensionAttributes</key>

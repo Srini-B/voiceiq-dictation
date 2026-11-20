@@ -49,7 +49,7 @@ struct LevelGlow: View {
     }
 
     private func advance() {
-        let latest = SharedStore.shared.levelBars
+        let latest = LevelGlowSource.levels()
         // Reduce Motion keeps the glow still at the dictation's latest height.
         let shown = reduceMotion ? Array(repeating: latest.last ?? 0, count: LevelBars.capacity) : latest
         if shown != levels { levels = shown }
@@ -86,4 +86,10 @@ private struct GlowShape: Shape {
         path.closeSubpath()
         return path
     }
+}
+
+/// Where the glow reads the dictation's levels: the app's, through the App
+/// Group, unless the keyboard records the dictation itself.
+enum LevelGlowSource {
+    @MainActor static var levels: () -> [Float] = { SharedStore.shared.levelBars }
 }
