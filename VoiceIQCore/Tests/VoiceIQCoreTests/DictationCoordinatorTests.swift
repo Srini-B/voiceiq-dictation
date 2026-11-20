@@ -117,33 +117,18 @@ final class DictationCoordinatorTests: XCTestCase {
 
     // MARK: Tests
 
-    /// Releasing the key mid-word must not clip the ending: capture carries
-    /// past key-up while speech is still present, then stops once it's quiet.
-    func testStillSpeakingAtKeyUpCarriesCapture() async {
+    /// Recording ends at key-up, even mid-word: no listening past it.
+    func testReleaseMidWordStopsImmediately() async {
         let c = makeCoordinator()
         c.handle(.begin)
         await pump()
-        capture.onLevel?(0.6) // mid-word at the moment of release
+        capture.onLevel?(0.9) // loud speech at the moment of release
         await pump()
         c.handle(.finalize)
         await pump()
-        XCTAssertEqual(capture.stopCount, 0, "still talking — the mic stays open")
-        capture.onLevel?(0.0) // they finish
-        await settle()
         XCTAssertEqual(capture.stopCount, 1)
+        await settle()
         XCTAssertEqual(c.state, .done(.inserted))
-    }
-
-    /// The common case pays nothing: a quiet release stops immediately.
-    func testQuietReleaseStopsImmediately() async {
-        let c = makeCoordinator()
-        c.handle(.begin)
-        await pump()
-        capture.onLevel?(0.01)
-        await pump()
-        c.handle(.finalize)
-        await pump()
-        XCTAssertEqual(capture.stopCount, 1, "already quiet — no carry-over latency")
     }
 
     func testHappyPathInserts() async {
@@ -539,61 +524,6 @@ final class DictationCoordinatorTests: XCTestCase {
 @MainActor
 extension DictationCoordinatorTests {
 
-    /// Feed the level stream a room, plus enough separation for the session to
-    /// have earned a relative judgement.
-    private func hearRoom(_ level: Float, samples: Int = 12, speech: Float? = nil) async {
-        for _ in 0..<samples { capture.onLevel?(level) }
-        if let speech { capture.onLevel?(speech) }
-        await pump()
-        capture.onLevel?(level) // the room is what's playing at the moment of release
-        await pump()
-    }
-
-    /// The guarantee that makes the experiment safe to ship: with the flag off,
-    /// a loud room behaves exactly as it does in the shipped build — the trailing
-    /// loop reads room tone as speech and keeps the mic open.
-    func testFlagOffBehavesExactlyAsToday() async {
-        let c = makeCoordinator(noiseHandling: false)
-        c.handle(.begin)
-        await pump()
-        await hearRoom(0.15, speech: 0.9)
-        c.handle(.finalize)
-        await pump()
-        XCTAssertEqual(capture.stopCount, 0, "today, room tone alone holds the mic open past key-up")
-        capture.onLevel?(0.0)
-        await settle()
-        XCTAssertEqual(capture.stopCount, 1)
-    }
-
-    /// The fix: the same room, the same levels, but judged against the room
-    /// rather than a constant — so releasing the key in a café stops the mic
-    /// instead of burning the full 1.5s cap on babble.
-    func testNoisyRoomTrailingCaptureStopsEarly() async {
-        let c = makeCoordinator(noiseHandling: true)
-        c.handle(.begin)
-        await pump()
-        await hearRoom(0.15, speech: 0.9)
-        c.handle(.finalize)
-        await settle()
-        XCTAssertEqual(capture.stopCount, 1, "room tone is not speech once we know what the room sounds like")
-    }
-
-    /// The trust gate. A session that never showed speech clearly above the room
-    /// has not earned a relative judgement, so we keep today's behaviour and pay
-    /// the cap rather than risk clipping a word.
-    func testNoisyRoomWithoutSeparationStillRunsToCap() async {
-        let c = makeCoordinator(noiseHandling: true)
-        c.handle(.begin)
-        await pump()
-        await hearRoom(0.15) // no loud speech: separation never reached 12dB
-        c.handle(.finalize)
-        await pump()
-        XCTAssertEqual(capture.stopCount, 0, "without proven separation the energy signal is not trusted")
-        capture.onLevel?(0.0)
-        await settle()
-        XCTAssertEqual(capture.stopCount, 1)
-    }
-
     /// Strictly safer, and unflagged: a quiet absolute peak that nonetheless rose
     /// far above a very quiet room is someone speaking softly, not a dead mic.
     /// This clause may only ever PREVENT a discard.
@@ -654,7 +584,7 @@ extension DictationCoordinatorTests {
         for _ in 0..<12 { capture.onLevel?(0.4) }
         capture.onLevel?(0.5)
         await pump()
-        capture.onLevel?(0.0) // quiet release so no trailing capture
+        capture.onLevel?(0.0)
         await pump()
         c.handle(.finalize)
         await settle()

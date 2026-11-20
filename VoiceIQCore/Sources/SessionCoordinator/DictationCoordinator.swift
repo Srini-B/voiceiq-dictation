@@ -44,30 +44,6 @@ public final class DictationCoordinator: ObservableObject {
     /// Zero frames on a hold shorter than this is an accidental blip, not an
     /// engine failure — the first buffer simply hadn't arrived yet.
     static let blipHoldThreshold: TimeInterval = 0.8
-    /// Releasing the key a beat before the last word is finished is a NORMAL
-    /// human gesture — the hand anticipates the mouth. When the user is still
-    /// speaking at key-up, keep capturing until they actually stop.
-    /// Costs nothing in the common case: already-quiet releases stop instantly.
-    static let trailingSpeechThreshold: Float = 0.08
-    /// Quiet this long ⇒ they finished the word.
-    static let trailingQuietToStop: TimeInterval = 0.25
-    /// Hard cap so a noisy room can never hold a session open. On iPhone the
-    /// stop is a tap on the keyboard, made after looking at the screen, so the
-    /// hand rarely runs ahead of the mouth and a long tail only adds wait.
-    #if os(iOS)
-    static let trailingCaptureCap: TimeInterval = 0.6
-    #else
-    static let trailingCaptureCap: TimeInterval = 1.5
-    #endif
-    /// How far above the measured room a level must sit to still read as speech.
-    /// Only ever raises the bar from `trailingSpeechThreshold`, never lowers it.
-    static let trailingFloorMarginDB: Double = 3
-    /// The session must have shown at least this much separation between speech
-    /// and room before we trust its energy readings enough to stop early. Below
-    /// it we keep today's behaviour: run to the cap and never clip a word.
-    static let trailingTrustSNR: Double = 12
-    /// A mis-estimated floor must never make ordinary speech read as quiet.
-    static let trailingRelativeCap: Float = 0.30
     /// Nothing rose this far above the room ⇒ nobody spoke, whatever the
     /// absolute peak says. Used to classify an empty transcript honestly.
     static let emptyTranscriptSNRThreshold: Double = 8
@@ -110,9 +86,6 @@ public final class DictationCoordinator: ObservableObject {
     /// The engine stop a finalize started, until its result is used.
     private var pendingStop: Task<AudioCaptureResult, Never>?
     private var screenContextCollector: ScreenContextCollector?
-    /// Most recent metered level — decides whether the user was mid-word when
-    /// they released the key.
-    private var latestLevel: Float = 0
     /// How loud the room is. Always measured, never in charge: what it feeds is
     /// gated on `noiseHandlingActive`, what it records is not.
     private var noiseFloor = NoiseFloorEstimator()
@@ -311,7 +284,7 @@ public final class DictationCoordinator: ObservableObject {
             }
             capture.onLevel = { [weak self] level in
                 Task { @MainActor [weak self] in
-                    self?.ingestLevel(level, updatingMeter: true)
+                    self?.ingestLevel(level)
                 }
             }
             capture.onDeviceChange = { [weak self] message in
@@ -413,34 +386,9 @@ public final class DictationCoordinator: ObservableObject {
         finalizeSession()
     }
 
-    /// The ONE place levels enter the coordinator.
-    ///
-    /// `captureTrailingSpeech` reassigns `capture.onLevel`, replacing the closure
-    /// installed at session start. Both paths must feed the estimator or it
-    /// starves in exactly the window that needs it most — the moment after key-up
-    /// when we are deciding whether the user is still talking.
-    private func ingestLevel(_ level: Float, updatingMeter: Bool) {
-        if updatingMeter { micLevel = level }
-        latestLevel = level
+    private func ingestLevel(_ level: Float) {
+        micLevel = level
         noiseFloor.ingest(level: level)
-    }
-
-    /// The level below which the user has stopped talking.
-    ///
-    /// Absolute by default. With the experiment on it rises to sit just above a
-    /// loud room — but only UPWARD from the absolute threshold, and only when the
-    /// session has proved it can tell speech from the room at all. Without that
-    /// separation the energy signal is not trustworthy, so we keep today's
-    /// behaviour and pay the full cap rather than risk clipping a word.
-    private func currentTrailingThreshold() -> Float {
-        guard noiseHandlingActive,
-              let floorDB = noiseFloor.floorDB,
-              let snr = noiseFloor.measuredSNR,
-              snr >= Self.trailingTrustSNR
-        else { return Self.trailingSpeechThreshold }
-        let targetDB = floorDB + Self.trailingFloorMarginDB
-        let relative = AudioLevelCurve.level(fromRMS: Float(pow(10, targetDB / 20)))
-        return min(Self.trailingRelativeCap, max(Self.trailingSpeechThreshold, relative))
     }
 
     private func finalizeSession() {
@@ -454,19 +402,15 @@ public final class DictationCoordinator: ObservableObject {
         partialPump = nil
         partialTranscript = ""
         finishScreenContext()
-        // Hand the engine off and release it immediately: stop() now drains the
-        // HAL's in-flight buffer (~50ms mean of real speech) and tears the graph
-        // down — tens to hundreds of ms that must not freeze the main actor. The
-        // pill is already showing .finalizing, so the wait is visually covered.
+        // Recording ends at key-up: no listening past it, even mid-word. stop()
+        // only collects the buffer the HAL already holds (audio from before
+        // key-up, at most one tap buffer away) and tears the graph down, off the
+        // main actor.
         let engine = capture
         capture = nil
-        let wasSpeaking = latestLevel >= currentTrailingThreshold()
         micLevel = 0
-        let stop = Task { @MainActor [weak self] in
-            if wasSpeaking, let engine {
-                await self?.captureTrailingSpeech(from: engine)
-            }
-            return await engine?.stop() ?? AudioCaptureResult(framesWritten: 0, durationSeconds: 0)
+        let stop = Task { @MainActor in
+            await engine?.stop() ?? AudioCaptureResult(framesWritten: 0, durationSeconds: 0)
         }
         pendingStop = stop
         Task { @MainActor [weak self] in
@@ -477,36 +421,6 @@ public final class DictationCoordinator: ObservableObject {
             guard self.session?.id == sessionID else { return }
             self.completeFinalize(result: result)
         }
-    }
-
-    /// Keep the mic open past key-up until the user actually stops talking.
-    /// Returns as soon as they're quiet — capped so it can never hang.
-    private func captureTrailingSpeech(from engine: AudioCapturing) async {
-        // Real elapsed time, not the injectable session clock: this is about how
-        // long actual audio keeps arriving.
-        let start = DispatchTime.now()
-        func elapsed(since mark: DispatchTime) -> TimeInterval {
-            Double(DispatchTime.now().uptimeNanoseconds - mark.uptimeNanoseconds) / 1_000_000_000
-        }
-        var quietSince: DispatchTime?
-        // The engine keeps reporting levels after key-up; watch them directly.
-        engine.onLevel = { [weak self] level in
-            // updatingMeter: false — the pill already shows .finalizing; this is
-            // about hearing whether they are still talking, not drawing bars.
-            Task { @MainActor [weak self] in self?.ingestLevel(level, updatingMeter: false) }
-        }
-        while elapsed(since: start) < Self.trailingCaptureCap {
-            try? await Task.sleep(nanoseconds: 60_000_000)
-            if latestLevel < currentTrailingThreshold() {
-                let since = quietSince ?? DispatchTime.now()
-                quietSince = since
-                if elapsed(since: since) >= Self.trailingQuietToStop { break }
-            } else {
-                quietSince = nil
-            }
-        }
-        let carried = elapsed(since: start)
-        Log.audio.info("carried capture \(carried * 1000, format: .fixed(precision: 0))ms past key-up — you were still talking")
     }
 
     private func completeFinalize(result: AudioCaptureResult) {
