@@ -294,6 +294,20 @@ final class DictationCoordinatorTests: XCTestCase {
         spoken.handle(.finalize)
         await settle()
         XCTAssertEqual(spoken.state, .done(.inserted), "a loud 0.3 s \"Hi\" must not be deleted unheard")
+
+        // Sent but answered with no text: a failure to retry, not silence to delete.
+        var empty = FakeTranscription()
+        empty.result = .failure(.emptyTranscript)
+        let dropped = makeCoordinator(transcription: empty, noiseHandling: false)
+        var discarded: [UUID] = []
+        dropped.onSessionDiscard = { discarded.append($0) }
+        dropped.handle(.begin)
+        capture.result = AudioCaptureResult(framesWritten: 4_800, durationSeconds: 0.3, peakLevel: 0.9)
+        fakeNow += 2.0
+        dropped.handle(.finalize)
+        await settle()
+        XCTAssertNotEqual(dropped.state, .done(.silent))
+        XCTAssertTrue(discarded.isEmpty, "the recording stays for Retry")
     }
 
     func testEngineStartFailureNamesTheMissingMic() async {

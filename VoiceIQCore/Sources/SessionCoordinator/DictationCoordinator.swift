@@ -638,8 +638,9 @@ public final class DictationCoordinator: ObservableObject {
             let peak = session?.peakLevel ?? 1.0
             let duration = session?.meta.audioDurationSeconds ?? 0
             // Energy decides; the duration escape hatch only covers true blips —
-            // a LOUD 1s "Hi!" with a dropped transcript is a real failure (F9a).
-            if peak < Self.silencePeakThreshold || duration < 0.6 {
+            // a LOUD "Hi!" with a dropped transcript is a real failure (F9a),
+            // however short now that recording stops at key-up.
+            if peak < Self.silencePeakThreshold || (duration < 0.6 && peak < Self.shortClipSpeechPeak) {
                 lastSilenceReason = .noSpeech
                 apply(.silenceOnly)
                 discardSessionArtifacts()
