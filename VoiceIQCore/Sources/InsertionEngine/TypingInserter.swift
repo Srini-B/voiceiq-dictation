@@ -97,8 +97,9 @@ public enum TypingInserter {
         case typed
         /// The app in front changed part way; `rest` was not typed.
         case stopped(rest: String)
-        /// Some character has no key on the layout, so nothing was typed: a
-        /// remote session that reads key codes would get the wrong key.
+        /// Nothing was typed: some character has no key on the layout (a
+        /// remote session that reads key codes would get the wrong key), or
+        /// the focused window can't be watched.
         case unsupported
     }
 
@@ -134,6 +135,12 @@ public enum TypingInserter {
             }
             let app = targetPID.map(AXUIElementCreateApplication)
             let startWindow = app.flatMap(focusedWindow(of:))
+            if app != nil, startWindow == nil {
+                // Without the window there is no telling when the user moves
+                // to another remote session part way.
+                Log.insertion.info("not typing: the focused window can't be read")
+                return .unsupported
+            }
             for (index, stroke) in all.enumerated() {
                 var movedApp = false
                 if let targetPID { movedApp = NSWorkspace.shared.frontmostApplication?.processIdentifier != targetPID }

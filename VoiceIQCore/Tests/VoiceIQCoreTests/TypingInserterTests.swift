@@ -1,4 +1,5 @@
 #if os(macOS)
+import Carbon
 import XCTest
 @testable import VoiceIQCore
 
@@ -53,8 +54,11 @@ final class TypingInserterTests: XCTestCase {
     /// rows, never the numeric keypad, and Space must be the space bar.
     @MainActor
     func testLayoutKeysUseTheMainRowsAndTheSpaceBar() throws {
+        let source = TISCopyCurrentKeyboardLayoutInputSource().takeRetainedValue()
+        let id = TISGetInputSourceProperty(source, kTISPropertyInputSourceID)
+            .map { Unmanaged<CFString>.fromOpaque($0).takeUnretainedValue() as String }
+        try XCTSkipUnless(["com.apple.keylayout.US", "com.apple.keylayout.ABC"].contains(id), "needs the US or ABC layout, not \(id ?? "unknown")")
         let keys = TypingInserter.layoutKeys()
-        try XCTSkipUnless(keys["a"]?.code == 0 && keys["q"]?.code == 12, "needs a US-style layout")
         XCTAssertEqual(keys[" "]?.code, 49)
         XCTAssertEqual(keys["1"]?.code, 18)
         XCTAssertEqual(keys["."]?.code, 47)
