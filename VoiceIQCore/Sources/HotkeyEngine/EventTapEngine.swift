@@ -13,8 +13,10 @@ import Foundation
 ///    and ⌘Esc key-downs, but ONLY while a session is active. Everything else passes.
 ///  - Self-healing: re-enables on kCGEventTapDisabledBy* and polls tapIsEnabled
 ///    every 5s — a non-nil tap is not a healthy tap.
-///  - Sendable by hand, like `GlobalShortcutEngine`: the tap thread and the
-///    owner share it, and the state they both touch is guarded by `lock`.
+///  - Sendable by hand, like `GlobalShortcutEngine`: the tap thread, the health
+///    timer and the owner share it. The grammar is guarded by `lock`, the tap's
+///    lifecycle (state, thread, port, run loop, timer) by `lifecycleLock`;
+///    neither is held while a callback runs or while `start()` waits.
 public final class EventTapEngine: @unchecked Sendable {
     public enum State: Equatable {
         case stopped
@@ -23,7 +25,7 @@ public final class EventTapEngine: @unchecked Sendable {
         case running
     }
 
-    public private(set) var state: State = .stopped
+    public var state: State { withLifecycle { $0.state } }
 
     /// Called with each intent, on an arbitrary internal thread — the owner hops
     /// to the main actor.
@@ -47,11 +49,23 @@ public final class EventTapEngine: @unchecked Sendable {
     /// (audit L8/L13 — the machine supported cancel, the tap never delivered it).
     private var externalSessionActive = false
 
-    private var tapThread: Thread?
-    private var tapPort: CFMachPort?
-    private var runLoop: CFRunLoop?
+    private struct Lifecycle {
+        var state: State = .stopped
+        var thread: Thread?
+        var port: CFMachPort?
+        var runLoop: CFRunLoop?
+        var healthTimer: DispatchSourceTimer?
+    }
+
+    private let lifecycleLock = NSLock()
+    private var lifecycle = Lifecycle()
     private let timerQueue = DispatchQueue(label: "io.blue.voiceiq.hotkey.timer")
-    private var healthTimer: DispatchSourceTimer?
+
+    private func withLifecycle<T>(_ body: (inout Lifecycle) -> T) -> T {
+        lifecycleLock.lock()
+        defer { lifecycleLock.unlock() }
+        return body(&lifecycle)
+    }
 
     public init(trigger: DictationTrigger = .default) {
         self.trigger = trigger
@@ -92,44 +106,45 @@ public final class EventTapEngine: @unchecked Sendable {
     /// Safe to call again after the user grants Accessibility (onboarding flow).
     @discardableResult
     public func start() -> Bool {
-        if state == .permissionDenied {
-            tapThread = nil
-            state = .stopped
-        }
-        guard tapThread == nil else { return state == .running }
-
+        let started = DispatchSemaphore(value: 0)
         let thread = Thread { [weak self] in
-            self?.threadMain()
+            self?.threadMain(started: started)
         }
         thread.name = "io.blue.voiceiq.eventtap"
         thread.qualityOfService = .userInteractive
-        tapThread = thread
+        let alreadyRunning: Bool? = withLifecycle { life in
+            if life.state == .permissionDenied {
+                life.thread = nil
+                life.state = .stopped
+            }
+            guard life.thread == nil else { return life.state == .running }
+            life.thread = thread
+            return nil
+        }
+        if let alreadyRunning { return alreadyRunning }
         thread.start()
 
-        // Wait briefly for the thread to report tap creation success/failure.
-        let deadline = Date().addingTimeInterval(2)
-        while state == .stopped && Date() < deadline {
-            usleep(10_000)
-        }
-        if state == .running {
-            startHealthTimer()
-        }
-        return state == .running
+        // The thread reports tap creation success or failure.
+        _ = started.wait(timeout: .now() + 2)
+        let running = withLifecycle { $0.state == .running }
+        if running { startHealthTimer() }
+        return running
     }
 
     public func stop() {
-        healthTimer?.cancel(); healthTimer = nil
-        if let runLoop { CFRunLoopStop(runLoop) }
-        if let tapPort { CGEvent.tapEnable(tap: tapPort, enable: false) }
-        tapPort = nil
-        runLoop = nil
-        tapThread = nil
-        state = .stopped
+        let life = withLifecycle { life in
+            defer { life = Lifecycle() }
+            return life
+        }
+        life.healthTimer?.cancel()
+        if let runLoop = life.runLoop { CFRunLoopStop(runLoop) }
+        if let port = life.port { CGEvent.tapEnable(tap: port, enable: false) }
     }
 
     // MARK: - Tap thread
 
-    private func threadMain() {
+    private func threadMain(started: DispatchSemaphore) {
+        defer { started.signal() }
         let mask: CGEventMask =
             (1 << CGEventType.flagsChanged.rawValue)
             | (1 << CGEventType.keyDown.rawValue)
@@ -149,17 +164,28 @@ public final class EventTapEngine: @unchecked Sendable {
             userInfo: selfPtr
         ) else {
             Log.hotkey.error("EventTapEngine: tap creation failed — Accessibility not granted")
-            state = .permissionDenied
+            withLifecycle { $0.state = .permissionDenied }
             return
         }
 
-        tapPort = tap
         let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0)
-        runLoop = CFRunLoopGetCurrent()
         CFRunLoopAddSource(CFRunLoopGetCurrent(), source, .commonModes)
+        // A stop() that ran while the tap was being created ended this start.
+        let current = withLifecycle { life -> Bool in
+            guard life.thread === Thread.current else { return false }
+            life.port = tap
+            life.runLoop = CFRunLoopGetCurrent()
+            life.state = .running
+            return true
+        }
+        guard current else {
+            CGEvent.tapEnable(tap: tap, enable: false)
+            CFMachPortInvalidate(tap)
+            return
+        }
         CGEvent.tapEnable(tap: tap, enable: true)
-        state = .running
         Log.hotkey.info("EventTapEngine: tap running (trigger=\(self.trigger.displayName, privacy: .public))")
+        started.signal()
         CFRunLoopRun()
         Log.hotkey.info("EventTapEngine: run loop exited")
     }
@@ -174,8 +200,7 @@ public final class EventTapEngine: @unchecked Sendable {
     private func handle(type: CGEventType, event: CGEvent) -> Unmanaged<CGEvent>? {
         // Tap health: the OS silently disables taps that are slow or during login events.
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
-            if let tapPort {
-                CGEvent.tapEnable(tap: tapPort, enable: true)
+            if reviveTap(onlyIfDisabled: false) {
                 Log.hotkey.warning("EventTapEngine: tap disabled by \(type == .tapDisabledByTimeout ? "timeout" : "user input", privacy: .public) — re-enabled")
                 onTapRevived?()
             }
@@ -295,15 +320,27 @@ public final class EventTapEngine: @unchecked Sendable {
         let timer = DispatchSource.makeTimerSource(queue: timerQueue)
         timer.schedule(deadline: .now() + 5, repeating: 5)
         timer.setEventHandler { [weak self] in
-            guard let self, let tapPort = self.tapPort else { return }
-            if !CGEvent.tapIsEnabled(tap: tapPort) {
-                CGEvent.tapEnable(tap: tapPort, enable: true)
-                Log.hotkey.warning("EventTapEngine: health poll found tap disabled — re-enabled")
-                self.onTapRevived?()
-            }
+            guard let self, self.reviveTap(onlyIfDisabled: true) else { return }
+            Log.hotkey.warning("EventTapEngine: health poll found tap disabled — re-enabled")
+            self.onTapRevived?()
         }
-        timer.resume()
-        healthTimer = timer
+        let kept = withLifecycle { life -> Bool in
+            guard life.state == .running, life.healthTimer == nil else { return false }
+            life.healthTimer = timer
+            return true
+        }
+        if kept { timer.resume() }
+    }
+
+    /// Re-enables the tap, under the lifecycle lock so a concurrent `stop()`
+    /// never has its disabled tap turned back on. True when it re-enabled it.
+    private func reviveTap(onlyIfDisabled: Bool) -> Bool {
+        withLifecycle { life in
+            guard let port = life.port else { return false }
+            if onlyIfDisabled, CGEvent.tapIsEnabled(tap: port) { return false }
+            CGEvent.tapEnable(tap: port, enable: true)
+            return true
+        }
     }
 }
 #endif
