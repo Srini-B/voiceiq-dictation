@@ -12,7 +12,7 @@ public extension Notification.Name {
 /// UserDefaults-backed settings (M3 minimal; the Settings UI lands at M7).
 /// Endpoint + model IDs are overridable because preview models get renamed.
 public struct SettingsStore: Sendable {
-    private static let defaults = UserDefaults.standard
+    private static var defaults: UserDefaults { .standard }
 
     public init() {}
 

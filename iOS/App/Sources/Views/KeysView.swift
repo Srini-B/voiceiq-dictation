@@ -262,7 +262,7 @@ enum KeySlot: Hashable, CaseIterable {
         }
     }
 
-    var purpose: String {
+    @MainActor var purpose: String {
         switch self {
         case .gemini:
             return "Google's Gemini API, with a free tier. Stored in your \(UIDevice.current.localizedModel)'s Keychain and only ever sent to Google."

@@ -15,6 +15,7 @@ import UIKit
 /// 2. `_hostProcessIdentifier` on our own input view controller is the host's
 ///    pid right now.
 /// The arbiter's pairs go into a pid table; the current pid is looked up in it.
+@MainActor
 enum HostAppResolver {
     private static let arbiterClassNames = ["_UIKeyboardArbiterClient", "UIKeyboardArbiterClient"]
     private static let sharedClientSelector = "automaticSharedArbiterClient"

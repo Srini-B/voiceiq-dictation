@@ -1,0 +1,33 @@
+# What scripts/sync-hex-keyboard.sh copies from https://github.com/anomalyco/hex.
+# One mapping per line: <path in Hex> <path in this repository>.
+# "exclude <path in Hex>" leaves a file or folder out; VoiceiQ takes English only,
+# so the other languages' models and emoji indexes stay out.
+# Each destination is replaced wholesale on every sync, so never edit files under
+# it by hand: put VoiceiQ's changes in iOS/Keyboard/Sources/HexGlue (keyboard) or
+# iOS/App/Sources/HexGlue (cleanup), or, when a Hex file itself must change, in a
+# patch under iOS/Keyboard/Hex/patches.
+LICENSE                     iOS/Keyboard/Hex/LICENSE
+
+# Keyboard, slide to type, autocorrect and predictions (keyboard extension).
+ios/HEXShared/FullKeyboard  iOS/Keyboard/Hex/FullKeyboard
+ios/HEXKeyboard/TypingModel/en.hextm iOS/Keyboard/Hex/TypingModel/en.hextm
+exclude ios/HEXShared/FullKeyboard/Emoji/emoji-index-de.txt
+exclude ios/HEXShared/FullKeyboard/Emoji/emoji-index-es.txt
+exclude ios/HEXShared/FullKeyboard/Emoji/emoji-index-nb.txt
+# What the keyboard's files call that lives beside them in Hex: Record typing logs
+# (TypingLogger, off unless its switch is on) and the dictation-edit types Learn how
+# I type records.
+ios/HEXShared/TypingLog                     iOS/Keyboard/Hex/TypingLog
+ios/HEXShared/DictationEditInference.swift  iOS/Keyboard/Hex/Dictation/DictationEditInference.swift
+ios/HEXShared/DictationCorrections.swift    iOS/Keyboard/Hex/Dictation/DictationCorrections.swift
+
+# Clean up what I say: the on-device cleanup tagger (iPhone app). The Core ML model
+# is a Hex release asset, not a git file: scripts/fetch-hex-cleanup-model.sh reads
+# its tag and SHA-256 from the copied fetch-cleanup-model.sh and downloads it.
+ios/HEXShared/CleanupTagger.swift         iOS/App/Hex/Cleanup/CleanupTagger.swift
+ios/HEXShared/CleanupTokenizer.swift      iOS/App/Hex/Cleanup/CleanupTokenizer.swift
+ios/HEXShared/CleanupGuard.swift          iOS/App/Hex/Cleanup/CleanupGuard.swift
+ios/HEXShared/CleanupReconstruction.swift iOS/App/Hex/Cleanup/CleanupReconstruction.swift
+ios/HEXShared/SpokenCleanupRules.swift    iOS/App/Hex/Cleanup/SpokenCleanupRules.swift
+ios/HEXKeyboard/CleanupTagger/HexCleanupTaggerVocab.txt iOS/App/Hex/Cleanup/HexCleanupTaggerVocab.txt
+ios/scripts/fetch-cleanup-model.sh        iOS/App/Hex/Cleanup/fetch-cleanup-model.sh

@@ -20,7 +20,8 @@ extension GeminiTranscriptionService {
         raw: String, context: DictationContext, config: GeminiConfig, rawHasFillers: Bool,
         normalized: String? = nil
     ) async -> SettledCleanup {
-        settle(await runCleanup(raw: raw, context: context, config: config, normalized: normalized),
+        if rawHasFillers { verbatimCleaner?.prepare() }
+        return await settle(await runCleanup(raw: raw, context: context, config: config, normalized: normalized),
                raw: raw, rawHasFillers: rawHasFillers)
     }
 
@@ -33,7 +34,7 @@ extension GeminiTranscriptionService {
 
     /// Turns a cleanup outcome into the text to insert. The dictionary's hard
     /// guarantee applies on every branch: explicit wrong→right rules always win.
-    private func settle(_ outcome: CleanupOutcome, raw: String, rawHasFillers: Bool) -> SettledCleanup {
+    private func settle(_ outcome: CleanupOutcome, raw: String, rawHasFillers: Bool) async -> SettledCleanup {
         let rules = DictionaryStore().replacementRules()
         let cause: CleanupSkip.Cause
         let reason: String
@@ -51,7 +52,11 @@ extension GeminiTranscriptionService {
         }
         // Without the writing model nothing else removes hesitation sounds
         // from a verbatim transcript.
-        let base = rawHasFillers ? FillerStripper.strip(raw) : raw
+        var base = raw
+        if rawHasFillers {
+            if let verbatimCleaner { base = await verbatimCleaner.clean(base) }
+            base = FillerStripper.strip(base)
+        }
         let fillersRemoved = base != raw
         let note = fillersRemoved ? reason + "; filler words removed" : reason
         Log.transcription.error("\(note, privacy: .public). Inserting the transcript.")

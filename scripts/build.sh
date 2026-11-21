@@ -7,6 +7,8 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+# Hex's cleanup tagger model is a resource of the iPhone app (not in git).
+scripts/fetch-hex-cleanup-model.sh
 xcodegen generate
 
 # macOS ties Accessibility and microphone grants to the code signature. An

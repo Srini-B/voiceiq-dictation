@@ -13,7 +13,9 @@ import Foundation
 ///    and ⌘Esc key-downs, but ONLY while a session is active. Everything else passes.
 ///  - Self-healing: re-enables on kCGEventTapDisabledBy* and polls tapIsEnabled
 ///    every 5s — a non-nil tap is not a healthy tap.
-public final class EventTapEngine {
+///  - Sendable by hand, like `GlobalShortcutEngine`: the tap thread and the
+///    owner share it, and the state they both touch is guarded by `lock`.
+public final class EventTapEngine: @unchecked Sendable {
     public enum State: Equatable {
         case stopped
         /// Tap creation failed — Accessibility permission is missing.

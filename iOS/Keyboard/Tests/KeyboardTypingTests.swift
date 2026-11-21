@@ -1,0 +1,206 @@
+import UIKit
+import XCTest
+
+/// A text field as a keyboard sees it: text with a cursor or a selection.
+private final class Field: NSObject, UITextDocumentProxy {
+    private var characters: [Character]
+    private var start: Int
+    private var length: Int
+
+    init(_ text: String = "", selecting word: String? = nil) {
+        characters = Array(text)
+        if let word, let range = text.range(of: word) {
+            start = text.distance(from: text.startIndex, to: range.lowerBound)
+            length = word.count
+        } else {
+            start = characters.count
+            length = 0
+        }
+    }
+
+    var text: String { String(characters) }
+
+    /// The user taps in the field, which collapses the selection.
+    func tap(at offset: Int) { start = offset; length = 0 }
+
+    var documentContextBeforeInput: String? { String(characters[..<start]) }
+    var documentContextAfterInput: String? { String(characters[(start + length)...]) }
+    var selectedText: String? { length > 0 ? String(characters[start..<(start + length)]) : nil }
+    var documentInputMode: UITextInputMode? { nil }
+    var documentIdentifier: UUID { UUID() }
+    var hasText: Bool { !characters.isEmpty }
+
+    func insertText(_ string: String) {
+        characters.replaceSubrange(start..<(start + length), with: string)
+        start += string.count
+        length = 0
+    }
+
+    func deleteBackward() {
+        if length > 0 {
+            characters.removeSubrange(start..<(start + length))
+        } else if start > 0 {
+            characters.remove(at: start - 1)
+            start -= 1
+        }
+        length = 0
+    }
+
+    func adjustTextPosition(byCharacterOffset offset: Int) {
+        start = min(max((offset < 0 ? start : start + length) + offset, 0), characters.count)
+        length = 0
+    }
+
+    func setMarkedText(_ markedText: String, selectedRange: NSRange) {}
+    func unmarkText() {}
+}
+
+private final class FieldController: UIInputViewController {
+    let field: Field
+
+    init(_ field: Field) {
+        self.field = field
+        super.init(nibName: nil, bundle: nil)
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    override var textDocumentProxy: UITextDocumentProxy { field }
+}
+
+/// The keyboard as the user drives it: Hex's keys under VoiceiQ's typing
+/// controller, touched where the keys are drawn, read back from the field.
+@MainActor
+final class KeyboardTypingTests: XCTestCase {
+    private var field: Field!
+    private var controller: FieldController!
+    private var typing: TypingController!
+    private var keyboard: FullKeyboardView!
+
+    private func open(_ text: String = "", selecting word: String? = nil) {
+        // Words learned in earlier runs would change the suggestions.
+        UserDefaults(suiteName: KeyboardBridge.appGroup)?.removeObject(forKey: LearnedWordsStore.defaultsKey)
+        field = Field(text, selecting: word)
+        controller = FieldController(field)
+        typing = TypingController()
+        typing.controller = controller
+        keyboard = typing.makeKeyboard()
+        keyboard.frame = CGRect(x: 0, y: 0, width: 402, height: typing.keysHeight)
+        keyboard.layoutIfNeeded()
+        typing.appeared()
+        keyboard.layoutIfNeeded()
+    }
+
+    private var plane: KeyboardKeyPlaneView { keyboard.plane }
+
+    private func sample(_ point: CGPoint) -> TypingLogTouchSample {
+        TypingLogTouchSample(point: point, timestamp: CACurrentMediaTime())
+    }
+
+    private func tap(_ kind: KeyKind, id: Int = 60) {
+        let key = plane.engine.layout.key(kind)!
+        let centre = CGPoint(x: key.frame.midX, y: key.frame.midY)
+        plane.began(id: id, sample: sample(centre))
+        plane.ended(id: id, sample: sample(centre))
+    }
+
+    private func type(_ text: String) {
+        for character in text {
+            tap(character == " " ? .space : .character(String(character).lowercased()))
+        }
+    }
+
+    /// A finger drawn through the centres of `word`'s keys, a point every 6 pt.
+    private func slide(_ word: String, id: Int = 50) {
+        let centres = plane.engine.swipeKeys.centres
+        var stops: [CGPoint] = []
+        for letter in word {
+            let centre = centres[letter]!
+            if stops.last != centre { stops.append(centre) }
+        }
+        var points = [stops[0]]
+        for (a, b) in zip(stops, stops.dropFirst()) {
+            let count = max(1, Int((hypot(b.x - a.x, b.y - a.y) / 6).rounded(.up)))
+            for i in 1...count {
+                let t = CGFloat(i) / CGFloat(count)
+                points.append(CGPoint(x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t))
+            }
+        }
+        plane.began(id: id, sample: sample(points[0]))
+        for point in points.dropFirst() { plane.moved(id: id, sample: sample(point)) }
+        plane.ended(id: id, sample: sample(points[points.count - 1]))
+    }
+
+    func testTypedLettersReachTheFieldCapitalisedAtTheStart() {
+        open()
+        type("hello there")
+        XCTAssertEqual(field.text, "Hello there")
+        tap(.delete)
+        XCTAssertEqual(field.text, "Hello ther")
+    }
+
+    func testSpaceCorrectsAMistypedWord() {
+        open()
+        type("i thibk ")
+        XCTAssertEqual(field.text, "I think ")
+    }
+
+    func testASlidWordIsTyped() {
+        open()
+        slide("hello")
+        XCTAssertEqual(field.text, "Hello")
+        slide("world")
+        XCTAssertEqual(field.text, "Hello world")
+    }
+
+    func testTheStripSuggestsAndAPickTypesIt() throws {
+        open()
+        type("we shoud")
+        let words = plane.engine.suggestions.map(\.replacement)
+        let pick = try XCTUnwrap(plane.engine.suggestions.first { $0.replacement == "should" }, "strip shows \(words)")
+        plane.engine.acceptSuggestion(pick)
+        XCTAssertTrue(field.text.hasPrefix("We should"), field.text)
+
+        type(" go ")
+        XCTAssertFalse(plane.engine.suggestions.isEmpty, "a next word after \"\(field.text)\"")
+    }
+
+    func testTheEmojiSearchTakesTheLettersInsteadOfTheField() {
+        open("hi ")
+        typing.emojiQuery = ""
+        type("pizza")
+        XCTAssertEqual(typing.emojiQuery, "pizza")
+        XCTAssertEqual(field.text, "hi ")
+    }
+
+    func testUndoTakesBackAWordAndRedoPutsItBack() {
+        open()
+        type("hello there")
+        typing.undo()
+        XCTAssertEqual(field.text, "Hello ")
+        typing.redo()
+        XCTAssertEqual(field.text, "Hello there")
+    }
+
+    /// The bar shows "Add to Dictionary" while `selection` holds a word.
+    /// iOS does not report the keyboard's own typing and deletes, so each
+    /// one that ends the selection has to end it here too, or the offer stays.
+    func testEveryWayOfEndingASelectionClearsIt() {
+        let endings: [(String, (KeyboardTypingTests) -> Void)] = [
+            ("typing a letter", { $0.tap(.character("x")) }),
+            ("Delete", { $0.tap(.delete) }),
+            ("space", { $0.tap(.space) }),
+            ("return", { $0.tap(.returnKey) }),
+            ("tapping elsewhere in the field", { $0.field.tap(at: 0); $0.typing.textChanged() }),
+        ]
+        for (name, end) in endings {
+            open("call Srini tomorrow", selecting: "Srini")
+            XCTAssertEqual(typing.selection, "Srini", name)
+
+            end(self)
+
+            XCTAssertNil(field.selectedText, name)
+            XCTAssertEqual(typing.selection, "", "\(name) left the selection behind")
+        }
+    }
+}

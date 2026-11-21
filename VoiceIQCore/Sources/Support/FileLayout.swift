@@ -1,11 +1,16 @@
 import Foundation
+import os
 
 /// Where everything lives on disk. One folder per dictation, Superwhisper-proven
 /// layout: audio.caf (crash-safe master), audio.flac (upload copy, M3+), meta.json.
 public enum FileLayout {
     /// Test hook: unit tests MUST sandbox here — the suite once wrote failed-
     /// session folders straight into the user's real History.
-    public static var overrideRoot: URL?
+    public static var overrideRoot: URL? {
+        get { overrideRootLock.withLock { $0 } }
+        set { overrideRootLock.withLock { $0 = newValue } }
+    }
+    private static let overrideRootLock = OSAllocatedUnfairLock<URL?>(initialState: nil)
 
     public static var appSupportRoot: URL {
         if let overrideRoot { return overrideRoot }

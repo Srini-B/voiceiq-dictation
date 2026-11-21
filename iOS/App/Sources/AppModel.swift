@@ -56,7 +56,7 @@ final class AppModel: ObservableObject {
             provider: { SettingsStore().preferredProvider },
             elevenLabsKey: { KeychainStore.loadKey(.elevenLabs) }
         )
-        transcription = GeminiTranscriptionService(client: client)
+        transcription = GeminiTranscriptionService(client: client, verbatimCleaner: HexCleanup.cleaner)
         historyStore = try? HistoryStore.standard()
         UsageMeter.store = try? UsageStore.standard()
         meetings = MeetingEngine(

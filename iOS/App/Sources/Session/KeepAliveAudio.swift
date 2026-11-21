@@ -90,10 +90,12 @@ final class KeepAliveAudio {
         let format = AVAudioFormat(standardFormatWithSampleRate: 44_100, channels: 2)!
         engine.connect(player, to: engine.mainMixerNode, format: format)
         // Holds the microphone open. Buffers are dropped; nothing is recorded.
+        // The tap runs on the audio thread: @Sendable keeps the block off the
+        // main actor, whose isolation check would stop the app there.
         let input = engine.inputNode
         let inputFormat = input.outputFormat(forBus: 0)
         if inputFormat.sampleRate > 0, inputFormat.channelCount > 0 {
-            input.installTap(onBus: 0, bufferSize: 4096, format: inputFormat) { _, _ in }
+            input.installTap(onBus: 0, bufferSize: 4096, format: inputFormat) { @Sendable _, _ in }
         }
         guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 44_100) else { return }
         buffer.frameLength = buffer.frameCapacity

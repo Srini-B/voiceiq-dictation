@@ -11,14 +11,14 @@ Like the Mac, it runs Gemini or OpenAI models, with that provider's own key.
 | Target | Contents |
 | --- | --- |
 | `VoiceIQiOS` | App: onboarding, keys, settings, history, notes (meetings), background voice session |
-| `VoiceIQKeyboard` | Keyboard extension (`RequestsOpenAccess`), links `VoiceIQBridge` only; English typing with the word list in `iOS/Keyboard/Resources` |
+| `VoiceIQKeyboard` | Keyboard extension (`RequestsOpenAccess`), links `VoiceIQBridge` only; English typing with Hex's keyboard (`iOS/Keyboard/Hex`) |
 | `VoiceIQLiveActivity` | Dynamic Island and lock-screen Live Activity |
 
 All three share one App Group. Bundle IDs, the App Group and profile names
 are in `project.yml`. The app declares
 `UIBackgroundModes: audio` and `NSSupportsLiveActivities`, and handles the
-`voiceiq://` scheme. Minimum iOS is 17 (Live Activity buttons need
-`LiveActivityIntent`).
+`voiceiq://` scheme. Minimum iOS is 18, which Hex's keyboard needs. Every
+target builds in the Swift 6 language mode.
 
 `VoiceIQCore` builds for iOS and macOS. Files that need AppKit, Accessibility,
 event taps, ScreenCaptureKit or Core Audio HAL are wrapped in `#if os(macOS)`.
@@ -343,11 +343,12 @@ recorder card also shows the last lines Scribe v3 Live heard.
 
 ### Typing
 
-The keyboard opens on letter keys. A bar above them shows three suggestions,
-with the VoiceiQ button (waveform) on the left and the mic on the right. The
+The keyboard opens on Hex's letter keys with its suggestion strip. A VoiceiQ
+bar above them has the VoiceiQ button (waveform) on the left, then Mini
+Keyboard, Edit and the mic on the right. The
 mic starts a dictation at once; the waveform opens the voice panel with
 Dictate, Translate and Ask. A running dictation keeps the keys and replaces
-the suggestion bar with the recording strip until the text is delivered.
+the bar with the recording strip until the text is delivered.
 
 **Recording strip** (`RecordingStrip`, `LevelGlow`), modelled on Gboard's
 Rambler. Cancel (x) on the left, a red stop button on the right, the elapsed
@@ -374,9 +375,9 @@ flat at the latest level. The glow is a plain `Shape` on a 0.06 s timer: a
 on an iPhone (0.6.23).
 
 **Add to Dictionary.** With Full Access, selecting text in the field replaces
-the suggestions with "Add “word” to Dictionary"; the suggestions come back as
+the bar's middle with "Add “word” to Dictionary"; it goes as
 soon as the selection ends, whether by typing, Delete, moving the cursor or a
-tap in the field. The bar reads the selection with the suggestions after every
+tap in the field. The bar reads the selection after every
 edit (`TypingController.selection`), because iOS does not report a keyboard's
 own edits to it. Text selected in another app
 or elsewhere on screen is not visible to a keyboard: copy it, and the bar
@@ -384,197 +385,112 @@ offers "Add copied text to Dictionary" until you start typing.
 
 | Feature | How |
 | --- | --- |
-| Layouts | QWERTY, QWERTZ, AZERTY, Dvorak, Colemak (`KeyLayout`). English words on each. Optional number row; Short, Default or Tall height (`KeyboardViewController.height`). Without the number row, holding a top-row letter types its digit (shown in the key's corner) on the 10-key layouts. |
-| Pages | Letters, 123, #+=, number pads for number, decimal and phone fields. The number pads follow iOS's: digits without letters, a flat delete and decimal separator, and the globe in the bottom-left corner where the system draws none (beside the separator on a decimal pad). iOS shows its own pad in phone fields. In other fields, the number pad key on the 123 and #+= pages (beside #+= or 123) opens a 4×4 number pad: digits, minus (hold for + * / = %), the decimal separator (hold for the other), space, delete and return, with ABC to go back (sharing its corner with the globe where the system draws none). It stays up after space and return until ABC or the keyboard reappears. Email fields get @ and `.`, URL fields `.` and `/`; search fields keep a full space bar. Return shows the field's label (go, send, search…). |
-| Mini keyboard | The size key beside the space bar shrinks the keyboard to the mini view and back (`TypingController.mini`, kept in the keyboard's own defaults, so the choice survives without Full Access). The mini view is the mic bar (with the voice screen's button) over two rows: edit, @ . , ? ! ' and delete, then 123, emoji, the size key, space and return, with the globe where the system draws none. The edit key opens the edit panel (cursor, selection, copy, paste, undo), which the mini view has no bar to open from; shift would do nothing without letters. 123 swaps the edit key and punctuation for the digits 1 to 0, which need the whole row beside delete to stay wide enough to hit (@?! swaps back); the digits stay up after space. The keyboard is the mic bar plus two rows of the full keyboard's key height (`KeyboardViewController.miniHeight`). The emoji, edit and voice panels, emoji search and number and decimal fields use the full keyboard's height. In email and URL fields on an iPhone SE or iPad, where the globe, the size key and two field keys share the bottom row, its function keys are one letter wide and return 1.6, so the space bar stays about 88 pt on an SE. |
-| Keys | Shift (tap once, double-tap for Caps Lock, hold and type), accents and alternates on long press (hold `.` for `.com`, the currency key for other currencies), key preview, repeat delete that moves to whole words. Space Bar Slide: Move Cursor (default) or Off. Delete Slide: sliding left from delete removes Words (default, one per 22 pt) or Characters (one per 9 pt), sliding back restores them, lifting keeps the result; Off. The slide first puts back what the press itself removed (a character, a slid word, a selection, a held run), recorded as each delete happens (`deleteRestore`) rather than as a snapshot, because iOS cuts the text before the cursor short in long fields. No delete or space-bar slide during emoji search. A touch goes to the nearest key in its row. |
-| Suggestions | Next-word predictions, completions and corrections. Mid-sentence, FUTO's context model ranks predictions and completions together with the word pairs (see Scoring); at a sentence start the words the user starts sentences with come first, then "I", "The" and "I'm". The typed letters show in quotes; picking them keeps and learns the word. |
-| Auto-correction | Delete right after a correction restores the typed word and learns it. On space or punctuation. Fixes a mistyped word one edit away (adjacent keys cost less), two edits away through `UITextChecker`, apostrophes (`dont` → `don't`), and capitals (`i` → `I`, `monday` → `Monday`). A real word is never replaced by another word. Off in URL, email and search fields and where the field turns it off. |
-| Auto-capitalization, “.” shortcut | Sentence starts, per the field's `autocapitalizationType`. Two spaces type a period, also after a slid word (its first space is the word's own). |
-| Slide to type | FUTO Swipe (`SwipeRecognizer`; see below). The slid word gets its space when the next word starts, so punctuation attaches; the bar offers the other candidates; delete removes the whole word. |
-| Blocked words | Holding a word in the bar offers "Don’t Suggest". A blocked word is never suggested, corrected to or slid to, and is forgotten if learned. With Full Access the list is `KeyboardPreferences.blockedWords`, editable in Settings › Typing › Blocked Words; without it the keyboard keeps its own list, which moves to the shared one the next time the keyboard appears with Full Access. |
-| Edit panel | The bar's cursor button: line start and end, word steps, left and right arrows that repeat while held, copy, cut and paste (Full Access), undo and redo of the keyboard's own edits (each word, each run of deletes, Return, cut, paste and each other action; a selection the edit replaced comes back; cleared when the text changes elsewhere), delete. Held arrows and delete act on touch-down and stop when the touch ends, is cancelled or the panel closes. Every keyboard edit goes through one recorder that notes the exact text it removed and typed; each undo step keeps the edit that reverses it and the edit that redoes it, so undo and redo work in fields longer than the text iOS shows before the cursor. The delete slide uses the same recorder. A keyboard cannot select text or reach the app's own undo. |
-| Your words | The VoiceiQ Dictionary (`SharedStore.dictionaryWords`), contact names and Text Replacements (`requestSupplementaryLexicon`), and words typed twice or picked from quotes. |
-| Emoji | Unicode's list (Emoji 17.0) in CLDR order, by category, with recents. The generated files tag emoji newer than 15.0 with their version (`🫩@16.0`), and `EmojiData.drawable` drops the ones the running iOS cannot draw (15.1 needs iOS 17.4, 16.0 iOS 18.4, 17.0 iOS 26.4, per Emojipedia) from the panel, recents, search, skin tones and suggestions; a suggestion falls back to the next best emoji ("ballet" gives ballet shoes before iOS 26.4). Search (magnifier in the emoji panel) types into the bar with the keys and matches gemoji names, aliases and tags by word prefix. Holding an emoji that takes a skin tone offers the five tones; the one picked becomes the tone the panel, search and suggestions show (`EmojiData.skinTone`). Emoji Suggestions: the third bar slot offers the emoji for the word being typed or just finished ("pizza" → 🍕, FUTO's shortcut rules: one-word names, then aliases, tags, the first part of two-part names, never words of two letters); picking it replaces the word. |
-| No assistance | Password, one-time code, card, phone and postal code fields. |
-| Themes | Default, Clear, Physical, Mechanical and iOS 5, after the Raycast keyboard (`KeyTheme`). Physical and Mechanical take Automatic, Light or Dark keys, which pins the key area through `overrideUserInterfaceStyle`; iOS 5 keys are always light. The bar follows the app, like the system backdrop under it. Every theme sits on the system's own backdrop: on iOS 26 and later iOS draws a rounded panel around the extension, with a strip above it and the globe and mic row below, that the keyboard cannot paint, so a painted background shows square corners and two greys. |
+| Keys | Hex's `FullKeyboardView` (`iOS/Keyboard/Hex/FullKeyboard`, MIT, unmodified): English QWERTY letters, 123 and #+= pages, shift and Caps Lock, accents on long press, key preview, repeat delete, the space bar's hold-and-slide cursor, adaptive touch targets, and Hex's strip of three suggestions. The key right of the space bar ("Hex key") starts VoiceiQ's dictation, the same action as the bar's mic: a tap starts it, a hold records until release. The emoji key opens VoiceiQ's emoji panel. Hex's own dictation, its recording panel, style menu, translation and language switching stay off (`HexGlue/HexDictationStandIns.swift`, `HexLanguageSettings.swift`). Phone, number and decimal fields hand off to iOS's pad, as before. |
+| Height | The VoiceiQ bar (44 pt, 36 in landscape) plus Hex's `preferredHeight` for the orientation, strip included (about 253 pt in portrait on a 402 pt wide iPhone). |
+| Mini keyboard | The bar's Mini Keyboard button shrinks the keyboard to the mini view and back (`TypingController.mini`, kept in the keyboard's own defaults). The mini view is the mic bar over two rows (`MiniKeys`): edit, @ . , ? ! ' and delete, then 123, emoji, the size key, space and return, with the globe where the system draws none. 123 swaps the punctuation for the digits 1 to 0. |
+| Suggestions | Hex's strip: the typed word in quotes (keeps it and teaches Hex not to change it), the best correction or completion in the middle (highlighted when space will apply it), and a runner-up; after a space, next-word predictions; after a slide, the other readings of the slid word. Ranked by Hex's English typing model (`TypingModel/en.hextm`, built from Google Books Ngram data, CC BY 3.0) and Hex's `AutocorrectEngine`. |
+| Auto-correction | Hex's `TypingDecoder` on space or punctuation, with the touch points (spatial autocorrect). Delete right after a correction restores the typed word. Off where the field turns it off, and in Settings › Typing. |
+| Slide to type | Hex's `SwipeDecoder` and `SwipeTyping` over the same typing model. The slid word gets its space when the next word starts; the strip offers the other readings. Off in Settings › Typing. |
+| Your words | The VoiceiQ Dictionary (`SharedStore.dictionaryWords`), contact names and Text Replacements (`requestSupplementaryLexicon`), loaded into Hex with `AutocorrectEngine.loadLexiconEntries` each time the keyboard appears, plus the words Hex learns (`LearnedWordsStore`: a word kept twice from the quotes or by deleting its correction). With Full Access, the keyboard hands the newest 200 of those to the app when it closes (`publishLearnedWords`); the app adds each once to the Dictionary as Auto-learned (`DictionaryBridge`). Hex stores them lowercase. |
+| Edit panel | The bar's cursor button: line start and end, word steps, arrows that repeat while held, copy, cut and paste (Full Access), undo and redo of the keyboard's own edits, delete. `TypingController` is Hex's `KeyboardTextTarget`, so every edit Hex's keys make passes through its recorder: each word, each run of deletes, each other action is one undo step. |
+| Emoji | VoiceiQ's panel: Unicode's list (Emoji 17.0) in CLDR order, by category, with recents, skin tones and search. While searching, Hex's keys type into the search field in the bar (`TypingController.emojiQuery`), with autocorrect off. `EmojiData.drawable` hides emoji the running iOS cannot draw (16.0 needs iOS 18.4, 17.0 iOS 26.4). Hex's strip also offers the emoji for a word just typed (`emoji-index-en.txt`). |
+| No assistance | Password, one-time code, card, phone and postal code fields, as Hex decides per field. |
 
-Key labels are centred on the cap height, or the x-height for lowercase, not
-on the font's line box. A tap types the key the finger lifts on once it is
-8 pt past the pressed key's edge, as on iOS. A slide starts with AOSP
-LatinIME's shipped thresholds: half a key after 20 ms, but within 0.5 s of a
-typed letter it must last about 185 ms and cross about 3.7 keys, easing to
-half a key by 450 ms, so a fast typist's drifting tap stays a tap. In that
-same half second, a slide mid-word may start only when the letters typed so
-far are a word (`canStartSwipe`), so a slip while typing never inserts a word
-and a space. Later it always may: blocking it then left an unknown word
-stuck at the cursor, each blocked slide typing one more letter onto it. A slide under
-0.8 of a key types the key under the finger. Moving more than 8 pt cancels
-the long press for accents. The slide trail draws above the keys. In `viewDidAppear` the keyboard turns off
-`delaysTouchesBegan` on its window's system-gesture recognizers, which
-otherwise hold back touches near the screen edges.
+**Hex inside VoiceiQ.** `TypingController.makeKeyboard()` builds Hex's view
+with VoiceiQ as its text target (`languageOverride = .english`,
+`letterLayoutOverride = .qwerty`) and puts it under the VoiceiQ bar
+(`KeysArea` in `TypingViews.swift`). Everything Hex reads from the rest of
+Hex comes from `iOS/Keyboard/Sources/HexGlue`:
 
-**Slide to type: FUTO Swipe.** FUTO Keyboard's swipe engine
-(`iOS/Vendor/FUTOSwipe`, GPL-3.0) runs three models on ExecuTorch with
-XNNPACK: an encoder that reads the path for any layout (FUTO's int8
-export, `model_int8.pte`: same accuracy as fp32, faster, about 10 MB less
-keyboard memory), a decoder trained on
-QWERTY, and a context model (`chosen_planarian`) that weighs the words before
-the cursor. The same context model ranks the suggestion bar (see Scoring). A beam
-search keeps the results to words in `swipe/words.trie` and the user's own
-words (the Dictionary, contact names and learned words, at about the
-frequency of "see"). `KeyboardKeysView` records every coalesced touch sample
-with its timestamp, and `SwipeRecognizer` scales the path to the letter keys'
-bounds, where each key's centre sits at its place in FUTO's layout (q at
-0.05, 1/6). The decoder loads only when the rows are QWERTY; other layouts use
-the encoder and context model. Models load on a serial queue when the
-keyboard first lays out its letters, if Slide to Type or Predictions is on,
-and each slide and prediction runs on the same queue, so the main thread
-never waits. `FUTOSwipe.mm` points `scoring_path` at `swipe/scoring.json` from
-the pinned model revision: the library's built-in scoring has no entry for
-`chosen_planarian` and would fall back to the encoder's weights, which give
-the context model no weight (alpha 0). The keyboard logs "no scoring for the
-context model" at load if that happens. The context words are
-`TypingEngine.contextWords`: the last ten words on the cursor's line, split
-the way FUTO Keyboard splits them (at anything but letters, digits, `_` and
-apostrophes, with ’ read as '), so "don't" stays one word. The model's
-vocabulary is cased as mid-sentence text ("the", "I", "London"), so a word
-that starts a sentence, or that the word list lacks as typed, is lowercased
-when the list has it lowercase ("The" becomes "the"). Word results keep the dictionary's
-spelling ("I", "don't"); the user's words get their saved spelling
-(`TypingEngine.userSpelling`), except a lone first capital on a word the list
-has lowercase: a contact "Apple Developer" or "Will" leaves "developer" and
-"will" lowercase, while "Srini", "London" and "GitHub" keep theirs. The
-field's auto-capitalization then decides the first letter. A slide
-records every sample from touch-down, so the turns made before it counted as
-a slide reach the model. A result that arrives after the user typed, moved
-the cursor or changed fields is dropped (`editGeneration`); a slid word does
-not count, so quick slides in a row all land in order.
-Settings › Typing credits FUTO Swipe with its copyright, GPL-3.0, no
-warranty, and links to the license and this repository's source, as the
-model license and GPL-3.0 section 5(d) require.
-
-- Accuracy on 4,931 real swipes from FUTO's MIT dataset
-  (`futo-org/swipe.futo.org` test split), first choice / top four: the
-  previous FlorisBoard-style classifier 75.6% / 85.0%; FUTO encoder only
-  88.1% / 94.0%; with the decoder and context model 91.7% / 95.3%, at
-  2.2 ms per slide on an M2 (the shipped dictionary, offensive words removed).
-  Measured again through `SwipeRecognizer` and `FUTOSwipe.mm` on the first
-  4,931 test swipes, with each swipe's sentence giving the words before it:
-  no context 92.1% / 96.3%; `hungry_jellyfish` with the old split 93.3% /
-  96.6%; `chosen_planarian` with `contextWords` 93.7% / 96.6%, 2.2 ms per
-  slide. Without `scoring.json` it fell to 91.9% / 96.3%.
-- Memory: FUTO's own dictionary loader builds a 98 MB trie, too much for a
-  keyboard extension. `scripts/generate-swipe-trie.py` writes the same trie as
-  12-byte nodes that `MappedTrie.cpp` memory-maps (5.2 MB, 142,507 words).
-  The three models add about 21 MB; the keyboard measured 40 MB in the
-  iPhone 17e Simulator after slides (fp32 encoder; with the int8 encoder
-  52 MB fell to 42 MB in the iPhone 18 Pro Simulator). On a Mac the loaded engine takes
-  19 MB and the model's scores for a context about 1 MB more; a second
-  `ContextLMScorer` for predictions would have added 11.5 MB, so predictions
-  share the swipe engine. After typing and slides in the iPhone Air Simulator
-  (iOS 27.0) the keyboard measured 42 to 48 MB with Slide to Type on, 43 to
-  51 MB with only Predictions on (which now loads the engine) and 42 MB with
-  both off; runs vary by about 5 MB. The model files are mapped and do not
-  count.
-- Rebuilding: `scripts/build-futo-swipe.sh` clones the library at its pinned
-  commit, builds it against ExecuTorch v1.6.0 (newer than the library's own
-  v1.2.0 pin, with the library's XNNPACK patch) for iPhone and Simulator
-  (about ten minutes on an Apple Silicon Mac), and downloads the pinned models. The output is
-  committed, so app builds need neither step. The keyboard target force-loads
-  `libfutoswipe_registry.a` (kernels register themselves), builds C++17
-  without RTTI, and excludes x86_64 Simulators.
-
-**Memory warnings.** On `didReceiveMemoryWarning` the keyboard frees the
-slide models (`TypingController.releaseModels`), about 12 MB in the
-Simulator. They load again when the keyboard next appears, not on a layout
-change before that. Until then slides insert nothing and the bar falls back
-to word-pair predictions.
+- `KeyboardBridge.appGroup` is VoiceiQ's App Group, so Hex's settings and
+  learned words live beside VoiceiQ's.
+- `KeyboardViewModel` is a stand-in: Full Access always reported on (so the
+  Hex key calls `onDictateTap`, and VoiceiQ's mic action handles the no-Full-
+  Access case), never recording (so Hex's recording panel never opens), and
+  no styles, languages or translation.
+- `HexLanguageSettings` offers English and QWERTY only: no other layouts, no
+  space-bar language switch, no bilingual autocorrect. Only `en.hextm` and
+  `emoji-index-en.txt` ship, so nothing asks for another language's files.
+- `HexKeyboardSettings` writes Settings › Typing (`KeyboardPreferences`:
+  autocorrect, auto-capitalization, slide to type, Reset Keyboard Learning)
+  into Hex's `FullKeyboardSettings` each time the keyboard appears. Without
+  Full Access iOS hides the App Group, so the keyboard uses Hex's defaults.
+- `HexKeyColors` gives VoiceiQ's panels Hex's key colours.
 
 **Instances and touches.** iOS makes a new `KeyboardViewController` each
 time the keyboard appears. Nothing in the view tree may hold the controller
-strongly, and its `deinit` detaches the SwiftUI view, which iOS otherwise keeps
-alive through its trait collection. Either leak kept every instance and its
-slide models (about 14 MB each) until iOS ended the extension and showed its
-own keyboard. iOS also drops a keyboard's touches on fully transparent pixels,
-so the SwiftUI root has a 1% gray background; without it a suggestion took
-only a tap on its letters, and taps between keys did nothing.
+strongly, and its `deinit` detaches the SwiftUI view. On a memory warning the
+keyboard calls Hex's `handleMemoryWarning`, which drops Hex's emoji caches.
+The typing model is memory-mapped, so its pages do not count against the
+extension's limit.
 
-**Data.** `lexicon.bin` holds 82,846 words and 242,342 word pairs (3.5 MB),
-memory-mapped so it does not count against the extension's memory limit. A
-word's key is lowercase without apostrophes, so one binary search finds `dont`
-and `don't`. `scripts/generate-keyboard-data.py` rebuilds it and `emoji.txt`
-from pinned sources (THIRD_PARTY_NOTICES.md, "Keyboard data"). A word takes
-Hunspell's capitalized spelling only when Hunspell has no lowercase form of it.
-Lowercase forms are every word Hunspell builds from a lowercase stem with the
-prefix and suffix rules in its `.aff` file: it stores "independence" only as
-"dependence/IM" and "jobs" only as "job/SM", so neither may become
-"Independence" or "Jobs". A word Hunspell lacks altogether ("as") stays
-lowercase when it is a listed lowercase stem plus a common ending. A learned
-word drops a capital that only started its sentence.
+**Syncing Hex.** `iOS/Keyboard/Hex` and `iOS/App/Hex` are byte-identical
+copies of Hex's files, listed in `iOS/Keyboard/Hex/MANIFEST`, at the commit
+in `iOS/Keyboard/Hex/UPSTREAM`. Never edit them.
 
-**Scoring.** Every candidate gets ln P(word | previous word), using the pair
-when the list has it and the word's frequency times 0.05 when it does not,
-plus the log cost of the edits from what was typed. On space, an unknown word
-becomes the best different spelling scoring above −24. A known word changes
-only to its own contraction or capitalization.
+```sh
+scripts/sync-hex-keyboard.sh --check     # report Hex commits since UPSTREAM (exit 10 if any)
+scripts/sync-hex-keyboard.sh             # copy Hex's dev branch, then apply patches/*.patch
+scripts/sync-hex-keyboard.sh <commit>    # copy a given commit
+```
 
-Mid-sentence, with Predictions on, the context model also ranks the bar.
-When the words before the cursor's word change, `TypingController` asks
-`SwipeRecognizer.nextWords` for the model's logit for every word it knows
-(`NextWordScores`, 32,767 words, about 6 ms on the swipe queue on an M2); the
-bar shows the word-pair ranking until they arrive and then refreshes.
-`TypingEngine.suggest` takes the scores and ranks by the model's logit plus a
-quarter of the word-pair score above (0.25 was best on the dev sets). Next
-words are chosen from the model's 30 likeliest that the word list has and may
-suggest, plus the list's followers of the previous word (or the starters
-after a comma). Completions are chosen from the 200 most frequent longer
-words starting with the typed letters, scored with 0.4 off per letter still
-to type, plus the user's own words. A word the model does not know gets the
-lowest logit of the others. The words the user usually types next still come
-first, blocked and offensive words are never offered, and the autocorrection
-applied on space stays the word list's: with a correction pending the model
-only picks the third slot, and a typed word that is a word keeps the first.
-At a sentence start the model is not used: with no
-sentence-start token it put the first word in its top three 3.5% of the time
-against 16.9% for the starters (DailyDialog).
+After a sync, build the keyboard and run `KeyboardTypingTests`. When Hex's
+files need a symbol from elsewhere in Hex, add it to `HexGlue` (adapted to
+VoiceiQ), or, when the Hex file is self-contained, add it to `MANIFEST` and
+sync again (as `TypingLog` and `Dictation/` are). A change to a Hex file goes
+in `iOS/Keyboard/Hex/patches/` only when nothing else works; there are none
+today.
 
-**Settings.** Settings › Typing in the app writes `KeyboardPreferences` to the
-App Group: layout, predictions, auto-correction, auto-capitalization, emoji
-suggestions, slide to type, “.” shortcut, space bar and delete slides, blocked
-words, and Reset Keyboard Learning. The
-keyboard reads them each time it appears. Without Full Access iOS hides the App
-Group, so the keyboard uses the defaults. Learned words stay in the keyboard's
-own storage.
+**Tests.** `KeyboardTypingTests` (scheme `VoiceIQiOS`) touch Hex's keys where
+they are drawn and read the field: typed text and capitals, a correction on
+space, a slid word, the strip's suggestions and next words, emoji search, undo
+and redo, and the Dictionary offer's selection. They run in `KeyboardTestHost`,
+an empty app whose bundle holds the typing model, because Hex loads it from
+the main bundle.
 
-**Learning** (`LearnedWords`, the keyboard's own defaults, so it works without
-Full Access; Reset Keyboard Learning clears all of it):
+```sh
+xcodebuild test -project VoiceIQ.xcodeproj -scheme VoiceIQiOS \
+  -destination 'platform=iOS Simulator,name=iPhone 18 Pro' -only-testing:KeyboardTypingTests
+```
 
-| What | Learned when | Used |
-|---|---|---|
-| Words | A word not in the list, typed and kept on space twice; or kept at once by deleting its autocorrection or picking it in quotes | Not corrected; offered as a completion. Up to 3,000, the least used dropped first. |
-| Word pairs | A finished word (space, punctuation, a picked suggestion, or the next word after a slide) after a word, or at a sentence start, when both are words. Not while Predictions is off. | Typed twice in that order, the next word leads the bar after the first one, ahead of the list's pairs, and leads the completions for its first letters. 12 next words kept per word (200 at a sentence start), 2,000 words. |
-| To the Dictionary | A learned word typed 3 times, with Full Access | The 200 most used go to the App Group (`keyboardLearnedWords`); the app adds each once as Auto-learned (`DictionaryBridge`), and iCloud takes it to the Mac. A word deleted from the Dictionary is not added again. The app picks the list up when it is open or next opened. |
+**Settings.** Settings › Typing in the app has Auto-Correction,
+Auto-Capitalization and Slide to Type, Reset Keyboard Learning, and a footer
+crediting Hex (MIT) and the Google Books Ngram data (CC BY 3.0).
 
-Words from codes, passwords, card numbers, phone and postal fields, and fields
-that turn correction off are not learned.
+**Data.** `scripts/generate-keyboard-data.py` rebuilds `emoji.txt` and
+`emoji-words.txt` for VoiceiQ's emoji panel from pinned sources
+(THIRD_PARTY_NOTICES.md, "Keyboard data"). Words, predictions and slides come
+from Hex's typing model.
 
-**Preview.** Settings › Typing pins a keyboard preview above the form
-(`iOS/App/Sources/Views/KeyboardPreview.swift`). It draws the letters page
-with the keyboard's own `KeyboardKeysView`, `KeyTheme` and `KeyLayout`, which
-`project.yml` also compiles into the app target, so theme, key tone, layout,
-height, number row and predictions redraw it the moment they change. Height
-comes from `KeyboardPreferences.keyboardHeight(compact:)`, the same function
-the keyboard uses. The keys respond to touch but type nothing.
+### Cleanup tagger
 
-**Measured** (2026-10-30, Mac harness over the same engine): 30 of 33 common
-misspellings corrected as the iOS keyboard does, about 7 ms a suggestion. Slide
-to type on simulated noisy paths for 400 words drawn by frequency: 357 right
-first and 389 in the top three at 0.15 key-width noise; 302 and 355 at 0.30;
-under 1 ms a gesture. After the 2026-10-31 fixes (no double-letter loop,
-lowercase list, no abbreviations), the 400 most frequent words with
-7 pt / 9 pt finger noise: 95.2% right first (was 90.7%) and 99.9% in the top
-three (was 97.2%); words of three or fewer distinct letters 86.5% (was 79.7%).
+When the writing model does not shape a dictation (its request failed or its
+answer was rejected) and the transcript is verbatim, the text reaches the
+user as heard. On iPhone, Hex's cleanup tagger ("Clean up what I say",
+`iOS/App/Hex/Cleanup`, MIT, unmodified) cleans it first: a small int8 BERT
+Core ML model marks ums, repeats and spoken self-corrections, and
+`CleanupGuard` keeps names, numbers and content words.
+
+- It runs in the app, never in the keyboard (memory). The app passes
+  `HexCleanup.cleaner` (`iOS/App/Sources/HexGlue/HexCleanup.swift`) to
+  `GeminiTranscriptionService` as its `VerbatimCleaner`. The Mac passes none.
+- `prepare` loads the model while the writing request runs, for a verbatim
+  transcript only. `clean` runs in `settle` with Hex's 150 ms budget
+  (`CleanupTagger.timeBudget`); a late or failed run returns the transcript
+  unchanged. `FillerStripper` then runs on the result either way, so without
+  the tagger the behaviour is as before.
+- English only, as in Hex: it runs when Settings › Languages lists only
+  English or nothing (detect). Dictionary words are protected terms, removed
+  only in a self-correction.
+- The model (about 25 MB, a Hex release asset) is not in git.
+  `scripts/fetch-hex-cleanup-model.sh` downloads it into
+  `iOS/App/HexCleanupModel/` and checks its SHA-256; `build.sh`,
+  `build-ios.sh`, `archive-ios.sh`, `release.sh` and CI run it before
+  `xcodegen generate`, which needs the folder. Xcode compiles it into the
+  app's `HexCleanupTagger.mlmodelc`.
+- `VoiceIQiOSTests` (hosted in the app, scheme `VoiceIQiOS`) runs the real
+  model: "um I think uh we should ship …" keeps every content word and loses
+  the fillers.
 
 ### Dictionary
 

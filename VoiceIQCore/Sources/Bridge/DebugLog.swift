@@ -30,8 +30,9 @@ public enum DebugLog {
     // MARK: - On or off
 
     /// iOS: the App Group, so the keyboard follows the app's switch. Mac: the
-    /// app's own defaults, which the Chrome host reads by name.
-    private static let defaults: UserDefaults = {
+    /// app's own defaults, which the Chrome host reads by name. UserDefaults
+    /// is thread-safe but not marked Sendable.
+    nonisolated(unsafe) private static let defaults: UserDefaults = {
         #if os(iOS)
         return UserDefaults(suiteName: SharedStore.appGroupID) ?? .standard
         #else

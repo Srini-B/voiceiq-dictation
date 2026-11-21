@@ -17,11 +17,15 @@ import VoiceIQObjC
 ///    routes), so mid-session device changes are handled by rebuild + gap marker
 ///    instead (Wispr behavior). True pinning is a v1.x investigation (raw AUHAL).
 ///  - Zero frames captured is a detectable error state, never an empty transcript.
-public final class AudioCaptureEngine: AudioCapturing {
-    public var onLevel: ((Float) -> Void)?
-    public var onDeviceChange: ((String) -> Void)?
-    public var onWriteFailure: (() -> Void)?
-    public var onEngineDied: ((String) -> Void)?
+///
+/// Sendable by hand: the audio thread, the write queue and the coordinator
+/// share it. State they all touch is guarded by `stateLock`; the graph and
+/// writer change only on the caller's start/stop sequence and on `queue`.
+public final class AudioCaptureEngine: AudioCapturing, @unchecked Sendable {
+    public var onLevel: (@Sendable (Float) -> Void)?
+    public var onDeviceChange: (@Sendable (String) -> Void)?
+    public var onWriteFailure: (@Sendable () -> Void)?
+    public var onEngineDied: (@Sendable (String) -> Void)?
 
     private let targetFormat = AVAudioFormat(
         commonFormat: .pcmFormatInt16, sampleRate: 16_000, channels: 1, interleaved: true
@@ -237,9 +241,8 @@ public final class AudioCaptureEngine: AudioCapturing {
             }
             tailWaiter = continuation
             stateLock.unlock()
-            let timeoutGuard = { [weak self] in self?.resumeTailWaiter() }
-            DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + timeoutSeconds) {
-                timeoutGuard()
+            DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + timeoutSeconds) { [weak self] in
+                self?.resumeTailWaiter()
             }
         }
     }
@@ -485,6 +488,9 @@ public final class AudioCaptureEngine: AudioCapturing {
     private func ingest(_ buffer: AVAudioPCMBuffer, hwRate: Double) {
         logFirstBufferIfNeeded(buffer)
         meterLevel(of: buffer)
+        // AVAudioPCMBuffer is not Sendable. The tap hands this buffer over and
+        // never touches it again; only the write queue reads it from here on.
+        nonisolated(unsafe) let buffer = buffer
         queue.async { [weak self] in
             guard let self, let converter = self.converter, let writer = self.writer else { return }
             self.stateLock.lock()

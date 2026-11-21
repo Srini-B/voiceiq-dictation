@@ -18,6 +18,8 @@ archive="$out/VoiceiQ.xcarchive"
 rm -rf "$out"
 mkdir -p "$out"
 
+# Hex's cleanup tagger model is a resource of the iPhone app (not in git).
+scripts/fetch-hex-cleanup-model.sh
 xcodegen generate
 
 build_args=()

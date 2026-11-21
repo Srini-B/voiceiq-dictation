@@ -85,9 +85,12 @@ extension AppUpdater: SPUUpdaterDelegate {
         immediateInstallationBlock immediateInstallHandler: @escaping () -> Void
     ) -> Bool {
         let version = item.displayVersionString
+        // Sparkle calls its delegate on the main thread but its block is not
+        // marked Sendable; it is only ever called back on the main actor.
+        nonisolated(unsafe) let install = immediateInstallHandler
         MainActor.assumeIsolated {
             Log.session.info("update \(version, privacy: .public) downloaded; installs on quit")
-            installDownloaded = immediateInstallHandler
+            installDownloaded = install
             availableUpdate = .downloaded(version: version)
         }
         // The app takes over when to install: UpdatePillController applies it

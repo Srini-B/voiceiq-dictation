@@ -34,7 +34,7 @@ public struct WritingRulesSnapshot: Codable, Equatable, Sendable {
 public final class WritingRulesSync {
     public static let shared = WritingRulesSync()
 
-    static let key = "writingRules.v2"
+    nonisolated static let key = "writingRules.v2"
     static let legacyKey = "writingRules.v1"
     /// The store holds 1 MB in total and the dictionary may use most of it.
     static let maxBytes = 64_000

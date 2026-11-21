@@ -183,7 +183,7 @@ built from — are in [docs/design/](docs/design/).
 
 ## iPhone
 
-VoiceiQ also ships as an iPhone app (iOS 17+) with its own keyboard. Add the
+VoiceiQ also ships as an iPhone app (iOS 18+) with its own keyboard. Add the
 VoiceiQ keyboard with Full Access, tap the mic in any app, and the text lands
 where you were typing.
 
@@ -290,9 +290,8 @@ process, one-time setup and checks are in
 VoiceiQ is based on [Jot](https://github.com/google-gemini/jot-gemini-transcribe-macOS),
 Copyright 2026 Google LLC, and is distributed under the Apache License 2.0
 ([LICENSE](LICENSE)). Changes since the fork are by Blue Lobster Technology.
-The iPhone keyboard extension links FUTO's GPL-3.0 swipe library, so the
-keyboard as distributed is licensed under the GPL-3.0; its slide to type is
-powered by FUTO Swipe.
+The iPhone keyboard's keys, suggestions, autocorrect and slide to type are
+[Hex](https://github.com/anomalyco/hex)'s (MIT), vendored in `iOS/Keyboard/Hex`.
 Third-party components and their licenses are listed in
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). This is not an officially
 supported Google product.

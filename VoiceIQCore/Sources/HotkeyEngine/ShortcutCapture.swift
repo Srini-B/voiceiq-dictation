@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 /// Process-wide "a Settings row is recording a shortcut" flag.
 ///
@@ -8,28 +9,21 @@ import Foundation
 /// One owner at a time: beginning a capture posts
 /// `voiceIQShortcutCaptureDidBegin` so any other row still listening stops.
 public enum ShortcutCapture {
-    private static let lock = NSLock()
-    private static var owner: UUID?
+    private static let owner = OSAllocatedUnfairLock<UUID?>(initialState: nil)
 
     public static var isActive: Bool {
-        lock.lock()
-        defer { lock.unlock() }
-        return owner != nil
+        owner.withLock { $0 != nil }
     }
 
     public static func begin(owner id: UUID) {
-        lock.lock()
-        owner = id
-        lock.unlock()
+        owner.withLock { $0 = id }
         NotificationCenter.default.post(name: .voiceIQShortcutCaptureDidBegin, object: id)
     }
 
     /// Clears the flag only if `id` still owns it, so a row that lost the
     /// capture to another row cannot end that row's capture on disappear.
     public static func end(owner id: UUID) {
-        lock.lock()
-        if owner == id { owner = nil }
-        lock.unlock()
+        owner.withLock { if $0 == id { $0 = nil } }
     }
 }
 

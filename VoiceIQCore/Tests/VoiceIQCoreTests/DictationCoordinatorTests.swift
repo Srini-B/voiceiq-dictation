@@ -6,11 +6,13 @@ final class DictationCoordinatorTests: XCTestCase {
 
     // MARK: Fakes
 
-    final class FakeCapture: AudioCapturing {
-        var onLevel: ((Float) -> Void)?
-        var onDeviceChange: ((String) -> Void)?
-        var onWriteFailure: (() -> Void)?
-        var onEngineDied: ((String) -> Void)?
+    /// Sendable by hand: each test drives it one step at a time, so its
+    /// state is never touched from two places at once.
+    final class FakeCapture: AudioCapturing, @unchecked Sendable {
+        var onLevel: (@Sendable (Float) -> Void)?
+        var onDeviceChange: (@Sendable (String) -> Void)?
+        var onWriteFailure: (@Sendable () -> Void)?
+        var onEngineDied: (@Sendable (String) -> Void)?
         var startError: Error?
         var result = AudioCaptureResult(framesWritten: 16_000, durationSeconds: 1.0)
         private(set) var started = false
@@ -56,20 +58,20 @@ final class DictationCoordinatorTests: XCTestCase {
     private var fakeNow = Date()
     private var sandbox: URL!
 
-    override func setUp() {
-        super.setUp()
+    override func setUp() async throws {
+        try await super.setUp()
         // Never touch the user's real recordings from tests.
         sandbox = FileManager.default.temporaryDirectory
             .appendingPathComponent("gt-tests-\(UUID().uuidString)", isDirectory: true)
         FileLayout.overrideRoot = sandbox
     }
 
-    override func tearDown() {
+    override func tearDown() async throws {
         FileLayout.overrideRoot = nil
         if let sandbox {
             try? FileManager.default.removeItem(at: sandbox)
         }
-        super.tearDown()
+        try await super.tearDown()
     }
 
     private func makeCoordinator(

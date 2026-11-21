@@ -38,6 +38,9 @@ final class KeyboardModel: ObservableObject {
     private var timer: Timer?
     private var pendingCommandID: UUID?
     private var pendingSince: Date?
+    /// A hold on the dictation key was released before the app's recording
+    /// reached the keyboard: stop it as soon as it shows up.
+    private var stopRequestedAt: Date?
     private var shownNoticeID: UUID?
 
     init() {
@@ -109,6 +112,14 @@ final class KeyboardModel: ObservableObject {
             waitingForApp = false
             pendingCommandID = nil
         }
+        if let stopRequestedAt {
+            if phase == .recording {
+                self.stopRequestedAt = nil
+                send(KeyboardCommand(action: .stop, mode: mode))
+            } else if Date().timeIntervalSince(stopRequestedAt) > 12 {
+                self.stopRequestedAt = nil
+            }
+        }
         deliverIfNeeded()
         showNoticeIfNeeded()
     }
@@ -121,6 +132,7 @@ final class KeyboardModel: ObservableObject {
             return
         }
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        stopRequestedAt = nil
         switch phase {
         case .recording:
             send(KeyboardCommand(action: .stop, mode: mode))
@@ -128,6 +140,16 @@ final class KeyboardModel: ObservableObject {
             if needsAppToFinish { controller?.openURL(BridgeURL.app) }
         case .warm, .off:
             start()
+        }
+    }
+
+    /// Lifting the dictation key after a hold finishes the dictation the hold
+    /// started, including one the app hasn't reported as recording yet.
+    func holdReleased() {
+        if phase == .recording {
+            micTapped()
+        } else if waitingForApp {
+            stopRequestedAt = Date()
         }
     }
 

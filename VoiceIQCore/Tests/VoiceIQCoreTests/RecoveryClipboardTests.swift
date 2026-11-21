@@ -8,14 +8,14 @@ final class RecoveryClipboardTests: XCTestCase {
     private var root: URL!
     private var store: HistoryStore!
 
-    override func setUpWithError() throws {
+    override func setUp() async throws {
         root = FileManager.default.temporaryDirectory
             .appendingPathComponent("RecoveryClipboardTests-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         store = try HistoryStore(databaseURL: root.appendingPathComponent("history.sqlite"))
     }
 
-    override func tearDownWithError() throws {
+    override func tearDown() async throws {
         store = nil
         try? FileManager.default.removeItem(at: root)
         UserDefaults.standard.removeObject(forKey: "copyRecoveredToClipboard")
