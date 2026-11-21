@@ -67,13 +67,14 @@ public enum KeyboardInbox {
         var usage: [UsageRecord] = []
         try? fileManager.createDirectory(at: FileLayout.recordingsRoot, withIntermediateDirectories: true)
         for folder in candidates {
-            let usageURL = folder.appendingPathComponent(usageFile)
+            // Moved first: a folder that stays keeps its usage for the next collection.
+            let target = FileLayout.recordingsRoot.appendingPathComponent(folder.lastPathComponent, isDirectory: true)
+            guard (try? fileManager.moveItem(at: folder, to: target)) != nil else { continue }
+            let usageURL = target.appendingPathComponent(usageFile)
             if let data = try? Data(contentsOf: usageURL), let records = try? JSONDecoder().decode([UsageRecord].self, from: data) {
                 usage += records
             }
             try? fileManager.removeItem(at: usageURL)
-            let target = FileLayout.recordingsRoot.appendingPathComponent(folder.lastPathComponent, isDirectory: true)
-            guard (try? fileManager.moveItem(at: folder, to: target)) != nil else { continue }
             if let meta = SessionMeta.read(from: target) { sessions.append((meta, target)) }
         }
         return (sessions, usage)
@@ -186,11 +187,15 @@ public struct KeyboardJob: Codable, Equatable, Sendable {
     }
 
     /// The job is over: its files go, its folder stays for the caller.
-    /// False, and nothing removed, when `claim` was taken over meanwhile.
+    /// False, and nothing removed, when `claim` was taken over meanwhile or
+    /// the job's JSON could not be deleted.
     @discardableResult
     public func remove(root: URL? = KeyboardInbox.root, claim: Claim? = nil) -> Bool {
         guard let directory = Self.directory(in: root), claim?.isHeld ?? true else { return false }
-        for suffix in ["json", "body", "response", "status"] {
+        // The JSON first: while it stays, the job is pending and needs its sidecars.
+        let json = directory.appendingPathComponent("\(id.uuidString).json")
+        if (try? FileManager.default.removeItem(at: json)) == nil, FileManager.default.fileExists(atPath: json.path) { return false }
+        for suffix in ["body", "response", "status"] {
             try? FileManager.default.removeItem(at: directory.appendingPathComponent("\(id.uuidString).\(suffix)"))
         }
         // The claim last, with any claim a crossed release or recovery left aside.
@@ -312,7 +317,11 @@ public struct KeyboardJob: Codable, Equatable, Sendable {
                 meta.write(to: folder)
             }
             guard held() else { return false }
-            KeyboardInbox.finish(folder: folder, usage: [], root: root)
+            // A folder that cannot move keeps its job for the next attempt.
+            if FileManager.default.fileExists(atPath: folder.path), !KeyboardInbox.finish(folder: folder, usage: [], root: root) {
+                claim?.release()
+                return false
+            }
         }
         return remove(root: root, claim: claim)
     }

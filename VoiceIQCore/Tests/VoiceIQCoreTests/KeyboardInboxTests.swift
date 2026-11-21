@@ -160,6 +160,66 @@ final class KeyboardInboxTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: folder.path))
     }
 
+    /// A folder that cannot move into the app's recordings keeps its usage
+    /// for the collection that moves it.
+    func testUsageStaysWithAFolderThatCannotMove() throws {
+        let folder = try session(named: "blocked", status: .inserted)
+        let record = UsageRecord(activity: .dictation, stage: .transcribe, model: "m", sessionID: "s", usage: TokenUsage(audioIn: 10))
+        XCTAssertTrue(KeyboardInbox.finish(folder: folder, usage: [record], root: inbox))
+        try FileManager.default.createDirectory(at: FileLayout.recordingsRoot, withIntermediateDirectories: true)
+        let blocker = FileLayout.recordingsRoot.appendingPathComponent("blocked")
+        try Data().write(to: blocker)
+
+        let first = KeyboardInbox.collect(from: inbox)
+        XCTAssertTrue(first.sessions.isEmpty)
+        XCTAssertTrue(first.usage.isEmpty, "usage taken without its dictation")
+
+        try FileManager.default.removeItem(at: blocker)
+        let second = KeyboardInbox.collect(from: inbox)
+        XCTAssertEqual(second.sessions.map(\.folder.lastPathComponent), ["blocked"])
+        XCTAssertEqual(second.usage.map(\.id), [record.id])
+    }
+
+    /// A job whose JSON cannot be deleted is still pending: it keeps its
+    /// answer, and the caller is told to try again.
+    func testAJobThatCannotBeRemovedKeepsItsFiles() throws {
+        let job = KeyboardJob(folder: "stuck-job", mode: .dictate, durationSeconds: 3)
+        try job.write(root: inbox)
+        let response = try XCTUnwrap(KeyboardJob.responseURL(job.id, root: inbox))
+        try Data("answer".utf8).write(to: response)
+        let jobs = response.deletingLastPathComponent()
+        try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: jobs.path)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: jobs.path) }
+
+        XCTAssertFalse(job.remove(root: inbox))
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: jobs.path)
+        XCTAssertEqual(KeyboardJob.pending(in: inbox).map(\.id), [job.id])
+        XCTAssertTrue(FileManager.default.fileExists(atPath: response.path))
+        XCTAssertTrue(job.remove(root: inbox))
+        XCTAssertTrue(KeyboardJob.pending(in: inbox).isEmpty)
+    }
+
+    /// A takeover whose folder cannot move keeps the job, released for the
+    /// next attempt.
+    func testATakeOverWhoseFolderCannotMoveKeepsTheJob() throws {
+        let folder = try session(named: "no-room", status: .queuedForRetry)
+        let job = KeyboardJob(folder: "no-room", mode: .dictate, durationSeconds: 3)
+        try job.write(root: inbox)
+        let finished = inbox.appendingPathComponent("finished", isDirectory: true)
+        try FileManager.default.createDirectory(at: finished, withIntermediateDirectories: true)
+        try Data().write(to: finished.appendingPathComponent("no-room"))
+        let claim = try XCTUnwrap(job.claim(root: inbox))
+
+        XCTAssertFalse(job.takeOver(root: inbox, claim: claim))
+        XCTAssertEqual(KeyboardJob.pending(in: inbox).map(\.id), [job.id])
+        XCTAssertTrue(FileManager.default.fileExists(atPath: folder.path))
+        let next = try XCTUnwrap(job.claim(root: inbox), "the claim was released")
+
+        try FileManager.default.removeItem(at: finished.appendingPathComponent("no-room"))
+        XCTAssertTrue(job.takeOver(root: inbox, claim: next))
+        XCTAssertTrue(KeyboardJob.pending(in: inbox).isEmpty)
+    }
+
     func testTheAppTakesOverOnlyJobsWithNoUpload() async throws {
         let starting = KeyboardJob(folder: "starting", mode: .dictate, durationSeconds: 3)
         let uploading = KeyboardJob(folder: "uploading", mode: .dictate, durationSeconds: 3)
