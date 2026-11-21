@@ -5,6 +5,19 @@ import XCTest
 
 /// Finishing a keyboard dictation from the answer its background transfer left.
 final class KeyboardTransfersTests: XCTestCase {
+    /// iOS's completion handler runs whether the session's events finish
+    /// before or after the app registers it.
+    func testTheCompletionHandlerRunsInEitherOrder() {
+        for eventsFirst in [true, false] {
+            let transfers = KeyboardTransfers(root: nil) { _ in }
+            let called = expectation(description: "completion")
+            if eventsFirst { transfers.urlSessionDidFinishEvents(forBackgroundURLSession: .shared) }
+            transfers.setEventsDone { called.fulfill() }
+            if !eventsFirst { transfers.urlSessionDidFinishEvents(forBackgroundURLSession: .shared) }
+            wait(for: [called], timeout: 2)
+        }
+    }
+
     /// A 200 whose body was cut off waits for a retry instead of failing.
     @MainActor
     func testAnInterruptedSuccessfulAnswerWaitsForARetry() async throws {

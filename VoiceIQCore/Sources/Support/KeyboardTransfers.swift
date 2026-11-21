@@ -20,7 +20,9 @@ public final class KeyboardTransfers: NSObject, URLSessionDataDelegate, Sendable
 
     private let root: URL?
     private let onAnswer: @Sendable (UUID) -> Void
-    private let eventsDone = OSAllocatedUnfairLock<(@Sendable () -> Void)?>(initialState: nil)
+    /// iOS's completion handler, and whether the session's events already
+    /// finished: either can come first.
+    private let eventsDone = OSAllocatedUnfairLock<(handler: (@Sendable () -> Void)?, finished: Bool)>(initialState: (nil, false))
 
     /// `onAnswer` runs on the session's queue once a job's answer is on disk.
     public init(root: URL? = KeyboardInbox.root, onAnswer: @escaping @Sendable (UUID) -> Void) {
@@ -43,7 +45,12 @@ public final class KeyboardTransfers: NSObject, URLSessionDataDelegate, Sendable
 
     /// App: iOS's completion handler, called once the session's events are in.
     public func setEventsDone(_ handler: @escaping @Sendable () -> Void) {
-        eventsDone.withLock { $0 = handler }
+        let finished = eventsDone.withLock { state in
+            if state.finished { state = (nil, false); return true }
+            state.handler = handler
+            return false
+        }
+        if finished { DispatchQueue.main.async(execute: handler) }
     }
 
     /// The jobs whose transfer is still running on `session`: the app
@@ -105,7 +112,11 @@ public final class KeyboardTransfers: NSObject, URLSessionDataDelegate, Sendable
     }
 
     public func urlSessionDidFinishEvents(forBackgroundURLSession session: URLSession) {
-        let handler = eventsDone.withLock { handler in defer { handler = nil }; return handler }
+        let handler = eventsDone.withLock { state in
+            guard let handler = state.handler else { state.finished = true; return nil as (@Sendable () -> Void)? }
+            state = (nil, false)
+            return handler
+        }
         if let handler { DispatchQueue.main.async(execute: handler) }
     }
 

@@ -30,8 +30,9 @@ public enum KeyboardInbox {
     static let abandonedAfter: TimeInterval = 600
 
     /// Keyboard: the dictation in `folder` is over. False when its billed
-    /// calls could not be written next to it: the folder is not moved, and
-    /// the caller keeps the calls and tries again.
+    /// calls could not be written next to it, or it could not be moved: the
+    /// folder stays in `recordings`, and the caller keeps the calls and
+    /// tries again.
     @discardableResult
     public static func finish(folder: URL, usage: [UsageRecord], root: URL? = root) -> Bool {
         guard let root, FileManager.default.fileExists(atPath: folder.path) else { return false }
@@ -43,8 +44,7 @@ public enum KeyboardInbox {
             guard (try? JSONEncoder().encode(usage).write(to: folder.appendingPathComponent(usageFile), options: .atomic)) != nil
             else { return false }
         }
-        try? FileManager.default.moveItem(at: folder, to: finished.appendingPathComponent(folder.lastPathComponent))
-        return true
+        return (try? FileManager.default.moveItem(at: folder, to: finished.appendingPathComponent(folder.lastPathComponent))) != nil
     }
 
     /// App: moves what the keyboard left into `FileLayout.recordingsRoot` and

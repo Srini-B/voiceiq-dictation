@@ -145,6 +145,22 @@ final class KeyboardInboxTests: XCTestCase {
     /// Opening the app takes over only jobs nobody else is sending: not one
     /// the keyboard is still starting (it holds the claim), not one whose
     /// upload runs. The claim is held while the tasks are read.
+    /// A folder that could not be moved to `finished` is not reported as
+    /// handed over: it stays where the next hand-over finds it.
+    func testAFolderThatCannotMoveStaysRetryable() throws {
+        let folder = try session(named: "stuck", status: .recorded)
+        let finished = inbox.appendingPathComponent("finished", isDirectory: true)
+        try FileManager.default.createDirectory(at: finished, withIntermediateDirectories: true)
+        try Data().write(to: finished.appendingPathComponent("stuck"))
+
+        XCTAssertFalse(KeyboardInbox.finish(folder: folder, usage: [], root: inbox))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: folder.path))
+
+        try FileManager.default.removeItem(at: finished.appendingPathComponent("stuck"))
+        XCTAssertTrue(KeyboardInbox.finish(folder: folder, usage: [], root: inbox))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: folder.path))
+    }
+
     func testTheAppTakesOverOnlyJobsWithNoUpload() async throws {
         let starting = KeyboardJob(folder: "starting", mode: .dictate, durationSeconds: 3)
         let uploading = KeyboardJob(folder: "uploading", mode: .dictate, durationSeconds: 3)
@@ -235,6 +251,24 @@ final class ReplayedResponseTests: XCTestCase {
             XCTAssertEqual(text, "sent to \(sentTo == .openAI ? "OpenAI" : "Gemini")")
             job.remove(root: inbox)
         }
+    }
+
+    /// History names the transcriber that answered a replayed job, and the
+    /// writing model still follows Settings.
+    func testAReplayedJobIsNamedForItsTranscriber() async {
+        let settings = SettingsStore()
+        let previous = settings.preferredProvider
+        settings.setPreferredProvider(.gemini)
+        defer { settings.setPreferredProvider(previous) }
+        let service = GeminiTranscriptionService(client: GeminiClient(apiKey: { "key" }), settings: settings)
+        let replay = ReplayedResponse(body: Data(), status: 200, endpoint: .openAI)
+        let (transcriber, elevenLabs) = GeminiClient.$replayedTranscription.withValue(replay) { service.transcriberInUse() }
+        XCTAssertEqual(transcriber, .openAI)
+        XCTAssertFalse(elevenLabs)
+        let names = service.modelNames(transcriber: transcriber, writer: settings.preferredProvider, elevenLabs: elevenLabs)
+        XCTAssertEqual(names.transcribe, settings.openAIConfig.transcribeModel)
+        XCTAssertEqual(names.writing, settings.geminiConfig.cleanupModel)
+        XCTAssertTrue(service.transcriptKeepsFillers(provider: transcriber, elevenLabs: false, policy: settings.formattingPolicy))
     }
 }
 

@@ -62,11 +62,8 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
         // Read once per dictation: a toggle flipped mid-flight must not change
         // the rules this transcript is being produced under.
         let vocabulary = Self.vocabularyIfEnabled()
-        let provider = settings.preferredProvider
-        // A replayed answer comes from the transcriber that was asked then.
-        let elevenLabs = GeminiClient.replayedTranscription?.endpoint.map { $0 == .elevenLabs }
-            ?? settings.transcribesWithElevenLabs
-        let names = modelNames(provider, elevenLabs: elevenLabs)
+        let (transcriber, elevenLabs) = transcriberInUse()
+        let names = modelNames(transcriber: transcriber, writer: settings.preferredProvider, elevenLabs: elevenLabs)
         let clock = ContinuousClock()
         let started = clock.now
         var encoded = Duration.zero
@@ -137,7 +134,7 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
             result = try await process(
                 TranscriptionResult(rawTranscript: trimmedRaw, cleanedTranscript: trimmedRaw, modelID: names.transcribe),
                 durationSeconds: durationSeconds, context: context, config: config,
-                policy: policy, provider: provider, elevenLabs: elevenLabs, writingModel: names.writing
+                policy: policy, transcriber: transcriber, elevenLabs: elevenLabs, writingModel: names.writing
             )
         } catch {
             logTiming(writing: "writing failed after \(ms(clock.now - transcribed))ms")
@@ -151,14 +148,14 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
         let provider = settings.preferredProvider
         let elevenLabs = settings.transcribesWithElevenLabs
         return try await process(transcript, durationSeconds: durationSeconds, context: context, config: settings.geminiConfig,
-                                 policy: settings.formattingPolicy, provider: provider, elevenLabs: elevenLabs,
-                                 writingModel: modelNames(provider, elevenLabs: elevenLabs).writing)
+                                 policy: settings.formattingPolicy, transcriber: provider, elevenLabs: elevenLabs,
+                                 writingModel: modelNames(transcriber: provider, writer: provider, elevenLabs: elevenLabs).writing)
     }
 
     private func process(
         _ transcript: TranscriptionResult, durationSeconds: Double, context: DictationContext,
         config: GeminiConfig, policy: SettingsStore.FormattingPolicy,
-        provider: ModelProvider, elevenLabs: Bool, writingModel: String
+        transcriber: ModelProvider, elevenLabs: Bool, writingModel: String
     ) async throws -> TranscriptionResult {
         let trimmedRaw = transcript.rawTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedRaw.isEmpty else {
@@ -203,7 +200,7 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
 
         let cleanup = await cleanupOrFallback(
             raw: trimmedRaw, context: context, config: config,
-            rawHasFillers: transcriptKeepsFillers(provider: provider, elevenLabs: elevenLabs, policy: policy),
+            rawHasFillers: transcriptKeepsFillers(provider: transcriber, elevenLabs: elevenLabs, policy: policy),
             normalized: transcript.normalizedTranscript
         )
         var result = TranscriptionResult(
@@ -216,18 +213,22 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
         return result
     }
 
+    /// The transcriber this dictation's text comes from. A replayed answer
+    /// comes from the one that was asked then, whatever Settings says now.
+    func transcriberInUse() -> (provider: ModelProvider, elevenLabs: Bool) {
+        switch GeminiClient.replayedTranscription?.endpoint {
+        case .openAI: (.openAI, false)
+        case .gemini: (.gemini, false)
+        case .elevenLabs: (settings.preferredProvider, true)
+        case nil: (settings.preferredProvider, settings.transcribesWithElevenLabs)
+        }
+    }
+
     /// The models that run, for History's model column. OpenAI's
     /// transcription model has no smart mode, so no mode is named.
-    private func modelNames(_ provider: ModelProvider, elevenLabs: Bool) -> (transcribe: String, writing: String) {
-        let writing: String
-        switch provider {
-        case .openAI:
-            let openAI = settings.openAIConfig
-            if !elevenLabs { return (openAI.transcribeModel, openAI.writingModel) }
-            writing = openAI.writingModel
-        case .gemini:
-            writing = settings.geminiConfig.cleanupModel
-        }
+    func modelNames(transcriber: ModelProvider, writer: ModelProvider, elevenLabs: Bool) -> (transcribe: String, writing: String) {
+        let writing = writer == .openAI ? settings.openAIConfig.writingModel : settings.geminiConfig.cleanupModel
+        if !elevenLabs, transcriber == .openAI { return (settings.openAIConfig.transcribeModel, writing) }
         let transcribe = elevenLabs ? ElevenLabs.batchModel : settings.geminiConfig.transcribeModel
         return ("\(transcribe)/\(settings.formattingPolicy.mode.rawValue)", writing)
     }
