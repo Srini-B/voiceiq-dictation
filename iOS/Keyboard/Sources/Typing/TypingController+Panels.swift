@@ -83,7 +83,7 @@ extension TypingController {
         }
         guard offset != 0 else { return }
         proxy.adjustTextPosition(byCharacterOffset: offset)
-        lastEdit = nil
+        forgetUndo()
         editedOutsideKeys()
     }
 
@@ -122,6 +122,14 @@ extension TypingController {
             redoStack = []
         }
         lastEdit = kind
+    }
+
+    /// Undo replays edits to the text before the cursor: once the cursor
+    /// moves or the field changes elsewhere, they no longer apply.
+    func forgetUndo() {
+        undoStack = []
+        redoStack = []
+        lastEdit = nil
     }
 
     func undo() {

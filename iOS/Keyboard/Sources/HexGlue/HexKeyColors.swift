@@ -10,8 +10,7 @@ enum HexKeyColors {
     static let popup = Color(dynamic { $0.popupFill })
 
     private static func dynamic(_ color: @escaping @Sendable (FullKeyboardPalette) -> UIColor) -> UIColor {
-        UIColor { traits in
-            MainActor.assumeIsolated { color(FullKeyboardPalette(isDark: FullKeyboardPalette.isDark(traits: traits))) }
-        }
+        // UIKit resolves a dynamic colour on whatever thread asks for it.
+        UIColor { traits in color(FullKeyboardPalette(isDark: traits.userInterfaceStyle == .dark)) }
     }
 }

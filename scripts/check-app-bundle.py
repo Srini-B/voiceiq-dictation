@@ -19,8 +19,12 @@ def main():
     with info.open("rb") as handle:
         metadata = plistlib.load(handle)
     files = [path for path in app.rglob("*") if path.is_file() and not path.is_symlink()]
+    # The iPhone app's one model: Hex's on-device cleanup tagger (docs/IOS.md).
+    allowed = set() if mac else {app / "HexCleanupTagger.mlmodelc"}
     forbidden = []
     for path in app.rglob("*"):
+        if path in allowed:
+            continue
         if path.suffix in {".mlmodel", ".mlmodelc", ".mlpackage", ".onnx", ".safetensors", ".gguf", ".cact"}:
             forbidden.append(str(path.relative_to(app)))
         # FluidAudio's resource bundles: the app no longer links any speech runtime.

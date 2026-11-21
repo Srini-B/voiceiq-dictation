@@ -37,6 +37,8 @@ final class TypingController: ObservableObject {
     @Published var undoStack: [UndoStep] = []
     @Published var redoStack: [UndoStep] = []
     var lastEdit: EditKind?
+    /// The keys deleted in this run-loop turn (`insertText`).
+    var deletedThisTurn = false
 
     weak var controller: UIInputViewController?
     var proxy: UITextDocumentProxy? { controller?.textDocumentProxy }
@@ -60,7 +62,10 @@ final class TypingController: ObservableObject {
         keyboard.letterLayoutOverride = .qwerty
         keyboard.onPreferredHeightChange = { [weak self] in self?.onHeightChange?() }
         // The emoji key opens VoiceiQ's emoji panel.
-        keyboard.engine.onEmojiKey = { [weak self] in self?.showsEmoji = true }
+        keyboard.engine.onEmojiKey = { [weak self] in
+            guard let self else { return }
+            if self.emojiQuery != nil { self.closeEmojiSearch() } else { self.showsEmoji = true }
+        }
         // Hex's style menu is for Hex's dictation; sliding off the key does nothing.
         keyboard.hexKey.onMenuOpen = nil
         keyboard.hexKey.onMenuDrag = nil
@@ -139,10 +144,7 @@ final class TypingController: ObservableObject {
     func textChanged() {
         readField()
         if proxy?.documentContextBeforeInput != lastBefore || proxy?.documentContextAfterInput != lastAfter {
-            // Undo replays text before the cursor; it is no longer this text.
-            undoStack = []
-            redoStack = []
-            lastEdit = nil
+            forgetUndo()
         }
         keyboard?.textDidChange()
         refresh()
@@ -217,7 +219,13 @@ extension TypingController: @MainActor KeyboardTextTarget {
             return
         }
         let wordCharacter = text.count == 1 && (text.first?.isLetter == true || text.first?.isNumber == true)
-        checkpoint(wordCharacter ? .typing : .other)
+        if deletedThisTurn {
+            // A text replacement or a correction: the keys deleted what was
+            // typed and type its replacement in one go, one undo step.
+            lastEdit = .other
+        } else {
+            checkpoint(wordCharacter ? .typing : .other)
+        }
         typeText(text)
         typedSinceAppear = true
         refresh()
@@ -231,13 +239,18 @@ extension TypingController: @MainActor KeyboardTextTarget {
         }
         checkpoint(.deleting)
         deleteBack()
+        if !deletedThisTurn {
+            deletedThisTurn = true
+            DispatchQueue.main.async { [weak self] in self?.deletedThisTurn = false }
+        }
         refresh()
     }
 
+    /// The space-bar trackpad.
     func adjustTextPosition(byCharacterOffset offset: Int) {
         guard emojiQuery == nil else { return }
         proxy?.adjustTextPosition(byCharacterOffset: offset)
-        lastEdit = nil
+        forgetUndo()
         refresh()
     }
 }

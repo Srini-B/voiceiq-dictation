@@ -1,4 +1,5 @@
 import UIKit
+import VoiceIQBridge
 import XCTest
 
 /// A text field as a keyboard sees it: text with a cursor or a selection.
@@ -214,5 +215,55 @@ final class KeyboardTypingTests: XCTestCase {
             XCTAssertNil(field.selectedText, name)
             XCTAssertEqual(typing.selection, "", "\(name) left the selection behind")
         }
+    }
+
+    /// A text replacement is one undo step: Undo brings the shortcut back.
+    func testATextReplacementIsOneUndoStep() {
+        open()
+        typing.setSupplementaryLexicon([("omw", "On my way!")])
+        type("omw ")
+        XCTAssertEqual(field.text, "On my way! ")
+        typing.undo()
+        XCTAssertEqual(field.text, "Omw")
+    }
+
+    /// Undo replays edits before the cursor, so moving the cursor ends them.
+    func testMovingTheCursorForgetsUndo() {
+        open()
+        type("ab")
+        typing.adjustTextPosition(byCharacterOffset: -1)
+        XCTAssertTrue(typing.undoStack.isEmpty)
+        typing.undo()
+        XCTAssertEqual(field.text, "Ab")
+    }
+
+    /// The emoji key closes the emoji search and shows the emoji.
+    func testTheEmojiKeyClosesTheSearch() {
+        open()
+        typing.startEmojiSearch()
+        type("piz")
+        plane.engine.onEmojiKey?()
+        XCTAssertNil(typing.emojiQuery)
+        XCTAssertTrue(typing.showsEmoji)
+    }
+
+    /// Reset Keyboard Learning applies once, stamped when applied, so words a
+    /// keyboard loaded in between are dropped; later appearances keep words
+    /// learned since.
+    func testResetKeyboardLearningAppliesOnce() throws {
+        let suite = "reset-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        var preferences = KeyboardPreferences()
+        preferences.learningResetAt = Date().addingTimeInterval(-60)
+        defaults.set(Data("old".utf8), forKey: LearnedWordsStore.defaultsKey)
+
+        HexKeyboardSettings.apply(preferences, defaults: defaults)
+        XCTAssertNil(defaults.object(forKey: LearnedWordsStore.defaultsKey))
+        XCTAssertGreaterThan(TypingJournalSettings(defaults: defaults).erasedAt, preferences.learningResetAt!.timeIntervalSince1970)
+
+        defaults.set(Data("new".utf8), forKey: LearnedWordsStore.defaultsKey)
+        HexKeyboardSettings.apply(preferences, defaults: defaults)
+        XCTAssertNotNil(defaults.object(forKey: LearnedWordsStore.defaultsKey), "a later appearance erased new words")
     }
 }
