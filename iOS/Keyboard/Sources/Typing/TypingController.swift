@@ -26,10 +26,24 @@ final class TypingController: ObservableObject {
     /// Nothing typed since the keyboard appeared, so the bar may show the
     /// Dictionary offer.
     @Published private(set) var typedSinceAppear = false
-    /// The Hex key started a dictation the app has not picked up yet. The keys
-    /// stay on screen meanwhile: swapping them for the voice panel would end
-    /// the key's touch, and lifting a hold could never stop the dictation.
+    /// A hold on the strip's mic started a dictation the app has not picked up
+    /// yet. The keys stay on screen meanwhile: swapping them for the voice panel
+    /// would end the mic's touch, and lifting the hold could never stop it.
     @Published var dictationKeyStarting = false
+    /// The voice panel is open, from the strip's or a panel's waveform button.
+    @Published var voiceOpen = false
+    /// Hex's strip in the keys view: the whole bar, the part between VoiceiQ's
+    /// buttons where the suggestions are, and the height down to the keys.
+    @Published private(set) var stripBar = CGRect.zero
+    @Published private(set) var stripSlots = CGRect.zero
+    @Published private(set) var stripArea: CGFloat = KeyboardMetrics.portrait.stripArea
+    /// What covers the strip: the Dictionary offer the suggestions, a recording
+    /// or the emoji search all of it, VoiceiQ's buttons too.
+    var stripCover = StripCover.none { didSet { applyStripCover() } }
+    enum StripCover: Equatable { case none, suggestions, all }
+    /// The strip mic's tap; its hold goes through `dictation` as the Hex key's did.
+    var onMicTap: (() -> Void)?
+    private var stripButtons: [StripButton: UIControl] = [:]
     /// The text selected in the field, so the bar's Dictionary offer ends with
     /// the selection.
     @Published private(set) var selection = ""
@@ -49,7 +63,8 @@ final class TypingController: ObservableObject {
     weak var controller: UIInputViewController?
     var proxy: UITextDocumentProxy? { controller?.textDocumentProxy }
 
-    /// What Hex's dictation side reads; its Hex key starts VoiceiQ's dictation.
+    /// What Hex's dictation side reads, and the callbacks the strip's mic calls
+    /// as Hex's key did.
     let dictation = KeyboardViewModel()
     private(set) var keyboard: FullKeyboardView?
     /// Text Replacements and contacts from iOS, kept to merge with the Dictionary.
@@ -72,13 +87,20 @@ final class TypingController: ObservableObject {
             guard let self else { return }
             if self.emojiQuery != nil { self.closeEmojiSearch() } else { self.showsEmoji = true }
         }
-        // Hex's style menu is for Hex's dictation; sliding off the key does nothing.
-        keyboard.hexKey.onMenuOpen = nil
-        keyboard.hexKey.onMenuDrag = nil
-        keyboard.hexKey.onMenuRelease = nil
-        keyboard.hexKey.accessibilityLabel = "Dictate"
-        keyboard.hexKey.accessibilityHint = "Tap to dictate with VoiceiQ"
-        keyboard.hexKey.accessibilityCustomActions = nil
+        // One row: VoiceiQ's buttons take the strip's ends and the Hex key goes;
+        // the strip's mic does what it did.
+        keyboard.hexKey.removeFromSuperview()
+        for button in StripButton.allCases {
+            let control = makeStripButton(button)
+            stripButtons[button] = control
+            keyboard.addSubview(control)
+        }
+        keyboard.stripLayout = { [weak self] layout, lift in
+            let bar = layout.stripBarFrame.offsetBy(dx: 0, dy: lift)
+            let placed = StripButton.layout(bar: bar, side: layout.metrics.side)
+            self?.placeStrip(buttons: placed.buttons, bar: bar, slots: placed.strip, area: layout.metrics.stripArea + lift)
+            return (placed.strip.offsetBy(dx: 0, dy: -lift), placed.slots.map { $0.offsetBy(dx: 0, dy: -lift) })
+        }
         self.keyboard = keyboard
         keyboard.prepareForField()
         loadWords()
@@ -169,6 +191,64 @@ final class TypingController: ObservableObject {
     func editedOutsideKeys() {
         keyboard?.textDidChange()
         refresh()
+    }
+
+    // MARK: - Strip
+
+    private func makeStripButton(_ button: StripButton) -> UIControl {
+        if button == .mic {
+            let mic = DictationKeyControl()
+            mic.onPress = { [weak self] at in self?.dictation.onHexKeyPress?(at) }
+            mic.onTap = { [weak self] in self?.onMicTap?() }
+            mic.onHold = { [weak self] in self?.dictation.onDictateTap?() }
+            mic.onHoldRelease = { [weak self] in self?.dictation.onStopTap?() }
+            mic.onAbandon = { [weak self] in self?.dictation.onHexKeyAbandon?() }
+            return mic
+        }
+        let control = UIButton(type: .system)
+        control.setImage(.stripSymbol(button.symbol), for: .normal)
+        control.tintColor = KeyboardPalette.accentUIColor
+        control.accessibilityLabel = button.label
+        control.addAction(UIAction { [weak self] _ in self?.stripButtonTapped(button) }, for: .touchUpInside)
+        return control
+    }
+
+    private func stripButtonTapped(_ button: StripButton) {
+        switch button {
+        case .voice:
+            voiceOpen = true
+            showsEmoji = false
+            showsEdit = false
+        case .mini: toggleMini()
+        case .edit:
+            showsEmoji = false
+            showsEdit = true
+        case .mic: break
+        }
+    }
+
+    private func placeStrip(buttons frames: [StripButton: CGRect], bar: CGRect, slots: CGRect, area: CGFloat) {
+        for (button, control) in stripButtons {
+            control.frame = frames[button] ?? .zero
+        }
+        applyStripCover()
+        guard (bar, slots, area) != (stripBar, stripSlots, stripArea) else { return }
+        // Layout runs inside SwiftUI's update; publish after it.
+        DispatchQueue.main.async { [weak self] in
+            self?.stripBar = bar
+            self?.stripSlots = slots
+            self?.stripArea = area
+        }
+    }
+
+    private func applyStripCover() {
+        keyboard?.stripView.isHidden = stripCover != .none
+        for control in stripButtons.values {
+            control.isHidden = control.frame.isEmpty
+            // Faded, not hidden: a hold on the mic that starts the recording
+            // strip keeps its touch, so lifting it still stops the dictation.
+            control.alpha = stripCover == .all ? 0 : 1
+        }
     }
 
     // MARK: - Panels and mini keys

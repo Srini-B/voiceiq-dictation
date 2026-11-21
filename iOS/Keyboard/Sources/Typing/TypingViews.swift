@@ -36,8 +36,8 @@ struct EmojiSearchBar: View {
     }
 }
 
-/// Hex's keys inside the SwiftUI keyboard: its suggestion strip, the Hex key
-/// (VoiceiQ's dictation) and the keys.
+/// Hex's keys inside the SwiftUI keyboard: its suggestion strip, with
+/// VoiceiQ's buttons at its ends, and the keys.
 struct KeysArea: UIViewRepresentable {
     let typing: TypingController
 

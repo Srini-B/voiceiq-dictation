@@ -20,15 +20,12 @@ struct KeyboardView: View {
     @ObservedObject var model: KeyboardModel
     @ObservedObject var offer: DictionaryOffer
     @ObservedObject var typing: TypingController
-    /// The voice panel, opened from the bar. It also shows a session that
-    /// is starting or needs the app; a running dictation keeps the keys.
-    @State private var voiceOpen = false
 
     private enum Panel { case keys, voice, emoji, edit, answer }
 
     private var panel: Panel {
         if model.answer != nil { return .answer }
-        if !isLive, voiceOpen || model.phase == .recording || model.phase == .processing
+        if !isLive, typing.voiceOpen || model.phase == .recording || model.phase == .processing
             || (model.waitingForApp && !typing.dictationKeyStarting) { return .voice }
         if typing.emojiQuery != nil { return .keys }
         if typing.showsEdit { return .edit }
@@ -43,15 +40,61 @@ struct KeyboardView: View {
     }
 
     static func miniBarHeight(compact: Bool) -> CGFloat { compact ? 44 : 58 }
-    static func barHeight(compact: Bool) -> CGFloat { compact ? 36 : 44 }
+
+    /// Hex's keys with VoiceiQ's buttons in their strip: one row above the keys.
+    private var showsHexKeys: Bool { panel == .keys && !showsMini && !typing.isDigitPad }
+
+    /// What covers Hex's strip: a recording or the emoji search all of it, the
+    /// Dictionary offer the suggestions.
+    private var stripCover: TypingController.StripCover {
+        guard showsHexKeys else { return .none }
+        if isLive || typing.emojiQuery != nil { return .all }
+        return showsOffer ? .suggestions : .none
+    }
 
     var body: some View {
-        VStack(spacing: 0) {
-            Group {
-                if isLive { RecordingStrip(model: model) } else if showsMini { miniBar } else { topBar }
+        Group {
+            if showsHexKeys {
+                KeysArea(typing: typing).overlay(alignment: .topLeading) { stripOverlay }
+            } else {
+                VStack(spacing: 0) {
+                    Group {
+                        if isLive { RecordingStrip(model: model, size: typing.stripBar.height) } else if showsMini { miniBar } else { topBar }
+                    }
+                    .frame(height: showsMini ? Self.miniBarHeight(compact: typing.compact) : typing.stripArea)
+                    panelContent.frame(maxHeight: .infinity)
+                }
             }
-            .frame(height: showsMini ? Self.miniBarHeight(compact: typing.compact) : Self.barHeight(compact: typing.compact))
+        }
+        .onChange(of: showsMini, initial: true) { _, mini in typing.showsMini = mini }
+        .onChange(of: stripCover, initial: true) { _, cover in typing.stripCover = cover }
+        .onChange(of: model.waitingForApp) { _, waiting in if !waiting { typing.dictationKeyStarting = false } }
+        .onChange(of: model.phase) { old, new in
+            // A finished session goes back to the keys.
+            if old == .processing, new == .off || new == .warm { typing.voiceOpen = false }
+        }
+    }
+
+    /// Over Hex's strip: the recording, the emoji search or the Dictionary offer.
+    @ViewBuilder private var stripOverlay: some View {
+        let bar = typing.stripBar
+        switch stripCover {
+        case .all:
             Group {
+                if isLive { RecordingStrip(model: model, size: bar.height) } else { EmojiSearchBar(typing: typing) }
+            }
+            .frame(width: bar.width, height: bar.height)
+            .offset(x: bar.minX, y: bar.minY)
+        case .suggestions:
+            DictionaryOfferChip(offer: offer, selection: typing.selection)
+                .frame(width: typing.stripSlots.width, height: bar.height)
+                .offset(x: typing.stripSlots.minX, y: bar.minY)
+        case .none:
+            EmptyView()
+        }
+    }
+
+    @ViewBuilder private var panelContent: some View {
                 switch panel {
                 case .answer:
                     if let answer = model.answer { AnswerPanel(answer: answer, model: model).padding(8) }
@@ -74,15 +117,6 @@ struct KeyboardView: View {
                 case .keys:
                     KeysArea(typing: typing)
                 }
-            }
-            .frame(maxHeight: .infinity)
-        }
-        .onChange(of: showsMini, initial: true) { _, mini in typing.showsMini = mini }
-        .onChange(of: model.waitingForApp) { _, waiting in if !waiting { typing.dictationKeyStarting = false } }
-        .onChange(of: model.phase) { old, new in
-            // A finished session goes back to the keys.
-            if old == .processing, new == .off || new == .warm { voiceOpen = false }
-        }
     }
 
     /// Recording, or writing the text while the app is running.
@@ -103,7 +137,7 @@ struct KeyboardView: View {
         HStack(spacing: 2) {
             BarButton(systemImage: panel == .voice ? "keyboard" : "waveform",
                       label: panel == .voice ? "Keyboard" : "VoiceiQ") {
-                voiceOpen.toggle()
+                typing.voiceOpen.toggle()
                 typing.showsEmoji = false
                 typing.showsEdit = false
                 typing.emojiQuery = nil
@@ -121,9 +155,6 @@ struct KeyboardView: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            if panel == .keys, typing.emojiQuery == nil, !typing.isDigitPad {
-                BarButton(systemImage: "arrow.down.right.and.arrow.up.left", label: "Mini Keyboard", action: typing.toggleMini)
-            }
             if panel != .voice, typing.emojiQuery == nil {
                 BarButton(systemImage: panel == .edit ? "keyboard" : "character.cursor.ibeam",
                           label: panel == .edit ? "Keyboard" : "Edit") {
@@ -133,6 +164,12 @@ struct KeyboardView: View {
             }
             if panel != .voice {
                 BarButton(systemImage: "mic.fill", label: "Dictate", action: model.micTapped)
+            } else if typing.stripBar.width > 0, typing.stripBar.width < StripButton.narrowBar {
+                // The strip has no room for it on a narrow keyboard.
+                BarButton(systemImage: StripButton.mini.symbol, label: StripButton.mini.label) {
+                    typing.voiceOpen = false
+                    if !typing.mini { typing.toggleMini() }
+                }
             } else {
                 Color.clear.frame(width: 40)
             }
@@ -144,7 +181,7 @@ struct KeyboardView: View {
     private var miniBar: some View {
         HStack(spacing: 4) {
             BarButton(systemImage: "waveform", label: "VoiceiQ") {
-                voiceOpen = true
+                typing.voiceOpen = true
                 typing.showsEmoji = false
                 typing.showsEdit = false
             }
@@ -342,11 +379,11 @@ private struct AnswerPanel: View {
 /// time and the glow once they arrive. While the text is written: a spinner.
 private struct RecordingStrip: View {
     @ObservedObject var model: KeyboardModel
-    @Environment(\.verticalSizeClass) private var verticalSizeClass
+    /// The strip's height: its buttons fit inside it, as Hex's pills do.
+    let size: CGFloat
 
     private var recording: Bool { model.phase == .recording }
-    /// The landscape strip is 36 pt tall.
-    private var buttonSize: CGFloat { verticalSizeClass == .compact ? 28 : 32 }
+    private var buttonSize: CGFloat { size > 0 ? min(32, size - 1) : 32 }
 
     var body: some View {
         HStack(spacing: 8) {
@@ -420,7 +457,8 @@ private struct BarButton: View {
         Button(action: action) {
             Image(systemName: systemImage)
                 .font(.system(size: 17, weight: .medium))
-                .frame(width: 40, height: 36)
+                .frame(width: 40)
+                .frame(maxHeight: .infinity)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

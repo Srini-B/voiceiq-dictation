@@ -1,0 +1,19 @@
+diff --git a/iOS/Keyboard/Hex/FullKeyboard/FullKeyboardView.swift b/iOS/Keyboard/Hex/FullKeyboard/FullKeyboardView.swift
+index 4f8a78a..53ac4b1 100644
+--- a/iOS/Keyboard/Hex/FullKeyboard/FullKeyboardView.swift
++++ b/iOS/Keyboard/Hex/FullKeyboard/FullKeyboardView.swift
+@@ -421,2 +421,6 @@ final class FullKeyboardView: UIView, UIInputViewAudioFeedback {
+ 
++    /// VoiceiQ: the strip's frame and slots in place of the layout's, given the layout and the
++    /// lift, so its own buttons fit at the strip's ends (iOS/Keyboard/Hex/patches).
++    var stripLayout: ((KeyboardLayout, CGFloat) -> (frame: CGRect, slots: [CGRect]))?
++
+     /// Fixtures pin where the Hex key sits; otherwise Settings › Keyboard › Hex key.
+@@ -597,4 +601,5 @@ final class FullKeyboardView: UIView, UIInputViewAudioFeedback {
+         accentCallout.frame = content
+-        stripView.frame = layout.stripFrame.offsetBy(dx: 0, dy: lift)
+-        stripView.slotFrames = layout.stripSlotFrames.map { $0.offsetBy(dx: -layout.stripFrame.minX, dy: -layout.stripFrame.minY) }
++        let strip = stripLayout?(layout, lift) ?? (frame: layout.stripFrame, slots: layout.stripSlotFrames)
++        stripView.frame = strip.frame.offsetBy(dx: 0, dy: lift)
++        stripView.slotFrames = strip.slots.map { $0.offsetBy(dx: -strip.frame.minX, dy: -strip.frame.minY) }
+         stripView.pillInset = layout.metrics.stripInset

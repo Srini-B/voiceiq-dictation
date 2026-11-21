@@ -16,8 +16,9 @@ final class KeyboardViewController: UIInputViewController {
         model.onEdited = { [weak typing] in typing?.editedOutsideKeys() }
         typing.controller = self
         typing.onHeightChange = { [weak self] in self?.updateHeight() }
-        // The Hex key starts VoiceiQ's dictation, as the mic button does; lifting
-        // it after a hold finishes the dictation it started.
+        // The strip's mic: a tap as the panels' mic button; a hold starts the
+        // dictation with the keys kept, and lifting it finishes the dictation.
+        typing.onMicTap = { [weak model] in model?.micTapped() }
         typing.dictation.onDictateTap = { [weak model, weak typing] in
             guard let model else { return }
             model.micTapped()
@@ -46,7 +47,7 @@ final class KeyboardViewController: UIInputViewController {
             hosting.view.topAnchor.constraint(equalTo: view.topAnchor),
             hosting.view.bottomAnchor.constraint(equalTo: view.bottomAnchor),
         ])
-        let height = view.heightAnchor.constraint(equalToConstant: KeyboardView.barHeight(compact: false) + typing.keysHeight)
+        let height = view.heightAnchor.constraint(equalToConstant: typing.keysHeight)
         height.priority = .defaultHigh
         height.isActive = true
         self.height = height
@@ -79,7 +80,7 @@ final class KeyboardViewController: UIInputViewController {
         let compact = traitCollection.verticalSizeClass == .compact
         if typing.compact != compact { typing.compact = compact }
         height?.constant = typing.showsMini ? miniHeight(compact: compact)
-            : KeyboardView.barHeight(compact: compact) + typing.keysHeight
+            : typing.keysHeight
     }
 
     /// The mic bar over two rows of keys.
