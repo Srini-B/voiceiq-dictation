@@ -15,8 +15,8 @@ struct EditPanel: View {
                 key("Line End", "arrow.right.to.line") { typing.moveCursor(.lineEnd) }
             }
             HStack(spacing: 8) {
-                RepeatKey(label: "Left", systemImage: "arrowtriangle.left.fill", theme: typing.theme) { typing.moveCursor(.left) }
-                RepeatKey(label: "Right", systemImage: "arrowtriangle.right.fill", theme: typing.theme) { typing.moveCursor(.right) }
+                RepeatKey(label: "Left", systemImage: "arrowtriangle.left.fill") { typing.moveCursor(.left) }
+                RepeatKey(label: "Right", systemImage: "arrowtriangle.right.fill") { typing.moveCursor(.right) }
             }
             HStack(spacing: 8) {
                 key("Copy", "doc.on.doc", enabled: typing.canUsePasteboard) { typing.copySelection(cut: false) }
@@ -29,10 +29,10 @@ struct EditPanel: View {
                 Button("ABC") { typing.showsEdit = false }
                     .font(.system(size: 15, weight: .medium))
                     .frame(width: 64, height: 40)
-                    .background(RoundedRectangle(cornerRadius: 8).fill(Color(typing.theme.function.top)))
+                    .background(RoundedRectangle(cornerRadius: 8).fill(HexKeyColors.function))
                 Spacer()
-                RepeatKey(label: "Delete", systemImage: "delete.left", theme: typing.theme) {
-                    typing.keyTapped(KeySpec(action: .delete, label: "delete"), text: nil)
+                RepeatKey(label: "Delete", systemImage: "delete.left") {
+                    typing.deleteFromPanel()
                 }
                 .frame(width: 64)
             }
@@ -47,7 +47,7 @@ struct EditPanel: View {
             Image(systemName: systemImage)
                 .font(.system(size: 17, weight: .medium))
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(RoundedRectangle(cornerRadius: 8).fill(Color(typing.theme.character.top)))
+                .background(RoundedRectangle(cornerRadius: 8).fill(HexKeyColors.key))
         }
         .disabled(!enabled)
         .opacity(enabled ? 1 : 0.4)
@@ -59,7 +59,6 @@ struct EditPanel: View {
 private struct RepeatKey: View {
     let label: String
     let systemImage: String
-    let theme: KeyTheme
     let action: () -> Void
     @State private var timer: Timer?
     /// Resets when the touch ends or is cancelled, unlike `onEnded`.
@@ -69,7 +68,7 @@ private struct RepeatKey: View {
         Image(systemName: systemImage)
             .font(.system(size: 17, weight: .medium))
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(RoundedRectangle(cornerRadius: 8).fill(Color(pressed ? theme.function.top : theme.character.top)))
+            .background(RoundedRectangle(cornerRadius: 8).fill(pressed ? HexKeyColors.pressed : HexKeyColors.key))
             .contentShape(Rectangle())
             // The first action fires from the gesture itself: a quick tap can
             // end before `pressed` reaches `onChange`.

@@ -14,6 +14,12 @@ ios/HEXKeyboard/TypingModel/en.hextm iOS/Keyboard/Hex/TypingModel/en.hextm
 exclude ios/HEXShared/FullKeyboard/Emoji/emoji-index-de.txt
 exclude ios/HEXShared/FullKeyboard/Emoji/emoji-index-es.txt
 exclude ios/HEXShared/FullKeyboard/Emoji/emoji-index-nb.txt
+# What the keyboard's files call that lives beside them in Hex: Record typing logs
+# (TypingLogger, off unless its switch is on) and the dictation-edit types Learn how
+# I type records.
+ios/HEXShared/TypingLog                     iOS/Keyboard/Hex/TypingLog
+ios/HEXShared/DictationEditInference.swift  iOS/Keyboard/Hex/Dictation/DictationEditInference.swift
+ios/HEXShared/DictationCorrections.swift    iOS/Keyboard/Hex/Dictation/DictationCorrections.swift
 
 # Clean up what I say: the on-device cleanup tagger (iPhone app). The Core ML model
 # is a Hex release asset, not a git file: scripts/fetch-hex-cleanup-model.sh reads

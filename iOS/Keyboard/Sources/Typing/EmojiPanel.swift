@@ -25,7 +25,7 @@ struct EmojiPanel: View {
                     .padding(.horizontal, 6)
                 }
                 .frame(maxHeight: .infinity)
-                .onChange(of: group) { value in withAnimation { reader.scrollTo("\(value)-0", anchor: .leading) } }
+                .onChange(of: group) { _, value in withAnimation { reader.scrollTo("\(value)-0", anchor: .leading) } }
             }
             .overlay(alignment: .top) {
                 if let tones { tonePicker(tones) }
@@ -46,7 +46,7 @@ struct EmojiPanel: View {
                     }
                     .accessibilityLabel(EmojiData.groups[index].name)
                 }
-                Button { typing.keyTapped(KeySpec(action: .delete, label: "delete"), text: nil) } label: {
+                Button { typing.deleteFromPanel() } label: {
                     Image(systemName: "delete.left").frame(width: 48, height: 34)
                 }
                 .accessibilityLabel("Delete")
@@ -94,7 +94,7 @@ struct EmojiPanel: View {
         }
         .buttonStyle(.plain)
         .padding(.horizontal, 6)
-        .background(RoundedRectangle(cornerRadius: 12).fill(Color(typing.theme.popup)).shadow(radius: 3, y: 1))
+        .background(RoundedRectangle(cornerRadius: 12).fill(HexKeyColors.popup).shadow(radius: 3, y: 1))
         .padding(.top, 6)
     }
 

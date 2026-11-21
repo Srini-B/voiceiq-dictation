@@ -13,11 +13,21 @@ final class KeyboardViewController: UIInputViewController {
         super.viewDidLoad()
         model.controller = self
         model.onOwnCopy = { [weak dictionaryOffer] in dictionaryOffer?.noteOwnCopy() }
-        model.onEdited = { [weak typing] in typing?.refresh() }
+        model.onEdited = { [weak typing] in typing?.editedOutsideKeys() }
         typing.controller = self
         typing.onHeightChange = { [weak self] in self?.updateHeight() }
-        requestSupplementaryLexicon { [weak typing] lexicon in
-            Task { @MainActor in typing?.setSupplementaryLexicon(lexicon.entries) }
+        // The Hex key starts VoiceiQ's dictation, as the mic button does; lifting
+        // it after a hold finishes the dictation it started.
+        typing.dictation.onDictateTap = { [weak model] in model?.micTapped() }
+        typing.dictation.onStopTap = { [weak model] in
+            if model?.phase == .recording { model?.micTapped() }
+        }
+        typing.dictation.onOpenURL = { [weak self] url in self?.openURL(url) }
+        // UIKit calls back on its own queue.
+        requestSupplementaryLexicon { @Sendable [weak typing] lexicon in
+            Task { @MainActor in
+                typing?.setSupplementaryLexicon(lexicon.entries.map { ($0.userInput, $0.documentText) })
+            }
         }
         let hosting = UIHostingController(rootView: KeyboardView(model: model, offer: dictionaryOffer, typing: typing))
         // Not clear: iOS drops a keyboard's touches that land on fully
@@ -34,12 +44,15 @@ final class KeyboardViewController: UIInputViewController {
             hosting.view.topAnchor.constraint(equalTo: view.topAnchor),
             hosting.view.bottomAnchor.constraint(equalTo: view.bottomAnchor),
         ])
-        let height = view.heightAnchor.constraint(equalToConstant: typing.preferences.keyboardHeight(compact: false))
+        let height = view.heightAnchor.constraint(equalToConstant: KeyboardView.barHeight(compact: false) + typing.keysHeight)
         height.priority = .defaultHigh
         height.isActive = true
         self.height = height
         hosting.didMove(toParent: self)
         self.hosting = hosting
+        registerForTraitChanges([UITraitVerticalSizeClass.self]) { (controller: KeyboardViewController, _) in
+            controller.updateHeight()
+        }
     }
 
     /// iOS keeps this controller's view alive after the controller goes,
@@ -47,7 +60,8 @@ final class KeyboardViewController: UIInputViewController {
     /// dismissal left a whole keyboard behind (14 MB each) until iOS ended
     /// the extension and showed its own keyboard. Detaching it frees it.
     deinit {
-        hosting?.view.removeFromSuperview()
+        let hosting = hosting
+        MainActor.assumeIsolated { hosting?.view.removeFromSuperview() }
     }
 
     override func viewWillAppear(_ animated: Bool) {
@@ -62,28 +76,19 @@ final class KeyboardViewController: UIInputViewController {
     private func updateHeight() {
         let compact = traitCollection.verticalSizeClass == .compact
         if typing.compact != compact { typing.compact = compact }
-        height?.constant = typing.showsMini ? miniHeight(compact: compact) : typing.preferences.keyboardHeight(compact: compact)
+        height?.constant = typing.showsMini ? miniHeight(compact: compact)
+            : KeyboardView.barHeight(compact: compact) + typing.keysHeight
     }
 
-    /// The mic bar over two rows as tall as the full keyboard's.
+    /// The mic bar over two rows of keys.
     private func miniHeight(compact: Bool) -> CGFloat {
-        var full = typing.preferences
-        full.numberRow = false
-        let keys = full.keyboardHeight(compact: compact) - (compact ? 36 : 44)
-        let row = (keys - 3 * 11 - 4) / 4
-        return KeyboardView.miniBarHeight(compact: compact) + 2 * row + 11 + 4
+        KeyboardView.miniBarHeight(compact: compact) + (compact ? 76 : 100)
     }
 
-    /// iOS ends a keyboard over its memory limit and shows its own; the slide
-    /// models are the largest thing the keyboard can give back.
+    /// iOS ends a keyboard over its memory limit and shows its own.
     override func didReceiveMemoryWarning() {
         super.didReceiveMemoryWarning()
-        typing.releaseModels()
-    }
-
-    override func traitCollectionDidChange(_ previous: UITraitCollection?) {
-        super.traitCollectionDidChange(previous)
-        updateHeight()
+        typing.releaseMemory()
     }
 
     override func viewDidAppear(_ animated: Bool) {
@@ -94,6 +99,7 @@ final class KeyboardViewController: UIInputViewController {
         // screen edges, so q, a, z and p type late or not at all (azooKey,
         // giellakbd-ios). The window is the extension's own.
         view.window?.gestureRecognizers?.forEach { $0.delaysTouchesBegan = false }
+        typing.keyboard?.warmUpTextCheckerAsync()
         typing.readField()
         typing.refresh()
     }
@@ -102,19 +108,19 @@ final class KeyboardViewController: UIInputViewController {
         super.viewDidDisappear(animated)
         model.disappeared()
         dictionaryOffer.disappeared()
+        typing.publishLearnedWords()
     }
 
     override func textDidChange(_ textInput: UITextInput?) {
         super.textDidChange(textInput)
         HostAppResolver.harvest()
-        typing.readField()
-        typing.selectionChanged()
+        typing.textChanged()
     }
 
     override func selectionDidChange(_ textInput: UITextInput?) {
         super.selectionDidChange(textInput)
         HostAppResolver.harvest()
-        typing.selectionChanged()
+        typing.textChanged()
     }
 
     /// Opens a URL from inside the extension. `UIApplication.open` is marked

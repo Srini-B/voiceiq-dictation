@@ -41,119 +41,23 @@ struct UndoStep: Equatable {
 
 enum CursorMove { case left, right, wordLeft, wordRight, lineStart, lineEnd }
 
-/// Emoji search, blocked words, delete slides and the edit panel.
+/// Emoji search, the edit panel and undo.
 extension TypingController {
     // MARK: - Emoji search
 
     func startEmojiSearch() {
         showsEmoji = false
-        page = .letters
         emojiQuery = ""
+        keyboard?.textDidChange()
     }
 
     func closeEmojiSearch() {
         emojiQuery = nil
         showsEmoji = true
+        keyboard?.textDidChange()
     }
 
-    /// While searching, the keys type into the query.
-    func searchKeyTapped(_ key: KeySpec, text: String?) {
-        guard var query = emojiQuery else { return }
-        switch key.action {
-        case .insert(let character): query += (text ?? character).lowercased()
-        case .space: query += " "
-        case .delete: if !query.isEmpty { query.removeLast() }
-        case .returnKey, .emoji: return closeEmojiSearch()
-        case .page(let target): page = target
-        case .shift, .globe, .toggleSize, .edit: break
-        }
-        emojiQuery = query
-    }
-
-    // MARK: - Blocked words
-
-    private static let localBlockedKey = "typing.blockedWords"
-
-    /// Blocked in the app, and here without Full Access, where the app's
-    /// list cannot be written.
-    var blockedWords: Set<String> {
-        Set(preferences.blockedWords).union(UserDefaults.standard.stringArray(forKey: Self.localBlockedKey) ?? [])
-    }
-
-    /// Words blocked before Full Access move to the app's list, where
-    /// Settings can unblock them.
-    func adoptLocalBlocks() {
-        guard controller?.hasFullAccess == true,
-              let local = UserDefaults.standard.stringArray(forKey: Self.localBlockedKey), !local.isEmpty else { return }
-        var shared = SharedStore.shared.keyboardPreferences
-        shared.blockedWords += local.filter { !shared.blockedWords.contains($0) }
-        SharedStore.shared.keyboardPreferences = shared
-        preferences.blockedWords = shared.blockedWords
-        UserDefaults.standard.removeObject(forKey: Self.localBlockedKey)
-    }
-
-    /// Holding a suggested word offers to block it; typed letters and
-    /// Text Replacements are the user's own.
-    func offerBlock(_ suggestion: Suggestion) {
-        guard suggestion.kind == .word || suggestion.kind == .autocorrection else { return }
-        blockOffer = suggestion.text
-    }
-
-    /// The word is never suggested, corrected to or slid to again, and is
-    /// forgotten if it was learned.
-    func block(_ word: String) {
-        let key = TypingEngine.key(of: word)
-        if controller?.hasFullAccess == true {
-            var shared = SharedStore.shared.keyboardPreferences
-            if !shared.blockedWords.contains(key) { shared.blockedWords.append(key) }
-            SharedStore.shared.keyboardPreferences = shared
-            preferences.blockedWords = shared.blockedWords
-        } else {
-            let local = UserDefaults.standard.stringArray(forKey: Self.localBlockedKey) ?? []
-            UserDefaults.standard.set(local + [key], forKey: Self.localBlockedKey)
-        }
-        if var engine {
-            LearnedWords.forget(key, in: &engine.user)
-            if controller?.hasFullAccess == true { LearnedWords.publish(engine.user) }
-            self.engine = engine
-        }
-        blockOffer = nil
-        syncSwipeWords()
-        refresh()
-    }
-
-    // MARK: - Delete slide
-
-    /// The press already deleted a character, a word or a held run; the
-    /// slide starts by putting that back, so sliding back to the key undoes
-    /// everything.
-    func deleteSlideBegan() {
-        guard emojiQuery == nil, let proxy, let restore = deleteRestore else { return }
-        deleteRestore = nil
-        apply(restore)
-        deleteSlide = (proxy.documentContextBeforeInput ?? "", 0)
-    }
-
-    /// Removes `steps` words or characters from where the slide began,
-    /// putting back what a slide back to the right no longer covers.
-    func deleteSlid(steps: Int) {
-        guard let slide = deleteSlide else { return }
-        let characters = Array(slide.source)
-        let target = preferences.deleteSlide == .characters ? min(steps, characters.count) : Self.length(ofLast: steps, wordsIn: characters)
-        if target > slide.removed {
-            deleteBack(target - slide.removed)
-        } else if target < slide.removed {
-            typeText(String(characters[(characters.count - slide.removed)..<(characters.count - target)]))
-        }
-        deleteSlide?.removed = target
-    }
-
-    func deleteSlideEnded() {
-        deleteSlide = nil
-        slid = nil
-        pendingSpace = false
-        finishEdit()
-    }
+    // MARK: - Edit panel
 
     private static func length(ofLast words: Int, wordsIn characters: [Character]) -> Int {
         var index = characters.count
@@ -163,8 +67,6 @@ extension TypingController {
         }
         return characters.count - index
     }
-
-    // MARK: - Edit panel
 
     func moveCursor(_ move: CursorMove) {
         guard let proxy else { return }
@@ -181,10 +83,8 @@ extension TypingController {
         }
         guard offset != 0 else { return }
         proxy.adjustTextPosition(byCharacterOffset: offset)
-        pendingSpace = false
-        slid = nil
         lastEdit = nil
-        editGeneration &+= 1
+        editedOutsideKeys()
     }
 
     var hasSelection: Bool { !(proxy?.selectedText ?? "").isEmpty }
@@ -198,17 +98,14 @@ extension TypingController {
         guard cut else { return }
         checkpoint(.other)
         deleteBack()
-        finishEdit()
+        editedOutsideKeys()
     }
 
     func paste() {
         guard canUsePasteboard, let text = UIPasteboard.general.string, !text.isEmpty else { return }
         checkpoint(.other)
-        if pendingSpace { typeText(" ") }
-        pendingSpace = false
-        slid = nil
         typeText(text)
-        finishEdit()
+        editedOutsideKeys()
     }
 
     // MARK: - Undo
@@ -217,8 +114,6 @@ extension TypingController {
     /// each other action.
     func checkpoint(_ kind: EditKind) {
         guard let proxy else { return }
-        editGeneration &+= 1
-        if kind != .deleting { deleteRestore = nil }
         let before = proxy.documentContextBeforeInput ?? ""
         let wordStart = before.isEmpty || before.last!.isWhitespace
         if undoStack.isEmpty || kind == .other || kind != lastEdit || (kind == .typing && wordStart) {
@@ -245,18 +140,8 @@ extension TypingController {
         guard let proxy else { return }
         for _ in 0..<edit.remove { proxy.deleteBackward() }
         if !edit.append.isEmpty { proxy.insertText(edit.append) }
-        deleteRestore = nil
-        editGeneration &+= 1
-        slid = nil
-        pendingSpace = false
-        corrected = nil
         lastEdit = nil
-        finishEdit()
-    }
-
-    func apply(_ edit: TextEdit) {
-        deleteBack(edit.remove)
-        if !edit.append.isEmpty { typeText(edit.append) }
+        editedOutsideKeys()
     }
 
     /// Types `text` over the selection, if any, and records the edit.
@@ -281,6 +166,5 @@ extension TypingController {
             undoStack[undoStack.count - 1].undo.addReverse(deleted: deleted, inserted: inserted)
             undoStack[undoStack.count - 1].redo.add(removing: deleted.count, typing: inserted)
         }
-        deleteRestore?.addReverse(deleted: deleted, inserted: inserted)
     }
 }

@@ -41,31 +41,9 @@ repository's Apache 2.0 license. See `App/Resources/Sounds/ATTRIBUTION.md`.
 
 ## Keyboard data
 
-`scripts/generate-keyboard-data.py` builds `iOS/Keyboard/Resources/lexicon.bin`
-and `emoji.txt` from these files, pinned by commit in the script.
-
-### SymSpell frequency dictionaries
-
-- Files: `frequency_dictionary_en_82_765.txt` (word counts) and
-  `frequency_bigramdictionary_en_243_342.txt` (word-pair counts), from
-  [wolfgarbe/SymSpell](https://github.com/wolfgarbe/SymSpell) at `91fe939`
-- License: MIT, Copyright (c) 2018 Wolf Garbe. The counts derive from Google
-  Books Ngram data (CC BY 3.0).
-
-### SCOWL / Hunspell en_US
-
-- Used for the capitalized spelling of names and brands ("iPhone", "Monday")
-  and which contractions are words. `index.dic` and its affix rules,
-  `index.aff`, from
-  [wooorm/dictionaries](https://github.com/wooorm/dictionaries) at `8cfea40`.
-- License: the SCOWL copyright and permission notice, Copyright 2000-2018 by
-  Kevin Atkinson, with the Ispell BSD license for the parts it derives from.
-
-### List of Dirty, Naughty, Obscene and Otherwise Bad Words
-
-- Words on it stay valid but are never suggested. From
-  [LDNOOBW](https://github.com/LDNOOBW/List-of-Dirty-Naughty-Obscene-and-Otherwise-Bad-Words) at `5faf2ba`.
-- License: Creative Commons Attribution 4.0 International.
+`scripts/generate-keyboard-data.py` builds `iOS/Keyboard/Resources/emoji.txt`
+and `emoji-words.txt`, for VoiceiQ's emoji panel and its search, from these
+files, pinned in the script.
 
 ### Unicode emoji
 
@@ -75,9 +53,10 @@ and `emoji.txt` from these files, pinned by commit in the script.
 
 ### gemoji (emoji names)
 
-- `emoji-words.txt` and `emoji-shortcuts.txt`: names, aliases and tags from
-  GitHub's [gemoji](https://github.com/github/gemoji) `db/emoji.json`, as
-  FUTO Keyboard ships it (`java/res/raw/gemoji.json` at `31e720dd`).
+- `emoji-words.txt`: names, aliases and tags from GitHub's
+  [gemoji](https://github.com/github/gemoji) `db/emoji.json`, as the copy at
+  futo-org/android-keyboard `java/res/raw/gemoji.json` (commit `31e720dd`)
+  ships it.
 - License: MIT, Copyright (c) 2019 GitHub, Inc.
 
 ## Hex keyboard (iPhone keyboard, slide to type and predictions)
@@ -146,50 +125,6 @@ contributors. `scripts/sync-hex-keyboard.sh` copies them, unmodified, into
   Hex fine-tuned on generated data, from a base model licensed under the
   Apache License 2.0. The vocabulary is that BERT model's English uncased
   WordPiece vocabulary (Apache 2.0).
-
-## FUTO Swipe (iPhone keyboard, slide to type and predictions)
-
-The keyboard extension links FUTO's swipe library, which is GPL-3.0. **The
-keyboard extension as built and distributed is therefore licensed under the
-GNU General Public License v3.0**; its complete source is this repository
-plus the pinned library commit below, and `scripts/build-futo-swipe.sh`
-rebuilds the prebuilt libraries from them. The rest of this repository keeps
-its Apache 2.0 license, which is compatible with GPL-3.0.
-
-### swipe-library
-
-- Files: `iOS/Vendor/FUTOSwipe/` (headers and static libraries built from the
-  source, unmodified); used by `iOS/Keyboard/Sources/Swipe/`.
-- Source: [keyboard/swipe-library](https://gitlab.futo.org/keyboard/swipe-library)
-  at `e8ade0e03bc18e9609e1f56afbd4394049185a99`.
-- License: GNU General Public License v3.0, Copyright FUTO Holdings, Inc.
-  Full text in `iOS/Vendor/FUTOSwipe/LICENSE`.
-- Linked into the same libraries, from ExecuTorch v1.6.0 (the library's
-  submodule moved forward from its pinned v1.2.0): ExecuTorch (BSD 3-Clause, Meta Platforms), XNNPACK
-  (BSD 3-Clause, Google and Facebook), cpuinfo and pthreadpool (BSD 2-Clause),
-  KleidiAI (Apache 2.0, Arm), flatcc runtime (Apache 2.0).
-
-### FUTO Swipe models
-
-- Files: `iOS/Keyboard/Resources/swipe/` `honorable_sturgeon` (encoder, its int8
-  `model_int8.pte`),
-  `magic_macaw` (QWERTY decoder), `chosen_planarian` (context model, which
-  replaced `hungry_jellyfish` on 2026-11-05 and also ranks the suggestion
-  bar's predictions and completions), and `scoring.json` (the scoring
-  weights for these models), unmodified.
-- Source: [futo-org/futo-swipe](https://huggingface.co/futo-org/futo-swipe) at
-  `0a9a44bbe4d5b8aa8d1ff579ffc40d4861ae2467`.
-- License: FUTO Model Weights License 1.0, in
-  `iOS/Keyboard/Resources/swipe/LICENSE.md`. It requires a visible "powered by
-  FUTO Swipe" notice, which is the footer of Settings › Typing.
-
-### Swipe dictionary
-
-- File: `iOS/Keyboard/Resources/swipe/words.trie`, built by
-  `scripts/generate-swipe-trie.py` from AOSP's `en_US_wordlist.combined.gz` as
-  FUTO Keyboard ships it (futo-org/android-keyboard at `31e720dd`), without
-  the words it marks offensive or not a word.
-- License: Apache 2.0, Copyright The Android Open Source Project.
 
 ## Adapted source
 

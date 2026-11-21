@@ -2,7 +2,7 @@ import SwiftUI
 import UIKit
 import VoiceIQBridge
 
-private enum KeyboardPalette {
+enum KeyboardPalette {
     static let accentUIColor = UIColor { traits in
         traits.userInterfaceStyle == .dark
             ? UIColor(red: 0.341, green: 0.525, blue: 0.941, alpha: 1)
@@ -35,20 +35,21 @@ struct KeyboardView: View {
     }
 
     /// The mini keyboard's keys: only typing on a text field. Panels, the
-    /// voice screen, emoji search, which types letters, and the number pad
-    /// (reachable from emoji search) use the full height.
+    /// voice screen, emoji search, which types letters, and number pads use
+    /// the full height.
     private var showsMini: Bool {
-        typing.mini && panel == .keys && typing.emojiQuery == nil && !typing.field.isDigitPad && typing.page != .numpad
+        typing.mini && panel == .keys && typing.emojiQuery == nil && !typing.isDigitPad
     }
 
     static func miniBarHeight(compact: Bool) -> CGFloat { compact ? 44 : 58 }
+    static func barHeight(compact: Bool) -> CGFloat { compact ? 36 : 44 }
 
     var body: some View {
         VStack(spacing: 0) {
             Group {
                 if isLive { RecordingStrip(model: model) } else if showsMini { miniBar } else { topBar }
             }
-            .frame(height: showsMini ? Self.miniBarHeight(compact: typing.compact) : (typing.compact ? 36 : 44))
+            .frame(height: showsMini ? Self.miniBarHeight(compact: typing.compact) : Self.barHeight(compact: typing.compact))
             Group {
                 switch panel {
                 case .answer:
@@ -65,8 +66,12 @@ struct KeyboardView: View {
                     EmojiPanel(typing: typing)
                 case .edit:
                     EditPanel(typing: typing)
+                case .keys where showsMini:
+                    MiniKeys(typing: typing, showsGlobe: model.showsGlobeKey, controller: model.controller)
+                case .keys where typing.isDigitPad:
+                    DigitPad(typing: typing, showsGlobe: model.showsGlobeKey, controller: model.controller)
                 case .keys:
-                    KeysArea(typing: typing, mini: showsMini)
+                    KeysArea(typing: typing)
                 }
             }
             .frame(maxHeight: .infinity)
@@ -107,18 +112,16 @@ struct KeyboardView: View {
                     ModePicker(mode: $model.mode, locked: model.phase == .recording || model.phase == .processing)
                 case .keys where typing.emojiQuery != nil:
                     EmojiSearchBar(typing: typing)
-                case .keys where typing.blockOffer != nil:
-                    BlockWordChip(word: typing.blockOffer ?? "", block: { typing.block(typing.blockOffer ?? "") },
-                                  cancel: { typing.blockOffer = nil })
                 case .keys where showsOffer:
                     DictionaryOfferChip(offer: offer, selection: typing.selection)
-                case .keys:
-                    SuggestionStrip(suggestions: typing.suggestions, theme: typing.theme, pick: typing.pick, hold: typing.offerBlock)
                 default:
                     Color.clear
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            if panel == .keys, typing.emojiQuery == nil, !typing.isDigitPad {
+                BarButton(systemImage: "arrow.down.right.and.arrow.up.left", label: "Mini Keyboard", action: typing.toggleMini)
+            }
             if panel != .voice, typing.emojiQuery == nil {
                 BarButton(systemImage: panel == .edit ? "keyboard" : "character.cursor.ibeam",
                           label: panel == .edit ? "Keyboard" : "Edit") {
@@ -455,123 +458,3 @@ private struct MicBarButtonStyle: ButtonStyle {
     }
 }
 
-private struct KeyCapStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .background(
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(KeyboardPalette.key.opacity(configuration.isPressed ? 0.72 : 1))
-            )
-            .shadow(color: .black.opacity(0.28), radius: 0, y: 1)
-            .shadow(color: .black.opacity(0.14), radius: 4, y: 2)
-            .offset(y: configuration.isPressed ? 1 : 0)
-    }
-}
-
-private struct KeyCap: View {
-    var title: String?
-    var systemImage: String?
-    var label: String?
-    var enabled = true
-    let action: () -> Void
-
-    init(title: String, action: @escaping () -> Void) {
-        self.title = title
-        self.action = action
-    }
-
-    init(systemImage: String, label: String, enabled: Bool = true, action: @escaping () -> Void) {
-        self.systemImage = systemImage
-        self.label = label
-        self.enabled = enabled
-        self.action = action
-    }
-
-    var body: some View {
-        Button(action: action) {
-            Group {
-                if let systemImage { Image(systemName: systemImage) } else { Text(title ?? "") }
-            }
-            .font(.system(size: 16))
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-        }
-        .buttonStyle(KeyCapStyle())
-        .foregroundStyle(.primary)
-        .disabled(!enabled)
-        .opacity(enabled ? 1 : 0.4)
-        .accessibilityLabel(label ?? title ?? "")
-    }
-}
-
-/// A UIKit key that matches the SwiftUI keycaps: rounded, raised by a soft
-/// shadow, a shade darker while pressed.
-private func makeUIKitKey(symbol: String) -> UIButton {
-    var config = UIButton.Configuration.plain()
-    config.image = UIImage(systemName: symbol, withConfiguration: UIImage.SymbolConfiguration(pointSize: 17, weight: .regular))
-    config.baseForegroundColor = .label
-    config.background.backgroundColor = KeyboardPalette.keyUIColor
-    config.background.cornerRadius = 8
-    let button = UIButton(configuration: config)
-    button.layer.shadowColor = UIColor.black.cgColor
-    button.layer.shadowOpacity = 0.2
-    button.layer.shadowRadius = 2
-    button.layer.shadowOffset = CGSize(width: 0, height: 1)
-    button.configurationUpdateHandler = { button in
-        guard var config = button.configuration else { return }
-        config.background.backgroundColor = KeyboardPalette.keyUIColor.withAlphaComponent(button.isHighlighted ? 0.72 : 1)
-        button.configuration = config
-        button.transform = button.isHighlighted ? CGAffineTransform(translationX: 0, y: 1) : .identity
-    }
-    return button
-}
-
-private struct GlobeKey: UIViewRepresentable {
-    /// Weak: the controller owns this view.
-    weak var controller: KeyboardViewController?
-
-    func makeUIView(context: Context) -> UIButton {
-        let button = makeUIKitKey(symbol: "globe")
-        button.accessibilityLabel = "Next keyboard"
-        button.addTarget(controller, action: #selector(UIInputViewController.handleInputModeList(from:with:)), for: .allTouchEvents)
-        return button
-    }
-
-    func updateUIView(_ uiView: UIButton, context: Context) {}
-}
-
-private struct RepeatingKey: UIViewRepresentable {
-    let action: () -> Void
-
-    func makeCoordinator() -> Coordinator { Coordinator(action: action) }
-
-    func makeUIView(context: Context) -> UIButton {
-        let button = makeUIKitKey(symbol: "delete.left")
-        button.accessibilityLabel = "Delete"
-        button.addTarget(context.coordinator, action: #selector(Coordinator.down), for: .touchDown)
-        button.addTarget(context.coordinator, action: #selector(Coordinator.up), for: [.touchUpInside, .touchUpOutside, .touchCancel])
-        return button
-    }
-
-    func updateUIView(_ uiView: UIButton, context: Context) {
-        context.coordinator.action = action
-    }
-
-    final class Coordinator: NSObject {
-        var action: () -> Void
-        private var timer: Timer?
-
-        init(action: @escaping () -> Void) { self.action = action }
-
-        @objc func down() {
-            action()
-            timer = Timer.scheduledTimer(withTimeInterval: 0.45, repeats: false) { [weak self] _ in
-                self?.timer = Timer.scheduledTimer(withTimeInterval: 0.08, repeats: true) { _ in self?.action() }
-            }
-        }
-
-        @objc func up() {
-            timer?.invalidate()
-            timer = nil
-        }
-    }
-}

@@ -6,12 +6,11 @@ import Foundation
 enum EmojiData {
     /// The newest Emoji version this iOS draws; newer ones would show as empty
     /// boxes. Per Emojipedia's Apple changelogs: Emoji 15.1 arrived in iOS 17.4,
-    /// 16.0 in iOS 18.4, 17.0 in iOS 26.4. iOS 17.0 draws 15.0.
+    /// 16.0 in iOS 18.4, 17.0 in iOS 26.4. iOS 18.0 draws 15.1.
     private static let newestDrawn: Double = {
         if #available(iOS 26.4, *) { return 17.0 }
         if #available(iOS 18.4, *) { return 16.0 }
-        if #available(iOS 17.4, *) { return 15.1 }
-        return 15.0
+        return 15.1
     }()
 
     /// The data writes emoji newer than Emoji 15.0 with their version
@@ -52,16 +51,6 @@ enum EmojiData {
     /// Everything above, for recents saved where newer emoji were drawn.
     private static let offered = Set(groups.flatMap(\.emoji) + tones.values.joined())
 
-    /// The word that brings up an emoji while typing ("pizza" → 🍕), the
-    /// first this iOS draws when the best is too new.
-    private static let shortcuts: [Substring: String] = Dictionary(
-        lines("emoji-shortcuts").compactMap { line in
-            let parts = line.split(separator: "\t")
-            guard parts.count == 2, let emoji = parts[1].split(separator: " ").lazy.compactMap(drawable).first
-            else { return nil }
-            return (parts[0], emoji)
-        }, uniquingKeysWith: { a, _ in a })
-
     private static func lines(_ name: String) -> [Substring] {
         guard let url = Bundle.main.url(forResource: name, withExtension: "txt"),
               let text = try? String(contentsOf: url, encoding: .utf8) else { return [] }
@@ -80,13 +69,6 @@ enum EmojiData {
             if exact.count >= limit { break }
         }
         return Array((exact + prefixed).prefix(limit)).map(toned)
-    }
-
-    /// The emoji for a word just typed. Two-letter words ("it", "us") are
-    /// words, not flags.
-    static func shortcut(for word: String) -> String? {
-        guard word.count > 2 else { return nil }
-        return shortcuts[Substring(word.lowercased())].map(toned)
     }
 
     static func skinTones(of emoji: String) -> [String]? {
