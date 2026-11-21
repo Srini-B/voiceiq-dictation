@@ -39,6 +39,10 @@ final class TypingController: ObservableObject {
     var lastEdit: EditKind?
     /// The keys deleted in this run-loop turn (`insertText`).
     var deletedThisTurn = false
+    /// The undo steps before this turn's first delete, and what the turn
+    /// deleted, so a replacement typed in the same turn is its own undo step.
+    var undoBeforeTurn: [UndoStep]?
+    var turnDeletes: [String] = []
 
     weak var controller: UIInputViewController?
     var proxy: UITextDocumentProxy? { controller?.textDocumentProxy }
@@ -221,7 +225,9 @@ extension TypingController: @MainActor KeyboardTextTarget {
         let wordCharacter = text.count == 1 && (text.first?.isLetter == true || text.first?.isNumber == true)
         if deletedThisTurn {
             // A text replacement or a correction: the keys deleted what was
-            // typed and type its replacement in one go, one undo step.
+            // typed and type its replacement in one go, one undo step, apart
+            // from a Backspace run before it.
+            groupTurnDeletes()
             lastEdit = .other
         } else {
             checkpoint(wordCharacter ? .typing : .other)
@@ -237,12 +243,17 @@ extension TypingController: @MainActor KeyboardTextTarget {
             emojiQuery = query
             return
         }
-        checkpoint(.deleting)
-        deleteBack()
         if !deletedThisTurn {
             deletedThisTurn = true
-            DispatchQueue.main.async { [weak self] in self?.deletedThisTurn = false }
+            undoBeforeTurn = undoStack
+            turnDeletes = []
+            DispatchQueue.main.async { [weak self] in
+                self?.deletedThisTurn = false
+                self?.undoBeforeTurn = nil
+            }
         }
+        checkpoint(.deleting)
+        turnDeletes.append(deleteBack())
         refresh()
     }
 

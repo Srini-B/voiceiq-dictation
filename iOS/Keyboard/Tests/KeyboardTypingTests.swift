@@ -227,6 +227,22 @@ final class KeyboardTypingTests: XCTestCase {
         XCTAssertEqual(field.text, "Omw")
     }
 
+    /// A Backspace run right before a replacement stays its own undo step.
+    func testABackspaceBeforeAReplacementIsItsOwnUndoStep() {
+        open()
+        typing.setSupplementaryLexicon([("omw", "On my way!")])
+        type("so omwx")
+        RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+        tap(.delete)
+        RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+        type(" ")
+        XCTAssertEqual(field.text, "So On my way! ")
+        typing.undo()
+        XCTAssertEqual(field.text, "So omw")
+        typing.undo()
+        XCTAssertEqual(field.text, "So omwx")
+    }
+
     /// Undo replays edits before the cursor, so moving the cursor ends them.
     func testMovingTheCursorForgetsUndo() {
         open()
