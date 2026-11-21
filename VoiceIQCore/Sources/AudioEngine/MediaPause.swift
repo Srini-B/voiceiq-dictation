@@ -25,6 +25,10 @@ public final class MediaPause {
         }
     }
 
+    /// Every script runs here, one at a time and in the order asked, so the
+    /// play after one dictation can never land after the next one's pause.
+    nonisolated private static let scripts = DispatchQueue(label: "io.blue.voiceiq.media-pause", qos: .userInitiated)
+
     /// Players this paused, to play again on resume.
     private var paused: [Player] = []
     private var holding = false
@@ -37,11 +41,11 @@ public final class MediaPause {
         let running = Self.runningPlayers()
         guard !running.isEmpty else { return }
         let script = Self.pauseScript(for: running)
-        Task.detached(priority: .userInitiated) {
+        Self.scripts.async {
             let output = Self.run(script) ?? ""
             let players = output.split(separator: ",")
                 .compactMap { Player(rawValue: $0.trimmingCharacters(in: .whitespacesAndNewlines)) }
-            await self.adopt(players)
+            Task { @MainActor in self.adopt(players) }
         }
     }
 
@@ -70,7 +74,7 @@ public final class MediaPause {
             .map { "try\n  tell application \"\($0.rawValue)\" to play\nend try" }
             .joined(separator: "\n")
         guard !script.isEmpty else { return }
-        Task.detached(priority: .userInitiated) { _ = run(script) }
+        scripts.async { _ = run(script) }
     }
 
     nonisolated static func pauseScript(for players: [Player]) -> String {
