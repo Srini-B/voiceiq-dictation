@@ -21,6 +21,9 @@ struct KeyboardStopGate {
         guard stop.startID != nil || state == .warming else { return false }
         var stop = stop
         stop.startID = stop.startID ?? startedBy
+        // A stop for another start (one not begun yet) never displaces the
+        // stop waiting for the dictation in progress.
+        if stop.startID != startedBy, let held, held.isFresh(), held.startID == startedBy { return false }
         held = stop
         return takeHeldStop(state: state)
     }
