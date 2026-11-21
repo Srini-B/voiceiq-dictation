@@ -54,6 +54,22 @@ final class KeyboardModelTests: XCTestCase {
         XCTAssertNil(KeyboardModel.heldToPaste(offered: offered.id, current: offered, now: expired))
     }
 
+    /// The app handled the start and its stop between two refreshes, so the
+    /// last command it reports is the stop: the start counts as taken, and
+    /// the keyboard does not open VoiceiQ for it.
+    func testAHandledStopAcknowledgesItsStart() throws {
+        let model = KeyboardModel()
+        model.micTapped()
+        model.holdReleased()
+        let stop = try XCTUnwrap(store.commands.last)
+        XCTAssertTrue(model.waitingForApp)
+
+        store.handledCommandID = stop.id
+        model.appeared()
+        defer { model.disappeared() }
+        XCTAssertFalse(model.waitingForApp)
+    }
+
     /// A hold longer than a command's 30 s lifetime still ends its own dictation.
     func testALongHoldReleasedSendsAStopForItsStart() throws {
         let model = KeyboardModel()

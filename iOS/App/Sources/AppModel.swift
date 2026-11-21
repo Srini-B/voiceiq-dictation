@@ -310,11 +310,16 @@ final class AppModel: ObservableObject {
     private func drainCommands() {
         let commands = store.commands
         let start = commands.lastIndex { $0.id == store.handledCommandID }.map { $0 + 1 } ?? 0
+        var leftStarts: Set<UUID> = []
         for command in commands[start...] where command.isFresh() && !processed.contains(command.id) {
+            // A stop for a start left for the launch URL waits with it, so
+            // the keyboard never reads its acknowledgement as the start's.
+            if let startID = command.startID, leftStarts.contains(startID) { continue }
             // Without a warm session the mic is closed and cannot be opened
             // from the background. Leave the command for the launch URL the
             // keyboard opens next.
             if command.action == .start, !canStartInPlace {
+                leftStarts.insert(command.id)
                 if UIApplication.shared.applicationState != .active {
                     SessionDiagnostics.note("keyboard start left for the app (mic open: \(session.canRecordInBackground), needsForeground: \(needsForeground))")
                 }
