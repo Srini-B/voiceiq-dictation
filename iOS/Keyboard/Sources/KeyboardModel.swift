@@ -139,13 +139,14 @@ final class KeyboardModel: ObservableObject {
     /// started. One the app hasn't reported as recording yet (it is starting,
     /// warming, or the keyboard is switching to the app and back) gets a stop
     /// bound to its start command: the app applies it once that dictation
-    /// records, and never to another one.
+    /// records, and never to another one, even once it records.
     func holdReleased() {
-        if phase == .recording {
-            micTapped()
-        } else if let holdStart, holdStart.isFresh() {
+        if let holdStart, holdStart.isFresh() {
             self.holdStart = nil
+            if phase == .recording { UIImpactFeedbackGenerator(style: .medium).impactOccurred() }
             send(KeyboardCommand(action: .stop, mode: mode, startID: holdStart.id))
+        } else if phase == .recording {
+            micTapped()
         }
     }
 
