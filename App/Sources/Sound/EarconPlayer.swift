@@ -72,4 +72,73 @@ final class EarconPlayer {
         player.currentTime = 0
         player.play()
     }
+
+    /// Plays the start sound after `grace`, unless `retractStart` comes
+    /// first. The wait runs off the main thread, which `engine.start()` can
+    /// block for hundreds of ms on a Bluetooth mic right after the press.
+    func playStart(after grace: TimeInterval) {
+        guard enabled, let player = players[.start] else { return }
+        let token = startGate.arm()
+        nonisolated(unsafe) let start = player
+        DispatchQueue.global(qos: .userInteractive).asyncAfter(deadline: .now() + grace) { [startGate] in
+            guard startGate.fire(token) else { return }
+            start.currentTime = 0
+            start.play()
+        }
+    }
+
+    /// Drops a start sound still waiting out its grace, and fades one that
+    /// already sounds.
+    func retractStart() {
+        startGate.disarm()
+        retract(.start)
+    }
+
+    /// Drops a start sound still waiting, without touching one that plays.
+    func cancelPendingStart() {
+        startGate.disarm()
+    }
+
+    private let startGate = StartGate()
+
+    /// Takes back a sound that is still playing: a 20 ms fade instead of a
+    /// click, then a pause, never stop() (see warmOutputRoute).
+    private func retract(_ earcon: Earcon) {
+        guard let player = players[earcon], player.isPlaying else { return }
+        let volume = player.volume
+        player.setVolume(0, fadeDuration: 0.02)
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 30_000_000)
+            player.pause()
+            player.currentTime = 0
+            player.volume = volume
+        }
+    }
+}
+
+/// Which delayed start sound may still play. Read on a background queue.
+private final class StartGate: @unchecked Sendable {
+    private let lock = NSLock()
+    private var counter = 0
+    private var armed: Int?
+
+    func arm() -> Int {
+        lock.lock(); defer { lock.unlock() }
+        counter += 1
+        armed = counter
+        return counter
+    }
+
+    /// True once for the token still armed.
+    func fire(_ token: Int) -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        guard armed == token else { return false }
+        armed = nil
+        return true
+    }
+
+    func disarm() {
+        lock.lock(); defer { lock.unlock() }
+        armed = nil
+    }
 }
