@@ -28,7 +28,8 @@ struct KeyboardView: View {
 
     private var panel: Panel {
         if model.answer != nil { return .answer }
-        if !isLive, voiceOpen || model.phase == .recording || model.phase == .processing || model.waitingForApp { return .voice }
+        if !isLive, voiceOpen || model.phase == .recording || model.phase == .processing
+            || (model.waitingForApp && !typing.dictationKeyStarting) { return .voice }
         if typing.emojiQuery != nil { return .keys }
         if typing.showsEdit { return .edit }
         return typing.showsEmoji ? .emoji : .keys
@@ -77,6 +78,7 @@ struct KeyboardView: View {
             .frame(maxHeight: .infinity)
         }
         .onChange(of: showsMini, initial: true) { _, mini in typing.showsMini = mini }
+        .onChange(of: model.waitingForApp) { _, waiting in if !waiting { typing.dictationKeyStarting = false } }
         .onChange(of: model.phase) { old, new in
             // A finished session goes back to the keys.
             if old == .processing, new == .off || new == .warm { voiceOpen = false }

@@ -26,6 +26,10 @@ final class TypingController: ObservableObject {
     /// Nothing typed since the keyboard appeared, so the bar may show the
     /// Dictionary offer.
     @Published private(set) var typedSinceAppear = false
+    /// The Hex key started a dictation the app has not picked up yet. The keys
+    /// stay on screen meanwhile: swapping them for the voice panel would end
+    /// the key's touch, and lifting a hold could never stop the dictation.
+    @Published var dictationKeyStarting = false
     /// The text selected in the field, so the bar's Dictionary offer ends with
     /// the selection.
     @Published private(set) var selection = ""
@@ -84,6 +88,7 @@ final class TypingController: ObservableObject {
         showsEdit = false
         miniDigits = false
         typedSinceAppear = false
+        dictationKeyStarting = false
         undoStack = []
         redoStack = []
         lastEdit = nil
