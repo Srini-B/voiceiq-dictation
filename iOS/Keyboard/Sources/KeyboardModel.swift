@@ -238,7 +238,9 @@ final class KeyboardModel: ObservableObject {
     }
 
     func dismissAnswer() {
-        if let answer { store.insertedDeliveryID = answer.id }
+        // Only the app's delivery is acknowledged: a local or held answer
+        // must not overwrite the acknowledgement of one still in its window.
+        if let answer, answer.id == snapshot.delivery?.id { store.insertedDeliveryID = answer.id }
         answer = nil
     }
 

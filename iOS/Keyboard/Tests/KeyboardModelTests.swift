@@ -85,6 +85,13 @@ final class KeyboardModelTests: XCTestCase {
         XCTAssertEqual(model.answer?.text, held.text)
         XCTAssertNil(store.heldDictation, "handled once")
         XCTAssertNil(store.keyboardDelivery, "an answer is not Paste last's text")
+
+        // Dismissing it leaves the app's last acknowledged delivery alone.
+        let acknowledged = UUID()
+        store.insertedDeliveryID = acknowledged
+        model.dismissAnswer()
+        XCTAssertNil(model.answer)
+        XCTAssertEqual(store.insertedDeliveryID, acknowledged)
     }
 
     /// A hold longer than a command's 30 s lifetime still ends its own dictation.
