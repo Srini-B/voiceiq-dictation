@@ -19,9 +19,7 @@ final class KeyboardViewController: UIInputViewController {
         // The Hex key starts VoiceiQ's dictation, as the mic button does; lifting
         // it after a hold finishes the dictation it started.
         typing.dictation.onDictateTap = { [weak model] in model?.micTapped() }
-        typing.dictation.onStopTap = { [weak model] in
-            if model?.phase == .recording { model?.micTapped() }
-        }
+        typing.dictation.onStopTap = { [weak model] in model?.holdReleased() }
         typing.dictation.onOpenURL = { [weak self] url in self?.openURL(url) }
         // UIKit calls back on its own queue.
         requestSupplementaryLexicon { @Sendable [weak typing] lexicon in

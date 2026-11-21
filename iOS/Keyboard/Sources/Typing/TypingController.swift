@@ -96,7 +96,9 @@ final class TypingController: ObservableObject {
     func readField() {
         dictation.needsGlobeKey = controller?.needsInputModeSwitchKey ?? true
         let type = proxy?.keyboardType ?? .default
-        isDigitPad = KeyboardFieldRouting.route(for: type) == .handOff
+        // Hex hands every number-like field off; a name-and-phone field still
+        // needs letters, so it keeps Hex's keys.
+        isDigitPad = type != .namePhonePad && KeyboardFieldRouting.route(for: type) == .handOff
     }
 
     /// iOS ends a keyboard over its memory limit and shows its own.
