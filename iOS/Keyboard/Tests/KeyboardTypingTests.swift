@@ -182,6 +182,18 @@ final class KeyboardTypingTests: XCTestCase {
         XCTAssertEqual(field.text, "Hello there")
     }
 
+    /// iOS makes a new controller each time the keyboard appears; the old one
+    /// and Hex's keys must go when it lets go of them.
+    func testTheTypingControllerGoesWithItsKeyboard() {
+        weak var released: TypingController?
+        autoreleasepool {
+            let typing = TypingController()
+            _ = typing.makeKeyboard()
+            released = typing
+        }
+        XCTAssertNil(released)
+    }
+
     /// The bar shows "Add to Dictionary" while `selection` holds a word.
     /// iOS does not report the keyboard's own typing and deletes, so each
     /// one that ends the selection has to end it here too, or the offer stays.
