@@ -201,6 +201,20 @@ final class ReplayedResponseTests: XCTestCase {
 
     /// A job sent to one provider and answered after the user switched to
     /// the other is read as the first provider's answer.
+    /// Only a client that opts in keeps the request it sent, recording and
+    /// all: the app's long-lived clients never hold one.
+    func testOnlyAnOptedInClientKeepsTheRequestItSent() async {
+        let closed = URL(string: "http://127.0.0.1:9")!
+        for keeps in [false, true] {
+            let client = GeminiClient(apiKey: { "key" }, keepsSentTranscription: keeps)
+            _ = try? await client.transcribeInteraction(audio: Data(count: 4_000), model: "m", endpoint: closed,
+                                                        mode: .verbatim, customVocabulary: [], deadline: 2)
+            XCTAssertEqual(client.sentTranscription != nil, keeps)
+            client.forgetSentTranscription()
+            XCTAssertNil(client.sentTranscription)
+        }
+    }
+
     func testTheAnswerIsReadAsTheProviderTheJobWentTo() async throws {
         let inbox = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: inbox) }

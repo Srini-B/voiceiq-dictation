@@ -88,7 +88,8 @@ final class KeyboardDictation: ObservableObject {
         openAIKey: { KeychainStore.loadOpenAIKey() },
         openAIConfig: { SettingsStore().openAIConfig },
         provider: { SettingsStore().preferredProvider },
-        elevenLabsKey: { KeychainStore.loadKey(.elevenLabs) }
+        elevenLabsKey: { KeychainStore.loadKey(.elevenLabs) },
+        keepsSentTranscription: true
     )
 
     var isArmed: Bool { job?.armed == true }
@@ -324,6 +325,10 @@ final class KeyboardDictation: ObservableObject {
             }
             let finished = job
             job = nil
+            // The request kept for a hand-off holds the whole recording:
+            // released once this dictation is handed off or over, before the
+            // next memory check.
+            defer { client.forgetSentTranscription() }
             recordingStartedAt = nil
             phase = .off
             bars = LevelBars()

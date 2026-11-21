@@ -57,15 +57,21 @@ public actor GeminiClient {
     /// Read per call, so flipping the provider in Settings takes effect on
     /// the next request without rebuilding the client.
     let provider: @Sendable () -> ModelProvider
+    /// Keeps the first transcription request it sends (`sentTranscription`),
+    /// audio and all, until `forgetSentTranscription()`. Only the iPhone
+    /// keyboard needs it, to hand that request to its background session.
+    nonisolated let keepsSentTranscription: Bool
 
     public init(
         apiKey: @escaping @Sendable () -> String?,
         openAIKey: @escaping @Sendable () -> String? = { nil },
         openAIConfig: @escaping @Sendable () -> OpenAIConfig = { OpenAIConfig() },
         provider: @escaping @Sendable () -> ModelProvider = { .gemini },
-        elevenLabsKey: @escaping @Sendable () -> String? = { nil }
+        elevenLabsKey: @escaping @Sendable () -> String? = { nil },
+        keepsSentTranscription: Bool = false
     ) {
         self.session = Self.makeSession()
+        self.keepsSentTranscription = keepsSentTranscription
         self.apiKey = apiKey
         self.openAIKey = openAIKey
         self.elevenLabsKey = elevenLabsKey
@@ -214,7 +220,7 @@ public actor GeminiClient {
         if stage == .transcribe, Self.capturesTranscription {
             throw CapturedTranscriptionRequest(request: request, endpoint: via)
         }
-        if stage == .transcribe, Self.replayedTranscription == nil {
+        if stage == .transcribe, keepsSentTranscription, Self.replayedTranscription == nil {
             let sent = CapturedTranscriptionRequest(request: request, endpoint: via)
             firstTranscription.withLock { if $0 == nil { $0 = sent } }
         }
