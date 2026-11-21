@@ -134,6 +134,9 @@ public enum TypingInserter {
                 return .unsupported
             }
             let app = targetPID.map(AXUIElementCreateApplication)
+            // An app that stops answering must not hold the main actor; a
+            // timeout reads as a changed window and stops the typing.
+            if let app { AXUIElementSetMessagingTimeout(app, 0.25) }
             let startWindow = app.flatMap(focusedWindow(of:))
             if app != nil, startWindow == nil {
                 // Without the window there is no telling when the user moves
