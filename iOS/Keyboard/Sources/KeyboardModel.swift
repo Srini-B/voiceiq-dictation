@@ -178,8 +178,13 @@ final class KeyboardModel: ObservableObject {
     /// words are not lost while the touch becomes a tap or a hold.
     func dictationKeyPressed() {
         guard hasFullAccess, phase == .off || phase == .warm, !appAlive, local.blocker() == nil else { return }
-        local.arm(mode: mode, selectedText: mode == .ask ? controller?.textDocumentProxy.selectedText : nil,
-                  host: controller.flatMap(HostAppResolver.currentHost(for:)),
+        let mode = self.mode
+        let context = mode == .ask ? controller?.textDocumentProxy.selectedText : nil
+        let host = controller.flatMap(HostAppResolver.currentHost(for:))
+        // This touch's own fallback: a WebKit microphone that does not start
+        // sends this dictation through the app.
+        local.onStartFailed = { [weak self] in self?.startThroughApp(mode: mode, context: context, host: host) }
+        local.arm(mode: mode, selectedText: context, host: host,
                   document: controller?.textDocumentProxy.fieldID,
                   textBefore: controller?.textDocumentProxy.documentContextBeforeInput)
     }
@@ -328,7 +333,7 @@ final class KeyboardModel: ObservableObject {
         switch held.delivery(in: proxy?.fieldID, host: controller.flatMap(HostAppResolver.currentHost(for:)),
                              textBefore: proxy?.documentContextBeforeInput) {
         case .insert:
-            store.heldHandledID = held.id
+            store.markHeldHandled(held)
             offer(nil)
             if held.mode == .ask {
                 answer = Delivery(mode: .ask, text: held.text, hostBundleID: nil)
@@ -352,7 +357,7 @@ final class KeyboardModel: ObservableObject {
     /// The strip's offer was tapped.
     func pasteHeld() {
         guard let held = store.heldDictation else { return }
-        store.heldHandledID = held.id
+        store.markHeldHandled(held)
         offer(nil)
         insert(held.text)
     }

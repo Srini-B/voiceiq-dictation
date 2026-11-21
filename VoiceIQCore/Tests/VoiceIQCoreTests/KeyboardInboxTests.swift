@@ -112,6 +112,25 @@ final class HeldDictationTests: XCTestCase {
         XCTAssertEqual(held().delivery(in: UUID(), at: finished.addingTimeInterval(601)), .expired)
     }
 
+    /// One result from the keyboard and one from the app: taking either
+    /// never brings the other back once it was taken too.
+    func testEachHeldResultIsTakenOnce() throws {
+        let suite = "held-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let store = SharedStore(defaults: defaults)
+        let fromKeyboard = HeldDictation(text: "keyboard", mode: .dictate, document: field, finishedAt: finished)
+        let fromApp = HeldDictation(text: "app", mode: .dictate, document: field, finishedAt: finished.addingTimeInterval(5))
+        store.heldByKeyboard = fromKeyboard
+        store.heldByApp = fromApp
+
+        XCTAssertEqual(store.heldDictation?.text, "app", "the newer one first")
+        store.markHeldHandled(fromApp)
+        XCTAssertEqual(store.heldDictation?.text, "keyboard")
+        store.markHeldHandled(fromKeyboard)
+        XCTAssertNil(store.heldDictation, "the app's result came back after the keyboard's was taken")
+    }
+
     /// iOS names the field anew when its app comes back to the front.
     func testRenamedFieldInTheSameAppWithTheSameTextIsTyped() {
         XCTAssertEqual(held().delivery(in: UUID(), host: "com.apple.MobileSMS", textBefore: "Dear Sam, ",

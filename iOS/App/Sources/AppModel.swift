@@ -158,6 +158,9 @@ final class AppModel: ObservableObject {
         }
         transfers.setEventsDone { [weak self] in
             Task { @MainActor in
+                // iOS may suspend the app once `completion` runs: every job
+                // the session answered is finished first.
+                for finish in self?.keyboardJobFinishes.values.map({ $0 }) ?? [] { await finish.value }
                 await self?.importKeyboardDictations(takeOverJobs: false)
                 completion()
             }
@@ -166,7 +169,19 @@ final class AppModel: ObservableObject {
         SessionDiagnostics.note("woken for the keyboard's background transfers")
     }
 
+    /// Finishes running now, by job: a second request for the same job
+    /// (iOS's event, the launch import, the wake-up) waits for the first.
+    private var keyboardJobFinishes: [UUID: Task<Void, Never>] = [:]
+
     private func finishKeyboardJob(_ id: UUID) async {
+        if let running = keyboardJobFinishes[id] { return await running.value }
+        let finish = Task { await self.runKeyboardJob(id) }
+        keyboardJobFinishes[id] = finish
+        await finish.value
+        keyboardJobFinishes[id] = nil
+    }
+
+    private func runKeyboardJob(_ id: UUID) async {
         guard let job = KeyboardJob.read(id) else { return }
         switch await KeyboardTransfers.finish(job, service: transcription) {
         case .busy:

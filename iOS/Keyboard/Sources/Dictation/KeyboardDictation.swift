@@ -66,8 +66,6 @@ final class KeyboardDictation: ObservableObject {
         /// The keyboard hid: the result is held instead of typed.
         var interrupted = false
         var processingSince: Date?
-        /// The transcription request, made ready when the keyboard hid.
-        var request: URLRequest?
     }
 
     private var mic: WebMicCapture?
@@ -149,6 +147,7 @@ final class KeyboardDictation: ObservableObject {
         case .ask: .askAnything(selectedText: selectedText)
         }
         job = Job(mode: mode, selectedText: selectedText, host: host, document: document, textBefore: textBefore, armed: armed)
+        client.forgetSentTranscription()
         guard coordinator.handle(.begin, mode: dictationMode) else {
             KeyboardLog.note("in-keyboard start refused: \(coordinator.coachingHint ?? "busy")")
             job = nil
@@ -199,7 +198,6 @@ final class KeyboardDictation: ObservableObject {
             coordinator?.handle(.finalize)
         case .finalizing, .transcribing, .inserting:
             KeyboardLog.note("keyboard hidden while transcribing: holding its text for the next keyboard")
-            prepareBackgroundRequest()
         default:
             return
         }
@@ -304,10 +302,7 @@ final class KeyboardDictation: ObservableObject {
         case .finalizing, .transcribing, .inserting:
             recordingStartedAt = nil
             phase = .processing
-            if job?.processingSince == nil {
-                job?.processingSince = Date()
-                if job?.interrupted == true { prepareBackgroundRequest() }
-            }
+            if job?.processingSince == nil { job?.processingSince = Date() }
         case .idle, .done, .cancelled, .failed:
             // A new dictation passes from the last one's end through idle;
             // only the first terminal state ends a job.
@@ -393,16 +388,6 @@ final class KeyboardDictation: ObservableObject {
         expiring = nil
     }
 
-    /// Builds the transcription request now, through the same service, so
-    /// handing it over later needs no work when time is short.
-    private func prepareBackgroundRequest() {
-        guard let job, let folder = job.folder, job.request == nil else { return }
-        Task {
-            let request = await captureRequest(folder: folder, job: job)
-            if self.job?.folder == folder { self.job?.request = request }
-        }
-    }
-
     /// The request the service would send for this recording, not sent.
     private func captureRequest(folder: URL, job: Job) async -> URLRequest? {
         let service = GeminiTranscriptionService(client: client)
@@ -427,10 +412,11 @@ final class KeyboardDictation: ObservableObject {
     /// session it goes to the app's retry queue as before.
     private func queueOffline(_ job: Job) {
         guard let folder = job.folder else { return }
-        // Handed off: iOS is about to suspend the keyboard, so the prepared
-        // request goes out now.
-        if let request = job.request {
-            if !send(request, job: job, reason: "keyboard suspended") { hand(over: folder) }
+        // The request this keyboard already sent, byte for byte: nothing is
+        // encoded again. When handed off, iOS is about to suspend the
+        // keyboard, so it goes out now.
+        if let request = client.sentTranscription {
+            if !send(request, job: job, reason: job.interrupted ? "keyboard suspended" : "offline") { hand(over: folder) }
             return
         }
         Task {
@@ -461,12 +447,12 @@ final class KeyboardDictation: ObservableObject {
 
     /// iOS's time ran out before the transcription answered: the coordinator
     /// stops its own request (and its retry), so no answer can arrive here,
-    /// and ends as queued; `stateChanged` then sends the prepared request
+    /// and ends as queued; `stateChanged` then hands the request it sent
     /// from the background session. The dictation is sent once: when the
     /// provider already answered, or the audio went out live, nothing is
     /// handed over and the keyboard finishes it when iOS resumes it.
     private func timeRanOut() {
-        guard let job, phase == .processing, job.request != nil, let coordinator else { return }
+        guard job != nil, phase == .processing, client.sentTranscription != nil, let coordinator else { return }
         KeyboardLog.note("keyboard's time ran out while transcribing")
         if !coordinator.handOffTranscription() {
             KeyboardLog.note("not handed over: the provider already has this dictation")

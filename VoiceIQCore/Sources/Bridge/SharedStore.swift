@@ -186,16 +186,24 @@ public final class SharedStore: @unchecked Sendable {
 
     /// The newest held result no keyboard has typed or dismissed.
     public var heldDictation: HeldDictation? {
-        let handled = heldHandledID
+        let handled = Set(heldHandledIDs)
         return [heldByKeyboard, heldByApp].compactMap { $0 }
-            .filter { $0.id != handled }
+            .filter { !handled.contains($0.id) }
             .max { $0.finishedAt < $1.finishedAt }
     }
 
-    /// The last held result a keyboard typed or dismissed. Writer: keyboard.
-    public var heldHandledID: UUID? {
-        get { defaults.string(forKey: Key.heldHandledID).flatMap(UUID.init(uuidString:)) }
-        set { defaults.set(newValue?.uuidString, forKey: Key.heldHandledID) }
+    /// A keyboard typed or dismissed `held`. The recent ones are all
+    /// remembered, so taking the app's result never brings the keyboard's
+    /// back, or the other way round. Writer: keyboard.
+    public func markHeldHandled(_ held: HeldDictation) {
+        let ids = ([held.id] + heldHandledIDs).prefix(Self.heldHandledLimit)
+        defaults.set(ids.map(\.uuidString), forKey: Key.heldHandledID)
+    }
+
+    private static let heldHandledLimit = 8
+
+    private var heldHandledIDs: [UUID] {
+        (defaults.stringArray(forKey: Key.heldHandledID) ?? []).compactMap(UUID.init(uuidString:))
     }
 
     // MARK: - Dictionary

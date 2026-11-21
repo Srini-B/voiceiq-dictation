@@ -188,9 +188,11 @@ The keyboard asks iOS for more time with
 out (about 30 s in the Simulator) while the transcription is still running,
 the keyboard hands the request to its background `URLSession`
 (`KeyboardTransfers`, identifier `io.blue.voiceiq.keyboard.transcribe`,
-`sharedContainerIdentifier` = the App Group). The request is captured from
-the normal pipeline (`GeminiClient.capturesTranscription`); its body and a
-`KeyboardJob` go to `KeyboardInbox/jobs` as atomic files. iOS sends it, saves
+`sharedContainerIdentifier` = the App Group). The request is the one the
+keyboard already sent, byte for byte (`GeminiClient.sentTranscription`), so
+nothing is encoded twice; an offline dictation that never sent one builds
+it through the normal pipeline (`GeminiClient.capturesTranscription`). Its
+body and a `KeyboardJob` go to `KeyboardInbox/jobs` as atomic files. iOS sends it, saves
 the answer and launches VoiceiQ in the background through
 `application(_:handleEventsForBackgroundURLSession:completionHandler:)`. The
 app reconnects to the session, replays the answer through the same service

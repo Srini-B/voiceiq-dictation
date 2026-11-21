@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 /// Endpoint + model configuration, overridable in Settings (preview models get
 /// renamed; never hard-fail on a model name).
@@ -44,6 +45,8 @@ public extension GeminiClient {
 /// so streaming buys nothing but parsing complexity.
 public actor GeminiClient {
     let session: URLSession
+    /// See `sentTranscription`.
+    nonisolated let firstTranscription = OSAllocatedUnfairLock<URLRequest?>(initialState: nil)
     private let apiKey: @Sendable () -> String?
     let openAIKey: @Sendable () -> String?
     let elevenLabsKey: @Sendable () -> String?
@@ -208,6 +211,10 @@ public actor GeminiClient {
 
         if stage == .transcribe, Self.capturesTranscription {
             throw CapturedTranscriptionRequest(request: request)
+        }
+        if stage == .transcribe, Self.replayedTranscription == nil {
+            let sent = request
+            firstTranscription.withLock { if $0 == nil { $0 = sent } }
         }
         let data: Data
         let response: URLResponse

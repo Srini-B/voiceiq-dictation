@@ -15,6 +15,17 @@ extension GeminiClient {
     /// The answer to the first transcription request, used instead of
     /// sending it. Later transcription requests (a retry) go out as usual.
     @TaskLocal public static var replayedTranscription: ReplayedResponse?
+
+    /// The first transcription request this client sent since
+    /// `forgetSentTranscription()`: what the iPhone keyboard hands to its
+    /// background session, byte for byte the request it sent itself, so
+    /// nothing is encoded twice. A recording longer than one chunk sends
+    /// more; the first is the one the replay answers.
+    public nonisolated var sentTranscription: URLRequest? { firstTranscription.withLock { $0 } }
+
+    public nonisolated func forgetSentTranscription() {
+        firstTranscription.withLock { $0 = nil }
+    }
 }
 
 /// The request `post` would have sent: URL, headers (with the key) and body.

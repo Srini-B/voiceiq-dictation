@@ -26,8 +26,9 @@ away only for a while after each dictation.
   renamed field in the same app with the same text before the cursor,
   because iOS gives the field a new ID when its app returns.
 - **Background transcription without a second request path.** The keyboard
-  captures the request the normal service would send
-  (`GeminiClient.capturesTranscription`) and hands it to its own background
+  keeps the request it sent (`GeminiClient.sentTranscription`), or builds
+  it through the normal service when none went out
+  (`GeminiClient.capturesTranscription`), and hands it to its own background
   `URLSession` in the App Group. The app replays the saved answer through
   the same service (`GeminiClient.replayedTranscription`), so parsing,
   usage, the writing model and History behave as for a normal dictation.
