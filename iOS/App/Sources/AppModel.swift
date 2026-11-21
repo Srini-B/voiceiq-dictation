@@ -129,12 +129,18 @@ final class AppModel: ObservableObject {
     /// Adds the dictations the keyboard recorded and processed itself to
     /// History and the usage totals. One it left unfinished is recovered or
     /// queued like the app's own; a queued one is sent. In the foreground,
-    /// a job the background session has not answered is taken over and sent
-    /// by the retry queue.
+    /// a job the background session has not answered and no longer sends
+    /// (Background App Refresh off, the app force-quit) is taken over and
+    /// sent by the retry queue; one still uploading waits for its answer.
     func importKeyboardDictations(takeOverJobs: Bool) async {
-        for job in KeyboardJob.pending() {
+        let jobs = KeyboardJob.pending()
+        let uploading = takeOverJobs && jobs.contains { $0.answer() == nil }
+            ? await KeyboardTransfers.activeJobIDs(on: keyboardTransferSession()) : []
+        for job in jobs {
             if job.answer() != nil {
                 await finishKeyboardJob(job.id)
+            } else if uploading.contains(job.id) {
+                SessionDiagnostics.note("keyboard job \(job.id.uuidString.prefix(8)) still uploading; waiting for its answer")
             } else if takeOverJobs {
                 SessionDiagnostics.note("keyboard job \(job.id.uuidString.prefix(8)) taken over by the app")
                 job.takeOver()
@@ -153,10 +159,8 @@ final class AppModel: ObservableObject {
     /// it, finish each answered job (writing model, History, usage, iCloud)
     /// and hold its text for the next keyboard.
     func handleKeyboardTransfers(completion: @escaping @MainActor () -> Void) {
-        let transfers = KeyboardTransfers { [weak self] id in
-            Task { @MainActor in await self?.finishKeyboardJob(id) }
-        }
-        transfers.setEventsDone { [weak self] in
+        _ = keyboardTransferSession()
+        keyboardTransfers?.delegate.setEventsDone { [weak self] in
             Task { @MainActor in
                 // iOS may suspend the app once `completion` runs: every job
                 // the session answered is finished first.
@@ -165,8 +169,22 @@ final class AppModel: ObservableObject {
                 completion()
             }
         }
-        keyboardTransfers = (transfers, transfers.connect())
         SessionDiagnostics.note("woken for the keyboard's background transfers")
+    }
+
+    /// The app's one connection to the keyboard's background session, made
+    /// when iOS wakes the app for it or when the app checks what is still
+    /// uploading. Answers that arrive on it are finished here; the job claim
+    /// (`KeyboardJob.claim`) keeps a keyboard that also holds the answer from
+    /// finishing it twice.
+    private func keyboardTransferSession() -> URLSession {
+        if let keyboardTransfers { return keyboardTransfers.session }
+        let transfers = KeyboardTransfers { [weak self] id in
+            Task { @MainActor in await self?.finishKeyboardJob(id) }
+        }
+        let session = transfers.connect()
+        keyboardTransfers = (transfers, session)
+        return session
     }
 
     /// Finishes running now, by job: a second request for the same job

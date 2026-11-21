@@ -40,6 +40,17 @@ final class WebMicCapture: NSObject, AudioCapturing, @unchecked Sendable {
     /// page died), or nil once audio arrived.
     private(set) var startFailure: String?
     private var isCapturing = false
+    /// Numbers each capture. The page tags its messages with it, and each
+    /// `stop()` finishes the oldest capture not yet stopped: a capture
+    /// started while an earlier one's `stop()` is still on its way keeps its
+    /// file and its audio.
+    private var generation = 0
+    private var unstopped: [Int] = []
+    /// Results of captures a new `start` closed while their `stop()` waited.
+    private var closedResults: [Int: AudioCaptureResult] = [:]
+    /// Runs script in the page; tests replace it to drive the capture
+    /// without a microphone.
+    var runScript: @MainActor (String) -> Void = { _ in }
     private var sink: (@Sendable (Data) -> Void)?
     private var file: AVAudioFile?
     private var frames: Int64 = 0
@@ -64,6 +75,7 @@ final class WebMicCapture: NSObject, AudioCapturing, @unchecked Sendable {
         webView.alpha = 0.01
         webView.isUserInteractionEnabled = false
         webView.accessibilityElementsHidden = true
+        runScript = { [weak self] script in self?.webView.evaluateJavaScript(script) }
         load()
     }
 
@@ -81,7 +93,16 @@ final class WebMicCapture: NSObject, AudioCapturing, @unchecked Sendable {
     func start(writingTo url: URL) throws {
         try MainActor.assumeIsolated {
             guard isReady else { throw CocoaError(.featureUnsupported) }
-            file = try AVAudioFile(forWriting: url, settings: format.settings, commonFormat: .pcmFormatInt16, interleaved: true)
+            // An earlier capture whose stop() is still draining: it ends here,
+            // and its stop() gets its own result.
+            if isCapturing {
+                runScript("stopCapture(\(generation)); 0")
+                closedResults[generation] = finish()
+            }
+            let file = try AVAudioFile(forWriting: url, settings: format.settings, commonFormat: .pcmFormatInt16, interleaved: true)
+            self.file = file
+            generation += 1
+            unstopped.append(generation)
             frames = 0
             peak = 0
             writtenPeak = 0
@@ -91,18 +112,34 @@ final class WebMicCapture: NSObject, AudioCapturing, @unchecked Sendable {
             otherAudioAtStart = otherAudioAtStart || AVAudioSession.sharedInstance().isOtherAudioPlaying
             Self.mixWithOtherAudio()
             heartbeat = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
-                MainActor.assumeIsolated { _ = self?.webView.evaluateJavaScript("captureHeartbeat(); 0") }
+                MainActor.assumeIsolated { self?.runScript("captureHeartbeat(); 0") }
             }
-            webView.evaluateJavaScript("startCapture(); 0")
+            runScript("startCapture(\(generation)); 0")
         }
     }
 
     func stop() async -> AudioCaptureResult {
-        await MainActor.run { webView.evaluateJavaScript("stopCapture(); 0") }
+        let stopping = await MainActor.run {
+            let oldest = unstopped.isEmpty ? generation : unstopped.removeFirst()
+            runScript("stopCapture(\(oldest)); 0")
+            return oldest
+        }
         // Chunks the page posted before it stopped are still queued for the
         // main thread; let them reach the file.
         try? await Task.sleep(nanoseconds: 150_000_000)
-        return await MainActor.run { finish() }
+        return await MainActor.run {
+            if let closed = closedResults.removeValue(forKey: stopping) { return closed }
+            return stopping == generation ? finish() : AudioCaptureResult(framesWritten: 0, durationSeconds: 0)
+        }
+    }
+
+    /// The watchdog found no audio since the start: if none ever arrived,
+    /// this capture never started, which `startFailure` now says.
+    @MainActor
+    func markStartTimedOut() -> Bool {
+        guard isCapturing, frames == 0 else { return false }
+        startFailure = startFailure ?? "no audio from the page"
+        return true
     }
 
     @MainActor
@@ -160,8 +197,11 @@ final class WebMicCapture: NSObject, AudioCapturing, @unchecked Sendable {
     }
 
     @MainActor
-    fileprivate func handle(_ body: Any) {
+    func handle(_ body: Any) {
         guard let message = body as? [String: Any], let type = message["type"] as? String else { return }
+        // A message from an earlier capture (a late chunk, its failure) never
+        // touches the current one.
+        if let id = message["id"] as? Int, id != generation { return }
         switch type {
         case "ready":
             isReady = true
@@ -218,9 +258,10 @@ final class WebMicCapture: NSObject, AudioCapturing, @unchecked Sendable {
     };
     let lastHeartbeat = performance.now();
     window.captureHeartbeat = () => { lastHeartbeat = performance.now(); };
-    let stopCapture = () => {};
-    window.stopCapture = () => stopCapture();
-    window.startCapture = async () => {
+    const stops = {};
+    window.stopCapture = id => { stops[id]?.(); delete stops[id]; };
+    window.startCapture = async id => {
+      const post = m => window.webkit.messageHandlers.capture.postMessage({ ...m, id });
       let stopping = false, stream, context, source, processor, sink, watchdog;
       const session = navigator.audioSession;
       const cleanup = () => {
@@ -233,7 +274,7 @@ final class WebMicCapture: NSObject, AudioCapturing, @unchecked Sendable {
         context?.close().catch(() => {});
       };
       const interrupted = reason => { if (!stopping) { cleanup(); post({ type: 'interrupted', reason }); } };
-      stopCapture = cleanup;
+      stops[id] = cleanup;
       try {
         const constraints = { channelCount: 1, echoCancellation: false, noiseSuppression: false, autoGainControl: false };
         const inputs = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'audioinput');

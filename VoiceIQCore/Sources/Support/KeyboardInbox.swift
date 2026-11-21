@@ -177,9 +177,35 @@ public struct KeyboardJob: Codable, Equatable, Sendable {
     /// The job is over: its files go, its folder stays for the caller.
     public func remove(root: URL? = KeyboardInbox.root) {
         guard let directory = Self.directory(in: root) else { return }
-        for suffix in ["json", "body", "response", "status"] {
+        for suffix in ["json", "body", "response", "status", "claim"] {
             try? FileManager.default.removeItem(at: directory.appendingPathComponent("\(id.uuidString).\(suffix)"))
         }
+    }
+
+    /// A claim older than this belongs to a process that ended mid-finish.
+    static let claimLifetime: TimeInterval = 300
+
+    /// Claims the job for one finish across processes: the app and the
+    /// keyboard can both hold its answer. Atomic (`O_EXCL`); false when
+    /// another finish holds it.
+    public func claim(root: URL? = KeyboardInbox.root, now: Date = Date()) -> Bool {
+        guard let url = Self.directory(in: root)?.appendingPathComponent("\(id.uuidString).claim") else { return false }
+        for _ in 0..<2 {
+            let fd = open(url.path, O_CREAT | O_EXCL | O_WRONLY, 0o644)
+            if fd >= 0 {
+                close(fd)
+                return true
+            }
+            let taken = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate ?? now
+            guard now.timeIntervalSince(taken) > Self.claimLifetime else { return false }
+            try? FileManager.default.removeItem(at: url)
+        }
+        return false
+    }
+
+    public func releaseClaim(root: URL? = KeyboardInbox.root) {
+        guard let url = Self.directory(in: root)?.appendingPathComponent("\(id.uuidString).claim") else { return }
+        try? FileManager.default.removeItem(at: url)
     }
 
     public func folderURL(root: URL? = KeyboardInbox.root) -> URL? {

@@ -54,6 +54,7 @@ final class KeyboardDictation: ObservableObject {
 
     /// One dictation, from the tap to its handover.
     private struct Job {
+        let id = UUID()
         var mode: KeyboardMode
         var selectedText: String?
         var host: String?
@@ -108,9 +109,11 @@ final class KeyboardDictation: ObservableObject {
     /// words are not lost while the touch becomes a tap or a hold (`keep`)
     /// or a slide (`discard`). Call `blocker()` first.
     func arm(mode: KeyboardMode, selectedText: String?, host: String?, document: UUID?, textBefore: String?) {
-        guard begin(mode: mode, selectedText: selectedText, host: host, document: document, textBefore: textBefore, armed: true) else { return }
+        guard begin(mode: mode, selectedText: selectedText, host: host, document: document, textBefore: textBefore, armed: true),
+              let touch = job?.id else { return }
         DispatchQueue.main.asyncAfter(deadline: .now() + Self.armedTimeout) { [weak self] in
-            guard let self, self.isArmed else { return }
+            // Only this touch's capture: a later touch has its own timeout.
+            guard let self, self.isArmed, self.job?.id == touch else { return }
             self.discard(reason: "never kept")
         }
     }
@@ -207,8 +210,14 @@ final class KeyboardDictation: ObservableObject {
     /// Self-heal, on every poll while the keyboard shows.
     func healIfStalled(now: Date = Date()) {
         guard let job, !job.armed else { return }
-        if phase == .recording, let last = mic?.lastAudioAt, now.timeIntervalSince(last) > Self.captureSilence {
-            KeyboardLog.note("capture silent for \(Int(now.timeIntervalSince(last))) s: finishing with what it heard")
+        if phase == .recording, let mic, let last = mic.lastAudioAt, now.timeIntervalSince(last) > Self.captureSilence {
+            if mic.markStartTimedOut() {
+                // Never started (WebKit's audio stayed pending): the app
+                // records this one instead (`onStartFailed`).
+                KeyboardLog.note("capture never started in \(Int(now.timeIntervalSince(last))) s")
+            } else {
+                KeyboardLog.note("capture silent for \(Int(now.timeIntervalSince(last))) s: finishing with what it heard")
+            }
             stop()
         } else if phase == .processing, let since = job.processingSince, now.timeIntervalSince(since) > Self.transcriptionTimeout {
             KeyboardLog.note("transcription stuck for \(Int(now.timeIntervalSince(since))) s: giving up")
@@ -361,7 +370,8 @@ final class KeyboardDictation: ObservableObject {
         let id = SessionMeta.read(from: folder)?.id.uuidString
         let usage = id.map { UsageMeter.store?.records(forSession: $0) ?? [] } ?? []
         KeyboardInbox.finish(folder: folder, usage: usage)
-        UsageMeter.store?.deleteAll()
+        // Only this dictation's: another may still be waiting for its answer.
+        if let id { UsageMeter.store?.deleteRecords(forSession: id) }
     }
 
     // MARK: - Outliving the keyboard
@@ -412,8 +422,8 @@ final class KeyboardDictation: ObservableObject {
     /// session it goes to the app's retry queue as before.
     private func queueOffline(_ job: Job) {
         guard let folder = job.folder else { return }
-        guard Self.fitsOneRequest(folder) else {
-            KeyboardLog.note("longer than one request: left to the app's retry")
+        guard Self.fitsOneRequest(folder), !client.transcriptionAnswered else {
+            KeyboardLog.note("longer than one request, or answered already: left to the app's retry")
             return hand(over: folder)
         }
         // The request this keyboard already sent, byte for byte: nothing is
@@ -460,6 +470,11 @@ final class KeyboardDictation: ObservableObject {
         // Several chunks: the keyboard finishes it when iOS resumes it, or
         // the app recovers the recording.
         guard Self.fitsOneRequest(folder) else { return }
+        // Answered already (the writing pass is running): finishing here
+        // sends nothing again.
+        guard !client.transcriptionAnswered else {
+            return KeyboardLog.note("not handed over: the provider already answered")
+        }
         KeyboardLog.note("keyboard's time ran out while transcribing")
         if !coordinator.handOffTranscription() {
             KeyboardLog.note("not handed over: the provider already has this dictation")

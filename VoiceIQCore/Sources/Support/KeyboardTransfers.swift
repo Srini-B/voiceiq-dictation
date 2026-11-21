@@ -46,14 +46,29 @@ public final class KeyboardTransfers: NSObject, URLSessionDataDelegate, Sendable
         eventsDone.withLock { $0 = handler }
     }
 
+    /// The jobs whose transfer is still running on `session`: the app
+    /// leaves them to their answer instead of sending them again.
+    public static func activeJobIDs(on session: URLSession) async -> Set<UUID> {
+        let tasks = await session.allTasks
+        return Set(tasks.filter { $0.state == .running || $0.state == .suspended }
+            .compactMap { $0.taskDescription.flatMap(UUID.init(uuidString:)) })
+    }
+
     /// Sends `request` for `job`, with its body from a file as background
     /// sessions require. The job is on disk before the transfer starts.
     @discardableResult
     public static func send(_ request: URLRequest, for job: KeyboardJob, on session: URLSession,
                             root: URL? = KeyboardInbox.root) throws -> URLSessionUploadTask {
         guard let bodyURL = KeyboardJob.bodyURL(job.id, root: root) else { throw CocoaError(.fileNoSuchFile) }
-        try job.write(root: root)
+        // The body first: a job is published only once it can be sent.
+        try FileManager.default.createDirectory(at: bodyURL.deletingLastPathComponent(), withIntermediateDirectories: true)
         try (request.httpBody ?? Data()).write(to: bodyURL, options: .atomic)
+        do {
+            try job.write(root: root)
+        } catch {
+            try? FileManager.default.removeItem(at: bodyURL)
+            throw error
+        }
         var request = request
         request.httpBody = nil
         request.timeoutInterval = requestTimeout
@@ -100,7 +115,8 @@ public final class KeyboardTransfers: NSObject, URLSessionDataDelegate, Sendable
         /// The provider refused it, or the step after its answer failed;
         /// the session is marked failed for History, with Retry.
         case failed(String)
-        /// Another call is finishing this job already.
+        /// Another call, in this process or the other one, is finishing
+        /// this job already.
         case busy
     }
 
@@ -119,6 +135,9 @@ public final class KeyboardTransfers: NSObject, URLSessionDataDelegate, Sendable
         guard let answer = job.answer(root: root), let folder = job.folderURL(root: root) else { return .waiting }
         guard finishing.insert(job.id).inserted else { return .busy }
         defer { finishing.remove(job.id) }
+        // The other process (keyboard or app) may be finishing it already.
+        guard job.claim(root: root) else { return .busy }
+        defer { job.releaseClaim(root: root) }
         guard let status = answer.status else {
             Log.transcription.notice("keyboard job \(job.id, privacy: .public): transfer ended without an answer (\(answer.error ?? "", privacy: .private))")
             return .waiting

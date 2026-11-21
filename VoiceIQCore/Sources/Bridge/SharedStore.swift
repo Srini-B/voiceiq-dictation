@@ -192,15 +192,14 @@ public final class SharedStore: @unchecked Sendable {
             .max { $0.finishedAt < $1.finishedAt }
     }
 
-    /// A keyboard typed or dismissed `held`. The recent ones are all
-    /// remembered, so taking the app's result never brings the keyboard's
-    /// back, or the other way round. Writer: keyboard.
+    /// A keyboard typed or dismissed `held`. Every taken result still in
+    /// either slot stays marked, so taking the app's result never brings the
+    /// keyboard's back, or the other way round. Writer: keyboard.
     public func markHeldHandled(_ held: HeldDictation) {
-        let ids = ([held.id] + heldHandledIDs).prefix(Self.heldHandledLimit)
+        let stored = Set([heldByKeyboard?.id, heldByApp?.id].compactMap { $0 })
+        let ids = [held.id] + heldHandledIDs.filter { $0 != held.id && stored.contains($0) }
         defaults.set(ids.map(\.uuidString), forKey: Key.heldHandledID)
     }
-
-    private static let heldHandledLimit = 8
 
     private var heldHandledIDs: [UUID] {
         (defaults.stringArray(forKey: Key.heldHandledID) ?? []).compactMap(UUID.init(uuidString:))

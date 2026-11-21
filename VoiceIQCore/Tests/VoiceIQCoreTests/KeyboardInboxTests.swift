@@ -35,10 +35,11 @@ final class KeyboardInboxTests: XCTestCase {
         let (sessions, usage) = KeyboardInbox.collect(from: inbox)
 
         XCTAssertEqual(sessions.map(\.folder.lastPathComponent), ["finished-one"])
-        XCTAssertEqual(sessions.first?.folder.deletingLastPathComponent(), FileLayout.recordingsRoot)
+        let imported = try XCTUnwrap(sessions.first)
+        XCTAssertEqual(imported.folder.deletingLastPathComponent(), FileLayout.recordingsRoot)
         XCTAssertEqual(sessions.first?.meta.status, .inserted)
         XCTAssertEqual(usage.map(\.id), [record.id])
-        XCTAssertFalse(FileManager.default.fileExists(atPath: sessions[0].folder.appendingPathComponent("usage.json").path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: imported.folder.appendingPathComponent("usage.json").path))
         XCTAssertTrue(KeyboardInbox.collect(from: inbox).sessions.isEmpty, "imported twice")
     }
 
@@ -69,7 +70,8 @@ final class KeyboardInboxTests: XCTestCase {
         XCTAssertTrue(KeyboardJob.pending(in: inbox).isEmpty)
         let (sessions, _) = KeyboardInbox.collect(from: inbox)
         XCTAssertEqual(sessions.map(\.meta.status), [.queuedForRetry])
-        XCTAssertTrue(FileManager.default.fileExists(atPath: FileLayout.audioFLAC(in: sessions[0].folder).path), "audio needed for the retry")
+        let imported = try XCTUnwrap(sessions.first)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: FileLayout.audioFLAC(in: imported.folder).path), "audio needed for the retry")
     }
 
     /// The app's retry queue transcribes as Dictate and the app marks a
@@ -85,6 +87,20 @@ final class KeyboardInboxTests: XCTestCase {
         let (sessions, _) = KeyboardInbox.collect(from: inbox)
         XCTAssertEqual(sessions.map(\.meta.status), [.failed])
         XCTAssertEqual(sessions.first?.meta.errorCode, "mode_transform")
+    }
+
+    /// The app and the keyboard can both hold a job's answer: one finishes it.
+    func testOneClaimPerJobAcrossProcesses() throws {
+        let job = KeyboardJob(folder: "claimed", mode: .dictate, durationSeconds: 3)
+        try job.write(root: inbox)
+
+        XCTAssertTrue(job.claim(root: inbox))
+        XCTAssertFalse(job.claim(root: inbox), "a second finish while the first runs")
+        job.releaseClaim(root: inbox)
+        XCTAssertTrue(job.claim(root: inbox))
+
+        let later = Date().addingTimeInterval(KeyboardJob.claimLifetime + 1)
+        XCTAssertTrue(job.claim(root: inbox, now: later), "a claim left by a process that ended")
     }
 
     func testNeverKeepAudioDropsTheRecordingOnceItHasWords() throws {
@@ -161,6 +177,36 @@ final class HeldDictationTests: XCTestCase {
         XCTAssertEqual(store.heldDictation?.text, "keyboard")
         store.markHeldHandled(fromKeyboard)
         XCTAssertNil(store.heldDictation, "the app's result came back after the keyboard's was taken")
+
+        // Many later keyboard results, each taken, never bring the app's back.
+        for index in 0..<10 {
+            let later = HeldDictation(text: "later \(index)", mode: .dictate, document: field,
+                                      finishedAt: finished.addingTimeInterval(Double(10 + index)))
+            store.heldByKeyboard = later
+            store.markHeldHandled(later)
+        }
+        XCTAssertNil(store.heldDictation)
+    }
+
+    /// A field either side could not name is never typed into by itself.
+    func testUnnamedFieldIsOfferedUnlessTheAppAndTextMatch() {
+        let unnamed = HeldDictation(text: "hi", mode: .dictate, document: nil, host: "com.apple.MobileSMS",
+                                    textBefore: "Dear Sam, ", finishedAt: finished)
+        XCTAssertEqual(unnamed.delivery(in: field, host: "com.apple.mobilesafari", textBefore: "Dear Sam, ",
+                                        at: finished.addingTimeInterval(5)), .offer, "another app")
+        XCTAssertEqual(held().delivery(in: nil, host: "com.apple.mobilesafari", at: finished.addingTimeInterval(5)), .offer)
+        XCTAssertEqual(unnamed.delivery(in: nil, host: "com.apple.MobileSMS", textBefore: "Dear Sam, ",
+                                        at: finished.addingTimeInterval(5)), .insert)
+    }
+
+    /// Empty text before the cursor does not tell two empty fields apart.
+    func testEmptyFieldsInTheSameAppAreOffered() {
+        let empty = HeldDictation(text: "hi", mode: .dictate, document: field, host: "com.apple.MobileSMS",
+                                  textBefore: "", finishedAt: finished)
+        XCTAssertEqual(empty.delivery(in: UUID(), host: "com.apple.MobileSMS", textBefore: "",
+                                      at: finished.addingTimeInterval(5)), .offer)
+        XCTAssertEqual(empty.delivery(in: field, host: "com.apple.MobileSMS", textBefore: "",
+                                      at: finished.addingTimeInterval(5)), .insert, "same named field")
     }
 
     /// iOS names the field anew when its app comes back to the front.

@@ -274,6 +274,14 @@ public final class UsageStore: @unchecked Sendable {
         }
     }
 
+    public func deleteRecords(forSession id: String) {
+        do {
+            _ = try queue.write { db in try UsageRecord.filter(Column("sessionID") == id).deleteAll(db) }
+        } catch {
+            Log.usage.error("UsageStore: deleting a session's records failed: \(error)")
+        }
+    }
+
     public func records(forSession id: String) -> [UsageRecord] {
         (try? queue.read { db in
             try UsageRecord.filter(Column("sessionID") == id).order(Column("at")).fetchAll(db)

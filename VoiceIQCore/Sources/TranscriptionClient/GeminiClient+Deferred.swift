@@ -23,8 +23,14 @@ extension GeminiClient {
     /// more; the first is the one the replay answers.
     public nonisolated var sentTranscription: URLRequest? { firstTranscription.withLock { $0 } }
 
+    /// The provider answered a transcription request with success since
+    /// `forgetSentTranscription()`, whether or not usage was metered: the
+    /// keyboard must not hand that dictation over.
+    public nonisolated var transcriptionAnswered: Bool { answeredTranscription.withLock { $0 } }
+
     public nonisolated func forgetSentTranscription() {
         firstTranscription.withLock { $0 = nil }
+        answeredTranscription.withLock { $0 = false }
     }
 }
 

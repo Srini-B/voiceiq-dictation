@@ -136,11 +136,39 @@ public enum KeychainStore {
     public static func shareWithKeyboard() {
         let secrets: [Secret] = [.gemini, .openAI, .elevenLabs, .tinyFish, .agentProvider]
         for secret in secrets {
-            var query = baseQuery(secret: secret, dataProtection: true)
-            query[kSecAttrAccessGroup as String] = SharedStore.appGroupID
-            guard SecItemCopyMatching(query as CFDictionary, nil) == errSecItemNotFound,
+            var shared = baseQuery(secret: secret, dataProtection: true)
+            shared[kSecAttrAccessGroup as String] = SharedStore.appGroupID
+            guard SecItemCopyMatching(shared as CFDictionary, nil) == errSecItemNotFound,
                   let key = load(secret, service: service) else { continue }
-            _ = save(key, for: secret, notify: false)
+            // The shared copy first; the original goes only once it exists,
+            // so a failed move keeps the key and the next launch tries again.
+            var attributes = shared
+            attributes[kSecAttrLabel as String] = secret.label
+            attributes[kSecValueData as String] = Data(key.utf8)
+            attributes[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+            let status = SecItemAdd(attributes as CFDictionary, nil)
+            guard status == errSecSuccess else {
+                Log.permissions.error("KeychainStore: sharing \(secret.rawValue, privacy: .public) failed (\(status)); the original stays")
+                continue
+            }
+            deleteOriginals(of: secret)
+        }
+    }
+
+    /// Removes `secret`'s items outside the App Group, and only those.
+    private static func deleteOriginals(of secret: Secret) {
+        for dataProtection in [true, false] {
+            var query = baseQuery(secret: secret, dataProtection: dataProtection)
+            query[kSecReturnAttributes as String] = true
+            query[kSecMatchLimit as String] = kSecMatchLimitAll
+            var items: CFTypeRef?
+            guard SecItemCopyMatching(query as CFDictionary, &items) == errSecSuccess,
+                  let found = items as? [[String: Any]] else { continue }
+            for group in Set(found.compactMap { $0[kSecAttrAccessGroup as String] as? String }) where group != SharedStore.appGroupID {
+                var original = baseQuery(secret: secret, dataProtection: dataProtection)
+                original[kSecAttrAccessGroup as String] = group
+                SecItemDelete(original as CFDictionary)
+            }
         }
     }
     #endif

@@ -175,9 +175,11 @@ the capture at once and finishes the dictation with what was said (Hex
 #2163). The result is held in the App Group (`HeldDictation`):
 
 - If the keyboard comes back in the same field within 30 s, it types the
-  text. iOS names a field anew when its app returns, so a different field ID
-  in the same app with the same text before the cursor also counts as the
-  same field.
+  text. The field counts as the same only when both sides name it with the
+  same ID, or (iOS names a field anew when its app returns, and may not name
+  it while focus moves) the app is the same and so is the text before the
+  cursor, which must not be empty. When it is less certain, the text is
+  offered, never typed.
 - Otherwise the suggestion strip offers "Paste dictation" for 10 minutes.
   Hex's strip shows word suggestions instead while the cursor touches a
   word; the chip shows once the cursor is after a space or punctuation.
@@ -202,21 +204,29 @@ History, usage and iCloud, and holds the text for the next keyboard
 (`heldByApp`). This works for every provider, ElevenLabs included, since
 they all post through `GeminiClient`.
 
-A dictation is never sent twice. Before the hand-over,
+Only one answer is ever delivered, and the recording is not sent again
+once the provider has answered it. Before the hand-over,
 `DictationCoordinator.handOffTranscription()` cancels the keyboard's own
 request, its silent retry and the writing pass, and drops any answer that
 still arrives, so only the background job delivers text. It refuses, and
 nothing is handed over, once the provider has answered the transcription
-(its usage is metered) or when the dictation streamed its audio with
+with success (`GeminiClient.transcriptionAnswered`, or its usage is
+metered) or when the dictation streamed its audio with
 Real-time transcription; the keyboard then finishes it when iOS resumes it,
 or the app recovers the recording. When the background answer is in but the
 next step fails (the writing model, Translate or Ask), the app marks the
 dictation failed with Retry in History instead of sending the recording
 again. A recording longer than one request (over 10 minutes, sent in chunks)
 is never handed over: the keyboard finishes it when iOS resumes it, or the
-app's chunk-aware retry sends it. A request the keyboard cancelled may
-still have reached the provider;
-whether a request the client abandoned is billed depends on the provider.
+app's chunk-aware retry sends it.
+
+Accepted risk (product decision): the keyboard's own request is cancelled
+at the hand-over, but it may already have reached the provider, which can
+still process it, so the same audio can reach the provider twice. Whether a
+request the client abandoned is billed depends on the provider. When the
+app and the keyboard both hold an answer, a claim file
+(`KeyboardJob.claim`, atomic, stale after 5 minutes) lets only one of them
+finish it.
 
 #### Offline
 
@@ -227,11 +237,13 @@ the background to finish it as above.
 
 This does not work when Background App Refresh is off for VoiceiQ or the
 user force-quit the app (force-quitting also cancels its transfers). Then the
-job stays in the App Group. The next time VoiceiQ opens, it takes the job
-over: the dictation appears in History as queued and the app's retry queue
+job stays in the App Group. The next time VoiceiQ opens, it asks the
+background session which uploads are still running; those keep waiting
+for their answer. Every other job is taken over: the dictation appears in History as queued and the app's retry queue
 sends it (at once when online). The retry queue transcribes as Dictate, as
 for the app's own dictations, so a Translate or Ask job is marked failed
-with Retry instead, as the app marks its own failed Translate or Ask. The user sees no text in the field, no
+with Retry instead, as the app marks its own failed Translate or Ask. The
+user sees no text in the field, no
 offer in the strip, and a History row that fills in once the retry
 succeeds; Paste last has the text after that.
 

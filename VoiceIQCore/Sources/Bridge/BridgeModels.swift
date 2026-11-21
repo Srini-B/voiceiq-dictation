@@ -227,14 +227,17 @@ public struct HeldDictation: Codable, Equatable, Sendable {
     }
 
     /// Where the keyboard is now: its field, app, and text before the cursor.
-    /// A field either side could not name counts as the same one; a field
-    /// iOS renamed counts as the same when the app and the text before the
-    /// cursor are unchanged.
+    /// Typed only when the field is surely the same: both sides name it and
+    /// the names match, or (iOS renames a field when its app returns, and
+    /// may not name it at all while focus moves) the app is the same and so
+    /// is the text before the cursor, which must not be empty. Anything less
+    /// certain is offered, never typed.
     public func delivery(in document: UUID?, host: String? = nil, textBefore: String? = nil, at now: Date = Date()) -> Delivery {
         let age = now.timeIntervalSince(finishedAt)
         guard age < Self.offerWindow else { return .expired }
-        let sameField = self.document == nil || document == nil || self.document == document
-            || (self.host != nil && self.host == host && self.textBefore != nil && self.textBefore == textBefore)
-        return sameField && age < Self.insertWindow ? .insert : .offer
+        let sameID = self.document != nil && self.document == document
+        let sameContext = self.host != nil && self.host == host
+            && !(self.textBefore ?? "").isEmpty && self.textBefore == textBefore
+        return (sameID || sameContext) && age < Self.insertWindow ? .insert : .offer
     }
 }

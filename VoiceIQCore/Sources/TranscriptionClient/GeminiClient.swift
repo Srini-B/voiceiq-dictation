@@ -47,6 +47,8 @@ public actor GeminiClient {
     let session: URLSession
     /// See `sentTranscription`.
     nonisolated let firstTranscription = OSAllocatedUnfairLock<URLRequest?>(initialState: nil)
+    /// See `transcriptionAnswered`.
+    nonisolated let answeredTranscription = OSAllocatedUnfairLock(initialState: false)
     private let apiKey: @Sendable () -> String?
     let openAIKey: @Sendable () -> String?
     let elevenLabsKey: @Sendable () -> String?
@@ -223,6 +225,9 @@ public actor GeminiClient {
                 (data, response) = replayed
             } else {
                 (data, response) = try await Self.perform(request, deadline: deadline, stage: stage, via: via, modelLabel: modelLabel)
+                if stage == .transcribe, let status = (response as? HTTPURLResponse)?.statusCode, (200..<300).contains(status) {
+                    answeredTranscription.withLock { $0 = true }
+                }
             }
         } catch is DeadlineExceeded {
             throw TranscriptionError.timeout
