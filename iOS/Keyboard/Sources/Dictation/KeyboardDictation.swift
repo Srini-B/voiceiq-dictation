@@ -76,8 +76,9 @@ final class KeyboardDictation: ObservableObject {
     private var cancellables: Set<AnyCancellable> = []
     private var job: Job?
     private var previousState: DictationState = .idle
-    /// A cancelled session waits for the coordinator's keep-or-delete.
-    private var cancelledFolder: URL?
+    /// Cancelled sessions waiting for the coordinator's keep-or-delete, by
+    /// session: a second cancel while the first drains must not lose it.
+    private var cancelledFolders: [UUID: URL] = [:]
     private var expiring: DispatchSemaphore?
     private var transfers: (delegate: KeyboardTransfers, session: URLSession)?
     /// Folders whose hand-over failed (`hand(over:)`).
@@ -281,12 +282,11 @@ final class KeyboardDictation: ObservableObject {
         coordinator.onSessionUpdate = { [weak self] meta, folder in
             RetentionPolicy.dropAudioIfNeverKept(meta, folder: folder)
             // The coordinator kept a cancelled recording (it was long): History gets it.
-            if meta.status == .cancelled, folder == self?.cancelledFolder {
-                self?.cancelledFolder = nil
+            if meta.status == .cancelled, self?.cancelledFolders.removeValue(forKey: meta.id) != nil {
                 self?.hand(over: folder)
             }
         }
-        coordinator.onSessionDiscard = { [weak self] _ in self?.cancelledFolder = nil }
+        coordinator.onSessionDiscard = { [weak self] id in self?.cancelledFolders[id] = nil }
         coordinator.$state
             .sink { [weak self] state in self?.stateChanged(state) }
             .store(in: &cancellables)
@@ -347,7 +347,7 @@ final class KeyboardDictation: ObservableObject {
             if state == .cancelled {
                 // The coordinator decides keep-or-delete once capture stops
                 // (`onSessionUpdate`/`onSessionDiscard`); the folder moves then.
-                cancelledFolder = finished?.folder
+                if let folder = finished?.folder, let id = SessionMeta.read(from: folder)?.id { cancelledFolders[id] = folder }
                 return
             }
             if state == .done(.queuedForRetry), let finished {

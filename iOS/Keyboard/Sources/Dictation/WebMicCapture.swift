@@ -283,6 +283,8 @@ final class WebMicCapture: NSObject, AudioCapturing, @unchecked Sendable {
         const inputs = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'audioinput');
         const builtIn = inputs.find(d => /iphone|ipad|built-in/i.test(d.label));
         if (builtIn) constraints.deviceId = { exact: builtIn.deviceId };
+        // A touch cancelled while the devices were listed never opens the mic.
+        if (stopping) return;
         stream = await navigator.mediaDevices.getUserMedia({ audio: constraints });
         if (stopping) { stream.getTracks().forEach(t => t.stop()); return; }
         stream.getAudioTracks()[0].onended = () => interrupted('track-ended');
