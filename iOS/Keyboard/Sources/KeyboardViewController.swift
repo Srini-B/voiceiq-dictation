@@ -24,6 +24,10 @@ final class KeyboardViewController: UIInputViewController {
             typing?.dictationKeyStarting = model.waitingForApp
         }
         typing.dictation.onStopTap = { [weak model] in model?.holdReleased() }
+        typing.dictation.onHexKeyPress = { [weak model] _ in model?.dictationKeyPressed() }
+        typing.dictation.onHexKeyAbandon = { [weak model] in model?.dictationKeyAbandoned() }
+        typing.dictation.onPasteDictation = { [weak model] in model?.pasteHeld() }
+        model.onOffer = { [weak typing] text in typing?.dictation.offeredDictation = text }
         typing.dictation.onOpenURL = { [weak self] url in self?.openURL(url) }
         // UIKit calls back on its own queue.
         requestSupplementaryLexicon { @Sendable [weak typing] lexicon in

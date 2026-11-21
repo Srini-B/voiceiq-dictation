@@ -165,9 +165,10 @@ targets:
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
 
-  # iOS: the app owns audio, keys and transcription; the keyboard is a remote
-  # control; the Live Activity shows the background session in the Dynamic
-  # Island. See docs/IOS.md.
+  # iOS: the app owns keys and settings; the keyboard sends it commands while
+  # a session is up and runs the same pipeline itself when none is; the Live
+  # Activity shows the background session in the Dynamic Island. See
+  # docs/IOS.md.
   VoiceIQiOS:
     type: application
     platform: iOS
@@ -201,6 +202,8 @@ targets:
       - path: iOS/App/Hex
         excludes: ["**/*.sh"]
       - path: iOS/App/HexCleanupModel/HexCleanupTagger.mlpackage
+      # Dictation wiring the keyboard runs too.
+      - path: iOS/Shared
     entitlements:
       path: iOS/App/VoiceIQiOS.entitlements
       properties:
@@ -294,6 +297,7 @@ targets:
           PROVISIONING_PROFILE_SPECIFIER: "VoiceiQ Keyboard App Store"
     sources:
       - path: iOS/Keyboard/Sources
+      - path: iOS/Shared
       # Hex's keys, slide to type, autocorrect and predictions, with its English
       # typing model, suggestion filter and emoji index (scripts/sync-hex-keyboard.sh).
       - path: iOS/Keyboard/Hex
@@ -308,12 +312,17 @@ targets:
     dependencies:
       - package: VoiceIQCore
         product: VoiceIQBridge
+      # The app's dictation pipeline, for dictations the keyboard runs by
+      # itself when no app session is up (docs/IOS.md).
+      - package: VoiceIQCore
+        product: VoiceIQCore
     info:
       path: iOS/Keyboard/Info.plist
       properties:
         CFBundleDisplayName: VoiceiQ
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        NSMicrophoneUsageDescription: VoiceiQ records audio when you tap the microphone in the VoiceiQ keyboard, so it can transcribe what you say.
         NSExtension:
           NSExtensionPointIdentifier: com.apple.keyboard-service
           NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).KeyboardViewController
@@ -341,12 +350,15 @@ targets:
       - path: iOS/Keyboard/Tests
         excludes: [Host]
       - path: iOS/Keyboard/Sources
+      - path: iOS/Shared
       - path: iOS/Keyboard/Hex
         excludes: [MANIFEST, UPSTREAM, LICENSE, patches, "**/LICENSE-*.txt", "**/*.hextm", "**/*.tsv", "**/*.txt"]
     dependencies:
       - target: KeyboardTestHost
       - package: VoiceIQCore
         product: VoiceIQBridge
+      - package: VoiceIQCore
+        product: VoiceIQCore
 
   KeyboardTestHost:
     type: application

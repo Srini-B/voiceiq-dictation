@@ -38,5 +38,7 @@
 		<key>NSExtensionPrincipalClass</key>
 		<string>$(PRODUCT_MODULE_NAME).KeyboardViewController</string>
 	</dict>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>VoiceiQ records audio when you tap the microphone in the VoiceiQ keyboard, so it can transcribe what you say.</string>
 </dict>
 </plist>
