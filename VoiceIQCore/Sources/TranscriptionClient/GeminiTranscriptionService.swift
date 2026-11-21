@@ -1,17 +1,6 @@
 import AVFoundation
 import Foundation
 
-/// The transcription pipeline.
-///
-///   CAF → FLAC → transcription model (gemini-3.5-transcribe in smart mode
-///   with custom_vocabulary, gpt-transcribe, or ElevenLabs scribe_v3 with
-///   keyterms)
-///       → [writing rules] writing model cleanup, with any screenshots
-///       → validation gate → ReplacementEngine → inserted text.
-///
-/// Rules unchanged: one silent retry on transient transcribe failures; cleanup
-/// has a hard deadline and NEVER blocks a good transcript; every failure is a
-/// typed TranscriptionError mapping to the failure matrix.
 /// Cleans a verbatim transcript when the writing model did not shape it (the
 /// iPhone app passes Hex's on-device cleanup tagger). Its answer still goes
 /// through `FillerStripper`, so a cleaner that is late, fails, or returns the
@@ -28,6 +17,17 @@ public struct VerbatimCleaner: Sendable {
     }
 }
 
+/// The transcription pipeline.
+///
+///   CAF → FLAC → transcription model (gemini-3.5-transcribe in smart mode
+///   with custom_vocabulary, gpt-transcribe, or ElevenLabs scribe_v3 with
+///   keyterms)
+///       → [writing rules] writing model cleanup, with any screenshots
+///       → validation gate → ReplacementEngine → inserted text.
+///
+/// Rules unchanged: one silent retry on transient transcribe failures; cleanup
+/// has a hard deadline and NEVER blocks a good transcript; every failure is a
+/// typed TranscriptionError mapping to the failure matrix.
 public struct GeminiTranscriptionService: TranscriptionServicing {
     static let untranslatableToken = "<<UNTRANSLATABLE>>"
     let client: GeminiClient
