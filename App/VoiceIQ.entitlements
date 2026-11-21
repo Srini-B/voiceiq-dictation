@@ -6,5 +6,9 @@
 	     consuming CGEventTaps and synthetic paste are incompatible with App Sandbox. -->
 	<key>com.apple.security.device.audio-input</key>
 	<true/>
+	<!-- Apple Events to Music and Spotify: "Pause Music and Spotify while
+	     dictating" (MediaPause). -->
+	<key>com.apple.security.automation.apple-events</key>
+	<true/>
 </dict>
 </plist>

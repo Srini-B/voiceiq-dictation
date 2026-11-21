@@ -289,6 +289,16 @@ public struct SettingsStore: Sendable {
         Self.set(enabled, forKey: "muteOtherAudioWhileDictating")
     }
 
+    /// Pause Music and Spotify while dictating, and play them again after.
+    /// Off by default: the first pause asks to control the player.
+    public var pauseMediaWhileDictating: Bool {
+        Self.defaults.bool(forKey: "pauseMediaWhileDictating")
+    }
+
+    public func setPauseMediaWhileDictating(_ enabled: Bool) {
+        Self.set(enabled, forKey: "pauseMediaWhileDictating")
+    }
+
     /// On unless the user turned it off. Read from the stored value only when
     /// one exists, so an explicit Off survives and every install that never
     /// touched the toggle gets the default with no migration write.
