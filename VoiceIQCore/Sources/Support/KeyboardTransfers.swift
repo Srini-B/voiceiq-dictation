@@ -23,6 +23,8 @@ public final class KeyboardTransfers: NSObject, URLSessionDataDelegate, Sendable
     /// iOS's completion handler, and whether the session's events already
     /// finished: either can come first.
     private let eventsDone = OSAllocatedUnfairLock<(handler: (@Sendable () -> Void)?, finished: Bool)>(initialState: (nil, false))
+    /// Jobs whose answer could not be written in full.
+    private let unsaved = OSAllocatedUnfairLock<Set<UUID>>(initialState: [])
 
     /// `onAnswer` runs on the session's queue once a job's answer is on disk.
     public init(root: URL? = KeyboardInbox.root, onAnswer: @escaping @Sendable (UUID) -> Void) {
@@ -97,19 +99,26 @@ public final class KeyboardTransfers: NSObject, URLSessionDataDelegate, Sendable
     public func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
         guard let id = dataTask.taskDescription.flatMap(UUID.init(uuidString:)),
               let url = KeyboardJob.responseURL(id, root: root) else { return }
-        if let handle = try? FileHandle(forWritingTo: url) {
-            handle.seekToEndOfFile()
-            handle.write(data)
-            try? handle.close()
-        } else {
-            try? data.write(to: url)
+        do {
+            if let handle = try? FileHandle(forWritingTo: url) {
+                defer { try? handle.close() }
+                try handle.seekToEnd()
+                try handle.write(contentsOf: data)
+            } else {
+                try data.write(to: url)
+            }
+        } catch {
+            unsaved.withLock { _ = $0.insert(id) }
         }
     }
 
     public func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
         guard let id = task.taskDescription.flatMap(UUID.init(uuidString:)) else { return }
         let status = (task.response as? HTTPURLResponse)?.statusCode
-        KeyboardJob.record(KeyboardJob.Answer(status: status, error: error.map { "\($0)" }), for: id, root: root)
+        // An answer not all on disk is no answer: the job waits, like a cut-off one.
+        let lost = unsaved.withLock { $0.remove(id) != nil }
+        let failure = lost ? "the answer could not be saved" : error.map { "\($0)" }
+        KeyboardJob.record(KeyboardJob.Answer(status: status, error: failure), for: id, root: root)
         onAnswer(id)
     }
 
@@ -185,8 +194,8 @@ public final class KeyboardTransfers: NSObject, URLSessionDataDelegate, Sendable
             meta.modelID = result.modelID
             meta.status = .recovered
             meta.errorCode = nil
-            meta.write(to: folder)
-            RetentionPolicy.dropAudioIfNeverKept(meta, folder: folder)
+            // The audio goes only once meta.json holds the words.
+            if meta.write(to: folder) { RetentionPolicy.dropAudioIfNeverKept(meta, folder: folder) }
             return (.finished(result), claim)
         } catch let error as TranscriptionError where error.isWorthRetrying && !replay.transcribed {
             guard claim.isHeld else { return (.busy, nil) }

@@ -64,7 +64,9 @@ public struct SessionMeta: Codable, Equatable, Sendable {
 
     // MARK: - Disk I/O (atomic)
 
-    public func write(to folder: URL) {
+    /// False when meta.json could not be written; the failure is logged.
+    @discardableResult
+    public func write(to folder: URL) -> Bool {
         let url = FileLayout.metaJSON(in: folder)
         do {
             let encoder = JSONEncoder()
@@ -72,8 +74,10 @@ public struct SessionMeta: Codable, Equatable, Sendable {
             encoder.dateEncodingStrategy = .iso8601
             let data = try encoder.encode(self)
             try data.write(to: url, options: .atomic)
+            return true
         } catch {
             Log.history.error("SessionMeta: write failed for \(self.id, privacy: .public): \(error)")
+            return false
         }
     }
 
