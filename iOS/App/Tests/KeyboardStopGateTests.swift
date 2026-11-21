@@ -16,6 +16,22 @@ final class KeyboardStopGateTests: XCTestCase {
         XCTAssertFalse(gate.takeHeldStop(state: recording), "the stop applies once")
     }
 
+    func testAStopForAnotherStartKeepsTheWarmingStop() {
+        var gate = KeyboardStopGate()
+        gate.started(by: UUID())
+        XCTAssertFalse(gate.receive(KeyboardCommand(action: .stop), state: .warming))
+        XCTAssertFalse(gate.receive(KeyboardCommand(action: .stop, startID: UUID()), state: .warming))
+        XCTAssertTrue(gate.takeHeldStop(state: recording))
+    }
+
+    func testAStopBeforeItsStartIsHeldForIt() {
+        var gate = KeyboardStopGate()
+        let start = UUID()
+        XCTAssertFalse(gate.receive(KeyboardCommand(action: .stop, startID: start), state: .idle))
+        gate.started(by: start)
+        XCTAssertTrue(gate.takeHeldStop(state: recording))
+    }
+
     func testAStopForAReplacedRecordingNeverEndsTheNewOne() {
         var gate = KeyboardStopGate()
         let first = UUID()

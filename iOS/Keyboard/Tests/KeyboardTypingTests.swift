@@ -243,6 +243,20 @@ final class KeyboardTypingTests: XCTestCase {
         XCTAssertEqual(field.text, "So omwx")
     }
 
+    /// A cursor move between a delete and typing starts undo afresh: Undo
+    /// never brings back text from before the move.
+    func testACursorMoveAfterADeleteForgetsItsUndo() {
+        open()
+        type("ab")
+        RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+        typing.deleteBackward()
+        typing.adjustTextPosition(byCharacterOffset: -1)
+        typing.insertText("x")
+        XCTAssertEqual(field.text, "xA")
+        typing.undo()
+        XCTAssertEqual(field.text, "A")
+    }
+
     /// Undo replays edits before the cursor, so moving the cursor ends them.
     func testMovingTheCursorForgetsUndo() {
         open()

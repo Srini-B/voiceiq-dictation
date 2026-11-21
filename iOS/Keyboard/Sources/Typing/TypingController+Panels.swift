@@ -130,6 +130,13 @@ extension TypingController {
         undoStack = []
         redoStack = []
         lastEdit = nil
+        endDeleteTurn()
+    }
+
+    func endDeleteTurn() {
+        deletedThisTurn = false
+        undoBeforeTurn = nil
+        turnDeletes = []
     }
 
     func undo() {

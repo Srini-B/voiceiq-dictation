@@ -43,6 +43,8 @@ final class TypingController: ObservableObject {
     /// deleted, so a replacement typed in the same turn is its own undo step.
     var undoBeforeTurn: [UndoStep]?
     var turnDeletes: [String] = []
+    /// Counts delete turns, so an older turn's queued end never ends a newer one.
+    var deleteTurn = 0
 
     weak var controller: UIInputViewController?
     var proxy: UITextDocumentProxy? { controller?.textDocumentProxy }
@@ -247,9 +249,11 @@ extension TypingController: @MainActor KeyboardTextTarget {
             deletedThisTurn = true
             undoBeforeTurn = undoStack
             turnDeletes = []
+            deleteTurn += 1
+            let turn = deleteTurn
             DispatchQueue.main.async { [weak self] in
-                self?.deletedThisTurn = false
-                self?.undoBeforeTurn = nil
+                guard let self, self.deleteTurn == turn else { return }
+                self.endDeleteTurn()
             }
         }
         checkpoint(.deleting)
