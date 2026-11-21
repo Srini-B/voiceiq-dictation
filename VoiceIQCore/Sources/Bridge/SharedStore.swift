@@ -192,13 +192,16 @@ public final class SharedStore: @unchecked Sendable {
             .max { $0.finishedAt < $1.finishedAt }
     }
 
-    /// A keyboard typed or dismissed `held`. Every taken result still in
+    /// A keyboard typed or pasted `held`. Every taken result still in
     /// either slot stays marked, so taking the app's result never brings the
-    /// keyboard's back, or the other way round. Writer: keyboard.
+    /// keyboard's back, or the other way round. A Dictate or Translate result
+    /// also becomes the last delivery, for Paste last, as one the keyboard
+    /// typed straight away does. Writer: keyboard.
     public func markHeldHandled(_ held: HeldDictation) {
         let stored = Set([heldByKeyboard?.id, heldByApp?.id].compactMap { $0 })
         let ids = [held.id] + heldHandledIDs.filter { $0 != held.id && stored.contains($0) }
         defaults.set(ids.map(\.uuidString), forKey: Key.heldHandledID)
+        if held.mode != .ask { keyboardDelivery = Delivery(mode: held.mode, text: held.text, hostBundleID: nil) }
     }
 
     private var heldHandledIDs: [UUID] {

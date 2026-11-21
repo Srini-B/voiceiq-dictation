@@ -273,6 +273,27 @@ final class HeldDictationTests: XCTestCase {
         XCTAssertNil(store.heldDictation)
     }
 
+    /// A held result the keyboard typed or pasted is what Paste last pastes;
+    /// an Ask answer is not.
+    func testATakenHeldResultIsTheLastDelivery() throws {
+        let suite = "held-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let store = SharedStore(defaults: defaults)
+        store.keyboardDelivery = Delivery(mode: .dictate, text: "older", createdAt: finished, hostBundleID: nil)
+
+        let translated = HeldDictation(text: "hola", mode: .translate, document: field, finishedAt: finished)
+        store.heldByApp = translated
+        store.markHeldHandled(translated)
+        XCTAssertEqual(store.keyboardDelivery?.text, "hola")
+        XCTAssertEqual(store.keyboardDelivery?.mode, .translate)
+
+        let answer = HeldDictation(text: "an answer", mode: .ask, document: field, finishedAt: finished)
+        store.heldByKeyboard = answer
+        store.markHeldHandled(answer)
+        XCTAssertEqual(store.keyboardDelivery?.text, "hola")
+    }
+
     /// A field either side could not name is never typed into by itself.
     func testUnnamedFieldIsOfferedUnlessTheAppAndTextMatch() {
         let unnamed = HeldDictation(text: "hi", mode: .dictate, document: nil, host: "com.apple.MobileSMS",
