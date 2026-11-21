@@ -1,3 +1,4 @@
+import UIKit
 import VoiceIQBridge
 import XCTest
 
@@ -92,6 +93,35 @@ final class KeyboardModelTests: XCTestCase {
         model.dismissAnswer()
         XCTAssertNil(model.answer)
         XCTAssertEqual(store.insertedDeliveryID, acknowledged)
+    }
+
+    /// A held Ask answer on screen is not replaced by an older answer from
+    /// the app still waiting: that one shows once the user closes the first.
+    func testAShownAnswerStaysUntilTheUserActsOnIt() {
+        let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 320, height: 200))
+        let controller = KeyboardViewController()
+        controller.view = UIView()
+        window.addSubview(controller.view)
+        let fromApp = Delivery(mode: .ask, text: "app answer", hostBundleID: nil)
+        store.insertedDeliveryID = nil
+        store.publish(SessionSnapshot(delivery: fromApp))
+        let held = HeldDictation(text: "held answer", mode: .ask, document: UUID())
+        store.heldByApp = nil
+        store.heldByKeyboard = held
+        defer { store.heldByKeyboard = nil }
+        let model = KeyboardModel()
+        model.controller = controller
+        model.offeredHeldID = held.id
+        model.pasteHeld()
+
+        model.appeared()
+        defer { model.disappeared() }
+        waitForRefresh()
+        XCTAssertEqual(model.answer?.text, "held answer")
+
+        model.dismissAnswer()
+        waitForRefresh()
+        XCTAssertEqual(model.answer?.text, "app answer")
     }
 
     /// A hold longer than a command's 30 s lifetime still ends its own dictation.

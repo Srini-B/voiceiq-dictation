@@ -92,7 +92,11 @@ final class WebMicCapture: NSObject, AudioCapturing, @unchecked Sendable {
 
     func start(writingTo url: URL) throws {
         try MainActor.assumeIsolated {
-            guard isReady else { throw CocoaError(.featureUnsupported) }
+            guard isReady else {
+                // WebKit ended after the tap was taken: the app records this one.
+                startFailure = "capture page not ready"
+                throw CocoaError(.featureUnsupported)
+            }
             // An earlier capture whose stop() is still draining: it ends here,
             // and its stop() gets its own result.
             if isCapturing {

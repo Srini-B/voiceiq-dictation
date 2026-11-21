@@ -109,7 +109,8 @@ final class KeyboardModel: ObservableObject {
     func disappeared() {
         if Self.onScreen === self {
             Self.onScreen = nil
-            local.keyboardHidden(textBefore: controller?.textDocumentProxy.documentContextBeforeInput)
+            local.keyboardHidden(document: controller?.textDocumentProxy.fieldID,
+                                 textBefore: controller?.textDocumentProxy.documentContextBeforeInput)
         }
         if let observer { DarwinNotifier.removeObserver(observer) }
         observer = nil
@@ -316,7 +317,9 @@ final class KeyboardModel: ObservableObject {
         guard Date().timeIntervalSince(delivery.createdAt) < Self.autoInsertWindow else { return }
         guard Self.onScreen === self, controller?.viewIfLoaded?.window != nil else { return }
         if delivery.mode == .ask {
-            if answer?.id != delivery.id { answer = delivery }
+            // An answer on screen stays until the user acts on it; this one
+            // waits, unacknowledged, and shows after it.
+            if answer == nil { answer = delivery }
             return
         }
         store.insertedDeliveryID = delivery.id

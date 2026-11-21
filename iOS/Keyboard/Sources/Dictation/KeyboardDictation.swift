@@ -191,14 +191,16 @@ final class KeyboardDictation: ObservableObject {
     /// text is held for the next keyboard. iOS gives the process a little
     /// time to finish (`performExpiringActivity`); when it runs out first,
     /// the request goes to the background session.
-    func keyboardHidden(textBefore: String?) {
+    func keyboardHidden(document: UUID?, textBefore: String?) {
         guard var job else { return }
         if job.armed {
             discard(reason: "keyboard hidden")
             return
         }
         job.interrupted = true
-        if let textBefore { job.textBefore = textBefore }
+        // Only the recorded field's text: another field's would let this
+        // result be typed there. Otherwise the text from the start stays.
+        if let textBefore, let document, document == job.document { job.textBefore = textBefore }
         self.job = job
         switch coordinator?.state {
         case .recording, .warming:
@@ -407,9 +409,10 @@ final class KeyboardDictation: ObservableObject {
         guard expiring == nil else { return }
         let done = DispatchSemaphore(value: 0)
         expiring = done
+        let id = job?.id
         ProcessInfo.processInfo.performExpiringActivity(withReason: "Finishing a dictation") { [weak self] expired in
             if expired {
-                DispatchQueue.main.sync { MainActor.assumeIsolated { self?.timeRanOut() } }
+                DispatchQueue.main.sync { MainActor.assumeIsolated { self?.timeRanOut(for: id) } }
                 done.signal()
             } else {
                 _ = done.wait(timeout: .now() + Self.transcriptionTimeout)
@@ -492,7 +495,9 @@ final class KeyboardDictation: ObservableObject {
     /// on its way, or a cancelled request the provider already received, can
     /// still mean the audio reaches the provider twice (accepted risk,
     /// docs/IOS.md).
-    private func timeRanOut() {
+    private func timeRanOut(for id: UUID?) {
+        // Only the job this activity was started for: a later one is not handed off.
+        guard let id, job?.id == id else { return }
         guard let folder = job?.folder, phase == .processing, client.sentTranscription != nil, let coordinator else { return }
         // Several chunks: the keyboard finishes it when iOS resumes it, or
         // the app recovers the recording.
