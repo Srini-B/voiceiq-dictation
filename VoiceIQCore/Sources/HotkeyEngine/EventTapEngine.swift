@@ -176,6 +176,8 @@ public final class EventTapEngine: @unchecked Sendable {
             life.port = tap
             life.runLoop = CFRunLoopGetCurrent()
             life.state = .running
+            // Enabled under the lock, so a stop() cannot disable it first.
+            CGEvent.tapEnable(tap: tap, enable: true)
             return true
         }
         guard current else {
@@ -183,7 +185,6 @@ public final class EventTapEngine: @unchecked Sendable {
             CFMachPortInvalidate(tap)
             return
         }
-        CGEvent.tapEnable(tap: tap, enable: true)
         Log.hotkey.info("EventTapEngine: tap running (trigger=\(self.trigger.displayName, privacy: .public))")
         started.signal()
         CFRunLoopRun()

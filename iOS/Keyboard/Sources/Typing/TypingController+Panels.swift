@@ -161,12 +161,27 @@ extension TypingController {
 
     /// Presses Delete `count` times and records what that removes: the
     /// selection first, if any, then the text before it.
-    func deleteBack(_ count: Int = 1) {
-        guard let proxy, count > 0 else { return }
+    @discardableResult
+    func deleteBack(_ count: Int = 1) -> String {
+        guard let proxy, count > 0 else { return "" }
         let selected = proxy.selectedText ?? ""
         let before = proxy.documentContextBeforeInput ?? ""
-        record(deleted: String(before.suffix(selected.isEmpty ? count : count - 1)) + selected, inserted: "")
+        let deleted = String(before.suffix(selected.isEmpty ? count : count - 1)) + selected
+        record(deleted: deleted, inserted: "")
         for _ in 0..<count { proxy.deleteBackward() }
+        return deleted
+    }
+
+    /// Moves this turn's deletes out of the step they joined into a new one,
+    /// for the text typed after them in the same turn to join.
+    func groupTurnDeletes() {
+        guard let before = undoBeforeTurn else { return }
+        undoBeforeTurn = nil
+        undoStack = before
+        redoStack = []
+        undoStack.append(UndoStep())
+        if undoStack.count > 50 { undoStack.removeFirst() }
+        for deleted in turnDeletes { record(deleted: deleted, inserted: "") }
     }
 
     private func record(deleted: String, inserted: String) {

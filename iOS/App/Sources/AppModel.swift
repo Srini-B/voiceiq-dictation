@@ -32,11 +32,7 @@ final class AppModel: ObservableObject {
     /// Commands acted on in this process. Guards against acting twice when a
     /// command arrives both by Darwin ping and by URL.
     private var processed: Set<UUID> = []
-    /// The keyboard command that started the dictation in progress.
-    private var startedBy: UUID?
-    /// A keyboard hold released before its dictation recorded: the start it
-    /// ends, applied once that dictation records (`applyHeldStop`).
-    private var heldStop: KeyboardCommand?
+    private var stopGate = KeyboardStopGate()
     private var lastActivityRequestID: UUID?
     /// The keyboard's background session, while iOS has the app handle it.
     private var keyboardTransfers: (delegate: KeyboardTransfers, session: URLSession)?
@@ -356,17 +352,8 @@ final class AppModel: ObservableObject {
         case .start:
             start(command)
         case .stop:
-            if command.startID == nil, case .recording = coordinator.state {
+            if stopGate.receive(command, state: coordinator.state) {
                 coordinator.handle(.finalize)
-                return
-            }
-            // Bound to a start, or sent while the dictation still warms up:
-            // kept until that dictation records.
-            if command.startID != nil || coordinator.state == .warming {
-                var held = command
-                held.startID = command.startID ?? startedBy
-                heldStop = held
-                applyHeldStop()
             }
         case .cancel:
             coordinator.handle(.cancel)
@@ -405,19 +392,15 @@ final class AppModel: ObservableObject {
             session.post(notice: problem)
             return problem
         }
-        startedBy = command.id
+        stopGate.started(by: command.id)
         coordinator.handle(.lockIn)
         applyHeldStop()
         return nil
     }
 
-    /// Finalizes the dictation a held stop names, once it records. A stop
-    /// for another start, or older than a command may be, never applies.
+    /// Finalizes the dictation a held stop names, once it records.
     private func applyHeldStop() {
-        guard let held = heldStop else { return }
-        guard held.isFresh(), held.startID != nil else { heldStop = nil; return }
-        guard held.startID == startedBy, case .recording = coordinator.state else { return }
-        heldStop = nil
+        guard stopGate.takeHeldStop(state: coordinator.state) else { return }
         SessionDiagnostics.note("keyboard hold released before recording: stopping now")
         coordinator.handle(.finalize)
     }
@@ -506,6 +489,9 @@ final class AppModel: ObservableObject {
                 banner = problem
                 return
             }
+            // A stop queued before this process started was skipped as old;
+            // the commands after this start apply to it.
+            drainCommands()
         }
         hostReturn.returnToHost(host, isRecording: { [weak self] in
             if case .recording = self?.coordinator.state { return true }
@@ -640,7 +626,11 @@ final class AppModel: ObservableObject {
             }
             if session.recordingStartedAt == nil { session.recordingStartedAt = Date() }
             session.dictationPhase = .recording
-            if case .recording = state { applyHeldStop() }
+            // `$state` publishes before the coordinator stores the state, so
+            // the held stop is checked on the next turn, against what it stored.
+            if case .recording = state {
+                Task { @MainActor [weak self] in self?.applyHeldStop() }
+            }
         case .finalizing, .transcribing, .inserting:
             session.recordingStartedAt = nil
             session.dictationPhase = .processing
@@ -655,7 +645,7 @@ final class AppModel: ObservableObject {
             session.recordingStartedAt = nil
             session.dictationPhase = .warm
             session.releaseBackgroundTime()
-            startedBy = nil
+            stopGate.ended()
             if state != previousState, case .failed(let failure) = state, DictationNotice.isMicrophoneFailure(failure),
                UIApplication.shared.applicationState != .active {
                 // iOS refused the microphone to a backgrounded app. The next tap
