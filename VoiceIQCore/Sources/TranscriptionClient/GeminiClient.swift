@@ -206,10 +206,17 @@ public actor GeminiClient {
         applyAuth(&request, via: via)
         request.httpBody = body
 
+        if stage == .transcribe, Self.capturesTranscription {
+            throw CapturedTranscriptionRequest(request: request)
+        }
         let data: Data
         let response: URLResponse
         do {
-            (data, response) = try await Self.perform(request, deadline: deadline, stage: stage, via: via, modelLabel: modelLabel)
+            if stage == .transcribe, let replayed = Self.replayedTranscription?.take(url: url) {
+                (data, response) = replayed
+            } else {
+                (data, response) = try await Self.perform(request, deadline: deadline, stage: stage, via: via, modelLabel: modelLabel)
+            }
         } catch is DeadlineExceeded {
             throw TranscriptionError.timeout
         } catch let error as URLError {

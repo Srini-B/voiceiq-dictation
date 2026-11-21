@@ -46,6 +46,13 @@ public final class SharedStore: @unchecked Sendable {
         static let keyboardLearnedWords = "bridge.keyboardLearnedWords"
         static let appPasteboardChangeCount = "bridge.appPasteboardChangeCount"
         static let keyboardPreferences = "bridge.keyboardPreferences"
+        static let keyboardSnapshot = "bridge.keyboardSnapshot"
+        static let keyboardHeartbeat = "bridge.keyboardHeartbeat"
+        static let keyboardStopRequestedAt = "bridge.keyboardStopRequestedAt"
+        static let heldByKeyboard = "bridge.heldByKeyboard"
+        static let heldByApp = "bridge.heldByApp"
+        static let heldHandledID = "bridge.heldHandledID"
+        static let keyboardDelivery = "bridge.keyboardDelivery"
     }
 
     // MARK: - Keyboard diagnostics
@@ -98,8 +105,10 @@ public final class SharedStore: @unchecked Sendable {
         set { defaults.set(newValue?.uuidString, forKey: Key.insertedDeliveryID) }
     }
 
-    /// When a keyboard with Full Access last ran. The app reads it to tell
-    /// whether setup is finished. Writer: keyboard.
+    /// When a keyboard with Full Access was last on screen, refreshed every
+    /// second while it is. The app reads it to tell whether setup is
+    /// finished, and holds the warm window open while it is recent.
+    /// Writer: keyboard.
     public var keyboardSeenAt: Date? {
         get { date(forKey: Key.keyboardSeenAt) }
         set { defaults.set(newValue?.timeIntervalSince1970, forKey: Key.keyboardSeenAt) }
@@ -116,6 +125,77 @@ public final class SharedStore: @unchecked Sendable {
     /// this drops the cache so a value the keyboard just wrote is visible.
     public func reloadFromDisk() {
         defaults.synchronize()
+    }
+
+    // MARK: - Dictation in the keyboard
+
+    /// A dictation the keyboard records itself, published as the app
+    /// publishes its own, so the Control Center toggle shows it. Fresh only
+    /// while `keyboardHeartbeat` is. Writer: keyboard.
+    public var keyboardSnapshot: SessionSnapshot? {
+        decode(SessionSnapshot.self, forKey: Key.keyboardSnapshot)
+    }
+
+    public var keyboardHeartbeat: Date? {
+        date(forKey: Key.keyboardHeartbeat)
+    }
+
+    public func publishKeyboard(_ snapshot: SessionSnapshot?) {
+        encode(snapshot, forKey: Key.keyboardSnapshot)
+        defaults.set(snapshot == nil ? 0 : Date().timeIntervalSince1970, forKey: Key.keyboardHeartbeat)
+    }
+
+    /// True while a keyboard on screen records a dictation.
+    public func keyboardIsRecording(now: Date = Date()) -> Bool {
+        guard keyboardSnapshot?.phase == .recording, let keyboardHeartbeat else { return false }
+        return now.timeIntervalSince(keyboardHeartbeat) < Self.heartbeatTimeout
+    }
+
+    /// The Control Center toggle was pressed while the keyboard recorded:
+    /// the keyboard stops its dictation. Writer: app.
+    public var keyboardStopRequestedAt: Date? {
+        get { date(forKey: Key.keyboardStopRequestedAt) }
+        set {
+            defaults.set(newValue?.timeIntervalSince1970, forKey: Key.keyboardStopRequestedAt)
+            DarwinNotifier.post(.state)
+        }
+    }
+
+    /// A result no keyboard typed yet: the keyboard hid before it was ready,
+    /// or the app finished it in the background. Writers: the keyboard
+    /// (`heldByKeyboard`) and the app (`heldByApp`).
+    public var heldByKeyboard: HeldDictation? {
+        get { decode(HeldDictation.self, forKey: Key.heldByKeyboard) }
+        set { encode(newValue, forKey: Key.heldByKeyboard) }
+    }
+
+    public var heldByApp: HeldDictation? {
+        get { decode(HeldDictation.self, forKey: Key.heldByApp) }
+        set {
+            encode(newValue, forKey: Key.heldByApp)
+            DarwinNotifier.post(.state)
+        }
+    }
+
+    /// The last result of a dictation the keyboard ran by itself, for Paste
+    /// last. Writer: keyboard.
+    public var keyboardDelivery: Delivery? {
+        get { decode(Delivery.self, forKey: Key.keyboardDelivery) }
+        set { encode(newValue, forKey: Key.keyboardDelivery) }
+    }
+
+    /// The newest held result no keyboard has typed or dismissed.
+    public var heldDictation: HeldDictation? {
+        let handled = heldHandledID
+        return [heldByKeyboard, heldByApp].compactMap { $0 }
+            .filter { $0.id != handled }
+            .max { $0.finishedAt < $1.finishedAt }
+    }
+
+    /// The last held result a keyboard typed or dismissed. Writer: keyboard.
+    public var heldHandledID: UUID? {
+        get { defaults.string(forKey: Key.heldHandledID).flatMap(UUID.init(uuidString:)) }
+        set { defaults.set(newValue?.uuidString, forKey: Key.heldHandledID) }
     }
 
     // MARK: - Dictionary
@@ -248,7 +328,11 @@ public final class SharedStore: @unchecked Sendable {
         return try? decoder.decode(type, from: data)
     }
 
-    private func encode<T: Encodable>(_ value: T, forKey key: String) {
+    private func encode<T: Encodable>(_ value: T?, forKey key: String) {
+        guard let value else {
+            defaults.removeObject(forKey: key)
+            return
+        }
         guard let data = try? encoder.encode(value) else { return }
         defaults.set(data, forKey: key)
     }

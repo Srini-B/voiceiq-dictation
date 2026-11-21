@@ -193,3 +193,48 @@ public struct DictionaryAddition: Codable, Equatable, Sendable, Identifiable {
         return trimmed
     }
 }
+
+/// A dictation's result held for the next keyboard (as anomalyco/hex #2163
+/// does): typed into the same field within `insertWindow`, otherwise offered
+/// in the suggestion strip until `offerWindow` runs out.
+public struct HeldDictation: Codable, Equatable, Sendable {
+    public static let insertWindow: TimeInterval = 30
+    public static let offerWindow: TimeInterval = 600
+
+    public enum Delivery: Equatable, Sendable { case insert, offer, expired }
+
+    public var id: UUID
+    public var text: String
+    public var mode: KeyboardMode
+    /// The field it was started in (`UITextDocumentProxy.documentIdentifier`).
+    public var document: UUID?
+    /// The app it was started in, and the text before the cursor when the
+    /// keyboard hid: iOS names the field anew when its app comes back, so
+    /// these tell the same field apart from another.
+    public var host: String?
+    public var textBefore: String?
+    public var finishedAt: Date
+
+    public init(id: UUID = UUID(), text: String, mode: KeyboardMode, document: UUID?,
+                host: String? = nil, textBefore: String? = nil, finishedAt: Date = Date()) {
+        self.id = id
+        self.text = text
+        self.mode = mode
+        self.document = document
+        self.host = host
+        self.textBefore = textBefore
+        self.finishedAt = finishedAt
+    }
+
+    /// Where the keyboard is now: its field, app, and text before the cursor.
+    /// A field either side could not name counts as the same one; a field
+    /// iOS renamed counts as the same when the app and the text before the
+    /// cursor are unchanged.
+    public func delivery(in document: UUID?, host: String? = nil, textBefore: String? = nil, at now: Date = Date()) -> Delivery {
+        let age = now.timeIntervalSince(finishedAt)
+        guard age < Self.offerWindow else { return .expired }
+        let sameField = self.document == nil || document == nil || self.document == document
+            || (self.host != nil && self.host == host && self.textBefore != nil && self.textBefore == textBefore)
+        return sameField && age < Self.insertWindow ? .insert : .offer
+    }
+}

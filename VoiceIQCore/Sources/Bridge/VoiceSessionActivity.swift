@@ -122,11 +122,11 @@ public struct SetDictationIntent: SetValueIntent, AudioRecordingIntent, LiveActi
 }
 
 extension SharedStore {
-    /// The control is on while the app records a dictation.
+    /// The control is on while the app or the keyboard records a dictation.
     public static let dictationControlKind = "io.blue.voiceiq.ios.control.dictate"
 
     public func isDictating(now: Date = Date()) -> Bool {
-        snapshot.phase == .recording && appIsAlive(now: now)
+        (snapshot.phase == .recording && appIsAlive(now: now)) || keyboardIsRecording(now: now)
     }
 }
 

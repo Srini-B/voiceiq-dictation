@@ -23,6 +23,17 @@ public struct RetentionPolicy: Sendable {
         DebugLog.prune(now: now)
     }
 
+    /// "Never" keeps no audio: once a dictation has its words (or was
+    /// silent), its recording goes at once. The app and the iPhone keyboard
+    /// both call this on every meta.json update.
+    public static func dropAudioIfNeverKept(_ meta: SessionMeta, folder: URL,
+                                            audioRetentionDays: Int = SettingsStore().audioRetentionDays) {
+        guard audioRetentionDays < 0, meta.rawTranscript != nil || meta.status == .silent else { return }
+        for audio in [FileLayout.audioCAF(in: folder), FileLayout.audioFLAC(in: folder), FileLayout.playbackFolder(in: folder)] {
+            try? FileManager.default.removeItem(at: audio)
+        }
+    }
+
     /// Statuses a dictation ends in. Anything else is in flight or waiting
     /// for the user (Retry, a secure field, the chip) and stays whatever
     /// its age.
