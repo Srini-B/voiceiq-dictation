@@ -131,9 +131,11 @@ public enum KeychainStore {
 
     #if os(iOS)
     /// The iPhone keyboard records and transcribes by itself when no app
-    /// session runs, so it reads the keys too. On iOS every key is saved in
-    /// the App Group's access group (`save`); this moves keys saved by older
-    /// builds, which sit in the app's own group, once. Reads search every
+    /// session runs, so it reads the keys too. On iOS the Gemini, OpenAI,
+    /// ElevenLabs and TinyFish keys are saved in the App Group's access group
+    /// (`save`); this moves those keys saved by older builds, which sit in the
+    /// app's own group, once. The agent provider's key stays in the app's own
+    /// group (`unshareAgentProviderKey`). Reads search every
     /// group the process belongs to, so they need no change. Only processes
     /// with the App Group entitlement (the app, the keyboard, the Live
     /// Activity) can read the group, and the keyboard only with Full Access.
