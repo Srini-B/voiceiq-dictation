@@ -159,7 +159,7 @@ struct DictationSettingsView: View {
                     session.warmWindowChanged()
                 }
             } footer: {
-                Text("While the mic is on, the next keyboard tap starts right away. After that, the tap opens VoiceiQ for a moment.")
+                Text("While the mic is on, the next keyboard tap starts right away. The time counts from when you last dictated or closed the VoiceiQ keyboard. After that, the tap opens VoiceiQ for a moment.")
             }
             Section {
                 NavigationLink {

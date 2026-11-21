@@ -2,10 +2,24 @@ import AppIntents
 import SwiftUI
 import UIKit
 import VoiceIQBridge
+import VoiceIQCore
 
 @MainActor
 final class AppDelegate: NSObject, UIApplicationDelegate {
     let model = AppModel()
+    private var transfersDone: (() -> Void)?
+
+    /// The keyboard's background transcription finished while no keyboard
+    /// ran (docs/IOS.md, "Dictation in the keyboard").
+    func application(_ application: UIApplication, handleEventsForBackgroundURLSession identifier: String,
+                     completionHandler: @escaping () -> Void) {
+        guard identifier == KeyboardTransfers.identifier else { return completionHandler() }
+        transfersDone = completionHandler
+        model.handleKeyboardTransfers { [weak self] in
+            self?.transfersDone?()
+            self?.transfersDone = nil
+        }
+    }
 
     func applicationWillTerminate(_ application: UIApplication) {
         // The recording is finalized to disk; the next launch transcribes it.
