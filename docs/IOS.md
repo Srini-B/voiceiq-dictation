@@ -198,9 +198,20 @@ app reconnects to the session, replays the answer through the same service
 through the writing model, Translate or Ask as if fetched there, writes
 History, usage and iCloud, and holds the text for the next keyboard
 (`heldByApp`). This works for every provider, ElevenLabs included, since
-they all post through `GeminiClient`. A Real-time dictation hands over the
-batch request for its recording, because the live stream ends with the
-keyboard.
+they all post through `GeminiClient`.
+
+A dictation is never sent twice. Before the hand-over,
+`DictationCoordinator.handOffTranscription()` cancels the keyboard's own
+request, its silent retry and the writing pass, and drops any answer that
+still arrives, so only the background job delivers text. It refuses, and
+nothing is handed over, once the provider has answered the transcription
+(its usage is metered) or when the dictation streamed its audio with
+Real-time transcription; the keyboard then finishes it when iOS resumes it,
+or the app recovers the recording. When the background answer is in but the
+next step fails (the writing model, Translate or Ask), the app marks the
+dictation failed with Retry in History instead of sending the recording
+again. A request the keyboard cancelled may still have reached the provider;
+whether a request the client abandoned is billed depends on the provider.
 
 #### Offline
 

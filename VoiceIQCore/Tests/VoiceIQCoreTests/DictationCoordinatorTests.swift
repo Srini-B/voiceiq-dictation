@@ -382,6 +382,65 @@ final class DictationCoordinatorTests: XCTestCase {
         XCTAssertNotNil(discarded, "a 3s deliberate cancel still discards")
     }
 
+    // MARK: Hand-over to the keyboard's background session
+
+    /// Begins and finalizes a dictation whose transcription takes 300 ms, and
+    /// returns once it is in flight.
+    private func transcribingCoordinator() async -> (DictationCoordinator, URL) {
+        var t = FakeTranscription()
+        t.delayNanos = 300_000_000
+        let c = makeCoordinator(transcription: t)
+        capture.result = AudioCaptureResult(framesWritten: 16_000 * 3, durationSeconds: 3)
+        c.handle(.begin)
+        await pump()
+        let folder = c.activeSessionFolder
+        c.handle(.finalize)
+        for _ in 0..<200 where c.state != .transcribing {
+            await Task.yield()
+            try? await Task.sleep(nanoseconds: 1_000_000)
+        }
+        XCTAssertEqual(c.state, .transcribing)
+        return (c, folder!)
+    }
+
+    func testHandedOffTranscriptionNeverDeliversAndKeepsTheRecording() async throws {
+        let (c, folder) = await transcribingCoordinator()
+        var answered = false
+        c.onAnswerReady = { _ in answered = true }
+
+        XCTAssertTrue(c.handOffTranscription())
+        XCTAssertEqual(c.state, .done(.queuedForRetry))
+
+        // The fake answers after its delay even when cancelled: that late
+        // answer must not be typed.
+        try await Task.sleep(nanoseconds: 500_000_000)
+        XCTAssertNil(inserter.insertedText)
+        XCTAssertFalse(answered)
+        XCTAssertEqual(c.state, .done(.queuedForRetry))
+        XCTAssertEqual(SessionMeta.read(from: folder)?.status, .queuedForRetry)
+    }
+
+    func testNoHandOffOnceTheProviderAnswered() async throws {
+        let previous = UsageMeter.store
+        UsageMeter.store = try UsageStore.inMemory()
+        defer { UsageMeter.store = previous }
+        let (c, folder) = await transcribingCoordinator()
+        let session = try XCTUnwrap(SessionMeta.read(from: folder)?.id.uuidString)
+        UsageMeter.store?.append(UsageRecord(activity: .dictation, stage: .transcribe, model: "m",
+                                             sessionID: session, usage: TokenUsage(audioIn: 10)))
+
+        XCTAssertFalse(c.handOffTranscription(), "the transcription was paid for: sending it again bills twice")
+        await settle()
+        XCTAssertEqual(inserter.insertedText, "clean")
+    }
+
+    func testNoHandOffAfterTheResultArrived() async {
+        let (c, _) = await transcribingCoordinator()
+        await settle()
+        XCTAssertEqual(inserter.insertedText, "clean")
+        XCTAssertFalse(c.handOffTranscription())
+    }
+
     // Production pass 2 P0: a second finalize while in flight must be a pure
     // no-op — it used to stop capture again and clobber meta to failed/no_audio.
 

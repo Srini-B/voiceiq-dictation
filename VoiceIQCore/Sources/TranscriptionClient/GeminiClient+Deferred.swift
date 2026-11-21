@@ -30,6 +30,11 @@ public final class ReplayedResponse: Sendable {
         pending = OSAllocatedUnfairLock(initialState: (body, status))
     }
 
+    /// The answer was handed out: the provider transcribed this dictation,
+    /// so a later failure (the writing model, Translate, Ask) must not send
+    /// the recording again.
+    public var wasTaken: Bool { pending.withLock { $0 == nil } }
+
     func take(url: URL) -> (Data, URLResponse)? {
         guard let (body, status) = pending.withLock({ state in defer { state = nil }; return state }),
               let response = HTTPURLResponse(url: url, statusCode: status, httpVersion: nil, headerFields: nil) else { return nil }

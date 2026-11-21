@@ -79,9 +79,6 @@ final class KeyboardDictation: ObservableObject {
     private var previousState: DictationState = .idle
     /// A cancelled session waits for the coordinator's keep-or-delete.
     private var cancelledFolder: URL?
-    /// Coordinators whose job went to the background session; kept until
-    /// their request ends, detached from the keyboard.
-    private var retired: [DictationCoordinator] = []
     private var expiring: DispatchSemaphore?
     private var transfers: (delegate: KeyboardTransfers, session: URLSession)?
     private var lastPublished: Date?
@@ -341,7 +338,9 @@ final class KeyboardDictation: ObservableObject {
                 return
             }
             if state == .done(.queuedForRetry), let finished {
+                // Offline, or handed off because iOS's time ran out.
                 queueOffline(finished)
+                if finished.interrupted { return }
             } else {
                 hand(over: finished?.folder)
             }
@@ -423,11 +422,17 @@ final class KeyboardDictation: ObservableObject {
         return nil
     }
 
-    /// An offline dictation: the background session sends it once the
-    /// network is back, and the app finishes it. Without a session it goes
-    /// to the app's retry queue as before.
+    /// An offline or handed-off dictation: the background session sends it
+    /// (once the network is back), and the app finishes it. Without a
+    /// session it goes to the app's retry queue as before.
     private func queueOffline(_ job: Job) {
         guard let folder = job.folder else { return }
+        // Handed off: iOS is about to suspend the keyboard, so the prepared
+        // request goes out now.
+        if let request = job.request {
+            if !send(request, job: job, reason: "keyboard suspended") { hand(over: folder) }
+            return
+        }
         Task {
             if let request = await captureRequest(folder: folder, job: job), send(request, job: job, reason: "offline") { return }
             hand(over: folder)
@@ -454,23 +459,18 @@ final class KeyboardDictation: ObservableObject {
         return true
     }
 
-    /// iOS's time ran out before the transcription answered: the prepared
-    /// request goes to the background session, and the coordinator is
-    /// retired. Its request may still answer if the keyboard comes back;
-    /// the background job's answer is the one used.
+    /// iOS's time ran out before the transcription answered: the coordinator
+    /// stops its own request (and its retry), so no answer can arrive here,
+    /// and ends as queued; `stateChanged` then sends the prepared request
+    /// from the background session. The dictation is sent once: when the
+    /// provider already answered, or the audio went out live, nothing is
+    /// handed over and the keyboard finishes it when iOS resumes it.
     private func timeRanOut() {
-        guard let job, phase == .processing, let request = job.request else { return }
+        guard let job, phase == .processing, job.request != nil, let coordinator else { return }
         KeyboardLog.note("keyboard's time ran out while transcribing")
-        guard send(request, job: job, reason: "keyboard suspended"), let coordinator else { return }
-        inserter.onDeliver = nil
-        coordinator.onAnswerReady = nil
-        coordinator.onSessionUpdate = nil
-        retired.append(coordinator)
-        cancellables.removeAll()
-        self.coordinator = nil
-        self.job = nil
-        phase = .off
-        recordingStartedAt = nil
+        if !coordinator.handOffTranscription() {
+            KeyboardLog.note("not handed over: the provider already has this dictation")
+        }
     }
 
     private func transferSession() -> URLSession {
@@ -489,6 +489,8 @@ final class KeyboardDictation: ObservableObject {
         guard let record = KeyboardJob.read(id), let folder = record.folderURL() else { return }
         let outcome = await KeyboardTransfers.finish(record, service: GeminiTranscriptionService(client: client))
         switch outcome {
+        case .busy:
+            return
         case .waiting:
             // The app's retry sends it again when it opens.
             record.takeOver()
@@ -501,12 +503,6 @@ final class KeyboardDictation: ObservableObject {
             let text = result.cleanedTranscript
             SharedStore.shared.heldByKeyboard = HeldDictation(text: text, mode: record.mode, document: record.document, host: record.host)
             KeyboardLog.note("background transcription finished in the keyboard; text held")
-        }
-        retired.removeAll { coordinator in
-            switch coordinator.state {
-            case .idle, .done, .cancelled, .failed: true
-            default: false
-            }
         }
     }
 }

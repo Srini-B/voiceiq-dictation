@@ -61,6 +61,8 @@ public final class DictationCoordinator: ObservableObject {
     /// The in-flight transcription task — cancelled when the user cancels the
     /// session (audit L8: Esc previously left the network work running).
     private var inFlightTask: Task<Void, Never>?
+    /// The in-flight session streamed its audio live: it was sent already.
+    private var inFlightIsLive = false
 
     /// Folder of the session in progress, if any — Delete All must not sweep it (audit L7).
     public var activeSessionFolder: URL? { session?.folder }
@@ -509,6 +511,7 @@ public final class DictationCoordinator: ObservableObject {
         let finalizeSeconds = finalizeStartedAt.timeIntervalSince(finalizeRequestedAt ?? finalizeStartedAt)
         let live = liveTranscriber
         let usageScope = UsageScope(mode: session.context.mode, sessionID: sessionID.uuidString)
+        inFlightIsLive = live != nil
         inFlightTask = Task { [weak self] in
           await UsageMeter.$scope.withValue(usageScope) {
             guard let self else { return }
@@ -745,6 +748,30 @@ public final class DictationCoordinator: ObservableObject {
             return
         }
         completeCancel(cancelled, result: nil)
+    }
+
+    /// The iPhone keyboard is about to be suspended mid-transcription and
+    /// sends this recording's request from a background `URLSession`
+    /// instead. Stops this session's network work (the request, its silent
+    /// retry and the writing pass), so no answer can arrive here, keeps the
+    /// recording and ends as `.done(.queuedForRetry)` without inserting.
+    ///
+    /// Refuses, and the caller must not send the request, when that would
+    /// send the dictation twice: the provider already answered the
+    /// transcription (its usage is metered), the audio was streamed live,
+    /// or the session is past transcribing.
+    @discardableResult
+    public func handOffTranscription() -> Bool {
+        guard state == .transcribing, let task = inFlightTask, !inFlightIsLive, let session else { return false }
+        let answered = UsageMeter.store?.records(forSession: session.id.uuidString)
+            .contains { $0.stageValue == .transcribe } ?? false
+        guard !answered else { return false }
+        task.cancel()
+        inFlightTask = nil
+        updateMeta { $0.status = .queuedForRetry; $0.errorCode = "handed_off" }
+        apply(.queuedForRetry)
+        self.session = nil
+        return true
     }
 
     private func completeCancel(_ cancelled: Session?, result: AudioCaptureResult?) {

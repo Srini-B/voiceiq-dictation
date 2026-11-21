@@ -418,6 +418,9 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
                 // One silent retry for transient classes (audio is safe on disk).
                 // Every request has its own connection, so a timeout retries at
                 // once; a server error waits half a second first.
+                // A cancelled dictation (handed to the keyboard's background
+                // session, or cancelled) is never sent again.
+                try Task.checkCancellation()
                 Log.transcription.notice("transcribe retrying after \(String(describing: error), privacy: .public)")
                 if case .network = error { try await Task.sleep(nanoseconds: 500_000_000) }
                 return try await sendTranscribe(
@@ -430,6 +433,7 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
                 // History, where the retry would hit the same wall.
                 let wait = retryAfter ?? TimeoutPolicy.rateLimitWait
                 guard wait <= TimeoutPolicy.rateLimitWait else { throw error }
+                try Task.checkCancellation()
                 Log.transcription.info("transcribe rate limited — waiting \(Int(wait))s once")
                 try await Task.sleep(nanoseconds: UInt64(wait * 1_000_000_000))
                 return try await sendTranscribe(

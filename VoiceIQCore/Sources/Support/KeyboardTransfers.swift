@@ -97,9 +97,16 @@ public final class KeyboardTransfers: NSObject, URLSessionDataDelegate, Sendable
         case finished(TranscriptionResult)
         /// No answer yet, or the answer says try again later: the job stays.
         case waiting
-        /// The provider refused it; the session is marked failed for History.
+        /// The provider refused it, or the step after its answer failed;
+        /// the session is marked failed for History, with Retry.
         case failed(String)
+        /// Another call is finishing this job already.
+        case busy
     }
+
+    /// Jobs being finished in this process: iOS's events, the app's launch
+    /// import and the session's wake-up can each ask for the same job.
+    @MainActor private static var finishing: Set<UUID> = []
 
     /// Runs the rest of the pipeline on a job's answer, as the coordinator
     /// would have: the service parses the provider's answer (replayed, not
@@ -110,14 +117,16 @@ public final class KeyboardTransfers: NSObject, URLSessionDataDelegate, Sendable
     public static func finish(_ job: KeyboardJob, service: GeminiTranscriptionService,
                               root: URL? = KeyboardInbox.root) async -> Outcome {
         guard let answer = job.answer(root: root), let folder = job.folderURL(root: root) else { return .waiting }
+        guard finishing.insert(job.id).inserted else { return .busy }
+        defer { finishing.remove(job.id) }
         guard let status = answer.status else {
             Log.transcription.notice("keyboard job \(job.id, privacy: .public): transfer ended without an answer (\(answer.error ?? "", privacy: .private))")
             return .waiting
         }
         let body = KeyboardJob.responseURL(job.id, root: root).flatMap { try? Data(contentsOf: $0) } ?? Data()
         var meta = SessionMeta.read(from: folder) ?? SessionMeta(id: job.id, startedAt: job.createdAt, status: .transcribing)
+        let replay = ReplayedResponse(body: body, status: status)
         do {
-            let replay = ReplayedResponse(body: body, status: status)
             let scope = UsageScope(mode: job.context.mode, sessionID: meta.id.uuidString)
             let result = try await GeminiClient.$replayedTranscription.withValue(replay) {
                 try await UsageMeter.$scope.withValue(scope) {
@@ -133,7 +142,7 @@ public final class KeyboardTransfers: NSObject, URLSessionDataDelegate, Sendable
             meta.write(to: folder)
             RetentionPolicy.dropAudioIfNeverKept(meta, folder: folder)
             return .finished(result)
-        } catch let error as TranscriptionError where error.isWorthRetrying {
+        } catch let error as TranscriptionError where error.isWorthRetrying && !replay.wasTaken {
             Log.transcription.notice("keyboard job \(job.id, privacy: .public): \(String(describing: error), privacy: .public); left for the app's retry")
             meta.status = .queuedForRetry
             meta.errorCode = "keyboard_transfer"

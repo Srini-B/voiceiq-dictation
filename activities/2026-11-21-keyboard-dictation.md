@@ -31,6 +31,11 @@ away only for a while after each dictation.
   `URLSession` in the App Group. The app replays the saved answer through
   the same service (`GeminiClient.replayedTranscription`), so parsing,
   usage, the writing model and History behave as for a normal dictation.
+- **Never sent twice.** When iOS's time runs out, the coordinator cancels
+  the keyboard's own request and its retry before the background upload
+  starts, and nothing is handed over once the provider answered or the
+  audio streamed live. The app does not re-send a recording whose
+  background answer it already has. Decided after review on 2026-11-21.
 - **Keys in the App Group keychain**, as #53 did. Every process with the App
   Group entitlement can read them (app, keyboard, Live Activity); docs/IOS.md
   states the risk.

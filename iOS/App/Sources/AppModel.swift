@@ -169,6 +169,8 @@ final class AppModel: ObservableObject {
     private func finishKeyboardJob(_ id: UUID) async {
         guard let job = KeyboardJob.read(id) else { return }
         switch await KeyboardTransfers.finish(job, service: transcription) {
+        case .busy:
+            break
         case .waiting:
             // The retry queue sends it (now when online, later otherwise).
             job.takeOver()
