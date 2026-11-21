@@ -1,3 +1,4 @@
+import AVFoundation
 import XCTest
 @testable import VoiceIQCore
 import VoiceIQBridge
@@ -328,6 +329,50 @@ final class ReplayedResponseTests: XCTestCase {
         XCTAssertEqual(names.transcribe, settings.openAIConfig.transcribeModel)
         XCTAssertEqual(names.writing, settings.geminiConfig.cleanupModel)
         XCTAssertTrue(service.transcriptKeepsFillers(provider: transcriber, elevenLabs: false, policy: settings.formattingPolicy))
+    }
+}
+
+extension ReplayedResponseTests {
+    /// A captured request carries the transcription model and filler mode it
+    /// was sent with; its replay is read with those, whatever Settings says
+    /// by then, and the writing model still follows Settings.
+    func testAReplayIsReadAsItWasSent() async throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let audio = folder.appendingPathComponent("audio.caf")
+        let format = try XCTUnwrap(AVAudioFormat(standardFormatWithSampleRate: 16_000, channels: 1))
+        let tone = try XCTUnwrap(AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 16_000))
+        tone.frameLength = 16_000
+        for frame in 0..<16_000 { tone.floatChannelData![0][frame] = 0.5 * sin(Float(frame) * 2 * .pi * 440 / 16_000) }
+        try AVAudioFile(forWriting: audio, settings: format.settings).write(from: tone)
+
+        let settings = SettingsStore()
+        let service = GeminiTranscriptionService(client: GeminiClient(apiKey: { "key" }, openAIKey: { "key" },
+                                                                   provider: { settings.preferredProvider },
+                                                                   elevenLabsKey: { "key" }), settings: settings)
+        var captured: CapturedTranscriptionRequest?
+        do {
+            _ = try await GeminiClient.$capturesTranscription.withValue(true) {
+                try await service.transcribe(audioURL: audio, durationSeconds: 1, context: DictationContext(mode: .dictate))
+            }
+        } catch let request as CapturedTranscriptionRequest {
+            captured = request
+        }
+        let (transcriber, elevenLabs) = service.transcriberInUse()
+        let now = service.modelNames(transcriber: transcriber, writer: settings.preferredProvider, elevenLabs: elevenLabs)
+        let keepsFillers = service.transcriptKeepsFillers(provider: transcriber, elevenLabs: elevenLabs, policy: settings.formattingPolicy)
+        XCTAssertEqual(captured?.model, now.transcribe)
+        XCTAssertEqual(captured?.keepsFillers, keepsFillers)
+
+        let replay = ReplayedResponse(body: Data(), status: 200, transcribeModel: "sent-model/verbatim", keepsFillers: !keepsFillers)
+        GeminiClient.$replayedTranscription.withValue(replay) {
+            let names = service.modelNames(transcriber: transcriber, writer: settings.preferredProvider, elevenLabs: elevenLabs)
+            XCTAssertEqual(names.transcribe, "sent-model/verbatim")
+            XCTAssertEqual(names.writing, now.writing)
+            XCTAssertEqual(service.transcriptKeepsFillers(provider: transcriber, elevenLabs: elevenLabs,
+                                                          policy: settings.formattingPolicy), !keepsFillers)
+        }
     }
 }
 

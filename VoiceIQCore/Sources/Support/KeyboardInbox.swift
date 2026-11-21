@@ -102,6 +102,10 @@ public struct KeyboardJob: Codable, Equatable, Sendable {
     /// Who the request went to, which decides how its answer reads, even
     /// after the provider in Settings changed. Nil in jobs of older builds.
     public var transcriber: ModelEndpoint?
+    /// The transcription model it was sent to and whether its text keeps
+    /// fillers, for History and the writing pass. Nil in older jobs.
+    public var transcribeModel: String?
+    public var keepsFillers: Bool?
 
     public init(id: UUID = UUID(), folder: String, mode: KeyboardMode, translationTargets: [String] = [],
                 selectedText: String? = nil, host: String? = nil, hostName: String? = nil, document: UUID? = nil,

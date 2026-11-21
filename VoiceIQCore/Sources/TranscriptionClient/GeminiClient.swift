@@ -218,10 +218,12 @@ public actor GeminiClient {
         request.httpBody = body
 
         if stage == .transcribe, Self.capturesTranscription {
-            throw CapturedTranscriptionRequest(request: request, endpoint: via)
+            throw CapturedTranscriptionRequest(request: request, endpoint: via, model: Self.sentTranscriber?.model,
+                                               keepsFillers: Self.sentTranscriber?.keepsFillers)
         }
         if stage == .transcribe, keepsSentTranscription, Self.replayedTranscription == nil {
-            let sent = CapturedTranscriptionRequest(request: request, endpoint: via)
+            let sent = CapturedTranscriptionRequest(request: request, endpoint: via, model: Self.sentTranscriber?.model,
+                                                    keepsFillers: Self.sentTranscriber?.keepsFillers)
             firstTranscription.withLock { if $0 == nil { $0 = sent } }
         }
         let data: Data

@@ -15,6 +15,10 @@ extension GeminiClient {
     /// The answer to the first transcription request, used instead of
     /// sending it. Later transcription requests (a retry) go out as usual.
     @TaskLocal public static var replayedTranscription: ReplayedResponse?
+    /// The transcription model and whether its text keeps fillers, set by
+    /// the service around each transcription request; kept with a captured
+    /// request so its replay is read as what was sent.
+    @TaskLocal static var sentTranscriber: (model: String, keepsFillers: Bool)?
 
     /// The first transcription request this client sent since
     /// `forgetSentTranscription()`: what the iPhone keyboard hands to its
@@ -39,6 +43,10 @@ extension GeminiClient {
 public struct CapturedTranscriptionRequest: Error, Sendable {
     public let request: URLRequest
     public let endpoint: ModelEndpoint
+    /// The transcription model History names, and whether the text keeps
+    /// fillers (the transcription mode); nil outside the service.
+    public var model: String?
+    public var keepsFillers: Bool?
 }
 
 /// A provider's answer received elsewhere, handed out once.
@@ -48,11 +56,17 @@ public final class ReplayedResponse: Sendable {
     /// The provider that answered; nil for a job from an older build, read
     /// as the provider in Settings.
     public let endpoint: ModelEndpoint?
+    /// What was sent (`CapturedTranscriptionRequest`); nil for a job from an
+    /// older build, read from Settings.
+    public let transcribeModel: String?
+    public let keepsFillers: Bool?
 
-    public init(body: Data, status: Int, endpoint: ModelEndpoint? = nil) {
+    public init(body: Data, status: Int, endpoint: ModelEndpoint? = nil, transcribeModel: String? = nil, keepsFillers: Bool? = nil) {
         pending = OSAllocatedUnfairLock(initialState: (body, status))
         self.status = status
         self.endpoint = endpoint
+        self.transcribeModel = transcribeModel
+        self.keepsFillers = keepsFillers
     }
 
     /// The provider transcribed this dictation: a successful answer was

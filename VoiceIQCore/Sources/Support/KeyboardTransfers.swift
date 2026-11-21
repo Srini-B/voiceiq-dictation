@@ -71,6 +71,8 @@ public final class KeyboardTransfers: NSObject, URLSessionDataDelegate, Sendable
         guard let bodyURL = KeyboardJob.bodyURL(job.id, root: root) else { throw CocoaError(.fileNoSuchFile) }
         var job = job
         job.transcriber = captured.endpoint
+        job.transcribeModel = captured.model
+        job.keepsFillers = captured.keepsFillers
         guard let claim = job.claim(root: root) else { throw CocoaError(.fileWriteFileExists) }
         defer { claim.release() }
         // The body first: a job is published only once it can be sent.
@@ -167,7 +169,8 @@ public final class KeyboardTransfers: NSObject, URLSessionDataDelegate, Sendable
         }
         let body = KeyboardJob.responseURL(job.id, root: root).flatMap { try? Data(contentsOf: $0) } ?? Data()
         var meta = SessionMeta.read(from: folder) ?? SessionMeta(id: job.id, startedAt: job.createdAt, status: .transcribing)
-        let replay = ReplayedResponse(body: body, status: status, endpoint: job.transcriber)
+        let replay = ReplayedResponse(body: body, status: status, endpoint: job.transcriber,
+                                      transcribeModel: job.transcribeModel, keepsFillers: job.keepsFillers)
         do {
             let scope = UsageScope(mode: job.context.mode, sessionID: meta.id.uuidString)
             let result = try await GeminiClient.$replayedTranscription.withValue(replay) {

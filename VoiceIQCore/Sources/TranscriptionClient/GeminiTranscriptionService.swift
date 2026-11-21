@@ -228,6 +228,8 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
     /// transcription model has no smart mode, so no mode is named.
     func modelNames(transcriber: ModelProvider, writer: ModelProvider, elevenLabs: Bool) -> (transcribe: String, writing: String) {
         let writing = writer == .openAI ? settings.openAIConfig.writingModel : settings.geminiConfig.cleanupModel
+        // A replayed answer is named for the model it was sent to.
+        if let sent = GeminiClient.replayedTranscription?.transcribeModel { return (sent, writing) }
         if !elevenLabs, transcriber == .openAI { return (settings.openAIConfig.transcribeModel, writing) }
         let transcribe = elevenLabs ? ElevenLabs.batchModel : settings.geminiConfig.transcribeModel
         return ("\(transcribe)/\(settings.formattingPolicy.mode.rawValue)", writing)
@@ -362,9 +364,14 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
         config: GeminiConfig, policy: SettingsStore.FormattingPolicy,
         vocabulary: [String], elevenLabs: Bool, deadline: TimeInterval
     ) async throws -> String {
-        try await UsageMeter.$audioSeconds.withValue(seconds) {
-            try await sendTranscribeRequest(flacData: flacData, seconds: seconds, config: config, policy: policy,
-                                            vocabulary: vocabulary, elevenLabs: elevenLabs, deadline: deadline)
+        let transcriber = transcriberInUse().provider
+        let sent = (model: modelNames(transcriber: transcriber, writer: transcriber, elevenLabs: elevenLabs).transcribe,
+                    keepsFillers: transcriptKeepsFillers(provider: transcriber, elevenLabs: elevenLabs, policy: policy))
+        return try await GeminiClient.$sentTranscriber.withValue(sent) {
+            try await UsageMeter.$audioSeconds.withValue(seconds) {
+                try await sendTranscribeRequest(flacData: flacData, seconds: seconds, config: config, policy: policy,
+                                                vocabulary: vocabulary, elevenLabs: elevenLabs, deadline: deadline)
+            }
         }
     }
 
