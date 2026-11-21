@@ -2,6 +2,10 @@
 # Keeps the repository's other CodeRabbit settings; only adds path filters.
 inheritance: true
 reviews:
+  auto_review:
+    # Stacked pull requests (one built on another's branch) are reviewed too.
+    base_branches:
+      - ".*"
   path_filters:
     # Hex's code and data, copied unmodified by scripts/sync-hex-keyboard.sh.
     # VoiceiQ's own adaptation is in HexGlue/ and is reviewed.
