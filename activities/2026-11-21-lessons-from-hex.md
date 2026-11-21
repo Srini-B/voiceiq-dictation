@@ -40,7 +40,10 @@ which findings to build.
     (`KeepAliveAudio`).
 - **Typing instead of ⌘V** (`TypingInserter`):
   - Windows App / Microsoft Remote Desktop is typed one key at a time, with
-    the layout's key code. Numpad keys are never used.
+    the layout's key code. Numpad keys are never used. Curly quotes, dashes
+    and ellipses become plain keys; text with any other character that has
+    no key goes to the clipboard untyped, so a remote session never gets a
+    wrong key.
   - Chromium 155–156 browsers are typed 20 UTF-16 units per event.
   - If the app in front changes part way, only the untyped rest goes to the
     clipboard.
