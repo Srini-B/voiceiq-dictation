@@ -125,14 +125,17 @@ the tap, as before.
   to the App Group at launch and on every change; the keyboard installs them
   as its registration domain before each dictation, so `SettingsStore` and
   `DictionaryStore` read the app's values unchanged.
-- **Keys.** On iOS, `KeychainStore` saves every key in the App Group's
-  keychain access group, and `shareWithKeyboard()` moves keys that older
-  builds saved. Keys stay `AfterFirstUnlockThisDeviceOnly` and never leave
-  the device except to their provider.
-  **Risk:** any process with the App Group entitlement can read every key:
-  the app, the keyboard (which also needs Full Access to reach the network),
-  and the Live Activity extension. A bug or a compromised dependency in any
-  of them exposes the provider keys, not only the app.
+- **Keys.** On iOS, `KeychainStore` saves the keys the keyboard uses
+  (Gemini, OpenAI, ElevenLabs, TinyFish) in the App Group's keychain access
+  group, and `shareWithKeyboard()` moves keys that older builds saved. The
+  agent provider's key stays in the app's own group; a shared copy an
+  earlier build made moves back there (the app's copy is written before the
+  shared one is deleted). Keys stay `AfterFirstUnlockThisDeviceOnly` and
+  never leave the device except to their provider.
+  **Risk:** any process with the App Group entitlement can read the shared
+  keys: the app, the keyboard (which also needs Full Access to reach the
+  network), and the Live Activity extension. A bug or a compromised
+  dependency in any of them exposes those provider keys, not only the app.
 - **Memory.** Before it starts, the keyboard checks `os_proc_available_memory`
   (Hex #2045). With less than 32 MB free for the first dictation of a
   process, or 24 MB for a later one, it dictates through the app instead.
@@ -183,7 +186,10 @@ the capture at once and finishes the dictation with what was said (Hex
 - Otherwise the suggestion strip offers "Paste dictation" for 10 minutes.
   Hex's strip shows word suggestions instead while the cursor touches a
   word; the chip shows once the cursor is after a space or punctuation.
-- An Ask answer opens in the answer panel instead of being typed.
+- An Ask answer opens in the answer panel instead of being typed, whether
+  it arrives by itself or the offer is tapped.
+- One result is held at a time: a second hidden-keyboard result within the
+  10 minutes replaces the first in the strip. The first is still in History.
 
 The keyboard asks iOS for more time with
 `ProcessInfo.performExpiringActivity` while it finishes. If the time runs
@@ -850,8 +856,9 @@ is `false`, so builds skip the export-compliance question.
 - A keyboard dictation stops when the keyboard hides. Its text is typed on
   return or offered in the strip, never inserted into a field the keyboard
   is not in.
-- Keys for the providers sit in the App Group keychain, readable by the
-  keyboard and the Live Activity as well as the app.
+- Keys for the providers the keyboard uses sit in the App Group keychain,
+  readable by the keyboard and the Live Activity as well as the app (not
+  the agent provider's key).
 - Typing is English only. Predictions come from book text, so chat phrasing
   ranks lower than on Apple's keyboard until the keyboard learns the user's
   own word pairs.

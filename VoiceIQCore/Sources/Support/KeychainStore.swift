@@ -21,6 +21,10 @@ public enum KeychainStore {
         case elevenLabs = "elevenlabs-api-key"
         case agentProvider = "agent-provider-api-key"
 
+        /// Saved where the iPhone keyboard can read it. The agent provider's
+        /// key is only for the app's agent, so it stays in the app's own group.
+        var sharedWithKeyboard: Bool { self != .agentProvider }
+
         var label: String {
             switch self {
             case .gemini: return "VoiceiQ — Gemini API key"
@@ -134,7 +138,8 @@ public enum KeychainStore {
     /// with the App Group entitlement (the app, the keyboard, the Live
     /// Activity) can read the group, and the keyboard only with Full Access.
     public static func shareWithKeyboard() {
-        let secrets: [Secret] = [.gemini, .openAI, .elevenLabs, .tinyFish, .agentProvider]
+        unshareAgentProviderKey()
+        let secrets: [Secret] = [.gemini, .openAI, .elevenLabs, .tinyFish]
         for secret in secrets {
             var shared = baseQuery(secret: secret, dataProtection: true)
             shared[kSecAttrAccessGroup as String] = SharedStore.appGroupID
@@ -153,6 +158,41 @@ public enum KeychainStore {
             }
             deleteOriginals(of: secret)
         }
+    }
+
+    /// Earlier builds moved the agent provider's key into the App Group,
+    /// which the keyboard never reads. It moves back to the app's own group:
+    /// that copy first, so the shared one goes only once the key is safe.
+    private static func unshareAgentProviderKey() {
+        var shared = baseQuery(secret: .agentProvider, dataProtection: true)
+        shared[kSecAttrAccessGroup as String] = SharedStore.appGroupID
+        shared[kSecReturnData as String] = true
+        var item: CFTypeRef?
+        guard SecItemCopyMatching(shared as CFDictionary, &item) == errSecSuccess, let data = item as? Data else { return }
+        shared[kSecReturnData as String] = nil
+        var own = baseQuery(secret: .agentProvider, dataProtection: true)
+        own[kSecAttrLabel as String] = Secret.agentProvider.label
+        own[kSecValueData as String] = data
+        own[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+        let status = SecItemAdd(own as CFDictionary, nil)
+        guard status == errSecSuccess || status == errSecDuplicateItem else {
+            Log.permissions.error("KeychainStore: keeping the agent key in the app failed (\(status)); the shared copy stays")
+            return
+        }
+        if status == errSecDuplicateItem {
+            // A copy in the app's own group already exists only if the
+            // default group is not the App Group; otherwise this matched
+            // the shared item itself, which must stay.
+            var check = baseQuery(secret: .agentProvider, dataProtection: true)
+            check[kSecReturnAttributes as String] = true
+            check[kSecMatchLimit as String] = kSecMatchLimitAll
+            var found: CFTypeRef?
+            guard SecItemCopyMatching(check as CFDictionary, &found) == errSecSuccess,
+                  let items = found as? [[String: Any]],
+                  items.contains(where: { ($0[kSecAttrAccessGroup as String] as? String) != SharedStore.appGroupID })
+            else { return }
+        }
+        SecItemDelete(shared as CFDictionary)
     }
 
     /// Removes `secret`'s items outside the App Group, and only those.
@@ -200,7 +240,7 @@ public enum KeychainStore {
             if dataProtection {
                 attributes[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
                 #if os(iOS)
-                attributes[kSecAttrAccessGroup as String] = SharedStore.appGroupID
+                if secret.sharedWithKeyboard { attributes[kSecAttrAccessGroup as String] = SharedStore.appGroupID }
                 #endif
             }
             let status = SecItemAdd(attributes as CFDictionary, nil)
