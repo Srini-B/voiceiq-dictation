@@ -70,6 +70,23 @@ final class KeyboardModelTests: XCTestCase {
         XCTAssertFalse(model.waitingForApp)
     }
 
+    /// Tapping the offer for a held Ask answer opens the answer panel,
+    /// as the automatic path does, instead of typing it into the field.
+    func testTappingAHeldAskOfferOpensTheAnswer() {
+        let held = HeldDictation(text: "Paris is the capital of France.", mode: .ask, document: UUID())
+        store.keyboardDelivery = nil
+        store.heldByApp = nil
+        store.heldByKeyboard = held
+        defer { store.heldByKeyboard = nil }
+        let model = KeyboardModel()
+        model.offeredHeldID = held.id
+
+        model.pasteHeld()
+        XCTAssertEqual(model.answer?.text, held.text)
+        XCTAssertNil(store.heldDictation, "handled once")
+        XCTAssertNil(store.keyboardDelivery, "an answer is not Paste last's text")
+    }
+
     /// A hold longer than a command's 30 s lifetime still ends its own dictation.
     func testALongHoldReleasedSendsAStopForItsStart() throws {
         let model = KeyboardModel()

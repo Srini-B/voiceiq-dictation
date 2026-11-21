@@ -50,7 +50,7 @@ final class KeyboardModel: ObservableObject {
     private var shownNoticeID: UUID?
     private let local = KeyboardDictation.shared
     private var localObserver: AnyCancellable?
-    private var offeredHeldID: UUID?
+    var offeredHeldID: UUID?
 
     init() {
         mode = UserDefaults.standard.string(forKey: Self.modeKey).flatMap(KeyboardMode.init(rawValue:)) ?? .dictate
@@ -345,14 +345,7 @@ final class KeyboardModel: ObservableObject {
         switch held.delivery(in: proxy?.fieldID, host: controller.flatMap(HostAppResolver.currentHost(for:)),
                              textBefore: proxy?.documentContextBeforeInput) {
         case .insert:
-            store.markHeldHandled(held)
-            offer(nil)
-            if held.mode == .ask {
-                answer = Delivery(mode: .ask, text: held.text, hostBundleID: nil)
-            } else {
-                insert(held.text)
-                KeyboardLog.note("[\(instanceTag)] held result typed")
-            }
+            take(held)
         case .offer:
             offer(held)
         case .expired:
@@ -374,9 +367,20 @@ final class KeyboardModel: ObservableObject {
         guard let held = Self.heldToPaste(offered: offeredHeldID, current: current) else {
             return offer(current.flatMap { $0.delivery(in: nil) == .expired ? nil : $0 })
         }
+        take(held)
+    }
+
+    /// Delivers a held result once: an Ask answer opens the answer panel,
+    /// anything else is typed.
+    private func take(_ held: HeldDictation) {
         store.markHeldHandled(held)
         offer(nil)
-        insert(held.text)
+        if held.mode == .ask {
+            answer = Delivery(mode: .ask, text: held.text, hostBundleID: nil)
+        } else {
+            insert(held.text)
+            KeyboardLog.note("[\(instanceTag)] held result typed")
+        }
     }
 
     /// The result a tap on the offer pastes: the one the strip shows, while
