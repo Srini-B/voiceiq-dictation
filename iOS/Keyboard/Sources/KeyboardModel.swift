@@ -111,7 +111,7 @@ final class KeyboardModel: ObservableObject {
         if newText != liveText { liveText = newText }
         let alive = store.appIsAlive()
         if alive != appAlive { appAlive = alive }
-        if let pendingCommandID, store.handledCommandID == pendingCommandID {
+        if let pendingCommandID, acknowledged(pendingCommandID) {
             self.pendingCommandID = nil
             waitingForApp = false
         }
@@ -203,10 +203,16 @@ final class KeyboardModel: ObservableObject {
             return
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + Self.acknowledgementTimeout) { [weak self] in
-            guard let self, self.pendingCommandID == command.id,
-                  self.store.handledCommandID != command.id else { return }
+            guard let self, self.pendingCommandID == command.id, !self.acknowledged(command.id) else { return }
             self.openApp(for: command)
         }
+    }
+
+    /// The app took this start: it handled it, or a later stop bound to it
+    /// (the app handles commands in order, and leaves a stop with its start).
+    private func acknowledged(_ start: UUID) -> Bool {
+        guard let handled = store.handledCommandID else { return false }
+        return handled == start || store.commands.first { $0.id == handled }?.startID == start
     }
 
     private func send(_ command: KeyboardCommand) {
