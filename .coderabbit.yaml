@@ -1,0 +1,8 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+# Keeps the repository's other CodeRabbit settings.
+inheritance: true
+reviews:
+  auto_review:
+    # Stacked pull requests (one built on another's branch) are reviewed too.
+    base_branches:
+      - ".*"
