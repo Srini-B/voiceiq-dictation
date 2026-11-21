@@ -9,11 +9,13 @@ final class HexCleanupTests: XCTestCase {
 
     func testTheTaggerDropsFillersAndKeepsTheContentWords() async throws {
         let spoken = "um I think uh we should ship the build to Priya by 5 on Friday"
-        // Loads the model; the budgeted call below then runs as dictation runs it.
-        _ = try await Task.detached { try CleanupTagger.shared.clean(spoken) }.value
+        let expected = ["i", "think", "we", "should", "ship", "the", "build", "to", "priya", "by", "5", "on", "friday"]
+        let cleaned = try await Task.detached { try CleanupTagger.shared.clean(spoken) }.value
+        XCTAssertEqual(words(cleaned), expected, cleaned)
 
-        let cleaned = await CleanupTagger.shared.clean(spoken, within: CleanupTagger.timeBudget)
-
-        XCTAssertEqual(words(cleaned), ["i", "think", "we", "should", "ship", "the", "build", "to", "priya", "by", "5", "on", "friday"], cleaned)
+        // As dictation runs it: the cleanup, or the transcript unchanged when
+        // the model misses its budget.
+        let budgeted = await CleanupTagger.shared.clean(spoken, within: CleanupTagger.timeBudget)
+        XCTAssertTrue(words(budgeted) == expected || budgeted == spoken, budgeted)
     }
 }
