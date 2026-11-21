@@ -39,6 +39,9 @@ public struct KeyboardCommand: Codable, Equatable, Sendable, Identifiable {
     public var context: String?
     /// The app the keyboard was typing in, when it could be resolved.
     public var hostBundleID: String?
+    /// A stop's start command: the stop ends only the dictation that start
+    /// began, once it records (a hold on the dictation key released early).
+    public var startID: UUID?
 
     public init(
         id: UUID = UUID(),
@@ -46,7 +49,8 @@ public struct KeyboardCommand: Codable, Equatable, Sendable, Identifiable {
         issuedAt: Date = Date(),
         mode: KeyboardMode = .dictate,
         context: String? = nil,
-        hostBundleID: String? = nil
+        hostBundleID: String? = nil,
+        startID: UUID? = nil
     ) {
         self.id = id
         self.action = action
@@ -54,6 +58,7 @@ public struct KeyboardCommand: Codable, Equatable, Sendable, Identifiable {
         self.mode = mode
         self.context = context
         self.hostBundleID = hostBundleID
+        self.startID = startID
     }
 
     /// A command older than this is never acted on: the keyboard gave up on it

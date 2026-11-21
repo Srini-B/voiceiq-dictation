@@ -38,9 +38,9 @@ final class KeyboardModel: ObservableObject {
     private var timer: Timer?
     private var pendingCommandID: UUID?
     private var pendingSince: Date?
-    /// A hold on the dictation key was released before the app's recording
-    /// reached the keyboard: stop it as soon as it shows up.
-    private var stopRequestedAt: Date?
+    /// The start command of the last dictation this keyboard began, for a
+    /// hold released before that dictation shows as recording.
+    private var holdStart: KeyboardCommand?
     private var shownNoticeID: UUID?
 
     init() {
@@ -112,14 +112,6 @@ final class KeyboardModel: ObservableObject {
             waitingForApp = false
             pendingCommandID = nil
         }
-        if let stopRequestedAt {
-            if phase == .recording {
-                self.stopRequestedAt = nil
-                send(KeyboardCommand(action: .stop, mode: mode))
-            } else if Date().timeIntervalSince(stopRequestedAt) > 12 {
-                self.stopRequestedAt = nil
-            }
-        }
         deliverIfNeeded()
         showNoticeIfNeeded()
     }
@@ -132,7 +124,7 @@ final class KeyboardModel: ObservableObject {
             return
         }
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-        stopRequestedAt = nil
+        holdStart = nil
         switch phase {
         case .recording:
             send(KeyboardCommand(action: .stop, mode: mode))
@@ -144,12 +136,16 @@ final class KeyboardModel: ObservableObject {
     }
 
     /// Lifting the dictation key after a hold finishes the dictation the hold
-    /// started, including one the app hasn't reported as recording yet.
+    /// started. One the app hasn't reported as recording yet (it is starting,
+    /// warming, or the keyboard is switching to the app and back) gets a stop
+    /// bound to its start command: the app applies it once that dictation
+    /// records, and never to another one.
     func holdReleased() {
         if phase == .recording {
             micTapped()
-        } else if waitingForApp {
-            stopRequestedAt = Date()
+        } else if let holdStart, holdStart.isFresh() {
+            self.holdStart = nil
+            send(KeyboardCommand(action: .stop, mode: mode, startID: holdStart.id))
         }
     }
 
@@ -189,6 +185,7 @@ final class KeyboardModel: ObservableObject {
         let command = KeyboardCommand(action: .start, mode: mode, context: context, hostBundleID: host)
         let alive = appAlive
         send(command)
+        holdStart = command
         waitingForApp = true
         pendingCommandID = command.id
         pendingSince = Date()

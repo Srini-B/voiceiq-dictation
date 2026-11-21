@@ -25,24 +25,19 @@ final class KeyboardModelTests: XCTestCase {
     }
 
     /// A quick hold: the key is lifted before the app reports recording, so the
-    /// stop has to wait for the recording to show up, then go once.
-    func testAHoldReleasedBeforeRecordingShowsStopsTheRecording() {
+    /// stop goes at once, bound to the hold's start, for the app to apply once
+    /// that dictation records and to no other one.
+    func testAHoldReleasedBeforeRecordingSendsAStopForItsStart() throws {
         let model = KeyboardModel()
         model.micTapped()
-        XCTAssertEqual(store.commands.map(\.action), [.start])
+        let start = try XCTUnwrap(store.commands.last)
+        XCTAssertEqual(start.action, .start)
 
         model.holdReleased()
-        model.appeared()
-        waitForRefresh()
-        XCTAssertEqual(store.commands.map(\.action), [.start], "no stop before anything records")
-
-        store.heartbeat = Date()
-        store.publish(SessionSnapshot(phase: .recording, mode: .dictate))
-        waitForRefresh()
         XCTAssertEqual(store.commands.map(\.action), [.start, .stop])
+        XCTAssertEqual(store.commands.last?.startID, start.id)
 
-        waitForRefresh()
-        XCTAssertEqual(store.commands.map(\.action), [.start, .stop], "the stop goes once")
-        model.disappeared()
+        model.holdReleased()
+        XCTAssertEqual(store.commands.count, 2, "the stop goes once")
     }
 }
