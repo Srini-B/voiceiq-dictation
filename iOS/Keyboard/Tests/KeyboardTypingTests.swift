@@ -20,6 +20,7 @@ private final class Field: NSObject, UITextDocumentProxy {
     }
 
     var text: String { String(characters) }
+    var textContentType: UITextContentType!
 
     /// The user taps in the field, which collapses the selection.
     func tap(at offset: Int) { start = offset; length = 0 }
@@ -249,6 +250,16 @@ final class KeyboardTypingTests: XCTestCase {
         XCTAssertEqual(field.text, "On my way! ")
         typing.undo()
         XCTAssertEqual(field.text, "Omw")
+    }
+
+    /// A one-time code field leaves autocorrection at its default, yet a
+    /// text replacement must not expand in it.
+    func testATextReplacementDoesNotExpandInAOneTimeCodeField() {
+        open()
+        field.textContentType = .oneTimeCode
+        typing.setSupplementaryLexicon([("omw", "On my way!")])
+        type("omw ")
+        XCTAssertFalse(field.text.contains("On my way"), field.text)
     }
 
     /// A Backspace run right before a replacement stays its own undo step.

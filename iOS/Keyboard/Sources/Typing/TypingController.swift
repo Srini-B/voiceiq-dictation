@@ -290,7 +290,16 @@ extension TypingController: @MainActor KeyboardTextTarget {
     var documentContextBeforeInput: String? { emojiQuery ?? proxy?.documentContextBeforeInput }
     var hasText: Bool { emojiQuery.map { !$0.isEmpty } ?? proxy?.hasText ?? false }
     var autocapitalizationType: UITextAutocapitalizationType? { emojiQuery != nil ? UITextAutocapitalizationType.none : proxy?.autocapitalizationType }
-    var autocorrectionType: UITextAutocorrectionType? { emojiQuery != nil ? .no : proxy?.autocorrectionType }
+    /// Off in the search and in fields where a correction or a text
+    /// replacement would corrupt what is typed: Hex checks only this and the
+    /// field kind before replacing a word.
+    var autocorrectionType: UITextAutocorrectionType? {
+        if emojiQuery != nil { return .no }
+        if let type = proxy?.textContentType ?? nil, Self.noAssistance.contains(type) { return .no }
+        return proxy?.autocorrectionType
+    }
+    private static let noAssistance: [UITextContentType] = [.oneTimeCode, .password, .newPassword, .creditCardNumber,
+                                                            .telephoneNumber, .postalCode]
     var keyboardType: UIKeyboardType? { emojiQuery != nil ? .default : proxy?.keyboardType }
     var returnKeyType: UIReturnKeyType? { emojiQuery != nil ? .search : proxy?.returnKeyType }
     var enablesReturnKeyAutomatically: Bool? { emojiQuery != nil ? false : proxy?.enablesReturnKeyAutomatically }
