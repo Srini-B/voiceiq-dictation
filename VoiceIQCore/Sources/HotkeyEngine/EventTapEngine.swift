@@ -164,7 +164,8 @@ public final class EventTapEngine: @unchecked Sendable {
             userInfo: selfPtr
         ) else {
             Log.hotkey.error("EventTapEngine: tap creation failed — Accessibility not granted")
-            withLifecycle { $0.state = .permissionDenied }
+            // Only while this thread is still the engine's: a later start owns it otherwise.
+            withLifecycle { if $0.thread === Thread.current { $0.state = .permissionDenied } }
             return
         }
 
@@ -187,7 +188,12 @@ public final class EventTapEngine: @unchecked Sendable {
         }
         Log.hotkey.info("EventTapEngine: tap running (trigger=\(self.trigger.displayName, privacy: .public))")
         started.signal()
-        CFRunLoopRun()
+        // In slices, not CFRunLoopRun(): a stop() before the loop first runs
+        // has nothing to stop, and this thread would run on alone.
+        while withLifecycle({ $0.thread === Thread.current }) {
+            CFRunLoopRunInMode(.defaultMode, 1, false)
+        }
+        CFMachPortInvalidate(tap)
         Log.hotkey.info("EventTapEngine: run loop exited")
     }
 
