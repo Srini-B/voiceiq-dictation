@@ -196,6 +196,11 @@ targets:
     sources:
       - path: iOS/App/Sources
       - path: iOS/App/Resources
+      # Hex's cleanup tagger, unmodified (scripts/sync-hex-keyboard.sh), and
+      # its Core ML model (scripts/fetch-hex-cleanup-model.sh).
+      - path: iOS/App/Hex
+        excludes: ["**/*.sh"]
+      - path: iOS/App/HexCleanupModel/HexCleanupTagger.mlpackage
     entitlements:
       path: iOS/App/VoiceIQiOS.entitlements
       properties:
@@ -241,8 +246,26 @@ targets:
           - CFBundleURLName: io.blue.voiceiq.ios.url
             CFBundleURLSchemes: [voiceiq]
     scheme:
-      testTargets: [KeyboardTypingTests]
+      testTargets: [KeyboardTypingTests, VoiceIQiOSTests]
       gatherCoverageData: false
+
+  # Runs inside the app, so Hex's cleanup tagger finds its compiled model.
+  VoiceIQiOSTests:
+    type: bundle.unit-test
+    platform: iOS
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.blue.voiceiq.ios.tests
+        SWIFT_VERSION: "6.0"
+        GENERATE_INFOPLIST_FILE: YES
+        CODE_SIGNING_ALLOWED: NO
+        # The app's product is VoiceiQ, not the target's name.
+        TEST_HOST: $(BUILT_PRODUCTS_DIR)/VoiceiQ.app/VoiceiQ
+        BUNDLE_LOADER: $(TEST_HOST)
+    sources:
+      - path: iOS/App/Tests
+    dependencies:
+      - target: VoiceIQiOS
 
   VoiceIQKeyboard:
     type: app-extension

@@ -56,6 +56,7 @@ rm -rf "$BUILD_DIR"
 mkdir -p "$BUILD_DIR"
 
 echo "▸ Generating project"
+scripts/fetch-hex-cleanup-model.sh
 xcodegen generate
 
 echo "▸ Building Developer ID Release"

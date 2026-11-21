@@ -12,10 +12,27 @@ import Foundation
 /// Rules unchanged: one silent retry on transient transcribe failures; cleanup
 /// has a hard deadline and NEVER blocks a good transcript; every failure is a
 /// typed TranscriptionError mapping to the failure matrix.
+/// Cleans a verbatim transcript when the writing model did not shape it (the
+/// iPhone app passes Hex's on-device cleanup tagger). Its answer still goes
+/// through `FillerStripper`, so a cleaner that is late, fails, or returns the
+/// text unchanged keeps the behaviour without one.
+public struct VerbatimCleaner: Sendable {
+    /// Called when a verbatim transcript goes to the writing model, so the
+    /// cleaner can load while that request runs.
+    public var prepare: @Sendable () -> Void
+    public var clean: @Sendable (String) async -> String
+
+    public init(prepare: @escaping @Sendable () -> Void, clean: @escaping @Sendable (String) async -> String) {
+        self.prepare = prepare
+        self.clean = clean
+    }
+}
+
 public struct GeminiTranscriptionService: TranscriptionServicing {
     static let untranslatableToken = "<<UNTRANSLATABLE>>"
     let client: GeminiClient
     let settings: SettingsStore
+    let verbatimCleaner: VerbatimCleaner?
 
     /// Cleanup budget. The pass reads the whole transcript and writes it back, so
     /// the budget grows with the text: a one-line dictation gets ~12 s, a
@@ -30,9 +47,13 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
         min(60, 12 + Double(count) / 350)
     }
 
-    public init(client: GeminiClient, settings: SettingsStore = SettingsStore()) {
+    public init(
+        client: GeminiClient, settings: SettingsStore = SettingsStore(),
+        verbatimCleaner: VerbatimCleaner? = nil
+    ) {
         self.client = client
         self.settings = settings
+        self.verbatimCleaner = verbatimCleaner
     }
 
     public func transcribe(audioURL: URL, durationSeconds: Double, context: DictationContext) async throws -> TranscriptionResult {
