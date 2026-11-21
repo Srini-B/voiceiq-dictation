@@ -33,8 +33,10 @@ preflight (tools, identity, credentials)
 3. Confirm the production models are available with a real dictation on both
    providers (Gemini and OpenAI).
 
-The apps run no speech model of their own; the keyboard ships Hex's English
-typing model (`en.hextm`) for suggestions, autocorrect and slide to type. The Mac UI links `VoiceIQCore`; the keyboard
+The apps run no speech model of their own. The keyboard ships Hex's English
+typing model (`en.hextm`) for suggestions, autocorrect and slide to type, and
+the iPhone app ships Hex's cleanup tagger (`HexCleanupTagger.mlmodelc`,
+downloaded by `scripts/fetch-hex-cleanup-model.sh`; see docs/IOS.md). The Mac UI links `VoiceIQCore`; the keyboard
 and Live Activity link only `VoiceIQBridge`. The Mac helper,
 `VoiceiQLocalSpeech`, links only `VoiceIQSpeech`: it is the Chrome extension's
 native messaging host and keeps its name because installed host manifests
