@@ -246,6 +246,31 @@ final class DictationCoordinatorTests: XCTestCase {
         XCTAssertNotNil(discarded, "micro-clip artifacts must be discarded")
     }
 
+    /// The iPhone keyboard hands a finished session to the app on the turn
+    /// after `$state` reports it over: by then a discarded micro-clip is gone,
+    /// and the app has nothing to recover and transcribe.
+    func testADiscardedKeyboardSessionLeavesNothingForTheApp() async throws {
+        let c = makeCoordinator()
+        c.handle(.begin)
+        await pump()
+        let folder = try XCTUnwrap(c.activeSessionFolder)
+        var handedOver = false
+        let handOver = c.$state.sink { state in
+            guard state.isTerminal else { return }
+            DispatchQueue.main.async { handedOver = KeyboardInbox.finish(folder: folder, usage: [], root: self.sandbox) }
+        }
+        defer { handOver.cancel() }
+        capture.result = AudioCaptureResult(framesWritten: 3_000, durationSeconds: 0.19)
+        fakeNow += 2.0
+        c.handle(.finalize)
+        await settle()
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        XCTAssertEqual(c.state, .done(.silent))
+        XCTAssertFalse(handedOver)
+        XCTAssertTrue(KeyboardInbox.collect(from: sandbox).sessions.isEmpty)
+    }
+
     func testShortCancelDiscardsButLongCancelKeeps() async {
         let c = makeCoordinator()
         var discarded: UUID?

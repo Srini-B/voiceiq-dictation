@@ -327,7 +327,8 @@ final class KeyboardDictation: ObservableObject {
             recordingStartedAt = nil
             phase = .off
             bars = LevelBars()
-            defer { endExpiringActivity() }
+            // After the hand-over below, which waits a turn.
+            defer { DispatchQueue.main.async { [weak self] in self?.endExpiringActivity() } }
             if let since = finished?.processingSince {
                 KeyboardLog.note(String(format: "processed in %.1fs (keyboard)", Date().timeIntervalSince(since)))
             }
@@ -349,7 +350,10 @@ final class KeyboardDictation: ObservableObject {
                 queueOffline(finished)
                 if finished.interrupted { return }
             } else {
-                hand(over: finished?.folder)
+                // `$state` publishes before the coordinator's bookkeeping, which
+                // deletes a silent or blip session: hand over what is left after it.
+                let folder = finished?.folder
+                DispatchQueue.main.async { [weak self] in self?.hand(over: folder) }
             }
             if let coordinator, let message = DictationNotice.message(for: state, coordinator: coordinator) {
                 onNotice?(message)
@@ -376,6 +380,8 @@ final class KeyboardDictation: ObservableObject {
     }
 
     private func handOver(_ folder: URL) {
+        // The coordinator discarded it: nothing for History.
+        guard FileManager.default.fileExists(atPath: folder.path) else { unhanded.remove(folder); return }
         let id = SessionMeta.read(from: folder)?.id.uuidString
         let usage = id.map { UsageMeter.store?.records(forSession: $0) ?? [] } ?? []
         guard KeyboardInbox.finish(folder: folder, usage: usage) else {
