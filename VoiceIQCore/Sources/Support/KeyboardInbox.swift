@@ -29,15 +29,21 @@ public enum KeyboardInbox {
     /// left behind by a keyboard that iOS ended.
     static let abandonedAfter: TimeInterval = 600
 
-    /// Keyboard: the dictation in `folder` is over.
-    public static func finish(folder: URL, usage: [UsageRecord], root: URL? = root) {
-        guard let root, FileManager.default.fileExists(atPath: folder.path) else { return }
+    /// Keyboard: the dictation in `folder` is over. False when its billed
+    /// calls could not be written next to it, so the caller keeps them.
+    @discardableResult
+    public static func finish(folder: URL, usage: [UsageRecord], root: URL? = root) -> Bool {
+        guard let root, FileManager.default.fileExists(atPath: folder.path) else { return false }
         let finished = root.appendingPathComponent("finished", isDirectory: true)
         try? FileManager.default.createDirectory(at: finished, withIntermediateDirectories: true)
-        if !usage.isEmpty, let data = try? JSONEncoder().encode(usage) {
-            try? data.write(to: folder.appendingPathComponent(usageFile))
+        var saved = true
+        if !usage.isEmpty {
+            saved = (try? JSONEncoder().encode(usage).write(to: folder.appendingPathComponent(usageFile), options: .atomic)) != nil
         }
+        // A folder that cannot move stays in `recordings`, usage and all, and
+        // is collected as abandoned.
         try? FileManager.default.moveItem(at: folder, to: finished.appendingPathComponent(folder.lastPathComponent))
+        return saved
     }
 
     /// App: moves what the keyboard left into `FileLayout.recordingsRoot` and
@@ -91,10 +97,13 @@ public struct KeyboardJob: Codable, Equatable, Sendable {
     public var document: UUID?
     public var durationSeconds: Double
     public var createdAt: Date
+    /// Who the request went to, which decides how its answer reads, even
+    /// after the provider in Settings changed. Nil in jobs of older builds.
+    public var transcriber: ModelEndpoint?
 
     public init(id: UUID = UUID(), folder: String, mode: KeyboardMode, translationTargets: [String] = [],
                 selectedText: String? = nil, host: String? = nil, hostName: String? = nil, document: UUID? = nil,
-                durationSeconds: Double, createdAt: Date = Date()) {
+                durationSeconds: Double, createdAt: Date = Date(), transcriber: ModelEndpoint? = nil) {
         self.id = id
         self.folder = folder
         self.mode = mode
@@ -105,6 +114,7 @@ public struct KeyboardJob: Codable, Equatable, Sendable {
         self.document = document
         self.durationSeconds = durationSeconds
         self.createdAt = createdAt
+        self.transcriber = transcriber
     }
 
     /// Only a recording sent in one request goes to the background session:
@@ -185,27 +195,67 @@ public struct KeyboardJob: Codable, Equatable, Sendable {
     /// A claim older than this belongs to a process that ended mid-finish.
     static let claimLifetime: TimeInterval = 300
 
-    /// Claims the job for one finish across processes: the app and the
-    /// keyboard can both hold its answer. Atomic (`O_EXCL`); false when
-    /// another finish holds it.
-    public func claim(root: URL? = KeyboardInbox.root, now: Date = Date()) -> Bool {
-        guard let url = Self.directory(in: root)?.appendingPathComponent("\(id.uuidString).claim") else { return false }
-        for _ in 0..<2 {
-            let fd = open(url.path, O_CREAT | O_EXCL | O_WRONLY, 0o644)
-            if fd >= 0 {
-                close(fd)
-                return true
-            }
-            let taken = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate ?? now
-            guard now.timeIntervalSince(taken) > Self.claimLifetime else { return false }
+    /// One process's hold on a job: the keyboard's while it starts the
+    /// upload, a finish's or the app's takeover until the job is removed.
+    public struct Claim: Sendable {
+        let url: URL
+        let token: String
+
+        /// Lets go, unless the claim went stale and someone else holds it now.
+        public func release() {
+            guard (try? String(contentsOf: url, encoding: .utf8)) == token else { return }
             try? FileManager.default.removeItem(at: url)
         }
-        return false
     }
 
-    public func releaseClaim(root: URL? = KeyboardInbox.root) {
-        guard let url = Self.directory(in: root)?.appendingPathComponent("\(id.uuidString).claim") else { return }
-        try? FileManager.default.removeItem(at: url)
+    /// Claims the job across processes, or nil when another one holds it.
+    /// The claim file appears atomically with its owner's token (`link`).
+    /// A stale one is moved aside atomically and deleted only if it is the
+    /// one judged stale; a fresh claim taken meanwhile is put back.
+    public func claim(root: URL? = KeyboardInbox.root, now: Date = Date()) -> Claim? {
+        guard let directory = Self.directory(in: root) else { return nil }
+        let url = directory.appendingPathComponent("\(id.uuidString).claim")
+        let token = UUID().uuidString
+        let staging = directory.appendingPathComponent("\(id.uuidString).claim-\(token)")
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        guard (try? Data(token.utf8).write(to: staging)) != nil else { return nil }
+        defer { try? FileManager.default.removeItem(at: staging) }
+        for _ in 0..<2 {
+            if link(staging.path, url.path) == 0 { return Claim(url: url, token: token) }
+            guard errno == EEXIST, let held = try? String(contentsOf: url, encoding: .utf8) else { return nil }
+            let taken = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate ?? now
+            guard now.timeIntervalSince(taken) > Self.claimLifetime else { return nil }
+            let aside = directory.appendingPathComponent("\(id.uuidString).claim-stale-\(token)")
+            guard rename(url.path, aside.path) == 0 else { continue }
+            let moved = try? String(contentsOf: aside, encoding: .utf8)
+            if moved != held { _ = link(aside.path, url.path) }
+            try? FileManager.default.removeItem(at: aside)
+            if moved != held { return nil }
+        }
+        return nil
+    }
+
+    /// App, in the foreground: takes over each job with no answer and no
+    /// upload running (Background App Refresh off, the app force-quit).
+    /// Each is claimed before the session's tasks are read, so a keyboard
+    /// still between writing a job and starting its upload (it holds the
+    /// claim) is left alone, and one that started its upload is in the list.
+    @discardableResult
+    public static func takeOverIdle(_ jobs: [KeyboardJob], root: URL? = KeyboardInbox.root,
+                                    uploading: @Sendable () async -> Set<UUID>) async -> [KeyboardJob] {
+        let claimed = jobs.filter { $0.answer(root: root) == nil }.compactMap { job in job.claim(root: root).map { (job, $0) } }
+        guard !claimed.isEmpty else { return [] }
+        let running = await uploading()
+        var taken: [KeyboardJob] = []
+        for (job, claim) in claimed {
+            guard !running.contains(job.id), job.answer(root: root) == nil, read(job.id, root: root) != nil else {
+                claim.release()
+                continue
+            }
+            job.takeOver(root: root)
+            taken.append(job)
+        }
+        return taken
     }
 
     public func folderURL(root: URL? = KeyboardInbox.root) -> URL? {

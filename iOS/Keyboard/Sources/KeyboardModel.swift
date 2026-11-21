@@ -356,14 +356,22 @@ final class KeyboardModel: ObservableObject {
 
     /// The strip's offer was tapped.
     func pasteHeld() {
-        // The result the strip shows, while it is still offered; otherwise
-        // the offer is refreshed and nothing is typed.
-        guard let held = store.heldDictation, held.id == offeredHeldID, held.delivery(in: nil) != .expired else {
-            return deliverHeldIfNeeded()
+        let current = store.heldDictation
+        // Otherwise the offer is refreshed and nothing is typed, not even a
+        // newer result that would go into this field by itself.
+        guard let held = Self.heldToPaste(offered: offeredHeldID, current: current) else {
+            return offer(current.flatMap { $0.delivery(in: nil) == .expired ? nil : $0 })
         }
         store.markHeldHandled(held)
         offer(nil)
         insert(held.text)
+    }
+
+    /// The result a tap on the offer pastes: the one the strip shows, while
+    /// it is still the held result and not expired.
+    static func heldToPaste(offered: UUID?, current: HeldDictation?, now: Date = Date()) -> HeldDictation? {
+        guard let current, current.id == offered, current.delivery(in: nil, at: now) != .expired else { return nil }
+        return current
     }
 
     func show(notice text: String) {

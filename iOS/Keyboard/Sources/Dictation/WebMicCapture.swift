@@ -37,7 +37,7 @@ final class WebMicCapture: NSObject, AudioCapturing, @unchecked Sendable {
     /// capture interrupts.
     private var otherAudioAtStart = false
     /// Why the last capture never delivered audio (getUserMedia refused, the
-    /// page died), or nil once audio arrived.
+    /// page died, the watchdog), or nil once audio arrived, even late.
     private(set) var startFailure: String?
     private var isCapturing = false
     /// Numbers each capture. The page tags its messages with it, and each
@@ -237,6 +237,9 @@ final class WebMicCapture: NSObject, AudioCapturing, @unchecked Sendable {
         do {
             try file.write(from: buffer)
             frames += Int64(count)
+            // Audio that arrived late (during stop()'s drain, after the
+            // watchdog) means the capture did start.
+            startFailure = nil
             writtenPeak = max(writtenPeak, AudioLevelCurve.level(fromRMS: Float(loudest) / 32_768))
         } catch {
             self.file = nil

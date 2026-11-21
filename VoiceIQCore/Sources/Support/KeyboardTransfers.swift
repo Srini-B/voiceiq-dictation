@@ -54,22 +54,27 @@ public final class KeyboardTransfers: NSObject, URLSessionDataDelegate, Sendable
             .compactMap { $0.taskDescription.flatMap(UUID.init(uuidString:)) })
     }
 
-    /// Sends `request` for `job`, with its body from a file as background
-    /// sessions require. The job is on disk before the transfer starts.
+    /// Sends `captured` for `job`, with its body from a file as background
+    /// sessions require. The job is on disk before the transfer starts, and
+    /// claimed until the task exists, so the app never takes it over in
+    /// between (`KeyboardJob.takeOverIdle`).
     @discardableResult
-    public static func send(_ request: URLRequest, for job: KeyboardJob, on session: URLSession,
+    public static func send(_ captured: CapturedTranscriptionRequest, for job: KeyboardJob, on session: URLSession,
                             root: URL? = KeyboardInbox.root) throws -> URLSessionUploadTask {
         guard let bodyURL = KeyboardJob.bodyURL(job.id, root: root) else { throw CocoaError(.fileNoSuchFile) }
+        var job = job
+        job.transcriber = captured.endpoint
+        guard let claim = job.claim(root: root) else { throw CocoaError(.fileWriteFileExists) }
+        defer { claim.release() }
         // The body first: a job is published only once it can be sent.
-        try FileManager.default.createDirectory(at: bodyURL.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try (request.httpBody ?? Data()).write(to: bodyURL, options: .atomic)
+        try (captured.request.httpBody ?? Data()).write(to: bodyURL, options: .atomic)
         do {
             try job.write(root: root)
         } catch {
             try? FileManager.default.removeItem(at: bodyURL)
             throw error
         }
-        var request = request
+        var request = captured.request
         request.httpBody = nil
         request.timeoutInterval = requestTimeout
         let task = session.uploadTask(with: request, fromFile: bodyURL)
@@ -136,15 +141,19 @@ public final class KeyboardTransfers: NSObject, URLSessionDataDelegate, Sendable
         guard finishing.insert(job.id).inserted else { return .busy }
         defer { finishing.remove(job.id) }
         // The other process (keyboard or app) may be finishing it already.
-        guard job.claim(root: root) else { return .busy }
-        defer { job.releaseClaim(root: root) }
+        // The claim stays until the caller removes or takes over the job.
+        guard let claim = job.claim(root: root) else { return .busy }
+        guard KeyboardJob.read(job.id, root: root) != nil else {
+            claim.release()
+            return .busy
+        }
         guard let status = answer.status else {
             Log.transcription.notice("keyboard job \(job.id, privacy: .public): transfer ended without an answer (\(answer.error ?? "", privacy: .private))")
             return .waiting
         }
         let body = KeyboardJob.responseURL(job.id, root: root).flatMap { try? Data(contentsOf: $0) } ?? Data()
         var meta = SessionMeta.read(from: folder) ?? SessionMeta(id: job.id, startedAt: job.createdAt, status: .transcribing)
-        let replay = ReplayedResponse(body: body, status: status)
+        let replay = ReplayedResponse(body: body, status: status, endpoint: job.transcriber)
         do {
             let scope = UsageScope(mode: job.context.mode, sessionID: meta.id.uuidString)
             let result = try await GeminiClient.$replayedTranscription.withValue(replay) {

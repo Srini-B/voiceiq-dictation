@@ -43,4 +43,22 @@ final class WebMicCaptureTests: XCTestCase {
         XCTAssertEqual(try AVAudioFile(forReading: second).length, 4_800)
         XCTAssertTrue(scripts.contains("startCapture(2); 0"))
     }
+
+    /// The watchdog gave up on a silent start, but audio arrived while stop()
+    /// drained: the capture started, and its audio is kept.
+    func testAudioDuringTheDrainIsNotAStartFailure() async throws {
+        let mic = WebMicCapture()
+        mic.runScript = { _ in }
+        mic.handle(["type": "ready"])
+        try mic.start(writingTo: file())
+        XCTAssertTrue(mic.markStartTimedOut())
+
+        let stop = Task { await mic.stop() }
+        await Task.yield()
+        mic.handle(["type": "audio", "data": samples(1_600), "rms": 0.1, "id": 1])
+
+        let result = await stop.value
+        XCTAssertEqual(result.framesWritten, 1_600)
+        XCTAssertNil(mic.startFailure)
+    }
 }

@@ -134,17 +134,14 @@ final class AppModel: ObservableObject {
     /// sent by the retry queue; one still uploading waits for its answer.
     func importKeyboardDictations(takeOverJobs: Bool) async {
         let jobs = KeyboardJob.pending()
-        let uploading = takeOverJobs && jobs.contains { $0.answer() == nil }
-            ? await KeyboardTransfers.activeJobIDs(on: keyboardTransferSession()) : []
-        for job in jobs {
-            if job.answer() != nil {
-                await finishKeyboardJob(job.id)
-            } else if uploading.contains(job.id) {
-                SessionDiagnostics.note("keyboard job \(job.id.uuidString.prefix(8)) still uploading; waiting for its answer")
-            } else if takeOverJobs {
+        if takeOverJobs, jobs.contains(where: { $0.answer() == nil }) {
+            let session = keyboardTransferSession()
+            for job in await KeyboardJob.takeOverIdle(jobs, uploading: { await KeyboardTransfers.activeJobIDs(on: session) }) {
                 SessionDiagnostics.note("keyboard job \(job.id.uuidString.prefix(8)) taken over by the app")
-                job.takeOver()
             }
+        }
+        for job in jobs where job.answer() != nil {
+            await finishKeyboardJob(job.id)
         }
         let (sessions, usage) = KeyboardInbox.collect()
         guard !sessions.isEmpty || !usage.isEmpty else { return }

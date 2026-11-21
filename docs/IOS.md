@@ -202,15 +202,16 @@ app reconnects to the session, replays the answer through the same service
 through the writing model, Translate or Ask as if fetched there, writes
 History, usage and iCloud, and holds the text for the next keyboard
 (`heldByApp`). This works for every provider, ElevenLabs included, since
-they all post through `GeminiClient`.
+they all post through `GeminiClient`. The job records which provider the
+request went to (`KeyboardJob.transcriber`), and the answer is read as that
+provider's even if the provider in Settings changed meanwhile.
 
-Only one answer is ever delivered, and the recording is not sent again
-once the provider has answered it. Before the hand-over,
+Only one answer is ever delivered. Before the hand-over,
 `DictationCoordinator.handOffTranscription()` cancels the keyboard's own
 request, its silent retry and the writing pass, and drops any answer that
 still arrives, so only the background job delivers text. It refuses, and
-nothing is handed over, once the provider has answered the transcription
-with success (`GeminiClient.transcriptionAnswered`, or its usage is
+nothing is handed over, once a successful transcription answer has reached
+the keyboard (`GeminiClient.transcriptionAnswered`, or its usage is
 metered) or when the dictation streamed its audio with
 Real-time transcription; the keyboard then finishes it when iOS resumes it,
 or the app recovers the recording. When the background answer is in but the
@@ -222,11 +223,17 @@ app's chunk-aware retry sends it.
 
 Accepted risk (product decision): the keyboard's own request is cancelled
 at the hand-over, but it may already have reached the provider, which can
-still process it, so the same audio can reach the provider twice. Whether a
-request the client abandoned is billed depends on the provider. When the
-app and the keyboard both hold an answer, a claim file
-(`KeyboardJob.claim`, atomic, stale after 5 minutes) lets only one of them
-finish it.
+still process it, so the same audio can reach the provider twice. The same
+holds for an answer still on its way when the keyboard's time runs out: the
+refusal above only covers an answer the keyboard has received. Whether a
+request the client abandoned is billed depends on the provider.
+
+A claim file (`KeyboardJob.claim`) keeps the keyboard and the app from
+acting on the same job at once. It appears atomically with its owner's
+token, goes stale after 5 minutes, and a stale one is replaced without
+removing a fresh claim. The keyboard holds it from writing a job until its
+upload task exists; a finish holds it until the job is removed; and the
+app's takeover claims a job before it reads the session's running tasks.
 
 #### Offline
 

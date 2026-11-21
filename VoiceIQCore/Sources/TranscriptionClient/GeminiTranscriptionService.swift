@@ -63,7 +63,9 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
         // the rules this transcript is being produced under.
         let vocabulary = Self.vocabularyIfEnabled()
         let provider = settings.preferredProvider
-        let elevenLabs = settings.transcribesWithElevenLabs
+        // A replayed answer comes from the transcriber that was asked then.
+        let elevenLabs = GeminiClient.replayedTranscription?.endpoint.map { $0 == .elevenLabs }
+            ?? settings.transcribesWithElevenLabs
         let names = modelNames(provider, elevenLabs: elevenLabs)
         let clock = ContinuousClock()
         let started = clock.now

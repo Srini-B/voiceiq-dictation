@@ -46,7 +46,7 @@ public extension GeminiClient {
 public actor GeminiClient {
     let session: URLSession
     /// See `sentTranscription`.
-    nonisolated let firstTranscription = OSAllocatedUnfairLock<URLRequest?>(initialState: nil)
+    nonisolated let firstTranscription = OSAllocatedUnfairLock<CapturedTranscriptionRequest?>(initialState: nil)
     /// See `transcriptionAnswered`.
     nonisolated let answeredTranscription = OSAllocatedUnfairLock(initialState: false)
     private let apiKey: @Sendable () -> String?
@@ -212,10 +212,10 @@ public actor GeminiClient {
         request.httpBody = body
 
         if stage == .transcribe, Self.capturesTranscription {
-            throw CapturedTranscriptionRequest(request: request)
+            throw CapturedTranscriptionRequest(request: request, endpoint: via)
         }
         if stage == .transcribe, Self.replayedTranscription == nil {
-            let sent = request
+            let sent = CapturedTranscriptionRequest(request: request, endpoint: via)
             firstTranscription.withLock { if $0 == nil { $0 = sent } }
         }
         let data: Data
@@ -355,7 +355,14 @@ public actor GeminiClient {
         languages: [String] = [],
         deadline: TimeInterval
     ) async throws -> String {
-        switch provider() {
+        // A replayed answer is read as the provider that gave it, whatever
+        // Settings says now.
+        let transcriber: ModelProvider = switch Self.replayedTranscription?.endpoint {
+        case .openAI: .openAI
+        case .gemini: .gemini
+        default: provider()
+        }
+        switch transcriber {
         case .openAI:
             // No smart mode; the dictionary rides along as keywords, and the
             // cleanup pass does the formatting.

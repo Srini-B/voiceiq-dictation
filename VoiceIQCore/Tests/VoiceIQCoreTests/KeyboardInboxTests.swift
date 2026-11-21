@@ -94,13 +94,37 @@ final class KeyboardInboxTests: XCTestCase {
         let job = KeyboardJob(folder: "claimed", mode: .dictate, durationSeconds: 3)
         try job.write(root: inbox)
 
-        XCTAssertTrue(job.claim(root: inbox))
-        XCTAssertFalse(job.claim(root: inbox), "a second finish while the first runs")
-        job.releaseClaim(root: inbox)
-        XCTAssertTrue(job.claim(root: inbox))
+        let first = try XCTUnwrap(job.claim(root: inbox))
+        XCTAssertNil(job.claim(root: inbox), "a second finish while the first runs")
+        first.release()
+        let stale = try XCTUnwrap(job.claim(root: inbox))
 
         let later = Date().addingTimeInterval(KeyboardJob.claimLifetime + 1)
-        XCTAssertTrue(job.claim(root: inbox, now: later), "a claim left by a process that ended")
+        XCTAssertNotNil(job.claim(root: inbox, now: later), "a claim left by a process that ended")
+        stale.release()
+        XCTAssertNil(job.claim(root: inbox), "the stale owner's release leaves the new claim")
+    }
+
+    /// Opening the app takes over only jobs nobody else is sending: not one
+    /// the keyboard is still starting (it holds the claim), not one whose
+    /// upload runs. The claim is held while the tasks are read.
+    func testTheAppTakesOverOnlyJobsWithNoUpload() async throws {
+        let starting = KeyboardJob(folder: "starting", mode: .dictate, durationSeconds: 3)
+        let uploading = KeyboardJob(folder: "uploading", mode: .dictate, durationSeconds: 3)
+        let idle = KeyboardJob(folder: "idle", mode: .dictate, durationSeconds: 3)
+        for job in [starting, uploading, idle] { try job.write(root: inbox) }
+        let keyboard = try XCTUnwrap(starting.claim(root: inbox))
+
+        let root = inbox!
+        let taken = await KeyboardJob.takeOverIdle([starting, uploading, idle], root: root) {
+            XCTAssertNil(idle.claim(root: root), "claimed before the tasks are read")
+            return [uploading.id]
+        }
+
+        XCTAssertEqual(taken.map(\.id), [idle.id])
+        XCTAssertEqual(Set(KeyboardJob.pending(in: inbox).map(\.id)), [starting.id, uploading.id])
+        XCTAssertNotNil(uploading.claim(root: inbox), "a job left waiting is released")
+        keyboard.release()
     }
 
     func testNeverKeepAudioDropsTheRecordingOnceItHasWords() throws {
@@ -136,6 +160,30 @@ final class ReplayedResponseTests: XCTestCase {
         XCTAssertNotNil(answered.take(url: url))
         XCTAssertTrue(answered.transcribed)
         XCTAssertNil(answered.take(url: url), "handed out once")
+    }
+
+    /// A job sent to one provider and answered after the user switched to
+    /// the other is read as the first provider's answer.
+    func testTheAnswerIsReadAsTheProviderTheJobWentTo() async throws {
+        let inbox = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: inbox) }
+        let answers: [(ModelEndpoint, ModelProvider, String)] = [
+            (.openAI, .gemini, #"{"text":"sent to OpenAI"}"#),
+            (.gemini, .openAI, #"{"status":"completed","steps":[{"type":"model_output","content":[{"type":"text","text":"sent to Gemini"}]}]}"#),
+        ]
+        for (sentTo, nowSelected, body) in answers {
+            try KeyboardJob(folder: "f", mode: .dictate, durationSeconds: 3, transcriber: sentTo).write(root: inbox)
+            let job = try XCTUnwrap(KeyboardJob.pending(in: inbox).last)
+            XCTAssertEqual(job.transcriber, sentTo)
+            let client = GeminiClient(apiKey: { "key" }, openAIKey: { "key" }, provider: { nowSelected })
+            let replay = ReplayedResponse(body: Data(body.utf8), status: 200, endpoint: job.transcriber)
+            let text = try await GeminiClient.$replayedTranscription.withValue(replay) {
+                try await client.transcribeInteraction(audio: Data(), model: "m", endpoint: url, mode: .verbatim,
+                                                       customVocabulary: [], deadline: 5)
+            }
+            XCTAssertEqual(text, "sent to \(sentTo == .openAI ? "OpenAI" : "Gemini")")
+            job.remove(root: inbox)
+        }
     }
 }
 

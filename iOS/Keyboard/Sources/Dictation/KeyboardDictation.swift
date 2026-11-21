@@ -369,9 +369,9 @@ final class KeyboardDictation: ObservableObject {
         guard let folder else { return }
         let id = SessionMeta.read(from: folder)?.id.uuidString
         let usage = id.map { UsageMeter.store?.records(forSession: $0) ?? [] } ?? []
-        KeyboardInbox.finish(folder: folder, usage: usage)
-        // Only this dictation's: another may still be waiting for its answer.
-        if let id { UsageMeter.store?.deleteRecords(forSession: id) }
+        // Only this dictation's, and only once they are next to it: another
+        // may still be waiting for its answer.
+        if KeyboardInbox.finish(folder: folder, usage: usage), let id { UsageMeter.store?.deleteRecords(forSession: id) }
     }
 
     // MARK: - Outliving the keyboard
@@ -399,7 +399,7 @@ final class KeyboardDictation: ObservableObject {
     }
 
     /// The request the service would send for this recording, not sent.
-    private func captureRequest(folder: URL, job: Job) async -> URLRequest? {
+    private func captureRequest(folder: URL, job: Job) async -> CapturedTranscriptionRequest? {
         let service = GeminiTranscriptionService(client: client)
         let seconds = SessionMeta.read(from: folder)?.audioDurationSeconds ?? 0
         let context = KeyboardJob(folder: folder.lastPathComponent, mode: job.mode,
@@ -410,7 +410,7 @@ final class KeyboardDictation: ObservableObject {
                 try await service.transcribe(audioURL: FileLayout.audioCAF(in: folder), durationSeconds: seconds, context: context)
             }
         } catch let captured as CapturedTranscriptionRequest {
-            return captured.request
+            return captured
         } catch {
             KeyboardLog.note("background request not built: \(error)")
         }
@@ -441,7 +441,7 @@ final class KeyboardDictation: ObservableObject {
 
     /// Hands `job` to the background session.
     @discardableResult
-    private func send(_ request: URLRequest, job: Job, reason: String) -> Bool {
+    private func send(_ request: CapturedTranscriptionRequest, job: Job, reason: String) -> Bool {
         guard let folder = job.folder else { return false }
         let seconds = SessionMeta.read(from: folder)?.audioDurationSeconds ?? 0
         let record = KeyboardJob(folder: folder.lastPathComponent, mode: job.mode,
@@ -462,9 +462,12 @@ final class KeyboardDictation: ObservableObject {
     /// iOS's time ran out before the transcription answered: the coordinator
     /// stops its own request (and its retry), so no answer can arrive here,
     /// and ends as queued; `stateChanged` then hands the request it sent
-    /// from the background session. The dictation is sent once: when the
-    /// provider already answered, or the audio went out live, nothing is
-    /// handed over and the keyboard finishes it when iOS resumes it.
+    /// from the background session. When a successful answer has already
+    /// reached the keyboard, or the audio went out live, nothing is handed
+    /// over and the keyboard finishes it when iOS resumes it. An answer still
+    /// on its way, or a cancelled request the provider already received, can
+    /// still mean the audio reaches the provider twice (accepted risk,
+    /// docs/IOS.md).
     private func timeRanOut() {
         guard let folder = job?.folder, phase == .processing, client.sentTranscription != nil, let coordinator else { return }
         // Several chunks: the keyboard finishes it when iOS resumes it, or

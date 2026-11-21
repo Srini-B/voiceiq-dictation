@@ -34,7 +34,7 @@ public enum ModelProvider: String, CaseIterable, Sendable, Codable, Identifiable
 /// envelope and how its error bodies read. ElevenLabs transcribes only, so
 /// it is never a `ModelProvider`: the provider's writing model still runs
 /// after it. Raw values are the `TransportEvent.via` strings.
-public enum ModelEndpoint: String, Sendable {
+public enum ModelEndpoint: String, Codable, Sendable {
     case gemini
     case openAI
     case elevenLabs

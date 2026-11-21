@@ -45,4 +45,17 @@ final class KeyboardModelTests: XCTestCase {
         XCTAssertEqual(store.commands.map(\.action), [.start, .stop], "the stop goes once")
         model.disappeared()
     }
+
+    /// Tapping the offered result A pastes A, and only A: a newer result B
+    /// for this field is offered instead, never typed by the tap.
+    func testTappingAnOfferPastesOnlyThatResult() {
+        let field = UUID()
+        let offered = HeldDictation(text: "A", mode: .dictate, document: field)
+        let newer = HeldDictation(text: "B", mode: .dictate, document: field)
+        XCTAssertEqual(KeyboardModel.heldToPaste(offered: offered.id, current: offered)?.text, "A")
+        XCTAssertNil(KeyboardModel.heldToPaste(offered: offered.id, current: newer))
+        XCTAssertNil(KeyboardModel.heldToPaste(offered: nil, current: newer))
+        let expired = Date().addingTimeInterval(HeldDictation.offerWindow + 1)
+        XCTAssertNil(KeyboardModel.heldToPaste(offered: offered.id, current: offered, now: expired))
+    }
 }

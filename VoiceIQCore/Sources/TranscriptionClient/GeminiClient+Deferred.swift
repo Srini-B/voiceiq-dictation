@@ -21,7 +21,7 @@ extension GeminiClient {
     /// background session, byte for byte the request it sent itself, so
     /// nothing is encoded twice. A recording longer than one chunk sends
     /// more; the first is the one the replay answers.
-    public nonisolated var sentTranscription: URLRequest? { firstTranscription.withLock { $0 } }
+    public nonisolated var sentTranscription: CapturedTranscriptionRequest? { firstTranscription.withLock { $0 } }
 
     /// The provider answered a transcription request with success since
     /// `forgetSentTranscription()`, whether or not usage was metered: the
@@ -34,19 +34,25 @@ extension GeminiClient {
     }
 }
 
-/// The request `post` would have sent: URL, headers (with the key) and body.
+/// The request `post` would have sent: URL, headers (with the key) and body,
+/// and the provider it goes to, which decides how its answer reads.
 public struct CapturedTranscriptionRequest: Error, Sendable {
     public let request: URLRequest
+    public let endpoint: ModelEndpoint
 }
 
 /// A provider's answer received elsewhere, handed out once.
 public final class ReplayedResponse: Sendable {
     private let pending: OSAllocatedUnfairLock<(body: Data, status: Int)?>
     private let status: Int
+    /// The provider that answered; nil for a job from an older build, read
+    /// as the provider in Settings.
+    public let endpoint: ModelEndpoint?
 
-    public init(body: Data, status: Int) {
+    public init(body: Data, status: Int, endpoint: ModelEndpoint? = nil) {
         pending = OSAllocatedUnfairLock(initialState: (body, status))
         self.status = status
+        self.endpoint = endpoint
     }
 
     /// The provider transcribed this dictation: a successful answer was
