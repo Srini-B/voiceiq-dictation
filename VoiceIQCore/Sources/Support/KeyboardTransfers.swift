@@ -133,23 +133,24 @@ public final class KeyboardTransfers: NSObject, URLSessionDataDelegate, Sendable
     /// would have: the service parses the provider's answer (replayed, not
     /// sent again), then the writing model, Translate or Ask run as usual.
     /// The session's meta.json gets the words; the caller moves the folder
-    /// and holds the text.
+    /// and holds the text. Every outcome but `.busy` comes with the job's
+    /// claim, which the caller passes to `remove` or `takeOver`; a claim
+    /// taken over while this ran turns the outcome into `.busy`.
     @MainActor
     public static func finish(_ job: KeyboardJob, service: GeminiTranscriptionService,
-                              root: URL? = KeyboardInbox.root) async -> Outcome {
-        guard let answer = job.answer(root: root), let folder = job.folderURL(root: root) else { return .waiting }
-        guard finishing.insert(job.id).inserted else { return .busy }
+                              root: URL? = KeyboardInbox.root) async -> (outcome: Outcome, claim: KeyboardJob.Claim?) {
+        guard let folder = job.folderURL(root: root) else { return (.busy, nil) }
+        guard finishing.insert(job.id).inserted else { return (.busy, nil) }
         defer { finishing.remove(job.id) }
         // The other process (keyboard or app) may be finishing it already.
-        // The claim stays until the caller removes or takes over the job.
-        guard let claim = job.claim(root: root) else { return .busy }
-        guard KeyboardJob.read(job.id, root: root) != nil else {
+        guard let claim = job.claim(root: root) else { return (.busy, nil) }
+        guard KeyboardJob.read(job.id, root: root) != nil, let answer = job.answer(root: root) else {
             claim.release()
-            return .busy
+            return (.busy, nil)
         }
         guard let status = answer.status else {
             Log.transcription.notice("keyboard job \(job.id, privacy: .public): transfer ended without an answer (\(answer.error ?? "", privacy: .private))")
-            return .waiting
+            return (.waiting, claim)
         }
         let body = KeyboardJob.responseURL(job.id, root: root).flatMap { try? Data(contentsOf: $0) } ?? Data()
         var meta = SessionMeta.read(from: folder) ?? SessionMeta(id: job.id, startedAt: job.createdAt, status: .transcribing)
@@ -162,6 +163,7 @@ public final class KeyboardTransfers: NSObject, URLSessionDataDelegate, Sendable
                                                  durationSeconds: job.durationSeconds, context: job.context)
                 }
             }
+            guard claim.isHeld else { return (.busy, nil) }
             meta.rawTranscript = result.rawTranscript
             meta.cleanedTranscript = result.cleanedTranscript
             meta.modelID = result.modelID
@@ -169,19 +171,21 @@ public final class KeyboardTransfers: NSObject, URLSessionDataDelegate, Sendable
             meta.errorCode = nil
             meta.write(to: folder)
             RetentionPolicy.dropAudioIfNeverKept(meta, folder: folder)
-            return .finished(result)
+            return (.finished(result), claim)
         } catch let error as TranscriptionError where error.isWorthRetrying && !replay.transcribed {
+            guard claim.isHeld else { return (.busy, nil) }
             Log.transcription.notice("keyboard job \(job.id, privacy: .public): \(String(describing: error), privacy: .public); left for the app's retry")
             meta.status = .queuedForRetry
             meta.errorCode = "keyboard_transfer"
             meta.write(to: folder)
-            return .waiting
+            return (.waiting, claim)
         } catch {
+            guard claim.isHeld else { return (.busy, nil) }
             meta.status = .failed
             meta.errorCode = "keyboard_transfer"
             meta.errorMessage = "\(error)"
             meta.write(to: folder)
-            return .failed("\(error)")
+            return (.failed("\(error)"), claim)
         }
     }
 }

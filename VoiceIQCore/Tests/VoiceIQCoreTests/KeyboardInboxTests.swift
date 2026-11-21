@@ -105,6 +105,43 @@ final class KeyboardInboxTests: XCTestCase {
         XCTAssertNil(job.claim(root: inbox), "the stale owner's release leaves the new claim")
     }
 
+    /// An owner that resumes after its claim expired and was taken commits
+    /// nothing: the new owner's job and folder stay as they are.
+    func testAnExpiredOwnerCannotCommit() throws {
+        let folder = try session(named: "expired", status: .queuedForRetry)
+        let job = KeyboardJob(folder: "expired", mode: .dictate, durationSeconds: 3)
+        try job.write(root: inbox)
+        let expired = try XCTUnwrap(job.claim(root: inbox))
+        let later = Date().addingTimeInterval(KeyboardJob.claimLifetime + 1)
+        let current = try XCTUnwrap(job.claim(root: inbox, now: later))
+
+        XCTAssertFalse(expired.isHeld)
+        XCTAssertFalse(job.takeOver(root: inbox, claim: expired))
+        XCTAssertFalse(job.remove(root: inbox, claim: expired))
+        expired.release()
+        XCTAssertEqual(KeyboardJob.pending(in: inbox).map(\.id), [job.id])
+        XCTAssertTrue(FileManager.default.fileExists(atPath: folder.path))
+        XCTAssertTrue(current.isHeld, "the old owner's release leaves the new claim")
+
+        XCTAssertTrue(job.takeOver(root: inbox, claim: current))
+        XCTAssertTrue(KeyboardJob.pending(in: inbox).isEmpty)
+    }
+
+    /// Usage that cannot be written keeps the folder where the keyboard can
+    /// hand it over again; the app never collects it without its usage.
+    func testAFolderWhoseUsageCannotBeWrittenStays() throws {
+        let folder = try session(named: "read-only", status: .recovered)
+        let usage = [UsageRecord(activity: .dictation, stage: .transcribe, model: "m", sessionID: "s", usage: TokenUsage(audioIn: 10))]
+        try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: folder.path)
+        XCTAssertFalse(KeyboardInbox.finish(folder: folder, usage: usage, root: inbox))
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: folder.path)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: folder.path), "not moved to finished")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: inbox.appendingPathComponent("finished/read-only").path))
+
+        XCTAssertTrue(KeyboardInbox.finish(folder: folder, usage: usage, root: inbox))
+        XCTAssertEqual(KeyboardInbox.collect(from: inbox).usage.count, 1)
+    }
+
     /// Opening the app takes over only jobs nobody else is sending: not one
     /// the keyboard is still starting (it holds the claim), not one whose
     /// upload runs. The claim is held while the tasks are read.

@@ -30,20 +30,21 @@ public enum KeyboardInbox {
     static let abandonedAfter: TimeInterval = 600
 
     /// Keyboard: the dictation in `folder` is over. False when its billed
-    /// calls could not be written next to it, so the caller keeps them.
+    /// calls could not be written next to it: the folder is not moved, and
+    /// the caller keeps the calls and tries again.
     @discardableResult
     public static func finish(folder: URL, usage: [UsageRecord], root: URL? = root) -> Bool {
         guard let root, FileManager.default.fileExists(atPath: folder.path) else { return false }
         let finished = root.appendingPathComponent("finished", isDirectory: true)
         try? FileManager.default.createDirectory(at: finished, withIntermediateDirectories: true)
-        var saved = true
+        // Without its usage the folder stays in `recordings` for the caller
+        // to hand over again; the app never takes it from `finished` without.
         if !usage.isEmpty {
-            saved = (try? JSONEncoder().encode(usage).write(to: folder.appendingPathComponent(usageFile), options: .atomic)) != nil
+            guard (try? JSONEncoder().encode(usage).write(to: folder.appendingPathComponent(usageFile), options: .atomic)) != nil
+            else { return false }
         }
-        // A folder that cannot move stays in `recordings`, usage and all, and
-        // is collected as abandoned.
         try? FileManager.default.moveItem(at: folder, to: finished.appendingPathComponent(folder.lastPathComponent))
-        return saved
+        return true
     }
 
     /// App: moves what the keyboard left into `FileLayout.recordingsRoot` and
@@ -185,11 +186,20 @@ public struct KeyboardJob: Codable, Equatable, Sendable {
     }
 
     /// The job is over: its files go, its folder stays for the caller.
-    public func remove(root: URL? = KeyboardInbox.root) {
-        guard let directory = Self.directory(in: root) else { return }
-        for suffix in ["json", "body", "response", "status", "claim"] {
+    /// False, and nothing removed, when `claim` was taken over meanwhile.
+    @discardableResult
+    public func remove(root: URL? = KeyboardInbox.root, claim: Claim? = nil) -> Bool {
+        guard let directory = Self.directory(in: root), claim?.isHeld ?? true else { return false }
+        for suffix in ["json", "body", "response", "status"] {
             try? FileManager.default.removeItem(at: directory.appendingPathComponent("\(id.uuidString).\(suffix)"))
         }
+        // The claim last, with any claim a crossed release or recovery left aside.
+        let files = (try? FileManager.default.contentsOfDirectory(atPath: directory.path)) ?? []
+        for name in files where name.hasPrefix("\(id.uuidString).claim-") {
+            try? FileManager.default.removeItem(at: directory.appendingPathComponent(name))
+        }
+        try? FileManager.default.removeItem(at: directory.appendingPathComponent("\(id.uuidString).claim"))
+        return true
     }
 
     /// A claim older than this belongs to a process that ended mid-finish.
@@ -201,17 +211,37 @@ public struct KeyboardJob: Codable, Equatable, Sendable {
         let url: URL
         let token: String
 
-        /// Lets go, unless the claim went stale and someone else holds it now.
+        /// Still this owner's: checked before each step that commits a
+        /// result, so an owner that resumes after its claim went stale and
+        /// was taken stops.
+        public var isHeld: Bool { (try? String(contentsOf: url, encoding: .utf8)) == token }
+
+        /// Lets go, unless the claim went stale and someone else holds it
+        /// now: the claim is moved aside atomically, deleted only if it
+        /// carries this owner's token, and otherwise put back.
         public func release() {
-            guard (try? String(contentsOf: url, encoding: .utf8)) == token else { return }
-            try? FileManager.default.removeItem(at: url)
+            let aside = url.deletingLastPathComponent().appendingPathComponent("\(url.lastPathComponent)-release-\(UUID().uuidString)")
+            guard rename(url.path, aside.path) == 0 else { return }
+            KeyboardJob.restore(aside, to: url, unless: token)
+        }
+    }
+
+    /// `aside` was moved off `url`: deleted when it carries `token`,
+    /// otherwise put back. When another claim took `url` meanwhile, it stays
+    /// aside (never deleted; `remove` clears it with the job).
+    static func restore(_ aside: URL, to url: URL, unless token: String?) {
+        if let token, (try? String(contentsOf: aside, encoding: .utf8)) == token {
+            try? FileManager.default.removeItem(at: aside)
+        } else if link(aside.path, url.path) == 0 {
+            try? FileManager.default.removeItem(at: aside)
         }
     }
 
     /// Claims the job across processes, or nil when another one holds it.
     /// The claim file appears atomically with its owner's token (`link`).
-    /// A stale one is moved aside atomically and deleted only if it is the
-    /// one judged stale; a fresh claim taken meanwhile is put back.
+    /// A stale one is moved aside atomically and deleted only if it carries
+    /// the token judged stale; any other claim is put back, or left aside
+    /// when the path was taken meanwhile.
     public func claim(root: URL? = KeyboardInbox.root, now: Date = Date()) -> Claim? {
         guard let directory = Self.directory(in: root) else { return nil }
         let url = directory.appendingPathComponent("\(id.uuidString).claim")
@@ -228,8 +258,7 @@ public struct KeyboardJob: Codable, Equatable, Sendable {
             let aside = directory.appendingPathComponent("\(id.uuidString).claim-stale-\(token)")
             guard rename(url.path, aside.path) == 0 else { continue }
             let moved = try? String(contentsOf: aside, encoding: .utf8)
-            if moved != held { _ = link(aside.path, url.path) }
-            try? FileManager.default.removeItem(at: aside)
+            Self.restore(aside, to: url, unless: held)
             if moved != held { return nil }
         }
         return nil
@@ -252,8 +281,7 @@ public struct KeyboardJob: Codable, Equatable, Sendable {
                 claim.release()
                 continue
             }
-            job.takeOver(root: root)
-            taken.append(job)
+            if job.takeOver(root: root, claim: claim) { taken.append(job) }
         }
         return taken
     }
@@ -271,15 +299,22 @@ public struct KeyboardJob: Codable, Equatable, Sendable {
     /// dictations; the app does not queue a Translate or Ask that failed
     /// either, it marks it failed with Retry in History. A taken-over
     /// Translate or Ask job does the same.
-    public func takeOver(root: URL? = KeyboardInbox.root) {
+    ///
+    /// With `claim`, each step first checks the claim is still held, and
+    /// false means it was taken over and this owner stopped.
+    @discardableResult
+    public func takeOver(root: URL? = KeyboardInbox.root, claim: Claim? = nil) -> Bool {
+        let held = { claim?.isHeld ?? true }
         if let folder = folderURL(root: root) {
             if mode != .dictate, var meta = SessionMeta.read(from: folder), meta.status == .queuedForRetry {
+                guard held() else { return false }
                 meta.status = .failed
                 meta.errorCode = "mode_transform"
                 meta.write(to: folder)
             }
+            guard held() else { return false }
             KeyboardInbox.finish(folder: folder, usage: [], root: root)
         }
-        remove(root: root)
+        return remove(root: root, claim: claim)
     }
 }

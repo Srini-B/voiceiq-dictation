@@ -143,6 +143,12 @@ final class AppModel: ObservableObject {
         for job in jobs where job.answer() != nil {
             await finishKeyboardJob(job.id)
         }
+        await collectKeyboardDictations()
+    }
+
+    /// Moves what the keyboard finished into History and usage, and sends
+    /// what is queued.
+    private func collectKeyboardDictations() async {
         let (sessions, usage) = KeyboardInbox.collect()
         guard !sessions.isEmpty || !usage.isEmpty else { return }
         for record in usage { UsageMeter.store?.append(record) }
@@ -177,7 +183,12 @@ final class AppModel: ObservableObject {
     private func keyboardTransferSession() -> URLSession {
         if let keyboardTransfers { return keyboardTransfers.session }
         let transfers = KeyboardTransfers { [weak self] id in
-            Task { @MainActor in await self?.finishKeyboardJob(id) }
+            // In the foreground nothing else collects it until the next
+            // activation.
+            Task { @MainActor in
+                await self?.finishKeyboardJob(id)
+                await self?.collectKeyboardDictations()
+            }
         }
         let session = transfers.connect()
         keyboardTransfers = (transfers, session)
@@ -198,16 +209,17 @@ final class AppModel: ObservableObject {
 
     private func runKeyboardJob(_ id: UUID) async {
         guard let job = KeyboardJob.read(id) else { return }
-        switch await KeyboardTransfers.finish(job, service: transcription) {
+        let (outcome, claim) = await KeyboardTransfers.finish(job, service: transcription)
+        switch outcome {
         case .busy:
             break
         case .waiting:
             // The retry queue sends it (now when online, later otherwise).
-            job.takeOver()
+            job.takeOver(claim: claim)
         case .failed:
-            job.takeOver()
+            job.takeOver(claim: claim)
         case .finished(let result):
-            job.takeOver()
+            guard job.takeOver(claim: claim) else { break }
             store.heldByApp = HeldDictation(text: result.cleanedTranscript, mode: job.mode, document: job.document, host: job.host)
             SessionDiagnostics.note("keyboard job \(id.uuidString.prefix(8)) finished in the background")
         }

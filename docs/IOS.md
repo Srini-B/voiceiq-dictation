@@ -230,10 +230,24 @@ request the client abandoned is billed depends on the provider.
 
 A claim file (`KeyboardJob.claim`) keeps the keyboard and the app from
 acting on the same job at once. It appears atomically with its owner's
-token, goes stale after 5 minutes, and a stale one is replaced without
-removing a fresh claim. The keyboard holds it from writing a job until its
-upload task exists; a finish holds it until the job is removed; and the
-app's takeover claims a job before it reads the session's running tasks.
+token and goes stale after 5 minutes. Releasing it, or replacing a stale
+one, first moves it aside atomically and deletes it only when it carries
+the expected token; any other claim is put back. The keyboard holds it
+from writing a job until its upload task exists; a finish holds it until
+the job is removed; and the app's takeover claims a job before it reads the
+session's running tasks. An owner checks that it still holds the claim
+before each step that commits (writing the result, moving the folder,
+deleting the job) and stops if not. Accepted: an owner that resumes after
+5 minutes can still finish the one step it was in, and a claim can be lost
+when two processes reclaim the same stale claim at the same moment; both
+only narrow the duplicate-send risk above.
+
+A dictation whose usage could not be written next to it stays in the
+keyboard's `recordings`, and the keyboard hands it over again with its
+next dictation or when it reappears; the app never collects it from
+`finished` without its usage. If the keyboard's process ends first, its
+in-memory usage is gone and the folder is recovered after 10 minutes as an
+abandoned one, as for a keyboard ended mid-dictation.
 
 #### Offline
 

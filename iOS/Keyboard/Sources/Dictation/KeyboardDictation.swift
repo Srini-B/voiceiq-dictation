@@ -80,6 +80,8 @@ final class KeyboardDictation: ObservableObject {
     private var cancelledFolder: URL?
     private var expiring: DispatchSemaphore?
     private var transfers: (delegate: KeyboardTransfers, session: URLSession)?
+    /// Folders whose hand-over failed (`hand(over:)`).
+    private var unhanded: Set<URL> = []
     private var lastPublished: Date?
     private lazy var client = GeminiClient(
         apiKey: { KeychainStore.loadAPIKey() },
@@ -179,6 +181,7 @@ final class KeyboardDictation: ObservableObject {
         self.mic = mic
         mic.attach(to: view)
         endExpiringActivity()
+        if !unhanded.isEmpty { hand(over: nil) }
     }
 
     /// The keyboard is going away mid-dictation. A touch still deciding is
@@ -365,13 +368,23 @@ final class KeyboardDictation: ObservableObject {
     }
 
     /// The dictation is over: its folder and billed calls go to the app.
+    /// One whose calls could not be written stays in `recordings` and is
+    /// handed over again with the next one, or when the keyboard reappears.
     private func hand(over folder: URL?) {
-        guard let folder else { return }
+        for earlier in unhanded { handOver(earlier) }
+        if let folder { handOver(folder) }
+    }
+
+    private func handOver(_ folder: URL) {
         let id = SessionMeta.read(from: folder)?.id.uuidString
         let usage = id.map { UsageMeter.store?.records(forSession: $0) ?? [] } ?? []
-        // Only this dictation's, and only once they are next to it: another
-        // may still be waiting for its answer.
-        if KeyboardInbox.finish(folder: folder, usage: usage), let id { UsageMeter.store?.deleteRecords(forSession: id) }
+        guard KeyboardInbox.finish(folder: folder, usage: usage) else {
+            if FileManager.default.fileExists(atPath: folder.path) { unhanded.insert(folder) }
+            return KeyboardLog.note("hand-over to the app failed; will try again")
+        }
+        unhanded.remove(folder)
+        // Only this dictation's: another may still be waiting for its answer.
+        if let id { UsageMeter.store?.deleteRecords(forSession: id) }
     }
 
     // MARK: - Outliving the keyboard
@@ -502,18 +515,18 @@ final class KeyboardDictation: ObservableObject {
     /// the pipeline runs here, and the text is held for the keyboard.
     private func finishTransfer(_ id: UUID) async {
         guard let record = KeyboardJob.read(id), let folder = record.folderURL() else { return }
-        let outcome = await KeyboardTransfers.finish(record, service: GeminiTranscriptionService(client: client))
+        let (outcome, claim) = await KeyboardTransfers.finish(record, service: GeminiTranscriptionService(client: client))
         switch outcome {
         case .busy:
             return
         case .waiting:
             // The app's retry sends it again when it opens.
-            record.takeOver()
+            record.takeOver(claim: claim)
         case .failed:
-            record.remove()
+            guard record.remove(claim: claim) else { return }
             hand(over: folder)
         case .finished(let result):
-            record.remove()
+            guard record.remove(claim: claim) else { return }
             hand(over: folder)
             let text = result.cleanedTranscript
             SharedStore.shared.heldByKeyboard = HeldDictation(text: text, mode: record.mode, document: record.document, host: record.host)
