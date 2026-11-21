@@ -16,6 +16,7 @@ final class DictationController {
     private let hud = PillHUDController()
     private let earcons = EarconPlayer()
     private let outputMute = AudioOutputMute()
+    private let mediaPause = MediaPause()
     private let transcriptionService: GeminiTranscriptionService
     private let historyStore: HistoryStore?
     private let learner = EditLearner()
@@ -869,12 +870,16 @@ final class DictationController {
 
     private func transition(to state: DictationState) {
         if case .recording = state {
-            if SettingsStore().muteOtherAudioWhileDictating,
-               !meetingIsRecording {
+            let settings = SettingsStore()
+            if settings.muteOtherAudioWhileDictating, !meetingIsRecording {
                 outputMute.mute()
+            }
+            if settings.pauseMediaWhileDictating, !meetingIsRecording {
+                mediaPause.pause()
             }
         } else {
             outputMute.unmute()
+            mediaPause.resume()
         }
         // Only terminal states clear the mode. The coordinator re-publishes
         // `.idle` at the start of every begin, and this sink delivers it after

@@ -119,6 +119,7 @@ targets:
         LSUIElement: true # menu bar app: no Dock icon
         NSMicrophoneUsageDescription: VoiceiQ records audio while you hold the dictation key, so it can transcribe what you say.
         NSAudioCaptureUsageDescription: VoiceiQ records the other side of your calls, so meeting notes include what everyone said.
+        NSAppleEventsUsageDescription: VoiceiQ pauses Music and Spotify while you dictate, when you turn that on, and plays them again after.
         NSHumanReadableCopyright: "Copyright 2026 Google LLC. Apache License 2.0. This is not an officially supported Google product."
         LSMinimumSystemVersion: "14.0"
         CFBundleURLTypes:
