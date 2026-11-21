@@ -1,5 +1,6 @@
 #if os(macOS)
 import AppKit
+import ApplicationServices
 import Carbon.HIToolbox
 import Foundation
 import Sauce
@@ -113,7 +114,8 @@ public enum TypingInserter {
     }
 
     /// Types `text` into the app in front. Paced typing checks before each
-    /// character that `targetPID` is still in front and stops otherwise.
+    /// character that `targetPID` is still in front with the same focused
+    /// window (Windows App opens one per remote session), and stops otherwise.
     @MainActor
     public static func type(_ text: String, mode: Mode, targetPID: pid_t?) async -> Result {
         guard let source = CGEventSource(stateID: .privateState) else { return .unsupported }
@@ -130,9 +132,18 @@ public enum TypingInserter {
                 Log.insertion.info("not typing: no key for U+\(String(missing.text.unicodeScalars.first?.value ?? 0, radix: 16, uppercase: true), privacy: .public) on this layout")
                 return .unsupported
             }
+            let app = targetPID.map(AXUIElementCreateApplication)
+            let startWindow = app.flatMap(focusedWindow(of:))
             for (index, stroke) in all.enumerated() {
-                if let targetPID, NSWorkspace.shared.frontmostApplication?.processIdentifier != targetPID {
-                    Log.insertion.info("typing stopped: the app in front changed")
+                var movedApp = false
+                if let targetPID { movedApp = NSWorkspace.shared.frontmostApplication?.processIdentifier != targetPID }
+                var movedWindow = false
+                if let app, let startWindow {
+                    let window = focusedWindow(of: app)
+                    movedWindow = window.map { !CFEqual(startWindow, $0) } ?? true
+                }
+                if movedApp || movedWindow {
+                    Log.insertion.info("typing stopped: the \(movedApp ? "app" : "window", privacy: .public) in front changed")
                     return .stopped(rest: all[index...].map(\.text).joined())
                 }
                 let key = keys[stroke.text] ?? (code: 0, shift: false)
@@ -141,6 +152,13 @@ public enum TypingInserter {
             }
             return .typed
         }
+    }
+
+    private static func focusedWindow(of app: AXUIElement) -> AXUIElement? {
+        var value: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(app, kAXFocusedWindowAttribute as CFString, &value) == .success,
+              let value, CFGetTypeID(value) == AXUIElementGetTypeID() else { return nil }
+        return (value as! AXUIElement)
     }
 
     private static func post(_ stroke: Stroke, source: CGEventSource, keyCode: CGKeyCode, shift: Bool) {
