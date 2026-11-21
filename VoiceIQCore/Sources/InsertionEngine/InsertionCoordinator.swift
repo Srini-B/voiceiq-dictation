@@ -11,7 +11,8 @@ import VoiceIQBridge
 ///   guard 2: secure input active → refuse entirely, no clipboard leak (F18)
 ///
 ///   tier 1: AX kAXSelectedTextAttribute with read-back verification
-///   tier 2: pasteboard + synthesized ⌘V with guarded restore
+///   tier 2: pasteboard + synthesized ⌘V with guarded restore, or typed key
+///           events where ⌘V fails (TypingInserter)
 ///   tier 3: text left on the clipboard, visible hint
 public struct InsertionCoordinator: TextInserting {
     private let paster: PasteInserter
@@ -70,6 +71,20 @@ public struct InsertionCoordinator: TextInserting {
            nowFront.processIdentifier != expectedPID {
             Log.insertion.info("frontmost changed during AX attempt — no blind paste")
             paster.copyOnly(text)
+            return .frontmostChanged
+        }
+
+        // Tier 2a: apps where ⌘V fails get the text typed instead.
+        let bundleURL = context.targetPID.flatMap { NSRunningApplication(processIdentifier: $0)?.bundleURL }
+        if let mode = TypingInserter.mode(bundleID: context.targetAppBundleID, bundleURL: bundleURL) {
+            let rest = await TypingInserter.type(text, mode: mode, targetPID: context.targetPID)
+            if rest.isEmpty {
+                Log.insertion.info("typed instead of pasting (\(String(describing: mode), privacy: .public))")
+                return .inserted
+            }
+            // The user switched apps part way: the rest must not land there,
+            // and the part already typed must not be pasted twice.
+            paster.copyOnly(rest)
             return .frontmostChanged
         }
 
