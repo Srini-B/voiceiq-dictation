@@ -148,7 +148,9 @@ public final class KeyboardTransfers: NSObject, URLSessionDataDelegate, Sendable
             claim.release()
             return (.busy, nil)
         }
-        guard let status = answer.status else {
+        // A transfer that failed after the headers left a partial body: it
+        // goes the way of one that never got an answer.
+        guard answer.error == nil, let status = answer.status else {
             Log.transcription.notice("keyboard job \(job.id, privacy: .public): transfer ended without an answer (\(answer.error ?? "", privacy: .private))")
             return (.waiting, claim)
         }
