@@ -183,7 +183,7 @@ built from — are in [docs/design/](docs/design/).
 
 ## iPhone
 
-VoiceiQ also ships as an iPhone app (iOS 17+) with its own keyboard. Add the
+VoiceiQ also ships as an iPhone app (iOS 18+) with its own keyboard. Add the
 VoiceiQ keyboard with Full Access, tap the mic in any app, and the text lands
 where you were typing.
 

@@ -4,7 +4,7 @@ import PackageDescription
 
 let package = Package(
     name: "VoiceIQCore",
-    platforms: [.macOS(.v14), .iOS(.v17)],
+    platforms: [.macOS(.v14), .iOS(.v18)],
     products: [
         .library(name: "VoiceIQCore", targets: ["VoiceIQCore"]),
         .library(name: "VoiceIQSpeech", targets: ["VoiceIQSpeech"]),
@@ -61,5 +61,5 @@ let package = Package(
             path: "Tests"
         ),
     ],
-    swiftLanguageModes: [.v5]
+    swiftLanguageModes: [.v6]
 )

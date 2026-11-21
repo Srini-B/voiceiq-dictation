@@ -40,7 +40,7 @@ targets:
         CODE_SIGN_STYLE: Automatic
         CODE_SIGN_ENTITLEMENTS: App/VoiceIQ.entitlements
         ENABLE_HARDENED_RUNTIME: NO # enabled for notarized release builds (M8)
-        SWIFT_VERSION: "5.10"
+        SWIFT_VERSION: "6.0"
         MACOSX_DEPLOYMENT_TARGET: "14.0"
         # Sparkle appcast. Every GitHub Release carries appcast.xml, and this URL
         # always resolves to the newest one. Override on the xcodebuild command
@@ -145,7 +145,7 @@ targets:
         PRODUCT_NAME: VoiceiQLocalSpeech
         PRODUCT_BUNDLE_IDENTIFIER: io.blue.voiceiq.localspeech
         DEVELOPMENT_TEAM: G8K3545FJ2
-        SWIFT_VERSION: "5.10"
+        SWIFT_VERSION: "6.0"
         ENABLE_HARDENED_RUNTIME: YES
         CODE_SIGN_INJECT_BASE_ENTITLEMENTS: NO
       configs:
@@ -171,14 +171,14 @@ targets:
   VoiceIQiOS:
     type: application
     platform: iOS
-    deploymentTarget: "17.0"
+    deploymentTarget: "18.0"
     settings:
       base:
         PRODUCT_NAME: "VoiceiQ"
         PRODUCT_BUNDLE_IDENTIFIER: io.blue.voiceiq.ios
         DEVELOPMENT_TEAM: G8K3545FJ2
         CODE_SIGN_STYLE: Automatic
-        SWIFT_VERSION: "5.10"
+        SWIFT_VERSION: "6.0"
         TARGETED_DEVICE_FAMILY: "1,2"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
@@ -349,14 +349,14 @@ targets:
   VoiceIQLiveActivity:
     type: app-extension
     platform: iOS
-    deploymentTarget: "17.0"
+    deploymentTarget: "18.0"
     settings:
       base:
         PRODUCT_NAME: "VoiceIQLiveActivity"
         PRODUCT_BUNDLE_IDENTIFIER: io.blue.voiceiq.ios.liveactivity
         DEVELOPMENT_TEAM: G8K3545FJ2
         CODE_SIGN_STYLE: Automatic
-        SWIFT_VERSION: "5.10"
+        SWIFT_VERSION: "6.0"
         TARGETED_DEVICE_FAMILY: "1,2"
         APPLICATION_EXTENSION_API_ONLY: YES
       configs:

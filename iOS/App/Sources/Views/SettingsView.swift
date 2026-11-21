@@ -38,7 +38,7 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         }
     }
 
-    @ViewBuilder var page: some View {
+    @MainActor @ViewBuilder var page: some View {
         switch self {
         case .keys: KeysView()
         case .keyboard: KeyboardSetupView()
@@ -257,7 +257,7 @@ struct DictationSettingsView: View {
 /// Settings › Action Button. There is no public URL for it; `App-prefs:` is
 /// the Settings app's own scheme. When iOS refuses it, VoiceiQ's page in
 /// Settings opens instead.
-private func openActionButtonSettings() {
+@MainActor private func openActionButtonSettings() {
     guard let url = URL(string: "App-prefs:ACTION_BUTTON") else { return }
     UIApplication.shared.open(url) { opened in
         if !opened, let fallback = URL(string: UIApplication.openSettingsURLString) {

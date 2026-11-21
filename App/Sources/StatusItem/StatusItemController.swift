@@ -4,6 +4,7 @@ import VoiceIQCore
 
 /// Owns the NSStatusItem. Plain NSStatusItem (not MenuBarExtra) so the template
 /// icon can pulse for listening and processing states.
+@MainActor
 final class StatusItemController: NSObject {
     enum VisualState {
         case idle
@@ -64,7 +65,8 @@ final class StatusItemController: NSObject {
             // NSImage per frame at 30 fps made the status item re-measure and
             // recommit its scene on every tick for the whole dictation.
             animationTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 15.0, repeats: true) { [weak self] _ in
-                self?.tickAnimation()
+                // Scheduled on the main run loop, so it fires on the main thread.
+                MainActor.assumeIsolated { self?.tickAnimation() }
             }
             tickAnimation()
         }

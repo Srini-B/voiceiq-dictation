@@ -60,8 +60,8 @@ struct AgentCachePolicy: Equatable, Sendable {
         sendsAnthropicBreakpoints = family == .anthropic
     }
 
-    static let staticTTL: [String: Any] = ["type": "ephemeral", "ttl": "1h"]
-    static let movingTTL: [String: Any] = ["type": "ephemeral"]
+    static var staticTTL: [String: Any] { ["type": "ephemeral", "ttl": "1h"] }
+    static var movingTTL: [String: Any] { ["type": "ephemeral"] }
 
     /// A 400 that names one of the cache fields. Other 400s (a bad image,
     /// a wrong model id) are the caller's problem and are not retried.
