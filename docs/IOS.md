@@ -267,9 +267,10 @@ user force-quit the app (force-quitting also cancels its transfers). Then the
 job stays in the App Group. The next time VoiceiQ opens, it asks the
 background session which uploads are still running; those keep waiting
 for their answer. Every other job is taken over: the dictation appears in History as queued and the app's retry queue
-sends it (at once when online). The retry queue transcribes as Dictate, as
-for the app's own dictations, so a Translate or Ask job is marked failed
-with Retry instead, as the app marks its own failed Translate or Ask. The
+sends it (at once when online). A Translate or Ask job is marked failed
+with Retry instead, as the app marks its own failed Translate or Ask;
+Retry runs it again in its mode (`SessionMeta.mode`), with the same
+translation targets or the same Ask selection. The
 user sees no text in the field, no
 offer in the strip, and a History row that fills in once the retry
 succeeds; Paste last has the text after that.

@@ -91,7 +91,7 @@ public enum TranscriptionError: Error, Equatable, Sendable {
     case safetyBlocked
 }
 
-public enum DictationMode: Equatable, Sendable {
+public enum DictationMode: Codable, Equatable, Sendable {
     case dictate
     case askAnything(selectedText: String?)
     /// Targets in order of preference; the model picks the first one the

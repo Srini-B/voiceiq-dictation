@@ -295,9 +295,8 @@ public struct KeyboardJob: Codable, Equatable, Sendable {
     /// moves to `finished` for `KeyboardInbox.collect`, and an answer that
     /// still arrives later finds no job and is dropped.
     ///
-    /// The retry queue transcribes as Dictate, as for the app's own
-    /// dictations; the app does not queue a Translate or Ask that failed
-    /// either, it marks it failed with Retry in History. A taken-over
+    /// The app does not queue a Translate or Ask that failed: it marks it
+    /// failed, and History's Retry runs it again in its mode. A taken-over
     /// Translate or Ask job does the same.
     ///
     /// With `claim`, each step first checks the claim is still held, and

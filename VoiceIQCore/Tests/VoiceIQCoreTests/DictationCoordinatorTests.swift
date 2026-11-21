@@ -193,6 +193,7 @@ final class DictationCoordinatorTests: XCTestCase {
         for _ in 0..<200 where !c.state.isTerminal { try await Task.sleep(nanoseconds: 10_000_000) }
         XCTAssertEqual(answer, "answer")
         XCTAssertNil(inserter.insertedText)
+        XCTAssertEqual(last?.mode, .askAnything(selectedText: nil), "History's Retry runs it as Ask again")
 
         let steps = try XCTUnwrap(last?.steps)
         XCTAssertNil(steps.insert)

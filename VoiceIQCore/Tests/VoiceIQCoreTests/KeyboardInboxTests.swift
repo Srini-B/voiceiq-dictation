@@ -74,9 +74,8 @@ final class KeyboardInboxTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: FileLayout.audioFLAC(in: imported.folder).path), "audio needed for the retry")
     }
 
-    /// The app's retry queue transcribes as Dictate and the app marks a
-    /// failed Translate or Ask failed, not queued; a taken-over keyboard
-    /// job matches that instead of coming back as a plain dictation.
+    /// The app marks a failed Translate or Ask failed, not queued, for
+    /// History's Retry; a taken-over keyboard job matches that.
     func testTakenOverTranslateJobIsFailedNotQueuedAsDictation() throws {
         _ = try session(named: "translate-one", status: .queuedForRetry)
         let job = KeyboardJob(folder: "translate-one", mode: .translate, translationTargets: ["es"], durationSeconds: 3)

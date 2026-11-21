@@ -102,6 +102,36 @@ final class RecoveryClipboardTests: XCTestCase {
         XCTAssertEqual(store.record(id: meta.id.uuidString)?.cleanedTranscript, "Retried text.")
     }
 
+    /// Records the mode each transcription was asked for.
+    private final class ModeRecorder: TranscriptionServicing, @unchecked Sendable {
+        private let lock = NSLock()
+        private var recorded: [DictationMode] = []
+        var modes: [DictationMode] { lock.withLock { recorded } }
+        func transcribe(audioURL: URL, durationSeconds: Double, context: DictationContext) async throws -> TranscriptionResult {
+            lock.withLock { recorded.append(context.mode) }
+            return TranscriptionResult(rawTranscript: "raw", cleanedTranscript: "text", modelID: "fake")
+        }
+    }
+
+    /// A failed Translate or Ask retries in its own mode, with its targets
+    /// or its selection; a dictation written before modes were kept
+    /// retries as Dictate.
+    func testRetryKeepsTheModeTheDictationRanIn() async throws {
+        let modes: [DictationMode?] = [.translate(targets: ["es", "fr"]), .askAnything(selectedText: "the selection"), nil]
+        let recorder = ModeRecorder()
+        let queue = RetryQueue(store: store, transcription: recorder)
+        for mode in modes {
+            var meta = try queuedSession("unused", secondsAgo: 5)
+            meta.status = .failed
+            meta.errorCode = "mode_transform"
+            meta.mode = mode
+            let folder = root.appendingPathComponent(meta.id.uuidString, isDirectory: true)
+            meta.write(to: folder); store.upsert(meta: meta, folder: folder)
+            _ = await queue.retrySingle(try XCTUnwrap(store.record(id: meta.id.uuidString)))
+        }
+        XCTAssertEqual(recorder.modes, [.translate(targets: ["es", "fr"]), .askAnything(selectedText: "the selection"), .dictate])
+    }
+
     /// Retry is offered only when it can do something: a recording to
     /// transcribe again, or the words of an unfinished dictation. A finished
     /// one whose audio is gone would only fail.

@@ -259,6 +259,7 @@ public final class DictationCoordinator: ObservableObject {
             context.selectedTextIsSettable = selectedTextIsSettable
             meta.targetAppBundleID = context.targetAppBundleID
             meta.targetAppName = context.targetAppName
+            if mode != .dictate, mode.keepsRecording { meta.mode = mode }
             meta.write(to: folder)
             session = Session(id: id, folder: folder, startedAt: startedAt, context: context, meta: meta)
 

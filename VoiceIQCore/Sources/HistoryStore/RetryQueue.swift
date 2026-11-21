@@ -189,11 +189,13 @@ public final class RetryQueue {
             return .failed
         }
         do {
+            let mode = meta.mode ?? .dictate
             let context = DictationContext(
                 targetAppBundleID: meta.targetAppBundleID,
-                targetAppName: meta.targetAppName
+                targetAppName: meta.targetAppName,
+                mode: mode
             )
-            let scope = UsageScope(activity: .dictation, sessionID: meta.id.uuidString)
+            let scope = UsageScope(mode: mode, sessionID: meta.id.uuidString)
             let result = try await UsageMeter.$scope.withValue(scope) {
                 try await transcription.transcribe(
                     audioURL: cafURL,

@@ -38,6 +38,9 @@ public struct SessionMeta: Codable, Equatable, Sendable {
     /// Human-relevant API error detail (e.g. the 404 body naming the model).
     public var errorMessage: String?
     public var modelID: String?
+    /// The Translate or Ask mode the dictation ran in, so a retry runs it the
+    /// same way. Nil for a plain dictation and in meta.json from older builds.
+    public var mode: DictationMode?
     /// Key-up → terminal-state latency, for the local stats overlay.
     public var pipelineSeconds: Double?
     /// Where `pipelineSeconds` went, step by step. Nil on failed dictations
