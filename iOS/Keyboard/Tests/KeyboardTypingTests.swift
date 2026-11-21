@@ -78,7 +78,7 @@ final class KeyboardTypingTests: XCTestCase {
     private var typing: TypingController!
     private var keyboard: FullKeyboardView!
 
-    private func open(_ text: String = "", selecting word: String? = nil) {
+    private func open(_ text: String = "", selecting word: String? = nil, width: CGFloat = 402) {
         // Words learned in earlier runs would change the suggestions.
         UserDefaults(suiteName: KeyboardBridge.appGroup)?.removeObject(forKey: LearnedWordsStore.defaultsKey)
         field = Field(text, selecting: word)
@@ -86,7 +86,7 @@ final class KeyboardTypingTests: XCTestCase {
         typing = TypingController()
         typing.controller = controller
         keyboard = typing.makeKeyboard()
-        keyboard.frame = CGRect(x: 0, y: 0, width: 402, height: typing.keysHeight)
+        keyboard.frame = CGRect(x: 0, y: 0, width: width, height: typing.keysHeight)
         keyboard.layoutIfNeeded()
         typing.appeared()
         keyboard.layoutIfNeeded()
@@ -164,6 +164,30 @@ final class KeyboardTypingTests: XCTestCase {
 
         type(" go ")
         XCTAssertFalse(plane.engine.suggestions.isEmpty, "a next word after \"\(field.text)\"")
+    }
+
+    /// One row above the keys: VoiceiQ's buttons at the strip's ends, the
+    /// suggestions between them, and no Hex key.
+    func testTheStripHoldsVoiceiQsButtonsBesideTheSuggestions() {
+        for (width, expected) in [(402.0, ["VoiceiQ", "Mini Keyboard", "Edit", "Dictate"]), (320.0, ["VoiceiQ", "Edit", "Dictate"])] {
+            open(width: width)
+            type("we shoud")
+            XCTAssertNil(keyboard.hexKey.superview, "the Hex key is gone")
+            let buttons = keyboard.subviews
+                .filter { !$0.isHidden && $0.alpha > 0 && StripButton.allCases.map(\.label).contains($0.accessibilityLabel ?? "") }
+                .sorted { $0.frame.minX < $1.frame.minX }
+            XCTAssertEqual(buttons.map(\.accessibilityLabel), expected, "at \(width) pt")
+            let slots = (keyboard.stripView.slotFrames ?? []).map { $0.offsetBy(dx: keyboard.stripView.frame.minX, dy: keyboard.stripView.frame.minY) }
+            XCTAssertEqual(slots.count, 3)
+            for button in buttons {
+                XCTAssertEqual(button.frame.height, keyboard.stripView.frame.height, "as tall as the strip")
+                for slot in slots { XCTAssertFalse(button.frame.intersects(slot), "\(button.accessibilityLabel!) over a suggestion at \(width) pt") }
+            }
+            // The suggestions share what is left equally, and still get a word.
+            XCTAssertEqual(slots[0].width, slots[2].width, accuracy: 0.5)
+            XCTAssertGreaterThan(slots[1].width, width < 360 ? 65 : 80)
+            XCTAssertFalse(plane.engine.suggestions.isEmpty)
+        }
     }
 
     func testTheEmojiSearchTakesTheLettersInsteadOfTheField() {

@@ -521,12 +521,25 @@ recorder card also shows the last lines Scribe v3 Live heard.
 
 ### Typing
 
-The keyboard opens on Hex's letter keys with its suggestion strip. A VoiceiQ
-bar above them has the VoiceiQ button (waveform) on the left, then Mini
-Keyboard, Edit and the mic on the right. The
-mic starts a dictation at once; the waveform opens the voice panel with
-Dictate, Translate and Ask. A running dictation keeps the keys and replaces
-the bar with the recording strip until the text is delivered.
+The keyboard opens on Hex's letter keys with one row above them: Hex's
+suggestion strip, with VoiceiQ's buttons at its ends. The VoiceiQ button
+(waveform) and Mini Keyboard sit at the leading end, Edit and the mic at the
+trailing end, and Hex's three suggestions share the room between them
+(`StripButton` in `Typing/StripButtons.swift`). Each button is 36 pt wide and
+as tall as the strip, as Hex's strip pills are. On a keyboard under 360 pt
+wide (iPad's floating keyboard) Mini Keyboard moves to the voice panel's bar,
+so each suggestion keeps about 69 pt; on a 402 pt iPhone each gets about
+82 pt. The mic starts a dictation at once; the waveform opens the voice panel
+with Dictate, Translate and Ask. A running dictation keeps the keys and covers
+the whole strip with the recording strip until the text is delivered. The
+emoji search covers the whole strip too, and the Dictionary offer covers the
+suggestions only.
+
+The strip's mic has the touch Hex's own key had (`DictationKeyControl`, on
+Hex's `HexKeyGesture`): the finger landing arms the dictation, a tap starts
+it, a still hold of 0.35 s records until the finger lifts, and sliding off
+drops the press. The panels' bars (voice, emoji, edit, answer, number pads)
+keep a plain mic button that taps only.
 
 **Recording strip** (`RecordingStrip`, `LevelGlow`), modelled on Gboard's
 Rambler. Cancel (x) on the left, a red stop button on the right, the elapsed
@@ -553,7 +566,7 @@ flat at the latest level. The glow is a plain `Shape` on a 0.06 s timer: a
 on an iPhone (0.6.23).
 
 **Add to Dictionary.** With Full Access, selecting text in the field replaces
-the bar's middle with "Add “word” to Dictionary"; it goes as
+the suggestions with "Add “word” to Dictionary"; it goes as
 soon as the selection ends, whether by typing, Delete, moving the cursor or a
 tap in the field. The bar reads the selection after every
 edit (`TypingController.selection`), because iOS does not report a keyboard's
@@ -563,28 +576,29 @@ offers "Add copied text to Dictionary" until you start typing.
 
 | Feature | How |
 | --- | --- |
-| Keys | Hex's `FullKeyboardView` (`iOS/Keyboard/Hex/FullKeyboard`, MIT, unmodified): English QWERTY letters, 123 and #+= pages, shift and Caps Lock, accents on long press, key preview, repeat delete, the space bar's hold-and-slide cursor, adaptive touch targets, and Hex's strip of three suggestions. The key right of the space bar ("Hex key") starts VoiceiQ's dictation, the same action as the bar's mic: a tap starts it, a hold records until release. The emoji key opens VoiceiQ's emoji panel. Hex's own dictation, its recording panel, style menu, translation and language switching stay off (`HexGlue/HexDictationStandIns.swift`, `HexLanguageSettings.swift`). Phone, number and decimal fields hand off to iOS's pad, as before. |
-| Height | The VoiceiQ bar (44 pt, 36 in landscape) plus Hex's `preferredHeight` for the orientation, strip included (about 253 pt in portrait on a 402 pt wide iPhone). |
-| Mini keyboard | The bar's Mini Keyboard button shrinks the keyboard to the mini view and back (`TypingController.mini`, kept in the keyboard's own defaults). The mini view is the mic bar over two rows (`MiniKeys`): edit, @ . , ? ! ' and delete, then 123, emoji, the size key, space and return, with the globe where the system draws none. 123 swaps the punctuation for the digits 1 to 0. |
+| Keys | Hex's `FullKeyboardView` (`iOS/Keyboard/Hex/FullKeyboard`, MIT, one patch): English QWERTY letters, 123 and #+= pages, shift and Caps Lock, accents on long press, key preview, repeat delete, the space bar's hold-and-slide cursor, adaptive touch targets, and Hex's strip of three suggestions. Hex's own key (the hexagon in the strip) is removed; the strip's mic does what it did. The emoji key opens VoiceiQ's emoji panel. Hex's own dictation, its recording panel, style menu, translation and language switching stay off (`HexGlue/HexDictationStandIns.swift`, `HexLanguageSettings.swift`). Phone, number and decimal fields hand off to iOS's pad, as before. |
+| Height | Hex's `preferredHeight` for the orientation, strip included (253 pt in portrait on a 402 pt wide iPhone): 44 pt shorter than with the separate VoiceiQ bar. Panels (voice, emoji, edit, answer) fill the same height, with their bar in the strip's place (35 pt in portrait, 50 in landscape), so each has 35 pt less below its bar than before. |
+| Mini keyboard | The strip's Mini Keyboard button (the voice panel's on a narrow keyboard) shrinks the keyboard to the mini view and back (`TypingController.mini`, kept in the keyboard's own defaults). The mini view is the mic bar over two rows (`MiniKeys`): edit, @ . , ? ! ' and delete, then 123, emoji, the size key, space and return, with the globe where the system draws none. 123 swaps the punctuation for the digits 1 to 0. |
 | Suggestions | Hex's strip: the typed word in quotes (keeps it and teaches Hex not to change it), the best correction or completion in the middle (highlighted when space will apply it), and a runner-up; after a space, next-word predictions; after a slide, the other readings of the slid word. Ranked by Hex's English typing model (`TypingModel/en.hextm`, built from Google Books Ngram data, CC BY 3.0) and Hex's `AutocorrectEngine`. |
 | Auto-correction | Hex's `TypingDecoder` on space or punctuation, with the touch points (spatial autocorrect). Delete right after a correction restores the typed word. Off where the field turns it off, and in Settings › Typing. |
 | Slide to type | Hex's `SwipeDecoder` and `SwipeTyping` over the same typing model. The slid word gets its space when the next word starts; the strip offers the other readings. Off in Settings › Typing. |
 | Your words | The VoiceiQ Dictionary (`SharedStore.dictionaryWords`), contact names and Text Replacements (`requestSupplementaryLexicon`), loaded into Hex with `AutocorrectEngine.loadLexiconEntries` each time the keyboard appears, plus the words Hex learns (`LearnedWordsStore`: a word kept twice from the quotes or by deleting its correction). With Full Access, the keyboard hands the newest 200 of those to the app when it closes (`publishLearnedWords`); the app adds each once to the Dictionary as Auto-learned (`DictionaryBridge`). Hex stores them lowercase. |
-| Edit panel | The bar's cursor button: line start and end, word steps, arrows that repeat while held, copy, cut and paste (Full Access), undo and redo of the keyboard's own edits, delete. `TypingController` is Hex's `KeyboardTextTarget`, so every edit Hex's keys make passes through its recorder: each word, each run of deletes, each other action is one undo step. |
+| Edit panel | The strip's cursor button: line start and end, word steps, arrows that repeat while held, copy, cut and paste (Full Access), undo and redo of the keyboard's own edits, delete. `TypingController` is Hex's `KeyboardTextTarget`, so every edit Hex's keys make passes through its recorder: each word, each run of deletes, each other action is one undo step. |
 | Emoji | VoiceiQ's panel: Unicode's list (Emoji 17.0) in CLDR order, by category, with recents, skin tones and search. While searching, Hex's keys type into the search field in the bar (`TypingController.emojiQuery`), with autocorrect off. `EmojiData.drawable` hides emoji the running iOS cannot draw (16.0 needs iOS 18.4, 17.0 iOS 26.4). Hex's strip also offers the emoji for a word just typed (`emoji-index-en.txt`). |
 | No assistance | Password, one-time code, card, phone and postal code fields, as Hex decides per field. |
 
 **Hex inside VoiceiQ.** `TypingController.makeKeyboard()` builds Hex's view
 with VoiceiQ as its text target (`languageOverride = .english`,
-`letterLayoutOverride = .qwerty`) and puts it under the VoiceiQ bar
-(`KeysArea` in `TypingViews.swift`). Everything Hex reads from the rest of
+`letterLayoutOverride = .qwerty`), removes the Hex key, adds VoiceiQ's strip
+buttons and sets `stripLayout`, which places them and narrows the strip to
+the room between them (`KeysArea` in `TypingViews.swift`). Everything Hex reads from the rest of
 Hex comes from `iOS/Keyboard/Sources/HexGlue`:
 
 - `KeyboardBridge.appGroup` is VoiceiQ's App Group, so Hex's settings and
   learned words live beside VoiceiQ's.
-- `KeyboardViewModel` is a stand-in: Full Access always reported on (so the
-  Hex key calls `onDictateTap`, and VoiceiQ's mic action handles the no-Full-
-  Access case), never recording (so Hex's recording panel never opens), and
+- `KeyboardViewModel` is a stand-in: Full Access always reported on (so Hex
+  never shows its own hint, and VoiceiQ's mic action handles the no-Full-
+  Access case), the callbacks the strip's mic calls as Hex's key did, never recording (so Hex's recording panel never opens), and
   no styles, languages or translation.
 - `HexLanguageSettings` offers English and QWERTY only: no other layouts, no
   space-bar language switch, no bilingual autocorrect. Only `en.hextm` and
@@ -602,6 +616,11 @@ keyboard calls Hex's `handleMemoryWarning`, which drops Hex's emoji caches.
 The typing model is memory-mapped, so its pages do not count against the
 extension's limit.
 
+Memory (Release, iPhone 17 Pro Simulator, `footprint` on the keyboard
+process, 2026-11-22): the one-row strip is 26 / 42 / 42 / 45 MB idle / after
+a 48-word paragraph / after six slides / recording, against 34 / 43 / 43 /
+46 MB with the separate VoiceiQ bar. iOS's limit is about 60 to 70 MB.
+
 **Syncing Hex.** `iOS/Keyboard/Hex` and `iOS/App/Hex` are byte-identical
 copies of Hex's files, listed in `iOS/Keyboard/Hex/MANIFEST`, at the commit
 in `iOS/Keyboard/Hex/UPSTREAM`. Never edit them.
@@ -616,8 +635,14 @@ After a sync, build the keyboard and run `KeyboardTypingTests`. When Hex's
 files need a symbol from elsewhere in Hex, add it to `HexGlue` (adapted to
 VoiceiQ), or, when the Hex file is self-contained, add it to `MANIFEST` and
 sync again (as `TypingLog` and `Dictation/` are). A change to a Hex file goes
-in `iOS/Keyboard/Hex/patches/` only when nothing else works; there are none
-today.
+in `iOS/Keyboard/Hex/patches/` only when nothing else works. There is one:
+`0001-strip-layout-hook.patch` adds `FullKeyboardView.stripLayout`, a
+closure that returns the strip's frame and slots in place of the layout's
+(Hex's layout reserves room for its own key only). It is made with one line
+of context (`git diff -U1`) so Hex's nearby edits do not stop it applying;
+regenerate it the same way. If a sync fails to apply it, fix the patch
+before anything else: without it the suggestions run under VoiceiQ's
+buttons.
 
 **Tests.** `KeyboardTypingTests` (scheme `VoiceIQiOS`) touch Hex's keys where
 they are drawn and read the field: typed text and capitals, a correction on

@@ -12,13 +12,14 @@ enum KeyboardBridge {
 }
 
 /// The dictation side of Hex's keyboard. `KeyboardController` sets the callbacks:
-/// the Hex key's tap and hold start VoiceiQ's dictation, as the mic button does.
+/// the strip's mic (`DictationKeyControl`) calls them as Hex's key did; the
+/// Hex key itself is removed (`TypingController.makeKeyboard`).
 @MainActor
 final class KeyboardViewModel: ObservableObject {
     enum StagePhase: Equatable { case idle, recording, transcribing, failed }
 
-    /// Always true: the Hex key then calls `onDictateTap`, and VoiceiQ's own mic
-    /// action asks for Full Access when it's off, as the mic button does.
+    /// Always true, so Hex never shows its own Full Access hint; VoiceiQ's mic
+    /// action asks for Full Access when it's off.
     let hasFullAccess = true
     @Published var needsGlobeKey = true
     /// Never recording: VoiceiQ shows its own recording strip above the keys, so
