@@ -142,7 +142,7 @@ public final class KeyboardTransfers: NSObject, URLSessionDataDelegate, Sendable
             meta.write(to: folder)
             RetentionPolicy.dropAudioIfNeverKept(meta, folder: folder)
             return .finished(result)
-        } catch let error as TranscriptionError where error.isWorthRetrying && !replay.wasTaken {
+        } catch let error as TranscriptionError where error.isWorthRetrying && !replay.transcribed {
             Log.transcription.notice("keyboard job \(job.id, privacy: .public): \(String(describing: error), privacy: .public); left for the app's retry")
             meta.status = .queuedForRetry
             meta.errorCode = "keyboard_transfer"

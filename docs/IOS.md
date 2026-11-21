@@ -212,7 +212,10 @@ Real-time transcription; the keyboard then finishes it when iOS resumes it,
 or the app recovers the recording. When the background answer is in but the
 next step fails (the writing model, Translate or Ask), the app marks the
 dictation failed with Retry in History instead of sending the recording
-again. A request the keyboard cancelled may still have reached the provider;
+again. A recording longer than one request (over 10 minutes, sent in chunks)
+is never handed over: the keyboard finishes it when iOS resumes it, or the
+app's chunk-aware retry sends it. A request the keyboard cancelled may
+still have reached the provider;
 whether a request the client abandoned is billed depends on the provider.
 
 #### Offline
@@ -226,7 +229,9 @@ This does not work when Background App Refresh is off for VoiceiQ or the
 user force-quit the app (force-quitting also cancels its transfers). Then the
 job stays in the App Group. The next time VoiceiQ opens, it takes the job
 over: the dictation appears in History as queued and the app's retry queue
-sends it (at once when online). The user sees no text in the field, no
+sends it (at once when online). The retry queue transcribes as Dictate, as
+for the app's own dictations, so a Translate or Ask job is marked failed
+with Retry instead, as the app marks its own failed Translate or Ask. The user sees no text in the field, no
 offer in the strip, and a History row that fills in once the retry
 succeeds; Paste last has the text after that.
 

@@ -72,6 +72,21 @@ final class KeyboardInboxTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: FileLayout.audioFLAC(in: sessions[0].folder).path), "audio needed for the retry")
     }
 
+    /// The app's retry queue transcribes as Dictate and the app marks a
+    /// failed Translate or Ask failed, not queued; a taken-over keyboard
+    /// job matches that instead of coming back as a plain dictation.
+    func testTakenOverTranslateJobIsFailedNotQueuedAsDictation() throws {
+        _ = try session(named: "translate-one", status: .queuedForRetry)
+        let job = KeyboardJob(folder: "translate-one", mode: .translate, translationTargets: ["es"], durationSeconds: 3)
+        try job.write(root: inbox)
+
+        job.takeOver(root: inbox)
+
+        let (sessions, _) = KeyboardInbox.collect(from: inbox)
+        XCTAssertEqual(sessions.map(\.meta.status), [.failed])
+        XCTAssertEqual(sessions.first?.meta.errorCode, "mode_transform")
+    }
+
     func testNeverKeepAudioDropsTheRecordingOnceItHasWords() throws {
         let folder = try session(named: "never-keep", status: .transcribing)
         let audio = [FileLayout.audioCAF(in: folder), FileLayout.audioFLAC(in: folder)]
@@ -88,6 +103,23 @@ final class KeyboardInboxTests: XCTestCase {
         RetentionPolicy.dropAudioIfNeverKept(meta, folder: folder, audioRetentionDays: -1)
         XCTAssertFalse(audio.contains { FileManager.default.fileExists(atPath: $0.path) })
         XCTAssertTrue(FileManager.default.fileExists(atPath: FileLayout.metaJSON(in: folder).path), "the dictation itself stays")
+    }
+}
+
+/// The background session's answer, replayed through the normal service.
+final class ReplayedResponseTests: XCTestCase {
+    private let url = URL(string: "https://example.com/transcribe")!
+
+    func testOnlyASuccessfulAnswerCountsAsTranscribed() {
+        let refused = ReplayedResponse(body: Data(), status: 429)
+        XCTAssertNotNil(refused.take(url: url))
+        XCTAssertFalse(refused.transcribed, "a quota refusal must stay queued for the retry")
+
+        let answered = ReplayedResponse(body: Data(), status: 200)
+        XCTAssertFalse(answered.transcribed, "not used yet")
+        XCTAssertNotNil(answered.take(url: url))
+        XCTAssertTrue(answered.transcribed)
+        XCTAssertNil(answered.take(url: url), "handed out once")
     }
 }
 

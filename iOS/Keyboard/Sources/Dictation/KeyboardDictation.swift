@@ -412,6 +412,10 @@ final class KeyboardDictation: ObservableObject {
     /// session it goes to the app's retry queue as before.
     private func queueOffline(_ job: Job) {
         guard let folder = job.folder else { return }
+        guard Self.fitsOneRequest(folder) else {
+            KeyboardLog.note("longer than one request: left to the app's retry")
+            return hand(over: folder)
+        }
         // The request this keyboard already sent, byte for byte: nothing is
         // encoded again. When handed off, iOS is about to suspend the
         // keyboard, so it goes out now.
@@ -452,11 +456,18 @@ final class KeyboardDictation: ObservableObject {
     /// provider already answered, or the audio went out live, nothing is
     /// handed over and the keyboard finishes it when iOS resumes it.
     private func timeRanOut() {
-        guard job != nil, phase == .processing, client.sentTranscription != nil, let coordinator else { return }
+        guard let folder = job?.folder, phase == .processing, client.sentTranscription != nil, let coordinator else { return }
+        // Several chunks: the keyboard finishes it when iOS resumes it, or
+        // the app recovers the recording.
+        guard Self.fitsOneRequest(folder) else { return }
         KeyboardLog.note("keyboard's time ran out while transcribing")
         if !coordinator.handOffTranscription() {
             KeyboardLog.note("not handed over: the provider already has this dictation")
         }
+    }
+
+    private static func fitsOneRequest(_ folder: URL) -> Bool {
+        KeyboardJob.fitsOneRequest(durationSeconds: SessionMeta.read(from: folder)?.audioDurationSeconds ?? .infinity)
     }
 
     private func transferSession() -> URLSession {

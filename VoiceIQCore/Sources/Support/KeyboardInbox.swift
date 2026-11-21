@@ -107,6 +107,13 @@ public struct KeyboardJob: Codable, Equatable, Sendable {
         self.createdAt = createdAt
     }
 
+    /// Only a recording sent in one request goes to the background session:
+    /// a replayed answer stands for the first request, so a longer one
+    /// (several chunks) stays with the app's chunk-aware retry.
+    public static func fitsOneRequest(durationSeconds: Double) -> Bool {
+        durationSeconds <= AudioChunker.maxChunkSeconds
+    }
+
     public var context: DictationContext {
         let dictationMode: DictationMode = switch mode {
         case .dictate: .dictate
@@ -183,8 +190,20 @@ public struct KeyboardJob: Codable, Equatable, Sendable {
     /// through the app's own retry like any queued dictation. Its folder
     /// moves to `finished` for `KeyboardInbox.collect`, and an answer that
     /// still arrives later finds no job and is dropped.
+    ///
+    /// The retry queue transcribes as Dictate, as for the app's own
+    /// dictations; the app does not queue a Translate or Ask that failed
+    /// either, it marks it failed with Retry in History. A taken-over
+    /// Translate or Ask job does the same.
     public func takeOver(root: URL? = KeyboardInbox.root) {
-        if let folder = folderURL(root: root) { KeyboardInbox.finish(folder: folder, usage: [], root: root) }
+        if let folder = folderURL(root: root) {
+            if mode != .dictate, var meta = SessionMeta.read(from: folder), meta.status == .queuedForRetry {
+                meta.status = .failed
+                meta.errorCode = "mode_transform"
+                meta.write(to: folder)
+            }
+            KeyboardInbox.finish(folder: folder, usage: [], root: root)
+        }
         remove(root: root)
     }
 }

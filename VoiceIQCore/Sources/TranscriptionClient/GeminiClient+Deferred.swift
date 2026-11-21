@@ -36,15 +36,20 @@ public struct CapturedTranscriptionRequest: Error, Sendable {
 /// A provider's answer received elsewhere, handed out once.
 public final class ReplayedResponse: Sendable {
     private let pending: OSAllocatedUnfairLock<(body: Data, status: Int)?>
+    private let status: Int
 
     public init(body: Data, status: Int) {
         pending = OSAllocatedUnfairLock(initialState: (body, status))
+        self.status = status
     }
 
-    /// The answer was handed out: the provider transcribed this dictation,
-    /// so a later failure (the writing model, Translate, Ask) must not send
-    /// the recording again.
-    public var wasTaken: Bool { pending.withLock { $0 == nil } }
+    /// The provider transcribed this dictation: a successful answer was
+    /// handed out, so a later failure (the writing model, Translate, Ask)
+    /// must not send the recording again. A refusal handed out (a quota,
+    /// no credits) leaves the dictation to the retry queue.
+    public var transcribed: Bool {
+        (200..<300).contains(status) && pending.withLock { $0 == nil }
+    }
 
     func take(url: URL) -> (Data, URLResponse)? {
         guard let (body, status) = pending.withLock({ state in defer { state = nil }; return state }),
