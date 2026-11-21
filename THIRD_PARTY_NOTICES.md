@@ -128,6 +128,46 @@ contributors. `scripts/sync-hex-keyboard.sh` copies them, unmodified, into
 
 ## Adapted source
 
+### ios-keyboard-dictation (in-keyboard microphone capture)
+
+- File: `iOS/Keyboard/Sources/Dictation/WebMicCapture.swift`
+- Source: [stephancill/ios-keyboard-dictation](https://github.com/stephancill/ios-keyboard-dictation), adapted
+- License: MIT
+
+```
+MIT License
+
+Copyright (c) 2026 Stephan Cilliers
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
+### Hex KeyboardLocalDictation (in-keyboard dictation behaviour)
+
+- Files: `iOS/Keyboard/Sources/Dictation/KeyboardDictation.swift`,
+  `iOS/Keyboard/Sources/Dictation/WebMicCapture.swift`
+- Source: [anomalyco/hex](https://github.com/anomalyco/hex)
+  `ios/HEXKeyboard/KeyboardLocalDictation.swift`, adapted (not copied): capture
+  on touch-down, stop on hide with the held result, the watchdog, resuming
+  paused audio, the mixable session and the memory guard
+- License: MIT, the same terms as the Hex keyboard above
+
 ### Dictus (iOS host-app return)
 
 - Files: `iOS/Keyboard/Sources/HostAppResolver.swift`,

@@ -97,6 +97,126 @@ and used when the first matches the spoken language). Settings › Privacy has
 the same "Keep dictations" picker as the Mac (`transcriptRetentionDays`);
 `AppModel` runs `RetentionPolicy.purge()` on launch.
 
+### Dictating in the keyboard
+
+When no app session is running (no fresh heartbeat), the Hex key and the mic
+button dictate inside the keyboard, and VoiceiQ never comes to the front.
+`KeyboardDictation` runs the app's own pipeline: the same
+`DictationCoordinator`, `GeminiTranscriptionService` and `LiveTranscriber`
+that `AppModel` wires. The selected provider (ElevenLabs Scribe v3 included),
+Real-time transcription, the writing model and rules, the dictionary,
+spelling, Translate, Ask, silence trim, retries inside a dictation and the
+step times all behave as in the app. A warm "Keep mic on" session still takes
+the tap, as before.
+
+- **Microphone.** iOS refuses to record from a keyboard extension, so
+  `WebMicCapture` runs `getUserMedia` in a hidden `WKWebView` (the approach
+  of stephancill/ios-keyboard-dictation and Hex's `KeyboardLocalDictation`).
+  WebKit records in its own processes under the app's microphone permission
+  and streams 16 kHz mono PCM back, which is written to the session's CAF as
+  `AudioCaptureEngine` writes it (raw, no echo cancellation or gain control).
+  The page loads when the keyboard opens. The Hex key starts the capture on
+  touch-down (Hex #2089): a tap or hold keeps it, a slide or a touch that
+  is never kept within 3 s drops it. Capture uses a mixable
+  `.playAndRecord` session, so music keeps playing (Hex #2005). Half a
+  second after the capture ends, the keyboard deactivates the session with
+  `notifyOthersOnDeactivation`, so audio WebKit paused resumes (Hex #2151).
+- **Settings.** `AppSettingsMirror`: the app publishes its standard defaults
+  to the App Group at launch and on every change; the keyboard installs them
+  as its registration domain before each dictation, so `SettingsStore` and
+  `DictionaryStore` read the app's values unchanged.
+- **Keys.** On iOS, `KeychainStore` saves every key in the App Group's
+  keychain access group, and `shareWithKeyboard()` moves keys that older
+  builds saved. Keys stay `AfterFirstUnlockThisDeviceOnly` and never leave
+  the device except to their provider.
+  **Risk:** any process with the App Group entitlement can read every key:
+  the app, the keyboard (which also needs Full Access to reach the network),
+  and the Live Activity extension. A bug or a compromised dependency in any
+  of them exposes the provider keys, not only the app.
+- **Memory.** Before it starts, the keyboard checks `os_proc_available_memory`
+  (Hex #2045). With less than 32 MB free for the first dictation of a
+  process, or 24 MB for a later one, it dictates through the app instead.
+- **Watchdog.** A capture that has sent no audio for 6 s finishes with what
+  it has. A transcription still running after 2 minutes is given up like a
+  Cancel: a long recording stays in History for Retry.
+- **Cancel and "Never keep audio".** Cancel waits for the coordinator to keep
+  or delete the recording (a short one is deleted, a long one kept) before the
+  folder goes to the app. With Settings › Privacy › Keep audio set to Never,
+  the keyboard deletes the CAF and FLAC as soon as the words arrive
+  (`RetentionPolicy.dropAudioIfNeverKept`), as the app does.
+- **Control Center and the Action button.** While it records, the keyboard
+  publishes the same `SessionSnapshot` the app does (`keyboardSnapshot`,
+  with its own heartbeat) and reloads the control, so "VoiceiQ Dictate" is
+  on. Pressing it runs the intent in the app, which writes
+  `keyboardStopRequestedAt`; the keyboard stops on its next refresh.
+- **History and usage.** The keyboard never opens the History or usage
+  databases (iOS ends a suspended process that holds a lock on a database in
+  the shared container). It moves each session folder to `KeyboardInbox`,
+  with the billed calls in `usage.json`. The app imports them at launch and
+  each time it comes to the front: the rows appear in History with their
+  step times, usage counts them and iCloud syncs them, a queued one is sent
+  and an abandoned one (the keyboard ended mid-dictation) is recovered.
+- **Log.** The keyboard's lines ("in-keyboard dictation started", the step
+  times, "processed in Ns (keyboard)") are under Keyboard in the session log.
+
+The tap goes through the app, as before, when an app session is running,
+when the capture page is not ready yet (the first second of a new keyboard
+process), when the app has not published its settings, when no key for the
+selected provider is readable, when the microphone is not allowed, when
+memory is short, or when the WebKit microphone does not start (the empty
+session is deleted and the app records instead).
+
+#### When the keyboard hides
+
+Recording stops when the keyboard hides: the user switches apps, dismisses
+the keyboard, or moves to a field that refuses custom keyboards. This is the
+one accepted difference from dictating through the app. The keyboard stops
+the capture at once and finishes the dictation with what was said (Hex
+#2163). The result is held in the App Group (`HeldDictation`):
+
+- If the keyboard comes back in the same field within 30 s, it types the
+  text. iOS names a field anew when its app returns, so a different field ID
+  in the same app with the same text before the cursor also counts as the
+  same field.
+- Otherwise the suggestion strip offers "Paste dictation" for 10 minutes.
+  Hex's strip shows word suggestions instead while the cursor touches a
+  word; the chip shows once the cursor is after a space or punctuation.
+- An Ask answer opens in the answer panel instead of being typed.
+
+The keyboard asks iOS for more time with
+`ProcessInfo.performExpiringActivity` while it finishes. If the time runs
+out (about 30 s in the Simulator) while the transcription is still running,
+the keyboard hands the request to its background `URLSession`
+(`KeyboardTransfers`, identifier `io.blue.voiceiq.keyboard.transcribe`,
+`sharedContainerIdentifier` = the App Group). The request is captured from
+the normal pipeline (`GeminiClient.capturesTranscription`); its body and a
+`KeyboardJob` go to `KeyboardInbox/jobs` as atomic files. iOS sends it, saves
+the answer and launches VoiceiQ in the background through
+`application(_:handleEventsForBackgroundURLSession:completionHandler:)`. The
+app reconnects to the session, replays the answer through the same service
+(`GeminiClient.replayedTranscription`), so it is parsed, metered and passed
+through the writing model, Translate or Ask as if fetched there, writes
+History, usage and iCloud, and holds the text for the next keyboard
+(`heldByApp`). This works for every provider, ElevenLabs included, since
+they all post through `GeminiClient`. A Real-time dictation hands over the
+batch request for its recording, because the live stream ends with the
+keyboard.
+
+#### Offline
+
+A dictation recorded offline ends as "queued" in the keyboard, as in the
+app. The keyboard sends its request through the same background session,
+which waits for a network. When the answer arrives, iOS wakes VoiceiQ in
+the background to finish it as above.
+
+This does not work when Background App Refresh is off for VoiceiQ or the
+user force-quit the app (force-quitting also cancels its transfers). Then the
+job stays in the App Group. The next time VoiceiQ opens, it takes the job
+over: the dictation appears in History as queued and the app's retry queue
+sends it (at once when online). The user sees no text in the field, no
+offer in the strip, and a History row that fills in once the retry
+succeeds; Paste last has the text after that.
+
 ### Returning to the app
 
 The keyboard learns the host's bundle ID from two private UIKit surfaces
@@ -674,7 +794,13 @@ is `false`, so builds skip the export-compliance question.
 - On an iPad with a keyboard case, a dictation lands on the clipboard, not in
   the field: iPadOS hides third-party keyboards while a hardware keyboard is
   attached, so nothing can type it in place.
-- The first dictation after a cold start costs one trip to the app.
+- A dictation started in a keyboard that opened less than a second ago
+  goes through the app: the capture page is still loading.
+- A keyboard dictation stops when the keyboard hides. Its text is typed on
+  return or offered in the strip, never inserted into a field the keyboard
+  is not in.
+- Keys for the providers sit in the App Group keychain, readable by the
+  keyboard and the Live Activity as well as the app.
 - Typing is English only. Predictions come from book text, so chat phrasing
   ranks lower than on Apple's keyboard until the keyboard learns the user's
   own word pairs.
