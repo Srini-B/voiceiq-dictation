@@ -1,0 +1,12 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+# Keeps the repository's other CodeRabbit settings; only adds path filters.
+inheritance: true
+reviews:
+  path_filters:
+    # Hex's code and data, copied unmodified by scripts/sync-hex-keyboard.sh.
+    # VoiceiQ's own adaptation is in HexGlue/ and is reviewed.
+    - "!iOS/Keyboard/Hex/**"
+    - "!iOS/App/Hex/**"
+    # FUTO Swipe, removed in favour of Hex's slide to type.
+    - "!iOS/Vendor/FUTOSwipe/**"
+    - "!iOS/Keyboard/Resources/swipe/**"
