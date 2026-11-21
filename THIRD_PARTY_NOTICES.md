@@ -80,6 +80,66 @@ and `emoji.txt` from these files, pinned by commit in the script.
   FUTO Keyboard ships it (`java/res/raw/gemoji.json` at `31e720dd`).
 - License: MIT, Copyright (c) 2019 GitHub, Inc.
 
+## Hex keyboard (iPhone keyboard, slide to type and predictions)
+
+The iPhone keyboard's keys, slide to type, autocorrect and predictions come
+from [Hex](https://github.com/anomalyco/hex) by Christopher Langton and
+contributors. `scripts/sync-hex-keyboard.sh` copies them, unmodified, into
+`iOS/Keyboard/Hex/` from the commit recorded in `iOS/Keyboard/Hex/UPSTREAM`;
+VoiceiQ's own code that connects them is in `iOS/Keyboard/Sources/HexGlue/`.
+
+### Hex source
+
+- Files: `iOS/Keyboard/Hex/FullKeyboard/` (from Hex's `ios/HEXShared/FullKeyboard`).
+- License: MIT, Copyright (c) 2026 Christopher Langton. Full text in
+  `iOS/Keyboard/Hex/LICENSE`.
+
+### Hex typing models
+
+- Files: `iOS/Keyboard/Hex/TypingModel/` (`en.hextm`, `es.hextm`, `de.hextm`,
+  `de.capitals`), from Hex's `ios/HEXKeyboard/TypingModel`, unmodified. Hex
+  builds them with `ios/scripts/build-typing-model.py` and
+  `build-german-capitals.py`.
+- Word and word-pair frequencies and German capitalisation shares: Google
+  Books Ngram Viewer data, version 3 (2020-02-17), by Google, licensed under
+  [Creative Commons Attribution 3.0](https://creativecommons.org/licenses/by/3.0/).
+  Hex lowercased the words, summed the 1980–2019 counts, kept only words in the
+  lists below, selected informative pairs and quantized the probabilities.
+- English spellings: SCOWL 2020.12.07 and VarCon, sizes up to 70, by Kevin
+  Atkinson (<http://wordlist.aspell.net/>). Copyright 2000-2018 by Kevin
+  Atkinson. Permission to use, copy, modify, distribute and sell these word
+  lists, the associated scripts, the output created from the scripts, and its
+  documentation for any purpose is hereby granted without fee, provided that
+  the above copyright notice appears in all copies and that both that
+  copyright notice and this permission notice appear in supporting
+  documentation. Kevin Atkinson makes no representations about the suitability
+  of this array for any purpose. It is provided "as is" without express or
+  implied warranty. SCOWL's inflections come from WordNet 1.6, Copyright 1997
+  by Princeton University, all rights reserved, provided "as is" without
+  warranties; its other sources are public domain.
+- Spanish spellings: RLA-ES, the Spanish Hunspell dictionaries for
+  LibreOffice (es_ES and es_MX) by Santiago Bosio and contributors
+  (<https://github.com/sbosio/rla-es>), used under the
+  [Mozilla Public License 1.1](https://www.mozilla.org/en-US/MPL/1.1/). They
+  only decide which words the Spanish model keeps; the dictionaries themselves
+  are not included.
+
+### Hex suggestion filter
+
+- File: `iOS/Keyboard/Hex/FullKeyboard/never-suggest.tsv`, from the
+  [List of Dirty, Naughty, Obscene, and Otherwise Bad Words](https://github.com/LDNOOBW/List-of-Dirty-Naughty-Obscene-and-Otherwise-Bad-Words/tree/5faf2ba42d7b1c0977169ec3611df25a3c08eb13),
+  © 2012–2020 Shutterstock, Inc., and contributors, licensed under
+  [Creative Commons Attribution 4.0 International](https://creativecommons.org/licenses/by/4.0/).
+  Hex lowercased and classified the entries, omitted ordinary, medical and
+  search-only terms, and added common slurs, inflections and spelling variants.
+
+### Hex emoji index
+
+- Files: `iOS/Keyboard/Hex/FullKeyboard/Emoji/emoji-index-*.txt`, built by
+  Hex from Unicode `emoji-test.txt` 18.0 and CLDR 49 annotations.
+- License: Unicode License v3, in
+  `iOS/Keyboard/Hex/FullKeyboard/Emoji/LICENSE-Unicode.txt`.
+
 ## FUTO Swipe (iPhone keyboard, slide to type and predictions)
 
 The keyboard extension links FUTO's swipe library, which is GPL-3.0. **The
