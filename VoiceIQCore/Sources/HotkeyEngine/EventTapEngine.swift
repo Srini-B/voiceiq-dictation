@@ -121,7 +121,10 @@ public final class EventTapEngine: @unchecked Sendable {
             life.thread = thread
             return nil
         }
-        if let alreadyRunning { return alreadyRunning }
+        if let alreadyRunning {
+            if alreadyRunning { startHealthTimer() }
+            return alreadyRunning
+        }
         thread.start()
 
         // The thread reports tap creation success or failure.
@@ -324,19 +327,20 @@ public final class EventTapEngine: @unchecked Sendable {
     // MARK: - Health polling
 
     private func startHealthTimer() {
-        let timer = DispatchSource.makeTimerSource(queue: timerQueue)
-        timer.schedule(deadline: .now() + 5, repeating: 5)
-        timer.setEventHandler { [weak self] in
-            guard let self, self.reviveTap(onlyIfDisabled: true) else { return }
-            Log.hotkey.warning("EventTapEngine: health poll found tap disabled — re-enabled")
-            self.onTapRevived?()
-        }
-        let kept = withLifecycle { life -> Bool in
-            guard life.state == .running, life.healthTimer == nil else { return false }
+        // Made only once it will be kept: a suspended source released
+        // without resume() crashes.
+        withLifecycle { life in
+            guard life.state == .running, life.healthTimer == nil else { return }
+            let timer = DispatchSource.makeTimerSource(queue: timerQueue)
+            timer.schedule(deadline: .now() + 5, repeating: 5)
+            timer.setEventHandler { [weak self] in
+                guard let self, self.reviveTap(onlyIfDisabled: true) else { return }
+                Log.hotkey.warning("EventTapEngine: health poll found tap disabled — re-enabled")
+                self.onTapRevived?()
+            }
             life.healthTimer = timer
-            return true
+            timer.resume()
         }
-        if kept { timer.resume() }
     }
 
     /// Re-enables the tap, under the lifecycle lock so a concurrent `stop()`
