@@ -44,7 +44,8 @@ point at it.
 
 Both release scripts run `scripts/check-app-bundle.py` to reject bundled model
 weights and accidental runtime dependencies. It fails if the app bundles a
-Core ML, ONNX, GGUF or safetensors model, if any binary still links FluidAudio
+Core ML, ONNX, GGUF or safetensors model (other than the iPhone app's
+`HexCleanupTagger.mlmodelc` at the top of its bundle), if any binary still links FluidAudio
 or the NeMo normalizer, or if the helper links app or database code. To check
 an existing build, pass the Mac app path or the app inside an iOS device
 archive:
