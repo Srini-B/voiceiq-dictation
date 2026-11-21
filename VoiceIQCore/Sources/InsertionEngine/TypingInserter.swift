@@ -92,34 +92,54 @@ public enum TypingInserter {
         return strokes
     }
 
+    public enum Result: Equatable, Sendable {
+        case typed
+        /// The app in front changed part way; `rest` was not typed.
+        case stopped(rest: String)
+        /// Some character has no key on the layout, so nothing was typed: a
+        /// remote session that reads key codes would get the wrong key.
+        case unsupported
+    }
+
+    /// Typographic punctuation the writing model produces, as the plain keys
+    /// a remote session can type.
+    static let plainPunctuation: [Character: String] = [
+        "\u{2018}": "'", "\u{2019}": "'", "\u{201C}": "\"", "\u{201D}": "\"",
+        "\u{2013}": "-", "\u{2014}": "-", "\u{2026}": "...", "\u{00A0}": " ",
+    ]
+
+    static func plain(_ text: String) -> String {
+        text.reduce(into: "") { out, character in out += plainPunctuation[character] ?? String(character) }
+    }
+
     /// Types `text` into the app in front. Paced typing checks before each
     /// character that `targetPID` is still in front and stops otherwise.
-    /// Returns the text not typed: empty when all of it landed.
     @MainActor
-    public static func type(_ text: String, mode: Mode, targetPID: pid_t?) async -> String {
-        guard let source = CGEventSource(stateID: .privateState) else { return text }
+    public static func type(_ text: String, mode: Mode, targetPID: pid_t?) async -> Result {
+        guard let source = CGEventSource(stateID: .privateState) else { return .unsupported }
         switch mode {
         case .burst:
             for stroke in strokes(text, maxUnits: maxUnitsPerEvent) {
                 post(stroke, source: source, keyCode: 0, shift: false)
             }
-            return ""
+            return .typed
         case .paced:
             let keys = layoutKeys()
-            let all = strokes(text, maxUnits: 1)
+            let all = strokes(plain(text), maxUnits: 1)
+            if let missing = all.first(where: { $0 != .lineBreak && keys[$0.text] == nil }) {
+                Log.insertion.info("not typing: no key for U+\(String(missing.text.unicodeScalars.first?.value ?? 0, radix: 16, uppercase: true), privacy: .public) on this layout")
+                return .unsupported
+            }
             for (index, stroke) in all.enumerated() {
                 if let targetPID, NSWorkspace.shared.frontmostApplication?.processIdentifier != targetPID {
                     Log.insertion.info("typing stopped: the app in front changed")
-                    return all[index...].map(\.text).joined()
+                    return .stopped(rest: all[index...].map(\.text).joined())
                 }
-                var key: (code: CGKeyCode, shift: Bool) = (0, false)
-                if case .text = stroke, let typed = keys[stroke.text] {
-                    key = typed
-                }
+                let key = keys[stroke.text] ?? (code: 0, shift: false)
                 post(stroke, source: source, keyCode: key.code, shift: key.shift)
                 try? await Task.sleep(nanoseconds: pacedGap)
             }
-            return ""
+            return .typed
         }
     }
 
@@ -156,18 +176,23 @@ public enum TypingInserter {
         }
     }
 
+    /// The key codes that type characters: the ANSI/ISO block and the two
+    /// JIS keys. Sauce labels the others (Return "↩", Space "␣", Delete "⌫",
+    /// the function keys) with symbols, and the numeric keypad (65–92) would
+    /// reach a Windows session with NumLock off as arrows, with "." as Delete.
+    static let characterKeyCodes: [Int] = (0...50).filter { ![kVK_Return, kVK_Tab, kVK_Space].contains($0) }
+        + [kVK_JIS_Yen, kVK_JIS_Underscore]
+
     /// The key (and whether Shift is held) the current layout types each
     /// character with, so a client that reads key codes gets the right key.
-    /// The first key found wins, unshifted before shifted, and the numeric
-    /// keypad (65–92) is never used: a Windows session with NumLock off reads
-    /// keypad "." as Delete and keypad digits as arrows.
+    /// The first key found wins, unshifted before shifted.
     @MainActor
-    private static func layoutKeys() -> [String: (code: CGKeyCode, shift: Bool)] {
-        var keys: [String: (code: CGKeyCode, shift: Bool)] = [:]
+    static func layoutKeys() -> [String: (code: CGKeyCode, shift: Bool)] {
+        var keys: [String: (code: CGKeyCode, shift: Bool)] = [" ": (CGKeyCode(kVK_Space), false)]
         for shift in [false, true] {
-            for code in 0..<128 where !(65...92).contains(code) {
+            for code in characterKeyCodes {
                 guard let character = Sauce.shared.character(for: code, modifiers: .cocoa(shift ? [.shift] : [])),
-                      !character.isEmpty, keys[character] == nil else { continue }
+                      character.count == 1, keys[character] == nil else { continue }
                 keys[character] = (CGKeyCode(code), shift)
             }
         }

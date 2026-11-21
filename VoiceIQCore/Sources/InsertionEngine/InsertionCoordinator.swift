@@ -77,15 +77,20 @@ public struct InsertionCoordinator: TextInserting {
         // Tier 2a: apps where ⌘V fails get the text typed instead.
         let bundleURL = context.targetPID.flatMap { NSRunningApplication(processIdentifier: $0)?.bundleURL }
         if let mode = TypingInserter.mode(bundleID: context.targetAppBundleID, bundleURL: bundleURL) {
-            let rest = await TypingInserter.type(text, mode: mode, targetPID: context.targetPID)
-            if rest.isEmpty {
+            switch await TypingInserter.type(text, mode: mode, targetPID: context.targetPID) {
+            case .typed:
                 Log.insertion.info("typed instead of pasting (\(String(describing: mode), privacy: .public))")
                 return .inserted
+            case .stopped(let rest):
+                // The user switched apps part way: the rest must not land
+                // there, and the part already typed must not be pasted twice.
+                paster.copyOnly(rest)
+                return .frontmostChanged
+            case .unsupported:
+                // A real ⌘V in the remote session still pastes it.
+                paster.copyOnly(text)
+                return .fellBackToClipboard
             }
-            // The user switched apps part way: the rest must not land there,
-            // and the part already typed must not be pasted twice.
-            paster.copyOnly(rest)
-            return .frontmostChanged
         }
 
         // Tier 2: guarded paste. Note: "true" means the ⌘V was POSTED — there is

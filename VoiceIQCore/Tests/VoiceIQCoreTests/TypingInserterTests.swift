@@ -48,5 +48,20 @@ final class TypingInserterTests: XCTestCase {
         ])
         XCTAssertEqual(TypingInserter.strokes("ab", maxUnits: 1), [.text(Array("a".utf16)), .text(Array("b".utf16))])
     }
+
+    /// Remote sessions read key codes: digits and "." must come from the main
+    /// rows, never the numeric keypad, and Space must be the space bar.
+    @MainActor
+    func testLayoutKeysUseTheMainRowsAndTheSpaceBar() throws {
+        let keys = TypingInserter.layoutKeys()
+        try XCTSkipUnless(keys["a"]?.code == 0 && keys["q"]?.code == 12, "needs a US-style layout")
+        XCTAssertEqual(keys[" "]?.code, 49)
+        XCTAssertEqual(keys["1"]?.code, 18)
+        XCTAssertEqual(keys["."]?.code, 47)
+        XCTAssertEqual(keys["*"]?.code, 28)
+        XCTAssertEqual(keys["*"]?.shift, true)
+        XCTAssertNil(keys["\u{2019}"], "no key types a curly apostrophe")
+        XCTAssertTrue(TypingInserter.plain("It\u{2019}s \u{201C}done\u{201D} \u{2014} ok\u{2026}").allSatisfy { keys[String($0)] != nil })
+    }
 }
 #endif
