@@ -49,7 +49,7 @@ final class TypingController: ObservableObject {
     /// Hex's keys, made on first use with this controller as their text target.
     func makeKeyboard() -> FullKeyboardView {
         if let keyboard { return keyboard }
-        let keyboard = FullKeyboardView(model: dictation, target: self)
+        let keyboard = FullKeyboardView(model: dictation, target: WeakTextTarget(self))
         keyboard.hostController = controller
         keyboard.allowsHaptics = { [weak self] in self?.controller?.hasFullAccess == true }
         keyboard.languageOverride = .english
