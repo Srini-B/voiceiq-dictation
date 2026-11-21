@@ -53,4 +53,16 @@ final class KeyboardModelTests: XCTestCase {
         let expired = Date().addingTimeInterval(HeldDictation.offerWindow + 1)
         XCTAssertNil(KeyboardModel.heldToPaste(offered: offered.id, current: offered, now: expired))
     }
+
+    /// A hold longer than a command's 30 s lifetime still ends its own dictation.
+    func testALongHoldReleasedSendsAStopForItsStart() throws {
+        let model = KeyboardModel()
+        model.micTapped()
+        let start = try XCTUnwrap(store.commands.last)
+        model.holdStart = KeyboardCommand(id: start.id, action: .start, issuedAt: Date().addingTimeInterval(-60))
+
+        model.holdReleased()
+        XCTAssertEqual(store.commands.last?.action, .stop)
+        XCTAssertEqual(store.commands.last?.startID, start.id)
+    }
 }

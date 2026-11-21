@@ -43,9 +43,10 @@ final class KeyboardModel: ObservableObject {
     private var timer: Timer?
     private var pendingCommandID: UUID?
     private var pendingSince: Date?
-    /// The start command of the last dictation this keyboard began, for a
-    /// hold released before that dictation shows as recording.
-    private var holdStart: KeyboardCommand?
+    /// The start command of the dictation this keyboard began, for the hold
+    /// that started it, however long: kept until it is released, another
+    /// start, or the app reports that dictation over.
+    var holdStart: KeyboardCommand?
     private var shownNoticeID: UUID?
     private let local = KeyboardDictation.shared
     private var localObserver: AnyCancellable?
@@ -127,7 +128,13 @@ final class KeyboardModel: ObservableObject {
             local.publishState(store: store)
         }
         let fresh = store.snapshot
-        if fresh != snapshot { snapshot = fresh }
+        if fresh != snapshot {
+            if !waitingForApp, snapshot.phase == .recording || snapshot.phase == .processing,
+               fresh.phase == .warm || fresh.phase == .off {
+                holdStart = nil
+            }
+            snapshot = fresh
+        }
         // With the snapshot, so a new recording never shows the last one's words.
         let newText = local.phase != .off ? local.liveText : phase == .recording ? store.liveText : ""
         if newText != liveText { liveText = newText }
@@ -140,6 +147,7 @@ final class KeyboardModel: ObservableObject {
         if waitingForApp, let pendingSince, Date().timeIntervalSince(pendingSince) > 12 {
             waitingForApp = false
             pendingCommandID = nil
+            holdStart = nil
         }
         deliverIfNeeded()
         deliverHeldIfNeeded()
@@ -196,7 +204,7 @@ final class KeyboardModel: ObservableObject {
     /// bound to its start command: the app applies it once that dictation
     /// records, and never to another one, even once it records.
     func holdReleased() {
-        if let holdStart, holdStart.isFresh() {
+        if let holdStart {
             self.holdStart = nil
             if phase == .recording { UIImpactFeedbackGenerator(style: .medium).impactOccurred() }
             send(KeyboardCommand(action: .stop, mode: mode, startID: holdStart.id))
