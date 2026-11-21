@@ -6,7 +6,7 @@ import VoiceIQCore
 /// Settings that exist only on iOS. Everything shared with macOS lives in
 /// `SettingsStore`.
 enum MobileSettings {
-    private static let defaults = UserDefaults.standard
+    private static var defaults: UserDefaults { .standard }
 
     /// Record from the iPhone's microphone even when AirPods are connected, so
     /// their audio stays in high quality. Default on, like Typeless.

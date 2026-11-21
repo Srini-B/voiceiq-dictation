@@ -198,19 +198,14 @@ private struct KeyboardSwitchSteps: View {
 struct HardwareKeyboardSteps: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.s) {
-            if #available(iOS 18.0, *) {
-                NumberedStep(number: 1, text: Text("Add **VoiceiQ Dictate** to Control Center, or press ⌘Space and run **Dictate with VoiceiQ**."))
-                NumberedStep(number: 2, text: Text("Speak, then run it again to stop."))
-                NumberedStep(number: 3, text: Text("Press ⌘V to paste."))
-                Text("To start it with keys of your own, put **Dictate with VoiceiQ** in a shortcut in the Shortcuts app, then assign that shortcut in Settings › Accessibility › Keyboards › Full Keyboard Access › Commands.")
-                    .font(Theme.Fonts.footnote())
-                    .foregroundStyle(Theme.Colors.muted)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.top, Theme.Spacing.xs)
-            } else {
-                NumberedStep(number: 1, text: Text("Disconnect your hardware keyboard."))
-                NumberedStep(number: 2, text: Text("Switch to the **VoiceiQ** keyboard, then tap the mic to dictate."))
-            }
+            NumberedStep(number: 1, text: Text("Add **VoiceiQ Dictate** to Control Center, or press ⌘Space and run **Dictate with VoiceiQ**."))
+            NumberedStep(number: 2, text: Text("Speak, then run it again to stop."))
+            NumberedStep(number: 3, text: Text("Press ⌘V to paste."))
+            Text("To start it with keys of your own, put **Dictate with VoiceiQ** in a shortcut in the Shortcuts app, then assign that shortcut in Settings › Accessibility › Keyboards › Full Keyboard Access › Commands.")
+                .font(Theme.Fonts.footnote())
+                .foregroundStyle(Theme.Colors.muted)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, Theme.Spacing.xs)
         }
         .font(Theme.Fonts.callout())
         .foregroundStyle(Theme.Colors.ink)

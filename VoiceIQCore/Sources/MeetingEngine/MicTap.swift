@@ -30,7 +30,7 @@ public final class MicTap: @unchecked Sendable {
         mSelector: kAudioHardwarePropertyDefaultInputDevice,
         mScope: kAudioObjectPropertyScopeGlobal, mElement: kAudioObjectPropertyElementMain)
     private lazy var deviceListener: AudioObjectPropertyListenerBlock = { [weak self] _, _ in
-        self?.control.async { self?.moveToWantedDevice() }
+        self?.control.async { [weak self] in self?.moveToWantedDevice() }
     }
     private var formatAddress = AudioObjectPropertyAddress(mSelector: kAudioDevicePropertyStreamFormat,
                                                           mScope: kAudioDevicePropertyScopeInput,
@@ -38,7 +38,7 @@ public final class MicTap: @unchecked Sendable {
     /// The same device can change format under the recording: AirPods switch
     /// to the headset profile when a call app opens the mic.
     private lazy var formatListener: AudioObjectPropertyListenerBlock = { [weak self] _, _ in
-        self?.control.async { self?.formatChanged() }
+        self?.control.async { [weak self] in self?.formatChanged() }
     }
     /// A failed move is retried this many times, half a second apart, so a
     /// device still settling does not leave the rest of the meeting silent.

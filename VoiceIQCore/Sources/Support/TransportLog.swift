@@ -44,7 +44,7 @@ public enum TransportLog {
         encoder.outputFormatting = [.sortedKeys]
         guard var line = try? encoder.encode(event) else { return }
         line.append(0x0A)
-        let url = fileURL, previous = previousURL
+        let url = fileURL, previous = previousURL, payload = line
         queue.async {
             let fm = FileManager.default
             try? fm.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
@@ -55,9 +55,9 @@ public enum TransportLog {
             if let handle = try? FileHandle(forWritingTo: url) {
                 defer { try? handle.close() }
                 _ = try? handle.seekToEnd()
-                try? handle.write(contentsOf: line)
+                try? handle.write(contentsOf: payload)
             } else {
-                try? line.write(to: url, options: .atomic)
+                try? payload.write(to: url, options: .atomic)
             }
         }
     }
