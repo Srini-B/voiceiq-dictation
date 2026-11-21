@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Copies Hex's keyboard, slide to type and typing model into iOS/Keyboard/Hex.
+# Copies Hex's keyboard, slide to type, English typing model and cleanup tagger
+# into iOS/Keyboard/Hex and iOS/App/Hex.
 #
 #   scripts/sync-hex-keyboard.sh            sync to Hex's default branch (dev)
 #   scripts/sync-hex-keyboard.sh <ref>      sync to a branch, tag or commit
@@ -48,12 +49,15 @@ else
 fi
 
 paths=()
+excludes=()
 while read -r from to; do
     case "$from" in ''|'#'*) continue ;; esac
-    paths+=("$from:$to")
+    if [ "$from" = exclude ]; then excludes+=("$to"); else paths+=("$from:$to"); fi
 done < "$MANIFEST"
 upstream_paths=()
 for pair in "${paths[@]}"; do upstream_paths+=("${pair%%:*}"); done
+pathspec=("${upstream_paths[@]}")
+for path in "${excludes[@]}"; do pathspec+=(":(exclude)$path"); done
 
 previous="$(sed -n 's/^commit=//p' "$UPSTREAM" 2>/dev/null || true)"
 
@@ -62,7 +66,7 @@ if [ "$check" = 1 ]; then
         echo "No recorded upstream commit; run a sync first."
         exit 10
     fi
-    changes="$(git -C "$CACHE" log --oneline "$previous..$commit" -- "${upstream_paths[@]}")"
+    changes="$(git -C "$CACHE" log --oneline "$previous..$commit" -- "${pathspec[@]}")"
     if [ -z "$changes" ]; then
         echo "Up to date with Hex $ref (${commit:0:12})."
         exit 0
@@ -70,18 +74,22 @@ if [ "$check" = 1 ]; then
     echo "Hex $ref has $(printf '%s\n' "$changes" | wc -l | tr -d ' ') new commit(s) for the keyboard since ${previous:0:12}:"
     printf '%s\n' "$changes"
     echo
-    git -C "$CACHE" diff --stat "$previous" "$commit" -- "${upstream_paths[@]}" | tail -n 1
+    git -C "$CACHE" diff --stat "$previous" "$commit" -- "${pathspec[@]}" | tail -n 1
     exit 10
 fi
 
 tree="$(mktemp -d)"
 trap 'rm -rf "$tree"' EXIT
 git -C "$CACHE" archive "$commit" "${upstream_paths[@]}" | tar -x -C "$tree"
+for path in "${excludes[@]}"; do rm -rf "${tree:?}/$path"; done
 
+# Start from empty copies, so files Hex deleted or the manifest dropped go too.
+find "$HEX_DIR" -mindepth 1 -maxdepth 1 ! -name MANIFEST ! -name UPSTREAM ! -name patches -exec rm -rf {} +
+rm -rf "$ROOT/iOS/App/Hex"
 for pair in "${paths[@]}"; do
     from="${pair%%:*}"
     to="$ROOT/${pair#*:}"
-    rm -rf "$to"
+    case "$to" in "$HEX_DIR"/*|"$ROOT/iOS/App/Hex"/*) ;; *) echo "MANIFEST destination outside the Hex folders: ${pair#*:}" >&2; exit 1 ;; esac
     mkdir -p "$(dirname "$to")"
     cp -R "$tree/$from" "$to"
 done
@@ -103,6 +111,6 @@ EOF
 
 if [ -n "$previous" ] && [ "$previous" != "$commit" ]; then
     echo "Hex commits since ${previous:0:12}:"
-    git -C "$CACHE" log --oneline "$previous..$commit" -- "${upstream_paths[@]}"
+    git -C "$CACHE" log --oneline "$previous..$commit" -- "${pathspec[@]}"
 fi
 echo "Synced Hex keyboard to ${commit:0:12} ($date)."

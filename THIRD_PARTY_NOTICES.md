@@ -82,11 +82,13 @@ and `emoji.txt` from these files, pinned by commit in the script.
 
 ## Hex keyboard (iPhone keyboard, slide to type and predictions)
 
-The iPhone keyboard's keys, slide to type, autocorrect and predictions come
+The iPhone keyboard's keys, slide to type, autocorrect and predictions, and the
+iPhone app's on-device dictation cleanup tagger, come
 from [Hex](https://github.com/anomalyco/hex) by Christopher Langton and
 contributors. `scripts/sync-hex-keyboard.sh` copies them, unmodified, into
-`iOS/Keyboard/Hex/` from the commit recorded in `iOS/Keyboard/Hex/UPSTREAM`;
-VoiceiQ's own code that connects them is in `iOS/Keyboard/Sources/HexGlue/`.
+`iOS/Keyboard/Hex/` and `iOS/App/Hex/` from the commit recorded in
+`iOS/Keyboard/Hex/UPSTREAM`; VoiceiQ's own code that connects them is in
+`HexGlue/` folders beside them.
 
 ### Hex source
 
@@ -94,35 +96,28 @@ VoiceiQ's own code that connects them is in `iOS/Keyboard/Sources/HexGlue/`.
 - License: MIT, Copyright (c) 2026 Christopher Langton. Full text in
   `iOS/Keyboard/Hex/LICENSE`.
 
-### Hex typing models
+### Hex typing model
 
-- Files: `iOS/Keyboard/Hex/TypingModel/` (`en.hextm`, `es.hextm`, `de.hextm`,
-  `de.capitals`), from Hex's `ios/HEXKeyboard/TypingModel`, unmodified. Hex
-  builds them with `ios/scripts/build-typing-model.py` and
-  `build-german-capitals.py`.
-- Word and word-pair frequencies and German capitalisation shares: Google
-  Books Ngram Viewer data, version 3 (2020-02-17), by Google, licensed under
+- File: `iOS/Keyboard/Hex/TypingModel/en.hextm`, from Hex's
+  `ios/HEXKeyboard/TypingModel`, unmodified. VoiceiQ takes English only. Hex
+  builds the model with `ios/scripts/build-typing-model.py`.
+- Word and word-pair frequencies: Google Books Ngram Viewer data, version 3
+  (2020-02-17), by Google, licensed under
   [Creative Commons Attribution 3.0](https://creativecommons.org/licenses/by/3.0/).
-  Hex lowercased the words, summed the 1980–2019 counts, kept only words in the
-  lists below, selected informative pairs and quantized the probabilities.
-- English spellings: SCOWL 2020.12.07 and VarCon, sizes up to 70, by Kevin
-  Atkinson (<http://wordlist.aspell.net/>). Copyright 2000-2018 by Kevin
-  Atkinson. Permission to use, copy, modify, distribute and sell these word
-  lists, the associated scripts, the output created from the scripts, and its
+  Hex lowercased the words, summed the 1980–2019 counts, kept only words in
+  the list below, selected informative pairs and quantized the probabilities.
+- Spellings: SCOWL 2020.12.07 and VarCon, sizes up to 70, by Kevin Atkinson
+  (<http://wordlist.aspell.net/>). Copyright 2000-2018 by Kevin Atkinson.
+  Permission to use, copy, modify, distribute and sell these word lists, the
+  associated scripts, the output created from the scripts, and its
   documentation for any purpose is hereby granted without fee, provided that
   the above copyright notice appears in all copies and that both that
   copyright notice and this permission notice appear in supporting
-  documentation. Kevin Atkinson makes no representations about the suitability
-  of this array for any purpose. It is provided "as is" without express or
-  implied warranty. SCOWL's inflections come from WordNet 1.6, Copyright 1997
-  by Princeton University, all rights reserved, provided "as is" without
-  warranties; its other sources are public domain.
-- Spanish spellings: RLA-ES, the Spanish Hunspell dictionaries for
-  LibreOffice (es_ES and es_MX) by Santiago Bosio and contributors
-  (<https://github.com/sbosio/rla-es>), used under the
-  [Mozilla Public License 1.1](https://www.mozilla.org/en-US/MPL/1.1/). They
-  only decide which words the Spanish model keeps; the dictionaries themselves
-  are not included.
+  documentation. Kevin Atkinson makes no representations about the
+  suitability of this array for any purpose. It is provided "as is" without
+  express or implied warranty. SCOWL's inflections come from WordNet 1.6,
+  Copyright 1997 by Princeton University, all rights reserved, provided "as
+  is" without warranties; its other sources are public domain.
 
 ### Hex suggestion filter
 
@@ -135,10 +130,22 @@ VoiceiQ's own code that connects them is in `iOS/Keyboard/Sources/HexGlue/`.
 
 ### Hex emoji index
 
-- Files: `iOS/Keyboard/Hex/FullKeyboard/Emoji/emoji-index-*.txt`, built by
+- File: `iOS/Keyboard/Hex/FullKeyboard/Emoji/emoji-index-en.txt`, built by
   Hex from Unicode `emoji-test.txt` 18.0 and CLDR 49 annotations.
 - License: Unicode License v3, in
   `iOS/Keyboard/Hex/FullKeyboard/Emoji/LICENSE-Unicode.txt`.
+
+### Hex cleanup tagger (iPhone app)
+
+- Files: `iOS/App/Hex/Cleanup/` (from Hex's `ios/HEXShared/Cleanup*.swift`,
+  `SpokenCleanupRules.swift` and the tagger's vocabulary), MIT as above.
+- Model: `HexCleanupTagger.mlpackage`, Hex's release asset
+  `ios-model-cleanup-tagger-1`, downloaded at build time by
+  `scripts/fetch-hex-cleanup-model.sh` and checked against its SHA-256; not
+  stored in this repository. A 4-layer, 512-wide BERT token classifier that
+  Hex fine-tuned on generated data, from a base model licensed under the
+  Apache License 2.0. The vocabulary is that BERT model's English uncased
+  WordPiece vocabulary (Apache 2.0).
 
 ## FUTO Swipe (iPhone keyboard, slide to type and predictions)
 

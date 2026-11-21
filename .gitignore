@@ -17,3 +17,6 @@ VoiceIQ.xcodeproj/
 Package.resolved
 build/
 xcuserdata/
+
+# Hex cleanup tagger model, downloaded by scripts/fetch-hex-cleanup-model.sh
+iOS/App/HexCleanupModel/
