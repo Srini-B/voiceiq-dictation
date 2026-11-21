@@ -40,4 +40,16 @@ final class KeyboardModelTests: XCTestCase {
         model.holdReleased()
         XCTAssertEqual(store.commands.count, 2, "the stop goes once")
     }
+
+    /// A hold longer than a command's 30 s lifetime still ends its own dictation.
+    func testALongHoldReleasedSendsAStopForItsStart() throws {
+        let model = KeyboardModel()
+        model.micTapped()
+        let start = try XCTUnwrap(store.commands.last)
+        model.holdStart = KeyboardCommand(id: start.id, action: .start, issuedAt: Date().addingTimeInterval(-60))
+
+        model.holdReleased()
+        XCTAssertEqual(store.commands.last?.action, .stop)
+        XCTAssertEqual(store.commands.last?.startID, start.id)
+    }
 }
