@@ -16,9 +16,10 @@ public final class SessionSleepGuard {
     #endif
 
     public init(dictation: DictationCoordinator, meetings: MeetingEngine) {
-        observation = dictation.$state.combineLatest(meetings.$phase)
-            .map { state, phase in
+        observation = dictation.$state.combineLatest(meetings.$phase, dictation.$hasBackgroundJobs)
+            .map { state, phase, background in
                 if case .recording = phase { return true }
+                if background { return true }
                 switch state {
                 case .warming, .recording, .finalizing, .transcribing, .inserting: return true
                 case .idle, .done, .cancelled, .failed: return false

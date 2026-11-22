@@ -41,10 +41,13 @@ public final class DictationCoordinator: ObservableObject {
         case failure(DictationFailure)
     }
     public var onDetachedResult: ((DetachedResult) -> Void)?
-    public var hasBackgroundJobs: Bool { !detached.isEmpty }
+    /// Published so the sleep guard holds the Mac awake until they finish.
+    @Published public private(set) var hasBackgroundJobs = false
 
     /// Jobs still being transcribed after a newer recording took the pill.
-    private var detached: [UUID: Session] = [:]
+    private var detached: [UUID: Session] = [:] {
+        didSet { if hasBackgroundJobs != !detached.isEmpty { hasBackgroundJobs = !detached.isEmpty } }
+    }
     private var detachedTasks: [UUID: Task<Void, Never>] = [:]
     private let insertTurns = InsertTurns()
 
