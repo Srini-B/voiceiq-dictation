@@ -13,7 +13,7 @@ final class KeyboardViewController: UIInputViewController {
         super.viewDidLoad()
         model.controller = self
         model.onOwnCopy = { [weak dictionaryOffer] in dictionaryOffer?.noteOwnCopy() }
-        model.onEdited = { [weak typing] in typing?.editedOutsideKeys() }
+        model.onEdited = { [weak typing] in typing?.modelWroteToField() }
         typing.controller = self
         typing.onHeightChange = { [weak self] in self?.updateHeight() }
         // The strip's mic: a tap as the panels' mic button; a hold starts the

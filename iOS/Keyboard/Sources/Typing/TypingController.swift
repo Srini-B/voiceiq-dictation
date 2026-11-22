@@ -193,6 +193,14 @@ final class TypingController: ObservableObject {
         refresh()
     }
 
+    /// The dictation side wrote straight to the field (a dictation, an
+    /// answer, the voice panel's keys): the recorded undo steps no longer
+    /// match the text, so Undo would delete the wrong characters.
+    func modelWroteToField() {
+        forgetUndo()
+        editedOutsideKeys()
+    }
+
     // MARK: - Strip
 
     private func makeStripButton(_ button: StripButton) -> UIControl {

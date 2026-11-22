@@ -262,6 +262,17 @@ final class KeyboardTypingTests: XCTestCase {
         XCTAssertFalse(field.text.contains("On my way"), field.text)
     }
 
+    /// A dictation typed by the model after the keys typed: Undo must not
+    /// take back the keys' word from the dictation's characters.
+    func testUndoAfterADictationLeavesTheDictationAlone() {
+        open()
+        type("abc")
+        controller.textDocumentProxy.insertText(" Testing dictation.")
+        typing.modelWroteToField()
+        typing.undo()
+        XCTAssertEqual(field.text, "Abc Testing dictation.")
+    }
+
     /// A Backspace run right before a replacement stays its own undo step.
     func testABackspaceBeforeAReplacementIsItsOwnUndoStep() {
         open()
