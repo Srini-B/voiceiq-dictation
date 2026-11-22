@@ -84,44 +84,63 @@ final class KeyboardModelTests: XCTestCase {
 
         model.pasteHeld()
         XCTAssertEqual(model.answer?.text, held.text)
-        XCTAssertNil(store.heldDictation, "handled once")
-        XCTAssertNil(store.keyboardDelivery, "an answer is not Paste last's text")
+        XCTAssertEqual(store.heldDictation?.id, held.id, "handled once the user acts on it")
 
         // Dismissing it leaves the app's last acknowledged delivery alone.
         let acknowledged = UUID()
         store.insertedDeliveryID = acknowledged
         model.dismissAnswer()
         XCTAssertNil(model.answer)
+        XCTAssertNil(store.heldDictation, "handled once")
+        XCTAssertNil(store.keyboardDelivery, "an answer is not Paste last's text")
         XCTAssertEqual(store.insertedDeliveryID, acknowledged)
     }
 
-    /// A held Ask answer on screen is not replaced by an older answer from
-    /// the app still waiting: that one shows once the user closes the first.
+    /// An answer on the panel stays until the user acts on it. Every other
+    /// answer waits and none is lost: an in-keyboard one, the app's, and two
+    /// held ones for the same field, which stay offered in the strip.
     func testAShownAnswerStaysUntilTheUserActsOnIt() {
         let window = UIWindow(frame: CGRect(x: 0, y: 0, width: 320, height: 200))
         let controller = KeyboardViewController()
         controller.view = UIView()
         window.addSubview(controller.view)
-        let fromApp = Delivery(mode: .ask, text: "app answer", hostBundleID: nil)
         store.insertedDeliveryID = nil
-        store.publish(SessionSnapshot(delivery: fromApp))
-        let held = HeldDictation(text: "held answer", mode: .ask, document: UUID())
-        store.heldByApp = nil
-        store.heldByKeyboard = held
-        defer { store.heldByKeyboard = nil }
+        store.publish(SessionSnapshot(delivery: Delivery(mode: .ask, text: "app answer", hostBundleID: nil)))
+        let field = UUID()
+        let first = HeldDictation(text: "held first", mode: .ask, document: field, finishedAt: Date().addingTimeInterval(-5))
+        let second = HeldDictation(text: "held second", mode: .ask, document: field)
+        store.heldByApp = first
+        store.heldByKeyboard = second
+        defer { store.heldByApp = nil; store.heldByKeyboard = nil }
         let model = KeyboardModel()
         model.controller = controller
-        model.offeredHeldID = held.id
-        model.pasteHeld()
-
         model.appeared()
         defer { model.disappeared() }
         waitForRefresh()
-        XCTAssertEqual(model.answer?.text, "held answer")
-
-        model.dismissAnswer()
-        waitForRefresh()
         XCTAssertEqual(model.answer?.text, "app answer")
+        XCTAssertTrue(model.deliverLocal("local first", mode: .ask))
+        waitForRefresh()
+        XCTAssertEqual(model.answer?.text, "app answer", "not replaced by an in-keyboard answer")
+        XCTAssertEqual(model.offeredHeldID, second.id, "the newer held answer is offered")
+
+        // Tapping the offer, or another in-keyboard answer, while one is shown.
+        model.pasteHeld()
+        XCTAssertTrue(model.deliverLocal("local second", mode: .ask))
+        XCTAssertEqual(model.answer?.text, "app answer")
+        XCTAssertEqual(store.heldDictation?.id, second.id, "not handled while it waits")
+        XCTAssertEqual(model.offeredHeldID, second.id)
+
+        var shown: [String] = []
+        for _ in 0..<5 {
+            model.dismissAnswer()
+            waitForRefresh()
+            if model.answer == nil { model.pasteHeld() }
+            guard let answer = model.answer else { break }
+            shown.append(answer.text)
+        }
+        XCTAssertEqual(shown, ["local first", "local second", "held second", "held first"])
+        model.dismissAnswer()
+        XCTAssertNil(store.heldDictation, "both held answers handled")
     }
 
     /// A hold longer than a command's 30 s lifetime still ends its own dictation.

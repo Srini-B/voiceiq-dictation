@@ -51,6 +51,10 @@ final class KeyboardModel: ObservableObject {
     private let local = KeyboardDictation.shared
     private var localObserver: AnyCancellable?
     var offeredHeldID: UUID?
+    /// The held answer on the panel: handled once the user acts on it.
+    private var shownHeld: HeldDictation?
+    /// In-keyboard answers that finished while another was on the panel.
+    private var pendingAnswers: [Delivery] = []
 
     init() {
         mode = UserDefaults.standard.string(forKey: Self.modeKey).flatMap(KeyboardMode.init(rawValue:)) ?? .dictate
@@ -242,7 +246,16 @@ final class KeyboardModel: ObservableObject {
         // Only the app's delivery is acknowledged: a local or held answer
         // must not overwrite the acknowledgement of one still in its window.
         if let answer, answer.id == snapshot.delivery?.id { store.insertedDeliveryID = answer.id }
+        if let shownHeld { store.markHeldHandled(shownHeld) }
+        shownHeld = nil
         answer = nil
+        // The next answer that waited for this one.
+        if !pendingAnswers.isEmpty {
+            answer = pendingAnswers.removeFirst()
+        } else {
+            deliverIfNeeded()
+            deliverHeldIfNeeded()
+        }
     }
 
     private func start() {
@@ -329,10 +342,12 @@ final class KeyboardModel: ObservableObject {
 
     /// A result of an in-keyboard dictation, for the keyboard on screen: an
     /// Ask answer opens the answer panel; anything else is typed.
-    private func deliverLocal(_ text: String, mode: KeyboardMode) -> Bool {
+    func deliverLocal(_ text: String, mode: KeyboardMode) -> Bool {
         guard controller?.viewIfLoaded?.window != nil else { return false }
         if mode == .ask {
-            answer = Delivery(mode: .ask, text: text, hostBundleID: nil)
+            let delivery = Delivery(mode: .ask, text: text, hostBundleID: nil)
+            // An answer on the panel stays until the user acts on it.
+            if answer == nil { answer = delivery } else { pendingAnswers.append(delivery) }
             return true
         }
         let typed = insert(text)
@@ -346,6 +361,8 @@ final class KeyboardModel: ObservableObject {
     private func deliverHeldIfNeeded() {
         guard Self.onScreen === self, controller?.viewIfLoaded?.window != nil else { return }
         guard let held = store.heldDictation else { return offer(nil) }
+        // Already on the panel.
+        if held.id == shownHeld?.id { return offer(nil) }
         let proxy = controller?.textDocumentProxy
         switch held.delivery(in: proxy?.fieldID, host: controller.flatMap(HostAppResolver.currentHost(for:)),
                              textBefore: proxy?.documentContextBeforeInput) {
@@ -376,16 +393,20 @@ final class KeyboardModel: ObservableObject {
     }
 
     /// Delivers a held result once: an Ask answer opens the answer panel,
-    /// anything else is typed.
+    /// and is handled once the user acts on it; while another answer is
+    /// there it stays offered in the strip. Anything else is typed.
     private func take(_ held: HeldDictation) {
+        if held.mode == .ask {
+            guard answer == nil else { return offer(held) }
+            offer(nil)
+            shownHeld = held
+            answer = Delivery(mode: .ask, text: held.text, hostBundleID: nil)
+            return
+        }
         store.markHeldHandled(held)
         offer(nil)
-        if held.mode == .ask {
-            answer = Delivery(mode: .ask, text: held.text, hostBundleID: nil)
-        } else {
-            insert(held.text)
-            KeyboardLog.note("[\(instanceTag)] held result typed")
-        }
+        insert(held.text)
+        KeyboardLog.note("[\(instanceTag)] held result typed")
     }
 
     /// The result a tap on the offer pastes: the one the strip shows, while

@@ -412,7 +412,8 @@ final class KeyboardDictation: ObservableObject {
         let id = job?.id
         ProcessInfo.processInfo.performExpiringActivity(withReason: "Finishing a dictation") { [weak self] expired in
             if expired {
-                DispatchQueue.main.sync { MainActor.assumeIsolated { self?.timeRanOut(for: id) } }
+                // Not once the keyboard came back and ended this activity.
+                DispatchQueue.main.sync { MainActor.assumeIsolated { if self?.expiring === done { self?.timeRanOut(for: id) } } }
                 done.signal()
             } else {
                 _ = done.wait(timeout: .now() + Self.transcriptionTimeout)
