@@ -54,6 +54,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Task { await HistorySync.shared.start(deviceName: deviceName) }
         // Meetings too: notes, transcripts and their questions; always on.
         Task { await MeetingSync.shared.start() }
+        // The local API and MCP server for coding agents, while Settings has it on.
+        AgentServer.shared.followSettings()
         let controller = DictationController()
         statusItemController = StatusItemController(
             onOpenHistory: { [weak controller] in controller?.openHistory() },

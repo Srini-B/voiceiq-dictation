@@ -329,4 +329,14 @@ public struct SettingsStore: Sendable {
     public func setTranscriptRetentionDays(_ days: Int) {
         Self.set(days, forKey: "transcriptRetentionDays")
     }
+
+    /// Lets coding agents on this Mac read History and meetings through the
+    /// local API and MCP server (`AgentServer`). Off until the user turns it on.
+    public var agentAccessEnabled: Bool {
+        Self.defaults.bool(forKey: "agentAccessEnabled")
+    }
+
+    public func setAgentAccessEnabled(_ enabled: Bool) {
+        Self.set(enabled, forKey: "agentAccessEnabled")
+    }
 }

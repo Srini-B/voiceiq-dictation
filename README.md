@@ -162,6 +162,15 @@ A few decisions worth knowing about, because they are what make it feel solid:
 The full design specs — including the failure matrix the reliability work is
 built from — are in [docs/design/](docs/design/).
 
+### Coding agents
+
+Turn on Settings › Advanced › Coding agents and Claude Code, Codex and other
+MCP clients on the Mac can list and search your dictations and meetings
+(notes, transcripts with speakers and times, and questions), including the
+ones synced from your iPhone. It is read-only, listens on 127.0.0.1 only and
+needs an access key. Setup, tools, routes and security are in
+[docs/AGENT_ACCESS.md](docs/AGENT_ACCESS.md).
+
 ## iPhone
 
 VoiceiQ also ships as an iPhone app (iOS 18+) with its own keyboard. Add the
@@ -227,6 +236,7 @@ VoiceIQCore/        all engine logic, headless and testable
   InsertionEngine/      the AX → paste → clipboard ladder
   HistoryStore/         GRDB index, recovery, retry queue, retention
   MeetingEngine/        call detection, mic + system audio taps, diarized notes
+  AgentAccess/          local API and MCP server for coding agents (Mac)
   ScreenContext/        screenshots on app switch for spelling context
   Learning/             dictionary auto-learn from your edits
   Usage/                token metering, price book, cost ledger
