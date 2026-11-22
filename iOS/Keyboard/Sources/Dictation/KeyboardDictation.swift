@@ -259,7 +259,7 @@ final class KeyboardDictation: ObservableObject {
     // MARK: - Wiring
 
     private init() {
-        LevelGlowSource.levels = { [unowned self] in
+        LevelWaveformSource.levels = { [unowned self] in
             self.phase == .recording ? self.bars.heights : SharedStore.shared.levelBars
         }
     }

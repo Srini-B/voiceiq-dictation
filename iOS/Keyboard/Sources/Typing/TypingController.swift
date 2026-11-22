@@ -44,6 +44,10 @@ final class TypingController: ObservableObject {
     /// The strip mic's tap; its hold goes through `dictation` as the Hex key's did.
     var onMicTap: (() -> Void)?
     private var stripButtons: [StripButton: UIControl] = [:]
+
+    init() {
+        HexStripHeight.install()
+    }
     /// The text selected in the field, so the bar's Dictionary offer ends with
     /// the selection.
     @Published private(set) var selection = ""
