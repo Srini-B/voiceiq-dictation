@@ -344,18 +344,24 @@ recorder card also shows the last lines Scribe v3 Live heard.
 ### Typing
 
 The keyboard opens on Hex's letter keys with one row above them: Hex's
-suggestion strip, with VoiceiQ's buttons at its ends. The VoiceiQ button
-(waveform) and Mini Keyboard sit at the leading end, Edit and the mic at the
-trailing end, and Hex's three suggestions share the room between them
-(`StripButton` in `Typing/StripButtons.swift`). Each button is 36 pt wide and
-as tall as the strip, as Hex's strip pills are. On a keyboard under 360 pt
-wide (iPad's floating keyboard) Mini Keyboard moves to the voice panel's bar,
-so each suggestion keeps about 69 pt; on a 402 pt iPhone each gets about
-82 pt. The mic starts a dictation at once; the waveform opens the voice panel
-with Dictate, Translate and Ask. A running dictation keeps the keys and covers
-the whole strip with the recording strip until the text is delivered. The
-emoji search covers the whole strip too, and the Dictionary offer covers the
-suggestions only.
+suggestion strip, with the VoiceiQ button (waveform) at its leading end and
+the mic at its trailing end, and Hex's three suggestions sharing the room
+between them (`StripButton` in `Typing/StripButtons.swift`). Each strip button
+is 36 pt wide and as tall as the strip, as Hex's strip pills are; on a 402 pt
+iPhone each suggestion gets about 106 pt. Mini Keyboard and Edit are keys in
+the bottom row, one either side of the space bar, on the letter, number and
+symbol pages: each a letter key wide, in room Hex's bottom row leaves through
+the patch's `KeyboardLayout.spaceSideRoom`, as long as the space bar keeps two
+letters' width and a gap (74 pt on the iPhone SE with its globe key, 129 pt on
+a 402 pt iPhone, 101 pt in a 402 pt iPhone's email field). Where it would
+not, as in an email field on the SE with its globe key, Hex's row stays as it
+is and the two go back to the strip beside the waveform and the mic; under 360 pt wide (iPad's floating keyboard) Mini
+Keyboard then moves to the voice panel's bar. The mic starts a dictation at
+once; the waveform opens the voice panel with Dictate, Translate and Ask. A
+running dictation keeps the keys and covers the whole strip with the
+recording strip until the text is delivered; Mini Keyboard and Edit stay with
+the keys. The emoji search covers the whole strip too, and the Dictionary
+offer covers the suggestions only.
 
 The strip's mic has the touch Hex's own key had (`DictationKeyControl`, on
 Hex's `HexKeyGesture`): the finger landing arms the dictation, a tap starts
@@ -363,28 +369,29 @@ it, a still hold of 0.35 s records until the finger lifts, and sliding off
 drops the press. The panels' bars (voice, emoji, edit, answer, number pads)
 keep a plain mic button that taps only.
 
-**Recording strip** (`RecordingStrip`, `LevelWaveform`), modelled on Gboard's
-Rambler. Cancel (x) on the left, a red stop button on the right, and between
-them the elapsed time and a red waveform: one 3 pt bar per recorded level,
-newest on the right, centred on the strip's middle line. Silence keeps 12% of
-the height and a bar grows linearly with the mic level up to the full height
-for the loudest speech. The app keeps the levels (`LevelBars`: one per mic
-level it writes, at most every 0.06 s, smoothed with a fast attack and slow
-release, newest 256 kept) and publishes them as `SharedStore.levelBars`; the
-keyboard redraws every 0.06 s while recording, as one shape with no images,
-and the timer goes with the strip when recording ends. A keyboard that
-appears mid-dictation, after an app switch or after being hidden, shows the
-dictation so far instead of starting empty. With Real-time transcription on,
-the words heard so far (`SharedStore.liveText`, from the provider's live
+**Recording strip** (`RecordingStrip`, `LevelGlow`), modelled on Gboard's
+Rambler. Cancel (x) on the left, a red stop button on the right, the elapsed
+time in the middle. Behind them a red glow rises from the bottom edge as loud
+as the voice was: silence keeps 8% of the strip's height, and the height grows
+linearly with the mic level up to the full strip for the loudest speech. It is
+blurred and fades out at every edge, the bottom too,
+so it never draws a line between the strip and the keys; its top edge is a
+smooth curve through the recent levels, newest on the right. The app keeps
+the levels (`LevelBars`: one per mic level it writes, at most every 0.06 s,
+smoothed with a fast attack and slow release, newest 256 kept) and publishes
+them as `SharedStore.levelBars`; the keyboard redraws every 0.06 s. A keyboard
+that appears mid-dictation, after an app switch or after being hidden, shows
+the dictation so far instead of starting empty. With Real-time transcription
+on, the words heard so far (`SharedStore.liveText`, from the provider's live
 socket: Gemini Live, OpenAI Realtime, or Scribe v3 Live while ElevenLabs
-transcribes) replace the time and the waveform once they arrive: one line,
-newest words last, the start cut off. The words shown are a preview; the
-final text comes from the live socket's final result, or from the saved
-recording when that is incomplete, and is typed as before. While the text is
-written the strip shows only a spinner with "Writing…" or "Thinking…".
-Reduce Motion holds every bar at the latest level. The waveform is a plain
-`Shape` on a 0.06 s timer: a `Canvas` inside `TimelineView(.animation)` drew
-in the Simulator but nothing on an iPhone (0.6.23).
+transcribes) replace the time and the glow once they
+arrive: one line, newest words last, the start cut off. The words shown are a
+preview; the final text comes from the live socket's final result, or from
+the saved recording when that is incomplete, and is typed as before. While the text is written the strip shows
+only a spinner with "Writing…" or "Thinking…". Reduce Motion holds the glow
+flat at the latest level. The glow is a plain `Shape` on a 0.06 s timer: a
+`Canvas` inside `TimelineView(.animation)` drew in the Simulator but nothing
+on an iPhone (0.6.23).
 
 **Add to Dictionary.** With Full Access, selecting text in the field replaces
 the suggestions with "Add “word” to Dictionary"; it goes as
@@ -398,8 +405,8 @@ offers "Add copied text to Dictionary" until you start typing.
 | Feature | How |
 | --- | --- |
 | Keys | Hex's `FullKeyboardView` (`iOS/Keyboard/Hex/FullKeyboard`, MIT, one patch): English QWERTY letters, 123 and #+= pages, shift and Caps Lock, accents on long press, key preview, repeat delete, the space bar's hold-and-slide cursor, adaptive touch targets, and Hex's strip of three suggestions. Hex's own key (the hexagon in the strip) is removed; the strip's mic does what it did. The emoji key opens VoiceiQ's emoji panel. Hex's own dictation, its recording panel, style menu, translation and language switching stay off (`HexGlue/HexDictationStandIns.swift`, `HexLanguageSettings.swift`). Phone, number and decimal fields hand off to iOS's pad, as before. |
-| Height | Hex's `preferredHeight` for the orientation, strip included (270 pt in portrait on a 402 pt wide iPhone): 27 pt shorter than with the separate VoiceiQ bar. The strip is 44 pt in portrait, Apple's suggestion-bar height, instead of Hex's 27 pt (`HexGlue/HexStripHeight.swift`, through the patch's `KeyboardMetrics.phoneOverride`); its buttons and suggestions are centred with equal room above and below, and the keys start 8 pt below it. Landscape keeps Hex's 42 pt strip. Hex places its strip below the band iOS 26 and later draws above a third-party keyboard (16.3 pt on the iPhone 17 Pro, measured by Hex on iOS 27.2), so the band sits outside the keyboard's view and covers none of it. The iOS 27.0 Simulator draws it too in portrait (17.7 pt on the iPhone 17 Pro, empty), so the strip's content reads about 28 pt below the keyboard's visible edge and 19 pt above the keys. Panels (voice, emoji, edit, answer) fill the same height, with their bar in the strip's place (52 pt in portrait, 50 in landscape). |
-| Mini keyboard | The strip's Mini Keyboard button (the voice panel's on a narrow keyboard) shrinks the keyboard to the mini view and back (`TypingController.mini`, kept in the keyboard's own defaults). The mini view is the mic bar, with 11 pt above and below it as in the strip, over two rows (`MiniKeys`): edit, @ . , ? ! ' and delete, then 123, emoji, the size key, space and return, with the globe where the system draws none. 123 swaps the punctuation for the digits 1 to 0. |
+| Height | Hex's `preferredHeight` for the orientation, strip included (262 pt in portrait on a 402 pt wide iPhone). The strip runs from the keyboard's top edge down to the keys, 44 pt in portrait (Apple's suggestion bar) and Hex's 50 pt turned, with its buttons and suggestions centred, so they have as much room above as below: 12.8 pt either side of the icons on the iPhone 17 Pro (`HexGlue/HexStripHeight.swift`, through the patch's `KeyboardMetrics.phoneOverride`). iOS 26 and later draw about 17 pt of their own panel above a third-party keyboard in some presentations and nothing in others, and a keyboard can't tell which (Hex measured this on an iPhone 17 Pro with iOS 27.2; the iOS 27.0 Simulator drew it in one run and not the next). Where iOS draws it, the room above the strip's content is that much larger. Panels (voice, emoji, edit, answer) fill the same height, with their bar in the strip's place. |
+| Mini keyboard | Mini Keyboard, left of the space bar (in the strip where the bottom row has no room; the voice panel's bar on a narrow keyboard), shrinks the keyboard to the mini view and back (`TypingController.mini`, kept in the keyboard's own defaults). The mini view is the mic bar over two rows (`MiniKeys`): edit, @ . , ? ! ' and delete, then 123, emoji, the size key, space and return, with the globe where the system draws none. 123 swaps the punctuation for the digits 1 to 0. The mic bar is as far below the keyboard's edge as above the first row of keys (`KeyboardView.miniBarInsets`): 13 pt from the edge, and 7 pt above the keys' 6 pt inset in portrait. |
 | Suggestions | Hex's strip: the typed word in quotes (keeps it and teaches Hex not to change it), the best correction or completion in the middle (highlighted when space will apply it), and a runner-up; after a space, next-word predictions; after a slide, the other readings of the slid word. Ranked by Hex's English typing model (`TypingModel/en.hextm`, built from Google Books Ngram data, CC BY 3.0) and Hex's `AutocorrectEngine`. |
 | Auto-correction | Hex's `TypingDecoder` on space or punctuation, with the touch points (spatial autocorrect). Delete right after a correction restores the typed word. Off where the field turns it off, and in Settings › Typing. |
 | Slide to type | Hex's `SwipeDecoder` and `SwipeTyping` over the same typing model. The slid word gets its space when the next word starts; the strip offers the other readings. Off in Settings › Typing. |

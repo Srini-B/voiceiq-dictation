@@ -41,25 +41,24 @@ in thirds of the room between. The keyboard is 44 pt shorter.
 
 Revert the commit; delete the patch with it, or the next sync fails to apply it.
 
-## Follow-up: 44 pt strip, waveform, mini spacing (0.7.12 review)
+## Follow-up: even spacing, the glow back, Mini and Edit by the space bar (0.7.12 review)
 
-- cyron found the 27 pt portrait strip cramped. Portrait now uses a 44 pt
-  strip, close to Apple's suggestion bar, with the buttons and suggestions
-  centred and equal room above and below. `HexGlue/HexStripHeight` sets it
-  through `KeyboardMetrics.phoneOverride`, which the strip-layout patch adds
-  (one more hunk; it applies to Hex 2a023f9 and to Hex main a5adb4c).
-  Landscape keeps Hex's 42 pt. The keyboard is 270 pt tall in portrait.
-- iOS 26+ draws a band over the top of third-party keyboards. It lies above
-  the keyboard view (17.7 pt on the iPhone 17 Pro in the iOS 27.0 Simulator,
-  in portrait only), so nothing sits under it, but the icons read 28 pt below
-  the visible edge and 19 pt above the keys. Check on the first TestFlight
-  device.
-- Simulator: the strip measured 10.7 pt above and below its icons (17 Pro),
-  11 / 10.5 pt (SE), 9.7 pt in landscape; the mini pill 11 pt both ways.
-  Keyboard memory 33 / 42 / 42 / 44 MB (idle / paragraph / six slides /
-  recording), against 26 / 42 / 42 / 45 MB before. The Simulator's mic gives a
-  steady tone, so the bars sit near full height there; that they follow speech
-  needs a device.
-- The recording strip's glow became a waveform (`LevelWaveform`): 3 pt bars
-  whose height follows the mic level, between the timer and Done.
-- The mini view's bar grew from 58 to 68 pt, 11 pt above and below the mic.
+- A 44 pt strip with an 8 pt gap below measured 28 pt from the keyboard's
+  visible edge to its icons and 19 pt from them to the keys in a Simulator
+  run where iOS drew its ~17.7 pt band above the keyboard. cyron asked for
+  even room. A strip built around that band (26.5 pt, the band's height as
+  the gap) then measured 5 / 21.5 pt, because the next Simulator runs drew no
+  band. Hex's notes (dev, iPhone 17 Pro, iOS 27.2) say the same: iOS draws
+  the band in some presentations and not others, and a keyboard can't tell.
+  So the strip now runs from the keyboard's top edge to the keys, 44 pt in
+  portrait and 50 pt turned, with its content centred: even without the
+  band, about 17 pt more room above the content with it. The mini view's mic
+  bar follows the same rule.
+- The red-bar waveform tried in its place was reverted: cyron wants 0.7.11's
+  `LevelGlow` behind the recording strip, as before.
+- Mini Keyboard and Edit moved from the strip to the bottom row, either side
+  of the space bar, so the suggestions get about 106 pt each on a 402 pt
+  iPhone. Hex's row leaves the room through a new patch hook
+  (`KeyboardLayout.spaceSideRoom`) when the space bar keeps two letters'
+  width; an email or URL field with the emoji key keeps Hex's row and the two
+  buttons go back to the strip.
