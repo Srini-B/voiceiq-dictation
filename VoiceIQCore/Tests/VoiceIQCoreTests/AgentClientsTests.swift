@@ -114,6 +114,12 @@ final class AgentClientsTests: XCTestCase {
         XCTAssertEqual(AgentClient.codex.status(key: "new", home: home), .unreadable)
         try AgentClient.codex.install(key: "new", home: home)
         XCTAssertEqual(try String(contentsOf: file, encoding: .utf8), dotted)
+
+        let inline = "mcp_servers = { other = { command = \"other-mcp\" } }\n"
+        try inline.write(to: file, atomically: true, encoding: .utf8)
+        XCTAssertEqual(AgentClient.codex.status(key: "new", home: home), .unreadable)
+        try AgentClient.codex.install(key: "new", home: home)
+        XCTAssertEqual(try String(contentsOf: file, encoding: .utf8), inline)
     }
 
     func testLeavesAloneWhatIsNotItsOwn() throws {

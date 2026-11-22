@@ -111,9 +111,10 @@ public enum AgentClient: String, CaseIterable, Identifiable, Sendable {
         let url: String?, authorization: String?
         switch self {
         case .codex:
-            // `voiceiq` written as a dotted key or an inline table, rather than
-            // as its own table, is a form this can't edit safely.
-            if Self.tomlRemovingOurs(text).range(of: #"(?m)^\s*(mcp_servers\s*\.\s*)?(voiceiq|"voiceiq"|'voiceiq')\s*[.=]"#,
+            // MCP servers, or `voiceiq` itself, written as dotted keys or inline
+            // tables rather than as `[mcp_servers.<name>]` tables: appending a
+            // table would clash with them, so this form is left alone.
+            if Self.tomlRemovingOurs(text).range(of: #"(?m)^\s*(mcp_servers|"mcp_servers"|'mcp_servers'|voiceiq|"voiceiq"|'voiceiq')\s*[.=]"#,
                                                   options: .regularExpression) != nil {
                 throw CocoaError(.fileReadCorruptFile)
             }
