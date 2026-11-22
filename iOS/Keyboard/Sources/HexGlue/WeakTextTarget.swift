@@ -21,6 +21,11 @@ final class WeakTextTarget: KeyboardTextTarget {
     var keyboardAppearance: UIKeyboardAppearance? { base?.keyboardAppearance }
     var textContentType: UITextContentType? { base?.textContentType ?? nil }
     var isSecureTextEntry: Bool? { base?.isSecureTextEntry }
+    var documentContextAfterInput: String? { base?.documentContextAfterInput }
+    var selectedText: String? { base?.selectedText }
+    var smartQuotesType: UITextSmartQuotesType? { base?.smartQuotesType }
+    var smartDashesType: UITextSmartDashesType? { base?.smartDashesType }
+    var documentIdentifier: UUID? { base?.documentIdentifier }
     func insertText(_ text: String) { base?.insertText(text) }
     func deleteBackward() { base?.deleteBackward() }
     func adjustTextPosition(byCharacterOffset offset: Int) { base?.adjustTextPosition(byCharacterOffset: offset) }
