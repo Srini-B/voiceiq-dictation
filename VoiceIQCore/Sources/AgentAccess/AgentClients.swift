@@ -118,6 +118,11 @@ public enum AgentClient: String, CaseIterable, Identifiable, Sendable {
                                                   options: .regularExpression) != nil {
                 throw CocoaError(.fileReadCorruptFile)
             }
+            // Escapes in a table name aren't decoded here, so such a name
+            // could be VoiceiQ's own table in disguise.
+            if Self.tomlLines(text).contains(where: { $0.table != nil && $0.line.contains("\\") }) {
+                throw CocoaError(.fileReadCorruptFile)
+            }
             guard let block = Self.tomlOurBlock(text) else { return nil }
             // Only the table's own `url = ` line, and the Authorization in its
             // `http_headers = { … }` line, as VoiceiQ writes them.
@@ -273,11 +278,11 @@ public enum AgentClient: String, CaseIterable, Identifiable, Sendable {
         table.count >= 2 && table[0] == "mcp_servers" && table[1] == serverName
     }
 
-    /// The lines of `[mcp_servers.voiceiq]` and its sub-tables, nil when there are none.
+    /// The lines of `[mcp_servers.voiceiq]` itself, without its sub-tables; nil when it isn't there.
     private static func tomlOurBlock(_ text: String) -> String? {
         var inside = false, lines: [String] = []
         for (line, table) in tomlLines(text) {
-            if let table { inside = isOurs(table) }
+            if let table { inside = table == ["mcp_servers", serverName] }
             if inside { lines.append(line) }
         }
         return lines.isEmpty ? nil : lines.joined(separator: "\n")

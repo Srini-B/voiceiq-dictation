@@ -121,6 +121,12 @@ final class AgentClientsTests: XCTestCase {
         try AgentClient.codex.install(key: "new", home: home)
         XCTAssertEqual(try String(contentsOf: file, encoding: .utf8), inline)
 
+        let escaped = "[mcp_servers.\"\\u0076oiceiq\"]\nurl = \"\(AgentAPI.mcpURL)\"\n"
+        try escaped.write(to: file, atomically: true, encoding: .utf8)
+        XCTAssertEqual(AgentClient.codex.status(key: "new", home: home), .unreadable)
+        try AgentClient.codex.install(key: "new", home: home)
+        XCTAssertEqual(try String(contentsOf: file, encoding: .utf8), escaped)
+
         // Windows line endings still show the table that's already there.
         let crlf = "[mcp_servers.voiceiq]\r\nurl = \"\(AgentAPI.mcpURL)\"\r\nhttp_headers = { Authorization = \"Bearer new\" }\r\n"
         try crlf.write(to: file, atomically: true, encoding: .utf8)
@@ -164,6 +170,20 @@ final class AgentClientsTests: XCTestCase {
         try AgentClient.codex.install(key: "a", home: home)
         try AgentClient.codex.remove(home: home)
         XCTAssertEqual(try String(contentsOf: codex, encoding: .utf8), foreignToml)
+
+        // Only the server's own table says where it points, not a sub-table.
+        let subTable = """
+        [mcp_servers.voiceiq.http_headers]
+        url = "\(AgentAPI.mcpURL)"
+        [mcp_servers.voiceiq]
+        url = "https://example.com/mcp"
+
+        """
+        _ = try write(subTable, to: ".codex/config.toml")
+        XCTAssertEqual(AgentClient.codex.status(key: "a", home: home), .otherServer)
+        try AgentClient.codex.install(key: "a", home: home)
+        try AgentClient.codex.remove(home: home)
+        XCTAssertEqual(try String(contentsOf: codex, encoding: .utf8), subTable)
 
         // A quoted name with a space in it is another server.
         let spaced = "[mcp_servers.\"voiceiq \"]\nurl = \"https://example.com/mcp\"\n"
