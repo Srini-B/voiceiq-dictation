@@ -46,6 +46,8 @@ final class HeardGuardTests: XCTestCase {
         assertPasses("the budget is about forty five hundred dollars and twelve percent of that goes to marketing send questions to finance at acme dot com before three thirty p m",
                      "The budget is about $4,500, and 12% of that goes to marketing. Send questions to finance@acme.com before 3:30 PM.")
         assertPasses("call me at three thirty p m", "Call me at 3:30 PM.")
+        // Ten spoken digits become one token.
+        assertPasses("call five five five one two three four five six seven", "Call 5551234567.")
     }
 
     func testRewordingFromTheRulesPasses() {

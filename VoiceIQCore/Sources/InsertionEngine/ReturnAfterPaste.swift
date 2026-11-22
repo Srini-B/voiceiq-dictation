@@ -1,5 +1,6 @@
 #if os(macOS)
 import AppKit
+import ApplicationServices
 import Foundation
 import os
 
@@ -20,6 +21,15 @@ public enum ReturnAfterPaste {
         lastEscape.withLock { $0 = Date() }
     }
 
+    private static func focusedElement() -> AXUIElement? {
+        let system = AXUIElementCreateSystemWide()
+        AXUIElementSetMessagingTimeout(system, 0.25)
+        var focused: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(system, kAXFocusedUIElementAttribute as CFString, &focused) == .success,
+              let focused, CFGetTypeID(focused) == AXUIElementGetTypeID() else { return nil }
+        return unsafeDowncast(focused as AnyObject, to: AXUIElement.self)
+    }
+
     /// An empty app list means every app.
     public static func applies(to bundleID: String?, apps: [String]) -> Bool {
         apps.isEmpty || bundleID.map(apps.contains) == true
@@ -30,6 +40,10 @@ public enum ReturnAfterPaste {
         let settings = SettingsStore()
         guard settings.pressReturnAfterPaste,
               applies(to: context.targetAppBundleID, apps: settings.pressReturnApps) else { return }
+        // Return must reach the field the text went into: switching to
+        // another field or window of the same app during the wait would send
+        // something else.
+        let target = focusedElement()
         let ended = context.recordingEndedAt ?? Date()
         let wait = max(ended.addingTimeInterval(escapeWindow).timeIntervalSinceNow, settle)
         try? await Task.sleep(for: .seconds(wait))
@@ -37,8 +51,9 @@ public enum ReturnAfterPaste {
             Log.insertion.info("Esc after the recording ended — no Return")
             return
         }
-        guard let pid = context.targetPID, NSWorkspace.shared.frontmostApplication?.processIdentifier == pid else {
-            Log.insertion.info("app changed before Return — no Return")
+        guard let pid = context.targetPID, NSWorkspace.shared.frontmostApplication?.processIdentifier == pid,
+              let target, let now = focusedElement(), CFEqual(target, now) else {
+            Log.insertion.info("focus moved before Return — no Return")
             return
         }
         guard let source = CGEventSource(stateID: .privateState),

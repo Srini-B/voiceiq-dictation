@@ -469,6 +469,25 @@ final class DictationCoordinatorTests: XCTestCase {
         XCTAssertFalse(c.hasBackgroundJobs)
     }
 
+    /// A job that fails while the one before it still runs must not let the
+    /// next one jump ahead of that earlier job.
+    func testAFailedMiddleJobKeepsTheSpokenOrder() async {
+        let turns = InsertTurns()
+        let first = turns.take(), middle = turns.take(), last = turns.take()
+        var order: [String] = []
+        let lastInserts = Task { @MainActor in
+            await last.waitForPrevious()
+            order.append("last")
+        }
+        middle.finish() // failed early
+        for _ in 0..<20 { await Task.yield() }
+        XCTAssertEqual(order, [], "the last job still waits for the first")
+        order.append("first")
+        first.finish()
+        await lastInserts.value
+        XCTAssertEqual(order, ["first", "last"])
+    }
+
     func testCancelDuringInsertingRejectedCleanly() async {
         let c = makeCoordinator()
         c.handle(.begin)

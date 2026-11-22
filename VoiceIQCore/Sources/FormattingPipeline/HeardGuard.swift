@@ -83,8 +83,12 @@ public enum HeardGuard {
             return .notTheSpeakersWords
         }
         // Under half of what was said kept, with no spoken correction to
-        // explain it. A digit stands for the number words it replaced.
-        let content = said.filter { !fillers.contains($0) }
+        // explain it. Number words written as digits are not counted as
+        // dropped: "five five five one two" is one token, "55512".
+        let writesDigits = written.contains(where: hasDigit)
+        let content = said.filter {
+            !fillers.contains($0) && !(writesDigits && numberWords.contains($0) && !writtenSet.contains($0))
+        }
         let kept = sharedWords + sharedNumbers + written.count(where: { hasDigit($0) && !saidSet.contains($0) })
         if content.count > 6 || written.count > 3, kept * 2 < content.count,
            !corrections.contains(where: { contains(said, $0) }) {
@@ -180,6 +184,13 @@ public enum HeardGuard {
         guard words.count >= phrase.count else { return false }
         return (0...(words.count - phrase.count)).contains { words[$0..<($0 + phrase.count)].elementsEqual(phrase) }
     }
+
+    static let numberWords: Set<String> = [
+        "zero", "oh", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten",
+        "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen",
+        "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety",
+        "hundred", "thousand", "million", "billion", "point", "double", "triple",
+    ]
 
     private static func hasDigit(_ word: String) -> Bool { word.contains(where: \.isNumber) }
 

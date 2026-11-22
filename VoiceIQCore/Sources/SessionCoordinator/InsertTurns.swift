@@ -6,25 +6,49 @@ import Foundation
 /// (anomalyco/hex, `OrderedOutputs` in `src/parakeet.rs`, MIT).
 @MainActor
 final class InsertTurns {
-    struct Ticket: Sendable {
-        fileprivate let previous: AsyncStream<Void>?
-        fileprivate let done: AsyncStream<Void>.Continuation
+    /// Opens once, and lets every waiter through from then on.
+    @MainActor final class Gate {
+        private var isOpen = false
+        private var waiters: [CheckedContinuation<Void, Never>] = []
 
-        /// Returns once the job before this one has inserted or given up.
-        func waitForPrevious() async {
-            guard let previous else { return }
-            for await _ in previous {}
+        func wait() async {
+            guard !isOpen else { return }
+            await withCheckedContinuation { waiters.append($0) }
         }
 
-        /// Frees the next job's turn. Safe to call more than once.
-        func finish() { done.finish() }
+        func open() {
+            guard !isOpen else { return }
+            isOpen = true
+            waiters.forEach { $0.resume() }
+            waiters = []
+        }
     }
 
-    private var last: AsyncStream<Void>?
+    struct Ticket: Sendable {
+        fileprivate let previous: Gate?
+        fileprivate let done: Gate
+
+        /// Returns once every earlier job has inserted or given up.
+        func waitForPrevious() async {
+            await previous?.wait()
+        }
+
+        /// Frees the next job's turn, but never ahead of an earlier job: a job
+        /// that fails or is cancelled while the one before it still runs
+        /// passes its turn on only when that one is done. Safe to call twice.
+        func finish() {
+            Task { @MainActor [previous, done] in
+                await previous?.wait()
+                done.open()
+            }
+        }
+    }
+
+    private var last: Gate?
 
     func take() -> Ticket {
-        let (stream, continuation) = AsyncStream<Void>.makeStream()
-        defer { last = stream }
-        return Ticket(previous: last, done: continuation)
+        let done = Gate()
+        defer { last = done }
+        return Ticket(previous: last, done: done)
     }
 }
