@@ -39,6 +39,7 @@ final class HeardGuardTests: XCTestCase {
     }
 
     func testListPasses() {
+        assertPasses("buy milk buy eggs buy bread buy apples", "1. Buy milk.\n2. Buy eggs.\n3. Buy bread.\n4. Buy apples.")
         assertPasses("A few things for tomorrow first book the meeting room for ten thirty second email the design team and third order lunch for twelve people",
                      "A few things for tomorrow:\n\n1. Book the meeting room for 10:30.\n2. Email the design team.\n3. Order lunch for 12 people.")
     }

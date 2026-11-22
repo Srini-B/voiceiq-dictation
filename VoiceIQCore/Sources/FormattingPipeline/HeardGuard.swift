@@ -72,7 +72,9 @@ public enum HeardGuard {
         // New words beyond a quarter of what was said (at least two), unless
         // each replaces a word that was dropped (a misheard word, a reworded
         // phrase, a number written as digits).
-        let added = written.count(where: { !saidSet.contains($0) })
+        // Numbers don't count as added: the rules write amounts as digits and
+        // number list items.
+        let added = written.count(where: { !saidSet.contains($0) && !hasDigit($0) })
         let dropped = said.count(where: { !writtenSet.contains($0) })
         if added > max(2, said.count / 4), added > dropped {
             return .addedWords
