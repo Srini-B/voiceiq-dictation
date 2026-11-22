@@ -253,6 +253,33 @@ final class KeyboardTypingTests: XCTestCase {
         }
     }
 
+    /// Once the keyboard has sent the user to VoiceiQ, iOS draws its band above
+    /// the keyboard, so the strip's content moves up by half the band to sit
+    /// midway between the band's top and the keys again; the keys stay put.
+    /// Before that trip nothing moves.
+    func testTheStripContentMovesUpOnlyOnceTheKeyboardWentToVoiceiQ() {
+        defer { HexStripHeight.expectsBand = false }
+        HexStripHeight.expectsBand = false
+        open()
+        func measure() -> (words: CGFloat, mic: CGFloat, keys: CGFloat) {
+            keyboard.setNeedsLayout()
+            keyboard.layoutIfNeeded()
+            let strip = keyboard.stripView.frame
+            return (strip.minY + (keyboard.stripView.textCenterY ?? 0), button(.mic)!.frame.midY,
+                    plane.engine.layout.key(.character("q"))!.frame.minY)
+        }
+        let before = measure()
+        XCTAssertEqual(before.words, before.keys / 2, accuracy: 0.5)
+        HexStripHeight.expectsBand = true
+        typing.appeared()
+        let after = measure()
+        XCTAssertEqual(after.keys, before.keys)
+        XCTAssertEqual(before.words - after.words, HexStripHeight.band / 2, accuracy: 0.01)
+        XCTAssertEqual(before.mic - after.mic, HexStripHeight.band / 2, accuracy: 0.01)
+        // Midway between the band's top edge and row 1.
+        XCTAssertEqual(after.words + HexStripHeight.band, (after.keys + HexStripHeight.band) / 2, accuracy: 0.5)
+    }
+
     /// Mini Keyboard left of the space bar and Edit right of it, on every layer,
     /// over no key, and the space bar still two letters wide.
     private func assertMiniAndEditBesideTheSpaceBar(at width: CGFloat, file: StaticString = #filePath, line: UInt = #line) {
