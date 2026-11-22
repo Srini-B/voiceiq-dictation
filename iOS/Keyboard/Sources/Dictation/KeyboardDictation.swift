@@ -56,6 +56,9 @@ final class KeyboardDictation: ObservableObject {
     private struct Job {
         let id = UUID()
         var mode: KeyboardMode
+        /// Translate's targets at the tap, so a later change in Settings
+        /// does not switch this dictation's language.
+        var translationTargets: [String]
         var selectedText: String?
         var host: String?
         var document: UUID?
@@ -148,12 +151,13 @@ final class KeyboardDictation: ObservableObject {
     private func begin(mode: KeyboardMode, selectedText: String?, host: String?, document: UUID?, textBefore: String?, armed: Bool) -> Bool {
         let coordinator = self.coordinator ?? makeCoordinator()
         target.host = host
+        let translationTargets = SettingsStore().translationTargetLanguages
         let dictationMode: DictationMode = switch mode {
         case .dictate: .dictate
-        case .translate: .translate(targets: SettingsStore().translationTargetLanguages)
+        case .translate: .translate(targets: translationTargets)
         case .ask: .askAnything(selectedText: selectedText)
         }
-        job = Job(mode: mode, selectedText: selectedText, host: host, document: document, textBefore: textBefore, armed: armed)
+        job = Job(mode: mode, translationTargets: translationTargets, selectedText: selectedText, host: host, document: document, textBefore: textBefore, armed: armed)
         client.forgetSentTranscription()
         guard coordinator.handle(.begin, mode: dictationMode) else {
             KeyboardLog.note("in-keyboard start refused: \(coordinator.coachingHint ?? "busy")")
@@ -431,7 +435,7 @@ final class KeyboardDictation: ObservableObject {
         let service = GeminiTranscriptionService(client: client)
         let seconds = SessionMeta.read(from: folder)?.audioDurationSeconds ?? 0
         let context = KeyboardJob(folder: folder.lastPathComponent, mode: job.mode,
-                                  translationTargets: SettingsStore().translationTargetLanguages,
+                                  translationTargets: job.translationTargets,
                                   selectedText: job.selectedText, host: job.host, durationSeconds: seconds).context
         do {
             _ = try await GeminiClient.$capturesTranscription.withValue(true) {
@@ -473,7 +477,7 @@ final class KeyboardDictation: ObservableObject {
         guard let folder = job.folder else { return false }
         let seconds = SessionMeta.read(from: folder)?.audioDurationSeconds ?? 0
         let record = KeyboardJob(folder: folder.lastPathComponent, mode: job.mode,
-                                 translationTargets: SettingsStore().translationTargetLanguages,
+                                 translationTargets: job.translationTargets,
                                  selectedText: job.selectedText, host: job.host,
                                  hostName: job.host.map(AppNames.displayName(for:)), document: job.document,
                                  durationSeconds: seconds)
