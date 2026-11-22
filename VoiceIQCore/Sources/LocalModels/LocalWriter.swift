@@ -25,11 +25,13 @@ public enum LocalWriter {
     /// The written text of an on-device transcript, "" when it holds no
     /// speech. RAW is the transcript as the speech model wrote it.
     static func dictation(raw: String, context: DictationContext, runner: @escaping LocalWriteRunner) async throws -> String {
-        if PromptOnDevice.isOnlyHesitation(raw) { return "" }
+        let settings = SettingsStore()
+        let english = settings.localSpeechLanguage.isEnglish
+        if PromptOnDevice.isOnlyHesitation(raw, english: english) { return "" }
         let dictionary = DictionaryStore()
-        let user = PromptOnDevice.user(raw: raw, customRules: SettingsStore().customWritingRules,
+        let user = PromptOnDevice.user(raw: raw, customRules: settings.customWritingRules,
                                        vocabulary: dictionary.sanitizedVocabulary(), spellings: dictionary.spellings(),
-                                       spelling: SpellingVariant.system.promptLine, appName: context.targetAppName)
+                                       spelling: SpellingVariant.system.promptLine, appName: context.targetAppName, english: english)
         let result = try await generate(system: PromptOnDevice.system, user: user, grammar: textGrammar,
                                          maxTokens: max(256, raw.count / 2), maxContext: 8_192, cachesSystem: true,
                                          runner: runner)

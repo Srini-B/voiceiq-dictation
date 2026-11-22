@@ -51,11 +51,13 @@ final class OnDeviceDictationTests: XCTestCase {
     /// before the on-device writer sees RAW; words that only contain those
     /// sounds stay, and a dictation of nothing but hesitation is not sent.
     func testOnDeviceWriterInputDropsHesitationOnly() {
-        XCTAssertEqual(PromptOnDevice.prepared("Um, tell Uhura the summer plan .. Uh thanks .."),
+        XCTAssertEqual(PromptOnDevice.prepared("Um, tell Uhura the summer plan .. Uh thanks ..", english: true),
                        "tell Uhura the summer plan. thanks.")
-        XCTAssertTrue(PromptOnDevice.isOnlyHesitation("Um, uh, hun."))
-        XCTAssertFalse(PromptOnDevice.isOnlyHesitation("Um, send it."))
-        XCTAssertFalse(PromptOnDevice.isOnlyHesitation("10:30"))
+        XCTAssertEqual(PromptOnDevice.prepared("Er kommt um 3 Uhr ..", english: false), "Er kommt um 3 Uhr.")
+        XCTAssertTrue(PromptOnDevice.isOnlyHesitation("Um, uh, hun.", english: true))
+        XCTAssertFalse(PromptOnDevice.isOnlyHesitation("Um, send it.", english: true))
+        XCTAssertFalse(PromptOnDevice.isOnlyHesitation("10:30", english: true))
+        XCTAssertFalse(PromptOnDevice.isOnlyHesitation("Er.", english: false))
         XCTAssertEqual(PromptOnDevice.text(fromAnswer: #"{"text": "Dear Priya,\n\nThanks."}"#), "Dear Priya,\n\nThanks.")
         XCTAssertEqual(PromptOnDevice.text(fromAnswer: #"{"text": "\#(PromptV1.noSpeechToken)"}"#), "")
         XCTAssertNil(PromptOnDevice.text(fromAnswer: "Here is the cleaned text"))

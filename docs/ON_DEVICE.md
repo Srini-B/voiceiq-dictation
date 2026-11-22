@@ -113,9 +113,10 @@ and on the CPU, which iOS requires for an app in the background.
 seconds and then mostly copies the transcript back. `PromptOnDevice` is the
 same built-in rules cut to about 900 tokens with short examples, followed by
 your custom rules (up to 2,000 characters), dictionary (100 terms), "heard
-as" spellings (10) and regional spelling. Hesitation sounds and a spoken
-"period" written as ".." are removed before the model sees the transcript, and
-a transcript of only hesitation sounds is not sent at all. The read system
+as" spellings (10) and regional spelling. A spoken "period" written as ".." becomes "." before the model sees the
+transcript. In English, hesitation sounds are removed first and a transcript
+of only hesitation sounds is not sent at all; in other languages "um" and
+"er" can be words, so the model decides. The read system
 prompt is saved next to the model (`prefix-<hash>.state`) and restored for
 the next dictation, so only the dictation itself is read.
 

@@ -52,7 +52,7 @@ public enum PromptOnDevice {
     /// small model.
     public static func user(raw: String, customRules: String?, vocabulary: [String],
                             spellings: [(wrong: String, right: String)], spelling: String?,
-                            appName: String?) -> String {
+                            appName: String?, english: Bool) -> String {
         var parts: [String] = []
         if let spelling { parts.append(spelling) }
         if let customRules, !customRules.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -66,24 +66,30 @@ public enum PromptOnDevice {
             parts.append("Heard as: " + spellings.prefix(10).map { "\"\(line($0.wrong))\" means \"\(line($0.right))\"." }.joined(separator: " "))
         }
         if let appName { parts.append("The text goes into \(line(appName)).") }
-        parts.append("RAW: \(prepared(raw))")
+        parts.append("RAW: \(prepared(raw, english: english))")
         return parts.joined(separator: "\n\n")
     }
 
     /// RAW with what a small model often leaves in removed first: hesitation
     /// sounds, and the ".." a speech model writes for a spoken "period".
-    /// Only standalone words go, so "Uhura" or "summer" stay.
-    public static func prepared(_ raw: String) -> String {
-        var text = raw.replacingOccurrences(of: #"\b(?:u+m+|u+h+|e+r+m*|a+h+|h+m+)\b[,.]?\s*"#, with: "",
-                                            options: [.regularExpression, .caseInsensitive])
+    /// Only standalone words go, so "Uhura" or "summer" stay, and only in
+    /// English: "um" and "er" are words in German and Dutch.
+    public static func prepared(_ raw: String, english: Bool) -> String {
+        var text = raw
+        if english {
+            text = text.replacingOccurrences(of: #"\b(?:u+m+|u+h+|e+r+m*|a+h+|h+m+)\b[,.]?\s*"#, with: "",
+                                             options: [.regularExpression, .caseInsensitive])
+        }
         text = text.replacingOccurrences(of: #"\s*\.\.(?!\.)"#, with: ".", options: .regularExpression)
         return text.trimmingCharacters(in: .whitespaces)
     }
 
     /// RAW holds only hesitation sounds, which speech models also write as
     /// "hum", "hun" or "mm": there is no speech to write, and the model is
-    /// not asked. Numbers count as speech, so "10:30" is written.
-    public static func isOnlyHesitation(_ raw: String) -> Bool {
+    /// not asked. Numbers count as speech, so "10:30" is written. Other
+    /// languages are left to the model.
+    public static func isOnlyHesitation(_ raw: String, english: Bool) -> Bool {
+        guard english else { return false }
         let words = raw.lowercased().split { !$0.isLetter && !$0.isNumber }
         let sounds: Set<String> = ["um", "umm", "uh", "uhh", "er", "erm", "ah", "hmm", "hm", "mm", "mmm", "hum", "hun", "oh"]
         return words.allSatisfy { sounds.contains(String($0)) }
