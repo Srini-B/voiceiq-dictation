@@ -35,6 +35,26 @@ repository's Apache 2.0 license. See `App/Resources/Sounds/ATTRIBUTION.md`.
 
 ## Vendored libraries
 
+### llama.cpp
+
+- https://github.com/ggml-org/llama.cpp, tag `b12633` (commit
+  `9c10c94e16ebc4f3ed7c06264a93bf7e019c3f26`), built as static libraries in
+  `VoiceIQCore/Vendor/llama/llama.xcframework` by `build.sh` next to it
+  (llama and ggml only).
+- License: MIT, Copyright (c) 2023-2026 The ggml authors. The full text is in
+  `VoiceIQCore/Vendor/llama/LICENSE`.
+
+### Optional LFM3-Omni-2B model
+
+- LFM3-Omni-2B by Liquid AI, GGUF build: https://huggingface.co/LiquidAI/LFM3-Omni-2B-GGUF,
+  revision `d508b88f08a5b4286f2d2805a6a8d69a0ff44c72`, file
+  `LFM3-Omni-2B-Q4_K_M.gguf`.
+- License: LFM Open License v1.0 (https://huggingface.co/LiquidAI/LFM3-Omni-2B/blob/main/LICENSE):
+  free for personal and non-commercial use; commercial use only by entities
+  below US$10 million annual revenue.
+- VoiceiQ downloads the file unmodified, on explicit request. Weights are not
+  bundled with the app. The file hash is in `LocalWriterManifest.swift`.
+
 ### Optional Fluid Speech Mini model
 
 - Fluid Speech Mini by FluidVoice: https://huggingface.co/FluidVoice-Labs/fluid-speech-mini-coreml, revision `d81c3160dfe5a5e1f8f7267164a07d30617a3a1a` (https://fluidvoice.com/labs/fluid-speech-mini).

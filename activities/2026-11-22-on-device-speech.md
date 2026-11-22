@@ -68,3 +68,48 @@ On a cloud Mac (macOS 27.2, Xcode 27.2):
 Not verified: the signed and notarized Mac release (no Developer ID on the
 cloud Mac), the Mac app end to end through the helper, and a real iPhone
 (cold Core ML load, RAM line, background warm-up).
+
+## LFM3-Omni-2B as the on-device writer
+
+Later the same day cyron chose LFM3-Omni-2B (Liquid AI) instead of Ripple and
+Splash, as the on-device "all-round" model, offered only on devices with 6 GB
+of RAM or more and loaded only while it works.
+
+Decisions:
+
+- Writing rules and notes becomes Gemini, On device or Off. On device is
+  offered on the Mac and on iPhone/iPad with 6 GB or more and an A13 or
+  later; below that the row offers Gemini and Off.
+- Not used for transcription: as a speech model it took 3.4–4 s per clip
+  (Fluid Speech 0.25 s), misheard names and kept fillers.
+- Runtime: llama.cpp `b12633` with the Q4_K_M GGUF (1.1 GB). MLX and ONNX were
+  not used: one runtime and one file serve both platforms, and iOS needs the
+  CPU in the background. The xcframework is built by
+  `VoiceIQCore/Vendor/llama/build.sh` and committed (57 MB), as with
+  CVoiceIQAEC, because llama.cpp's own has no Simulator slice.
+- BLAS (Accelerate) is off in that build. With it, a restored system prompt
+  changed the answer, and the iOS Simulator read prompts at 36 tokens/s (38 s
+  for one dictation). Without it, with the dot-product kernels, the app wrote
+  the same dictation in 0.9–3.2 s, and restored and freshly read prompts give
+  the same answer.
+- A compact prompt (`PromptOnDevice`, about 900 tokens) replaces `PromptV1`
+  (about 9,400) for the 2B model. Fillers and ".." are removed before the
+  model sees the transcript; filler-only dictations are not sent.
+- On the Mac the writer runs in a helper started per request; on iOS in the
+  app. A writer waits for any speech-model warm-up, so two models are never
+  loaded together.
+- Licence: LFM Open License v1.0. Personal and non-commercial use is free;
+  nothing limits this app.
+
+Verification (cloud Mac):
+
+- `swift test`: 158 tests, 0 failures. Mac and iOS Simulator builds succeed;
+  the Mac helper links llama.
+- iOS Simulator app: LFM3-Omni-2B downloaded from its Settings row (progress,
+  1.1 GB, delete); keyboard dictations with Fluid Speech Pro and the writer
+  On device were inserted written (list, email, collapsed self-correction).
+- Per-combination memory, speed and quality against Gemini are in
+  [docs/ON_DEVICE.md](../docs/ON_DEVICE.md).
+
+Not verified: a real iPhone (CPU speed, memory limits while in the
+background) and a real Mac GPU; this VM's GPU is slower than its CPU.

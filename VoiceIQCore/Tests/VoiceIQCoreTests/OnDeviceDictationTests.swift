@@ -43,5 +43,20 @@ final class OnDeviceDictationTests: XCTestCase {
         XCTAssertEqual(LocalSpeechModel.suggested(physicalMemory: 3_900_000_000), .parakeet)
         XCTAssertEqual(LocalSpeechModel.suggested(physicalMemory: 5_700_000_000), .fluidSpeechPro)
         XCTAssertEqual(LocalSpeechModel.suggested(physicalMemory: 8_000_000_000), .fluidSpeechPro)
+        XCTAssertFalse(LocalWriterSupport.isOffered(physicalMemory: 3_900_000_000))
+        XCTAssertTrue(LocalWriterSupport.isOffered(physicalMemory: 5_700_000_000))
+    }
+
+    /// Hesitation sounds and a spoken "period" written as ".." are removed
+    /// before the on-device writer sees RAW; words that only contain those
+    /// sounds stay, and a dictation of nothing but hesitation is not sent.
+    func testOnDeviceWriterInputDropsHesitationOnly() {
+        XCTAssertEqual(PromptOnDevice.prepared("Um, tell Uhura the summer plan .. Uh thanks .."),
+                       "tell Uhura the summer plan. thanks.")
+        XCTAssertTrue(PromptOnDevice.isOnlyHesitation("Um, uh, hun."))
+        XCTAssertFalse(PromptOnDevice.isOnlyHesitation("Um, send it."))
+        XCTAssertEqual(PromptOnDevice.text(fromAnswer: #"{"text": "Dear Priya,\n\nThanks."}"#), "Dear Priya,\n\nThanks.")
+        XCTAssertEqual(PromptOnDevice.text(fromAnswer: #"{"text": "\#(PromptV1.noSpeechToken)"}"#), "")
+        XCTAssertNil(PromptOnDevice.text(fromAnswer: "Here is the cleaned text"))
     }
 }

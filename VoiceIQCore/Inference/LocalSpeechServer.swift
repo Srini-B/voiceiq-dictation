@@ -63,6 +63,14 @@ private actor HelperLifetime {
             } catch {
                 return .meetingFailed(error.localizedDescription)
             }
+        case .write(let request):
+            await session?.stop()
+            session = nil
+            do {
+                return .written(try LocalWriterJob.run(request, isCancelled: { false }))
+            } catch {
+                return .writeFailed(error.localizedDescription)
+            }
         }
     }
 }

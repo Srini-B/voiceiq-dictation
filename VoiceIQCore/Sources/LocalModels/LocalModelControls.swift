@@ -72,6 +72,23 @@ public struct LocalMeetingControls: View {
     }
 }
 
+/// The on-device writer's row, offered while it writes on-device
+/// transcripts and notes. Devices that do not offer it show nothing.
+@MainActor
+public struct LocalWriterControls: View {
+    private let offered: Bool
+
+    public init(offered: Bool) {
+        self.offered = offered
+    }
+
+    public var body: some View {
+        if LocalWriterSupport.isAvailable {
+            LocalModelRow(store: .writer, offered: offered, selection: nil)
+        }
+    }
+}
+
 @MainActor
 private struct LocalModelRow: View {
     @ObservedObject var store: LocalModelStore

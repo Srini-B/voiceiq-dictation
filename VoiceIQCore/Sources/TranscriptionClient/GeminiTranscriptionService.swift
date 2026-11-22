@@ -1,6 +1,7 @@
 import AVFoundation
 import Foundation
 import VoiceIQBridge
+import VoiceIQSpeech
 
 /// The dictation pipeline.
 ///
@@ -17,10 +18,14 @@ import VoiceIQBridge
 public struct GeminiTranscriptionService: TranscriptionServicing {
     let client: GeminiClient
     let settings: SettingsStore
+    /// The on-device writer, for "Writing rules" set to On device. Nil where
+    /// the app does not link it (tests).
+    let localWriter: LocalWriteRunner?
 
-    public init(client: GeminiClient, settings: SettingsStore = SettingsStore()) {
+    public init(client: GeminiClient, settings: SettingsStore = SettingsStore(), localWriter: LocalWriteRunner? = nil) {
         self.client = client
         self.settings = settings
+        self.localWriter = localWriter
     }
 
     public func transcribe(audioURL: URL, durationSeconds: Double, context: DictationContext) async throws -> TranscriptionResult {
@@ -94,18 +99,23 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
         return TranscriptionResult(rawTranscript: written, cleanedTranscript: text, modelID: modelID)
     }
 
-    /// Writes an on-device transcript by the writing rules with Gemini, when
-    /// the user lets text go to Gemini and a key is stored. Otherwise, or
-    /// when the request fails, the transcript is inserted as transcribed. The
-    /// dictionary's replacement rules apply either way. A transcript with no
-    /// words, or one Gemini finds holds no speech (only "um" and "uh"), is
-    /// an empty dictation, as a Gemini transcription of the audio would be.
+    /// Writes an on-device transcript by the writing rules: with Gemini when
+    /// the user lets text go to Gemini and a key is stored, or with the
+    /// on-device writer when they picked it and it is downloaded. Otherwise,
+    /// or when writing fails, the transcript is inserted as transcribed; an
+    /// on-device choice never falls back to Gemini. The dictionary's
+    /// replacement rules apply either way. A transcript with no words, or one
+    /// the writer finds holds no speech (only "um" and "uh"), is an empty
+    /// dictation, as a Gemini transcription of the audio would be.
     public func write(_ transcript: TranscriptionResult, context: DictationContext) async throws -> TranscriptionResult {
         let rules = DictionaryStore().replacementRules()
         let raw = transcript.cleanedTranscript
         guard !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw TranscriptionError.emptyTranscript }
         var asTranscribed = transcript
         asTranscribed.cleanedTranscript = ReplacementEngine.apply(rules, to: raw)
+        if settings.cleanupSource == .onDevice {
+            return try await writeOnDevice(transcript, context: context, rules: rules, fallback: asTranscribed)
+        }
         guard settings.cleanupSource == .gemini, KeychainStore.loadAPIKey() != nil else { return asTranscribed }
         let config = settings.geminiConfig
         let prompt = dictationPrompt(context: context, transcript: raw)
@@ -124,6 +134,24 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
             try Task.checkCancellation()
             Log.transcription.error("Writing rules skipped for an on-device transcript: \(String(describing: error), privacy: .public)")
             return asTranscribed
+        }
+    }
+
+    private func writeOnDevice(_ transcript: TranscriptionResult, context: DictationContext,
+                               rules: [ReplacementEngine.Rule], fallback: TranscriptionResult) async throws -> TranscriptionResult {
+        guard let localWriter, await LocalWriter.isReady else { return fallback }
+        do {
+            let written = try await LocalWriter.dictation(raw: transcript.cleanedTranscript, context: context, runner: localWriter)
+            guard !written.isEmpty else { throw TranscriptionError.emptyTranscript }
+            return TranscriptionResult(rawTranscript: transcript.rawTranscript,
+                                       cleanedTranscript: ReplacementEngine.apply(rules, to: written),
+                                       modelID: "\(transcript.modelID)+lfm3-omni-2b/writing-rules")
+        } catch TranscriptionError.emptyTranscript {
+            throw TranscriptionError.emptyTranscript
+        } catch {
+            try Task.checkCancellation()
+            Log.transcription.error("On-device writing skipped: \(String(describing: error), privacy: .public)")
+            return fallback
         }
     }
 

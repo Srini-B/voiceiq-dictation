@@ -125,7 +125,9 @@ typical dictation is a few seconds of audio. VoiceiQ itself is free and has no a
 Every dictation is one call: the model hears the recording and writes the
 text, with any screenshots in the same request.
 Dictation and meetings can also be transcribed on device with Fluid Speech
-Pro or Mini by FluidVoice; see [docs/ON_DEVICE.md](docs/ON_DEVICE.md).
+Pro or Mini by FluidVoice, and written by the writing rules (with meeting
+notes) on device with LFM3-Omni-2B by Liquid AI; see
+[docs/ON_DEVICE.md](docs/ON_DEVICE.md).
 Settings → Advanced can pin other model names ("Dictation model" and
 "Meeting model").
 

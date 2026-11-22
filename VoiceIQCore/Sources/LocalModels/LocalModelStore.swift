@@ -48,6 +48,10 @@ public final class LocalModelStore: ObservableObject {
     /// Fluid Speech Mini; this model only tells the speakers apart.
     public static let speakerDiarizer = LocalModelStore(manifest: .speakerDiarizer, displayName: "Speaker Separation (pyannote community-1)")
 
+    /// LFM3-Omni-2B, which writes on-device transcripts and meeting notes.
+    public static let writer = LocalModelStore(manifest: .writer, displayName: LocalWriterSupport.displayName,
+                                               supported: LocalWriterSupport.isAvailable)
+
     public static func store(for model: LocalSpeechModel) -> LocalModelStore {
         switch model {
         case .parakeet: return parakeet
@@ -71,10 +75,10 @@ public final class LocalModelStore: ObservableObject {
         self.init(manifest: model.manifest, displayName: model.displayName)
     }
 
-    private init(manifest: LocalModelManifest, displayName: String) {
+    private init(manifest: LocalModelManifest, displayName: String, supported: Bool = LocalModelSupport.isAvailable) {
         self.displayName = displayName
         self.manifest = manifest
-        guard LocalModelSupport.isAvailable else {
+        guard supported else {
             state = .unsupported
             return
         }

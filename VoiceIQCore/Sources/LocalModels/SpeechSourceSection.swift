@@ -31,26 +31,27 @@ public struct SpeechSourceSection<Header: View>: View {
                 meetingSource = $0
                 settings.setMeetingSource($0)
             }))
-            if dictationSource == .onDevice || meetingSource == .onDevice {
+            if anyOnDevice {
                 Picker("Writing rules and notes", selection: Binding(get: { cleanupSource }, set: {
                     cleanupSource = $0
                     settings.setCleanupSource($0)
                 })) {
-                    ForEach(CleanupSource.allCases) { Text($0.displayName).tag($0) }
+                    ForEach(CleanupSource.offered) { Text($0.displayName).tag($0) }
                 }
                 .sourcePickerStyle()
             }
             LocalModelControls(localEnabled: dictationSource == .onDevice, meetingsLocal: meetingSource == .onDevice,
                                selection: $localModel)
             LocalMeetingControls(meetingsLocal: meetingSource == .onDevice)
+            LocalWriterControls(offered: anyOnDevice && cleanupSource == .onDevice)
         } header: {
             header
         } footer: {
             VStack(alignment: .leading, spacing: 4) {
                 LocalModelFooter(localEnabled: dictationSource == .onDevice, selection: localModel)
                 LocalMeetingFooter(enabled: meetingSource == .onDevice, model: localModel)
-                if dictationSource == .onDevice || meetingSource == .onDevice {
-                    Text(cleanupSource == .gemini ? Self.geminiWrites : "Nothing leaves this \(device): dictations go in as transcribed, with your Dictionary's replacements, and meetings keep their transcript with speaker labels but no notes.")
+                if anyOnDevice {
+                    Text(cleanupNote)
                 }
             }
         }
@@ -63,6 +64,16 @@ public struct SpeechSourceSection<Header: View>: View {
             case "onDeviceSpeechModel": localModel = settings.localSpeechModel
             default: break
             }
+        }
+    }
+
+    private var anyOnDevice: Bool { dictationSource == .onDevice || meetingSource == .onDevice }
+
+    private var cleanupNote: String {
+        switch cleanupSource {
+        case .gemini: return Self.geminiWrites
+        case .onDevice: return "\(LocalWriterSupport.displayName) writes on-device transcripts by your writing rules and writes meeting notes on this \(device), so nothing leaves it. It loads only while it writes. Until it is downloaded, dictations go in as transcribed."
+        case .none: return "Nothing leaves this \(device): dictations go in as transcribed, with your Dictionary's replacements, and meetings keep their transcript with speaker labels but no notes."
         }
     }
 

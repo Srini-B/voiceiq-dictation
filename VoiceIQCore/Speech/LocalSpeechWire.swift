@@ -8,6 +8,8 @@ public enum ParakeetCommand: Codable, Sendable {
     /// A whole saved meeting, sent once to a helper the client spawns for it
     /// and kills after the reply.
     case meeting(LocalMeetingRequest)
+    /// One on-device writer generation, sent the same way as a meeting.
+    case write(LocalWriteRequest)
 }
 
 public enum ParakeetReply: Codable, Sendable {
@@ -18,6 +20,8 @@ public enum ParakeetReply: Codable, Sendable {
     case transcript(LocalSpeechOutput?)
     case meeting(LocalMeetingResult)
     case meetingFailed(String)
+    case written(LocalWriteResult)
+    case writeFailed(String)
 }
 
 public enum ParakeetWire {

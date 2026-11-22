@@ -49,13 +49,14 @@ final class AppModel: ObservableObject {
         FileLayout.removeStaleRenders()
         SettingsStore().removeRetiredSettingsOnce()
         let client = GeminiClient(apiKey: { KeychainStore.loadAPIKey() })
-        transcription = GeminiTranscriptionService(client: client)
+        transcription = GeminiTranscriptionService(client: client, localWriter: LocalSpeechInference.write)
         historyStore = try? HistoryStore.standard()
         UsageMeter.store = try? UsageStore.standard()
         meetings = MeetingEngine(
             client: client,
             config: { SettingsStore().geminiConfig },
-            localMeeting: LocalSpeechInference.transcribeMeeting
+            localMeeting: LocalSpeechInference.transcribeMeeting,
+            localWriter: LocalSpeechInference.write
         )
         let inserter = self.inserter
         coordinator = DictationCoordinator(

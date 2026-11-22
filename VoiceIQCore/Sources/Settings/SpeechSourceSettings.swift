@@ -17,11 +17,13 @@ public enum TranscriptionSource: String, CaseIterable, Sendable, Identifiable {
     }
 }
 
-/// Who applies the writing rules to an on-device transcript: Gemini, or
-/// nobody, so the dictation never leaves the device. A Gemini transcript is
-/// always written by the rules in the same request.
+/// Who applies the writing rules to an on-device transcript and writes an
+/// on-device meeting's notes: Gemini, the on-device writer (LFM3-Omni-2B),
+/// or nobody. With the last two the words never leave the device. A Gemini
+/// transcript is always written by the rules in the same request.
 public enum CleanupSource: String, CaseIterable, Sendable, Identifiable {
     case gemini
+    case onDevice
     case none
 
     public var id: String { rawValue }
@@ -29,8 +31,14 @@ public enum CleanupSource: String, CaseIterable, Sendable, Identifiable {
     public var displayName: String {
         switch self {
         case .gemini: return "Gemini"
+        case .onDevice: return "On device"
         case .none: return "Off"
         }
+    }
+
+    /// The choices this device offers: On device needs the writer.
+    public static var offered: [CleanupSource] {
+        allCases.filter { $0 != .onDevice || LocalWriterSupport.isAvailable }
     }
 }
 
@@ -58,7 +66,8 @@ public extension SettingsStore {
     /// Who applies the writing rules to an on-device dictation. Gemini unless
     /// the user turned it off.
     var cleanupSource: CleanupSource {
-        Self.defaults.string(forKey: "cleanupSource").flatMap(CleanupSource.init(rawValue:)) ?? .gemini
+        let stored = Self.defaults.string(forKey: "cleanupSource").flatMap(CleanupSource.init(rawValue:)) ?? .gemini
+        return CleanupSource.offered.contains(stored) ? stored : .gemini
     }
 
     func setCleanupSource(_ source: CleanupSource) {

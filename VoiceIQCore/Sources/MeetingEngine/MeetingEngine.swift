@@ -26,6 +26,8 @@ import VoiceIQSpeech
     private let hasKey: @Sendable () -> Bool
     /// On-device transcription, used when `LocalMeetingTranscriber` is ready.
     private let localMeeting: LocalMeetingRunner?
+    /// The on-device writer, for notes of a meeting kept on device.
+    private let localWriter: LocalWriteRunner?
     private lazy var detector = CallDetector()
     private var mic: MicTap?, system: SystemAudioTap?
     private var currentFolder: URL?, currentMeta: MeetingMeta?
@@ -52,9 +54,9 @@ import VoiceIQSpeech
 
     public init(client: GeminiClient, store: MeetingStore = MeetingStore(), config: @escaping () -> GeminiConfig,
                 hasKey: @escaping @Sendable () -> Bool = { KeychainStore.loadAPIKey() != nil },
-                localMeeting: LocalMeetingRunner? = nil) {
+                localMeeting: LocalMeetingRunner? = nil, localWriter: LocalWriteRunner? = nil) {
         self.client = client; self.store = store; self.config = config
-        self.hasKey = hasKey; self.localMeeting = localMeeting
+        self.hasKey = hasKey; self.localMeeting = localMeeting; self.localWriter = localWriter
         detector.onChange = { [weak self] source in self?.detected(source) }
         failInterruptedRecordings()
     }
@@ -175,8 +177,13 @@ import VoiceIQSpeech
         Task { await UsageMeter.$scope.withValue(UsageScope(activity: .meeting, sessionID: id.uuid.uuidString)) {
             do {
                 try mark(&meta, .summarizing)
-                guard hasKey() else { throw MeetingFailure.noKey }
-                let notes = try await writeNotes(transcript: transcript, meta: meta)
+                let notes: MeetingNotes
+                if SettingsStore().cleanupSource == .onDevice, let localWriter, LocalWriter.isReady {
+                    notes = try await localNotes(transcript: transcript, meta: meta, runner: localWriter)
+                } else {
+                    guard hasKey() else { throw MeetingFailure.noKey }
+                    notes = try await writeNotes(transcript: transcript, meta: meta)
+                }
                 try finish(id: id, meta: &meta, transcript: transcript, notes: notes)
             } catch { saveFailure(id: id, meta: &meta, error: error) }
         } }
@@ -233,12 +240,12 @@ import VoiceIQSpeech
             meta.screenNames = BrowserSpeakers.name(meta.screenNames, transcript: transcript, folder: folder)
             let fromPage = meta.screenNames?.speakers.values.filter { $0.talkSeconds != nil }.count ?? 0
             Log.meeting.info("browser names: \(fromPage, privacy: .public) speakers named")
-            if onDevice, SettingsStore().cleanupSource == .none || !hasKey() {
-                // Nothing leaves the device: the transcript is the result.
-                try finish(id: id, meta: &meta, transcript: transcript, notes: Self.onDeviceNotes(meta: meta))
+            try mark(&meta, .summarizing)
+            if onDevice, let notes = await notesKeptOnDevice(transcript: transcript, meta: meta) {
+                // Nothing leaves the device.
+                try finish(id: id, meta: &meta, transcript: transcript, notes: notes)
                 return
             }
-            try mark(&meta, .summarizing)
             let notes = try await writeNotes(transcript: transcript, meta: meta)
             try finish(id: id, meta: &meta, transcript: transcript, notes: notes)
         } catch { saveFailure(id: id, meta: &meta, error: error) }
@@ -303,16 +310,50 @@ import VoiceIQSpeech
         return try MeetingNotesPrompt.parse(text)
     }
 
+    /// The notes of a meeting transcribed on device, when they must stay on
+    /// it: written by the on-device writer when the user picked it, or the
+    /// transcript-only stub when writing is off, there is no key, or the
+    /// writer is missing or fails. Nil when Gemini writes them.
+    private func notesKeptOnDevice(transcript: [TranscriptSegment], meta: MeetingMeta) async -> MeetingNotes? {
+        switch SettingsStore().cleanupSource {
+        case .gemini:
+            return hasKey() ? nil : Self.onDeviceNotes(meta: meta)
+        case .none:
+            return Self.onDeviceNotes(meta: meta)
+        case .onDevice:
+            guard let localWriter, LocalWriter.isReady else { return Self.onDeviceNotes(meta: meta) }
+            do {
+                return try await localNotes(transcript: transcript, meta: meta, runner: localWriter)
+            } catch {
+                Log.meeting.error("on-device notes failed: \(String(describing: error), privacy: .public)")
+                return Self.onDeviceNotes(meta: meta)
+            }
+        }
+    }
+
+    private func localNotes(transcript: [TranscriptSegment], meta: MeetingMeta, runner: @escaping LocalWriteRunner) async throws -> MeetingNotes {
+        let settings = SettingsStore(), dictionary = DictionaryStore()
+        let context = MeetingNotesPrompt.Context(
+            startedAt: meta.startedAt, durationSeconds: meta.durationSeconds, app: meta.source.map(Self.name),
+            names: meta.speakerNames, screenNames: meta.screenNames, ownerName: settings.meetingOwnerName,
+            vocabulary: dictionary.sanitizedVocabulary(), spellings: dictionary.spellings(),
+            writingRules: settings.customWritingRules)
+        return try await LocalWriter.notes(system: MeetingNotesPrompt.onDeviceSystem,
+                                           user: MeetingNotesPrompt.onDeviceUser(transcript: transcript, context: context),
+                                           runner: runner)
+    }
+
     /// Fewer words than this and the notes model has nothing to work with; it
     /// would write a summary saying so, in whatever language the fragment is.
     static let minimumSummarizableWords = 8
 
-    /// The notes of a meeting transcribed on device with Gemini writing off
-    /// or no key: the transcript is the record. Regenerate notes writes real
-    /// ones once Gemini may.
+    /// The notes of a meeting transcribed on device when nothing wrote them:
+    /// writing off, no Gemini key, or the on-device writer missing or
+    /// failing. The transcript is the record; Regenerate notes writes real
+    /// ones once a writer may.
     static func onDeviceNotes(meta: MeetingMeta) -> MeetingNotes {
         let title = meta.source.map { "\(name($0)) call" } ?? "Meeting"
-        return MeetingNotes(title: title, summary: "Transcribed on device. Notes are written by Gemini; turn on Gemini writing and add a key to get them.",
+        return MeetingNotes(title: title, summary: "Transcribed on device. No notes were written: choose Gemini with a key, or On device with its model downloaded, under Writing rules and notes, then Regenerate notes.",
                             decisions: [], actions: [], notes: [])
     }
 
