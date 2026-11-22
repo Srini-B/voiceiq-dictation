@@ -132,10 +132,6 @@ SOFTWARE.
   `src/dictation/yolo_mode.rs`), the calendar reader
   (`VoiceIQCore/Sources/MeetingEngine/CalendarMeetings.swift`, from
   `src/calendar.rs`) and the sound volume setting (`src/feedback.rs`)
-- Also the check that stops a dictation's text that answers the speaker or
-  adds a preamble (`VoiceIQCore/Sources/FormattingPipeline/HeardGuard.swift`),
-  adapted from the cleanup rejection rules in `src/dictation/apple_cleanup.rs`
-  at `6f0b20c1`, rewritten in Swift
 - License: MIT
 
 ```

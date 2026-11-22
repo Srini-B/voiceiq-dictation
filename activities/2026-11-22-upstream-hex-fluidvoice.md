@@ -76,7 +76,9 @@ and Put Back would fight).
 ## Second batch: the eight ranked items
 
 cyron asked for all eight, with Press Return after pasting as a setting that
-is off by default. Same clean-room rule for FluidVoice.
+is off by default. Same clean-room rule for FluidVoice. The seventh, the
+reply and preamble guard, was built and then removed at cyron's call (below),
+so seven shipped in the PR.
 
 | # | Change | Where | From |
 | --- | --- | --- | --- |
@@ -86,7 +88,6 @@ is off by default. Same clean-room rule for FluidVoice.
 | 4 | Sound volume slider (default stays at the old 90 %) | Mac (iPhone plays no sounds) | Hex |
 | 5 | Press Return after pasting, off by default, every app or chosen apps; Esc after you stop skips it | Mac (the iPhone keyboard is frozen) | Hex |
 | 6 | iPhone microphone: Automatic / iPhone / Bluetooth; the warm session stays on the iPhone's mic | iPhone | Hex |
-| 7 | Reject a result that answers the speaker or adds a preamble | Mac and iPhone | Hex |
 | 8 | Calendar: meeting title and invitees, off until connected | Mac and iPhone | Hex |
 
 ### Decisions
@@ -107,6 +108,14 @@ is off by default. Same clean-room rule for FluidVoice.
 - **Calendar** asks for access only when the switch is turned on; only the
   event's title and invitees are read, and they go to Gemini with the notes
   request.
+- **Reply and preamble guard removed** (cyron). It asked Gemini for a
+  verbatim `heard` field next to `text` (2.83 → 3.06 s mean, 45 → 79 output
+  tokens per dictation, measured on six synthesized dictations) and inserted
+  `heard` when the text looked like an answer. Review found 13 kinds of
+  correct cleanup it rejected (spelled-out words, lists, units, restarted
+  phrases, Chinese and Japanese, …), and the released cleanup already
+  works, so the dictation request and prompt stay exactly as in 0.7.12. The
+  daily upstream watch no longer proposes it.
 - **Not built:** FluidVoice's lazy clipboard "read receipt" for the paste
   check, the Meet "You left the meeting" page check, and Hex's calendar
   reminders before a meeting starts.

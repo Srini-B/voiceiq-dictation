@@ -38,18 +38,13 @@ public actor GeminiClient {
     // MARK: - Calls
 
     /// One dictation in one call: the model hears the recording (FLAC) and
-    /// answers `{"text": ..., "heard": ...}` under `prompt`, which carries
-    /// the writing rules. Without audio, the prompt carries the text to write
-    /// (joining the chunks of a long dictation) and the answer is
-    /// `{"text": ...}`. Screenshots ride along when
+    /// answers `{"text": ...}` under `prompt`, which carries the writing
+    /// rules. Without audio, the prompt carries the text to write (joining the
+    /// chunks of a long dictation). Screenshots ride along when
     /// screen context is on. Returns the text, or "" when the model heard no
     /// speech. Structured output keeps the model's working out of the answer:
     /// with audio attached, gemini-3.8-flash sometimes wrote its re-listening
     /// and drafts as plain text before the result (measured 2026-09-28).
-    ///
-    /// `heard` is the recording word for word. When `HeardGuard` finds that
-    /// the text answers the speaker or adds a preamble, `heard` without its
-    /// fillers is returned instead.
     public func dictate(
         prompt: String,
         audio: Data?,
@@ -58,9 +53,7 @@ public actor GeminiClient {
         endpoint: URL,
         deadline: TimeInterval
     ) async throws -> String {
-        let sentPrompt = audio == nil ? prompt
-            : prompt.replacingOccurrences(of: PromptV1.answerFormat, with: Self.heardAnswerFormat)
-        var parts: [[String: Any]] = [["text": sentPrompt]]
+        var parts: [[String: Any]] = [["text": prompt]]
         parts += images.map { ["inline_data": ["mime_type": "image/jpeg", "data": $0.base64EncodedString()]] }
         if let audio {
             parts.append(["inline_data": ["mime_type": "audio/flac", "data": audio.base64EncodedString()]])
@@ -71,7 +64,7 @@ public actor GeminiClient {
                 "temperature": 0,
                 "thinkingConfig": Self.thinkingConfig(model: model),
                 "responseMimeType": "application/json",
-                "responseJsonSchema": audio == nil ? PromptV1.dictationSchema : Self.heardSchema,
+                "responseJsonSchema": PromptV1.dictationSchema,
             ] as [String: Any],
         ]
         let reply = try await generateContent(body: body, model: model, endpoint: endpoint, deadline: deadline,
@@ -82,42 +75,7 @@ public actor GeminiClient {
             Log.transcription.warning("dictation reply was not the JSON answer")
             throw TranscriptionError.network("malformed_answer")
         }
-        if text.contains(PromptV1.noSpeechToken) { return "" }
-        if let heard = Self.heard(fromJSON: reply), !heard.contains(PromptV1.noSpeechToken),
-           let rule = HeardGuard.rejection(heard: heard, text: ValidationGate.stripArtifacts(text)) {
-            Log.transcription.notice("dictation text rejected (\(rule.rawValue, privacy: .public)), inserting what was heard")
-            return HeardGuard.withoutFillers(heard)
-        }
-        return text
-    }
-
-    /// Replaces `PromptV1.answerFormat` when audio is attached. `text` keeps
-    /// its wording and comes first, so it is written as before; `heard` follows.
-    /// Asking for `heard` first made the model think on 7 of 42 calls (up to
-    /// 56 s); asking for it last added 0.3 s and about 35 output tokens
-    /// (measured 2026-11-22).
-    static let heardAnswerFormat = "Answer with a JSON object with two fields, in this order. \"text\" is the written text and nothing else: no notes, timestamps, drafts, or reasoning. If the recording has no intelligible speech, \"text\" is exactly \(PromptV1.noSpeechToken). \"heard\" is a plain verbatim transcript of the recording: every word as spoken, in order, including fillers and corrections."
-
-    /// `{"text": ..., "heard": ...}`. Gemini writes the fields in
-    /// `propertyOrdering`, not in the order a dictionary happens to serialize.
-    static var heardSchema: [String: Any] {
-        [
-            "type": "object",
-            "properties": ["text": ["type": "string"], "heard": ["type": "string"]],
-            "required": ["text", "heard"],
-            "propertyOrdering": ["text", "heard"],
-        ]
-    }
-
-    /// The `heard` field of a dictation answer, or nil when it is missing.
-    static func heard(fromJSON reply: String) -> String? {
-        var body = reply.trimmingCharacters(in: .whitespacesAndNewlines)
-        if body.hasPrefix("```") {
-            body = body.replacingOccurrences(of: "^```[a-z]*\\s*|\\s*```$", with: "", options: .regularExpression)
-        }
-        guard let data = body.data(using: .utf8),
-              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
-        return object["heard"] as? String
+        return text.contains(PromptV1.noSpeechToken) ? "" : text
     }
 
     /// A conversation: `system`, then alternating user and model turns,

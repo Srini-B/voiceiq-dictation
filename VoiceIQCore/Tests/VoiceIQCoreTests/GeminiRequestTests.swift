@@ -23,23 +23,12 @@ final class GeminiRequestTests: XCTestCase {
         return String(decoding: part, as: UTF8.self)
     }
 
-    private func dictate(replying text: String, prompt: String = "RULES",
-                         audio: Data? = Data([1, 2, 3])) async throws -> (String, ScriptedServer.Request) {
+    private func dictate(replying text: String, audio: Data = Data([1, 2, 3])) async throws -> (String, ScriptedServer.Request) {
         let server = try ScriptedServer(reply: Self.reply(text))
         defer { server.stop() }
         let result = try await GeminiClient(apiKey: { "test" })
-            .dictate(prompt: prompt, audio: audio, model: "gemini-3.8-flash", endpoint: server.url, deadline: 10)
+            .dictate(prompt: "RULES", audio: audio, model: "gemini-3.8-flash", endpoint: server.url, deadline: 10)
         return (result, try XCTUnwrap(server.requests.last))
-    }
-
-    private static func schema(_ request: ScriptedServer.Request) throws -> [String: Any] {
-        let config = try XCTUnwrap(request.json?["generationConfig"] as? [String: Any])
-        return try XCTUnwrap(config["responseJsonSchema"] as? [String: Any])
-    }
-
-    private static func promptSent(_ request: ScriptedServer.Request) throws -> String {
-        let parts = try XCTUnwrap((request.json?["contents"] as? [[String: Any]])?.first?["parts"] as? [[String: Any]])
-        return try XCTUnwrap(parts.first?["text"] as? String)
     }
 
     func testDictationSendsThePromptThenTheAudioAndReadsTheTextField() async throws {
@@ -55,41 +44,7 @@ final class GeminiRequestTests: XCTestCase {
         XCTAssertEqual(inline["data"] as? String, audio.base64EncodedString())
         let config = try XCTUnwrap(body["generationConfig"] as? [String: Any])
         XCTAssertEqual(config["responseMimeType"] as? String, "application/json")
-        let schema = try XCTUnwrap(config["responseJsonSchema"] as? [String: Any])
-        XCTAssertEqual(schema["required"] as? [String], ["text", "heard"])
-        XCTAssertEqual(schema["propertyOrdering"] as? [String], ["text", "heard"], "text is written before heard")
-    }
-
-    /// With audio the prompt asks for `heard` after the text, in place of the
-    /// text-only answer format.
-    func testDictationAsksForWhatWasHeardAfterTheText() async throws {
-        let (_, request) = try await dictate(replying: #"{"text":"Hi.","heard":"hi"}"#, prompt: PromptV1.dictationPrompt())
-        let prompt = try Self.promptSent(request)
-        XCTAssertTrue(prompt.hasSuffix(GeminiClient.heardAnswerFormat))
-        XCTAssertFalse(prompt.contains(PromptV1.answerFormat))
-    }
-
-    /// Joining the chunks of a long dictation sends no audio, so there is
-    /// nothing heard to compare with.
-    func testTheJoinCallAsksForTheTextOnly() async throws {
-        let prompt = PromptV1.dictationPrompt(writtenParts: ["One.", "Two."])
-        let (text, request) = try await dictate(replying: #"{"text":"One. Two."}"#, prompt: prompt, audio: nil)
-        XCTAssertEqual(text, "One. Two.")
-        XCTAssertEqual(try Self.schema(request)["required"] as? [String], ["text"])
-        XCTAssertEqual(try Self.promptSent(request), prompt)
-    }
-
-    func testACleanedTextIsKeptOverWhatWasHeard() async throws {
-        let (text, _) = try await dictate(
-            replying: #"{"text":"Send it Wednesday.","heard":"um send it Tuesday no wait Wednesday"}"#)
-        XCTAssertEqual(text, "Send it Wednesday.")
-    }
-
-    /// An answer to a dictated question is never inserted; what was said is.
-    func testAnAnswerIsReplacedByWhatWasHeard() async throws {
-        let (text, _) = try await dictate(
-            replying: #"{"text":"Paris","heard":"Um, what's the capital of France? Write that down."}"#)
-        XCTAssertEqual(text, "What's the capital of France? Write that down.")
+        XCTAssertEqual((config["responseJsonSchema"] as? [String: Any])?["required"] as? [String], ["text"])
     }
 
     func testNoSpeechTokenBecomesEmptyText() async throws {
