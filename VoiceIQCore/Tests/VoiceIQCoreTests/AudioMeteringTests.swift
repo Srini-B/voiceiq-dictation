@@ -92,4 +92,42 @@ final class AudioMeteringTests: XCTestCase {
         }
         XCTAssertEqual(try! XCTUnwrap(AudioCaptureEngine.meanSquareRoot(of: multi)), 0.25, accuracy: 0.01)
     }
+
+    /// Ten ~10 ms sink buffers must read as the one 100 ms tap buffer they
+    /// replace: the discard gate and the noise floor were tuned on 100 ms RMS.
+    /// A loud 10 ms click followed by quiet must not read as a loud window.
+    func testSmallBuffersAddUpToOneHundredMillisecondWindow() {
+        var window = RMSWindow()
+        var levels: [Float] = []
+        for index in 0..<10 {
+            let rms: Float = index == 0 ? 0.5 : 0.05
+            if let level = window.add(rms: rms, frames: 480, windowFrames: 4_800) { levels.append(level) }
+        }
+        let expected = ((0.5 * 0.5 + 9 * 0.05 * 0.05) / 10 as Float).squareRoot()
+        XCTAssertEqual(levels.count, 1)
+        XCTAssertEqual(levels[0], expected, accuracy: 0.0001)
+        XCTAssertNil(window.flush(), "the window empties once it reports")
+    }
+
+    /// A partial window of at least half a window still reports at the end,
+    /// so a short word counts; a 10 ms click on its own does not.
+    func testPartialWindowFlushesOnlyWhenLongEnough() {
+        var window = RMSWindow()
+        for _ in 0..<5 { XCTAssertNil(window.add(rms: 0.4, frames: 480, windowFrames: 4_800)) }
+        XCTAssertEqual(try XCTUnwrap(window.flush(minimumFrames: 2_400)), 0.4, accuracy: 0.0001)
+        XCTAssertNil(window.add(rms: 0.9, frames: 480, windowFrames: 4_800))
+        XCTAssertNil(window.flush(minimumFrames: 2_400))
+    }
+
+    /// Dropouts between 50 and 250 ms are filled with exactly the missing
+    /// audio; anything shorter is jitter and anything longer is left alone.
+    func testOnlyShortDropoutsArePadded() {
+        let ms: UInt64 = 1_000_000
+        let base: UInt64 = 5_000_000_000
+        XCTAssertEqual(AudioCaptureEngine.paddingFrames(expected: base, actual: base + 49 * ms, sampleRate: 16_000), 0)
+        XCTAssertEqual(AudioCaptureEngine.paddingFrames(expected: base, actual: base + 140 * ms, sampleRate: 16_000), 2_240)
+        XCTAssertEqual(AudioCaptureEngine.paddingFrames(expected: base, actual: base + 250 * ms, sampleRate: 16_000), 4_000)
+        XCTAssertEqual(AudioCaptureEngine.paddingFrames(expected: base, actual: base + 251 * ms, sampleRate: 16_000), 0)
+        XCTAssertEqual(AudioCaptureEngine.paddingFrames(expected: base + 10 * ms, actual: base, sampleRate: 16_000), 0)
+    }
 }

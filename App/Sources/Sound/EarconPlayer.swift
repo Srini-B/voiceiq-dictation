@@ -42,7 +42,7 @@ final class EarconPlayer {
             }
             if let player = try? AVAudioPlayer(contentsOf: url) {
                 player.prepareToPlay()
-                player.volume = 0.9
+                player.volume = volume
                 players[earcon] = player
             }
         }
@@ -71,5 +71,85 @@ final class EarconPlayer {
         guard enabled, let player = players[earcon] else { return }
         player.currentTime = 0
         player.play()
+    }
+
+    /// Plays the start sound after `grace`, unless `retractStart` comes
+    /// first. The wait runs off the main thread, which `engine.start()` can
+    /// block for hundreds of ms on a Bluetooth mic right after the press.
+    func playStart(after grace: TimeInterval) {
+        guard enabled, let player = players[.start] else { return }
+        nonisolated(unsafe) let start = player
+        let token = startGate.arm()
+        DispatchQueue.global(qos: .userInteractive).asyncAfter(deadline: .now() + grace) { [startGate] in
+            // Under the gate's lock, so a cancel either comes before this and
+            // stops it, or after it and sees the sound playing.
+            startGate.fire(token) {
+                start.volume = Self.volume
+                start.currentTime = 0
+                start.play()
+            }
+        }
+    }
+
+    /// Drops a start sound still waiting out its grace, and fades one that
+    /// already sounds: 20 ms instead of a click, then a pause, never stop()
+    /// (see warmOutputRoute).
+    func retractStart() {
+        guard let token = startGate.disarm(), let player = players[.start], player.isPlaying else { return }
+        nonisolated(unsafe) let start = player
+        start.setVolume(0, fadeDuration: 0.02)
+        DispatchQueue.global(qos: .userInteractive).asyncAfter(deadline: .now() + 0.03) { [startGate] in
+            // A newer start owns the player now: leave it alone.
+            startGate.ifStill(token) {
+                start.pause()
+                start.currentTime = 0
+                start.volume = Self.volume
+            }
+        }
+    }
+
+    /// Drops a start sound still waiting, without touching one that plays.
+    func cancelPendingStart() {
+        _ = startGate.disarm()
+    }
+
+    private let startGate = StartGate()
+    nonisolated private static let volume: Float = 0.9
+}
+
+/// Which delayed start sound may still play, and which start owns the player.
+/// Used from a background queue and the main actor.
+private final class StartGate: @unchecked Sendable {
+    private let lock = NSLock()
+    private var counter = 0
+    private var armed: Int?
+
+    func arm() -> Int {
+        lock.lock(); defer { lock.unlock() }
+        counter += 1
+        armed = counter
+        return counter
+    }
+
+    /// Runs `body` once, under the lock, if `token` is still armed.
+    func fire(_ token: Int, _ body: () -> Void) {
+        lock.lock(); defer { lock.unlock() }
+        guard armed == token else { return }
+        armed = nil
+        body()
+    }
+
+    /// Disarms, and returns the latest start's token.
+    func disarm() -> Int? {
+        lock.lock(); defer { lock.unlock() }
+        armed = nil
+        return counter == 0 ? nil : counter
+    }
+
+    /// Runs `body` under the lock if no start came after `token`.
+    func ifStill(_ token: Int, _ body: () -> Void) {
+        lock.lock(); defer { lock.unlock() }
+        guard counter == token else { return }
+        body()
     }
 }
