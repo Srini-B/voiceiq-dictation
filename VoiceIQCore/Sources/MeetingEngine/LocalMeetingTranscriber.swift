@@ -252,6 +252,9 @@ public struct LocalMeetingTranscriber: Sendable {
 /// The running decode, so a model deletion can stop it and wait for it.
 private actor Job {
     private var task: Task<LocalMeetingResult, Error>?
+    /// Set by `cancel`, also before any run starts (a model deleted while the
+    /// mix is written), so no later run reaches the deleted files.
+    private var cancelled = false
 
     /// Core ML work cannot be cancelled, so a run that passes its deadline is
     /// abandoned instead of joined: the caller moves on to the cloud path,
@@ -259,6 +262,7 @@ private actor Job {
     /// fires only in-process (iOS).
     func run(deadline: TimeInterval,
              _ body: @escaping @Sendable () async throws -> LocalMeetingResult) async throws -> LocalMeetingResult {
+        guard !cancelled else { throw CancellationError() }
         let task = Task { try await body() }
         self.task = task
         let settled = OSAllocatedUnfairLock(initialState: false)
@@ -288,6 +292,7 @@ private actor Job {
     }
 
     func cancel() async {
+        cancelled = true
         task?.cancel()
         _ = await task?.result
     }

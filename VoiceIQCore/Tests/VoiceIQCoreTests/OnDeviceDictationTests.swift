@@ -62,4 +62,14 @@ final class OnDeviceDictationTests: XCTestCase {
         XCTAssertEqual(PromptOnDevice.text(fromAnswer: #"{"text": "\#(PromptV1.noSpeechToken)"}"#), "")
         XCTAssertNil(PromptOnDevice.text(fromAnswer: "Here is the cleaned text"))
     }
+
+    /// A meeting too long for the on-device notes keeps its start and end,
+    /// also when one speaker talked through most of it.
+    func testOnDeviceNotesKeepBothEndsOfAnOversizedTurn() {
+        let long = "S1: opening " + String(repeating: "word ", count: 2_000) + "closing remark"
+        let fitted = MeetingNotesPrompt.fitted([long, "S2: final decision"], characters: 2_000)
+        XCTAssertLessThanOrEqual(fitted.count, 2_200)
+        XCTAssertTrue(fitted.contains("S1: opening"))
+        XCTAssertTrue(fitted.contains("S2: final decision"))
+    }
 }

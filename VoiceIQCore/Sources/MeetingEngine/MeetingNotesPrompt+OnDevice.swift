@@ -51,9 +51,15 @@ extension MeetingNotesPrompt {
         return parts.joined(separator: "\n\n")
     }
 
-    static func fitted(_ lines: [String], characters budget: Int) -> String {
-        let all = lines.joined(separator: "\n")
+    static func fitted(_ turns: [String], characters budget: Int) -> String {
+        let all = turns.joined(separator: "\n")
         guard all.count > budget else { return all }
+        // A long uninterrupted turn is cut into pieces, so one turn larger
+        // than the budget cannot leave nothing to keep.
+        let size = max(200, budget / 8)
+        let lines = turns.flatMap { turn in
+            stride(from: 0, to: turn.count, by: size).map { String(turn.dropFirst($0).prefix(size)) }
+        }
         var head: [String] = [], tail: [String] = [], used = 0
         var low = 0, high = lines.count - 1
         while low <= high {
