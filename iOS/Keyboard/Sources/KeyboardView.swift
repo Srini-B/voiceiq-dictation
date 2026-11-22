@@ -53,19 +53,18 @@ struct KeyboardView: View {
             }
         } else {
             VStack(spacing: 6) {
-                Group {
-                    if isLive {
-                        RecordingStrip(model: model)
-                            .frame(height: barHeight)
-                            .background(Capsule().fill(Color(.secondarySystemFill)))
-                            .clipShape(Capsule())
-                    } else {
-                        MicBar(phase: model.phase, waiting: model.waitingForApp, title: micTitle,
-                               height: barHeight, action: model.micTapped)
-                    }
+                if isLive {
+                    // As wide as the key row, so the glow spans the keyboard.
+                    RecordingStrip(model: model)
+                        .frame(height: barHeight)
+                        .background(Capsule().fill(Color(.secondarySystemFill)))
+                        .clipShape(Capsule())
+                } else {
+                    MicBar(phase: model.phase, waiting: model.waitingForApp, title: micTitle,
+                           height: barHeight, action: model.micTapped)
+                        .frame(maxWidth: 340)
+                        .frame(maxWidth: .infinity)
                 }
-                .frame(maxWidth: 340)
-                .frame(maxWidth: .infinity)
 
                 Group {
                     if let notice = model.notice {

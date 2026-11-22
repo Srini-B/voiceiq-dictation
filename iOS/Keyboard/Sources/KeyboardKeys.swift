@@ -66,13 +66,14 @@ struct KeyCap: View {
 /// A UIKit key that matches the SwiftUI keycaps: rounded, raised by a soft
 /// shadow, a shade darker while pressed.
 @MainActor
-func makeUIKitKey(symbol: String) -> UIButton {
+func makeUIKitKey<Button: UIButton>(_ type: Button.Type = UIButton.self, symbol: String) -> Button {
     var config = UIButton.Configuration.plain()
     config.image = UIImage(systemName: symbol, withConfiguration: UIImage.SymbolConfiguration(pointSize: 17, weight: .regular))
     config.baseForegroundColor = .label
     config.background.backgroundColor = KeyboardPalette.keyUIColor
     config.background.cornerRadius = 8
-    let button = UIButton(configuration: config)
+    let button = Button(frame: .zero)
+    button.configuration = config
     button.layer.shadowColor = UIColor.black.cgColor
     button.layer.shadowOpacity = 0.2
     button.layer.shadowRadius = 2
@@ -98,6 +99,23 @@ struct GlobeKey: UIViewRepresentable {
     }
 
     func updateUIView(_ uiView: UIButton, context: Context) {}
+
+    /// The frame SwiftUI gives it, not the button's own wider natural size.
+    func sizeThatFits(_ proposal: ProposedViewSize, uiView: UIButton, context: Context) -> CGSize? {
+        CGSize(width: proposal.width ?? 44, height: proposal.height ?? 42)
+    }
+}
+
+/// VoiceOver's activation sends no touch-down, so a key that acts on
+/// touch-down acts here instead: once, with no repeat.
+final class ActivatableButton: UIButton {
+    var onAccessibilityActivate: (() -> Void)?
+
+    override func accessibilityActivate() -> Bool {
+        guard let onAccessibilityActivate else { return false }
+        onAccessibilityActivate()
+        return true
+    }
 }
 
 /// Acts on press, then repeats while held.
@@ -109,8 +127,9 @@ struct RepeatingKey: UIViewRepresentable {
     func makeCoordinator() -> Coordinator { Coordinator(action: action) }
 
     func makeUIView(context: Context) -> UIButton {
-        let button = makeUIKitKey(symbol: symbol)
+        let button = makeUIKitKey(ActivatableButton.self, symbol: symbol)
         button.accessibilityLabel = label
+        button.onAccessibilityActivate = { [weak coordinator = context.coordinator] in coordinator?.action() }
         button.addTarget(context.coordinator, action: #selector(Coordinator.down), for: .touchDown)
         button.addTarget(context.coordinator, action: #selector(Coordinator.up), for: [.touchUpInside, .touchUpOutside, .touchCancel])
         return button
@@ -118,6 +137,11 @@ struct RepeatingKey: UIViewRepresentable {
 
     func updateUIView(_ uiView: UIButton, context: Context) {
         context.coordinator.action = action
+    }
+
+    /// The frame SwiftUI gives it, not the button's own wider natural size.
+    func sizeThatFits(_ proposal: ProposedViewSize, uiView: UIButton, context: Context) -> CGSize? {
+        CGSize(width: proposal.width ?? 44, height: proposal.height ?? 42)
     }
 
     @MainActor
