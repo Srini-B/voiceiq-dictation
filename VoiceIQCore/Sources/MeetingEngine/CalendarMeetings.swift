@@ -33,7 +33,8 @@ public enum CalendarMeetings {
     /// stays off when access is refused. Returns whether it is on.
     @MainActor
     public static func connect(_ enabled: Bool) async -> Bool {
-        let on = enabled && (isAuthorized || ((try? await store.requestFullAccessToEvents()) ?? false))
+        var on = enabled && isAuthorized
+        if enabled && !on { on = (try? await store.requestFullAccessToEvents()) ?? false }
         SettingsStore().setCalendarForMeetings(on)
         return on
     }
