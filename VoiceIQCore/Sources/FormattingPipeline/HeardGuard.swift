@@ -27,8 +27,8 @@ public enum HeardGuard {
 
     /// The rule `text` breaks against `heard`, or nil when it may be inserted.
     public static func rejection(heard: String, text: String) -> Rule? {
-        let said = words(heard)
-        let written = words(text)
+        let said = soundAlike(words(heard))
+        let written = soundAlike(words(text))
         guard !said.isEmpty, !written.isEmpty else { return nil }
         let writtenSet = Set(written)
         // A word spelled out letter by letter ("capital B, e, e") that the
@@ -210,6 +210,27 @@ public enum HeardGuard {
         guard let scalar = character.unicodeScalars.first?.value else { return false }
         return unspacedScripts.contains { $0.contains(scalar) }
     }
+
+    /// Sound-alikes the rules correct ("your welcome" → "You're welcome")
+    /// read as one word on both sides.
+    static func soundAlike(_ words: [String]) -> [String] {
+        var result: [String] = []
+        var i = 0
+        while i < words.count {
+            if words[i] == "you", i + 1 < words.count, words[i + 1] == "are" {
+                result.append("your")
+                i += 2
+                continue
+            }
+            result.append(homophones[words[i]] ?? words[i])
+            i += 1
+        }
+        return result
+    }
+
+    private static let homophones: [String: String] = [
+        "their": "there", "they're": "there", "it's": "its", "who's": "whose",
+    ]
 
     private static let contractions: [String: [String]] = [
         "i'm": ["i", "am"], "i've": ["i", "have"], "i'll": ["i", "will"], "i'd": ["i", "would"],

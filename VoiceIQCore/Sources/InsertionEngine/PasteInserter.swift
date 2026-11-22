@@ -35,10 +35,7 @@ public final class PasteInserter {
     /// after the text visibly landed (production pass 2, P0: the next dictation's
     /// begin was silently rejected in that window).
     public func paste(_ text: String) async -> Bool {
-        // A paste still inside its restore window (the previous of two queued
-        // dictations) keeps the clipboard until a slow app has read it, and
-        // its restore brings back the user's clipboard for the snapshot below.
-        if let pending = restoreTask { await pending.value }
+        await finishPendingRestore()
         let pasteboard = NSPasteboard.general
         let snapshot = Self.snapshot(pasteboard)
 
@@ -72,6 +69,14 @@ public final class PasteInserter {
             }
         }
         return true
+    }
+
+    /// A paste still inside its restore window (the previous of two queued
+    /// dictations) keeps the clipboard until a slow app has read it, and its
+    /// restore brings back the user's clipboard for the next snapshot. Up to
+    /// `restoreDelay`; at once when nothing is pending.
+    public func finishPendingRestore() async {
+        if let pending = restoreTask { await pending.value }
     }
 
     /// Puts text on the clipboard WITHOUT restore — the tier-3 floor and the

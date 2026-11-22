@@ -55,6 +55,9 @@ final class HeardGuardTests: XCTestCase {
     func testRewordingFromTheRulesPasses() {
         assertPasses("push the same fix to us for both of those screens", "Apply the same fix to both of our screens.")
         assertPasses("I'm gonna send it", "I am going to send it.")
+        assertPasses("your welcome", "You're welcome.")
+        assertPasses("your right", "You're right.")
+        assertPasses("there going to love it", "They're going to love it.")
     }
 
     func testADictatedQuestionWrittenDownPasses() {

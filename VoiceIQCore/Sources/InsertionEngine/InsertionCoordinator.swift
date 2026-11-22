@@ -34,6 +34,9 @@ public struct InsertionCoordinator: TextInserting {
 
     @MainActor
     public func insert(_ text: String, context: DictationContext) async -> InsertionOutcome {
+        // Before the guards, so the frontmost app and the field they check
+        // are still the target after waiting out an earlier paste.
+        await paster.finishPendingRestore()
         // Guard 2: secure input — the transcript stays in History only.
         if SecureInput.isActive {
             Log.insertion.warning("secure input active at insert time — refusing (text in History only)")
