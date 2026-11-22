@@ -257,6 +257,9 @@ public final class EventTapEngine: @unchecked Sendable {
             if keyCode == 36 || keyCode == 76 { // Return, keypad Enter
                 onReturnKeyDown?()
             }
+            #if os(macOS)
+            if keyCode == 53 { ReturnAfterPaste.noteEscape() }
+            #endif
             // A shortcut being recorded is the row's to consume, Esc included.
             guard !ShortcutCapture.isActive else { return Unmanaged.passUnretained(event) }
             lock.lock()

@@ -47,9 +47,22 @@ final class DictationCoordinatorTests: XCTestCase {
     final class FakeInserter: TextInserting {
         var outcome: InsertionOutcome = .inserted
         private(set) var insertedText: String?
+        private(set) var insertedTexts: [String] = []
         func insert(_ text: String, context: DictationContext) async -> InsertionOutcome {
             insertedText = text
+            insertedTexts.append(text)
             return outcome
+        }
+    }
+
+    /// Hands out a different text and delay for each dictation, in order.
+    final class SequencedTranscription: TranscriptionServicing, @unchecked Sendable {
+        private var replies: [(text: String, delayNanos: UInt64)]
+        init(_ replies: [(text: String, delayNanos: UInt64)]) { self.replies = replies }
+        func transcribe(audioURL: URL, durationSeconds: Double, context: DictationContext) async throws -> TranscriptionResult {
+            let reply = await MainActor.run { replies.removeFirst() }
+            try? await Task.sleep(nanoseconds: reply.delayNanos)
+            return TranscriptionResult(rawTranscript: reply.text, cleanedTranscript: reply.text, modelID: "test")
         }
     }
 
@@ -75,7 +88,7 @@ final class DictationCoordinatorTests: XCTestCase {
     }
 
     private func makeCoordinator(
-        transcription: FakeTranscription = FakeTranscription(),
+        transcription: TranscriptionServicing = FakeTranscription(),
         secureInput: Bool = false
     ) -> DictationCoordinator {
         capture = FakeCapture()
@@ -426,6 +439,34 @@ final class DictationCoordinatorTests: XCTestCase {
         await settle()
         XCTAssertEqual(c.state, .done(.inserted), "the in-flight transcript is sacred")
         XCTAssertEqual(inserter.insertedText, "clean")
+    }
+
+    /// A press while the last dictation is still being written starts a new
+    /// one at once, and the texts land in the order they were spoken even
+    /// when the second is written first.
+    func testNewDictationWhileTheLastIsTranscribingInsertsInSpokenOrder() async {
+        let c = makeCoordinator(transcription: SequencedTranscription([
+            ("first", 300_000_000), ("second", 10_000_000),
+        ]))
+        var detachedResults: [DictationCoordinator.DetachedResult] = []
+        c.onDetachedResult = { detachedResults.append($0) }
+        c.handle(.begin)
+        await pump()
+        c.handle(.finalize)
+        for _ in 0..<100 where c.state != .transcribing { await pump() }
+        XCTAssertEqual(c.state, .transcribing)
+
+        XCTAssertTrue(c.handle(.begin), "accepted: the first job moves to the background")
+        await pump()
+        XCTAssertEqual(c.state, .recording(locked: false))
+        XCTAssertTrue(c.hasBackgroundJobs)
+        c.handle(.finalize)
+        await settle()
+
+        XCTAssertEqual(c.state, .done(.inserted))
+        XCTAssertEqual(inserter.insertedTexts, ["first", "second"])
+        XCTAssertEqual(detachedResults, [.outcome(.inserted)])
+        XCTAssertFalse(c.hasBackgroundJobs)
     }
 
     func testCancelDuringInsertingRejectedCleanly() async {

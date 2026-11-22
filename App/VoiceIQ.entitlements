@@ -10,5 +10,9 @@
 	     dictating" (MediaPause). -->
 	<key>com.apple.security.automation.apple-events</key>
 	<true/>
+	<!-- Calendar under Hardened Runtime: meeting titles and invitees, when
+	     the user connects the calendar (CalendarMeetings). -->
+	<key>com.apple.security.personal-information.calendars</key>
+	<true/>
 </dict>
 </plist>

@@ -4,8 +4,10 @@ import Foundation
 /// DictationStateMachine, drives audio → transcription → insertion, and owns the
 /// per-session folder + meta.json writes.
 ///
-/// M2 scope: one session at a time (overlapping in-flight sessions arrive with M3's
-/// async transcription). All state hops through the main actor.
+/// One session records at a time. A press while the previous one is still being
+/// transcribed detaches that job: it finishes in the background and its text is
+/// inserted before the new one's, in spoken order (Hex does the same,
+/// anomalyco/hex, MIT). All state hops through the main actor.
 @MainActor
 public final class DictationCoordinator: ObservableObject {
     // Observable surface for the HUD / status item.
@@ -28,7 +30,23 @@ public final class DictationCoordinator: ObservableObject {
         public var meta: SessionMeta
         /// Peak mic level from capture — silence vs dropped-transcript evidence.
         public var peakLevel: Float = 1.0
+        /// Its place in the insert order, taken once its audio is final.
+        var turn: InsertTurns.Ticket?
     }
+
+    /// How a job that no longer owns the pill ended. The pill belongs to the
+    /// new recording, so the app reports these on their own.
+    public enum DetachedResult: Equatable, Sendable {
+        case outcome(DictationOutcome)
+        case failure(DictationFailure)
+    }
+    public var onDetachedResult: ((DetachedResult) -> Void)?
+    public var hasBackgroundJobs: Bool { !detached.isEmpty }
+
+    /// Jobs still being transcribed after a newer recording took the pill.
+    private var detached: [UUID: Session] = [:]
+    private var detachedTasks: [UUID: Task<Void, Never>] = [:]
+    private let insertTurns = InsertTurns()
 
     /// Below this metered peak the user simply didn't speak (F9b). Scale matches
     /// AudioCaptureEngine's onLevel; whisper-quiet speech peaks well above it.
@@ -184,6 +202,7 @@ public final class DictationCoordinator: ObservableObject {
 
     @discardableResult
     private func beginSession() -> Bool {
+        if state == .transcribing { detachInFlightSession() }
         guard state == .idle || state.isTerminal else {
             Log.session.info("begin ignored: session already active (\(String(describing: self.state), privacy: .public))")
             return false
@@ -274,6 +293,18 @@ public final class DictationCoordinator: ObservableObject {
         }
     }
 
+    /// The job keeps running and inserts in its turn; the state machine and
+    /// the pill move on to the new recording.
+    private func detachInFlightSession() {
+        guard let current = session else { return }
+        detached[current.id] = current
+        detachedTasks[current.id] = inFlightTask
+        inFlightTask = nil
+        session = nil
+        state = .idle
+        Log.session.info("new dictation while \(current.id.uuidString, privacy: .public) is transcribing — it finishes in the background")
+    }
+
     /// The deferred half of beginSession. The session may already be gone by
     /// the time this runs (Esc during warming, a blip release) — starting the
     /// mic for a dead session would record with no session to own the audio.
@@ -345,6 +376,7 @@ public final class DictationCoordinator: ObservableObject {
         // session is in flight must not stop capture or clobber meta.
         guard apply(.finalize) else { return }
         finalizeRequestedAt = Date()
+        session?.context.recordingEndedAt = finalizeRequestedAt
         finishScreenContext()
         // Recording ends at key-up: no listening past it, even mid-word. stop()
         // only collects the buffer the HAL already holds (audio from before
@@ -441,11 +473,17 @@ public final class DictationCoordinator: ObservableObject {
         }
         apply(.audioFinalized)
 
+        let ticket = insertTurns.take()
+        session.turn = ticket
+        self.session = session
         let sessionID = session.id
         let finalizeStartedAt = Date()
-        let finalizeSeconds = finalizeStartedAt.timeIntervalSince(finalizeRequestedAt ?? finalizeStartedAt)
+        let requestedAt = finalizeRequestedAt ?? finalizeStartedAt
+        let finalizeSeconds = finalizeStartedAt.timeIntervalSince(requestedAt)
         let usageScope = UsageScope(activity: .dictation, sessionID: sessionID.uuidString)
         inFlightTask = Task { [weak self] in
+          // Every way out of the job frees the next one's turn.
+          defer { ticket.finish() }
           await UsageMeter.$scope.withValue(usageScope) {
             guard let self else { return }
             do {
@@ -464,7 +502,7 @@ public final class DictationCoordinator: ObservableObject {
                 guard !Task.isCancelled else { return }
                 await self.completeTranscription(
                     sessionID: sessionID, outcome: outcome,
-                    startedAt: self.finalizeRequestedAt ?? finalizeStartedAt, readyAt: readyAt, stages: stages
+                    startedAt: requestedAt, readyAt: readyAt, stages: stages
                 )
             } catch {
                 guard !Task.isCancelled else { return }
@@ -477,51 +515,70 @@ public final class DictationCoordinator: ObservableObject {
     private func completeTranscription(
         sessionID: UUID, outcome: TranscriptionResult, startedAt: Date, readyAt: Date, stages: DictationSteps
     ) async {
-        guard session?.id == sessionID else { return } // stale completion
+        guard let waiting = job(sessionID) else { return } // stale completion
         var stages = stages
-        updateMeta {
+        updateMeta(sessionID) {
             $0.rawTranscript = outcome.rawTranscript
             $0.cleanedTranscript = outcome.cleanedTranscript
             $0.modelID = outcome.modelID
             $0.status = .transcribing
         }
-        apply(.transcriptReady)
+        // Still .transcribing while an earlier job inserts, so a press now
+        // can detach this one too.
+        await waiting.turn?.waitForPrevious()
+        guard !Task.isCancelled, let job = self.job(sessionID) else { return } // cancelled while waiting
+        let isForeground = session?.id == sessionID
+        if isForeground { apply(.transcriptReady) }
 
-        let insertionOutcome = await insertion.insert(outcome.cleanedTranscript, context: session?.context ?? DictationContext())
+        let insertionOutcome = await insertion.insert(outcome.cleanedTranscript, context: job.context)
         let insertedAt = Date()
         let pipelineSeconds = insertedAt.timeIntervalSince(startedAt)
         // From the text being ready, so saving it to History counts here too.
         stages.insert = insertedAt.timeIntervalSince(readyAt)
+        let status: SessionMeta.Status, event: DictationEvent, result: DictationOutcome
         switch insertionOutcome {
-        case .inserted:
-            updateMeta { $0.status = .inserted; $0.pipelineSeconds = pipelineSeconds; $0.steps = stages }
-            apply(.inserted)
-        case .frontmostChanged:
-            updateMeta { $0.status = .awaitingChip; $0.pipelineSeconds = pipelineSeconds; $0.steps = stages }
-            apply(.frontmostChangedAwaitingChip)
-        case .fellBackToClipboard:
-            updateMeta { $0.status = .copiedToClipboard; $0.pipelineSeconds = pipelineSeconds; $0.steps = stages }
-            apply(.insertionFellBackToClipboard)
-        case .blockedSecureField:
-            updateMeta { $0.status = .heldSecure; $0.pipelineSeconds = pipelineSeconds; $0.steps = stages }
-            apply(.insertionBlockedSecure)
+        case .inserted: (status, event, result) = (.inserted, .inserted, .inserted)
+        case .frontmostChanged: (status, event, result) = (.awaitingChip, .frontmostChangedAwaitingChip, .awaitingChip)
+        case .fellBackToClipboard: (status, event, result) = (.copiedToClipboard, .insertionFellBackToClipboard, .copiedToClipboard)
+        case .blockedSecureField: (status, event, result) = (.heldSecure, .insertionBlockedSecure, .heldForSecureField)
         }
+        updateMeta(sessionID) { $0.status = status; $0.pipelineSeconds = pipelineSeconds; $0.steps = stages }
         lastResult = outcome.cleanedTranscript
-        session = nil
-        reportStageTimes(stages, sessionID: sessionID)
+        if session?.id == sessionID {
+            apply(event)
+            session = nil
+        } else {
+            endDetached(sessionID)
+            onDetachedResult?(.outcome(result))
+        }
+        reportStageTimes(stages, sessionID: sessionID, requestedAt: startedAt)
+    }
+
+    /// The session with this id, whether it owns the pill or was detached.
+    private func job(_ id: UUID) -> Session? {
+        session?.id == id ? session : detached[id]
+    }
+
+    private func endDetached(_ id: UUID) {
+        detached[id] = nil
+        detachedTasks[id] = nil
     }
 
     /// One line per dictation from key-up to the result, so a slow one can be
     /// blamed on the mic teardown, the transcript, the writing model or the
     /// typing. History shows the same steps.
-    private func reportStageTimes(_ stages: DictationSteps, sessionID: UUID) {
+    private func reportStageTimes(_ stages: DictationSteps, sessionID: UUID, requestedAt: Date) {
         func ms(_ seconds: TimeInterval?) -> String { seconds.map { "\(Int($0 * 1000))ms" } ?? "-" }
-        let total = finalizeRequestedAt.map { Date().timeIntervalSince($0) }
+        let total: TimeInterval? = Date().timeIntervalSince(requestedAt)
         Log.session.notice("timing \(sessionID.uuidString, privacy: .public): finalize \(ms(stages.finishRecording), privacy: .public), upload \(ms(stages.transcription), privacy: .public), insert \(ms(stages.insert), privacy: .public), key-up to done \(ms(total), privacy: .public)")
         onStageTimes?(stages)
     }
 
     private func failTranscription(sessionID: UUID, error: Error) async {
+        if let job = detached[sessionID] {
+            failDetached(job, error: error)
+            return
+        }
         guard session?.id == sessionID else { return }
         // Empty transcript: silence is judged by AUDIO ENERGY, not duration —
         // a long quiet hold is "no speech", never "Failed" (F9b; dogfood bug).
@@ -569,6 +626,32 @@ public final class DictationCoordinator: ObservableObject {
             session = nil
             return
         }
+        let (failure, code, detail) = Self.classify(error)
+        updateMeta { $0.status = .failed; $0.errorCode = code; $0.errorMessage = detail }
+        apply(.transcriptFailed(failure))
+        session = nil
+    }
+
+    /// A detached job has no pill of its own: a no-speech result is dropped
+    /// quietly, and anything else is kept in History and reported.
+    private func failDetached(_ job: Session, error: Error) {
+        defer { endDetached(job.id) }
+        if case .some(.emptyTranscript) = error as? TranscriptionError, job.peakLevel < Self.silencePeakThreshold {
+            try? FileManager.default.removeItem(at: job.folder)
+            onSessionDiscard?(job.id)
+            return
+        }
+        if case .some(.offline) = error as? TranscriptionError {
+            updateMeta(job.id) { $0.status = .queuedForRetry; $0.errorCode = "offline" }
+            onDetachedResult?(.outcome(.queuedForRetry))
+            return
+        }
+        let (failure, code, detail) = Self.classify(error)
+        updateMeta(job.id) { $0.status = .failed; $0.errorCode = code; $0.errorMessage = detail }
+        onDetachedResult?(.failure(failure))
+    }
+
+    private static func classify(_ error: Error) -> (DictationFailure, String, String?) {
         let failure: DictationFailure
         let code: String
         var detail: String?
@@ -588,9 +671,7 @@ public final class DictationCoordinator: ObservableObject {
         case .safetyBlocked: failure = .safetyBlocked; code = "safety"
         case nil: failure = .network; code = "unknown"
         }
-        updateMeta { $0.status = .failed; $0.errorCode = code; $0.errorMessage = detail }
-        apply(.transcriptFailed(failure))
-        session = nil
+        return (failure, code, detail)
     }
 
     private func cancelSession(hint: String?) {
@@ -690,10 +771,15 @@ public final class DictationCoordinator: ObservableObject {
     }
 
     private func updateMeta(_ mutate: (inout SessionMeta) -> Void) {
-        guard var session else { return }
-        mutate(&session.meta)
-        session.meta.write(to: session.folder)
-        self.session = session
-        onSessionUpdate?(session.meta, session.folder)
+        guard let id = session?.id else { return }
+        updateMeta(id, mutate)
+    }
+
+    private func updateMeta(_ id: UUID, _ mutate: (inout SessionMeta) -> Void) {
+        guard var job = job(id) else { return }
+        mutate(&job.meta)
+        job.meta.write(to: job.folder)
+        if session?.id == id { session = job } else { detached[id] = job }
+        onSessionUpdate?(job.meta, job.folder)
     }
 }

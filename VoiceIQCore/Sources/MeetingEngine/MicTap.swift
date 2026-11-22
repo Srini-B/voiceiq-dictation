@@ -54,6 +54,7 @@ public final class MicTap: @unchecked Sendable {
 
 
     public init(url: URL, device: AudioDeviceID? = nil) { self.url = url; preferred = device }
+    public let sound = SoundClock()
 
     public func start() throws {
         writer = try CAFWriter(url: url, format: target); frames = 0
@@ -165,6 +166,7 @@ public final class MicTap: @unchecked Sendable {
             supplied = true; outStatus.pointee = .haveData; return buffer
         }
         guard status != .error, output.frameLength > 0 else { return }
+        sound.hear(output)
         do { try writer.write(output); frames += Int64(output.frameLength) }
         catch { Log.meeting.error("mic write failed: \(String(describing: error), privacy: .public)") }
     }

@@ -36,6 +36,39 @@ struct MeetingPromptContent: View {
     }
 }
 
+/// The recorded call ended: a countdown to stopping, with Stop now and Keep
+/// recording. FluidVoice asks the same way (altic-dev/FluidVoice).
+struct MeetingEndingContent: View {
+    let until: Date
+
+    var body: some View {
+        HStack(spacing: VoiceIQUI.Spacing.s) {
+            Image(systemName: "phone.down.fill")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(VoiceIQUI.Colors.error)
+            TimelineView(.periodic(from: .now, by: 1)) { context in
+                Text("Meeting ended · Stopping in \(max(0, Int(until.timeIntervalSince(context.date).rounded(.up))))s")
+                    .font(VoiceIQUI.TypeScale.label())
+                    .foregroundStyle(VoiceIQUI.Colors.onSurface)
+                    .monospacedDigit()
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
+            }
+            Button("Stop now") {
+                NotificationCenter.default.post(name: .pillMeetingStopTapped, object: nil)
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.small)
+            .tint(VoiceIQUI.Colors.primary)
+            .accessibilityLabel("Stop recording now and make meeting notes")
+            Button("Keep recording") {
+                NotificationCenter.default.post(name: .pillMeetingKeepTapped, object: nil)
+            }
+            .controlSize(.small)
+        }
+    }
+}
+
 /// Recording: elapsed time, working bars, and Stop.
 /// The timer is a `TimelineView` over the start date, so no published tick is needed.
 struct MeetingRecordingContent: View {

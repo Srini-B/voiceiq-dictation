@@ -77,7 +77,7 @@ final class VoiceSession: ObservableObject {
             }
             return
         }
-        try audio.start(preferBuiltInMic: MobileSettings.preferBuiltInMic)
+        try audio.start()
         isActive = true
         startedByActionButton = fromActionButton
         if fromActionButton { activity.start(activityState) }
@@ -125,6 +125,7 @@ final class VoiceSession: ObservableObject {
         case .recording:
             cancelWarmEnd()
         case .warm:
+            audio.useKeepAliveInput()
             becameIdle()
         default:
             break
@@ -170,8 +171,11 @@ final class VoiceSession: ObservableObject {
         warmUntil = nil
     }
 
-    func setPreferBuiltInMic(_ prefer: Bool) {
-        audio.setPreferBuiltInMic(prefer)
+    /// A dictation is about to start its capture: move to the input
+    /// Settings › Dictation › Microphone picks. It returns to the iPhone's
+    /// mic when the dictation is back to `.warm`.
+    func useDictationInput() {
+        audio.useDictationInput(MobileSettings.microphoneChoice)
     }
 
     // MARK: - Results for the keyboard

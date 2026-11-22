@@ -56,8 +56,11 @@ final class AppModel: ObservableObject {
             config: { SettingsStore().geminiConfig }
         )
         let inserter = self.inserter
+        let session = self.session
         coordinator = DictationCoordinator(
+            // Called once per dictation, before its capture engine starts.
             audioFactory: {
+                session.useDictationInput()
                 #if DEBUG
                 if let simulated = SimulatedMicrophone.make() { return simulated }
                 #endif

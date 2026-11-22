@@ -255,6 +255,8 @@ public struct MeetingMeta: Codable, Equatable, Sendable, Identifiable {
     /// The typed names the current notes were written with. Nil for notes
     /// written before this was kept: as if written with none.
     public var notesSpeakerNames: [String: String]?
+    /// The calendar event that was on when the recording started, if the calendar is connected.
+    public var calendarEvent: CalendarMeetings.Event?
 
     /// Speakers were named, renamed or cleared since the notes were written,
     /// so the notes may credit the wrong people.

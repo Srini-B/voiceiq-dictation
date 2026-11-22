@@ -92,6 +92,28 @@ during the quiet time. FluidVoice holds back a dismissed app the same way.
 
 VoiceiQ's own processes never count.
 
+**When the call ends (Mac).** A recording started from a detected call
+watches for its end (`MeetingEngine.watchForCallEnd`, every 5 s). Once none
+of the call's processes plays or captures sound
+(`CallProcesses.isRunningAudio`) for 20 s, and neither track has carried
+sound above about −40 dBFS for 45 s (`SoundClock`), the pill shows "Meeting
+ended · Stopping in 30s" with Stop now and Keep recording. At zero the
+recording stops and the notes are made as usual. The call coming back
+cancels the countdown, and Keep recording holds until the call comes back
+and ends again. A recording started by hand is never stopped. The rules
+follow FluidVoice's; a browser call ends only when the browser plays no
+other sound.
+
+**Calendar (Mac and iPhone).** With **Use calendar for meeting notes** on
+(off by default; turning it on asks for calendar access), a recording takes
+the calendar event it falls in: an event that started before it or starts
+within 10 minutes, not all-day, cancelled, free or declined, with other
+people invited or a Zoom, Meet, Teams, Webex or Slack link
+(`CalendarMeetings.event(at:)`). Its title shows in the list until the notes
+have one, and the notes request gets the title and up to 30 invitees' names
+for the title and name spellings (`MeetingMeta.calendarEvent`). Hex reads
+the calendar the same way.
+
 WebKit's XPC services (`com.apple.WebKit.*`, such as "Safari Graphics and
 Media") are skipped. macOS lists them as running apps, and Safari's GPU
 process captures the mic itself, so it used to win before Safari and the

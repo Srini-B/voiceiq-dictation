@@ -8,13 +8,45 @@ import VoiceIQCore
 enum MobileSettings {
     private static var defaults: UserDefaults { .standard }
 
-    /// Record from the iPhone's microphone even when AirPods are connected, so
-    /// their audio stays in high quality. Default on, like Typeless.
-    static var preferBuiltInMic: Bool {
-        get { defaults.object(forKey: "preferBuiltInMic") as? Bool ?? true }
+    /// What a dictation records from while a headset, car or Bluetooth device
+    /// is connected. `KeepAliveAudio` turns it into an input when each
+    /// dictation starts.
+    enum MicrophoneChoice: String, CaseIterable, Identifiable {
+        /// A wired or USB headset's mic, the car's in CarPlay, otherwise the
+        /// iPhone's. Bluetooth headphones keep playing in full quality.
+        case automatic
+        /// Always the iPhone's own mic.
+        case iPhone
+        /// Bluetooth hands-free mics too (AirPods, headsets, car kits), which
+        /// switch to call audio while dictating.
+        case bluetooth
+
+        var id: String { rawValue }
+        @MainActor var label: String {
+            switch self {
+            case .automatic: return "Automatic"
+            case .iPhone: return UIDevice.current.localizedModel
+            case .bluetooth: return "Bluetooth"
+            }
+        }
+    }
+
+    /// Defaults to Automatic. Before this setting, a Bool `preferBuiltInMic`
+    /// (default on) chose between the iPhone's mic and AirPods: on reads as
+    /// Automatic, off as Bluetooth, until the user picks again.
+    static var microphoneChoice: MicrophoneChoice {
+        get {
+            if let raw = defaults.string(forKey: "microphoneChoice"), let choice = MicrophoneChoice(rawValue: raw) {
+                return choice
+            }
+            if let preferBuiltIn = defaults.object(forKey: "preferBuiltInMic") as? Bool, !preferBuiltIn {
+                return .bluetooth
+            }
+            return .automatic
+        }
         set {
-            defaults.set(newValue, forKey: "preferBuiltInMic")
-            Log.ui.info("setting preferBuiltInMic changed to \(newValue)")
+            defaults.set(newValue.rawValue, forKey: "microphoneChoice")
+            Log.ui.info("setting microphoneChoice changed to \(newValue.rawValue, privacy: .public)")
         }
     }
 

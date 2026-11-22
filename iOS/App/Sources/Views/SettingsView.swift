@@ -124,7 +124,9 @@ struct DictationSettingsView: View {
     @EnvironmentObject private var session: VoiceSession
     private let settings = SettingsStore()
     @State private var customRules = SettingsStore().customWritingRules
-    @State private var builtInMic = MobileSettings.preferBuiltInMic
+    @State private var calendar = SettingsStore().calendarForMeetings && CalendarMeetings.isAuthorized
+    private var calendarDenied: Bool { !calendar && CalendarMeetings.isDenied }
+    @State private var microphone = MobileSettings.microphoneChoice
     @State private var warmWindow = MobileSettings.warmWindow
     @State private var languages = SettingsStore().spokenLanguages
 
@@ -150,11 +152,12 @@ struct DictationSettingsView: View {
                 Text("While the mic is on, the next keyboard tap starts right away. After that, the tap opens VoiceiQ for a moment.")
             }
             Section {
-                Toggle("Use \(UIDevice.current.localizedModel) microphone", isOn: $builtInMic)
-                    .onChange(of: builtInMic) { _, value in
-                        MobileSettings.preferBuiltInMic = value
-                        session.setPreferBuiltInMic(value)
-                    }
+                Picker("Microphone", selection: $microphone) {
+                    ForEach(MobileSettings.MicrophoneChoice.allCases) { Text($0.label).tag($0) }
+                }
+                .onChange(of: microphone) { _, value in MobileSettings.microphoneChoice = value }
+            } footer: {
+                Text("Automatic uses a wired headset's mic, or the car's in CarPlay, and otherwise your \(UIDevice.current.localizedModel)'s, so AirPods keep playing in full quality. \(UIDevice.current.localizedModel) always uses its own mic. Bluetooth also uses AirPods and car kits, which switch to call-quality sound while you dictate.")
             }
             Section {
                 SearchablePicker("Main language", selection: Binding(get: { languages.first ?? "" }, set: {
@@ -170,6 +173,16 @@ struct DictationSettingsView: View {
                 SettingsSectionHeader("Languages")
             } footer: {
                 Text("Dictation is told to expect these languages. Automatic works out the language each time, which can go wrong on a short phrase. Add every other language you speak, whole sentences or mixed in: each is written in its own script, never translated. Notes work out each language by themselves.")
+            }
+            Section {
+                Toggle("Use calendar for notes", isOn: $calendar)
+                    .onChange(of: calendar) { _, enabled in
+                        Task { calendar = await CalendarMeetings.connect(enabled) }
+                    }
+            } footer: {
+                Text(calendarDenied
+                     ? "Calendar access is off. Turn it on in Settings → Privacy & Security → Calendars → VoiceiQ."
+                     : "Notes take the title of the calendar event you're in and the spelling of its invitees' names. Only the event's title and invitees are used.")
             }
             Section {
                 NavigationLink("Custom rules") { CustomRulesView(text: $customRules) }

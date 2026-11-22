@@ -34,6 +34,7 @@ final class MeetingHUDController {
 
     /// The pill state that stands in for the idle dot while a meeting records.
     var restingState: PillState? {
+        if let until = meetings.endingAt { return .meetingEnding(until: until) }
         if case let .recording(_, since) = meetings.phase { return .meetingRecording(since: since) }
         return nil
     }
@@ -46,6 +47,10 @@ final class MeetingHUDController {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] phase in self?.phaseChanged(phase) }
             .store(in: &cancellables)
+        meetings.$endingAt
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] until in self?.endingChanged(until) }
+            .store(in: &cancellables)
 
         let center = NotificationCenter.default
         center.addObserver(forName: .pillMeetingAccepted, object: nil, queue: .main) { [weak self] _ in
@@ -56,6 +61,9 @@ final class MeetingHUDController {
         }
         center.addObserver(forName: .pillMeetingStopTapped, object: nil, queue: .main) { [weak self] _ in
             Task { @MainActor in self?.meetings.stopRecording() }
+        }
+        center.addObserver(forName: .pillMeetingKeepTapped, object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor in self?.meetings.keepRecordingAfterCallEnd() }
         }
     }
 
@@ -101,6 +109,12 @@ final class MeetingHUDController {
         if case .meetingPrompt = hud.model.state { setPill(restingPill()) }
     }
 
+    /// The recorded call ended (a countdown), or the countdown was kept or the call came back.
+    private func endingChanged(_ until: Date?) {
+        guard !dictationIsActive(), case let .recording(_, since) = meetings.phase else { return }
+        setPill(until.map { .meetingEnding(until: $0) } ?? .meetingRecording(since: since))
+    }
+
     private func phaseChanged(_ phase: MeetingPhase) {
         switch phase {
         case let .recording(_, since):
@@ -108,8 +122,11 @@ final class MeetingHUDController {
         case .idle, .failed:
             // Notes are made in the background; the pill is free at once and
             // shows the check only when they are saved.
-            if !dictationIsActive(), case .meetingRecording = hud.model.state {
-                setPill(restingPill())
+            if !dictationIsActive() {
+                switch hud.model.state {
+                case .meetingRecording, .meetingEnding: setPill(restingPill())
+                default: break
+                }
             }
         case .callDetected:
             break

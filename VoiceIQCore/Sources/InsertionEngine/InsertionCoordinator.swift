@@ -53,6 +53,7 @@ public struct InsertionCoordinator: TextInserting {
                                        startField: context.focusedField?.element) {
         case .landed:
             Log.insertion.info("inserted via AX")
+            await ReturnAfterPaste.pressIfWanted(context: context)
             return .inserted
         case .focusElsewhere:
             // PROVEN focus theft — a blind ⌘V would paste into the thief.
@@ -82,6 +83,7 @@ public struct InsertionCoordinator: TextInserting {
             switch await TypingInserter.type(text, mode: mode, targetPID: context.targetPID) {
             case .typed:
                 Log.insertion.info("typed instead of pasting (\(String(describing: mode), privacy: .public))")
+                await ReturnAfterPaste.pressIfWanted(context: context)
                 return .inserted
             case .stopped(let rest):
                 // The user switched apps part way: the rest must not land
@@ -95,11 +97,19 @@ public struct InsertionCoordinator: TextInserting {
             }
         }
 
-        // Tier 2: guarded paste. Note: "true" means the ⌘V was POSTED — there is
-        // no OS-level delivery receipt for synthetic paste (industry-wide floor;
-        // the text also stays recoverable in History).
+        // Tier 2: guarded paste. "true" means the ⌘V was POSTED — there is no
+        // OS-level delivery receipt for synthetic paste, so a readable field is
+        // read back afterwards (PasteCheck) and a certain miss is copied.
+        let before = PasteCheck.focusedReading()
         if await paster.paste(text) {
-            Log.insertion.info("⌘V posted (delivery is best-effort)")
+            Log.insertion.info("⌘V posted")
+            if let before {
+                PasteCheck.watch(element: before.element, before: before.reading, text: text, postedAt: Date()) { [paster] in
+                    paster.copyOnly(text)
+                    NotificationCenter.default.post(name: .voiceIQPasteMissed, object: text)
+                }
+            }
+            await ReturnAfterPaste.pressIfWanted(context: context)
             return .inserted
         }
 

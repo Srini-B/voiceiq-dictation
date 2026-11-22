@@ -37,7 +37,7 @@ RAM gating, model downloads, and the local API/MCP.
 | 9 | F13–F19 can be the dictation key or a shortcut on their own | FluidVoice `33fa5d83` |
 | 10 | ⌘C copies the selected dictation in History | FluidVoice `9e3cea53` |
 
-## Ranked, not built yet
+## Ranked list (built in the second batch, below)
 
 Larger or a product call. In rough order of value:
 
@@ -72,6 +72,44 @@ record" (detection only offers), hold-to-talk (removed on purpose), per-app
 prompts, a 32 MB clipboard-backup cap (the snapshot has to read the data to
 size it, so it saves little), meeting delete to the Trash (iCloud deletes
 and Put Back would fight).
+
+## Second batch: the eight ranked items
+
+cyron asked for all eight, with Press Return after pasting as a setting that
+is off by default. Same clean-room rule for FluidVoice.
+
+| # | Change | Where | From |
+| --- | --- | --- | --- |
+| 1 | Detected call ended: 20 s without the call's sound and 45 s of quiet, then "Meeting ended · Stopping in 30s" with Stop now / Keep recording | Mac | FluidVoice (behaviour) |
+| 2 | Read the field back after ⌘V; a certain miss copies the text and says so | Mac | FluidVoice (behaviour) |
+| 3 | Dictate again while the last one is still being written; texts insert in spoken order | Mac | Hex |
+| 4 | Sound volume slider (default stays at the old 90 %) | Mac (iPhone plays no sounds) | Hex |
+| 5 | Press Return after pasting, off by default, every app or chosen apps; Esc after you stop skips it | Mac (the iPhone keyboard is frozen) | Hex |
+| 6 | iPhone microphone: Automatic / iPhone / Bluetooth; the warm session stays on the iPhone's mic | iPhone | Hex |
+| 7 | Reject a result that answers the speaker or adds a preamble | Mac and iPhone | Hex |
+| 8 | Calendar: meeting title and invitees, off until connected | Mac and iPhone | Hex |
+
+### Decisions
+
+- **Volume default 90 %**, not Hex's 50 %: that was VoiceiQ's fixed level,
+  so nobody's sounds change.
+- **Press Return after pasting is off** (cyron). With no apps chosen it applies
+  everywhere; adding apps limits it.
+- **Concurrent dictation** covers a press while the last dictation is
+  transcribing. The few tens of milliseconds of finalizing and inserting
+  still refuse a press. iPhone dictation is unchanged.
+- **Call end** counts only recordings started from a detected call. A
+  browser call ends only once the browser plays no sound at all, so a
+  YouTube tab keeps the recording going (it can be stopped by hand).
+- **Meetings on iPhone always use the iPhone's mic.** The Meetings screen
+  already says so; the old "prefer built-in mic: off" used to route them to
+  AirPods.
+- **Calendar** asks for access only when the switch is turned on; only the
+  event's title and invitees are read, and they go to Gemini with the notes
+  request.
+- **Not built:** FluidVoice's lazy clipboard "read receipt" for the paste
+  check, the Meet "You left the meeting" page check, and Hex's calendar
+  reminders before a meeting starts.
 
 ## Verification
 
