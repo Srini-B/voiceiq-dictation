@@ -126,8 +126,9 @@ public final class LocalTranscriber: Sendable {
         let (worker, model, id) = (worker, model, id)
         let release: @Sendable () async -> Void = {
             await worker.stop()
-            // Claims taken over from a warm-up cover it until it has stopped.
-            await LocalModelWarmup.finished()
+            // Claims taken over from a warm-up cover it until it has stopped,
+            // even when the caller was cancelled (a new task is not).
+            await Task { await LocalModelWarmup.finished() }.value
             await LocalModelStore.store(for: model).releaseSession(id: id)
             await LocalModelStore.englishTools.releaseSession(id: id)
         }
@@ -177,7 +178,7 @@ public final class LocalTranscriber: Sendable {
         guard !handedOff.withLock({ $0 }) else { return }
         load.cancel()
         await worker.stop()
-        await LocalModelWarmup.finished()
+        await Task { await LocalModelWarmup.finished() }.value
         await LocalModelStore.store(for: model).releaseSession(id: id)
         await LocalModelStore.englishTools.releaseSession(id: id)
     }
