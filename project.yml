@@ -364,6 +364,10 @@ targets:
       - path: iOS/Keyboard/Hex
         includes: ["**/*.hextm", "**/*.tsv", "**/emoji-index-*.txt"]
         buildPhase: resources
+      # The keyboard's strings, where Hex's name its own app.
+      - path: iOS/Keyboard/Resources
+        includes: ["**/*.strings"]
+        buildPhase: resources
 
   VoiceIQLiveActivity:
     type: app-extension

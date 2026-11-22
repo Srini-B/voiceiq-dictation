@@ -1,0 +1,6 @@
+/* Hex's keyboard (iOS/Keyboard/Hex) names its own app where it points to a
+   setting; these name VoiceiQ instead, without changing Hex's files.
+   KeyboardClipboardTracker.allowPasteHint and its announcement. */
+"Settings › Apps › Hex › Paste from Other Apps › Allow" = "Settings › Apps › VoiceiQ › Paste from Other Apps › Allow";
+"To paste without being asked, go to Settings, Apps, Hex, Paste from Other Apps, and choose Allow." = "To paste without being asked, go to Settings, Apps, VoiceiQ, Paste from Other Apps, and choose Allow.";
+"Open Hex" = "Open VoiceiQ";
