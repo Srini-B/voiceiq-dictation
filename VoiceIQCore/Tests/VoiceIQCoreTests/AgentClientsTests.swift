@@ -185,6 +185,13 @@ final class AgentClientsTests: XCTestCase {
         try AgentClient.codex.remove(home: home)
         XCTAssertEqual(try String(contentsOf: codex, encoding: .utf8), subTable)
 
+        let multiline = "[mcp_servers.voiceiq]\ndescription = \"\"\"\nurl = \"\(AgentAPI.mcpURL)\"\n\"\"\"\nurl = \"https://example.com/mcp\"\n"
+        _ = try write(multiline, to: ".codex/config.toml")
+        XCTAssertEqual(AgentClient.codex.status(key: "a", home: home), .unreadable)
+        try AgentClient.codex.install(key: "a", home: home)
+        try AgentClient.codex.remove(home: home)
+        XCTAssertEqual(try String(contentsOf: codex, encoding: .utf8), multiline)
+
         // A quoted name with a space in it is another server.
         let spaced = "[mcp_servers.\"voiceiq \"]\nurl = \"https://example.com/mcp\"\n"
         _ = try write(spaced, to: ".codex/config.toml")

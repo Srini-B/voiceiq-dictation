@@ -124,6 +124,9 @@ public enum AgentClient: String, CaseIterable, Identifiable, Sendable {
                 throw CocoaError(.fileReadCorruptFile)
             }
             guard let block = Self.tomlOurBlock(text) else { return nil }
+            // VoiceiQ never writes multi-line strings, and lines inside one
+            // could pass for its fields.
+            if block.contains("\"\"\"") || block.contains("'''") { throw CocoaError(.fileReadCorruptFile) }
             // Only the table's own `url = ` line, and the Authorization in its
             // `http_headers = { … }` line, as VoiceiQ writes them.
             url = Self.tomlString(#"^\s*"?url"?\s*=\s*"([^"]*)""#, in: block)
