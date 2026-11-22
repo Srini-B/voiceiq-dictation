@@ -98,18 +98,13 @@ public enum LocalModelWarmup {
         }
     }
 
-    /// A dictation is starting on `model` (and the English tools, with
-    /// `tools`): a store holds one session at a time, so it takes those claims
-    /// over from the warm-ups in progress and queued, and its own claim waits
-    /// for them. Claims on other models stay with their warm-ups until those
-    /// stop. The loads keep running, and the
-    /// dictation loads after them (`finished(before:)`), so two model
-    /// compiles never overlap.
-    static func yieldToDictation(model: LocalSpeechModel, tools: Bool) {
-        for entry in [current].compactMap({ $0 }) + pending {
-            if entry.model == model { LocalModelStore.store(for: model).releaseSession(id: entry.id) }
-            if tools { LocalModelStore.englishTools.releaseSession(id: entry.id) }
-        }
+    /// The warm-ups in progress and queued. A starting dictation takes their
+    /// claims on the stores it uses (each holds one session), since its own
+    /// claim waits for them; claims on other stores stay with the warm-ups.
+    /// The loads keep running, and the dictation loads after them
+    /// (`finished(before:)`), so two model compiles never overlap.
+    static var claimIDs: Set<UUID> {
+        Set(([current].compactMap { $0 } + pending).map(\.id))
     }
 
     /// A warm-up or an adopted dictation load is in progress.

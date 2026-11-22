@@ -2,6 +2,13 @@ import XCTest
 @testable import VoiceIQCore
 
 @MainActor
+final class CallCount: @unchecked Sendable {
+    private let lock = NSLock()
+    private var count = 0
+    func add() { lock.lock(); count += 1; lock.unlock() }
+    var value: Int { lock.lock(); defer { lock.unlock() }; return count }
+}
+
 final class DictationCoordinatorTests: XCTestCase {
 
     // MARK: Fakes
@@ -33,7 +40,10 @@ final class DictationCoordinatorTests: XCTestCase {
             .success(TranscriptionResult(rawTranscript: "raw", cleanedTranscript: "clean", modelID: "test"))
         /// Simulates a slow round-trip so tests can act mid-flight.
         var delayNanos: UInt64 = 0
+        /// Audio sent to the cloud transcriber.
+        let audioCalls = CallCount()
         func transcribe(audioURL: URL, durationSeconds: Double, context: DictationContext) async throws -> TranscriptionResult {
+            audioCalls.add()
             if delayNanos > 0 {
                 try? await Task.sleep(nanoseconds: delayNanos)
             }
@@ -156,21 +166,25 @@ final class DictationCoordinatorTests: XCTestCase {
         }
         for writing in [CleanupSource.none, .onDevice] {
             settings.setCleanupSource(writing)
-            let c = makeCoordinator()
+            let cloud = FakeTranscription()
+            let c = makeCoordinator(transcription: cloud)
             c.handle(.begin)
             await pump()
             c.handle(.finalize)
             await settle()
             XCTAssertEqual(c.state, .failed(.validation), "writing \(writing)")
             XCTAssertNil(inserter.insertedText, "writing \(writing)")
+            XCTAssertEqual(cloud.audioCalls.value, 0, "writing \(writing)")
         }
         settings.setCleanupSource(.gemini)
-        let c = makeCoordinator()
+        let cloud = FakeTranscription()
+        let c = makeCoordinator(transcription: cloud)
         c.handle(.begin)
         await pump()
         c.handle(.finalize)
         await settle()
         XCTAssertEqual(c.state, .done(.inserted))
+        XCTAssertEqual(cloud.audioCalls.value, 1)
     }
 
     /// History shows each step of a dictation; the one model call that hears

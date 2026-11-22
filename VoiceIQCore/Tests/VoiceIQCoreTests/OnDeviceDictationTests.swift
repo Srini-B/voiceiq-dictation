@@ -25,6 +25,30 @@ final class OnDeviceDictationTests: XCTestCase {
         XCTAssertEqual(written.modelID, "fluid-speech-pro-local")
     }
 
+    /// History's Retry with Dictation On device and the model unavailable:
+    /// the saved audio reaches Gemini only with Gemini writing.
+    func testRetryWithoutTheModelSendsAudioOnlyWithGeminiWriting() async throws {
+        let settings = SettingsStore()
+        settings.setDictationSource(.onDevice)
+        defer { UserDefaults.standard.removeObject(forKey: "transcriptionSource") }
+        let cloud = DictationCoordinatorTests.FakeTranscription()
+        let retry = OnDeviceFirstTranscription(gemini: cloud, makeSession: { _, _, _, _ in fatalError("no session expected") })
+        let audio = FileManager.default.temporaryDirectory.appendingPathComponent("missing-\(UUID()).caf")
+        for writing in [CleanupSource.none, .onDevice] {
+            settings.setCleanupSource(writing)
+            do {
+                _ = try await retry.transcribe(audioURL: audio, durationSeconds: 3, context: DictationContext())
+                XCTFail("expected onDeviceFailed with writing \(writing)")
+            } catch {
+                XCTAssertEqual(error as? TranscriptionError, .onDeviceFailed)
+            }
+        }
+        XCTAssertEqual(cloud.audioCalls.value, 0)
+        settings.setCleanupSource(.gemini)
+        _ = try await retry.transcribe(audioURL: audio, durationSeconds: 3, context: DictationContext())
+        XCTAssertEqual(cloud.audioCalls.value, 1)
+    }
+
     /// A decode with no words is an empty dictation, judged by the
     /// coordinator like an empty Gemini transcript, not an empty insert.
     func testEmptyTranscriptIsAnEmptyDictation() async {

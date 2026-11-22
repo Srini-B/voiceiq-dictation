@@ -89,14 +89,25 @@ public final class LocalModelStore: ObservableObject {
     /// The verified model folder, or nil when the model is absent, damaged, or
     /// being deleted. `cancel` is called if the model is deleted mid-session;
     /// it must stop all use of the folder before returning.
-    public func acquireSession(id: UUID, cancel: @escaping @Sendable () async -> Void) -> URL? {
-        guard state == .ready, deleteTask == nil, sessions.isEmpty else { return nil }
+    ///
+    /// The store holds one session at a time. Sessions in `replacing` (a
+    /// warm-up the new session takes over) do not count as busy and are
+    /// removed only when this claim succeeds.
+    public func acquireSession(id: UUID, replacing: Set<UUID> = [],
+                               cancel: @escaping @Sendable () async -> Void) -> URL? {
+        guard canAcquire(replacing: replacing) else { return nil }
         guard LocalModelInstaller.isInstalled(manifest) else {
             state = .notDownloaded
             return nil
         }
+        for old in replacing { sessions[old] = nil }
         sessions[id] = cancel
         return manifest.installDirectory
+    }
+
+    /// `acquireSession` would succeed now, short of the install check.
+    func canAcquire(replacing: Set<UUID> = []) -> Bool {
+        state == .ready && deleteTask == nil && sessions.keys.allSatisfy(replacing.contains)
     }
 
     public func releaseSession(id: UUID) {
