@@ -411,7 +411,7 @@ public final class DictationCoordinator: ObservableObject {
         finishScreenContext()
         // Recording ends at key-up: no listening past it, even mid-word. stop()
         // only collects the buffer the HAL already holds (audio from before
-        // key-up, at most one tap buffer away) and tears the graph down, off the
+        // key-up, at most one I/O buffer away) and tears the graph down, off the
         // main actor.
         let engine = capture
         capture = nil

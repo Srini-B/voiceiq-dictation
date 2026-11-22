@@ -69,9 +69,15 @@ dictation that fails before then has none:
 
 `finalize` is key-up to the recording being closed. Recording stops at
 key-up, even mid-word (there is no listening past it since 2026-11-20); what
-remains is collecting the one tap buffer the input already holds, audio from
-before key-up (`tail drained`, at most about 100 ms), then stopping the
-engine and closing the file.
+remains is waiting until the audio captured up to key-up has been written
+(`tail drained`; buffers arrive every ~10 ms at 512 frames and 48 kHz, after
+the input's own latency, capped at 160 ms), then stopping the engine and
+closing the file.
+
+A `mic audio skipped Nms … filled with silence` line means the input dropped
+50 to 250 ms of audio, which a Bluetooth microphone often does as it starts;
+the recording gets that much silence so the words on either side stay apart.
+A longer dropout is logged as `too long to fill` and left as it is.
 
 `writing` covers building the prompt, the writing-model requests and the
 validation gate. Each request attempt inside it has its own `call` line, so

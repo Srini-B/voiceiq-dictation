@@ -13,7 +13,7 @@ import Foundation
 /// unflagged precisely so the calibration data accumulates before the behaviour
 /// that depends on it does.
 public struct NoiseFloorEstimator: Sendable {
-    /// Below this many samples the percentile is meaningless — with tap buffers
+    /// Below this many samples the percentile is meaningless — with levels
     /// arriving at ~10 Hz this is ~0.8s of audio.
     public static let minimumSamples = 8
     /// The floor is the quietest tenth of the session, not the minimum: a single

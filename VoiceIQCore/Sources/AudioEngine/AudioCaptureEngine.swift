@@ -38,11 +38,14 @@ public final class AudioCaptureEngine: AudioCapturing, @unchecked Sendable {
     /// Bluetooth route (measured), which is exactly the window where the first
     /// words are lost, so it must never happen on the critical path.
     private var prewarmedDevice: AudioDeviceID?
-    /// The input format the prepared graph's tap was installed with.
+    /// The input format the prepared graph was built for.
     private var prewarmedFormat: AudioDeviceQuery.InputFormat?
     private var isPrewarmed = false
     /// Parked while stop() waits for the HAL's in-flight buffer to land.
     private var tailWaiter: CheckedContinuation<Void, Never>?
+    /// Host time (ns) of key-up: the waiter resumes once audio up to here is
+    /// written. Guarded by `stateLock`.
+    private var tailUntil: UInt64?
     private var writer: CAFWriter?
     /// The default input at session start — used to DETECT changes, never to pin.
     private var sessionDevice: AudioDeviceID?
@@ -64,9 +67,16 @@ public final class AudioCaptureEngine: AudioCapturing, @unchecked Sendable {
     private var consecutiveWriteFailures = 0
     private var writeFailureReported = false
 
-    // Level metering (throttled to ~30Hz)
-    private var levelAccumulator: Float = 0
-    private var levelSampleCount = 0
+    /// Level metering and the written peak run over 100 ms windows, the size
+    /// the tap used to deliver: the discard gate, the noise floor and the
+    /// waveform were tuned on 100 ms RMS, and the sink's ~10 ms buffers would
+    /// read louder peaks. Write queue only.
+    private var levelWindow = RMSWindow()
+    private var levelWindowFrames = 4_800
+    private var writtenWindow = RMSWindow()
+    /// Host time (ns) the previous buffer's audio ran up to, nil at a new
+    /// graph. Guarded by `stateLock`.
+    private var capturedThrough: UInt64?
     private var peakLevel: Float = 0
     /// The authoritative peak: computed on the WRITE queue from the converted
     /// buffer, which is 16kHz mono Int16 by construction. No hardware change, no
@@ -138,6 +148,10 @@ public final class AudioCaptureEngine: AudioCapturing, @unchecked Sendable {
         noBufferRebuilds = 0
         let generation = startGeneration
         stateLock.unlock()
+        queue.sync {
+            levelWindow = RMSWindow()
+            writtenWindow = RMSWindow()
+        }
         startedClock = startClock
 
         writer = try CAFWriter(url: url, format: targetFormat)
@@ -182,23 +196,27 @@ public final class AudioCaptureEngine: AudioCapturing, @unchecked Sendable {
             self.configObserver = nil
         }
         if !alreadyStopped {
-            // The tap only ever delivers WHOLE buffers (~104ms on this hardware),
-            // so tearing the engine down here discarded everything the HAL had
-            // accumulated since the last callback — measurably the tail of the
-            // user's last word, on every single recording (never-lose-words).
-            // Wait for one more buffer to LAND: a signal, not a sleep, capped so
-            // a dead engine can never stall finalize.
+            // Audio arrives in whole I/O buffers (~10 ms at 512 frames/48 kHz)
+            // after the input's own latency, so tearing the engine down here
+            // discards the end of the user's last word (never-lose-words).
+            // Wait until the audio captured up to key-up has LANDED: a signal,
+            // not a sleep, capped so a dead engine can never stall finalize.
             if engine?.isRunning == true {
+                let keyUp = DispatchTime.now().uptimeNanoseconds
                 let before = withStateLock { framesWritten }
-                await awaitTailBuffer(timeoutSeconds: 0.16)
+                await awaitTail(through: keyUp, timeoutSeconds: 0.16)
                 let recovered = withStateLock { framesWritten } - before
                 if recovered > 0 {
-                    Log.audio.info("tail drained: +\(Double(recovered) / self.targetFormat.sampleRate * 1000, format: .fixed(precision: 0))ms of speech that used to be discarded")
+                    Log.audio.info("tail drained: +\(Double(recovered) / self.targetFormat.sampleRate * 1000, format: .fixed(precision: 0))ms written while stopping, up to key-up")
                 }
             }
             tearDownEngine()
-            // Barrier on the write queue so every queued buffer lands before close.
-            queue.sync {}
+            // Barrier on the write queue so every queued buffer lands before
+            // close. The converter goes inside it: `ingest` reads it there.
+            queue.sync {
+                flushLevelWindows()
+                converter = nil
+            }
             // Only NOW refuse further buffers: setting this before the barrier is
             // what made the barrier a no-op for the tail it was meant to save.
             withStateLock { stopped = true }
@@ -228,10 +246,11 @@ public final class AudioCaptureEngine: AudioCapturing, @unchecked Sendable {
         )
     }
 
-    /// Resolves when the next buffer is written, or when the cap expires —
-    /// whichever comes first. Never resumes twice: the continuation is cleared
-    /// under the lock before it is resumed.
-    private func awaitTailBuffer(timeoutSeconds: Double) async {
+    /// Resolves when audio captured up to `keyUp` is written (any buffer, when
+    /// the input gives no host times), or when the cap expires, whichever
+    /// comes first. Never resumes twice: the continuation is cleared under the
+    /// lock before it is resumed.
+    private func awaitTail(through keyUp: UInt64, timeoutSeconds: Double) async {
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
             stateLock.lock()
             guard !stopped, tailWaiter == nil else {
@@ -240,6 +259,7 @@ public final class AudioCaptureEngine: AudioCapturing, @unchecked Sendable {
                 return
             }
             tailWaiter = continuation
+            tailUntil = keyUp
             stateLock.unlock()
             DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + timeoutSeconds) { [weak self] in
                 self?.resumeTailWaiter()
@@ -259,6 +279,26 @@ public final class AudioCaptureEngine: AudioCapturing, @unchecked Sendable {
         stateLock.lock()
         let waiter = tailWaiter
         tailWaiter = nil
+        tailUntil = nil
+        stateLock.unlock()
+        waiter?.resume()
+    }
+
+    /// Write queue, after each write: resumes the waiter once the audio
+    /// written reaches key-up.
+    private func resumeTailWaiterIfCaughtUp() {
+        stateLock.lock()
+        let caughtUp: Bool
+        if let tailUntil, let capturedThrough {
+            caughtUp = capturedThrough >= tailUntil
+        } else {
+            caughtUp = true
+        }
+        let waiter = caughtUp ? tailWaiter : nil
+        if caughtUp {
+            tailWaiter = nil
+            tailUntil = nil
+        }
         stateLock.unlock()
         waiter?.resume()
     }
@@ -330,7 +370,8 @@ public final class AudioCaptureEngine: AudioCapturing, @unchecked Sendable {
 
     /// AVFAudio raises an Objective-C exception, which Swift cannot catch and
     /// which aborts the app, when the input device changes between reading the
-    /// hardware format and installing the tap. MEASURED 2026-09-28: switching
+    /// hardware format and connecting the input (installing the tap, before the
+    /// sink node). MEASURED 2026-09-28: switching
     /// the default input 40 times at 150 ms intervals crashed the app in
     /// `installTap` during `prewarm` (four crash reports that day from AirPods
     /// connecting, same stack). The exception becomes an error here.
@@ -348,6 +389,9 @@ public final class AudioCaptureEngine: AudioCapturing, @unchecked Sendable {
             Double(DispatchTime.now().uptimeNanoseconds - from.uptimeNanoseconds) / 1_000_000
         }
         tearDownEngine()
+        // A new graph starts a new timeline: the step from the old one is a
+        // device change (gap marker), not a dropout to fill.
+        withStateLock { capturedThrough = nil }
 
         let engine = AVAudioEngine()
         self.engine = engine
@@ -367,15 +411,17 @@ public final class AudioCaptureEngine: AudioCapturing, @unchecked Sendable {
         converter.channelMap = [0]
         self.converter = converter
 
-        // NOTE: bufferSize is a REQUEST, and AVAudioNode documents the supported
-        // range as [100, 400]ms — 1024 frames is silently clamped, so buffers
-        // really arrive at ~10Hz, not the ~47Hz this comment used to claim
-        // (docs/design/latency-audit-2026-08-19.md:53). Every threshold that
-        // watches this stream has ~100ms of resolution, no more.
-        try Self.catchingException("installTap") {
-            input.installTap(onBus: 0, bufferSize: 1024, format: hwFormat) { [weak self] buffer, _ in
-                self?.ingest(buffer, hwRate: hwFormat.sampleRate)
-            }
+        // A sink node gets every I/O buffer (512 frames, ~10.7 ms, measured on
+        // macOS 27). An input tap clamps its buffer to at least 100 ms
+        // whatever bufferSize asks for, which held the first audio back ~100 ms
+        // and made stop() wait up to ~100 ms for the last of it.
+        let sink = AVAudioSinkNode { [weak self] timestamp, frameCount, audio in
+            self?.receive(audio, frames: frameCount, at: timestamp.pointee, format: hwFormat)
+            return noErr
+        }
+        try Self.catchingException("connect sink") {
+            engine.attach(sink)
+            engine.connect(input, to: sink, format: hwFormat)
         }
 
         try Self.catchingException("prepare") { engine.prepare() }
@@ -411,12 +457,9 @@ public final class AudioCaptureEngine: AudioCapturing, @unchecked Sendable {
         // A stop() parked on the tail must never outlive the engine.
         resumeTailWaiter()
         if let engine {
-            // Both can raise during a device change too; the engine is being
-            // discarded either way.
-            try? Self.catchingException("teardown") {
-                engine.inputNode.removeTap(onBus: 0)
-                engine.stop()
-            }
+            // Stopping can raise during a device change too; the engine is
+            // being discarded either way.
+            try? Self.catchingException("teardown") { engine.stop() }
             // Never deallocate an AVAudioEngine on the same turn a device
             // change lands: AVFAudio's IO unit dispatches its property listener
             // asynchronously and dereferences the unit after we free it
@@ -426,7 +469,6 @@ public final class AudioCaptureEngine: AudioCapturing, @unchecked Sendable {
             }
         }
         engine = nil
-        converter = nil
         isPrewarmed = false
         prewarmedDevice = nil
         prewarmedFormat = nil
@@ -483,69 +525,127 @@ public final class AudioCaptureEngine: AudioCapturing, @unchecked Sendable {
         }
     }
 
-    // MARK: - Buffer path (audio thread → write queue)
+    // MARK: - Buffer path (I/O thread → write queue)
 
-    private func ingest(_ buffer: AVAudioPCMBuffer, hwRate: Double) {
-        logFirstBufferIfNeeded(buffer)
-        meterLevel(of: buffer)
-        // AVAudioPCMBuffer is not Sendable. The tap hands this buffer over and
-        // never touches it again; only the write queue reads it from here on.
+    /// Dropouts up to this long are filled with silence so the words on either
+    /// side stay apart; a Bluetooth input often skips ~140 ms as it starts.
+    /// Longer ones are logged and left alone. The approach (50 ms tolerance,
+    /// 250 ms limit) follows Hex, MIT licence, Copyright (c) 2026 Christopher
+    /// Langton (github.com/anomalyco/hex, src/dictation.rs).
+    static let gapTolerance: TimeInterval = 0.05
+    static let maxPaddedGap: TimeInterval = 0.25
+
+    /// The frames of silence to write for audio that should have started at
+    /// `expected` but started at `actual` (host times in ns): none for a step
+    /// within the tolerance or beyond the limit.
+    static func paddingFrames(expected: UInt64, actual: UInt64, sampleRate: Double) -> Int {
+        guard actual > expected else { return 0 }
+        let gap = Double(actual - expected) / 1e9
+        guard gap > gapTolerance, gap <= maxPaddedGap else { return 0 }
+        return Int((gap * sampleRate).rounded())
+    }
+
+    /// Runs on the real-time I/O thread: copy the buffer and leave. Everything
+    /// else happens on the write queue.
+    private func receive(_ audio: UnsafePointer<AudioBufferList>, frames: AVAudioFrameCount,
+                         at timestamp: AudioTimeStamp, format: AVAudioFormat) {
+        guard frames > 0, let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frames) else { return }
+        buffer.frameLength = frames
+        let source = UnsafeMutableAudioBufferListPointer(UnsafeMutablePointer(mutating: audio))
+        let destination = UnsafeMutableAudioBufferListPointer(buffer.mutableAudioBufferList)
+        for (from, to) in zip(source, destination) {
+            guard let fromData = from.mData, let toData = to.mData else { continue }
+            memcpy(toData, fromData, Int(min(from.mDataByteSize, to.mDataByteSize)))
+        }
+        let hostTime = timestamp.mFlags.contains(.hostTimeValid) ? Self.nanoseconds(fromHostTime: timestamp.mHostTime) : nil
+        // AVAudioPCMBuffer is not Sendable. This copy is never touched again
+        // here; only the write queue reads it from now on.
         nonisolated(unsafe) let buffer = buffer
         queue.async { [weak self] in
-            guard let self, let converter = self.converter, let writer = self.writer else { return }
-            self.stateLock.lock()
-            let isStopped = self.stopped
-            self.stateLock.unlock()
-            guard !isStopped else { return }
+            self?.ingest(buffer, capturedAt: hostTime)
+        }
+    }
 
-            let ratio = self.targetFormat.sampleRate / hwRate
-            let capacity = AVAudioFrameCount(Double(buffer.frameLength) * ratio) + 64
-            guard let out = AVAudioPCMBuffer(pcmFormat: self.targetFormat, frameCapacity: capacity) else { return }
+    /// Write queue.
+    private func ingest(_ buffer: AVAudioPCMBuffer, capturedAt hostTime: UInt64?) {
+        let hwRate = buffer.format.sampleRate
+        let (isStopped, previousEnd) = withStateLock { () -> (Bool, UInt64?) in
+            let previous = capturedThrough
+            if let hostTime {
+                capturedThrough = hostTime + UInt64(Double(buffer.frameLength) / hwRate * 1e9)
+            }
+            return (stopped, previous)
+        }
+        guard !isStopped else { return }
+        logFirstBufferIfNeeded(buffer)
+        meterLevel(of: buffer)
+        guard let converter, let writer else { return }
 
-            var fed = false
-            var error: NSError?
-            converter.convert(to: out, error: &error) { _, status in
-                if fed {
-                    status.pointee = .noDataNow
-                    return nil
-                }
-                fed = true
-                status.pointee = .haveData
-                return buffer
+        if let hostTime, let previousEnd {
+            let padding = Self.paddingFrames(expected: previousEnd, actual: hostTime, sampleRate: targetFormat.sampleRate)
+            if padding > 0, let silence = AVAudioPCMBuffer(pcmFormat: targetFormat, frameCapacity: AVAudioFrameCount(padding)) {
+                silence.frameLength = AVAudioFrameCount(padding)
+                if let samples = silence.int16ChannelData?[0] { samples.update(repeating: 0, count: padding) }
+                Log.audio.warning("mic audio skipped \(Double(padding) / self.targetFormat.sampleRate * 1000, format: .fixed(precision: 0))ms on \(AudioDeviceQuery.transportDescription(), privacy: .public) — filled with silence")
+                write(silence, with: writer)
+            } else if hostTime > previousEnd, Double(hostTime - previousEnd) / 1e9 > Self.maxPaddedGap {
+                Log.audio.warning("mic audio skipped \(Double(hostTime - previousEnd) / 1e6, format: .fixed(precision: 0))ms — too long to fill")
             }
-            if let error {
-                Log.audio.error("AudioCaptureEngine: convert failed: \(error)")
-                return
+        }
+
+        let ratio = targetFormat.sampleRate / hwRate
+        let capacity = AVAudioFrameCount(Double(buffer.frameLength) * ratio) + 64
+        guard let out = AVAudioPCMBuffer(pcmFormat: targetFormat, frameCapacity: capacity) else { return }
+
+        var fed = false
+        var error: NSError?
+        converter.convert(to: out, error: &error) { _, status in
+            if fed {
+                status.pointee = .noDataNow
+                return nil
             }
-            guard out.frameLength > 0 else { return }
-            self.recordWrittenPeak(out)
-            do {
-                try writer.write(out)
-                self.stateLock.lock()
-                self.framesWritten += Int64(out.frameLength)
-                self.consecutiveWriteFailures = 0
-                self.stateLock.unlock()
-                if let sink = self.pcmSink, let samples = out.int16ChannelData?[0] {
-                    sink(Data(bytes: samples, count: Int(out.frameLength) * 2))
-                }
-                // A stop() waiting on the tail can finish now — this buffer is
-                // the audio that used to be thrown away.
-                self.resumeTailWaiter()
-            } catch {
-                Log.audio.error("AudioCaptureEngine: CAF write failed: \(error)")
-                self.stateLock.lock()
-                self.consecutiveWriteFailures += 1
-                let shouldReport = self.consecutiveWriteFailures >= 15 && !self.writeFailureReported
-                if shouldReport { self.writeFailureReported = true }
-                self.stateLock.unlock()
-                if shouldReport {
-                    self.onWriteFailure?() // ~0.3s of sustained failure (F22)
-                }
+            fed = true
+            status.pointee = .haveData
+            return buffer
+        }
+        if let error {
+            Log.audio.error("AudioCaptureEngine: convert failed: \(error)")
+            return
+        }
+        guard out.frameLength > 0 else { return }
+        write(out, with: writer)
+    }
+
+    /// Write queue. Appends converted audio to the file and the live stream.
+    private func write(_ out: AVAudioPCMBuffer, with writer: CAFWriter) {
+        recordWrittenPeak(out)
+        do {
+            try writer.write(out)
+            stateLock.lock()
+            framesWritten += Int64(out.frameLength)
+            consecutiveWriteFailures = 0
+            stateLock.unlock()
+            if let sink = pcmSink, let samples = out.int16ChannelData?[0] {
+                sink(Data(bytes: samples, count: Int(out.frameLength) * 2))
+            }
+            // A stop() waiting on the tail can finish once this buffer reaches
+            // key-up.
+            resumeTailWaiterIfCaughtUp()
+        } catch {
+            Log.audio.error("AudioCaptureEngine: CAF write failed: \(error)")
+            stateLock.lock()
+            consecutiveWriteFailures += 1
+            let shouldReport = consecutiveWriteFailures >= 15 && !writeFailureReported
+            if shouldReport { writeFailureReported = true }
+            stateLock.unlock()
+            if shouldReport {
+                onWriteFailure?() // sustained failure (F22)
             }
         }
     }
 
     /// Drives the waveform, and (for now) the peak the coordinator gates on.
+    /// Write queue.
     ///
     /// This used to read `floatChannelData?[0]` and SILENTLY RETURN for anything
     /// else. Since `peakLevel` fed the discard gate, any format that wasn't
@@ -558,14 +658,12 @@ public final class AudioCaptureEngine: AudioCapturing, @unchecked Sendable {
             reportMeteringBlind(buffer)
             return
         }
-        levelAccumulator += rms
-        levelSampleCount += 1
         // Compressive curve: quiet speech lands mid-range instead of hugging the
         // floor, loud speech saturates gracefully — the bars feel ALIVE.
-        let averageRMS = levelAccumulator / Float(levelSampleCount)
-        let level = AudioLevelCurve.level(fromRMS: averageRMS)
-        levelAccumulator = 0
-        levelSampleCount = 0
+        levelWindowFrames = Int(buffer.format.sampleRate / 10)
+        guard let windowRMS = levelWindow.add(rms: rms, frames: Int(buffer.frameLength),
+                                              windowFrames: levelWindowFrames) else { return }
+        let level = AudioLevelCurve.level(fromRMS: windowRMS)
         stateLock.lock()
         peakLevel = max(peakLevel, level)
         meteringDidRun = true
@@ -603,13 +701,39 @@ public final class AudioCaptureEngine: AudioCapturing, @unchecked Sendable {
     }
 
     /// The peak that cannot be blinded: `out` is always `targetFormat`.
+    /// Write queue.
     private func recordWrittenPeak(_ out: AVAudioPCMBuffer) {
-        guard out.frameLength > 0, let rms = Self.meanSquareRoot(of: out) else { return }
+        guard out.frameLength > 0, let rms = Self.meanSquareRoot(of: out),
+              let windowRMS = writtenWindow.add(rms: rms, frames: Int(out.frameLength),
+                                                windowFrames: Int(targetFormat.sampleRate / 10)) else { return }
+        noteWrittenPeak(windowRMS)
+    }
+
+    private func noteWrittenPeak(_ rms: Float) {
         let level = AudioLevelCurve.level(fromRMS: rms)
         stateLock.lock()
         writtenPeakLevel = max(writtenPeakLevel, level)
         writtenPeakDidRun = true
         stateLock.unlock()
+    }
+
+    /// Write queue, after the last buffer: at least 50 ms short of a full window
+    /// still counts toward the peaks, or a short loud word could read as silence.
+    private func flushLevelWindows() {
+        if let rms = levelWindow.flush(minimumFrames: levelWindowFrames / 2) {
+            let level = AudioLevelCurve.level(fromRMS: rms)
+            stateLock.lock()
+            peakLevel = max(peakLevel, level)
+            meteringDidRun = true
+            stateLock.unlock()
+        }
+        if let rms = writtenWindow.flush(minimumFrames: Int(targetFormat.sampleRate / 20)) { noteWrittenPeak(rms) }
+    }
+
+    static func nanoseconds(fromHostTime hostTime: UInt64) -> UInt64 {
+        var timebase = mach_timebase_info_data_t()
+        mach_timebase_info(&timebase)
+        return hostTime * UInt64(timebase.numer) / UInt64(timebase.denom)
     }
 
     /// Phase 0: the number that actually matters for capture latency, and the one
@@ -622,7 +746,7 @@ public final class AudioCaptureEngine: AudioCapturing, @unchecked Sendable {
         guard shouldLog, let startedClock else { return }
         let ms = Double(DispatchTime.now().uptimeNanoseconds - startedClock.uptimeNanoseconds) / 1_000_000
         let format = buffer.format
-        Log.audio.info("first buffer: \(ms, format: .fixed(precision: 1))ms after start on \(AudioInputDevices.currentDefaultName() ?? "unknown", privacy: .public) [\(AudioDeviceQuery.transportDescription(), privacy: .public)] — tap \(Int(format.sampleRate))Hz/\(format.channelCount)ch/\(format.commonFormat.rawValue)\(format.isInterleaved ? "/interleaved" : ""), \(buffer.frameLength) frames")
+        Log.audio.info("first buffer: \(ms, format: .fixed(precision: 1))ms after start on \(AudioInputDevices.currentDefaultName() ?? "unknown", privacy: .public) [\(AudioDeviceQuery.transportDescription(), privacy: .public)] — input \(Int(format.sampleRate))Hz/\(format.channelCount)ch/\(format.commonFormat.rawValue)\(format.isInterleaved ? "/interleaved" : ""), \(buffer.frameLength) frames")
     }
 
     public enum CaptureError: Error, Equatable {
@@ -631,5 +755,33 @@ public final class AudioCaptureEngine: AudioCapturing, @unchecked Sendable {
         case engineStart(String)
         /// AVFAudio raised while the input device was changing.
         case deviceChanging(String)
+    }
+}
+
+/// RMS over fixed windows of audio fed in buffers of any size.
+struct RMSWindow {
+    private var sumOfSquares: Double = 0
+    private var frames = 0
+
+    /// Adds a buffer's RMS; returns the window's RMS once it holds `windowFrames`.
+    mutating func add(rms: Float, frames count: Int, windowFrames: Int) -> Float? {
+        sumOfSquares += Double(rms) * Double(rms) * Double(count)
+        frames += count
+        guard frames >= windowFrames else { return nil }
+        return flush()
+    }
+
+    /// The RMS of whatever the window holds, then empties it. Nil below
+    /// `minimumFrames`: RMS over a few milliseconds reads a click as loud.
+    mutating func flush(minimumFrames: Int = 1) -> Float? {
+        guard frames >= max(1, minimumFrames) else {
+            sumOfSquares = 0
+            frames = 0
+            return nil
+        }
+        let rms = Float((sumOfSquares / Double(frames)).squareRoot())
+        sumOfSquares = 0
+        frames = 0
+        return rms
     }
 }

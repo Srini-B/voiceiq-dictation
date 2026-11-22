@@ -16,6 +16,7 @@ final class DictationController {
     private let hud = PillHUDController()
     private let earcons = EarconPlayer()
     private let outputMute = AudioOutputMute()
+    private let mediaPause = MediaPause()
     private let transcriptionService: GeminiTranscriptionService
     private let historyStore: HistoryStore?
     private let learner = EditLearner()
@@ -44,6 +45,11 @@ final class DictationController {
     private var slowTimer: Timer?
     private var dismissTask: Task<Void, Never>?
     private var shortcutMode: DictationMode?
+    /// The start tone waits out `chordGrace`, so a press that turns out to be
+    /// part of another app's shortcut stays silent. Modifiers pressed together
+    /// for a shortcut arrive within it. The idea and the 40 ms come from Hex
+    /// (MIT, Copyright (c) 2026 Christopher Langton, src/feedback.rs).
+    private static let chordGrace: TimeInterval = 0.04
 
     var onStatusChange: ((String) -> Void)?
     var onStatusItemState: ((StatusItemController.VisualState) -> Void)?
@@ -865,12 +871,16 @@ final class DictationController {
 
     private func transition(to state: DictationState) {
         if case .recording = state {
-            if SettingsStore().muteOtherAudioWhileDictating,
-               !meetingIsRecording {
+            let settings = SettingsStore()
+            if settings.muteOtherAudioWhileDictating, !meetingIsRecording {
                 outputMute.mute()
+            }
+            if settings.pauseMediaWhileDictating, !meetingIsRecording {
+                mediaPause.pause()
             }
         } else {
             outputMute.unmute()
+            mediaPause.resume()
         }
         // Only terminal states clear the mode. The coordinator re-publishes
         // `.idle` at the start of every begin, and this sink delivers it after
@@ -886,6 +896,10 @@ final class DictationController {
         }
         defer { previousState = state }
         dismissTask?.cancel()
+        switch state {
+        case .warming, .recording: break
+        default: earcons.cancelPendingStart() // never after the stop, cancel or error sound
+        }
 
         // ⌘Esc must reach us even when the grammar is idle: in-flight transcription
         // and UI-started hands-free are "externally active" (audit L8/L13).
@@ -910,7 +924,7 @@ final class DictationController {
 
         case .warming:
             sessionStartedAt = Date()
-            earcons.play(.start)
+            earcons.playStart(after: Self.chordGrace)
             hud.repositionToActiveScreen() // follow the dictation display (audit L14)
             setPill(.listening(locked: false))
             startElapsedTimer()
@@ -943,6 +957,9 @@ final class DictationController {
             clearSlowTimer()
             stopElapsedTimer()
             onStatusItemState?(.idle)
+            // An accidental chord cancels within the grace or while the start
+            // tone still sounds: take the tone back.
+            earcons.retractStart()
             // Short accidental taps stay silent; deliberate cancels get the soft damp.
             if let startedAt = sessionStartedAt, Date().timeIntervalSince(startedAt) > 0.5 {
                 earcons.play(.cancel)

@@ -39,6 +39,8 @@
 	<string>14.0</string>
 	<key>LSUIElement</key>
 	<true/>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>VoiceiQ pauses Music and Spotify while you dictate, when you turn that on, and plays them again after.</string>
 	<key>NSAudioCaptureUsageDescription</key>
 	<string>VoiceiQ records the other side of your calls, so meeting notes include what everyone said.</string>
 	<key>NSHumanReadableCopyright</key>

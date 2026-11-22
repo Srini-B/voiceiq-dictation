@@ -562,7 +562,7 @@ runs. Everything needs Full Access.
 | Fit to existing text | Not yet: the keyboard can read the text around the cursor, but does not hand it to the app |
 | Learn from your edits | Not yet: needs the keyboard to read the field again after the text lands |
 | Call detection, read names from the screen, Agent mode | Not on iOS: an app cannot see other apps' microphone use, screen or windows |
-| Mute other audio, sounds, resting indicator, hide pill from screen sharing, copy recovered dictations | Not on iOS |
+| Mute other audio, pause Music and Spotify, sounds, resting indicator, hide pill from screen sharing, copy recovered dictations | Not on iOS |
 | Shortcuts, up to three Translate targets | Keyboard modes and one Translate target |
 | Not on the Mac | Keep mic on after dictating, Action Button |
 
