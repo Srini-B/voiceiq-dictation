@@ -9,22 +9,28 @@ import Foundation
 public final class RecoveryScanner {
     private let store: HistoryStore
     private let transcription: TranscriptionServicing
+    private let recordingsRoot: URL
 
     /// The text of the dictation the launch scan recovered.
     public var onRecovered: ((String) -> Void)?
 
-    public init(store: HistoryStore, transcription: TranscriptionServicing) {
+    public init(store: HistoryStore, transcription: TranscriptionServicing, recordingsRoot: URL = FileLayout.recordingsRoot) {
         self.store = store
         self.transcription = transcription
+        self.recordingsRoot = recordingsRoot
     }
 
-    public func scanAndRecover() async {
+    /// `sparing` is the session the app is recording or transcribing now,
+    /// read once the reindex is done: it is unfinished, not interrupted.
+    public func scanAndRecover(sparing active: @MainActor () -> URL? = { nil }) async {
         // The reindex walks every recording folder and decodes every meta.json —
         // unbounded as history grows, and the hotkey is already armed by now, so
         // a key press would queue behind it on the main actor.
         let store = self.store
-        await Task.detached(priority: .utility) { store.reindex() }.value
-        let interrupted = store.interruptedRecords()
+        let root = recordingsRoot
+        await Task.detached(priority: .utility) { store.reindex(recordingsRoot: root) }.value
+        let live = active()?.standardizedFileURL
+        let interrupted = store.interruptedRecords().filter { $0.folderURL.standardizedFileURL != live }
         guard !interrupted.isEmpty else { return }
         Log.history.info("RecoveryScanner: \(interrupted.count) interrupted session(s) found")
 
