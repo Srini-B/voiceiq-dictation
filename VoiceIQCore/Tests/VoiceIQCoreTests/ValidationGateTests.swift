@@ -76,6 +76,9 @@ final class HeardGuardTests: XCTestCase {
     func testASpelledOutWordPasses() {
         assertPasses("capital B, e, e", "Bee")
         assertPasses("my name is Srini that's s r i n i", "My name is Srini.")
+        // Single-letter words that spell nothing stay words.
+        assertPasses("Am I a good fit", "Am I a good fit?")
+        assertPasses("I I think we should ship", "I think we should ship.")
     }
 
     func testPunctuationInLanguagesWithoutSpacesPasses() {

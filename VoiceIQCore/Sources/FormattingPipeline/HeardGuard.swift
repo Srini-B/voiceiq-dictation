@@ -27,11 +27,15 @@ public enum HeardGuard {
 
     /// The rule `text` breaks against `heard`, or nil when it may be inserted.
     public static func rejection(heard: String, text: String) -> Rule? {
-        let said = joiningSpelledLetters(words(heard))
+        let said = words(heard)
         let written = words(text)
         guard !said.isEmpty, !written.isEmpty else { return nil }
-        let saidSet = Set(said)
         let writtenSet = Set(written)
+        // A word spelled out letter by letter ("capital B, e, e") that the
+        // text writes ("Bee") counts as said, and its letters as kept.
+        let spellings = spelledWords(said).filter { writtenSet.contains($0.word) }
+        let spelledLetters = Set(spellings.flatMap(\.positions))
+        let saidSet = Set(said).union(spellings.map(\.word))
 
         // "Sure, …" or "Yes, …" the speaker did not start with. A leading
         // "hear" written as "here" is a homophone fix, not a reply, and an
@@ -75,7 +79,7 @@ public enum HeardGuard {
         }
         // Mostly words the speaker never said, such as "Paris" for a
         // dictated question. Digits are left out: numbers are rewritten.
-        var remaining = said.reduce(into: [String: Int]()) { $0[$1, default: 0] += 1 }
+        var remaining = (said + spellings.map(\.word)).reduce(into: [String: Int]()) { $0[$1, default: 0] += 1 }
         var sharedWords = 0
         var sharedNumbers = 0
         for word in written where remaining[word, default: 0] > 0 {
@@ -92,7 +96,7 @@ public enum HeardGuard {
         let writesDigits = written.contains(where: hasDigit)
         // Spoken punctuation and layout ("open quote", "new paragraph") is
         // written as marks, so it isn't dropped content either.
-        let content = said.filter {
+        let content = said.indices.filter { !spelledLetters.contains($0) }.map { said[$0] }.filter {
             !fillers.contains($0) && !(writesDigits && numberWords.contains($0) && !writtenSet.contains($0))
                 && !(formattingWords.contains($0) && !writtenSet.contains($0))
         }
@@ -151,15 +155,14 @@ public enum HeardGuard {
         return result
     }
 
-    /// A word spelled out letter by letter ("capital B, e, e") reads as the
-    /// word it spells ("bee"), which is what the rules write. Two or more
-    /// single letters in a row count; "capital" and the like inside the run
-    /// are dropped.
-    static func joiningSpelledLetters(_ said: [String]) -> [String] {
+    /// Runs of two or more spoken single letters, with "capital" and the
+    /// like inside the run skipped, as the word they spell and the positions
+    /// they take in `said`.
+    static func spelledWords(_ said: [String]) -> [(word: String, positions: Range<Int>)] {
         func isLetter(_ word: String) -> Bool {
             word.count == 1 && word.first!.isLetter && !isUnspaced(word.first!)
         }
-        var result: [String] = []
+        var result: [(word: String, positions: Range<Int>)] = []
         var i = 0
         while i < said.count {
             var j = i
@@ -175,10 +178,9 @@ public enum HeardGuard {
                 }
             }
             if letters.count >= 2 {
-                result.append(letters)
+                result.append((letters, i..<j))
                 i = j
             } else {
-                result.append(said[i])
                 i += 1
             }
         }
