@@ -21,6 +21,9 @@ struct MeetingsView: View {
                     Section("Past notes") {
                         ForEach(meetings) { meta in
                             NavigationLink { MeetingDetail(meta: meta) } label: { MeetingRow(meta: meta) }
+                                // Deleting mid-transcription would leave its Gemini calls running
+                                // with nowhere to save (the Mac's More menu is disabled the same way).
+                                .deleteDisabled(model.meetings.isBusy(meta.id))
                         }
                         .onDelete(perform: delete)
                     }
@@ -42,7 +45,9 @@ struct MeetingsView: View {
     }
 
     private func delete(_ offsets: IndexSet) {
-        for index in offsets { try? model.meetings.store.delete(id: meetings[index].id) }
+        for index in offsets where !model.meetings.isBusy(meetings[index].id) {
+            try? model.meetings.store.delete(id: meetings[index].id)
+        }
         reload()
     }
 

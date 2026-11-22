@@ -219,6 +219,11 @@ struct HistoryPane: View {
             }
         }
         .overlay { if records.isEmpty { Text(query.isEmpty ? "No dictations" : "No matches").foregroundStyle(.secondary) } }
+        // ⌘C copies the selected dictation, as FluidVoice's history does (altic-dev/FluidVoice).
+        .onCopyCommand {
+            guard let text = selected?.displayText, !text.isEmpty else { return [] }
+            return [NSItemProvider(object: text as NSString)]
+        }
     }
 
     private func attentionRow(_ record: DictationRecord) -> some View {

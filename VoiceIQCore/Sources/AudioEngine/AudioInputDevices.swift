@@ -157,7 +157,7 @@ public enum AudioInputDevices {
         return cfName as String
     }
 
-    private static func uid(of id: AudioDeviceID) -> String? {
+    static func uid(of id: AudioDeviceID) -> String? {
         var address = AudioObjectPropertyAddress(
             mSelector: kAudioDevicePropertyDeviceUID,
             mScope: kAudioObjectPropertyScopeGlobal,

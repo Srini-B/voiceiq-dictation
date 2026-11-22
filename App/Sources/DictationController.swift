@@ -119,6 +119,13 @@ final class DictationController {
         Task { @MainActor [weak self] in
             for await intent in intentStream {
                 guard let self else { break }
+                // The event tap still sees the key at the lock screen; a
+                // dictation there would record the room behind a locked Mac
+                // (FluidVoice ignores it too, altic-dev/FluidVoice).
+                if intent == .begin, Self.screenIsLocked {
+                    self.engine.resetGrammar()
+                    continue
+                }
                 let accepted = self.coordinator.handle(intent)
                 if !accepted, intent == .begin {
                     // Refused begin: the grammar armed a phantom session, so
@@ -694,6 +701,10 @@ final class DictationController {
     }
 
     private func transition(to state: DictationState) {
+        switch state {
+        case .warming, .recording: hud.dictationMicIsOpen = true
+        default: hud.dictationMicIsOpen = false
+        }
         if case .recording = state {
             let settings = SettingsStore()
             if settings.muteOtherAudioWhileDictating, !meetingIsRecording {
@@ -839,6 +850,8 @@ final class DictationController {
             if AVCaptureDevice.authorizationStatus(for: .audio) != .authorized {
                 showNotice("Microphone access is off — re-enable it in System Settings → Privacy & Security", for: 5.0, sound: nil)
                 onStatusItemState?(.attention)
+            } else if MacLid.mutesDefaultInput {
+                showNotice("The lid is closed, so the built-in mic is off — open it or connect a mic", for: 5.0, sound: nil)
             } else if coordinator.lastSilenceReason == .tooNoisy {
                 // A loud room with nothing above it. The recording is kept, so say
                 // where it went — this is the one no-speech case with a Retry.
@@ -978,6 +991,11 @@ final class DictationController {
         slowTimer?.invalidate()
         slowTimer = nil
         hud.model.slow = false
+    }
+
+    private static var screenIsLocked: Bool {
+        let session = CGSessionCopyCurrentDictionary() as? [String: Any]
+        return (session?["CGSSessionScreenIsLocked"] as? Bool) ?? false
     }
 
     // MARK: - Copy

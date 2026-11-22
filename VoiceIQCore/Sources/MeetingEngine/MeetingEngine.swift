@@ -92,10 +92,21 @@ import Foundation
         startRecording(source: source)
     }
 
-    /// The pill's dismiss. The same call is not offered again; the next one is.
-    public func dismissDetectedCall() {
-        guard case .callDetected = phase else { return }
+    /// The pill's dismiss. The same call is not offered again. With `quiet`
+    /// (the × button, not the offer timing out), neither is the next call from
+    /// that app or site for 30 minutes, so a dropped and rejoined huddle stays
+    /// quiet. FluidVoice holds back a dismissed app for 30 minutes too
+    /// (altic-dev/FluidVoice, `MeetingAutoDetector`).
+    public func dismissDetectedCall(quiet: Bool = true) {
+        guard case let .callDetected(source) = phase else { return }
+        if quiet { quietUntil[Self.offerKey(source)] = Date().addingTimeInterval(Self.dismissedQuiet) }
         phase = .idle
+    }
+
+    static let dismissedQuiet: TimeInterval = 30 * 60
+    private var quietUntil: [String: Date] = [:]
+    private static func offerKey(_ source: CallSource) -> String {
+        switch source { case let .app(bundleID, _): return bundleID; case let .browser(_, host): return host }
     }
 
     public func startRecording(source: CallSource? = nil) {
@@ -215,8 +226,9 @@ import Foundation
             }
             guard hasKey() else { throw MeetingFailure.noKey }
             try mark(&meta, .transcribing)
-            let transcript = try await MeetingTranscriber(client: client, models: .init(transcribe: cfg.transcribeModel),
-                                                          endpoint: cfg.endpoint).transcribe(folder: folder)
+            let heard = try await MeetingTranscriber(client: client, models: .init(transcribe: cfg.transcribeModel),
+                                                     endpoint: cfg.endpoint).transcribe(folder: folder)
+            let transcript = Self.corrected(heard, rules: DictionaryStore().replacementRules())
             let words = transcript.reduce(0) { $0 + $1.text.split(whereSeparator: \.isWhitespace).count }
             guard words >= Self.minimumSummarizableWords else {
                 Log.meeting.info("transcript too short to summarize (\(words, privacy: .public) words)")
@@ -262,6 +274,18 @@ import Foundation
         return try MeetingNotesPrompt.parse(text)
     }
 
+    /// The dictionary's wrong → right spellings, applied to what was heard.
+    /// Google takes no custom vocabulary with diarization, so a meeting is
+    /// transcribed verbatim and fixed here, as dictation is. FluidVoice applies
+    /// its replacements to meetings the same way (altic-dev/FluidVoice).
+    nonisolated static func corrected(_ transcript: [TranscriptSegment], rules: [ReplacementEngine.Rule]) -> [TranscriptSegment] {
+        transcript.map { segment in
+            var segment = segment
+            segment.text = ReplacementEngine.apply(rules, to: segment.text)
+            return segment
+        }
+    }
+
     /// Fewer words than this and the notes model has nothing to work with; it
     /// would write a summary saying so, in whatever language the fragment is.
     static let minimumSummarizableWords = 8
@@ -287,6 +311,7 @@ import Foundation
     private func detected(_ source: CallSource?) {
         detectedSource = source
         if let source {
+            if let until = quietUntil[Self.offerKey(source)], until > Date() { return }
             switch phase {
             case .idle, .callDetected: phase = .callDetected(source); onCallDetected?(source)
             case .recording, .failed: return

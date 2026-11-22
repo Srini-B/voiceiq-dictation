@@ -117,6 +117,8 @@ SOFTWARE.
 - Source: [anomalyco/hex](https://github.com/anomalyco/hex) at `2a023f91`
   (`src/paste.rs`, `src/keyboard.rs`, `src/audio/recording_environment.rs`,
   `src/dictation.rs`, `src/feedback.rs`), rewritten in Swift
+- Also `VoiceIQCore/Sources/AudioEngine/MacLid.swift` (the closed-lid check),
+  from Hex at `afd7da22` (`src/audio/lid.rs`), rewritten in Swift
 - License: MIT
 
 ```
@@ -142,6 +144,20 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
+
+## Behaviour studied, no code used
+
+### FluidVoice
+
+[altic-dev/FluidVoice](https://github.com/altic-dev/FluidVoice) is GPL-3.0,
+so under the clean-room rule in `CONTRIBUTING.md` none of its code is copied,
+translated or paraphrased here. VoiceiQ reimplemented these behaviours, seen
+at `87fbef8b`, from a written description: no paste when focus is on a
+control that takes no text, waking any Electron app's accessibility,
+ignoring the dictation key at the lock screen, F13–F19 as keys of their own,
+dictionary spellings in meeting transcripts, a 30-minute quiet time after
+dismissing a call offer, VoiceOver announcements for the pill, and ⌘C in
+History.
 
 ## Trademarks
 
