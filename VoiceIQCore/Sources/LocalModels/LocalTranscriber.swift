@@ -68,7 +68,12 @@ public final class LocalTranscriber: Sendable {
         let id = UUID()
         let (options, toolsReady) = Self.sessionOptions(language: language)
         let worker = makeSession(model, audioURL, false, options)
-        let cancel: @Sendable () async -> Void = { await worker.stop() }
+        // The warm-ups this dictation takes the model from keep loading its
+        // files, so a delete waits for them as well as for this dictation.
+        let cancel: @Sendable () async -> Void = {
+            await worker.stop()
+            await LocalModelWarmup.finished()
+        }
         LocalModelWarmup.yieldToDictation()
         guard let directory = LocalModelStore.store(for: model).acquireSession(id: id, cancel: cancel) else { return nil }
         if toolsReady, LocalModelStore.englishTools.acquireSession(id: id, cancel: cancel) == nil {
