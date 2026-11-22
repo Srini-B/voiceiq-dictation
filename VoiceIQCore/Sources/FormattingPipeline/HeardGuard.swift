@@ -81,10 +81,9 @@ public enum HeardGuard {
         // dictated question. Digits are left out: numbers are rewritten.
         var remaining = (said + spellings.map(\.word)).reduce(into: [String: Int]()) { $0[$1, default: 0] += 1 }
         var sharedWords = 0
-        var sharedNumbers = 0
         for word in written where remaining[word, default: 0] > 0 {
             remaining[word, default: 0] -= 1
-            if hasDigit(word) { sharedNumbers += 1 } else { sharedWords += 1 }
+            if !hasDigit(word) { sharedWords += 1 }
         }
         // A short unit or currency next to an amount ("5 kg", "6 ft 2 in",
         // "CHF 200", "C$100") is how the rules write the spoken one, so it is
@@ -101,12 +100,14 @@ public enum HeardGuard {
         // dropped: "five five five one two" is one token, "55512".
         let writesDigits = written.contains(where: hasDigit)
         // Spoken punctuation and layout ("open quote", "new paragraph") is
-        // written as marks, so it isn't dropped content either.
-        let content = said.indices.filter { !spelledLetters.contains($0) }.map { said[$0] }.filter {
+        // written as marks, so it isn't dropped content either. Distinct
+        // words are compared, so a restarted phrase said three times counts
+        // once.
+        let content = Set(said.indices.filter { !spelledLetters.contains($0) }.map { said[$0] }.filter {
             !fillers.contains($0) && !(writesDigits && numberWords.contains($0) && !writtenSet.contains($0))
                 && !(formattingWords.contains($0) && !writtenSet.contains($0))
-        }
-        let kept = sharedWords + sharedNumbers + written.count(where: { hasDigit($0) && !saidSet.contains($0) })
+        })
+        let kept = writtenSet.count(where: { saidSet.contains($0) || hasDigit($0) })
         if content.count > 6 || written.count > 3, kept * 2 < content.count,
            !corrected {
             return .droppedMostWords

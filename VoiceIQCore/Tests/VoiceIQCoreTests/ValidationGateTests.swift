@@ -34,6 +34,7 @@ final class HeardGuardTests: XCTestCase {
 
     func testSelfCorrectionPasses() {
         assertPasses("send it Tuesday, no wait, Wednesday", "Send it Wednesday.")
+        assertPasses("I think we should I think we should I think we should ship tomorrow", "I think we should ship tomorrow.")
         assertPasses("let's meet at the cafe on main street actually make it the library", "Let's meet at the library.")
     }
 
