@@ -80,10 +80,7 @@ public final class LocalTranscriber: Sendable {
         let warmups = LocalModelWarmup.claimIDs
         guard speech.canAcquire(replacing: warmups), !toolsReady || tools.canAcquire(replacing: warmups),
               let directory = speech.acquireSession(id: id, replacing: warmups, cancel: cancel) else { return nil }
-        if toolsReady, tools.acquireSession(id: id, replacing: warmups, cancel: cancel) == nil {
-            speech.releaseSession(id: id)
-            return nil
-        }
+        if toolsReady { _ = tools.acquireSession(id: id, replacing: warmups, cancel: cancel) }
         self.id = id
         self.model = model
         self.worker = worker

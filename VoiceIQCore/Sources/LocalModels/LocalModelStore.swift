@@ -105,9 +105,11 @@ public final class LocalModelStore: ObservableObject {
         return manifest.installDirectory
     }
 
-    /// `acquireSession` would succeed now, short of the install check.
+    /// `acquireSession` would succeed now. Nothing can change in between on
+    /// the main actor, so checking both stores first makes taking both atomic.
     func canAcquire(replacing: Set<UUID> = []) -> Bool {
         state == .ready && deleteTask == nil && sessions.keys.allSatisfy(replacing.contains)
+            && LocalModelInstaller.isInstalled(manifest)
     }
 
     public func releaseSession(id: UUID) {
