@@ -310,8 +310,12 @@ final class KeyboardDictation: ObservableObject {
         defer { previousState = state }
         switch state {
         case .warming, .recording:
-            // The folder exists only once the engine is up.
-            if job?.folder == nil { job?.folder = coordinator?.activeSessionFolder }
+            // The folder exists only once the engine is up. While warming it can
+            // still be a cancelled capture's that is draining, so .recording,
+            // once the new session holds the folder, always rebinds it.
+            if let folder = coordinator?.activeSessionFolder, state != .warming || job?.folder == nil {
+                job?.folder = folder
+            }
             if recordingStartedAt == nil {
                 recordingStartedAt = Date()
                 bars = LevelBars()
