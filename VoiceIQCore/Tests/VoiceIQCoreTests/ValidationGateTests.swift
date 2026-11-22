@@ -63,6 +63,16 @@ final class HeardGuardTests: XCTestCase {
         assertPasses("um yes ship it", "Yes, ship it.")
     }
 
+    func testACorrectedOpenerPasses() {
+        assertPasses("no wait yes I can join tomorrow", "Yes, I can join tomorrow.")
+        XCTAssertEqual(HeardGuard.rejection(heard: "no wait I can join tomorrow", text: "Sure, I can join tomorrow."), .replyOpener)
+    }
+
+    func testSpokenPunctuationPasses() {
+        assertPasses("open quote hello close quote comma new paragraph open quote goodbye close quote period",
+                     "\u{201C}Hello,\u{201D}\n\n\u{201C}Goodbye.\u{201D}")
+    }
+
     func testASpelledOutWordPasses() {
         assertPasses("capital B, e, e", "Bee")
         assertPasses("my name is Srini that's s r i n i", "My name is Srini.")

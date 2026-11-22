@@ -34,10 +34,14 @@ public enum HeardGuard {
         let writtenSet = Set(written)
 
         // "Sure, …" or "Yes, …" the speaker did not start with. A leading
-        // "hear" written as "here" is a homophone fix, not a reply.
+        // "hear" written as "here" is a homophone fix, not a reply, and an
+        // opener the speaker said after correcting themselves ("no wait,
+        // yes …") is theirs.
+        let corrected = corrections.contains(where: { contains(said, $0) })
         if let reply = opener(written),
            reply != opener(said.filter { !fillers.contains($0) }),
-           !(reply == "here" && said.first == "hear") {
+           !(reply == "here" && said.first == "hear"),
+           !(corrected && reply.split(separator: " ").allSatisfy { saidSet.contains(String($0)) }) {
             return .replyOpener
         }
         // "Here's the cleaned text" the speaker never said.
@@ -86,12 +90,15 @@ public enum HeardGuard {
         // explain it. Number words written as digits are not counted as
         // dropped: "five five five one two" is one token, "55512".
         let writesDigits = written.contains(where: hasDigit)
+        // Spoken punctuation and layout ("open quote", "new paragraph") is
+        // written as marks, so it isn't dropped content either.
         let content = said.filter {
             !fillers.contains($0) && !(writesDigits && numberWords.contains($0) && !writtenSet.contains($0))
+                && !(formattingWords.contains($0) && !writtenSet.contains($0))
         }
         let kept = sharedWords + sharedNumbers + written.count(where: { hasDigit($0) && !saidSet.contains($0) })
         if content.count > 6 || written.count > 3, kept * 2 < content.count,
-           !corrections.contains(where: { contains(said, $0) }) {
+           !corrected {
             return .droppedMostWords
         }
         return nil
@@ -222,6 +229,14 @@ public enum HeardGuard {
     private static let preambles: [[String]] = [
         ["here's", "the"], ["here", "is", "the"], ["here's", "your"], ["here", "is", "your"],
         ["cleaned", "transcript"], ["cleaned", "text"],
+    ]
+
+    /// Words of spoken punctuation and layout commands.
+    private static let formattingWords: Set<String> = [
+        "open", "close", "quote", "quotes", "unquote", "end", "comma", "period", "full", "stop", "dot",
+        "colon", "semicolon", "question", "exclamation", "mark", "point", "dash", "hyphen", "ellipsis",
+        "apostrophe", "bracket", "brackets", "paren", "parenthesis", "parentheses", "new", "line",
+        "paragraph", "next", "bullet", "slash", "tab",
     ]
 
     /// Spoken self-corrections, which may leave less than half the words.
