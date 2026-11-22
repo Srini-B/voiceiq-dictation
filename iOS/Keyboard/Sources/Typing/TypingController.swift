@@ -103,14 +103,20 @@ final class TypingController: ObservableObject {
             keyboard.addSubview(control)
         }
         keyboard.stripLayout = { [weak self] layout, lift in
-            let bar = layout.stripBarFrame.offsetBy(dx: 0, dy: lift)
+            // Hex's strip keeps its frame, with the words on `stripTextCenter`; VoiceiQ's
+            // buttons and the overlays in its place get a band as tall, centred on that line.
+            let hexBar = layout.stripBarFrame.offsetBy(dx: 0, dy: lift)
+            let bar = hexBar.offsetBy(dx: 0, dy: layout.metrics.stripTextCenter - hexBar.height / 2)
             let beside = StripButton.besideSpace(in: layout).map {
                 (mini: $0.mini.offsetBy(dx: 0, dy: lift), edit: $0.edit.offsetBy(dx: 0, dy: lift))
             }
             let placed = StripButton.layout(bar: bar, side: layout.metrics.side, besideSpace: beside)
             self?.placeStrip(buttons: placed.buttons, besideSpace: beside != nil, radius: layout.metrics.cornerRadius,
                              bar: bar, slots: placed.strip, area: layout.metrics.stripArea + lift)
-            return (placed.strip.offsetBy(dx: 0, dy: -lift), placed.slots.map { $0.offsetBy(dx: 0, dy: -lift) })
+            func onHexBar(_ rect: CGRect) -> CGRect {
+                CGRect(x: rect.minX, y: hexBar.minY - lift, width: rect.width, height: hexBar.height)
+            }
+            return (onHexBar(placed.strip), placed.slots.map(onHexBar))
         }
         self.keyboard = keyboard
         keyboard.prepareForField()

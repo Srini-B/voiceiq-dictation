@@ -21,6 +21,16 @@ final class EmojiPanelView: UIView, UICollectionViewDataSource, UICollectionView
     var showsKeyPopups = true
     var metrics = KeyboardMetrics.portrait { didSet { if metrics != oldValue { setNeedsLayout() } } }
     var horizontalInset: CGFloat = 0 { didSet { if horizontalInset != oldValue { setNeedsLayout() } } }
+    /// The full keyboard's current emoji key, in the panel's coordinates, when it has one: only
+    /// its x and width are used. ABC takes both, under the thumb that just lifted off the key
+    /// (Settings › Experiments › ABC under the emoji key); nil keeps ABC at the bar's leading
+    /// end, as on the dictation bar and in a panel a fixture shows alone.
+    var emojiKeyFrame: CGRect? {
+        didSet {
+            guard emojiKeyFrame != oldValue else { return }
+            setNeedsLayout()
+        }
+    }
     /// An emoji went in: the text to insert, its entry, and where it came from
     /// ("suggestion", "grid", "tone").
     var onInsert: ((String, Int, String) -> Void)?
@@ -121,6 +131,8 @@ final class EmojiPanelView: UIView, UICollectionViewDataSource, UICollectionView
         addSubview(grid)
 
         categoryBar.onSelect = { [weak self] index in self?.jump(toSection: index) }
+        categoryBar.onScrub = { [weak self] index, fraction in self?.scrub(toSection: index, fraction: fraction) }
+        categoryBar.onScrubStep = { [weak self] in self?.onSelectionStep?() }
         addSubview(categoryBar)
 
         lettersKey.title = "ABC"
@@ -212,6 +224,13 @@ final class EmojiPanelView: UIView, UICollectionViewDataSource, UICollectionView
         CGRect(x: horizontalInset, y: metrics.stripTop, width: bounds.width - 2 * horizontalInset, height: metrics.stripHeight)
     }
 
+    /// The row's band around the strip's words' line: the search button and suggestions centre
+    /// in it, where the strip's words were.
+    private var rowLineFrame: CGRect {
+        let band = metrics.stripLineBand
+        return CGRect(x: rowFrame.minX, y: metrics.stripTop + band.top, width: rowFrame.width, height: band.height)
+    }
+
     /// The grid's rows: four on roomy keyboards, three on compact ones.
     var gridRows: Int {
         metrics.keyHeight >= 40 ? 4 : 3
@@ -234,12 +253,13 @@ final class EmojiPanelView: UIView, UICollectionViewDataSource, UICollectionView
     override func layoutSubviews() {
         super.layoutSubviews()
         let row = rowFrame
+        let line = rowLineFrame
         let side = metrics.side
-        let buttonSide = min(36, row.height - 8)
-        searchButton.frame = CGRect(x: row.minX + side, y: row.midY - buttonSide / 2, width: buttonSide + 4, height: buttonSide)
+        let buttonSide = min(36, line.height - 8)
+        searchButton.frame = CGRect(x: row.minX + side, y: line.midY - buttonSide / 2, width: buttonSide + 4, height: buttonSide)
         searchButton.layer.cornerRadius = 10
         let rowStart = showsSearch ? searchButton.frame.maxX + 4 : row.minX + side
-        suggestionRow.frame = CGRect(x: rowStart, y: row.minY, width: row.maxX - side - rowStart, height: row.height)
+        suggestionRow.frame = CGRect(x: rowStart, y: line.minY, width: row.maxX - side - rowStart, height: line.height)
         let hairline = 1 / max(1, traitCollection.displayScale)
         rowSeparator.frame = CGRect(x: row.minX + side, y: row.maxY - hairline, width: row.width - 2 * side, height: hairline)
         suggestionRow.fontSize = rowFontSize
@@ -248,17 +268,19 @@ final class EmojiPanelView: UIView, UICollectionViewDataSource, UICollectionView
         // ABC and delete are drawn without keys, so they take only their label's room and the
         // categories get the rest.
         let keyWidth = min(44, KeyboardLayout.letterWidth(innerWidth: bounds.width - 2 * horizontalInset, metrics: metrics) * KeyboardLayout.bottomSwitchWidthRatio)
-        lettersKey.frame = CGRect(x: horizontalInset + side, y: barY, width: keyWidth, height: barKeyHeight)
+        let lettersFrame = emojiKeyFrame.map {
+            CGRect(x: $0.minX, y: barY, width: $0.width, height: barKeyHeight)
+        } ?? CGRect(x: horizontalInset + side, y: barY, width: keyWidth, height: barKeyHeight)
+        lettersKey.frame = lettersFrame
         deleteKey.frame = CGRect(x: bounds.width - horizontalInset - side - keyWidth, y: barY, width: keyWidth, height: barKeyHeight)
         lettersKey.cornerRadius = metrics.cornerRadius
         deleteKey.cornerRadius = metrics.cornerRadius
-        categoryBar.frame = CGRect(x: lettersKey.frame.maxX + 4, y: barY, width: deleteKey.frame.minX - lettersKey.frame.maxX - 8, height: barKeyHeight)
+        categoryBar.frame = CGRect(x: lettersKey.frame.maxX + 4, y: barY, width: max(0, deleteKey.frame.minX - lettersKey.frame.maxX - 8), height: barKeyHeight)
 
         let gridTop = row.maxY
         let gridFrame = CGRect(x: horizontalInset, y: gridTop, width: bounds.width - 2 * horizontalInset, height: barY - 4 - gridTop)
         grid.frame = gridFrame
         let band = UIEdgeInsets(top: barY - gridFrame.maxY, left: 0, bottom: max(0, bounds.height - barY - barKeyHeight), right: 0)
-        categoryBar.hitOutsets = band
         lettersKey.hitOutsets = UIEdgeInsets(top: band.top, left: lettersKey.frame.minX, bottom: band.bottom, right: categoryBar.frame.minX - lettersKey.frame.maxX)
         deleteKey.hitOutsets = UIEdgeInsets(top: band.top, left: deleteKey.frame.minX - categoryBar.frame.maxX, bottom: band.bottom, right: bounds.width - deleteKey.frame.maxX)
         callout.frame = bounds
@@ -268,13 +290,15 @@ final class EmojiPanelView: UIView, UICollectionViewDataSource, UICollectionView
 
     /// The bar's keys take the whole band under the grid: the gap above them and the margin
     /// down to the keyboard's edge, where a thumb aiming at a small icon often lands. Taps
-    /// there used to hit nothing, so a category could take two taps.
+    /// there used to hit nothing, so a category could take two taps. Between ABC and delete
+    /// the bar takes it, each category the full width of its slot, so a finger can also slide
+    /// along it.
     override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
         guard !isHidden, isUserInteractionEnabled, alpha > 0.01, self.point(inside: point, with: event) else { return nil }
         if tonePicker.menu == nil, point.y >= grid.frame.maxY {
             if point.x < categoryBar.frame.minX { return lettersKey }
             if point.x >= categoryBar.frame.maxX { return deleteKey }
-            if let button = categoryBar.button(atX: point.x - categoryBar.frame.minX) { return button }
+            return categoryBar
         }
         return super.hitTest(point, with: event)
     }
@@ -419,11 +443,13 @@ final class EmojiPanelView: UIView, UICollectionViewDataSource, UICollectionView
 
     func scrollViewDidScroll(_ scrollView: UIScrollView) {
         callout.show(nil, label: "")
+        keepHeadersInView()
+        // While a finger slides along the bar, the bar leads and the grid follows it.
+        guard !categoryBar.isScrubbing else { return }
         if sectionStarts.isEmpty { measureSections() }
         let x = scrollView.contentOffset.x + 24
         let current = sectionStarts.lastIndex { $0 <= x } ?? 0
         categoryBar.selected = current
-        keepHeadersInView()
     }
 
     func collectionView(
@@ -464,6 +490,24 @@ final class EmojiPanelView: UIView, UICollectionViewDataSource, UICollectionView
         let maxX = max(0, grid.contentSize.width - grid.bounds.width)
         grid.setContentOffset(CGPoint(x: min(maxX, max(0, start - 2)), y: 0), animated: false)
         categoryBar.selected = section
+    }
+
+    /// A finger sliding along the bar: the grid shows `section` `fraction` of the way
+    /// through, live, so the bar scrubs through every emoji.
+    private func scrub(toSection section: Int, fraction: CGFloat) {
+        guard section < sections.count else { return }
+        grid.layoutIfNeeded()
+        if sectionStarts.isEmpty { measureSections() }
+        let start = sectionStart(section)
+        let end = section + 1 < sections.count ? sectionStart(section + 1) : grid.contentSize.width
+        let maxX = max(0, grid.contentSize.width - grid.bounds.width)
+        let x = start + min(1, max(0, fraction)) * max(0, end - start)
+        grid.setContentOffset(CGPoint(x: min(maxX, max(0, x - 2)), y: 0), animated: false)
+    }
+
+    /// Where a section's first emoji sits in the grid; an empty one starts where the next does.
+    private func sectionStart(_ section: Int) -> CGFloat {
+        sectionStarts[section...].first { $0 != .greatestFiniteMagnitude } ?? grid.contentSize.width
     }
 
     private func cellFrame(_ indexPath: IndexPath) -> CGRect? {

@@ -11,14 +11,41 @@ import UIKit
 /// (which never asks) draws blank in a keyboard, and `detectPatterns` can't give the text,
 /// so the strip points to that setting after a paste that asked or was refused.
 enum KeyboardClipboardOffer: Equatable {
-    /// Something was copied recently and hasn't been pasted from the keyboard yet.
+    /// Something was copied recently and hasn't been pasted from the keyboard yet, and the
+    /// field is empty.
     case paste
-    /// A one-time-code field: paste a copied code, or switch keyboards so iOS can offer
-    /// a code from Messages or Mail (only Apple's keyboard receives those).
+    /// An empty field that expects a code (`KeyboardClipboardTracker.expectsCode`) with Apple's
+    /// keyboard among the user's keyboards: paste a copied code, or switch to it so iOS can
+    /// offer a code from Messages or Mail (only Apple's keyboard receives those; a third-party
+    /// keyboard gets nothing, not even the system's suggestion above it).
     case code(canPaste: Bool)
     /// A finished dictation the keyboard didn't insert by itself
     /// (`KeyboardViewModel.offeredDictation`); it never touches the clipboard.
     case dictation
+}
+
+/// The user's keyboards, from `UITextInputMode.activeInputModes`, which a keyboard extension
+/// sees in Settings › General › Keyboard › Keyboards order. On iOS 27.2 a third-party keyboard is
+/// a `UIKeyboardExtensionInputMode` and Apple's are `UIKeyboardInputMode`; Emoji's language is
+/// `emoji`. `advanceToNextInputMode` from Hex skips Emoji when Apple's keyboard is on, in
+/// either order (simulator, black box).
+enum KeyboardInputModes {
+    struct Mode: Equatable {
+        var primaryLanguage: String?
+        var className: String
+    }
+
+    @MainActor
+    static func hasAppleKeyboard(_ modes: [UITextInputMode] = UITextInputMode.activeInputModes) -> Bool {
+        hasAppleKeyboard(modes.map { Mode(primaryLanguage: $0.primaryLanguage, className: NSStringFromClass(type(of: $0))) })
+    }
+
+    /// Apple's own keyboard for a language: not Emoji or dictation, and not an extension.
+    static func hasAppleKeyboard(_ modes: [Mode]) -> Bool {
+        modes.contains { mode in
+            !["emoji", "dictation"].contains(mode.primaryLanguage) && !mode.className.contains("Extension")
+        }
+    }
 }
 
 /// Remembers which copy the keyboard first noticed and which one it already pasted, in
@@ -54,19 +81,46 @@ struct KeyboardClipboardTracker {
         self.defaults = defaults
     }
 
+    /// Only in an empty field, as Apple's keyboard offers a recent copy (iOS 27.2): once
+    /// something is typed the strip goes back to suggestions. `hasAppleKeyboard` is asked only
+    /// where a code is expected: without Apple's keyboard the next keyboard is Emoji or another
+    /// third-party one (or there is none), which gets no code, so Code from Messages would do
+    /// nothing (TestFlight build 56).
     func offer(
         textContentType: UITextContentType?,
+        keyboardType: UIKeyboardType?,
+        autocorrectionType: UITextAutocorrectionType?,
+        fieldIsEmpty: Bool,
         hasFullAccess: Bool,
+        hasAppleKeyboard: () -> Bool = { KeyboardInputModes.hasAppleKeyboard() },
         pasteboard: UIPasteboard = .general,
         now: Date = Date()
     ) -> KeyboardClipboardOffer? {
         // Without Full Access a keyboard can't use the clipboard at all.
-        guard hasFullAccess else { return nil }
+        guard hasFullAccess, fieldIsEmpty else { return nil }
         let fresh = hasFreshCopy(pasteboard: pasteboard, now: now)
-        if textContentType == .oneTimeCode {
+        if Self.expectsCode(textContentType: textContentType, keyboardType: keyboardType, autocorrectionType: autocorrectionType),
+           hasAppleKeyboard() {
             return .code(canPaste: fresh)
         }
         return fresh ? .paste : nil
+    }
+
+    /// A `.oneTimeCode` field with a number pad, or with autocorrection set either way: WebKit
+    /// always sets it, so Safari's `autocomplete="one-time-code"` fields count (iOS 27.2).
+    /// Some chat apps mark their message box `.oneTimeCode` too, with letters and autocorrection
+    /// left at default: that box gets suggestions, as it does with Apple's keyboard (TestFlight
+    /// build 56, ChatGPT and Capy).
+    static func expectsCode(
+        textContentType: UITextContentType?,
+        keyboardType: UIKeyboardType?,
+        autocorrectionType: UITextAutocorrectionType?
+    ) -> Bool {
+        guard textContentType == .oneTimeCode else { return false }
+        switch keyboardType {
+        case .numberPad, .asciiCapableNumberPad, .decimalPad, .phonePad, .numbersAndPunctuation: return true
+        default: return autocorrectionType == .yes || autocorrectionType == .no
+        }
     }
 
     /// What the Paste chip inserts, in one read: text, else a link. Reading `string` and then

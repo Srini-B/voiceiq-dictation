@@ -1,5 +1,23 @@
 import Foundation
 
+/// How hard the keys' haptic tap is (Settings › Keyboard › Strength). Medium is meant to match
+/// Apple's keyboard (testers found Hex's, a 0.65 light impact, too weak beside it).
+nonisolated enum KeyHapticStrength: String, CaseIterable, Sendable {
+    case light
+    case medium
+    case strong
+}
+
+/// Settings › Keyboard › Auto-start, while the dictation bar is chosen: whether the bar starts
+/// dictating by itself as it shows, so Dictate needs no tap.
+nonisolated enum DictationBarAutoStart: String, CaseIterable, Sendable {
+    case never
+    /// Only when you switch to Hex from another keyboard in the same field
+    /// (`KeyboardSwitchGuess`), not when a field opens with Hex already chosen.
+    case whenSwitching
+    case always
+}
+
 /// The full keyboard's switches in the shared App Group.
 ///
 /// Without Full Access an iPhone may not let the keyboard read the App Group (the simulator
@@ -9,7 +27,9 @@ import Foundation
 struct FullKeyboardSettings {
     static let launchArgument = "--experiment-full-keyboard"
     static let emojiLaunchArgument = "--experiment-emoji"
+    static let emojiLettersLaunchArgument = "--experiment-emoji-letters"
     static let swipeLaunchArgument = "--experiment-swipe"
+    static let twoThumbSelectionLaunchArgument = "--experiment-two-thumb-selection"
     /// Simulator scenes pass `--hex-key left` (or `right`) for Settings › Keyboard › Hex key.
     static let hexKeyLaunchArgument = "--hex-key"
     /// Simulator scenes pass `--keyboard dictation-bar` (or `full`) to pick the keyboard.
@@ -23,10 +43,15 @@ struct FullKeyboardSettings {
         static let germanSpatialAutocorrect = "experiments.germanSpatialAutocorrect"
         static let keyPopups = "settings.keyboardKeyPopups"
         static let haptics = "settings.keyboardHaptics"
+        static let hapticStrength = "settings.keyboardHapticStrength"
         static let suggestSwearWords = "settings.keyboardSuggestSwearWords"
         static let emoji = "experiments.emoji"
+        static let emojiLettersUnderEmojiKey = "experiments.emojiLettersUnderEmojiKey"
         static let swipeTyping = "experiments.swipeTyping"
+        static let twoThumbSelection = "experiments.twoThumbSelection"
+        static let hideWordSuggestions = "experiments.hideWordSuggestions"
         static let hexKeyOnLeft = "settings.keyboardHexKeyLeft"
+        static let dictationBarAutoStart = "settings.dictationBarAutoStart"
     }
 
     private let defaults: UserDefaults?
@@ -112,6 +137,13 @@ struct FullKeyboardSettings {
         nonmutating set { defaults?.set(newValue, forKey: Key.haptics) }
     }
 
+    /// Settings › Keyboard › Strength, under Haptics: how hard each key's tap is. Medium, the
+    /// default, is meant to feel like Apple's keyboard.
+    var hapticStrength: KeyHapticStrength {
+        get { defaults?.string(forKey: Key.hapticStrength).flatMap(KeyHapticStrength.init(rawValue:)) ?? .medium }
+        nonmutating set { defaults?.set(newValue.rawValue, forKey: Key.hapticStrength) }
+    }
+
     /// Settings › Keyboard › Emoji: an emoji key whose panel suggests emoji for what you just
     /// typed, from what the words mean and what you use. On by default. Stored as
     /// `experiments.emoji`, from when it was an experiment (off by default) that only its
@@ -120,6 +152,37 @@ struct FullKeyboardSettings {
     var emoji: Bool {
         get { defaults?.object(forKey: Key.emoji) as? Bool ?? true }
         nonmutating set { defaults?.set(newValue, forKey: Key.emoji) }
+    }
+
+    /// Settings › Experiments › ABC under the emoji key: the emoji panel's ABC sits where the
+    /// emoji key that opened it was, so switching back to the letters needs no thumb move.
+    /// Off by default; a panel with no emoji key behind it (the dictation bar's, a standalone
+    /// panel) keeps ABC at the bar's leading end. Stored as
+    /// `experiments.emojiLettersUnderEmojiKey`.
+    var emojiLettersUnderEmojiKey: Bool {
+        get { defaults?.object(forKey: Key.emojiLettersUnderEmojiKey) as? Bool ?? false }
+        nonmutating set { defaults?.set(newValue, forKey: Key.emojiLettersUnderEmojiKey) }
+    }
+
+    /// Settings › Experiments › Two-thumb selection: while the space bar is the trackpad, a
+    /// second thumb selects — each thumb moves one end, shown in the strip, with Delete, Cut,
+    /// Copy, Dictate and Cancel once both lift. Off by default. Stored as
+    /// `experiments.twoThumbSelection`; off, a second finger is ignored as it always was.
+    var twoThumbSelection: Bool {
+        get { defaults?.object(forKey: Key.twoThumbSelection) as? Bool ?? false }
+        nonmutating set { defaults?.set(newValue, forKey: Key.twoThumbSelection) }
+    }
+
+    /// Settings › Experiments › Hide word suggestions: the strip above the keys stops suggesting
+    /// words (typing and next-word suggestions, swipe readings, the finished word's emoji, and
+    /// the chip that keeps what you typed while a correction is still ahead), while the Hex key,
+    /// Undo, status, notices and the Paste chip stay. Autocorrect still corrects on space, and
+    /// the chip that puts back what a correction replaced stays after Delete; holding a strip
+    /// word to add it to Custom vocabulary needs a suggestion, so it goes. Off by default.
+    /// Stored as `experiments.hideWordSuggestions`; off, the strip suggests exactly as it did.
+    var hideWordSuggestions: Bool {
+        get { defaults?.object(forKey: Key.hideWordSuggestions) as? Bool ?? false }
+        nonmutating set { defaults?.set(newValue, forKey: Key.hideWordSuggestions) }
     }
 
     /// Settings › Keyboard › Swipe typing: slide through a word's letters to type it, on the
@@ -139,6 +202,16 @@ struct FullKeyboardSettings {
         nonmutating set { defaults?.set(newValue, forKey: Key.hexKeyOnLeft) }
     }
 
+    /// Settings › Keyboard › Auto-start: when the dictation bar starts dictating by itself.
+    /// When switching by default.
+    var dictationBarAutoStart: DictationBarAutoStart {
+        get {
+            defaults?.string(forKey: Key.dictationBarAutoStart).flatMap(DictationBarAutoStart.init(rawValue:))
+                ?? .whenSwitching
+        }
+        nonmutating set { defaults?.set(newValue.rawValue, forKey: Key.dictationBarAutoStart) }
+    }
+
     /// Where the full keyboard's Hex key sits for `hexKeyOnLeft`.
     var hexKeyPlacement: HexKeyPlacement {
         hexKeyOnLeft ? .stripLeading : .stripTrailing
@@ -146,7 +219,8 @@ struct FullKeyboardSettings {
 
     /// Simulator scenes pass `--experiment-full-keyboard` or `--keyboard full|dictation-bar`
     /// to pick the keyboard, `--experiment-emoji` to turn Emoji on, `--experiment-swipe` for
-    /// Swipe typing (both on by default; the arguments override a stored off), and
+    /// Swipe typing (both on by default; the arguments override a stored off),
+    /// `--experiment-emoji-letters` for ABC under the emoji key, and
     /// `--hex-key left|right` for the Hex key's side.
     func applyLaunchArguments(_ arguments: [String] = ProcessInfo.processInfo.arguments) {
         if arguments.contains(Self.launchArgument) {
@@ -162,8 +236,14 @@ struct FullKeyboardSettings {
         if arguments.contains(Self.emojiLaunchArgument) {
             emoji = true
         }
+        if arguments.contains(Self.emojiLettersLaunchArgument) {
+            emojiLettersUnderEmojiKey = true
+        }
         if arguments.contains(Self.swipeLaunchArgument) {
             swipeTyping = true
+        }
+        if arguments.contains(Self.twoThumbSelectionLaunchArgument) {
+            twoThumbSelection = true
         }
         if let index = arguments.firstIndex(of: Self.hexKeyLaunchArgument), index + 1 < arguments.count {
             switch arguments[index + 1] {

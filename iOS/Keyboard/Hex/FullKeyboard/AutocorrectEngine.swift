@@ -17,6 +17,9 @@ nonisolated struct KeyboardSuggestion: Equatable, Sendable {
         /// Another reading of the word just swiped (Settings › Keyboard › Swipe typing): tapping it
         /// puts it in that word's place.
         case swiped
+        /// What you typed before autocorrect changed it, offered once the cursor is back at the
+        /// end of the corrected words (delete takes only their space): tapping it puts it back.
+        case revert
     }
 
     let displayText: String
@@ -34,18 +37,41 @@ nonisolated struct KeyboardSuggestion: Equatable, Sendable {
 @MainActor
 final class LearnedWordsStore {
     nonisolated static let defaultsKey = "keyboard.learnedWords"
+    nonisolated static let scopedPrefix = defaultsKey + "."
     static let maxWords = 2_000
     static let maxBytes = 64 * 1024
 
     private let defaults: UserDefaults?
+    /// The language this list belongs to (`Learn each language separately`); nil is the
+    /// shared list every language uses while the experiment is off.
+    private let language: String?
     private var storage: [String] = []
     private var wordSet: Set<String> = []
     private var sessionKeepCounts: [String: Int] = [:]
     private var loadedAt = Date().timeIntervalSince1970
 
-    init(defaults: UserDefaults? = UserDefaults(suiteName: KeyboardBridge.appGroup)) {
+    init(defaults: UserDefaults? = UserDefaults(suiteName: KeyboardBridge.appGroup), language: String? = nil) {
         self.defaults = defaults
+        self.language = language
         load()
+    }
+
+    /// This list's words for one language, made on first use and seeded from the shared list.
+    func scoped(to language: String) -> LearnedWordsStore {
+        LearnedWordsStore(defaults: defaults, language: language)
+    }
+
+    nonisolated static func key(for language: String) -> String {
+        defaultsKey + "." + language
+    }
+
+    /// Whether `key` is a language's own list (`keyboard.learnedWords.<code>`).
+    nonisolated static func isScopedKey(_ key: String) -> Bool {
+        key.hasPrefix(scopedPrefix)
+    }
+
+    private var storageKey: String {
+        language.map { Self.key(for: $0) } ?? Self.defaultsKey
     }
 
     var words: [String] {
@@ -93,18 +119,29 @@ final class LearnedWordsStore {
     }
 
     private func load() {
-        guard let data = defaults?.data(forKey: Self.defaultsKey),
-              data.count <= Self.maxBytes,
-              let decoded = try? JSONDecoder().decode([String].self, from: data) else { return }
-        storage = Array(decoded.suffix(Self.maxWords))
-        wordSet = Set(storage)
+        if let data = defaults?.data(forKey: storageKey), data.count <= Self.maxBytes,
+           let decoded = try? JSONDecoder().decode([String].self, from: data) {
+            storage = Array(decoded.suffix(Self.maxWords))
+            wordSet = Set(storage)
+            return
+        }
+        guard language != nil else { return }
+        // A language's list starts with the shared words, and remembers that it was made so a
+        // later shared keep doesn't leak into it.
+        if let data = defaults?.data(forKey: Self.defaultsKey), data.count <= Self.maxBytes,
+           let decoded = try? JSONDecoder().decode([String].self, from: data) {
+            storage = Array(decoded.suffix(Self.maxWords))
+            wordSet = Set(storage)
+        }
+        save()
     }
 
     private func save() {
         guard let defaults else { return }
-        while !storage.isEmpty {
-            if let data = try? JSONEncoder().encode(storage), data.count <= Self.maxBytes {
-                defaults.set(data, forKey: Self.defaultsKey)
+        while true {
+            guard let data = try? JSONEncoder().encode(storage) else { return }
+            if data.count <= Self.maxBytes || storage.isEmpty {
+                defaults.set(data, forKey: storageKey)
                 return
             }
             let evicted = storage.removeFirst()
@@ -117,21 +154,18 @@ final class LearnedWordsStore {
 /// deterministic contractions/transpositions, QWERTY-ranked `UITextChecker`, and `LearnedWordsStore`.
 @MainActor
 final class AutocorrectEngine {
-    struct AppliedCorrection: Equatable {
-        /// One word backspace puts back as typed (`from`), and what autocorrect made it.
-        struct Change: Equatable {
-            let from: String
-            let to: String
-        }
-
-        let original: String
-        let insertedText: String
-        /// The words in `original` that autocorrect changed; backspace keeps each as typed.
-        let changes: [Change]
-    }
-
     let checker: TextChecking
-    let learnedWords: LearnedWordsStore
+    /// The words kept in this engine's language: the one shared list, or with Learn each
+    /// language separately on, this language's own (`learnsPerLanguage`).
+    private(set) var learnedWords: LearnedWordsStore
+    private var sharedLearnedWords: LearnedWordsStore
+    /// Experiment (Learn each language separately): each keyboard language keeps its own
+    /// words, seeded from the shared list, and the partner its own too. Off, one shared list.
+    var learnsPerLanguage = false {
+        didSet { if learnsPerLanguage != oldValue { scopeLearnedWords() } }
+    }
+    /// Each language's list once made, so switching back keeps what it holds in memory.
+    private var scopedLearnedWords: [String: LearnedWordsStore] = [:]
     /// Settings › Keyboard › Autocorrect. Off, only your text replacements still show in the
     /// strip and apply on space or a closing mark, as Apple's keyboard does with Auto-Correction
     /// off; a field that turns autocorrection off gets none, as there.
@@ -151,7 +185,7 @@ final class AutocorrectEngine {
     /// language whose word data isn't there (the iOS 27.2 simulator's `pl_PL`), and such a
     /// partner would keep every typo as "a word in the other language". Checked once per
     /// language, on first use.
-    private var workingPartner: AutocorrectEngine? {
+    var workingPartner: AutocorrectEngine? {
         guard let partner else { return nil }
         if partner.acceptsAnyLetters == nil {
             partner.acceptsAnyLetters = partner.checker.isWordValid("qzxjvkq")
@@ -164,11 +198,19 @@ final class AutocorrectEngine {
     private(set) var layoutLanguage: KeyboardLanguage = .english
     private(set) var layoutLetters: KeyboardLetterLayout?
     private var lexiconShortcuts: [String: String] = [:]
-    private var lexiconTerms: [String] = []
-    private var suppressedInSession: Set<String> = []
+    /// Your `UILexicon` terms, then your vocabulary's words (`AutocorrectEngine+Vocabulary`).
+    private(set) var lexiconTerms: [String] = []
+    private var systemLexiconTerms: [String] = []
+    private(set) var vocabulary: [String] = []
+    private(set) var suppressedInSession: Set<String> = []
     /// Learn how I type: typos you fixed the same way twice and words you turned down twice.
     private(set) var learning = TypingLearning()
     private(set) var lastCorrection: AppliedCorrection?
+    /// The language of the fix space would apply to the word it was asked about: the
+    /// partner's when its fix won, else this engine's; nil for a text replacement.
+    private(set) var lastFixLanguage: KeyboardLanguage?
+    /// The language of the last revision `revision(of:)` returned: the partner's for its accents.
+    private(set) var lastRevisionLanguage: KeyboardLanguage?
     /// Experiment (Spatial autocorrect): reads the word's taps with a language model in place
     /// of `UITextChecker`'s one-edit guesses, for the language its model was built for. Nil
     /// while off or without a model.
@@ -230,14 +272,16 @@ final class AutocorrectEngine {
     var addsCapitals = true {
         didSet { partner?.addsCapitals = addsCapitals }
     }
-    private var decoderCache: (before: String, taps: [CGPoint], decision: TypingDecoder.Decision?)?
+    private var decoderCache: (before: String, taps: [CGPoint], partnerWord: Bool, decision: TypingDecoder.Decision?)?
 
     init(
         checker: TextChecking? = nil,
         learnedWords: LearnedWordsStore? = nil
     ) {
+        let words = learnedWords ?? LearnedWordsStore()
         self.checker = checker ?? SystemTextChecker()
-        self.learnedWords = learnedWords ?? LearnedWordsStore()
+        sharedLearnedWords = words
+        self.learnedWords = words
         self.offensiveWords = .bundled(KeyboardLanguage.english.rawValue)
     }
 
@@ -274,9 +318,20 @@ final class AutocorrectEngine {
             }
         }
         lexiconShortcuts = shortcuts
-        lexiconTerms = terms
+        systemLexiconTerms = terms
+        lexiconTerms = terms + Self.vocabularyWords(vocabulary)
         userWordsRevision += 1
         partner?.loadLexiconEntries(entries)
+    }
+
+    /// Hex's vocabulary list for typing (`AutocorrectEngine+Vocabulary`).
+    func setVocabulary(_ terms: [String]) {
+        guard terms != vocabulary else { return }
+        vocabulary = terms
+        lexiconTerms = systemLexiconTerms + Self.vocabularyWords(terms)
+        userWordsRevision += 1
+        decoderCache = nil
+        partner?.setVocabulary(terms)
     }
 
     /// Your text replacement for `token`, cased as Apple's keyboard writes it (black box, iOS
@@ -314,22 +369,24 @@ final class AutocorrectEngine {
         return nil
     }
 
-    func clearPendingUndo() {
+    func forgetCorrection() {
         lastCorrection = nil
     }
 
-    func recordAppliedCorrection(original: String, insertedText: String, changes: [AppliedCorrection.Change]) {
-        lastCorrection = AppliedCorrection(original: original, insertedText: insertedText, changes: changes)
+    func recordAppliedCorrection(original: String, corrected: String, anchor: String, changes: [AppliedCorrection.Change]) {
+        lastCorrection = AppliedCorrection(original: original, corrected: corrected, changes: changes, anchor: anchor)
     }
 
-    func consumePendingUndo() -> AppliedCorrection? {
-        defer { lastCorrection = nil }
+    /// The latest autocorrection when the cursor is right after it (`AppliedCorrection.isAtEnd`).
+    func revertibleCorrection(before: String?) -> AppliedCorrection? {
+        guard let lastCorrection, lastCorrection.isAtEnd(of: before) else { return nil }
         return lastCorrection
     }
 
     /// Follows the keyboard layout. `available` is `UITextChecker.availableLanguages`.
     func setLanguage(_ language: KeyboardLanguage, available: [String] = UITextChecker.availableLanguages) {
         self.language = language
+        scopeLearnedWords()
         layoutLanguage = language
         acceptsAnyLetters = nil
         if partner?.language == language {
@@ -363,7 +420,8 @@ final class AutocorrectEngine {
 
     /// Bilingual autocorrect's second language (`KeyboardLanguageList.partner`), or nil. It
     /// shares your words (`learnedWords`, text replacements, Learn how I type) and types on
-    /// this engine's keys. None without a dictionary for either language. `checker` is for
+    /// this engine's keys, except with Learn each language separately: then it keeps its own
+    /// language's words. None without a dictionary for either language. `checker` is for
     /// tests.
     func setPartner(
         _ other: KeyboardLanguage?,
@@ -375,13 +433,17 @@ final class AutocorrectEngine {
             return
         }
         guard partner?.language != other else { return }
-        let engine = AutocorrectEngine(checker: checker ?? SystemTextChecker(), learnedWords: learnedWords)
+        let engine = AutocorrectEngine(
+            checker: checker ?? SystemTextChecker(), learnedWords: learnsPerLanguage ? scopedWords(other) : sharedLearnedWords
+        )
         engine.setLanguage(other, available: available)
         engine.layoutLanguage = layoutLanguage
         engine.layoutLetters = layoutLetters
         engine.lexiconShortcuts = lexiconShortcuts
+        engine.systemLexiconTerms = systemLexiconTerms
+        engine.vocabulary = vocabulary
         engine.lexiconTerms = lexiconTerms
-        engine.learning = learning
+        if !learnsPerLanguage { engine.learning = learning }
         engine.allowsSwearing = allowsSwearing
         engine.addsCapitals = addsCapitals
         engine.decoderKeys = decoderKeys
@@ -390,10 +452,43 @@ final class AutocorrectEngine {
         partner = engine
     }
 
-    func applyLearning(_ learning: TypingLearning) {
+    /// Gives this engine and its partner the list for their languages while Learn each
+    /// language separately is on, or the one shared list while it is off.
+    private func scopeLearnedWords() {
+        let store = learnsPerLanguage ? scopedWords(language) : sharedLearnedWords
+        if store !== learnedWords {
+            learnedWords = store
+            userWordsRevision += 1
+        }
+        guard let partner else { return }
+        let theirs = learnsPerLanguage ? scopedWords(partner.language) : sharedLearnedWords
+        partner.sharedLearnedWords = theirs
+        if theirs !== partner.learnedWords {
+            partner.learnedWords = theirs
+            partner.userWordsRevision += 1
+        }
+    }
+
+    private func scopedWords(_ language: KeyboardLanguage) -> LearnedWordsStore {
+        if let store = scopedLearnedWords[language.rawValue] { return store }
+        let store = sharedLearnedWords.scoped(to: language.rawValue)
+        scopedLearnedWords[language.rawValue] = store
+        return store
+    }
+
+    /// Hands over what the journal learned. With Learn each language separately on, the
+    /// partner gets `partnerLearning` (its own language's) instead of these.
+    func applyLearning(_ learning: TypingLearning, partner partnerLearning: TypingLearning? = nil) {
         if self.learning != learning {
             self.learning = learning
             userWordsRevision += 1
+        }
+        if learnsPerLanguage, let partnerLearning {
+            if let partner, partner.learning != partnerLearning {
+                partner.learning = partnerLearning
+                partner.userWordsRevision += 1
+            }
+            return
         }
         partner?.applyLearning(learning)
     }
@@ -402,7 +497,7 @@ final class AutocorrectEngine {
         suppressedInSession.insert(word.lowercased())
         learnedWords.recordExplicitKeep(word)
         userWordsRevision += 1
-        // The store is shared, so the partner only drops its copy of your words.
+        // The partner never learns this keep itself; it only drops its copy of your words.
         partner?.suppressedInSession.insert(word.lowercased())
         partner?.userWordsRevision += 1
     }
@@ -439,8 +534,9 @@ final class AutocorrectEngine {
 
     // MARK: - Predictions between words
 
-    /// The empty field, or after a sentence's end and a space, or a new line.
-    static func isSentenceStart(_ beforeInput: String?) -> Bool {
+    /// The empty field, or after a sentence's end and a space, or a new line. In Greek, ; is
+    /// the question mark and ends a sentence too.
+    static func isSentenceStart(_ beforeInput: String?, language: KeyboardLanguage = .english) -> Bool {
         guard let beforeInput else { return true }
         guard let last = beforeInput.last else { return true }
         if last.isNewline { return true }
@@ -449,6 +545,7 @@ final class AutocorrectEngine {
         while trimmed.last == " " { trimmed = trimmed.dropLast() }
         guard let written = trimmed.last else { return true }
         return written.isNewline || written == "." || written == "!" || written == "?"
+            || (language == .greek && (written == ";" || written == "\u{037E}"))
     }
 
     /// Common sentence-initial words per language (Hex's own short lists), lowercase except
@@ -462,16 +559,18 @@ final class AutocorrectEngine {
         case .italian: ["io", "il", "la"]
         case .portuguese: ["eu", "o", "a"]
         case .polish: ["ja", "to", "nie"]
+        case .czech: ["to", "já", "ale"]
         case .romanian: ["eu", "nu", "am"]
         case .norwegian: ["jeg", "det", "vi"]
         case .russian: ["я", "это", "мы"]
         case .ukrainian: ["я", "це", "ми"]
+        case .greek: ["θα", "δεν", "το"]
         case .serbianLatin: ["ja", "to", "da"]
         }
     }
 
     /// Marks after which a sentence goes on.
-    static let midSentenceMarks: Set<Character> = [",", ";", ":", ")", "\"", "\u{201D}", "\u{2019}", "\u{2014}"]
+    static let midSentenceMarks: Set<Character> = [",", ";", ":", ")", "\"", "'", "\u{201D}", "\u{2019}", "\u{2014}"]
 
     /// Common first words of a clause, after a comma (Hex's own short lists).
     static func clauseStarters(_ language: KeyboardLanguage) -> [String] {
@@ -483,10 +582,12 @@ final class AutocorrectEngine {
         case .italian: ["e", "ma", "che"]
         case .portuguese: ["e", "mas", "que"]
         case .polish: ["a", "ale", "że"]
+        case .czech: ["a", "ale", "že"]
         case .romanian: ["și", "dar", "că"]
         case .norwegian: ["og", "men", "jeg"]
         case .russian: ["и", "но", "что"]
         case .ukrainian: ["і", "але", "що"]
+        case .greek: ["και", "αλλά", "που"]
         case .serbianLatin: ["i", "ali", "da"]
         }
     }
@@ -501,10 +602,12 @@ final class AutocorrectEngine {
         case .italian: ["di", "e", "che", "la", "il", "a"]
         case .portuguese: ["de", "que", "e", "o", "a", "do"]
         case .polish: ["nie", "i", "w", "się", "na", "to"]
+        case .czech: ["a", "se", "je", "v", "na", "to"]
         case .romanian: ["de", "și", "în", "nu", "să", "la"]
         case .norwegian: ["og", "i", "det", "er", "på", "som"]
         case .russian: ["и", "в", "не", "на", "я", "что"]
         case .ukrainian: ["і", "в", "не", "на", "що", "я"]
+        case .greek: ["και", "να", "το", "θα", "δεν", "η"]
         case .serbianLatin: ["i", "je", "da", "u", "se", "na"]
         }
     }
@@ -533,6 +636,7 @@ final class AutocorrectEngine {
         predictionModel: TypingDecoderModel? = nil,
         capitalizesNext: Bool = false
     ) -> [KeyboardSuggestion] {
+        lastFixLanguage = nil
         guard field == .text, autocorrectionType != .no else { return [] }
         // Your text replacement shows as Apple's keyboard shows it ("myem": "myem", then the
         // address Space puts in), in any language and whatever the word's history.
@@ -546,7 +650,7 @@ final class AutocorrectEngine {
         guard hasDictionary else { return replacementOnly ?? [] }
         // An empty field, or a new sentence (". ", "! ", "? ", a new line): three common
         // first words, as Apple's keyboard offers.
-        if Self.isSentenceStart(beforeInput) {
+        if Self.isSentenceStart(beforeInput, language: language) {
             return predictions(Self.sentenceStarters(language), previous: nil, capitalized: capitalizesNext)
         }
         if let beforeInput, beforeInput.last == " " {
@@ -588,18 +692,21 @@ final class AutocorrectEngine {
             // first; spelling guesses only for a word neither knows.
             let mine = candidates(for: token, autoFix: autoFix, guesses: !partner.knowsAsTyped(token), limit: 2, model: predictionModel, corrects: isEnabled)
             let theirs = partner.candidates(for: token, autoFix: autoFix, guesses: !knowsAsTyped(token), limit: 2, model: partner.decoder?.model, corrects: isEnabled)
-            let leansPartner = languageLean(partner, token: token) > 0
-            let (first, second) = leansPartner ? (theirs, mine) : (mine, theirs)
-            for index in 0..<max(first.count, second.count) {
-                for item in [first, second].compactMap({ index < $0.count ? $0[index] : nil })
-                where pool.count < 2 && !pool.contains(where: { $0.caseInsensitiveCompare(item) == .orderedSame }) {
-                    pool.append(item)
-                }
+            // A sentence in one language (`languageLean`) gets only that language's words, even
+            // when it has none (TestFlight build 56: "autocomplete suggests English words in
+            // Czech too"); without one, both, in turn.
+            let lean = languageLean(partner, token: token)
+            let ordered = lean < 0 ? [mine] : lean > 0 ? [theirs]
+                : (0..<max(mine.count, theirs.count)).map { i in [mine, theirs].compactMap { i < $0.count ? $0[i] : nil } }
+            for item in ordered.joined()
+            where pool.count < 2 && !pool.contains(where: { $0.caseInsensitiveCompare(item) == .orderedSame }) {
+                pool.append(item)
             }
         } else {
             pool += candidates(for: token, autoFix: autoFix, guesses: true, limit: 2 - pool.count, model: predictionModel, corrects: isEnabled)
         }
 
+        pool = withoutAddedCapitals(pool, typed: token)
         let literal = KeyboardSuggestion(displayText: "“\(token)”", replacement: token, kind: .keepLiteral)
         // Nothing better than what you typed: the strip shows it once, not again in the centre.
         guard let first = pool.first else { return [literal] }
@@ -641,8 +748,15 @@ final class AutocorrectEngine {
                 pool.append(cased(learned, typed: token))
             } else if language.usesEnglishFixes, let suggested = Self.suggestOnlyContractions[lower] {
                 pool.append(Self.matchCase(of: token, onto: suggested))
+            } else if !suppressedInSession.contains(lower), !learning.rejected.contains(lower),
+                      !learnedWords.contains(lower), let accented = language.accentSuggestions[lower] {
+                // Offered, never put in by space: the plain spelling is a word of its own
+                // ("e" is "and", "ce" is "to us"), as the contractions above are.
+                pool.append(cased(accented, typed: token))
             }
         }
+        // Your vocabulary's word that starts with what you typed, before the dictionary's.
+        if pool.count < end, let term = vocabularyCompletion(for: token), !has(term) { pool.append(term) }
 
         // A short prefix is usually an unfinished word. Reserve a slot for its most likely
         // completion in this phrase without changing what space does to the literal.
@@ -666,8 +780,7 @@ final class AutocorrectEngine {
 
         // Spelling guesses for a word the dictionary doesn't know.
         if corrects && guesses && pool.count < end && token.count >= 2 {
-            let valid = Self.shorthandAllowlist.contains(lower) || learnedWords.contains(lower) || checker.isWordValid(token)
-            if !valid {
+            if !knowsAsTyped(token) {
                 for guess in rankedGuesses(for: token) {
                     let fixed = cased(guess, typed: token)
                     if fixed.caseInsensitiveCompare(token) != .orderedSame, mayOffer(guess, replacing: token), !has(fixed) {
@@ -722,6 +835,7 @@ final class AutocorrectEngine {
         field: KeyboardFieldKind,
         autocorrectionType: UITextAutocorrectionType?
     ) -> (original: String, replacement: String)? {
+        lastFixLanguage = nil
         guard field == .text, autocorrectionType != .no else { return nil }
         // Your own text replacement comes first, as on Apple's keyboard: before the chat
         // shorthand Hex leaves alone ("brb"), with Autocorrect off or no dictionary, and
@@ -741,50 +855,172 @@ final class AutocorrectEngine {
 
     /// What space puts in place of `token`, if anything. With a partner (bilingual
     /// autocorrect), a word either language knows as typed stays as it is (your text
-    /// replacements still apply); a typo either can fix gets the fix, and when both can, the
-    /// fix in the language of the words before it, else the cheaper slip on these keys, else
-    /// the keyboard's own language's.
+    /// replacements still apply), except a sure fix of this language's (`isSureFix`) once
+    /// the words before are in it: the other dictionary takes many of its typos for words
+    /// ("dont", "im", "dk" in French, "im", "tkm" in German), and kept them. A typo either can
+    /// fix gets the fix, though never the other's guess of a name ("Zuri" for "Ziri"); when both
+    /// can, the fix in the language of the words before it, else the cheaper slip on these
+    /// keys, else the keyboard's own language's. Held-out English benchmark, French beside it:
+    /// 7.56% WER before, 5.79% now, against 5.75% alone.
     private func cautiousReplacement(for token: String) -> String? {
-        guard let partner = workingPartner else { return ownReplacement(for: token) }
         if let shortcut = shortcut(for: token) {
+            lastFixLanguage = nil
             return shortcut
         }
+        if let term = vocabularyTerm(for: token) {
+            lastFixLanguage = nil
+            return Self.vocabularySpelling(of: token, as: term)
+        }
+        // This language's own accented spelling decides before any partner logic: the table
+        // only holds plain spellings that are no word of this language ("perche" -> "perché"),
+        // so an English lean must not hand it to the other dictionary's guess.
+        if let accented = accentRestoration(for: token) {
+            lastFixLanguage = language
+            return accented
+        }
+        guard let partner = workingPartner else {
+            lastFixLanguage = language
+            return ownReplacement(for: token)
+        }
+        let lean = languageLean(partner, token: token)
         // One-letter words are left to the keyboard's own language: `UITextChecker` takes
         // every letter as a word, so English "i" would never become "I" beside French.
-        if token.count >= 2, partner.knowsAsTyped(token) { return nil }
+        if token.count >= 2, partner.knowsAsTyped(token), Self.hasVowel(token) {
+            if lean < 0, isSureFix(token), let own = ownReplacement(for: token) {
+                lastFixLanguage = language
+                return own
+            }
+            // Spatial autocorrect may still read the taps as another word, counting the other
+            // language's word as one it changes only on a clear margin, as it does its own
+            // words: "tkm" (German) becomes "Tom", "merci" stays. Not a sure fix's word, which
+            // the next word decides ("Im" stays for "I'm going", not "In").
+            guard lean <= 0, !isAllCapsOrMixed(token),
+                  !(language.usesEnglishFixes && Self.unambiguousFixes[token.lowercased()] != nil),
+                  let replacement = decoderDecision(for: token, partnerWord: true)?.replacement,
+                  mayOffer(replacement, replacing: token) else {
+                lastFixLanguage = nil
+                return nil
+            }
+            lastFixLanguage = language
+            return withoutAddedCapitals(cased(replacement, typed: token), typed: token)
+        }
         let own = ownReplacement(for: token)
-        guard token.count >= 2, !knowsAsTyped(token), let theirs = partner.ownReplacement(for: token) else { return own }
-        guard let own, own.caseInsensitiveCompare(theirs) != .orderedSame else { return own ?? theirs }
-        return prefersPartner(partner, token: token, own: own, theirs: theirs) ? theirs : own
+        // A name the other dictionary guesses ("Zuri" for "Ziri") is no fix of yours.
+        guard token.count >= 2, !knowsAsTyped(token), let theirs = partner.ownReplacement(for: token),
+              !partner.isName(theirs) else {
+            lastFixLanguage = own == nil ? nil : language
+            return own
+        }
+        guard let own, own.caseInsensitiveCompare(theirs) != .orderedSame else {
+            lastFixLanguage = own == nil ? partner.language : language
+            return own ?? theirs
+        }
+        if prefersPartner(lean, token: token, own: own, theirs: theirs) {
+            lastFixLanguage = partner.language
+            return theirs
+        }
+        lastFixLanguage = language
+        return own
+    }
+
+    /// Whether this language's dictionary knows `word` only with a capital, and German's noun
+    /// list doesn't call it a noun: a name.
+    private func isName(_ word: String) -> Bool {
+        let lower = word.lowercased()
+        guard lower.count >= 2, let first = lower.first else { return false }
+        guard checker.isWordValid(first.uppercased() + lower.dropFirst()), !checker.isWordValid(lower) else { return false }
+        return !(language == .german && germanNouns?.capitalises(lower, after: nil) == true)
+    }
+
+    /// Whether `token` has a vowel. iOS's French and German dictionaries take abbreviations
+    /// without one ("dk", "dl", "tkm"), which beside English kept its slips ("Tkm" for "Tom"),
+    /// so a partner's word without a vowel doesn't count as a word. Serbian's vowelless words
+    /// ("prst") never meet this: it has no dictionary, so it is never a partner.
+    static func hasVowel(_ token: String) -> Bool {
+        token.lowercased().folding(options: .diacriticInsensitive, locale: nil).contains { "aeiouy".contains($0) }
+    }
+
+    /// ALL-CAPS ("API") or with capitals inside ("iOS"), which Spatial autocorrect leaves alone.
+    private func isAllCapsOrMixed(_ token: String) -> Bool {
+        token.dropFirst().contains(where: \.isUppercase)
+    }
+
+    /// A fix this language makes of `token` even where the other one knows the word: a
+    /// contraction typed without its apostrophe or a common slip (`unambiguousFixes`: "dont",
+    /// "im"), or a two-letter word ("dk" -> "do"), which in the other dictionary is mostly an
+    /// abbreviation. Longer words of the other language ("est", "merci") stay as typed.
+    private func isSureFix(_ token: String) -> Bool {
+        token.count == 2 || (language.usesEnglishFixes && Self.unambiguousFixes[token.lowercased()] != nil)
+    }
+
+    /// Bilingual autocorrect: `word`, which the partner's dictionary knew, was left as typed
+    /// at a sentence's start (no words before to tell the languages apart), and `next` now
+    /// leans this language (`languageLean`): its sure fix (`unambiguousFixes`), as "Im
+    /// going" becomes "I'm going" and "Dont do" "Don't do", while German "Im Haus" stays.
+    private func bilingualRevision(of word: String, before: String, next: String) -> String? {
+        guard let partner = workingPartner, language.usesEnglishFixes, !word.contains("'"),
+              let fixed = Self.unambiguousFixes[word.lowercased()], word.count >= 2 else { return nil }
+        let lower = word.lowercased()
+        guard !suppressedInSession.contains(lower), !learning.rejected.contains(lower), !learnedWords.contains(lower),
+              partner.knowsAsTyped(word), next.count >= 2, languageLean(partner, before: next, commonFrom: 2) < 0 else { return nil }
+        let rest = before.hasSuffix(word) ? String(before.dropLast(word.count)) : before
+        guard languageLean(partner, before: rest) == 0, mayOffer(fixed, after: Self.previousWord(before, token: word)) else { return nil }
+        return withoutAddedCapitals(Self.matchCase(of: word, onto: fixed), typed: word)
     }
 
     /// Whether `token` is a word in this language as typed: the dictionary's, one of your
     /// own (`UILexicon`, kept twice) or chat shorthand. A name it knows only capitalised
     /// doesn't count ("paris").
-    private func knowsAsTyped(_ token: String) -> Bool {
+    func knowsAsTyped(_ token: String) -> Bool {
         let lower = token.lowercased()
         return Self.shorthandAllowlist.contains(lower) || learnedWords.contains(lower)
             || lexiconTerms.contains { $0.lowercased() == lower } || checker.isWordValid(token)
     }
 
     /// Which language the words before `token` are in: above zero the partner's, below this
-    /// one's, counting the last four that only one of the dictionaries knows.
+    /// one's, counting the last four that only one of the dictionaries knows, or, of three
+    /// letters or more, that both know but only one language's typing model has among its
+    /// common words: iOS's French and German dictionaries take "the", "you", "your", "not"
+    /// and "please" (iOS 27.2 simulator), so English sentences rarely leaned English.
     private func languageLean(_ partner: AutocorrectEngine, token: String) -> Int {
         let before = (beforeInput ?? "").suffix(120)
-        let rest = before.hasSuffix(token) ? before.dropLast(token.count) : before
+        return languageLean(partner, before: String(before.hasSuffix(token) ? before.dropLast(token.count) : before))
+    }
+
+    /// `commonFrom`: the fewest letters a word both dictionaries know needs to count by the
+    /// typing models. Three, as French "de", "la" and "et" are common in the English model's
+    /// books, except for the word after a sentence's first (`bilingualRevision`: "Im in").
+    func languageLean(_ partner: AutocorrectEngine, before: String, commonFrom: Int = 3) -> Int {
         var lean = 0
-        for word in rest.split(whereSeparator: { !$0.isLetter && $0 != "'" }).suffix(4) where word.count >= 2 {
+        for word in before.suffix(120).split(whereSeparator: { !$0.isLetter && $0 != "'" }).suffix(4) where word.count >= 2 {
             let mine = checker.isWordValid(String(word))
             let theirs = partner.checker.isWordValid(String(word))
-            if theirs && !mine { lean += 1 } else if mine && !theirs { lean -= 1 }
+            if theirs && !mine {
+                lean += 1
+            } else if mine && !theirs {
+                lean -= 1
+            } else if mine, word.count >= commonFrom {
+                let myCommon = isCommon(String(word))
+                if myCommon != partner.isCommon(String(word)) { lean += myCommon ? -1 : 1 }
+            }
         }
         return lean
     }
 
+    /// Whether this language's typing model (`contextModel`, else Spatial autocorrect's)
+    /// has `word` among its commonest, about the top 2,000 (-ln P at most 10 nats: English
+    /// "please" 9.25, "capable" 9.9). False without a model for the language.
+    private func isCommon(_ word: String) -> Bool {
+        guard let model = contextModel ?? decoder?.model, model.language == language.rawValue,
+              let index = model.index(of: word.lowercased()) else { return false }
+        return model.unigramCost(index) <= Self.commonWordCost
+    }
+
+    static let commonWordCost = 10.0
+
     /// Both languages can fix the typo: the partner's fix when the words before are in its
     /// language, or, without a lean, when its fix is clearly the cheaper slip on these keys.
-    private func prefersPartner(_ partner: AutocorrectEngine, token: String, own: String, theirs: String) -> Bool {
-        let lean = languageLean(partner, token: token)
+    private func prefersPartner(_ lean: Int, token: String, own: String, theirs: String) -> Bool {
         if lean != 0 { return lean > 0 }
         let lower = token.lowercased()
         func cost(_ fix: String) -> Double {
@@ -870,7 +1106,15 @@ final class AutocorrectEngine {
             return Self.matchCase(of: token, onto: fix)
         }
 
-        // 4. Single-edit `UITextChecker` typo on words of 3+ characters, never rewriting valid words.
+        // 4. A word typed without its accent where the plain spelling is no word of the
+        // language ("perche" -> "perché", "citta" -> "città"): the dictionary path below
+        // needs three letters and never rewrites a word it knows, and a language's own list
+        // is deterministic. Ambiguous pairs ("e"/"è", "ce"/"c'è") are suggestion-only.
+        if let accented = accentRestoration(for: token) {
+            return accented
+        }
+
+        // 5. Single-edit `UITextChecker` typo on words of 3+ characters, never rewriting valid words.
         guard token.count >= 3, !token.contains("'") else { return nil }
         guard !checker.isWordValid(token) else { return nil }
 
@@ -891,33 +1135,30 @@ final class AutocorrectEngine {
         return withoutAddedCapitals(cased(bestGuess, typed: token), typed: token)
     }
 
+    /// The language's own accented spelling of `token`, where the plain spelling is no word
+    /// of it ("perche" -> "perché"), or nil. All-caps and mixed-case words are left alone,
+    /// as the dictionary path leaves them, and the table only holds non-words of this
+    /// language, so it may decide before a bilingual partner's dictionary does.
+    private func accentRestoration(for token: String) -> String? {
+        let isAllCaps = token.count >= 2 && token == token.uppercased() && token != token.lowercased()
+        guard !isAllCaps, !token.dropFirst().contains(where: \.isUppercase) else { return nil }
+        let lower = token.lowercased()
+        guard let accented = language.accentRestorations[lower], mayOffer(accented, replacing: token) else {
+            return nil
+        }
+        return withoutAddedCapitals(cased(accented, typed: token), typed: token)
+    }
+
     /// `candidate` cased as `token` was typed (`matchCase`), less a capital it only has
     /// from where it was learned (`withoutStrayCapital`).
     private func cased(_ candidate: String, typed token: String) -> String {
         withoutStrayCapital(Self.matchCase(of: token, onto: candidate), typed: token)
     }
 
-    /// `word` without a capital first letter it only has from where it was learned: a fix
-    /// you picked at the start of a sentence ("Helli" to "Hello"), a guess iOS knows
-    /// capitalised, a Contacts name that is also a common word ("Bell", "Will"). When `typed`
-    /// starts in lowercase and the dictionary knows the word in lowercase, it is written in
-    /// lowercase, as Apple's keyboard writes "bell" mid-sentence beside a contact Kate Bell
-    /// (black box, iOS 27.2). Names the dictionary knows only capitalised ("Taylor"), "I" and
-    /// its contractions, words with more capitals ("iPhone") and German, whose nouns take
-    /// capitals, keep theirs.
-    func withoutStrayCapital(_ word: String, typed: String) -> String {
-        guard language != .german, hasDictionary, typed.first?.isUppercase != true, word.count >= 2,
-              let first = word.first, first.isUppercase, !word.dropFirst().contains(where: \.isUppercase),
-              !word.contains(" ") else { return word }
-        let lower = first.lowercased() + word.dropFirst()
-        if language.usesEnglishFixes, lower.hasPrefix("i'") || lower.hasPrefix("i\u{2019}") { return word }
-        return checker.isWordValid(lower) ? lower : word
-    }
-
     /// `fix` for `token` as autocorrect puts it in: with `addsCapitals` off and nothing
     /// typed in capitals, all lowercase unless it is your own spelling; nil when that leaves
     /// just what you typed ("i").
-    private func withoutAddedCapitals(_ fix: String, typed token: String) -> String? {
+    func withoutAddedCapitals(_ fix: String, typed token: String) -> String? {
         guard !addsCapitals, !token.contains(where: \.isUppercase), !isOwnSpelling(fix) else { return fix }
         let lowered = fix.lowercased()
         return lowered == token ? nil : lowered
@@ -925,10 +1166,13 @@ final class AutocorrectEngine {
 
     /// Whether `word`, capitals and all, is one of your own spellings: a Contacts name or
     /// other `UILexicon` term, a text replacement's output, a word you kept twice, or a fix
-    /// Hex learned from you. Auto-capitalization off leaves their capitals alone.
+    /// Hex learned from you. Auto-capitalization off leaves their capitals alone, except a
+    /// capital that `withoutStrayCapital` drops: a Contacts name or learned fix that is also a
+    /// common word ("Will", "World") stays lowercase mid-sentence either way.
     func isOwnSpelling(_ word: String) -> Bool {
-        lexiconTerms.contains(word) || lexiconShortcuts.values.contains(word)
-            || learning.typos.values.contains(word) || learnedWords.words.contains(word)
+        lexiconShortcuts.values.contains(word)
+            || ((lexiconTerms.contains(word) || learning.typos.values.contains(word) || learnedWords.words.contains(word))
+                && withoutStrayCapital(word, typed: "") == word)
     }
 
     /// The very common two-letter word (the language's `commonTwoLetterWords`, commonest
@@ -946,12 +1190,13 @@ final class AutocorrectEngine {
     /// What spatial autocorrect makes of `token`'s taps, or nil when it doesn't apply: off,
     /// another language's model, an apostrophe or one letter typed, a letter the model lacks,
     /// or taps that don't match the word.
-    private func decoderDecision(for token: String) -> TypingDecoder.Decision? {
+    /// `partnerWord`: the bilingual partner knows `token` as typed, so it counts as a word.
+    private func decoderDecision(for token: String, partnerWord: Bool = false) -> TypingDecoder.Decision? {
         syncUserWords()
         guard let decoder, let keys = decoderKeys, let taps = decoderTaps, decoder.model.language == language.rawValue,
               token.count >= 2, taps.count == token.count, !token.contains("'") else { return nil }
         let before = beforeInput ?? ""
-        if let cache = decoderCache, cache.before == before, cache.taps == taps { return cache.decision }
+        if let cache = decoderCache, cache.before == before, cache.taps == taps, cache.partnerWord == partnerWord { return cache.decision }
         let lower = token.lowercased()
         // Whether what you typed is a word at all, which `properNoun` already answers for a noun
         // the dictionary knows only capitalised. German's list only decides the capital its
@@ -959,7 +1204,7 @@ final class AutocorrectEngine {
         // here.
         let valid = Self.shorthandAllowlist.contains(lower) || learnedWords.contains(lower)
             || lexiconTerms.contains { $0.lowercased() == lower } || checker.isWordValid(token)
-            || properNoun(for: token) != nil
+            || properNoun(for: token) != nil || partnerWord
         let previous = Self.previousWord(before, token: token)
         var decision = decoder.decide(taps: taps, typed: lower, previous: previous, literalIsValid: valid, keys: keys)
         if let baseline = decoderBaselineKeys, let replacement = decision?.replacement {
@@ -978,7 +1223,7 @@ final class AutocorrectEngine {
                 decision?.replacement = decoder.decide(taps: taps, typed: lower, previous: previous, literalIsValid: valid, keys: baseline)?.replacement
             }
         }
-        decoderCache = (before, taps, decision)
+        decoderCache = (before, taps, partnerWord, decision)
         return decision
     }
 
@@ -1117,6 +1362,9 @@ final class AutocorrectEngine {
         let isAllCaps = word == word.uppercased() && word != word.lowercased() && !word.hasPrefix("I'")
         guard !isAllCaps, let nextWord = next.split(separator: " ").first.map(String.init) else { return nil }
         let previous = Self.previousWord(before, token: word)
+        lastRevisionLanguage = language
+        if let fixed = bilingualRevision(of: word, before: before, next: nextWord) { return fixed }
+        if let (fixed, into) = accentRevision(of: word, before: before, next: nextWord) { lastRevisionLanguage = into; return fixed }
         guard let choice = contextChoice(
             for: word, previous: previous, next: nextWord.lowercased(),
             startsSentence: Self.startsSentence(before: before, token: word)
@@ -1176,20 +1424,6 @@ final class AutocorrectEngine {
         decoder?.neverSuggest = TypingDecoder.NeverSuggest(offensiveWords.blocked(allowSwearing: allowsSwearing), model: model)
         userWordsBuilt = (userWordsRevision, id)
         decoderCache = nil
-    }
-
-    /// The word before `token` in `before`, lowercased, when only spaces separate them
-    /// (nil at the start of a sentence or after punctuation).
-    static func previousWord(_ before: String, token: String) -> String? {
-        var rest = before.hasSuffix(token) ? before.dropLast(token.count) : Substring(before)
-        guard rest.last == " " else { return nil }
-        while rest.last == " " { rest = rest.dropLast() }
-        var word = ""
-        while let c = rest.last, c.isLetter || c == "'" {
-            word.insert(c, at: word.startIndex)
-            rest = rest.dropLast()
-        }
-        return word.isEmpty ? nil : word.lowercased()
     }
 
     /// A `UITextChecker` guess as autocorrect and the strip may use it, or nil. A guess adds
@@ -1252,126 +1486,5 @@ final class AutocorrectEngine {
                 return (costA + Double(a.offset) * 0.08) < (costB + Double(b.offset) * 0.08)
             }
             .map(\.element)
-    }
-
-    // MARK: - Case matching & QWERTY distance
-
-    static func matchCase(of typed: String, onto target: String) -> String {
-        guard !typed.isEmpty, !target.isEmpty else { return target }
-        if typed.count >= 2 && typed == typed.uppercased() && typed != typed.lowercased() {
-            return target.uppercased()
-        }
-        // Preserve intentional casing in `I`, `I'm`, `iPhone`, etc. unless `typed` started capitalized.
-        if target != target.lowercased() {
-            if typed.first?.isUppercase == true, let first = target.first, first.isLowercase {
-                return first.uppercased() + target.dropFirst()
-            }
-            return target
-        }
-        if typed.first?.isUppercase == true, let first = target.first {
-            return first.uppercased() + target.dropFirst()
-        }
-        return target
-    }
-
-    /// Returns a weighted cost if `source` and `target` are within 1 Damerau-Levenshtein edit; `nil` otherwise.
-    static func singleEditKeyboardCost(
-        from source: String,
-        to target: String,
-        language: KeyboardLanguage = .english,
-        letters: KeyboardLetterLayout? = nil
-    ) -> Double? {
-        if source == target { return 0 }
-        let s = Array(source)
-        let t = Array(target)
-        // Polish: diacritics you didn't add, however many ("zolw" -> "żółw", "maly" -> "mały"),
-        // are as cheap as one missing Spanish accent, a little more for each further one.
-        if language == .polish, s.count == t.count {
-            let missed = zip(s, t).filter { $0 != $1 }
-            if !missed.isEmpty, missed.allSatisfy({ samePolishLetterIgnoringDiacritics($0, $1) }) {
-                return 0.15 + 0.05 * Double(missed.count - 1)
-            }
-        }
-        let ds = s.count - t.count
-        guard abs(ds) <= 1 else { return nil }
-
-        if ds == 0 {
-            var diffs: [Int] = []
-            for i in 0..<s.count where s[i] != t[i] {
-                diffs.append(i)
-                if diffs.count > 2 { return nil }
-            }
-            if diffs.count == 1 {
-                let i = diffs[0]
-                // An accent or tilde you didn't add ("aqui" -> "aquí", "manana" -> "mañana")
-                // is the cheapest fix there is, not a far-away key.
-                if sameLetterIgnoringAccents(s[i], t[i]) { return 0.15 }
-                return areAdjacentKeys(s[i], t[i], language: language, letters: letters) ? 0.65 : 1.15
-            }
-            if diffs.count == 2, diffs[1] == diffs[0] + 1,
-               s[diffs[0]] == t[diffs[1]], s[diffs[1]] == t[diffs[0]] {
-                return 0.60
-            }
-            return nil
-        }
-
-        // Single insertion or deletion.
-        let (shorter, longer) = s.count < t.count ? (s, t) : (t, s)
-        var i = 0
-        var j = 0
-        var skippedIndex: Int?
-        while i < shorter.count && j < longer.count {
-            if shorter[i] == longer[j] {
-                i += 1
-                j += 1
-            } else if skippedIndex == nil {
-                skippedIndex = j
-                j += 1
-            } else {
-                return nil
-            }
-        }
-        let extraIdx = skippedIndex ?? (longer.count - 1)
-        let extraChar = longer[extraIdx]
-        let leftAdj = extraIdx > 0 && areAdjacentKeys(extraChar, longer[extraIdx - 1], language: language, letters: letters)
-        let rightAdj = extraIdx + 1 < longer.count && areAdjacentKeys(extraChar, longer[extraIdx + 1], language: language, letters: letters)
-        return (leftAdj || rightAdj) ? 0.70 : 0.90
-    }
-
-    /// Whether two letters differ only by an accent, diaeresis or tilde (e/é, u/ü, n/ñ).
-    static func sameLetterIgnoringAccents(_ a: Character, _ b: Character) -> Bool {
-        guard a != b else { return false }
-        let base: (Character) -> Unicode.Scalar? = { String($0).decomposedStringWithCanonicalMapping.unicodeScalars.first }
-        return base(a) == base(b)
-    }
-
-    /// Whether two lowercase letters are one Polish letter with or without its diacritic (a/ą,
-    /// z/ż, l/ł: ł has no decomposition, so it is named).
-    static func samePolishLetterIgnoringDiacritics(_ a: Character, _ b: Character) -> Bool {
-        sameLetterIgnoringAccents(a, b) || Set([a, b]) == ["l", "ł"]
-    }
-
-    private struct LayoutKey: Hashable {
-        let language: KeyboardLanguage
-        let letters: KeyboardLetterLayout
-    }
-
-    private static let keyCoordinates: [LayoutKey: [Character: (Double, Double)]] = Dictionary(
-        uniqueKeysWithValues: KeyboardLanguage.allCases.flatMap { language in
-            language.letterLayouts.map { (LayoutKey(language: language, letters: $0), language.keyCoordinates($0)) }
-        }
-    )
-
-    static func areAdjacentKeys(
-        _ a: Character,
-        _ b: Character,
-        language: KeyboardLanguage = .english,
-        letters: KeyboardLetterLayout? = nil
-    ) -> Bool {
-        let key = LayoutKey(language: language, letters: language.offered(letters))
-        guard let keys = keyCoordinates[key], let pa = keys[a], let pb = keys[b] else { return false }
-        let dx = pa.1 - pb.1
-        let dy = pa.0 - pb.0
-        return (dx * dx + dy * dy).squareRoot() <= 1.6
     }
 }

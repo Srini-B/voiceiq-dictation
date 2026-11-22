@@ -15,6 +15,10 @@ extension FullKeyboardEngine {
         /// What the swipe put in: a space when one was needed, then the word.
         var inserted: String
         var word: String
+        /// The text before and after the cursor right after it went in, as Hex expects the host
+        /// to report them: an update that matches is the echo of Hex's own edit (`hostEchoed`).
+        var before: String?
+        var after: String?
         /// Its other readings, cased as the word is, best first.
         var alternatives: [String]
     }
@@ -33,7 +37,7 @@ extension FullKeyboardEngine {
     /// The word before a swipe's, lowercased, when only spaces (or the one the swipe will
     /// add) come between them.
     var swipePreviousWord: String? {
-        let before = target.documentContextBeforeInput ?? ""
+        let before = textBefore ?? ""
         return AutocorrectEngine.previousWord(SwipeTyping.needsSpace(before: before) ? before + " " : before, token: "")
     }
 
@@ -61,7 +65,7 @@ extension FullKeyboardEngine {
     var swipeCapital: Bool {
         if shift.isUppercase { return true }
         guard shift.state == .off, !shift.isHeld else { return false }
-        let before = target.documentContextBeforeInput
+        let before = typingContext
         guard SwipeTyping.needsSpace(before: before) else { return false }
         return AutoCapitalization.shouldCapitalize(
             mode: autoCapitalizationMode,

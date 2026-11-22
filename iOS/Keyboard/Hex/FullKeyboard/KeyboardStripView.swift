@@ -3,8 +3,10 @@ import UIKit
 /// The 3-slot top bar above the keys, drawn as Apple's iOS 26 predictive bar is (measured in
 /// the iOS 27.2 simulator): SF 17 pt regular in muted ink, slots a third of the keyboard wide,
 /// 1 × 24 pt dividers ending on the thirds, and a pending autocorrection as a full-slot
-/// capsule with the divider beside it hidden. iOS's band above the keyboard takes the top of
-/// Apple's bar, so everything here is centred in the 27 pt below it. The centred
+/// capsule with the divider beside it hidden. On an iPhone held upright the strip is Apple's
+/// bar from its pill's top down (38 pt), with the words and dividers on Apple's line, 20 pt
+/// below the keyboard's top edge (`KeyboardMetrics.stripTextCenter`), and a small chip around
+/// a word instead of the capsule. The centred
 /// `Undo dictation` chip or a status message replaces the slots when needed.
 @MainActor
 final class KeyboardStripView: UIView {
@@ -21,6 +23,24 @@ final class KeyboardStripView: UIView {
     /// Each slot's frame in this view, from `KeyboardLayout.stripSlotFrames`; thirds of the
     /// view until the keyboard lays it out.
     var slotFrames: [CGRect]? { didSet { if slotFrames != oldValue { setNeedsLayout(); setNeedsDisplay() } } }
+    /// Where the words and dividers centre, from the strip's top (`KeyboardMetrics.stripTextCenter`).
+    var textCenterY: CGFloat? {
+        didSet {
+            guard textCenterY != oldValue else { return }
+            for button in slotButtons { button.textCenterY = textCenterY }
+            setNeedsLayout()
+            setNeedsDisplay()
+        }
+    }
+    /// A suggestion's chip and the dividers' height (`KeyboardMetrics.stripChipHeight`).
+    var chipHeight: CGFloat? {
+        didSet {
+            guard chipHeight != oldValue else { return }
+            for button in slotButtons { button.chipHeight = chipHeight }
+            setNeedsLayout()
+            setNeedsDisplay()
+        }
+    }
     /// How far the pills sit in from the strip's top and bottom (`KeyboardMetrics.stripInset`).
     var pillInset: CGFloat = 0.5 {
         didSet {
@@ -30,6 +50,8 @@ final class KeyboardStripView: UIView {
         }
     }
     var onSelectSuggestion: ((KeyboardSuggestion) -> Void)?
+    /// A slot was held (half a second): the word you typed offers Add to vocabulary.
+    var onHoldSuggestion: ((KeyboardSuggestion) -> Void)?
     var onUndoDictation: (() -> Void)?
     var onPaste: (() -> Void)?
     var onNextKeyboard: (() -> Void)?
@@ -76,9 +98,13 @@ final class KeyboardStripView: UIView {
         }
     }
     private var loggingMark: TypingLogMarkView?
-    /// A plain chip: `UIPasteControl` renders as an empty blue box inside a keyboard
-    /// extension (TestFlight build 4), so this reads the clipboard on tap instead, once, which
-    /// iOS asks about until Paste from Other Apps is Allow (`KeyboardClipboardTracker`).
+    /// Where the bar's middle slot centres, from this view's leading edge: the keyboard's middle,
+    /// not this view's, which leaves out the Hex key. Paste and Next keyboard centre on it.
+    var barMidX: CGFloat? { didSet { if barMidX != oldValue { setNeedsLayout() } } }
+    /// Plain text on the words' line, as a suggestion is: `UIPasteControl` renders as an empty
+    /// blue box inside a keyboard extension (TestFlight build 4), so this reads the clipboard on
+    /// tap instead, once, which iOS asks about until Paste from Other Apps is Allow
+    /// (`KeyboardClipboardTracker`).
     private let pasteControl = UIButton(type: .custom)
     private let nextKeyboardChip = UIButton(type: .custom)
 
@@ -107,15 +133,21 @@ final class KeyboardStripView: UIView {
         undoChip.configuration = chip
         undoChip.isHidden = true
         undoChip.addTarget(self, action: #selector(handleUndo), for: .touchUpInside)
+        // Apple's bar words: SF 17 pt regular in the bar's ink, no chip.
         var paste = UIButton.Configuration.plain()
         paste.image = UIImage(
             systemName: "doc.on.clipboard",
-            withConfiguration: UIImage.SymbolConfiguration(pointSize: 12.5, weight: .medium)
+            withConfiguration: UIImage.SymbolConfiguration(font: Self.pasteFont, scale: .small)
         )
-        paste.imagePadding = 6
+        paste.imagePadding = 5
         paste.title = "Paste"
-        paste.contentInsets = NSDirectionalEdgeInsets(top: 0, leading: 13, bottom: 0, trailing: 13)
-        paste.background.cornerRadius = 15
+        paste.titleTextAttributesTransformer = UIConfigurationTextAttributesTransformer { attributes in
+            var attributes = attributes
+            attributes.font = Self.pasteFont
+            return attributes
+        }
+        paste.contentInsets = NSDirectionalEdgeInsets(top: 0, leading: 8, bottom: 0, trailing: 8)
+        paste.background.backgroundColor = .clear
         pasteControl.configuration = paste
         pasteControl.isHidden = true
         pasteControl.addTarget(self, action: #selector(handlePaste), for: .touchUpInside)
@@ -140,6 +172,7 @@ final class KeyboardStripView: UIView {
         for (index, button) in slotButtons.enumerated() {
             button.tag = index
             button.addTarget(self, action: #selector(handleSlotTap(_:)), for: .touchUpInside)
+            button.addGestureRecognizer(UILongPressGestureRecognizer(target: self, action: #selector(handleSlotHold(_:))))
             addSubview(button)
         }
         applyPalette()
@@ -147,6 +180,8 @@ final class KeyboardStripView: UIView {
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError() }
+
+    private static let pasteFont = UIFont.systemFont(ofSize: 17, weight: .regular)
 
     /// `fullAccessHint`, while true, replaces everything else in the strip with what
     /// dictation needs (`FullAccessHintView`); `notice` does the same after it.
@@ -231,9 +266,9 @@ final class KeyboardStripView: UIView {
     }
 
     /// Which slot shows each suggestion: in order, except a lone emoji, swiped word or reading
-    /// of one, which takes the centre.
+    /// of one, which takes the centre. A revert keeps the left slot.
     static func slots(for suggestions: [KeyboardSuggestion]) -> [Int] {
-        if suggestions.count == 1, suggestions[0].kind != .keepLiteral, suggestions[0].kind != .secondary { return [1] }
+        if suggestions.count == 1, ![.keepLiteral, .secondary, .revert].contains(suggestions[0].kind) { return [1] }
         return Array(suggestions.indices.prefix(3))
     }
 
@@ -288,8 +323,7 @@ final class KeyboardStripView: UIView {
     private func applyPalette() {
         statusLabel.textColor = palette.textMuted
         var paste = pasteControl.configuration
-        paste?.baseForegroundColor = palette.textBase
-        paste?.background.backgroundColor = palette.chipFill
+        paste?.baseForegroundColor = palette.stripText
         pasteControl.configuration = paste
         var next = nextKeyboardChip.configuration
         next?.baseForegroundColor = palette.textMuted
@@ -309,14 +343,14 @@ final class KeyboardStripView: UIView {
     }
 
     private var contentCenterY: CGFloat {
-        bounds.height * 0.5
+        textCenterY ?? bounds.height * 0.5
     }
 
     override func layoutSubviews() {
         super.layoutSubviews()
         let midY = contentCenterY
         statusLabel.frame = CGRect(x: 16, y: max(0, midY - 12), width: max(0, bounds.width - 32), height: 24)
-        let chipH = min(34, max(24, bounds.height - 2 * pillInset))
+        let chipH = min(34, max(18, min(bounds.height - 2 * pillInset, chipHeight ?? .infinity)))
         let chipSize = undoChip.sizeThatFits(CGSize(width: bounds.width, height: chipH))
         undoChip.frame = CGRect(
             x: (bounds.width - chipSize.width) / 2,
@@ -332,7 +366,9 @@ final class KeyboardStripView: UIView {
         let pair = pasteShown && nextShown
         let gap: CGFloat = 8
         let total = pair ? pasteW + gap + nextSize.width : (pasteShown ? pasteW : nextSize.width)
-        let startX = (bounds.width - total) / 2
+        // On the keyboard's middle, as the middle slot's word, kept inside the strip.
+        let midX = barMidX ?? bounds.width / 2
+        let startX = max(0, min(bounds.width - total, midX - total / 2))
         let chipY = max(0, midY - chipH / 2)
         pasteControl.frame = CGRect(x: startX, y: chipY, width: pasteW, height: chipH)
         nextKeyboardChip.frame = CGRect(
@@ -341,7 +377,10 @@ final class KeyboardStripView: UIView {
             width: nextSize.width,
             height: chipH
         )
-        var hintFrame = bounds.insetBy(dx: 12, dy: 0)
+        // The hint's two lines and chip centre on the words' line, as everything in the strip.
+        let hintHalf = min(midY, bounds.height - midY)
+        let hintY = midY - hintHalf
+        var hintFrame = CGRect(x: 12, y: hintY, width: max(0, bounds.width - 24), height: 2 * hintHalf)
         var markRoom: CGFloat = 0
         if let loggingMark, showsLoggingMark {
             // On the text line at the outer slot's end, in from the keyboard's rounded corner;
@@ -352,8 +391,8 @@ final class KeyboardStripView: UIView {
             markRoom = 12 + size.width + 4
             bringSubviewToFront(loggingMark)
             hintFrame = hexOnLeading
-                ? CGRect(x: 12, y: 0, width: max(0, loggingMark.frame.minX - 8 - 12), height: bounds.height)
-                : CGRect(x: loggingMark.frame.maxX + 8, y: 0, width: max(0, bounds.width - loggingMark.frame.maxX - 20), height: bounds.height)
+                ? CGRect(x: 12, y: hintY, width: max(0, loggingMark.frame.minX - 8 - 12), height: 2 * hintHalf)
+                : CGRect(x: loggingMark.frame.maxX + 8, y: hintY, width: max(0, bounds.width - loggingMark.frame.maxX - 20), height: 2 * hintHalf)
         }
         fullAccessHintView?.frame = hintFrame
         fullAccessHintView?.chipHeight = chipH
@@ -376,19 +415,20 @@ final class KeyboardStripView: UIView {
 
     override func draw(_ rect: CGRect) {
         guard !showsUndo, !showsClipboard, !showsFullAccessHint, notice == nil, statusLabel.isHidden, bounds.width > 60 else { return }
-        // Hide the divider adjacent to a highlighted primary pill, matching Apple's strip.
-        let primaryHighlighted = currentSuggestions.count > 1 && currentSuggestions[1].willAutoReplace
-        guard !primaryHighlighted else { return }
+        // A chip sits inside its slot, so the dividers stay beside it, but for the one beside a
+        // revert, which Apple's bar hides.
+        let reverting = currentSuggestions.first?.kind == .revert
 
-        // Apple's dividers: 1 pt wide, ending on the slot boundary, 24 pt tall on the text's centre.
-        let lineH: CGFloat = min(24, bounds.height - 2)
+        // Apple's dividers: 1 pt wide, ending on the slot boundary, centred on the words' line, and
+        // no taller than a chip (24 pt where there's room).
+        let lineH: CGFloat = min(24, bounds.height - 2, chipHeight ?? .infinity, 2 * contentCenterY)
         let y = contentCenterY - lineH / 2
         palette.stripDivider.setFill()
         // Only between two filled slots: nothing to show, no dividers (as Apple's bar in a
         // field it offers nothing for).
         let filled = Set(Self.slots(for: currentSuggestions))
         for (index, slot) in currentSlotFrames.prefix(2).enumerated()
-        where slot.maxX < bounds.width - 1 && filled.contains(index) && filled.contains(index + 1) {
+        where slot.maxX < bounds.width - 1 && filled.contains(index) && filled.contains(index + 1) && !(reverting && index == 0) {
             UIRectFill(CGRect(x: slot.maxX - 1, y: y, width: 1, height: lineH))
         }
     }
@@ -402,6 +442,12 @@ final class KeyboardStripView: UIView {
         onSelectSuggestion?(currentSuggestions[item])
     }
 
+    @objc private func handleSlotHold(_ recognizer: UILongPressGestureRecognizer) {
+        guard recognizer.state == .began, let slot = recognizer.view?.tag,
+              let item = Self.slots(for: currentSuggestions).firstIndex(of: slot) else { return }
+        onHoldSuggestion?(currentSuggestions[item])
+    }
+
     /// One suggestion slot. A word that changes swaps letter by letter, as Apple's bar does
     /// (iOS 27.2, recorded at 60 fps): the letters both words share stay, the old word's other
     /// letters fade from its end and the new word's from its start, each in 0.1 s, staggered
@@ -409,6 +455,8 @@ final class KeyboardStripView: UIView {
     private final class SlotButton: UIControl {
         var inSystemPlatter = true { didSet { if inSystemPlatter != oldValue { setNeedsDisplay() } } }
         var pillInset: CGFloat = 0.5 { didSet { if pillInset != oldValue { setNeedsDisplay() } } }
+        var textCenterY: CGFloat? { didSet { if textCenterY != oldValue { setNeedsDisplay() } } }
+        var chipHeight: CGFloat? { didSet { if chipHeight != oldValue { setNeedsDisplay() } } }
         /// Room the Logging mark takes at the slot's outer end: the word centres in the rest.
         var leadingRoom: CGFloat = 0 { didSet { if leadingRoom != oldValue { setNeedsDisplay() } } }
         var trailingRoom: CGFloat = 0 { didSet { if trailingRoom != oldValue { setNeedsDisplay() } } }
@@ -447,6 +495,7 @@ final class KeyboardStripView: UIView {
             isAccessibilityElement = suggestion != nil
             isUserInteractionEnabled = suggestion != nil
             accessibilityLabel = suggestion?.displayText
+            accessibilityHint = suggestion?.kind == .revert ? "Undoes the autocorrection" : nil
             if old?.displayText != suggestion?.displayText {
                 if animated, window != nil, !UIAccessibility.isReduceMotionEnabled {
                     outgoing = old
@@ -493,13 +542,15 @@ final class KeyboardStripView: UIView {
         }
 
         private func layout(_ suggestion: KeyboardSuggestion, ink: UIColor) -> Word {
-            let midY = bounds.height * 0.5
+            let midY = textCenterY ?? bounds.height * 0.5
             // Apple's words are all SF 17 pt regular, the one in the capsule included.
             let font = UIFont.systemFont(ofSize: suggestion.kind == .emoji ? 22 : 17, weight: .regular)
             let attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: ink]
-            // The word centres in the slot, less any room the Logging mark takes.
-            let textMidX = (leadingRoom + bounds.width - trailingRoom) / 2
-            let maxTextW = max(20, min(bounds.width - 12, bounds.width - leadingRoom - trailingRoom - 8))
+            // The word centres in the slot, less any room the Logging mark takes; a revert's
+            // with its arrow after it.
+            let arrowRoom = suggestion.kind == .revert ? Self.revertArrowSize + Self.revertArrowGap : 0
+            let textMidX = (leadingRoom + bounds.width - trailingRoom - arrowRoom) / 2
+            let maxTextW = max(20, min(bounds.width - 12, bounds.width - leadingRoom - trailingRoom - 8) - arrowRoom)
             let text = suggestion.displayText
             let size = (text as NSString).size(withAttributes: attributes)
             guard size.width > maxTextW else {
@@ -546,18 +597,43 @@ final class KeyboardStripView: UIView {
             return CGFloat(x * x * (3 - 2 * x))
         }
 
+        static let chipPadding: CGFloat = 12
+        static let revertArrowSize: CGFloat = 13
+        static let revertArrowGap: CGFloat = 5
+
+        /// Apple's revert bubble's undo arrow, after the word.
+        private func drawRevertArrow(after word: Word, ink: UIColor) {
+            let config = UIImage.SymbolConfiguration(pointSize: Self.revertArrowSize, weight: .medium)
+            guard let arrow = UIImage(systemName: "arrow.uturn.backward", withConfiguration: config)?
+                .withTintColor(ink, renderingMode: .alwaysOriginal) else { return }
+            let textWidth = word.truncatedRect?.width ?? (word.text as NSString).size(withAttributes: word.attributes).width
+            let x = word.origin.x + textWidth + Self.revertArrowGap
+            arrow.draw(at: CGPoint(x: x, y: (textCenterY ?? bounds.height * 0.5) - arrow.size.height / 2))
+        }
+
         override func draw(_ rect: CGRect) {
-            let midY = bounds.height * 0.5
-            let pilled = suggestion != nil && (isHighlighted || suggestion?.willAutoReplace == true)
-            if pilled {
-                // Like Apple's, the highlight is a capsule as wide as its slot.
-                let pillH = max(22, bounds.height - 2 * pillInset)
-                let pill = CGRect(x: 0, y: max(0.5, midY - pillH / 2), width: bounds.width, height: pillH)
-                (isHighlighted ? palette.stripPillPressedFill : palette.stripPillFill).setFill()
-                UIBezierPath(roundedRect: pill, cornerRadius: pillH / 2).fill()
-            }
+            let pilled = suggestion != nil && (isHighlighted || suggestion?.willAutoReplace == true || suggestion?.kind == .revert)
             let ink = pilled ? palette.stripPillText : palette.stripText
             let incoming = suggestion.map { layout($0, ink: ink) }
+            if pilled, let incoming {
+                // A chip around the word (and a revert's arrow), even above and below the words'
+                // line: Apple's slot-wide 38 pt pill reaches into the band iOS draws over a
+                // third-party keyboard, and cut short there it read as squashed.
+                let textW = incoming.truncatedRect?.width ?? (incoming.text as NSString).size(withAttributes: incoming.attributes).width
+                let arrowRoom = suggestion?.kind == .revert ? Self.revertArrowSize + Self.revertArrowGap : 0
+                let chipH = chipHeight ?? max(22, bounds.height - 2 * pillInset)
+                let chipW = min(bounds.width, textW + arrowRoom + 2 * Self.chipPadding)
+                let midY = textCenterY ?? bounds.height * 0.5
+                let chip = CGRect(
+                    x: max(0, min(bounds.width - chipW, incoming.origin.x - (chipW - textW - arrowRoom) / 2)),
+                    y: midY - chipH / 2,
+                    width: chipW,
+                    height: chipH
+                )
+                (isHighlighted ? palette.stripPillPressedFill : palette.stripPillFill).setFill()
+                UIBezierPath(roundedRect: chip, cornerRadius: chipH / 2).fill()
+            }
+            if let incoming, suggestion?.kind == .revert { drawRevertArrow(after: incoming, ink: ink) }
             guard var leaving = outgoing.map({ layout($0, ink: ink) }) else {
                 if let incoming { draw(incoming) { _ in 1 } }
                 return
@@ -684,7 +760,7 @@ final class FullAccessHintView: UIView {
         )
         let textX = chipLeads ? openButton.frame.maxX + 10 : 0
         let textWidth = chipLeads ? max(0, bounds.width - textX) : max(0, openButton.frame.minX - 10)
-        // Two lines in the strip's 27 pt.
+        // Two lines, even above and below the strip's words' line.
         let lineHeight: CGFloat = min(16, (bounds.height + 1) / 2)
         let top = (bounds.height - 2 * lineHeight) / 2
         titleLabel.frame = CGRect(x: textX, y: top, width: textWidth, height: lineHeight)
