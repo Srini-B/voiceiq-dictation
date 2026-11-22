@@ -36,7 +36,9 @@ public enum FileLayout {
         appSupportRoot.appendingPathComponent("meetings", isDirectory: true)
     }
 
-    public static var agentRunsRoot: URL {
+    /// Agent mode's saved runs, removed with it in 0.7.12; see
+    /// `SettingsStore.removeRetiredSettingsOnce`.
+    static var agentRunsRoot: URL {
         appSupportRoot.appendingPathComponent("agent-runs", isDirectory: true)
     }
 

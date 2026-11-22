@@ -187,14 +187,6 @@ private struct RecordingStrip: View {
                             .font(.subheadline.weight(.medium))
                             .foregroundStyle(.secondary)
                     }
-                } else if !model.liveText.isEmpty {
-                    // One line, newest words last.
-                    Text(model.liveText)
-                        .font(.system(size: 16))
-                        .lineLimit(1)
-                        .truncationMode(.head)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .accessibilityLabel("Heard so far: \(model.liveText)")
                 } else if let started = model.snapshot.recordingStartedAt {
                     Text(timerInterval: started...Date.distantFuture, countsDown: false)
                         .font(.system(size: 16, weight: .semibold).monospacedDigit())
@@ -208,7 +200,7 @@ private struct RecordingStrip: View {
         }
         .padding(.horizontal, 6)
         .background {
-            if recording, model.liveText.isEmpty {
+            if recording {
                 LevelGlow(color: KeyboardPalette.recording)
             }
         }

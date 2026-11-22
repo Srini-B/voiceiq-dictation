@@ -28,14 +28,10 @@ public struct SurroundingText: Equatable, Sendable {
         before.contains { !$0.isWhitespace } || after.contains { !$0.isWhitespace }
     }
 
-    /// Only the gap before the result: a space when it would otherwise run
-    /// into the previous word ("button.Please"), or a line break when its
-    /// layout needs one, such as the next item of a list (`FieldLayout`).
-    public func spaced(_ text: String) -> String {
-        FieldLayout.leadingGap(before: before, text: text) + text
-    }
-
-    /// `spaced`, plus: a capital first letter at the start of a sentence,
+    /// The gap before the result (a space when it would otherwise run into
+    /// the previous word, "button.Please", or a line break when its layout
+    /// needs one, such as the next item of a list; `FieldLayout`), plus: a
+    /// capital first letter at the start of a sentence,
     /// punctuation the field already has dropped from the front of the
     /// result, and the gap after it that the text after the cursor needs.
     /// Whether a result continues the sentence before it is left to the

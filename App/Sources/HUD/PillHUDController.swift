@@ -7,11 +7,10 @@ import VoiceIQCore
 /// animates its own bounds inside (avoids NSWindow frame-animation jank).
 /// The panel never becomes key except transiently for the locked-state stop button.
 @MainActor
-final class PillHUDController: AgentOverlay {
+final class PillHUDController {
     let model = PillModel()
     private let panel: NSPanel
     private var stateObservation: AnyCancellable?
-    private var eventMonitors: [Any] = []
     private var mouseMonitor: Any?
     private let settings = SettingsStore()
     private var dragObservers: [NSObjectProtocol] = []
@@ -37,8 +36,8 @@ final class PillHUDController: AgentOverlay {
         panel.contentView = NSHostingView(
             rootView: PillRootView(model: model)
         )
-        stateObservation = model.$state.sink { [weak self] state in
-            self?.updatePanel(for: state)
+        stateObservation = model.$state.sink { [weak self] _ in
+            self?.reposition()
         }
         dragObservers = [
             NotificationCenter.default.addObserver(forName: .pillDragMoved, object: nil, queue: .main) { [weak self] _ in
@@ -91,12 +90,6 @@ final class PillHUDController: AgentOverlay {
         panel.orderOut(nil)
     }
 
-    /// Fades the panel out for a screen capture without ordering it out, so
-    /// its position and the agent transcript survive the capture.
-    func setHidden(_ hidden: Bool) {
-        panel.alphaValue = hidden ? 0 : 1
-    }
-
     /// `.none` leaves the panel out of other apps' screen captures (Zoom, Meet,
     /// Teams, screen recorders) while it stays visible on this Mac.
     func applyScreenSharingPrivacy() {
@@ -118,62 +111,6 @@ final class PillHUDController: AgentOverlay {
     private func stopFollowingMouse() {
         if let mouseMonitor { NSEvent.removeMonitor(mouseMonitor) }
         mouseMonitor = nil
-    }
-
-    private func updatePanel(for state: PillState) {
-        let isAnswer: Bool
-        if case .answer = state { isAnswer = true } else { isAnswer = false }
-        let isAgent: Bool
-        if case .agent = state { isAgent = true } else { isAgent = false }
-        let size = isAnswer || isAgent ? answerPanelSize() : NSSize(width: 600, height: 96)
-        let oldOrigin = panel.frame.origin
-        panel.setFrame(NSRect(origin: oldOrigin, size: size), display: true, animate: panel.isVisible)
-        reposition()
-        // The agent panel stays until Stop: no click-away or Esc dismissal.
-        isAnswer ? installAnswerMonitors() : removeAnswerMonitors()
-    }
-
-    private func answerPanelSize() -> NSSize {
-        let visible = targetScreen()?.visibleFrame.size ?? NSSize(width: 600, height: 320)
-        return NSSize(width: min(560, visible.width - 24), height: min(300, visible.height - 24))
-    }
-
-    /// ⌘Esc, as for a dictation (`EventTapEngine.isCancel`). A bare Esc
-    /// belongs to the app in front.
-    private static func isCancel(_ event: NSEvent) -> Bool {
-        event.keyCode == 53 && event.modifierFlags.intersection([.command, .option, .control, .shift]) == .command
-    }
-
-    private func installAnswerMonitors() {
-        guard eventMonitors.isEmpty else { return }
-        if let local = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .leftMouseDown, .rightMouseDown], handler: { [weak self] event in
-            guard let self else { return event }
-            if event.type == .keyDown, Self.isCancel(event) {
-                self.dismissAnswer()
-                return nil
-            }
-            if event.type != .keyDown, event.window != self.panel {
-                self.dismissAnswer()
-            }
-            return event
-        }) {
-            eventMonitors.append(local)
-        }
-        if let global = NSEvent.addGlobalMonitorForEvents(matching: [.keyDown, .leftMouseDown, .rightMouseDown], handler: { [weak self] event in
-            if event.type == .keyDown, !Self.isCancel(event) { return }
-            self?.dismissAnswer()
-        }) {
-            eventMonitors.append(global)
-        }
-    }
-
-    private func removeAnswerMonitors() {
-        eventMonitors.forEach(NSEvent.removeMonitor)
-        eventMonitors.removeAll()
-    }
-
-    private func dismissAnswer() {
-        NotificationCenter.default.post(name: .pillAnswerDismissed, object: nil)
     }
 
     private func reposition() {

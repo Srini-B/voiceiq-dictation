@@ -26,12 +26,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Before ANYTHING reads the Keychain, defaults, or History: carry over
         // everything from the app's pre-rename identity.
         LegacyMigration.runIfNeeded()
-        // AFTER LegacyMigration: smartFormatting is in its key list and has to be
-        // pulled out of the old defaults domain before this reads it.
-        FormattingSettingsMigration.runIfNeeded()
-        FormattingSettingsMigration.enableWritingRulesIfNeeded()
         FormattingSettingsMigration.removeLiveTranscriptionSettings()
-        FormattingSettingsMigration.restoreAutoDegradedWritingRulesOnce()
         FormattingSettingsMigration.splitWritingRulesOnce()
     }
 
@@ -152,12 +147,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             case "start-hands-free": self?.dictationController?.startHandsFree()
             case "stop": self?.dictationController?.coordinator.handle(.finalize)
             #if DEBUG
-            // voiceiq://agent — the agent shortcut; voiceiq://agent/<command> —
-            // opens the agent panel and runs the command as if it were spoken,
-            // so the loop can be exercised without a microphone. Debug only.
-            case "agent":
-                let command = url.pathComponents.dropFirst().joined(separator: "/")
-                self?.dictationController?.debugAgent(command: command.isEmpty ? nil : command)
             // voiceiq://set/<key>/<true|false> — flips a boolean setting through
             // the REAL SettingsStore setter (and its change notification), so the
             // live-update path can be exercised headlessly. Debug builds only.
@@ -178,9 +167,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         switch key {
         case "showIdleIndicator": settings.setShowIdleIndicator(value)
         case "soundsEnabled": settings.setSoundsEnabled(value)
-        case "experimentalNoiseHandling": settings.setExperimentalNoiseHandling(value)
-        case "smartTranscription": settings.setSmartTranscription(value)
-        case "smartCleanupPass": settings.setSmartCleanupPass(value)
         default: Log.session.warning("debug set: unknown key \(key, privacy: .public)")
         }
     }

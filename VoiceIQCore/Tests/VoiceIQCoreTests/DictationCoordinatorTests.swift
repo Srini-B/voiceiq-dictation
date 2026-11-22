@@ -76,7 +76,6 @@ final class DictationCoordinatorTests: XCTestCase {
 
     private func makeCoordinator(
         transcription: FakeTranscription = FakeTranscription(),
-        noiseHandling: Bool = false,
         secureInput: Bool = false
     ) -> DictationCoordinator {
         capture = FakeCapture()
@@ -87,9 +86,6 @@ final class DictationCoordinatorTests: XCTestCase {
             transcription: transcription,
             insertion: inserter,
             now: { [weak self] in self?.fakeNow ?? Date() },
-            // Explicit, never read from UserDefaults: a developer with the
-            // experiment switched on must not get different test results.
-            noiseHandlingEnabled: { noiseHandling },
             // Never read the host's real secure-input state: it is system-wide,
             // and a stuck loginwindow or Terminal's Secure Keyboard Entry would
             // fail every begin-a-session test for reasons unrelated to the code.
@@ -147,13 +143,10 @@ final class DictationCoordinatorTests: XCTestCase {
         XCTAssertEqual(c.lastResult, "clean")
     }
 
-    /// History shows each step of an uploaded dictation: the upload's
-    /// transcription without the writing model's share, which is its own row.
+    /// History shows each step of a dictation; the one model call that hears
+    /// and writes it is the transcription step.
     func testInsertedDictationKeepsItsStepTimes() async throws {
         var transcription = FakeTranscription()
-        var result = TranscriptionResult(rawTranscript: "raw", cleanedTranscript: "clean", modelID: "test")
-        result.writingSeconds = 0.2
-        transcription.result = .success(result)
         transcription.delayNanos = 300_000_000
         let c = makeCoordinator(transcription: transcription)
         var last: SessionMeta?
@@ -165,41 +158,11 @@ final class DictationCoordinatorTests: XCTestCase {
         XCTAssertEqual(c.state, .done(.inserted))
 
         let steps = try XCTUnwrap(last?.steps)
-        XCTAssertFalse(steps.live)
-        XCTAssertEqual(steps.writing, 0.2)
-        XCTAssertEqual(steps.transcription, 0.1, accuracy: 0.08, "the 0.3 s upload minus its 0.2 s writing share")
+        XCTAssertNil(steps.writing, "one call: there is no separate writing step")
+        XCTAssertEqual(steps.transcription, 0.3, accuracy: 0.08, "the 0.3 s model call")
         XCTAssertNotNil(steps.insert)
         let pipeline = try XCTUnwrap(last?.pipelineSeconds)
         let sum = steps.finishRecording + steps.transcription + (steps.writing ?? 0) + (steps.insert ?? 0)
-        XCTAssertEqual(pipeline, sum, accuracy: 0.01, "the steps add up to the pipeline shown above them")
-    }
-
-    /// An Ask result goes to the answer card, not the field: its last step
-    /// is the hand-off, and the steps still add up to the pipeline.
-    func testAnsweredDictationKeepsItsHandoffTime() async throws {
-        var transcription = FakeTranscription()
-        var result = TranscriptionResult(rawTranscript: "raw", cleanedTranscript: "answer", modelID: "test")
-        result.writingSeconds = 0.2
-        transcription.result = .success(result)
-        transcription.delayNanos = 300_000_000
-        let c = makeCoordinator(transcription: transcription)
-        var last: SessionMeta?
-        var answer: String?
-        c.onSessionUpdate = { meta, _ in last = meta }
-        c.onAnswerReady = { answer = $0 }
-        c.handle(.begin, mode: .askAnything(selectedText: nil))
-        await pump()
-        c.handle(.finalize)
-        for _ in 0..<200 where !c.state.isTerminal { try await Task.sleep(nanoseconds: 10_000_000) }
-        XCTAssertEqual(answer, "answer")
-        XCTAssertNil(inserter.insertedText)
-
-        let steps = try XCTUnwrap(last?.steps)
-        XCTAssertNil(steps.insert)
-        XCTAssertNotNil(steps.handoff)
-        XCTAssertEqual(steps.rows.last?.label, "Hand-off")
-        let pipeline = try XCTUnwrap(last?.pipelineSeconds)
-        let sum = steps.finishRecording + steps.transcription + (steps.writing ?? 0) + (steps.handoff ?? 0)
         XCTAssertEqual(pipeline, sum, accuracy: 0.01, "the steps add up to the pipeline shown above them")
     }
 
@@ -300,7 +263,7 @@ final class DictationCoordinatorTests: XCTestCase {
         // Sent but answered with no text: a failure to retry, not silence to delete.
         var empty = FakeTranscription()
         empty.result = .failure(.emptyTranscript)
-        let dropped = makeCoordinator(transcription: empty, noiseHandling: false)
+        let dropped = makeCoordinator(transcription: empty)
         var discarded: [UUID] = []
         dropped.onSessionDiscard = { discarded.append($0) }
         dropped.handle(.begin)
@@ -565,7 +528,7 @@ extension DictationCoordinatorTests {
     /// far above a very quiet room is someone speaking softly, not a dead mic.
     /// This clause may only ever PREVENT a discard.
     func testQuietSpeechAboveAQuietRoomIsNotDiscarded() async {
-        let c = makeCoordinator(noiseHandling: false)
+        let c = makeCoordinator()
         var discarded: [UUID] = []
         c.onSessionDiscard = { discarded.append($0) }
         capture.result = AudioCaptureResult(
@@ -587,7 +550,7 @@ extension DictationCoordinatorTests {
     /// Nothing measured the loudness at all ⇒ upload. A wasted round-trip costs a
     /// fraction of a cent; a discarded session costs the words.
     func testUnmeasuredPeakIsTreatedAsSpeech() async {
-        let c = makeCoordinator(noiseHandling: false)
+        let c = makeCoordinator()
         var discarded: [UUID] = []
         c.onSessionDiscard = { discarded.append($0) }
         capture.result = AudioCaptureResult(
@@ -608,7 +571,7 @@ extension DictationCoordinatorTests {
     func testEmptyTranscriptInLoudRoomIsSilentButKeepsTheRecording() async {
         var transcription = FakeTranscription()
         transcription.result = .failure(.emptyTranscript)
-        let c = makeCoordinator(transcription: transcription, noiseHandling: true)
+        let c = makeCoordinator(transcription: transcription)
         var discarded: [UUID] = []
         var updates: [SessionMeta] = []
         c.onSessionDiscard = { discarded.append($0) }
@@ -637,24 +600,5 @@ extension DictationCoordinatorTests {
         let meta = try! XCTUnwrap(updates.last, "a row must be written at all")
         XCTAssertEqual(meta.status, .failed, ".silent rows are invisible in History and get purged")
         XCTAssertEqual(meta.errorCode, "tooNoisy")
-    }
-
-    /// With the flag off, that same empty transcript stays a real failure — the
-    /// experiment is the only thing that changes the classification.
-    func testEmptyTranscriptInLoudRoomStillFailsWithFlagOff() async {
-        var transcription = FakeTranscription()
-        transcription.result = .failure(.emptyTranscript)
-        let c = makeCoordinator(transcription: transcription, noiseHandling: false)
-        capture.result = AudioCaptureResult(
-            framesWritten: 16_000, durationSeconds: 1.0, peakLevel: 0.5
-        )
-        c.handle(.begin)
-        await pump()
-        for _ in 0..<12 { capture.onLevel?(0.4) }
-        capture.onLevel?(0.0)
-        await pump()
-        c.handle(.finalize)
-        await settle()
-        XCTAssertNotEqual(c.state, .done(.silent))
     }
 }

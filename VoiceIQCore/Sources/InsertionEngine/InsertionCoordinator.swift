@@ -23,14 +23,13 @@ public struct InsertionCoordinator: TextInserting {
     }
 
     /// The result as it should land next to the text already in the target
-    /// field: spaced, and with "Fit to existing text" on, also capitalized and
-    /// punctuated for where the cursor is. Unchanged when the field cannot be
+    /// field: spaced, capitalized and punctuated for where the cursor is. Unchanged when the field cannot be
     /// read. Run it before `insert`, so whoever tracks the insert sees the
     /// text that landed.
     @MainActor
     public static func fitted(_ text: String, context: DictationContext) -> String {
         guard let surrounding = AXInserter.surroundingText(targetPID: context.targetPID) else { return text }
-        return SettingsStore().fitToExistingText ? surrounding.fitted(text) : surrounding.spaced(text)
+        return surrounding.fitted(text)
     }
 
     @MainActor

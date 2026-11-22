@@ -38,12 +38,9 @@ struct MeetingsPane: View {
             if let exported { ExportToast(result: exported) { self.exported = nil }.padding(.bottom, VoiceIQUI.Spacing.l) }
         }
         .animation(.easeOut(duration: 0.2), value: exported)
-        .onAppear { reload(); if engine.liveTranscript != nil { narrowShowsTranscript = true } }
+        .onAppear { reload() }
         .onChange(of: selection) { _, _ in assigning = false; loadSelection() }
         .onChange(of: engine.phase) { _, _ in reload() }
-        // A narrow window shows the notes or the transcript. While a meeting
-        // records, the notes are only a spinner, so the live transcript shows.
-        .onChange(of: engine.liveTranscript != nil) { _, live in narrowShowsTranscript = live }
         .onChange(of: engine.processing) { _, _ in reload() }
         .onReceive(NotificationCenter.default.publisher(for: .gtMeetingsDidChange).receive(on: RunLoop.main)) { note in
             if note.object as? String == "sync" { reload() }
@@ -84,8 +81,7 @@ struct MeetingsPane: View {
 
     private func detail(_ meeting: MeetingMeta, width paneWidth: CGFloat) -> some View {
         let wide = paneWidth >= Self.wideWidth
-        let shown = shownTranscript(meeting)
-        let transcriptShown = !shown.isEmpty && (wide ? !hidesTranscript : narrowShowsTranscript)
+        let transcriptShown = !transcript.isEmpty && (wide ? !hidesTranscript : narrowShowsTranscript)
         return VStack(spacing: 0) {
             header(meeting, wide: wide, transcriptShown: transcriptShown)
             Divider()
@@ -115,8 +111,8 @@ struct MeetingsPane: View {
                                                rename: { speaker, name in rename(meeting, speaker, name) },
                                                back: { assigning = false })
                         } else {
-                            MeetingTranscriptColumn(meeting: meeting, notes: notes, transcript: shown,
-                                                    width: width, live: isRecording(meeting)) { assigning = true }
+                            MeetingTranscriptColumn(meeting: meeting, notes: notes, transcript: transcript,
+                                                    width: width) { assigning = true }
                         }
                     }
                     .frame(width: width)
@@ -131,21 +127,6 @@ struct MeetingsPane: View {
                     .id(meeting.id)
             }
         }
-    }
-
-    /// The saved transcript, or while this meeting records with ElevenLabs,
-    /// what Scribe v3 Live has heard so far, with the turn still being heard
-    /// last. The saved transcript replaces it after the meeting stops. Only
-    /// the last 100 turns, since the column redraws with every partial.
-    private func shownTranscript(_ meeting: MeetingMeta) -> [TranscriptSegment] {
-        guard isRecording(meeting), let live = engine.liveTranscript else { return transcript }
-        let hearing = live.stopped ? "Live transcript stopped. The transcript is made when you stop." : live.partial
-        return live.segments.suffix(100) + (hearing.isEmpty ? [] : [TranscriptSegment(speaker: "…", text: hearing, chunkIndex: 0)])
-    }
-
-    private func isRecording(_ meeting: MeetingMeta) -> Bool {
-        if case .recording(meeting.id, _) = engine.phase { return true }
-        return false
     }
 
     /// Nil until the meeting has a transcript to ask about.
@@ -216,7 +197,7 @@ struct MeetingsPane: View {
                 Image(systemName: wide ? "sidebar.right" : transcriptShown ? "doc.text" : "text.bubble")
             }
             .help(transcriptShown ? (wide ? "Hide transcript" : "Show notes") : "Show transcript")
-            .disabled(shownTranscript(meeting).isEmpty)
+            .disabled(transcript.isEmpty)
         }
         .padding(.horizontal, VoiceIQUI.Spacing.l)
         .padding(.top, VoiceIQUI.Spacing.l)

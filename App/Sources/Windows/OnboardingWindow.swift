@@ -353,32 +353,13 @@ private struct APIKeyScreen: View {
     /// Replacing a key that is already stored — bug report: a user who saved a
     /// bad key had to UNINSTALL the app to get another chance at this screen.
     @State private var replacing = false
-    @State private var provider = SettingsStore().preferredProvider
-    /// A saved key for the selected provider completes this step.
-    @State private var storedKeyExists = KeychainStore.hasKey(for: SettingsStore().preferredProvider)
+    /// A saved key completes this step.
+    @State private var storedKeyExists = KeychainStore.hasModelKey
     private var showingField: Bool { !storedKeyExists || replacing }
-    private var host: String { provider == .gemini ? "Google" : "OpenAI" }
 
     var body: some View {
-        ScreenScaffold("Bring your own key.", "VoiceiQ uses your \(provider.displayName) API key. It's stored in your Mac's Keychain and only ever sent to \(host).") {
+        ScreenScaffold("Bring your own key.", "VoiceiQ uses your Gemini API key. It's stored in your Mac's Keychain and only ever sent to Google.") {
             VStack(spacing: VoiceIQUI.Spacing.s) {
-                Picker("Provider", selection: $provider) {
-                    ForEach(ModelProvider.allCases) { Text($0.displayName).tag($0) }
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .frame(width: 220)
-                .disabled(validating)
-                .onChange(of: provider) { _, value in
-                    SettingsStore().setPreferredProvider(value)
-                    storedKeyExists = KeychainStore.hasKey(for: value)
-                    replacing = false
-                    key = ""
-                    failed = false
-                    rejection = nil
-                    unverified = false
-                    noModelAccess = false
-                }
                 if !showingField {
                     Label("Key already in your Keychain", systemImage: "checkmark.circle.fill")
                         .font(VoiceIQUI.TypeScale.body())
@@ -402,7 +383,7 @@ private struct APIKeyScreen: View {
                         .frame(width: 320)
                     if failed {
                         Text(rejection.map { "That key was rejected: \($0)" }
-                             ?? "That key didn't work — check it in \(provider == .gemini ? "AI Studio" : "your OpenAI dashboard").")
+                             ?? "That key didn't work — check it in AI Studio.")
                             .font(VoiceIQUI.TypeScale.labelSmall())
                             .foregroundStyle(VoiceIQUI.Colors.error)
                             .multilineTextAlignment(.center)
@@ -410,7 +391,7 @@ private struct APIKeyScreen: View {
                             .frame(maxWidth: 320)
                     }
                     if unverified {
-                        Text("Couldn't reach \(host) to check this key — saved it anyway. Your first dictation will tell you for sure.")
+                        Text("Couldn't reach Google to check this key — saved it anyway. Your first dictation will tell you for sure.")
                             .font(VoiceIQUI.TypeScale.labelSmall())
                             .foregroundStyle(VoiceIQUI.Colors.onSurfaceVariant)
                             .multilineTextAlignment(.center)
@@ -423,19 +404,14 @@ private struct APIKeyScreen: View {
                             .foregroundStyle(VoiceIQUI.Colors.error)
                     }
                     if noModelAccess {
-                        Text("That key works, but it can't reach VoiceiQ's transcription model yet. Setup continues — ask for access, then try a dictation.")
+                        Text("That key works, but it can't reach VoiceiQ's dictation model yet. Setup continues — ask for access, then try a dictation.")
                             .font(VoiceIQUI.TypeScale.labelSmall())
                             .foregroundStyle(VoiceIQUI.Colors.error)
                             .multilineTextAlignment(.center)
                             .fixedSize(horizontal: false, vertical: true)
                     }
-                    if provider == .gemini {
-                        Link("Get a key in Google AI Studio", destination: URL(string: "https://aistudio.google.com/apikey")!)
-                            .font(VoiceIQUI.TypeScale.labelSmall())
-                    } else {
-                        Link("Get a key from OpenAI", destination: URL(string: "https://platform.openai.com/api-keys")!)
-                            .font(VoiceIQUI.TypeScale.labelSmall())
-                    }
+                    Link("Get a key in Google AI Studio", destination: URL(string: "https://aistudio.google.com/apikey")!)
+                        .font(VoiceIQUI.TypeScale.labelSmall())
                 }
                 if validating {
                     ProgressView().controlSize(.small)
@@ -467,14 +443,9 @@ private struct APIKeyScreen: View {
         failed = false
         rejection = nil
         unverified = false
-        let provider = provider
         Task {
-            let client = provider == .gemini
-                ? GeminiClient(apiKey: { candidate })
-                : GeminiClient(apiKey: { nil }, openAIKey: { candidate })
-            let check = provider == .gemini
-                ? await client.validateKey(endpoint: SettingsStore().geminiConfig.endpoint)
-                : await client.validateOpenAIKey()
+            let client = GeminiClient(apiKey: { candidate })
+            let check = await client.validateKey(endpoint: SettingsStore().geminiConfig.endpoint)
 
             if case .rejected(let detail) = check {
                 // The server answered and said no. This is the case that used to
@@ -488,18 +459,17 @@ private struct APIKeyScreen: View {
                 return
             }
 
-            if check == .valid, provider == .gemini {
+            if check == .valid {
                 // "Your key works" must mean dictation works. Check the model
                 // VoiceiQ actually ships on — and only report, never substitute.
                 let config = SettingsStore().geminiConfig
                 noModelAccess = await client.resolveAvailableModel(
-                    from: [config.transcribeModel], endpoint: config.endpoint
+                    from: [config.writingModel], endpoint: config.endpoint
                 ) == nil
             }
             unverified = (check == .unreachable)
 
-            let saved = provider == .gemini ? KeychainStore.saveAPIKey(candidate) : KeychainStore.saveOpenAIKey(candidate)
-            guard saved else {
+            guard KeychainStore.saveAPIKey(candidate) else {
                 saveFailed = true
                 validating = false
                 return
@@ -881,10 +851,6 @@ private struct HowToScreen: View {
                                detail: "Talk as long as you like. Press \(keyName) again and polished text lands at your cursor.")
                     gestureRow(keys: ["⌘esc"], title: "Changed your mind",
                                detail: "Cancels the dictation. Long recordings are kept in History.")
-                    gestureRow(keys: [shortcuts.shortcut(for: .askAnything).displayString], title: "Ask Anything",
-                               detail: "Speak a question or a command over selected text. The answer shows on the pill.")
-                    gestureRow(keys: [shortcuts.shortcut(for: .translate).displayString], title: "Translate",
-                               detail: "Speak in any language. The target language types out.")
                     gestureRow(keys: [shortcuts.shortcut(for: .meetingToggle).displayString], title: "Meeting notes",
                                detail: "Records the call, then writes a transcript, summary, and action items.")
                     gestureRow(keys: [shortcuts.shortcut(for: .pasteLastTranscript).displayString], title: "Paste last transcript",

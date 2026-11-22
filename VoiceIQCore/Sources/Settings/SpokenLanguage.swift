@@ -1,21 +1,17 @@
 import Foundation
 
 /// A language the user speaks, by its ISO 639-3 code: the main language and
-/// the others in `SettingsStore.spokenLanguages`, used by every provider for
-/// dictation and meetings. Each provider takes them its own way:
-/// ElevenLabs as `language_code` plus secondary codes, OpenAI as
-/// `languages[]` plus `transcriptionPrompt`. Gemini's transcribe models get
-/// none: they detect the language and its switches themselves, and
-/// `language_codes` silently turns smart mode off (see
-/// `GeminiClient.transcriptionConfig`).
+/// the others in `SettingsStore.spokenLanguages`. The dictation call gets
+/// them as a hint (`promptLine`). Meetings get none: gemini-3.5-transcribe
+/// detects each language and every switch itself.
 public struct SpokenLanguage: Hashable, Identifiable, Sendable {
     public let code: String
     public let name: String
     public var id: String { code }
 
-    /// Every language on the ElevenLabs speech to text page (read
-    /// 2026-11-12), by English name. Settings offers only these; OpenAI and
-    /// Gemini list fewer, see `openAICodes`.
+    /// The languages Settings offers, by English name (the list ElevenLabs'
+    /// speech to text page gave on 2026-11-12, kept so saved choices still
+    /// read).
     public static let all: [SpokenLanguage] = [
         SpokenLanguage(code: "afr", name: "Afrikaans"),
         SpokenLanguage(code: "amh", name: "Amharic"),
@@ -123,8 +119,7 @@ public struct SpokenLanguage: Hashable, Identifiable, Sendable {
     public static func isListed(_ code: String) -> Bool { all.contains { $0.code == code } }
 
     /// `codes` with `main` as the main language ("" for automatic
-    /// detection, which also clears the others: Scribe v3 refuses other
-    /// languages without a main one).
+    /// detection, which also clears the others).
     public static func choosing(main: String, in codes: [String]) -> [String] {
         main.isEmpty ? [] : [main] + codes.dropFirst().filter { $0 != main }
     }
@@ -147,43 +142,14 @@ public struct SpokenLanguage: Hashable, Identifiable, Sendable {
         codes.isEmpty ? none : codes.map { code in all.first { $0.code == code }?.name ?? code }.joined(separator: ", ")
     }
 
-    /// OpenAI's `languages[]` (ISO 639-1) for `codes`, or none when one of
-    /// them has no two-letter code (Cantonese, Cebuano and the like): the
-    /// list limits what the model listens for, so a partial one would shut
-    /// out that language. `Locale` hands back the three-letter code when
-    /// there is no two-letter one, hence the length check. OpenAI refuses a
-    /// request with a code it does not know, and
-    /// `GeminiClient.openAITranscribe` then retries without it.
-    public static func openAICodes(_ codes: [String]) -> [String] {
-        let short = codes.compactMap { Locale.LanguageCode($0).identifier(.alpha2) }.filter { $0.count == 2 }
-        return short.count == codes.count ? short : []
-    }
-
-    /// What OpenAI's transcription models are told about the speaker
-    /// (`prompt`) when they speak more than one language; nil otherwise,
-    /// where `openAICodes` says it all. It describes the recording, as
-    /// OpenAI's guide asks, and carries only what a transcriber can act on
-    /// from the writing rules: which languages to expect and that they
-    /// switch mid-sentence. Vocabulary goes in `keywords[]`; rewording,
-    /// layout, tone and number style stay with the writing model. Each
-    /// language is also named in itself ("Japanese (日本語)"), since OpenAI
-    /// asks for a prompt in the audio's language. MEASURED 2026-11-13 with
-    /// gpt-transcribe: adding the writing rules' script line ("Each language
-    /// is written in its own script, never translated or romanized.") made
-    /// a short accented Japanese dictation come back part Devanagari ("Now
-    /// मिस on.") in 4 of 6 runs; this prompt, like `languages[]` alone, in
-    /// none (with neither, in Devanagari in 3 of 4 runs). Clear
-    /// Japanese, Tamil and English-Tamil code-switched clips came back in
-    /// their own scripts either way.
-    public static func transcriptionPrompt(_ codes: [String]) -> String? {
-        guard codes.count > 1 else { return nil }
-        let names = codes.map { code -> String in
-            let name = all.first { $0.code == code }?.name ?? code
-            guard let native = Locale(identifier: code).localizedString(forLanguageCode: code),
-                  native.lowercased() != name.lowercased() else { return name }
-            return "\(name) (\(native))"
-        }
-        let list = names.dropLast().joined(separator: ", ") + " and " + names.last!
-        return "Dictation in \(list), sometimes switching language mid-sentence."
+    /// What the dictation call is told about the speaker's languages, or nil
+    /// for automatic detection. A hint only: Gemini hears every language
+    /// and each switch, and the writing rules already keep each language in
+    /// its own script.
+    public static func promptLine(_ codes: [String]) -> String? {
+        guard let main = codes.first else { return nil }
+        let mainName = names([main], none: main)
+        guard codes.count > 1 else { return "LANGUAGES: The speaker usually speaks \(mainName)." }
+        return "LANGUAGES: The speaker usually speaks \(mainName) and may also speak \(names(codes.dropFirst(), none: "")), sometimes switching language mid-sentence. Write every language as it is spoken; never translate."
     }
 }

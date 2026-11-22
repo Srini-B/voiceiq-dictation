@@ -17,10 +17,7 @@ final class LearningInserter: TextInserting {
     }
 
     func insert(_ text: String, context: DictationContext) async -> InsertionOutcome {
-        let enabled = SettingsStore().autoLearnEnabled
-        let field = enabled
-            ? AXInserter.focusedField(targetPID: context.targetPID, bundleID: context.targetAppBundleID)
-            : nil
+        let field = AXInserter.focusedField(targetPID: context.targetPID, bundleID: context.targetAppBundleID)
         if let field { await learner.harvest(before: field) }
         let text = InsertionCoordinator.fitted(text, context: context)
         let outcome = await inner.insert(text, context: context)

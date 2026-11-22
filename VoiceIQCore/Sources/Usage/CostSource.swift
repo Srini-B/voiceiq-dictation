@@ -1,22 +1,14 @@
 import Foundation
 
-/// Whose bill a usage record lands on, for the Cost pane: Gemini, OpenAI,
-/// ElevenLabs, or Claude. Claude is no longer a provider (removed 2026-11-10); its source
-/// stays so rows booked under it (on Anthropic, and on DeepInfra while Claude
-/// transcribed with Nemotron there) still show and price.
+/// Whose bill a usage record lands on, for the Cost pane. Gemini is the only
+/// provider since 0.7.12. OpenAI and ElevenLabs (removed in 0.7.12) and Claude
+/// (removed 2026-11-10) stay so rows booked under them still show and price.
 /// Records store only the model ID, so the source is read off its prefix.
 public enum CostSource: String, CaseIterable, Sendable, Identifiable {
     case gemini
     case openAI
     case elevenLabs
     case anthropic
-
-    public init(_ provider: ModelProvider) {
-        switch provider {
-        case .gemini: self = .gemini
-        case .openAI: self = .openAI
-        }
-    }
 
     public var id: String { rawValue }
 
@@ -29,16 +21,9 @@ public enum CostSource: String, CaseIterable, Sendable, Identifiable {
         }
     }
 
-    /// Whether the Cost pane always offers the source: a provider the app
-    /// still offers, or ElevenLabs while its key is stored. Any other source
-    /// is offered only while it has rows.
-    public var isCurrent: Bool {
-        switch self {
-        case .gemini, .openAI: return true
-        case .elevenLabs: return KeychainStore.loadKey(.elevenLabs) != nil
-        case .anthropic: return false
-        }
-    }
+    /// Whether the Cost pane always offers the source. A retired one is
+    /// offered only while it has rows.
+    public var isCurrent: Bool { self == .gemini }
 
     /// For SQL `LIKE` filters on the stored model ID. The `google/` and
     /// `openai/` prefixes match rows booked before the gateways were removed,
@@ -59,7 +44,7 @@ public enum CostSource: String, CaseIterable, Sendable, Identifiable {
         case .gemini: return "Paid-tier Standard prices from the Gemini API pricing page. A free-tier key is billed nothing."
         case .openAI: return "Standard prices from the OpenAI API pricing page."
         case .elevenLabs:
-            return "List prices from the ElevenLabs API pricing page: Scribe v3 $0.20 an hour, plus dictionary terms ($0.05), the formatting instruction ($0.07) and hiding card and ID numbers ($0.06); Scribe v3 Live, for the live meeting transcript, $0.22 an hour plus dictionary terms ($0.08). Hours included in your plan are not subtracted."
+            return "List prices from the ElevenLabs API pricing page: Scribe v3 $0.20 an hour, plus its add-ons; Scribe v3 Live $0.22 an hour. Hours included in your plan are not subtracted."
         case .anthropic: return "Standard prices from Anthropic's pricing page."
         }
     }

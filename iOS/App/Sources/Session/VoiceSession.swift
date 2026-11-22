@@ -27,7 +27,6 @@ final class VoiceSession: ObservableObject {
             if dictationPhase != oldValue { phaseChanged() }
         }
     }
-    var mode: KeyboardMode = .dictate { didSet { publishIfChanged() } }
     var recordingStartedAt: Date? { didSet { publishIfChanged() } }
     var meetingStartedAt: Date? {
         didSet {
@@ -193,16 +192,9 @@ final class VoiceSession: ObservableObject {
         store.levelBars = bars.heights
     }
 
-    /// The live transcriber's words so far, for the keyboard to show.
-    func setLiveText(_ text: String) {
-        guard isActive, dictationPhase == .recording else { return }
-        store.liveText = text
-    }
-
     private func clearDictationTrace() {
         bars = LevelBars()
         store.levelBars = []
-        store.liveText = ""
     }
 
     // MARK: - Background time
@@ -227,7 +219,6 @@ final class VoiceSession: ObservableObject {
     private var snapshot: SessionSnapshot {
         SessionSnapshot(
             phase: isActive ? dictationPhase : .off,
-            mode: mode,
             recordingStartedAt: recordingStartedAt,
             delivery: delivery,
             notice: notice,
@@ -237,12 +228,12 @@ final class VoiceSession: ObservableObject {
 
     private var activityState: VoiceSessionAttributes.ContentState {
         if let meetingStartedAt {
-            return .init(phase: .meeting, mode: mode, since: meetingStartedAt)
+            return .init(phase: .meeting, since: meetingStartedAt)
         }
         switch dictationPhase {
-        case .recording: return .init(phase: .recording, mode: mode, since: recordingStartedAt)
-        case .processing: return .init(phase: .processing, mode: mode)
-        case .warm, .off: return .init(phase: .ready, mode: mode)
+        case .recording: return .init(phase: .recording, since: recordingStartedAt)
+        case .processing: return .init(phase: .processing)
+        case .warm, .off: return .init(phase: .ready)
         }
     }
 

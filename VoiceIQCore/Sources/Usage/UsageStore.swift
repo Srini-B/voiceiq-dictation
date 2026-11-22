@@ -1,7 +1,9 @@
 import Foundation
 import GRDB
 
-/// What the user was doing when a model call happened.
+/// What the user was doing when a model call happened. Ask Anything,
+/// Translate and Agent were removed in 0.7.12; their cases stay so rows
+/// booked before still read.
 public enum UsageActivity: String, Codable, CaseIterable, Sendable {
     case dictation, askAnything, translate, meeting, agent, other
 
@@ -17,8 +19,9 @@ public enum UsageActivity: String, Codable, CaseIterable, Sendable {
     }
 }
 
-/// Which call inside that activity. One dictation is typically a
-/// transcription plus a cleanup; one meeting is a transcription plus a summary.
+/// Which call inside that activity. One dictation is one transcription call
+/// since 0.7.12; one meeting is a transcription plus a summary. The other
+/// stages stay so rows booked by older builds still read.
 public enum UsageStage: String, Codable, Sendable {
     case transcribe, liveTranscribe, cleanup, answer, translate, webQuery, meetingTranscribe, meetingSummary, meetingChat, agentStep
 

@@ -18,7 +18,6 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
         meetings: MeetingEngine,
         onRetry: @escaping (DictationRecord) -> Void,
         onDeleteAllHistory: @escaping () -> Void,
-        agentRuns: AgentRunStore,
         onClosed: @escaping () -> Void
     ) {
         model = MainWindowModel()
@@ -48,8 +47,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
             store: store,
             meetings: meetings,
             onRetry: onRetry,
-            onDeleteAllHistory: onDeleteAllHistory,
-            agentRuns: agentRuns
+            onDeleteAllHistory: onDeleteAllHistory
         ))
     }
 
@@ -69,7 +67,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
 }
 
 enum MainSection: String, CaseIterable, Identifiable {
-    case history, meetings, agent, dictionary, cost
+    case history, meetings, dictionary, cost
     case dictation, privacy, advanced
     case about
     var id: String { rawValue }
@@ -78,7 +76,6 @@ enum MainSection: String, CaseIterable, Identifiable {
         switch self {
         case .history: return "History"
         case .meetings: return "Meetings"
-        case .agent: return "Agent"
         case .dictionary: return "Dictionary"
         case .cost: return "Cost Analysis"
         case .dictation: return "Dictation"
@@ -92,7 +89,6 @@ enum MainSection: String, CaseIterable, Identifiable {
         switch self {
         case .history: return "clock.arrow.circlepath"
         case .meetings: return "person.2.wave.2.fill"
-        case .agent: return "sparkles"
         case .dictionary: return "character.book.closed.fill"
         case .cost: return "dollarsign.circle.fill"
         case .dictation: return "waveform"
@@ -106,7 +102,6 @@ enum MainSection: String, CaseIterable, Identifiable {
         switch self {
         case .history: return VoiceIQUI.Colors.gBlue
         case .meetings: return Color(nsColor: .systemPurple)
-        case .agent: return Color(nsColor: .systemYellow)
         case .dictionary: return Color(nsColor: .systemOrange)
         case .cost: return Color(nsColor: .systemMint)
         case .dictation: return Color(nsColor: .systemTeal)
@@ -116,7 +111,7 @@ enum MainSection: String, CaseIterable, Identifiable {
         }
     }
 
-    static let dataSections: [MainSection] = [.history, .meetings, .agent, .dictionary, .cost]
+    static let dataSections: [MainSection] = [.history, .meetings, .dictionary, .cost]
     static let settingsSections: [MainSection] = [.dictation, .privacy, .advanced, .about]
 }
 
@@ -132,7 +127,6 @@ private struct MainView: View {
     let meetings: MeetingEngine
     let onRetry: (DictationRecord) -> Void
     let onDeleteAllHistory: () -> Void
-    let agentRuns: AgentRunStore
 
     var body: some View {
         HStack(spacing: 0) {
@@ -198,8 +192,6 @@ private struct MainView: View {
                 }
             case .meetings:
                 MeetingsPane(engine: meetings, store: meetings.store)
-            case .agent:
-                AgentRunsPane(store: agentRuns)
             case .dictionary:
                 DictionaryView()
             case .cost:
@@ -265,34 +257,6 @@ private struct SidebarRow: View {
 struct PrivacyPane: View {
     let onDeleteAllHistory: () -> Void
     private let settings = SettingsStore()
-    @State private var provider = SettingsStore().preferredProvider
-    @State private var meetingProviders = SettingsStore().meetingProviders
-    @State private var elevenLabs = SettingsStore().transcribesWithElevenLabs
-    private static func host(_ provider: ModelProvider) -> String {
-        switch provider {
-        case .gemini: return "Google"
-        case .openAI: return "OpenAI"
-        }
-    }
-    /// Every host this setup can send to: ElevenLabs when it transcribes,
-    /// the provider, and the meeting transcript and notes fallbacks.
-    private var hosts: String {
-        var names: [String] = []
-        for name in (elevenLabs ? ["ElevenLabs"] : []) + [Self.host(provider)] + meetingProviders.map(Self.host)
-        where !names.contains(name) { names.append(name) }
-        return ListFormatter.localizedString(byJoining: names)
-    }
-    /// Meetings go to the first provider with a key, then to each other one
-    /// in turn while the earlier ones fail.
-    private var meetingOwner: String {
-        if elevenLabs { return "ElevenLabs Scribe v3" }
-        let names = meetingProviders.map(\.displayName)
-        guard let first = names.first else { return provider.displayName }
-        let rest = names.dropFirst()
-        guard let last = rest.last else { return first }
-        let fallbacks = rest.count == 1 ? last : rest.dropLast().joined(separator: ", ") + " or " + last
-        return "\(first), or \(fallbacks) if that fails"
-    }
     @State private var retentionDays = SettingsStore().audioRetentionDays
     @State private var transcriptRetentionDays = SettingsStore().transcriptRetentionDays
     @State private var confirmingDelete = false
@@ -351,23 +315,21 @@ struct PrivacyPane: View {
             }
 
             Section {
-                LabeledContent("Audio") { Text("Sent to \(elevenLabs ? "ElevenLabs" : Self.host(provider)) with your key, transcribed every time") }
-                LabeledContent("Transcript text") { Text("Sent back only for writing rules, Ask Anything and Translate") }
-                LabeledContent("Text around the cursor") { Text("Only if Fit to existing text and writing rules are on") }
-                LabeledContent("Where you are typing") { Text("App name, window title and browser page address, only with writing rules") }
-                LabeledContent("Meeting audio") { Text("Only if call recording is on; transcribed by \(meetingOwner), notes are made by \(provider.displayName)") }
-                LabeledContent("Dictionary terms") { Text("Sent with cloud transcription and cleanup, so names are spelled right") }
+                LabeledContent("Audio") { Text("Sent to Google's Gemini API with your key, transcribed every time") }
+                LabeledContent("Text around the cursor") { Text("Sent with each dictation, so it fits the text already there") }
+                LabeledContent("Where you are typing") { Text("App name, window title and browser page address, with each dictation") }
+                LabeledContent("Meeting audio") { Text("Only if call recording is on; transcribed and turned into notes by Gemini") }
+                LabeledContent("Dictionary terms") { Text("Sent with each dictation and meeting notes, so names are spelled right") }
                 LabeledContent("Dictionary") { Text("Synced to your iPhone through your iCloud account") }
                 LabeledContent("History") { Text("Final text synced to your iPhone through your iCloud account") }
                 LabeledContent("Meetings") { Text("Notes, transcripts and questions synced to your iPhone through your iCloud account; recordings stay on this Mac") }
-                LabeledContent("Screen snapshots") { Text("Only if screen context and writing rules are on; never stored") }
-                LabeledContent("Names on a call screen") { Text("Read on this Mac while a meeting records; only the names go to \(provider.displayName) for notes") }
-                LabeledContent("Ask Anything search") { Text("Only if a TinyFish key is saved; the search query goes to TinyFish") }
+                LabeledContent("Screen snapshots") { Text("Only if screen context is on; never stored") }
+                LabeledContent("Names on a call screen") { Text("Read on this Mac while a meeting records; only the names go to Gemini for notes") }
                 LabeledContent("Everything else") { Text("Never leaves this Mac") }
             } header: {
                 Text("What leaves your Mac")
             } footer: {
-                Text("No middleman server, no account, no analytics, no keystroke logging. Only \(hosts), plus TinyFish when you add its key.")
+                Text("No middleman server, no account, no analytics, no keystroke logging. Only Google.")
             }
 
             Section {
@@ -387,12 +349,6 @@ struct PrivacyPane: View {
         // off without telling us. Re-reading on appear covers reopening the window.
         .onAppear {
             launchAtLogin = SMAppService.mainApp.status == .enabled
-            provider = settings.preferredProvider
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .gtSettingDidChange).receive(on: RunLoop.main)) { _ in
-            provider = settings.preferredProvider
-            meetingProviders = settings.meetingProviders
-            elevenLabs = settings.transcribesWithElevenLabs
         }
     }
 }
@@ -420,28 +376,12 @@ struct AdvancedPane: View {
         let trimmed = endpoint.trimmingCharacters(in: .whitespacesAndNewlines)
         return !trimmed.isEmpty && SettingsStore.usableEndpointURL(trimmed) == nil
     }
-    @State private var provider = SettingsStore().preferredProvider
 
     var body: some View {
         Form {
-            ProviderSection(provider: $provider)
+            geminiKeySection
 
-            switch provider {
-            case .gemini: geminiKeySection
-            case .openAI: ProviderKeySection.openAI
-            }
-
-            TinyFishKeySection()
-
-            ProviderKeySection.elevenLabs
-            ElevenLabsTranscriptionSection(provider: provider)
-
-            switch provider {
-            case .gemini: geminiModelSections
-            case .openAI: OpenAIModelsSection()
-            }
-
-            AgentProviderSection()
+            geminiModelSections
 
             BrowserExtensionSection()
 
@@ -517,7 +457,7 @@ struct AdvancedPane: View {
                         .font(VoiceIQUI.TypeScale.labelSmall())
                         .foregroundStyle(VoiceIQUI.Colors.error)
                 }
-                LabeledContent("Transcription model") {
+                LabeledContent("Meeting model") {
                     TextField("", text: $transcribeModel, prompt: Text(Self.defaultConfig.transcribeModel))
                         .labelsHidden()
                         .font(VoiceIQUI.TypeScale.code)
@@ -527,8 +467,8 @@ struct AdvancedPane: View {
                     let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
                     settings.setTranscribeModelOverride(trimmed.isEmpty ? nil : trimmed)
                 }
-                LabeledContent("Formatting model") {
-                    TextField("", text: $cleanupModel, prompt: Text(Self.defaultConfig.cleanupModel))
+                LabeledContent("Dictation model") {
+                    TextField("", text: $cleanupModel, prompt: Text(Self.defaultConfig.writingModel))
                         .labelsHidden()
                         .font(VoiceIQUI.TypeScale.code)
                         .multilineTextAlignment(.trailing)
@@ -540,7 +480,7 @@ struct AdvancedPane: View {
             } header: {
                 Text("Gemini models")
             } footer: {
-                Text("Preview models get renamed — override here if a model 404s. Leave blank for defaults — every edit saves as you type.")
+                Text("The dictation model hears each dictation and writes its text in one call; it also writes meeting notes and answers meeting questions. The meeting model transcribes meetings with speakers and word times. Preview models get renamed — override here if a model 404s. Leave blank for defaults — every edit saves as you type.")
             }
     }
 

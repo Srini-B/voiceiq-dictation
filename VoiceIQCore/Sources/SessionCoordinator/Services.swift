@@ -4,70 +4,23 @@ import AppKit
 import Foundation
 import VoiceIQBridge
 
-/// Transcription seam. M3 provides the Gemini implementation; tests use fakes.
+/// Transcription seam. `GeminiTranscriptionService` in the app; tests use fakes.
 public protocol TranscriptionServicing: Sendable {
-    /// Returns (rawTranscript, cleanedTranscript). Throws TranscriptionError.
+    /// Throws TranscriptionError.
     func transcribe(audioURL: URL, durationSeconds: Double, context: DictationContext) async throws -> TranscriptionResult
-    func process(_ transcript: TranscriptionResult, durationSeconds: Double, context: DictationContext) async throws -> TranscriptionResult
-}
-
-public extension TranscriptionServicing {
-    func process(_ transcript: TranscriptionResult, durationSeconds: Double, context: DictationContext) async throws -> TranscriptionResult {
-        transcript
-    }
-}
-
-/// Why the writing rules did not shape a transcript when they were on, and
-/// what stood in for them.
-public struct CleanupSkip: Equatable, Sendable {
-    public enum Cause: Equatable, Sendable {
-        /// The user keeps dictations of 5 seconds or less as spoken.
-        case shortDictation
-        /// The cleanup request never answered: timed out, offline, or a network error.
-        case requestFailed
-        /// The model answered and the validation gate refused its rewrite.
-        case rewriteRejected
-    }
-    public var cause: Cause
-    /// `FillerStripper` removed hesitation sounds in the model's place.
-    public var fillersRemoved: Bool
-    /// The row's details in History.
-    public var note: String
-
-    public init(cause: Cause, fillersRemoved: Bool = false, note: String) {
-        self.cause = cause
-        self.fillersRemoved = fillersRemoved
-        self.note = note
-    }
 }
 
 public struct TranscriptionResult: Equatable, Sendable {
+    /// The model's text before the Dictionary's replacement rules.
     public var rawTranscript: String
+    /// The text that is inserted.
     public var cleanedTranscript: String
     public var modelID: String
-    /// Set when the writing rules were on and did not shape `cleanedTranscript`.
-    public var cleanupSkip: CleanupSkip?
-    /// Local English formatting candidate. The original remains authoritative.
-    public var normalizedTranscript: String?
-    /// An Ask Anything result that is the edited selection rather than an
-    /// answer: it goes through the insertion ladder in place of the selected
-    /// text instead of the answer pill.
-    public var replacesSelection: Bool
-    /// How long the writing model took, its checks included. Nil when no
-    /// writing model ran.
-    public var writingSeconds: TimeInterval?
 
-    /// Shown in History as the row's details.
-    public var cleanupNote: String? { cleanupSkip?.note }
-
-    public init(rawTranscript: String, cleanedTranscript: String, modelID: String, cleanupSkip: CleanupSkip? = nil,
-                normalizedTranscript: String? = nil, replacesSelection: Bool = false) {
+    public init(rawTranscript: String, cleanedTranscript: String, modelID: String) {
         self.rawTranscript = rawTranscript
         self.cleanedTranscript = cleanedTranscript
         self.modelID = modelID
-        self.cleanupSkip = cleanupSkip
-        self.normalizedTranscript = normalizedTranscript
-        self.replacesSelection = replacesSelection
     }
 }
 
@@ -89,29 +42,6 @@ public enum TranscriptionError: Error, Equatable, Sendable {
     case timeout
     case emptyTranscript
     case safetyBlocked
-}
-
-public enum DictationMode: Equatable, Sendable {
-    case dictate
-    case askAnything(selectedText: String?)
-    /// Targets in order of preference; the model picks the first one the
-    /// transcript is not already in.
-    case translate(targets: [String])
-    /// A spoken command for the agent. The transcript is handed to the
-    /// agent loop instead of being inserted or answered here.
-    case agent
-
-    /// Modes whose result goes to `onAnswerReady` instead of insertion.
-    public var handsTranscriptToCaller: Bool {
-        switch self {
-        case .askAnything, .agent: return true
-        case .dictate, .translate: return false
-        }
-    }
-
-    /// Modes whose recording and transcript stay in History. Agent commands
-    /// live in the agent run instead.
-    public var keepsRecording: Bool { self != .agent }
 }
 
 /// The text field that had focus when dictation started, and the text around
@@ -147,8 +77,6 @@ public struct DictationContext: Equatable, Sendable {
     public var targetAppName: String?
     public var targetPID: pid_t?
     public var focusedField: FocusedFieldCapture?
-    public var mode: DictationMode
-    public var selectedTextIsSettable: Bool
     public var screenshots: [Data]
 
     public init(
@@ -156,16 +84,12 @@ public struct DictationContext: Equatable, Sendable {
         targetAppName: String? = nil,
         targetPID: pid_t? = nil,
         focusedField: FocusedFieldCapture? = nil,
-        mode: DictationMode = .dictate,
-        selectedTextIsSettable: Bool = false,
         screenshots: [Data] = []
     ) {
         self.targetAppBundleID = targetAppBundleID
         self.targetAppName = targetAppName
         self.targetPID = targetPID
         self.focusedField = focusedField
-        self.mode = mode
-        self.selectedTextIsSettable = selectedTextIsSettable
         self.screenshots = screenshots
     }
 }

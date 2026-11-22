@@ -20,7 +20,7 @@ struct PillView: View {
 
     private var hasInteractiveControls: Bool {
         switch model.state {
-        case .idleDot, .listening(locked: true), .answer, .agent, .meetingPrompt, .meetingRecording: return true
+        case .idleDot, .listening(locked: true), .meetingPrompt, .meetingRecording: return true
         default: return false
         }
     }
@@ -40,7 +40,7 @@ struct PillView: View {
                 .padding(.vertical, 20) // stable panel hit area
 
         case .listening(let locked):
-            pillSurface(width: model.partial.isEmpty ? (locked ? 308 : 200) : 520) {
+            pillSurface(width: locked ? 308 : 200) {
                 HStack(spacing: VoiceIQUI.Spacing.s) {
                     if locked {
                         Image(systemName: "lock.fill")
@@ -55,16 +55,6 @@ struct PillView: View {
                             .foregroundStyle(VoiceIQUI.Colors.onSurfaceVariant)
                     }
                     WaveformView(level: model.level, processing: false)
-                    if !model.partial.isEmpty {
-                        Text(model.partial)
-                            .font(VoiceIQUI.TypeScale.labelSmall())
-                            .foregroundStyle(VoiceIQUI.Colors.onSurfaceVariant)
-                            .lineLimit(1)
-                            .truncationMode(.head)
-                            .frame(maxWidth: .infinity, alignment: .trailing)
-                            .animation(nil, value: model.partial)
-                            .accessibilityHidden(true)
-                    }
                     if locked {
                         cancelButton
                         stopButton
@@ -97,16 +87,6 @@ struct PillView: View {
                     .fixedSize(horizontal: true, vertical: false) // never truncate — the pill hugs the text
                     .padding(.horizontal, VoiceIQUI.Spacing.xxs)
             }
-
-        case .answer(let answer):
-            AnswerView(answer: answer)
-                .frame(width: 520, height: 260)
-                .transition(.scale(scale: 0.94, anchor: .bottom).combined(with: .opacity))
-
-        case .agent:
-            AgentPanelView(model: model.agent)
-                .frame(width: 520, height: 260)
-                .transition(.scale(scale: 0.94, anchor: .bottom).combined(with: .opacity))
 
         case .error(let message):
             errorChip(message: message)
@@ -235,8 +215,6 @@ struct PillView: View {
         case .processing: return "Processing"
         case .success(let words): return "Inserted\(words.map { " \($0) words" } ?? "")"
         case .notice(let message): return message
-        case .answer: return "Answer"
-        case .agent: return "Agent"
         case .error(let message): return "Error — \(message)"
         case .meetingPrompt(let name): return "Meeting detected in \(name)"
         case .meetingRecording: return "Recording meeting"

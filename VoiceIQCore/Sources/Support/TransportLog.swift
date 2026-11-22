@@ -7,7 +7,6 @@ public struct TransportEvent: Codable, Equatable, Sendable {
     public var requestID: String
     public var attempt: Int
     public var stage: String
-    public var via: String
     public var model: String
     public var host: String?
     /// "h2", "h3", "http/1.1"; nil when no transaction started.

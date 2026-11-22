@@ -28,12 +28,6 @@ final class DictationController {
     private var retryQueue: RetryQueue?
     private var mainWindow: MainWindowController?
     private var onboardingWindow: OnboardingWindowController?
-    private var pendingAnswer: String?
-    private lazy var agent = AgentController(panel: hud.model.agent)
-    private let agentRuns = AgentRunStore()
-    /// A coordinator session in `.agent` mode is recording or transcribing
-    /// the next command.
-    private var agentListening = false
     private var activationObservers: [NSObjectProtocol] = []
     /// The app in front before VoiceiQ was activated.
     private var previousFrontmostApp: NSRunningApplication?
@@ -44,7 +38,6 @@ final class DictationController {
     private var elapsedTimer: Timer?
     private var slowTimer: Timer?
     private var dismissTask: Task<Void, Never>?
-    private var shortcutMode: DictationMode?
     /// The start tone waits out `chordGrace`, so a press that turns out to be
     /// part of another app's shortcut stays silent. Modifiers pressed together
     /// for a shortcut arrive within it. The idea and the 40 ms come from Hex
@@ -57,26 +50,15 @@ final class DictationController {
     init() {
         KeychainStore.migrateDevKeyFileIfPresent()
         FileLayout.removeRetiredModels()
-        SettingsStore().adoptProviderWithKeyOnce()
-        let client = GeminiClient(
-            apiKey: { KeychainStore.loadAPIKey() },
-            openAIKey: { KeychainStore.loadOpenAIKey() },
-            openAIConfig: { SettingsStore().openAIConfig },
-            provider: { SettingsStore().preferredProvider },
-            elevenLabsKey: { KeychainStore.loadKey(.elevenLabs) }
-        )
+        SettingsStore().removeRetiredSettingsOnce()
+        let client = GeminiClient(apiKey: { KeychainStore.loadAPIKey() })
         let service = GeminiTranscriptionService(client: client)
         transcriptionService = service
         historyStore = try? HistoryStore.standard()
         UsageMeter.store = try? UsageStore.standard()
         meetings = MeetingEngine(
             client: client,
-            config: { SettingsStore().geminiConfig },
-            summaryModel: SettingsStore().geminiConfig.cleanupModel,
-            providers: { SettingsStore().meetingProviders },
-            speechEndpoints: { SettingsStore().meetingSpeechEndpoints },
-            readsScreenNames: { SettingsStore().meetingScreenNamesEnabled },
-            liveMeetingKey: { SettingsStore().transcribesWithElevenLabs ? KeychainStore.loadKey(.elevenLabs) : nil }
+            config: { SettingsStore().geminiConfig }
         )
         coordinator = DictationCoordinator(
             audioFactory: { [warmEngines] in warmEngines.take() },
@@ -103,8 +85,7 @@ final class DictationController {
                     targetPID: app?.processIdentifier,
                     focusedField: field
                 )
-            },
-            liveFactory: { _ in LiveTranscriber.makeFromSettings() }
+            }
         )
         sleepGuard = SessionSleepGuard(dictation: coordinator, meetings: meetings)
     }
@@ -138,28 +119,6 @@ final class DictationController {
         Task { @MainActor [weak self] in
             for await intent in intentStream {
                 guard let self else { break }
-                // The dictation key also ends an Ask Anything or Translate
-                // session, so the user has one key that always means "stop".
-                if intent == .begin, self.shortcutMode != nil {
-                    Log.hotkey.info("dictation key ends mode session")
-                    self.coordinator.handle(.finalize)
-                    self.shortcutMode = nil
-                    self.engine.resetGrammar()
-                    continue
-                }
-                // While the agent panel is open the dictation key speaks to
-                // the agent. The panel never takes focus, so a plain
-                // dictation would land in the app behind it instead. Only when
-                // nothing is running: a hands-free dictation started from the
-                // menu keeps the key as its stop (refused-begin path below).
-                if intent == .begin, self.agent.isOpen,
-                   self.coordinator.state == .idle || self.coordinator.state.isTerminal {
-                    Log.hotkey.info("dictation key speaks to the agent")
-                    if !self.agent.canRun || self.agent.isBusy || !self.startAgentListening() {
-                        self.engine.resetGrammar()
-                    }
-                    continue
-                }
                 let accepted = self.coordinator.handle(intent)
                 if !accepted, intent == .begin {
                     // Refused begin: the grammar armed a phantom session, so
@@ -190,18 +149,6 @@ final class DictationController {
                 self?.startHandsFree()
             }
         }
-        NotificationCenter.default.addObserver(forName: .pillAnswerDismissed, object: nil, queue: .main) { [weak self] _ in
-            Task { @MainActor in
-                guard let self else { return }
-                self.setPill(self.restingPill(for: self.coordinator.state))
-            }
-        }
-        NotificationCenter.default.addObserver(forName: .agentStopRequested, object: nil, queue: .main) { [weak self] _ in
-            Task { @MainActor in self?.stopAgent() }
-        }
-        NotificationCenter.default.addObserver(forName: .agentListenTapped, object: nil, queue: .main) { [weak self] _ in
-            Task { @MainActor in self?.agentShortcutPressed() }
-        }
         // Settings must take effect the moment they're flipped — not on the next
         // unrelated pill transition (dogfood: resting-dot toggle "didn't work").
         NotificationCenter.default.addObserver(forName: .gtSettingDidChange, object: nil, queue: .main) { [weak self] note in
@@ -219,12 +166,9 @@ final class DictationController {
         }
         meetings.onNotesReady = { [weak self] in
             guard let self else { return }
-            // Notes finish in the background, so they can land while another
-            // offer or answer is on the pill; the check must not replace it.
-            switch self.hud.model.state {
-            case .meetingPrompt, .answer: return
-            default: break
-            }
+            // Notes finish in the background, so they can land while a
+            // meeting offer is on the pill; the check must not replace it.
+            if case .meetingPrompt = self.hud.model.state { return }
             switch self.coordinator.state {
             case .idle, .done, .cancelled, .failed: self.showSuccessBadge(words: nil)
             default: break
@@ -270,19 +214,6 @@ final class DictationController {
             Task { @MainActor in self?.handleInputDevicesChanged() }
         }
 
-        coordinator.onAgentCommandReady = { [weak self] result in
-            self?.agent.submit(command: result.cleanedTranscript, originalTranscript: result.rawTranscript)
-        }
-        coordinator.onAnswerReady = { [weak self] answer in
-            self?.pendingAnswer = answer
-        }
-        agent.overlay = hud
-        agent.onSessionChange = { [agentRuns] session in
-            guard session.commandCount > 0 else { return }
-            do { try agentRuns.save(session) } catch {
-                Log.history.error("agent run save failed: \(error.localizedDescription, privacy: .public)")
-            }
-        }
         activationObservers = [
             NSWorkspace.shared.notificationCenter.addObserver(
                 forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main
@@ -290,11 +221,6 @@ final class DictationController {
                 guard let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
                       app.processIdentifier != ProcessInfo.processInfo.processIdentifier else { return }
                 Task { @MainActor in self?.previousFrontmostApp = app }
-            },
-            NotificationCenter.default.addObserver(
-                forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main
-            ) { [weak self] _ in
-                Task { @MainActor in self?.handBackActivation() }
             },
         ]
 
@@ -356,11 +282,7 @@ final class DictationController {
             // resting state first or the dot flashes for a frame at launch.
             setPill(restingPill(for: coordinator.state))
             hud.show()
-            // Only now does a pill exist to paint into. Called here rather than in
-            // start() because the onboarding path never reaches activateEngine()
-            // until permissions are granted — and the migrating cohort is exactly
-            // the cohort that gets re-prompted.
-            announceSmartRestoredIfNeeded()
+            // Only now does a pill exist to paint into.
             updatePill.announceIfJustUpdated()
             // Idle time, not insert time: Sauce's one-time keyboard-layout
             // lookup otherwise lands between transcript-ready and ⌘V.
@@ -448,7 +370,7 @@ final class DictationController {
             if !engineActive {
                 activateEngine()
             }
-        case "apiKey", "openAIKey", "modelProvider":
+        case "apiKey":
             if KeychainStore.hasModelKey {
                 // Covers the "I'll add it later" onboarding path, where the
                 // engine was never started: a key arriving in Settings must
@@ -566,7 +488,7 @@ final class DictationController {
                         case .stillOffline:
                             self.showNotice("Still offline — will retry automatically when you're back", for: 4.0, sound: nil)
                         case .rateLimited(let retryIn):
-                            self.showNotice("\(SettingsStore().preferredProvider.displayName) is rate limited — retrying in \(Int(retryIn.rounded()))s", for: 4.0, sound: nil)
+                            self.showNotice("Gemini is rate limited — retrying in \(Int(retryIn.rounded()))s", for: 4.0, sound: nil)
                         case .busy:
                             self.showNotice("Already retrying your queued dictations…", for: 2.5, sound: nil)
                         case .failed:
@@ -605,8 +527,7 @@ final class DictationController {
                     // Wiping history also forgets the paste-last buffer.
                     self.coordinator.clearLastResult()
                 },
-                agentRuns: agentRuns,
-                onClosed: { [weak self] in self?.handBackActivation(afterWindowClose: true) }
+                onClosed: { [weak self] in self?.handBackActivation() }
             )
         }
         if let app = NSWorkspace.shared.frontmostApplication,
@@ -653,16 +574,8 @@ final class DictationController {
             switch action {
             case .pasteLastTranscript:
                 break
-            case .askAnything:
-                self.toggleModeShortcut(.askAnything(selectedText: nil))
-            case .translate:
-                self.toggleModeShortcut(
-                    .translate(targets: SettingsStore().translationTargetLanguages)
-                )
             case .meetingToggle:
                 self.meetingHUD.toggle()
-            case .agent:
-                self.agentShortcutPressed()
             }
         }
         globalShortcutEngine.onKeyUp = { [weak self] action in
@@ -671,63 +584,19 @@ final class DictationController {
             case .pasteLastTranscript:
                 Log.hotkey.info("paste-last shortcut fired")
                 self.pasteLastTranscript()
-            case .askAnything, .translate, .meetingToggle, .agent:
+            case .meetingToggle:
                 break
             }
         }
     }
 
-    // MARK: - Agent mode
-
-    /// First press opens the session and listens. While listening, a press
-    /// ends the command. While the panel is open and idle, a press listens
-    /// again. The panel closes only from its Stop button.
-    private func agentShortcutPressed() {
-        guard SettingsStore().agentModeEnabled else { return }
-        Log.hotkey.info("agent shortcut pressed")
-        if agentListening {
-            coordinator.handle(.finalize)
-            return
-        }
-        if !agent.isOpen {
-            guard coordinator.state == .idle || coordinator.state.isTerminal, shortcutMode == nil else { return }
-            openAgentPanel()
-        }
-        guard agent.canRun, !agent.isBusy else { return }
-        startAgentListening()
-    }
-
-    #if DEBUG
-    /// voiceiq://agent[/<command>]. Nil presses the shortcut; text skips the
-    /// microphone and goes straight to the loop.
-    func debugAgent(command: String?) {
-        guard let command else { return agentShortcutPressed() }
-        guard SettingsStore().agentModeEnabled else { return }
-        if !agent.isOpen { openAgentPanel() }
-        guard agent.canRun, !agent.isBusy else { return }
-        agent.submit(command: command)
-    }
-    #endif
-
-    /// The pill panel is normally ordered in by activateEngine(); hud.show()
-    /// is idempotent, so calling it here also covers an engine that never
-    /// started (permissions still missing) and keeps the transcript visible.
-    private func openAgentPanel() {
-        hud.repositionToActiveScreen()
-        agent.start()
-        setPill(.agent)
-        hud.show()
-    }
-
-    /// The agent panel must not take focus from the app the agent works in.
-    /// A click on the panel's buttons can still activate VoiceiQ on some
-    /// systems; when that happens with no regular window open, give the
-    /// activation back to the app behind the panel.
-    private func handBackActivation(afterWindowClose: Bool = false) {
-        guard NSApp.isActive, agent.isOpen || afterWindowClose else { return }
+    /// Closing the main window leaves VoiceiQ active with nothing to show;
+    /// give the activation back to the app the user came from.
+    private func handBackActivation() {
+        guard NSApp.isActive else { return }
         guard !NSApp.windows.contains(where: { $0.isVisible && $0.canBecomeMain }) else { return }
         let app = previousFrontmostApp.flatMap { $0.isTerminated ? nil : $0 }
-            ?? NativeExecutor.topmostForeignWindowOwner().flatMap { NSRunningApplication(processIdentifier: $0) }
+            ?? Self.topmostForeignWindowOwner().flatMap { NSRunningApplication(processIdentifier: $0) }
         guard let app else {
             Log.hotkey.info("VoiceiQ has no main window; no app to hand focus back to")
             return
@@ -736,54 +605,15 @@ final class DictationController {
         app.activate()
     }
 
-    /// False when the coordinator is mid-session or refused to begin.
-    @discardableResult
-    private func startAgentListening() -> Bool {
-        guard coordinator.state == .idle || coordinator.state.isTerminal else { return false }
-        guard coordinator.handle(.begin, mode: .agent) else { return false }
-        coordinator.handle(.lockIn)
-        shortcutMode = .agent
-        agentListening = true
-        return true
-    }
-
-    private func stopAgent() {
-        if agentListening {
-            coordinator.handle(.cancel)
-            agentListening = false
+    private static func topmostForeignWindowOwner() -> pid_t? {
+        let own = ProcessInfo.processInfo.processIdentifier
+        guard let windows = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] else {
+            return nil
         }
-        agent.stop()
-        setPill(restingPill(for: coordinator.state))
-        if !engineActive { hud.hide() }
-    }
-
-    /// One press starts a hands-free Ask Anything or Translate session, the
-    /// next press of the same shortcut ends it. Release does nothing.
-    private func toggleModeShortcut(_ initialMode: DictationMode) {
-        Log.hotkey.info("mode shortcut pressed")
-        if shortcutMode != nil {
-            coordinator.handle(.finalize)
-            shortcutMode = nil
-            return
-        }
-        guard coordinator.state == .idle || coordinator.state.isTerminal else { return }
-        let mode: DictationMode
-        var settable = false
-        switch initialMode {
-        case .askAnything:
-            let selection = SelectedTextCapture.capture()
-            mode = .askAnything(selectedText: selection.text)
-            settable = selection.isSettable
-        case .translate:
-            mode = .translate(targets: SettingsStore().translationTargetLanguages)
-        case .dictate:
-            mode = .dictate
-        case .agent:
-            mode = .agent
-        }
-        guard coordinator.handle(.begin, mode: mode, selectedTextIsSettable: settable) else { return }
-        coordinator.handle(.lockIn)
-        shortcutMode = mode
+        return windows.first {
+            let pid = $0[kCGWindowOwnerPID as String] as? pid_t
+            return pid != nil && pid != own && (($0[kCGWindowLayer as String] as? Int) ?? 1) == 0
+        }?[kCGWindowOwnerPID as String] as? pid_t
     }
 
     private func applyPreferredInputDevice() {
@@ -840,12 +670,6 @@ final class DictationController {
     // MARK: - State → HUD/earcons (frame-synced: sound fires on the same tick)
 
     private func bind() {
-        coordinator.$partialTranscript
-            .removeDuplicates()
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] text in self?.hud.model.partial = text }
-            .store(in: &cancellables)
-
         coordinator.$state
             .receive(on: DispatchQueue.main)
             .sink { [weak self] state in
@@ -882,16 +706,10 @@ final class DictationController {
             outputMute.unmute()
             mediaPause.resume()
         }
-        // Only terminal states clear the mode. The coordinator re-publishes
-        // `.idle` at the start of every begin, and this sink delivers it after
-        // toggleModeShortcut already set shortcutMode — clearing on `.idle`
-        // wiped the mode and let the dictation key fall through to "begin ignored".
+        // A session the key started can end elsewhere (the pill's stop or
+        // cancel). Without this the grammar still thinks it is recording and
+        // swallows the next press as a stop.
         if state.isTerminal {
-            shortcutMode = nil
-            agentListening = false
-            // A session the key started can end elsewhere (the panel's Done,
-            // the Agent shortcut). Without this the grammar still thinks it
-            // is recording and swallows the next press as a stop.
             engine.resetGrammar()
         }
         defer { previousState = state }
@@ -978,13 +796,12 @@ final class DictationController {
                 // throttle, so the queue needs a timed one.
                 retryQueue?.scheduleDrain(after: TimeoutPolicy.rateLimitWait)
             }
-            showError(coordinator.modeFailureMessage ?? Self.copy(for: failure))
+            showError(Self.copy(for: failure))
         }
     }
 
-    /// Anything an update relaunch would cut short: a dictation or mode session,
-    /// a meeting (detected, recording, or making notes), a History retry, or an
-    /// answer on screen.
+    /// Anything an update relaunch would cut short: a dictation, a meeting
+    /// (detected, recording, or making notes), or a History retry.
     private var isInUse: Bool {
         switch coordinator.state {
         case .idle, .done, .cancelled, .failed: break
@@ -995,10 +812,8 @@ final class DictationController {
         case .idle, .failed: break
         default: return true
         }
-        switch hud.model.state {
-        case .answer, .agent, .meetingPrompt: return true
-        default: return shortcutMode != nil
-        }
+        if case .meetingPrompt = hud.model.state { return true }
+        return false
     }
 
     private var meetingIsRecording: Bool {
@@ -1009,17 +824,6 @@ final class DictationController {
     private func handleOutcome(_ outcome: DictationOutcome) {
         switch outcome {
         case .inserted:
-            if let answer = pendingAnswer {
-                pendingAnswer = nil
-                setPill(.answer(answer))
-                return
-            }
-            // An agent command is handed to the loop; the panel shows it.
-            if agent.isOpen { return }
-            if let message = coordinator.lastCleanupSkip.flatMap(Self.cleanupFallbackNotice) {
-                showNotice(message, for: 4.0, sound: .success)
-                return
-            }
             showSuccessBadge(words: coordinator.lastResult.map { $0.split(separator: " ").count })
         case .copiedToClipboard:
             earcons.play(.success)
@@ -1058,7 +862,6 @@ final class DictationController {
     // MARK: - Pill helpers
 
     private func setPill(_ state: PillState) {
-        if agent.isOpen, reflectInAgentPanel(state) { return }
         // "Only while dictating" preference: the resting dot becomes nothing.
         if case .idleDot = state, !SettingsStore().showIdleIndicator {
             hud.model.state = .hidden
@@ -1070,56 +873,10 @@ final class DictationController {
         }
     }
 
-    /// While the agent panel is open, the pill states a dictation session
-    /// would show become the panel's phase line instead, so the transcript
-    /// never flips away. True when the state was absorbed.
-    private func reflectInAgentPanel(_ state: PillState) -> Bool {
-        let panel = hud.model.agent
-        let wasListening = panel.phase == .listening || panel.phase == .transcribing
-        switch state {
-        case .agent:
-            return false
-        case .listening:
-            panel.phase = .listening
-            panel.notice = nil
-        case .processing:
-            panel.phase = .transcribing
-        case .error(let message), .notice(let message):
-            panel.notice = message
-            if wasListening { panel.phase = .idle }
-        case .success, .idleDot, .hidden:
-            if wasListening { panel.phase = .idle }
-        case .answer, .meetingPrompt, .meetingRecording:
-            return false
-        }
-        hud.model.state = .agent
-        hud.model.slow = false
-        return true
-    }
-
     /// Notices about BACKGROUND events (retry drain, recovery)
     /// must never hijack an active session's pill — they wait for it to end.
     /// Session-critical notices (cap warning, device change) still interrupt.
     private var pendingNotice: (message: String, seconds: TimeInterval, sound: EarconPlayer.Earcon?)?
-
-    /// The migration flips formatting back on for users the OLD auto-degrade had
-    /// switched off — they were degraded because the cleanup model was unreliable,
-    /// and native smart transcription is a different mechanism entirely. Telling
-    /// them is not optional: this codebase's rule is that auto-degrade must never
-    /// be silent, and silently UN-degrading is the same rule broken in the other
-    /// direction. Deferred, because it fires during launch.
-    private func announceSmartRestoredIfNeeded() {
-        let key = "shouldAnnounceSmartRestored"
-        guard UserDefaults.standard.bool(forKey: key) else { return }
-        UserDefaults.standard.removeObject(forKey: key)
-        // showBackgroundNotice, not showNotice: bind() replays the coordinator's
-        // current .idle state a moment after launch, which repaints the pill and
-        // would stomp a directly-shown notice.
-        showBackgroundNotice(
-            "Smart transcription is back on — the model does the formatting itself now.",
-            for: 5.0, sound: nil
-        )
-    }
 
     /// The green check, for a pasted dictation and for saved meeting notes alike.
     private func showSuccessBadge(words: Int?) {
@@ -1225,9 +982,7 @@ final class DictationController {
 
     // MARK: - Copy
 
-    private static var providerName: String {
-        SettingsStore().preferredProvider.displayName
-    }
+    private static let providerName = "Gemini"
 
     private static func copy(for failure: DictationFailure) -> String {
         switch failure {
@@ -1236,9 +991,9 @@ final class DictationController {
             if !KeychainStore.hasModelKey { return "Add your API key in Settings — recording saved to History" }
             return "API key isn't working — saved to History"
         case .modelAccess:
-            return SettingsStore().transcribeModelOverride != nil
+            return SettingsStore().cleanupModelOverride != nil
                 ? "That model isn't available to your key — check Settings → Advanced. Saved to History"
-                : "Your key can't use the transcription model yet — recording saved to History"
+                : "Your key can't use the dictation model yet — recording saved to History"
         case .badRequest: return "\(providerName) rejected the request — saved to History"
         case .rateLimited: return "Rate limited — History will retry it shortly"
         case .noMicrophone: return "No microphone found — connect one to dictate"
@@ -1251,19 +1006,5 @@ final class DictationController {
         case .audio: return "Mic didn't start — try again"
         case .storage: return "Disk problem — couldn't save the audio"
         }
-    }
-
-    /// The toast after a dictation the writing rules did not shape. A short
-    /// dictation the user chose to keep as spoken gets the plain success badge.
-    static func cleanupFallbackNotice(_ skip: CleanupSkip) -> String? {
-        let what: String
-        switch skip.cause {
-        case .shortDictation: return nil
-        case .requestFailed: what = "Cleanup request failed"
-        case .rewriteRejected: what = "Cleanup rewrite rejected"
-        }
-        return skip.fillersRemoved
-            ? "\(what) — filler words removed locally"
-            : "\(what) — inserted as spoken"
     }
 }

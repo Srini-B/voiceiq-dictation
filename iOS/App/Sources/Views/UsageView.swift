@@ -1,8 +1,8 @@
 import SwiftUI
 import VoiceIQCore
 
-/// Cost for Gemini or OpenAI, opening on the selected provider, and for
-/// Claude while it has rows from before it was removed as a provider.
+/// Cost for Gemini, and for each retired provider while History still has
+/// its calls.
 /// Period totals, cost per action, and in Detailed the per-model table and
 /// the most recent calls.
 struct UsageView: View {
@@ -29,8 +29,8 @@ struct UsageView: View {
         }
     }
 
-    @State private var source = CostSource(SettingsStore().preferredProvider)
-    /// The current providers, plus Claude while it has rows (`reload`).
+    @State private var source = CostSource.gemini
+    /// Gemini, plus each retired provider while it has rows (`reload`).
     @State private var sources = CostSource.allCases.filter(\.isCurrent)
     @State private var period: Period = .month
     @AppStorage("costPaneDetailed") private var detailed = false
@@ -43,10 +43,12 @@ struct UsageView: View {
         List {
             Section {
                 VStack(alignment: .leading, spacing: Theme.Spacing.m) {
-                    Picker("Source", selection: $source) {
-                        ForEach(sources) { Text($0.displayName).tag($0) }
+                    if sources.count > 1 {
+                        Picker("Source", selection: $source) {
+                            ForEach(sources) { Text($0.displayName).tag($0) }
+                        }
+                        .pickerStyle(.segmented)
                     }
-                    .pickerStyle(.segmented)
                     Picker("Period", selection: $period) {
                         ForEach(Period.allCases) { Text($0.title).tag($0) }
                     }
@@ -131,7 +133,7 @@ struct UsageView: View {
     private func reload() {
         guard let store = UsageMeter.store else { return }
         sources = CostSource.allCases.filter { $0.isCurrent || store.total(source: $0).calls > 0 }
-        if !sources.contains(source) { source = CostSource(SettingsStore().preferredProvider) }
+        if !sources.contains(source) { source = .gemini }
         total = store.total(since: period.start, source: source)
         byActivity = store.totalsByActivity(since: period.start, source: source)
         byModel = store.totalsByModel(since: period.start, source: source)

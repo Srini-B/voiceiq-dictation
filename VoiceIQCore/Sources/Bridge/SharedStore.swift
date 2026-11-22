@@ -36,7 +36,6 @@ public final class SharedStore: @unchecked Sendable {
         static let snapshot = "bridge.snapshot"
         static let heartbeat = "bridge.heartbeat"
         static let levelBars = "bridge.levelBars"
-        static let liveText = "bridge.liveText"
         static let insertedDeliveryID = "bridge.insertedDeliveryID"
         static let keyboardSeenAt = "bridge.keyboardSeenAt"
         static let activityRequest = "bridge.activityRequest"
@@ -196,14 +195,6 @@ public final class SharedStore: @unchecked Sendable {
     public var levelBars: [Float] {
         get { (defaults.data(forKey: Key.levelBars) ?? Data()).map { Float($0) / 255 } }
         set { defaults.set(Data(newValue.map { UInt8((min(max($0, 0), 1) * 255).rounded()) }), forKey: Key.levelBars) }
-    }
-
-    /// The words heard so far in the dictation being recorded, display only:
-    /// the final text comes from the live socket's result or the saved
-    /// recording, never from this. Writer: app.
-    public var liveText: String {
-        get { defaults.string(forKey: Key.liveText) ?? "" }
-        set { defaults.set(newValue, forKey: Key.liveText) }
     }
 
     /// True when the app is running a session right now.

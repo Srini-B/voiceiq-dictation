@@ -97,7 +97,7 @@ private func title(for state: VoiceSessionAttributes.ContentState) -> String {
     switch state.phase {
     case .ready: return "VoiceiQ ready"
     case .recording: return "Listening"
-    case .processing: return state.mode == .ask ? "Thinking" : "Writing"
+    case .processing: return "Writing"
     case .meeting: return "Recording notes"
     }
 }

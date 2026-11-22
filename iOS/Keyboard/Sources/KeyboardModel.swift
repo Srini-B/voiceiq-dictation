@@ -8,8 +8,6 @@ import VoiceIQBridge
 final class KeyboardModel: ObservableObject {
     @Published private(set) var snapshot = SessionSnapshot()
     @Published private(set) var appAlive = false
-    /// The words heard so far in the dictation being recorded.
-    @Published private(set) var liveText = ""
     @Published private(set) var notice: String?
     @Published private(set) var waitingForApp = false
     @Published private(set) var hasFullAccess = true
@@ -85,9 +83,6 @@ final class KeyboardModel: ObservableObject {
     private func refresh() {
         let fresh = store.snapshot
         if fresh != snapshot { snapshot = fresh }
-        // With the snapshot, so a new recording never shows the last one's words.
-        let newText = phase == .recording ? store.liveText : ""
-        if newText != liveText { liveText = newText }
         let alive = store.appIsAlive()
         if alive != appAlive { appAlive = alive }
         if let pendingCommandID, store.handledCommandID == pendingCommandID {

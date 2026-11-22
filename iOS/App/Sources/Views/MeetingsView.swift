@@ -98,7 +98,6 @@ private struct RecorderCard: View {
             Text(timerInterval: since...Date.distantFuture, countsDown: false)
                 .font(Theme.Fonts.numeric(48, weight: 250))
                 .foregroundStyle(Theme.Colors.ink)
-            if let live = meetings.liveTranscript { liveLines(live) }
             Button(action: model.stopMeeting) {
                 Label("Stop", systemImage: "stop.fill")
                     .font(Theme.Fonts.label())
@@ -113,27 +112,6 @@ private struct RecorderCard: View {
         .onAppear {
             withAnimation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true)) { pulse = true }
         }
-    }
-
-    /// The last turns Scribe v3 Live heard, while ElevenLabs transcribes.
-    /// The saved transcript is made after the note stops.
-    private func liveLines(_ live: LiveMeetingTranscript) -> some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-            ForEach(Array(live.segments.suffix(3).enumerated()), id: \.offset) { _, segment in
-                (Text(MeetingSpeaker.defaultName(segment.speaker) + "  ").font(Theme.Fonts.caption()).foregroundStyle(Theme.Colors.muted)
-                    + Text(segment.text).font(Theme.Fonts.footnote()).foregroundStyle(Theme.Colors.ink))
-                    .lineLimit(3)
-            }
-            if live.stopped {
-                Text("Live transcript stopped. The transcript is made when you stop.")
-                    .font(Theme.Fonts.footnote()).foregroundStyle(Theme.Colors.muted)
-            } else if !live.partial.isEmpty {
-                Text(live.partial).font(Theme.Fonts.footnote()).foregroundStyle(Theme.Colors.muted).lineLimit(3)
-            } else if live.segments.isEmpty {
-                Text("Transcribing live…").font(Theme.Fonts.footnote()).foregroundStyle(Theme.Colors.muted)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 

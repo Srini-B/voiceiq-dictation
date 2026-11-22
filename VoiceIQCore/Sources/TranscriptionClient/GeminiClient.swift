@@ -4,38 +4,22 @@ import Foundation
 /// renamed; never hard-fail on a model name).
 public struct GeminiConfig: Sendable, Equatable {
     public var endpoint: URL
+    /// Meetings only: diarized, word-timed transcription.
     public var transcribeModel: String
-    public var cleanupModel: String
+    /// Everything else: one call hears a dictation and writes its text, and
+    /// meeting notes and meeting chat run on it too.
+    public var writingModel: String
 
     public init(
         endpoint: URL = URL(string: "https://generativelanguage.googleapis.com")!,
-        // PRODUCT DECISION, not a tunable default: VoiceiQ ships on
-        // gemini-3.5-transcribe. Do not swap it, and do not add automatic
-        // substitution — no other model is this product. (The name that 404'd
-        // on 2026-08-18 was the -preview suffix; the graduated name is this
-        // one.) A user can still pin something else in Settings → Advanced.
+        // Model IDs read from ai.google.dev/gemini-api/docs/models on
+        // 2026-11-22. A user can pin others in Settings → Advanced.
         transcribeModel: String = "gemini-3.5-transcribe",
-        cleanupModel: String = "gemini-3.8-flash"
+        writingModel: String = "gemini-3.8-flash"
     ) {
         self.endpoint = endpoint
         self.transcribeModel = transcribeModel
-        self.cleanupModel = cleanupModel
-    }
-
-}
-
-public extension GeminiClient {
-    /// How the transcription model formats its output.
-    ///
-    /// VERIFIED 2026-08-20 against the live API: `verbatim` produces output
-    /// byte-identical to sending no transcription_config at all, so it is the
-    /// server default and we omit the field entirely for it.
-    enum TranscriptionMode: String, Sendable, CaseIterable {
-        /// Exactly what was said, punctuated.
-        case verbatim
-        /// The model removes fillers, collapses self-corrections ("at 1pm —
-        /// actually, no, 2pm"), formats spoken lists and adds paragraph breaks.
-        case smart
+        self.writingModel = writingModel
     }
 }
 
@@ -45,65 +29,74 @@ public extension GeminiClient {
 public actor GeminiClient {
     let session: URLSession
     private let apiKey: @Sendable () -> String?
-    let openAIKey: @Sendable () -> String?
-    let elevenLabsKey: @Sendable () -> String?
-    /// Read per call, like `provider`, so a model override applies at once.
-    let openAIConfig: @Sendable () -> OpenAIConfig
-    /// Read per call, so flipping the provider in Settings takes effect on
-    /// the next request without rebuilding the client.
-    let provider: @Sendable () -> ModelProvider
 
-    public init(
-        apiKey: @escaping @Sendable () -> String?,
-        openAIKey: @escaping @Sendable () -> String? = { nil },
-        openAIConfig: @escaping @Sendable () -> OpenAIConfig = { OpenAIConfig() },
-        provider: @escaping @Sendable () -> ModelProvider = { .gemini },
-        elevenLabsKey: @escaping @Sendable () -> String? = { nil }
-    ) {
+    public init(apiKey: @escaping @Sendable () -> String?) {
         self.session = Self.makeSession()
         self.apiKey = apiKey
-        self.openAIKey = openAIKey
-        self.elevenLabsKey = elevenLabsKey
-        self.openAIConfig = openAIConfig
-        self.provider = provider
     }
 
     // MARK: - Calls
 
-    /// Cleanup with optional JPEG context. Gemini 2 uses a zero thinking budget;
-    /// Gemini 3 uses low thinking. The selected Gemini 3.8 model rejected minimal
-    /// in the live probe; low was not established as faster than minimal.
-    public func cleanup(
+    /// One dictation in one call: the model hears the recording (FLAC) and
+    /// answers `{"text": ...}` under `prompt`, which carries the writing
+    /// rules. Screenshots ride along when
+    /// screen context is on. Returns the text, or "" when the model heard no
+    /// speech. Structured output keeps the model's working out of the answer:
+    /// with audio attached, gemini-3.8-flash sometimes wrote its re-listening
+    /// and drafts as plain text before the result (measured 2026-09-28).
+    public func dictate(
         prompt: String,
+        audio: Data,
         images: [Data] = [],
         model: String,
         endpoint: URL,
-        deadline: TimeInterval,
-        stage: UsageStage = .cleanup
+        deadline: TimeInterval
     ) async throws -> String {
-        switch provider() {
-        case .openAI: return try await openAIChat(prompt: prompt, images: images, deadline: deadline, stage: stage)
-        case .gemini: break
-        }
-        let thinkingConfig: [String: Any] = model.hasPrefix("gemini-2")
-            ? ["thinkingBudget": 0]
-            : ["thinkingLevel": "low"]
         var parts: [[String: Any]] = [["text": prompt]]
-        parts.append(contentsOf: images.map {
-            ["inline_data": ["mime_type": "image/jpeg", "data": $0.base64EncodedString()]]
-        })
-        let generationConfig: [String: Any] = [
-            "temperature": 0,
-            "thinkingConfig": thinkingConfig,
-        ]
+        parts += images.map { ["inline_data": ["mime_type": "image/jpeg", "data": $0.base64EncodedString()]] }
+        parts.append(["inline_data": ["mime_type": "audio/flac", "data": audio.base64EncodedString()]])
         let body: [String: Any] = [
-            "contents": [[
-                "role": "user",
-                "parts": parts,
-            ]],
-            "generationConfig": generationConfig,
+            "contents": [["role": "user", "parts": parts]],
+            "generationConfig": [
+                "temperature": 0,
+                "thinkingConfig": Self.thinkingConfig(model: model),
+                "responseMimeType": "application/json",
+                "responseJsonSchema": PromptV1.dictationSchema,
+            ] as [String: Any],
+        ]
+        let reply = try await generateContent(body: body, model: model, endpoint: endpoint, deadline: deadline,
+                                              stage: .transcribe)
+        guard let text = PromptV1.dictationText(fromJSON: reply) else {
+            // Never paste the model's working. Retryable: the next attempt
+            // usually answers with the object.
+            Log.transcription.warning("dictation reply was not the JSON answer")
+            throw TranscriptionError.network("malformed_answer")
+        }
+        return text.contains(PromptV1.noSpeechToken) ? "" : text
+    }
+
+    /// A conversation: `system`, then alternating user and model turns,
+    /// ending on the user's. For meeting chat; Gemini caches the repeated
+    /// prefix implicitly.
+    public func chat(
+        system: String, turns: [(user: String, model: String)], question: String,
+        model: String, endpoint: URL, deadline: TimeInterval, stage: UsageStage
+    ) async throws -> String {
+        let history: [[String: Any]] = turns.flatMap { turn in
+            [["role": "user", "parts": [["text": turn.user]]], ["role": "model", "parts": [["text": turn.model]]]]
+        }
+        let body: [String: Any] = [
+            "systemInstruction": ["parts": [["text": system]]],
+            "contents": history + [["role": "user", "parts": [["text": question]]]],
+            "generationConfig": ["thinkingConfig": Self.thinkingConfig(model: model)],
         ]
         return try await generateContent(body: body, model: model, endpoint: endpoint, deadline: deadline, stage: stage)
+    }
+
+    /// Gemini 2 takes a zero thinking budget; Gemini 3 takes a level, and
+    /// gemini-3.8-flash rejected "minimal" in the live probe.
+    static func thinkingConfig(model: String) -> [String: Any] {
+        model.hasPrefix("gemini-2") ? ["thinkingBudget": 0] : ["thinkingLevel": "low"]
     }
 
     /// Cheap key validation for onboarding/Settings.
@@ -190,26 +183,20 @@ public actor GeminiClient {
         modelIsInPath: Bool = true,
         /// Attributed to the current `UsageMeter.scope` for the Cost pane.
         stage: UsageStage,
-        isRetryAfter429: Bool = false,
-        /// OpenAI and ElevenLabs calls share this transport: same deadline,
-        /// same status → error mapping, different base URL, auth header and
-        /// usage envelope.
-        via: ModelEndpoint = .gemini,
-        extraHeaders: [String: String] = [:]
+        isRetryAfter429: Bool = false
     ) async throws -> Data {
         let url = endpoint.appendingPathComponent(path)
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        for (field, value) in extraHeaders { request.setValue(value, forHTTPHeaderField: field) }
         request.timeoutInterval = deadline
-        applyAuth(&request, via: via)
+        applyAuth(&request)
         request.httpBody = body
 
         let data: Data
         let response: URLResponse
         do {
-            (data, response) = try await Self.perform(request, deadline: deadline, stage: stage, via: via, modelLabel: modelLabel)
+            (data, response) = try await Self.perform(request, deadline: deadline, stage: stage, modelLabel: modelLabel)
         } catch is DeadlineExceeded {
             throw TranscriptionError.timeout
         } catch let error as URLError {
@@ -231,29 +218,11 @@ public actor GeminiClient {
             // Every billed call passes through here, so this is the one place
             // usage is read. Both envelopes are tried; a body with neither is
             // simply not metered.
-            let usage: TokenUsage? = switch via {
-            case .gemini: TokenUsage.fromGenerateContent(data) ?? TokenUsage.fromInteraction(data)
-            case .openAI: TokenUsage.fromOpenAIDuration(data, model: modelLabel) ?? TokenUsage.fromOpenAI(data)
-            // No usage block, and the price depends on the request's options:
-            // `elevenLabsTranscribe` books it.
-            case .elevenLabs: nil
-            }
-            if let usage {
+            if let usage = TokenUsage.fromGenerateContent(data) ?? TokenUsage.fromInteraction(data) {
                 UsageMeter.record(stage: stage, model: modelLabel, usage: usage)
             }
         case 401:
-            // ElevenLabs answers 401 for a used-up credit balance as well as
-            // for a bad key (`quota_exceeded`). That is "add credits", not "fix
-            // your key", and it clears on top-up, so it holds the queue like a
-            // daily quota instead of failing the row (fixed in 0.5.10).
-            if via == .elevenLabs, Self.isElevenLabsQuota(Self.elevenLabsErrorDetail(from: data)) {
-                Log.transcription.error("GeminiClient: 401 quota on \(path, privacy: .public) via elevenLabs")
-                throw TranscriptionError.rateLimitedDaily
-            }
             throw TranscriptionError.auth
-        case 402 where via == .elevenLabs:
-            Log.transcription.error("GeminiClient: 402 on \(path, privacy: .public) via elevenLabs — \(Self.errorMessage(from: data) ?? "no detail", privacy: .private)")
-            throw TranscriptionError.rateLimitedDaily
         case 403, 404:
             // Key authenticated but this model is not available to it — gated,
             // renamed, or unknown. "Fix your key" would misdirect — name the
@@ -279,13 +248,7 @@ public actor GeminiClient {
                 try Task.checkCancellation()
                 return try await post(path: path, body: body, endpoint: endpoint, deadline: deadline,
                                       modelLabel: modelLabel, modelIsInPath: modelIsInPath, stage: stage,
-                                      isRetryAfter429: true, via: via, extraHeaders: extraHeaders)
-            }
-            // OpenAI answers 429 `insufficient_quota` when the account has no
-            // credit left. Retryable, so the recording stays queued until
-            // credit is added.
-            if let body = String(data: data, encoding: .utf8), body.contains("insufficient_quota") {
-                throw TranscriptionError.network("insufficient_credits")
+                                      isRetryAfter429: true)
             }
             // Only a real daily/hard quota is terminal; a per-minute throttle
             // (or an unparseable body) clears on its own and stays retryable.
@@ -295,11 +258,8 @@ public actor GeminiClient {
                 throw TranscriptionError.rateLimitedDaily
             }
             throw TranscriptionError.rateLimitedTransient(retryAfter: retryAfter)
-        case 400,
-             422 where via == .elevenLabs:
-            // Permanent: malformed request — retrying is pointless. ElevenLabs
-            // reports a refused keyterm as 422, which the vocabulary fail-open
-            // retry covers.
+        case 400:
+            // Permanent: malformed request — retrying is pointless.
             let message = Self.errorMessage(from: data) ?? "http_\(http.statusCode)"
             Log.transcription.error("GeminiClient: \(http.statusCode) — \(message, privacy: .private)")
             throw TranscriptionError.badRequest(message)
@@ -312,98 +272,6 @@ public actor GeminiClient {
         }
 
         return data
-    }
-
-    // MARK: - Interactions (native smart transcription)
-
-    /// Audio transcription via `POST {endpoint}/v1beta/interactions`.
-    ///
-    /// This is a DIFFERENT surface from `:generateContent`, with a different
-    /// response envelope (`steps/content/text`, not `candidates/content/parts`)
-    /// and the model named in the BODY rather than the URL path. It is the only
-    /// place `mode: "smart"` works — on `:generateContent` the same field parses
-    /// but returns an empty text part with finishReason STOP (probed on the
-    /// transcribe models).
-    ///
-    /// `languages` (the spoken languages) reach OpenAI only. Gemini's
-    /// transcribe models take no prompt, and with no `language_codes` they
-    /// detect each language and its switches themselves (ai.google.dev
-    /// transcription guide, read 2026-11-13).
-    public func transcribeInteraction(
-        audio: Data,
-        mimeType: String = "audio/flac",
-        model: String,
-        endpoint: URL,
-        mode: TranscriptionMode,
-        customVocabulary: [String],
-        languages: [String] = [],
-        deadline: TimeInterval
-    ) async throws -> String {
-        switch provider() {
-        case .openAI:
-            // No smart mode; the dictionary rides along as keywords, and the
-            // cleanup pass does the formatting.
-            return try await openAITranscribe(audio: audio, mimeType: mimeType, keywords: customVocabulary,
-                                              languages: languages, deadline: deadline)
-        case .gemini: break
-        }
-        var body: [String: Any] = [
-            "model": model,
-            "input": [["type": "audio", "mime_type": mimeType, "data": audio.base64EncodedString()]],
-        ]
-        if let config = Self.transcriptionConfig(mode: mode, customVocabulary: customVocabulary) {
-            body["generation_config"] = ["transcription_config": config]
-        }
-        let data = try await post(
-            path: "v1beta/interactions",
-            body: try JSONSerialization.data(withJSONObject: body),
-            endpoint: endpoint, deadline: deadline, modelLabel: model, modelIsInPath: false, stage: .transcribe
-        )
-        return try Self.extractInteractionText(from: data)
-    }
-
-    /// The ONLY place a transcription_config is constructed.
-    ///
-    /// NEVER add `language_codes` here. VERIFIED 2026-08-20 against the live API:
-    /// sending {"mode":"smart","language_codes":["en-US"]} returns VERBATIM output
-    /// with HTTP 200 and no error — smart mode is silently disabled and there is
-    /// no runtime signal whatsoever. (The published example pairs them, which is
-    /// how this would have shipped.) `custom_vocabulary` is safe to combine.
-    /// TranscriptionConfigTests pins this; a comment alone cannot defend it.
-    static func transcriptionConfig(mode: TranscriptionMode, customVocabulary: [String]) -> [String: Any]? {
-        switch mode {
-        case .verbatim:
-            // Server default. Omitting the field is byte-identical to sending it.
-            return customVocabulary.isEmpty ? nil : ["custom_vocabulary": customVocabulary]
-        case .smart:
-            var config: [String: Any] = ["mode": "smart"]
-            if !customVocabulary.isEmpty { config["custom_vocabulary"] = customVocabulary }
-            return config
-        }
-    }
-
-    /// interactions envelope: {"id","status","steps":[{"type","content":[{"type","text"}]}],"usage"}
-    ///
-    /// Empty text is returned as "" rather than thrown, exactly as `extractText`
-    /// does — GeminiTranscriptionService owns the empty-transcript retry and the
-    /// coordinator classifies silence by audio energy. Throwing here would route
-    /// a quiet dictation into the failure path instead.
-    static func extractInteractionText(from data: Data) throws -> String {
-        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            throw TranscriptionError.network("unparseable_response")
-        }
-        let status = json["status"] as? String ?? "missing"
-        guard status == "completed" else { throw mapInteractionStatus(status, json: json) }
-        // VERIFIED 2026-09-26 against the live API: a silent clip comes back
-        // `completed` with zero output tokens and NO `steps` key at all. That is
-        // an empty transcript, not a transport failure — throwing here showed
-        // "network" for every quiet dictation.
-        guard let steps = json["steps"] as? [[String: Any]] else { return "" }
-        return steps
-            .filter { ($0["type"] as? String) == "model_output" }
-            .flatMap { ($0["content"] as? [[String: Any]]) ?? [] }
-            .compactMap { ($0["type"] as? String) == "text" ? $0["text"] as? String : nil }
-            .joined()
     }
 
     /// HTTP 200 with a non-"completed" status. Unknown statuses map to `.network`
@@ -472,21 +340,10 @@ public actor GeminiClient {
         session.invalidateAndCancel() // transient clients (key validation) must not leak (audit L33)
     }
 
-    func applyAuth(_ request: inout URLRequest, via: ModelEndpoint = .gemini) {
+    func applyAuth(_ request: inout URLRequest) {
         // Header, never ?key= — query strings leak into logs and proxies.
-        switch via {
-        case .gemini:
-            if let key = apiKey() {
-                request.setValue(key, forHTTPHeaderField: "x-goog-api-key")
-            }
-        case .openAI:
-            if let key = openAIKey() {
-                request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
-            }
-        case .elevenLabs:
-            if let key = elevenLabsKey() {
-                request.setValue(key, forHTTPHeaderField: "xi-api-key")
-            }
+        if let key = apiKey() {
+            request.setValue(key, forHTTPHeaderField: "x-goog-api-key")
         }
     }
 
@@ -537,7 +394,7 @@ public actor GeminiClient {
         } else {
             object = nil
         }
-        guard let error = object?["error"] as? [String: Any] else { return elevenLabsErrorDetail(from: data).message }
+        guard let error = object?["error"] as? [String: Any] else { return nil }
         return error["message"] as? String
     }
 }

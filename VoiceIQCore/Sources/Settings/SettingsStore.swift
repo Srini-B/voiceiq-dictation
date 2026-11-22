@@ -72,106 +72,46 @@ public struct SettingsStore: Sendable {
             config.transcribeModel = model
         }
         if let model = Self.defaults.string(forKey: "cleanupModelOverride"), !model.isEmpty {
-            config.cleanupModel = model
+            config.writingModel = model
         }
         return config
     }
 
-    /// OpenAI's models, used only while OpenAI is the active provider.
-    public var openAIConfig: OpenAIConfig {
-        var config = OpenAIConfig()
-        if let model = Self.nonEmpty("openAITranscribeModelOverride") { config.transcribeModel = model }
-        if let model = Self.nonEmpty("openAIWritingModelOverride") { config.writingModel = model }
-        return config
+    /// Runs once, on the first Gemini-only build (0.7.12). Deletes what the
+    /// retired providers and modes stored: the OpenAI, ElevenLabs, agent
+    /// provider and TinyFish keys in the Keychain, their settings and
+    /// shortcuts, and Agent mode's saved runs, which nothing can open any
+    /// more. Older builds' on-device settings go too, and so do the toggles
+    /// 0.7.12 made permanent (smart transcription, writing rules, spelling,
+    /// learning from edits, fitting to existing text, reading names from the
+    /// screen, better hearing in loud rooms): each is now always on, and
+    /// spelling follows the system region (`SpellingVariant.system`).
+    public func removeRetiredSettingsOnce() {
+        guard !Self.defaults.bool(forKey: "didRemoveRetiredProviders") else { return }
+        Self.defaults.set(true, forKey: "didRemoveRetiredProviders")
+        KeychainStore.deleteRetiredKeys()
+        for key in Self.retiredKeys { Self.defaults.removeObject(forKey: key) }
+        try? FileManager.default.removeItem(at: FileLayout.agentRunsRoot)
     }
 
-    public var openAITranscribeModelOverride: String? { Self.defaults.string(forKey: "openAITranscribeModelOverride") }
-    public var openAIWritingModelOverride: String? { Self.defaults.string(forKey: "openAIWritingModelOverride") }
+    static let retiredKeys = [
+        "modelProvider", "didAdoptProviderWithKey", "openAITranscribeModelOverride", "openAIWritingModelOverride",
+        "liveDictationEnabled", "elevenLabsTranscription", "elevenLabsRedaction", "skipShortDictationCleanup",
+        "translationTargetLanguage", "translationTargetLanguages", "agentProviderOverride", "agentModeEnabled",
+        "shortcut.askAnything", "shortcut.translate", "shortcut.agent",
+        "dictationSource", "meetingSource", "localTranscriptionEnabled", "localMeetingTranscriptionEnabled",
+        "localSpeechModel", "localSpeechLanguage", "writingSource", "localWriterModel",
+        "smartTranscription", "smartCleanupPass", "spellingVariant", "autoLearn", "fitToExistingText",
+        "meetingScreenNames", "experimentalNoiseHandling", "smartFormatting", "gateTrips", "shouldAnnounceSmartRestored",
+        "didMigrateSmartFormattingKeys", "didEnableWritingRules", "didRestoreAutoDegradedWritingRules",
+    ]
 
-    public func setOpenAITranscribeModelOverride(_ raw: String?) { Self.set(raw, forKey: "openAITranscribeModelOverride") }
-    public func setOpenAIWritingModelOverride(_ raw: String?) { Self.set(raw, forKey: "openAIWritingModelOverride") }
-
-    private static func nonEmpty(_ key: String) -> String? {
-        guard let value = defaults.string(forKey: key)?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty else { return nil }
-        return value
-    }
-
-    /// Gemini or OpenAI, chosen in Settings → Advanced. Any other stored
-    /// value (an older build's gateway, or Claude, removed 2026-11-10) reads
-    /// as Gemini.
-    public var preferredProvider: ModelProvider {
-        ModelProvider(rawValue: Self.defaults.string(forKey: "modelProvider") ?? "") ?? .gemini
-    }
-
-    public func setPreferredProvider(_ provider: ModelProvider) {
-        Self.set(provider.rawValue, forKey: "modelProvider")
-    }
-
-    /// Runs once per install, on the first cloud-only build. Older builds
-    /// dictated on device without a key, or kept Claude selected, so the
-    /// selected provider may have no key while the other one does: switch to
-    /// that one. Also drops the on-device settings those builds stored.
-    public func adoptProviderWithKeyOnce() {
-        guard !Self.defaults.bool(forKey: "didAdoptProviderWithKey") else { return }
-        Self.defaults.set(true, forKey: "didAdoptProviderWithKey")
-        let selected = preferredProvider
-        let provider = KeychainStore.hasKey(for: selected) ? selected
-            : ModelProvider.allCases.first(where: KeychainStore.hasKey(for:)) ?? selected
-        setPreferredProvider(provider)
-        for key in ["dictationSource", "meetingSource", "localTranscriptionEnabled", "localMeetingTranscriptionEnabled",
-                    "localSpeechModel", "localSpeechLanguage", "writingSource", "localWriterModel"] {
-            Self.defaults.removeObject(forKey: key)
-        }
-    }
-
-    /// Off by default since 2026-11-10, the owner's choice; it was on from
-    /// 2026-10-13. A user who turned it on or off keeps their choice. A
-    /// refused socket falls back to the saved recording on its own.
-    public var liveTranscriptionEnabled: Bool { liveTranscriptionChosen ?? false }
-
-    /// The user's own setting, nil until they change the toggle.
-    public var liveTranscriptionChosen: Bool? {
-        Self.defaults.object(forKey: "liveDictationEnabled") as? Bool
-    }
-
-    public func setLiveTranscriptionEnabled(_ enabled: Bool) {
-        if enabled && !liveTranscriptionEnabled { LiveAvailability.shared.resetRefusals() }
-        Self.set(enabled, forKey: "liveDictationEnabled")
-    }
-
-    /// Providers for a meeting's notes, and for its transcript unless
-    /// ElevenLabs transcribes; see `ModelProvider.meetingOrder`.
-    public var meetingProviders: [ModelProvider] {
-        ModelProvider.meetingOrder(selected: preferredProvider, hasKey: KeychainStore.hasKey(for:))
-    }
-
-    /// The user's choice to transcribe dictation and meetings with ElevenLabs
-    /// Scribe v3 instead of the provider. Off by default. A new key on
-    /// purpose: builds from 2026-09 stored `transcriptionSource`, and reading
-    /// it would move someone who still has an old ElevenLabs key in the
-    /// Keychain onto ElevenLabs without asking.
-    public var elevenLabsTranscriptionChosen: Bool {
-        Self.defaults.bool(forKey: "elevenLabsTranscription")
-    }
-
-    public func setElevenLabsTranscription(_ enabled: Bool) {
-        Self.set(enabled, forKey: "elevenLabsTranscription")
-    }
-
-    /// Whether ElevenLabs transcribes right now: chosen, with its key
-    /// stored. A removed key falls back to the provider rather than
-    /// stranding dictation. The provider's writing model runs either way.
-    public var transcribesWithElevenLabs: Bool {
-        elevenLabsTranscriptionChosen && KeychainStore.loadKey(.elevenLabs) != nil
-    }
-
-    /// The languages the user and their meetings speak, as ISO 639-3 codes
-    /// from `SpokenLanguage.all`, for every transcription provider (see
-    /// `SpokenLanguage` for how each takes them): the first is the main
-    /// language and the rest are the others it may hear. Empty detects the
-    /// language.
+    /// The languages the user speaks, as ISO 639-3 codes from
+    /// `SpokenLanguage.all`: the first is the main language and the rest are
+    /// the others it may hear. Empty detects the language. Dictation gets them
+    /// as a hint (`SpokenLanguage.promptLine`).
     /// Codes typed into the earlier free-text field read as their
-    /// three-letter form ("hi" as "hin"); ones Scribe does not list are dropped.
+    /// three-letter form ("hi" as "hin"); ones not listed are dropped.
     public var spokenLanguages: [String] {
         (Self.defaults.stringArray(forKey: "spokenLanguages") ?? []).map { code in
             code.count == 2 ? Locale.LanguageCode(code).identifier(.alpha3) ?? code : code
@@ -182,29 +122,6 @@ public struct SettingsStore: Sendable {
     public func setSpokenLanguages(_ codes: [String]) {
         var seen = Set<String>()
         Self.set(codes.filter { seen.insert($0).inserted }, forKey: "spokenLanguages")
-    }
-
-    /// Hide card numbers, ID and account numbers and passwords in meeting
-    /// transcripts made by Scribe v3 (`ElevenLabs.redactedEntities`), so the
-    /// notes model and the saved transcript never hold them. Off by default:
-    /// ElevenLabs bills it at 30% more, and it changes what the transcript
-    /// says. Dictation never redacts: the user is the one speaking.
-    public var redactsMeetingSecrets: Bool {
-        Self.defaults.bool(forKey: Self.redactionKey)
-    }
-
-    public func setRedactsMeetingSecrets(_ enabled: Bool) {
-        Self.set(enabled, forKey: Self.redactionKey)
-    }
-
-    /// `object` of `.gtSettingDidChange` when `redactsMeetingSecrets` changes.
-    public static let redactionKey = "elevenLabsRedaction"
-
-    /// Where a meeting's transcript is made, in order: ElevenLabs alone when
-    /// it transcribes (no silent switch to another company's servers), the
-    /// providers with keys otherwise.
-    public var meetingSpeechEndpoints: [ModelEndpoint] {
-        transcribesWithElevenLabs ? [.elevenLabs] : meetingProviders.map(ModelEndpoint.init)
     }
 
     /// Show the resting dot at the bottom of the screen when idle. Off = the pill
@@ -234,37 +151,6 @@ public struct SettingsStore: Sendable {
 
     public func setSoundsEnabled(_ enabled: Bool) {
         Self.set(enabled, forKey: "soundsEnabled")
-    }
-
-    public static let maxTranslationTargets = 3
-
-    /// Translate targets in order of preference. The model picks the first
-    /// one the transcript is not already in, so "English, Tamil" translates
-    /// in both directions. At least one, at most `maxTranslationTargets`.
-    public var translationTargetLanguages: [String] {
-        if let list = Self.defaults.stringArray(forKey: "translationTargetLanguages"), !list.isEmpty {
-            return list
-        }
-        return [Self.defaults.string(forKey: "translationTargetLanguage") ?? "English"]
-    }
-
-    /// The first target. iOS offers one picker and reads this.
-    public var translationTargetLanguage: String { translationTargetLanguages[0] }
-
-    public func setTranslationTargetLanguages(_ languages: [String]) {
-        var seen = Set<String>()
-        let list = languages
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty && seen.insert($0).inserted }
-            .prefix(Self.maxTranslationTargets)
-        let stored = list.isEmpty ? ["English"] : Array(list)
-        Self.defaults.set(stored[0], forKey: "translationTargetLanguage")
-        Self.set(stored, forKey: "translationTargetLanguages")
-    }
-
-    /// Replaces the first target and keeps the others.
-    public func setTranslationTargetLanguage(_ language: String) {
-        setTranslationTargetLanguages([language] + translationTargetLanguages.dropFirst())
     }
 
     /// Where the pill sits along the bottom of the screen, as a fraction of the
@@ -321,17 +207,6 @@ public struct SettingsStore: Sendable {
         Self.set(enabled, forKey: "screenContextEnabled")
     }
 
-    /// Fits a dictation to the text already in the field: the writing model
-    /// sees the text around the cursor, and the insert adds spaces and a
-    /// sentence-start capital.
-    public var fitToExistingText: Bool {
-        Self.defaults.object(forKey: "fitToExistingText") as? Bool ?? true
-    }
-
-    public func setFitToExistingText(_ enabled: Bool) {
-        Self.set(enabled, forKey: "fitToExistingText")
-    }
-
     public var preferredInputDeviceUID: String? {
         Self.defaults.string(forKey: "preferredInputDeviceUID")
     }
@@ -351,70 +226,6 @@ public struct SettingsStore: Sendable {
             return .modifier(key)
         }
         return .default
-    }
-
-    // MARK: - Formatting policy
-
-    /// How a dictation gets formatted. Two independent flags rather than a
-    /// three-valued enum, because all four combinations are meaningful — in
-    /// particular (nativeSmart: false, cleanupPass: true) is the exact pipeline
-    /// VoiceiQ shipped before native smart existed, and that is the configuration you
-    /// want reachable if smart mode ever regresses server-side.
-    public struct FormattingPolicy: Equatable, Sendable {
-        public var nativeSmart: Bool
-        public var cleanupPass: Bool
-
-        public init(nativeSmart: Bool, cleanupPass: Bool) {
-            self.nativeSmart = nativeSmart
-            self.cleanupPass = cleanupPass
-        }
-
-        public var mode: GeminiClient.TranscriptionMode { nativeSmart ? .smart : .verbatim }
-        /// The gate only has a real reference to compare against when a second
-        /// model actually rewrote the text.
-        public var runsValidationGate: Bool { cleanupPass }
-    }
-
-    public var formattingPolicy: FormattingPolicy {
-        FormattingPolicy(
-            nativeSmart: Self.defaults.object(forKey: "smartTranscription") as? Bool ?? true,
-            cleanupPass: Self.defaults.object(forKey: "smartCleanupPass") as? Bool ?? true
-        )
-    }
-
-    /// Native `mode: "smart"` — the default transcription path.
-    public var smartTranscriptionEnabled: Bool {
-        Self.defaults.object(forKey: "smartTranscription") as? Bool ?? true
-    }
-
-    public func setSmartTranscription(_ enabled: Bool) {
-        Self.set(enabled, forKey: "smartTranscription")
-    }
-
-    /// The second pass through the cleanup model — this is what applies the
-    /// writing rules (`DefaultWritingRules` plus `customWritingRules`) and
-    /// per-app tone. On by default: native smart transcription cannot apply a correction spoken
-    /// several sentences after the thing it corrects, and cannot segment
-    /// pause-free speech by grammar. It costs a round trip and sends the
-    /// transcript text a second time.
-    public var smartCleanupPassEnabled: Bool {
-        Self.defaults.object(forKey: "smartCleanupPass") as? Bool ?? true
-    }
-
-    public var skipShortDictationCleanup: Bool {
-        Self.defaults.object(forKey: "skipShortDictationCleanup") as? Bool ?? true
-    }
-
-    public func setSkipShortDictationCleanup(_ enabled: Bool) {
-        Self.set(enabled, forKey: "skipShortDictationCleanup")
-    }
-
-    public var spellingVariant: SpellingVariant {
-        SpellingVariant(rawValue: Self.defaults.string(forKey: "spellingVariant") ?? "") ?? .automatic
-    }
-
-    public func setSpellingVariant(_ variant: SpellingVariant) {
-        Self.set(variant.rawValue, forKey: "spellingVariant")
     }
 
     /// Rules the user adds on top of `DefaultWritingRules`. Empty when there
@@ -451,16 +262,6 @@ public struct SettingsStore: Sendable {
         Self.set(snapshot.text, forKey: Self.customWritingRulesKey)
     }
 
-    /// Watch the field after insertion and add the user's word-level edits to
-    /// the dictionary automatically.
-    public var autoLearnEnabled: Bool {
-        Self.defaults.object(forKey: "autoLearn") as? Bool ?? true
-    }
-
-    public func setAutoLearn(_ enabled: Bool) {
-        Self.set(enabled, forKey: "autoLearn")
-    }
-
     /// Detect calls (mic in use by a call app or a meeting tab) and record
     /// them for meeting notes.
     public var meetingDetectionEnabled: Bool {
@@ -469,16 +270,6 @@ public struct SettingsStore: Sendable {
 
     public func setMeetingDetection(_ enabled: Bool) {
         Self.set(enabled, forKey: "meetingDetection")
-    }
-
-    /// Read name tags off the call window while a meeting records, to name
-    /// its speakers. macOS only; the snapshots never leave memory.
-    public var meetingScreenNamesEnabled: Bool {
-        Self.defaults.object(forKey: "meetingScreenNames") as? Bool ?? true
-    }
-
-    public func setMeetingScreenNames(_ enabled: Bool) {
-        Self.set(enabled, forKey: "meetingScreenNames")
     }
 
     /// The note owner's name in meeting notes, which are shared, so the owner
@@ -496,29 +287,8 @@ public struct SettingsStore: Sendable {
         Self.set(name.trimmingCharacters(in: .whitespacesAndNewlines), forKey: "meetingOwnerName")
     }
 
-    /// Only the user changes this. Rejected rewrites never turn it off.
-    public func setSmartCleanupPass(_ enabled: Bool) {
-        Self.set(enabled, forKey: "smartCleanupPass")
-    }
-
     public func setDictationTrigger(_ trigger: DictationTrigger) {
         Self.set(try? JSONEncoder().encode(trigger), forKey: "dictationTrigger")
-    }
-
-    /// Experimental: judge speech RELATIVE to the room instead of against fixed
-    /// thresholds that assume a quiet one, and (once probed) let macOS suppress
-    /// background voices. On by default since 2026-11-12, the owner's choice; it
-    /// was off before. A user who set the toggle keeps their choice.
-    ///
-    /// One key gates every behaviour in the noise work, so there is exactly one
-    /// thing to turn on and one thing to turn off. The measurements it acts on
-    /// are recorded either way — `NoiseFloorEstimator` runs unconditionally.
-    public var experimentalNoiseHandling: Bool {
-        Self.defaults.object(forKey: "experimentalNoiseHandling") as? Bool ?? true
-    }
-
-    public func setExperimentalNoiseHandling(_ enabled: Bool) {
-        Self.set(enabled, forKey: "experimentalNoiseHandling")
     }
 
     // Raw override values for the Settings UI — panes must not duplicate the

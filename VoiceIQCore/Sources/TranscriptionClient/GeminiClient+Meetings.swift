@@ -29,17 +29,12 @@ public extension GeminiClient {
         let data = try await post(path: "v1beta/interactions",
                                   body: try JSONSerialization.data(withJSONObject: body), endpoint: endpoint,
                                   deadline: deadline, modelLabel: model, modelIsInPath: false,
-                                  stage: .meetingTranscribe, via: .gemini)
+                                  stage: .meetingTranscribe)
         return try Self.parseDiarizedWords(data)
     }
 
     /// Notes JSON for a prompt built by `MeetingNotesPrompt`.
-    func meetingNotesJSON(prompt: String, model: String, endpoint: URL, deadline: TimeInterval,
-                          via provider: ModelProvider) async throws -> String {
-        switch provider {
-        case .openAI: return try await openAIChat(prompt: prompt, deadline: deadline, stage: .meetingSummary, jsonObject: true)
-        case .gemini: break
-        }
+    func meetingNotesJSON(prompt: String, model: String, endpoint: URL, deadline: TimeInterval) async throws -> String {
         let body: [String: Any] = [
             "contents": [["role": "user", "parts": [["text": prompt]]]],
             "generationConfig": [
