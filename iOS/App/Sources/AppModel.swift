@@ -75,7 +75,7 @@ final class AppModel: ObservableObject {
                 )
             },
             localFactory: {
-                LocalTranscriber.makeFromSettings(audioURL: $0, cloudOnColdLoad: KeychainStore.hasModelKey,
+                LocalTranscriber.makeFromSettings(audioURL: $0, cloudOnColdLoad: KeychainStore.hasModelKey && SettingsStore().onDeviceFallsBackToGemini,
                                                   makeSession: LocalSpeechInference.makeSession)
             }
         )

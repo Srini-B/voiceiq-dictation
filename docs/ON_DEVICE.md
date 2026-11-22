@@ -29,13 +29,24 @@ who writes an on-device transcript:
   writes meeting notes. Offered on the Mac, and on iPhone and iPad with 6 GB
   of RAM or more; below that the row offers Gemini and Off only. If it fails
   or is not downloaded, the dictation goes in as transcribed. It never falls
-  back to Gemini. See [On-device writer](#on-device-writer).
-- **Off**: nothing leaves the device. Dictations go in as transcribed, with
-  the Dictionary's replacements. Meetings keep their transcript with speaker
+  back to Gemini, and on a device that does not offer it the choice reads as
+  Off. See [On-device writer](#on-device-writer).
+- **Off**: no on-device transcript or its audio leaves the device.
+  Dictations go in as transcribed, with the Dictionary's replacements. Meetings keep their transcript with speaker
   labels and a short note that no summary was written.
 
-A Gemini transcription always applies the writing rules in the same request,
-so "Gemini transcribes, on-device writes" does not exist.
+These choices cover what was transcribed on device. A row set to Gemini still
+sends its audio to Gemini: with Meetings On device and Dictation Gemini,
+dictations go to Gemini whatever this row says. A Gemini transcription always
+applies the writing rules in the same request, so "Gemini transcribes,
+on-device writes" does not exist.
+
+With Gemini, an on-device dictation or meeting whose model fails, stays
+busy or loads too slowly goes to Gemini as audio when a key is stored. With
+On device or Off it never does: the dictation fails and stays in History for
+Retry, and the meeting is marked failed (`SettingsStore.onDeviceFallsBackToGemini`).
+Screen context, when on, sends its screenshots with the Gemini writing
+request as it does with a Gemini dictation.
 
 ## Models
 
@@ -65,11 +76,12 @@ delete button.
 3. The coordinator passes the result to `TranscriptionServicing.write`
    (Gemini text cleanup, or dictionary replacements when Off).
 4. If the model is still loading `TimeoutPolicy.localColdLoad` after the
-   recording and a Gemini key exists, the dictation goes to Gemini and the load
+   recording, a Gemini key exists and writing is Gemini, the dictation goes to Gemini and the load
    finishes as a warm-up.
 
 History's Retry and launch recovery use `OnDeviceFirstTranscription`: the
-saved recording goes to the on-device model first, then Gemini.
+saved recording goes to the on-device model first, then Gemini (only with
+writing set to Gemini).
 `DictationRoute.isAvailable` (a key, or the selected model downloaded) decides
 whether VoiceiQ asks for an API key, so fully offline use needs no key.
 
@@ -83,8 +95,8 @@ update.
 With Meetings set to On device, `MeetingEngine.transcribe` sends the saved
 tracks to `LocalMeetingTranscriber`: speech stretches are transcribed with the
 selected model and labelled by speaker with pyannote. Nothing is shown while
-recording, and the work runs after you stop. If it fails and a key exists,
-the meeting falls back to Gemini. With Writing rules and notes set to On
+recording, and the work runs after you stop. If it fails, a key exists and
+writing is Gemini, the meeting falls back to Gemini. With Writing rules and notes set to On
 device, LFM3-Omni-2B writes the notes after the transcript is saved.
 
 ## On-device writer

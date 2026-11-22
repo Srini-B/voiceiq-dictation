@@ -64,11 +64,17 @@ public extension SettingsStore {
     var localMeetingTranscriptionEnabled: Bool { meetingSource == .onDevice }
 
     /// Who applies the writing rules to an on-device dictation. Gemini unless
-    /// the user turned it off.
+    /// the user chose otherwise. On device where this device does not offer
+    /// the writer reads as Off, so a local-only choice never turns into Gemini.
     var cleanupSource: CleanupSource {
         let stored = Self.defaults.string(forKey: "cleanupSource").flatMap(CleanupSource.init(rawValue:)) ?? .gemini
-        return CleanupSource.offered.contains(stored) ? stored : .gemini
+        return CleanupSource.offered.contains(stored) ? stored : .none
     }
+
+    /// An on-device dictation or meeting whose model fails, is busy or runs
+    /// late may go to Gemini as audio only when the user lets its words reach
+    /// Gemini anyway. With On device or Off nothing leaves the device.
+    var onDeviceFallsBackToGemini: Bool { cleanupSource == .gemini }
 
     func setCleanupSource(_ source: CleanupSource) {
         Self.set(source.rawValue, forKey: "cleanupSource")

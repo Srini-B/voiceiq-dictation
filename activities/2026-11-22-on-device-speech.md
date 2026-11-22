@@ -113,3 +113,13 @@ Verification (cloud Mac):
 
 Not verified: a real iPhone (CPU speed, memory limits while in the
 background) and a real Mac GPU; this VM's GPU is slower than its CPU.
+
+## Gemini fallback only with Gemini writing
+
+After CodeRabbit's review: an on-device dictation or meeting whose model
+failed, stayed busy or loaded too slowly went to Gemini as audio whenever a
+key existed, even with Writing rules and notes set to Off. Now it does so only
+when that row is Gemini (`onDeviceFallsBackToGemini`); otherwise the dictation
+fails with `onDeviceFailed` and stays in History, and the meeting is marked
+failed. A stored On device choice on a device that does not offer the writer
+reads as Off, not Gemini.

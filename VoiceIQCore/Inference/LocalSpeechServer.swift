@@ -17,11 +17,21 @@ public enum ParakeetHelperServer {
                     try ParakeetWire.read(ParakeetCommand.self, from: .standardInput)
                 }.value
                 let reply = await lifetime.handle(command)
-                try ParakeetWire.write(reply, to: output)
+                do {
+                    try ParakeetWire.write(reply, to: output)
+                } catch let error as CocoaError where error.code == .fileReadTooLarge {
+                    // A very long meeting: say why instead of exiting with no reply.
+                    try ParakeetWire.write(Self.tooLarge(reply), to: output)
+                }
             } catch {
                 exit(0) // EOF also covers host termination.
             }
         }
+    }
+
+    private static func tooLarge(_ reply: ParakeetReply) -> ParakeetReply {
+        if case .written = reply { return .writeFailed("The answer is larger than the helper's 8 MB reply limit.") }
+        return .meetingFailed("The meeting's transcript is larger than the helper's 8 MB reply limit.")
     }
 }
 

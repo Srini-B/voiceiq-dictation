@@ -88,18 +88,26 @@ public enum LocalModelWarmup {
     }
 
     /// The load `id` ended; the next adopted load, if any, takes its place.
+    /// A queued load that ends before its turn leaves the queue, so it never
+    /// becomes `current` after it has finished.
     private static func ended(_ id: UUID) {
-        guard current?.id == id else { return }
-        current = pending.isEmpty ? nil : pending.removeFirst()
+        if current?.id == id {
+            current = pending.isEmpty ? nil : pending.removeFirst()
+        } else {
+            pending.removeAll { $0.id == id }
+        }
     }
 
-    /// A dictation is starting: it takes the model from the warm-ups in
-    /// progress and queued. Their loads keep running, and the dictation loads
-    /// after them (`finished(before:)`), so two model compiles never overlap.
-    static func yieldToDictation() {
+    /// A dictation has claimed `model` (and the English tools, with `tools`):
+    /// it takes those claims over from the warm-ups in progress and queued,
+    /// since its own claim waits for them. Claims on other models stay with
+    /// their warm-ups until those stop. The loads keep running, and the
+    /// dictation loads after them (`finished(before:)`), so two model
+    /// compiles never overlap.
+    static func yieldToDictation(model: LocalSpeechModel, tools: Bool) {
         for entry in [current].compactMap({ $0 }) + pending {
-            LocalModelStore.store(for: entry.model).releaseSession(id: entry.id)
-            LocalModelStore.englishTools.releaseSession(id: entry.id)
+            if entry.model == model { LocalModelStore.store(for: model).releaseSession(id: entry.id) }
+            if tools { LocalModelStore.englishTools.releaseSession(id: entry.id) }
         }
     }
 

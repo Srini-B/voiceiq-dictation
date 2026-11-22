@@ -89,7 +89,7 @@ final class DictationController {
                 )
             },
             localFactory: {
-                LocalTranscriber.makeFromSettings(audioURL: $0, cloudOnColdLoad: KeychainStore.hasModelKey,
+                LocalTranscriber.makeFromSettings(audioURL: $0, cloudOnColdLoad: KeychainStore.hasModelKey && SettingsStore().onDeviceFallsBackToGemini,
                                                   makeSession: LocalSpeechHelper.makeSession)
             }
         )
@@ -377,7 +377,7 @@ final class DictationController {
                 activateEngine()
             }
         case "apiKey":
-            if KeychainStore.hasModelKey {
+            if DictationRoute.isAvailable {
                 // Covers the "I'll add it later" onboarding path, where the
                 // engine was never started: a key arriving in Settings must
                 // bring the whole app to life, not just flip a badge.
