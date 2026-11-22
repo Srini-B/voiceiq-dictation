@@ -16,6 +16,21 @@ enum HexStripHeight {
     static let portraitGap: CGFloat = 2 * KeyboardMetrics.barTextAboveKeys - KeyboardMetrics.stripBarHeight
     static let landscape: CGFloat = 50
 
+    /// iOS's band above the keyboard, as drawn once the keyboard came back from
+    /// VoiceiQ (17 pt on the iPhone 17 Pro and SE, iOS 27 Simulator). It then stays
+    /// for the keyboard process's life, and a keyboard can't see it: its window and
+    /// insets are the same with it as without. So the keyboard assumes it from its
+    /// first trip to VoiceiQ (`KeyboardViewController.openURL`) on.
+    static let band: CGFloat = 17
+    nonisolated(unsafe) static var expectsBand = false
+    /// How far the strip's content and the mini bar's move up while the band is
+    /// there: half of it, so the content sits midway between the band's top edge
+    /// and the keys again. The keys stay where they are. Upright only: turned,
+    /// iOS draws no band.
+    static func contentShift(compact: Bool) -> CGFloat {
+        expectsBand && !compact ? band / 2 : 0
+    }
+
     static func install() {
         KeyboardMetrics.phoneOverride = { m, orientation in
             let turned = orientation == .landscape

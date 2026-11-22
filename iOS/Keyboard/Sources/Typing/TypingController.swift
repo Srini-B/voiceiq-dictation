@@ -106,7 +106,8 @@ final class TypingController: ObservableObject {
             // Hex's strip keeps its frame, with the words on `stripTextCenter`; VoiceiQ's
             // buttons and the overlays in its place get a band as tall, centred on that line.
             let hexBar = layout.stripBarFrame.offsetBy(dx: 0, dy: lift)
-            let bar = hexBar.offsetBy(dx: 0, dy: layout.metrics.stripTextCenter - hexBar.height / 2)
+            let shift = self?.bandShift ?? 0
+            let bar = hexBar.offsetBy(dx: 0, dy: layout.metrics.stripTextCenter - hexBar.height / 2 - shift)
             let beside = StripButton.besideSpace(in: layout).map {
                 (mini: $0.mini.offsetBy(dx: 0, dy: lift), edit: $0.edit.offsetBy(dx: 0, dy: lift))
             }
@@ -114,7 +115,7 @@ final class TypingController: ObservableObject {
             self?.placeStrip(buttons: placed.buttons, besideSpace: beside != nil, radius: layout.metrics.cornerRadius,
                              bar: bar, slots: placed.strip, area: layout.metrics.stripArea + lift)
             func onHexBar(_ rect: CGRect) -> CGRect {
-                CGRect(x: rect.minX, y: hexBar.minY - lift, width: rect.width, height: hexBar.height)
+                CGRect(x: rect.minX, y: hexBar.minY - lift - shift, width: rect.width, height: hexBar.height)
             }
             return (onHexBar(placed.strip), placed.slots.map(onHexBar))
         }
@@ -144,9 +145,14 @@ final class TypingController: ObservableObject {
         lastEdit = nil
         readField()
         keyboard?.prepareForField()
+        // Back from VoiceiQ, iOS may now draw its band (`HexStripHeight.band`).
+        keyboard?.setNeedsLayout()
         loadWords()
         refresh()
     }
+
+    /// How far the strip's content sits above its place without iOS's band.
+    var bandShift: CGFloat { HexStripHeight.contentShift(compact: compact) }
 
     func readField() {
         dictation.needsGlobeKey = controller?.needsInputModeSwitchKey ?? true

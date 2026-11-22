@@ -69,10 +69,15 @@ struct KeyboardView: View {
             } else {
                 VStack(spacing: 0) {
                     if showsMini {
+                        // Recording or not, the content sits where the mic bar does,
+                        // as far above it as below, and up with iOS's band.
+                        let insets = Self.miniBarInsets(compact: typing.compact)
                         Group {
                             if isLive { RecordingStrip(model: model, size: typing.stripBar.height) } else { miniBar }
                         }
-                        .frame(height: Self.miniBarHeight(compact: typing.compact))
+                        .frame(height: MicBar.height(compact: typing.compact))
+                        .padding(.top, insets.top - typing.bandShift)
+                        .padding(.bottom, insets.bottom + typing.bandShift)
                     } else {
                         // In the strip's place, spaced as the strip is.
                         let bar = typing.stripBar.height > 0 ? typing.stripBar : CGRect(x: 0, y: 0, width: 0, height: typing.stripArea)
@@ -210,8 +215,6 @@ struct KeyboardView: View {
             MicBar(phase: model.phase, waiting: model.waitingForApp, title: micTitle,
                    height: MicBar.height(compact: typing.compact), label: model.hasFullAccess ? nil : micTitle, action: model.micTapped)
         }
-        .padding(.top, Self.miniBarInsets(compact: typing.compact).top)
-        .padding(.bottom, Self.miniBarInsets(compact: typing.compact).bottom)
         .padding(.leading, 4)
         .padding(.trailing, 7)
     }

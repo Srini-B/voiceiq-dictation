@@ -558,7 +558,7 @@ final class KeyboardStripView: UIView {
                 return Word(text: text, attributes: attributes, origin: origin, truncatedRect: nil)
             }
             let style = NSMutableParagraphStyle()
-            style.lineBreakMode = .byTruncatingTail
+            style.lineBreakMode = .byTruncatingMiddle // VoiceiQ: the word's start and end (iOS/Keyboard/Hex/patches)
             style.alignment = .center
             let small: [NSAttributedString.Key: Any] = [
                 .font: UIFont.systemFont(ofSize: 15, weight: .regular), .foregroundColor: ink, .paragraphStyle: style,

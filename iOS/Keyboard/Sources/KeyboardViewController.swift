@@ -131,6 +131,7 @@ final class KeyboardViewController: UIInputViewController {
     /// is reached through the responder chain. `extensionContext.open` is the
     /// documented call but returns false for keyboards on current iOS.
     func openURL(_ url: URL) {
+        HexStripHeight.expectsBand = true
         let selector = NSSelectorFromString("openURL:options:completionHandler:")
         var responder: UIResponder? = self
         while let current = responder {

@@ -47,3 +47,12 @@ index fe4eabc..a8749d7 100644
 +        }
 +
          // Touch targets: split every gap down the middle; outer keys reach the edges, and row 1
+diff --git a/iOS/Keyboard/Hex/FullKeyboard/KeyboardStripView.swift b/iOS/Keyboard/Hex/FullKeyboard/KeyboardStripView.swift
+index e5e84f3..214dc14 100644
+--- a/iOS/Keyboard/Hex/FullKeyboard/KeyboardStripView.swift
++++ b/iOS/Keyboard/Hex/FullKeyboard/KeyboardStripView.swift
+@@ -560,3 +560,3 @@ final class KeyboardStripView: UIView {
+             let style = NSMutableParagraphStyle()
+-            style.lineBreakMode = .byTruncatingTail
++            style.lineBreakMode = .byTruncatingMiddle // VoiceiQ: the word's start and end (iOS/Keyboard/Hex/patches)
+             style.alignment = .center
