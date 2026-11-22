@@ -119,8 +119,10 @@ public enum AgentClient: String, CaseIterable, Identifiable, Sendable {
                 throw CocoaError(.fileReadCorruptFile)
             }
             guard let block = Self.tomlOurBlock(text) else { return nil }
-            url = Self.tomlString("url", in: block)
-            authorization = Self.tomlString("Authorization", in: block)
+            // Only the table's own `url = ` line, and the Authorization in its
+            // `http_headers = { … }` line, as VoiceiQ writes them.
+            url = Self.tomlString(#"^\s*"?url"?\s*=\s*"([^"]*)""#, in: block)
+            authorization = Self.tomlString(#"^\s*"?http_headers"?\s*=\s*\{\s*"?Authorization"?\s*=\s*"([^"]*)""#, in: block)
         case .claudeCode, .amp:
             let root = try Self.jsonObject(text)
             guard let entry = (root[containerKey] as? [String: Any])?[Self.serverName] as? [String: Any] else { return nil }
@@ -207,7 +209,7 @@ public enum AgentClient: String, CaseIterable, Identifiable, Sendable {
     /// The key path of a TOML table header line, such as `["mcp_servers", "voiceiq.backup"]`
     /// for `[mcp_servers."voiceiq.backup"]`; nil for other lines. Quoted parts keep their dots.
     private static func tomlTable(_ line: String) -> [String]? {
-        var rest = Substring(line.trimmingCharacters(in: .whitespaces))
+        var rest = Substring(line.trimmingCharacters(in: .whitespacesAndNewlines))
         guard rest.popFirst() == "[" else { return nil }
         let isArray = rest.first == "["
         if isArray { rest.removeFirst() }
@@ -224,13 +226,13 @@ public enum AgentClient: String, CaseIterable, Identifiable, Sendable {
             } else if character == "\"" || character == "'" {
                 quote = character
             } else if character == "." || character == "]" {
-                path.append(part.trimmingCharacters(in: .whitespaces))
+                path.append(part)
                 part = ""
                 guard character == "]" else { continue }
                 if isArray, rest.popFirst() != "]" { return nil }
-                let after = rest.trimmingCharacters(in: .whitespaces)
+                let after = rest.trimmingCharacters(in: .whitespacesAndNewlines)
                 return (after.isEmpty || after.hasPrefix("#")) && !path.contains("") ? path : nil
-            } else {
+            } else if !character.isWhitespace {
                 part.append(character)
             }
         }
@@ -307,10 +309,9 @@ public enum AgentClient: String, CaseIterable, Identifiable, Sendable {
         return line
     }
 
-    /// The first `name = "value"` in `block`, also inside an inline table.
-    private static func tomlString(_ name: String, in block: String) -> String? {
+    /// The first capture of `pattern`, matched line by line, in `block` without comments.
+    private static func tomlString(_ pattern: String, in block: String) -> String? {
         let block = block.components(separatedBy: "\n").map(tomlRemovingComment).joined(separator: "\n")
-        let pattern = "(?:^|[\\s{,])\"?\(name)\"?\\s*=\\s*\"([^\"]*)\""
         guard let regex = try? NSRegularExpression(pattern: pattern, options: [.anchorsMatchLines]),
               let match = regex.firstMatch(in: block, range: NSRange(block.startIndex..., in: block)),
               let range = Range(match.range(at: 1), in: block) else { return nil }

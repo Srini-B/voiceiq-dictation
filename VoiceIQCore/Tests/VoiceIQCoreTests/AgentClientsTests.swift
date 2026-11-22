@@ -120,6 +120,13 @@ final class AgentClientsTests: XCTestCase {
         XCTAssertEqual(AgentClient.codex.status(key: "new", home: home), .unreadable)
         try AgentClient.codex.install(key: "new", home: home)
         XCTAssertEqual(try String(contentsOf: file, encoding: .utf8), inline)
+
+        // Windows line endings still show the table that's already there.
+        let crlf = "[mcp_servers.voiceiq]\r\nurl = \"\(AgentAPI.mcpURL)\"\r\nhttp_headers = { Authorization = \"Bearer new\" }\r\n"
+        try crlf.write(to: file, atomically: true, encoding: .utf8)
+        XCTAssertEqual(AgentClient.codex.status(key: "new", home: home), .setUp)
+        try AgentClient.codex.install(key: "new", home: home)
+        XCTAssertEqual(try String(contentsOf: file, encoding: .utf8), crlf)
     }
 
     func testLeavesAloneWhatIsNotItsOwn() throws {
@@ -145,12 +152,26 @@ final class AgentClientsTests: XCTestCase {
         XCTAssertEqual(try String(contentsOf: amp, encoding: .utf8), foreign)
 
         // A commented-out line naming VoiceiQ's URL doesn't make a server VoiceiQ's.
-        let foreignToml = "[mcp_servers.voiceiq]\n# url = \"\(AgentAPI.mcpURL)\"\nurl = \"https://example.com/mcp\"\n"
+        let foreignToml = """
+        [mcp_servers.voiceiq]
+        # url = "\(AgentAPI.mcpURL)"
+        http_headers = { Note = ' url = "\(AgentAPI.mcpURL)"' }
+        url = "https://example.com/mcp"
+
+        """
         let codex = try write(foreignToml, to: ".codex/config.toml")
         XCTAssertEqual(AgentClient.codex.status(key: "a", home: home), .otherServer)
         try AgentClient.codex.install(key: "a", home: home)
         try AgentClient.codex.remove(home: home)
         XCTAssertEqual(try String(contentsOf: codex, encoding: .utf8), foreignToml)
+
+        // A quoted name with a space in it is another server.
+        let spaced = "[mcp_servers.\"voiceiq \"]\nurl = \"https://example.com/mcp\"\n"
+        _ = try write(spaced, to: ".codex/config.toml")
+        XCTAssertEqual(AgentClient.codex.status(key: "a", home: home), .notSetUp)
+        try AgentClient.codex.install(key: "a", home: home)
+        try AgentClient.codex.remove(home: home)
+        XCTAssertEqual(try String(contentsOf: codex, encoding: .utf8), spaced)
 
         // An example server inside a multi-line string is text, not a table.
         let instructions = """
