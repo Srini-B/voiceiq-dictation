@@ -98,6 +98,11 @@ struct GlobeKey: UIViewRepresentable {
     }
 
     func updateUIView(_ uiView: UIButton, context: Context) {}
+
+    /// The frame SwiftUI gives it, not the button's own wider natural size.
+    func sizeThatFits(_ proposal: ProposedViewSize, uiView: UIButton, context: Context) -> CGSize? {
+        CGSize(width: proposal.width ?? 44, height: proposal.height ?? 42)
+    }
 }
 
 /// Acts on press, then repeats while held.
@@ -118,6 +123,11 @@ struct RepeatingKey: UIViewRepresentable {
 
     func updateUIView(_ uiView: UIButton, context: Context) {
         context.coordinator.action = action
+    }
+
+    /// The frame SwiftUI gives it, not the button's own wider natural size.
+    func sizeThatFits(_ proposal: ProposedViewSize, uiView: UIButton, context: Context) -> CGSize? {
+        CGSize(width: proposal.width ?? 44, height: proposal.height ?? 42)
     }
 
     @MainActor
