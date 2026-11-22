@@ -5,8 +5,9 @@ instead of sending audio to Gemini. Gemini stays the default. The models are
 Fluid Speech Pro and Fluid Speech Mini by FluidVoice (Parakeet TDT models
 converted to Core ML), run through the FluidAudio package, plus pyannote
 community-1 to tell meeting speakers apart. LFM3-Omni-2B by Liquid AI, run
-through llama.cpp, can write on-device transcripts and meeting notes so the
-words never leave the device.
+through llama.cpp, can write on-device transcripts and meeting notes so no
+model service sees the words. Finished text still syncs to your own iCloud
+like any dictation.
 
 ## Settings
 
