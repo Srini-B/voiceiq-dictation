@@ -141,6 +141,8 @@ public enum KeychainStore {
     /// Activity) can read the group, and the keyboard only with Full Access.
     public static func shareWithKeyboard() {
         unshareAgentProviderKey()
+        // A Gemini key only the legacy service holds moves to the current one first.
+        _ = loadAPIKey()
         let secrets: [Secret] = [.gemini, .openAI, .elevenLabs, .tinyFish]
         for secret in secrets {
             var shared = baseQuery(secret: secret, dataProtection: true)
