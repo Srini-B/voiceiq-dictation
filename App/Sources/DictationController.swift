@@ -205,8 +205,9 @@ final class DictationController {
         // Settings must take effect the moment they're flipped — not on the next
         // unrelated pill transition (dogfood: resting-dot toggle "didn't work").
         NotificationCenter.default.addObserver(forName: .gtSettingDidChange, object: nil, queue: .main) { [weak self] note in
+            let key = note.object as? String
             Task { @MainActor in
-                self?.applySettingChange(key: note.object as? String)
+                self?.applySettingChange(key: key)
             }
         }
         learner.onLearned = { [weak self] entries in

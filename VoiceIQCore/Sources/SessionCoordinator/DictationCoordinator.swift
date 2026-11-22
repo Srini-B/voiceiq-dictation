@@ -37,7 +37,7 @@ public final class DictationCoordinator: ObservableObject {
 
     /// Below this metered peak the user simply didn't speak (F9b). Scale matches
     /// AudioCaptureEngine's onLevel; whisper-quiet speech peaks well above it.
-    static let silencePeakThreshold: Float = 0.06
+    nonisolated static let silencePeakThreshold: Float = 0.06
     /// Clips shorter than this can't contain a word — never sent to the API
     /// (dogfood: a 0.19s blip got uploaded, errored, and showed as Failed).
     static let minimumSendableDuration: Double = 0.2

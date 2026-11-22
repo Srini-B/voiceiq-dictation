@@ -1,4 +1,6 @@
-import ActivityKit
+// ActivityKit does not mark Activity Sendable; its update and end calls run
+// off the main actor.
+@preconcurrency import ActivityKit
 import Foundation
 import VoiceIQBridge
 import VoiceIQCore

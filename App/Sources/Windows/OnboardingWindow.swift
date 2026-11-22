@@ -640,11 +640,10 @@ private struct MicScreen: View {
                             NSWorkspace.shared.open(URL(string:
                                 "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone")!)
                         } else {
-                            AVCaptureDevice.requestAccess(for: .audio) { ok in
-                                Task { @MainActor in
-                                    granted = ok
-                                    denied = !ok
-                                }
+                            Task {
+                                let ok = await AVCaptureDevice.requestAccess(for: .audio)
+                                granted = ok
+                                denied = !ok
                             }
                         }
                     }
@@ -769,7 +768,8 @@ private struct AccessibilityScreen: View {
         ScreenScaffold("Let it type for you.", "Accessibility places text at your cursor. Screen Recording lets VoiceiQ read names and paths on screen while you talk. It is optional.") {
             VStack(spacing: VoiceIQUI.Spacing.m) {
                 PermissionCard(icon: "keyboard", title: "Accessibility", granted: granted) {
-                    let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
+                    // kAXTrustedCheckOptionPrompt's value; the C global is mutable, so Swift 6 refuses it.
+                    let options = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
                     _ = AXIsProcessTrustedWithOptions(options)
                     NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!)
                 }

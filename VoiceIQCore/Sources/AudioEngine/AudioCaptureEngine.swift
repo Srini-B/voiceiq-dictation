@@ -17,11 +17,15 @@ import VoiceIQObjC
 ///    routes), so mid-session device changes are handled by rebuild + gap marker
 ///    instead (Wispr behavior). True pinning is a v1.x investigation (raw AUHAL).
 ///  - Zero frames captured is a detectable error state, never an empty transcript.
-public final class AudioCaptureEngine: AudioCapturing {
-    public var onLevel: ((Float) -> Void)?
-    public var onDeviceChange: ((String) -> Void)?
-    public var onWriteFailure: (() -> Void)?
-    public var onEngineDied: ((String) -> Void)?
+///
+/// Sendable by hand: the audio thread, the write queue and the coordinator
+/// share it. State they all touch is guarded by `stateLock`; the graph and
+/// writer change only on the caller's start/stop sequence and on `queue`.
+public final class AudioCaptureEngine: AudioCapturing, @unchecked Sendable {
+    public var onLevel: (@Sendable (Float) -> Void)?
+    public var onDeviceChange: (@Sendable (String) -> Void)?
+    public var onWriteFailure: (@Sendable () -> Void)?
+    public var onEngineDied: (@Sendable (String) -> Void)?
 
     private let targetFormat = AVAudioFormat(
         commonFormat: .pcmFormatInt16, sampleRate: 16_000, channels: 1, interleaved: true
@@ -257,9 +261,8 @@ public final class AudioCaptureEngine: AudioCapturing {
             tailWaiter = continuation
             tailUntil = keyUp
             stateLock.unlock()
-            let timeoutGuard = { [weak self] in self?.resumeTailWaiter() }
-            DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + timeoutSeconds) {
-                timeoutGuard()
+            DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + timeoutSeconds) { [weak self] in
+                self?.resumeTailWaiter()
             }
         }
     }
@@ -555,6 +558,9 @@ public final class AudioCaptureEngine: AudioCapturing {
             memcpy(toData, fromData, Int(min(from.mDataByteSize, to.mDataByteSize)))
         }
         let hostTime = timestamp.mFlags.contains(.hostTimeValid) ? Self.nanoseconds(fromHostTime: timestamp.mHostTime) : nil
+        // AVAudioPCMBuffer is not Sendable. This copy is never touched again
+        // here; only the write queue reads it from now on.
+        nonisolated(unsafe) let buffer = buffer
         queue.async { [weak self] in
             self?.ingest(buffer, capturedAt: hostTime)
         }

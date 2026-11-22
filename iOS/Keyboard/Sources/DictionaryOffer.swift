@@ -72,12 +72,6 @@ final class DictionaryOffer: ObservableObject {
         }
     }
 
-    /// Our own copies (Ask's Copy) are not offered back.
-    func noteOwnCopy() {
-        markPasteboardSeen()
-        copiedPending = false
-    }
-
     private func isSaved(_ term: String) -> Bool {
         let key = term.lowercased()
         return justAdded.contains(key) || store.dictionaryTerms.contains(key)

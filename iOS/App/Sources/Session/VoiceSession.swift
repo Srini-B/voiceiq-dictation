@@ -33,6 +33,8 @@ final class VoiceSession: ObservableObject {
         didSet {
             publishIfChanged()
             if meetingStartedAt == nil, oldValue != nil { becameIdle() }
+            // A meeting keeps the session on: no warm deadline while it runs.
+            if meetingStartedAt != nil, oldValue == nil { cancelWarmEnd() }
         }
     }
 

@@ -1,0 +1,145 @@
+import UIKit
+import XCTest
+
+/// A text field as a keyboard sees it: text with a cursor or a selection.
+private final class Field: NSObject, UITextDocumentProxy {
+    var text: [Character]
+    private var start: Int
+    private var length: Int
+
+    init(_ text: String, cursorAt offset: Int? = nil, selecting word: String? = nil) {
+        self.text = Array(text)
+        if let word, let range = text.range(of: word) {
+            start = text.distance(from: text.startIndex, to: range.lowerBound)
+            length = word.count
+        } else {
+            start = offset ?? text.count
+            length = 0
+        }
+    }
+
+    var string: String { String(text) }
+    var cursor: Int { start }
+
+    var documentContextBeforeInput: String? { String(text[..<start]) }
+    var documentContextAfterInput: String? { String(text[(start + length)...]) }
+    var selectedText: String? { length > 0 ? String(text[start..<(start + length)]) : nil }
+    var documentInputMode: UITextInputMode? { nil }
+    var documentIdentifier: UUID { UUID() }
+    var hasText: Bool { !text.isEmpty }
+
+    func insertText(_ string: String) {
+        text.replaceSubrange(start..<(start + length), with: string)
+        start += string.count
+        length = 0
+    }
+
+    func deleteBackward() {
+        if length > 0 {
+            text.removeSubrange(start..<(start + length))
+        } else if start > 0 {
+            text.remove(at: start - 1)
+            start -= 1
+        }
+        length = 0
+    }
+
+    func adjustTextPosition(byCharacterOffset offset: Int) {
+        start = min(max((offset < 0 ? start : start + length) + offset, 0), text.count)
+        length = 0
+    }
+
+    func setMarkedText(_ markedText: String, selectedRange: NSRange) {}
+    func unmarkText() {}
+}
+
+private final class FieldController: UIInputViewController {
+    let field: Field
+
+    init(_ field: Field) {
+        self.field = field
+        super.init(nibName: nil, bundle: nil)
+    }
+
+    required init?(coder: NSCoder) { fatalError() }
+
+    override var textDocumentProxy: UITextDocumentProxy { field }
+}
+
+@MainActor
+final class EditControllerTests: XCTestCase {
+    private var controller: FieldController!
+
+    private func editor(for field: Field) -> EditController {
+        controller = FieldController(field)
+        let editor = EditController()
+        editor.controller = controller
+        editor.appeared()
+        return editor
+    }
+
+    /// Undo takes back a whole dictation, then the deletes after it as one
+    /// step, and redo puts them back in order.
+    func testUndoAndRedoReplayDictationAndDeletes() {
+        let field = Field("Dear Ana, ")
+        let editor = editor(for: field)
+
+        editor.type("see you at noon.")
+        editor.deleteBackward()
+        editor.deleteBackward()
+        editor.deleteBackward()
+        XCTAssertEqual(field.string, "Dear Ana, see you at no")
+
+        editor.undo()
+        XCTAssertEqual(field.string, "Dear Ana, see you at noon.")
+        editor.undo()
+        XCTAssertEqual(field.string, "Dear Ana, ")
+        XCTAssertTrue(editor.undoStack.isEmpty)
+
+        editor.redo()
+        editor.redo()
+        XCTAssertEqual(field.string, "Dear Ana, see you at no")
+    }
+
+    /// Typing over a selection ends it, and undo brings the selected word back.
+    func testTypingOverASelectionEndsItAndUndoRestoresTheWord() {
+        let field = Field("call Srini tomorrow", selecting: "Srini")
+        let editor = editor(for: field)
+        XCTAssertEqual(editor.selection, "Srini")
+
+        editor.type("\n", as: .typing)
+        XCTAssertEqual(editor.selection, "")
+        XCTAssertEqual(field.string, "call \n tomorrow")
+
+        editor.undo()
+        XCTAssertEqual(field.string, "call Srini tomorrow")
+    }
+
+    /// Word steps stop at the near edge of the next word; line steps stop at
+    /// a line break.
+    func testWordAndLineSteps() {
+        let field = Field("one two\nthree four", cursorAt: 11)
+        let editor = editor(for: field)
+
+        editor.moveCursor(.lineStart)
+        XCTAssertEqual(field.cursor, 8)
+        editor.moveCursor(.wordLeft)
+        XCTAssertEqual(field.cursor, 4, "the line break counts as space before \"two\"")
+        editor.moveCursor(.wordRight)
+        XCTAssertEqual(field.cursor, 7)
+        editor.moveCursor(.right)
+        editor.moveCursor(.lineEnd)
+        XCTAssertEqual(field.cursor, 18)
+    }
+
+    /// When the app itself changes the text, the keyboard's undo would
+    /// replay at the wrong place, so it is dropped.
+    func testAnEditByTheAppDropsUndo() {
+        let field = Field("Hi")
+        let editor = editor(for: field)
+        editor.type(" there")
+        field.insertText("!")
+        editor.textChanged()
+        XCTAssertTrue(editor.undoStack.isEmpty)
+    }
+}

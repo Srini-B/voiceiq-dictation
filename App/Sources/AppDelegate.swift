@@ -2,6 +2,7 @@ import AppKit
 import Combine
 import VoiceIQCore
 
+@MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItemController: StatusItemController?
     private var dictationController: DictationController?
