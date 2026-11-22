@@ -27,10 +27,12 @@ public struct OnDeviceFirstTranscription: TranscriptionServicing {
             if let decoded = await local.finish(framesWritten: frames) {
                 return try await gemini.write(decoded, context: context)
             }
-            try Task.checkCancellation()
-            guard SettingsStore().onDeviceFallsBackToGemini else { throw TranscriptionError.onDeviceFailed }
         }
         try Task.checkCancellation()
+        let settings = SettingsStore()
+        guard !settings.localTranscriptionEnabled || settings.onDeviceFallsBackToGemini else {
+            throw TranscriptionError.onDeviceFailed
+        }
         return try await gemini.transcribe(audioURL: audioURL, durationSeconds: durationSeconds, context: context)
     }
 

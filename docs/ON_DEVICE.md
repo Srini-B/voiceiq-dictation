@@ -31,9 +31,11 @@ who writes an on-device transcript:
   or is not downloaded, the dictation goes in as transcribed. It never falls
   back to Gemini, and on a device that does not offer it the choice reads as
   Off. See [On-device writer](#on-device-writer).
-- **Off**: no on-device transcript or its audio leaves the device.
-  Dictations go in as transcribed, with the Dictionary's replacements. Meetings keep their transcript with speaker
-  labels and a short note that no summary was written.
+- **Off**: no on-device transcript or its audio goes to Gemini. Dictations
+  go in as transcribed, with the Dictionary's replacements. Meetings keep
+  their transcript with speaker labels and a short note that no summary was
+  written. As with every dictation and meeting, the finished text syncs to
+  your own iCloud when History sync is on (see PRIVACY.md).
 
 These choices cover what was transcribed on device. A row set to Gemini still
 sends its audio to Gemini: with Meetings On device and Dictation Gemini,
@@ -41,8 +43,8 @@ dictations go to Gemini whatever this row says. A Gemini transcription always
 applies the writing rules in the same request, so "Gemini transcribes,
 on-device writes" does not exist.
 
-With Gemini, an on-device dictation or meeting whose model fails, stays
-busy or loads too slowly goes to Gemini as audio when a key is stored. With
+With Gemini, an on-device dictation or meeting whose model is missing, busy,
+fails or loads too slowly goes to Gemini as audio when a key is stored. With
 On device or Off it never does: the dictation fails and stays in History for
 Retry, and the meeting is marked failed (`SettingsStore.onDeviceFallsBackToGemini`).
 Screen context, when on, sends its screenshots with the Gemini writing

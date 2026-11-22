@@ -480,9 +480,13 @@ public final class DictationCoordinator: ObservableObject {
                     // Gemini hears the audio and writes the text in one call, so
                     // the whole request is the transcription step. Counted from
                     // the recording's end, so a slow on-device load shows too.
-                    if local != nil {
+                    // On device chosen, whether or not the model could be taken
+                    // (busy, missing): the audio goes to Gemini only when the
+                    // user lets the words reach Gemini.
+                    let settings = SettingsStore()
+                    if local != nil || settings.localTranscriptionEnabled {
                         try Task.checkCancellation()
-                        guard SettingsStore().onDeviceFallsBackToGemini else { throw TranscriptionError.onDeviceFailed }
+                        guard settings.onDeviceFallsBackToGemini else { throw TranscriptionError.onDeviceFailed }
                     }
                     outcome = try await self.transcription.transcribe(
                         audioURL: audioURL, durationSeconds: result.durationSeconds, context: session.context

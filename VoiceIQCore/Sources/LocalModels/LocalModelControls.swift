@@ -253,7 +253,9 @@ public struct LocalModelFooter: View {
             if store.state == .ready {
                 Text(Self.firstRunNote)
             } else {
-                Text("Gemini transcribes until \(store.displayName) is downloaded.")
+                Text(SettingsStore().onDeviceFallsBackToGemini
+                     ? "Gemini transcribes until \(store.displayName) is downloaded."
+                     : "Download \(store.displayName) to dictate. Until then, dictations are kept in History and nothing is sent.")
             }
         }
     }

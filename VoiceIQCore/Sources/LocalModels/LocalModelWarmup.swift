@@ -98,10 +98,11 @@ public enum LocalModelWarmup {
         }
     }
 
-    /// A dictation has claimed `model` (and the English tools, with `tools`):
-    /// it takes those claims over from the warm-ups in progress and queued,
-    /// since its own claim waits for them. Claims on other models stay with
-    /// their warm-ups until those stop. The loads keep running, and the
+    /// A dictation is starting on `model` (and the English tools, with
+    /// `tools`): a store holds one session at a time, so it takes those claims
+    /// over from the warm-ups in progress and queued, and its own claim waits
+    /// for them. Claims on other models stay with their warm-ups until those
+    /// stop. The loads keep running, and the
     /// dictation loads after them (`finished(before:)`), so two model
     /// compiles never overlap.
     static func yieldToDictation(model: LocalSpeechModel, tools: Bool) {

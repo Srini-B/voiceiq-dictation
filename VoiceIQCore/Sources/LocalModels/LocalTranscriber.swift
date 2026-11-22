@@ -74,12 +74,12 @@ public final class LocalTranscriber: Sendable {
             await worker.stop()
             await LocalModelWarmup.finished()
         }
+        LocalModelWarmup.yieldToDictation(model: model, tools: toolsReady)
         guard let directory = LocalModelStore.store(for: model).acquireSession(id: id, cancel: cancel) else { return nil }
         if toolsReady, LocalModelStore.englishTools.acquireSession(id: id, cancel: cancel) == nil {
             LocalModelStore.store(for: model).releaseSession(id: id)
             return nil
         }
-        LocalModelWarmup.yieldToDictation(model: model, tools: toolsReady)
         self.id = id
         self.model = model
         self.worker = worker

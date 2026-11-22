@@ -143,6 +143,36 @@ final class DictationCoordinatorTests: XCTestCase {
         XCTAssertEqual(c.lastResult, "clean")
     }
 
+    /// Dictation set to On device with the model missing or busy (no local
+    /// session): with writing Off or On device the recording must not go to
+    /// Gemini, so the dictation fails and nothing is inserted. With writing
+    /// Gemini it may.
+    func testOnDeviceDictationWithoutItsModelReachesGeminiOnlyWithGeminiWriting() async {
+        let settings = SettingsStore()
+        settings.setDictationSource(.onDevice)
+        defer {
+            UserDefaults.standard.removeObject(forKey: "transcriptionSource")
+            UserDefaults.standard.removeObject(forKey: "cleanupSource")
+        }
+        for writing in [CleanupSource.none, .onDevice] {
+            settings.setCleanupSource(writing)
+            let c = makeCoordinator()
+            c.handle(.begin)
+            await pump()
+            c.handle(.finalize)
+            await settle()
+            XCTAssertEqual(c.state, .failed(.validation), "writing \(writing)")
+            XCTAssertNil(inserter.insertedText, "writing \(writing)")
+        }
+        settings.setCleanupSource(.gemini)
+        let c = makeCoordinator()
+        c.handle(.begin)
+        await pump()
+        c.handle(.finalize)
+        await settle()
+        XCTAssertEqual(c.state, .done(.inserted))
+    }
+
     /// History shows each step of a dictation; the one model call that hears
     /// and writes it is the transcription step.
     func testInsertedDictationKeepsItsStepTimes() async throws {

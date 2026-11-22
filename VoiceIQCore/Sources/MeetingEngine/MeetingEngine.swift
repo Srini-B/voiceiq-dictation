@@ -266,6 +266,10 @@ import VoiceIQSpeech
     private func transcribe(folder: URL, config cfg: GeminiConfig) async throws -> ([TranscriptSegment], Bool) {
         let cloud = MeetingTranscriber(client: client, models: .init(transcribe: cfg.transcribeModel), endpoint: cfg.endpoint)
         guard let local = try await acquireLocal() else {
+            let settings = SettingsStore()
+            guard !settings.localMeetingTranscriptionEnabled || settings.onDeviceFallsBackToGemini else {
+                throw TranscriptionError.onDeviceFailed
+            }
             guard hasKey() else { throw MeetingFailure.noKey }
             return (try await cloud.transcribe(folder: folder), false)
         }
