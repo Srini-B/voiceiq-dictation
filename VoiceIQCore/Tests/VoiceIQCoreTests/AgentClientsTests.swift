@@ -68,6 +68,9 @@ final class AgentClientsTests: XCTestCase {
         [mcp_servers.voiceiq.tools.get_meeting]
         approval_mode = "approve"
 
+        [mcp_servers."voiceiq.backup"]
+        url = "https://example.com/mcp"
+
         [profiles.fast]
         model = "mini"
         """, to: ".codex/config.toml")
@@ -80,11 +83,12 @@ final class AgentClientsTests: XCTestCase {
         XCTAssertEqual(text.components(separatedBy: "[mcp_servers.voiceiq]").count, 2, text)
         XCTAssertFalse(text.contains("old") || text.contains("approval_mode"), text)
         XCTAssertTrue(text.hasPrefix("model = \"o4\"\n\n[mcp_servers.github]\ncommand = \"gh\"\n"), text)
-        XCTAssertTrue(text.contains("[profiles.fast]\nmodel = \"mini\"\n"), text)
+        XCTAssertTrue(text.contains("[mcp_servers.\"voiceiq.backup\"]\nurl = \"https://example.com/mcp\"\n\n[profiles.fast]\nmodel = \"mini\"\n"), text)
 
         try codex.remove(home: home)
         XCTAssertEqual(try String(contentsOf: file, encoding: .utf8),
-                       "model = \"o4\"\n\n[mcp_servers.github]\ncommand = \"gh\"\n\n[profiles.fast]\nmodel = \"mini\"\n")
+                       "model = \"o4\"\n\n[mcp_servers.github]\ncommand = \"gh\"\n\n"
+                       + "[mcp_servers.\"voiceiq.backup\"]\nurl = \"https://example.com/mcp\"\n\n[profiles.fast]\nmodel = \"mini\"\n")
     }
 
     func testCodexQuotedTablesAndSharedFilePermissions() throws {

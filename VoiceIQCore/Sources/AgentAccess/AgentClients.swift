@@ -113,7 +113,7 @@ public enum AgentClient: String, CaseIterable, Identifiable, Sendable {
         case .codex:
             // `voiceiq` written as a dotted key or an inline table, rather than
             // as its own table, is a form this can't edit safely.
-            if Self.tomlRemovingOurs(text).range(of: #"(?m)^\s*(mcp_servers\s*\.\s*)?["']?voiceiq["']?\s*[.=]"#,
+            if Self.tomlRemovingOurs(text).range(of: #"(?m)^\s*(mcp_servers\s*\.\s*)?(voiceiq|"voiceiq"|'voiceiq')\s*[.=]"#,
                                                   options: .regularExpression) != nil {
                 throw CocoaError(.fileReadCorruptFile)
             }
@@ -187,19 +187,41 @@ public enum AgentClient: String, CaseIterable, Identifiable, Sendable {
         "\n[mcp_servers.\(serverName)]\nurl = \"\(AgentAPI.mcpURL)\"\nhttp_headers = { Authorization = \"Bearer \(key)\" }\n"
     }
 
-    /// The table name of a TOML header line such as `[mcp_servers.voiceiq]`, nil for other lines.
-    private static func tomlTable(_ line: String) -> String? {
-        let trimmed = line.trimmingCharacters(in: .whitespaces)
-        guard trimmed.hasPrefix("["), let close = trimmed.lastIndex(of: "]") else { return nil }
-        let after = trimmed[trimmed.index(after: close)...].trimmingCharacters(in: .whitespaces)
-        guard after.isEmpty || after.hasPrefix("#") else { return nil }
-        let name = trimmed[..<close].trimmingCharacters(in: CharacterSet(charactersIn: "[] "))
-        guard !name.isEmpty else { return nil }
-        return name.filter { !"\"' ".contains($0) }
+    /// The key path of a TOML table header line, such as `["mcp_servers", "voiceiq.backup"]`
+    /// for `[mcp_servers."voiceiq.backup"]`; nil for other lines. Quoted parts keep their dots.
+    private static func tomlTable(_ line: String) -> [String]? {
+        var rest = Substring(line.trimmingCharacters(in: .whitespaces))
+        guard rest.popFirst() == "[" else { return nil }
+        let isArray = rest.first == "["
+        if isArray { rest.removeFirst() }
+        var path: [String] = [], part = "", quote: Character?
+        while let character = rest.popFirst() {
+            if let open = quote {
+                if character == open {
+                    quote = nil
+                } else if character == "\\", open == "\"", let escaped = rest.popFirst() {
+                    part.append(escaped)
+                } else {
+                    part.append(character)
+                }
+            } else if character == "\"" || character == "'" {
+                quote = character
+            } else if character == "." || character == "]" {
+                path.append(part.trimmingCharacters(in: .whitespaces))
+                part = ""
+                guard character == "]" else { continue }
+                if isArray, rest.popFirst() != "]" { return nil }
+                let after = rest.trimmingCharacters(in: .whitespaces)
+                return (after.isEmpty || after.hasPrefix("#")) && !path.contains("") ? path : nil
+            } else {
+                part.append(character)
+            }
+        }
+        return nil
     }
 
-    private static func isOurs(_ table: String) -> Bool {
-        table == "mcp_servers.\(serverName)" || table.hasPrefix("mcp_servers.\(serverName).")
+    private static func isOurs(_ table: [String]) -> Bool {
+        table.count >= 2 && table[0] == "mcp_servers" && table[1] == serverName
     }
 
     /// The lines of `[mcp_servers.voiceiq]` and its sub-tables, nil when there are none.
