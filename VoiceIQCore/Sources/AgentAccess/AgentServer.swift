@@ -60,8 +60,16 @@ public final class AgentServer: @unchecked Sendable {
         var bytes = [UInt8](repeating: 0, count: 32)
         guard SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes) == errSecSuccess else { return nil }
         let key = "viq_" + bytes.map { String(format: "%02x", $0) }.joined()
-        guard KeychainStore.saveAgentAccessKey(key) else { return nil }
-        cachedKey.withLock { $0 = key }
+        // Cached before saving: the save posts the change that restarts the
+        // server, which must already see the new key.
+        let previous = cachedKey.withLock { cached in
+            defer { cached = key }
+            return cached
+        }
+        guard KeychainStore.saveAgentAccessKey(key) else {
+            cachedKey.withLock { $0 = previous }
+            return nil
+        }
         return key
     }
 
