@@ -47,7 +47,7 @@ public enum PromptV1 {
     static let answerFormat = "Answer with a JSON object whose only field, \"text\", is the written text and nothing else: no notes, timestamps, drafts, or reasoning. If the recording has no intelligible speech, \"text\" is exactly \(noSpeechToken)."
 
     /// `{"text": "..."}`, the answer `GeminiClient.dictate` asks for.
-    static let dictationSchema: [String: Any] = [
+    nonisolated(unsafe) static let dictationSchema: [String: Any] = [
         "type": "object",
         "properties": ["text": ["type": "string"]],
         "required": ["text"],
