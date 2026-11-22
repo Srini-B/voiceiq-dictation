@@ -8,6 +8,7 @@ final class CallCount: @unchecked Sendable {
     var value: Int { lock.lock(); defer { lock.unlock() }; return count }
 }
 
+@MainActor
 final class DictationCoordinatorTests: XCTestCase {
 
     // MARK: Fakes
