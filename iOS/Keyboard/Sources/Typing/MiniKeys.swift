@@ -5,6 +5,9 @@ import UIKit
 /// punctuation, or the digits after 123, then emoji, the size toggle, space
 /// and return.
 struct MiniKeys: View {
+    /// From the top of the keys to their first row.
+    static let topInset: CGFloat = 6
+
     @ObservedObject var typing: TypingController
     let showsGlobe: Bool
     weak var controller: KeyboardViewController?
@@ -39,7 +42,7 @@ struct MiniKeys: View {
             }
         }
         .padding(.horizontal, 4)
-        .padding(.vertical, 6)
+        .padding(.vertical, Self.topInset)
     }
 }
 

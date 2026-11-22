@@ -258,6 +258,9 @@ nonisolated struct KeyboardLayout: Equatable, Sendable {
     static let bottomSwitchWidthRatio: CGFloat = 1.56
     static let returnWidthRatio: CGFloat = 2.40
     static let compactReturnWidthRatio: CGFloat = 2.18
+    /// VoiceiQ: room left free on each side of the space bar for its own keys, given the space
+    /// bar's full width, a letter's width and the gap (iOS/Keyboard/Hex/patches).
+    nonisolated(unsafe) static var spaceSideRoom: ((CGFloat, CGFloat, CGFloat) -> CGFloat)?
 
     let width: CGFloat
     let orientation: KeyboardOrientation
@@ -642,14 +645,16 @@ nonisolated struct KeyboardLayout: Equatable, Sendable {
 
         let fixed = (leading + trailing).reduce(0) { $0 + $1.1 }
         let itemCount = CGFloat(leading.count + trailing.count + 1)
-        let spaceW = max(lw, (right - left) - fixed - (itemCount - 1) * m.gap)
+        let fullSpaceW = max(lw, (right - left) - fixed - (itemCount - 1) * m.gap)
+        let room = spaceSideRoom?(fullSpaceW, referenceW, m.gap) ?? 0
+        let spaceW = fullSpaceW - 2 * room
         var x = left
         for (kind, w, label) in leading {
             add(kind, row: 3, x: x, w: w, label: label)
             x += w + m.gap
         }
-        add(.space, row: 3, x: x, w: spaceW, label: "space")
-        x += spaceW + m.gap
+        add(.space, row: 3, x: x + room, w: spaceW, label: "space")
+        x += spaceW + 2 * room + m.gap
         for (kind, w, label) in trailing {
             add(kind, row: 3, x: x, w: w, label: label)
             x += w + m.gap

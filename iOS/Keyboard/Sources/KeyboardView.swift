@@ -39,8 +39,17 @@ struct KeyboardView: View {
         typing.mini && panel == .keys && typing.emojiQuery == nil && !typing.isDigitPad
     }
 
-    /// The mic bar with the strip's room above and below it (11 pt in portrait).
-    static func miniBarHeight(compact: Bool) -> CGFloat { compact ? 44 : 68 }
+    /// The mic bar's room above and below it, so the keyboard's edge is as far
+    /// above it as the mini keys' first row (6 pt into `MiniKeys`) is below it.
+    static func miniBarInsets(compact: Bool) -> (top: CGFloat, bottom: CGFloat) {
+        let bottom: CGFloat = compact ? 2 : 7
+        return (bottom + MiniKeys.topInset, bottom)
+    }
+
+    static func miniBarHeight(compact: Bool) -> CGFloat {
+        let insets = miniBarInsets(compact: compact)
+        return insets.top + MicBar.height(compact: compact) + insets.bottom
+    }
 
     /// Hex's keys with VoiceiQ's buttons in their strip: one row above the keys.
     private var showsHexKeys: Bool { panel == .keys && !showsMini && !typing.isDigitPad }
@@ -59,10 +68,21 @@ struct KeyboardView: View {
                 KeysArea(typing: typing).overlay(alignment: .topLeading) { stripOverlay }
             } else {
                 VStack(spacing: 0) {
-                    Group {
-                        if isLive { RecordingStrip(model: model, size: typing.stripBar.height) } else if showsMini { miniBar } else { topBar }
+                    if showsMini {
+                        Group {
+                            if isLive { RecordingStrip(model: model, size: typing.stripBar.height) } else { miniBar }
+                        }
+                        .frame(height: Self.miniBarHeight(compact: typing.compact))
+                    } else {
+                        // In the strip's place, spaced as the strip is.
+                        let bar = typing.stripBar.height > 0 ? typing.stripBar : CGRect(x: 0, y: 0, width: 0, height: typing.stripArea)
+                        Group {
+                            if isLive { RecordingStrip(model: model, size: bar.height) } else { topBar }
+                        }
+                        .frame(height: bar.height)
+                        .padding(.top, bar.minY)
+                        .padding(.bottom, max(0, typing.stripArea - bar.maxY))
                     }
-                    .frame(height: showsMini ? Self.miniBarHeight(compact: typing.compact) : typing.stripArea)
                     panelContent.frame(maxHeight: .infinity)
                 }
             }
@@ -188,8 +208,10 @@ struct KeyboardView: View {
             }
             // Without Full Access the bar asks for it, and VoiceOver should say so.
             MicBar(phase: model.phase, waiting: model.waitingForApp, title: micTitle,
-                   height: typing.compact ? 36 : 46, label: model.hasFullAccess ? nil : micTitle, action: model.micTapped)
+                   height: MicBar.height(compact: typing.compact), label: model.hasFullAccess ? nil : micTitle, action: model.micTapped)
         }
+        .padding(.top, Self.miniBarInsets(compact: typing.compact).top)
+        .padding(.bottom, Self.miniBarInsets(compact: typing.compact).bottom)
         .padding(.leading, 4)
         .padding(.trailing, 7)
     }
@@ -305,6 +327,8 @@ private struct MicBar: View {
     let waiting: Bool
     let title: String
     var height: CGFloat = 56
+    /// The mini keyboard's mic bar.
+    static func height(compact: Bool) -> CGFloat { compact ? 36 : 46 }
     /// Replaces the spoken label, which otherwise follows the phase.
     var label: String? = nil
     let action: () -> Void
@@ -375,9 +399,9 @@ private struct AnswerPanel: View {
 }
 
 /// Stands in for the suggestion bar while a dictation runs, with the keys
-/// still below it: Cancel, the time and a waveform whose bars rise with the
-/// voice, Done. With Real-time transcription the words heard so far replace the
-/// time and the waveform once they arrive. While the text is written: a spinner.
+/// still below it: Cancel, the time over a glow that rises with the voice,
+/// Done. With Real-time transcription the words heard so far replace the
+/// time and the glow once they arrive. While the text is written: a spinner.
 private struct RecordingStrip: View {
     @ObservedObject var model: KeyboardModel
     /// The strip's height: its buttons fit inside it, as Hex's pills do.
@@ -408,17 +432,9 @@ private struct RecordingStrip: View {
                         .truncationMode(.head)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .accessibilityLabel("Heard so far: \(model.liveText)")
-                } else {
-                    // The time, then the voice's waveform across the rest.
-                    HStack(spacing: 10) {
-                        if let started = model.recordingStartedAt {
-                            Text(timerInterval: started...Date.distantFuture, countsDown: false)
-                                .font(.system(size: 16, weight: .semibold).monospacedDigit())
-                                .fixedSize()
-                        }
-                        LevelWaveform(color: KeyboardPalette.recording)
-                            .padding(.vertical, 6)
-                    }
+                } else if let started = model.recordingStartedAt {
+                    Text(timerInterval: started...Date.distantFuture, countsDown: false)
+                        .font(.system(size: 16, weight: .semibold).monospacedDigit())
                 }
             }
             .frame(maxWidth: .infinity)
@@ -428,6 +444,11 @@ private struct RecordingStrip: View {
             }
         }
         .padding(.horizontal, 6)
+        .background {
+            if recording, model.liveText.isEmpty {
+                LevelGlow(color: KeyboardPalette.recording)
+            }
+        }
     }
 }
 

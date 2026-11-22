@@ -44,9 +44,12 @@ final class TypingController: ObservableObject {
     /// The strip mic's tap; its hold goes through `dictation` as the Hex key's did.
     var onMicTap: (() -> Void)?
     private var stripButtons: [StripButton: UIControl] = [:]
+    /// The buttons beside the space bar rather than in the strip.
+    private var bottomRowButtons: Set<StripButton> = []
 
     init() {
         HexStripHeight.install()
+        KeyboardLayout.spaceSideRoom = StripButton.spaceSideRoom
     }
     /// The text selected in the field, so the bar's Dictionary offer ends with
     /// the selection.
@@ -91,8 +94,8 @@ final class TypingController: ObservableObject {
             guard let self else { return }
             if self.emojiQuery != nil { self.closeEmojiSearch() } else { self.showsEmoji = true }
         }
-        // One row: VoiceiQ's buttons take the strip's ends and the Hex key goes;
-        // the strip's mic does what it did.
+        // One row: VoiceiQ's buttons take the strip's ends and the space bar's
+        // sides, and the Hex key goes; the strip's mic does what it did.
         keyboard.hexKey.removeFromSuperview()
         for button in StripButton.allCases {
             let control = makeStripButton(button)
@@ -101,8 +104,12 @@ final class TypingController: ObservableObject {
         }
         keyboard.stripLayout = { [weak self] layout, lift in
             let bar = layout.stripBarFrame.offsetBy(dx: 0, dy: lift)
-            let placed = StripButton.layout(bar: bar, side: layout.metrics.side)
-            self?.placeStrip(buttons: placed.buttons, bar: bar, slots: placed.strip, area: layout.metrics.stripArea + lift)
+            let beside = StripButton.besideSpace(in: layout).map {
+                (mini: $0.mini.offsetBy(dx: 0, dy: lift), edit: $0.edit.offsetBy(dx: 0, dy: lift))
+            }
+            let placed = StripButton.layout(bar: bar, side: layout.metrics.side, besideSpace: beside)
+            self?.placeStrip(buttons: placed.buttons, besideSpace: beside != nil, radius: layout.metrics.cornerRadius,
+                             bar: bar, slots: placed.strip, area: layout.metrics.stripArea + lift)
             return (placed.strip.offsetBy(dx: 0, dy: -lift), placed.slots.map { $0.offsetBy(dx: 0, dy: -lift) })
         }
         self.keyboard = keyboard
@@ -217,10 +224,7 @@ final class TypingController: ObservableObject {
             mic.onAbandon = { [weak self] in self?.dictation.onHexKeyAbandon?() }
             return mic
         }
-        let control = UIButton(type: .system)
-        control.setImage(.stripSymbol(button.symbol), for: .normal)
-        control.tintColor = KeyboardPalette.accentUIColor
-        control.accessibilityLabel = button.label
+        let control = StripKeyButton(button)
         control.addAction(UIAction { [weak self] _ in self?.stripButtonTapped(button) }, for: .touchUpInside)
         return control
     }
@@ -239,9 +243,16 @@ final class TypingController: ObservableObject {
         }
     }
 
-    private func placeStrip(buttons frames: [StripButton: CGRect], bar: CGRect, slots: CGRect, area: CGFloat) {
+    private func placeStrip(
+        buttons frames: [StripButton: CGRect], besideSpace: Bool, radius: CGFloat, bar: CGRect, slots: CGRect, area: CGFloat
+    ) {
+        bottomRowButtons = besideSpace ? [.mini, .edit] : []
         for (button, control) in stripButtons {
             control.frame = frames[button] ?? .zero
+            if let key = control as? StripKeyButton {
+                key.isKey = bottomRowButtons.contains(button)
+                key.cornerRadius = radius
+            }
         }
         applyStripCover()
         guard (bar, slots, area) != (stripBar, stripSlots, stripArea) else { return }
@@ -255,11 +266,12 @@ final class TypingController: ObservableObject {
 
     private func applyStripCover() {
         keyboard?.stripView.isHidden = stripCover != .none
-        for control in stripButtons.values {
+        for (button, control) in stripButtons {
             control.isHidden = control.frame.isEmpty
             // Faded, not hidden: a hold on the mic that starts the recording
             // strip keeps its touch, so lifting it still stops the dictation.
-            control.alpha = stripCover == .all ? 0 : 1
+            // The keys beside the space bar stay, as the other keys do.
+            control.alpha = stripCover == .all && !bottomRowButtons.contains(button) ? 0 : 1
         }
     }
 

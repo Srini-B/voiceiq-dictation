@@ -18,7 +18,7 @@ index 4f8a78a..53ac4b1 100644
 +        stripView.slotFrames = strip.slots.map { $0.offsetBy(dx: -strip.frame.minX, dy: -strip.frame.minY) }
          stripView.pillInset = layout.metrics.stripInset
 diff --git a/iOS/Keyboard/Hex/FullKeyboard/KeyboardLayout.swift b/iOS/Keyboard/Hex/FullKeyboard/KeyboardLayout.swift
-index a4c11dd..b1b4ca7 100644
+index a4c11dd..5c957bf 100644
 --- a/iOS/Keyboard/Hex/FullKeyboard/KeyboardLayout.swift
 +++ b/iOS/Keyboard/Hex/FullKeyboard/KeyboardLayout.swift
 @@ -187,3 +187,3 @@ nonisolated struct KeyboardMetrics: Equatable, Sendable {
@@ -32,3 +32,23 @@ index a4c11dd..b1b4ca7 100644
 +    nonisolated(unsafe) static var phoneOverride: ((KeyboardMetrics, KeyboardOrientation) -> KeyboardMetrics)?
 +
      private func with(side: CGFloat) -> KeyboardMetrics {
+@@ -257,2 +260,5 @@ nonisolated struct KeyboardLayout: Equatable, Sendable {
+     static let compactReturnWidthRatio: CGFloat = 2.18
++    /// VoiceiQ: room left free on each side of the space bar for its own keys, given the space
++    /// bar's full width, a letter's width and the gap (iOS/Keyboard/Hex/patches).
++    nonisolated(unsafe) static var spaceSideRoom: ((CGFloat, CGFloat, CGFloat) -> CGFloat)?
+ 
+@@ -641,3 +647,5 @@ nonisolated struct KeyboardLayout: Equatable, Sendable {
+         let itemCount = CGFloat(leading.count + trailing.count + 1)
+-        let spaceW = max(lw, (right - left) - fixed - (itemCount - 1) * m.gap)
++        let fullSpaceW = max(lw, (right - left) - fixed - (itemCount - 1) * m.gap)
++        let room = spaceSideRoom?(fullSpaceW, referenceW, m.gap) ?? 0
++        let spaceW = fullSpaceW - 2 * room
+         var x = left
+@@ -647,4 +655,4 @@ nonisolated struct KeyboardLayout: Equatable, Sendable {
+         }
+-        add(.space, row: 3, x: x, w: spaceW, label: "space")
+-        x += spaceW + m.gap
++        add(.space, row: 3, x: x + room, w: spaceW, label: "space")
++        x += spaceW + 2 * room + m.gap
+         for (kind, w, label) in trailing {
