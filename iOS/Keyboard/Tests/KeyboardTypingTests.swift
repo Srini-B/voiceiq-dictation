@@ -22,6 +22,7 @@ private final class Field: NSObject, UITextDocumentProxy {
     var text: String { String(characters) }
     var textContentType: UITextContentType!
     var keyboardType: UIKeyboardType = .default
+    var smartQuotesType: UITextSmartQuotesType = .default
 
     /// The user taps in the field, which collapses the selection.
     func tap(at offset: Int) { start = offset; length = 0 }
@@ -172,6 +173,35 @@ final class KeyboardTypingTests: XCTestCase {
         XCTAssertEqual(field.text, "Hello")
         slide("world")
         XCTAssertEqual(field.text, "Hello world")
+    }
+
+    /// The space bar's trackpad reads the text after the cursor, so in the
+    /// middle of a field it moves right as well as left.
+    func testTheTrackpadMovesRightFromTheMiddleOfAField() {
+        open("hello world")
+        field.tap(at: 5)
+        typing.textChanged()
+        let space = plane.engine.layout.key(.space)!.frame
+        let start = CGPoint(x: space.midX, y: space.midY)
+        plane.began(id: 70, sample: sample(start))
+        plane.engine.holdSpace(forTouch: 70)
+        for step in 1...8 { plane.moved(id: 70, sample: sample(CGPoint(x: start.x + CGFloat(step) * 6, y: start.y))) }
+        plane.ended(id: 70, sample: sample(CGPoint(x: start.x + 48, y: start.y)))
+        XCTAssertEqual(field.text, "hello world", "the trackpad types nothing")
+        XCTAssertGreaterThan(field.documentContextBeforeInput!.count, 5, "the cursor moved right")
+    }
+
+    /// A field that turns smart quotes off (a code editor) keeps the straight
+    /// quote; an ordinary one curls it.
+    func testAFieldWithSmartQuotesOffKeepsStraightQuotes() {
+        for (setting, expected) in [(UITextSmartQuotesType.no, "\""), (.default, "“")] {
+            open()
+            field.smartQuotesType = setting
+            tap(.layerSwitch(.numbers))
+            keyboard.layoutIfNeeded()
+            tap(.character("\""))
+            XCTAssertEqual(field.text, expected, "smart quotes \(setting.rawValue)")
+        }
     }
 
     func testTheStripSuggestsAndAPickTypesIt() throws {

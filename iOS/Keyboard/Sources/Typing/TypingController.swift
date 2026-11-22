@@ -336,6 +336,11 @@ extension TypingController: @MainActor KeyboardTextTarget {
     var keyboardAppearance: UIKeyboardAppearance? { proxy?.keyboardAppearance }
     var textContentType: UITextContentType? { emojiQuery != nil ? nil : proxy?.textContentType ?? nil }
     var isSecureTextEntry: Bool? { proxy?.isSecureTextEntry }
+    var documentContextAfterInput: String? { emojiQuery != nil ? nil : proxy?.documentContextAfterInput }
+    var selectedText: String? { emojiQuery != nil ? nil : proxy?.selectedText }
+    var smartQuotesType: UITextSmartQuotesType? { proxy?.smartQuotesType }
+    var smartDashesType: UITextSmartDashesType? { proxy?.smartDashesType }
+    var documentIdentifier: UUID? { proxy.flatMap { TypingLogTraits.documentIdentifier(of: $0) } }
 
     func insertText(_ text: String) {
         if let query = emojiQuery {
