@@ -39,7 +39,8 @@ struct KeyboardView: View {
         typing.mini && panel == .keys && typing.emojiQuery == nil && !typing.isDigitPad
     }
 
-    static func miniBarHeight(compact: Bool) -> CGFloat { compact ? 44 : 58 }
+    /// The mic bar with the strip's room above and below it (11 pt in portrait).
+    static func miniBarHeight(compact: Bool) -> CGFloat { compact ? 44 : 68 }
 
     /// Hex's keys with VoiceiQ's buttons in their strip: one row above the keys.
     private var showsHexKeys: Bool { panel == .keys && !showsMini && !typing.isDigitPad }

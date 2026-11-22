@@ -17,3 +17,18 @@ index 4f8a78a..53ac4b1 100644
 +        stripView.frame = strip.frame.offsetBy(dx: 0, dy: lift)
 +        stripView.slotFrames = strip.slots.map { $0.offsetBy(dx: -strip.frame.minX, dy: -strip.frame.minY) }
          stripView.pillInset = layout.metrics.stripInset
+diff --git a/iOS/Keyboard/Hex/FullKeyboard/KeyboardLayout.swift b/iOS/Keyboard/Hex/FullKeyboard/KeyboardLayout.swift
+index a4c11dd..b1b4ca7 100644
+--- a/iOS/Keyboard/Hex/FullKeyboard/KeyboardLayout.swift
++++ b/iOS/Keyboard/Hex/FullKeyboard/KeyboardLayout.swift
+@@ -187,3 +187,3 @@ nonisolated struct KeyboardMetrics: Equatable, Sendable {
+         }
+-        guard posture != .phone else { return base }
++        guard posture != .phone else { return phoneOverride?(base, orientation) ?? base }
+ 
+@@ -220,2 +220,5 @@ nonisolated struct KeyboardMetrics: Equatable, Sendable {
+ 
++    /// VoiceiQ: replaces the phone's metrics, for its own strip height (iOS/Keyboard/Hex/patches).
++    nonisolated(unsafe) static var phoneOverride: ((KeyboardMetrics, KeyboardOrientation) -> KeyboardMetrics)?
++
+     private func with(side: CGFloat) -> KeyboardMetrics {

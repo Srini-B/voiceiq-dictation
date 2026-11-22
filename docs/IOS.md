@@ -363,29 +363,28 @@ it, a still hold of 0.35 s records until the finger lifts, and sliding off
 drops the press. The panels' bars (voice, emoji, edit, answer, number pads)
 keep a plain mic button that taps only.
 
-**Recording strip** (`RecordingStrip`, `LevelGlow`), modelled on Gboard's
-Rambler. Cancel (x) on the left, a red stop button on the right, the elapsed
-time in the middle. Behind them a red glow rises from the bottom edge as loud
-as the voice was: silence keeps 8% of the strip's height, and the height grows
-linearly with the mic level up to the full strip for the loudest speech. It is
-blurred and fades out at every edge, the bottom too,
-so it never draws a line between the strip and the keys; its top edge is a
-smooth curve through the recent levels, newest on the right. The app keeps
-the levels (`LevelBars`: one per mic level it writes, at most every 0.06 s,
-smoothed with a fast attack and slow release, newest 256 kept) and publishes
-them as `SharedStore.levelBars`; the keyboard redraws every 0.06 s. A keyboard
-that appears mid-dictation, after an app switch or after being hidden, shows
-the dictation so far instead of starting empty. With Real-time transcription
-on, the words heard so far (`SharedStore.liveText`, from the provider's live
+**Recording strip** (`RecordingStrip`, `LevelWaveform`), modelled on Gboard's
+Rambler. Cancel (x) on the left, a red stop button on the right, and between
+them the elapsed time and a red waveform: one 3 pt bar per recorded level,
+newest on the right, centred on the strip's middle line. Silence keeps 12% of
+the height and a bar grows linearly with the mic level up to the full height
+for the loudest speech. The app keeps the levels (`LevelBars`: one per mic
+level it writes, at most every 0.06 s, smoothed with a fast attack and slow
+release, newest 256 kept) and publishes them as `SharedStore.levelBars`; the
+keyboard redraws every 0.06 s while recording, as one shape with no images,
+and the timer goes with the strip when recording ends. A keyboard that
+appears mid-dictation, after an app switch or after being hidden, shows the
+dictation so far instead of starting empty. With Real-time transcription on,
+the words heard so far (`SharedStore.liveText`, from the provider's live
 socket: Gemini Live, OpenAI Realtime, or Scribe v3 Live while ElevenLabs
-transcribes) replace the time and the glow once they
-arrive: one line, newest words last, the start cut off. The words shown are a
-preview; the final text comes from the live socket's final result, or from
-the saved recording when that is incomplete, and is typed as before. While the text is written the strip shows
-only a spinner with "Writing…" or "Thinking…". Reduce Motion holds the glow
-flat at the latest level. The glow is a plain `Shape` on a 0.06 s timer: a
-`Canvas` inside `TimelineView(.animation)` drew in the Simulator but nothing
-on an iPhone (0.6.23).
+transcribes) replace the time and the waveform once they arrive: one line,
+newest words last, the start cut off. The words shown are a preview; the
+final text comes from the live socket's final result, or from the saved
+recording when that is incomplete, and is typed as before. While the text is
+written the strip shows only a spinner with "Writing…" or "Thinking…".
+Reduce Motion holds every bar at the latest level. The waveform is a plain
+`Shape` on a 0.06 s timer: a `Canvas` inside `TimelineView(.animation)` drew
+in the Simulator but nothing on an iPhone (0.6.23).
 
 **Add to Dictionary.** With Full Access, selecting text in the field replaces
 the suggestions with "Add “word” to Dictionary"; it goes as
@@ -399,8 +398,8 @@ offers "Add copied text to Dictionary" until you start typing.
 | Feature | How |
 | --- | --- |
 | Keys | Hex's `FullKeyboardView` (`iOS/Keyboard/Hex/FullKeyboard`, MIT, one patch): English QWERTY letters, 123 and #+= pages, shift and Caps Lock, accents on long press, key preview, repeat delete, the space bar's hold-and-slide cursor, adaptive touch targets, and Hex's strip of three suggestions. Hex's own key (the hexagon in the strip) is removed; the strip's mic does what it did. The emoji key opens VoiceiQ's emoji panel. Hex's own dictation, its recording panel, style menu, translation and language switching stay off (`HexGlue/HexDictationStandIns.swift`, `HexLanguageSettings.swift`). Phone, number and decimal fields hand off to iOS's pad, as before. |
-| Height | Hex's `preferredHeight` for the orientation, strip included (253 pt in portrait on a 402 pt wide iPhone): 44 pt shorter than with the separate VoiceiQ bar. Panels (voice, emoji, edit, answer) fill the same height, with their bar in the strip's place (35 pt in portrait, 50 in landscape), so each has 35 pt less below its bar than before. |
-| Mini keyboard | The strip's Mini Keyboard button (the voice panel's on a narrow keyboard) shrinks the keyboard to the mini view and back (`TypingController.mini`, kept in the keyboard's own defaults). The mini view is the mic bar over two rows (`MiniKeys`): edit, @ . , ? ! ' and delete, then 123, emoji, the size key, space and return, with the globe where the system draws none. 123 swaps the punctuation for the digits 1 to 0. |
+| Height | Hex's `preferredHeight` for the orientation, strip included (270 pt in portrait on a 402 pt wide iPhone): 27 pt shorter than with the separate VoiceiQ bar. The strip is 44 pt in portrait, Apple's suggestion-bar height, instead of Hex's 27 pt (`HexGlue/HexStripHeight.swift`, through the patch's `KeyboardMetrics.phoneOverride`); its buttons and suggestions are centred with equal room above and below, and the keys start 8 pt below it. Landscape keeps Hex's 42 pt strip. Hex places its strip below the band iOS 26 and later draws above a third-party keyboard (16.3 pt on the iPhone 17 Pro, measured by Hex on iOS 27.2), so the band sits outside the keyboard's view and covers none of it. The iOS 27.0 Simulator draws it too in portrait (17.7 pt on the iPhone 17 Pro, empty), so the strip's content reads about 28 pt below the keyboard's visible edge and 19 pt above the keys. Panels (voice, emoji, edit, answer) fill the same height, with their bar in the strip's place (52 pt in portrait, 50 in landscape). |
+| Mini keyboard | The strip's Mini Keyboard button (the voice panel's on a narrow keyboard) shrinks the keyboard to the mini view and back (`TypingController.mini`, kept in the keyboard's own defaults). The mini view is the mic bar, with 11 pt above and below it as in the strip, over two rows (`MiniKeys`): edit, @ . , ? ! ' and delete, then 123, emoji, the size key, space and return, with the globe where the system draws none. 123 swaps the punctuation for the digits 1 to 0. |
 | Suggestions | Hex's strip: the typed word in quotes (keeps it and teaches Hex not to change it), the best correction or completion in the middle (highlighted when space will apply it), and a runner-up; after a space, next-word predictions; after a slide, the other readings of the slid word. Ranked by Hex's English typing model (`TypingModel/en.hextm`, built from Google Books Ngram data, CC BY 3.0) and Hex's `AutocorrectEngine`. |
 | Auto-correction | Hex's `TypingDecoder` on space or punctuation, with the touch points (spatial autocorrect). Delete right after a correction restores the typed word. Off where the field turns it off, and in Settings › Typing. |
 | Slide to type | Hex's `SwipeDecoder` and `SwipeTyping` over the same typing model. The slid word gets its space when the next word starts; the strip offers the other readings. Off in Settings › Typing. |
@@ -460,7 +459,9 @@ sync again (as `TypingLog` and `Dictation/` are). A change to a Hex file goes
 in `iOS/Keyboard/Hex/patches/` only when nothing else works. There is one:
 `0001-strip-layout-hook.patch` adds `FullKeyboardView.stripLayout`, a
 closure that returns the strip's frame and slots in place of the layout's
-(Hex's layout reserves room for its own key only). It is made with one line
+(Hex's layout reserves room for its own key only), and
+`KeyboardMetrics.phoneOverride`, which lets `HexStripHeight` set the
+portrait strip's height. It is made with one line
 of context (`git diff -U1`) so Hex's nearby edits do not stop it applying;
 regenerate it the same way. If a sync fails to apply it, fix the patch
 before anything else: without it the suggestions run under VoiceiQ's

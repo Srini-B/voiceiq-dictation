@@ -185,7 +185,7 @@ nonisolated struct KeyboardMetrics: Equatable, Sendable {
         } else {
             base = .portrait
         }
-        guard posture != .phone else { return base }
+        guard posture != .phone else { return phoneOverride?(base, orientation) ?? base }
 
         // The Duo: Apple's row pitch for each screen (56 pt folded, 59.7 pt unfolded and turned,
         // 51.7 pt unfolded upright), keycaps starting where Apple's do, and no gap under the strip.
@@ -217,6 +217,9 @@ nonisolated struct KeyboardMetrics: Equatable, Sendable {
             keysTop: base.keysTop, keysBottom: base.keysBottom, cornerRadius: base.cornerRadius
         )
     }
+
+    /// VoiceiQ: replaces the phone's metrics, for its own strip height (iOS/Keyboard/Hex/patches).
+    nonisolated(unsafe) static var phoneOverride: ((KeyboardMetrics, KeyboardOrientation) -> KeyboardMetrics)?
 
     private func with(side: CGFloat) -> KeyboardMetrics {
         KeyboardMetrics(

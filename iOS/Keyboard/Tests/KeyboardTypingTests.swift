@@ -180,10 +180,22 @@ final class KeyboardTypingTests: XCTestCase {
             XCTAssertEqual(buttons.map(\.accessibilityLabel), expected, "at \(width) pt")
             let slots = (keyboard.stripView.slotFrames ?? []).map { $0.offsetBy(dx: keyboard.stripView.frame.minX, dy: keyboard.stripView.frame.minY) }
             XCTAssertEqual(slots.count, 3)
+            // Apple's bar height, the keys below it, and everything in it
+            // centred with equal room above and below.
+            let strip = keyboard.stripView.frame
+            XCTAssertEqual(strip.minY, 0)
+            XCTAssertEqual(strip.height, 44)
+            XCTAssertGreaterThanOrEqual(plane.engine.layout.key(.character("q"))!.frame.minY, strip.maxY)
+            XCTAssertEqual(keyboard.stripView.pillInset * 2 + plane.engine.layout.metrics.stripPillHeight, strip.height, accuracy: 0.01)
             for button in buttons {
-                XCTAssertEqual(button.frame.height, keyboard.stripView.frame.height, "as tall as the strip")
+                XCTAssertEqual(button.frame.minY, strip.minY, "\(button.accessibilityLabel!) top")
+                XCTAssertEqual(button.frame.maxY, strip.maxY, "\(button.accessibilityLabel!) bottom")
+                button.layoutIfNeeded()
+                let glyph = button.subviews.first { $0 is UIImageView }!
+                XCTAssertEqual(glyph.frame.midY, button.bounds.midY, accuracy: 0.5, "\(button.accessibilityLabel!) centred")
                 for slot in slots { XCTAssertFalse(button.frame.intersects(slot), "\(button.accessibilityLabel!) over a suggestion at \(width) pt") }
             }
+            for slot in slots { XCTAssertEqual(slot.minY, strip.minY); XCTAssertEqual(slot.maxY, strip.maxY) }
             // The suggestions share what is left equally, and still get a word.
             XCTAssertEqual(slots[0].width, slots[2].width, accuracy: 0.5)
             XCTAssertGreaterThan(slots[1].width, width < 360 ? 65 : 80)
