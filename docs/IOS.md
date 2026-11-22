@@ -190,6 +190,9 @@ the capture at once and finishes the dictation with what was said (Hex
   it arrives by itself or the offer is tapped.
 - One result is held at a time: a second hidden-keyboard result within the
   10 minutes replaces the first in the strip. The first is still in History.
+- If iOS replaces the keyboard's controller before the user acts on an Ask
+  answer finished in the keyboard, the new keyboard does not show that
+  answer again. It is in History.
 
 The keyboard asks iOS for more time with
 `ProcessInfo.performExpiringActivity` while it finishes. If the time runs
