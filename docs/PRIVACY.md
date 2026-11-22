@@ -4,8 +4,12 @@
 
 Your voice goes from your Mac directly to Google's Gemini API
 (`generativelanguage.googleapis.com`), using your own API key. Dictation,
-meetings and screen context all use it. VoiceiQ runs no speech model on your
-Mac or iPhone, and sends nothing to any other model service.
+meetings and screen context all use it by default, and VoiceiQ sends nothing
+to any other model service. You can instead transcribe dictations and
+meetings on your Mac, iPhone or iPad (Settings → Dictation → Speech, see
+[ON_DEVICE.md](ON_DEVICE.md)). With "Writing rules and notes" set to Gemini,
+only the transcript text goes to Gemini; set to Off, no audio or text leaves
+the device. Models download from Hugging Face only when you ask for them.
 There is no VoiceiQ server, no account, no analytics, no telemetry.
 Everything else stays on your Mac. The code is open — verify all of this.
 

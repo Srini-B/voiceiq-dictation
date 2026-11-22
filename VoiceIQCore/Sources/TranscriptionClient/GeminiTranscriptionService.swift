@@ -94,7 +94,40 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
         return TranscriptionResult(rawTranscript: written, cleanedTranscript: text, modelID: modelID)
     }
 
-    private func dictationPrompt(context: DictationContext, writtenParts: [String]? = nil) -> String {
+    /// Writes an on-device transcript by the writing rules with Gemini, when
+    /// the user lets text go to Gemini and a key is stored. Otherwise, or
+    /// when the request fails, the transcript is inserted as transcribed. The
+    /// dictionary's replacement rules apply either way. A transcript with no
+    /// words, or one Gemini finds holds no speech (only "um" and "uh"), is
+    /// an empty dictation, as a Gemini transcription of the audio would be.
+    public func write(_ transcript: TranscriptionResult, context: DictationContext) async throws -> TranscriptionResult {
+        let rules = DictionaryStore().replacementRules()
+        let raw = transcript.cleanedTranscript
+        guard !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw TranscriptionError.emptyTranscript }
+        var asTranscribed = transcript
+        asTranscribed.cleanedTranscript = ReplacementEngine.apply(rules, to: raw)
+        guard settings.cleanupSource == .gemini, KeychainStore.loadAPIKey() != nil else { return asTranscribed }
+        let config = settings.geminiConfig
+        let prompt = dictationPrompt(context: context, transcript: raw)
+        // About fifteen characters a second of speech.
+        let deadline = TimeoutPolicy.overallDeadline(audioDuration: Double(raw.count) / 15) + Double(context.screenshots.count * 2)
+        do {
+            let written = try await sendWithRetry(flac: nil, prompt: prompt, images: context.screenshots,
+                                                  config: config, deadline: deadline)
+            guard !written.isEmpty else { throw TranscriptionError.emptyTranscript }
+            return TranscriptionResult(rawTranscript: transcript.rawTranscript,
+                                       cleanedTranscript: ReplacementEngine.apply(rules, to: written),
+                                       modelID: "\(transcript.modelID)+\(config.writingModel)/writing-rules")
+        } catch TranscriptionError.emptyTranscript {
+            throw TranscriptionError.emptyTranscript
+        } catch {
+            try Task.checkCancellation()
+            Log.transcription.error("Writing rules skipped for an on-device transcript: \(String(describing: error), privacy: .public)")
+            return asTranscribed
+        }
+    }
+
+    private func dictationPrompt(context: DictationContext, writtenParts: [String]? = nil, transcript: String? = nil) -> String {
         let dictionary = DictionaryStore()
         let place = DictationPlace(appName: context.targetAppName,
                                    windowTitle: context.focusedField?.windowTitle,
@@ -106,7 +139,8 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
             imagesAttached: writtenParts == nil && !context.screenshots.isEmpty,
             surroundingText: context.focusedField?.surroundingText,
             place: place,
-            writtenParts: writtenParts
+            writtenParts: writtenParts,
+            transcript: transcript
         )
     }
 

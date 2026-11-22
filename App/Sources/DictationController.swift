@@ -49,7 +49,7 @@ final class DictationController {
 
     init() {
         KeychainStore.migrateDevKeyFileIfPresent()
-        FileLayout.removeRetiredModels()
+        FileLayout.removeStaleRenders()
         SettingsStore().removeRetiredSettingsOnce()
         let client = GeminiClient(apiKey: { KeychainStore.loadAPIKey() })
         let service = GeminiTranscriptionService(client: client)
@@ -58,7 +58,8 @@ final class DictationController {
         UsageMeter.store = try? UsageStore.standard()
         meetings = MeetingEngine(
             client: client,
-            config: { SettingsStore().geminiConfig }
+            config: { SettingsStore().geminiConfig },
+            localMeeting: LocalMeetingHelper.run
         )
         coordinator = DictationCoordinator(
             audioFactory: { [warmEngines] in warmEngines.take() },
@@ -85,6 +86,10 @@ final class DictationController {
                     targetPID: app?.processIdentifier,
                     focusedField: field
                 )
+            },
+            localFactory: {
+                LocalTranscriber.makeFromSettings(audioURL: $0, cloudOnColdLoad: KeychainStore.hasModelKey,
+                                                  makeSession: LocalSpeechHelper.makeSession)
             }
         )
         sleepGuard = SessionSleepGuard(dictation: coordinator, meetings: meetings)
@@ -267,7 +272,7 @@ final class DictationController {
         if engine.start() {
             _ = globalShortcutEngine.start()
             engineActive = true
-            if !KeychainStore.hasModelKey {
+            if !DictationRoute.isAvailable {
                 // New-user path: dictation can't work yet — say exactly where to go.
                 onStatusChange?("Add your API key in Settings → Advanced")
                 onStatusItemState?(.attention)
@@ -358,7 +363,7 @@ final class DictationController {
             applyHotkeySettings()
             // The menu-bar status line names the key — keep it truthful, but
             // never overwrite an attention message ("Grant Accessibility…").
-            if engineActive, KeychainStore.hasModelKey {
+            if engineActive, DictationRoute.isAvailable {
                 onStatusChange?("Ready — press \(SettingsStore().dictationTrigger.displayName) to dictate")
             }
         case "meetingDetection":
@@ -421,14 +426,15 @@ final class DictationController {
             }
         }
 
-        let scanner = RecoveryScanner(store: historyStore, transcription: transcriptionService)
+        let retry = OnDeviceFirstTranscription(gemini: transcriptionService, makeSession: LocalSpeechHelper.makeSession)
+        let scanner = RecoveryScanner(store: historyStore, transcription: retry)
         scanner.onRecovered = { [weak self] text in
             let copied = Self.copyRecovered([text])
             self?.showBackgroundNotice(RecoveryNotice.message(for: .relaunch, copied: copied), for: 4.0, sound: .success)
         }
         recoveryScanner = scanner
 
-        let queue = RetryQueue(store: historyStore, transcription: transcriptionService)
+        let queue = RetryQueue(store: historyStore, transcription: retry)
         queue.onDrained = { [weak self] texts in
             let copied = Self.copyRecovered(texts)
             let message = RecoveryNotice.message(for: .queue(count: texts.count), copied: copied)
