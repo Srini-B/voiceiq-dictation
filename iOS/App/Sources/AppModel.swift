@@ -161,7 +161,7 @@ final class AppModel: ObservableObject {
         retryQueue = queue
         Task {
             // A keyboard start can launch the app straight into a dictation.
-            await scanner.scanAndRecover(sparing: { [weak self] in self?.coordinator.activeSessionFolder })
+            await scanner.scanAndRecover(sparing: { [weak self] in self?.coordinator.activeSessionFolders ?? [] })
             queue.start()
             Task.detached(priority: .utility) { RetentionPolicy().purge() }
         }

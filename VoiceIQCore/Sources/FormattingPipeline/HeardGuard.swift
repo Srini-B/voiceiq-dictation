@@ -117,7 +117,9 @@ public enum HeardGuard {
 
     /// Lowercased words of letters and digits, apostrophes kept inside a
     /// word, pronoun contractions read as their two words so "I'm" and "I am"
-    /// compare the same.
+    /// compare the same. Scripts written without spaces (Chinese, Japanese,
+    /// Thai, …) count each character as a word, so punctuation added between
+    /// them doesn't make the whole sentence a new word.
     static func words(_ text: String) -> [String] {
         var result: [String] = []
         var current = ""
@@ -127,7 +129,10 @@ public enum HeardGuard {
             current = ""
         }
         for character in text.lowercased() {
-            if character.isLetter || character.isNumber {
+            if isUnspaced(character) {
+                flush()
+                result.append(String(character))
+            } else if character.isLetter || character.isNumber {
                 current.append(character)
             } else if character == "'" || character == "\u{2019}" {
                 if !current.isEmpty { current.append("'") }
@@ -137,6 +142,23 @@ public enum HeardGuard {
         }
         flush()
         return result
+    }
+
+    private static let unspacedScripts: [ClosedRange<UInt32>] = [
+        0x0E00...0x0EFF, // Thai, Lao
+        0x1000...0x109F, // Myanmar
+        0x1780...0x17FF, // Khmer
+        0x3040...0x30FF, // Hiragana, Katakana
+        0x3400...0x4DBF, // CJK Extension A
+        0x4E00...0x9FFF, // CJK Unified Ideographs
+        0xF900...0xFAFF, // CJK Compatibility Ideographs
+        0xFF66...0xFF9F, // Halfwidth Katakana
+        0x20000...0x3134F, // CJK Extensions B–G
+    ]
+
+    private static func isUnspaced(_ character: Character) -> Bool {
+        guard let scalar = character.unicodeScalars.first?.value else { return false }
+        return unspacedScripts.contains { $0.contains(scalar) }
     }
 
     private static let contractions: [String: [String]] = [

@@ -63,6 +63,12 @@ final class HeardGuardTests: XCTestCase {
         assertPasses("um yes ship it", "Yes, ship it.")
     }
 
+    func testPunctuationInLanguagesWithoutSpacesPasses() {
+        assertPasses("明天我们一起去公园然后去吃午饭", "明天我们一起去公园，然后去吃午饭。")
+        assertPasses("明日は会議がありますそのあと資料を送ります", "明日は会議があります。そのあと資料を送ります。")
+        XCTAssertNotNil(HeardGuard.rejection(heard: "法国的首都是哪里", text: "巴黎。"))
+    }
+
     func testNothingHeardLeavesTheTextAlone() {
         assertPasses("", "Hello.")
     }

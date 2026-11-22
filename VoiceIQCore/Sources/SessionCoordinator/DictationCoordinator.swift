@@ -75,8 +75,9 @@ public final class DictationCoordinator: ObservableObject {
     /// session (audit L8: Esc previously left the network work running).
     private var inFlightTask: Task<Void, Never>?
 
-    /// Folder of the session in progress, if any — Delete All must not sweep it (audit L7).
-    public var activeSessionFolder: URL? { session?.folder }
+    /// Folders of the session in progress and of jobs still transcribing in
+    /// the background — Delete All must not sweep them (audit L7).
+    public var activeSessionFolders: [URL] { [session?.folder].compactMap { $0 } + detached.values.map(\.folder) }
 
     /// `didSet` rather than a teardown call at each exit, because there are a
     /// dozen places that clear this — four early returns in `completeFinalize`
@@ -473,9 +474,9 @@ public final class DictationCoordinator: ObservableObject {
         }
         apply(.audioFinalized)
 
+        // On the stored session: the local copy predates the meta written above.
         let ticket = insertTurns.take()
-        session.turn = ticket
-        self.session = session
+        self.session?.turn = ticket
         let sessionID = session.id
         let finalizeStartedAt = Date()
         let requestedAt = finalizeRequestedAt ?? finalizeStartedAt

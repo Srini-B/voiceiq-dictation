@@ -103,13 +103,27 @@ public struct InsertionCoordinator: TextInserting {
         let before = PasteCheck.focusedReading()
         if await paster.paste(text) {
             Log.insertion.info("⌘V posted")
-            if let before {
-                PasteCheck.watch(element: before.element, before: before.reading, text: text, postedAt: Date()) { [paster] in
+            guard let before else {
+                await ReturnAfterPaste.pressIfWanted(context: context)
+                return .inserted
+            }
+            let postedAt = Date()
+            let check = Task { @MainActor [paster] in
+                await PasteCheck.watch(element: before.element, before: before.reading, text: text, postedAt: postedAt) {
                     paster.copyOnly(text)
                     NotificationCenter.default.post(name: .voiceIQPasteMissed, object: text)
                 }
             }
-            await ReturnAfterPaste.pressIfWanted(context: context)
+            // A readable field must show the text before Return goes in: a
+            // paste the app ignored would otherwise send whatever draft or
+            // command was already in the field.
+            if ReturnAfterPaste.isWanted(for: context) {
+                if await check.value == .landed {
+                    await ReturnAfterPaste.pressIfWanted(context: context)
+                } else {
+                    Log.insertion.info("paste not seen in the field — no Return")
+                }
+            }
             return .inserted
         }
 

@@ -523,7 +523,7 @@ final class DictationController {
                     if let store = self.historyStore {
                         store.deleteAll(
                             removeFolders: true,
-                            sparing: self.coordinator.activeSessionFolder
+                            sparing: self.coordinator.activeSessionFolders
                         )
                     } else {
                         // No DB handle (quarantined at launch) must not turn the
@@ -532,8 +532,8 @@ final class DictationController {
                         let folders = (try? FileManager.default.contentsOfDirectory(
                             at: FileLayout.recordingsRoot, includingPropertiesForKeys: nil
                         )) ?? []
-                        let active = self.coordinator.activeSessionFolder?.standardizedFileURL
-                        for folder in folders where folder.hasDirectoryPath && folder.standardizedFileURL != active {
+                        let active = Set(self.coordinator.activeSessionFolders.map(\.standardizedFileURL))
+                        for folder in folders where folder.hasDirectoryPath && !active.contains(folder.standardizedFileURL) {
                             try? FileManager.default.removeItem(at: folder)
                         }
                     }

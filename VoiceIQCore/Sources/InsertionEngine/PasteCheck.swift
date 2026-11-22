@@ -81,25 +81,24 @@ extension PasteCheck {
         return Reading(value: value, caret: range.location, selectionLength: range.length)
     }
 
-    /// Reads the field back after the paste and calls `missed` only on a
-    /// certain miss. A key press or click after the paste (Return to send,
-    /// say) makes the result unknown, so nothing is said.
+    /// Reads the field back after the paste, returning as soon as the text is
+    /// seen, and calls `missed` only on a certain miss. A key press or click
+    /// after the paste makes the result unknown, so nothing is said.
     @MainActor
-    static func watch(element: AXUIElement, before: Reading, text: String, postedAt: Date, missed: @escaping @MainActor () -> Void) {
-        Task { @MainActor in
-            var verdict = Verdict.unknown
-            for delay in readDelays {
-                let wait = postedAt.addingTimeInterval(delay).timeIntervalSinceNow
-                if wait > 0 { try? await Task.sleep(for: .seconds(wait)) }
-                guard !userActed(since: postedAt) else { return }
-                let current = focusedReading()
-                let sameField = current.map { CFEqual($0.element, element) } ?? false
-                verdict = PasteCheck.verdict(before: before, after: sameField ? current?.reading : nil, text: text)
-                guard verdict == .missed else { return }
-            }
-            Log.insertion.warning("⌘V posted but the field never changed — text copied instead")
-            missed()
+    static func watch(element: AXUIElement, before: Reading, text: String, postedAt: Date,
+                      missed: @MainActor () -> Void) async -> Verdict {
+        for delay in readDelays {
+            let wait = postedAt.addingTimeInterval(delay).timeIntervalSinceNow
+            if wait > 0 { try? await Task.sleep(for: .seconds(wait)) }
+            guard !userActed(since: postedAt) else { return .unknown }
+            let current = focusedReading()
+            let sameField = current.map { CFEqual($0.element, element) } ?? false
+            let verdict = PasteCheck.verdict(before: before, after: sameField ? current?.reading : nil, text: text)
+            guard verdict == .missed else { return verdict }
         }
+        Log.insertion.warning("⌘V posted but the field never changed — text copied instead")
+        missed()
+        return .missed
     }
 
     private static func userActed(since date: Date) -> Bool {

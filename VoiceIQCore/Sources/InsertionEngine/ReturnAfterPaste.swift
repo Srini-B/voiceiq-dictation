@@ -35,11 +35,14 @@ public enum ReturnAfterPaste {
         apps.isEmpty || bundleID.map(apps.contains) == true
     }
 
+    static func isWanted(for context: DictationContext) -> Bool {
+        let settings = SettingsStore()
+        return settings.pressReturnAfterPaste && applies(to: context.targetAppBundleID, apps: settings.pressReturnApps)
+    }
+
     @MainActor
     static func pressIfWanted(context: DictationContext) async {
-        let settings = SettingsStore()
-        guard settings.pressReturnAfterPaste,
-              applies(to: context.targetAppBundleID, apps: settings.pressReturnApps) else { return }
+        guard isWanted(for: context) else { return }
         // Return must reach the field the text went into: switching to
         // another field or window of the same app during the wait would send
         // something else.
