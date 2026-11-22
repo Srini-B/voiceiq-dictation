@@ -63,6 +63,11 @@ final class HeardGuardTests: XCTestCase {
         assertPasses("um yes ship it", "Yes, ship it.")
     }
 
+    func testASpelledOutWordPasses() {
+        assertPasses("capital B, e, e", "Bee")
+        assertPasses("my name is Srini that's s r i n i", "My name is Srini.")
+    }
+
     func testPunctuationInLanguagesWithoutSpacesPasses() {
         assertPasses("明天我们一起去公园然后去吃午饭", "明天我们一起去公园，然后去吃午饭。")
         assertPasses("明日は会議がありますそのあと資料を送ります", "明日は会議があります。そのあと資料を送ります。")

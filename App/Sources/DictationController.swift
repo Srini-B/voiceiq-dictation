@@ -886,7 +886,10 @@ final class DictationController {
         case .outcome(.awaitingChip): showBackgroundNotice("You switched apps — press ⌘V to paste", for: 5.0, sound: nil)
         case .outcome(.heldForSecureField): showBackgroundNotice("Secure input is on — saved to History", for: 4.0, sound: nil)
         case .outcome(.queuedForRetry): showBackgroundNotice("You're offline — saved to History", for: 4.0, sound: nil)
-        case .failure(let failure): showBackgroundNotice(Self.copy(for: failure), for: 6.0, sound: .error)
+        case .failure(let failure):
+            // Same timed drain as a foreground throttle: nothing else retries it.
+            if failure == .rateLimited { retryQueue?.scheduleDrain(after: TimeoutPolicy.rateLimitWait) }
+            showBackgroundNotice(Self.copy(for: failure), for: 6.0, sound: .error)
         }
     }
 

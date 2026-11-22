@@ -27,7 +27,7 @@ public enum HeardGuard {
 
     /// The rule `text` breaks against `heard`, or nil when it may be inserted.
     public static func rejection(heard: String, text: String) -> Rule? {
-        let said = words(heard)
+        let said = joiningSpelledLetters(words(heard))
         let written = words(text)
         guard !said.isEmpty, !written.isEmpty else { return nil }
         let saidSet = Set(said)
@@ -143,6 +143,42 @@ public enum HeardGuard {
         flush()
         return result
     }
+
+    /// A word spelled out letter by letter ("capital B, e, e") reads as the
+    /// word it spells ("bee"), which is what the rules write. Two or more
+    /// single letters in a row count; "capital" and the like inside the run
+    /// are dropped.
+    static func joiningSpelledLetters(_ said: [String]) -> [String] {
+        func isLetter(_ word: String) -> Bool {
+            word.count == 1 && word.first!.isLetter && !isUnspaced(word.first!)
+        }
+        var result: [String] = []
+        var i = 0
+        while i < said.count {
+            var j = i
+            var letters = ""
+            while j < said.count {
+                if isLetter(said[j]) {
+                    letters += said[j]
+                    j += 1
+                } else if letterCaseMarkers.contains(said[j]), j + 1 < said.count, isLetter(said[j + 1]) {
+                    j += 1
+                } else {
+                    break
+                }
+            }
+            if letters.count >= 2 {
+                result.append(letters)
+                i = j
+            } else {
+                result.append(said[i])
+                i += 1
+            }
+        }
+        return result
+    }
+
+    private static let letterCaseMarkers: Set<String> = ["capital", "uppercase", "lowercase", "small"]
 
     private static let unspacedScripts: [ClosedRange<UInt32>] = [
         0x0E00...0x0EFF, // Thai, Lao
