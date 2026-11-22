@@ -73,13 +73,42 @@ public final class AgentServer: @unchecked Sendable {
         return key
     }
 
+    /// Sets up every installed agent the user hasn't removed VoiceiQ from with
+    /// `key`, or with nil takes VoiceiQ out of all of them.
+    private static func syncClients(key: String?) {
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        let removed = SettingsStore().agentAccessRemovedClients
+        for client in AgentClient.allCases {
+            do {
+                if let key, !removed.contains(client.rawValue) {
+                    try client.install(key: key, home: home)
+                } else {
+                    try client.remove(home: home)
+                }
+            } catch {
+                Log.session.error("agent access: couldn't update \(client.name, privacy: .public)'s config: \(String(describing: error), privacy: .public)")
+            }
+        }
+        DispatchQueue.main.async { NotificationCenter.default.post(name: .gtAgentServerStateDidChange, object: nil) }
+    }
+
+    /// Runs the sync on the server's queue, so it never writes a config at
+    /// the same time as a sync started by the switch or a new key.
+    public func syncClientsNow() {
+        queue.async { Self.syncClients(key: SettingsStore().agentAccessEnabled ? Self.accessKey() : nil) }
+    }
+
     /// `attempt` counts retries while the port is still held, as it is for a
     /// moment by the copy of VoiceiQ that an update or a relaunch replaces.
     private func apply(attempt: Int = 0) {
         stop()
-        guard SettingsStore().agentAccessEnabled else { return set(.off) }
+        guard SettingsStore().agentAccessEnabled else {
+            Self.syncClients(key: nil)
+            return set(.off)
+        }
         set(.starting)
         guard let key = Self.accessKey() else { return set(.failed("The access key could not be saved to the Keychain.")) }
+        if attempt == 0 { Self.syncClients(key: key) }
         if history == nil { history = try? HistoryStore.standard() }
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "dev"
         api = AgentAPI(key: key, library: AgentLibrary(history: history, meetings: MeetingStore()), version: version)

@@ -164,10 +164,11 @@ built from — are in [docs/design/](docs/design/).
 
 ### Coding agents
 
-Turn on Settings › Advanced › Coding agents and Claude Code, Codex and other
-MCP clients on the Mac can list and search your dictations and meetings
+Turn on Settings › Advanced › Coding agents and Claude Code, Codex, Amp and
+other MCP clients on the Mac can list and search your dictations and meetings
 (notes, transcripts with speakers and times, and questions), including the
-ones synced from your iPhone. It is read-only, listens on 127.0.0.1 only and
+ones synced from your iPhone. VoiceiQ adds itself to Claude Code, Codex and
+Amp's own config when they are installed. It is read-only, listens on 127.0.0.1 only and
 needs an access key. Setup, tools, routes and security are in
 [docs/AGENT_ACCESS.md](docs/AGENT_ACCESS.md).
 

@@ -26,30 +26,43 @@ Audio is never served. Nothing can be changed or deleted.
 
 ## Set up an agent
 
-Turn the switch on, then use the buttons under it. Each copies a setup with
-your access key already filled in.
+### Claude Code, Codex and Amp: automatic
 
-**Claude Code** (paste into Terminal):
+When the switch is on, VoiceiQ adds a `voiceiq` MCP server to each of these
+that it finds on the Mac, with the access key filled in:
 
-```sh
-claude mcp add --transport http --scope user voiceiq http://127.0.0.1:47823/mcp --header "Authorization: Bearer <key>"
-```
+| Agent | Found when this exists | Config VoiceiQ edits | Entry |
+|---|---|---|---|
+| Claude Code | `~/.claude.json` | `~/.claude.json`, user scope | `mcpServers.voiceiq`: `type` `http`, `url`, `headers.Authorization` |
+| Codex (CLI, IDE extension and app) | `~/.codex/` | `~/.codex/config.toml` | `[mcp_servers.voiceiq]`: `url`, `http_headers` |
+| Amp CLI | `~/.config/amp/` | `~/.config/amp/settings.json` | `amp.mcpServers.voiceiq`: `url`, `headers.Authorization` |
 
-`claude mcp list` should then show `voiceiq ... ✔ Connected`.
+Each row in Settings shows the agent's state: Not found on this Mac, Not set
+up, Set up, or Has an old key. The button next to it sets the agent up,
+updates its key, or removes VoiceiQ from it.
 
-**Codex** (paste into `~/.codex/config.toml`):
+- Everything else in those files is kept: other MCP servers, settings, and
+  Codex tables before and after VoiceiQ's.
+- Before each change VoiceiQ copies the file to `<name>.voiceiq-backup` next
+  to it, and keeps the file's permissions (a new file is readable by you only).
+- VoiceiQ only changes a `voiceiq` entry whose URL is
+  `http://127.0.0.1:47823/mcp`. A different server with that name shows as
+  "Has another server named voiceiq" and is left alone.
+- An Amp settings file with comments, or a `settings.jsonc`, is left alone,
+  since rewriting it would drop the comments. Copy the JSON instead.
+- **New Key…** writes the new key into each agent that is set up.
+- Turning the switch off removes VoiceiQ from all three. Turning it on adds it
+  back, except to agents you removed it from with **Remove**.
+- VoiceiQ never creates `~/.claude.json`: Claude Code keeps its whole state
+  there, so run Claude Code once first.
 
-```toml
-[mcp_servers.voiceiq]
-url = "http://127.0.0.1:47823/mcp"
-http_headers = { Authorization = "Bearer <key>" }
-```
+Check each one with `claude mcp list` (shows `voiceiq ... ✔ Connected`),
+`codex mcp list`, and `amp mcp list` or `amp mcp doctor`.
 
-To keep the key out of the file, use `bearer_token_env_var = "VOICEIQ_KEY"`
-instead of `http_headers` and export `VOICEIQ_KEY` where Codex starts.
+### Other tools
 
-**Other tools** (Cursor, Gemini CLI, and any client that takes `mcpServers`
-JSON): merge this into the tool's MCP settings.
+For Cursor, Gemini CLI and any client that takes `mcpServers` JSON,
+**Copy for Other Tools** copies this, ready to merge into the tool's MCP settings:
 
 ```json
 {

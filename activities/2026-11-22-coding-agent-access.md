@@ -46,3 +46,35 @@ as well as meetings.
   reopens it, and New Key turns the old key into 401.
 - Not tested on a signed, notarized build: the Mac mini runner was down and
   the brief allowed a Debug build.
+
+## Automatic setup for Claude Code, Codex and Amp (same day)
+
+Asked by the product owner: set the three agents up without copy and paste,
+in each one's real user config, and add Amp. `AgentClient` edits
+`~/.claude.json` (`mcpServers`), `~/.codex/config.toml` (`[mcp_servers.voiceiq]`)
+and `~/.config/amp/settings.json` (`amp.mcpServers`), the locations their docs
+and CLIs use (`claude mcp add --scope user`, `codex mcp add`, `amp mcp add`
+wrote to exactly these files on the test Mac). The server's queue runs every
+sync, so two writes to one file never overlap. Other tools keep the copied
+JSON.
+
+- Codex's TOML is edited as text, table by table, rather than through a TOML
+  library: VoiceiQ owns whole tables (`[mcp_servers.voiceiq]` and its
+  sub-tables), so it never needs to understand the rest of the file, and
+  comments elsewhere survive.
+- JSON files are rewritten through `JSONSerialization`, which keeps every key
+  and value but not the original key order or spacing. Amp settings with
+  comments are left alone for that reason.
+- VoiceiQ never creates `~/.claude.json`, since Claude Code keeps its whole
+  state there.
+
+Verified on a macOS 27 satellite with Claude Code 2.1.330, Codex 0.171 and the
+Amp CLI (2026-11-22 build), each with another MCP server already configured:
+the app set all three up at launch; `claude mcp list` showed voiceiq
+Connected, `codex mcp list` and `amp mcp list` listed it with its URL. Remove
+on Amp took it out and it stayed out after a relaunch; New Key rewrote Claude
+Code and Codex and the old key got 401; Update fixed a stale Codex key; the
+switch off left all three files equal to their state before setup (JSON
+compared as values, TOML byte for byte), and on put the entries back. Codex
+and Amp's own connection checks need a signed-in account, which the test Mac
+did not have.
