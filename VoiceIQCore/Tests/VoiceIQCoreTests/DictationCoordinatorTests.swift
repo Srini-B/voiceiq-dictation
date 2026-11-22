@@ -474,18 +474,19 @@ final class DictationCoordinatorTests: XCTestCase {
     func testAFailedMiddleJobKeepsTheSpokenOrder() async {
         let turns = InsertTurns()
         let first = turns.take(), middle = turns.take(), last = turns.take()
-        var order: [String] = []
+        @MainActor final class Order { var order: [String] = [] }
+        let log = Order()
         let lastInserts = Task { @MainActor in
             await last.waitForPrevious()
-            order.append("last")
+            log.order.append("last")
         }
         middle.finish() // failed early
         for _ in 0..<20 { await Task.yield() }
-        XCTAssertEqual(order, [], "the last job still waits for the first")
-        order.append("first")
+        XCTAssertEqual(log.order, [], "the last job still waits for the first")
+        log.order.append("first")
         first.finish()
         await lastInserts.value
-        XCTAssertEqual(order, ["first", "last"])
+        XCTAssertEqual(log.order, ["first", "last"])
     }
 
     func testCancelDuringInsertingRejectedCleanly() async {
