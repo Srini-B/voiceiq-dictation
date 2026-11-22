@@ -84,24 +84,32 @@ final class TransportTests: XCTestCase {
 
 /// A local HTTP/1.1 server that reads each request, then closes the first
 /// `dropFirst` connections without answering (the client sees -1005) and
-/// answers the rest with 200.
+/// answers the rest with 200 and `reply`.
 final class ScriptedServer: @unchecked Sendable {
     static let okBody = #"{"candidates":[{"content":{"parts":[{"text":"ok"}]}}]}"#
 
-    struct Request { let connection: Int; let headers: [String: String] }
+    struct Request {
+        let connection: Int
+        let headers: [String: String]
+        let body: Data
+
+        var json: [String: Any]? { try? JSONSerialization.jsonObject(with: body) as? [String: Any] }
+    }
 
     private let listener: NWListener
     private let queue = DispatchQueue(label: "scripted-server")
     private let lock = NSLock()
     private var recorded: [Request] = []
     private var dropsLeft: Int
+    private let reply: String
     private var connectionCount = 0
     private(set) var url: URL!
 
     var requests: [Request] { lock.lock(); defer { lock.unlock() }; return recorded }
 
-    init(dropFirst: Int) throws {
+    init(dropFirst: Int = 0, reply: String = ScriptedServer.okBody) throws {
         dropsLeft = dropFirst
+        self.reply = reply
         listener = try NWListener(using: .tcp, on: .any)
         let ready = DispatchSemaphore(value: 0)
         listener.stateUpdateHandler = { state in if case .ready = state { ready.signal() } }
@@ -126,17 +134,17 @@ final class ScriptedServer: @unchecked Sendable {
             guard let self else { return }
             var buffer = buffer
             if let data { buffer.append(data) }
-            if let request = Self.parse(buffer) {
-                self.respond(connection, number: number, headers: request)
+            if let (headers, body) = Self.parse(buffer) {
+                self.respond(connection, number: number, headers: headers, body: body)
             } else if !done, error == nil {
                 self.read(connection, number: number, buffer: buffer)
             }
         }
     }
 
-    private func respond(_ connection: NWConnection, number: Int, headers: [String: String]) {
+    private func respond(_ connection: NWConnection, number: Int, headers: [String: String], body: Data) {
         lock.lock()
-        recorded.append(Request(connection: number, headers: headers))
+        recorded.append(Request(connection: number, headers: headers, body: body))
         let drop = dropsLeft > 0
         if drop { dropsLeft -= 1 }
         lock.unlock()
@@ -144,13 +152,13 @@ final class ScriptedServer: @unchecked Sendable {
             connection.forceCancel()
             return
         }
-        let body = Data(Self.okBody.utf8)
+        let body = Data(reply.utf8)
         let head = "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: \(body.count)\r\nConnection: keep-alive\r\n\r\n"
         connection.send(content: Data(head.utf8) + body, completion: .contentProcessed { _ in })
     }
 
-    /// Headers (lowercased names) once the whole request, body included, is in.
-    private static func parse(_ buffer: Data) -> [String: String]? {
+    /// Headers (lowercased names) and body once the whole request is in.
+    private static func parse(_ buffer: Data) -> ([String: String], Data)? {
         guard let end = buffer.range(of: Data("\r\n\r\n".utf8)) else { return nil }
         let head = String(decoding: buffer[..<end.lowerBound], as: UTF8.self)
         var headers: [String: String] = [:]
@@ -159,6 +167,7 @@ final class ScriptedServer: @unchecked Sendable {
             headers[line[..<colon].lowercased()] = line[line.index(after: colon)...].trimmingCharacters(in: .whitespaces)
         }
         let length = Int(headers["content-length"] ?? "0") ?? 0
-        return buffer.count - end.upperBound >= length ? headers : nil
+        guard buffer.count - end.upperBound >= length else { return nil }
+        return (headers, Data(buffer[end.upperBound..<(end.upperBound + length)]))
     }
 }

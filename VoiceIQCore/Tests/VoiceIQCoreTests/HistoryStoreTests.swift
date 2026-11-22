@@ -62,11 +62,13 @@ final class HistoryStoreTests: XCTestCase {
     func testStepTimesSurviveTheDatabase() throws {
         var meta = SessionMeta(id: UUID(), startedAt: Date(), status: .inserted)
         meta.rawTranscript = "hello"
-        let steps = DictationSteps(finishRecording: 0.1, transcription: 0.34, live: true, writing: 2.31, insert: 0.15)
+        // A two-call dictation from before 0.7.12 still shows its writing step.
+        var steps = DictationSteps(finishRecording: 0.1, transcription: 0.34, insert: 0.15)
+        steps.writing = 2.31
         meta.steps = steps
         store.upsert(meta: meta, folder: root.appendingPathComponent("recordings/\(meta.id.uuidString)"))
         XCTAssertEqual(store.record(id: meta.id.uuidString)?.steps, steps)
-        XCTAssertEqual(steps.rows.map(\.label), ["Finish recording", "Transcription (live)", "Writing model", "Insert"])
+        XCTAssertEqual(steps.rows.map(\.label), ["Finish recording", "Transcription", "Writing model", "Insert"])
         XCTAssertEqual(steps.rows.map(\.value), ["0.10s", "0.34s", "2.31s", "0.15s"])
     }
 }

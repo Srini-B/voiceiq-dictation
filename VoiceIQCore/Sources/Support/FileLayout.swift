@@ -36,7 +36,9 @@ public enum FileLayout {
         appSupportRoot.appendingPathComponent("meetings", isDirectory: true)
     }
 
-    public static var agentRunsRoot: URL {
+    /// Agent mode's saved runs, removed with it in 0.7.12; see
+    /// `SettingsStore.removeRetiredSettingsOnce`.
+    static var agentRunsRoot: URL {
         appSupportRoot.appendingPathComponent("agent-runs", isDirectory: true)
     }
 
@@ -97,5 +99,5 @@ public enum FileLayout {
     public static func metaJSON(in folder: URL) -> URL { folder.appendingPathComponent("meta.json") }
     /// Transcripts of the chunks that already succeeded on a multi-request
     /// upload, so a retry after a mid-way failure re-sends only what is missing.
-    public static func chunkTranscripts(in folder: URL) -> URL { folder.appendingPathComponent("chunks.json") }
+    public static func chunkTranscripts(in folder: URL) -> URL { folder.appendingPathComponent("chunk-text.json") }
 }

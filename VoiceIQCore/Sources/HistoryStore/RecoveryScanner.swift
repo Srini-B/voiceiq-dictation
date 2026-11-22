@@ -80,7 +80,7 @@ public final class RecoveryScanner {
                     meta.rawTranscript = result.rawTranscript
                     meta.cleanedTranscript = result.cleanedTranscript
                     meta.modelID = result.modelID
-                    meta.errorMessage = result.cleanupNote
+                    meta.errorMessage = nil
                     meta.status = .recovered // text ready in History; the app copies it only when the user turned that on
                     meta.write(to: folder)
                     store.upsert(meta: meta, folder: folder)

@@ -12,12 +12,7 @@ public final class DictationCoordinator: ObservableObject {
     @Published public private(set) var state: DictationState = .idle
     @Published public private(set) var micLevel: Float = 0
     @Published public private(set) var lastResult: String?
-    /// Why the writing rules did not shape `lastResult`, when they were on and did not.
-    public private(set) var lastCleanupSkip: CleanupSkip?
     @Published public private(set) var coachingHint: String?
-    @Published public private(set) var modeFailureMessage: String?
-    @Published public private(set) var partialTranscript = ""
-    private var partialPump: Task<Void, Never>?
 
     /// "Delete All History" should also forget the paste-last buffer — a user
     /// wiping their words expects them gone from everywhere we hold them.
@@ -72,14 +67,6 @@ public final class DictationCoordinator: ObservableObject {
     private var session: Session? {
         didSet {
             guard oldValue?.id != session?.id else { return }
-            partialPump?.cancel()
-            partialPump = nil
-            partialTranscript = ""
-            if let live = liveTranscriber {
-                liveTranscriber = nil
-                let scope = oldValue.map { UsageScope(mode: $0.context.mode, sessionID: $0.id.uuidString) }
-                Task { await UsageMeter.$scope.withValue(scope) { await live.abort() } }
-            }
             if oldValue != nil, let collector = screenContextCollector {
                 screenContextCollector = nil
                 _ = collector.stop()
@@ -87,22 +74,17 @@ public final class DictationCoordinator: ObservableObject {
         }
     }
     private var capture: AudioCapturing?
-    private var liveTranscriber: (any DictationStreaming)?
     /// When the user let go; the gap to the audio's end is the finalize stage.
     private var finalizeRequestedAt: Date?
     /// The engine stop a finalize started, until its result is used.
     private var pendingStop: Task<AudioCaptureResult, Never>?
     private var screenContextCollector: ScreenContextCollector?
-    /// How loud the room is. Always measured, never in charge: what it feeds is
-    /// gated on `noiseHandlingActive`, what it records is not.
+    /// How loud the room is, measured for every dictation.
     private var noiseFloor = NoiseFloorEstimator()
     /// Why the last session ended with no speech — the pill copy differs, nothing
     /// else does, so this rides alongside the outcome instead of widening the
     /// state machine for a string.
     public private(set) var lastSilenceReason: SilenceReason = .noSpeech
-    /// The experiment's state, read ONCE at key-down. A toggle flipped while the
-    /// pill is up must not change the rules the recording is judged by.
-    private var noiseHandlingActive = false
     /// Space-lock (or UI hands-free) that arrived while the engine was still
     /// coming up — applied on engineStarted, cleared when the session ends.
     private var pendingLockIn = false
@@ -113,8 +95,6 @@ public final class DictationCoordinator: ObservableObject {
     /// short cancels) — the app removes its History row. Disk mirrors the UI:
     /// what History doesn't show, we don't store.
     public var onSessionDiscard: ((UUID) -> Void)?
-    public var onAnswerReady: ((String) -> Void)?
-    public var onAgentCommandReady: ((TranscriptionResult) -> Void)?
 
     /// Where the time after key-up went, for the session log.
     /// Fired once per completed session, after the result was handed over.
@@ -125,7 +105,6 @@ public final class DictationCoordinator: ObservableObject {
     static let cancelKeepThreshold: Double = 10
 
     private let audioFactory: @MainActor () -> AudioCapturing
-    private let liveFactory: @MainActor (URL) -> (any DictationStreaming)?
     private let transcription: TranscriptionServicing
     private let insertion: TextInserting
     private let contextProvider: @MainActor () -> DictationContext
@@ -133,7 +112,6 @@ public final class DictationCoordinator: ObservableObject {
     private let now: () -> Date
     /// Injectable so the noise behaviours can be exercised both ways headlessly,
     /// without a UserDefaults round-trip in the test.
-    private let noiseHandlingEnabled: @MainActor () -> Bool
     /// Injectable because the real check reads SYSTEM-WIDE state. Left un-injected,
     /// every begin-a-session test fails on any machine that happens to have secure
     /// input held — a stuck loginwindow after a lock screen, or Terminal's Secure
@@ -146,18 +124,14 @@ public final class DictationCoordinator: ObservableObject {
         transcription: TranscriptionServicing,
         insertion: TextInserting,
         contextProvider: @escaping @MainActor () -> DictationContext = { DictationContext() },
-        liveFactory: @escaping @MainActor (URL) -> (any DictationStreaming)? = { _ in nil },
         now: @escaping () -> Date = Date.init,
-        noiseHandlingEnabled: @escaping @MainActor () -> Bool = { SettingsStore().experimentalNoiseHandling },
         secureInputActive: @escaping @MainActor () -> Bool = { SecureInput.isActive }
     ) {
         self.audioFactory = audioFactory
         self.transcription = transcription
         self.insertion = insertion
         self.contextProvider = contextProvider
-        self.liveFactory = liveFactory
         self.now = now
-        self.noiseHandlingEnabled = noiseHandlingEnabled
         self.secureInputActive = secureInputActive
     }
 
@@ -168,18 +142,9 @@ public final class DictationCoordinator: ObservableObject {
     /// of the key would read as a stop.
     @discardableResult
     public func handle(_ intent: HotkeyIntent) -> Bool {
-        handle(intent, mode: .dictate)
-    }
-
-    @discardableResult
-    public func handle(
-        _ intent: HotkeyIntent,
-        mode: DictationMode,
-        selectedTextIsSettable: Bool = false
-    ) -> Bool {
         switch intent {
         case .begin:
-            return beginSession(mode: mode, selectedTextIsSettable: selectedTextIsSettable)
+            return beginSession()
         case .lockIn:
             // Engine start is deferred a tick (and Bluetooth mics take longer):
             // a lock arriving during warming must not be dropped — latch it and
@@ -218,10 +183,7 @@ public final class DictationCoordinator: ObservableObject {
     // MARK: - Session lifecycle
 
     @discardableResult
-    private func beginSession(
-        mode: DictationMode = .dictate,
-        selectedTextIsSettable: Bool = false
-    ) -> Bool {
+    private func beginSession() -> Bool {
         guard state == .idle || state.isTerminal else {
             Log.session.info("begin ignored: session already active (\(String(describing: self.state), privacy: .public))")
             return false
@@ -243,7 +205,6 @@ public final class DictationCoordinator: ObservableObject {
         }
         state = .idle
         coachingHint = nil
-        modeFailureMessage = nil
         pendingLockIn = false // never inherit a stale latch from a dead session
         apply(.hotkeyBegin)
 
@@ -252,43 +213,22 @@ public final class DictationCoordinator: ObservableObject {
         do {
             let folder = try FileLayout.makeSessionFolder(id: id, now: startedAt)
             var meta = SessionMeta(id: id, startedAt: startedAt, status: .recording)
-            var context = contextProvider()
-            context.mode = mode
-            context.selectedTextIsSettable = selectedTextIsSettable
+            let context = contextProvider()
             meta.targetAppBundleID = context.targetAppBundleID
             meta.targetAppName = context.targetAppName
             meta.write(to: folder)
             session = Session(id: id, folder: folder, startedAt: startedAt, context: context, meta: meta)
 
-            if mode == .dictate, SettingsStore().screenContextEnabled {
+            if SettingsStore().screenContextEnabled {
                 let collector = ScreenContextCollector()
                 screenContextCollector = collector
                 collector.start()
             }
 
             noiseFloor = NoiseFloorEstimator()
-            noiseHandlingActive = noiseHandlingEnabled()
 
             let capture = audioFactory()
             self.capture = capture
-            // Tasks the streamer starts inherit the scope, so requests sent while
-            // recording are booked against this dictation.
-            let live = UsageMeter.$scope.withValue(UsageScope(mode: mode, sessionID: id.uuidString)) {
-                liveFactory(FileLayout.audioCAF(in: folder))
-            }
-            liveTranscriber = live
-            if let live {
-                capture.setPCMSink { pcm in live.enqueue(pcm) }
-                partialPump = Task { [weak self] in
-                    for await text in live.partials {
-                        guard let self, !Task.isCancelled, self.session?.id == id else { return }
-                        guard case .recording = self.state else { continue }
-                        self.partialTranscript = text
-                    }
-                }
-            } else {
-                capture.setPCMSink(nil)
-            }
             capture.onLevel = { [weak self] level in
                 Task { @MainActor [weak self] in
                     self?.ingestLevel(level)
@@ -405,9 +345,6 @@ public final class DictationCoordinator: ObservableObject {
         // session is in flight must not stop capture or clobber meta.
         guard apply(.finalize) else { return }
         finalizeRequestedAt = Date()
-        partialPump?.cancel()
-        partialPump = nil
-        partialTranscript = ""
         finishScreenContext()
         // Recording ends at key-up: no listening past it, even mid-word. stop()
         // only collects the buffer the HAL already holds (audio from before
@@ -468,7 +405,7 @@ public final class DictationCoordinator: ObservableObject {
             $0.speechPeakDBFS = speechPeakDB
         }
         if let roomFloorDB, let speechPeakDB, let separation {
-            Log.audio.info("room \(roomFloorDB, format: .fixed(precision: 1))dBFS, speech \(speechPeakDB, format: .fixed(precision: 1))dBFS, separation \(separation, format: .fixed(precision: 1))dB\(self.noiseHandlingActive ? " [experiment on]" : "")")
+            Log.audio.info("room \(roomFloorDB, format: .fixed(precision: 1))dBFS, speech \(speechPeakDB, format: .fixed(precision: 1))dBFS, separation \(separation, format: .fixed(precision: 1))dB")
         }
 
         // Micro-clips can't contain a word — classify locally, never upload
@@ -507,34 +444,22 @@ public final class DictationCoordinator: ObservableObject {
         let sessionID = session.id
         let finalizeStartedAt = Date()
         let finalizeSeconds = finalizeStartedAt.timeIntervalSince(finalizeRequestedAt ?? finalizeStartedAt)
-        let live = liveTranscriber
-        let usageScope = UsageScope(mode: session.context.mode, sessionID: sessionID.uuidString)
+        let usageScope = UsageScope(activity: .dictation, sessionID: sessionID.uuidString)
         inFlightTask = Task { [weak self] in
           await UsageMeter.$scope.withValue(usageScope) {
             guard let self else { return }
             do {
-                let liveResult = await live?.finish(framesWritten: result.framesWritten)
-                try Task.checkCancellation()
-                let outcome: TranscriptionResult
-                if let liveResult {
-                    outcome = try await self.transcription.process(
-                        liveResult, durationSeconds: result.durationSeconds, context: session.context
-                    )
-                } else {
-                    outcome = try await self.transcription.transcribe(
-                        audioURL: FileLayout.audioCAF(in: session.folder),
-                        durationSeconds: result.durationSeconds,
-                        context: session.context
-                    )
-                }
-                // Transcription is everything from the recording's end to the
-                // text, less the writing model: the live socket's wait or the
-                // upload, including a fallback after the live final timed out.
+                let outcome = try await self.transcription.transcribe(
+                    audioURL: FileLayout.audioCAF(in: session.folder),
+                    durationSeconds: result.durationSeconds,
+                    context: session.context
+                )
+                // One model call hears the audio and writes the text, so the
+                // whole request is the transcription step.
                 let readyAt = Date()
                 let stages = DictationSteps(
                     finishRecording: finalizeSeconds,
-                    transcription: readyAt.timeIntervalSince(finalizeStartedAt) - (outcome.writingSeconds ?? 0),
-                    live: liveResult != nil, writing: outcome.writingSeconds
+                    transcription: readyAt.timeIntervalSince(finalizeStartedAt)
                 )
                 guard !Task.isCancelled else { return }
                 await self.completeTranscription(
@@ -558,30 +483,9 @@ public final class DictationCoordinator: ObservableObject {
             $0.rawTranscript = outcome.rawTranscript
             $0.cleanedTranscript = outcome.cleanedTranscript
             $0.modelID = outcome.modelID
-            $0.errorMessage = outcome.cleanupNote
             $0.status = .transcribing
         }
         apply(.transcriptReady)
-
-        // An edited selection is typed over the selection like a translation
-        // is, instead of going to the answer card.
-        if session?.context.mode.handsTranscriptToCaller == true, !outcome.replacesSelection {
-            lastResult = outcome.cleanedTranscript
-            lastCleanupSkip = outcome.cleanupSkip
-            if session?.context.mode == .agent, let onAgentCommandReady {
-                onAgentCommandReady(outcome)
-            } else {
-                onAnswerReady?(outcome.cleanedTranscript)
-            }
-            let handedOver = Date()
-            stages.handoff = handedOver.timeIntervalSince(readyAt)
-            updateMeta { $0.status = .inserted; $0.pipelineSeconds = handedOver.timeIntervalSince(startedAt); $0.steps = stages }
-            apply(.inserted)
-            discardUnlessKept()
-            session = nil
-            reportStageTimes(stages, sessionID: sessionID)
-            return
-        }
 
         let insertionOutcome = await insertion.insert(outcome.cleanedTranscript, context: session?.context ?? DictationContext())
         let insertedAt = Date()
@@ -603,7 +507,6 @@ public final class DictationCoordinator: ObservableObject {
             apply(.insertionBlockedSecure)
         }
         lastResult = outcome.cleanedTranscript
-        lastCleanupSkip = outcome.cleanupSkip
         session = nil
         reportStageTimes(stages, sessionID: sessionID)
     }
@@ -614,23 +517,12 @@ public final class DictationCoordinator: ObservableObject {
     private func reportStageTimes(_ stages: DictationSteps, sessionID: UUID) {
         func ms(_ seconds: TimeInterval?) -> String { seconds.map { "\(Int($0 * 1000))ms" } ?? "-" }
         let total = finalizeRequestedAt.map { Date().timeIntervalSince($0) }
-        let source = stages.live ? "live final" : "upload"
-        Log.session.notice("timing \(sessionID.uuidString, privacy: .public): finalize \(ms(stages.finishRecording), privacy: .public), \(source, privacy: .public) \(ms(stages.transcription), privacy: .public), writing \(ms(stages.writing), privacy: .public), insert \(ms(stages.insert ?? stages.handoff), privacy: .public), key-up to done \(ms(total), privacy: .public)")
+        Log.session.notice("timing \(sessionID.uuidString, privacy: .public): finalize \(ms(stages.finishRecording), privacy: .public), upload \(ms(stages.transcription), privacy: .public), insert \(ms(stages.insert), privacy: .public), key-up to done \(ms(total), privacy: .public)")
         onStageTimes?(stages)
     }
 
     private func failTranscription(sessionID: UUID, error: Error) async {
         guard session?.id == sessionID else { return }
-        if session?.context.mode != .dictate {
-            if case .translate(let targets) = session?.context.mode {
-                modeFailureMessage = "Couldn't translate to \(targets.joined(separator: " or "))"
-            }
-            updateMeta { $0.status = .failed; $0.errorCode = "mode_transform" }
-            apply(.transcriptFailed(.network))
-            discardUnlessKept()
-            session = nil
-            return
-        }
         // Empty transcript: silence is judged by AUDIO ENERGY, not duration —
         // a long quiet hold is "no speech", never "Failed" (F9b; dogfood bug).
         // Speech energy present but no transcript = real failure, retryable (F9a).
@@ -653,8 +545,7 @@ public final class DictationCoordinator: ObservableObject {
             // gesture that reads as a soft "didn't catch that" in a quiet room.
             // Classify honestly, but KEEP the recording: a high absolute peak means
             // we might be wrong, and Retry has to still exist when we are.
-            if noiseHandlingActive,
-               let snr = noiseFloor.measuredSNR,
+            if let snr = noiseFloor.measuredSNR,
                snr < Self.emptyTranscriptSNRThreshold {
                 Log.audio.info("empty transcript with only \(snr, format: .fixed(precision: 1))dB above the room — no speech, not a failure")
                 // NOT .silent: HistoryStore's visible filter ends with
@@ -710,11 +601,6 @@ public final class DictationCoordinator: ObservableObject {
             return
         }
         finishScreenContext()
-        if let live = liveTranscriber {
-            let scope = session.map { UsageScope(mode: $0.context.mode, sessionID: $0.id.uuidString) }
-            liveTranscriber = nil
-            Task { await UsageMeter.$scope.withValue(scope) { await live.abort() } }
-        }
         inFlightTask?.cancel() // stop the network work too (audit L8)
         inFlightTask = nil
         micLevel = 0
@@ -756,7 +642,7 @@ public final class DictationCoordinator: ObservableObject {
         // and destroys a recording of ANY length (production pass 2, P0).
         let duration = result?.durationSeconds ?? target.meta.audioDurationSeconds ?? 0
         let hasTranscript = target.meta.rawTranscript != nil
-        if target.context.mode.keepsRecording, hasTranscript || duration >= Self.cancelKeepThreshold {
+        if hasTranscript || duration >= Self.cancelKeepThreshold {
             // Long cancels stay recoverable — History shows them with Retry.
             target.meta.status = .cancelled
             target.meta.audioDurationSeconds = target.meta.audioDurationSeconds ?? duration
@@ -781,12 +667,6 @@ public final class DictationCoordinator: ObservableObject {
         guard var session else { return }
         session.context.screenshots = images
         self.session = session
-    }
-
-    /// Agent commands leave no History row; the agent run keeps the text.
-    private func discardUnlessKept() {
-        guard session?.context.mode.keepsRecording == false else { return }
-        discardSessionArtifacts()
     }
 
     /// Removes the session folder and asks the app to drop its History row.

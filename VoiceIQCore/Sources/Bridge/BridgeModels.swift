@@ -1,28 +1,5 @@
 import Foundation
 
-/// What a dictation produces. Mirrors the macOS dictation key, ⌃⌥T and ⌃⌥A.
-public enum KeyboardMode: String, Codable, CaseIterable, Sendable {
-    case dictate
-    case translate
-    case ask
-
-    public var title: String {
-        switch self {
-        case .dictate: return "Dictate"
-        case .translate: return "Translate"
-        case .ask: return "Ask"
-        }
-    }
-
-    public var symbol: String {
-        switch self {
-        case .dictate: return "mic.fill"
-        case .translate: return "globe"
-        case .ask: return "sparkles"
-        }
-    }
-}
-
 /// One request from the keyboard. Only the keyboard writes these.
 public struct KeyboardCommand: Codable, Equatable, Sendable, Identifiable {
     public enum Action: String, Codable, Sendable {
@@ -34,9 +11,6 @@ public struct KeyboardCommand: Codable, Equatable, Sendable, Identifiable {
     public let id: UUID
     public let action: Action
     public let issuedAt: Date
-    public var mode: KeyboardMode
-    /// Selected text, or the text before the cursor, for Ask.
-    public var context: String?
     /// The app the keyboard was typing in, when it could be resolved.
     public var hostBundleID: String?
 
@@ -44,15 +18,11 @@ public struct KeyboardCommand: Codable, Equatable, Sendable, Identifiable {
         id: UUID = UUID(),
         action: Action,
         issuedAt: Date = Date(),
-        mode: KeyboardMode = .dictate,
-        context: String? = nil,
         hostBundleID: String? = nil
     ) {
         self.id = id
         self.action = action
         self.issuedAt = issuedAt
-        self.mode = mode
-        self.context = context
         self.hostBundleID = hostBundleID
     }
 
@@ -68,14 +38,12 @@ public struct KeyboardCommand: Codable, Equatable, Sendable, Identifiable {
 /// A finished result waiting for the keyboard to insert or show it.
 public struct Delivery: Codable, Equatable, Sendable, Identifiable {
     public let id: UUID
-    public let mode: KeyboardMode
     public let text: String
     public let createdAt: Date
     public let hostBundleID: String?
 
-    public init(id: UUID = UUID(), mode: KeyboardMode, text: String, createdAt: Date = Date(), hostBundleID: String?) {
+    public init(id: UUID = UUID(), text: String, createdAt: Date = Date(), hostBundleID: String?) {
         self.id = id
-        self.mode = mode
         self.text = text
         self.createdAt = createdAt
         self.hostBundleID = hostBundleID
@@ -108,7 +76,6 @@ public struct SessionSnapshot: Codable, Equatable, Sendable {
     }
 
     public var phase: Phase
-    public var mode: KeyboardMode
     public var recordingStartedAt: Date?
     public var delivery: Delivery?
     public var notice: Notice?
@@ -116,14 +83,12 @@ public struct SessionSnapshot: Codable, Equatable, Sendable {
 
     public init(
         phase: Phase = .off,
-        mode: KeyboardMode = .dictate,
         recordingStartedAt: Date? = nil,
         delivery: Delivery? = nil,
         notice: Notice? = nil,
         meetingActive: Bool = false
     ) {
         self.phase = phase
-        self.mode = mode
         self.recordingStartedAt = recordingStartedAt
         self.delivery = delivery
         self.notice = notice

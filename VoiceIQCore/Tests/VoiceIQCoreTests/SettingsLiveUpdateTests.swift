@@ -8,8 +8,7 @@ final class SettingsLiveUpdateTests: XCTestCase {
     private let settings = SettingsStore()
 
     override func tearDown() {
-        for key in ["showIdleIndicator", "soundsEnabled", "gateTrips",
-                    "experimentalNoiseHandling", "smartTranscription", "smartCleanupPass"] {
+        for key in ["showIdleIndicator", "soundsEnabled", "dictationTrigger", "audioRetentionDays"] {
             UserDefaults.standard.removeObject(forKey: key)
         }
     }
@@ -31,11 +30,8 @@ final class SettingsLiveUpdateTests: XCTestCase {
     func testEverySetterPostsItsKey() {
         expectChange(forKey: "showIdleIndicator") { settings.setShowIdleIndicator(false) }
         expectChange(forKey: "soundsEnabled") { settings.setSoundsEnabled(false) }
-        expectChange(forKey: "smartTranscription") { settings.setSmartTranscription(false) }
-        expectChange(forKey: "smartCleanupPass") { settings.setSmartCleanupPass(false) }
         expectChange(forKey: "dictationTrigger") { settings.setDictationTrigger(.modifier(.fn)) }
         expectChange(forKey: "audioRetentionDays") { settings.setAudioRetentionDays(7) }
-        expectChange(forKey: "experimentalNoiseHandling") { settings.setExperimentalNoiseHandling(true) }
     }
 }
 

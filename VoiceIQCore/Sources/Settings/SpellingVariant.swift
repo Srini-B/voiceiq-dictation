@@ -1,9 +1,10 @@
 import Foundation
 
-/// The regional spelling and conventions the writing model uses. The
-/// recognizer cannot hear the difference between "colour" and "color", so
-/// the choice is a setting. `automatic` leaves it to the model, which then
-/// follows the words on screen and the speaker's own usage.
+/// The regional spelling and conventions the writing model uses. Nobody can
+/// hear the difference between "colour" and "color", so it follows the
+/// system region (`system`), read fresh for every dictation. `automatic`
+/// leaves it to the model, which then follows the words on screen and the
+/// speaker's own usage.
 public enum SpellingVariant: String, CaseIterable, Sendable {
     case automatic = ""
     case englishUS = "en-US"
@@ -36,6 +37,39 @@ public enum SpellingVariant: String, CaseIterable, Sendable {
         case .portuguesePortugal: return "Portuguese (Portugal)"
         case .chineseSimplified: return "Chinese (Simplified)"
         case .chineseTraditional: return "Chinese (Traditional)"
+        }
+    }
+
+    /// The variant for this device's region (Settings › General › Language &
+    /// Region), in the language the user reads first.
+    public static var system: SpellingVariant {
+        let current = Locale.autoupdatingCurrent
+        let language = Locale.preferredLanguages.first.map { Locale(identifier: $0).language.languageCode?.identifier }
+            ?? current.language.languageCode?.identifier
+        return forRegion(current.region?.identifier, language: language ?? "en")
+    }
+
+    /// `region` is an ISO 3166 code ("IN"), `language` an ISO 639-1 code
+    /// ("en"). Spanish, French, Portuguese and Chinese readers get their own
+    /// variant; everyone else gets the English one for the region. A region
+    /// with no matching variant is `automatic`.
+    static func forRegion(_ region: String?, language: String) -> SpellingVariant {
+        guard let region = region?.uppercased() else { return .automatic }
+        switch language {
+        case "es": return region == "ES" ? .spanishSpain : .spanishLatinAmerica
+        case "fr": return region == "CA" ? .frenchCanada : .frenchFrance
+        case "pt": return region == "PT" ? .portuguesePortugal : .portugueseBrazil
+        case "zh": return ["TW", "HK", "MO"].contains(region) ? .chineseTraditional : .chineseSimplified
+        default: break
+        }
+        switch region {
+        case "US", "PR", "GU", "VI", "AS", "MP", "UM", "PH": return .englishUS
+        case "GB", "IE", "IM", "JE", "GG", "GI", "MT", "ZA", "NG", "KE", "GH", "SG", "MY", "HK", "PK", "LK", "BD":
+            return .englishUK
+        case "AU", "NZ": return .englishAU
+        case "CA": return .englishCA
+        case "IN": return .englishIN
+        default: return .automatic
         }
     }
 

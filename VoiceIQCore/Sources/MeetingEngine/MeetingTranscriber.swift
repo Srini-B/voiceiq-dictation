@@ -23,22 +23,11 @@ public struct MeetingTranscriber: Sendable {
     private let client: GeminiClient
     private let models: Models
     private let endpoint: URL
-    /// Where to transcribe, in order; see `SettingsStore.meetingSpeechEndpoints`.
-    private var endpoints: @Sendable () -> [ModelEndpoint]
-    /// ElevenLabs redaction; see `SettingsStore.redactsMeetingSecrets`.
-    private var redacts: @Sendable () -> Bool = { SettingsStore().redactsMeetingSecrets }
-    /// Spoken languages; see `SettingsStore.spokenLanguages`. Only Scribe
-    /// takes them for a meeting: OpenAI's diarizing model
-    /// (`gpt-4o-transcribe-diarize`) takes no prompt and no language list,
-    /// only one `language`, which would shut out every other speaker's, and
-    /// Gemini detects each language and every switch itself.
-    private var languages: @Sendable () -> [String] = { SettingsStore().spokenLanguages }
     private let sleep: @Sendable (TimeInterval) async throws -> Void
 
     public init(client: GeminiClient, models: Models, endpoint: URL,
-                endpoints: @escaping @Sendable () -> [ModelEndpoint],
                 sleep: @escaping @Sendable (TimeInterval) async throws -> Void = { try await Task.sleep(nanoseconds: UInt64($0 * 1_000_000_000)) }) {
-        self.client = client; self.models = models; self.endpoint = endpoint; self.endpoints = endpoints
+        self.client = client; self.models = models; self.endpoint = endpoint
         self.sleep = sleep
     }
 
@@ -46,8 +35,6 @@ public struct MeetingTranscriber: Sendable {
     /// minutes of audio; ten keeps a Tier 1 Gemini key (10,000 audio tokens a
     /// minute, 25 tokens a second) to about one minute of waiting per window.
     /// MEASURED 2026-09-27 on a 30-minute call: Gemini at 600 s gave 907 words.
-    /// OpenAI's diarizing model gets the same window; it is not measured on a
-    /// long call yet.
     static let windowSpeech: Double = 600
     /// A Tier 1 key needs about one minute of waiting per window; a two-hour
     /// call has twenty windows.
@@ -55,28 +42,11 @@ public struct MeetingTranscriber: Sendable {
     static let cacheVersion = "v7"
 
     public func transcribe(folder: URL) async throws -> [TranscriptSegment] {
-        // A run keeps the settings it started with, so every window it saves
-        // matches the cache it is saved in.
-        let endpoints = self.endpoints(), redacts = self.redacts(), languages = self.languages()
-        var run = self
-        run.endpoints = { endpoints }; run.redacts = { redacts }; run.languages = { languages }
-        return try await run.transcribeRun(folder: folder)
-    }
-
-    private func transcribeRun(folder: URL) async throws -> [TranscriptSegment] {
         let audio = try Self.callAudio(folder: folder)
-        // The endpoint names the window cache, so a redo after switching it
-        // transcribes again instead of reusing the other model's windows; so
-        // do ElevenLabs redaction and spoken languages, so a retry after
-        // changing them never reuses windows made without them.
-        let first = endpoints().first
-        var options = ""
-        if first == .elevenLabs {
-            if redacts() { options += "-redacted" }
-            if !languages().isEmpty { options += "-" + languages().joined(separator: "+") }
-        }
+        // The name matches the Gemini windows earlier versions cached, so a
+        // redo of an older meeting reuses them.
         let cache = folder.appendingPathComponent(
-            "transcribe-\(Self.cacheVersion)-\(first?.rawValue ?? "none")\(options)-\(Int(Self.windowSpeech))", isDirectory: true)
+            "transcribe-\(Self.cacheVersion)-gemini-\(Int(Self.windowSpeech))", isDirectory: true)
         try FileManager.default.createDirectory(at: cache, withIntermediateDirectories: true)
         var budget = Self.rateLimitBudget
         let windows = Self.windows(audio.activeRegions(), speech: Self.windowSpeech)
@@ -132,8 +102,8 @@ public struct MeetingTranscriber: Sendable {
             var request = AssembledAudio()
             try request.appendBody(part, source: audio.mic.samples)
             let flac = try FLACEncoder.encode(samples: request.samples)
-            let raw = try await withProviders(label: "overlap", budget: &budget) { via in
-                try await transcribeSpeakers(flac, seconds: request.duration, references: [], via: via)
+            let raw = try await withRetries(label: "overlap", budget: &budget) {
+                try await transcribeSpeakers(flac)
             }
             words += raw.compactMap { word in
                 guard let start = word.start, let span = request.trackSpan(start, word.end ?? start) else { return nil }
@@ -290,109 +260,47 @@ public struct MeetingTranscriber: Sendable {
         return id
     }
 
-    /// One window through the first provider that answers.
+    /// One window. Reference clips of the speakers found so far go inside the
+    /// audio, and the labels the API gives them name the speakers
+    /// (`SpeakerLinker.link`).
     private func transcribe(window regions: [ClosedRange<Double>], audio: CallAudio, known: [TimedWord],
                             budget: inout TimeInterval, label: String) async throws -> [TimedWord] {
         let clips = SpeakerLinker.anchorClips(known).sorted { $0.key < $1.key }
-        return try await withProviders(label: label, budget: &budget) { via in
-            try await transcribe(window: regions, audio: audio, clips: clips, known: known, via: via)
-        }
-    }
-
-    /// Runs `body` with each provider in turn. A throttled provider is waited
-    /// out only when no other provider has a key.
-    private func withProviders<T>(label: String, budget: inout TimeInterval,
-                                  _ body: (ModelEndpoint) async throws -> T) async throws -> T {
-        var lastError: Error = TranscriptionError.network("no_provider")
-        while true {
-            var waits: [TimeInterval] = []
-            for via in endpoints() {
-                do {
-                    do { return try await body(via) } catch TranscriptionError.safetyBlocked {
-                        // MEASURED 2026-09-27: the flash model blocked one window of a
-                        // call as `content_filter` and passed the same window on the
-                        // next run. One more try before moving on.
-                        Log.meeting.info("\(label, privacy: .public): \(via.rawValue, privacy: .public) safety block, retrying")
-                        return try await body(via)
-                    }
-                } catch TranscriptionError.rateLimitedTransient(let retryAfter) {
-                    Log.meeting.info("\(label, privacy: .public): \(via.rawValue, privacy: .public) rate limited")
-                    waits.append(retryAfter ?? 60); lastError = TranscriptionError.rateLimitedTransient(retryAfter: retryAfter)
-                } catch let error as TranscriptionError where Self.tryNextProvider(error) {
-                    Log.meeting.error("\(label, privacy: .public): \(via.rawValue, privacy: .public) failed: \(String(describing: error), privacy: .public)")
-                    lastError = error
-                } catch is DecodingError {
-                    Log.meeting.error("\(label, privacy: .public): \(via.rawValue, privacy: .public) returned unreadable segments")
-                    lastError = TranscriptionError.network("unreadable_segments")
-                }
-            }
-            guard let wait = waits.min(), wait + 2 <= budget else { throw lastError }
-            budget -= wait + 2
-            Log.meeting.info("\(label, privacy: .public): waiting \(Int(wait + 2), privacy: .public)s for the rate limit")
-            try await sleep(wait + 2)
-        }
-    }
-
-    /// Speaker-labelled words on the endpoint's diarizing model.
-    private func transcribeSpeakers(_ flac: Data, seconds: Double, references: [(id: String, audio: Data)],
-                                    via endpoint: ModelEndpoint) async throws -> [DiarizedWord] {
-        switch endpoint {
-        case .gemini:
-            return try await client.transcribeSpeakers(audio: flac, model: models.transcribe, endpoint: self.endpoint, deadline: 600)
-        case .openAI:
-            return try await client.openAIDiarize(audio: flac, references: references, deadline: 600)
-        case .elevenLabs:
-            return try await client.elevenLabsDiarize(audio: flac, keyterms: DictionaryStore().sanitizedVocabulary(),
-                                                      languages: languages(),
-                                                      redact: redacts(),
-                                                      audioSeconds: seconds, deadline: 600)
-        }
-    }
-
-    /// Gemini and ElevenLabs: reference clips go inside the audio and the
-    /// labels the API gives them name the speakers (`SpeakerLinker.link`). OpenAI: up to
-    /// four named voice references go alongside, and the model labels their
-    /// segments with those names.
-    private func transcribe(window regions: [ClosedRange<Double>], audio: CallAudio, clips: [(key: String, value: [ClosedRange<Double>])],
-                            known: [TimedWord], via provider: ModelEndpoint) async throws -> [TimedWord] {
         var request = AssembledAudio()
-        if provider != .openAI {
-            for (id, ranges) in clips { try request.appendAnchor(id: id, clips: ranges, from: audio) }
-            try request.appendBody(regions, from: audio)
-            let raw = try await transcribeSpeakers(try FLACEncoder.encode(samples: request.samples), seconds: request.duration,
-                                                   references: [], via: provider)
-            return Self.place(raw, audio: request, call: audio, known: known, mapping: SpeakerLinker.link(words: raw, anchors: request.anchors))
-        }
+        for (id, ranges) in clips { try request.appendAnchor(id: id, clips: ranges, from: audio) }
         try request.appendBody(regions, from: audio)
-        var references: [(id: String, audio: Data)] = []
-        for (id, ranges) in Self.openAIReferenceClips(clips) {
-            var clip = AssembledAudio()
-            try clip.appendBody(ranges, from: audio)
-            let limit = Int(GeminiClient.openAIReferenceSeconds.upperBound * TrackAudio.sampleRate)
-            guard clip.duration >= GeminiClient.openAIReferenceSeconds.lowerBound else { continue }
-            references.append((id, try FLACEncoder.encode(samples: Array(clip.samples.prefix(limit)))))
-        }
-        let raw = try await transcribeSpeakers(try FLACEncoder.encode(samples: request.samples), seconds: request.duration,
-                                               references: references, via: provider)
-        let mapping = Dictionary(uniqueKeysWithValues: references.map { ($0.id, $0.id) })
-        return Self.place(raw, audio: request, call: audio, known: known, mapping: mapping)
+        let flac = try FLACEncoder.encode(samples: request.samples)
+        let raw = try await withRetries(label: label, budget: &budget) { try await transcribeSpeakers(flac) }
+        return Self.place(raw, audio: request, call: audio, known: known, mapping: SpeakerLinker.link(words: raw, anchors: request.anchors))
     }
 
-    /// The owner first, then the speakers with the most reference audio, up
-    /// to OpenAI's limit of four.
-    static func openAIReferenceClips(_ clips: [(key: String, value: [ClosedRange<Double>])]) -> [(key: String, value: [ClosedRange<Double>])] {
-        func seconds(_ ranges: [ClosedRange<Double>]) -> Double { ranges.reduce(0) { $0 + $1.upperBound - $1.lowerBound } }
-        let ranked = clips.sorted { lhs, rhs in
-            if (lhs.key == MeetingSpeaker.you) != (rhs.key == MeetingSpeaker.you) { return lhs.key == MeetingSpeaker.you }
-            return seconds(lhs.value) > seconds(rhs.value)
+    /// Runs `body`, trying a safety block once more and waiting out a
+    /// per-minute rate limit while `budget` lasts.
+    private func withRetries<T>(label: String, budget: inout TimeInterval, _ body: () async throws -> T) async throws -> T {
+        while true {
+            do {
+                do { return try await body() } catch TranscriptionError.safetyBlocked {
+                    // MEASURED 2026-09-27: the flash model blocked one window of a
+                    // call as `content_filter` and passed the same window on the
+                    // next run. One more try before giving up.
+                    Log.meeting.info("\(label, privacy: .public): safety block, retrying")
+                    return try await body()
+                }
+            } catch TranscriptionError.rateLimitedTransient(let retryAfter) {
+                let wait = (retryAfter ?? 60) + 2
+                guard wait <= budget else { throw TranscriptionError.rateLimitedTransient(retryAfter: retryAfter) }
+                budget -= wait
+                Log.meeting.info("\(label, privacy: .public): waiting \(Int(wait), privacy: .public)s for the rate limit")
+                try await sleep(wait)
+            } catch is DecodingError {
+                Log.meeting.error("\(label, privacy: .public): returned unreadable segments")
+                throw TranscriptionError.network("unreadable_segments")
+            }
         }
-        return Array(ranked.prefix(GeminiClient.openAIMaxReferences))
     }
 
-    static func tryNextProvider(_ error: TranscriptionError) -> Bool {
-        switch error {
-        case .rateLimitedDaily, .modelUnavailable, .safetyBlocked, .badRequest, .network, .timeout, .auth: return true
-        case .offline, .emptyTranscript, .rateLimitedTransient: return false
-        }
+    /// Speaker-labelled, word-timed words from gemini-3.5-transcribe.
+    private func transcribeSpeakers(_ flac: Data) async throws -> [DiarizedWord] {
+        try await client.transcribeSpeakers(audio: flac, model: models.transcribe, endpoint: endpoint, deadline: 600)
     }
 }

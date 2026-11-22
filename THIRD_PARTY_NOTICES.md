@@ -146,9 +146,9 @@ SOFTWARE.
 ## Trademarks
 
 "Google", the Google logo, the Gemini spark, and related marks are trademarks of
-Google LLC. "OpenAI" and its logo are trademarks of OpenAI. "Anthropic",
-"Claude" and the Anthropic logo are trademarks of Anthropic, PBC. "TinyFish" and its
-logo are trademarks of TinyFish. The iOS app bundles each service's favicon
-(`iOS/App/Resources/Assets.xcassets/Provider*.imageset`) only to label the key
-field for that service; no endorsement is implied. The app icon and menu bar
-glyph are original works.
+Google LLC. "OpenAI" is a trademark of OpenAI, "ElevenLabs" of ElevenLabs,
+and "Claude" of Anthropic, PBC; Cost Analysis names them only to label spend
+from when they were providers. The iOS app bundles the Gemini favicon
+(`iOS/App/Resources/Assets.xcassets/ProviderGemini.imageset`) only to label
+the key field; no endorsement is implied. The app icon and menu bar glyph are
+original works.

@@ -36,7 +36,6 @@ final class AppModel: ObservableObject {
     /// The app the current dictation is for. A box so the coordinator's
     /// context closure can read it without capturing `self` during init.
     private let target = DictationTarget()
-    private var currentMode: KeyboardMode = .dictate
     private var lastLevelWrite = Date.distantPast
     private var previousState: DictationState = .idle
     /// A background start failed to open the microphone. Until the app has
@@ -44,28 +43,17 @@ final class AppModel: ObservableObject {
     private var needsForeground = false
 
     init() {
-        FormattingSettingsMigration.restoreAutoDegradedWritingRulesOnce()
         FormattingSettingsMigration.splitWritingRulesOnce()
         FormattingSettingsMigration.removeLiveTranscriptionSettings()
         FileLayout.removeRetiredModels()
-        SettingsStore().adoptProviderWithKeyOnce()
-        let client = GeminiClient(
-            apiKey: { KeychainStore.loadAPIKey() },
-            openAIKey: { KeychainStore.loadOpenAIKey() },
-            openAIConfig: { SettingsStore().openAIConfig },
-            provider: { SettingsStore().preferredProvider },
-            elevenLabsKey: { KeychainStore.loadKey(.elevenLabs) }
-        )
+        SettingsStore().removeRetiredSettingsOnce()
+        let client = GeminiClient(apiKey: { KeychainStore.loadAPIKey() })
         transcription = GeminiTranscriptionService(client: client)
         historyStore = try? HistoryStore.standard()
         UsageMeter.store = try? UsageStore.standard()
         meetings = MeetingEngine(
             client: client,
-            config: { SettingsStore().geminiConfig },
-            summaryModel: SettingsStore().geminiConfig.cleanupModel,
-            providers: { SettingsStore().meetingProviders },
-            speechEndpoints: { SettingsStore().meetingSpeechEndpoints },
-            liveMeetingKey: { SettingsStore().transcribesWithElevenLabs ? KeychainStore.loadKey(.elevenLabs) : nil }
+            config: { SettingsStore().geminiConfig }
         )
         let inserter = self.inserter
         coordinator = DictationCoordinator(
@@ -82,11 +70,10 @@ final class AppModel: ObservableObject {
                     targetAppBundleID: target.host,
                     targetAppName: target.host.map(AppNames.displayName(for:))
                 )
-            },
-            liveFactory: { _ in LiveTranscriber.makeFromSettings() }
+            }
         )
         sleepGuard = SessionSleepGuard(dictation: coordinator, meetings: meetings)
-        inserter.onDeliver = { [weak self] text, mode in self?.deliver(text, mode: mode) }
+        inserter.onDeliver = { [weak self] text in self?.deliver(text) }
 
         // Commands already in the App Group belong to an earlier process. Only
         // a command named in a launch URL may still be acted on.
@@ -116,13 +103,6 @@ final class AppModel: ObservableObject {
         coordinator.$micLevel
             .sink { [weak self] level in self?.levelChanged(level) }
             .store(in: &cancellables)
-        coordinator.$partialTranscript
-            .removeDuplicates()
-            .sink { [weak self] text in self?.session.setLiveText(text) }
-            .store(in: &cancellables)
-        coordinator.onAnswerReady = { [weak self] answer in
-            self?.deliver(answer, mode: .ask)
-        }
         coordinator.onSessionUpdate = { [weak self] meta, folder in
             self?.historyStore?.upsert(meta: meta, folder: folder)
             if SettingsStore().audioRetentionDays < 0, meta.rawTranscript != nil || meta.status == .silent {
@@ -136,9 +116,9 @@ final class AppModel: ObservableObject {
         }
         coordinator.onStageTimes = { stages in
             // Splits "processed in" so a slow result can be blamed on the mic
-            // teardown, the transcript, the cleanup request, or typing it in.
+            // teardown, the model request, or typing it in.
             var parts = [String(format: "finalize %.1fs", stages.finishRecording)]
-            parts.append(String(format: stages.live ? "cloud live final %.1fs" : "cloud transcribe %.1fs", stages.transcription))
+            parts.append(String(format: "cloud transcribe %.1fs", stages.transcription))
             if let writing = stages.writing { parts.append(String(format: "writing %.1fs", writing)) }
             if let insert = stages.insert { parts.append(String(format: "insert %.1fs", insert)) }
             SessionDiagnostics.note(parts.joined(separator: ", "))
@@ -269,15 +249,7 @@ final class AppModel: ObservableObject {
             return problem
         }
         target.host = command.hostBundleID
-        currentMode = command.mode
-        session.mode = command.mode
-        let mode: DictationMode
-        switch command.mode {
-        case .dictate: mode = .dictate
-        case .translate: mode = .translate(targets: SettingsStore().translationTargetLanguages)
-        case .ask: mode = .askAnything(selectedText: command.context)
-        }
-        guard coordinator.handle(.begin, mode: mode) else {
+        guard coordinator.handle(.begin) else {
             let problem = coordinator.coachingHint ?? "Still working on the last one"
             session.post(notice: problem)
             return problem
@@ -410,9 +382,7 @@ final class AppModel: ObservableObject {
         }
         SessionDiagnostics.note("action button: start")
         target.host = nil
-        currentMode = .dictate
-        session.mode = .dictate
-        guard coordinator.handle(.begin, mode: .dictate) else {
+        guard coordinator.handle(.begin) else {
             let notice = coordinator.coachingHint ?? "Still working on the last one"
             session.post(notice: notice)
             return notice
@@ -531,10 +501,10 @@ final class AppModel: ObservableObject {
         session.setLevel(level)
     }
 
-    private func deliver(_ text: String, mode: KeyboardMode) {
-        let delivery = Delivery(mode: mode, text: text, hostBundleID: target.host)
+    private func deliver(_ text: String) {
+        let delivery = Delivery(text: text, hostBundleID: target.host)
         session.deliver(delivery)
-        if mode != .ask { copyIfNotTyped(delivery) }
+        copyIfNotTyped(delivery)
     }
 
     /// The keyboard on screen types the result wherever the user is. When no
@@ -587,7 +557,6 @@ final class AppModel: ObservableObject {
     static func notice(for state: DictationState, coordinator: DictationCoordinator) -> String? {
         switch state {
         case .failed(let failure):
-            if let message = coordinator.modeFailureMessage { return message }
             switch failure {
             case .auth: return "API key rejected. Check it in VoiceiQ."
             case .modelAccess: return "Model unavailable. Check Settings › Advanced."

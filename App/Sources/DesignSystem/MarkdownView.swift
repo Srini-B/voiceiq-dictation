@@ -3,7 +3,7 @@ import SwiftUI
 
 /// Lays out a Markdown answer block by block: paragraphs, headings, lists
 /// with markers, code in a box, quotes with a bar, and tables as a grid.
-/// Shared by the agent panel and the Ask Anything answer.
+/// Used for meeting chat answers.
 struct MarkdownView: View {
     private let blocks: [MarkdownBlock]
     private let style: MarkdownStyle

@@ -146,9 +146,8 @@ With both on:
    VoiceiQ also installs it.
 3. After the relaunch the pill says "Updated to VoiceiQ x.y.z".
 
-"In use" means a dictation, Ask Anything or Translate session, a meeting that
-is detected, recording or being written up, a History retry or queued
-dictation being sent, or an answer on screen.
+"In use" means a dictation, a meeting that is detected, recording or being
+written up, or a History retry or queued dictation being sent.
 `UpdatePillController` (`App/Sources/Updates/UpdatePillController.swift`) owns
 steps 2 and 3; `AppUpdater` owns Sparkle.
 

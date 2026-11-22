@@ -6,27 +6,14 @@ import SwiftUI
 struct DictationPane: View {
     private let settings = SettingsStore()
     @State private var sounds = SettingsStore().soundsEnabled
-    @State private var liveTranscription = SettingsStore().liveTranscriptionEnabled
-    /// Names Scribe v3 Live in the Real-time transcription footer.
-    @State private var elevenLabs = SettingsStore().transcribesWithElevenLabs
-    @State private var smartTranscription = SettingsStore().smartTranscriptionEnabled
-    @State private var cleanupPass = SettingsStore().smartCleanupPassEnabled
-    @State private var skipShortCleanup = SettingsStore().skipShortDictationCleanup
     @State private var customRules = SettingsStore().customWritingRules
-    @State private var autoLearn = SettingsStore().autoLearnEnabled
     @State private var meetingDetection = SettingsStore().meetingDetectionEnabled
-    @State private var meetingScreenNames = SettingsStore().meetingScreenNamesEnabled
     @State private var meetingOwnerName = SettingsStore().meetingOwnerName
     @State private var showIdleDot = SettingsStore().showIdleIndicator
     @State private var hidePillFromScreenSharing = SettingsStore().hidePillFromScreenSharing
-    @State private var noiseHandling = SettingsStore().experimentalNoiseHandling
-    @State private var agentMode = SettingsStore().agentModeEnabled
-    @State private var translationTargets = SettingsStore().translationTargetLanguages
-    @State private var spelling = SettingsStore().spellingVariant
     @State private var muteOtherAudio = SettingsStore().muteOtherAudioWhileDictating
     @State private var pauseMedia = SettingsStore().pauseMediaWhileDictating
     @State private var screenContext = SettingsStore().screenContextEnabled
-    @State private var fitToExistingText = SettingsStore().fitToExistingText
     @State private var copyRecovered = SettingsStore().copyRecoveredToClipboard
     @State private var preferredMicrophone = SettingsStore().preferredInputDeviceUID
     @State private var microphones = AudioInputDevices.list()
@@ -38,10 +25,7 @@ struct DictationPane: View {
 
             Section("Shortcuts") {
                 ShortcutRecorderRow(action: .pasteLastTranscript)
-                ShortcutRecorderRow(action: .askAnything)
-                ShortcutRecorderRow(action: .translate)
                 ShortcutRecorderRow(action: .meetingToggle)
-                TranslationTargetsRow(targets: $translationTargets)
             }
 
             Section {
@@ -79,94 +63,30 @@ struct DictationPane: View {
             }
 
             Section {
-                // Saved only on a user change, not when its default is refreshed.
-                Toggle("Real-time transcription", isOn: Binding(get: { liveTranscription }, set: {
-                    liveTranscription = $0
-                    settings.setLiveTranscriptionEnabled($0)
-                }))
-            } footer: {
-                Text("Transcribes while you speak\(elevenLabs ? " with Scribe v3 Live" : ""), so the text is ready about 1.5 s sooner after you stop. If the stream fails, the recording is uploaded as before.")
-            }
-
-            Section {
-                Toggle("Smart transcription", isOn: $smartTranscription)
-                    .onChange(of: smartTranscription) { _, enabled in
-                        settings.setSmartTranscription(enabled)
-                    }
-            } footer: {
-                Text("Removes filler words and applies self-corrections (\"at 2 — actually 3\") as it transcribes. Off = word for word — unless writing rules below are on, which rewrite either way.")
-            }
-
-            Section {
-                Toggle("Apply writing rules", isOn: $cleanupPass)
-                    .onChange(of: cleanupPass) { _, enabled in
-                        guard enabled != settings.smartCleanupPassEnabled else { return }
-                        settings.setSmartCleanupPass(enabled)
-                    }
-                Toggle("Skip cleanup for dictations of 5 seconds or less", isOn: $skipShortCleanup)
-                    .disabled(!cleanupPass)
-                    .onChange(of: skipShortCleanup) { _, enabled in
-                        guard enabled != settings.skipShortDictationCleanup else { return }
-                        settings.setSkipShortDictationCleanup(enabled)
-                    }
-                SearchablePicker("Spelling", selection: $spelling,
-                                 options: SpellingVariant.allCases.map { SearchOption(value: $0, name: $0.name) })
-                .disabled(!cleanupPass)
-                .onChange(of: spelling) { _, variant in
-                    guard variant != settings.spellingVariant else { return }
-                    settings.setSpellingVariant(variant)
-                }
-            } header: {
-                Text("Writing rules")
-            } footer: {
-                Text("A second model rewrites the transcript by these rules: corrections you speak later fix what you said earlier, sentences are split by grammar rather than pauses, and the layout follows what you said: a message stays a message, several requests become a numbered list.")
-            }
-
-            Section("Custom rules") {
                 TextEditor(text: $customRules)
                     .font(.body)
                     .frame(minHeight: 120, maxHeight: 320)
-                    .disabled(!cleanupPass)
                     .onChange(of: customRules) { _, text in
                         settings.setCustomWritingRules(text)
                     }
+            } header: {
+                Text("Custom rules")
+            } footer: {
+                Text("Gemini hears each dictation and writes it in one step, by the built-in writing rules and yours: corrections you speak later fix what you said earlier, grammar is fixed, sentences are split by grammar rather than pauses, and the layout follows what you said. Spelling follows your Mac's region. Words you change after a dictation lands are added to the Dictionary.")
             }
 
             Section {
-                Toggle("Learn from your edits", isOn: $autoLearn)
-                    .onChange(of: autoLearn) { _, enabled in settings.setAutoLearn(enabled) }
                 Toggle("Screen context", isOn: $screenContext)
                     .onChange(of: screenContext) { _, enabled in
                         guard enabled != settings.screenContextEnabled else { return }
                         settings.setScreenContextEnabled(enabled)
                     }
-                Toggle("Fit to existing text", isOn: $fitToExistingText)
-                    .onChange(of: fitToExistingText) { _, enabled in
-                        guard enabled != settings.fitToExistingText else { return }
-                        settings.setFitToExistingText(enabled)
-                    }
                 Toggle("Offer to record calls", isOn: $meetingDetection)
                     .onChange(of: meetingDetection) { _, enabled in settings.setMeetingDetection(enabled) }
-                Toggle("Read names from the screen", isOn: $meetingScreenNames)
-                    .onChange(of: meetingScreenNames) { _, enabled in settings.setMeetingScreenNames(enabled) }
                 TextField("Your name in meeting notes", text: $meetingOwnerName)
                     .onChange(of: meetingOwnerName) { _, name in settings.setMeetingOwnerName(name) }
             } footer: {
-                Text("Words you change after a dictation lands are added to the Dictionary. Screen context sends a snapshot of what you're looking at, taken when dictation starts and when you switch apps, so names and paths on screen are spelled right; it adds about 0.2–0.9 s to a dictation when the writing pass uses it. Fit to existing text sends the text around the cursor with the transcript, so a dictation continues or follows what is already in the field. When a call app or a meeting tab is using the microphone, the pill asks before recording; the Meeting recording shortcut starts and stops a recording at any time. Notes appear under Meetings. Read names from the screen reads the name tags in the call window on this Mac while a meeting records, to name its speakers; no image is kept.")
-            }
-
-            Section {
-                Toggle("Better hearing in loud rooms", isOn: $noiseHandling)
-                    .onChange(of: noiseHandling) { _, enabled in
-                        settings.setExperimentalNoiseHandling(enabled)
-                    }
-                Toggle("Agent mode", isOn: $agentMode)
-                    .onChange(of: agentMode) { _, enabled in settings.setAgentModeEnabled(enabled) }
-                if agentMode {
-                    ShortcutRecorderRow(action: .agent)
-                }
-            } footer: {
-                Text("Loud rooms judges your voice against the actual room noise instead of a fixed level. Agent mode operates your Mac from a spoken command: it sees the screen and clicks, types and opens apps on your behalf. It needs Screen Recording and Accessibility access, and asks before anything that looks like sending, paying or deleting.")
+                Text("Screen context sends a snapshot of what you're looking at, taken when dictation starts and when you switch apps, so names and paths on screen are spelled right; it adds about 0.2–0.9 s to a dictation. When a call app or a meeting tab is using the microphone, the pill asks before recording; the Meeting recording shortcut starts and stops a recording at any time. Notes appear under Meetings. While a meeting records, VoiceiQ reads the name tags in the call window on this Mac to name its speakers; no image is kept.")
             }
         }
         .onAppear { microphones = AudioInputDevices.list() }
@@ -175,24 +95,11 @@ struct DictationPane: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .gtSettingDidChange).receive(on: RunLoop.main)) { note in
             switch note.object as? String {
-            case "liveDictationEnabled": liveTranscription = settings.liveTranscriptionEnabled
-            case "elevenLabsTranscription", KeychainStore.Secret.elevenLabs.settingKey: elevenLabs = settings.transcribesWithElevenLabs
-            case "smartTranscription": smartTranscription = settings.smartTranscriptionEnabled
-            case "agentModeEnabled": agentMode = settings.agentModeEnabled
-            case "smartCleanupPass": cleanupPass = settings.smartCleanupPassEnabled
-            case "skipShortDictationCleanup": skipShortCleanup = settings.skipShortDictationCleanup
             case SettingsStore.customWritingRulesKey: customRules = settings.customWritingRules
-            case "autoLearn": autoLearn = settings.autoLearnEnabled
             case "meetingDetection": meetingDetection = settings.meetingDetectionEnabled
-            // voiceiq://set drives this headlessly in DEBUG — the pane must not show
-            // a stale toggle after the flag moved underneath it.
-            case "experimentalNoiseHandling": noiseHandling = settings.experimentalNoiseHandling
-            case "translationTargetLanguages": translationTargets = settings.translationTargetLanguages
-            case "spellingVariant": spelling = settings.spellingVariant
             case "muteOtherAudioWhileDictating": muteOtherAudio = settings.muteOtherAudioWhileDictating
             case "pauseMediaWhileDictating": pauseMedia = settings.pauseMediaWhileDictating
             case "screenContextEnabled": screenContext = settings.screenContextEnabled
-            case "fitToExistingText": fitToExistingText = settings.fitToExistingText
             case "copyRecoveredToClipboard": copyRecovered = settings.copyRecoveredToClipboard
             case "preferredInputDeviceUID": preferredMicrophone = settings.preferredInputDeviceUID
             default: break
@@ -201,8 +108,8 @@ struct DictationPane: View {
     }
 }
 
-/// The languages the user and their meetings speak, for every transcription
-/// provider (`SettingsStore.spokenLanguages`).
+/// The languages the user speaks (`SettingsStore.spokenLanguages`), sent to
+/// the dictation model as a hint.
 struct SpokenLanguagesSection: View {
     private let settings = SettingsStore()
     @State private var languages = SettingsStore().spokenLanguages
@@ -216,18 +123,18 @@ struct SpokenLanguagesSection: View {
             SearchablePicker("Spoken language", selection: Binding(get: { languages.first ?? "" }, set: {
                 save(SpokenLanguage.choosing(main: $0, in: languages))
             }), options: [SearchOption(value: "", name: "Automatic")] + Self.options(SpokenLanguage.all))
-            .help("The language you speak most, in dictation and meetings. Automatic works it out each time, which can go wrong on a short phrase; pick a main language to add others.")
+            .help("The language you speak most when dictating. Automatic works it out each time, which can go wrong on a short phrase; pick a main language to add others.")
             if let main = languages.first {
                 SearchablePicker("Also spoken", summary: SpokenLanguage.names(languages.dropFirst(), none: "None"),
                                  options: Self.options(SpokenLanguage.all.filter { $0.code != main }),
                                  isSelected: { languages.dropFirst().contains($0) },
                                  toggle: { save(SpokenLanguage.toggling($0, in: languages)) })
-                .help("Other languages you or the people in your meetings speak, in whole sentences or mixed into the main language. Each recording is transcribed once, with each language in its own script. A short or accented phrase can still come out as the main language. With ElevenLabs, switch the main language for a stretch in another one from the menu bar's Spoken Language menu.")
+                .help("Other languages you speak, in whole sentences or mixed into the main language. Each is written in its own script, never translated.")
             }
         } header: {
             Text("Languages")
         } footer: {
-            Text("ElevenLabs and OpenAI listen for these languages. Gemini works out each language and every switch between them by itself.")
+            Text("Dictation is told to expect these languages. Meetings work out each language and every switch between them by themselves.")
         }
         .onReceive(NotificationCenter.default.publisher(for: .gtSettingDidChange).receive(on: RunLoop.main)) { _ in
             languages = settings.spokenLanguages
@@ -237,6 +144,5 @@ struct SpokenLanguagesSection: View {
     private func save(_ codes: [String]) {
         languages = codes
         settings.setSpokenLanguages(codes)
-        UserDefaults.standard.removeObject(forKey: StatusItemController.languagesBeforeAutomatic)
     }
 }

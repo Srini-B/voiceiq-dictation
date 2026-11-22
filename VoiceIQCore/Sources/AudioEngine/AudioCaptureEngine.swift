@@ -52,7 +52,6 @@ public final class AudioCaptureEngine: AudioCapturing, @unchecked Sendable {
     private var configObserver: NSObjectProtocol?
 
     private let queue = DispatchQueue(label: "io.blue.voiceiq.audio.write", qos: .userInitiated)
-    private var pcmSink: (@Sendable (Data) -> Void)?
     private let stateLock = NSLock()
     private var framesWritten: Int64 = 0
     private var stopped = false
@@ -101,10 +100,6 @@ public final class AudioCaptureEngine: AudioCapturing, @unchecked Sendable {
     public static let noAudioMessage = "Mic didn't start"
 
     public init() {}
-
-    public func setPCMSink(_ sink: (@Sendable (Data) -> Void)?) {
-        queue.sync { pcmSink = sink }
-    }
 
     // MARK: - Lifecycle
 
@@ -560,9 +555,9 @@ public final class AudioCaptureEngine: AudioCapturing, @unchecked Sendable {
         let hostTime = timestamp.mFlags.contains(.hostTimeValid) ? Self.nanoseconds(fromHostTime: timestamp.mHostTime) : nil
         // AVAudioPCMBuffer is not Sendable. This copy is never touched again
         // here; only the write queue reads it from now on.
-        nonisolated(unsafe) let handed = buffer
+        nonisolated(unsafe) let copy = buffer
         queue.async { [weak self] in
-            self?.ingest(handed, capturedAt: hostTime)
+            self?.ingest(copy, capturedAt: hostTime)
         }
     }
 
@@ -616,7 +611,7 @@ public final class AudioCaptureEngine: AudioCapturing, @unchecked Sendable {
         write(out, with: writer)
     }
 
-    /// Write queue. Appends converted audio to the file and the live stream.
+    /// Write queue. Appends converted audio to the file.
     private func write(_ out: AVAudioPCMBuffer, with writer: CAFWriter) {
         recordWrittenPeak(out)
         do {
@@ -625,9 +620,6 @@ public final class AudioCaptureEngine: AudioCapturing, @unchecked Sendable {
             framesWritten += Int64(out.frameLength)
             consecutiveWriteFailures = 0
             stateLock.unlock()
-            if let sink = pcmSink, let samples = out.int16ChannelData?[0] {
-                sink(Data(bytes: samples, count: Int(out.frameLength) * 2))
-            }
             // A stop() waiting on the tail can finish once this buffer reaches
             // key-up.
             resumeTailWaiterIfCaughtUp()

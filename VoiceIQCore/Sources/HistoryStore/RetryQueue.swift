@@ -208,7 +208,7 @@ public final class RetryQueue {
             meta.modelID = result.modelID
             meta.steps = nil // the earlier attempt's steps did not produce this text
             meta.errorCode = nil
-            meta.errorMessage = result.cleanupNote
+            meta.errorMessage = nil
             // .recovered, NOT .awaitingChip: the text was never put on the
             // clipboard, so no chip may promise "Ready to paste". A finished
             // dictation keeps its status: it was delivered, just differently.

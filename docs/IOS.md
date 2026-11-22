@@ -4,7 +4,7 @@ A small keyboard with VoiceiQ dictation on one tap, and a cursor control
 panel. The keyboard never records or calls a model. It sends
 commands to the VoiceiQ app, which records, transcribes with your own API key,
 and hands the text back.
-Like the Mac, it runs Gemini or OpenAI models, with that provider's own key.
+Like the Mac, it runs Gemini models with your own Gemini API key.
 
 ## Targets
 
@@ -33,12 +33,12 @@ second, extension-safe library in the same package.
 ```
 Keyboard ──command + Darwin ping──▶ App Group ──▶ App (background audio)
    ▲                                                   │ DictationCoordinator
-   └──────snapshot + Darwin ping ◀── App Group ◀───────┘ → Gemini / OpenAI
+   └──────snapshot + Darwin ping ◀── App Group ◀───────┘ → Gemini
 ```
 
 `VoiceIQBridge` defines the protocol:
 
-- `KeyboardCommand` (`start` with a mode, `stop`, `cancel`), written only by the keyboard.
+- `KeyboardCommand` (`start`, `stop`, `cancel`), written only by the keyboard.
 - `SessionSnapshot` (`off`, `warm`, `recording`, `processing`, plus the last
   `Delivery` and `Notice`), written only by the app.
 - `ActivityRequest`, written only by the Live Activity buttons.
@@ -90,10 +90,7 @@ because pings are dropped while a process is suspended.
    ("processed in 94.2s (background)"), and when the app was opened during
    processing.
 
-Ask shows the answer in a panel with Insert and Copy. Translate inserts the
-translation into the target language from Settings › Dictation (the iPhone
-picker sets the first of the Mac's up-to-three targets; the others are kept
-and used when the first matches the spoken language). Settings › Privacy has
+Settings › Privacy has
 the same "Keep dictations" picker as the Mac (`transcriptRetentionDays`);
 `AppModel` runs `RetentionPolicy.purge()` on launch.
 
@@ -307,8 +304,7 @@ Permissions can be taken back after onboarding (2026-09-30):
 Onboarding saves its page in `MobileSettings.onboardingStep`,
 so a trip to Settings resumes on the same page.
 
-Onboarding has four pages: welcome, API keys (a Gemini or OpenAI provider
-picker with that provider's key, plus the optional TinyFish key), permissions
+Onboarding has four pages: welcome, the Gemini API key, permissions
 (microphone and keyboard together), and a Try it field.
 
 ### Design system
@@ -337,9 +333,8 @@ far-side reference, so `MeetingTranscriber.callAudio` skips echo cancellation
 (the WebRTC AEC3 xcframework ships a macOS slice only and is not linked on
 iOS). Speaker linking, meeting-type notes, suggested speaker names and Redo
 (notes only, or transcript and notes) work as on the Mac. Dictation is refused
-while notes record. Notes are transcribed by the provider, or by ElevenLabs
-Scribe v3 when Provider & Keys picks ElevenLabs under Transcription; then the
-recorder card also shows the last lines Scribe v3 Live heard.
+while notes record. Notes are transcribed by Gemini after you stop, as on the
+Mac; there is no live transcript while they record.
 
 ### Keyboard
 
@@ -363,8 +358,8 @@ globe key switches to it.
   goes back to the voice panel), Paste last, space, delete (repeats while
   held) and return.
 
-The keyboard always sends Dictate commands (`KeyboardCommand.mode` keeps its
-`.dictate` default) and types every result it receives.
+The keyboard sends only dictation commands and types every result it
+receives.
 
 **Recording strip** (`RecordingStrip`, `LevelGlow`), modelled on Gboard's
 Rambler. In place of the mic bar: Cancel (x) on the left, a red stop button on the
@@ -378,13 +373,8 @@ one per mic level it writes, at most every 0.06 s, smoothed with a fast attack
 and slow release, newest 256 kept) and publishes them as
 `SharedStore.levelBars`; the keyboard redraws every 0.06 s. A keyboard that
 appears mid-dictation, after an app switch or after being hidden, shows the
-dictation so far instead of starting empty. With Real-time transcription on,
-the words heard so far (`SharedStore.liveText`, from the provider's live
-socket: Gemini Live, OpenAI Realtime, or Scribe v3 Live while ElevenLabs
-transcribes) replace the time and the glow once they arrive: one line, newest
-words last, the start cut off. The words shown are a preview; the final text
-comes from the live socket's final result, or from the saved recording when
-that is incomplete. While the text is written the strip shows only a spinner
+dictation so far instead of starting empty. There is no live text: the words
+arrive once the dictation is written. While the text is written the strip shows only a spinner
 with "Writing…". Reduce Motion holds the glow flat at the
 latest level. The glow is a plain `Shape` on a 0.06 s timer: a `Canvas`
 inside `TimelineView(.animation)` drew in the Simulator but nothing on an
@@ -453,7 +443,7 @@ Every local edit and every change from iCloud merges the two copies with
 
 The built-in writing rules (`DefaultWritingRules`) ship with the app and are
 not shown or editable, so an update changes them on every device. Settings
-shows only "Custom rules", which the cleanup prompt appends after the
+shows only "Custom rules", which the dictation prompt appends after the
 built-in rules. The custom rules are the same on the Mac and the iPhone,
 with no setting. `WritingRulesSync` (VoiceIQCore) keeps them as a second
 value, `writingRules.v2`, in the same key-value store. The value is the
@@ -548,22 +538,22 @@ runs. Everything needs Full Access.
 | Dictation key, hands-free | Mic button in the keyboard |
 | Pill | Keyboard status plus Dynamic Island |
 | AX and paste insertion | `textDocumentProxy.insertText` |
-| Ask Anything, Translate, Paste last | Keyboard modes and Paste last |
-| Provider (Gemini or OpenAI), ElevenLabs, TinyFish | Same, in Settings › Provider & Keys and the iOS Keychain. With an ElevenLabs key stored, a Transcription picker (provider or ElevenLabs) appears there. Each key card carries the service's favicon from `Assets.xcassets/Provider*.imageset` (`BrandTile`); the OpenAI mark is a template image so it takes the ink colour in dark mode |
+| Paste last | Paste last |
+| Gemini API key | Same, in Settings › API Key and the iOS Keychain. The key card carries Gemini's favicon from `Assets.xcassets/ProviderGemini.imageset` (`BrandTile`) |
 | History stats: words, dictations, WPM, audio time, time saved, day streak, with a period menu | Statistics (`StatsView`), opened from the row above History's days or from Home's stats grid. Same `HistoryStore.stats(period:)` and the same remembered period (`historyStatsPeriod`); the Mac's streak tooltip (longest streak, active days) is a line under the tiles. Home's grid shows all time |
 | Dictionary with search, CSV and Auto-learned | Same, synced through iCloud, plus adding a selection or a copied word from the keyboard |
-| Writing rules (with Spelling), smart transcription, real-time transcription (Gemini Live, OpenAI Realtime or Scribe v3 Live), noise handling, spoken languages | Same settings |
+| Custom rules, spoken languages; spelling from the region | Same: custom rules and Languages in Settings › Dictation, spelling from the iPhone's region |
 | `[transcription] timing:` and `[session] timing` debug log lines | Same lines, in the app's debug log file |
 | Microphone picker | "Use iPhone microphone" (prefer the built-in mic over a headset) |
 | History, retry, crash recovery, retention | Same. The detail shows Pipeline, the seconds from Stop to the text being ready (`DictationRecord.pipelineSeconds`, as on the Mac; absent for dictations synced from the Mac), the cost and one row per stage and model (stage, model, call count when above one, summed cost; `UsageLine.lines` over `UsageStore.records(forSession:)`), and Copy turns into "Copied" with a checkmark and a success haptic for 1.5 s |
-| Cost with the Gemini and OpenAI toggle (plus Claude while it has rows), periods and Detailed | Same |
-| Advanced: the selected provider's models | Same, plus the session log |
+| Cost for Gemini (plus OpenAI, ElevenLabs or Claude while History has calls booked to them), periods and Detailed | Same |
+| Advanced: Dictation model and Meeting model | Same, as Dictation and Notes, plus the session log |
 | Screen context | Not on iOS: an app cannot capture other apps' screens (`PlatformStubs+iOS.swift`) |
-| Fit to existing text | Not yet: the keyboard can read the text around the cursor, but does not hand it to the app |
-| Learn from your edits | Not yet: needs the keyboard to read the field again after the text lands |
-| Call detection, read names from the screen, Agent mode | Not on iOS: an app cannot see other apps' microphone use, screen or windows |
+| Text around the cursor sent with each dictation | Not yet: the keyboard reads it to fit spaces and capitals, but does not hand it to the app |
+| Learning from your edits | Not yet: needs the keyboard to read the field again after the text lands |
+| Call detection, names read from the call screen | Not on iOS: an app cannot see other apps' microphone use, screen or windows |
 | Mute other audio, pause Music and Spotify, sounds, resting indicator, hide pill from screen sharing, copy recovered dictations | Not on iOS |
-| Shortcuts, up to three Translate targets | Keyboard modes and one Translate target |
+| Shortcuts (Paste last transcript, Meeting recording) | Paste last in the keyboard; Record in Notes |
 | Not on the Mac | Keep mic on after dictating, Action Button |
 
 ## Building

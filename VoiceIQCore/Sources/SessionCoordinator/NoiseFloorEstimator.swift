@@ -7,11 +7,8 @@ import Foundation
 /// clears it, which is why noise doesn't merely degrade accuracy — it turns
 /// "nobody spoke" into a hard failure.
 ///
-/// **This type always runs, and it decides nothing.** It observes the level
-/// stream and records numbers into `SessionMeta`; whether anything acts on them
-/// is the caller's business, gated behind `experimentalNoiseHandling`. Ships
-/// unflagged precisely so the calibration data accumulates before the behaviour
-/// that depends on it does.
+/// **This type decides nothing.** It observes the level stream and records
+/// numbers into `SessionMeta`; `DictationCoordinator` acts on them.
 public struct NoiseFloorEstimator: Sendable {
     /// Below this many samples the percentile is meaningless — with levels
     /// arriving at ~10 Hz this is ~0.8s of audio.

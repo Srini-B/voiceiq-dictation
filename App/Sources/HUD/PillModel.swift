@@ -11,9 +11,6 @@ enum PillState: Equatable {
     case success(words: Int?)
     /// Neutral informational chip (coaching hint, copied-to-clipboard, offline…).
     case notice(String)
-    case answer(String)
-    /// The agent session panel. Its content lives in `PillModel.agent`.
-    case agent
     /// Error styling: errorContainer surface + "saved to History" framing.
     case error(String)
     /// A call was noticed; the pill offers to record it. The string names the app or site.
@@ -37,14 +34,10 @@ final class LevelSource {
 final class PillModel: ObservableObject {
     @Published var state: PillState = .idleDot
     @Published var elapsed: TimeInterval = 0
-    /// A provisional preview, never the result to insert.
-    @Published var partial = ""
     /// Still-working slow state (>3s in processing — TimeoutPolicy.slowStateUI).
     @Published var slow = false
     /// `SettingsStore.pillAnchor`, mirrored so the pill hugs the panel edge
     /// the anchor points at instead of floating in the panel's middle.
     @Published var anchor: Double = SettingsStore().pillAnchor
     let level = LevelSource()
-    /// The agent session shown while `state == .agent`.
-    let agent = AgentPanelModel()
 }

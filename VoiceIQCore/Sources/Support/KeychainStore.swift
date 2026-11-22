@@ -14,50 +14,33 @@ public enum KeychainStore {
     /// One keychain item per secret. `rawValue` is the `kSecAttrAccount`.
     public enum Secret: String {
         case gemini = "gemini-api-key"
-        case tinyFish = "tinyfish-api-key"
-        case openAI = "openai-api-key"
-        /// The same account the 2026-09 and 2026-10 builds used, so a key
-        /// saved then works again.
-        case elevenLabs = "elevenlabs-api-key"
-        case agentProvider = "agent-provider-api-key"
 
-        var label: String {
-            switch self {
-            case .gemini: return "VoiceiQ — Gemini API key"
-            case .tinyFish: return "VoiceiQ — TinyFish API key"
-            case .openAI: return "VoiceiQ — OpenAI API key"
-            case .elevenLabs: return "VoiceiQ — ElevenLabs API key"
-            case .agentProvider: return "VoiceiQ — Agent provider API key"
-            }
-        }
+        var label: String { "VoiceiQ — Gemini API key" }
 
         /// `object` of `.gtSettingDidChange` when this secret changes.
-        public var settingKey: String {
-            switch self {
-            case .gemini: return "apiKey"
-            case .tinyFish: return "tinyFishKey"
-            case .openAI: return "openAIKey"
-            case .elevenLabs: return "elevenLabsKey"
-            case .agentProvider: return "agentProviderKey"
-            }
+        public var settingKey: String { "apiKey" }
+    }
+
+    /// Accounts of the keys older builds stored for OpenAI, ElevenLabs,
+    /// Agent mode's custom provider and TinyFish (Ask Anything's web search).
+    static let retiredAccounts = ["openai-api-key", "elevenlabs-api-key", "agent-provider-api-key", "tinyfish-api-key"]
+
+    /// Deletes the retired keys; see `SettingsStore.removeRetiredSettingsOnce`.
+    public static func deleteRetiredKeys() {
+        for account in retiredAccounts where delete(account: account, service: service) {
+            Log.permissions.info("KeychainStore: deleted retired \(account, privacy: .public)")
         }
     }
 
-    // MARK: - Agent provider override
-
-    public static func loadAgentProviderKey() -> String? { load(.agentProvider, service: service) }
-
-    @discardableResult
-    public static func saveAgentProviderKey(_ key: String) -> Bool { save(key, for: .agentProvider) }
-
-    @discardableResult
-    public static func deleteAgentProviderKey(notify: Bool = false) -> Bool { delete(.agentProvider, notify: notify) }
-
     private static func baseQuery(service: String = service, secret: Secret, dataProtection: Bool) -> [String: Any] {
+        baseQuery(service: service, account: secret.rawValue, dataProtection: dataProtection)
+    }
+
+    private static func baseQuery(service: String, account: String, dataProtection: Bool) -> [String: Any] {
         var query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
-            kSecAttrAccount as String: secret.rawValue,
+            kSecAttrAccount as String: account,
         ]
         if dataProtection {
             query[kSecUseDataProtectionKeychain as String] = true
@@ -83,47 +66,8 @@ public enum KeychainStore {
     @discardableResult
     public static func deleteAPIKey(notify: Bool = false) -> Bool { delete(.gemini, notify: notify) }
 
-    // MARK: - TinyFish
-
-    public static func loadTinyFishKey() -> String? { load(.tinyFish, service: service) }
-
-    @discardableResult
-    public static func saveTinyFishKey(_ key: String) -> Bool { save(key, for: .tinyFish) }
-
-    @discardableResult
-    public static func deleteTinyFishKey(notify: Bool = false) -> Bool { delete(.tinyFish, notify: notify) }
-
-    // MARK: - OpenAI
-
-    public static func loadOpenAIKey() -> String? { load(.openAI, service: service) }
-
-    @discardableResult
-    public static func saveOpenAIKey(_ key: String) -> Bool { save(key, for: .openAI) }
-
-    @discardableResult
-    public static func deleteOpenAIKey(notify: Bool = false) -> Bool { delete(.openAI, notify: notify) }
-
-    // MARK: - Any secret
-
-    public static func loadKey(_ secret: Secret) -> String? { load(secret, service: service) }
-
-    @discardableResult
-    public static func saveKey(_ secret: Secret, _ key: String) -> Bool { save(key, for: secret) }
-
-    @discardableResult
-    public static func deleteKey(_ secret: Secret, notify: Bool = false) -> Bool { delete(secret, notify: notify) }
-
-    /// Whether the provider's own key is stored.
-    public static func hasKey(for provider: ModelProvider) -> Bool {
-        switch provider {
-        case .gemini: return loadAPIKey() != nil
-        case .openAI: return loadOpenAIKey() != nil
-        }
-    }
-
-    /// Whether the selected provider can be reached at all; a Gemini key
-    /// alone does not let an OpenAI selection work.
-    public static var hasModelKey: Bool { hasKey(for: SettingsStore().preferredProvider) }
+    /// Whether a Gemini key is stored.
+    public static var hasModelKey: Bool { loadAPIKey() != nil }
 
     // MARK: - Generic
 
@@ -177,9 +121,14 @@ public enum KeychainStore {
 
     @discardableResult
     private static func delete(_ secret: Secret, service: String) -> Bool {
+        delete(account: secret.rawValue, service: service)
+    }
+
+    @discardableResult
+    private static func delete(account: String, service: String) -> Bool {
         var deleted = false
         for dataProtection in [true, false] {
-            let status = SecItemDelete(baseQuery(service: service, secret: secret, dataProtection: dataProtection) as CFDictionary)
+            let status = SecItemDelete(baseQuery(service: service, account: account, dataProtection: dataProtection) as CFDictionary)
             deleted = deleted || status == errSecSuccess
         }
         return deleted

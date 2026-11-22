@@ -89,27 +89,18 @@ public struct SessionMeta: Codable, Equatable, Sendable {
 public struct DictationSteps: Codable, Equatable, Sendable {
     /// Trailing speech kept after key-up, then the microphone teardown.
     public var finishRecording: TimeInterval
-    /// The wait for the live stream's last words, or the upload: encoding
-    /// and the transcription request.
+    /// Encoding and the one model request that hears the audio and writes
+    /// the text.
     public var transcription: TimeInterval
-    /// True when the live stream supplied the transcript.
-    public var live: Bool
-    /// The writing model's request, its retries and the checks on its
-    /// answer. Nil when no writing model ran.
+    /// The separate writing model's request. Only dictations from before
+    /// 0.7.12, which transcribed and then cleaned up in two calls, have it.
     public var writing: TimeInterval?
-    /// Saving the result and typing it. Nil when it went to the answer card
-    /// instead.
+    /// Saving the result and typing it.
     public var insert: TimeInterval?
-    /// Saving the result and handing it to the answer card or the agent, for
-    /// results that are not typed.
-    public var handoff: TimeInterval?
 
-    public init(finishRecording: TimeInterval, transcription: TimeInterval, live: Bool,
-                writing: TimeInterval?, insert: TimeInterval? = nil) {
+    public init(finishRecording: TimeInterval, transcription: TimeInterval, insert: TimeInterval? = nil) {
         self.finishRecording = finishRecording
         self.transcription = transcription
-        self.live = live
-        self.writing = writing
         self.insert = insert
     }
 }
@@ -125,11 +116,10 @@ public extension DictationSteps {
         func seconds(_ value: TimeInterval) -> String { String(format: "%.2fs", value) }
         var rows = [
             Row(label: "Finish recording", value: seconds(finishRecording)),
-            Row(label: live ? "Transcription (live)" : "Transcription", value: seconds(transcription)),
-            Row(label: "Writing model", value: writing.map(seconds) ?? "skipped"),
+            Row(label: "Transcription", value: seconds(transcription)),
         ]
+        if let writing { rows.append(Row(label: "Writing model", value: seconds(writing))) }
         if let insert { rows.append(Row(label: "Insert", value: seconds(insert))) }
-        if let handoff { rows.append(Row(label: "Hand-off", value: seconds(handoff))) }
         return rows
     }
 }

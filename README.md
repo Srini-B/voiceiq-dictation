@@ -6,7 +6,7 @@
 
 **Press a key. Speak. It types.**
 
-Smart dictation, Ask Anything, Translate, and meeting notes for macOS and iPhone, on Gemini or OpenAI with your own keys.
+Smart dictation and meeting notes for macOS and iPhone, on Google Gemini with your own key.
 
 </div>
 
@@ -28,14 +28,11 @@ while you talk, and a History window that proves nothing was ever lost.
 | --- | --- |
 | **Dictation key** (default `fn`) | One press starts, one press finishes. Hands-free, no holding. A bare modifier or a combination like ⌥D. |
 | **⌘Esc** | Cancels. A bare `Esc` goes to the app you are in. Anything over 10 seconds is still kept in History. |
-| **⌃⌥A** | Ask Anything. Speak a question or a command over selected text. |
-| **⌃⌥T** | Translate. Speak in any language; the target language is typed. |
 | **⌥M** | Start or stop meeting notes. |
-| **⌘⇧V** | Paste the last transcript or answer again. |
+| **⌘⇧V** | Paste the last transcript again. |
 
 Every key is editable in Settings → Dictation, and a shortcut can require the
-left or the right modifier only. The dictation key also stops an Ask Anything or
-Translate in progress.
+left or the right modifier only.
 
 ## What makes it different
 
@@ -50,13 +47,13 @@ Every failure is retryable from History, and Retry transcribes any dictation aga
 listening until you actually stop.
 
 **It is private by architecture.** Your voice goes from your Mac straight to
-the provider you choose with *your* key: Gemini or OpenAI, or, if you add an
-ElevenLabs key and pick it as the transcription provider, ElevenLabs Scribe v3 for the transcription. No middleman server, no
-account, no analytics, no keystroke logging — one network host per dictation step,
-and you can read every line of the code that talks to it. Screen context (a few downscaled screenshots sent with each
-dictation so on-screen names and paths are spelled right) can be switched off
-in Settings → Dictation, and so can Fit to existing text (the text around the
-cursor, sent so a dictation continues or follows what is already in the field).
+Google's Gemini API with *your* key. No middleman server, no account, no
+analytics, no keystroke logging — one network host, and you can read every
+line of the code that talks to it. Each dictation also sends the app, window
+and page you are in and the text around the cursor, so the dictation fits
+what is already in the field. Screen context (a few downscaled screenshots
+sent with each dictation so on-screen names and paths are spelled right) can
+be switched off in Settings → Dictation.
 See [PRIVACY.md](docs/PRIVACY.md).
 
 **Your jargon, spelled right.** Names and product terms go in the Dictionary and
@@ -66,29 +63,14 @@ after VoiceiQ types it and the correction is learned into the Dictionary on its 
 Dictionary syncs between the Mac and iPhone through your iCloud account, and the
 iPhone keyboard adds a selected or copied word in one tap.
 
-**It writes the way you meant it.** A writing-rules pass runs on every
-transcript: "scratch that", "change the first point to…" and other mid-dictation
-instructions become edits, run-on speech gets sentence breaks, and your own
-rules from Settings → Dictation are applied. Dictate for as long as you like;
-there is no time limit.
-
-**Ask Anything and Translate.** Select text (optional), press ⌃⌥A, and ask
-("make this shorter", "what does this error mean"); the answer opens in the
-pill, with Markdown rendered and a Copy button. An instruction that edits an
-editable selection ("make this shorter", "fix the grammar") replaces the
-selection in place instead. Each
-question stands alone. Add a free [TinyFish](https://agent.tinyfish.ai/api-keys)
-API key in Settings → Advanced and questions that need current information
-(news, prices, releases) are answered from a live web search, with sources
-linked. Press ⌃⌥T to dictate in any language and have it typed in
-a target language. Settings → Dictation takes up to three targets from the
-searchable list (99 languages); the first one that is not the language you
-spoke is used, so "English, Tamil" translates English speech into Tamil and
-anything else into English. If the model cannot translate it, the pill says
-so and nothing is inserted. ⌘⇧V pastes the last transcript or answer
-again. All three shortcuts are editable and can require either, left, or right
-modifier keys. Plain dictation is language-agnostic: speak in any language, or
-mix them mid-sentence, and the text stays in the language you used.
+**It writes the way you meant it.** One Gemini call hears the recording and
+writes the text by the built-in writing rules: "scratch that", "change the
+first point to…" and other mid-dictation instructions become edits, grammar is
+fixed, run-on speech gets sentence breaks, and your own rules from Settings →
+Dictation are applied. Spelling follows your Mac's region (en-GB, en-IN or
+en-US, for example). Dictate for as long as you like; there is no time limit.
+Plain dictation is language-agnostic: speak in any language, or mix them
+mid-sentence, and the text stays in the language you used.
 
 **Stays out of your way.** Other audio is muted while you dictate and restored
 after (switch it off in Settings → Dictation). Pick a preferred microphone or
@@ -99,18 +81,16 @@ Webex, or a Meet/Teams/Zoom tab in any browser starts a call, the pill offers to
 record it. Accept, or press ⌥M at any time, and VoiceiQ records both sides.
 Press ⌥M again (or the pill's stop button) to finish: you get a
 speaker-labelled transcript plus a summary, decisions, and owned action items
-under Settings → Meetings. Recording never stops on its own. Meetings run on
-the selected provider, or on the other provider when only its key is saved,
-and are transcribed by ElevenLabs Scribe v3 instead when it is the
-transcription provider.
+under Settings → Meetings. Recording never stops on its own. There is no live
+transcript while it records; the transcript is written when you stop.
 With no usable key the recording is kept and marked failed with the reason,
 ready to Retry once a key is added.
 
-**Cost Analysis.** Every model call is metered: tokens or audio seconds from the
-API response, priced at the provider's list prices. Settings → Cost Analysis shows today, this week, this month, and all
-time, broken down by action and by model, for Gemini, OpenAI or ElevenLabs (a
-toggle switches between them, with Claude added while there is spend from
-when it was a provider); each dictation in History shows what it cost. Details in
+**Cost Analysis.** Every model call is metered: tokens from the API response,
+priced at Google's list prices. Settings → Cost Analysis shows today, this week, this month, and all
+time, broken down by action and by model, for Gemini (OpenAI, ElevenLabs and
+Claude get a row only while History still holds calls booked to them from
+when they were providers); each dictation in History shows what it cost. Details in
 [docs/COST_TRACKING.md](docs/COST_TRACKING.md).
 
 ## Setup
@@ -119,11 +99,10 @@ Build the app (see Development below), move `VoiceiQ.app` into
 **Applications**, and launch it. Setup takes about two minutes and the app walks
 you through it:
 
-1. **Pick a provider and paste its key** — Gemini (get a key at
-   [Google AI Studio](https://aistudio.google.com/apikey)) or OpenAI (get one at
-   [platform.openai.com](https://platform.openai.com/api-keys)). The key is
-   stored in your macOS Keychain and only ever sent to that provider. You can
-   switch provider later in Settings → Advanced.
+1. **Paste a Gemini API key** — get one at
+   [Google AI Studio](https://aistudio.google.com/apikey). The key is stored
+   in your macOS Keychain and only ever sent to Google. You can change it
+   later in Settings → Advanced.
 2. **Allow the microphone** — say hello and it advances by itself.
 3. **Allow Accessibility** — macOS requires this for any app that types into
    another app.
@@ -131,32 +110,33 @@ you through it:
    ride along with each dictation so on-screen names and paths are spelled right.
 5. **Press the dictation key and talk.**
 
-**Cost:** you pay the provider for what you dictate, at
-[Gemini API pricing](https://ai.google.dev/pricing) (a free tier exists) or
-[OpenAI API pricing](https://developers.openai.com/api/docs/pricing); a
+**Cost:** you pay Google for what you dictate, at
+[Gemini API pricing](https://ai.google.dev/pricing) (a free tier exists); a
 typical dictation is a few seconds of audio. VoiceiQ itself is free and has no account.
 
 **Models:**
 
-| | Gemini | OpenAI |
-| --- | --- | --- |
-| Transcription | `gemini-3.5-transcribe` | `gpt-transcribe` |
-| Writing rules, Ask Anything, Translate, meeting notes | `gemini-3.8-flash` | `gpt-6.1-terra` |
-| Meeting speakers | `gemini-3.5-transcribe` | `gpt-4o-transcribe-diarize` |
+| | Model |
+| --- | --- |
+| Dictation | `gemini-3.8-flash` |
+| Meeting transcript and speakers | `gemini-3.5-transcribe` |
+| Meeting notes and meeting chat | `gemini-3.8-flash` |
 
-Every dictation is a transcription followed, with writing rules on, by a
-writing-rules pass. Screenshots go only to the writing model.
-Settings → Advanced can pin other model names for either provider.
+Every dictation is one call: the model hears the recording and writes the
+text, with any screenshots in the same request.
+Settings → Advanced can pin other model names ("Dictation model" and
+"Meeting model").
 
 ## How it works
 
 ```
-key ─▶ capture (CAF on disk from t=0) ─▶ key ─▶ FLAC ─▶ transcribe (Gemini or OpenAI)
-                    │  (Gemini/OpenAI live socket streams text) │  (chunked past 10 min)
-                    ▼                                           ▼
-   cursor ◀─ insert (AX → paste → clipboard) ◀─ validate ◀─ writing-rules pass
-      │                                           (gemini-3.8-flash or gpt-6.1-terra, with screenshots)
-      ▼                                                         │
+key ─▶ capture (CAF on disk from t=0) ─▶ key ─▶ FLAC ─▶ gemini-3.8-flash
+                                                          (hears + writes, one call;
+                                                           screenshots, chunked past 10 min)
+                                                                │
+   cursor ◀─ insert (AX → paste → clipboard) ◀─ dictionary replacements
+      │                                                         │
+      ▼                                                         ▼
    learn from edits ─▶ Dictionary                  History (SQLite) + usage ledger
 ```
 
@@ -171,8 +151,9 @@ A few decisions worth knowing about, because they are what make it feel solid:
 - **Insertion is a ladder**: Accessibility API first (no clipboard involved), then
   a guarded paste that restores your clipboard, then a "copied — press ⌘V" chip.
   It never blind-pastes into an app that stole focus mid-flight.
-- **A validation gate** guards the writing-rules pass, catching the classic failure where the model *answers*
-  your audio instead of transcribing it, and falls back to the raw transcript.
+- **The answer is structured.** The model returns JSON `{"text": ...}`, which
+  keeps its working out of the inserted text, and the prompt has it write
+  down a spoken instruction rather than obey it.
 - **The paths that can lose words are tested.** `VoiceIQCore` is a headless Swift
   package holding the state machine, hotkey grammar, audio, transcription,
   formatting, insertion and history — so the failure modes above are exercised
@@ -194,10 +175,10 @@ where you were typing.
 - **One trip to the app, once.** The first tap starts a background session and
   sends you back to the app you were in. After that the mic starts in place,
   and the session shows in the Dynamic Island until you end it.
-- **Same settings as the Mac.** Gemini or OpenAI with your own key (stored
-  in the iOS Keychain), dictionary, writing rules, Ask Anything, Translate,
-  History and Cost.
-- **Meetings are a recorder.** Record in the app, stop, and the notes are
+- **Same settings as the Mac.** Gemini with your own key (stored in the iOS
+  Keychain, under Settings › API Key), dictionary, writing rules, History and
+  Cost.
+- **Meetings are a recorder (Notes on iPhone).** Record in the app, stop, and the notes are
   written with the same pipeline as on the Mac. The iPhone records the room
   mic only, because iOS does not let an app capture call audio.
 
@@ -241,8 +222,8 @@ iOS/            iPhone app, voice keyboard extension, Live Activity
 VoiceIQCore/        all engine logic, headless and testable
   HotkeyEngine/     CGEventTap + the pure hold/lock/cancel grammar
   AudioEngine/      crash-safe CAF capture, device changes, prewarming
-  TranscriptionClient/  Gemini and OpenAI calls, retries, FLAC
-  FormattingPipeline/   cleanup prompt, validation gate, dictionary rules
+  TranscriptionClient/  Gemini calls, retries, FLAC
+  FormattingPipeline/   dictation prompt, writing rules, dictionary replacements
   InsertionEngine/      the AX → paste → clipboard ladder
   HistoryStore/         GRDB index, recovery, retry queue, retention
   MeetingEngine/        call detection, mic + system audio taps, diarized notes

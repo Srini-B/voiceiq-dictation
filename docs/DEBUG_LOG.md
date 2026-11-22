@@ -20,7 +20,7 @@ Settings › Advanced › **Write a debug log**, on the Mac and on iOS. Off by
 default.
 
 While it is on, every message the app logs through `Log` (dictation,
-transcription with each provider, real-time sessions, meetings, insertion,
+transcription, meetings, insertion,
 history sync, dictionary and writing-rule sync, usage, permissions, errors,
 and the timing line of every model request) is also written to a file. So
 are:
@@ -49,22 +49,19 @@ host process adds its process id (`debug-2026-11-12-chrome-host-4211.log`),
 since Chrome starts one per profile. Two processes never write the same file. A line looks like:
 
 ```text
-2026-11-12 14:03:22.481 app notice [transcription] call transcribe via gemini (gemini-3.8-flash) id=… attempt=1 h2 ok in 812ms, first byte 640ms, sent 52311 bytes
+2026-11-22 14:03:22.481 app notice [transcription] call transcribe (gemini-3.8-flash) id=… attempt=1 h2 ok in 812ms, first byte 640ms, sent 52311 bytes
 ```
 
-A dictation whose recording was uploaded and transcribed also gets a
-`[transcription] timing:` line that splits the work after the microphone
-stops. It is written once the writing pass ends, also when that pass fails
-(`writing failed after …ms`); `writing skipped` means no writing model ran,
-as for a short dictation. A dictation whose text comes from the live stream
-has no such line, and an upload that fails before a transcript has none
-either. Every dictation that reaches insertion, or hands its text to Ask or
-Agent, gets one `[session] timing` line from key-up to the result; a
-dictation that fails before then has none:
+A dictation also gets a `[transcription] timing:` line once its one Gemini
+call ends: the FLAC encode, the dictation call that hears the audio and
+writes the text, the model, the word count and the audio length. An upload
+that fails before any text has none. Every dictation that reaches insertion
+gets one `[session] timing` line from key-up to the result; a dictation that
+fails before then has none:
 
 ```text
-… app notice [transcription] timing: encode 31ms, transcribe 1604ms (scribe_v3/smart), writing 3012ms, 41 words, 18.2s audio
-… app notice [session] timing 26A1A1D4-…: finalize 233ms, upload 1638ms, writing 3012ms, insert 133ms, key-up to done 5016ms
+… app notice [transcription] timing: encode 31ms, dictation call 2604ms (gemini-3.8-flash), 41 words, 18.2s audio
+… app notice [session] timing 26A1A1D4-…: finalize 233ms, upload 2638ms, insert 133ms, key-up to done 3004ms
 ```
 
 `finalize` is key-up to the recording being closed. Recording stops at
@@ -79,14 +76,13 @@ A `mic audio skipped Nms … filled with silence` line means the input dropped
 the recording gets that much silence so the words on either side stay apart.
 A longer dropout is logged as `too long to fill` and left as it is.
 
-`writing` covers building the prompt, the writing-model requests and the
-validation gate. Each request attempt inside it has its own `call` line, so
-one interval can hold several: a second attempt of the same request, or the
-reminder request `runCleanup` sends when the model answered a dictated
-question instead of writing it down. The session line names the
-transcript's source (`live final` or `upload`), and its `writing` is `-` when
-no writing model ran. History shows the same steps under **Pipeline** on the
-Mac and iPhone (`SessionMeta.steps`, `DictationSteps.rows`).
+`upload` covers encoding and the dictation call. Each request attempt inside
+it has its own `call` line, so one interval can hold several: a second
+attempt of the same request on a fresh connection, or one chunk per request
+for a dictation over ten minutes. History shows the same steps under
+**Pipeline** on the Mac and iPhone (`SessionMeta.steps`,
+`DictationSteps.rows`). Dictations from before 0.7.12, which transcribed and
+then ran a separate writing pass, also show a Writing model step.
 
 ### Keeping and deleting
 

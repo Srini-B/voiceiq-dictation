@@ -1,34 +1,22 @@
 import AVFoundation
 import Foundation
+import VoiceIQBridge
 
-/// The transcription pipeline.
+/// The dictation pipeline.
 ///
-///   CAF → FLAC → transcription model (gemini-3.5-transcribe in smart mode
-///   with custom_vocabulary, gpt-transcribe, or ElevenLabs scribe_v3 with
-///   keyterms)
-///       → [writing rules] writing model cleanup, with any screenshots
-///       → validation gate → ReplacementEngine → inserted text.
+///   CAF → FLAC → gemini-3.8-flash, one call that hears the recording and
+///   writes the text by the writing rules (or, with them off, writes down
+///   what was said), with any screenshots → ReplacementEngine → inserted text.
 ///
-/// Rules unchanged: one silent retry on transient transcribe failures; cleanup
-/// has a hard deadline and NEVER blocks a good transcript; every failure is a
-/// typed TranscriptionError mapping to the failure matrix.
+/// Recordings over ten minutes go in chunks, one call each, then one text
+/// call joins the written chunks so a correction spoken in a later chunk
+/// reaches an earlier one. Rules unchanged:
+/// one silent retry on transient failures, a second attempt on a fresh
+/// connection when the first is slow, and every failure is a typed
+/// TranscriptionError mapping to the failure matrix.
 public struct GeminiTranscriptionService: TranscriptionServicing {
-    static let untranslatableToken = "<<UNTRANSLATABLE>>"
     let client: GeminiClient
     let settings: SettingsStore
-
-    /// Cleanup budget. The pass reads the whole transcript and writes it back, so
-    /// the budget grows with the text: a one-line dictation gets ~12 s, a
-    /// ten-minute one (~8k characters) ~35 s. Capped so a stalled request still
-    /// falls back to the raw transcript in bounded time.
-    /// MEASURED 2026-09-26: the full cleanup prompt (rules + seed instructions,
-    /// ~15 k characters) on gemini-3.8-flash at thinkingLevel low took 1.7–4.9 s
-    /// for a 170-character transcript, with or without a screenshot. The old
-    /// 3 s floor tripped "cleanup unavailable (timeout)" on ordinary dictations,
-    /// which pasted RAW text and made every formatting rule look ignored.
-    static func cleanupDeadline(forCharacters count: Int) -> TimeInterval {
-        min(60, 12 + Double(count) / 350)
-    }
 
     public init(client: GeminiClient, settings: SettingsStore = SettingsStore()) {
         self.client = client
@@ -37,25 +25,21 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
 
     public func transcribe(audioURL: URL, durationSeconds: Double, context: DictationContext) async throws -> TranscriptionResult {
         let config = settings.geminiConfig
-        let policy = settings.formattingPolicy
-        // Read once per dictation: a toggle flipped mid-flight must not change
-        // the rules this transcript is being produced under.
-        let vocabulary = Self.vocabularyIfEnabled()
-        let provider = settings.preferredProvider
-        let elevenLabs = settings.transcribesWithElevenLabs
-        let names = modelNames(provider, elevenLabs: elevenLabs)
+        // Built once per dictation: a rule edited mid-flight must not change
+        // the rules this text is being written under.
+        let prompt = dictationPrompt(context: context)
+        let images = context.screenshots
         let clock = ContinuousClock()
         let started = clock.now
         var encoded = Duration.zero
 
-        // One request per chunk. A short dictation is one chunk, so this is the
-        // old single-request path for everything under ten minutes. Leading and
+        // One request per chunk. A short dictation is one chunk. Leading and
         // trailing silence is left out of every request.
         let (ranges, fileFrames) = try AudioChunker.ranges(cafURL: audioURL)
 
-        // A multi-chunk upload can fail half way (Tier 1 meters ~400 s of audio
-        // per minute, so chunk 1 is often refused right after chunk 0). Finished
-        // chunks are kept next to the audio so a retry sends only the rest.
+        // A multi-chunk upload can fail half way (a per-minute quota often
+        // refuses chunk 1 right after chunk 0). Finished chunks are kept next
+        // to the audio so a retry sends only the rest.
         let cacheURL = FileLayout.chunkTranscripts(in: audioURL.deletingLastPathComponent())
         var done = ranges.count > 1 ? ChunkTranscripts.read(from: cacheURL) : ChunkTranscripts()
         if ranges.count > 1 {
@@ -68,232 +52,62 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
                 continue
             }
             let encodeStart = clock.now
-            let flacData = try encodeChunk(audioURL: audioURL, range: range, index: index)
+            let flac = try encodeChunk(audioURL: audioURL, range: range, index: index)
             encoded += clock.now - encodeStart
             let seconds = durationSeconds * Double(range.count) / Double(max(1, fileFrames))
-            let deadline = TimeoutPolicy.overallDeadline(audioDuration: seconds)
-            var raw = try await transcribeWithRetry(
-                flacData: flacData, seconds: seconds, config: config, policy: policy,
-                vocabulary: vocabulary, elevenLabs: elevenLabs, deadline: deadline
-            )
-            var trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-            if trimmed.isEmpty, seconds >= 0.6 {
+            let deadline = TimeoutPolicy.overallDeadline(audioDuration: seconds) + Double(images.count * 2)
+            var text = try await sendWithRetry(flac: flac, prompt: prompt, images: images, config: config, deadline: deadline)
+            if text.isEmpty, seconds >= 0.6 {
                 // F9a second chance: an empty result on real audio is sometimes model
                 // nondeterminism — one re-send before surfacing anything (audit L25).
-                Log.transcription.info("empty transcript on \(String(format: "%.1f", seconds))s audio — one re-send")
-                // NB: goes through the same policy-aware call as the primary path.
-                // Sending this one down the old endpoint would leave a rare branch
-                // silently on a different pipeline.
-                raw = (try? await sendTranscribe(
-                    flacData: flacData, seconds: seconds, config: config, policy: policy,
-                    vocabulary: vocabulary, elevenLabs: elevenLabs, deadline: deadline
-                )) ?? ""
-                trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+                Log.transcription.info("empty dictation on \(String(format: "%.1f", seconds))s audio — one re-send")
+                text = (try? await send(flac: flac, prompt: prompt, images: images, config: config, deadline: deadline)) ?? ""
             }
-            if !trimmed.isEmpty { pieces.append(trimmed) }
+            if !text.isEmpty { pieces.append(text) }
             if ranges.count > 1 {
-                done[range] = trimmed
+                done[range] = text
                 done.write(to: cacheURL)
             }
+        }
+        func ms(_ duration: Duration) -> Int { Int(duration / .milliseconds(1)) }
+        let words = pieces.joined(separator: " ").split(whereSeparator: \.isWhitespace).count
+        Log.transcription.notice("timing: encode \(ms(encoded))ms, dictation call \(ms(clock.now - started - encoded))ms (\(config.writingModel, privacy: .public)), \(words) words, \(String(format: "%.1f", durationSeconds), privacy: .public)s audio")
+
+        guard !pieces.isEmpty else {
+            // The coordinator classifies silence vs dropped-transcript by energy.
+            throw TranscriptionError.emptyTranscript
+        }
+        var written = pieces[0]
+        if pieces.count > 1 {
+            // A failure here leaves the chunk cache in place, so Retry sends only this call.
+            let joinPrompt = dictationPrompt(context: context, writtenParts: pieces)
+            let joined = try await sendWithRetry(flac: nil, prompt: joinPrompt, images: [], config: config,
+                                                 deadline: TimeoutPolicy.overallDeadline(audioDuration: durationSeconds))
+            written = joined.isEmpty ? pieces.joined(separator: "\n\n") : joined
         }
         if ranges.count > 1 {
             try? FileManager.default.removeItem(at: cacheURL)
         }
-
-        let trimmedRaw = pieces.joined(separator: " ")
-        let transcribed = clock.now
-        // The upload path runs transcription and the writing pass inside one
-        // coordinator stage; this line splits it, also when the writing pass
-        // fails.
-        func ms(_ duration: Duration) -> Int { Int(duration / .milliseconds(1)) }
-        func logTiming(writing: String) {
-            Log.transcription.notice("timing: encode \(ms(encoded))ms, transcribe \(ms(transcribed - started - encoded))ms (\(names.transcribe, privacy: .public)), \(writing, privacy: .public), \(trimmedRaw.split(whereSeparator: \.isWhitespace).count) words, \(String(format: "%.1f", durationSeconds), privacy: .public)s audio")
-        }
-        let result: TranscriptionResult
-        do {
-            result = try await process(
-                TranscriptionResult(rawTranscript: trimmedRaw, cleanedTranscript: trimmedRaw, modelID: names.transcribe),
-                durationSeconds: durationSeconds, context: context, config: config,
-                policy: policy, provider: provider, elevenLabs: elevenLabs, writingModel: names.writing
-            )
-        } catch {
-            logTiming(writing: "writing failed after \(ms(clock.now - transcribed))ms")
-            throw error
-        }
-        logTiming(writing: result.writingSeconds.map { "writing \(Int($0 * 1000))ms" } ?? "writing skipped")
-        return result
+        // Dictionary rules are a HARD guarantee — they apply on every path (audit L9).
+        let text = ReplacementEngine.apply(DictionaryStore().replacementRules(), to: written)
+        let modelID = "\(config.writingModel)/writing-rules"
+        return TranscriptionResult(rawTranscript: written, cleanedTranscript: text, modelID: modelID)
     }
 
-    public func process(_ transcript: TranscriptionResult, durationSeconds: Double, context: DictationContext) async throws -> TranscriptionResult {
-        let provider = settings.preferredProvider
-        let elevenLabs = settings.transcribesWithElevenLabs
-        return try await process(transcript, durationSeconds: durationSeconds, context: context, config: settings.geminiConfig,
-                                 policy: settings.formattingPolicy, provider: provider, elevenLabs: elevenLabs,
-                                 writingModel: modelNames(provider, elevenLabs: elevenLabs).writing)
-    }
-
-    private func process(
-        _ transcript: TranscriptionResult, durationSeconds: Double, context: DictationContext,
-        config: GeminiConfig, policy: SettingsStore.FormattingPolicy,
-        provider: ModelProvider, elevenLabs: Bool, writingModel: String
-    ) async throws -> TranscriptionResult {
-        let trimmedRaw = transcript.rawTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedRaw.isEmpty else {
-            // The coordinator classifies silence vs dropped-transcript by energy.
-            throw TranscriptionError.emptyTranscript
-        }
-
-        let clock = ContinuousClock()
-        let writingStart = clock.now
-        func writingSeconds() -> TimeInterval { (clock.now - writingStart) / .seconds(1) }
-
-        if context.mode != .dictate {
-            let transformed = try await transform(raw: trimmedRaw, normalized: transcript.normalizedTranscript,
-                                                  context: context, config: config)
-            var result = TranscriptionResult(
-                rawTranscript: trimmedRaw,
-                cleanedTranscript: transformed.text,
-                modelID: context.mode == .agent ? transcript.modelID : "\(transcript.modelID)+\(writingModel)",
-                replacesSelection: transformed.replacesSelection
-            )
-            if context.mode != .agent { result.writingSeconds = writingSeconds() }
-            return result
-        }
-
-        let skipShortCleanup = settings.skipShortDictationCleanup && durationSeconds <= 5
-        guard policy.cleanupPass, !skipShortCleanup else {
-            // Dictionary rules are a HARD guarantee — they apply on every path
-            // (audit L9). The gate is deliberately NOT run here: with no second
-            // model there is no independent reference, and validate(raw:X, cleaned:X)
-            // passes trivially, so running it would be theatre rather than safety.
-            let rules = DictionaryStore().replacementRules()
-            let text = ReplacementEngine.apply(rules, to: trimmedRaw)
-            return TranscriptionResult(
-                rawTranscript: trimmedRaw,
-                cleanedTranscript: text,
-                modelID: transcript.modelID,
-                cleanupSkip: policy.cleanupPass && skipShortCleanup
-                    ? CleanupSkip(cause: .shortDictation, note: "Writing rules skipped: dictation is 5 seconds or less")
-                    : nil
-            )
-        }
-
-        let cleanup = await cleanupOrFallback(
-            raw: trimmedRaw, context: context, config: config,
-            rawHasFillers: transcriptKeepsFillers(provider: provider, elevenLabs: elevenLabs, policy: policy),
-            normalized: transcript.normalizedTranscript
-        )
-        var result = TranscriptionResult(
-            rawTranscript: trimmedRaw,
-            cleanedTranscript: cleanup.text,
-            modelID: "\(transcript.modelID)+\(writingModel)",
-            cleanupSkip: cleanup.skip
-        )
-        result.writingSeconds = writingSeconds()
-        return result
-    }
-
-    /// The models that run, for History's model column. OpenAI's
-    /// transcription model has no smart mode, so no mode is named.
-    private func modelNames(_ provider: ModelProvider, elevenLabs: Bool) -> (transcribe: String, writing: String) {
-        let writing: String
-        switch provider {
-        case .openAI:
-            let openAI = settings.openAIConfig
-            if !elevenLabs { return (openAI.transcribeModel, openAI.writingModel) }
-            writing = openAI.writingModel
-        case .gemini:
-            writing = settings.geminiConfig.cleanupModel
-        }
-        let transcribe = elevenLabs ? ElevenLabs.batchModel : settings.geminiConfig.transcribeModel
-        return ("\(transcribe)/\(settings.formattingPolicy.mode.rawValue)", writing)
-    }
-
-    // MARK: - Stages
-
-    struct Transformed {
-        var text: String
-        var replacesSelection = false
-    }
-
-    private func transform(raw: String, normalized: String?, context: DictationContext, config: GeminiConfig) async throws -> Transformed {
+    private func dictationPrompt(context: DictationContext, writtenParts: [String]? = nil) -> String {
         let dictionary = DictionaryStore()
-        let prompt: String
-        switch context.mode {
-        case .dictate:
-            return Transformed(text: raw)
-        case .agent:
-            // The command goes to the agent model as spoken; only the
-            // dictionary's hard replacements apply.
-            return Transformed(text: ReplacementEngine.apply(dictionary.replacementRules(), to: normalized ?? raw))
-        case .askAnything(let selectedText):
-            var webContext: WebContext?
-            if KeychainStore.loadTinyFishKey() != nil {
-                webContext = await WebContext.gather(
-                    instruction: raw,
-                    selectedText: selectedText,
-                    gemini: client,
-                    tinyFish: TinyFishClient(apiKey: { KeychainStore.loadTinyFishKey() }),
-                    config: config
-                )
-            }
-            prompt = PromptV1.askAnythingPrompt(
-                instruction: raw,
-                selectedText: selectedText,
-                selectionIsEditable: context.selectedTextIsSettable,
-                vocabulary: dictionary.sanitizedVocabulary(),
-                webContext: webContext,
-                normalized: normalized
-            )
-        case .translate(let targets):
-            prompt = PromptV1.translatePrompt(
-                raw: raw, targets: targets, vocabulary: dictionary.sanitizedVocabulary(), normalized: normalized
-            )
-        }
-        let stage: UsageStage = { if case .translate = context.mode { return .translate }; return .answer }()
-        let response = try await client.cleanup(
-            prompt: prompt,
-            model: config.cleanupModel,
-            endpoint: config.endpoint,
-            // Web context can make the prompt far larger than the transcript;
-            // the model has to read it all, so the budget follows the prompt.
-            deadline: Self.cleanupDeadline(forCharacters: max(raw.count, prompt.count / 3)),
-            stage: stage
+        let place = DictationPlace(appName: context.targetAppName,
+                                   windowTitle: context.focusedField?.windowTitle,
+                                   pageURL: context.focusedField?.pageURL)
+        return PromptV1.dictationPrompt(
+            vocabulary: dictionary.sanitizedVocabulary(), spellings: dictionary.spellings(),
+            customRules: settings.customWritingRules, spelling: SpellingVariant.system.promptLine,
+            languages: SpokenLanguage.promptLine(settings.spokenLanguages),
+            imagesAttached: writtenParts == nil && !context.screenshots.isEmpty,
+            surroundingText: context.focusedField?.surroundingText,
+            place: place,
+            writtenParts: writtenParts
         )
-        let cleaned = ValidationGate.stripArtifacts(response).trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !cleaned.isEmpty else { throw TranscriptionError.emptyTranscript }
-        if case .translate = context.mode, cleaned == Self.untranslatableToken {
-            throw TranscriptionError.emptyTranscript
-        }
-        guard case .askAnything = context.mode else { return Transformed(text: cleaned) }
-        if let replacement = Self.replacement(in: cleaned) {
-            guard !replacement.isEmpty else { throw TranscriptionError.emptyTranscript }
-            return Transformed(text: replacement, replacesSelection: true)
-        }
-        return Transformed(text: Self.separateSources(cleaned))
-    }
-
-    /// The edited selection when the answer starts with the replace marker,
-    /// which is only asked for when the selection is editable. A model that
-    /// answers a question never starts with it, and a marker anywhere else
-    /// is left alone. Fences the model may have wrapped the result in are
-    /// removed, since the text is typed over the selection as is.
-    static func replacement(in answer: String) -> String? {
-        guard answer.hasPrefix(PromptV1.replaceMarker) else { return nil }
-        let body = answer.dropFirst(PromptV1.replaceMarker.count).trimmingCharacters(in: .whitespacesAndNewlines)
-        return ValidationGate.stripArtifacts(body)
-    }
-
-    /// Puts the "Sources" line the answer prompt asks for on its own paragraph.
-    /// The model writes it inline about half the time ("…$84,413.Sources: …"),
-    /// and the card shows exactly what comes back, so the break is made here.
-    static func separateSources(_ answer: String) -> String {
-        guard let match = answer.range(
-            of: #"[ \t]*\n*[ \t]*\**Sources?\**[ \t]*:?\**[ \t]*(?=\S)"#,
-            options: [.regularExpression, .caseInsensitive, .backwards]
-        ), match.lowerBound > answer.startIndex else { return answer }
-        return answer[..<match.lowerBound].trimmingCharacters(in: .whitespacesAndNewlines)
-            + "\n\nSources: " + answer[match.upperBound...]
     }
 
     private func encodeChunk(audioURL: URL, range: Range<AVAudioFramePosition>, index: Int) throws -> Data {
@@ -308,113 +122,41 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
         return data
     }
 
-    /// Vocabulary is suppressed once it has PROVABLY broken a request.
-    ///
-    /// Keyed on the vocabulary itself rather than a bare flag: editing the
-    /// Dictionary changes the key and we try again, so one bad entry cannot
-    /// disable the feature until relaunch with nothing telling the user why.
-    private static let vocabularySuppressed = Suppression()
-    final class Suppression: @unchecked Sendable {
-        private let lock = NSLock()
-        private var blocked: Int?
-        func isBlocked(_ vocabulary: [String]) -> Bool {
-            lock.lock(); defer { lock.unlock() }
-            return blocked != nil && blocked == vocabulary.hashValue
+    /// The ONE place a dictation request is sent. A second attempt starts on
+    /// its own connection when the first has not answered in time or lost
+    /// its connection; the first answer wins.
+    private func send(flac: Data?, prompt: String, images: [Data], config: GeminiConfig,
+                      deadline: TimeInterval) async throws -> String {
+        let timing = GeminiClient.freshRetryTiming(deadline: deadline)
+        let attempt: @Sendable () async throws -> String = { [client] in
+            try await client.dictate(prompt: prompt, audio: flac, images: images, model: config.writingModel,
+                                     endpoint: config.endpoint, deadline: deadline)
         }
-        func block(_ vocabulary: [String]) {
-            lock.lock(); blocked = vocabulary.hashValue; lock.unlock()
-        }
+        let text = try await GeminiClient.firstSuccess(retryAfter: timing.startAfter, first: attempt, retry: attempt)
+        return ValidationGate.stripArtifacts(text).trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    private static func vocabularyIfEnabled() -> [String] {
-        let vocabulary = DictionaryStore().sanitizedVocabulary()
-        return vocabularySuppressed.isBlocked(vocabulary) ? [] : vocabulary
-    }
-
-    /// The ONE place a transcription request is sent. Every caller — primary,
-    /// silent retry, and the empty-transcript second chance — goes through here.
-    private func sendTranscribe(
-        flacData: Data, seconds: Double,
-        config: GeminiConfig, policy: SettingsStore.FormattingPolicy,
-        vocabulary: [String], elevenLabs: Bool, deadline: TimeInterval
-    ) async throws -> String {
-        try await UsageMeter.$audioSeconds.withValue(seconds) {
-            try await sendTranscribeRequest(flacData: flacData, seconds: seconds, config: config, policy: policy,
-                                            vocabulary: vocabulary, elevenLabs: elevenLabs, deadline: deadline)
-        }
-    }
-
-    private func sendTranscribeRequest(
-        flacData: Data, seconds: Double,
-        config: GeminiConfig, policy: SettingsStore.FormattingPolicy,
-        vocabulary: [String], elevenLabs: Bool, deadline: TimeInterval
-    ) async throws -> String {
-        func send(_ terms: [String]) async throws -> String {
-            if elevenLabs {
-                // Smart transcription maps onto Scribe's no-verbatim mode.
-                return try await client.elevenLabsTranscribe(
-                    audio: flacData, keyterms: terms, languages: settings.spokenLanguages,
-                    smart: policy.mode == .smart,
-                    audioSeconds: seconds, deadline: deadline
-                )
-            }
-            return try await client.transcribeInteraction(
-                audio: flacData, model: config.transcribeModel, endpoint: config.endpoint,
-                mode: policy.mode, customVocabulary: terms, languages: settings.spokenLanguages, deadline: deadline
-            )
-        }
-
+    private func sendWithRetry(flac: Data?, prompt: String, images: [Data], config: GeminiConfig,
+                               deadline: TimeInterval) async throws -> String {
         do {
-            return try await send(vocabulary)
-        } catch TranscriptionError.badRequest(let message) where !vocabulary.isEmpty {
-            // Fail open. badRequest is deliberately terminal everywhere else, but
-            // one strange dictionary entry must never be able to break a user's
-            // own dictation.
-            Log.transcription.error("transcribe rejected with vocabulary (\(message, privacy: .private)) — retrying without it")
-            let text = try await send([])
-            // Only latch once the vocabulary-free retry SUCCEEDS. If it also
-            // fails, the vocabulary was innocent — and a bad API key returns 400
-            // here, not 401, so latching eagerly would disable the Dictionary for
-            // the rest of the launch over an auth problem.
-            Self.vocabularySuppressed.block(vocabulary)
-            return text
-        }
-    }
-
-    private func transcribeWithRetry(
-        flacData: Data, seconds: Double,
-        config: GeminiConfig, policy: SettingsStore.FormattingPolicy,
-        vocabulary: [String], elevenLabs: Bool, deadline: TimeInterval
-    ) async throws -> String {
-        do {
-            return try await sendTranscribe(
-                flacData: flacData, seconds: seconds, config: config, policy: policy,
-                vocabulary: vocabulary, elevenLabs: elevenLabs, deadline: deadline
-            )
+            return try await send(flac: flac, prompt: prompt, images: images, config: config, deadline: deadline)
         } catch let error as TranscriptionError {
             switch error {
             case .network, .timeout:
                 // One silent retry for transient classes (audio is safe on disk).
-                // Every request has its own connection, so a timeout retries at
-                // once; a server error waits half a second first.
-                Log.transcription.notice("transcribe retrying after \(String(describing: error), privacy: .public)")
+                // A server error waits half a second first.
+                Log.transcription.notice("dictation retrying after \(String(describing: error), privacy: .public)")
                 if case .network = error { try await Task.sleep(nanoseconds: 500_000_000) }
-                return try await sendTranscribe(
-                    flacData: flacData, seconds: seconds, config: config, policy: policy,
-                    vocabulary: vocabulary, elevenLabs: elevenLabs, deadline: deadline
-                )
+                return try await send(flac: flac, prompt: prompt, images: images, config: config, deadline: deadline)
             case .rateLimitedTransient(let retryAfter):
                 // A per-minute throttle names its own wait. Sitting it out once
                 // keeps a long dictation on the pill instead of failing it to
                 // History, where the retry would hit the same wall.
                 let wait = retryAfter ?? TimeoutPolicy.rateLimitWait
                 guard wait <= TimeoutPolicy.rateLimitWait else { throw error }
-                Log.transcription.info("transcribe rate limited — waiting \(Int(wait))s once")
+                Log.transcription.info("dictation rate limited — waiting \(Int(wait))s once")
                 try await Task.sleep(nanoseconds: UInt64(wait * 1_000_000_000))
-                return try await sendTranscribe(
-                    flacData: flacData, seconds: seconds, config: config, policy: policy,
-                    vocabulary: vocabulary, elevenLabs: elevenLabs, deadline: deadline
-                )
+                return try await send(flac: flac, prompt: prompt, images: images, config: config, deadline: deadline)
             default:
                 throw error
             }

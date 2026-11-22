@@ -41,7 +41,7 @@ extension GeminiClient {
     /// insert. Nothing else is retried here: a timeout already spent the
     /// deadline (callers retry it), and an HTTP status is an answer.
     static func perform(
-        _ request: URLRequest, deadline: TimeInterval, stage: UsageStage, via: ModelEndpoint, modelLabel: String
+        _ request: URLRequest, deadline: TimeInterval, stage: UsageStage, modelLabel: String
     ) async throws -> (Data, URLResponse) {
         var request = request
         let requestID = UUID().uuidString
@@ -62,13 +62,13 @@ extension GeminiClient {
                     try await session.data(for: request)
                 }
                 let status = (result.1 as? HTTPURLResponse)?.statusCode
-                record(collector, requestID: requestID, attempt: attempt, stage: stage, via: via, model: modelLabel,
+                record(collector, requestID: requestID, attempt: attempt, stage: stage, model: modelLabel,
                        request: request, started: attemptStart, status: status,
                        outcome: status.map { (200...299).contains($0) } == true ? "ok" : "http_\(status ?? -1)")
                 return result
             } catch {
                 let outcome = outcomeName(error)
-                record(collector, requestID: requestID, attempt: attempt, stage: stage, via: via, model: modelLabel,
+                record(collector, requestID: requestID, attempt: attempt, stage: stage, model: modelLabel,
                        request: request, started: attemptStart, status: nil, outcome: outcome)
                 let left = deadline - Date().timeIntervalSince(started)
                 if attempt == 1, (error as? URLError)?.code == .networkConnectionLost, left > 1 {
@@ -95,7 +95,7 @@ extension GeminiClient {
 
     private static func record(
         _ collector: TransportMetricsCollector, requestID: String, attempt: Int, stage: UsageStage,
-        via: ModelEndpoint, model: String, request: URLRequest, started: Date, status: Int?, outcome: String
+        model: String, request: URLRequest, started: Date, status: Int?, outcome: String
     ) {
         let metrics = collector.transaction
         func ms(_ from: Date?, _ to: Date?) -> Int? {
@@ -103,7 +103,7 @@ extension GeminiClient {
             return Int(to.timeIntervalSince(from) * 1000)
         }
         let event = TransportEvent(
-            at: started, requestID: requestID, attempt: attempt, stage: stage.rawValue, via: via.rawValue,
+            at: started, requestID: requestID, attempt: attempt, stage: stage.rawValue,
             model: model, host: request.url?.host, networkProtocol: metrics?.networkProtocolName,
             reusedConnection: metrics?.isReusedConnection,
             connectMs: ms(metrics?.connectStartDate, metrics?.connectEndDate),
@@ -113,7 +113,7 @@ extension GeminiClient {
             status: status, outcome: outcome
         )
         TransportLog.record(event)
-        Log.transcription.notice("call \(event.stage, privacy: .public) via \(event.via, privacy: .public) (\(model, privacy: .public)) id=\(requestID, privacy: .public) attempt=\(attempt) \(event.networkProtocol ?? "-", privacy: .public)\(event.reusedConnection == true ? " reused" : "", privacy: .public) \(outcome, privacy: .public) in \(event.totalMs)ms, first byte \(event.firstByteMs ?? -1)ms, sent \(event.requestBytes ?? 0) bytes")
+        Log.transcription.notice("call \(event.stage, privacy: .public) (\(model, privacy: .public)) id=\(requestID, privacy: .public) attempt=\(attempt) \(event.networkProtocol ?? "-", privacy: .public)\(event.reusedConnection == true ? " reused" : "", privacy: .public) \(outcome, privacy: .public) in \(event.totalMs)ms, first byte \(event.firstByteMs ?? -1)ms, sent \(event.requestBytes ?? 0) bytes")
     }
 
     /// A retry processes the entire prompt, so it needs an entire request budget.
@@ -131,24 +131,6 @@ extension GeminiClient {
         case .timeout, .network, .offline: return true
         default: return false
         }
-    }
-
-    /// `cleanup`, plus a second attempt (its own connection, like every call) when the first has
-    /// not answered by `startAfter` or fails with a connection error first.
-    /// The first success wins and cancels the other attempt.
-    nonisolated func cleanupWithFreshRetry(
-        prompt: String, images: [Data], model: String, endpoint: URL, deadline: TimeInterval
-    ) async throws -> String {
-        let timing = Self.freshRetryTiming(deadline: deadline)
-        return try await Self.firstSuccess(
-            retryAfter: timing.startAfter,
-            first: { try await self.cleanup(prompt: prompt, images: images, model: model,
-                                            endpoint: endpoint, deadline: deadline) },
-            retry: {
-                try await self.cleanup(prompt: prompt, images: images, model: model,
-                                       endpoint: endpoint, deadline: timing.deadline)
-            }
-        )
     }
 
     private enum Attempt: Sendable {
@@ -184,7 +166,7 @@ extension GeminiClient {
                     group.cancelAll()
                     return text
                 case .retry(.success(let text)):
-                    Log.transcription.notice("cleanup: the second attempt answered")
+                    Log.transcription.notice("the second attempt answered")
                     group.cancelAll()
                     return text
                 case .first(.failure(let error)):
@@ -202,7 +184,7 @@ extension GeminiClient {
                 if let startReason, !retryStarted {
                     retryStarted = true
                     inFlight += 1
-                    Log.transcription.notice("cleanup: \(startReason, privacy: .public), starting a second attempt")
+                    Log.transcription.notice("\(startReason, privacy: .public), starting a second attempt")
                     group.addTask { .retry(await outcome(retry)) }
                 } else if case .first(.failure(let error)) = attempt, inFlight == 0 {
                     // A connection failure after the retry already failed.

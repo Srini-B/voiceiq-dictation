@@ -12,7 +12,7 @@ enum SettingsSection: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .keys: return "Provider & Keys"
+        case .keys: return "API Key"
         case .keyboard: return "Keyboard & Permissions"
         case .dictation: return "Dictation"
         case .dictionary: return "Dictionary"
@@ -121,18 +121,9 @@ struct SettingsView: View {
 }
 
 struct DictationSettingsView: View {
-    @State private var liveTranscription = SettingsStore().liveTranscriptionEnabled
-    /// Names Scribe v3 Live in the Real-time transcription footer.
-    @State private var elevenLabs = SettingsStore().transcribesWithElevenLabs
     @EnvironmentObject private var session: VoiceSession
     private let settings = SettingsStore()
-    @State private var translationTarget = SettingsStore().translationTargetLanguage
-    @State private var smartTranscription = SettingsStore().smartTranscriptionEnabled
-    @State private var cleanupPass = SettingsStore().smartCleanupPassEnabled
-    @State private var skipShortCleanup = SettingsStore().skipShortDictationCleanup
-    @State private var spelling = SettingsStore().spellingVariant
     @State private var customRules = SettingsStore().customWritingRules
-    @State private var noiseHandling = SettingsStore().experimentalNoiseHandling
     @State private var builtInMic = MobileSettings.preferBuiltInMic
     @State private var warmWindow = MobileSettings.warmWindow
     @State private var languages = SettingsStore().spokenLanguages
@@ -159,12 +150,6 @@ struct DictationSettingsView: View {
                 Text("While the mic is on, the next keyboard tap starts right away. After that, the tap opens VoiceiQ for a moment.")
             }
             Section {
-                NavigationLink {
-                    LanguageList(selected: $translationTarget)
-                } label: {
-                    LabeledContent("Translate to", value: translationTarget)
-                }
-                .onChange(of: translationTarget) { _, value in settings.setTranslationTargetLanguage(value) }
                 Toggle("Use \(UIDevice.current.localizedModel) microphone", isOn: $builtInMic)
                     .onChange(of: builtInMic) { _, value in
                         MobileSettings.preferBuiltInMic = value
@@ -184,37 +169,12 @@ struct DictationSettingsView: View {
             } header: {
                 SettingsSectionHeader("Languages")
             } footer: {
-                Text("For dictation and meetings. Automatic works out the language each time, which can go wrong on a short phrase. Add every other language you or the people in your meetings speak, whole sentences or mixed in: each recording is transcribed once, with each language in its own script. A short or accented phrase can still come out as the main language. ElevenLabs and OpenAI listen for these languages; Gemini works them out by itself.")
+                Text("Dictation is told to expect these languages. Automatic works out the language each time, which can go wrong on a short phrase. Add every other language you speak, whole sentences or mixed in: each is written in its own script, never translated. Notes work out each language by themselves.")
             }
             Section {
-                // Saved only on a user change, not when its default is refreshed.
-                Toggle("Real-time transcription", isOn: Binding(get: { liveTranscription }, set: {
-                    liveTranscription = $0
-                    settings.setLiveTranscriptionEnabled($0)
-                }))
+                NavigationLink("Custom rules") { CustomRulesView(text: $customRules) }
             } footer: {
-                Text("Transcribes while you speak\(elevenLabs ? " with Scribe v3 Live" : ""), so the text is ready about 1.5 s sooner after you stop. If the stream fails, the recording is uploaded as before.")
-            }
-            Section {
-                Toggle("Smart transcription", isOn: $smartTranscription)
-                    .onChange(of: smartTranscription) { _, value in settings.setSmartTranscription(value) }
-                Toggle("Apply writing rules", isOn: $cleanupPass)
-                    .onChange(of: cleanupPass) { _, value in settings.setSmartCleanupPass(value) }
-                Toggle("Skip cleanup for dictations of 5 seconds or less", isOn: $skipShortCleanup)
-                    .disabled(!cleanupPass)
-                    .onChange(of: skipShortCleanup) { _, value in settings.setSkipShortDictationCleanup(value) }
-                SearchablePicker("Spelling", selection: $spelling,
-                                 options: SpellingVariant.allCases.map { SearchOption(value: $0, name: $0.name) })
-                    .disabled(!cleanupPass)
-                    .onChange(of: spelling) { _, value in
-                        guard value != settings.spellingVariant else { return }
-                        settings.setSpellingVariant(value)
-                    }
-                if cleanupPass { NavigationLink("Custom rules") { CustomRulesView(text: $customRules) } }
-            }
-            Section {
-                Toggle("Better hearing in loud rooms", isOn: $noiseHandling)
-                    .onChange(of: noiseHandling) { _, value in settings.setExperimentalNoiseHandling(value) }
+                Text("Gemini hears each dictation and writes it in one step, by the built-in writing rules and yours: it fixes grammar, applies spoken corrections and lays the text out. Spelling follows your \(UIDevice.current.localizedModel)'s region.")
             }
             if UIDevice.isPad {
                 Section {
@@ -235,15 +195,7 @@ struct DictationSettingsView: View {
         // leave a stale toggle here.
         .onReceive(NotificationCenter.default.publisher(for: .gtSettingDidChange).receive(on: RunLoop.main)) { note in
             switch note.object as? String {
-            case "liveDictationEnabled": liveTranscription = settings.liveTranscriptionEnabled
-            case "elevenLabsTranscription", KeychainStore.Secret.elevenLabs.settingKey: elevenLabs = settings.transcribesWithElevenLabs
-            case "smartTranscription": smartTranscription = settings.smartTranscriptionEnabled
-            case "smartCleanupPass": cleanupPass = settings.smartCleanupPassEnabled
-            case "skipShortDictationCleanup": skipShortCleanup = settings.skipShortDictationCleanup
-            case "spellingVariant": spelling = settings.spellingVariant
             case SettingsStore.customWritingRulesKey: customRules = settings.customWritingRules
-            case "experimentalNoiseHandling": noiseHandling = settings.experimentalNoiseHandling
-            case "translationTargetLanguages": translationTarget = settings.translationTargetLanguage
             case "spokenLanguages": languages = settings.spokenLanguages
             default: break
             }
@@ -280,34 +232,6 @@ private struct CustomRulesView: View {
         }
         .settingsPage(title: "Custom Rules", keyboard: true)
         .onDisappear { SettingsStore().setCustomWritingRules(text) }
-    }
-}
-
-private struct LanguageList: View {
-    @Binding var selected: String
-    @State private var search = ""
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        List(GeminiLanguages.supported.filter {
-            search.isEmpty || $0.name.localizedCaseInsensitiveContains(search)
-        }) { language in
-            Button {
-                selected = language.name
-                dismiss()
-            } label: {
-                HStack {
-                    Text(language.name).font(Theme.Fonts.body()).foregroundStyle(Theme.Colors.ink)
-                    Spacer()
-                    if language.name == selected {
-                        Image(systemName: "checkmark").foregroundStyle(Theme.Colors.accent)
-                    }
-                }
-            }
-            .listRowBackground(Theme.Colors.surface)
-        }
-        .searchable(text: $search)
-        .settingsPage(title: "Translate To", keyboard: true)
     }
 }
 
@@ -384,24 +308,6 @@ private struct ReturnAppDetail: View {
 struct PrivacyView: View {
     @State private var retentionDays = SettingsStore().audioRetentionDays
     @State private var transcriptRetentionDays = SettingsStore().transcriptRetentionDays
-    @State private var provider = SettingsStore().preferredProvider
-
-    @State private var meetingProviders = SettingsStore().meetingProviders
-    @State private var elevenLabs = SettingsStore().transcribesWithElevenLabs
-
-    private var destination: String { "\(elevenLabs ? ModelEndpoint.elevenLabs.directName : provider.directName), with your key" }
-    /// Meetings go to ElevenLabs when it transcribes; otherwise to the first
-    /// provider with a key, then to each other one in turn while the earlier
-    /// ones fail.
-    private var meetingOwner: String {
-        if elevenLabs { return ModelEndpoint.elevenLabs.directName }
-        let names = meetingProviders.map(\.directName)
-        guard let first = names.first else { return provider.directName }
-        let rest = names.dropFirst()
-        guard let last = rest.last else { return first }
-        let fallbacks = rest.count == 1 ? last : rest.dropLast().joined(separator: ", ") + " or " + last
-        return "\(first), or \(fallbacks) if that fails"
-    }
 
     var body: some View {
         Form {
@@ -426,42 +332,28 @@ struct PrivacyView: View {
                 }
             }
             Section {
-                LabeledContent("Audio", value: destination)
-                LabeledContent("Transcript text", value: "For writing rules, Ask and Translate")
-                LabeledContent("Notes audio", value: "\(meetingOwner), then notes by \(provider.displayName)")
-                LabeledContent("Dictionary terms", value: "With cloud transcription and cleanup")
+                LabeledContent("Audio", value: "Google's Gemini API, with your key")
+                LabeledContent("Notes audio", value: "Gemini, for the transcript and notes")
+                LabeledContent("Dictionary terms", value: "With each dictation and notes")
                 LabeledContent("Dictionary", value: "Your iCloud, to sync")
                 LabeledContent("History", value: "Your iCloud, to sync final text")
                 LabeledContent("Notes", value: "Your iCloud, to sync; not the audio")
-                LabeledContent("Ask search queries", value: "TinyFish, if its key is saved")
                 LabeledContent("What you type", value: "Never")
             } header: { SettingsSectionHeader("What leaves your \(UIDevice.current.localizedModel)") }
         }
         .settingsPage(title: "Privacy")
-        .onAppear {
-            provider = SettingsStore().preferredProvider
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .gtSettingDidChange).receive(on: RunLoop.main)) { _ in
-            provider = SettingsStore().preferredProvider
-            meetingProviders = SettingsStore().meetingProviders
-            elevenLabs = SettingsStore().transcribesWithElevenLabs
-        }
     }
 }
 
-/// Session log and the selected provider's models, as in the Mac's
-/// Advanced pane. The provider and keys are under Provider & Keys.
+/// Session log and the Gemini models, as in the Mac's Advanced pane. The
+/// key is under API Key.
 struct AdvancedView: View {
     private let settings = SettingsStore()
-    private let provider = SettingsStore().preferredProvider
     @State private var endpoint = SettingsStore().endpointOverride ?? ""
     @State private var transcribeModel = SettingsStore().transcribeModelOverride ?? ""
     @State private var cleanupModel = SettingsStore().cleanupModelOverride ?? ""
-    @State private var openAITranscribe = SettingsStore().openAITranscribeModelOverride ?? ""
-    @State private var openAIWriting = SettingsStore().openAIWritingModelOverride ?? ""
     @State private var debugLog = DebugLog.isEnabled
     private let geminiDefaults = GeminiConfig()
-    private let openAIDefaults = OpenAIConfig()
 
     /// The same test the client uses, so the warning matches what happens.
     private var endpointInvalid: Bool {
@@ -479,24 +371,19 @@ struct AdvancedView: View {
                     .onChange(of: debugLog) { _, on in DebugLog.setEnabled(on) }
                 NavigationLink("Debug log") { DebugLogView() }
             } footer: {
-                Text("While this is on, VoiceiQ and its keyboard write down everything they do: dictation, transcription with each provider, meetings, settings changes, sync, network requests and errors. Share the file with a bug report. API keys and tokens are removed, and transcripts are never written. VoiceiQ keeps the last \(DebugLog.keepDays) days, up to \(DebugLog.maxTotalBytes / 1_000_000) MB, and deletes older entries on its own.")
+                Text("While this is on, VoiceiQ and its keyboard write down everything they do: dictation, transcription, meetings, settings changes, sync, network requests and errors. Share the file with a bug report. API keys and tokens are removed, and transcripts are never written. VoiceiQ keeps the last \(DebugLog.keepDays) days, up to \(DebugLog.maxTotalBytes / 1_000_000) MB, and deletes older entries on its own.")
             }
-            if provider == .gemini {
-                Section {
-                    field("Endpoint", text: $endpoint, prompt: geminiDefaults.endpoint.absoluteString) { settings.setEndpointOverride($0) }
-                    if endpointInvalid {
-                        Text("Not a valid http(s) URL — the default endpoint is being used.")
-                            .font(Theme.Fonts.footnote())
-                            .foregroundStyle(Theme.Colors.recording)
-                    }
-                    field("Transcription", text: $transcribeModel, prompt: geminiDefaults.transcribeModel) { settings.setTranscribeModelOverride($0) }
-                    field("Formatting", text: $cleanupModel, prompt: geminiDefaults.cleanupModel) { settings.setCleanupModelOverride($0) }
-                } header: { SettingsSectionHeader("Gemini models") }
-            } else {
-                Section {
-                    field("Transcription", text: $openAITranscribe, prompt: openAIDefaults.transcribeModel) { settings.setOpenAITranscribeModelOverride($0) }
-                    field("Formatting", text: $openAIWriting, prompt: openAIDefaults.writingModel) { settings.setOpenAIWritingModelOverride($0) }
-                } header: { SettingsSectionHeader("OpenAI models") }
+            Section {
+                field("Endpoint", text: $endpoint, prompt: geminiDefaults.endpoint.absoluteString) { settings.setEndpointOverride($0) }
+                if endpointInvalid {
+                    Text("Not a valid http(s) URL — the default endpoint is being used.")
+                        .font(Theme.Fonts.footnote())
+                        .foregroundStyle(Theme.Colors.recording)
+                }
+                field("Dictation", text: $cleanupModel, prompt: geminiDefaults.writingModel) { settings.setCleanupModelOverride($0) }
+                field("Notes", text: $transcribeModel, prompt: geminiDefaults.transcribeModel) { settings.setTranscribeModelOverride($0) }
+            } header: { SettingsSectionHeader("Gemini models") } footer: {
+                Text("The dictation model hears each dictation and writes its text in one call, and writes notes and answers questions about them. The notes model transcribes notes with speakers and word times.")
             }
         }
         .settingsPage(title: "Advanced", keyboard: true)

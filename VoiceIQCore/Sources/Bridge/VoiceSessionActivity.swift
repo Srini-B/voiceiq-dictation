@@ -14,13 +14,11 @@ public struct VoiceSessionAttributes: ActivityAttributes {
         }
 
         public var phase: Phase
-        public var mode: KeyboardMode
         /// Start of the current recording or meeting, for the running timer.
         public var since: Date?
 
-        public init(phase: Phase, mode: KeyboardMode = .dictate, since: Date? = nil) {
+        public init(phase: Phase, since: Date? = nil) {
             self.phase = phase
-            self.mode = mode
             self.since = since
         }
     }

@@ -10,9 +10,6 @@ import SwiftUI
 struct RichTextView: NSViewRepresentable {
     let text: NSAttributedString
     var inset = NSSize(width: 0, height: 0)
-    /// Keep the end in view as the text grows (a live transcript); otherwise
-    /// new text starts at the top.
-    var followsEnd = false
 
     func makeNSView(context: Context) -> NSScrollView {
         let scroll = NSTextView.scrollableTextView()
@@ -37,6 +34,6 @@ struct RichTextView: NSViewRepresentable {
         guard let view = scroll.documentView as? NSTextView,
               view.textStorage?.isEqual(to: text) == false else { return }
         view.textStorage?.setAttributedString(text)
-        if followsEnd { view.scrollToEndOfDocument(nil) } else { view.scroll(.zero) }
+        view.scroll(.zero)
     }
 }
