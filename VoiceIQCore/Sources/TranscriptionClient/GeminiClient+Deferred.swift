@@ -25,16 +25,15 @@ extension GeminiClient {
     /// background session, byte for byte the request it sent itself, so
     /// nothing is encoded twice. A recording longer than one chunk sends
     /// more; the first is the one the replay answers.
-    public nonisolated var sentTranscription: CapturedTranscriptionRequest? { firstTranscription.withLock { $0 } }
+    public nonisolated var sentTranscription: CapturedTranscriptionRequest? { sentState.withLock { $0.first } }
 
     /// The provider answered a transcription request with success since
     /// `forgetSentTranscription()`, whether or not usage was metered: the
     /// keyboard must not hand that dictation over.
-    public nonisolated var transcriptionAnswered: Bool { answeredTranscription.withLock { $0.answered } }
+    public nonisolated var transcriptionAnswered: Bool { sentState.withLock { $0.answered } }
 
     public nonisolated func forgetSentTranscription() {
-        firstTranscription.withLock { $0 = nil }
-        answeredTranscription.withLock { $0 = (generation: $0.generation + 1, answered: false) }
+        sentState.withLock { $0 = SentTranscription(first: nil, generation: $0.generation + 1, answered: false) }
     }
 }
 

@@ -45,12 +45,16 @@ public extension GeminiClient {
 /// so streaming buys nothing but parsing complexity.
 public actor GeminiClient {
     let session: URLSession
-    /// See `sentTranscription`.
-    nonisolated let firstTranscription = OSAllocatedUnfairLock<CapturedTranscriptionRequest?>(initialState: nil)
-    /// See `transcriptionAnswered`. `generation` advances with each
-    /// `forgetSentTranscription()`, so an answer to an earlier request does
-    /// not count for the next dictation.
-    nonisolated let answeredTranscription = OSAllocatedUnfairLock(initialState: (generation: 0, answered: false))
+    /// What `sentTranscription` and `transcriptionAnswered` read, under one
+    /// lock: `forgetSentTranscription()` empties the slot and advances the
+    /// generation in one step, and a request writes the slot or marks it
+    /// answered only while its generation is still current.
+    nonisolated let sentState = OSAllocatedUnfairLock(initialState: SentTranscription())
+    struct SentTranscription {
+        var first: CapturedTranscriptionRequest?
+        var generation = 0
+        var answered = false
+    }
     private let apiKey: @Sendable () -> String?
     let openAIKey: @Sendable () -> String?
     let elevenLabsKey: @Sendable () -> String?
@@ -209,7 +213,7 @@ public actor GeminiClient {
         /// usage envelope.
         via: ModelEndpoint = .gemini,
         extraHeaders: [String: String] = [:],
-        /// The 429 retry's: its first try's `answeredTranscription` generation.
+        /// The 429 retry's: its first try's `sentState` generation.
         generation: Int? = nil
     ) async throws -> Data {
         let url = endpoint.appendingPathComponent(path)
@@ -228,13 +232,11 @@ public actor GeminiClient {
         // The dictation this request belongs to: a retry keeps its first
         // try's, so a request outliving `forgetSentTranscription()` neither
         // fills the next dictation's slot nor marks it answered.
-        let generation = generation ?? answeredTranscription.withLock { $0.generation }
+        let generation = generation ?? sentState.withLock { $0.generation }
         if stage == .transcribe, keepsSentTranscription, Self.replayedTranscription == nil {
             let sent = CapturedTranscriptionRequest(request: request, endpoint: via, model: Self.sentTranscriber?.model,
                                                     keepsFillers: Self.sentTranscriber?.keepsFillers)
-            firstTranscription.withLock { slot in
-                if slot == nil, answeredTranscription.withLock({ $0.generation }) == generation { slot = sent }
-            }
+            sentState.withLock { if $0.first == nil, $0.generation == generation { $0.first = sent } }
         }
         let data: Data
         let response: URLResponse
@@ -244,7 +246,7 @@ public actor GeminiClient {
             } else {
                 (data, response) = try await Self.perform(request, deadline: deadline, stage: stage, via: via, modelLabel: modelLabel)
                 if stage == .transcribe, let status = (response as? HTTPURLResponse)?.statusCode, (200..<300).contains(status) {
-                    answeredTranscription.withLock { if $0.generation == generation { $0.answered = true } }
+                    sentState.withLock { if $0.generation == generation { $0.answered = true } }
                 }
             }
         } catch is DeadlineExceeded {
