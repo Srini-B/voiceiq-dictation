@@ -159,7 +159,7 @@ public final class LocalTranscriber: Sendable {
         let claim: @Sendable () -> Bool = { settled.withLock { let first = !$0; $0 = true; return first } }
         return await withCheckedContinuation { continuation in
             let timer = Task {
-                try? await Task.sleep(for: .seconds(seconds))
+                do { try await Task.sleep(for: .seconds(seconds)) } catch { return }
                 if claim() { continuation.resume(returning: .timedOut) }
             }
             Task {

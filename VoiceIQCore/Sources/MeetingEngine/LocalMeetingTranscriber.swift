@@ -102,11 +102,16 @@ public struct LocalMeetingTranscriber: Sendable {
         }
     }
 
+    /// Releases the models once any decode abandoned at its deadline has
+    /// ended, so a delete or the next meeting never meets it still running.
     private func release() {
-        let model = model, id = id
-        Task { @MainActor in
-            LocalModelStore.store(for: model).releaseSession(id: id)
-            LocalModelStore.speakerDiarizer.releaseSession(id: id)
+        let model = model, id = id, job = job
+        Task {
+            await job.cancel()
+            await MainActor.run {
+                LocalModelStore.store(for: model).releaseSession(id: id)
+                LocalModelStore.speakerDiarizer.releaseSession(id: id)
+            }
         }
     }
 
@@ -117,11 +122,19 @@ public struct LocalMeetingTranscriber: Sendable {
             return cached
         }
         let mix = folder.appendingPathComponent(Self.mixName)
-        defer { try? FileManager.default.removeItem(at: mix) }
-        try Self.writeMix(duration: duration, samples: samples, to: mix)
+        do {
+            try Self.writeMix(duration: duration, samples: samples, to: mix)
+        } catch {
+            try? FileManager.default.removeItem(at: mix)
+            throw error
+        }
         let request = LocalMeetingRequest(speechDirectory: speech, diarizerDirectory: diarize ? diarizer : nil, audio: mix)
+        let runner = runner
+        // The decode removes its input when it ends, which past the deadline
+        // is after this returns.
         let result = try await job.run(deadline: TimeoutPolicy.localMeeting(audioSeconds: duration)) {
-            try await runner(request)
+            defer { try? FileManager.default.removeItem(at: mix) }
+            return try await runner(request)
         }
         try JSONEncoder().encode(result).write(to: cache, options: .atomic)
         try? FileManager.default.removeItem(at: folder.appendingPathComponent("local-words-v1.json"))
@@ -241,15 +254,13 @@ private actor Job {
     private var task: Task<LocalMeetingResult, Error>?
 
     /// Core ML work cannot be cancelled, so a run that passes its deadline is
-    /// abandoned instead of joined: the caller moves on to the cloud path and
-    /// the work keeps its task until the next cancellation check between
-    /// models. The Mac helper is killed at the same deadline first, so this
+    /// abandoned instead of joined: the caller moves on to the cloud path,
+    /// and the work keeps its task, held here until it ends. The Mac helper is killed at the same deadline first, so this
     /// fires only in-process (iOS).
     func run(deadline: TimeInterval,
              _ body: @escaping @Sendable () async throws -> LocalMeetingResult) async throws -> LocalMeetingResult {
         let task = Task { try await body() }
         self.task = task
-        defer { self.task = nil }
         let settled = OSAllocatedUnfairLock(initialState: false)
         let claim: @Sendable () -> Bool = { settled.withLock { let first = !$0; $0 = true; return first } }
         return try await withTaskCancellationHandler {
@@ -263,10 +274,17 @@ private actor Job {
                 Task {
                     let result = await task.result
                     timer.cancel()
+                    await self.ended(task)
                     if claim() { continuation.resume(with: result) }
                 }
             }
         } onCancel: { task.cancel() }
+    }
+
+    /// The task is held until it has ended, also past its deadline, so
+    /// `cancel` waits for work the caller already gave up on.
+    private func ended(_ finished: Task<LocalMeetingResult, Error>) {
+        if task == finished { task = nil }
     }
 
     func cancel() async {

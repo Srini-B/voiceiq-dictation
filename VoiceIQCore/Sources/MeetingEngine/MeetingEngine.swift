@@ -170,15 +170,24 @@ import VoiceIQSpeech
     }
 
     /// New notes from the saved transcript, using the speaker names typed since.
+    /// With meetings on device, only the writer chosen under Writing rules
+    /// and notes may write them: with Off, or On device and its model
+    /// missing, nothing happens and the transcript stays on the device.
     public func regenerateNotes(id: MeetingID) {
         guard !isBusy(id), var meta = store.list().first(where: { $0.id == id }),
               let transcript = try? store.loadTranscript(id: id), !transcript.isEmpty else { return }
+        let settings = SettingsStore()
+        let writesLocally = settings.meetingSource == .onDevice && settings.cleanupSource != .gemini
+        if writesLocally, settings.cleanupSource == .none || localWriter == nil || !LocalWriter.isReady {
+            Log.meeting.notice("notes not regenerated: meetings stay on device and no on-device writer is available")
+            return
+        }
         processing[id] = .summarizing
         Task { await UsageMeter.$scope.withValue(UsageScope(activity: .meeting, sessionID: id.uuid.uuidString)) {
             do {
                 try mark(&meta, .summarizing)
                 let notes: MeetingNotes
-                if SettingsStore().cleanupSource == .onDevice, let localWriter, LocalWriter.isReady {
+                if writesLocally, let localWriter {
                     notes = try await localNotes(transcript: transcript, meta: meta, runner: localWriter)
                 } else {
                     guard hasKey() else { throw MeetingFailure.noKey }
