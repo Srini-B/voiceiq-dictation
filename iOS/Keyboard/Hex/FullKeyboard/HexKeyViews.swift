@@ -16,6 +16,9 @@ final class HexKeyControl: UIControl {
     var cornerRadius: CGFloat = FullKeyboardPalette.cornerRadius { didSet { if cornerRadius != oldValue { setNeedsDisplay() } } }
     /// The drawn keycap inside the control's (larger) touch target.
     var keycapFrame: CGRect = .zero { didSet { if keycapFrame != oldValue { setNeedsDisplay() } } }
+    /// In the strip, the suggestions' line in this view's coordinates
+    /// (`KeyboardMetrics.stripTextCenter`): the mark centres on it, beside the words.
+    var markCenterY: CGFloat? { didSet { if markCenterY != oldValue { setNeedsDisplay() } } }
 
     /// The finger landed on the key, with when (wall clock, from the touch's own timestamp).
     var onPress: ((TimeInterval) -> Void)?
@@ -133,6 +136,10 @@ final class HexKeyControl: UIControl {
     override func draw(_ rect: CGRect) {
         guard let context = UIGraphicsGetCurrentContext() else { return }
         let cap = keycapFrame == .zero ? bounds : keycapFrame
+        // In the strip the mark sits on the suggestions' line, as tall as fits evenly around it
+        // there (19 pt, or less where the line leaves less room), and so does its pressed chip.
+        let markMidY = inStrip ? (markCenterY ?? cap.midY) : cap.midY
+        let room = inStrip ? 2 * min(markMidY - cap.minY, cap.maxY - markMidY) : cap.height
         if !inStrip {
             context.fillKeycap(
                 cap,
@@ -141,11 +148,11 @@ final class HexKeyControl: UIControl {
             )
         } else if isHighlighted {
             palette.keyPressedFill.setFill()
-            UIBezierPath(roundedRect: cap, cornerRadius: cap.height / 2).fill()
+            let chip = CGRect(x: cap.minX, y: markMidY - room / 2, width: cap.width, height: room)
+            UIBezierPath(roundedRect: chip, cornerRadius: room / 2).fill()
         }
-        // In the strip the mark keeps its 19 pt in the 26 pt pill as in the Duo's 36 pt one.
-        let markSize: CGFloat = inStrip ? min(19, cap.height) : min(19, cap.height * 0.56)
-        let markRect = CGRect(x: cap.midX - markSize / 2, y: cap.midY - markSize / 2, width: markSize, height: markSize)
+        let markSize: CGFloat = inStrip ? min(19, room) : min(19, cap.height * 0.56)
+        let markRect = CGRect(x: cap.midX - markSize / 2, y: markMidY - markSize / 2, width: markSize, height: markSize)
         if isWarm {
             HexMarkPath.draw(in: context, rect: markRect, color: palette.textBase, coreColor: palette.warmCore)
         } else {
@@ -300,9 +307,9 @@ final class HexKeyRecordingPanel: UIView {
         super.layoutSubviews()
         let innerLeft = horizontalInset + metrics.side
         let innerRight = bounds.width - horizontalInset - metrics.side
-        // The strip's pill height, inset from its top and bottom as its pills are.
+        // The strip's pill height, as far below its top as its pills are (on the words' line).
         let rowH = metrics.stripPillHeight
-        let rowY = (bounds.height - rowH) / 2
+        let rowY = metrics.stripInset
 
         doneButton.cornerRadius = rowH / 2
         cancelButton.cornerRadius = rowH / 2
@@ -413,10 +420,11 @@ final class PanelKeyButton: UIControl {
 }
 
 /// Holding the Hex key: dictation styles, then the dictation language when there are choices,
-/// then Translate to <language> (on or off) and the target to translate into.
+/// then Translate to <language> (on or off) and the target to translate into. The language
+/// page takes a language off with a long press and Remove, and adds one from More languages….
 @MainActor
 final class HexStyleMenuView: UIView {
-    enum Page { case styles, languages, translation }
+    enum Page { case styles, languages, moreLanguages, translation }
 
     var palette = FullKeyboardPalette(isDark: false) { didSet { rebuild() } }
     var style: DictationStyle = .polished { didSet { rebuild() } }
@@ -425,6 +433,8 @@ final class HexStyleMenuView: UIView {
     var dictationLanguage: String? { didSet { if dictationLanguage != oldValue { rebuild() } } }
     var automaticLanguage: String? { didSet { if automaticLanguage != oldValue { rebuild() } } }
     var languageChoices: [String] = [] { didSet { if languageChoices != oldValue { rebuild() } } }
+    /// Every other language Apple Speech has (`KeyboardViewModel.moreLanguages`).
+    var moreLanguages: [String] = [] { didSet { if moreLanguages != oldValue { rebuild() } } }
     /// Translate what I say's target, on or off; nil hides its rows
     /// (`KeyboardViewModel.showsTranslationSwitch`).
     var translationTarget: String? { didSet { if translationTarget != oldValue { rebuild() } } }
@@ -433,6 +443,7 @@ final class HexStyleMenuView: UIView {
     var translationTargets: [String] = [] { didSet { if translationTargets != oldValue { rebuild() } } }
     var onStyle: ((DictationStyle) -> Void)?
     var onLanguage: ((String?) -> Void)?
+    var onRemoveLanguage: ((String) -> Void)?
     /// Translate to <language> switched on (true) or off.
     var onTranslationToggle: ((Bool) -> Void)?
     var onTranslationTarget: ((String) -> Void)?
@@ -443,8 +454,13 @@ final class HexStyleMenuView: UIView {
 
     private var page: Page = .styles
     private let panel = UIView()
+    /// More languages… scrolls its long list inside the panel.
+    private let scroller = MenuScrollView()
     private var rows: [MenuRow] = []
     private var hoveredIndex: Int?
+    /// The language a long press offered to remove, with Remove on its row.
+    private var removingLanguage: String?
+    private static let rowHeight: CGFloat = 36
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -456,6 +472,10 @@ final class HexStyleMenuView: UIView {
         panel.layer.shadowRadius = 12
         panel.layer.shadowOpacity = 1
         addSubview(panel)
+        scroller.showsVerticalScrollIndicator = false
+        scroller.delaysContentTouches = false
+        scroller.alwaysBounceVertical = true
+        panel.addSubview(scroller)
         accessibilityViewIsModal = true
         rebuild()
     }
@@ -466,13 +486,21 @@ final class HexStyleMenuView: UIView {
     func show(page: Page) {
         self.page = page
         hoveredIndex = nil
+        removingLanguage = nil
+        scroller.contentOffset = .zero
+        rebuild()
+    }
+
+    /// Fixtures: the language page with Remove on a language's row.
+    func debugOfferRemove(_ language: String) {
+        show(page: .languages)
+        removingLanguage = language
         rebuild()
     }
 
     /// Updates row highlight while the user holds the Hex key and slides into the menu.
     func updateDrag(at point: CGPoint) {
-        let local = convert(point, to: panel)
-        let nextIndex = rows.firstIndex { $0.frame.contains(local) }
+        let nextIndex = rows.firstIndex { $0.bounds.contains(convert(point, to: $0)) }
         guard nextIndex != hoveredIndex else { return }
         hoveredIndex = nextIndex
         for (idx, row) in rows.enumerated() {
@@ -485,8 +513,7 @@ final class HexStyleMenuView: UIView {
 
     /// Commits a hovered row if the hold-and-slide ended inside the panel; otherwise leaves the menu open for a tap.
     func finishDrag(at point: CGPoint) {
-        let local = convert(point, to: panel)
-        if let idx = rows.firstIndex(where: { $0.frame.contains(local) }) {
+        if let idx = rows.firstIndex(where: { $0.bounds.contains(convert(point, to: $0)) }) {
             hoveredIndex = nil
             rows[idx].trigger()
         } else {
@@ -503,6 +530,9 @@ final class HexStyleMenuView: UIView {
     }
 
     private func rebuild() {
+        // Apple Speech's languages here, for labels: More languages holds every one the
+        // switch doesn't, so the two together name a language's region where it has several.
+        let supported = languageChoices + moreLanguages
         panel.backgroundColor = palette.popupFill
         panel.layer.borderColor = palette.popupBorder.cgColor
         panel.layer.borderWidth = 1 / max(1, traitCollection.displayScale)
@@ -516,8 +546,10 @@ final class HexStyleMenuView: UIView {
                     self?.onStyle?(option)
                 })
             }
-            if !languageChoices.isEmpty {
-                let current = (dictationLanguage ?? automaticLanguage).map(DictationLanguageSwitch.nativeName(for:))
+            if !languageChoices.isEmpty || !moreLanguages.isEmpty {
+                let current = (dictationLanguage ?? automaticLanguage).map {
+                    DictationLanguageSwitch.nativeName(for: $0, supported: supported)
+                }
                 rows.append(makeRow(title: String(localized: "Language"), detail: current ?? String(localized: "Automatic"), chevron: true, selected: false, showsTopDivider: true) { [weak self] in
                     self?.show(page: .languages)
                 })
@@ -538,13 +570,55 @@ final class HexStyleMenuView: UIView {
                 }
             }
         case .languages:
-            let automatic = automaticLanguage.map(DictationLanguageSwitch.nativeName(for:))
+            let automatic = automaticLanguage.map {
+                DictationLanguageSwitch.nativeName(for: $0, supported: supported)
+            }
             rows.append(makeRow(title: String(localized: "Automatic"), detail: automatic, selected: dictationLanguage == nil) { [weak self] in
                 self?.onLanguage?(nil)
             })
-            let names = DictationLanguageSwitch.nativeNames(for: languageChoices)
+            let names = DictationLanguageSwitch.nativeNames(for: languageChoices, supported: supported)
             for id in languageChoices {
-                rows.append(makeRow(title: names[id] ?? id, selected: id == dictationLanguage) { [weak self] in
+                let name = names[id] ?? id
+                let removing = id == removingLanguage
+                let row = makeRow(title: name, selected: id == dictationLanguage) { [weak self] in
+                    guard let self else { return }
+                    if removing {
+                        // A tap on the row, beside Remove, keeps the language.
+                        self.removingLanguage = nil
+                        self.rebuild()
+                    } else {
+                        self.onLanguage?(id)
+                    }
+                }
+                if removing {
+                    row.addRemoveButton(title: String(localized: "Remove"), accessibilityLabel: String(localized: "Remove \(name)")) { [weak self] in
+                        self?.removingLanguage = nil
+                        self?.onRemoveLanguage?(id)
+                    }
+                }
+                row.onLongPress = { [weak self] in
+                    guard let self, self.removingLanguage != id else { return }
+                    self.onHoverChanged?()
+                    self.removingLanguage = id
+                    self.rebuild()
+                }
+                row.accessibilityCustomActions = [
+                    UIAccessibilityCustomAction(name: String(localized: "Remove")) { [weak self] _ in
+                        self?.onRemoveLanguage?(id)
+                        return true
+                    },
+                ]
+                rows.append(row)
+            }
+            if !moreLanguages.isEmpty {
+                rows.append(makeRow(title: String(localized: "More languages…"), chevron: true, selected: false, showsTopDivider: true) { [weak self] in
+                    self?.show(page: .moreLanguages)
+                })
+            }
+        case .moreLanguages:
+            let names = DictationLanguageSwitch.nativeNames(for: languageChoices + moreLanguages, supported: supported)
+            for id in moreLanguages {
+                rows.append(makeRow(title: names[id] ?? id, selected: false) { [weak self] in
                     self?.onLanguage?(id)
                 })
             }
@@ -558,7 +632,9 @@ final class HexStyleMenuView: UIView {
                 })
             }
         }
-        rows.forEach(panel.addSubview)
+        let container: UIView = page == .moreLanguages ? scroller : panel
+        scroller.isHidden = page != .moreLanguages
+        rows.forEach(container.addSubview)
         setNeedsLayout()
     }
 
@@ -589,17 +665,31 @@ final class HexStyleMenuView: UIView {
         // Opens away from the edge the Hex key sits on: down from the strip, up from the keys.
         let opensDown = anchor.midY < bounds.midY
         let available = opensDown ? max(80, bounds.height - anchor.maxY - 6 - 4) : max(80, anchor.minY - 6 - 4)
-        let rowH = min(36, (available - 2 * padding) / CGFloat(max(1, rows.count)))
-        let height = CGFloat(rows.count) * rowH + 2 * padding
+        // More languages… scrolls: its rows keep their height in a panel as tall as there is room.
+        let scrolls = page == .moreLanguages
+        let rowH = scrolls ? Self.rowHeight : min(Self.rowHeight, (available - 2 * padding) / CGFloat(max(1, rows.count)))
+        let height = scrolls
+            ? min(available, CGFloat(rows.count) * rowH + 2 * padding)
+            : CGFloat(rows.count) * rowH + 2 * padding
         // Toward the screen's middle: from the key's right edge leftward on the right, from its
         // left edge rightward on the left.
         let towardRight = anchor.midX < bounds.midX
         let x = min(bounds.width - 6 - width, max(6, towardRight ? anchor.minX : anchor.maxX - width))
         let y = opensDown ? anchor.maxY + 6 : max(2, anchor.minY - 6 - height)
         panel.frame = CGRect(x: x, y: y, width: width, height: height)
+        if scrolls {
+            scroller.frame = panel.bounds
+            scroller.layer.cornerRadius = panel.layer.cornerRadius
+            scroller.contentSize = CGSize(width: width, height: CGFloat(rows.count) * rowH + 2 * padding)
+        }
         for (i, row) in rows.enumerated() {
             row.frame = CGRect(x: padding, y: padding + CGFloat(i) * rowH, width: width - 2 * padding, height: rowH)
         }
+    }
+
+    /// Lets a drag that starts on a row scroll the list, as a table does.
+    private final class MenuScrollView: UIScrollView {
+        override func touchesShouldCancel(in view: UIView) -> Bool { true }
     }
 
     private final class MenuRow: UIControl {
@@ -610,7 +700,19 @@ final class HexStyleMenuView: UIView {
         private let isChosen: Bool
         private let showsTopDivider: Bool
         private let onTrigger: () -> Void
+        private var removeButton: UIButton?
         var isSlideHovered = false { didSet { if isSlideHovered != oldValue { setNeedsDisplay() } } }
+        /// A long press on the row (a language's: Remove shows on it).
+        var onLongPress: (() -> Void)? {
+            didSet {
+                guard onLongPress != nil, longPress == nil else { return }
+                let recognizer = UILongPressGestureRecognizer(target: self, action: #selector(longPressed(_:)))
+                recognizer.minimumPressDuration = 0.45
+                addGestureRecognizer(recognizer)
+                longPress = recognizer
+            }
+        }
+        private var longPress: UILongPressGestureRecognizer?
 
         init(
             palette: FullKeyboardPalette,
@@ -644,6 +746,36 @@ final class HexStyleMenuView: UIView {
 
         func trigger() { onTrigger() }
 
+        @objc private func longPressed(_ recognizer: UILongPressGestureRecognizer) {
+            guard recognizer.state == .began else { return }
+            onLongPress?()
+        }
+
+        /// Remove, at the row's trailing end, in place of its checkmark.
+        func addRemoveButton(title: String, accessibilityLabel: String, action: @escaping () -> Void) {
+            var config = UIButton.Configuration.plain()
+            config.attributedTitle = AttributedString(title, attributes: AttributeContainer([
+                .font: UIFont.systemFont(ofSize: 14.5, weight: .medium),
+                .foregroundColor: UIColor(HexTheme.danger),
+            ]))
+            config.contentInsets = NSDirectionalEdgeInsets(top: 0, leading: 10, bottom: 0, trailing: 10)
+            config.background.backgroundColor = palette.functionFill
+            config.background.cornerRadius = 7
+            let button = UIButton(configuration: config, primaryAction: UIAction { _ in action() })
+            button.accessibilityLabel = accessibilityLabel
+            addSubview(button)
+            removeButton = button
+            setNeedsLayout()
+        }
+
+        override func layoutSubviews() {
+            super.layoutSubviews()
+            guard let removeButton else { return }
+            let size = removeButton.sizeThatFits(bounds.size)
+            let height = min(bounds.height - 6, 28)
+            removeButton.frame = CGRect(x: bounds.maxX - 4 - size.width, y: bounds.midY - height / 2, width: size.width, height: height)
+        }
+
         @objc private func redraw() { setNeedsDisplay() }
 
         override var isHighlighted: Bool {
@@ -670,6 +802,7 @@ final class HexStyleMenuView: UIView {
             (title as NSString).draw(at: CGPoint(x: 12, y: bounds.midY - size.height / 2), withAttributes: attributes)
 
             var trailing = bounds.maxX - 12
+            if removeButton != nil { return }
             if isChosen || chevron {
                 let config = UIImage.SymbolConfiguration(pointSize: 12, weight: .semibold)
                 let name = chevron ? "chevron.right" : "checkmark"

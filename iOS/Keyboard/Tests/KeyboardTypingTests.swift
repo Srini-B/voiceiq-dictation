@@ -194,21 +194,21 @@ final class KeyboardTypingTests: XCTestCase {
             type("we shoud")
             XCTAssertNil(keyboard.hexKey.superview, "the Hex key is gone")
             let strip = keyboard.stripView.frame
-            let buttons = shownButtons.filter { $0.frame.maxY <= strip.maxY }
+            // The strip's content has as much room above it, up to the keyboard's
+            // edge, as below it, down to the keys: Hex's 38 pt bar, its words 26 pt
+            // above row 1, and a 14 pt gap under it.
+            let firstRow = plane.engine.layout.key(.character("q"))!.frame.minY
+            let centre = firstRow / 2
+            XCTAssertEqual(firstRow, 52)
+            XCTAssertEqual(strip.minY, 0)
+            XCTAssertEqual(strip.height, 38)
+            XCTAssertEqual(strip.minY + (keyboard.stripView.textCenterY ?? 0), centre, accuracy: 0.5, "words at \(width) pt")
+            let buttons = shownButtons.filter { $0.frame.maxY <= firstRow }
             XCTAssertEqual(buttons.map(\.accessibilityLabel), ["VoiceiQ", "Dictate"], "at \(width) pt")
             let slots = (keyboard.stripView.slotFrames ?? []).map { $0.offsetBy(dx: strip.minX, dy: strip.minY) }
             XCTAssertEqual(slots.count, 3)
-            // The strip's content has as much room above it, up to the
-            // keyboard's edge, as below it, down to the keys, in a 44 pt bar.
-            let firstRow = plane.engine.layout.key(.character("q"))!.frame.minY
-            let centre = firstRow / 2
-            XCTAssertEqual(firstRow, 44)
-            XCTAssertEqual(strip.minY, 0)
-            XCTAssertEqual(strip.midY, centre, accuracy: 0.5, "at \(width) pt")
-            XCTAssertEqual(keyboard.stripView.pillInset * 2 + plane.engine.layout.metrics.stripPillHeight, strip.height, accuracy: 0.01)
             for button in buttons {
-                XCTAssertEqual(button.frame.minY, strip.minY, "\(button.accessibilityLabel!) top")
-                XCTAssertEqual(button.frame.maxY, strip.maxY, "\(button.accessibilityLabel!) bottom")
+                XCTAssertEqual(button.frame.midY, centre, accuracy: 0.5, "\(button.accessibilityLabel!) on the words' line")
                 button.layoutIfNeeded()
                 let glyph = button.subviews.first { $0 is UIImageView }!
                 XCTAssertEqual(button.convert(glyph.frame, to: keyboard).midY, centre, accuracy: 0.5, "\(button.accessibilityLabel!) centred")
@@ -251,8 +251,8 @@ final class KeyboardTypingTests: XCTestCase {
         let layout = plane.engine.layout
         XCTAssertNotNil(layout.key(.character("@")))
         XCTAssertEqual(shownButtons.map(\.accessibilityLabel), ["VoiceiQ", "Mini Keyboard", "Edit", "Dictate"])
-        let strip = keyboard.stripView.frame
-        for button in shownButtons { XCTAssertEqual(button.frame.maxY, strip.maxY) }
+        let centre = layout.key(.character("q"))!.frame.minY / 2
+        for button in shownButtons { XCTAssertEqual(button.frame.midY, centre, accuracy: 0.5) }
         // Hex's own row: the space bar loses nothing.
         let space = layout.key(.space)!.frame
         let row = layout.keys.filter { $0.row == 3 }.map(\.frame).sorted { $0.minX < $1.minX }

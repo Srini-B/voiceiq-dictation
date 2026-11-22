@@ -1,9 +1,10 @@
 import CoreGraphics
 
-/// VoiceiQ's one row above the keys: the strip runs from the keyboard view's top
-/// edge down to the keys, with its content centred, so the content has as much
-/// room above it, up to the keyboard's edge, as below it, down to the keys.
-/// 44 pt in portrait (Apple's suggestion bar), Hex's 50 pt turned.
+/// VoiceiQ's room around the strip. Hex's portrait strip is its 38 pt bar with the
+/// words 26 pt above row 1, which leaves 20 pt above them and 26 pt below; VoiceiQ
+/// keeps the bar and its chips and widens the gap under it to 14 pt, so the words
+/// sit midway between the keyboard's top edge and the keys (row 1 at 52 pt). Turned,
+/// the strip is 50 pt on the keys with its content centred, the same height as Hex's.
 ///
 /// iOS 26 and later draw about 17 pt of their own panel above a third-party
 /// keyboard in some presentations and nothing in others, and a keyboard can't
@@ -12,17 +13,24 @@ import CoreGraphics
 /// room above the content is that much larger. Hex's metrics take this through
 /// the patch's `KeyboardMetrics.phoneOverride`.
 enum HexStripHeight {
-    static let portrait: CGFloat = 44
+    static let portraitGap: CGFloat = 2 * KeyboardMetrics.barTextAboveKeys - KeyboardMetrics.stripBarHeight
     static let landscape: CGFloat = 50
 
     static func install() {
-        KeyboardMetrics.phoneOverride = { metrics, orientation in
-            let area = orientation == .landscape ? landscape : portrait
-            return KeyboardMetrics(
-                side: metrics.side, gap: metrics.gap, rowGap: metrics.rowGap, keyHeight: metrics.keyHeight,
-                stripTop: metrics.stripTop, stripHeight: area - metrics.stripTop, stripBottom: 0,
-                keysTop: metrics.keysTop, keysBottom: metrics.keysBottom, cornerRadius: metrics.cornerRadius
+        KeyboardMetrics.phoneOverride = { m, orientation in
+            let turned = orientation == .landscape
+            var out = KeyboardMetrics(
+                side: m.side, gap: m.gap, rowGap: m.rowGap, keyHeight: m.keyHeight,
+                stripTop: 0,
+                stripHeight: turned ? landscape : KeyboardMetrics.stripBarHeight,
+                stripBottom: turned ? 0 : portraitGap,
+                keysTop: m.keysTop, keysBottom: m.keysBottom, cornerRadius: m.cornerRadius,
+                bottomRowTrim: m.bottomRowTrim
             )
+            out.bottomRowReturnColumn = m.bottomRowReturnColumn
+            out.modifierLetterRatio = m.modifierLetterRatio
+            out.pad = m.pad
+            return out
         }
     }
 }

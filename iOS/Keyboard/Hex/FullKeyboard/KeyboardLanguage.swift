@@ -14,7 +14,11 @@ import Foundation
 /// English letters (the standard Polish layout is QWERTY) with ą ć ę ł ń ó ś ź ż on held keys.
 /// Romanian is QWERTY too, its own ă â î ș ț held on a, i, s and t (the comma-below ș and ț, not
 /// the cedilla ş ţ), as on Apple's iPhone keyboard; Apple's Romanian layout with keys of its own
-/// for them is the iPad's.
+/// for them is the iPad's. Greek matches the standard Greek layout and the system keyboard's
+/// observed long-press options, in the iPhone's rows (no ; or ς keys, the tonos key ending row
+/// 1; its typing rules are `GreekTyping`). Czech matches the standard Czech layout and the
+/// system keyboard's observed long-press options: QWERTZ, with the ´ and ˇ keys that accent the
+/// letter before them (`CzechTyping`) and every other Czech letter on a held key.
 nonisolated enum KeyboardLanguage: String, CaseIterable, Sendable {
     case english = "en"
     case norwegian = "nb"
@@ -26,9 +30,11 @@ nonisolated enum KeyboardLanguage: String, CaseIterable, Sendable {
     case frenchSwiss = "fr-CH"
     case portuguese = "pt"
     case polish = "pl"
+    case czech = "cs"
     case romanian = "ro"
     case russian = "ru"
     case ukrainian = "uk"
+    case greek = "el"
     case serbianLatin = "sr-Latn"
 
     /// Its own name, as Apple's keyboard list shows it.
@@ -44,9 +50,11 @@ nonisolated enum KeyboardLanguage: String, CaseIterable, Sendable {
         case .frenchSwiss: "Français (Suisse)"
         case .portuguese: "Português"
         case .polish: "Polski"
+        case .czech: "Čeština"
         case .romanian: "Română"
         case .russian: "Русский"
         case .ukrainian: "Українська"
+        case .greek: "Ελληνικά"
         case .serbianLatin: "Srpski"
         }
     }
@@ -65,20 +73,12 @@ nonisolated enum KeyboardLanguage: String, CaseIterable, Sendable {
         String(rawValue.prefix { $0 != "-" })
     }
 
-    /// Latin letters, so another Latin-script language can be autocorrected on its keys
-    /// (bilingual autocorrect). Russian's and Ukrainian's are Cyrillic.
-    var isLatin: Bool { self != .russian && self != .ukrainian }
-
-    /// The Apple Speech language (BCP 47) to dictate in while this layout types (Settings ›
-    /// Keyboard › Languages › Switch dictation too): the iPhone's own region where it has one
-    /// for the language (English on a British iPhone is en-GB), else the language's usual
-    /// one, among `supported` (what Apple Speech transcribes here; empty when not listed yet).
-    /// Nil when Apple Speech has none of it (Serbian).
-    func dictationLanguage(supported: [String], preferred: [String]) -> String? {
-        func key(_ identifier: String) -> String {
-            identifier.replacingOccurrences(of: "_", with: "-").lowercased()
-        }
-        let usual = switch self {
+    /// The BCP 47 identifier the keyboard reports as its input mode's language
+    /// (`UIInputViewController.primaryLanguage`, which supersedes the Info.plist's
+    /// `PrimaryLanguage`), so the host's spelling and autocorrection follow the language
+    /// typing: the language's usual region, as `dictationLanguage` falls back to.
+    var inputModeLanguage: String {
+        switch self {
         case .english: "en-US"
         case .norwegian: "nb-NO"
         case .spanish: "es-ES"
@@ -89,10 +89,50 @@ nonisolated enum KeyboardLanguage: String, CaseIterable, Sendable {
         case .frenchSwiss: "fr-CH"
         case .portuguese: "pt-BR"
         case .polish: "pl-PL"
+        case .czech: "cs-CZ"
         case .romanian: "ro-RO"
         case .russian: "ru-RU"
         case .ukrainian: "uk-UA"
+        case .greek: "el-GR"
         case .serbianLatin: "sr-Latn-RS"
+        }
+    }
+
+    /// Latin letters, so another Latin-script language can be autocorrected on its keys
+    /// (bilingual autocorrect). Russian's and Ukrainian's are Cyrillic, Greek's Greek.
+    var isLatin: Bool { self != .russian && self != .ukrainian && self != .greek }
+
+    /// The Apple Speech language (BCP 47) to dictate in while this layout types (Settings ›
+    /// Keyboard › Languages › Switch dictation too): the iPhone's own region where it has one
+    /// for the language (English on a British iPhone is en-GB), else the language's usual
+    /// one, among `supported` (what Apple Speech transcribes here; empty when not listed yet).
+    /// Spanish follows the iPhone's Spanish (`DictationLanguageSwitch.spanishCandidates`):
+    /// es-419, es-CO, es-AR and the like are the Americas' (es-US, then es-MX), and with no
+    /// Spanish region at all the iPhone's own `region` chooses (es-MX in Mexico, es-US in the
+    /// United States and Latin America, es-ES elsewhere). Nil when Apple Speech has none of it
+    /// (Serbian).
+    func dictationLanguage(
+        supported: [String],
+        preferred: [String],
+        region: String? = Locale.current.region?.identifier
+    ) -> String? {
+        func key(_ identifier: String) -> String {
+            identifier.replacingOccurrences(of: "_", with: "-").lowercased()
+        }
+        let usual = inputModeLanguage
+        // Spanish's regions are Apple's three variants, not the iPhone's own identifier.
+        if self == .spanish {
+            let named = preferred.first {
+                Self.matching($0) == .spanish && Locale(identifier: $0).region != nil
+            }
+            guard !supported.isEmpty else {
+                return named ?? DictationLanguageSwitch.spanish(forRegion: region)
+            }
+            return DictationLanguageSwitch.supportedMatch(
+                for: named ?? "es",
+                in: supported,
+                region: region
+            )
         }
         // A French layout keeps its own region: Canadian French dictates fr-CA.
         let ownRegion = self == .frenchCanadian || self == .frenchSwiss
@@ -119,6 +159,8 @@ nonisolated enum KeyboardLanguage: String, CaseIterable, Sendable {
     func letterRows(_ letters: KeyboardLetterLayout) -> [[String]] {
         let rows: [String] = switch offered(letters) {
         case .own: ownLetterRows
+        // Apple's Czech layouts are both its own, the ´ and ˇ keys kept: QWERTY only swaps Z and Y.
+        case .qwerty where self == .czech: ["qwertyuiop", "asdfghjkl\u{00B4}", "zxcvbnm\u{02C7}"]
         case .qwerty: ["qwertyuiop", "asdfghjkl", "zxcvbnm"]
         case .qwertz: ["qwertzuiop", "asdfghjkl", "yxcvbnm"]
         case .azerty: ["azertyuiop", "qsdfghjklm", "wxcvbn"]
@@ -143,10 +185,13 @@ nonisolated enum KeyboardLanguage: String, CaseIterable, Sendable {
         case .frenchSwiss: [.qwertz, .azerty, .qwerty]
         case .italian, .portuguese: [.qwerty, .azerty, .qwertz]
         case .polish, .romanian: [.qwerty, .qwertz, .azerty]
+        // Apple's "QWERTZ – Czech/Slovak" (its default) and "QWERTY – Czech/Slovak", nothing else
+        // (iOS 27.2 simulator, Add New Keyboard › Czech › Layout).
+        case .czech: [.own, .qwerty]
         // Apple lists QWERTY first for Serbian (Latin) and adds it as QWERTY; Hex keeps the
         // QWERTZ it always typed on as the default.
         case .serbianLatin: [.qwertz, .qwerty, .azerty]
-        case .norwegian, .russian, .ukrainian: [.own]
+        case .norwegian, .russian, .ukrainian, .greek: [.own]
         }
     }
 
@@ -163,13 +208,14 @@ nonisolated enum KeyboardLanguage: String, CaseIterable, Sendable {
     /// own layout with letters of its own, its arrangement and the language ("QWERTZ – Deutsch").
     func layoutName(_ letters: KeyboardLetterLayout) -> String {
         switch letters {
+        case .qwerty where self == .czech: "QWERTY – \(displayName)"
         case .qwerty: "QWERTY"
         case .qwertz: "QWERTZ"
         case .azerty: "AZERTY"
         case .dvorak: "Dvorak"
         case .own:
             switch self {
-            case .german: "QWERTZ – \(displayName)"
+            case .german, .czech: "QWERTZ – \(displayName)"
             case .spanish, .norwegian: "QWERTY – \(displayName)"
             default: displayName
             }
@@ -194,7 +240,15 @@ nonisolated enum KeyboardLanguage: String, CaseIterable, Sendable {
         // one Ukrainian spelling uses) after ж, ґ after ю, so shift and delete are one letter
         // wide.
         case .ukrainian: ["йцукенгшщзхї", "фівапролджєʼ", "ячсмитьбюґ"]
+        // The standard Greek layout in the rows the iPhone's own Greek keyboard shows (iOS 27.2
+        // simulator): no ; or ς keys (; is on the 123 page, ς on a held σ), so row 1 is nine
+        // keys ending in the tonos key ´, over row 2's nine.
+        case .greek: ["ερτυθιοπ\u{00B4}", "ασδφγηξκλ", "ζχψωβνμ"]
         case .serbianLatin: ["qwertzuiop", "asdfghjkl", "yxcvbnm"]
+        // The standard Czech layout (QWERTZ) in the rows the iPhone's own Czech keyboard shows
+        // (iOS 27.2 simulator): the ´ key (U+00B4) ends row 2, ten keys edge to edge, and the ˇ
+        // key (U+02C7) ends row 3, so shift and delete are one letter wide.
+        case .czech: ["qwertzuiop", "asdfghjkl\u{00B4}", "yxcvbnm\u{02C7}"]
         }
     }
 
@@ -317,6 +371,26 @@ nonisolated enum KeyboardLanguage: String, CaseIterable, Sendable {
                 "c": ["c", "ć", "ç", "č"],
                 "n": ["n", "ń", "ñ"],
             ]
+        case .czech:
+            // Every Czech letter (á č ď é ě í ň ó ř š ť ú ů ý ž) and its neighbours'; the ˇ key
+            // holds the ring ˚ (ů, å), the ´ key nothing, and so does every letter not listed.
+            [
+                "e": ["e", "ě", "é", "ê", "è", "ę", "ë", "ē", "ė"],
+                "r": ["r", "ř", "ŕ"],
+                "t": ["t", "ť"],
+                "z": ["z", "ż", "ź", "ž"],
+                "u": ["u", "ú", "ů", "û", "ü", "ù", "ū"],
+                "i": ["i", "í", "î", "ï", "ì", "į", "ī"],
+                "o": ["o", "ó", "ô", "ö", "ò", "õ", "œ", "ø", "ō"],
+                "a": ["a", "á", "à", "ą", "â", "ä", "æ", "ã", "å", "ā"],
+                "s": ["s", "š", "ß", "ś"],
+                "d": ["d", "ď"],
+                "l": ["l", "ł", "ľ", "ĺ"],
+                "y": ["y", "ý", "ÿ"],
+                "c": ["c", "č", "ç", "ć"],
+                "n": ["n", "ň", "ñ", "ń"],
+                "\u{02C7}": ["\u{02C7}", "\u{02DA}"],
+            ]
         case .romanian:
             // Romanian's own letters right after the base: ă and â on A, î on I, ș on S and ț on
             // T (comma-below, never the cedilla ş ţ); every other letter holds nothing. Its held
@@ -359,6 +433,21 @@ nonisolated enum KeyboardLanguage: String, CaseIterable, Sendable {
             [
                 "ʼ": ["ʼ", "'", "’", "‘", "`"],
             ]
+        case .greek:
+            // Each vowel's tonos form (ι and υ also with diaeresis, and with both), ς on σ and
+            // the kai sign ϗ on κ; in capitals Σ holds nothing and Ι, Υ only Ί Ϊ, Ύ Ϋ
+            // (`AccentCatalog`). Every other letter, and the tonos key, holds nothing.
+            [
+                "ε": ["ε", "έ"],
+                "υ": ["υ", "ύ", "ϋ", "ΰ"],
+                "ι": ["ι", "ΐ", "ϊ", "ί"],
+                "ο": ["ο", "ό"],
+                "α": ["α", "ά"],
+                "σ": ["σ", "ς"],
+                "η": ["η", "ή"],
+                "κ": ["κ", "ϗ"],
+                "ω": ["ω", "ώ"],
+            ]
         case .serbianLatin:
             [
                 "z": ["z", "ż", "ź", "ž"],
@@ -389,7 +478,8 @@ nonisolated enum KeyboardLanguage: String, CaseIterable, Sendable {
 
     /// The 123 and #+= keys whose held options on this language's system keyboard differ from
     /// English's (`AccentCatalog`), observed the same way. The pages themselves are English's in
-    /// every language, so Ukrainian's ₴, second on the system keyboard's held $, is held there.
+    /// every language but Greek (`KeyboardLayout.characterRows`), so Ukrainian's ₴, second on the
+    /// system keyboard's held $, is held there.
     var symbolHolds: [String: [String]] {
         switch self {
         case .english, .serbianLatin:
@@ -435,6 +525,9 @@ nonisolated enum KeyboardLanguage: String, CaseIterable, Sendable {
                 "8": ["8", "8ª", "8º"],
                 "9": ["9", "9º", "9ª"],
             ]
+        case .czech:
+            // The system Czech keyboard's 123 and #+= pages, and every held symbol, are English's.
+            [:]
         case .polish:
             // Its currency key is € (no zł), held for € $ £ ¥ ₩ ₽; Hex's 123 page keeps $.
             [
@@ -456,6 +549,11 @@ nonisolated enum KeyboardLanguage: String, CaseIterable, Sendable {
                 "$": ["$", "₽", "₩", "¥", "£", "€", "¢", "₴"],
                 "#": ["#", "№"],
             ]
+        case .greek:
+            // Its currency key is $, held as English's is; a held " offers French's order.
+            [
+                "\"": ["\"", "»", "«", "”", "“", "„"],
+            ]
         }
     }
 
@@ -473,9 +571,11 @@ nonisolated enum KeyboardLanguage: String, CaseIterable, Sendable {
         // Brazil's spelling first, Portugal's where only it is installed.
         case .portuguese: ["pt_BR", "pt", "pt_PT"]
         case .polish: ["pl", "pl_PL"]
+        case .czech: ["cs", "cs_CZ"]
         case .romanian: ["ro", "ro_RO"]
         case .russian: ["ru", "ru_RU"]
         case .ukrainian: ["uk", "uk_UA"]
+        case .greek: ["el", "el_GR"]
         // Latin only: a Cyrillic `sr` dictionary would reject every Latin word.
         case .serbianLatin: ["sr_Latn", "sr_Latn_RS", "sr-Latn"]
         }
@@ -517,8 +617,49 @@ nonisolated enum KeyboardLanguage: String, CaseIterable, Sendable {
             ["di", "il", "la", "in", "un", "si", "le", "lo", "ha", "ho", "ma", "da", "mi", "ci",
              "ti", "se", "ne", "no", "io", "tu", "su", "al"]
         case .norwegian, .german, .french, .frenchCanadian, .frenchSwiss, .portuguese, .polish,
-             .romanian, .russian, .ukrainian, .serbianLatin:
+             .czech, .romanian, .russian, .ukrainian, .greek, .serbianLatin:
             []
+        }
+    }
+
+    /// Unaccented spellings space puts the accent back on, where the plain spelling is no
+    /// word of the language at all. The dictionary path needs three letters and never
+    /// rewrites a word it knows, so these cannot come from it ("perche" is also the plural of
+    /// a fish, but that is not a common word; "cosi" is the plural of "coso" and stays out).
+    /// A pair whose plain spelling is a common word of its own is never here: "e" is "and",
+    /// "ce" is "to us", "si" is "oneself", "ne" is "of it", "da" is "from", "la" is "the" and
+    /// "li" is "them"; `accentSuggestions` offers those in the strip instead, as Spanish's
+    /// "si"/"sí" and "tu"/"tú" are left alone, and English's `suggestOnlyContractions`.
+    var accentRestorations: [String: String] {
+        switch self {
+        case .italian:
+            [
+                "perche": "perché", "poiche": "poiché", "affinche": "affinché",
+                "benche": "benché", "finche": "finché",
+                "piu": "più", "gia": "già", "puo": "può", "cioe": "cioè", "percio": "perciò",
+                "citta": "città", "societa": "società", "universita": "università",
+                "qualita": "qualità", "liberta": "libertà", "verita": "verità",
+                "realta": "realtà", "attivita": "attività", "possibilita": "possibilità",
+                "difficolta": "difficoltà", "opportunita": "opportunità",
+                "caffe": "caffè", "giu": "giù",
+                "lunedi": "lunedì", "martedi": "martedì", "mercoledi": "mercoledì",
+                "giovedi": "giovedì", "venerdi": "venerdì",
+            ]
+        case .english, .norwegian, .spanish, .german, .french, .frenchCanadian, .frenchSwiss,
+             .portuguese, .polish, .czech, .romanian, .russian, .ukrainian, .greek, .serbianLatin:
+            [:]
+        }
+    }
+
+    /// Accented forms whose plain spelling is a common word of its own, offered in the
+    /// suggestion strip and never put in by space ("e" is "and", "ce" is "to us"; "c'è"
+    /// uses the same straight apostrophe as the English contractions).
+    var accentSuggestions: [String: String] {
+        switch self {
+        case .italian: ["e": "è", "ce": "c'è"]
+        case .english, .norwegian, .spanish, .german, .french, .frenchCanadian, .frenchSwiss,
+             .portuguese, .polish, .czech, .romanian, .russian, .ukrainian, .greek, .serbianLatin:
+            [:]
         }
     }
 
@@ -528,13 +669,16 @@ nonisolated enum KeyboardLanguage: String, CaseIterable, Sendable {
         var map: [Character: (Double, Double)] = [:]
         let letters = offered(letters)
         // AZERTY's row 2 runs edge to edge, and its row 3 starts under e (W under E).
-        // Ukrainian's rows 1 and 2 are both twelve keys, and its row 3 starts under ц.
+        // Ukrainian's rows 1 and 2 are both twelve keys, and its row 3 starts under ц; Greek's
+        // are both nine (row 1 ending in the tonos key), and its row 3 starts under σ; Czech's
+        // both ten (row 2 ending in ´), its row 3 starting under s.
         // Dvorak's row 2 runs from the edge, its row 1 ends at delete (P over U's left half) and
         // its row 3 starts after shift (Q under O's right half).
         let offsets = switch letters {
         case .azerty: [0.0, 0.0, 2.0]
         case .dvorak: [1.85, 0.0, 1.33]
-        case .own where self == .ukrainian: [0.0, 0.0, 1.0]
+        case .own where self == .ukrainian || self == .greek || self == .czech: [0.0, 0.0, 1.0]
+        case .qwerty where self == .czech: [0.0, 0.0, 1.0]
         default: [0.0, 0.5, 1.5]
         }
         for (row, letters) in letterRows(letters).enumerated() {
@@ -567,9 +711,11 @@ nonisolated enum KeyboardLanguage: String, CaseIterable, Sendable {
             return .french
         case "pt": return .portuguese
         case "pl": return .polish
+        case "cs": return .czech
         case "ro": return .romanian
         case "ru": return .russian
         case "uk": return .ukrainian
+        case "el": return .greek
         case "sr": return parts.contains("latn") ? .serbianLatin : nil
         default: return nil
         }
@@ -583,9 +729,11 @@ nonisolated enum KeyboardLanguage: String, CaseIterable, Sendable {
     }
 
     /// Automatic follows the dictation language: its layout, or English for a language
-    /// without one (Hebrew, Greek). Before any dictation language is known, the first
+    /// without one (Hebrew). Before any dictation language is known, the first
     /// iPhone keyboard, then preferred language, that has a layout. Hex's own input mode
-    /// says nothing here: its `primaryLanguage` is the Info.plist's en-US, whatever you type.
+    /// says nothing here: the keyboard reports the language typing there
+    /// (`FullKeyboardView.syncLanguage`), so following it would only repeat the choice
+    /// already made.
     static func automatic(
         dictationLanguage: String?,
         inputModes: [String],
@@ -607,7 +755,9 @@ nonisolated enum KeyboardLanguage: String, CaseIterable, Sendable {
 /// Apple's Keyboard Layout list offers them for it. The plain ones hold only the 26 letters, in
 /// every language (iOS 27.0 simulator: the same rows, bottom row and 123 pages as the language's
 /// own layout, which is English's QWERTY, French's AZERTY, Swiss French's and Serbian's QWERTZ);
-/// a language's other letters are then held on their base letter (`letterHolds(on:)`).
+/// a language's other letters are then held on their base letter (`letterHolds(on:)`). Czech's
+/// QWERTY is Apple's "QWERTY – Czech/Slovak": its own rows, ´ and ˇ keys kept, Z and Y swapped
+/// (iOS 27.2 simulator).
 nonisolated enum KeyboardLetterLayout: String, CaseIterable, Sendable {
     /// The language's own keys, with letters of their own (German's ü ö ä, Spanish's ñ).
     case own

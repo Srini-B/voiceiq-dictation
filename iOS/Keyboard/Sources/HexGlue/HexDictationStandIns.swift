@@ -1,4 +1,5 @@
 import Combine
+import SwiftUI
 import UIKit
 import VoiceIQBridge
 
@@ -27,6 +28,8 @@ final class KeyboardViewModel: ObservableObject {
     let stagePhase: StagePhase = .idle
     let statusMessage: String? = nil
     let isWarmAvailable = true
+    /// The strip's mic always reaches VoiceiQ's dictation.
+    var dictatesThroughHex: Bool { true }
     let isLoggingTyping = false
     /// A result held for this keyboard: the strip offers it (Hex #2163).
     @Published var offeredDictation: String?
@@ -34,6 +37,7 @@ final class KeyboardViewModel: ObservableObject {
     let dictationLanguage: String? = nil
     let automaticLanguage: String? = nil
     let languageChoices: [String] = []
+    let moreLanguages: [String] = []
     let translationNote: TranslationFailure? = nil
     let translationLanguage: String? = nil
     let translationTargetChoices: [String] = []
@@ -57,6 +61,7 @@ final class KeyboardViewModel: ObservableObject {
     let onCancelTap: (() -> Void)? = nil
     let onStyleSelected: ((DictationStyle) -> Void)? = nil
     let onLanguageSelected: ((String?) -> Void)? = nil
+    let onLanguageRemoved: ((String) -> Void)? = nil
     let onTranslationToggled: ((Bool) -> Void)? = nil
     let onTranslationTargetSelected: ((String) -> Void)? = nil
     var onPasteDictation: (() -> Void)?
@@ -76,6 +81,11 @@ enum DictationStyle: String, CaseIterable, Sendable {
     var label: String { "Polished" }
     var shortHint: String { "" }
     var next: DictationStyle { self }
+}
+
+/// Hex's colours the keyboard's own views name.
+enum HexTheme {
+    static let danger = Color(red: 0xE5 / 255.0, green: 0x4D / 255.0, blue: 0x42 / 255.0)
 }
 
 /// Hex's translation of dictations; off in VoiceiQ.
@@ -98,8 +108,22 @@ enum DictationLanguageSwitch {
         Locale(identifier: identifier).localizedString(forIdentifier: identifier) ?? identifier
     }
 
-    static func nativeNames(for identifiers: [String]) -> [String: String] {
+    static func nativeName(for identifier: String, supported: [String]) -> String {
+        nativeName(for: identifier)
+    }
+
+    static func nativeNames(for identifiers: [String], supported: [String] = []) -> [String: String] {
         Dictionary(uniqueKeysWithValues: identifiers.map { ($0, nativeName(for: $0)) })
+    }
+
+    // Spanish's keyboard regions; VoiceiQ ships English only, so these name the
+    // language without Apple Speech's list.
+    static func spanish(forRegion region: String?) -> String {
+        region.map { "es-\($0)" } ?? "es-ES"
+    }
+
+    static func supportedMatch(for identifier: String, in supported: [String], region: String? = nil) -> String? {
+        supported.first { $0.hasPrefix(identifier) } ?? identifier
     }
 }
 
@@ -135,11 +159,35 @@ final class DotScopeHostView: UIView {
     func tearDown() {}
 }
 
-// Hex's custom vocabulary, which its dictation-correction helpers name. The
-// keyboard never calls those helpers (they feed Hex's speech recognizer).
+/// Hex's vocabulary list is VoiceiQ's Dictionary: the keys never autocorrect its
+/// words away, and the strip's Add to vocabulary queues a word for the app, as the
+/// dictionary offer does (`SharedStore.requestDictionaryAddition`). Without Full
+/// Access nothing reaches the app, so a word added then lasts for this session.
+@MainActor
+struct CustomVocabularySettings {
+    nonisolated static let maxTermCount = 100
+    private static var addedThisSession: [String] = []
 
-enum CustomVocabularySettings {
-    static let maxTermCount = 100
+    var terms: [String] {
+        get { Self.sanitize(SharedStore.shared.dictionaryWords + Self.addedThisSession) }
+        nonmutating set {
+            let saved = Set(terms.map(VocabularySpelling.normalizedKey))
+            for term in Self.sanitize(newValue) where !saved.contains(VocabularySpelling.normalizedKey(term)) {
+                SharedStore.shared.requestDictionaryAddition(term)
+                Self.addedThisSession.append(term)
+            }
+        }
+    }
+
+    /// Hex's rule: trimmed, two letters or digits at least, one per spelling, at most 100.
+    static func sanitize(_ raw: [String]) -> [String] {
+        var seen = Set<String>()
+        let kept = raw.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { term in
+            let key = VocabularySpelling.normalizedKey(term)
+            return key.count >= 2 && term.count <= 64 && seen.insert(key).inserted
+        }
+        return Array(kept.prefix(maxTermCount))
+    }
 }
 
 enum VocabularySpelling {
