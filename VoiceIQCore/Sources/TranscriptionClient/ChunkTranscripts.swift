@@ -5,7 +5,9 @@ import Foundation
 /// keyed by the exact frame range each was cut at. A retry that chunks the
 /// same CAF gets the same ranges and skips those requests; a different cut
 /// (a changed chunk length, say) simply misses and re-sends. Lives next to
-/// the audio as `chunks.json` and is deleted once every chunk is in.
+/// the audio as `chunk-text.json` and is deleted once the chunks are joined.
+/// Each entry is the chunk's written text. Before 0.7.12 the cache held raw
+/// transcript in `chunks.json`; the new name keeps a retry from reading it.
 struct ChunkTranscripts: Codable, Equatable {
     private var byRange: [String: String] = [:]
 

@@ -8,7 +8,9 @@ import VoiceIQBridge
 ///   writes the text by the writing rules (or, with them off, writes down
 ///   what was said), with any screenshots → ReplacementEngine → inserted text.
 ///
-/// Recordings over ten minutes go in chunks, one call each. Rules unchanged:
+/// Recordings over ten minutes go in chunks, one call each, then one text
+/// call joins the written chunks so a correction spoken in a later chunk
+/// reaches an earlier one. Rules unchanged:
 /// one silent retry on transient failures, a second attempt on a fresh
 /// connection when the first is slow, and every failure is a typed
 /// TranscriptionError mapping to the failure matrix.
@@ -67,19 +69,24 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
                 done.write(to: cacheURL)
             }
         }
-        if ranges.count > 1 {
-            try? FileManager.default.removeItem(at: cacheURL)
-        }
-
         func ms(_ duration: Duration) -> Int { Int(duration / .milliseconds(1)) }
         let words = pieces.joined(separator: " ").split(whereSeparator: \.isWhitespace).count
         Log.transcription.notice("timing: encode \(ms(encoded))ms, dictation call \(ms(clock.now - started - encoded))ms (\(config.writingModel, privacy: .public)), \(words) words, \(String(format: "%.1f", durationSeconds), privacy: .public)s audio")
 
-        // The model writes each chunk as finished text, so chunks join as paragraphs.
-        let written = pieces.joined(separator: "\n\n")
-        guard !written.isEmpty else {
+        guard !pieces.isEmpty else {
             // The coordinator classifies silence vs dropped-transcript by energy.
             throw TranscriptionError.emptyTranscript
+        }
+        var written = pieces[0]
+        if pieces.count > 1 {
+            // A failure here leaves the chunk cache in place, so Retry sends only this call.
+            let joinPrompt = dictationPrompt(context: context, writtenParts: pieces)
+            let joined = try await sendWithRetry(flac: nil, prompt: joinPrompt, images: [], config: config,
+                                                 deadline: TimeoutPolicy.overallDeadline(audioDuration: durationSeconds))
+            written = joined.isEmpty ? pieces.joined(separator: "\n\n") : joined
+        }
+        if ranges.count > 1 {
+            try? FileManager.default.removeItem(at: cacheURL)
         }
         // Dictionary rules are a HARD guarantee — they apply on every path (audit L9).
         let text = ReplacementEngine.apply(DictionaryStore().replacementRules(), to: written)
@@ -87,7 +94,7 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
         return TranscriptionResult(rawTranscript: written, cleanedTranscript: text, modelID: modelID)
     }
 
-    private func dictationPrompt(context: DictationContext) -> String {
+    private func dictationPrompt(context: DictationContext, writtenParts: [String]? = nil) -> String {
         let dictionary = DictionaryStore()
         let place = DictationPlace(appName: context.targetAppName,
                                    windowTitle: context.focusedField?.windowTitle,
@@ -96,9 +103,10 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
             vocabulary: dictionary.sanitizedVocabulary(), spellings: dictionary.spellings(),
             customRules: settings.customWritingRules, spelling: SpellingVariant.system.promptLine,
             languages: SpokenLanguage.promptLine(settings.spokenLanguages),
-            imagesAttached: !context.screenshots.isEmpty,
+            imagesAttached: writtenParts == nil && !context.screenshots.isEmpty,
             surroundingText: context.focusedField?.surroundingText,
-            place: place
+            place: place,
+            writtenParts: writtenParts
         )
     }
 
@@ -117,7 +125,7 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
     /// The ONE place a dictation request is sent. A second attempt starts on
     /// its own connection when the first has not answered in time or lost
     /// its connection; the first answer wins.
-    private func send(flac: Data, prompt: String, images: [Data], config: GeminiConfig,
+    private func send(flac: Data?, prompt: String, images: [Data], config: GeminiConfig,
                       deadline: TimeInterval) async throws -> String {
         let timing = GeminiClient.freshRetryTiming(deadline: deadline)
         let attempt: @Sendable () async throws -> String = { [client] in
@@ -128,7 +136,7 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
         return ValidationGate.stripArtifacts(text).trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    private func sendWithRetry(flac: Data, prompt: String, images: [Data], config: GeminiConfig,
+    private func sendWithRetry(flac: Data?, prompt: String, images: [Data], config: GeminiConfig,
                                deadline: TimeInterval) async throws -> String {
         do {
             return try await send(flac: flac, prompt: prompt, images: images, config: config, deadline: deadline)

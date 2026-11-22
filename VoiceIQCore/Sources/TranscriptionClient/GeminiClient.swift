@@ -39,14 +39,15 @@ public actor GeminiClient {
 
     /// One dictation in one call: the model hears the recording (FLAC) and
     /// answers `{"text": ...}` under `prompt`, which carries the writing
-    /// rules. Screenshots ride along when
+    /// rules. Without audio, the prompt carries the text to write (joining the
+    /// chunks of a long dictation). Screenshots ride along when
     /// screen context is on. Returns the text, or "" when the model heard no
     /// speech. Structured output keeps the model's working out of the answer:
     /// with audio attached, gemini-3.8-flash sometimes wrote its re-listening
     /// and drafts as plain text before the result (measured 2026-09-28).
     public func dictate(
         prompt: String,
-        audio: Data,
+        audio: Data?,
         images: [Data] = [],
         model: String,
         endpoint: URL,
@@ -54,7 +55,9 @@ public actor GeminiClient {
     ) async throws -> String {
         var parts: [[String: Any]] = [["text": prompt]]
         parts += images.map { ["inline_data": ["mime_type": "image/jpeg", "data": $0.base64EncodedString()]] }
-        parts.append(["inline_data": ["mime_type": "audio/flac", "data": audio.base64EncodedString()]])
+        if let audio {
+            parts.append(["inline_data": ["mime_type": "audio/flac", "data": audio.base64EncodedString()]])
+        }
         let body: [String: Any] = [
             "contents": [["role": "user", "parts": parts]],
             "generationConfig": [
@@ -65,7 +68,7 @@ public actor GeminiClient {
             ] as [String: Any],
         ]
         let reply = try await generateContent(body: body, model: model, endpoint: endpoint, deadline: deadline,
-                                              stage: .transcribe)
+                                              stage: audio == nil ? .cleanup : .transcribe)
         guard let text = PromptV1.dictationText(fromJSON: reply) else {
             // Never paste the model's working. Retryable: the next attempt
             // usually answers with the object.
