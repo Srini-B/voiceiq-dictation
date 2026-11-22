@@ -24,6 +24,7 @@ struct DictationPane: View {
     @State private var translationTargets = SettingsStore().translationTargetLanguages
     @State private var spelling = SettingsStore().spellingVariant
     @State private var muteOtherAudio = SettingsStore().muteOtherAudioWhileDictating
+    @State private var pauseMedia = SettingsStore().pauseMediaWhileDictating
     @State private var screenContext = SettingsStore().screenContextEnabled
     @State private var fitToExistingText = SettingsStore().fitToExistingText
     @State private var copyRecovered = SettingsStore().copyRecoveredToClipboard
@@ -53,6 +54,10 @@ struct DictationPane: View {
                 Toggle("Mute other audio while dictating", isOn: $muteOtherAudio)
                     .onChange(of: muteOtherAudio) { _, enabled in
                         settings.setMuteOtherAudioWhileDictating(enabled)
+                    }
+                Toggle("Pause Music and Spotify while dictating", isOn: $pauseMedia)
+                    .onChange(of: pauseMedia) { _, enabled in
+                        settings.setPauseMediaWhileDictating(enabled)
                     }
                 Toggle("Copy recovered dictations to the clipboard", isOn: $copyRecovered)
                     .onChange(of: copyRecovered) { _, enabled in
@@ -185,6 +190,7 @@ struct DictationPane: View {
             case "translationTargetLanguages": translationTargets = settings.translationTargetLanguages
             case "spellingVariant": spelling = settings.spellingVariant
             case "muteOtherAudioWhileDictating": muteOtherAudio = settings.muteOtherAudioWhileDictating
+            case "pauseMediaWhileDictating": pauseMedia = settings.pauseMediaWhileDictating
             case "screenContextEnabled": screenContext = settings.screenContextEnabled
             case "fitToExistingText": fitToExistingText = settings.fitToExistingText
             case "copyRecoveredToClipboard": copyRecovered = settings.copyRecoveredToClipboard
