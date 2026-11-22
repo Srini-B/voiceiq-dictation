@@ -111,12 +111,13 @@ public struct InsertionCoordinator: TextInserting {
                 return .inserted
             }
             let postedAt = Date()
-            let check = Task { @MainActor [paster] in
+            let check = Task { @MainActor [paster] () -> PasteCheck.Verdict in
                 await PasteCheck.watch(element: before.element, before: before.reading, text: text, postedAt: postedAt) {
                     paster.copyOnly(text)
                     NotificationCenter.default.post(name: .voiceIQPasteMissed, object: text)
                 }
             }
+            paster.pasteCheck = check
             // A readable field must show the text before Return goes in: a
             // paste the app ignored would otherwise send whatever draft or
             // command was already in the field.

@@ -76,8 +76,14 @@ public final class PasteInserter {
     /// restore brings back the user's clipboard for the next snapshot. Up to
     /// `restoreDelay`; at once when nothing is pending.
     public func finishPendingRestore() async {
+        if let check = pasteCheck { _ = await check.value }
         if let pending = restoreTask { await pending.value }
     }
+
+    /// The read-back of the last paste (PasteCheck), which may copy its text
+    /// on a miss: the next paste waits for it so that copy can't replace the
+    /// newer text on the clipboard.
+    public var pasteCheck: Task<PasteCheck.Verdict, Never>?
 
     /// Puts text on the clipboard WITHOUT restore — the tier-3 floor and the
     /// focus-changed path ("Copied — press ⌘V"). Marked transient so clipboard

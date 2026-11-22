@@ -86,10 +86,11 @@ public enum HeardGuard {
             remaining[word, default: 0] -= 1
             if hasDigit(word) { sharedNumbers += 1 } else { sharedWords += 1 }
         }
-        // A currency code or prefix next to an amount ("CHF 200", "C$100")
-        // is how the rules write the spoken currency, so it is left out too.
+        // A short unit or currency next to an amount ("5 kg", "6 ft 2 in",
+        // "CHF 200", "C$100") is how the rules write the spoken one, so it is
+        // left out too.
         let writtenWords = written.indices.count(where: { i in
-            !hasDigit(written[i]) && !(currencyCodes.contains(written[i])
+            !hasDigit(written[i]) && !(written[i].count <= 3
                 && (written.indices.contains(i + 1) && hasDigit(written[i + 1]) || i > 0 && hasDigit(written[i - 1])))
         })
         if writtenWords > 0, sharedWords * 2 < writtenWords {
@@ -257,13 +258,6 @@ public enum HeardGuard {
     private static let preambles: [[String]] = [
         ["here's", "the"], ["here", "is", "the"], ["here's", "your"], ["here", "is", "your"],
         ["cleaned", "transcript"], ["cleaned", "text"],
-    ]
-
-    /// Currency codes and the letters of prefixes such as C$, A$, HK$, R$.
-    private static let currencyCodes: Set<String> = [
-        "usd", "eur", "gbp", "jpy", "cny", "rmb", "inr", "cad", "aud", "nzd", "chf", "hkd", "sgd", "sek",
-        "nok", "dkk", "pln", "czk", "huf", "brl", "mxn", "zar", "krw", "try", "aed", "sar", "rub", "thb",
-        "idr", "myr", "php", "ils", "us", "c", "a", "nz", "hk", "s", "r", "rs", "kr", "fr", "mx",
     ]
 
     /// Words of spoken punctuation and layout commands.

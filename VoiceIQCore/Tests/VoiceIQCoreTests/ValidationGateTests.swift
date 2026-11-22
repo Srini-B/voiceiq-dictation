@@ -48,6 +48,8 @@ final class HeardGuardTests: XCTestCase {
         assertPasses("call me at three thirty p m", "Call me at 3:30 PM.")
         assertPasses("two hundred Swiss francs", "CHF 200")
         assertPasses("one hundred Canadian dollars", "C$100")
+        assertPasses("five kilograms", "5 kg")
+        assertPasses("six feet two inches", "6 ft 2 in")
         // Ten spoken digits become one token.
         assertPasses("call five five five one two three four five six seven", "Call 5551234567.")
     }
