@@ -187,9 +187,9 @@ VoiceiQ also ships as an iPhone app (iOS 18+) with its own keyboard. Add the
 VoiceiQ keyboard with Full Access, tap the mic in any app, and the text lands
 where you were typing.
 
-- **A full English keyboard.** Predictions, auto-correction, slide to type,
-  QWERTY and four other layouts, and emoji, all offline. It knows your
-  Dictionary, contacts and Text Replacements (docs/IOS.md, "Typing").
+- **A keyboard for your voice.** Dictate in one tap, plus a panel that moves
+  the cursor, copies, pastes and undoes. Type with your usual
+  keyboard; the globe key switches between them (docs/IOS.md, "Keyboard").
 
 - **One trip to the app, once.** The first tap starts a background session and
   sends you back to the app you were in. After that the mic starts in place,
@@ -290,9 +290,6 @@ process, one-time setup and checks are in
 VoiceiQ is based on [Jot](https://github.com/google-gemini/jot-gemini-transcribe-macOS),
 Copyright 2026 Google LLC, and is distributed under the Apache License 2.0
 ([LICENSE](LICENSE)). Changes since the fork are by Blue Lobster Technology.
-The iPhone keyboard extension links FUTO's GPL-3.0 swipe library, so the
-keyboard as distributed is licensed under the GPL-3.0; its slide to type is
-powered by FUTO Swipe.
 Third-party components and their licenses are listed in
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). This is not an officially
 supported Google product.

@@ -33,8 +33,8 @@ preflight (tools, identity, credentials)
 3. Confirm the production models are available with a real dictation on both
    providers (Gemini and OpenAI).
 
-The apps run no speech or ML model of their own; only the keyboard's FUTO
-Swipe models ship in the bundle. The Mac UI links `VoiceIQCore`; the keyboard
+The apps run no speech or ML model of their own, and none ships in the
+bundle. The Mac UI links `VoiceIQCore`; the keyboard
 and Live Activity link only `VoiceIQBridge`. The Mac helper,
 `VoiceiQLocalSpeech`, links only `VoiceIQSpeech`: it is the Chrome extension's
 native messaging host and keeps its name because installed host manifests
