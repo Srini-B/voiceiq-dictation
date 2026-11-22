@@ -155,6 +155,21 @@ final class RecoveryClipboardTests: XCTestCase {
         XCTAssertEqual(recorder.modes, [.translate(targets: ["es", "fr"]), .askAnything(selectedText: "the selection"), .dictate])
     }
 
+    /// An interrupted Translate (a keyboard ended mid-dictation, an app
+    /// crash) is recovered as a translation, not as plain dictated text.
+    func testRecoveryKeepsTheModeTheDictationRanIn() async throws {
+        var meta = try queuedSession("unused", secondsAgo: 5)
+        meta.status = .recording
+        meta.mode = .translate(targets: ["de"])
+        let folder = root.appendingPathComponent(meta.id.uuidString, isDirectory: true)
+        meta.write(to: folder); store.upsert(meta: meta, folder: folder)
+        let recorder = ModeRecorder()
+
+        await RecoveryScanner(store: store, transcription: recorder, recordingsRoot: root).scanAndRecover()
+
+        XCTAssertEqual(recorder.modes, [.translate(targets: ["de"])])
+    }
+
     /// Retry is offered only when it can do something: a recording to
     /// transcribe again, or the words of an unfinished dictation. A finished
     /// one whose audio is gone would only fail.

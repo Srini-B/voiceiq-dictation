@@ -72,7 +72,8 @@ public final class RecoveryScanner {
                         ?? 60
                     let context = DictationContext(
                         targetAppBundleID: meta.targetAppBundleID,
-                        targetAppName: meta.targetAppName
+                        targetAppName: meta.targetAppName,
+                        mode: meta.mode ?? .dictate
                     )
                     let result = try await transcription.transcribe(
                         audioURL: cafURL, durationSeconds: duration, context: context
