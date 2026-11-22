@@ -351,8 +351,9 @@ globe key switches to it.
 
 - The voice panel: the mic bar ("Tap to speak"), with a notice from the app
   or the Dictionary offer under it. While a dictation runs, the recording
-  strip takes the mic bar's place until the text is delivered. Without Full
-  Access it shows "Allow Full Access" instead, which opens the app's setup.
+  strip takes the mic bar's place, as wide as the key row, until the text is
+  delivered. Without Full Access it shows "Allow Full Access" instead, which
+  opens the app's setup.
 - The edit panel (`EditPanel`, `EditController`), in place of the voice
   panel: line start, previous word, left and right arrows that repeat while
   held, next word and line end; then copy, cut and paste (Full Access), undo
@@ -370,8 +371,8 @@ Rambler. In place of the mic bar: Cancel (x) on the left, a red stop button on t
 right, the elapsed time in the middle. Behind them a red glow rises from the bottom edge as loud
 as the voice was: silence keeps 8% of the strip's height, and the height grows
 linearly with the mic level up to the full strip for the loudest speech. It is
-blurred and fades out at every edge, the bottom too, so it never draws a hard
-edge; its top edge is a smooth curve through
+blurred, spans the strip's full width behind the buttons and fades out over
+its bottom few points; its top edge is a smooth curve through
 the recent levels, newest on the right. The app keeps the levels (`LevelBars`:
 one per mic level it writes, at most every 0.06 s, smoothed with a fast attack
 and slow release, newest 256 kept) and publishes them as

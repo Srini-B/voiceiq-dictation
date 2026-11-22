@@ -31,14 +31,10 @@ struct LevelGlow: View {
                 .fill(LinearGradient(colors: [color.opacity(0.6), color.opacity(0.18)],
                                      startPoint: .bottom, endPoint: .top))
                 .blur(radius: 2)
-                // Soft on every side, so no edge reads as a line: a bright
-                // bottom edge looked like a divider above the keys, with the
-                // buttons sitting on it.
-                .mask(LinearGradient(stops: [.init(color: .clear, location: 0), .init(color: .black, location: 0.08),
-                                             .init(color: .black, location: 0.92), .init(color: .clear, location: 1)],
-                                     startPoint: .leading, endPoint: .trailing))
-                // Only the last few points feather out, so the glow still
-                // rises from the bottom rather than floating as a band.
+                // Full width, behind the strip's buttons. Only the bottom's
+                // last few points feather out: a bright bottom edge looked
+                // like a divider, and the glow still rises from the bottom
+                // rather than floating as a band.
                 .mask(LinearGradient(stops: [.init(color: .black, location: 0), .init(color: .black, location: 0.84),
                                              .init(color: .clear, location: 1)],
                                      startPoint: .top, endPoint: .bottom))
