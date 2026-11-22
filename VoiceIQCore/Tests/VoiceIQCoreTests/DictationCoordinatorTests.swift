@@ -1,7 +1,6 @@
 import XCTest
 @testable import VoiceIQCore
 
-@MainActor
 final class CallCount: @unchecked Sendable {
     private let lock = NSLock()
     private var count = 0
