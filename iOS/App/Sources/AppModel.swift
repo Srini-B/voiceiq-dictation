@@ -155,7 +155,10 @@ final class AppModel: ObservableObject {
         for record in usage { UsageMeter.store?.append(record) }
         for (meta, folder) in sessions { mirror(meta, folder: folder) }
         SessionDiagnostics.note("imported \(sessions.count) keyboard dictation(s)")
-        if sessions.contains(where: { [.recording, .recorded, .transcribing].contains($0.meta.status) }) { await recoveryScanner?.scanAndRecover() }
+        if sessions.contains(where: { [.recording, .recorded, .transcribing].contains($0.meta.status) }) {
+            // Only what the keyboard left: the app's own dictation may be running.
+            await recoveryScanner?.scanAndRecover(sparing: { [weak self] in self?.coordinator.activeSessionFolder })
+        }
         await retryQueue?.drain()
     }
 
@@ -286,7 +289,8 @@ final class AppModel: ObservableObject {
         retryQueue = queue
         Task {
             await importKeyboardDictations(takeOverJobs: false)
-            await scanner.scanAndRecover()
+            // A keyboard start can launch the app straight into a dictation.
+            await scanner.scanAndRecover(sparing: { [weak self] in self?.coordinator.activeSessionFolder })
             queue.start()
             Task.detached(priority: .utility) { RetentionPolicy().purge() }
         }

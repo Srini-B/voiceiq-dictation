@@ -102,6 +102,29 @@ final class RecoveryClipboardTests: XCTestCase {
         XCTAssertEqual(store.record(id: meta.id.uuidString)?.cleanedTranscript, "Retried text.")
     }
 
+    /// The recovery scan a keyboard import runs leaves the app's own running
+    /// dictation alone: it is unfinished, not interrupted.
+    func testRecoverySparesTheActiveSession() async throws {
+        var folders: [URL] = []
+        for text in ["Interrupted.", "Still recording."] {
+            let meta = try queuedSession(text, secondsAgo: text == "Interrupted." ? 60 : 5)
+            var interrupted = meta
+            interrupted.status = .recording
+            let folder = root.appendingPathComponent(meta.id.uuidString, isDirectory: true)
+            interrupted.write(to: folder)
+            store.upsert(meta: interrupted, folder: folder)
+            folders.append(folder)
+        }
+        let active = folders[1]
+        let scanner = RecoveryScanner(store: store, transcription: FolderTranscription(), recordingsRoot: root)
+        await scanner.scanAndRecover(sparing: { active })
+
+        let live = try XCTUnwrap(SessionMeta.read(from: active))
+        XCTAssertEqual(live.status, .recording, "the running dictation's meta is untouched")
+        XCTAssertNil(live.rawTranscript)
+        XCTAssertEqual(SessionMeta.read(from: folders[0])?.status, .recovered, "a real interrupted one is still recovered")
+    }
+
     /// Records the mode each transcription was asked for.
     private final class ModeRecorder: TranscriptionServicing, @unchecked Sendable {
         private let lock = NSLock()
