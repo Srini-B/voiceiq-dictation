@@ -560,9 +560,9 @@ public final class AudioCaptureEngine: AudioCapturing, @unchecked Sendable {
         let hostTime = timestamp.mFlags.contains(.hostTimeValid) ? Self.nanoseconds(fromHostTime: timestamp.mHostTime) : nil
         // AVAudioPCMBuffer is not Sendable. This copy is never touched again
         // here; only the write queue reads it from now on.
-        nonisolated(unsafe) let buffer = buffer
+        nonisolated(unsafe) let handed = buffer
         queue.async { [weak self] in
-            self?.ingest(buffer, capturedAt: hostTime)
+            self?.ingest(handed, capturedAt: hostTime)
         }
     }
 
