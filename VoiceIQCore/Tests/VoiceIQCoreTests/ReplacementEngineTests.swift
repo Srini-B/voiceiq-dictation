@@ -12,7 +12,7 @@ final class ReplacementEngineTests: XCTestCase {
             TranscriptSegment(speaker: "B", text: "COOPER NETTIES is down", chunkIndex: 1, start: 4, end: 6.25),
         ]
         let fixed = MeetingEngine.corrected(heard, rules: [rule("cooper netties", "Kubernetes")])
-        XCTAssertEqual(fixed.map(\.text), ["Ship it to Kubernetes today", "KUBERNETES is down"])
+        XCTAssertEqual(fixed.map(\.text), ["Ship it to Kubernetes today", "Kubernetes is down"])
         XCTAssertEqual(fixed.map(\.speaker), ["A", "B"])
         XCTAssertEqual(fixed.map(\.end), [4, 6.25])
     }
