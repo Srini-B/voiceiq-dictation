@@ -61,4 +61,23 @@ final class WebMicCaptureTests: XCTestCase {
         XCTAssertEqual(result.framesWritten, 1_600)
         XCTAssertNil(mic.startFailure)
     }
+
+    /// Done tapped while getUserMedia was still pending: the capture never
+    /// started, so the app records this one. A capture that started and
+    /// stopped before its first chunk is a silent blip, not a failure.
+    func testAStopBeforeTheMicrophoneStartedIsAStartFailure() async throws {
+        let mic = WebMicCapture()
+        mic.runScript = { _ in }
+        mic.handle(["type": "ready"])
+
+        try mic.start(writingTo: file())
+        _ = await mic.stop()
+        XCTAssertNotNil(mic.startFailure)
+
+        try mic.start(writingTo: file())
+        mic.handle(["type": "started", "id": 2])
+        let blip = await mic.stop()
+        XCTAssertEqual(blip.framesWritten, 0)
+        XCTAssertNil(mic.startFailure)
+    }
 }

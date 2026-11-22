@@ -36,10 +36,13 @@ final class WebMicCapture: NSObject, AudioCapturing, @unchecked Sendable {
     /// Another app played audio as this capture began, which WebKit's
     /// capture interrupts.
     private var otherAudioAtStart = false
-    /// Why the last capture never delivered audio (getUserMedia refused, the
-    /// page died, the watchdog), or nil once audio arrived, even late.
+    /// Why the last capture never delivered audio (getUserMedia refused or
+    /// still pending when it stopped, the page died, the watchdog), or nil
+    /// once audio arrived, even late.
     private(set) var startFailure: String?
     private var isCapturing = false
+    /// The page opened the microphone for this capture (its `started`).
+    private var micStarted = false
     /// Numbers each capture. The page tags its messages with it, and each
     /// `stop()` finishes the oldest capture not yet stopped: a capture
     /// started while an earlier one's `stop()` is still on its way keeps its
@@ -111,6 +114,7 @@ final class WebMicCapture: NSObject, AudioCapturing, @unchecked Sendable {
             peak = 0
             writtenPeak = 0
             startFailure = nil
+            micStarted = false
             lastAudioAt = Date()
             isCapturing = true
             otherAudioAtStart = otherAudioAtStart || AVAudioSession.sharedInstance().isOtherAudioPlaying
@@ -150,6 +154,9 @@ final class WebMicCapture: NSObject, AudioCapturing, @unchecked Sendable {
     private func finish() -> AudioCaptureResult {
         heartbeat?.invalidate()
         heartbeat = nil
+        // Stopped while getUserMedia was still pending: no audio, and not a
+        // silent blip either.
+        if isCapturing, frames == 0, !micStarted { startFailure = startFailure ?? "stopped before the microphone started" }
         if isCapturing { resumeOtherAudio() }
         isCapturing = false
         file = nil
@@ -209,6 +216,8 @@ final class WebMicCapture: NSObject, AudioCapturing, @unchecked Sendable {
         switch type {
         case "ready":
             isReady = true
+        case "started":
+            micStarted = true
         case "audio":
             guard isCapturing, let base64 = message["data"] as? String, let data = Data(base64Encoded: base64) else { return }
             let level = AudioLevelCurve.level(fromRMS: (message["rms"] as? NSNumber)?.floatValue ?? 0)
