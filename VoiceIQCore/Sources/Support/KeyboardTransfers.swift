@@ -194,8 +194,14 @@ public final class KeyboardTransfers: NSObject, URLSessionDataDelegate, Sendable
             meta.modelID = result.modelID
             meta.status = .recovered
             meta.errorCode = nil
-            // The audio goes only once meta.json holds the words.
-            if meta.write(to: folder) { RetentionPolicy.dropAudioIfNeverKept(meta, folder: folder) }
+            // Without the words in meta.json the job stays as it is, with its
+            // saved answer and audio, for the next import to replay.
+            guard meta.write(to: folder) else {
+                Log.transcription.notice("keyboard job \(job.id, privacy: .public): meta.json not written; left for the next import")
+                claim.release()
+                return (.busy, nil)
+            }
+            RetentionPolicy.dropAudioIfNeverKept(meta, folder: folder)
             return (.finished(result), claim)
         } catch let error as TranscriptionError where error.isWorthRetrying && !replay.transcribed {
             guard claim.isHeld else { return (.busy, nil) }

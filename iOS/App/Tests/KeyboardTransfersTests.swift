@@ -63,8 +63,9 @@ final class KeyboardTransfersTests: XCTestCase {
         XCTAssertNotNil(job.answer(root: inbox)?.error)
     }
 
-    /// A replayed job is named for the model it was sent to; and its audio
-    /// stays when meta.json cannot take the words, even set never to keep it.
+    /// A replayed job whose words meta.json cannot take stays pending, with
+    /// its saved answer and its audio, even set never to keep audio; the next
+    /// try replays that answer and names the model it was sent to.
     @MainActor
     func testAReplayKeepsItsModelAndItsAudioUntilTheWordsAreSaved() async throws {
         let inbox = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
@@ -92,11 +93,21 @@ final class KeyboardTransfersTests: XCTestCase {
         KeyboardJob.record(KeyboardJob.Answer(status: 200, error: nil), for: job.id, root: inbox)
         let client = GeminiClient(apiKey: { "key" }, openAIKey: { "key" }, provider: { .gemini })
 
-        let (outcome, claim) = await KeyboardTransfers.finish(job, service: GeminiTranscriptionService(client: client), root: inbox)
-        claim?.release()
+        let service = GeminiTranscriptionService(client: client)
 
+        let (failed, held) = await KeyboardTransfers.finish(job, service: service, root: inbox)
+        guard case .busy = failed else { return XCTFail("finished without its words saved: \(failed)") }
+        XCTAssertNil(held)
+        XCTAssertNotNil(KeyboardJob.read(job.id, root: inbox), "job dropped")
+        XCTAssertNotNil(job.answer(root: inbox), "saved answer dropped")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: FileLayout.audioCAF(in: folder).path), "audio dropped before its words were saved")
+
+        // The disk recovers: the next import replays the saved answer.
+        try FileManager.default.removeItem(at: FileLayout.metaJSON(in: folder))
+        let (outcome, claim) = await KeyboardTransfers.finish(job, service: service, root: inbox)
+        claim?.release()
         guard case .finished(let result) = outcome else { return XCTFail("\(outcome)") }
         XCTAssertEqual(result.modelID, "sent-model/verbatim")
-        XCTAssertTrue(FileManager.default.fileExists(atPath: FileLayout.audioCAF(in: folder).path), "audio dropped before its words were saved")
+        XCTAssertEqual(SessionMeta.read(from: folder)?.rawTranscript, "hello there")
     }
 }
