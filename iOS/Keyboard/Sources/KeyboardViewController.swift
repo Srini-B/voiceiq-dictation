@@ -52,9 +52,10 @@ final class KeyboardViewController: UIInputViewController {
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
         HostAppResolver.keyboardWillAppear()
+        // Before the model: a result it types while appearing keeps its undo step.
+        editor.appeared()
         model.appeared()
         dictionaryOffer.appeared(hasFullAccess: hasFullAccess)
-        editor.appeared()
         updateHeight()
     }
 
