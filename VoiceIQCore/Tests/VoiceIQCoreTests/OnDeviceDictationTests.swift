@@ -55,6 +55,7 @@ final class OnDeviceDictationTests: XCTestCase {
                        "tell Uhura the summer plan. thanks.")
         XCTAssertTrue(PromptOnDevice.isOnlyHesitation("Um, uh, hun."))
         XCTAssertFalse(PromptOnDevice.isOnlyHesitation("Um, send it."))
+        XCTAssertFalse(PromptOnDevice.isOnlyHesitation("10:30"))
         XCTAssertEqual(PromptOnDevice.text(fromAnswer: #"{"text": "Dear Priya,\n\nThanks."}"#), "Dear Priya,\n\nThanks.")
         XCTAssertEqual(PromptOnDevice.text(fromAnswer: #"{"text": "\#(PromptV1.noSpeechToken)"}"#), "")
         XCTAssertNil(PromptOnDevice.text(fromAnswer: "Here is the cleaned text"))

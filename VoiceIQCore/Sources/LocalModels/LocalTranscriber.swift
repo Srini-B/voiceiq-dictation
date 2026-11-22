@@ -120,14 +120,20 @@ public final class LocalTranscriber: Sendable {
             self.load.cancel()
             Task { await self.worker.stop() }
         }
-        if case .finished = outcome {
+        // The models stay claimed until the work has stopped, so a delete or
+        // the next dictation never meets an inference still running.
+        let (worker, model, id) = (worker, model, id)
+        let release: @Sendable () async -> Void = {
             await worker.stop()
+            await LocalModelStore.store(for: model).releaseSession(id: id)
+            await LocalModelStore.englishTools.releaseSession(id: id)
+        }
+        if case .finished = outcome {
+            await release()
         } else {
             Log.transcription.notice("On-device transcription passed \(deadline, format: .fixed(precision: 0))s; using saved audio with Gemini")
-            Task { await worker.stop() }
+            Task { await release() }
         }
-        await LocalModelStore.store(for: model).releaseSession(id: id)
-        await LocalModelStore.englishTools.releaseSession(id: id)
         guard !Task.isCancelled, case .finished(let text?) = outcome else { return nil }
         if let confidence = text.confidence {
             Log.transcription.notice("Parakeet token confidence (uncalibrated): \(confidence)")

@@ -82,9 +82,9 @@ public enum PromptOnDevice {
 
     /// RAW holds only hesitation sounds, which speech models also write as
     /// "hum", "hun" or "mm": there is no speech to write, and the model is
-    /// not asked.
+    /// not asked. Numbers count as speech, so "10:30" is written.
     public static func isOnlyHesitation(_ raw: String) -> Bool {
-        let words = raw.lowercased().split { !$0.isLetter }
+        let words = raw.lowercased().split { !$0.isLetter && !$0.isNumber }
         let sounds: Set<String> = ["um", "umm", "uh", "uhh", "er", "erm", "ah", "hmm", "hm", "mm", "mmm", "hum", "hun", "oh"]
         return words.allSatisfy { sounds.contains(String($0)) }
     }
