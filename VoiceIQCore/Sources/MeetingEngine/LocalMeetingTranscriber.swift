@@ -132,9 +132,17 @@ public struct LocalMeetingTranscriber: Sendable {
         let runner = runner
         // The decode removes its input when it ends, which past the deadline
         // is after this returns.
-        let result = try await job.run(deadline: TimeoutPolicy.localMeeting(audioSeconds: duration)) {
-            defer { try? FileManager.default.removeItem(at: mix) }
-            return try await runner(request)
+        let result: LocalMeetingResult
+        do {
+            result = try await job.run(deadline: TimeoutPolicy.localMeeting(audioSeconds: duration)) {
+                defer { try? FileManager.default.removeItem(at: mix) }
+                return try await runner(request)
+            }
+        } catch is CancellationError {
+            // Refused before it started, or stopped and joined: either way
+            // no decode still reads the mix.
+            try? FileManager.default.removeItem(at: mix)
+            throw CancellationError()
         }
         try JSONEncoder().encode(result).write(to: cache, options: .atomic)
         try? FileManager.default.removeItem(at: folder.appendingPathComponent("local-words-v1.json"))
