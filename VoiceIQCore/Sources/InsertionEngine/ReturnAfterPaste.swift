@@ -21,7 +21,7 @@ public enum ReturnAfterPaste {
         lastEscape.withLock { $0 = Date() }
     }
 
-    private static func focusedElement() -> AXUIElement? {
+    static func focusedElement() -> AXUIElement? {
         let system = AXUIElementCreateSystemWide()
         AXUIElementSetMessagingTimeout(system, 0.25)
         var focused: CFTypeRef?
@@ -41,12 +41,12 @@ public enum ReturnAfterPaste {
     }
 
     @MainActor
-    static func pressIfWanted(context: DictationContext) async {
+    /// `target` is the field focused before the insert began. Return must
+    /// reach the field the text went into: switching to another field or
+    /// window of the same app during the insert or the wait would send
+    /// something else.
+    static func pressIfWanted(context: DictationContext, target: AXUIElement?) async {
         guard isWanted(for: context) else { return }
-        // Return must reach the field the text went into: switching to
-        // another field or window of the same app during the wait would send
-        // something else.
-        let target = focusedElement()
         let ended = context.recordingEndedAt ?? Date()
         let wait = max(ended.addingTimeInterval(escapeWindow).timeIntervalSinceNow, settle)
         try? await Task.sleep(for: .seconds(wait))

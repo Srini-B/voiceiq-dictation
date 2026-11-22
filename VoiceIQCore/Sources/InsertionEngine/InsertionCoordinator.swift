@@ -51,12 +51,16 @@ public struct InsertionCoordinator: TextInserting {
             return .frontmostChanged
         }
 
+        // The field the text is about to go into, taken before any tier
+        // waits: Return goes only to this field.
+        let returnTarget = ReturnAfterPaste.isWanted(for: context) ? ReturnAfterPaste.focusedElement() : nil
+
         // Tier 1: AX direct insertion.
         switch await AXInserter.insert(text, targetPID: context.targetPID, bundleID: context.targetAppBundleID,
                                        startField: context.focusedField?.element) {
         case .landed:
             Log.insertion.info("inserted via AX")
-            await ReturnAfterPaste.pressIfWanted(context: context)
+            await ReturnAfterPaste.pressIfWanted(context: context, target: returnTarget)
             return .inserted
         case .focusElsewhere:
             // PROVEN focus theft — a blind ⌘V would paste into the thief.
@@ -86,7 +90,7 @@ public struct InsertionCoordinator: TextInserting {
             switch await TypingInserter.type(text, mode: mode, targetPID: context.targetPID) {
             case .typed:
                 Log.insertion.info("typed instead of pasting (\(String(describing: mode), privacy: .public))")
-                await ReturnAfterPaste.pressIfWanted(context: context)
+                await ReturnAfterPaste.pressIfWanted(context: context, target: returnTarget)
                 return .inserted
             case .stopped(let rest):
                 // The user switched apps part way: the rest must not land
@@ -107,7 +111,7 @@ public struct InsertionCoordinator: TextInserting {
         if await paster.paste(text) {
             Log.insertion.info("⌘V posted")
             guard let before else {
-                await ReturnAfterPaste.pressIfWanted(context: context)
+                await ReturnAfterPaste.pressIfWanted(context: context, target: returnTarget)
                 return .inserted
             }
             let postedAt = Date()
@@ -123,7 +127,7 @@ public struct InsertionCoordinator: TextInserting {
             // command was already in the field.
             if ReturnAfterPaste.isWanted(for: context) {
                 if await check.value == .landed {
-                    await ReturnAfterPaste.pressIfWanted(context: context)
+                    await ReturnAfterPaste.pressIfWanted(context: context, target: returnTarget)
                 } else {
                     Log.insertion.info("paste not seen in the field — no Return")
                 }
