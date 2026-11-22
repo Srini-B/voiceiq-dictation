@@ -311,7 +311,12 @@ import Foundation
     private func detected(_ source: CallSource?) {
         detectedSource = source
         if let source {
-            if let until = quietUntil[Self.offerKey(source)], until > Date() { return }
+            if let until = quietUntil[Self.offerKey(source)], until > Date() {
+                // A quiet app's call can replace another offer directly; that
+                // offer's call is gone, so it must not stay up.
+                if case .callDetected = phase { phase = .idle; onCallEnded?() }
+                return
+            }
             switch phase {
             case .idle, .callDetected: phase = .callDetected(source); onCallDetected?(source)
             case .recording, .failed: return
