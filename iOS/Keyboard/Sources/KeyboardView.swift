@@ -374,9 +374,9 @@ private struct AnswerPanel: View {
 }
 
 /// Stands in for the suggestion bar while a dictation runs, with the keys
-/// still below it: Cancel, the time over a glow that rises with the voice,
-/// Done. With Real-time transcription the words heard so far replace the
-/// time and the glow once they arrive. While the text is written: a spinner.
+/// still below it: Cancel, the time and a waveform whose bars rise with the
+/// voice, Done. With Real-time transcription the words heard so far replace the
+/// time and the waveform once they arrive. While the text is written: a spinner.
 private struct RecordingStrip: View {
     @ObservedObject var model: KeyboardModel
     /// The strip's height: its buttons fit inside it, as Hex's pills do.
@@ -407,9 +407,17 @@ private struct RecordingStrip: View {
                         .truncationMode(.head)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .accessibilityLabel("Heard so far: \(model.liveText)")
-                } else if let started = model.snapshot.recordingStartedAt {
-                    Text(timerInterval: started...Date.distantFuture, countsDown: false)
-                        .font(.system(size: 16, weight: .semibold).monospacedDigit())
+                } else {
+                    // The time, then the voice's waveform across the rest.
+                    HStack(spacing: 10) {
+                        if let started = model.snapshot.recordingStartedAt {
+                            Text(timerInterval: started...Date.distantFuture, countsDown: false)
+                                .font(.system(size: 16, weight: .semibold).monospacedDigit())
+                                .fixedSize()
+                        }
+                        LevelWaveform(color: KeyboardPalette.recording)
+                            .padding(.vertical, 6)
+                    }
                 }
             }
             .frame(maxWidth: .infinity)
@@ -419,11 +427,6 @@ private struct RecordingStrip: View {
             }
         }
         .padding(.horizontal, 6)
-        .background {
-            if recording, model.liveText.isEmpty {
-                LevelGlow(color: KeyboardPalette.recording)
-            }
-        }
     }
 }
 
