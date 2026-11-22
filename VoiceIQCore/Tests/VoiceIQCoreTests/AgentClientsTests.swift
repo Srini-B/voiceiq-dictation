@@ -87,6 +87,31 @@ final class AgentClientsTests: XCTestCase {
                        "model = \"o4\"\n\n[mcp_servers.github]\ncommand = \"gh\"\n\n[profiles.fast]\nmodel = \"mini\"\n")
     }
 
+    func testCodexQuotedTablesAndSharedFilePermissions() throws {
+        let file = try write("""
+        [mcp_servers.'voiceiq']
+        url = "http://127.0.0.1:47823/mcp"
+        http_headers = { Authorization = "Bearer old" }
+        """, to: ".codex/config.toml")
+        try FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: file.path)
+
+        try AgentClient.codex.install(key: "new", home: home)
+        let text = try String(contentsOf: file, encoding: .utf8)
+        XCTAssertEqual(text.components(separatedBy: "voiceiq").count, 2, text)
+        XCTAssertEqual(AgentClient.codex.status(key: "new", home: home), .setUp)
+        // The key must not stay readable by other accounts, nor the old one in the backup.
+        let backup = home.appendingPathComponent(".codex/config.toml.voiceiq-backup")
+        XCTAssertEqual(try FileManager.default.attributesOfItem(atPath: file.path)[.posixPermissions] as? Int, 0o600)
+        XCTAssertEqual(try FileManager.default.attributesOfItem(atPath: backup.path)[.posixPermissions] as? Int, 0o600)
+
+        // A form it can't edit as a table is left alone rather than duplicated.
+        let dotted = "[mcp_servers]\nvoiceiq = { url = \"http://127.0.0.1:47823/mcp\" }\n"
+        try dotted.write(to: file, atomically: true, encoding: .utf8)
+        XCTAssertEqual(AgentClient.codex.status(key: "new", home: home), .unreadable)
+        try AgentClient.codex.install(key: "new", home: home)
+        XCTAssertEqual(try String(contentsOf: file, encoding: .utf8), dotted)
+    }
+
     func testLeavesAloneWhatIsNotItsOwn() throws {
         XCTAssertEqual(AgentClient.amp.status(key: "a", home: home), .notInstalled)
         try AgentClient.amp.install(key: "a", home: home)

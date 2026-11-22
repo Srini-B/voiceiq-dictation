@@ -29,7 +29,8 @@ public enum AgentClient: String, CaseIterable, Identifiable, Sendable {
         case needsUpdate
         /// A `voiceiq` server pointing somewhere else, left alone.
         case otherServer
-        /// The config isn't plain JSON (comments, or a settings.jsonc), so it is left alone.
+        /// The config is in a form VoiceiQ could not edit without losing something
+        /// (JSON with comments, a settings.jsonc, a TOML `voiceiq` not written as a table), so it is left alone.
         case unreadable
     }
 
@@ -110,6 +111,12 @@ public enum AgentClient: String, CaseIterable, Identifiable, Sendable {
         let url: String?, authorization: String?
         switch self {
         case .codex:
+            // `voiceiq` written as a dotted key or an inline table, rather than
+            // as its own table, is a form this can't edit safely.
+            if Self.tomlRemovingOurs(text).range(of: #"(?m)^\s*(mcp_servers\s*\.\s*)?["']?voiceiq["']?\s*[.=]"#,
+                                                  options: .regularExpression) != nil {
+                throw CocoaError(.fileReadCorruptFile)
+            }
             guard let block = Self.tomlOurBlock(text) else { return nil }
             url = Self.tomlString("url", in: block)
             authorization = Self.tomlString("Authorization", in: block)
@@ -133,12 +140,15 @@ public enum AgentClient: String, CaseIterable, Identifiable, Sendable {
         let old = exists(file) ? try String(contentsOf: file, encoding: .utf8) : nil
         let new = try edit(old ?? "")
         try fileManager.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
-        // The key is a secret: a new file is the user's alone, an old one keeps its permissions.
-        let permissions = (try? fileManager.attributesOfItem(atPath: file.path)[.posixPermissions]) ?? 0o600
+        // The key is a secret, and the backup may hold the old one: both are
+        // left readable by the user alone, whatever the file allowed before.
+        let existing = (try? fileManager.attributesOfItem(atPath: file.path)[.posixPermissions] as? Int) ?? 0o600
+        let permissions = existing & 0o700
         if old != nil {
             let backup = file.deletingLastPathComponent().appendingPathComponent(file.lastPathComponent + ".voiceiq-backup")
             try? fileManager.removeItem(at: backup)
             try fileManager.copyItem(at: file, to: backup)
+            try fileManager.setAttributes([.posixPermissions: permissions], ofItemAtPath: backup.path)
         }
         try Data(new.utf8).write(to: file, options: .atomic)
         try fileManager.setAttributes([.posixPermissions: permissions], ofItemAtPath: file.path)
@@ -185,7 +195,7 @@ public enum AgentClient: String, CaseIterable, Identifiable, Sendable {
         guard after.isEmpty || after.hasPrefix("#") else { return nil }
         let name = trimmed[..<close].trimmingCharacters(in: CharacterSet(charactersIn: "[] "))
         guard !name.isEmpty else { return nil }
-        return name.replacingOccurrences(of: "\"", with: "").replacingOccurrences(of: " ", with: "")
+        return name.filter { !"\"' ".contains($0) }
     }
 
     private static func isOurs(_ table: String) -> Bool {

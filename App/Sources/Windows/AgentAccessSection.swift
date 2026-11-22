@@ -98,7 +98,7 @@ struct AgentAccessSection: View {
         case .setUp: "Set up"
         case .needsUpdate: "Has an old key"
         case .otherServer: "Has another server named voiceiq"
-        case .unreadable: "Its settings file has comments; copy the JSON instead"
+        case .unreadable: "Can't edit its settings file safely; copy the JSON instead"
         }
     }
 
