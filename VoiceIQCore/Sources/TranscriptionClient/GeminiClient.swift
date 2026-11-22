@@ -47,8 +47,10 @@ public actor GeminiClient {
     let session: URLSession
     /// See `sentTranscription`.
     nonisolated let firstTranscription = OSAllocatedUnfairLock<CapturedTranscriptionRequest?>(initialState: nil)
-    /// See `transcriptionAnswered`.
-    nonisolated let answeredTranscription = OSAllocatedUnfairLock(initialState: false)
+    /// See `transcriptionAnswered`. `generation` advances with each
+    /// `forgetSentTranscription()`, so an answer to an earlier request does
+    /// not count for the next dictation.
+    nonisolated let answeredTranscription = OSAllocatedUnfairLock(initialState: (generation: 0, answered: false))
     private let apiKey: @Sendable () -> String?
     let openAIKey: @Sendable () -> String?
     let elevenLabsKey: @Sendable () -> String?
@@ -226,6 +228,7 @@ public actor GeminiClient {
                                                     keepsFillers: Self.sentTranscriber?.keepsFillers)
             firstTranscription.withLock { if $0 == nil { $0 = sent } }
         }
+        let generation = answeredTranscription.withLock { $0.generation }
         let data: Data
         let response: URLResponse
         do {
@@ -234,7 +237,7 @@ public actor GeminiClient {
             } else {
                 (data, response) = try await Self.perform(request, deadline: deadline, stage: stage, via: via, modelLabel: modelLabel)
                 if stage == .transcribe, let status = (response as? HTTPURLResponse)?.statusCode, (200..<300).contains(status) {
-                    answeredTranscription.withLock { $0 = true }
+                    answeredTranscription.withLock { if $0.generation == generation { $0.answered = true } }
                 }
             }
         } catch is DeadlineExceeded {

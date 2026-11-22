@@ -84,7 +84,7 @@ final class TransportTests: XCTestCase {
 
 /// A local HTTP/1.1 server that reads each request, then closes the first
 /// `dropFirst` connections without answering (the client sees -1005) and
-/// answers the rest with 200.
+/// answers the rest with 200, after running `beforeAnswer`.
 final class ScriptedServer: @unchecked Sendable {
     static let okBody = #"{"candidates":[{"content":{"parts":[{"text":"ok"}]}}]}"#
 
@@ -97,6 +97,8 @@ final class ScriptedServer: @unchecked Sendable {
     private var dropsLeft: Int
     private var connectionCount = 0
     private(set) var url: URL!
+    /// Runs on the server's queue while the request waits for its answer.
+    var beforeAnswer: (@Sendable () -> Void)?
 
     var requests: [Request] { lock.lock(); defer { lock.unlock() }; return recorded }
 
@@ -144,6 +146,7 @@ final class ScriptedServer: @unchecked Sendable {
             connection.forceCancel()
             return
         }
+        beforeAnswer?()
         let body = Data(Self.okBody.utf8)
         let head = "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: \(body.count)\r\nConnection: keep-alive\r\n\r\n"
         connection.send(content: Data(head.utf8) + body, completion: .contentProcessed { _ in })

@@ -30,11 +30,11 @@ extension GeminiClient {
     /// The provider answered a transcription request with success since
     /// `forgetSentTranscription()`, whether or not usage was metered: the
     /// keyboard must not hand that dictation over.
-    public nonisolated var transcriptionAnswered: Bool { answeredTranscription.withLock { $0 } }
+    public nonisolated var transcriptionAnswered: Bool { answeredTranscription.withLock { $0.answered } }
 
     public nonisolated func forgetSentTranscription() {
         firstTranscription.withLock { $0 = nil }
-        answeredTranscription.withLock { $0 = false }
+        answeredTranscription.withLock { $0 = (generation: $0.generation + 1, answered: false) }
     }
 }
 

@@ -291,6 +291,20 @@ final class ReplayedResponseTests: XCTestCase {
         }
     }
 
+    /// A request still in flight when the keyboard starts the next
+    /// dictation does not mark that dictation as answered.
+    func testAnAnswerToAForgottenRequestDoesNotCount() async throws {
+        for forgets in [false, true] {
+            let server = try ScriptedServer(dropFirst: 0)
+            defer { server.stop() }
+            let client = GeminiClient(apiKey: { "key" }, keepsSentTranscription: true)
+            if forgets { server.beforeAnswer = { client.forgetSentTranscription() } }
+            _ = try await client.post(path: "x", body: Data("{}".utf8), endpoint: server.url, deadline: 10,
+                                      modelLabel: "m", stage: .transcribe)
+            XCTAssertEqual(client.transcriptionAnswered, !forgets)
+        }
+    }
+
     func testTheAnswerIsReadAsTheProviderTheJobWentTo() async throws {
         let inbox = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: inbox) }
