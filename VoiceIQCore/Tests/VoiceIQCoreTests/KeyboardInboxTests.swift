@@ -1,4 +1,5 @@
 import AVFoundation
+import os
 import XCTest
 @testable import VoiceIQCore
 import VoiceIQBridge
@@ -302,6 +303,28 @@ final class ReplayedResponseTests: XCTestCase {
             _ = try await client.post(path: "x", body: Data("{}".utf8), endpoint: server.url, deadline: 10,
                                       modelLabel: "m", stage: .transcribe)
             XCTAssertEqual(client.transcriptionAnswered, !forgets)
+        }
+    }
+
+    /// A request whose dictation was forgotten while it waited out a 429
+    /// does not fill the next dictation's slot when it is sent again, so the
+    /// next hand-off can't upload the earlier dictation's audio.
+    func testARetryOfAForgottenRequestDoesNotFillTheSlot() async throws {
+        for forgets in [false, true] {
+            let server = try ScriptedServer(dropFirst: 0, throttleFirst: 1)
+            defer { server.stop() }
+            let client = GeminiClient(apiKey: { "key" }, keepsSentTranscription: true)
+            // The next dictation starts while this one waits out the 429.
+            let answers = OSAllocatedUnfairLock(initialState: 0)
+            if forgets {
+                server.beforeAnswer = {
+                    if answers.withLock({ $0 += 1; return $0 }) == 1 { client.forgetSentTranscription() }
+                }
+            }
+            _ = try await client.post(path: "x", body: Data("{}".utf8), endpoint: server.url, deadline: 10,
+                                      modelLabel: "m", stage: .transcribe)
+            XCTAssertEqual(server.requests.count, 2, "the 429 was retried")
+            XCTAssertEqual(client.sentTranscription == nil, forgets)
         }
     }
 

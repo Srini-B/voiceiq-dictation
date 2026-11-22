@@ -83,8 +83,9 @@ final class TransportTests: XCTestCase {
 }
 
 /// A local HTTP/1.1 server that reads each request, then closes the first
-/// `dropFirst` connections without answering (the client sees -1005) and
-/// answers the rest with 200, after running `beforeAnswer`.
+/// `dropFirst` connections without answering (the client sees -1005), answers
+/// the next `throttleFirst` with a 429 to retry at once, and the rest with 200,
+/// running `beforeAnswer` before each answer.
 final class ScriptedServer: @unchecked Sendable {
     static let okBody = #"{"candidates":[{"content":{"parts":[{"text":"ok"}]}}]}"#
 
@@ -95,6 +96,7 @@ final class ScriptedServer: @unchecked Sendable {
     private let lock = NSLock()
     private var recorded: [Request] = []
     private var dropsLeft: Int
+    private var throttlesLeft: Int
     private var connectionCount = 0
     private(set) var url: URL!
     /// Runs on the server's queue while the request waits for its answer.
@@ -102,8 +104,9 @@ final class ScriptedServer: @unchecked Sendable {
 
     var requests: [Request] { lock.lock(); defer { lock.unlock() }; return recorded }
 
-    init(dropFirst: Int) throws {
+    init(dropFirst: Int, throttleFirst: Int = 0) throws {
         dropsLeft = dropFirst
+        throttlesLeft = throttleFirst
         listener = try NWListener(using: .tcp, on: .any)
         let ready = DispatchSemaphore(value: 0)
         listener.stateUpdateHandler = { state in if case .ready = state { ready.signal() } }
@@ -141,14 +144,17 @@ final class ScriptedServer: @unchecked Sendable {
         recorded.append(Request(connection: number, headers: headers))
         let drop = dropsLeft > 0
         if drop { dropsLeft -= 1 }
+        let throttle = !drop && throttlesLeft > 0
+        if throttle { throttlesLeft -= 1 }
         lock.unlock()
         if drop {
             connection.forceCancel()
             return
         }
         beforeAnswer?()
-        let body = Data(Self.okBody.utf8)
-        let head = "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: \(body.count)\r\nConnection: keep-alive\r\n\r\n"
+        let body = Data((throttle ? "{}" : Self.okBody).utf8)
+        let status = throttle ? "429 Too Many Requests\r\nRetry-After: 0" : "200 OK"
+        let head = "HTTP/1.1 \(status)\r\nContent-Type: application/json\r\nContent-Length: \(body.count)\r\nConnection: keep-alive\r\n\r\n"
         connection.send(content: Data(head.utf8) + body, completion: .contentProcessed { _ in })
     }
 

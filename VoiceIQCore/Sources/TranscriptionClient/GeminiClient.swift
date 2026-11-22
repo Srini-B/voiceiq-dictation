@@ -208,7 +208,9 @@ public actor GeminiClient {
         /// same status → error mapping, different base URL, auth header and
         /// usage envelope.
         via: ModelEndpoint = .gemini,
-        extraHeaders: [String: String] = [:]
+        extraHeaders: [String: String] = [:],
+        /// The 429 retry's: its first try's `answeredTranscription` generation.
+        generation: Int? = nil
     ) async throws -> Data {
         let url = endpoint.appendingPathComponent(path)
         var request = URLRequest(url: url)
@@ -223,12 +225,17 @@ public actor GeminiClient {
             throw CapturedTranscriptionRequest(request: request, endpoint: via, model: Self.sentTranscriber?.model,
                                                keepsFillers: Self.sentTranscriber?.keepsFillers)
         }
+        // The dictation this request belongs to: a retry keeps its first
+        // try's, so a request outliving `forgetSentTranscription()` neither
+        // fills the next dictation's slot nor marks it answered.
+        let generation = generation ?? answeredTranscription.withLock { $0.generation }
         if stage == .transcribe, keepsSentTranscription, Self.replayedTranscription == nil {
             let sent = CapturedTranscriptionRequest(request: request, endpoint: via, model: Self.sentTranscriber?.model,
                                                     keepsFillers: Self.sentTranscriber?.keepsFillers)
-            firstTranscription.withLock { if $0 == nil { $0 = sent } }
+            firstTranscription.withLock { slot in
+                if slot == nil, answeredTranscription.withLock({ $0.generation }) == generation { slot = sent }
+            }
         }
-        let generation = answeredTranscription.withLock { $0.generation }
         let data: Data
         let response: URLResponse
         do {
@@ -303,10 +310,12 @@ public actor GeminiClient {
             // F5: per-minute throttles carry a short retryDelay — honor it once.
             if !isRetryAfter429, let delay = retryAfter, delay <= 8 {
                 Log.transcription.info("GeminiClient: 429 with retryDelay \(delay, format: .fixed(precision: 1))s — waiting once")
-                try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+                try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+                try Task.checkCancellation()
                 return try await post(path: path, body: body, endpoint: endpoint, deadline: deadline,
                                       modelLabel: modelLabel, modelIsInPath: modelIsInPath, stage: stage,
-                                      isRetryAfter429: true, via: via, extraHeaders: extraHeaders)
+                                      isRetryAfter429: true, via: via, extraHeaders: extraHeaders,
+                                      generation: generation)
             }
             // OpenAI answers 429 `insufficient_quota` when the account has no
             // credit left. Retryable, so the recording stays queued until
