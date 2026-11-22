@@ -270,6 +270,12 @@ final class KeyboardTypingTests: XCTestCase {
         typing.toggleMini()
     }
 
+    /// Hex's pointer to Paste from Other Apps names VoiceiQ, the app the user has.
+    func testThePasteHintNamesVoiceiQ() {
+        XCTAssertEqual(KeyboardClipboardTracker.allowPasteHint, "Settings › Apps › VoiceiQ › Paste from Other Apps › Allow")
+        XCTAssertTrue(KeyboardClipboardTracker.allowPasteHintAnnouncement.contains("Apps, VoiceiQ,"))
+    }
+
     func testTheEmojiSearchTakesTheLettersInsteadOfTheField() {
         open("hi ")
         typing.emojiQuery = ""
