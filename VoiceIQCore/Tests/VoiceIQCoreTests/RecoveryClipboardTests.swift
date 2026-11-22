@@ -125,6 +125,35 @@ final class RecoveryClipboardTests: XCTestCase {
         XCTAssertEqual(SessionMeta.read(from: folders[0])?.status, .recovered, "a real interrupted one is still recovered")
     }
 
+    /// Counts uploads; each takes a moment, as a real one does.
+    private final class SlowCounter: TranscriptionServicing, @unchecked Sendable {
+        private let lock = NSLock()
+        private var calls = 0
+        var count: Int { lock.withLock { calls } }
+        func transcribe(audioURL: URL, durationSeconds: Double, context: DictationContext) async throws -> TranscriptionResult {
+            lock.withLock { calls += 1 }
+            try await Task.sleep(for: .milliseconds(200))
+            return TranscriptionResult(rawTranscript: "raw", cleanedTranscript: "text", modelID: "fake")
+        }
+    }
+
+    /// A second scan while the first still uploads waits for it and finds
+    /// nothing left: the recording is sent once.
+    func testOverlappingRecoveryScansUploadOnce() async throws {
+        var meta = try queuedSession("unused", secondsAgo: 5)
+        meta.status = .recording
+        let folder = root.appendingPathComponent(meta.id.uuidString, isDirectory: true)
+        meta.write(to: folder)
+        store.upsert(meta: meta, folder: folder)
+        let counter = SlowCounter()
+        let scanner = RecoveryScanner(store: store, transcription: counter, recordingsRoot: root)
+        async let first: Void = scanner.scanAndRecover()
+        async let second: Void = scanner.scanAndRecover()
+        _ = await (first, second)
+        XCTAssertEqual(counter.count, 1)
+        XCTAssertEqual(SessionMeta.read(from: folder)?.status, .recovered)
+    }
+
     /// Records the mode each transcription was asked for.
     private final class ModeRecorder: TranscriptionServicing, @unchecked Sendable {
         private let lock = NSLock()

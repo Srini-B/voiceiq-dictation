@@ -10,6 +10,9 @@ public final class RecoveryScanner {
     private let store: HistoryStore
     private let transcription: TranscriptionServicing
     private let recordingsRoot: URL
+    /// The scan running now: the next one waits for it, then scans again,
+    /// so two never upload the same recording.
+    private var running: Task<Void, Never>?
 
     /// The text of the dictation the launch scan recovered.
     public var onRecovered: ((String) -> Void)?
@@ -22,7 +25,17 @@ public final class RecoveryScanner {
 
     /// `sparing` is the session the app is recording or transcribing now,
     /// read once the reindex is done: it is unfinished, not interrupted.
-    public func scanAndRecover(sparing active: @MainActor () -> URL? = { nil }) async {
+    public func scanAndRecover(sparing active: @escaping @MainActor () -> URL? = { nil }) async {
+        let previous = running
+        let scan = Task { @MainActor in
+            await previous?.value
+            await self.scan(sparing: active)
+        }
+        running = scan
+        await scan.value
+    }
+
+    private func scan(sparing active: @MainActor () -> URL?) async {
         // The reindex walks every recording folder and decodes every meta.json —
         // unbounded as history grows, and the hotkey is already armed by now, so
         // a key press would queue behind it on the main actor.
