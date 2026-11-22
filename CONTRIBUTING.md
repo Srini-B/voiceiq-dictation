@@ -38,12 +38,11 @@ the right to contribute it under this repository's license.
 
 ## Ground rules
 
-1. **Swift, Apple platforms, Gemini and OpenAI models.** macOS and iOS, native
-   frameworks only. Gemini or OpenAI models, each reached on its own API with
-   the provider's own key. A change to the transcription or writing path has
-   to work on both providers (`ModelProvider` picks the calls; see
-   `docs/design/architecture.md`). No on-device speech models, no other
-   model families, no gateways, no cross-platform layers.
+1. **Swift, Apple platforms, Gemini models.** macOS and iOS, native
+   frameworks only. Gemini models only, reached on Google's Gemini API with
+   the user's own key (see `docs/design/architecture.md`). No on-device
+   speech models, no other model families, no gateways, no cross-platform
+   layers.
 2. **Share code through `VoiceIQCore`.** Logic both apps need goes in the
    package, not in `App/` or `iOS/`. Mac-only code is wrapped in
    `#if os(macOS)`; its iPhone stand-in lives in a sibling file ending
@@ -67,19 +66,18 @@ the right to contribute it under this repository's license.
    first. The full design contract is `docs/design/experience.md`. iPhone UI
    uses standard SwiftUI controls and the `Brand` colors in
    `iOS/App/Sources/VoiceIQMobileApp.swift`.
-8. **Prompt changes need evidence in the PR.** `PromptV1.swift` and
-   `PromptV1+Modes.swift` steer the writing-rules pass. There is no automated
-   eval set yet, so verify by hand and put the results in the PR: dictate a
-   self-correction, a spoken list, question-shaped speech, spoken punctuation,
-   and an all-filler take, on both Gemini and OpenAI, and confirm the
-   ValidationGate did not trip.
+8. **Prompt changes need evidence in the PR.** `PromptV1.swift` is the
+   dictation prompt: one call hears the recording and writes the text. There
+   is no automated eval set yet, so verify by hand and put the results in the
+   PR: dictate a self-correction, a spoken list, question-shaped speech,
+   spoken punctuation, an all-filler take, and a spoken instruction that must
+   be written down rather than obeyed.
 9. **Never-lose-words is an invariant.** Any change touching audio, networking,
    or insertion must keep these true on both platforms: audio is on disk before
    network I/O begins; every failure writes a terminal status; errors are never
    modal; nothing is silently discarded.
 10. **No telemetry.** PRs adding analytics, tracking, or phone-home behavior will
-   be declined. The only network hosts are the model services the user has
-   keys for (Gemini API, OpenAI API), plus TinyFish when the
-   user has entered a key for it.
+   be declined. The only model service is the Gemini API, with the user's
+   key.
 11. **Keep files small.** Around 500 lines per source file; split when it improves
    clarity, not to hit a number.

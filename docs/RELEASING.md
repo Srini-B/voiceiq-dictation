@@ -30,8 +30,8 @@ preflight (tools, identity, credentials)
    They are set once, under `settings`, for all four targets. The build
    number must be higher than every build already on TestFlight or GitHub.
 2. Confirm `./scripts/build.sh` and `./scripts/build-ios.sh` pass.
-3. Confirm the production models are available with a real dictation on both
-   providers (Gemini and OpenAI).
+3. Confirm the production models are available with a real dictation
+   (`gemini-3.8-flash`) and a short meeting (`gemini-3.5-transcribe`).
 
 The apps run no speech or ML model of their own, and none ships in the
 bundle. The Mac UI links `VoiceIQCore`; the keyboard

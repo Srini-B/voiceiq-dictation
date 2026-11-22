@@ -2,100 +2,47 @@
 
 ## The promise
 
-Your voice goes from your Mac directly to the model provider you chose in
-Settings → Advanced, using your own API key: Google's Gemini API or OpenAI's API.
-Transcription, cleanup and screen context all use that provider. VoiceiQ runs
-no speech model on your Mac or iPhone.
+Your voice goes from your Mac directly to Google's Gemini API
+(`generativelanguage.googleapis.com`), using your own API key. Dictation,
+meetings and screen context all use it. VoiceiQ runs no speech model on your
+Mac or iPhone, and sends nothing to any other model service.
 There is no VoiceiQ server, no account, no analytics, no telemetry.
 Everything else stays on your Mac. The code is open — verify all of this.
 
-"The provider" below means the one you selected:
-`generativelanguage.googleapis.com` (Gemini) or `api.openai.com` (OpenAI).
-Only it receives a given dictation;
-nothing is sent to the others. Meetings are
-the one exception: a meeting goes to the selected provider when its key is
-saved, otherwise to the next provider you have a key for, and a meeting whose
-provider fails moves on to each other provider you have a key for in turn
-(the selected provider first, then the other).
-If you set a custom provider for Agent mode, it also receives each Agent
-command's text and its observations: screenshots, accessibility summaries
-of the screen and tool results ([AGENT-MODE.md](AGENT-MODE.md)); the command is still transcribed by the
-selected provider.
 With no usable key, nothing is sent and the recording stays on your Mac.
 
 ## What leaves your machine (the complete list)
 
-1. **The audio of each dictation**, sent to the provider. With "Real-time
-   transcription" off, VoiceiQ sends FLAC-compressed audio after you stop.
-   With it on, VoiceiQ sends PCM audio while you speak in Dictation, Ask
-   Anything, Translate and Agent. It uses the selected provider's existing
-   key. Cancelled dictations may already have been
-   sent in part. If the live connection fails or
-   does not return every completed turn, VoiceiQ uploads the saved recording
-   to that provider after you stop. Real-time transcription is off by default
-   (since 2026-11-10); turn it on in Settings › Dictation.
-   It does not affect meetings.
-   With ElevenLabs picked as the transcription provider (Settings › Advanced
-   on the Mac, Provider & Keys on iPhone; not picked by default, and only with
-   an ElevenLabs key), the saved recording goes to ElevenLabs Scribe v3
-   instead of the provider, with your ElevenLabs key, after you stop. With
-   Real-time transcription on, the audio streams to ElevenLabs Scribe v3 Live
-   while you speak instead, on the Mac and on iPhone, and the saved recording
-   goes to Scribe v3 only if that stream fails or cannot start (for example
-   after ElevenLabs refused a recent live stream). With Smart transcription on,
-   Scribe is asked to drop filler words (`no_verbatim`); no other instruction
-   is sent. The spoken languages you set are sent with it.
-   The transcript then goes to the provider for the writing rules, as below.
-   Meetings are the one exception to "after you stop": while a meeting
-   records with ElevenLabs chosen, its audio (mic and call audio mixed, the
-   mic alone on iPhone) also streams to Scribe v3 Live for the live
-   transcript in the window.
-2. **Your dictionary terms**, alongside that audio. The transcription model uses
-   them to bias what it hears, which is why names and jargon come out spelled
-   right as you speak rather than being corrected afterwards. Only the correct
-   spellings are sent — never the misspellings you record. They ride on every
-   dictation, including with Smart transcription off.
-3. **The writing-rules prompt**, while "Apply writing rules" is on in
-   Settings → Dictation — on by default. "Skip cleanup for dictations of 5 seconds
-   or less" is also on by default. With that setting on, short ordinary dictations
-   skip this request and insert the transcript with local dictionary rules.
-   Turn it off to send short dictations for cleanup too. Longer dictations run
-   cleanup after transcription. The request
-   sends text only (and screen images, item 4), never the audio. It contains the transcript being
-   formatted, the built-in formatting rules, your custom instructions from the
-   same pane, the frontmost app's name and the title of its focused window
-   (a document name, a page title, a chat name; since 2026-10-13), in Safari,
-   Chrome, Edge, Brave, Vivaldi, Arc, Dia, Opera, Firefox and Zen the host and
-   path of the page in that window (never the query string or fragment, so no
-   search terms or tokens; also since 2026-10-13), your spelling choice from
-   the same pane, your
-   dictionary terms, and, while
-   "Fit to existing text" is on (on by default), up to 300 characters before
-   the cursor and 100 after it in the field you are dictating into. No tone or
-   category is derived from the app; the model reads intent from your speech
-   and uses the app and window names only to tell what kind of text this is
-   and how names on screen are spelled. With that
-   setting off, a dictation's transcript never leaves this Mac after
-   transcription. Ask Anything and Translate always send it (item 7).
-4. **Screen context**, while "Screen context" is on in Settings → Dictation — off
+1. **Each dictation**, in one request to Gemini after you stop. Nothing is
+   sent while you speak. The request holds the FLAC-compressed recording
+   and the dictation prompt, and the model answers with the finished text.
+   The prompt contains the built-in writing rules, your custom rules from
+   Settings → Dictation, the spoken languages you set, the regional spelling
+   of your Mac (read from its region for each dictation), the frontmost
+   app's name and the title of its focused window (a document name, a page
+   title, a chat name), in Safari, Chrome, Edge, Brave, Vivaldi, Arc, Dia,
+   Opera, Firefox and Zen the host and path of the page in that window
+   (never the query string or fragment, so no search terms or tokens), and
+   up to 300 characters before the cursor and 100 after it in the field you
+   are dictating into. No tone or category is derived from the app; the
+   model reads intent from your speech and uses the app and window names
+   only to tell what kind of text this is and how names on screen are
+   spelled.
+2. **Your dictionary terms**, in that same request. The model uses them to
+   bias what it hears, which is why names and jargon come out spelled right
+   as you speak rather than being corrected afterwards. Up to 100 words and
+   up to 10 "heard as" spellings (the misspelling and its correction) are
+   sent.
+3. **Screen context**, while "Screen context" is on in Settings → Dictation — off
    by default since 2026-10-13 (three images added about 1.3 s to every
-   cleanup; the app and window names in item 3 replace them). VoiceiQ captures the main display when dictation starts and when
-   the frontmost app changes during that dictation. It sends up to four reduced-
-   size JPEG images to the provider only with the writing-rules request. VoiceiQ keeps
-   the images in memory and never stores them on disk. macOS asks for Screen
-   Recording permission the first time this feature runs. If you deny access,
-   dictation continues without images. Turn off "Screen context" to stop capture.
-5. **Ask Anything web search**, only if you saved a TinyFish API key in
-   Settings → Advanced (off by default; there is no key until you add one).
-   For each Ask Anything request the provider's model first decides whether
-   the question needs current information. If it does, VoiceiQ sends one short search
-   query to `api.search.tinyfish.ai` and fetches the top three result pages
-   through `api.fetch.tinyfish.ai`. Your spoken instruction and any selected
-   text go only to the provider; TinyFish receives the search query and the
-   page URLs. The fetched page text is placed in the provider prompt and
-   discarded.
-   Remove the key to stop this entirely.
-6. **Meeting audio**, only after you start a recording. With "Offer to record
+   dictation; the app and window names in item 1 replace them). VoiceiQ
+   captures the main display when dictation starts and when the frontmost
+   app changes during that dictation. It sends up to four reduced-size JPEG
+   images in the same dictation request. VoiceiQ keeps the images in memory
+   and never stores them on disk. macOS asks for Screen Recording permission
+   the first time this feature runs. If you deny access, dictation continues
+   without images. Turn off "Screen context" to stop capture.
+4. **Meeting audio**, only after you start a recording. With "Offer to record
    calls" on in Settings → Dictation (on by default), VoiceiQ watches which
    processes use your microphone (Core Audio's per-process list; nothing is
    recorded). It offers to record when a calling app (Zoom, Teams, FaceTime,
@@ -117,50 +64,39 @@ With no usable key, nothing is sent and the recording stays on your Mac.
    recording with no call detected records the default microphone and all
    system sound.
    Recording stops only when you stop it; the stretches with speech are then
-   sent to the provider (or to ElevenLabs Scribe v3 when it transcribes, with
-   your dictionary terms and spoken languages) for a speaker-labelled
-   transcript. With "Hide card and ID numbers in meetings" on, ElevenLabs
-   still receives the full audio but returns those numbers replaced, so the
-   saved transcript and the notes request never hold them. The meeting's
-   audio recording, kept on your device for as long as you keep audio, still
-   contains them as spoken. The live transcript shows each turn
-   only once those numbers are replaced. That transcript is sent back to the provider for a summary
-   and action items. Turn the setting
-   off and no call detection runs.
-   With "Read names from the screen" on (Settings → Dictation, on by default,
-   macOS only) and Screen Recording already granted, VoiceiQ takes a snapshot
-   of the call window every 3 seconds while recording. It captures only a
-   window of the call app, never the whole display; in a browser, only a
-   window whose title is a meeting page. A recording with no call
-   detected reads the frontmost calling app, and with none open it takes no
-   snapshots. Each snapshot
+   sent to Gemini for a speaker-labelled transcript. That transcript is sent
+   back to Gemini, with your dictionary terms and custom rules, for a summary
+   and action items. Turn the setting off and no call detection runs.
+   While a meeting records on the Mac, VoiceiQ reads names off the call
+   window to name its speakers. With Screen Recording granted (asked during
+   onboarding, optional), it takes a snapshot of the call window every 3
+   seconds. It captures only a window of the call app, never the whole
+   display; in a browser, only a window whose title is a meeting page. A
+   recording with no call detected reads the frontmost calling app, and with
+   none open it takes no snapshots. Each snapshot
    is read with Apple's on-device text recognition and dropped at once; it is
-   never written to disk or sent anywhere. Only the name-like text and its time
-   are kept, in `screen-names.json` in the meeting's folder, and only the names
-   are sent with the transcript for the notes. With Accessibility granted, it
-   also reads the call app's window text (name tags, the participants list)
-   through the Accessibility API, with the same rule: only name-like text is
-   kept. A meeting never asks for Screen Recording or Accessibility itself.
-   A question you type in a meeting's question box is sent to the selected
-   provider with that meeting's notes, transcript and your earlier questions
+   never written to disk or sent anywhere. With Accessibility, which
+   dictation already has, it also reads the call app's window text (name
+   tags, the participants list) through the Accessibility API, so names are
+   read even without Screen Recording. Either way only the name-like text and its time
+   are kept, in `screen-names.json` in the meeting's folder, and only the
+   names are sent with the transcript for the notes. A meeting never asks
+   for Screen Recording or Accessibility itself.
+   A question you type in a meeting's question box is sent to Gemini with
+   that meeting's notes, transcript and your earlier questions
    and answers. The questions and answers are kept in `chat.json` in the
    meeting's folder and deleted with the meeting.
-7. **The selected text, when you use Ask Anything** (⌃⌥A by default). At the
-   moment you press the shortcut, VoiceiQ reads the text selected in the
-   frontmost app through the Accessibility API and sends it with your spoken
-   instruction to the provider. Nothing else in the window is read. Translate (⌃⌥T)
-   sends only your dictation, as a normal dictation does.
-8. **Your API keys**, each only in the request header to its own service: the
-   Gemini key to Google and the OpenAI key to OpenAI. They are stored in the
-   macOS Keychain, never in files or preferences.
-9. **Update checks.** Every six hours, and when you choose Check for Updates, the
+5. **Your API key**, only in the request header to Google. It is stored in
+   the macOS Keychain, never in files or preferences.
+6. **Update checks.** Every six hours, and when you choose Check for Updates, the
    app downloads the update feed (`appcast.xml`) from the project's GitHub
    Releases (`github.com`, which redirects to GitHub's download host). The
    request carries only the app name and version and the Sparkle version in its
    User-Agent; Sparkle's system profiling is off. When an update is offered, the
    ZIP comes from the same place. GitHub sees your IP address, as with any
    download. Turn the checks off in Settings › About.
-The auto-learn feature ("Learn from your edits") never sends anything. It
+
+Learning from your edits never sends anything. It
 re-reads the field VoiceiQ typed into, through the Accessibility API, for up to ten
 minutes after an insertion, waits until you have stopped editing for a few
 seconds, and adds the short replacements you made (one to three words) to the
@@ -168,14 +104,6 @@ Dictionary as words, skipping ordinary words (anything in the macOS spelling
 dictionary, checked on the Mac). They ride with your audio like any other
 dictionary term and are never applied as automatic text replacements.
 Everything it reads stays on this Mac.
-
-The iPhone keyboard learns from your typing on the iPhone. With Full Access,
-its 200 most used learned words (each typed at least three times, never from
-password, code, card-number, phone or postal fields) are handed to the
-VoiceiQ app, which adds them to the Dictionary as Auto-learned. From there
-they sync through your iCloud account and reach the cleanup prompt like any
-other term. Word pairs and the rest of the learned words stay in the keyboard
-on the iPhone.
 
 The VoiceiQ Meetings extension for Chrome sends nothing off your Mac. It is
 optional: you install it from Settings → Advanced and load it in Chrome
@@ -203,7 +131,7 @@ while Chrome runs, whether or not VoiceiQ records it. It also sends one
 Chrome starts. When a recording stops, VoiceiQ copies the
 reports from that meeting's tab to `browser-speakers.json` in the meeting's
 folder and uses them to tell the other speakers apart and name them. The
-names given to speakers go to your provider with the transcript when the
+names given to speakers go to Gemini with the transcript when the
 notes are written, like names read off the screen. That file is deleted
 with the meeting. Day files older than 7 days are deleted when a meeting
 with reports stops, when Chrome starts the helper, and every hour while it
@@ -214,9 +142,9 @@ Extensions page.
 
 - Your history database and stored recordings — audio and transcript text leave
   only as part of the requests above, never in bulk and never anywhere else
-- Your dictionary as a file, to anyone but you. Individual terms ride with the
-  audio as described above, and your misspelling rules are included in the
-  writing-rules prompt while that pass is on. The dictionary itself (words,
+- Your dictionary as a file, to anyone but you. Individual terms and
+  "heard as" spellings ride with the audio as described above. The
+  dictionary itself (words,
   "heard as" spellings, stars, and when entries were added or deleted) is
   kept in your own iCloud account, in VoiceiQ's key-value storage, so the Mac
   and iPhone apps share it. Your custom writing rules are kept there too, for the
@@ -237,10 +165,9 @@ Extensions page.
   was is never examined beyond its keycode, never logged, never stored, never
   transmitted). When you're not dictating, other keys pass through untouched.
 - Screen context images and meeting name snapshots are never stored on disk and
-  are never attached to Ask Anything, Translate, meeting, or transcription
-  requests.
+  are never attached to meeting requests.
 - Telemetry: there is none. No analytics SDK, no crash uploader, no phone-home
-  beyond the update check in item 9.
+  beyond the update check in item 6.
 
 ## What's stored locally, and your controls
 
@@ -266,19 +193,19 @@ Extensions page.
   folder, and on the Mac the helper's cache in
   `~/Library/Caches/io.blue.voiceiq.localspeech` (`FileLayout.removeRetiredModels`).
   That cleanup can be removed once every install has launched a build from
-  2026-11-10 or later. On that first launch the app also switches to the
-  provider that has a saved key when the selected one has none
-  (`SettingsStore.adoptProviderWithKeyOnce`).
+  2026-11-10 or later.
+- The first launch of 0.7.12 deletes the OpenAI, ElevenLabs, TinyFish and
+  agent-provider keys that earlier versions stored in the Keychain, their
+  settings, and Agent mode's saved runs
+  (`SettingsStore.removeRetiredSettingsOnce`). Those providers and features
+  are gone; nothing is sent to them.
 
-## The provider's side of the wire
+## Google's side of the wire
 
-Your audio is governed by your own terms with whoever receives it. With Gemini,
-that is the Gemini API terms with Google; as of writing, paid-tier API usage is
-not used for model training, and free-tier usage may be. With OpenAI, it is
-OpenAI's API terms, and with ElevenLabs, its terms of service. That relationship is yours — this app doesn't broker it. Review the
-[Gemini API terms](https://ai.google.dev/gemini-api/terms), the
-[OpenAI API data controls](https://platform.openai.com/docs/guides/your-data) and
-[ElevenLabs' privacy policy](https://elevenlabs.io/privacy-policy).
+Your audio is governed by your own terms with Google: the Gemini API terms.
+As of writing, paid-tier API usage is not used for model training, and
+free-tier usage may be. That relationship is yours — this app doesn't broker
+it. Review the [Gemini API terms](https://ai.google.dev/gemini-api/terms).
 
 ## Secure input
 
@@ -289,14 +216,11 @@ the clipboard.
 ## Verify it
 
 - Build from source (`./scripts/build.sh`).
-- Watch traffic with Little Snitch or `nettop` — a dictation reaches the
-  transcription host the active route names, and no other model host (two
-  TinyFish hosts appear only after you add a TinyFish key).
-- Read the prompts: they are source files. The writing-rules pass is
+- Watch traffic with Little Snitch or `nettop` — a dictation reaches
+  `generativelanguage.googleapis.com` and no other model host.
+- Read the prompts: they are source files. The dictation prompt is
   [PromptV1.swift](../VoiceIQCore/Sources/FormattingPipeline/PromptV1.swift) plus
-  the default custom instructions in
-  [DictationRulesSeed.swift](../VoiceIQCore/Sources/FormattingPipeline/DictationRulesSeed.swift);
+  the built-in writing rules in
+  [DefaultWritingRules.swift](../VoiceIQCore/Sources/FormattingPipeline/DefaultWritingRules.swift);
   meeting transcription and summarising are in
-  [GeminiClient+Meetings.swift](../VoiceIQCore/Sources/TranscriptionClient/GeminiClient+Meetings.swift),
-  and OpenAI's requests in
-  [GeminiClient+OpenAI.swift](../VoiceIQCore/Sources/TranscriptionClient/GeminiClient+OpenAI.swift).
+  [GeminiClient+Meetings.swift](../VoiceIQCore/Sources/TranscriptionClient/GeminiClient+Meetings.swift).

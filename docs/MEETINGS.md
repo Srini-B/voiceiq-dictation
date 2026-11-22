@@ -1,56 +1,28 @@
 # Meetings on the Mac
 
 How VoiceiQ notices a call, what audio it records, how each line goes to the
-right person (the provider's speaker labels, the VoiceiQ Meetings Chrome
+right person (Gemini's speaker labels, the VoiceiQ Meetings Chrome
 extension, and names from the call screen), and how the Meetings window shows
-and exports it. Meetings are transcribed by the provider (Gemini or
-OpenAI), or by ElevenLabs Scribe v3 when it is the transcription provider,
-always from the saved tracks after the recording stops. With ElevenLabs, the
-Meetings window (and the iPhone recorder card) also shows a live transcript
-from Scribe v3 Live while the meeting records; it is replaced by the saved
-transcript when the meeting stops. Notes always come
-from the provider. What is sent, and the notes prompt, are covered in
+and exports it. Meetings are transcribed by `gemini-3.5-transcribe` through
+the Interactions API (`v1beta/interactions`), always from the saved tracks
+after the recording stops; there is no live transcript while a meeting
+records. Notes and meeting chat come from `gemini-3.8-flash`. What is sent,
+and the notes prompt, are covered in
 [PRIVACY.md](PRIVACY.md) and [design/meeting-prompt-rulebook.md](design/meeting-prompt-rulebook.md).
 
-### Live transcript with ElevenLabs
+## The transcription request
 
-`LiveMeetingSession` mixes the mic and system tracks (the mic alone on
-iPhone) into one 16 kHz stream to Scribe v3 Live with:
-
-- `commit_strategy=turn_prediction`: the server's voice activity detection
-  ends a segment at a pause, or the model ends it earlier when it predicts the
-  speaker finished. Batch Scribe v3 has no VAD option, so this is where VAD is
-  used.
-- `diarize=true`: speakers in real time. `speakers_merged` events rewrite
-  earlier turns when two ids turn out to be one person.
-- `no_verbatim`, the dictionary as `keyterms` (50 terms of up to 20
-  characters) plus the whole dictionary as the keyterm library (up to 10,000
-  terms, first audio chunk), and the spoken languages (several turn on
-  `multilang_mode`).
-
-The live transcript is for watching the call. Measured 2026-11-12 on two real
-four-person meetings (AMI corpus, 180 s each, scored against its speaker
-labels): Live gave the right speaker to 95.0% and 73.7% of its words, batch
-to 93.6% and 67.6%, but Live wrote 8% and 17% fewer words. So the saved
-transcript still comes from batch Scribe v3 after the meeting stops, where
-only stretches with speech are sent (`CallAudio.activeRegions`), which also
-keeps billed silence down. A live session that fails says so in the window;
-the recording and the saved transcript are not affected.
-
-"Hide card and ID numbers in meetings" (off by default) asks batch Scribe v3
-to write card details, ID, account and health-card numbers, other
-identifiers and numeric personal data, and passwords as `{CREDIT_CARD}` and
-the like (`entity_redaction`), in the saved transcript and so in what the
-notes model sees. Names, places, dates and money stay. The live transcript
-redacts the same entities (`entity_redaction` on the Scribe v3 Live socket,
-+$0.066/h): Live redacts only finished turns and still sends the running
-text and the diarized words unredacted, so a redacting session shows no
-running text and shows each turn only once its `redacted_transcript`
-arrives, a moment after it is said (`ElevenLabs.redacting` gives the
-redacted words the speakers of the words they replace). Turning it on during
-a recording closes the unredacted session, clears its text and starts a
-redacting one (`MeetingEngine.restartLiveForRedaction`); turning it off
-leaves the redacting one running.
+`GeminiClient.transcribeSpeakers` sends FLAC audio with a
+`transcription_config` of `verbatim` mode, `diarization_mode: speaker` and
+word timestamps (`timestamp_granularities: ["word"]`). Without the word
+timestamps the API returned one text block with the speaker turns run
+together (2026-09-26). A request tells apart up to 8 speakers and holds at
+most 30 minutes of audio, so `MeetingTranscriber` sends only the stretches
+with speech (`CallAudio.activeRegions`), cut into windows of 10 minutes of
+speech each. Every window after the first starts with reference clips of the
+speakers already found, so a speaker keeps one id across a long call
+(`SpeakerLinker`). Finished windows are cached beside the audio, so a retry
+never pays for the same audio twice.
 
 ## Call detection
 
@@ -194,9 +166,8 @@ names on the tiles the meeting page lights as talking, which name the
 speakers. It reads no audio and no other page text. What it reports and
 where that is kept is in [PRIVACY.md](PRIVACY.md).
 
-Everything here runs after the provider's transcript is back, on its
-speaker-labelled words, so it works the same for every transcription
-provider: Gemini, OpenAI and ElevenLabs.
+Everything here runs after Gemini's transcript is back, on its
+speaker-labelled words.
 
 ### What the extension reports
 
@@ -279,7 +250,7 @@ VoiceiQ does not need to run while the extension reports.
 2. Each event lasts until the next one, for at most 3 s (`hold`), widened by
    0.3 s on each side (`slack`). These are each source's loud stretches.
 3. `BrowserSpeakers.apply` runs before turns are built, in
-   `MeetingTranscriber`, for every provider. The owner's words stay `you`.
+   `MeetingTranscriber`. The owner's words stay `you`.
 4. A far-side word goes to the source whose loud stretches overlap the
    word's time more than twice as much as any other source's. The rule uses
    overlap, not the word's midpoint, because the recognizer often starts a
@@ -392,16 +363,18 @@ those services still use this markup is not known.
 Call apps show the active speaker's name tag on their tile. VoiceiQ reads those
 tags while it records and matches them to the diarized speakers afterwards.
 
-Setting: **Read names from the screen** in Settings → Dictation
-(`SettingsStore.meetingScreenNamesEnabled`, key `meetingScreenNames`, default
-on). It needs Screen Recording, which the dictation onboarding asks for; a
-meeting never raises the prompt (`CGPreflightScreenCaptureAccess`).
+This always runs while a meeting records; it has no setting, and it adds no
+time to dictation. It uses Screen Recording when it was granted (the
+onboarding asks for it, and it is optional), and the call window's text
+through Accessibility, which VoiceiQ already has. Either one is enough. A
+meeting never raises a permission prompt (`CGPreflightScreenCaptureAccess`,
+`AXIsProcessTrusted`).
 
 1. `MeetingEngine.startRecording` starts a `ScreenNameSampler` with the
    detected call source. A recording started by hand with no call detected
    reads the frontmost known call app (`ScreenNameSampler.frontCallApp`).
    With no call app, the sampler does not run.
-2. Every 3 s the sampler captures one window of the call app or browser
+2. With Screen Recording granted, every 3 s the sampler captures one window of the call app or browser
    with ScreenCaptureKit (`SCContentFilter(desktopIndependentWindow:)`, so it
    works when the window is covered). It picks a window whose title names a
    page in `CallApps.meetingPages` first, then a window on screen, then the
@@ -472,8 +445,8 @@ docs/design/meeting-prompt-rulebook.md. Fixes from 2026-10-29:
   defaults to the account's full name), else "Note owner". The rules forbid
   "you" for any participant.
 - **One spelling per name and term.** The request carries the user's
-  Dictionary (vocabulary and spellings) and custom writing rules, as dictation
-  cleanup does. The model fills a leading `glossary` field first: one entry per
+  Dictionary (vocabulary and spellings) and custom writing rules, as a
+  dictation does. The model fills a leading `glossary` field first: one entry per
   person, product and term, with every transcript spelling that means it
   (`"Nitin": ["Nithin", "Lithin", "Nathan"]`). Every other field uses those
   spellings. `MeetingNotes` ignores the field when decoding.
@@ -486,14 +459,10 @@ docs/design/meeting-prompt-rulebook.md. Fixes from 2026-10-29:
   builds before 2026-11-10) and hears
   the whole meeting again. `browser-speakers.json` stays. **Retry** after a
   failure keeps the finished windows.
-- Redo and Retry transcribe from the saved tracks through
-  `SettingsStore.meetingSpeechEndpoints` at that moment: ElevenLabs alone
-  when it is the transcription provider, otherwise
-  `SettingsStore.meetingProviders` with the provider selected now first.
-  After an ElevenLabs failure, Retry goes to ElevenLabs again; to use Gemini
-  or OpenAI instead, choose the model provider as the transcription provider
-  first. Notes always come from `meetingProviders`. `mic.caf` and `system.caf` stay until the meeting is deleted; the
-  audio retention setting applies to dictations only.
+- Redo and Retry transcribe from the saved tracks with the meeting model set
+  at that moment (Settings → Advanced → Meeting model). `mic.caf` and
+  `system.caf` stay until the meeting is deleted; the audio retention setting
+  applies to dictations only.
 - `MeetingEngine.processing` maps each meeting being processed to its step
   (`.transcribing` or `.summarizing`). The Mac header shows a spinner with
   "Transcribing" or "Making notes" while old notes stay on screen; iOS shows
@@ -565,9 +534,8 @@ Once a meeting has a transcript, a question box sits along its bottom
 narrow window, sending switches back to the notes, where the answers are
 listed after the Notes section. iOS: pinned to the bottom of the note, with
 the answers after the notes). A question
-goes to the selected provider's writing model on its own API
-(`AgentEndpoint.writingModel`: Gemini's formatting model or OpenAI's writing
-model), never to Agent mode's custom provider.
+goes to Gemini's dictation model (`gemini-3.8-flash` unless Settings →
+Advanced → Dictation model names another).
 `MeetingChat` builds the request:
 
 - **System prompt.** Short answering rules, then the meeting as
@@ -577,16 +545,9 @@ model), never to Agent mode's custom provider.
 - **Turns.** Every earlier question and answer, in order, then the new
   question. The model sees its own earlier answers, so follow-ups work.
 
-It is sent through `AgentTransport` with no tools, the same adapters Agent
-mode uses: Gemini `generateContent` and OpenAI's Responses API. Caching
-follows `AgentCachePolicy`:
-
-- OpenAI: automatic prefix caching, with `prompt_cache_key`
-  `voiceiq-meeting-chat-<meeting id>`, so every question about a meeting
-  lands on the same cache, also after a relaunch. GPT-5.6 and later keep it
-  for 30 minutes.
-- Gemini: implicit caching of the repeated prefix. Nothing is sent. Gemini
-  3.x caches only from 4,096 tokens, so a short meeting is not cached.
+It is sent with `GeminiClient.chat` (`generateContent`). Gemini caches the
+repeated prefix implicitly; nothing extra is sent. Gemini 3.x caches only
+from 4,096 tokens, so a short meeting is not cached.
 
 Each answered question is saved with its answer, time and model in
 `chat.json` in the meeting's folder (`MeetingStore.loadChat` /
