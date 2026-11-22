@@ -22,11 +22,6 @@ packages:
   Sparkle:
     url: https://github.com/sparkle-project/Sparkle
     from: 2.10.1
-  # Agent mode's screen observer and action layer (AX + CGEvent). Pinned to
-  # an exact release. See docs/AGENT-MODE.md.
-  Peekaboo:
-    url: https://github.com/openclaw/Peekaboo.git
-    exactVersion: 4.9.7
 
 targets:
   VoiceIQ:
@@ -88,10 +83,6 @@ targets:
     dependencies:
       - package: VoiceIQCore
       - package: Sparkle
-      - package: Peekaboo
-        product: PeekabooAutomationKit
-      - package: Peekaboo
-        product: PeekabooFoundation
       - target: VoiceiQLocalSpeech
         embed: true
         codeSign: true
