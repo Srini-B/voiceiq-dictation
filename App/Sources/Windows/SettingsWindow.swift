@@ -330,7 +330,7 @@ struct PrivacyPane: View {
             } header: {
                 Text("What leaves your Mac")
             } footer: {
-                Text("No middleman server, no account, no analytics, no keystroke logging. Only Google.")
+                Text("No middleman server, no account, no analytics, no keystroke logging. Only Google, plus the AI providers of any coding agents you let read History and meetings.")
             }
 
             Section {

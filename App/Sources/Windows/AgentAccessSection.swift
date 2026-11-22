@@ -10,6 +10,7 @@ struct AgentAccessSection: View {
     @State private var state = AgentServer.shared.state
     @State private var copied: String?
     @State private var confirmingNewKey = false
+    @State private var newKeyFailed = false
     @State private var statuses: [AgentClient: AgentClient.Status] = [:]
 
     var body: some View {
@@ -52,7 +53,13 @@ struct AgentAccessSection: View {
                     Button("New Key…") { confirmingNewKey = true }
                         .confirmationDialog("Make a new access key? Claude Code, Codex and Amp get it here; other tools stop working until you set them up again.",
                                             isPresented: $confirmingNewKey) {
-                            Button("Make New Key", role: .destructive) { AgentServer.resetAccessKey(); copied = nil }
+                            Button("Make New Key", role: .destructive) {
+                                newKeyFailed = AgentServer.resetAccessKey() == nil
+                                copied = nil
+                            }
+                        }
+                        .alert("Couldn't make a new key", isPresented: $newKeyFailed) {} message: {
+                            Text("VoiceiQ couldn't save a new key to your Keychain, so the old key still works.")
                         }
                 }
                 Text(copied.map { "Copied the \($0)." } ?? "VoiceiQ adds itself to Claude Code, Codex and Amp when they're on this Mac, and keeps their key current. For Cursor, Gemini CLI and others, merge the copied JSON into their MCP settings.")

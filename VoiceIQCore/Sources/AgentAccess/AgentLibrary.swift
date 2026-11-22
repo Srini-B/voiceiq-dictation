@@ -117,7 +117,7 @@ public struct AgentLibrary: Sendable {
             transcript: transcript.map {
                 Turn(speaker: meta.displayName($0.speaker, notes: notes), start: $0.start, end: $0.end, text: $0.text)
             },
-            chat: meetings.loadChat(id: meta.id)
+            chat: meetings.loadChat(id: meta.id, setAsideUnreadable: false)
         )
     }
 
@@ -126,7 +126,7 @@ public struct AgentLibrary: Sendable {
     public func meetingMarkdown(_ reference: String) throws -> String {
         let meta = try self.meta(reference)
         var text = try meetings.markdown(id: meta.id, parts: .both)
-        let chat = meetings.loadChat(id: meta.id)
+        let chat = meetings.loadChat(id: meta.id, setAsideUnreadable: false)
         if !chat.isEmpty {
             text += "\n## Questions asked in VoiceiQ\n"
             for turn in chat { text += "\n**Q:** \(turn.question)\n\n**A:** \(turn.answer)\n" }

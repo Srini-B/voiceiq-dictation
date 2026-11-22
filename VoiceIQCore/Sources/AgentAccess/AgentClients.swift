@@ -145,14 +145,30 @@ public enum AgentClient: String, CaseIterable, Identifiable, Sendable {
         // left readable by the user alone, whatever the file allowed before.
         let existing = (try? fileManager.attributesOfItem(atPath: file.path)[.posixPermissions] as? Int) ?? 0o600
         let permissions = existing & 0o700
-        if old != nil {
+        if let old {
             let backup = file.deletingLastPathComponent().appendingPathComponent(file.lastPathComponent + ".voiceiq-backup")
-            try? fileManager.removeItem(at: backup)
-            try fileManager.copyItem(at: file, to: backup)
-            try fileManager.setAttributes([.posixPermissions: permissions], ofItemAtPath: backup.path)
+            try Self.replace(backup, with: Data(old.utf8), permissions: permissions)
         }
-        try Data(new.utf8).write(to: file, options: .atomic)
-        try fileManager.setAttributes([.posixPermissions: permissions], ofItemAtPath: file.path)
+        try Self.replace(file, with: Data(new.utf8), permissions: permissions)
+    }
+
+    /// Writes `data` to a new file that has `permissions` before any byte is in
+    /// it, then moves it over `file`, so neither a reader nor a crash midway
+    /// sees the key in a file other users can read.
+    private static func replace(_ file: URL, with data: Data, permissions: Int) throws {
+        let temporary = file.deletingLastPathComponent().appendingPathComponent(".\(file.lastPathComponent).voiceiq-\(UUID().uuidString)")
+        let descriptor = open(temporary.path, O_WRONLY | O_CREAT | O_EXCL, mode_t(permissions))
+        guard descriptor >= 0 else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
+        let handle = FileHandle(fileDescriptor: descriptor, closeOnDealloc: true)
+        do {
+            guard fchmod(descriptor, mode_t(permissions)) == 0 else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
+            try handle.write(contentsOf: data)
+            try handle.close()
+            guard rename(temporary.path, file.path) == 0 else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
+        } catch {
+            unlink(temporary.path)
+            throw error
+        }
     }
 
     // MARK: - JSON (Claude Code, Amp)
@@ -221,6 +237,36 @@ public enum AgentClient: String, CaseIterable, Identifiable, Sendable {
         return nil
     }
 
+    /// Each line of `text` with its table key path when it is a table header,
+    /// so a header-like line inside a `"""` or `'''` string isn't taken for one.
+    private static func tomlLines(_ text: String) -> [(line: String, table: [String]?)] {
+        var open: Substring?
+        return text.components(separatedBy: "\n").map { line in
+            let table = open == nil ? tomlTable(line) : nil
+            var rest = Substring(line)
+            while !rest.isEmpty {
+                if let delimiter = open {
+                    guard let end = rest.range(of: delimiter) else { break }
+                    rest = rest[end.upperBound...]
+                    open = nil
+                } else if rest.hasPrefix("\"\"\"") || rest.hasPrefix("'''") {
+                    open = rest.prefix(3)
+                    rest = rest.dropFirst(3)
+                } else if let quote = rest.first, quote == "\"" || quote == "'" {
+                    rest = rest.dropFirst()
+                    while let character = rest.popFirst(), character != quote {
+                        if character == "\\", quote == "\"" { _ = rest.popFirst() }
+                    }
+                } else if rest.first == "#" {
+                    break
+                } else {
+                    rest = rest.dropFirst()
+                }
+            }
+            return (line, table)
+        }
+    }
+
     private static func isOurs(_ table: [String]) -> Bool {
         table.count >= 2 && table[0] == "mcp_servers" && table[1] == serverName
     }
@@ -228,8 +274,8 @@ public enum AgentClient: String, CaseIterable, Identifiable, Sendable {
     /// The lines of `[mcp_servers.voiceiq]` and its sub-tables, nil when there are none.
     private static func tomlOurBlock(_ text: String) -> String? {
         var inside = false, lines: [String] = []
-        for line in text.components(separatedBy: "\n") {
-            if let table = tomlTable(line) { inside = isOurs(table) }
+        for (line, table) in tomlLines(text) {
+            if let table { inside = isOurs(table) }
             if inside { lines.append(line) }
         }
         return lines.isEmpty ? nil : lines.joined(separator: "\n")
@@ -237,8 +283,8 @@ public enum AgentClient: String, CaseIterable, Identifiable, Sendable {
 
     private static func tomlRemovingOurs(_ text: String) -> String {
         var inside = false, kept: [String] = []
-        for line in text.components(separatedBy: "\n") {
-            if let table = tomlTable(line) { inside = isOurs(table) }
+        for (line, table) in tomlLines(text) {
+            if let table { inside = isOurs(table) }
             if !inside { kept.append(line) }
         }
         var result = kept.joined(separator: "\n")
@@ -246,8 +292,24 @@ public enum AgentClient: String, CaseIterable, Identifiable, Sendable {
         return result
     }
 
+    /// `line` without its `#` comment; a `#` inside a string is kept.
+    private static func tomlRemovingComment(_ line: String) -> String {
+        var quote: Character?, escaped = false
+        for (offset, character) in line.enumerated() {
+            if let open = quote {
+                if escaped { escaped = false } else if character == "\\", open == "\"" { escaped = true } else if character == open { quote = nil }
+            } else if character == "\"" || character == "'" {
+                quote = character
+            } else if character == "#" {
+                return String(line.prefix(offset))
+            }
+        }
+        return line
+    }
+
     /// The first `name = "value"` in `block`, also inside an inline table.
     private static func tomlString(_ name: String, in block: String) -> String? {
+        let block = block.components(separatedBy: "\n").map(tomlRemovingComment).joined(separator: "\n")
         let pattern = "(?:^|[\\s{,])\"?\(name)\"?\\s*=\\s*\"([^\"]*)\""
         guard let regex = try? NSRegularExpression(pattern: pattern, options: [.anchorsMatchLines]),
               let match = regex.firstMatch(in: block, range: NSRange(block.startIndex..., in: block)),

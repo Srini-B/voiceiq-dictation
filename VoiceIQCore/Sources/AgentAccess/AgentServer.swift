@@ -48,8 +48,11 @@ public final class AgentServer: @unchecked Sendable {
     public static func accessKey() -> String? {
         if let key = cachedKey.withLock({ $0 }) { return key }
         if let key = KeychainStore.loadAgentAccessKey() {
-            cachedKey.withLock { $0 = key }
-            return key
+            // A new key made while this read waited wins over the one read.
+            return cachedKey.withLock { cached in
+                if cached == nil { cached = key }
+                return cached
+            }
         }
         return resetAccessKey()
     }

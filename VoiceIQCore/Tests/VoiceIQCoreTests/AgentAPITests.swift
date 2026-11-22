@@ -114,8 +114,13 @@ final class AgentAPITests: XCTestCase {
         XCTAssertEqual(turns.last?["start"] as? Double, 75)
         XCTAssertEqual((meeting["chat"] as? [[String: Any]])?.first?["answer"] as? String, "Priya.")
 
+        // Reading never changes the store, even a chat that no longer decodes.
+        let chat = try XCTUnwrap(MeetingStore(root: root.appendingPathComponent("meetings")).folder(for: newer)).appendingPathComponent("chat.json")
+        try Data("{".utf8).write(to: chat)
         let latest = try toolText("get_meeting", ["id": "latest"])
         XCTAssertTrue(latest.text.hasPrefix("Meeting id: \(newer.uuid.uuidString)"), latest.text)
+        XCTAssertFalse(try toolText("get_meeting", ["id": "latest", "format": "json"]).isError)
+        XCTAssertEqual(try String(contentsOf: chat, encoding: .utf8), "{")
         XCTAssertTrue(try toolText("get_meeting", ["id": "nope"]).isError)
     }
 

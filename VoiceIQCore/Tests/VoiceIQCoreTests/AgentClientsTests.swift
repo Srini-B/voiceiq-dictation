@@ -143,6 +143,32 @@ final class AgentClientsTests: XCTestCase {
         try AgentClient.amp.install(key: "a", home: home)
         try AgentClient.amp.remove(home: home)
         XCTAssertEqual(try String(contentsOf: amp, encoding: .utf8), foreign)
+
+        // A commented-out line naming VoiceiQ's URL doesn't make a server VoiceiQ's.
+        let foreignToml = "[mcp_servers.voiceiq]\n# url = \"\(AgentAPI.mcpURL)\"\nurl = \"https://example.com/mcp\"\n"
+        let codex = try write(foreignToml, to: ".codex/config.toml")
+        XCTAssertEqual(AgentClient.codex.status(key: "a", home: home), .otherServer)
+        try AgentClient.codex.install(key: "a", home: home)
+        try AgentClient.codex.remove(home: home)
+        XCTAssertEqual(try String(contentsOf: codex, encoding: .utf8), foreignToml)
+
+        // An example server inside a multi-line string is text, not a table.
+        let instructions = """
+        developer_instructions = \"\"\"
+        To read meetings, add:
+        [mcp_servers.voiceiq]
+        url = "\(AgentAPI.mcpURL)"
+        \"\"\"
+        model = "o3"
+
+        """
+        _ = try write(instructions, to: ".codex/config.toml")
+        XCTAssertEqual(AgentClient.codex.status(key: "a", home: home), .notSetUp)
+        try AgentClient.codex.install(key: "a", home: home)
+        XCTAssertEqual(AgentClient.codex.status(key: "a", home: home), .setUp)
+        XCTAssertTrue(try String(contentsOf: codex, encoding: .utf8).hasPrefix(instructions))
+        try AgentClient.codex.remove(home: home)
+        XCTAssertEqual(try String(contentsOf: codex, encoding: .utf8), instructions)
     }
 
     func testAmpSetUpInAFreshConfigFolder() throws {
