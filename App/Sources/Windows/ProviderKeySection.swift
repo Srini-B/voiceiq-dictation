@@ -104,13 +104,17 @@ struct ProviderKeySection: View {
 }
 
 extension ProviderKeySection {
-    static let openAI = ProviderKeySection(
-        secret: .openAI, vendor: "OpenAI", keyPage: URL(string: "https://platform.openai.com/api-keys")!,
-        validate: { key in await GeminiClient(apiKey: { nil }, openAIKey: { key }).validateOpenAIKey() })
+    static var openAI: ProviderKeySection {
+        ProviderKeySection(
+            secret: .openAI, vendor: "OpenAI", keyPage: URL(string: "https://platform.openai.com/api-keys")!,
+            validate: { key in await GeminiClient(apiKey: { nil }, openAIKey: { key }).validateOpenAIKey() })
+    }
 
-    static let elevenLabs = ProviderKeySection(
-        secret: .elevenLabs, vendor: "ElevenLabs", keyPage: URL(string: "https://elevenlabs.io/app/settings/api-keys")!,
-        validate: { key in await GeminiClient(apiKey: { nil }, elevenLabsKey: { key }).validateElevenLabsKey() })
+    static var elevenLabs: ProviderKeySection {
+        ProviderKeySection(
+            secret: .elevenLabs, vendor: "ElevenLabs", keyPage: URL(string: "https://elevenlabs.io/app/settings/api-keys")!,
+            validate: { key in await GeminiClient(apiKey: { nil }, elevenLabsKey: { key }).validateElevenLabsKey() })
+    }
 }
 
 /// The transcription provider: the model provider, or ElevenLabs, whose

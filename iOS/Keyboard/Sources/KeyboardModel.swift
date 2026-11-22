@@ -10,15 +10,11 @@ final class KeyboardModel: ObservableObject {
     @Published private(set) var appAlive = false
     /// The words heard so far in the dictation being recorded.
     @Published private(set) var liveText = ""
-    @Published private(set) var answer: Delivery?
     @Published private(set) var notice: String?
     @Published private(set) var waitingForApp = false
     @Published private(set) var hasFullAccess = true
     /// Read once per appearance: UIKit answers wrongly before the host connects.
     @Published private(set) var showsGlobeKey = true
-    @Published var mode: KeyboardMode {
-        didSet { UserDefaults.standard.set(mode.rawValue, forKey: Self.modeKey) }
-    }
 
     /// When the app has not acknowledged a command by then, it is asleep:
     /// open it. The app answers in well under 100 ms when it is running.
@@ -26,23 +22,16 @@ final class KeyboardModel: ObservableObject {
     /// A dictation finished longer ago than this is not typed into whatever
     /// field happens to be open now; it stays available behind Paste last.
     static let autoInsertWindow: TimeInterval = 120
-    private static let modeKey = "keyboardMode"
 
     weak var controller: KeyboardViewController?
-    /// Called after the keyboard itself writes to the clipboard.
-    var onOwnCopy: (() -> Void)?
-    /// Called after the keyboard edits the field, so typing rereads the text.
-    var onEdited: (() -> Void)?
+    /// Makes the keyboard's edits, so the edit panel can undo a dictation.
+    weak var editor: EditController?
     private let store = SharedStore.shared
     private var observer: UUID?
     private var timer: Timer?
     private var pendingCommandID: UUID?
     private var pendingSince: Date?
     private var shownNoticeID: UUID?
-
-    init() {
-        mode = UserDefaults.standard.string(forKey: Self.modeKey).flatMap(KeyboardMode.init(rawValue:)) ?? .dictate
-    }
 
     /// The session phase, trusting the snapshot only while the app is alive.
     /// A dictation the app was still writing when it stopped answering stays
@@ -123,7 +112,7 @@ final class KeyboardModel: ObservableObject {
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
         switch phase {
         case .recording:
-            send(KeyboardCommand(action: .stop, mode: mode))
+            send(KeyboardCommand(action: .stop))
         case .processing:
             if needsAppToFinish { controller?.openURL(BridgeURL.app) }
         case .warm, .off:
@@ -134,7 +123,7 @@ final class KeyboardModel: ObservableObject {
     func cancelTapped() {
         guard phase == .recording else { return }
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
-        send(KeyboardCommand(action: .cancel, mode: mode))
+        send(KeyboardCommand(action: .cancel))
     }
 
     func pasteLast() {
@@ -142,29 +131,10 @@ final class KeyboardModel: ObservableObject {
         insert(lastText)
     }
 
-    func insertAnswer() {
-        guard let answer else { return }
-        insert(answer.text)
-        dismissAnswer()
-    }
-
-    func copyAnswer() {
-        guard let answer else { return }
-        UIPasteboard.general.string = answer.text
-        onOwnCopy?()
-        dismissAnswer()
-    }
-
-    func dismissAnswer() {
-        if let answer { store.insertedDeliveryID = answer.id }
-        answer = nil
-    }
-
     private func start() {
         let host = controller.flatMap(HostAppResolver.currentHost(for:))
         KeyboardLog.note("[\(instanceTag)] start in \(host ?? "an unresolved host")")
-        let context = mode == .ask ? controller?.textDocumentProxy.selectedText : nil
-        let command = KeyboardCommand(action: .start, mode: mode, context: context, hostBundleID: host)
+        let command = KeyboardCommand(action: .start, hostBundleID: host)
         let alive = appAlive
         send(command)
         waitingForApp = true
@@ -203,10 +173,6 @@ final class KeyboardModel: ObservableObject {
         guard let delivery = snapshot.delivery, delivery.id != store.insertedDeliveryID else { return }
         guard Date().timeIntervalSince(delivery.createdAt) < Self.autoInsertWindow else { return }
         guard Self.onScreen === self, controller?.viewIfLoaded?.window != nil else { return }
-        if delivery.mode == .ask {
-            if answer?.id != delivery.id { answer = delivery }
-            return
-        }
         store.insertedDeliveryID = delivery.id
         let typed = insert(delivery.text)
         KeyboardLog.note(typed ? "[\(instanceTag)] result typed" : "[\(instanceTag)] result not typed: no text field")
@@ -229,26 +195,8 @@ final class KeyboardModel: ObservableObject {
         guard let proxy = controller?.textDocumentProxy, !text.isEmpty else { return false }
         let surrounding = SurroundingText(before: proxy.documentContextBeforeInput ?? "",
                                           after: proxy.documentContextAfterInput ?? "")
-        proxy.insertText(surrounding.fitted(text))
-        onEdited?()
+        editor?.type(surrounding.fitted(text))
         return true
-    }
-
-    // MARK: - Keys
-
-    func deleteBackward() {
-        controller?.textDocumentProxy.deleteBackward()
-        onEdited?()
-    }
-
-    func insertSpace() {
-        controller?.textDocumentProxy.insertText(" ")
-        onEdited?()
-    }
-
-    func insertReturn() {
-        controller?.textDocumentProxy.insertText("\n")
-        onEdited?()
     }
 }
 

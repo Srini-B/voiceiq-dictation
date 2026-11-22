@@ -40,7 +40,7 @@ targets:
         CODE_SIGN_STYLE: Automatic
         CODE_SIGN_ENTITLEMENTS: App/VoiceIQ.entitlements
         ENABLE_HARDENED_RUNTIME: NO # enabled for notarized release builds (M8)
-        SWIFT_VERSION: "5.10"
+        SWIFT_VERSION: "6.0"
         MACOSX_DEPLOYMENT_TARGET: "14.0"
         # Sparkle appcast. Every GitHub Release carries appcast.xml, and this URL
         # always resolves to the newest one. Override on the xcodebuild command
@@ -146,7 +146,7 @@ targets:
         PRODUCT_NAME: VoiceiQLocalSpeech
         PRODUCT_BUNDLE_IDENTIFIER: io.blue.voiceiq.localspeech
         DEVELOPMENT_TEAM: G8K3545FJ2
-        SWIFT_VERSION: "5.10"
+        SWIFT_VERSION: "6.0"
         ENABLE_HARDENED_RUNTIME: YES
         CODE_SIGN_INJECT_BASE_ENTITLEMENTS: NO
       configs:
@@ -172,14 +172,14 @@ targets:
   VoiceIQiOS:
     type: application
     platform: iOS
-    deploymentTarget: "17.0"
+    deploymentTarget: "18.0"
     settings:
       base:
         PRODUCT_NAME: "VoiceiQ"
         PRODUCT_BUNDLE_IDENTIFIER: io.blue.voiceiq.ios
         DEVELOPMENT_TEAM: G8K3545FJ2
         CODE_SIGN_STYLE: Automatic
-        SWIFT_VERSION: "5.10"
+        SWIFT_VERSION: "6.0"
         TARGETED_DEVICE_FAMILY: "1,2"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
@@ -197,9 +197,6 @@ targets:
     sources:
       - path: iOS/App/Sources
       - path: iOS/App/Resources
-      # The keyboard's key views, for the live preview in Settings › Typing.
-      - path: iOS/Keyboard/Sources/Typing
-        includes: [KeyTheme.swift, KeyViews.swift, KeyLayout.swift, KeyboardKeysView.swift, TypingEngine.swift, Lexicon.swift]
     entitlements:
       path: iOS/App/VoiceIQiOS.entitlements
       properties:
@@ -245,33 +242,23 @@ targets:
           - CFBundleURLName: io.blue.voiceiq.ios.url
             CFBundleURLSchemes: [voiceiq]
     scheme:
-      testTargets: [KeyboardTypingTests]
+      testTargets: [KeyboardTests]
       gatherCoverageData: false
 
   VoiceIQKeyboard:
     type: app-extension
     platform: iOS
-    deploymentTarget: "17.0"
+    deploymentTarget: "18.0"
     settings:
       base:
         PRODUCT_NAME: "VoiceIQKeyboard"
         PRODUCT_BUNDLE_IDENTIFIER: io.blue.voiceiq.ios.keyboard
         DEVELOPMENT_TEAM: G8K3545FJ2
         CODE_SIGN_STYLE: Automatic
-        SWIFT_VERSION: "5.10"
+        SWIFT_VERSION: "6.0"
         TARGETED_DEVICE_FAMILY: "1,2"
         APPLICATION_EXTENSION_API_ONLY: YES
         SWIFT_OBJC_BRIDGING_HEADER: iOS/Keyboard/Sources/Keyboard-Bridging-Header.h
-        # FUTO Swipe, prebuilt by scripts/build-futo-swipe.sh. The registry
-        # library is force-loaded: its kernels register themselves at launch.
-        HEADER_SEARCH_PATHS: $(SRCROOT)/iOS/Vendor/FUTOSwipe/include
-        LIBRARY_SEARCH_PATHS: $(SRCROOT)/iOS/Vendor/FUTOSwipe/lib/$(PLATFORM_NAME)
-        OTHER_LDFLAGS: -force_load $(SRCROOT)/iOS/Vendor/FUTOSwipe/lib/$(PLATFORM_NAME)/libfutoswipe_registry.a -lfutoswipe -lc++
-        # The library is C++17, built without RTTI.
-        CLANG_CXX_LANGUAGE_STANDARD: c++17
-        GCC_ENABLE_CPP_RTTI: NO
-        # Built for Apple silicon Simulators only.
-        EXCLUDED_ARCHS[sdk=iphonesimulator*]: x86_64
       configs:
         Debug:
           CODE_SIGN_IDENTITY: "-"
@@ -285,15 +272,6 @@ targets:
           PROVISIONING_PROFILE_SPECIFIER: "VoiceiQ Keyboard App Store"
     sources:
       - path: iOS/Keyboard/Sources
-      # Word list and emoji: scripts/generate-keyboard-data.py.
-      - path: iOS/Keyboard/Resources
-        buildPhase: resources
-        excludes: [swipe]
-      # FUTO Swipe's models and dictionary, kept as a folder: each model has
-      # its own metadata.json.
-      - path: iOS/Keyboard/Resources/swipe
-        type: folder
-        buildPhase: resources
     entitlements:
       path: iOS/Keyboard/VoiceIQKeyboard.entitlements
       properties:
@@ -316,48 +294,34 @@ targets:
             PrimaryLanguage: en-US
             RequestsOpenAccess: true
 
-  # The keyboard's typing code, compiled on its own: an extension cannot host
+  # The keyboard's edit code, compiled on its own: an extension cannot host
   # tests. Runs in the VoiceIQiOS scheme on a Simulator.
-  KeyboardTypingTests:
+  KeyboardTests:
     type: bundle.unit-test
     platform: iOS
-    deploymentTarget: "17.0"
+    deploymentTarget: "18.0"
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: io.blue.voiceiq.ios.keyboard.tests
-        SWIFT_VERSION: "5.10"
+        SWIFT_VERSION: "6.0"
         GENERATE_INFOPLIST_FILE: YES
         CODE_SIGNING_ALLOWED: NO
-        # The typing controller holds the FUTO Swipe recognizer; linked as in
-        # VoiceIQKeyboard.
-        SWIFT_OBJC_BRIDGING_HEADER: iOS/Keyboard/Sources/Keyboard-Bridging-Header.h
-        HEADER_SEARCH_PATHS: $(SRCROOT)/iOS/Vendor/FUTOSwipe/include
-        LIBRARY_SEARCH_PATHS: $(SRCROOT)/iOS/Vendor/FUTOSwipe/lib/$(PLATFORM_NAME)
-        OTHER_LDFLAGS: -force_load $(SRCROOT)/iOS/Vendor/FUTOSwipe/lib/$(PLATFORM_NAME)/libfutoswipe_registry.a -lfutoswipe -lc++
-        CLANG_CXX_LANGUAGE_STANDARD: c++17
-        GCC_ENABLE_CPP_RTTI: NO
-        EXCLUDED_ARCHS[sdk=iphonesimulator*]: x86_64
     sources:
       - iOS/Keyboard/Tests
-      - iOS/Keyboard/Sources/Typing
-      - iOS/Keyboard/Sources/Swipe
-      - path: iOS/Keyboard/Resources/lexicon.bin
-        buildPhase: resources
-    dependencies:
-      - package: VoiceIQCore
-        product: VoiceIQBridge
+      - path: iOS/Keyboard/Sources
+        includes: [EditController.swift]
 
   VoiceIQLiveActivity:
     type: app-extension
     platform: iOS
-    deploymentTarget: "17.0"
+    deploymentTarget: "18.0"
     settings:
       base:
         PRODUCT_NAME: "VoiceIQLiveActivity"
         PRODUCT_BUNDLE_IDENTIFIER: io.blue.voiceiq.ios.liveactivity
         DEVELOPMENT_TEAM: G8K3545FJ2
         CODE_SIGN_STYLE: Automatic
-        SWIFT_VERSION: "5.10"
+        SWIFT_VERSION: "6.0"
         TARGETED_DEVICE_FAMILY: "1,2"
         APPLICATION_EXTENSION_API_ONLY: YES
       configs:

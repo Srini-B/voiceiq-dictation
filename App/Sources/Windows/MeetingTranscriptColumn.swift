@@ -30,7 +30,7 @@ struct MeetingTranscriptColumn: View {
                 } else {
                     Spacer()
                 }
-                Button(action: searching ? closeSearch : openSearch) {
+                Button { searching ? closeSearch() : openSearch() } label: {
                     Image(systemName: searching ? "xmark.circle.fill" : "magnifyingglass")
                 }
                 .help(searching ? "Close search" : "Search transcript")

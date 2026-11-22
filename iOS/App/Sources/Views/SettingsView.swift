@@ -4,17 +4,16 @@ import VoiceIQCore
 
 /// The pages under Settings, in sidebar order.
 enum SettingsSection: String, CaseIterable, Identifiable {
-    case keys, keyboard, typing, dictation, dictionary, returnApps, privacy, cost, advanced
+    case keys, keyboard, dictation, dictionary, returnApps, privacy, cost, advanced
     var id: String { rawValue }
 
-    static let primary: [SettingsSection] = [.keys, .keyboard, .typing, .dictation, .dictionary, .returnApps]
+    static let primary: [SettingsSection] = [.keys, .keyboard, .dictation, .dictionary, .returnApps]
     static let secondary: [SettingsSection] = [.privacy, .cost, .advanced]
 
     var title: String {
         switch self {
         case .keys: return "Provider & Keys"
         case .keyboard: return "Keyboard & Permissions"
-        case .typing: return "Typing"
         case .dictation: return "Dictation"
         case .dictionary: return "Dictionary"
         case .returnApps: return "Return to Apps"
@@ -28,7 +27,6 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         switch self {
         case .keys: return "key.fill"
         case .keyboard: return "keyboard.fill"
-        case .typing: return "character.cursor.ibeam"
         case .dictation: return "waveform"
         case .dictionary: return "character.book.closed.fill"
         case .returnApps: return "arrow.uturn.backward"
@@ -38,11 +36,10 @@ enum SettingsSection: String, CaseIterable, Identifiable {
         }
     }
 
-    @ViewBuilder var page: some View {
+    @MainActor @ViewBuilder var page: some View {
         switch self {
         case .keys: KeysView()
         case .keyboard: KeyboardSetupView()
-        case .typing: TypingSettingsView()
         case .dictation: DictationSettingsView()
         case .dictionary: DictionaryView()
         case .returnApps: ReturnAppsView()
@@ -257,7 +254,7 @@ struct DictationSettingsView: View {
 /// Settings › Action Button. There is no public URL for it; `App-prefs:` is
 /// the Settings app's own scheme. When iOS refuses it, VoiceiQ's page in
 /// Settings opens instead.
-private func openActionButtonSettings() {
+@MainActor private func openActionButtonSettings() {
     guard let url = URL(string: "App-prefs:ACTION_BUTTON") else { return }
     UIApplication.shared.open(url) { opened in
         if !opened, let fallback = URL(string: UIApplication.openSettingsURLString) {

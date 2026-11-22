@@ -112,7 +112,9 @@ private struct SessionCard: View {
         if let until = session.warmUntil {
             HStack(spacing: 4) {
                 Text("Turns off in")
-                Text(timerInterval: Date()...until, countsDown: true).monospacedDigit()
+                // The warm timer can fire just after the deadline; a range
+                // that ends before it starts traps.
+                Text(timerInterval: Date()...max(until, Date()), countsDown: true).monospacedDigit()
             }
         } else if session.isActive {
             // While the text is written the mic is on only to keep the app

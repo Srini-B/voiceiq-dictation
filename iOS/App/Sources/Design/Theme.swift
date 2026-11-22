@@ -112,7 +112,7 @@ enum Brand {
 extension Theme {
     /// Navigation bar titles in the brand face: large titles light, inline
     /// titles medium. Set once at launch.
-    static func applyAppearance() {
+    @MainActor static func applyAppearance() {
         let ink = UIColor(Colors.ink)
         let appearance = UINavigationBar.appearance()
         appearance.largeTitleTextAttributes = [

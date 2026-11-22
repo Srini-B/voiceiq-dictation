@@ -74,7 +74,7 @@ public struct DictionaryEntry: Codable, Equatable, Identifiable, Sendable {
 public struct DictionaryStore: Sendable {
     private static let key = "dictionaryEntries"
     private static let tombstonesKey = "dictionaryTombstones"
-    private static let defaults = UserDefaults.standard
+    private static var defaults: UserDefaults { .standard }
 
     public init() {}
 

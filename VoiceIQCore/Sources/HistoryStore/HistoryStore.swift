@@ -146,7 +146,7 @@ public final class HistoryStore: @unchecked Sendable {
                 t.add(column: "cloudSyncedAt", .datetime)
             }
         }
-        migrator.registerMigration("v4-stats", migrate: Self.createStatTable)
+        migrator.registerMigration("v4-stats") { db in try Self.createStatTable(db) }
         migrator.registerMigration("v5-steps") { db in
             try db.alter(table: DictationRecord.databaseTableName) { t in
                 t.add(column: "steps", .text)

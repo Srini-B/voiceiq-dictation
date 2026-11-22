@@ -36,20 +36,20 @@ public struct AudioCaptureResult: Equatable, Sendable {
 }
 
 /// Seam for the coordinator so it can be tested headless with a fake recorder.
-public protocol AudioCapturing: AnyObject {
+public protocol AudioCapturing: AnyObject, Sendable {
     /// ~30Hz RMS level in 0…1, delivered on an arbitrary queue.
-    var onLevel: ((Float) -> Void)? { get set }
+    var onLevel: (@Sendable (Float) -> Void)? { get set }
     /// Fired when the input device changed mid-recording (informational).
-    var onDeviceChange: ((String) -> Void)? { get set }
+    var onDeviceChange: (@Sendable (String) -> Void)? { get set }
     /// Fired once when disk writes fail persistently (F22) — captured audio up to
     /// that point is preserved; the coordinator should finalize early.
-    var onWriteFailure: (() -> Void)? { get set }
+    var onWriteFailure: (@Sendable () -> Void)? { get set }
     /// Fired once when the engine dies mid-recording and cannot be revived
     /// (rebuild failed, or the reconnect circuit breaker tripped). Captured
     /// audio up to the seam is preserved; the coordinator should finalize with
     /// what exists — a pill that keeps "listening" while nothing records is the
     /// worst kind of word loss. The message describes the cause for the user.
-    var onEngineDied: ((String) -> Void)? { get set }
+    var onEngineDied: (@Sendable (String) -> Void)? { get set }
     /// Receives the same 16 kHz mono Int16 frames written to the CAF, in order.
     func setPCMSink(_ sink: (@Sendable (Data) -> Void)?)
     /// Starts the engine and begins writing CAF to `url` immediately.

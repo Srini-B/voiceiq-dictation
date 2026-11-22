@@ -2,153 +2,44 @@ import SwiftUI
 import UIKit
 import VoiceIQBridge
 
-private enum KeyboardPalette {
-    static let accentUIColor = UIColor { traits in
-        traits.userInterfaceStyle == .dark
-            ? UIColor(red: 0.341, green: 0.525, blue: 0.941, alpha: 1)
-            : UIColor(red: 0.133, green: 0.322, blue: 0.737, alpha: 1)
-    }
-    static let accent = Color(accentUIColor)
-    static let recording = Color(red: 0.92, green: 0.26, blue: 0.21)
-    static let keyUIColor = UIColor { traits in
-        traits.userInterfaceStyle == .dark ? .systemGray4 : .systemBackground
-    }
-    static let key = Color(keyUIColor)
-}
-
+/// The keyboard: Dictate through the VoiceiQ app, and an edit panel that
+/// moves the cursor. It has no letter keys.
 struct KeyboardView: View {
     @ObservedObject var model: KeyboardModel
     @ObservedObject var offer: DictionaryOffer
-    @ObservedObject var typing: TypingController
-    /// The voice panel, opened from the bar. It also shows a session that
-    /// is starting or needs the app; a running dictation keeps the keys.
-    @State private var voiceOpen = false
+    @ObservedObject var editor: EditController
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
+    @State private var editOpen = false
 
-    private enum Panel { case keys, voice, emoji, edit, answer }
+    private var compact: Bool { verticalSizeClass == .compact }
 
-    private var panel: Panel {
-        if model.answer != nil { return .answer }
-        if !isLive, voiceOpen || model.phase == .recording || model.phase == .processing || model.waitingForApp { return .voice }
-        if typing.emojiQuery != nil { return .keys }
-        if typing.showsEdit { return .edit }
-        return typing.showsEmoji ? .emoji : .keys
-    }
-
-    /// The mini keyboard's keys: only typing on a text field. Panels, the
-    /// voice screen, emoji search, which types letters, and the number pad
-    /// (reachable from emoji search) use the full height.
-    private var showsMini: Bool {
-        typing.mini && panel == .keys && typing.emojiQuery == nil && !typing.field.isDigitPad && typing.page != .numpad
-    }
-
-    static func miniBarHeight(compact: Bool) -> CGFloat { compact ? 44 : 58 }
+    /// Landscape on iPhone is shorter.
+    static func height(compact: Bool) -> CGFloat { compact ? 136 : 164 }
 
     var body: some View {
-        VStack(spacing: 0) {
-            Group {
-                if isLive { RecordingStrip(model: model) } else if showsMini { miniBar } else { topBar }
+        VStack(spacing: 8) {
+            if editOpen, !isLive {
+                EditPanel(editor: editor, rowHeight: keyHeight)
+                    .frame(maxHeight: .infinity)
+            } else {
+                center.frame(maxHeight: .infinity)
             }
-            .frame(height: showsMini ? Self.miniBarHeight(compact: typing.compact) : (typing.compact ? 36 : 44))
-            Group {
-                switch panel {
-                case .answer:
-                    if let answer = model.answer { AnswerPanel(answer: answer, model: model).padding(8) }
-                case .voice:
-                    VStack(spacing: 8) {
-                        Spacer(minLength: 0)
-                        center
-                        Spacer(minLength: 0)
-                        bottomRow
-                    }
-                    .padding(8)
-                case .emoji:
-                    EmojiPanel(typing: typing)
-                case .edit:
-                    EditPanel(typing: typing)
-                case .keys:
-                    KeysArea(typing: typing, mini: showsMini)
-                }
-            }
-            .frame(maxHeight: .infinity)
+            bottomRow
         }
-        .onChange(of: showsMini, initial: true) { _, mini in typing.showsMini = mini }
-        .onChange(of: model.phase) { old, new in
-            // A finished session goes back to the keys.
-            if old == .processing, new == .off || new == .warm { voiceOpen = false }
+        .padding(.horizontal, 8)
+        .padding(.vertical, compact ? 4 : 8)
+        .onChange(of: model.phase) { _, new in
+            // A dictation started elsewhere shows its progress.
+            if new == .recording || new == .processing { editOpen = false }
         }
     }
+
+    private var keyHeight: CGFloat { compact ? 34 : 42 }
+    private var barHeight: CGFloat { compact ? 44 : 56 }
 
     /// Recording, or writing the text while the app is running.
     private var isLive: Bool {
         model.hasFullAccess && (model.phase == .recording || (model.phase == .processing && !model.needsAppToFinish))
-    }
-
-    private var showsOffer: Bool {
-        if offer.feedback != nil { return true }
-        switch offer.offer(selection: typing.selection) {
-        case .selection: return true
-        case .copied: return !typing.typedSinceAppear
-        case nil: return false
-        }
-    }
-
-    private var topBar: some View {
-        HStack(spacing: 2) {
-            BarButton(systemImage: panel == .voice ? "keyboard" : "waveform",
-                      label: panel == .voice ? "Keyboard" : "VoiceiQ") {
-                voiceOpen.toggle()
-                typing.showsEmoji = false
-                typing.showsEdit = false
-                typing.emojiQuery = nil
-            }
-            Group {
-                switch panel {
-                case .voice:
-                    ModePicker(mode: $model.mode, locked: model.phase == .recording || model.phase == .processing)
-                case .keys where typing.emojiQuery != nil:
-                    EmojiSearchBar(typing: typing)
-                case .keys where typing.blockOffer != nil:
-                    BlockWordChip(word: typing.blockOffer ?? "", block: { typing.block(typing.blockOffer ?? "") },
-                                  cancel: { typing.blockOffer = nil })
-                case .keys where showsOffer:
-                    DictionaryOfferChip(offer: offer, selection: typing.selection)
-                case .keys:
-                    SuggestionStrip(suggestions: typing.suggestions, theme: typing.theme, pick: typing.pick, hold: typing.offerBlock)
-                default:
-                    Color.clear
-                }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            if panel != .voice, typing.emojiQuery == nil {
-                BarButton(systemImage: panel == .edit ? "keyboard" : "character.cursor.ibeam",
-                          label: panel == .edit ? "Keyboard" : "Edit") {
-                    typing.showsEmoji = false
-                    typing.showsEdit.toggle()
-                }
-            }
-            if panel != .voice {
-                BarButton(systemImage: "mic.fill", label: "Dictate", action: model.micTapped)
-            } else {
-                Color.clear.frame(width: 40)
-            }
-        }
-        .padding(.horizontal, 4)
-    }
-
-    /// Leads the mini keyboard: the voice screen's button and the mic bar.
-    private var miniBar: some View {
-        HStack(spacing: 4) {
-            BarButton(systemImage: "waveform", label: "VoiceiQ") {
-                voiceOpen = true
-                typing.showsEmoji = false
-                typing.showsEdit = false
-            }
-            // Without Full Access the bar asks for it, and VoiceOver should say so.
-            MicBar(phase: model.phase, waiting: model.waitingForApp, title: micTitle,
-                   height: typing.compact ? 36 : 46, label: model.hasFullAccess ? nil : micTitle, action: model.micTapped)
-        }
-        .padding(.leading, 4)
-        .padding(.trailing, 7)
     }
 
     @ViewBuilder private var center: some View {
@@ -162,18 +53,18 @@ struct KeyboardView: View {
             }
         } else {
             VStack(spacing: 6) {
-                HStack(spacing: 8) {
-                    Color.clear.frame(width: 36, height: 36)
-                    MicBar(
-                        phase: model.phase,
-                        waiting: model.waitingForApp,
-                        title: micTitle,
-                        action: model.micTapped
-                    )
-                    .frame(maxWidth: 300)
-                    Color.clear.frame(width: 36, height: 36)
+                if isLive {
+                    // As wide as the key row, so the glow spans the keyboard.
+                    RecordingStrip(model: model)
+                        .frame(height: barHeight)
+                        .background(Capsule().fill(Color(.secondarySystemFill)))
+                        .clipShape(Capsule())
+                } else {
+                    MicBar(phase: model.phase, waiting: model.waitingForApp, title: micTitle,
+                           height: barHeight, action: model.micTapped)
+                        .frame(maxWidth: 340)
+                        .frame(maxWidth: .infinity)
                 }
-                .frame(maxWidth: .infinity)
 
                 Group {
                     if let notice = model.notice {
@@ -182,7 +73,7 @@ struct KeyboardView: View {
                             .foregroundStyle(KeyboardPalette.recording)
                             .lineLimit(1)
                     } else if model.phase == .off || model.phase == .warm {
-                        DictionaryOfferChip(offer: offer, selection: typing.selection)
+                        DictionaryOfferChip(offer: offer, selection: editor.selection)
                     }
                 }
                 .frame(height: DictionaryOfferChip.height)
@@ -191,18 +82,11 @@ struct KeyboardView: View {
     }
 
     private var micTitle: String {
-        if !model.hasFullAccess { return "Allow Full Access" }
         if model.waitingForApp, model.phase != .recording { return "Starting…" }
         switch model.phase {
         case .recording: return "Tap to finish"
-        case .processing where model.needsAppToFinish: return "Open VoiceiQ to finish"
-        case .processing: return model.mode == .ask ? "Thinking…" : "Writing…"
-        case .warm, .off:
-            switch model.mode {
-            case .dictate: return "Tap to speak"
-            case .translate: return "Tap to translate"
-            case .ask: return "Tap to ask"
-            }
+        case .processing: return model.needsAppToFinish ? "Open VoiceiQ to finish" : "Writing…"
+        case .warm, .off: return "Tap to speak"
         }
     }
 
@@ -211,49 +95,21 @@ struct KeyboardView: View {
             if model.showsGlobeKey {
                 GlobeKey(controller: model.controller).frame(width: 44)
             }
+            KeyCap(systemImage: editOpen ? "mic" : "character.cursor.ibeam",
+                   label: editOpen ? "Dictate" : "Edit", enabled: !isLive) {
+                editOpen.toggle()
+            }
+            .frame(width: 44)
             KeyCap(systemImage: "doc.on.clipboard", label: "Paste last", enabled: model.lastText != nil) {
                 model.pasteLast()
             }
             .frame(width: 44)
-            KeyCap(title: "space") { model.insertSpace() }
-            RepeatingKey(action: model.deleteBackward).frame(width: 52)
-            KeyCap(systemImage: "return", label: "Return") { model.insertReturn() }
+            KeyCap(title: "space") { editor.type(" ", as: .typing) }
+            RepeatingKey(action: editor.deleteBackward).frame(width: 52)
+            KeyCap(systemImage: "return", label: "Return") { editor.type("\n", as: .typing) }
                 .frame(width: 52)
         }
-        .frame(height: 42)
-    }
-}
-
-private struct ModePicker: View {
-    @Binding var mode: KeyboardMode
-    let locked: Bool
-
-    var body: some View {
-        HStack(spacing: 2) {
-            ForEach(KeyboardMode.allCases, id: \.self) { item in
-                Button {
-                    mode = item
-                } label: {
-                    Label(item.title, systemImage: item.symbol)
-                        .font(.caption.weight(.semibold))
-                        .lineLimit(1)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .background {
-                            if mode == item {
-                                Capsule().fill(KeyboardPalette.accent.opacity(0.16))
-                            }
-                        }
-                        .foregroundStyle(mode == item ? KeyboardPalette.accent : Color.secondary)
-                }
-                .buttonStyle(.plain)
-                .disabled(locked)
-            }
-        }
-        .padding(2)
-        .frame(maxWidth: 286, maxHeight: 32)
-        .background(Capsule().fill(Color(.secondarySystemFill)))
-        .opacity(locked ? 0.7 : 1)
-        .frame(maxWidth: .infinity)
+        .frame(height: keyHeight)
     }
 }
 
@@ -305,43 +161,16 @@ private struct MicBar: View {
     }
 }
 
-private struct AnswerPanel: View {
-    let answer: Delivery
-    @ObservedObject var model: KeyboardModel
-
-    var body: some View {
-        VStack(spacing: 8) {
-            ScrollView {
-                Text(answer.text)
-                    .font(.callout)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .textSelection(.enabled)
-            }
-            HStack(spacing: 8) {
-                Button("Close", action: model.dismissAnswer).buttonStyle(AnswerButtonStyle())
-                Spacer()
-                Button("Copy", action: model.copyAnswer).buttonStyle(AnswerButtonStyle())
-                Button("Insert", action: model.insertAnswer).buttonStyle(AnswerButtonStyle(primary: true))
-            }
-        }
-        .padding(10)
-        .background(RoundedRectangle(cornerRadius: 12).fill(Color(.secondarySystemBackground)))
-        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.primary.opacity(0.08)))
-        .shadow(color: .black.opacity(0.08), radius: 5, y: 2)
-    }
-}
-
-/// Stands in for the suggestion bar while a dictation runs, with the keys
-/// still below it: Cancel, the time over a glow that rises with the voice,
-/// Done. With Real-time transcription the words heard so far replace the
+/// Stands in for the mic bar while a dictation runs: Cancel, the time over
+/// a glow that rises with the voice, Done. With Real-time transcription the words heard so far replace the
 /// time and the glow once they arrive. While the text is written: a spinner.
 private struct RecordingStrip: View {
     @ObservedObject var model: KeyboardModel
     @Environment(\.verticalSizeClass) private var verticalSizeClass
 
     private var recording: Bool { model.phase == .recording }
-    /// The landscape strip is 36 pt tall.
-    private var buttonSize: CGFloat { verticalSizeClass == .compact ? 28 : 32 }
+    /// The landscape strip is 44 pt tall.
+    private var buttonSize: CGFloat { verticalSizeClass == .compact ? 32 : 40 }
 
     var body: some View {
         HStack(spacing: 8) {
@@ -353,7 +182,7 @@ private struct RecordingStrip: View {
                 if !recording {
                     HStack(spacing: 8) {
                         ProgressView()
-                        Text(model.mode == .ask ? "Thinking…" : "Writing…")
+                        Text("Writing…")
                             .font(.subheadline.weight(.medium))
                             .foregroundStyle(.secondary)
                     }
@@ -406,24 +235,6 @@ private struct CircleButton: View {
     }
 }
 
-private struct BarButton: View {
-    let systemImage: String
-    let label: String
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            Image(systemName: systemImage)
-                .font(.system(size: 17, weight: .medium))
-                .frame(width: 40, height: 36)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .foregroundStyle(KeyboardPalette.accent)
-        .accessibilityLabel(label)
-    }
-}
-
 private struct PrimaryPillStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
@@ -435,143 +246,9 @@ private struct PrimaryPillStyle: ButtonStyle {
     }
 }
 
-private struct AnswerButtonStyle: ButtonStyle {
-    var primary = false
-
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(.system(size: 13, weight: .semibold))
-            .foregroundStyle(primary ? Color.white : Color.primary)
-            .padding(.horizontal, 14)
-            .frame(height: 32)
-            .background(Capsule().fill(primary ? KeyboardPalette.accent : Color(.secondarySystemFill)))
-            .opacity(configuration.isPressed ? 0.72 : 1)
-    }
-}
-
 private struct MicBarButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label.scaleEffect(configuration.isPressed ? 0.985 : 1)
     }
 }
 
-private struct KeyCapStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .background(
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(KeyboardPalette.key.opacity(configuration.isPressed ? 0.72 : 1))
-            )
-            .shadow(color: .black.opacity(0.28), radius: 0, y: 1)
-            .shadow(color: .black.opacity(0.14), radius: 4, y: 2)
-            .offset(y: configuration.isPressed ? 1 : 0)
-    }
-}
-
-private struct KeyCap: View {
-    var title: String?
-    var systemImage: String?
-    var label: String?
-    var enabled = true
-    let action: () -> Void
-
-    init(title: String, action: @escaping () -> Void) {
-        self.title = title
-        self.action = action
-    }
-
-    init(systemImage: String, label: String, enabled: Bool = true, action: @escaping () -> Void) {
-        self.systemImage = systemImage
-        self.label = label
-        self.enabled = enabled
-        self.action = action
-    }
-
-    var body: some View {
-        Button(action: action) {
-            Group {
-                if let systemImage { Image(systemName: systemImage) } else { Text(title ?? "") }
-            }
-            .font(.system(size: 16))
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-        }
-        .buttonStyle(KeyCapStyle())
-        .foregroundStyle(.primary)
-        .disabled(!enabled)
-        .opacity(enabled ? 1 : 0.4)
-        .accessibilityLabel(label ?? title ?? "")
-    }
-}
-
-/// A UIKit key that matches the SwiftUI keycaps: rounded, raised by a soft
-/// shadow, a shade darker while pressed.
-private func makeUIKitKey(symbol: String) -> UIButton {
-    var config = UIButton.Configuration.plain()
-    config.image = UIImage(systemName: symbol, withConfiguration: UIImage.SymbolConfiguration(pointSize: 17, weight: .regular))
-    config.baseForegroundColor = .label
-    config.background.backgroundColor = KeyboardPalette.keyUIColor
-    config.background.cornerRadius = 8
-    let button = UIButton(configuration: config)
-    button.layer.shadowColor = UIColor.black.cgColor
-    button.layer.shadowOpacity = 0.2
-    button.layer.shadowRadius = 2
-    button.layer.shadowOffset = CGSize(width: 0, height: 1)
-    button.configurationUpdateHandler = { button in
-        guard var config = button.configuration else { return }
-        config.background.backgroundColor = KeyboardPalette.keyUIColor.withAlphaComponent(button.isHighlighted ? 0.72 : 1)
-        button.configuration = config
-        button.transform = button.isHighlighted ? CGAffineTransform(translationX: 0, y: 1) : .identity
-    }
-    return button
-}
-
-private struct GlobeKey: UIViewRepresentable {
-    /// Weak: the controller owns this view.
-    weak var controller: KeyboardViewController?
-
-    func makeUIView(context: Context) -> UIButton {
-        let button = makeUIKitKey(symbol: "globe")
-        button.accessibilityLabel = "Next keyboard"
-        button.addTarget(controller, action: #selector(UIInputViewController.handleInputModeList(from:with:)), for: .allTouchEvents)
-        return button
-    }
-
-    func updateUIView(_ uiView: UIButton, context: Context) {}
-}
-
-private struct RepeatingKey: UIViewRepresentable {
-    let action: () -> Void
-
-    func makeCoordinator() -> Coordinator { Coordinator(action: action) }
-
-    func makeUIView(context: Context) -> UIButton {
-        let button = makeUIKitKey(symbol: "delete.left")
-        button.accessibilityLabel = "Delete"
-        button.addTarget(context.coordinator, action: #selector(Coordinator.down), for: .touchDown)
-        button.addTarget(context.coordinator, action: #selector(Coordinator.up), for: [.touchUpInside, .touchUpOutside, .touchCancel])
-        return button
-    }
-
-    func updateUIView(_ uiView: UIButton, context: Context) {
-        context.coordinator.action = action
-    }
-
-    final class Coordinator: NSObject {
-        var action: () -> Void
-        private var timer: Timer?
-
-        init(action: @escaping () -> Void) { self.action = action }
-
-        @objc func down() {
-            action()
-            timer = Timer.scheduledTimer(withTimeInterval: 0.45, repeats: false) { [weak self] _ in
-                self?.timer = Timer.scheduledTimer(withTimeInterval: 0.08, repeats: true) { _ in self?.action() }
-            }
-        }
-
-        @objc func up() {
-            timer?.invalidate()
-            timer = nil
-        }
-    }
-}

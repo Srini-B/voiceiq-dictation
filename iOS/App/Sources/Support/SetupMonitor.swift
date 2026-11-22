@@ -70,8 +70,9 @@ final class SetupMonitor: ObservableObject {
     }
 
     func requestMicrophone() {
-        AVAudioApplication.requestRecordPermission { [weak self] _ in
-            Task { @MainActor in self?.refresh() }
+        Task {
+            _ = await AVAudioApplication.requestRecordPermission()
+            refresh()
         }
     }
 }

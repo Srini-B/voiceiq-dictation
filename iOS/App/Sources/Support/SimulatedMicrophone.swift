@@ -6,11 +6,14 @@ import VoiceIQCore
 /// keyboard → app → model → keyboard path can run in a Simulator on a Mac with
 /// no microphone. Set `VOICEIQ_SIMULATED_MIC` to an audio file path at launch
 /// (`SIMCTL_CHILD_VOICEIQ_SIMULATED_MIC=… xcrun simctl launch …`).
-final class SimulatedMicrophone: AudioCapturing {
-    var onLevel: ((Float) -> Void)?
-    var onDeviceChange: ((String) -> Void)?
-    var onWriteFailure: (() -> Void)?
-    var onEngineDied: ((String) -> Void)?
+///
+/// Sendable by hand: its state is touched only on the main thread (the
+/// coordinator, the main run loop's timer, and `stop`, which hops there).
+final class SimulatedMicrophone: AudioCapturing, @unchecked Sendable {
+    var onLevel: (@Sendable (Float) -> Void)?
+    var onDeviceChange: (@Sendable (String) -> Void)?
+    var onWriteFailure: (@Sendable () -> Void)?
+    var onEngineDied: (@Sendable (String) -> Void)?
 
     private let source: URL
     private var target: URL?
@@ -19,6 +22,7 @@ final class SimulatedMicrophone: AudioCapturing {
     /// Real-time transcription socket hears it as it would the microphone.
     private var pcm = Data()
     private var sent = 0
+    private var levelIndex = 0
     private var sink: (@Sendable (Data) -> Void)?
 
     func setPCMSink(_ sink: (@Sendable (Data) -> Void)?) { self.sink = sink }
@@ -41,11 +45,11 @@ final class SimulatedMicrophone: AudioCapturing {
         pcm = buffer.map(Self.bytes) ?? Data()
         sent = 0
         let levels = buffer.map(Self.levels) ?? [0.3]
-        var index = 0
+        levelIndex = 0
         timer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] _ in
             guard let self else { return }
-            onLevel?(levels[index % levels.count])
-            index += 1
+            onLevel?(levels[levelIndex % levels.count])
+            levelIndex += 1
             feed(upTo: sent + 1600)
         }
     }
@@ -73,10 +77,13 @@ final class SimulatedMicrophone: AudioCapturing {
     }
 
     func stop() async -> AudioCaptureResult {
-        timer?.invalidate()
-        timer = nil
-        // The saved file is the whole source, so the sink must have had all of it.
-        feed(upTo: pcm.count)
+        let target = await MainActor.run { () -> URL? in
+            timer?.invalidate()
+            timer = nil
+            // The saved file is the whole source, so the sink must have had all of it.
+            feed(upTo: pcm.count)
+            return self.target
+        }
         guard let target, let frames = try? convert(source, to: target) else {
             return AudioCaptureResult(framesWritten: 0, durationSeconds: 0)
         }

@@ -5,24 +5,19 @@ import VoiceIQBridge
 final class KeyboardViewController: UIInputViewController {
     private let model = KeyboardModel()
     private let dictionaryOffer = DictionaryOffer()
-    private let typing = TypingController()
+    private let editor = EditController()
     private var hosting: UIHostingController<KeyboardView>?
     private var height: NSLayoutConstraint?
 
     override func viewDidLoad() {
         super.viewDidLoad()
         model.controller = self
-        model.onOwnCopy = { [weak dictionaryOffer] in dictionaryOffer?.noteOwnCopy() }
-        model.onEdited = { [weak typing] in typing?.refresh() }
-        typing.controller = self
-        typing.onHeightChange = { [weak self] in self?.updateHeight() }
-        requestSupplementaryLexicon { [weak typing] lexicon in
-            Task { @MainActor in typing?.setSupplementaryLexicon(lexicon.entries) }
-        }
-        let hosting = UIHostingController(rootView: KeyboardView(model: model, offer: dictionaryOffer, typing: typing))
+        model.editor = editor
+        editor.controller = self
+        let hosting = UIHostingController(rootView: KeyboardView(model: model, offer: dictionaryOffer, editor: editor))
         // Not clear: iOS drops a keyboard's touches that land on fully
-        // transparent pixels, so taps beside a suggestion's letters and
-        // between keys did nothing. 1% gray is invisible.
+        // transparent pixels, so taps between keys did nothing. 1% gray is
+        // invisible.
         hosting.view.backgroundColor = UIColor(white: 0.5, alpha: 0.01)
         hosting.sizingOptions = []
         addChild(hosting)
@@ -34,12 +29,15 @@ final class KeyboardViewController: UIInputViewController {
             hosting.view.topAnchor.constraint(equalTo: view.topAnchor),
             hosting.view.bottomAnchor.constraint(equalTo: view.bottomAnchor),
         ])
-        let height = view.heightAnchor.constraint(equalToConstant: typing.preferences.keyboardHeight(compact: false))
+        let height = view.heightAnchor.constraint(equalToConstant: KeyboardView.height(compact: false))
         height.priority = .defaultHigh
         height.isActive = true
         self.height = height
         hosting.didMove(toParent: self)
         self.hosting = hosting
+        registerForTraitChanges([UITraitVerticalSizeClass.self]) { (self: Self, _: UITraitCollection) in
+            self.updateHeight()
+        }
     }
 
     /// iOS keeps this controller's view alive after the controller goes,
@@ -47,43 +45,22 @@ final class KeyboardViewController: UIInputViewController {
     /// dismissal left a whole keyboard behind (14 MB each) until iOS ended
     /// the extension and showed its own keyboard. Detaching it frees it.
     deinit {
-        hosting?.view.removeFromSuperview()
+        // UIKit releases view controllers on the main thread.
+        MainActor.assumeIsolated { hosting?.view.removeFromSuperview() }
     }
 
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
         HostAppResolver.keyboardWillAppear()
+        // Before the model: a result it types while appearing keeps its undo step.
+        editor.appeared()
         model.appeared()
         dictionaryOffer.appeared(hasFullAccess: hasFullAccess)
-        typing.appeared()
         updateHeight()
     }
 
     private func updateHeight() {
-        let compact = traitCollection.verticalSizeClass == .compact
-        if typing.compact != compact { typing.compact = compact }
-        height?.constant = typing.showsMini ? miniHeight(compact: compact) : typing.preferences.keyboardHeight(compact: compact)
-    }
-
-    /// The mic bar over two rows as tall as the full keyboard's.
-    private func miniHeight(compact: Bool) -> CGFloat {
-        var full = typing.preferences
-        full.numberRow = false
-        let keys = full.keyboardHeight(compact: compact) - (compact ? 36 : 44)
-        let row = (keys - 3 * 11 - 4) / 4
-        return KeyboardView.miniBarHeight(compact: compact) + 2 * row + 11 + 4
-    }
-
-    /// iOS ends a keyboard over its memory limit and shows its own; the slide
-    /// models are the largest thing the keyboard can give back.
-    override func didReceiveMemoryWarning() {
-        super.didReceiveMemoryWarning()
-        typing.releaseModels()
-    }
-
-    override func traitCollectionDidChange(_ previous: UITraitCollection?) {
-        super.traitCollectionDidChange(previous)
-        updateHeight()
+        height?.constant = KeyboardView.height(compact: traitCollection.verticalSizeClass == .compact)
     }
 
     override func viewDidAppear(_ animated: Bool) {
@@ -91,11 +68,10 @@ final class KeyboardViewController: UIInputViewController {
         // The host connection exists now, so the globe answer is reliable.
         model.refreshHostTraits()
         // The window's system-gesture recognizers hold back touches near the
-        // screen edges, so q, a, z and p type late or not at all (azooKey,
+        // screen edges, so the outer keys respond late (azooKey,
         // giellakbd-ios). The window is the extension's own.
         view.window?.gestureRecognizers?.forEach { $0.delaysTouchesBegan = false }
-        typing.readField()
-        typing.refresh()
+        editor.textChanged()
     }
 
     override func viewDidDisappear(_ animated: Bool) {
@@ -107,14 +83,13 @@ final class KeyboardViewController: UIInputViewController {
     override func textDidChange(_ textInput: UITextInput?) {
         super.textDidChange(textInput)
         HostAppResolver.harvest()
-        typing.readField()
-        typing.selectionChanged()
+        editor.textChanged()
     }
 
     override func selectionDidChange(_ textInput: UITextInput?) {
         super.selectionDidChange(textInput)
         HostAppResolver.harvest()
-        typing.selectionChanged()
+        editor.textChanged()
     }
 
     /// Opens a URL from inside the extension. `UIApplication.open` is marked

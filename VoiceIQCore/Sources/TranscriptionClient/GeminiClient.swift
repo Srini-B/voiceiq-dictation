@@ -273,7 +273,10 @@ public actor GeminiClient {
             // F5: per-minute throttles carry a short retryDelay — honor it once.
             if !isRetryAfter429, let delay = retryAfter, delay <= 8 {
                 Log.transcription.info("GeminiClient: 429 with retryDelay \(delay, format: .fixed(precision: 1))s — waiting once")
-                try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+                // A cancelled dictation (the user cancelled, or a new one
+                // replaced it) stops here instead of sending again.
+                try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+                try Task.checkCancellation()
                 return try await post(path: path, body: body, endpoint: endpoint, deadline: deadline,
                                       modelLabel: modelLabel, modelIsInPath: modelIsInPath, stage: stage,
                                       isRetryAfter429: true, via: via, extraHeaders: extraHeaders)
