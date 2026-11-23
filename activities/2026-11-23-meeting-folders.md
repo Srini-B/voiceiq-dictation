@@ -48,3 +48,24 @@ iCloud like meetings, and coding agents see them through `list_meetings` and
   the detail and from a row's menu, New Folder from a meeting, delete (the
   meetings stay and the filter returns to All).
 - Not tried: two real devices syncing through iCloud, or a signed build.
+
+## Second round (cyron's follow-up)
+
+- **Hover button (Mac).** The row under the pointer shows a folder button
+  that opens the folder menu. cyron asked for the same option "in the right
+  sidebar of the meeting details"; the folder line under the title in the
+  detail pane is taken to be that place.
+- **Swipe (iPhone and iPad).** A swipe right on a row offers Folders, which
+  opens `MeetingFolderPicker` as a sheet. Its New Folder… has its own alert:
+  the list's alert sits under the sheet, and an inline text field in the
+  sheet's list never took focus on the simulator.
+- **Imported rows have no length line** (Granola's export has none), at the
+  Granola import thread's request; they get no folder automatically.
+- **Review fixes (#69).** A meeting can arrive through CloudKit before its
+  folder arrives through the key-value store; toggling another folder kept
+  only the known ids and dropped the pending one. `setMeeting` now keeps
+  stored ids, and the list re-resolves them when the folder arrives.
+- Verified on a Mac satellite: 199 core tests pass, both schemes build; the
+  hover button follows the pointer and opens the menu (clip); on the iPhone
+  17 Pro simulator a swipe opens the sheet, ticking and New Folder… file the
+  note, and the row updates.

@@ -580,10 +580,13 @@ and `meetingFolderEditing` in `VoiceIQCore/Sources/MeetingEngine/MeetingFolderVi
   renames, or deletes the folder shown. Deleting asks first and says the
   meetings stay.
 - **File a meeting.** The folder line under the meeting's title (Mac), the
-  folder button on an open note (iPhone and iPad), or a right-click or long
-  press on a row lists every folder with a check mark, then New Folder…, which
-  makes the folder and files the meeting in it. Filing works while a meeting
-  is still being transcribed.
+  folder button on an open note (iPhone and iPad), the folder button that
+  appears on the row under the pointer (Mac), or a right-click or long press
+  on a row lists every folder with a check mark, then New Folder…, which
+  makes the folder and files the meeting in it. On iPhone and iPad a swipe
+  right on a row offers Folders, which opens the same list as a sheet
+  (`MeetingFolderPicker`). Filing works while a meeting is still being
+  transcribed. Imported meetings (Granola) start in no folder.
 - **See a meeting's folders.** Each row and each open meeting shows its
   folders by name.
 

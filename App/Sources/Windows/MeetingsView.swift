@@ -75,7 +75,10 @@ struct MeetingsPane: View {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(title(meeting)).font(VoiceIQUI.TypeScale.body()).lineLimit(1)
                     Text(timeRange(meeting)).font(VoiceIQUI.TypeScale.labelSmall()).foregroundStyle(.secondary)
-                    Text(durationLine(meeting)).font(VoiceIQUI.TypeScale.labelSmall()).foregroundStyle(.secondary)
+                    // An import has no length to show (Granola's export has none).
+                    if meeting.importedFrom == nil {
+                        Text(durationLine(meeting)).font(VoiceIQUI.TypeScale.labelSmall()).foregroundStyle(.secondary)
+                    }
                     let names = folders.names(of: meeting.id)
                     if !names.isEmpty {
                         // Text, not a Label: a list row gives a Label's icon a column of its own.

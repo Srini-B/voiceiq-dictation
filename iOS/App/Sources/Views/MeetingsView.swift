@@ -167,7 +167,10 @@ private struct MeetingRow: View {
                     .font(Theme.Fonts.callout())
                     .foregroundStyle(selected ? Theme.Colors.onAccent : Theme.Colors.ink)
                     .lineLimit(1)
-                Text("\(meta.startedAt.formatted(date: .abbreviated, time: .shortened)) · \(duration)")
+                // An import has no length to show (Granola's export has none).
+                Text(meta.importedFrom == nil
+                     ? "\(meta.startedAt.formatted(date: .abbreviated, time: .shortened)) · \(duration)"
+                     : meta.startedAt.formatted(date: .abbreviated, time: .shortened))
                     .font(Theme.Fonts.caption())
                     .foregroundStyle(selected ? Theme.Colors.onAccent.opacity(0.8) : Theme.Colors.muted)
                 if !folders.isEmpty {

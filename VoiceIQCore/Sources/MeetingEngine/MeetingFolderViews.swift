@@ -146,6 +146,7 @@ public struct MeetingFolderPicker: View {
     @ObservedObject var model: MeetingFolderModel
     let meeting: MeetingID
     let done: () -> Void
+    @State private var naming = false
     @State private var newName = ""
 
     public init(model: MeetingFolderModel, meeting: MeetingID, done: @escaping () -> Void) {
@@ -166,23 +167,17 @@ public struct MeetingFolderPicker: View {
                         }
                     }
                 }
-                // A field, not New Folder…: the name dialog is attached under this sheet.
-                HStack {
-                    Image(systemName: "folder.badge.plus").foregroundStyle(.secondary)
-                    TextField("New folder", text: $newName).onSubmit(add)
-                    if !newName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { Button("Add", action: add) }
-                }
+                Button("New Folder…", systemImage: "folder.badge.plus") { newName = ""; naming = true }
             }
             .navigationTitle("Folders")
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done", action: done) } }
+            // Its own dialog: the list's `meetingFolderEditing` one sits under this sheet.
+            .alert("New Folder", isPresented: $naming) {
+                TextField("Name", text: $newName)
+                Button("Cancel", role: .cancel) {}
+                Button("Create") { try? model.createFolder(named: newName, fileIn: meeting) }
+            }
         }
-    }
-}
-
-extension MeetingFolderPicker {
-    private func add() {
-        guard (try? model.createFolder(named: newName, fileIn: meeting)) != nil else { return }
-        newName = ""
     }
 }
 
