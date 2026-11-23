@@ -73,6 +73,9 @@ import VoiceIQSpeech
                 try? await Task.sleep(for: .seconds(self?.endingAt == nil ? 5 : 1))
                 guard let self, !Task.isCancelled else { return }
                 let live = await Task.detached { CallDetector.processes(for: source)?.isRunningAudio == true }.value
+                // A stop during the query cancelled this watcher and cleared
+                // the countdown; don't set it again.
+                guard !Task.isCancelled else { return }
                 let now = Date()
                 if live {
                     goneSince = nil; keepAfterCallEnd = false
