@@ -217,6 +217,19 @@ final class AgentClientsTests: XCTestCase {
         XCTAssertTrue(try String(contentsOf: codex, encoding: .utf8).hasPrefix(instructions))
         try AgentClient.codex.remove(home: home)
         XCTAssertEqual(try String(contentsOf: codex, encoding: .utf8), instructions)
+
+        // An escaped \""" doesn't end the string; the real table after it is found.
+        let escapedQuotes = """
+        developer_instructions = \"\"\"Say \\\"\"\" here.\"\"\"
+        [mcp_servers.voiceiq]
+        url = "\(AgentAPI.mcpURL)"
+        http_headers = { Authorization = "Bearer a" }
+
+        """
+        _ = try write(escapedQuotes, to: ".codex/config.toml")
+        XCTAssertEqual(AgentClient.codex.status(key: "a", home: home), .setUp)
+        try AgentClient.codex.install(key: "a", home: home)
+        XCTAssertEqual(try String(contentsOf: codex, encoding: .utf8), escapedQuotes)
     }
 
     func testAmpSetUpInAFreshConfigFolder() throws {

@@ -256,9 +256,15 @@ public enum AgentClient: String, CaseIterable, Identifiable, Sendable {
             var rest = Substring(line)
             while !rest.isEmpty {
                 if let delimiter = open {
-                    guard let end = rest.range(of: delimiter) else { break }
-                    rest = rest[end.upperBound...]
-                    open = nil
+                    if delimiter == "\"\"\"", rest.first == "\\" {
+                        rest = rest.dropFirst(2)
+                    } else if rest.hasPrefix(delimiter) {
+                        // Up to two more quotes right before the close are part of the string.
+                        rest = rest.dropFirst(3).drop { $0 == delimiter.first }
+                        open = nil
+                    } else {
+                        rest = rest.dropFirst()
+                    }
                 } else if rest.hasPrefix("\"\"\"") || rest.hasPrefix("'''") {
                     open = rest.prefix(3)
                     rest = rest.dropFirst(3)
