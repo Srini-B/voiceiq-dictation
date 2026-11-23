@@ -384,8 +384,7 @@ final class DictationController {
                 // engine.start() is reentrant; hud.show() is idempotent.
                 activateEngine()
             } else {
-                onStatusChange?("Add your API key in Settings → Advanced")
-                onStatusItemState?(.attention)
+                reportSetupIncomplete()
             }
         default:
             break
