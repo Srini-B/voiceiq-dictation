@@ -190,7 +190,7 @@ struct DictationSettingsView: View {
             } footer: {
                 Text(calendarDenied
                      ? "Calendar access is off. Turn it on in Settings → Privacy & Security → Calendars → VoiceiQ."
-                     : "Notes take the title of the calendar event you're in and the spelling of its invitees' names. Only the event's title and invitees are used.")
+                     : "Notes take the title of the calendar event you're in and the spelling of its invitees' names, and your next meeting shows at the top of Notes. Only events' titles, times, invitees and call links are used.")
             }
             Section {
                 NavigationLink("Custom rules") { CustomRulesView(text: $customRules) }

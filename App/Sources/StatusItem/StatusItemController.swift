@@ -90,6 +90,9 @@ final class StatusItemController: NSObject {
 
     private var statusLine: NSMenuItem?
     private var updatesItem: NSMenuItem?
+    /// The next calendar meeting: a separator, a header with when it starts,
+    /// its title and, when the invite has a call link, Join.
+    private var nextMeetingItems: [NSMenuItem] = []
 
     func setStatusLine(_ text: String) {
         statusLine?.title = text
@@ -110,6 +113,13 @@ final class StatusItemController: NSObject {
         status.isEnabled = false
         statusLine = status
         menu.addItem(status)
+
+        let nextTitle = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+        nextTitle.isEnabled = false
+        let join = NSMenuItem(title: "", action: #selector(joinNextMeeting(_:)), keyEquivalent: "")
+        join.target = self
+        nextMeetingItems = [.separator(), .sectionHeader(title: ""), nextTitle, join]
+        nextMeetingItems.forEach { $0.isHidden = true; menu.addItem($0) }
 
         menu.addItem(.separator())
 
@@ -153,7 +163,21 @@ final class StatusItemController: NSObject {
         let quit = NSMenuItem(title: "Quit VoiceiQ", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         menu.addItem(quit)
 
+        menu.delegate = self
         return menu
+    }
+
+    /// Read when the menu opens, so it is never stale.
+    private func showNextMeeting() {
+        let next = CalendarMeetings.next(after: Date())
+        let header = nextMeetingItems[1], title = nextMeetingItems[2], join = nextMeetingItems[3]
+        nextMeetingItems.forEach { $0.isHidden = next == nil }
+        guard let next else { return }
+        header.title = "Next Meeting · \(CalendarMeetings.when(next.start, now: Date()))"
+        title.title = next.title
+        join.isHidden = next.join == nil
+        join.title = next.join.map { "Join \($0.app)" } ?? ""
+        join.representedObject = next.join?.url
     }
 
     @objc private func openHistory() {
@@ -180,6 +204,11 @@ final class StatusItemController: NSObject {
         onCheckForUpdates()
     }
 
+    @objc private func joinNextMeeting(_ sender: NSMenuItem) {
+        guard let url = sender.representedObject as? URL else { return }
+        NSWorkspace.shared.open(url)
+    }
+
     @objc private func selectMicrophone(_ sender: NSMenuItem) {
         guard let id = sender.representedObject as? AudioDeviceID else { return }
         AudioInputDevices.setDefault(id: id)
@@ -187,6 +216,10 @@ final class StatusItemController: NSObject {
 }
 
 extension StatusItemController: NSMenuDelegate {
+    func menuWillOpen(_ menu: NSMenu) {
+        if menu === statusItem.menu { showNextMeeting() }
+    }
+
     /// Rebuild the Microphone submenu each open — devices come and go
     /// (AirPods connect, headsets unplug) and the checkmark must be live.
     func menuNeedsUpdate(_ menu: NSMenu) {

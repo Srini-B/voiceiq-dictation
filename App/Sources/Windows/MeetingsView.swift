@@ -57,6 +57,7 @@ struct MeetingsPane: View {
 
     private var sidebar: some View {
         VStack(spacing: 0) {
+            NextMeetingCard()
             Button {
                 // As Option-M: a call already detected becomes the meeting's source.
                 engine.toggleRecording()
