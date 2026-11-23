@@ -92,7 +92,7 @@ public struct LocalMeetingTranscriber: Sendable {
             let result = try await decode(Self.cacheName, duration: audio.duration, diarize: true,
                                           folder: folder, samples: audio.samples)
             words = Self.label(result.words, segments: result.segments)
-            if audio.isOnline { words = MeetingTranscriber.markOwner(words, audio: audio) }
+            if audio.isOnline { words = MeetingTranscriber.byTrack(MeetingTranscriber.markOwner(words, audio: audio), audio: audio) }
         }
         UsageMeter.record(stage: .meetingTranscribe, model: model.modelID,
                           usage: TokenUsage(reportedCostUSD: 0, audioSeconds: audio.duration))

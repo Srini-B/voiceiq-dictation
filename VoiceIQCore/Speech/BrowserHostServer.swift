@@ -28,6 +28,8 @@ public enum BrowserHostServer {
         note("host started by \(origin)")
         var received = 0, unreadable = 0, failed = 0
         var sites: Set<String> = []
+        let build = installedBuild(), checkEvery: TimeInterval = 30
+        var checked = Date()
         let input = FileHandle.standardInput
         while let length = read(4, from: input).map({ $0.withUnsafeBytes { $0.loadUnaligned(as: UInt32.self) } }) {
             guard length <= largestMessage else {
@@ -48,10 +50,29 @@ public enum BrowserHostServer {
                 if failed == 1 { note("couldn't save a speaker event: \(error)", level: "error") }
             }
             if Date().timeIntervalSince(pruned) > 3600 { BrowserSpeakerLog.prune(); pruned = Date() }
+            // Chrome keeps a host running for as long as the extension stays
+            // connected, so an updated VoiceiQ would never replace it: one
+            // from 0.7.12 was still writing in 0.7.14. The host stops instead,
+            // and the extension starts the new one with its next event.
+            if Date().timeIntervalSince(checked) > checkEvery {
+                checked = Date()
+                if let now = installedBuild(), now != build {
+                    note("VoiceiQ was updated to build \(now), stopping so Chrome starts the new host")
+                    break
+                }
+            }
         }
         note("host stopped after \(received) events (\(unreadable) unreadable, \(failed) not saved)")
         DebugLog.flush()
         exit(0)
+    }
+
+    /// The build number in this helper's Info.plist on disk, which an update replaces.
+    static func installedBuild(bundle: URL = Bundle.main.bundleURL) -> String? {
+        let plist = bundle.appendingPathComponent("Contents/Info.plist")
+        guard let data = try? Data(contentsOf: plist),
+              let info = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any] else { return nil }
+        return info["CFBundleVersion"] as? String
     }
 
     private static func note(_ message: String, level: String = "info") {

@@ -6,7 +6,8 @@ import VoiceIQSpeech
 /// The VoiceiQ Meetings Chrome extension: it tells the app which participant
 /// is talking in a browser meeting (`BrowserSpeakers`). It is not on the
 /// Chrome Web Store, and Chrome lets an app install nothing itself, so the app
-/// copies it out and the user loads it once with Developer mode on.
+/// copies it out and the user loads it once with Developer mode on. Each
+/// VoiceiQ update copies it out again and the extension reloads itself.
 enum BrowserExtension {
     /// Fixed by the manifest's `key`, so the host manifest can name it.
     static let id = "gjobkaplebdoedjfopfmogibphjmglaa"
@@ -15,12 +16,7 @@ enum BrowserExtension {
 
     /// Where Chrome loads the unpacked extension from.
     static var folder: URL { FileLayout.appSupportRoot.appendingPathComponent("ChromeExtension", isDirectory: true) }
-    static var isInstalled: Bool { FileManager.default.fileExists(atPath: folder.appendingPathComponent("manifest.json").path) }
-
-    /// Chromium browsers read a host manifest from `<support folder>/NativeMessagingHosts`.
-    private static let browserFolders = ["Google/Chrome", "Google/Chrome Beta", "Google/Chrome Canary", "Google/Chrome for Testing",
-                                         "Google/ChromeForTesting", "Chromium",
-                                         "Microsoft Edge", "BraveSoftware/Brave-Browser", "Arc/User Data", "Vivaldi"]
+    static var isCopiedOut: Bool { FileManager.default.fileExists(atPath: folder.appendingPathComponent("manifest.json").path) }
 
     /// Run again after each update: Chrome needs the host's absolute path, which moves with the app.
     static func install() throws {
@@ -28,9 +24,17 @@ enum BrowserExtension {
             throw CocoaError(.fileNoSuchFile)
         }
         let fm = FileManager.default
-        try? fm.removeItem(at: folder)
+        // Swapped in whole: the running extension reloads itself when the
+        // version on disk changes, and must never read a half-copied folder.
+        let fresh = folder.deletingLastPathComponent().appendingPathComponent("ChromeExtension.new", isDirectory: true)
+        try? fm.removeItem(at: fresh)
         try fm.createDirectory(at: folder.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try fm.copyItem(at: bundled, to: folder)
+        try fm.copyItem(at: bundled, to: fresh)
+        if fm.fileExists(atPath: folder.path) {
+            _ = try fm.replaceItemAt(folder, withItemAt: fresh)
+        } else {
+            try fm.moveItem(at: fresh, to: folder)
+        }
         let host = Bundle.main.bundleURL.appendingPathComponent(nativeHostExecutable)
         let manifest: [String: Any] = [
             "name": hostName, "description": "VoiceiQ Meetings", "path": host.path, "type": "stdio",
@@ -39,7 +43,7 @@ enum BrowserExtension {
         let data = try JSONSerialization.data(withJSONObject: manifest, options: [.prettyPrinted, .sortedKeys])
         let support = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         var browsers: [String] = []
-        for browser in browserFolders where fm.fileExists(atPath: support.appendingPathComponent(browser).path) {
+        for browser in BrowserExtensionInstalls.browserFolders where fm.fileExists(atPath: support.appendingPathComponent(browser).path) {
             let hosts = support.appendingPathComponent(browser).appendingPathComponent("NativeMessagingHosts", isDirectory: true)
             try fm.createDirectory(at: hosts, withIntermediateDirectories: true)
             try data.write(to: hosts.appendingPathComponent("\(hostName).json"), options: .atomic)
@@ -49,8 +53,20 @@ enum BrowserExtension {
     }
 
     static func refreshIfInstalled() {
-        guard isInstalled else { return }
+        guard isCopiedOut else { return }
         do { try install() } catch { Log.meeting.error("browser extension refresh failed: \(String(describing: error), privacy: .public)") }
+    }
+
+    /// The browser profiles that have the extension, from their own records.
+    static var installs: [BrowserExtensionInstall] {
+        BrowserExtensionInstalls.find(id: id, support: FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0])
+    }
+
+    /// The version this VoiceiQ copies out.
+    static var bundledVersion: String? {
+        guard let url = Bundle.main.url(forResource: "manifest", withExtension: "json", subdirectory: "ChromeExtension"),
+              let data = try? Data(contentsOf: url) else { return nil }
+        return (try? JSONSerialization.jsonObject(with: data) as? [String: Any])?["version"] as? String
     }
 
     static var lastHeard: Date? {
@@ -68,22 +84,27 @@ enum BrowserExtension {
 }
 
 struct BrowserExtensionSection: View {
-    @State private var installed = BrowserExtension.isInstalled
+    @State private var copied = BrowserExtension.isCopiedOut
+    @State private var installs: [BrowserExtensionInstall] = []
     @State private var failure: String?
 
     var body: some View {
         Section {
             LabeledContent("Status") {
-                // The native host, a process Chrome starts, writes the log and
-                // nothing tells the app, so look again each second: the status
-                // changes as soon as the extension's first event lands, and
+                // Chrome changes its profiles and the native host writes the
+                // log without telling the app, so look again every few
+                // seconds: removing the extension in Chrome shows here, and
                 // "a minute ago" keeps counting.
-                TimelineView(.periodic(from: .now, by: 1)) { _ in
+                TimelineView(.periodic(from: .now, by: 3)) { context in
                     Text(status).foregroundStyle(.secondary)
+                        .onChange(of: context.date) { installs = BrowserExtension.installs }
                 }
             }
-            if installed {
-                Text("In Chrome's Extensions page, turn on Developer mode, then drag the selected ChromeExtension folder onto the page, or click Load unpacked and choose it. Chrome keeps it from then on.")
+            if let note = runningNote {
+                Text(note).font(VoiceIQUI.TypeScale.labelSmall()).foregroundStyle(.secondary)
+            }
+            if copied && enabled.isEmpty {
+                Text("In Chrome's Extensions page, turn on Developer mode, then drag the selected ChromeExtension folder onto the page, or click Load unpacked and choose it. Chrome keeps it from then on, and it updates itself with VoiceiQ.")
                     .font(VoiceIQUI.TypeScale.labelSmall())
                     .foregroundStyle(.secondary)
             }
@@ -91,27 +112,50 @@ struct BrowserExtensionSection: View {
                 Text(failure).font(VoiceIQUI.TypeScale.labelSmall()).foregroundStyle(VoiceIQUI.Colors.error)
             }
             HStack {
-                Button(installed ? "Show in Chrome…" : "Install in Chrome…") { install() }
+                Button(installs.isEmpty ? "Install in Chrome…" : "Show in Chrome…") { install() }
                 Spacer()
             }
         } header: {
             Text("Chrome extension for meetings")
         } footer: {
-            Text("For Google Meet, Teams, Zoom and other calls in Chrome, Edge, Brave or Arc. The extension tells VoiceiQ which participant is talking, from the call's own audio streams, so people who sound alike are kept apart, and on Meet, Teams, Zoom and Jitsi the name the call shows on that person's tile, so the transcript uses real names. It sends stream numbers, those names, times, the tab's number and the page's address without its query, such as meet.google.com/abc-defg-hij, never audio or other page content. VoiceiQ keeps these reports on this Mac for a week, and a meeting keeps its own until you delete it.")
+            Text("For Google Meet, Teams, Zoom and other calls in Chrome, Edge, Brave or Arc. The extension tells VoiceiQ which participant is talking, from the call's own audio streams, so people who sound alike are kept apart, and on Meet, Teams, Zoom and Jitsi the name the call shows on that person's tile, so the transcript uses real names. On Meet it also sends the names on every tile, so VoiceiQ knows how many people to expect. It sends stream numbers, those names, times, a few numbers about the call's audio, the tab's number and the page's address without its query, such as meet.google.com/abc-defg-hij, never audio or other page content. VoiceiQ keeps these reports on this Mac for a week, and a meeting keeps its own until you delete it.")
         }
-        .onAppear { installed = BrowserExtension.isInstalled }
+        .onAppear { copied = BrowserExtension.isCopiedOut; installs = BrowserExtension.installs }
+    }
+
+    private var enabled: [BrowserExtensionInstall] { installs.filter(\.enabled) }
+
+    private static func place(_ install: BrowserExtensionInstall) -> String {
+        let browser = install.browser.split(separator: "/").last.map(String.init) ?? install.browser
+        let profile = install.profileName.map { "\($0) (\(install.profile))" } ?? install.profile
+        return "\(browser == "User Data" ? "Arc" : browser), \(profile)"
     }
 
     private var status: String {
-        guard installed else { return "Not installed" }
-        guard let lastHeard = BrowserExtension.lastHeard else { return "Waiting for Chrome to load it" }
-        return "Last heard from it \(lastHeard.formatted(.relative(presentation: .named)))"
+        guard !installs.isEmpty else { return copied ? "Not added to Chrome" : "Not installed" }
+        guard !enabled.isEmpty else { return "Turned off in \(installs.map(Self.place).joined(separator: "; "))" }
+        let places = enabled.map(Self.place).joined(separator: "; ")
+        guard let lastHeard = BrowserExtension.lastHeard else { return "On in \(places)" }
+        return "On in \(places). Last heard from it \(lastHeard.formatted(.relative(presentation: .named)))"
+    }
+
+    /// Chrome runs an older copy than this VoiceiQ ships. From 1.2 the
+    /// extension reloads itself once no call is open; 1.1 and older cannot,
+    /// and Chrome swaps them only when it next starts (their service worker
+    /// had another file name).
+    private var runningNote: String? {
+        guard !enabled.isEmpty, let bundled = BrowserExtension.bundledVersion,
+              let latest = BrowserSpeakerLog.latest(root: FileLayout.appSupportRoot) else { return nil }
+        guard let running = latest.version else {
+            return "Chrome is still running an older copy of the extension. It switches to \(bundled) the next time Chrome starts."
+        }
+        return running == bundled ? nil : "Chrome is running version \(running) of the extension. It updates itself to \(bundled) once no call is open."
     }
 
     private func install() {
         do {
             try BrowserExtension.install()
-            failure = nil; installed = true
+            failure = nil; copied = true
             BrowserExtension.showLoadSteps()
         } catch {
             failure = "Couldn't copy the extension: \(error.localizedDescription)"

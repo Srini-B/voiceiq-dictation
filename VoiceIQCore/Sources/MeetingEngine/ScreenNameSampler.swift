@@ -110,7 +110,10 @@ public final class ScreenNameSampler: @unchecked Sendable {
             var lines = snapshots ? try await capture().map(Self.read) ?? [] : []
             if let pid { lines += CallWindowText.lines(pid: pid) }
             let names = ScreenSpeakerNames.candidates(in: lines), me = ScreenSpeakerNames.owner(in: lines)
-            samples.withLock { $0.append(ScreenNameSample(time: time, names: names, me: me.isEmpty ? nil : me)) }
+            let single = ScreenSpeakerNames.singleNames(in: lines)
+            samples.withLock { $0.append(ScreenNameSample(time: time, names: names, me: me.isEmpty ? nil : me,
+                                                          single: single.isEmpty ? nil : single,
+                                                          count: ScreenSpeakerNames.participantCount(in: lines))) }
         } catch is CancellationError {
         } catch {
             Log.meeting.info("screen names snapshot failed: \(String(describing: error), privacy: .public)")

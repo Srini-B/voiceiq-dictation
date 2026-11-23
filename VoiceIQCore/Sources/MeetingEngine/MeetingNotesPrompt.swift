@@ -74,6 +74,10 @@ public enum MeetingNotesPrompt {
             - Invited: \(invited.isEmpty ? "nobody else" : invited.joined(separator: ", ")) (use these spellings for invitees the transcript mentions; being invited does not make someone a speaker)
             """
         } ?? ""
+        let merged = context.screenNames?.probablyMerged == true ? """
+
+            - Speaker labels: the call showed \(context.screenNames?.remote ?? 0) other people, more than the transcript's other speakers, so one label may hold several people. Where the content makes clear who is talking (a name said in reply, a change of topic owner), say so; never credit one person with all of that label's lines.
+            """ : ""
         let language = dominantLanguage(transcript).map {
             "OUTPUT LANGUAGE: \($0). The transcript was detected as mostly \($0); write every field in \($0)."
         } ?? "OUTPUT LANGUAGE: follow the LANGUAGE rule."
@@ -92,7 +96,7 @@ public enum MeetingNotesPrompt {
         - Confirmed names: \(confirmed.isEmpty ? "none" : confirmed.joined(separator: ", "))
         - Names read from the meeting screen: \(fromScreen.isEmpty ? "none" : fromScreen.joined(separator: ", "))
         - Other text seen on screen that may be participant names: \(seen.isEmpty ? "none" : seen.joined(separator: ", "))
-        - Anonymous speakers: \(anonymous.isEmpty ? "none" : anonymous.joined(separator: ", "))\(calendar)
+        - Anonymous speakers: \(anonymous.isEmpty ? "none" : anonymous.joined(separator: ", "))\(merged)\(calendar)
 
         \(language)
 

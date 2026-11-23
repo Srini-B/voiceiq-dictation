@@ -35,7 +35,13 @@ enum CallWindowText {
         while let (element, depth) = stack.popLast(), budget > 0, Date() < deadline {
             budget -= 1
             let role = value(element, kAXRoleAttribute) as? String ?? ""
-            if skippedRoles.contains(role) { continue }
+            if skippedRoles.contains(role) {
+                // The participants button carries the call's head count
+                // ("People", badge "3"), the one button label kept.
+                if role == "AXButton", let line = buttonText(element), ScreenSpeakerNames.participantCount(in: [line]) != nil,
+                   seen.insert(line).inserted { out.append(line) }
+                continue
+            }
             if textRoles.contains(role) {
                 for key in [kAXValueAttribute, kAXTitleAttribute, kAXDescriptionAttribute] {
                     guard let text = value(element, key) as? String else { continue }
@@ -47,6 +53,21 @@ enum CallWindowText {
             stack += children.reversed().map { ($0, depth + 1) }
         }
         return out
+    }
+
+    /// A button's label with the text inside it, such as "People 3".
+    private static func buttonText(_ element: AXUIElement) -> String? {
+        var parts: [String] = []
+        for key in [kAXTitleAttribute, kAXDescriptionAttribute] {
+            if let text = value(element, key) as? String, !text.isEmpty { parts.append(text) }
+        }
+        for child in (value(element, kAXChildrenAttribute) as? [AXUIElement] ?? []).prefix(4) {
+            if let text = value(child, kAXValueAttribute) as? String ?? value(child, kAXTitleAttribute) as? String, !text.isEmpty {
+                parts.append(text)
+            }
+        }
+        let line = parts.joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
+        return line.isEmpty || line.count > 80 ? nil : line
     }
 
     private static func value(_ element: AXUIElement, _ key: String) -> CFTypeRef? {

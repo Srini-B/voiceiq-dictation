@@ -248,8 +248,12 @@ Discord, and Webex.
   uses the contributing sources (CSRC) when the receiver has them: Meet and
   Teams mix people into a few streams and mark each person with a CSRC.
   Otherwise it uses the synchronization sources (SSRC), one stream per
-  person. A source is loud when its `audioLevel` was at least 0.01 (about
-  -40 dBov) within the last 400 ms. The script posts the sorted loud ids
+  person. A source is loud when its `audioLevel` is at least 0.01 (about
+  -40 dBov) and its `timestamp` or `rtpTimestamp` moved since the previous
+  poll, so it is still playing. Until extension 1.2 it compared the source's
+  `timestamp` with the page's clock instead (played within 400 ms); where the
+  two clocks drift apart (webrtc issue 42222258) no source was ever loud, and
+  no Meet or Teams call ever reported a speaker. The script posts the sorted loud ids
   (such as `csrc:3141` or `ssrc:2718`) with the time and the page's host and
   path. It posts when the list changes, and every 1 s while the list is not
   empty, so a pause in the call differs from a page that stopped reporting.
@@ -258,6 +262,15 @@ Discord, and Webex.
   It leaves out the user's own tile, and it reads nothing while every source
   is quiet, because Zoom and Jitsi keep the last speaker lit after they stop.
   A change of names is posted like a change of sources.
+- On Google Meet, `page.js` also reads the roster once a second: the name on
+  every `[data-participant-id]` tile, talking or not, one per participant id,
+  with " (Presentation)" removed. It sends the other people as `roster`, the
+  user's own tile (`[data-self-name]`) as `me`, and the head count as `count`,
+  posted like a change of sources.
+- Every 10 s while the tab is in a call it adds `diag` to the next event: live
+  audio receivers, sources, the loudest `audioLevel`, and how far the newest
+  source's `timestamp` sits behind the page's clock, in ms. The 10 s events
+  also tell the service worker a call is still open during a long silence.
 
   | Site | Tiles | Lit as talking | Name | Own tile |
   | --- | --- | --- | --- | --- |
@@ -274,12 +287,50 @@ Discord, and Webex.
   only where it agrees with the transcript's timing (see below).
 - `relay.js` runs in the content script world and passes on only messages
   of that shape: a numeric time, a page cut to 300 characters, at most 64
-  ids of up to 40 characters each, and at most 16 names of up to 80.
-- `background.js` adds the tab id and sends each event to the native
-  messaging host `io.blue.voiceiq.browser`. When the host cannot be reached,
-  it waits 30 s before it connects again. On install and at browser start it
-  sends a `hello` event (tab `-1`), so Settings can show that the extension
-  works.
+  ids of up to 40 characters each, at most 16 names and 64 roster names of
+  up to 80, a count up to 1000, and the four numbers of `diag`.
+- `service-worker.js` adds the tab id and the extension's `version` and sends
+  each event to the native messaging host `io.blue.voiceiq.browser`. When the
+  host cannot be reached it waits 30 s before it connects again; a host that
+  ran 5 s or more and then stopped was replaced, so it connects again with the
+  next event. On install, on update and at browser start it sends a `hello`
+  event (tab `-1`) with its version.
+
+### How the extension updates itself
+
+VoiceiQ copies the extension out again at each launch, but Chrome keeps
+running the service worker it cached for an unpacked extension, also across
+browser restarts, while `chrome://extensions` already shows the new
+manifest's version. MEASURED 2026-11-23 with Chrome 157 for Testing: files
+changed from 1.0.0 to 1.1.0 kept the 1.0.0 worker through three restarts,
+which is why one Mac ran the 1.0.0 worker (no names) while the Extensions page
+said 1.1.0. Two things now swap it without the user:
+
+1. From 1.2.0 the worker file is `service-worker.js`, not `background.js`.
+   Chrome registers a worker under a new file name the next time it starts,
+   so a Chrome still running 1.1.0 or older runs 1.2.0 after its next start.
+   (Measured the same way: a renamed worker ran at the first restart.)
+2. The 1.2.0 worker fetches its own `manifest.json`, which Chrome reads from
+   the folder on disk on every request, when it starts, when the native host
+   goes away, and 61 s after the last event from a call tab. When the
+   version on disk differs from the running one and no call tab has reported
+   for a minute, it calls `chrome.runtime.reload()`, which swaps the worker
+   and the content scripts at once and sends a new `hello`. A reload during a
+   call would cut off that tab's content scripts, so it waits. Measured: with
+   a call tab open the old version kept reporting, and 61 s after the call
+   ended the new version said hello through a newly started host.
+
+So every change to the extension must raise the manifest `version`; files
+changed under the same version are not picked up until Chrome restarts and
+then only for content scripts. `BrowserExtension.install` copies to
+`ChromeExtension.new` and swaps it in whole, so a check never reads a
+half-copied folder.
+
+The native host stops when the helper's build number on disk changes (checked
+every 30 s while events arrive), because Chrome keeps one host process for as
+long as the extension stays connected: a host from 0.7.12 was still writing
+events from a 0.7.14 extension, and an old host drops fields it does not know.
+The extension starts the new host with its next event.
 
 ### The native host
 
@@ -296,7 +347,8 @@ VoiceiQ does not need to run while the extension reports.
 
 1. `MeetingEngine.stopRecording` calls `BrowserSpeakers.save`. It reads the
    events from 5 s before the meeting started to 5 s after it ended, groups
-   them by tab and page, and keeps the tabs where a source was loud. It takes
+   them by tab and page, and keeps the tabs where a source was loud or that
+   sent a roster. It takes
    the tab on the detected meeting page, else the busiest one, and writes its
    events to `browser-speakers.json` in the meeting folder, where Retry and
    Redo find them. A call in a known call app (`CallApps.known`, Zoom or
@@ -370,6 +422,48 @@ saved, after the screen names are matched, and on every Retry or Redo:
 The owner's words are never named this way; their name comes from the
 owner marker, the typed name or Settings, as before.
 
+### How many people the call had
+
+`ScreenSpeakerNames.expectedRemote` counts the other people the call showed:
+the extension's roster (names on at least two rosters, the owner's own tile
+left out, or the head count less one), or the participants button read off
+the window (`ScreenSpeakerNames.participantCount`, a count seen in at least
+two snapshots, less one), whichever is larger. It is used three ways:
+
+- `MeetingTranscriber.place` maps a lone new far-side label onto the only
+  known remote speaker only when the reference clip got no label of its own
+  and the call showed at most one other person. With two or more, a new
+  voice becomes a new speaker.
+- When the call showed more other people than the transcript has far-side
+  ids and the extension's sources do not tell them apart, the cloud path runs
+  the on-device speaker model on the system track alone (no speech model) and
+  gives the far-side words to its voices when it hears more of them
+  (`MeetingTranscriber.splitFarSide`, cached as
+  `transcribe-far-speakers-v1.json`). Without the model downloaded
+  (Speaker Separation, pyannote community-1, in Settings) nothing changes and the log says
+  so.
+- `ScreenNames.remote` keeps the count and `ScreenNames.probablyMerged` marks
+  a transcript with fewer far-side ids than that. The log says "speakers
+  probably merged", and the notes request tells the notes model one label may
+  hold several people. Silent listeners count too, so this is a likelihood.
+
+`ScreenSpeakerNames.match` also gives the one far-side speaker the one other
+name on screen when the call had at most one other person, though that name
+was always visible. Single-word names count when they are on the roster or
+stay on screen in at least a quarter of the snapshots and are no UI word
+(`ScreenSpeakerNames.singleNames`, `uiWords`).
+
+### Words follow their track
+
+`MeetingTranscriber.byTrack` runs on every call after the owner is marked: a
+word heard only on the system track is not the owner's (when the mic is
+echo-free, so mic silence means the owner was silent) and goes to the nearest
+far-side speaker; a word heard only on the mic is the owner's. MEASURED
+2026-11-23 on a 22-minute three-person Meet call: 114 s of far-side speech had
+come back as the owner's and 49 s of mic speech as a far-side speaker's. The
+on-device path, which transcribes each track alone when the mic is
+echo-free, uses the same step when it transcribes a mix.
+
 ### Install the extension
 
 The extension is not on the Chrome Web Store. Chrome 137 removed
@@ -390,13 +484,23 @@ only through MDM, so you load it once as an unpacked extension.
    and choose it.
 
 At each launch, VoiceiQ copies the files and writes the host manifests again
-when the extension is installed (`BrowserExtension.refreshIfInstalled`), so
-both follow app updates. **Status** shows "Not installed", "Waiting for
-Chrome to load it", or "Last heard from it" with the time of the newest
-write to the log. The native host, not the app, writes that log, so the row
-reads it again every second while Settings is open: it turns to "Last heard"
-as soon as Chrome loads the extension and sends its first event. It does not
-claim the extension works now: a disabled extension leaves the old log behind.
+when they were copied out before (`BrowserExtension.refreshIfInstalled`),
+so both follow app updates, and the extension reloads itself (see above).
+
+**Status** reads whether a browser has the extension from each profile's own
+record (`BrowserExtensionInstalls.find`): every profile folder ("Default",
+"Profile 4") of each browser above, its `Secure Preferences` (where Chrome
+keeps unpacked extensions) and `Preferences`, entry
+`extensions.settings.gjobkaplebdoedjfopfmogibphjmglaa`. An entry counts only
+with its `location`: removing the extension can leave an empty entry behind
+(measured with Chrome 157). A non-empty `disable_reasons`, or `state` 0 in old
+versions, means turned off. Profile names come from `Local State`. The row
+shows "Not added to Chrome", "Turned off in Chrome, Profile 4", or "On in
+Chrome, Work (Profile 4)" with when it was last heard from, and reads the
+profiles again every 3 s while Settings is open. The button says **Install in
+Chrome…** whenever no profile has the extension, also after it was removed,
+and **Show in Chrome…** otherwise. When the newest event in the log came from
+an older extension, a note says Chrome still runs it and when it will switch.
 
 ### Measured
 

@@ -1,4 +1,5 @@
 import Foundation
+import VoiceIQSpeech
 
 /// Turns a meeting's mic and system tracks into one speaker-labelled transcript.
 ///
@@ -24,10 +25,16 @@ public struct MeetingTranscriber: Sendable {
     private let models: Models
     private let endpoint: URL
     private let sleep: @Sendable (TimeInterval) async throws -> Void
+    private let diarizeFarSide: FarSideDiarizer?
 
-    public init(client: GeminiClient, models: Models, endpoint: URL,
+    /// Who spoke when in a recording of the far side alone (16 kHz mono), from
+    /// the on-device speaker model. Nil when that model is not downloaded.
+    public typealias FarSideDiarizer = @Sendable (URL) async throws -> [LocalMeetingResult.Segment]?
+
+    public init(client: GeminiClient, models: Models, endpoint: URL, diarizeFarSide: FarSideDiarizer? = nil,
                 sleep: @escaping @Sendable (TimeInterval) async throws -> Void = { try await Task.sleep(nanoseconds: UInt64($0 * 1_000_000_000)) }) {
         self.client = client; self.models = models; self.endpoint = endpoint
+        self.diarizeFarSide = diarizeFarSide
         self.sleep = sleep
     }
 
@@ -49,6 +56,7 @@ public struct MeetingTranscriber: Sendable {
             "transcribe-\(Self.cacheVersion)-gemini-\(Int(Self.windowSpeech))", isDirectory: true)
         try FileManager.default.createDirectory(at: cache, withIntermediateDirectories: true)
         var budget = Self.rateLimitBudget
+        let remote = ScreenSpeakerNames.expectedRemote(folder: folder)
         let windows = Self.windows(audio.activeRegions(), speech: Self.windowSpeech)
         var words: [TimedWord] = []
         for (index, regions) in windows.enumerated() {
@@ -56,7 +64,7 @@ public struct MeetingTranscriber: Sendable {
             if let data = try? Data(contentsOf: file), let cached = try? JSONDecoder().decode([TimedWord].self, from: data) {
                 words += cached; continue
             }
-            let placed = try await transcribe(window: regions, audio: audio, known: words, budget: &budget,
+            let placed = try await transcribe(window: regions, audio: audio, known: words, remote: remote, budget: &budget,
                                               label: "window \(index + 1)/\(windows.count)")
             try JSONEncoder().encode(placed).write(to: file, options: .atomic)
             words += placed
@@ -73,6 +81,10 @@ public struct MeetingTranscriber: Sendable {
                 try JSONEncoder().encode(owner).write(to: file, options: .atomic)
             }
             words = Self.mergeOwner(owner, into: words, overlaps: overlaps)
+        }
+        if audio.isOnline { words = Self.byTrack(words, audio: audio) }
+        if let remote, !BrowserSpeakers.separatesPeople(folder: folder) {
+            words = try await splitFarSide(words, remote: remote, audio: audio, folder: folder)
         }
         words = BrowserSpeakers.apply(words, folder: folder)
         return SpeakerLinker.overlappingTurns(words).map { turn in
@@ -186,6 +198,87 @@ public struct MeetingTranscriber: Sendable {
         }
     }
 
+    /// Each word goes to the track it was heard on, whatever the model said:
+    /// a word heard only from the far side is not the owner's, and one heard
+    /// only from the mic is. A word with sound on both, or on neither, keeps
+    /// its speaker. Mic silence under a far-side word says the owner was
+    /// silent only when the mic is echo-free; otherwise far-side speech
+    /// hides the mic and only the second rule applies. A far-side word taken
+    /// from the owner goes to the far-side speaker talking nearest to it.
+    /// MEASURED 2026-11-23 on a 22-minute three-person Meet call: 114 s of
+    /// far-side speech came back as the owner's and 49 s of mic speech as a
+    /// far-side speaker's.
+    static func byTrack(_ words: [TimedWord], audio: CallAudio) -> [TimedWord] {
+        let heard = words.map { audio.sources($0.start...max($0.end, $0.start)) }
+        let far = words.indices.filter { words[$0].speaker != MeetingSpeaker.you }
+        var next = (words.compactMap { Int($0.speaker.dropFirst()) }.max() ?? 0) + 1
+        var out = words
+        for index in words.indices {
+            let source = heard[index], word = words[index]
+            if word.speaker == MeetingSpeaker.you {
+                guard audio.micIsEchoFree, source.mic == 0, source.system >= 2 else { continue }
+                let nearest = far.min { abs(words[$0].start - word.start) < abs(words[$1].start - word.start) }
+                if let nearest, abs(words[nearest].start - word.start) <= 30 {
+                    out[index].speaker = words[nearest].speaker
+                } else {
+                    out[index].speaker = "s\(next)"; next += 1
+                }
+            } else if source.system == 0, source.mic >= 2 {
+                out[index].speaker = MeetingSpeaker.you
+            }
+        }
+        return out
+    }
+
+    /// Where the call showed more other people than the far side has
+    /// speaker ids, the far side's words are given to the voices the
+    /// on-device speaker model tells apart on the system track, when it
+    /// tells more apart. Gemini takes no speaker count and gave two remote
+    /// people one id. Without the model downloaded the words stay as they
+    /// are and the meeting says the speakers are probably merged
+    /// (`ScreenNames.probablyMerged`).
+    private func splitFarSide(_ words: [TimedWord], remote: Int, audio: CallAudio, folder: URL) async throws -> [TimedWord] {
+        let ids = Set(words.map(\.speaker)).subtracting([MeetingSpeaker.you])
+        guard remote > ids.count, !ids.isEmpty else { return words }
+        let cache = folder.appendingPathComponent(Self.farSpeakersCacheName)
+        var segments = (try? Data(contentsOf: cache)).flatMap { try? JSONDecoder().decode([LocalMeetingResult.Segment].self, from: $0) }
+        if segments == nil, let diarizeFarSide {
+            let track = folder.appendingPathComponent("far-side-mix.caf")
+            defer { try? FileManager.default.removeItem(at: track) }
+            do {
+                try LocalMeetingTranscriber.writeMix(duration: audio.system.duration, samples: audio.system.samples, to: track)
+                segments = try await diarizeFarSide(track)
+                if let segments { try? JSONEncoder().encode(segments).write(to: cache, options: .atomic) }
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                Log.meeting.error("far side not split: \(String(describing: error), privacy: .public)")
+            }
+        }
+        guard let segments else {
+            Log.meeting.info("far side: \(remote, privacy: .public) other people shown, \(ids.count, privacy: .public) speakers heard; the speaker model is not downloaded")
+            return words
+        }
+        let split = Self.split(words, segments: segments)
+        let found = Set(split.map(\.speaker)).subtracting([MeetingSpeaker.you]).count
+        Log.meeting.info("far side: \(remote, privacy: .public) other people shown, \(ids.count, privacy: .public) speakers heard, \(found, privacy: .public) voices on the system track")
+        return found > ids.count ? split : words
+    }
+
+    /// Cached beside the audio; a fresh redo removes it with the windows.
+    static let farSpeakersCacheName = "transcribe-far-speakers-v1.json"
+
+    /// Far-side words relabelled by the diarizer's stretches on the system
+    /// track; the owner's keep theirs. Ids are renumbered from s1.
+    static func split(_ words: [TimedWord], segments: [LocalMeetingResult.Segment]) -> [TimedWord] {
+        let far = words.indices.filter { words[$0].speaker != MeetingSpeaker.you }
+        let farWords = far.map { LocalMeetingResult.Word(text: words[$0].text, start: words[$0].start, end: words[$0].end) }
+        let labelled = LocalMeetingTranscriber.settled(LocalMeetingTranscriber.label(farWords, segments: segments), segments: segments)
+        var out = words
+        for (offset, index) in far.enumerated() { out[index].speaker = "far " + labelled[offset].speaker }
+        return BrowserSpeakers.renumber(out)
+    }
+
     /// Consecutive speech regions grouped into requests of about `windowSpeech` seconds each.
     static func windows(_ regions: [ClosedRange<Double>], speech windowSpeech: Double) -> [[ClosedRange<Double>]] {
         var out: [[ClosedRange<Double>]] = [], current: [ClosedRange<Double>] = [], total = 0.0
@@ -244,7 +337,8 @@ public struct MeetingTranscriber: Sendable {
             }
             let remote = Set(known.map(\.speaker)).subtracting([MeetingSpeaker.you])
             let unmatched = Set(placed.map(\.label)).filter { mapping[$0] == nil }
-            if remote.count == 1, unmatched.count == 1, let only = remote.first, !mapping.values.contains(only) {
+            if remote.count == 1, unmatched.count == 1, let only = remote.first, !mapping.values.contains(only),
+               (expected ?? 1) <= 1 {
                 mapping[unmatched.first!] = only
             }
         }
@@ -263,7 +357,7 @@ public struct MeetingTranscriber: Sendable {
     /// One window. Reference clips of the speakers found so far go inside the
     /// audio, and the labels the API gives them name the speakers
     /// (`SpeakerLinker.link`).
-    private func transcribe(window regions: [ClosedRange<Double>], audio: CallAudio, known: [TimedWord],
+    private func transcribe(window regions: [ClosedRange<Double>], audio: CallAudio, known: [TimedWord], remote: Int?,
                             budget: inout TimeInterval, label: String) async throws -> [TimedWord] {
         let clips = SpeakerLinker.anchorClips(known).sorted { $0.key < $1.key }
         var request = AssembledAudio()
@@ -271,7 +365,8 @@ public struct MeetingTranscriber: Sendable {
         try request.appendBody(regions, from: audio)
         let flac = try FLACEncoder.encode(samples: request.samples)
         let raw = try await withRetries(label: label, budget: &budget) { try await transcribeSpeakers(flac) }
-        return Self.place(raw, audio: request, call: audio, known: known, mapping: SpeakerLinker.link(words: raw, anchors: request.anchors))
+        return Self.place(raw, audio: request, call: audio, known: known, mapping: SpeakerLinker.link(words: raw, anchors: request.anchors),
+                          remote: remote)
     }
 
     /// Runs `body`, trying a safety block once more and waiting out a

@@ -213,4 +213,17 @@ final class BrowserSpeakersTests: XCTestCase {
 
         XCTAssertEqual(BrowserSpeakers.apply(words, folder: folder), words)
     }
+
+    func testAMeetingKeepsThePagesRosterEvenWhenNobodyWasHeardLoud() throws {
+        // A silent stretch of a Meet call: the roster arrives every second, no source is loud.
+        let roster = (0..<6).map {
+            BrowserSpeakerEvent(t: (start.timeIntervalSince1970 + Double($0)) * 1000, page: "meet.google.com/abc-defg-hij", tab: 7,
+                                active: [], roster: $0 == 3 ? ["Muhammed Hafeed", "Nihal", "Someone Passing"] : ["Muhammed Hafeed", "Nihal"],
+                                me: "cyron", count: 3, version: "1.2.0")
+        }
+        let folder = try meeting(roster)
+
+        XCTAssertEqual(BrowserSpeakers.roster(folder: folder), MeetingRoster(remote: ["Muhammed Hafeed", "Nihal"], me: "cyron", count: 3))
+        XCTAssertEqual(ScreenSpeakerNames.expectedRemote(folder: folder), 2)
+    }
 }
