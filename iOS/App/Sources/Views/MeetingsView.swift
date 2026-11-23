@@ -11,6 +11,7 @@ struct MeetingsView: View {
     var body: some View {
         ListDetailNavigation {
             List {
+                NextMeetingSection()
                 Section {
                     RecorderCard(meetings: model.meetings)
                         // The inset-grouped list already margins its rows;

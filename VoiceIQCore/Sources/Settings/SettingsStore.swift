@@ -165,7 +165,8 @@ public struct SettingsStore: Sendable {
         Self.set(min(max(volume, 0.05), 1), forKey: "soundVolume")
     }
 
-    /// Read the calendar for each meeting's title and invitees. Off until the
+    /// Read the calendar for each meeting's title and invitees, and show the
+    /// next meeting in Meetings and the menu-bar menu. Off until the
     /// user connects the calendar, which is when access is asked for.
     public var calendarForMeetings: Bool {
         Self.defaults.bool(forKey: "calendarForMeetings")

@@ -1,3 +1,4 @@
+import Combine
 import EventKit
 import Foundation
 
@@ -53,13 +54,89 @@ public enum CalendarMeetings {
             .filter { $0.startDate.addingTimeInterval(-earlyStart) <= date && date < $0.endDate && isMeeting($0) }
             .min { abs($0.startDate.timeIntervalSince(date)) < abs($1.startDate.timeIntervalSince(date)) }
         guard let best, let title = best.title?.trimmingCharacters(in: .whitespacesAndNewlines), !title.isEmpty else { return nil }
-        let people = (best.attendees ?? []).filter { !$0.isCurrentUser && $0.participantType == .person }
+        return Event(title: title, attendees: attendees(of: best))
+    }
+
+    /// Invitees other than the user, by name or address, at most 30.
+    private static func attendees(of event: EKEvent) -> [String] {
+        let people = (event.attendees ?? []).filter { !$0.isCurrentUser && $0.participantType == .person }
         let names = people.compactMap { person -> String? in
             if let name = person.name?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty { return name }
             let address = person.url.absoluteString.replacingOccurrences(of: "mailto:", with: "")
             return address.isEmpty ? nil : address
         }
-        return Event(title: title, attendees: Array(names.prefix(30)))
+        return Array(names.prefix(30))
+    }
+
+    /// A meeting still to come, for the Meetings screens and the menu-bar menu.
+    public struct Upcoming: Equatable, Sendable {
+        public struct Join: Equatable, Sendable {
+            public var app: String
+            public var url: URL
+            /// The service's apps, by bundle ID; a browser can open any service.
+            var bundleIDs: Set<String> = []
+        }
+
+        public var title: String
+        public var start: Date
+        /// The call to join, when the event links to a known call service.
+        public var join: Join?
+        /// What a recording of this meeting keeps, as `event(at:)` gives it.
+        public var event: Event
+    }
+
+    /// The next meeting from `date`, by the rules of `event(at:)`, up to a
+    /// week ahead. One that started up to 10 minutes ago still counts, so a
+    /// late joiner sees its link. Nil while the calendar is not connected.
+    public static func next(after date: Date) -> Upcoming? {
+        guard SettingsStore().calendarForMeetings, isAuthorized else { return nil }
+        let earliest = date.addingTimeInterval(-earlyStart)
+        let predicate = store.predicateForEvents(withStart: earliest, end: date.addingTimeInterval(7 * 24 * 3600), calendars: nil)
+        let next = store.events(matching: predicate)
+            .filter { $0.startDate >= earliest && $0.endDate > date && isMeeting($0) }
+            .min { $0.startDate < $1.startDate }
+        guard let next else { return nil }
+        let title = next.title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let text = [next.url?.absoluteString, next.location, next.notes].compactMap { $0 }.joined(separator: " ")
+        let shown = title.isEmpty ? "Meeting" : title
+        return Upcoming(title: shown, start: next.startDate, join: joinLink(in: text),
+                        event: Event(title: shown, attendees: attendees(of: next)))
+    }
+
+    /// Slack is left out: a slack.com link in an invite is rarely the call itself.
+    static let joinApps: [(service: String, app: String, bundleIDs: Set<String>)] = [
+        ("zoom.us", "Zoom", ["us.zoom.xos"]),
+        ("meet.google.com", "Google Meet", []),
+        ("teams.microsoft.com", "Teams", ["com.microsoft.teams2", "com.microsoft.teams"]),
+        ("teams.live.com", "Teams", ["com.microsoft.teams2", "com.microsoft.teams"]),
+        ("webex.com", "Webex", ["com.cisco.webexmeetingsapp", "Cisco-Systems.Spark", "com.webex.meetingmanager"]),
+    ]
+
+    /// The first https link in `text` to a call service, with the service's name.
+    static func joinLink(in text: String) -> Upcoming.Join? {
+        guard let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue) else { return nil }
+        for match in detector.matches(in: text, range: NSRange(text.startIndex..., in: text)) {
+            guard let url = match.url, url.scheme == "https", let host = url.host?.lowercased() else { continue }
+            if let entry = joinApps.first(where: { host == $0.service || host.hasSuffix("." + $0.service) }) {
+                return Upcoming.Join(app: entry.app, url: url, bundleIDs: entry.bundleIDs)
+            }
+        }
+        return nil
+    }
+
+    /// When a meeting starts, as the Meetings screens and the menu show it:
+    /// "Now", "in 12 min", "3:30 PM", "Tomorrow 10:00 AM" or "Wed 10:00 AM".
+    public static func when(_ start: Date, now: Date) -> String {
+        let minutes = Int((start.timeIntervalSince(now) / 60).rounded(.up))
+        if minutes <= 0 { return "Now" }
+        if minutes < 60 { return "in \(minutes) min" }
+        let time = start.formatted(date: .omitted, time: .shortened)
+        let calendar = Calendar.current
+        if calendar.isDate(start, inSameDayAs: now) { return time }
+        if let tomorrow = calendar.date(byAdding: .day, value: 1, to: now), calendar.isDate(start, inSameDayAs: tomorrow) {
+            return "Tomorrow \(time)"
+        }
+        return "\(start.formatted(.dateTime.weekday(.abbreviated))) \(time)"
     }
 
     private static func isMeeting(_ event: EKEvent) -> Bool {
@@ -75,5 +152,29 @@ public enum CalendarMeetings {
     static func hasCallLink(_ text: String) -> Bool {
         let lowered = text.lowercased()
         return callHosts.contains { lowered.contains($0) }
+    }
+}
+
+/// The next meeting, kept current: every 30 seconds, so "in 12 min" counts
+/// down and a newly connected calendar shows up, and whenever the calendar changes.
+@MainActor
+public final class NextMeetingModel: ObservableObject {
+    @Published public private(set) var next: CalendarMeetings.Upcoming?
+    @Published public private(set) var now = Date()
+    private var updates: AnyCancellable?
+
+    public init() {
+        refresh()
+        updates = Timer.publish(every: 30, on: .main, in: .common).autoconnect().map { _ in () }
+            .merge(with: NotificationCenter.default.publisher(for: .EKEventStoreChanged).map { _ in () })
+            .merge(with: NotificationCenter.default.publisher(for: .gtSettingDidChange)
+                .filter { $0.object as? String == "calendarForMeetings" }.map { _ in () })
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] in self?.refresh() }
+    }
+
+    private func refresh() {
+        now = Date()
+        next = CalendarMeetings.next(after: now)
     }
 }

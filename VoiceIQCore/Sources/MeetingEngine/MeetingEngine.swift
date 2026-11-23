@@ -175,11 +175,16 @@ import VoiceIQSpeech
         switch source { case let .app(bundleID, _): return bundleID; case let .browser(_, host): return host }
     }
 
-    public func startRecording(source: CallSource? = nil) {
+    /// `event`: the calendar meeting the user chose to record (Join and
+    /// Record); otherwise the one under way now, when the calendar is on.
+    /// `joining`: the call that meeting links to, whose window speaker names
+    /// are read from once it opens.
+    public func startRecording(source: CallSource? = nil, event: CalendarMeetings.Event? = nil,
+                               joining: CalendarMeetings.Upcoming.Join? = nil) {
         if case .recording = phase { return }
         let id = MeetingID(), now = Date()
         var meta = MeetingMeta(id: id, startedAt: now, source: source)
-        if SettingsStore().calendarForMeetings { meta.calendarEvent = CalendarMeetings.event(at: now) }
+        if SettingsStore().calendarForMeetings { meta.calendarEvent = event ?? CalendarMeetings.event(at: now) }
         do {
             let folder = try store.create(meta: meta)
             #if os(macOS)
@@ -201,7 +206,7 @@ import VoiceIQSpeech
             self.mic = mic; self.system = system
             currentFolder = folder; currentMeta = meta
             #if os(macOS)
-            screenNames = ScreenNameSampler(source: source); screenNames?.start()
+            screenNames = ScreenNameSampler(source: source, joining: joining?.bundleIDs); screenNames?.start()
             if let source {
                 // A call that already ended before the offer was accepted has
                 // no processes to follow, but its recording still stops.

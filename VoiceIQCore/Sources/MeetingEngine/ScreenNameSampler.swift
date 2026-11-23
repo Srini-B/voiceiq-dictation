@@ -22,50 +22,76 @@ public final class ScreenNameSampler: @unchecked Sendable {
     private let startedAt = Date()
     private var bundleID: String?
     private var pid: pid_t?
+    /// With no source: the apps the call being joined runs in, besides a
+    /// browser. Nil reads any call app.
+    private let joining: Set<String>?
     private var snapshots = false
     private let samples = OSAllocatedUnfairLock(initialState: [ScreenNameSample]())
     private var task: Task<Void, Never>?
 
     /// `source` is the call app or browser, when one was detected. With none,
-    /// the frontmost known call app is read; with no call app, nothing is.
-    public init(source: CallSource?) {
+    /// the frontmost known call app is read, or with `joining` (Join and
+    /// Record) the frontmost of those apps or a browser meeting tab, so
+    /// another call app left open is not read; with none of them, nothing is.
+    public init(source: CallSource?, joining: Set<String>? = nil) {
         switch source {
         case let .app(bundleID, _), let .browser(bundleID, _): self.bundleID = bundleID
         case nil: bundleID = nil
         }
+        self.joining = joining
     }
 
     public func start() {
         // A meeting never raises a permission prompt; the dictation onboarding
         // asks for Screen Recording and Accessibility. Either one is enough.
         snapshots = CGPreflightScreenCaptureAccess()
-        // A recording started by hand, with no call detected (a call app
-        // without microphone access, say), reads the frontmost call app.
-        if bundleID == nil { bundleID = Self.frontCallApp() }
-        if let bundleID, AXIsProcessTrusted(),
-           let app = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).first {
-            pid = app.processIdentifier
-            AccessibilityWaker.wakeIfNeeded(bundleID: bundleID, pid: app.processIdentifier)
-        }
-        guard bundleID != nil, snapshots || pid != nil else {
-            Log.meeting.info("screen names off: no call window, or no Screen Recording or Accessibility access")
+        let accessibility = AXIsProcessTrusted()
+        guard snapshots || accessibility else {
+            Log.meeting.info("screen names off: no Screen Recording or Accessibility access")
             return
         }
         task = Task.detached(priority: .utility) { [weak self] in
             while !Task.isCancelled {
-                await self?.sample()
+                // Resolved on each tick until found: Join and Record starts
+                // recording before the call app has opened its window.
+                if let self, self.resolveCallApp(accessibility: accessibility) { await self.sample() }
                 try? await Task.sleep(for: Self.interval)
             }
         }
     }
 
-    /// The known call app with the frontmost normal window.
-    static func frontCallApp() -> String? {
+    /// Whether there is a call app to read. A recording started by hand, with
+    /// no call detected (a call app without microphone access, or one just
+    /// being opened), reads the frontmost call app once there is one.
+    private func resolveCallApp(accessibility: Bool) -> Bool {
+        if bundleID == nil { bundleID = Self.frontCallApp(among: joining) }
+        guard let bundleID else { return false }
+        if pid == nil, accessibility,
+           let app = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).first {
+            pid = app.processIdentifier
+            AccessibilityWaker.wakeIfNeeded(bundleID: bundleID, pid: app.processIdentifier)
+        }
+        return snapshots || pid != nil
+    }
+
+    /// The known call app, or the browser showing a meeting page (Google Meet
+    /// opened by Join and Record, say), with the frontmost normal window.
+    /// `apps` limits the call apps; browsers always count.
+    static func frontCallApp(among apps: Set<String>? = nil) -> String? {
         let windows = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] ?? []
+        var browsersRead = Set<pid_t>()
         for window in windows where window[kCGWindowLayer as String] as? Int == 0 {
             guard let pid = window[kCGWindowOwnerPID as String] as? pid_t,
-                  let id = NSRunningApplication(processIdentifier: pid)?.bundleIdentifier, CallApps.known[id] != nil else { continue }
-            return id
+                  let id = NSRunningApplication(processIdentifier: pid)?.bundleIdentifier else { continue }
+            if CallApps.known[id] != nil, apps?.contains(id) ?? true { return id }
+            guard CallApps.browsers.contains(id) else { continue }
+            // Window titles need Screen Recording; without it, Accessibility
+            // reads the browser's pages, once per browser.
+            if let title = window[kCGWindowName as String] as? String {
+                if CallApps.meetingPages.contains(where: { title.localizedCaseInsensitiveContains($0) }) { return id }
+            } else if AXIsProcessTrusted(), browsersRead.insert(pid).inserted, BrowserPages.read(pid: pid).meeting != nil {
+                return id
+            }
         }
         return nil
     }

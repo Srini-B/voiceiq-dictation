@@ -12,8 +12,8 @@ options:
 # CURRENT_PROJECT_VERSION is the build number: raise it with every release.
 settings:
   base:
-    MARKETING_VERSION: "0.7.13"
-    CURRENT_PROJECT_VERSION: "87"
+    MARKETING_VERSION: "0.7.14"
+    CURRENT_PROJECT_VERSION: "88"
 
 packages:
   VoiceIQCore:
@@ -111,7 +111,7 @@ targets:
         NSMicrophoneUsageDescription: VoiceiQ records audio while you hold the dictation key, so it can transcribe what you say.
         NSAudioCaptureUsageDescription: VoiceiQ records the other side of your calls, so meeting notes include what everyone said.
         NSAppleEventsUsageDescription: VoiceiQ pauses Music and Spotify while you dictate, when you turn that on, and plays them again after.
-        NSCalendarsFullAccessUsageDescription: VoiceiQ reads the title and invitees of the calendar event you're in, when you turn that on, so meeting notes get the right title and names.
+        NSCalendarsFullAccessUsageDescription: When you turn it on, VoiceiQ reads the title and invitees of the calendar event you're in, so meeting notes get the right title and names, and shows your next meeting in Meetings and the menu bar.
         NSHumanReadableCopyright: "Copyright 2026 Google LLC. Apache License 2.0. This is not an officially supported Google product."
         LSMinimumSystemVersion: "14.0"
         CFBundleURLTypes:
@@ -232,7 +232,7 @@ targets:
         NSSupportsLiveActivities: true
         ITSAppUsesNonExemptEncryption: false
         NSMicrophoneUsageDescription: VoiceiQ records audio when you tap the microphone in the VoiceiQ keyboard or record notes, so it can transcribe what you say.
-        NSCalendarsFullAccessUsageDescription: VoiceiQ reads the title and invitees of the calendar event you're in, when you turn that on, so notes get the right title and names.
+        NSCalendarsFullAccessUsageDescription: When you turn it on, VoiceiQ reads the title and invitees of the calendar event you're in, so notes get the right title and names, and shows your next meeting in Notes.
         NSHumanReadableCopyright: "Copyright 2026 Google LLC. Apache License 2.0. This is not an officially supported Google product."
         CFBundleURLTypes:
           - CFBundleURLName: io.blue.voiceiq.ios.url

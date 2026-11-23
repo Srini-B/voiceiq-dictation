@@ -20,6 +20,8 @@ final class StatusItemController: NSObject {
     private let onStartHandsFree: () -> Void
     private let onOpenAbout: () -> Void
     private let onCheckForUpdates: () -> Void
+    private let onJoinMeeting: (CalendarMeetings.Upcoming) -> Void
+    private let nextMeetingButton: (CalendarMeetings.Upcoming) -> NextMeetingButton?
     private let templateImage: NSImage
     private var animationTimer: Timer?
     private var animationStartedAt = Date()
@@ -31,7 +33,9 @@ final class StatusItemController: NSObject {
         onOpenSettings: @escaping () -> Void,
         onStartHandsFree: @escaping () -> Void,
         onOpenAbout: @escaping () -> Void,
-        onCheckForUpdates: @escaping () -> Void
+        onCheckForUpdates: @escaping () -> Void,
+        onJoinMeeting: @escaping (CalendarMeetings.Upcoming) -> Void,
+        nextMeetingButton: @escaping (CalendarMeetings.Upcoming) -> NextMeetingButton?
     ) {
         self.statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         self.onOpenHistory = onOpenHistory
@@ -40,6 +44,8 @@ final class StatusItemController: NSObject {
         self.onStartHandsFree = onStartHandsFree
         self.onOpenAbout = onOpenAbout
         self.onCheckForUpdates = onCheckForUpdates
+        self.onJoinMeeting = onJoinMeeting
+        self.nextMeetingButton = nextMeetingButton
         self.templateImage = Self.loadTemplateImage()
         super.init()
 
@@ -90,6 +96,9 @@ final class StatusItemController: NSObject {
 
     private var statusLine: NSMenuItem?
     private var updatesItem: NSMenuItem?
+    /// The next calendar meeting: a separator, a header with when it starts,
+    /// its title and, when the invite has a call link, Join.
+    private var nextMeetingItems: [NSMenuItem] = []
 
     func setStatusLine(_ text: String) {
         statusLine?.title = text
@@ -110,6 +119,13 @@ final class StatusItemController: NSObject {
         status.isEnabled = false
         statusLine = status
         menu.addItem(status)
+
+        let nextTitle = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+        nextTitle.isEnabled = false
+        let join = NSMenuItem(title: "", action: #selector(joinNextMeeting(_:)), keyEquivalent: "")
+        join.target = self
+        nextMeetingItems = [.separator(), .sectionHeader(title: ""), nextTitle, join]
+        nextMeetingItems.forEach { $0.isHidden = true; menu.addItem($0) }
 
         menu.addItem(.separator())
 
@@ -153,7 +169,24 @@ final class StatusItemController: NSObject {
         let quit = NSMenuItem(title: "Quit VoiceiQ", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         menu.addItem(quit)
 
+        menu.delegate = self
         return menu
+    }
+
+    /// Read when the menu opens, so it is never stale.
+    private func showNextMeeting() {
+        let next = CalendarMeetings.next(after: Date())
+        let header = nextMeetingItems[1], title = nextMeetingItems[2], join = nextMeetingItems[3]
+        nextMeetingItems.forEach { $0.isHidden = next == nil }
+        guard let next else { return }
+        header.title = "Next Meeting · \(CalendarMeetings.when(next.start, now: Date()))"
+        title.title = next.title
+        let button = nextMeetingButton(next)
+        join.isHidden = button == nil
+        join.title = button?.title ?? ""
+        // The menu enables an item by its action: none greys out In Progress.
+        join.action = button?.enabled == true ? #selector(joinNextMeeting(_:)) : nil
+        join.representedObject = next
     }
 
     @objc private func openHistory() {
@@ -180,6 +213,11 @@ final class StatusItemController: NSObject {
         onCheckForUpdates()
     }
 
+    @objc private func joinNextMeeting(_ sender: NSMenuItem) {
+        guard let meeting = sender.representedObject as? CalendarMeetings.Upcoming else { return }
+        onJoinMeeting(meeting)
+    }
+
     @objc private func selectMicrophone(_ sender: NSMenuItem) {
         guard let id = sender.representedObject as? AudioDeviceID else { return }
         AudioInputDevices.setDefault(id: id)
@@ -187,6 +225,10 @@ final class StatusItemController: NSObject {
 }
 
 extension StatusItemController: NSMenuDelegate {
+    func menuWillOpen(_ menu: NSMenu) {
+        if menu === statusItem.menu { showNextMeeting() }
+    }
+
     /// Rebuild the Microphone submenu each open — devices come and go
     /// (AirPods connect, headsets unplug) and the checkmark must be live.
     func menuNeedsUpdate(_ menu: NSMenu) {

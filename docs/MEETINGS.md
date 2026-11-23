@@ -116,6 +116,38 @@ have one, and the notes request gets the title and up to 30 invitees' names
 for the title and name spellings (`MeetingMeta.calendarEvent`). Hex reads
 the calendar the same way.
 
+**Next meeting (Mac and iPhone).** With the calendar connected, the next
+meeting by the same rules, up to a week ahead, shows at the top of Meetings
+on the Mac (`NextMeetingCard`, above Record), at the top of Notes on iPhone and iPad
+(`NextMeetingSection`), and in the Mac menu-bar menu under the status line.
+It shows the title and when it starts ("in 12 min" within the hour, else
+the time, "Tomorrow 10:00 AM" or "Wed 10:00 AM"). One that started up to 10
+minutes ago still shows, as "Now", so a late joiner can still join it. When
+the invite's link, location or notes hold a Zoom, Google Meet, Teams or Webex
+https link, a button joins it; Slack links are not offered, since an
+invite's slack.com link is rarely the call. On the Mac the card's button and
+the menu item (`NextMeetingButton`) read:
+
+- **Join Zoom and Record**: starts a recording, then opens the link, so the
+  call is recorded from its first second. The recording has no call source,
+  so it records all system audio and is not stopped when the call ends. The
+  button reads the same when call detection hears a Zoom call: detection
+  knows the service, not the meeting, so that call may be another one.
+  Speaker names are read from the linked app's window once it opens (Zoom,
+  Teams, Webex), or from a browser tab showing a meeting page (Google Meet),
+  never from another call app left open.
+- **In Progress**, disabled, while any recording runs.
+
+The recording takes the joined event's title and invitees
+(`Upcoming.event`), not whatever event the clock falls in, so a meeting
+joined early is still named right. A recording started from the menu shows
+the pill, with its Stop, even when Accessibility is not granted. On iPhone
+the button is **Join Zoom** alone, since the phone cannot record calls.
+The screens refresh every 30 seconds, whenever the calendar changes and when
+the calendar setting changes (`NextMeetingModel`); the menu reads the calendar each time it opens
+(`CalendarMeetings.next(after:)`). With the calendar off or access denied,
+nothing shows.
+
 WebKit's XPC services (`com.apple.WebKit.*`, such as "Safari Graphics and
 Media") are skipped. macOS lists them as running apps, and Safari's GPU
 process captures the mic itself, so it used to win before Safari and the
