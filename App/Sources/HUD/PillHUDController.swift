@@ -9,6 +9,10 @@ import VoiceIQCore
 @MainActor
 final class PillHUDController {
     let model = PillModel()
+    /// Set by DictationController while a dictation records, so VoiceOver
+    /// speech is never captured into it.
+    var dictationMicIsOpen = false
+    private var lastState: PillState?
     private let panel: NSPanel
     private var stateObservation: AnyCancellable?
     private var mouseMonitor: Any?
@@ -36,8 +40,9 @@ final class PillHUDController {
         panel.contentView = NSHostingView(
             rootView: PillRootView(model: model)
         )
-        stateObservation = model.$state.sink { [weak self] _ in
+        stateObservation = model.$state.sink { [weak self] state in
             self?.reposition()
+            self?.announce(state)
         }
         dragObservers = [
             NotificationCenter.default.addObserver(forName: .pillDragMoved, object: nil, queue: .main) { [weak self] _ in
@@ -48,6 +53,24 @@ final class PillHUDController {
             },
         ]
         reposition()
+    }
+
+    /// The pill never takes focus, so VoiceOver would not read what it says.
+    /// FluidVoice announces its pill the same way (altic-dev/FluidVoice).
+    private func announce(_ state: PillState) {
+        guard state != lastState else { return }
+        lastState = state
+        guard !dictationMicIsOpen else { return }
+        let text: String
+        switch state {
+        case .notice(let message), .error(let message): text = message
+        case .meetingPrompt(let name): text = "Record this meeting? \(name). Nothing is recording yet."
+        default: return
+        }
+        NSAccessibility.post(element: NSApplication.shared, notification: .announcementRequested, userInfo: [
+            .announcement: text,
+            .priority: NSAccessibilityPriorityLevel.high.rawValue,
+        ])
     }
 
     /// Slides the panel with the pointer while the grip is held. The offset

@@ -64,4 +64,15 @@ final class HotkeyProcessorTests: XCTestCase {
         XCTAssertEqual(send(.otherKeyDown, at: 0).intents, [])
         XCTAssertFalse(processor.isSessionActive)
     }
+
+    func testBareF13IsAShortcutButABareLetterIsNot() {
+        let f13 = KeyShortcut(keyCode: 105, modifiers: [])
+        XCTAssertEqual(f13.displayString, "F13")
+        // F-keys arrive with the fn flag set; it is not one of the modifiers.
+        XCTAssertTrue(f13.matches(rawFlags: 0x80_0000, keyCode: 105))
+        XCTAssertFalse(f13.matches(rawFlags: 0x10_0000, keyCode: 105)) // ⌘F13 is a different shortcut
+        XCTAssertTrue(KeyShortcut.standaloneKeyCodes.contains(80))      // F19
+        XCTAssertFalse(KeyShortcut.standaloneKeyCodes.contains(0))      // A
+        XCTAssertFalse(KeyShortcut.standaloneKeyCodes.contains(111))    // F12 is a system key
+    }
 }

@@ -63,6 +63,11 @@ public struct KeyShortcut: Codable, Equatable, Sendable {
         self.side = side
     }
 
+    /// F13–F19 have no letter to type, so they work alone, without a
+    /// modifier. Stream Deck buttons and Karabiner remaps send them
+    /// (FluidVoice accepts them the same way, altic-dev/FluidVoice).
+    public static let standaloneKeyCodes: Set<UInt16> = [105, 107, 113, 106, 64, 79, 80]
+
     public var displayString: String {
         let prefix = side == .either ? "" : "\(side.displayName) "
         let ordered: [Modifier] = [.control, .option, .shift, .command]
@@ -111,7 +116,8 @@ public struct KeyShortcut: Codable, Equatable, Sendable {
             98: "F7", 99: "F3", 100: "F8", 101: "F9", 103: "F11", 109: "F10",
             111: "F12", 115: "Home", 116: "Page Up", 117: "⌦", 118: "F4",
             119: "End", 120: "F2", 121: "Page Down", 122: "F1", 123: "←",
-            124: "→", 125: "↓", 126: "↑",
+            124: "→", 125: "↓", 126: "↑", 105: "F13", 107: "F14", 113: "F15",
+            106: "F16", 64: "F17", 79: "F18", 80: "F19",
         ]
         return labels[keyCode] ?? "Key \(keyCode)"
     }

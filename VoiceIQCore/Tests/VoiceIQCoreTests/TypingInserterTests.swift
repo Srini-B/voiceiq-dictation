@@ -32,6 +32,14 @@ final class TypingInserterTests: XCTestCase {
         XCTAssertNil(TypingInserter.mode(bundleID: "com.tinyspeck.slackmacgap", bundleURL: electron))
     }
 
+    func testAnyElectronAppIsWokenNotOnlyListedOnes() throws {
+        let electron = try bundle(frameworks: ["Electron Framework.framework": ["A"]])
+        XCTAssertTrue(AccessibilityWaker.isElectron(electron))
+        let chrome = try bundle(frameworks: ["Google Chrome Framework.framework": ["157.0.1.2"]])
+        XCTAssertFalse(AccessibilityWaker.isElectron(chrome))
+        XCTAssertFalse(AccessibilityWaker.isElectron(nil))
+    }
+
     func testRemoteDesktopIsTypedOneKeyAtATime() {
         XCTAssertEqual(TypingInserter.mode(bundleID: "com.microsoft.rdc.macos", bundleURL: nil), .paced)
         XCTAssertEqual(TypingInserter.mode(bundleID: "com.microsoft.WindowsApp", bundleURL: nil), .paced)

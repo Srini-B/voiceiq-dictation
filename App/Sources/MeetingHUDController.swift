@@ -79,7 +79,7 @@ final class MeetingHUDController {
         promptDismiss = Task { [weak self] in
             try? await Task.sleep(nanoseconds: UInt64(Self.promptSeconds * 1_000_000_000))
             guard !Task.isCancelled else { return }
-            self?.dismiss()
+            self?.dismiss(quiet: false)
         }
     }
 
@@ -94,10 +94,10 @@ final class MeetingHUDController {
         meetings.acceptDetectedCall()
     }
 
-    private func dismiss() {
+    private func dismiss(quiet: Bool = true) {
         promptDismiss?.cancel()
         pendingPrompt = nil
-        meetings.dismissDetectedCall()
+        meetings.dismissDetectedCall(quiet: quiet)
         if case .meetingPrompt = hud.model.state { setPill(restingPill()) }
     }
 

@@ -41,7 +41,7 @@ struct DictationKeySection: View {
                         .help("Cancel")
                     }
 
-                    if case .combo(let shortcut) = trigger {
+                    if case .combo(let shortcut) = trigger, !shortcut.modifiers.isEmpty {
                         Text("Side")
                         SearchablePicker("", selection: sideBinding(shortcut),
                                          options: KeyShortcut.Side.allCases.map { SearchOption(value: $0, name: $0.displayName) })

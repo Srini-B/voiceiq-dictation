@@ -111,10 +111,12 @@ struct ShortcutRecorderRow: View {
 
 extension KeyShortcut {
     /// The combination a keyDown describes, or nil when no modifier is held
-    /// (a bare letter is never a global shortcut).
+    /// (a bare letter is never a global shortcut; a bare F13–F19 is).
     static func recorded(from event: NSEvent) -> KeyShortcut? {
         let modifiers = modifiers(from: event.modifierFlags)
-        guard !modifiers.isEmpty else { return nil }
+        if modifiers.isEmpty {
+            return standaloneKeyCodes.contains(event.keyCode) ? KeyShortcut(keyCode: event.keyCode, modifiers: []) : nil
+        }
         let side = side(for: modifiers, rawFlags: event.modifierFlags.rawValue)
         return KeyShortcut(keyCode: event.keyCode, modifiers: modifiers, side: side)
     }
