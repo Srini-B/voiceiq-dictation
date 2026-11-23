@@ -12,11 +12,11 @@ public extension Notification.Name {
 /// UserDefaults-backed settings (M3 minimal; the Settings UI lands at M7).
 /// Endpoint + model IDs are overridable because preview models get renamed.
 public struct SettingsStore: Sendable {
-    private static var defaults: UserDefaults { .standard }
+    static var defaults: UserDefaults { .standard }
 
     public init() {}
 
-    private static func set(_ value: Any?, forKey key: String) {
+    static func set(_ value: Any?, forKey key: String) {
         defaults.set(value, forKey: key)
         let shown = privateTextKeys.contains(key) ? (value as? String).map { "\($0.count) characters" } ?? "default"
                                                   : logDescription(of: value)
