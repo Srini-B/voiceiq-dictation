@@ -46,6 +46,17 @@ The maintainer also asked for two things:
   one other person and one far-side speaker, that person's always-visible name
   is given to the speaker.
 - **Words follow their track** (`MeetingTranscriber.byTrack`).
+- **Review round (Codex, CodeRabbit).** Fixes from the bot reviews:
+  - The diarizer split now runs whenever the browser timeline left the words
+    unchanged.
+  - Words moved off the owner share one fallback id, and mic-only words lend
+    no id.
+  - Deleting the speaker model stops the far-side pass and waits for it.
+  - The extension checks for updates every 5 minutes while idle, and puts its
+    relay back into call pages left open across a reload. This adds the
+    `scripting` permission and host access for the call sites.
+  - The head count is taken by participant id.
+  - A screen count needs two snapshots.
 - **Settings.** The status reads each Chrome profile's `Secure Preferences`
   and `Preferences` (`BrowserExtensionInstalls`). It shows the install button
   again once the extension is removed.
@@ -82,6 +93,9 @@ page and the native host (scratch harness, not committed):
 - Changing the version on disk during a call left the old version reporting.
   61 s after the call tab closed, the new version said hello through a newly
   started host.
+- With a call page left open after its call, a second call in the same page
+  after the self-reload sent 14 events from the new version. Without the
+  relay restore it sent none.
 - After the extension was removed, `Preferences` still held `{}` for it. That
   is why an entry needs `location` to count.
 
