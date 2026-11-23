@@ -32,10 +32,12 @@ struct NextMeetingCard: View {
 }
 
 extension MeetingEngine {
-    /// Records the call from before it is joined, the way the Record button
-    /// does, then opens the call. Already recording: only opens it.
+    /// Records the call from before it is joined, then opens it. Already
+    /// recording: only opens it. No call source: a call detected now is not
+    /// this one, and following its processes would miss the joined call's
+    /// audio and stop when that other call ends.
     func join(_ join: CalendarMeetings.Upcoming.Join) {
-        if !isRecording { toggleRecording() }
+        if !isRecording { startRecording() }
         NSWorkspace.shared.open(join.url)
     }
 }

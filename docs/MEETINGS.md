@@ -127,9 +127,12 @@ minutes ago still shows, as "Now", so a late joiner can still join it. When
 the invite's link, location or notes hold a Zoom, Google Meet, Teams or Webex
 https link, a button joins it; Slack links are not offered, since an
 invite's slack.com link is rarely the call. On the Mac the button and the
-menu item are **Join Zoom and Record**: they start a recording the way Record
-does, then open the link (`MeetingEngine.join`), so the call is recorded from
-its first second; already recording, they only open the link. On iPhone it
+menu item are **Join Zoom and Record**: they start a recording, then open the
+link (`MeetingEngine.join`), so the call is recorded from its first second;
+already recording, they only open the link. The recording has no call source,
+even when another call is detected at that moment: it records all system
+audio, and like any recording started without a detected call it is not
+stopped automatically when the call ends. On iPhone it
 is **Join Zoom** alone, since the phone cannot record calls.
 The screens refresh every 30 seconds and whenever the calendar changes
 (`NextMeetingModel`); the menu reads the calendar each time it opens
