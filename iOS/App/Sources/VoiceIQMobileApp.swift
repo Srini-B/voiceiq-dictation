@@ -7,6 +7,13 @@ import VoiceIQBridge
 final class AppDelegate: NSObject, UIApplicationDelegate {
     let model = AppModel()
 
+    func application(_ application: UIApplication,
+                     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
+        ModelWarmer.register()
+        ModelWarmer.schedule()
+        return true
+    }
+
     func applicationWillTerminate(_ application: UIApplication) {
         // The recording is finalized to disk; the next launch transcribes it.
         model.prepareForTermination()

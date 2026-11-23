@@ -8,6 +8,16 @@ import VoiceIQBridge
 public protocol TranscriptionServicing: Sendable {
     /// Throws TranscriptionError.
     func transcribe(audioURL: URL, durationSeconds: Double, context: DictationContext) async throws -> TranscriptionResult
+    /// The text to insert for a transcript the on-device model made: written
+    /// by the writing rules, or as transcribed. Never throws for a failed
+    /// writing request; the transcript is the fallback.
+    func write(_ transcript: TranscriptionResult, context: DictationContext) async throws -> TranscriptionResult
+}
+
+public extension TranscriptionServicing {
+    func write(_ transcript: TranscriptionResult, context: DictationContext) async throws -> TranscriptionResult {
+        transcript
+    }
 }
 
 public struct TranscriptionResult: Equatable, Sendable {

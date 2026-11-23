@@ -30,9 +30,105 @@ repository's Apache 2.0 license. See `App/Resources/Sounds/ATTRIBUTION.md`.
 |---|---|
 | [Sauce](https://github.com/Clipy/Sauce) (Clipy) | MIT |
 | [GRDB.swift](https://github.com/groue/GRDB.swift) (Gwendal Roué) | MIT |
+| [FluidAudio](https://github.com/FluidInference/FluidAudio) 0.18.2 (Fluid Inference), with the `NemoTextProcessing` and `Diarizer` traits | Apache 2.0; bundled dependencies retain their upstream notices |
 | [Sparkle](https://github.com/sparkle-project/Sparkle) (from M8) | Sparkle License (permissive, MIT-style) |
 
 ## Vendored libraries
+
+### llama.cpp
+
+- https://github.com/ggml-org/llama.cpp, tag `b12633` (commit
+  `9c10c94e16ebc4f3ed7c06264a93bf7e019c3f26`), built as static libraries in
+  `VoiceIQCore/Vendor/llama/llama.xcframework` by `build.sh` next to it
+  (llama and ggml only).
+- License: MIT, Copyright (c) 2023-2026 The ggml authors. The full text is in
+  `VoiceIQCore/Vendor/llama/LICENSE`.
+
+### Optional LFM3-Omni-2B model
+
+- LFM3-Omni-2B by Liquid AI, GGUF build: https://huggingface.co/LiquidAI/LFM3-Omni-2B-GGUF,
+  revision `d508b88f08a5b4286f2d2805a6a8d69a0ff44c72`, file
+  `LFM3-Omni-2B-Q4_K_M.gguf`.
+- License: LFM Open License v1.0 (https://huggingface.co/LiquidAI/LFM3-Omni-2B/blob/main/LICENSE):
+  free for personal and non-commercial use; commercial use only by entities
+  below US$10 million annual revenue.
+- VoiceiQ downloads the file unmodified, on explicit request. Weights are not
+  bundled with the app. The file hash is in `LocalWriterManifest.swift`.
+
+### Optional Fluid Speech Mini model
+
+- Fluid Speech Mini by FluidVoice: https://huggingface.co/FluidVoice-Labs/fluid-speech-mini-coreml, revision `d81c3160dfe5a5e1f8f7267164a07d30617a3a1a` (https://fluidvoice.com/labs/fluid-speech-mini).
+- Built on NVIDIA Parakeet TDT 0.6B v3 (https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3) and Moondream Parakeet Ultra, with the audio preprocessor from FluidInference's Parakeet v3 Core ML package.
+- License: [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Credit: "Fluid Speech Mini by FluidVoice".
+- VoiceiQ downloads the model files unmodified, on explicit request; the joint
+  network folder is saved as `JointDecisionv3.mlmodelc` instead of
+  `JointDecision.mlmodelc`. Weights are not bundled with the app. File hashes
+  are in `ParakeetManifest.swift`.
+
+### Optional Fluid Speech Pro model
+
+- Fluid Speech Pro by FluidVoice (Core ML): https://huggingface.co/FluidVoice-Labs/fluid-speech-pro-coreml, revision `3b9d38a93d606f84011e5a0a669b7ea146375a22` (https://huggingface.co/FluidVoice-Labs/fluid-speech-pro).
+- Built on NVIDIA Parakeet TDT 0.6B v3 (https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3) and Moondream Parakeet Ultra (https://huggingface.co/moondream/parakeet-ultra).
+- License: [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Credit: "Fluid Speech Pro by FluidVoice".
+- VoiceiQ downloads the model files unmodified, on explicit request; the joint
+  network folder is saved as `JointDecisionv3.mlmodelc` instead of
+  `JointDecision.mlmodelc`. Weights are not bundled with the app. File hashes
+  are in `FluidSpeechProManifest.swift`.
+
+### Optional speaker separation model (pyannote community-1)
+
+- Original pipeline: https://huggingface.co/pyannote/speaker-diarization-community-1
+  (pyannote), with speaker segmentation by Plaquet and Bredin ("Powerset
+  multi-class cross entropy loss for neural speaker diarization", Interspeech
+  2023), the WeSpeaker speaker embedding (Wang et al., "Wespeaker: A research
+  and production oriented speaker embedding learning toolkit", ICASSP 2023),
+  and PLDA parameters from Brno University of Technology / BUT Speech@FIT for
+  VBx clustering (Landini et al., Computer Speech & Language, 2022).
+- Modified: Core ML conversion by Fluid Inference, https://huggingface.co/FluidInference/speaker-diarization-coreml,
+  revision `df2625ac79a7ac6b65ad868fee6d80f320da4232` (fixed input shapes,
+  mixed-precision storage, the FBank frontend split from the embedding model).
+- License: [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/), as the
+  repository's `NOTICE.md` scopes it to `Segmentation.mlmodelc`,
+  `FBank.mlmodelc`, `Embedding.mlmodelc`, `PLDA.mlmodelc`, `PldaRho.mlmodelc`,
+  `plda-parameters.json` and `xvector-transform.json`. VoiceiQ downloads only
+  files from that set.
+- VoiceiQ downloads `Segmentation`, `FBank`, `Embedding` and `PldaRho`
+  (`.mlmodelc`) and `plda-parameters.json` unmodified on explicit request, for
+  on-device meeting speakers. Weights are not bundled. File hashes are in
+  `SpeakerDiarizerManifest.swift`.
+
+### Optional English tools pack
+
+VoiceiQ downloads these Core ML conversions unmodified, on explicit request, as
+one pack. No weights are bundled with the app. File hashes are in
+`EnglishToolsManifest.swift`.
+
+- **Silero VAD v6.2.1 (speech detection).** Original model:
+  https://github.com/snakers4/silero-vad (Copyright (c) 2020-present Silero Team),
+  via https://huggingface.co/onnx-community/silero-vad. Core ML conversion:
+  https://huggingface.co/FluidInference/silero-vad-coreml (Fluid Inference),
+  revision `b419383c55c110e2c9271fa6ee0ea83d03c70d96`. License: MIT.
+- **Parakeet TDT-CTC 110M, CTC branch (dictionary correction).** Original
+  model: https://huggingface.co/nvidia/parakeet-tdt_ctc-110m (NVIDIA). Core ML
+  conversion with tokenizer and vocabulary files:
+  https://huggingface.co/FluidInference/parakeet-ctc-110m-coreml (Fluid
+  Inference), revision `accdafd8cf8a2ff1cabe3c11e54416b405d409aa`. License:
+  [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
+
+### NeMo text processing (inverse text normalization)
+
+- Linked through FluidAudio's `NemoTextProcessing` trait into the Mac speech
+  helper and the iOS app, not the Mac UI.
+- Binary: `NemoTextProcessing.xcframework` from
+  https://github.com/FluidInference/text-processing-rs release v0.3.1
+  (Fluid Inference). License: Apache 2.0.
+- Includes compiled weighted-FST grammars derived from
+  https://github.com/NVIDIA/NeMo-text-processing (Copyright (c) NVIDIA
+  CORPORATION & AFFILIATES), Apache 2.0. It statically links rustfst and
+  flate2, each MIT OR Apache 2.0, and their MIT or Apache 2.0 dependencies.
+  It contains no neural network weights.
+- Full notice: `ThirdPartyLicenses/NemoTextProcessing-LICENSE.md` in the
+  FluidAudio 0.18.2 source.
 
 ### WebRTC audio processing (AEC3 echo canceller)
 - File: `VoiceIQCore/Vendor/WebRTCAEC/CVoiceIQAEC.xcframework` (static library, arm64 and x86_64)
@@ -158,9 +254,19 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
+### FluidVoice (on-device meetings design)
+
+- The on-device meeting path (`LocalMeetingTranscriber`, `LocalMeetingJob`)
+  follows FluidMeet's design: the meeting is transcribed after it ends by a
+  Fluid Speech model, speakers are separated by a diarization model, and the
+  two are joined by time.
+- Source: [altic-dev/FluidVoice](https://github.com/altic-dev/FluidVoice)
+  (`Sources/Fluid/Services/Meeting/`), GPLv3. VoiceiQ includes no FluidVoice
+  source code; the design was reimplemented on FluidAudio.
+
 ## Behaviour studied, no code used
 
-### FluidVoice
+### FluidVoice (dictation and meetings behaviours)
 
 [altic-dev/FluidVoice](https://github.com/altic-dev/FluidVoice) is GPL-3.0,
 so under the clean-room rule in `CONTRIBUTING.md` none of its code is copied,
@@ -182,4 +288,6 @@ and "Claude" of Anthropic, PBC; Cost Analysis names them only to label spend
 from when they were providers. The iOS app bundles the Gemini favicon
 (`iOS/App/Resources/Assets.xcassets/ProviderGemini.imageset`) only to label
 the key field; no endorsement is implied. The app icon and menu bar glyph are
-original works.
+original works. "NVIDIA" and "Parakeet" are trademarks of NVIDIA Corporation, and
+"FluidVoice" and "Fluid Speech" are Altic's product names; the model credits above are
+attribution, not endorsement.

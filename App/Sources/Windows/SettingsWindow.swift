@@ -315,10 +315,13 @@ struct PrivacyPane: View {
             }
 
             Section {
-                LabeledContent("Audio") { Text("Sent to Google's Gemini API with your key, transcribed every time") }
+                LocalAudioPrivacyRow(provider: "Gemini", cloudDescription: "Sent to Google's Gemini API with your key, transcribed every time")
                 LabeledContent("Text around the cursor") { Text("Sent with each dictation, so it fits the text already there") }
                 LabeledContent("Where you are typing") { Text("App name, window title and browser page address, with each dictation") }
-                LabeledContent("Meeting audio") { Text("Only if call recording is on; transcribed and turned into notes by Gemini") }
+                LocalMeetingPrivacyRow(
+                    label: "Meeting audio",
+                    localDescription: { "Transcribed on device by \($0); only the transcript goes to Gemini for notes, if writing is on" },
+                    cloudDescription: "Only if call recording is on; transcribed and turned into notes by Gemini")
                 LabeledContent("Dictionary terms") { Text("Sent with each dictation and meeting notes, so names are spelled right") }
                 LabeledContent("Dictionary") { Text("Synced to your iPhone through your iCloud account") }
                 LabeledContent("History") { Text("Final text synced to your iPhone through your iCloud account") }

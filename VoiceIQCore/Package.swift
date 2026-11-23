@@ -8,6 +8,7 @@ let package = Package(
     products: [
         .library(name: "VoiceIQCore", targets: ["VoiceIQCore"]),
         .library(name: "VoiceIQSpeech", targets: ["VoiceIQSpeech"]),
+        .library(name: "VoiceIQInference", targets: ["VoiceIQInference"]),
         // The keyboard and Live Activity extensions link only this: it is
         // extension-safe and carries no network or audio code.
         .library(name: "VoiceIQBridge", targets: ["VoiceIQBridge"]),
@@ -15,6 +16,9 @@ let package = Package(
     dependencies: [
         .package(url: "https://github.com/groue/GRDB.swift.git", from: "7.12.0"),
         .package(url: "https://github.com/Clipy/Sauce.git", from: "2.5.1"),
+        // Listing traits turns FluidAudio's defaults off: TTS stays out, and
+        // Diarizer gates OfflineDiarizerManager (LocalMeetingJob).
+        .package(url: "https://github.com/FluidInference/FluidAudio.git", exact: "0.18.2", traits: ["NemoTextProcessing", "Diarizer"]),
     ],
     targets: [
         // WebRTC's AEC3 echo canceller and a small C bridge, built by
@@ -22,6 +26,13 @@ let package = Package(
         .binaryTarget(
             name: "CVoiceIQAEC",
             path: "Vendor/WebRTCAEC/CVoiceIQAEC.xcframework"
+        ),
+        // llama.cpp's text runtime for the on-device writer (LFM3-Omni-2B),
+        // built by Vendor/llama/build.sh for macOS, iOS and the iOS Simulator.
+        // MIT-licensed; see Vendor/llama/LICENSE.
+        .binaryTarget(
+            name: "llama",
+            path: "Vendor/llama/llama.xcframework"
         ),
         // Catches Objective-C exceptions that Swift cannot (AVFAudio raises
         // them while the input device is changing).
@@ -47,6 +58,18 @@ let package = Package(
                 .linkedLibrary("c++", .when(platforms: [.macOS])),
                 .linkedFramework("CoreFoundation"),
             ]
+        ),
+        // On-device speech (Fluid Speech Mini and Pro, the English tools and the
+        // meeting diarizer) and the on-device writer. The Mac runs it in the
+        // VoiceiQLocalSpeech helper, iOS in-process; the Mac UI never links it.
+        .target(
+            name: "VoiceIQInference",
+            dependencies: [
+                "VoiceIQSpeech",
+                "llama",
+                .product(name: "FluidAudio", package: "FluidAudio"),
+            ],
+            path: "Inference"
         ),
         // The VoiceiQ Meetings Chrome extension's speaker log and its native
         // messaging host, which the VoiceiQLocalSpeech helper runs.

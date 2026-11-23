@@ -92,6 +92,8 @@ struct DictationPane: View {
             }
             .onChange(of: pressReturnApps) { _, apps in settings.setPressReturnApps(apps) }
 
+            SpeechSourceSection(device: "Mac") { Text("Speech") }
+
             SpokenLanguagesSection()
 
             Section {

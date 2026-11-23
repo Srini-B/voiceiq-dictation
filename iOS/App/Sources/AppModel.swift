@@ -3,6 +3,7 @@ import Combine
 import UIKit
 import VoiceIQBridge
 import VoiceIQCore
+import VoiceIQInference
 
 /// Composition root for the iOS app: the same dictation pipeline as macOS,
 /// driven by keyboard commands instead of a hotkey, delivering to the keyboard
@@ -45,15 +46,17 @@ final class AppModel: ObservableObject {
     init() {
         FormattingSettingsMigration.splitWritingRulesOnce()
         FormattingSettingsMigration.removeLiveTranscriptionSettings()
-        FileLayout.removeRetiredModels()
+        FileLayout.removeStaleRenders()
         SettingsStore().removeRetiredSettingsOnce()
         let client = GeminiClient(apiKey: { KeychainStore.loadAPIKey() })
-        transcription = GeminiTranscriptionService(client: client)
+        transcription = GeminiTranscriptionService(client: client, localWriter: LocalSpeechInference.write)
         historyStore = try? HistoryStore.standard()
         UsageMeter.store = try? UsageStore.standard()
         meetings = MeetingEngine(
             client: client,
-            config: { SettingsStore().geminiConfig }
+            config: { SettingsStore().geminiConfig },
+            localMeeting: LocalSpeechInference.transcribeMeeting,
+            localWriter: LocalSpeechInference.write
         )
         let inserter = self.inserter
         let session = self.session
@@ -73,10 +76,34 @@ final class AppModel: ObservableObject {
                     targetAppBundleID: target.host,
                     targetAppName: target.host.map(AppNames.displayName(for:))
                 )
+            },
+            localFactory: {
+                LocalTranscriber.makeFromSettings(audioURL: $0, cloudOnColdLoad: KeychainStore.hasModelKey,
+                                                  makeSession: LocalSpeechInference.makeSession)
             }
         )
         sleepGuard = SessionSleepGuard(dictation: coordinator, meetings: meetings)
         inserter.onDeliver = { [weak self] text in self?.deliver(text) }
+        // The load overlaps the recording; a load longer than the recording
+        // is what the user waits for in "processing".
+        LocalTranscriber.onLoadEvent = { event in
+            let age = SessionDiagnostics.processAge
+            switch event {
+            case .loaded(let model, let seconds):
+                Task {
+                    SessionDiagnostics.note(String(format: "%@ loaded in %.1fs (%@, %@)", model.displayName, seconds,
+                                                  age, await PreparedModelCache.describe()))
+                }
+            case .failed(let model, let seconds):
+                Task {
+                    SessionDiagnostics.note(String(format: "%@ failed to load after %.1fs (%@, %@)", model.displayName, seconds,
+                                                  age, await PreparedModelCache.describe()))
+                }
+            case .stillLoading(let model, let waited):
+                SessionDiagnostics.note(String(format: "%@ still loading %.0fs after the recording; sent to Gemini, load goes on",
+                                              model.displayName, waited))
+            }
+        }
 
         // Commands already in the App Group belong to an earlier process. Only
         // a command named in a launch URL may still be acted on.
@@ -150,10 +177,11 @@ final class AppModel: ObservableObject {
 
     private func startHistoryServices() {
         guard let historyStore else { return }
-        let scanner = RecoveryScanner(store: historyStore, transcription: transcription)
+        let retry = OnDeviceFirstTranscription(gemini: transcription, makeSession: LocalSpeechInference.makeSession)
+        let scanner = RecoveryScanner(store: historyStore, transcription: retry)
         scanner.onRecovered = { [weak self] _ in self?.banner = RecoveryNotice.message(for: .relaunch, copied: false) }
         recoveryScanner = scanner
-        let queue = RetryQueue(store: historyStore, transcription: transcription)
+        let queue = RetryQueue(store: historyStore, transcription: retry)
         queue.onDrained = { [weak self] texts in
             let count = texts.count
             self?.banner = count == 1 ? "A queued dictation is ready in History" : "\(count) queued dictations are ready in History"
@@ -275,7 +303,7 @@ final class AppModel: ObservableObject {
     /// onboarding: the key deleted, or the microphone switched off in Settings
     /// (iOS then ends the app, so this is read fresh on the next launch).
     private func setupBlocker() -> String? {
-        if !KeychainStore.hasModelKey { return "Add an API key in VoiceiQ" }
+        if !DictationRoute.isAvailable { return "Add an API key in VoiceiQ" }
         if AVAudioApplication.shared.recordPermission != .granted { return "Allow the microphone in VoiceiQ" }
         return nil
     }
@@ -443,10 +471,12 @@ final class AppModel: ObservableObject {
         WritingRulesSync.shared.refresh()
         Task { await HistorySync.shared.refresh() }
         Task { await MeetingSync.shared.refresh() }
+        ModelWarmer.warmIfSystemUpdated()
     }
 
     func appEnteredBackground() {
         showSwipeBack = false
+        ModelWarmer.schedule()
     }
 
     func prepareForTermination() {
