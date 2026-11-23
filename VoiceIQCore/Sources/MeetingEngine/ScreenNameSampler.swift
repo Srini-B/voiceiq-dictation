@@ -68,13 +68,17 @@ public final class ScreenNameSampler: @unchecked Sendable {
         return snapshots || pid != nil
     }
 
-    /// The known call app with the frontmost normal window.
+    /// The known call app, or the browser showing a meeting page (Google Meet
+    /// opened by Join and Record, say), with the frontmost normal window.
     static func frontCallApp() -> String? {
         let windows = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] ?? []
         for window in windows where window[kCGWindowLayer as String] as? Int == 0 {
             guard let pid = window[kCGWindowOwnerPID as String] as? pid_t,
-                  let id = NSRunningApplication(processIdentifier: pid)?.bundleIdentifier, CallApps.known[id] != nil else { continue }
-            return id
+                  let id = NSRunningApplication(processIdentifier: pid)?.bundleIdentifier else { continue }
+            if CallApps.known[id] != nil { return id }
+            // Window titles need Screen Recording, which snapshots need anyway.
+            if CallApps.browsers.contains(id), let title = window[kCGWindowName as String] as? String,
+               CallApps.meetingPages.contains(where: { title.localizedCaseInsensitiveContains($0) }) { return id }
         }
         return nil
     }
