@@ -19,8 +19,11 @@ menu-bar menu. Mac and iPhone the same where possible.
   under the status line in the menu-bar menu, read each time it opens.
   cyron, on the first version: make the button "Join Zoom and Record", and
   put the card in the empty space above Record instead of pushing Record
-  down. The card now sits in the titlebar strip (the sidebar ignores the top
-  safe area while it shows), and Join starts a recording, then opens the link.
+  down. Join starts a recording, then opens the link. Then: "all of the
+  pages have that additional space at the top"; every pane of the main
+  window now starts at the window's top edge (the title sits over the
+  sidebar, so the transparent titlebar strip above the panes was empty), and
+  each keeps its own padding.
 - iPhone and iPad: a "Next meeting" section above the record card in Notes
   (`NextMeetingSection`).
 - The calendar permission text and the Settings copy on both say the next

@@ -210,6 +210,9 @@ private struct MainView: View {
                 AboutPane()
             }
         }
+        // The title sits over the sidebar, so every pane starts at the window's
+        // top edge with its own padding instead of below an empty titlebar strip.
+        .ignoresSafeArea(.container, edges: .top)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background {
             Color(nsColor: .windowBackgroundColor)

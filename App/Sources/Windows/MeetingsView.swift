@@ -60,7 +60,8 @@ struct MeetingsPane: View {
         VStack(spacing: 0) {
             if let next = nextMeeting.next {
                 NextMeetingCard(meeting: next, now: nextMeeting.now, engine: engine)
-                    .padding([.horizontal, .top], VoiceIQUI.Spacing.s)
+                    .padding(.horizontal, VoiceIQUI.Spacing.s)
+                    .padding(.top, VoiceIQUI.Spacing.l)
             }
             Button {
                 // As Option-M: a call already detected becomes the meeting's source.
@@ -122,8 +123,6 @@ struct MeetingsPane: View {
                 }
             }
         }
-        // The card takes the empty titlebar strip above Record, so Record moves down less.
-        .ignoresSafeArea(.container, edges: nextMeeting.next == nil ? [] : .top)
     }
 
     /// Which meetings the list shows: all, or one folder's.
