@@ -59,6 +59,9 @@ public struct InsertionCoordinator: TextInserting {
             // Same treatment as the frontmost-changed guard: chip, never blind.
             paster.copyOnly(text)
             return .frontmostChanged
+        case .notATextField:
+            paster.copyOnly(text)
+            return .fellBackToClipboard
         case .notPossible:
             break
         }

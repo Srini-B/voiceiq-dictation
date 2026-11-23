@@ -98,10 +98,21 @@ import VoiceIQSpeech
         startRecording(source: source)
     }
 
-    /// The pill's dismiss. The same call is not offered again; the next one is.
-    public func dismissDetectedCall() {
-        guard case .callDetected = phase else { return }
+    /// The pill's dismiss. The same call is not offered again. With `quiet`
+    /// (the × button, not the offer timing out), neither is the next call from
+    /// that app or site for 30 minutes, so a dropped and rejoined huddle stays
+    /// quiet. FluidVoice holds back a dismissed app for 30 minutes too
+    /// (altic-dev/FluidVoice, `MeetingAutoDetector`).
+    public func dismissDetectedCall(quiet: Bool = true) {
+        guard case let .callDetected(source) = phase else { return }
+        if quiet { quietUntil[Self.offerKey(source)] = Date().addingTimeInterval(Self.dismissedQuiet) }
         phase = .idle
+    }
+
+    static let dismissedQuiet: TimeInterval = 30 * 60
+    private var quietUntil: [String: Date] = [:]
+    private static func offerKey(_ source: CallSource) -> String {
+        switch source { case let .app(bundleID, _): return bundleID; case let .browser(_, host): return host }
     }
 
     public func startRecording(source: CallSource? = nil) {
@@ -244,7 +255,8 @@ import VoiceIQSpeech
                 return
             }
             try mark(&meta, .transcribing)
-            let (transcript, onDevice) = try await transcribe(folder: folder, config: cfg)
+            let (heard, onDevice) = try await transcribe(folder: folder, config: cfg)
+            let transcript = Self.corrected(heard, rules: DictionaryStore().replacementRules())
             let words = transcript.reduce(0) { $0 + $1.text.split(whereSeparator: \.isWhitespace).count }
             guard words >= Self.minimumSummarizableWords else {
                 Log.meeting.info("transcript too short to summarize (\(words, privacy: .public) words)")
@@ -330,6 +342,18 @@ import VoiceIQSpeech
         return try MeetingNotesPrompt.parse(text)
     }
 
+    /// The dictionary's wrong → right spellings, applied to what was heard.
+    /// Google takes no custom vocabulary with diarization, so a meeting is
+    /// transcribed verbatim and fixed here, as dictation is. FluidVoice applies
+    /// its replacements to meetings the same way (altic-dev/FluidVoice).
+    nonisolated static func corrected(_ transcript: [TranscriptSegment], rules: [ReplacementEngine.Rule]) -> [TranscriptSegment] {
+        transcript.map { segment in
+            var segment = segment
+            segment.text = ReplacementEngine.apply(rules, to: segment.text)
+            return segment
+        }
+    }
+
     /// The notes of a meeting transcribed on device, when they stay on it:
     /// written by the on-device writer when the user picked it, or the
     /// transcript-only stub when writing is off, or when no key is stored and
@@ -400,6 +424,12 @@ import VoiceIQSpeech
     private func detected(_ source: CallSource?) {
         detectedSource = source
         if let source {
+            if let until = quietUntil[Self.offerKey(source)], until > Date() {
+                // A quiet app's call can replace another offer directly; that
+                // offer's call is gone, so it must not stay up.
+                if case .callDetected = phase { phase = .idle; onCallEnded?() }
+                return
+            }
             switch phase {
             case .idle, .callDetected: phase = .callDetected(source); onCallDetected?(source)
             case .recording, .failed: return

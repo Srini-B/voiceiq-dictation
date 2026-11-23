@@ -20,7 +20,21 @@ public enum AXInserter {
         /// or is a different field of the same app than the one dictation
         /// started in. A blind ⌘V would paste the transcript into the thief.
         case focusElsewhere
+        /// Focus is on a control that never takes text (a button, a menu, a
+        /// slider), so a ⌘V would do nothing and the words would look pasted.
+        case notATextField
     }
+
+    /// Roles that can't take a paste. Windows, groups, web areas and the
+    /// application itself are left out: terminals, remote desktops and VMs
+    /// report those and still accept ⌘V. The idea is FluidVoice's
+    /// (altic-dev/FluidVoice, `DeliveryTargetAssessment`); this list is our own.
+    public nonisolated static let rolesWithoutText: Set<String> = [
+        "AXButton", "AXCheckBox", "AXRadioButton", "AXPopUpButton", "AXMenuButton",
+        "AXMenu", "AXMenuBar", "AXMenuBarItem", "AXMenuItem", "AXDisclosureTriangle",
+        "AXSlider", "AXIncrementor", "AXScrollBar", "AXProgressIndicator", "AXBusyIndicator",
+        "AXToolbar", "AXImage", "AXStaticText", "AXColorWell", "AXLevelIndicator",
+    ]
 
     /// The target app's focused element when text can be typed into it (its
     /// selected text is settable, the same test the insert below needs), else
@@ -130,8 +144,12 @@ public enum AXInserter {
         // Never write into secure fields.
         var roleRef: CFTypeRef?
         if AXUIElementCopyAttributeValue(element, kAXRoleAttribute as CFString, &roleRef) == .success,
-           let role = roleRef as? String, role == "AXSecureTextField" {
-            return .notPossible
+           let role = roleRef as? String {
+            if role == "AXSecureTextField" { return .notPossible }
+            if rolesWithoutText.contains(role) {
+                Log.insertion.info("AXInserter: focus is on a \(role, privacy: .public), not a text field — no blind paste")
+                return .notATextField
+            }
         }
 
         // Readable value is the precondition for verification; without it we cannot

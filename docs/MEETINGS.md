@@ -86,6 +86,12 @@ after three polls without its call, even when another source shows on them,
 so a call that ended gives way to the next one. A recording in progress
 keeps its call.
 
+Pressing × on the offer keeps that app, or that site in a browser, from
+being offered again for 30 minutes (`MeetingEngine.dismissedQuiet`), so a
+huddle that drops and is rejoined does not ask again. An offer that folds
+away on its own after 30 s hides only that call. Option-M still records
+during the quiet time. FluidVoice holds back a dismissed app the same way.
+
 VoiceiQ's own processes never count.
 
 WebKit's XPC services (`com.apple.WebKit.*`, such as "Safari Graphics and
@@ -452,6 +458,17 @@ docs/design/meeting-prompt-rulebook.md. Fixes from 2026-10-29:
   person, product and term, with every transcript spelling that means it
   (`"Nitin": ["Nithin", "Lithin", "Nathan"]`). Every other field uses those
   spellings. `MeetingNotes` ignores the field when decoding.
+- **Dictionary spellings in the transcript.** Google takes no custom
+  vocabulary together with diarization, so the transcript is heard verbatim.
+  The Dictionary's wrong → right spellings (`ReplacementEngine`) are then
+  applied to every segment before it is saved
+  (`MeetingEngine.corrected`), as they are to a dictation, so the saved
+  transcript, the notes and the chat all read the corrected words. Speakers
+  and timestamps are unchanged.
+- **No delete while busy.** A meeting that is recording, transcribing or
+  writing notes can't be deleted, on the Mac (the More menu is disabled)
+  or on iPhone (no swipe to delete), so its Gemini calls never run on with
+  nowhere to save.
 
 ## Redo and progress
 
