@@ -134,6 +134,13 @@ final class VoiceSession: ObservableObject {
         }
     }
 
+    /// Back to the iPhone's mic for the warm session, once a dictation's
+    /// capture has stopped.
+    func useKeepAliveInput() {
+        guard isActive else { return }
+        audio.useKeepAliveInput()
+    }
+
     /// No dictation or meeting is running. The warm window counts down.
     private func becameIdle() {
         scheduleWarmEnd()
@@ -211,7 +218,7 @@ final class VoiceSession: ObservableObject {
 
     /// A dictation is about to start its capture: move to the input
     /// Settings › Dictation › Microphone picks. It returns to the iPhone's
-    /// mic when the dictation is back to `.warm`.
+    /// mic once transcription starts, and again at `.warm`.
     func useDictationInput() {
         audio.useDictationInput(MobileSettings.microphoneChoice)
     }

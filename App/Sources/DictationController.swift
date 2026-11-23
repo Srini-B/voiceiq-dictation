@@ -468,7 +468,7 @@ final class DictationController {
         // actor that grows without bound as history grows — and the hotkey is
         // already armed, so a key press would queue behind it.
         Task {
-            await scanner.scanAndRecover()
+            await scanner.scanAndRecover(sparing: { [weak self] in self?.coordinator.activeSessionFolders ?? [] })
             queue.start()
             Task.detached(priority: .utility) {
                 RetentionPolicy().purge()

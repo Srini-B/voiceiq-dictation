@@ -43,6 +43,10 @@ extension MeetingNotesPrompt {
             "Meeting: \(date), \(Int((context.durationSeconds / 60).rounded())) minutes, app: \(context.app ?? "unknown").",
             "Names: \(known.isEmpty ? "none known" : known.joined(separator: ", ")).",
         ]
+        if let event = context.calendarEvent {
+            let oneLine: (String) -> String = { String($0.replacingOccurrences(of: "\n", with: " ").prefix(120)) }
+            parts.append("Calendar event: \(oneLine(event.title)) (use it as the title unless the discussion is about something else). Invited: \(event.attendees.isEmpty ? "nobody else" : event.attendees.prefix(30).map(oneLine).joined(separator: ", ")) (use these spellings; being invited does not make someone a speaker).")
+        }
         let references = userReferences(context).trimmingCharacters(in: .whitespacesAndNewlines)
         if !references.isEmpty { parts.append(String(references.prefix(4_000))) }
         // About three characters a token, with room for the rest of the prompt.

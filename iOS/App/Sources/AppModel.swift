@@ -504,6 +504,9 @@ final class AppModel: ObservableObject {
             session.recordingStartedAt = nil
             session.dictationPhase = .processing
             if processingSince == nil { processingSince = Date() }
+            // Capture has stopped once transcription starts (finalizing may
+            // still drain buffers), so a Bluetooth dictation leaves call audio here.
+            if case .transcribing = state, !(previousState == .transcribing) { session.useKeepAliveInput() }
         case .idle, .done, .cancelled, .failed:
             if let since = processingSince {
                 // How long the transcript and cleanup took, and where the app was.

@@ -202,8 +202,10 @@ import VoiceIQSpeech
             currentFolder = folder; currentMeta = meta
             #if os(macOS)
             screenNames = ScreenNameSampler(source: source); screenNames?.start()
-            if let source, call != nil {
-                following = Self.follow(source, mic: mic, system: system)
+            if let source {
+                // A call that already ended before the offer was accepted has
+                // no processes to follow, but its recording still stops.
+                if call != nil { following = Self.follow(source, mic: mic, system: system) }
                 keepAfterCallEnd = false
                 endWatch = watchForCallEnd(source, mic: mic, system: system)
             }
@@ -452,7 +454,7 @@ import VoiceIQSpeech
             startedAt: meta.startedAt, durationSeconds: meta.durationSeconds, app: meta.source.map(Self.name),
             names: meta.speakerNames, screenNames: meta.screenNames, ownerName: settings.meetingOwnerName,
             vocabulary: dictionary.sanitizedVocabulary(), spellings: dictionary.spellings(),
-            writingRules: settings.customWritingRules)
+            writingRules: settings.customWritingRules, calendarEvent: meta.calendarEvent)
         return try await LocalWriter.notes(system: MeetingNotesPrompt.onDeviceSystem,
                                            user: MeetingNotesPrompt.onDeviceUser(transcript: transcript, context: context),
                                            runner: runner)

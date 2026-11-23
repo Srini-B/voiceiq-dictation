@@ -172,8 +172,8 @@ only choice that adds `.allowBluetoothHFP`, so AirPods or a car switch to
 call audio only while such a dictation records. Between dictations the warm
 session always pins the iPhone's mic without HFP: `AppModel`'s capture
 factory calls `VoiceSession.useDictationInput()` before each capture engine
-starts, and the session returns to the iPhone's mic when the dictation is
-back to `.warm`. Meetings record from the warm session's input, the iPhone's
+starts, and the session returns to the iPhone's mic once transcription
+starts (capture has stopped by then), and again at `.warm`. Meetings record from the warm session's input, the iPhone's
 mic. The setting replaced the Bool `preferBuiltInMic`: a stored `true` reads
 as Automatic and `false` as Bluetooth until the user picks again. The port
 orders come from Hex (see `THIRD_PARTY_NOTICES.md`).

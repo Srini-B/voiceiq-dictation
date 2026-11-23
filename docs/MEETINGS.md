@@ -102,7 +102,7 @@ sound above about −40 dBFS for 45 s (`SoundClock`), the pill shows "Meeting
 ended · Stopping in 30s" with Stop now and Keep recording. At zero the
 recording stops and the notes are made as usual. The call coming back
 cancels the countdown, and Keep recording holds until the call comes back
-and ends again. A recording started by hand is never stopped. The rules
+and ends again. A recording started without a detected call is never stopped automatically. The rules
 follow FluidVoice's; a browser call ends only when the browser plays no
 other sound.
 

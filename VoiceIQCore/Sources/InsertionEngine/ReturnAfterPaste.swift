@@ -59,6 +59,11 @@ public enum ReturnAfterPaste {
             Log.insertion.info("focus moved before Return — no Return")
             return
         }
+        // An Esc can land on the tap's thread while focus was being read.
+        if let escape = lastEscape.withLock({ $0 }), escape >= ended {
+            Log.insertion.info("Esc after the recording ended — no Return")
+            return
+        }
         guard let source = CGEventSource(stateID: .privateState),
               let down = CGEvent(keyboardEventSource: source, virtualKey: 36, keyDown: true),
               let up = CGEvent(keyboardEventSource: source, virtualKey: 36, keyDown: false) else { return }

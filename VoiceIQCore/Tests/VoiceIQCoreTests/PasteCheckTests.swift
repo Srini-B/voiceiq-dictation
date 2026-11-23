@@ -27,6 +27,9 @@ final class PasteCheckTests: XCTestCase {
         // The app reformatted the field, or the user edited it: not a verdict either way.
         XCTAssertEqual(PasteCheck.verdict(before: before, after: reading("Draft", caret: 5), text: "more words"), .unknown)
         XCTAssertEqual(PasteCheck.verdict(before: before, after: nil, text: "more words"), .unknown)
+        // A same-length change over the selection that isn't the dictation.
+        let selected = reading("draft", caret: 0, selected: 5)
+        XCTAssertEqual(PasteCheck.verdict(before: selected, after: reading("Draft", caret: 0), text: "hello"), .unknown)
     }
 
     #if os(macOS)

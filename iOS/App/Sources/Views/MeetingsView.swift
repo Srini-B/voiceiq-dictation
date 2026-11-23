@@ -129,7 +129,7 @@ private struct MeetingRow: View {
         let selected = prominence == .increased
         HStack(alignment: .top, spacing: Theme.Spacing.m) {
             VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                Text(meta.title ?? meta.calendarEvent?.title ?? "Notes")
+                Text([meta.title, meta.calendarEvent?.title].compactMap { $0 }.first { !$0.isEmpty } ?? "Notes")
                     .font(Theme.Fonts.callout())
                     .foregroundStyle(selected ? Theme.Colors.onAccent : Theme.Colors.ink)
                     .lineLimit(1)

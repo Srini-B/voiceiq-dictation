@@ -65,7 +65,9 @@ final class PillHUDController {
         switch state {
         case .notice(let message), .error(let message): text = message
         case .meetingPrompt(let name): text = "Record this meeting? \(name). Nothing is recording yet."
-        case .meetingEnding: text = "Meeting ended. The recording stops in 30 seconds unless you keep recording."
+        case .meetingEnding(let until):
+            let seconds = max(1, Int(until.timeIntervalSinceNow.rounded()))
+            text = "Meeting ended. The recording stops in \(seconds) seconds unless you keep recording."
         default: return
         }
         NSAccessibility.post(element: NSApplication.shared, notification: .announcementRequested, userInfo: [

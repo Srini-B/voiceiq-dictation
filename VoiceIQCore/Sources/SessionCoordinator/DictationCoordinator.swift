@@ -669,7 +669,9 @@ public final class DictationCoordinator: ObservableObject {
     /// quietly, and anything else is kept in History and reported.
     private func failDetached(_ job: Session, error: Error) {
         defer { endDetached(job.id) }
-        if case .some(.emptyTranscript) = error as? TranscriptionError, job.peakLevel < Self.silencePeakThreshold {
+        if case .some(.emptyTranscript) = error as? TranscriptionError,
+           job.peakLevel < Self.silencePeakThreshold
+            || ((job.meta.audioDurationSeconds ?? 0) < 0.6 && job.peakLevel < Self.shortClipSpeechPeak) {
             try? FileManager.default.removeItem(at: job.folder)
             onSessionDiscard?(job.id)
             return

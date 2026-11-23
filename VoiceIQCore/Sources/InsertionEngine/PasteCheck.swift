@@ -37,10 +37,19 @@ public enum PasteCheck {
         guard let after else { return .unknown }
         let added = text.utf16.count
         let grewBy = after.value.utf16.count - before.value.utf16.count
-        if after.value != before.value, grewBy == added - before.selectionLength { return .landed }
+        // The length alone could be a same-length edit elsewhere ("draft" →
+        // "Draft"), so the text must also sit where the paste put it.
+        if after.value != before.value, grewBy == added - before.selectionLength,
+           holds(text, at: before.caret, in: after.value) { return .landed }
         if after.caret == before.caret + added, added > 0 { return .landed }
         if occurrences(of: text, in: after.value) > occurrences(of: text, in: before.value) { return .landed }
         return after == before ? .missed : .unknown
+    }
+
+    private static func holds(_ text: String, at offset: Int, in value: String) -> Bool {
+        let units = Array(value.utf16), inserted = Array(text.utf16)
+        guard offset >= 0, offset + inserted.count <= units.count else { return false }
+        return Array(units[offset..<(offset + inserted.count)]) == inserted
     }
 
     private static func occurrences(of text: String, in value: String) -> Int {
