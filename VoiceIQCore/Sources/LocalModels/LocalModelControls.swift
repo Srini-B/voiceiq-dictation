@@ -1,13 +1,13 @@
 import SwiftUI
 import VoiceIQSpeech
 
-/// The model list shared by the macOS and iOS settings. While on-device
-/// transcription is on, every model has a row: the leading check selects it,
-/// and the trailing action downloads, cancels, or deletes that model alone.
-/// While it is off, only models on disk or in transit keep a row, so they can
-/// still be cancelled or deleted. The English tools pack follows the same
-/// rules but is never selected. The selected model also transcribes meetings
-/// kept on device, so the rows stay offered and selectable while that is on.
+/// The speech models in the shared on-device transcription group
+/// (`SpeechSourceSection`). While on-device transcription is on, every model
+/// has a row: the leading check selects it, and the trailing action
+/// downloads, cancels, or deletes that model alone. While it is off, only
+/// models on disk or in transit keep a row, so they can still be cancelled or
+/// deleted. The selected model also transcribes meetings kept on device, so
+/// the rows stay offered and selectable while that is on.
 @MainActor
 public struct LocalModelControls: View {
     private let localEnabled: Bool
@@ -24,22 +24,14 @@ public struct LocalModelControls: View {
     }
 
     public var body: some View {
-        if LocalModelSupport.isAvailable {
-            ForEach(LocalSpeechModel.available, id: \.self) { model in
-                LocalModelRow(
-                    store: .store(for: model),
-                    offered: localEnabled || meetingsLocal,
-                    selection: localEnabled || meetingsLocal ? (isSelected: model == selection, select: { selection = model }) : nil,
-                    languages: model.languages,
-                    language: localEnabled && model == selection ? languageBinding(for: model) : nil
-                )
-            }
-            LocalModelRow(store: .englishTools, offered: localEnabled, selection: nil)
-            if localEnabled {
-                Text(Self.englishNote)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
+        ForEach(LocalSpeechModel.available, id: \.self) { model in
+            LocalModelRow(
+                store: .store(for: model),
+                offered: localEnabled || meetingsLocal,
+                selection: localEnabled || meetingsLocal ? (isSelected: model == selection, select: { selection = model }) : nil,
+                languages: model.languages,
+                language: localEnabled && model == selection ? languageBinding(for: model) : nil
+            )
         }
     }
 
@@ -52,45 +44,12 @@ public struct LocalModelControls: View {
             }
         )
     }
-
-    static let englishNote = "English tools add dictionary correction for English dictation. Without them, on-device transcription still works."
 }
 
-/// The speaker diarizer's row, offered while meetings are kept on device.
+/// One model's row: its name (or select button), size, and download,
+/// cancel or delete action.
 @MainActor
-public struct LocalMeetingControls: View {
-    private let meetingsLocal: Bool
-
-    public init(meetingsLocal: Bool) {
-        self.meetingsLocal = meetingsLocal
-    }
-
-    public var body: some View {
-        if LocalModelSupport.isAvailable {
-            LocalModelRow(store: .speakerDiarizer, offered: meetingsLocal, selection: nil)
-        }
-    }
-}
-
-/// The on-device writer's row, offered while it writes on-device
-/// transcripts and notes. Devices that do not offer it show nothing.
-@MainActor
-public struct LocalWriterControls: View {
-    private let offered: Bool
-
-    public init(offered: Bool) {
-        self.offered = offered
-    }
-
-    public var body: some View {
-        if LocalWriterSupport.isAvailable {
-            LocalModelRow(store: .writer, offered: offered, selection: nil)
-        }
-    }
-}
-
-@MainActor
-private struct LocalModelRow: View {
+struct LocalModelRow: View {
     @ObservedObject var store: LocalModelStore
     /// Shown even before download; off, a row stays only while there is
     /// something on disk or in transit to cancel or delete.
@@ -147,8 +106,10 @@ private struct LocalModelRow: View {
         }
     }
 
-    private var isVisible: Bool {
-        switch store.state {
+    private var isVisible: Bool { Self.isVisible(store.state, offered: offered) }
+
+    static func isVisible(_ state: LocalModelState, offered: Bool) -> Bool {
+        switch state {
         case .unsupported: return false
         case .notDownloaded, .failed: return offered
         case .downloading, .ready, .deleting: return true
@@ -234,8 +195,8 @@ private struct LocalModelRow: View {
     }
 }
 
-/// Section footer: the hardware requirement, the cloud fallback while the
-/// selected model is missing, or the first-run note once it is on disk.
+/// Transcription footer: the cloud fallback while the selected model is
+/// missing, or the first-run note once it is on disk.
 @MainActor
 public struct LocalModelFooter: View {
     private let localEnabled: Bool
@@ -247,9 +208,7 @@ public struct LocalModelFooter: View {
     }
 
     public var body: some View {
-        if !LocalModelSupport.isAvailable {
-            Text(LocalModelSupport.requirement)
-        } else if localEnabled {
+        if localEnabled {
             if store.state == .ready {
                 Text(Self.firstRunNote)
             } else {
