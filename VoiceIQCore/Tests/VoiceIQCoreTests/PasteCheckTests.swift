@@ -30,6 +30,7 @@ final class PasteCheckTests: XCTestCase {
         // A same-length change over the selection that isn't the dictation.
         let selected = reading("draft", caret: 0, selected: 5)
         XCTAssertEqual(PasteCheck.verdict(before: selected, after: reading("Draft", caret: 0), text: "hello"), .unknown)
+        XCTAssertEqual(PasteCheck.verdict(before: selected, after: reading("Draft", caret: 5), text: "hello"), .unknown)
     }
 
     #if os(macOS)
