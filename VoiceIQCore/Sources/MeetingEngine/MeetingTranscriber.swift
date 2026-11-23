@@ -301,8 +301,13 @@ public struct MeetingTranscriber: Sendable {
     /// 30-minute two-person call: without this the
     /// two people swapped ids between windows; the owner's words were 422
     /// mic-only windows to 119 far-side ones.
+    /// That holds only when the reference clip got no label of its own, so
+    /// no voice says otherwise, and never when the call showed two or more
+    /// other people (`expected`): then a new voice is a new speaker.
+    /// MEASURED 2026-11-23 on a three-person Meet call: the rule put the
+    /// second remote person under the first's id in every window.
     static func place(_ raw: [DiarizedWord], audio request: AssembledAudio, call: CallAudio, known: [TimedWord],
-                      mapping linked: [String: String], idPrefix: String = "s") -> [TimedWord] {
+                      mapping linked: [String: String], remote expected: Int? = nil, idPrefix: String = "s") -> [TimedWord] {
         typealias Placed = (text: String, label: String, start: Double, end: Double)
         // A word the provider left without a speaker belongs to the one before
         // it; an empty label of its own became a speaker who never existed.
