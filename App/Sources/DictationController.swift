@@ -476,6 +476,11 @@ final class DictationController {
         }
     }
 
+    /// The menu's Join and Record for the next calendar meeting.
+    func joinMeeting(_ join: CalendarMeetings.Upcoming.Join) {
+        meetings.join(join)
+    }
+
     func openHistory() {
         openMainWindow(section: .history)
     }

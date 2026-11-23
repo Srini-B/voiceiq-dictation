@@ -20,6 +20,7 @@ final class StatusItemController: NSObject {
     private let onStartHandsFree: () -> Void
     private let onOpenAbout: () -> Void
     private let onCheckForUpdates: () -> Void
+    private let onJoinMeeting: (CalendarMeetings.Upcoming.Join) -> Void
     private let templateImage: NSImage
     private var animationTimer: Timer?
     private var animationStartedAt = Date()
@@ -31,7 +32,8 @@ final class StatusItemController: NSObject {
         onOpenSettings: @escaping () -> Void,
         onStartHandsFree: @escaping () -> Void,
         onOpenAbout: @escaping () -> Void,
-        onCheckForUpdates: @escaping () -> Void
+        onCheckForUpdates: @escaping () -> Void,
+        onJoinMeeting: @escaping (CalendarMeetings.Upcoming.Join) -> Void
     ) {
         self.statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         self.onOpenHistory = onOpenHistory
@@ -40,6 +42,7 @@ final class StatusItemController: NSObject {
         self.onStartHandsFree = onStartHandsFree
         self.onOpenAbout = onOpenAbout
         self.onCheckForUpdates = onCheckForUpdates
+        self.onJoinMeeting = onJoinMeeting
         self.templateImage = Self.loadTemplateImage()
         super.init()
 
@@ -176,8 +179,8 @@ final class StatusItemController: NSObject {
         header.title = "Next Meeting · \(CalendarMeetings.when(next.start, now: Date()))"
         title.title = next.title
         join.isHidden = next.join == nil
-        join.title = next.join.map { "Join \($0.app)" } ?? ""
-        join.representedObject = next.join?.url
+        join.title = next.join.map { "Join \($0.app) and Record" } ?? ""
+        join.representedObject = next.join
     }
 
     @objc private func openHistory() {
@@ -205,8 +208,8 @@ final class StatusItemController: NSObject {
     }
 
     @objc private func joinNextMeeting(_ sender: NSMenuItem) {
-        guard let url = sender.representedObject as? URL else { return }
-        NSWorkspace.shared.open(url)
+        guard let join = sender.representedObject as? CalendarMeetings.Upcoming.Join else { return }
+        onJoinMeeting(join)
     }
 
     @objc private func selectMicrophone(_ sender: NSMenuItem) {

@@ -18,6 +18,7 @@ struct MeetingsPane: View {
     @StateObject private var folders = MeetingFolderModel()
     /// The row under the pointer, which shows its folder button.
     @State private var hovered: MeetingID?
+    @StateObject private var nextMeeting = NextMeetingModel()
 
     var body: some View {
         HStack(spacing: 0) {
@@ -57,7 +58,10 @@ struct MeetingsPane: View {
 
     private var sidebar: some View {
         VStack(spacing: 0) {
-            NextMeetingCard()
+            if let next = nextMeeting.next {
+                NextMeetingCard(meeting: next, now: nextMeeting.now, engine: engine)
+                    .padding([.horizontal, .top], VoiceIQUI.Spacing.s)
+            }
             Button {
                 // As Option-M: a call already detected becomes the meeting's source.
                 engine.toggleRecording()
@@ -69,7 +73,7 @@ struct MeetingsPane: View {
             .tint(recording ? VoiceIQUI.Colors.gRed : nil)
             .buttonStyle(.borderedProminent)
             .padding(.horizontal, VoiceIQUI.Spacing.s)
-            .padding(.top, VoiceIQUI.Spacing.l)
+            .padding(.top, nextMeeting.next == nil ? VoiceIQUI.Spacing.l : VoiceIQUI.Spacing.s)
             .padding(.bottom, VoiceIQUI.Spacing.xs)
             folderFilter
             List(folders.shown(meetings), selection: $selection) { meeting in
@@ -118,6 +122,8 @@ struct MeetingsPane: View {
                 }
             }
         }
+        // The card takes the empty titlebar strip above Record, so Record moves down less.
+        .ignoresSafeArea(.container, edges: nextMeeting.next == nil ? [] : .top)
     }
 
     /// Which meetings the list shows: all, or one folder's.

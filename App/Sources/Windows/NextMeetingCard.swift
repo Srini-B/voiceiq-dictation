@@ -1,32 +1,41 @@
+import AppKit
 import SwiftUI
 import VoiceIQCore
 
-/// The next calendar meeting, at the top of Meetings. Shows nothing until the
-/// calendar is connected or when no meeting is coming up in the next week.
+/// The next calendar meeting, at the top of Meetings.
 struct NextMeetingCard: View {
-    @StateObject private var model = NextMeetingModel()
+    let meeting: CalendarMeetings.Upcoming
+    let now: Date
+    @ObservedObject var engine: MeetingEngine
 
     var body: some View {
-        if let next = model.next {
-            VStack(alignment: .leading, spacing: VoiceIQUI.Spacing.xxs) {
-                Text("Next meeting · \(CalendarMeetings.when(next.start, now: model.now))")
-                    .font(VoiceIQUI.TypeScale.labelSmall())
-                    .foregroundStyle(.secondary)
-                Text(next.title).font(VoiceIQUI.TypeScale.body()).lineLimit(2)
-                if let join = next.join {
-                    Link(destination: join.url) {
-                        Label("Join \(join.app)", systemImage: "video")
-                            .font(VoiceIQUI.TypeScale.label())
-                    }
-                    .padding(.top, VoiceIQUI.Spacing.xxs)
-                    .help(join.url.absoluteString)
+        VStack(alignment: .leading, spacing: VoiceIQUI.Spacing.xxs) {
+            Text("Next meeting · \(CalendarMeetings.when(meeting.start, now: now))")
+                .font(VoiceIQUI.TypeScale.labelSmall())
+                .foregroundStyle(.secondary)
+            Text(meeting.title).font(VoiceIQUI.TypeScale.body()).lineLimit(2)
+            if let join = meeting.join {
+                Button { engine.join(join) } label: {
+                    Label("Join \(join.app) and Record", systemImage: "video")
+                        .frame(maxWidth: .infinity)
                 }
+                .controlSize(.large)
+                .buttonStyle(.bordered)
+                .padding(.top, VoiceIQUI.Spacing.xs)
+                .help(join.url.absoluteString)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(VoiceIQUI.Spacing.s)
-            .background(RoundedRectangle(cornerRadius: VoiceIQUI.Radius.medium).fill(VoiceIQUI.Colors.surfaceContainer))
-            .padding(.horizontal, VoiceIQUI.Spacing.s)
-            .padding(.top, VoiceIQUI.Spacing.l)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(VoiceIQUI.Spacing.s)
+        .background(RoundedRectangle(cornerRadius: VoiceIQUI.Radius.medium).fill(VoiceIQUI.Colors.surfaceContainer))
+    }
+}
+
+extension MeetingEngine {
+    /// Records the call from before it is joined, the way the Record button
+    /// does, then opens the call. Already recording: only opens it.
+    func join(_ join: CalendarMeetings.Upcoming.Join) {
+        if !isRecording { toggleRecording() }
+        NSWorkspace.shared.open(join.url)
     }
 }
