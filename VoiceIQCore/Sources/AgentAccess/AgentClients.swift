@@ -118,9 +118,13 @@ public enum AgentClient: String, CaseIterable, Identifiable, Sendable {
                                                   options: .regularExpression) != nil {
                 throw CocoaError(.fileReadCorruptFile)
             }
-            // Escapes in a table name aren't decoded here, so such a name
-            // could be VoiceiQ's own table in disguise.
-            if Self.tomlLines(text).contains(where: { $0.table != nil && $0.line.contains("\\") }) {
+            // Escapes in a table name or key aren't decoded here, so such a
+            // name could be `mcp_servers` or VoiceiQ's own table in disguise.
+            if Self.tomlLines(text).contains(where: { line in
+                guard !line.inString else { return false }
+                let key = line.table != nil ? Substring(line.line) : line.line.firstIndex(of: "=").map { line.line[..<$0] } ?? ""
+                return key.contains("\\")
+            }) {
                 throw CocoaError(.fileReadCorruptFile)
             }
             guard let block = Self.tomlOurBlock(text) else { return nil }
@@ -249,10 +253,11 @@ public enum AgentClient: String, CaseIterable, Identifiable, Sendable {
 
     /// Each line of `text` with its table key path when it is a table header,
     /// so a header-like line inside a `"""` or `'''` string isn't taken for one.
-    private static func tomlLines(_ text: String) -> [(line: String, table: [String]?)] {
+    private static func tomlLines(_ text: String) -> [(line: String, table: [String]?, inString: Bool)] {
         var open: Substring?
         return text.components(separatedBy: "\n").map { line in
-            let table = open == nil ? tomlTable(line) : nil
+            let inString = open != nil
+            let table = inString ? nil : tomlTable(line)
             var rest = Substring(line)
             while !rest.isEmpty {
                 if let delimiter = open {
@@ -279,7 +284,7 @@ public enum AgentClient: String, CaseIterable, Identifiable, Sendable {
                     rest = rest.dropFirst()
                 }
             }
-            return (line, table)
+            return (line, table, inString)
         }
     }
 
@@ -290,7 +295,7 @@ public enum AgentClient: String, CaseIterable, Identifiable, Sendable {
     /// The lines of `[mcp_servers.voiceiq]` itself, without its sub-tables; nil when it isn't there.
     private static func tomlOurBlock(_ text: String) -> String? {
         var inside = false, lines: [String] = []
-        for (line, table) in tomlLines(text) {
+        for (line, table, _) in tomlLines(text) {
             if let table { inside = table == ["mcp_servers", serverName] }
             if inside { lines.append(line) }
         }
@@ -299,7 +304,7 @@ public enum AgentClient: String, CaseIterable, Identifiable, Sendable {
 
     private static func tomlRemovingOurs(_ text: String) -> String {
         var inside = false, kept: [String] = []
-        for (line, table) in tomlLines(text) {
+        for (line, table, _) in tomlLines(text) {
             if let table { inside = isOurs(table) }
             if !inside { kept.append(line) }
         }

@@ -127,6 +127,12 @@ final class AgentClientsTests: XCTestCase {
         try AgentClient.codex.install(key: "new", home: home)
         XCTAssertEqual(try String(contentsOf: file, encoding: .utf8), escaped)
 
+        let escapedKey = "\"\\u006dcp_servers\" = { other = { command = \"other-mcp\" } }\n"
+        try escapedKey.write(to: file, atomically: true, encoding: .utf8)
+        XCTAssertEqual(AgentClient.codex.status(key: "new", home: home), .unreadable)
+        try AgentClient.codex.install(key: "new", home: home)
+        XCTAssertEqual(try String(contentsOf: file, encoding: .utf8), escapedKey)
+
         // Windows line endings still show the table that's already there.
         let crlf = "[mcp_servers.voiceiq]\r\nurl = \"\(AgentAPI.mcpURL)\"\r\nhttp_headers = { Authorization = \"Bearer new\" }\r\n"
         try crlf.write(to: file, atomically: true, encoding: .utf8)
