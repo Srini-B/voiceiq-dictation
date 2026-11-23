@@ -336,6 +336,8 @@ struct PrivacyPane: View {
                 Text("No middleman server, no account, no analytics, no keystroke logging. Only Google, plus the AI providers of any coding agents you let read History and meetings.")
             }
 
+            GranolaImportSection { Text("Import meetings") }
+
             Section {
                 Button("Delete All History…", role: .destructive) {
                     confirmingDelete = true

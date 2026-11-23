@@ -357,6 +357,7 @@ struct PrivacyView: View {
                 LabeledContent("Notes", value: "Your iCloud, to sync; not the audio")
                 LabeledContent("What you type", value: "Never")
             } header: { SettingsSectionHeader("What leaves your \(UIDevice.current.localizedModel)") }
+            GranolaImportSection { SettingsSectionHeader("Import meetings") }
         }
         .settingsPage(title: "Privacy")
     }
