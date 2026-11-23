@@ -42,11 +42,14 @@ public struct MeetingFoldersSnapshot: Codable, Equatable, Sendable {
     public func resolve(_ ids: [UUID]) -> [UUID] {
         let live = Set(folders.map(\.id))
         var seen = Set<UUID>()
-        return ids.compactMap { id in
-            var id = id
-            for _ in 0..<8 { guard let next = aliases[id.uuidString] else { break }; id = next }
-            return live.contains(id) && seen.insert(id).inserted ? id : nil
-        }
+        return ids.map(canonical).filter { live.contains($0) && seen.insert($0).inserted }
+    }
+
+    /// The folder an id stands for now: itself, or the folder it became.
+    func canonical(_ id: UUID) -> UUID {
+        var id = id
+        for _ in 0..<8 { guard let next = aliases[id.uuidString] else { break }; id = next }
+        return id
     }
 
     /// As long as the dictionary keeps its deletions.
@@ -156,10 +159,13 @@ extension MeetingStore {
         try writeFolderIDs(ids, id: meeting)
     }
 
-    /// Files the meeting in the folder, or takes it out.
+    /// Files the meeting in the folder, or takes it out. Other stored ids stay,
+    /// even of folders this device does not know yet: the folder list syncs
+    /// apart from the meetings and may arrive later.
     public func setMeeting(_ meeting: MeetingID, inFolder folder: UUID, _ member: Bool) throws {
-        var ids = folderIDs(of: meeting)
-        ids.removeAll { $0 == folder }
+        let snapshot = foldersSnapshot()
+        var ids = storedFolderIDs(of: meeting)
+        ids.removeAll { snapshot.canonical($0) == snapshot.canonical(folder) }
         if member { ids.append(folder) }
         try setFolderIDs(ids, for: meeting)
     }

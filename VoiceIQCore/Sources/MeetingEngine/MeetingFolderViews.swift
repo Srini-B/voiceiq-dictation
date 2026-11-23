@@ -25,6 +25,9 @@ public final class MeetingFolderModel: ObservableObject {
     @Published public private(set) var folders: [MeetingFolder] = []
     /// The live folders each meeting is in, as of the last `reload`.
     @Published public private(set) var filed: [MeetingID: [UUID]] = [:]
+    /// Each meeting's `folder-ids.json` as read, which may name folders that
+    /// have not synced here yet; `filed` is rebuilt from it when they do.
+    private var stored: [MeetingID: [UUID]] = [:]
     /// Nil shows every meeting.
     @Published public var filter: UUID?
     @Published public var edit: Edit?
@@ -41,11 +44,8 @@ public final class MeetingFolderModel: ObservableObject {
     }
 
     public func reload(_ meetings: [MeetingMeta]) {
+        stored = Dictionary(uniqueKeysWithValues: meetings.map { ($0.id, store.storedFolderIDs(of: $0.id)) })
         reloadFolders()
-        let snapshot = store.foldersSnapshot()
-        filed = Dictionary(uniqueKeysWithValues: meetings.map { meta in
-            (meta.id, snapshot.resolve(store.storedFolderIDs(of: meta.id)))
-        })
     }
 
     private func reloadFolders() {
@@ -53,7 +53,7 @@ public final class MeetingFolderModel: ObservableObject {
         folders = snapshot.folders
         // Combined with another folder, or deleted, here or on another device.
         if let filter { self.filter = snapshot.resolve([filter]).first }
-        filed = filed.mapValues(snapshot.resolve)
+        filed = stored.mapValues(snapshot.resolve)
     }
 
     /// The meetings the filter shows, in their order.
@@ -75,6 +75,7 @@ public final class MeetingFolderModel: ObservableObject {
     public func file(_ meeting: MeetingID, in folder: UUID, _ member: Bool) {
         do {
             try store.setMeeting(meeting, inFolder: folder, member)
+            stored[meeting] = store.storedFolderIDs(of: meeting)
             filed[meeting] = store.folderIDs(of: meeting)
         } catch {
             Log.meeting.error("meeting folders: could not file \(meeting.uuid.uuidString, privacy: .public): \(error)")
@@ -95,8 +96,7 @@ public final class MeetingFolderModel: ObservableObject {
         do {
             switch edit {
             case .create(let meeting)?:
-                let folder = try store.createFolder(named: draft)
-                if let meeting { file(meeting, in: folder.id, true) } else { filter = folder.id }
+                try createFolder(named: draft, fileIn: meeting)
             case .rename(let folder)?:
                 try store.renameFolder(folder.id, to: draft)
             case .delete?, nil:
@@ -105,6 +105,13 @@ public final class MeetingFolderModel: ObservableObject {
         } catch {
             Log.meeting.error("meeting folders: could not save a name: \(error)")
         }
+        reloadFolders()
+    }
+
+    /// A new folder, shown in the list, or with this meeting filed in it.
+    public func createFolder(named name: String, fileIn meeting: MeetingID?) throws {
+        let folder = try store.createFolder(named: name)
+        if let meeting { file(meeting, in: folder.id, true) } else { filter = folder.id }
         reloadFolders()
     }
 
@@ -130,6 +137,52 @@ public struct MeetingFolderToggles: View {
         }
         if !model.folders.isEmpty { Divider() }
         Button("New Folder…", systemImage: "folder.badge.plus") { model.begin(.create(fileIn: meeting)) }
+    }
+}
+
+/// The folders as a list to tick, for a sheet: what a swipe on an iPhone
+/// row opens, where a menu cannot.
+public struct MeetingFolderPicker: View {
+    @ObservedObject var model: MeetingFolderModel
+    let meeting: MeetingID
+    let done: () -> Void
+    @State private var newName = ""
+
+    public init(model: MeetingFolderModel, meeting: MeetingID, done: @escaping () -> Void) {
+        self.model = model; self.meeting = meeting; self.done = done
+    }
+
+    public var body: some View {
+        NavigationStack {
+            List {
+                ForEach(model.folders) { folder in
+                    Button {
+                        model.file(meeting, in: folder.id, !model.isFiled(meeting, in: folder.id))
+                    } label: {
+                        HStack {
+                            Label(folder.name, systemImage: "folder")
+                            Spacer()
+                            if model.isFiled(meeting, in: folder.id) { Image(systemName: "checkmark").fontWeight(.semibold) }
+                        }
+                    }
+                }
+                // A field, not New Folder…: the name dialog is attached under this sheet.
+                HStack {
+                    Image(systemName: "folder.badge.plus").foregroundStyle(.secondary)
+                    TextField("New folder", text: $newName).onSubmit(add)
+                    if !newName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { Button("Add", action: add) }
+                }
+            }
+            .navigationTitle("Folders")
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done", action: done) } }
+        }
+    }
+}
+
+extension MeetingFolderPicker {
+    private func add() {
+        guard (try? model.createFolder(named: newName, fileIn: meeting)) != nil else { return }
+        newName = ""
     }
 }
 

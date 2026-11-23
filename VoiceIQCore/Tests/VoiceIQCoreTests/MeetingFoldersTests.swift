@@ -85,6 +85,14 @@ final class MeetingFoldersTests: XCTestCase {
         try store.setMeeting(id, inFolder: a.id, false)
         XCTAssertEqual(store.folderIDs(of: id), [])
 
+        // A folder that has not synced here yet stays on the meeting while another is toggled.
+        let notYetHere = UUID()
+        try store.setFolderIDs([notYetHere], for: id)
+        try store.setMeeting(id, inFolder: a.id, true)
+        try store.setMeeting(id, inFolder: a.id, false)
+        XCTAssertEqual(store.storedFolderIDs(of: id), [notYetHere])
+        try store.setFolderIDs([], for: id)
+
         // Renamed to another folder's name, the two become one, with the meetings of both.
         let c = try store.createFolder(named: "C")
         try store.setFolderIDs([c.id], for: id)

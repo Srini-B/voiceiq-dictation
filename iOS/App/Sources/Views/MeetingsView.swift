@@ -5,6 +5,8 @@ struct MeetingsView: View {
     @EnvironmentObject private var model: AppModel
     @State private var meetings: [MeetingMeta] = []
     @StateObject private var folders = MeetingFolderModel()
+    /// The note a swipe is filing, in the folder sheet.
+    @State private var filing: MeetingID?
 
     var body: some View {
         ListDetailNavigation {
@@ -28,6 +30,10 @@ struct MeetingsView: View {
                             // with nowhere to save (the Mac's More menu is disabled the same way).
                             .deleteDisabled(model.meetings.isBusy(meta.id))
                             .contextMenu { Menu("Folders", systemImage: "folder") { MeetingFolderToggles(model: folders, meeting: meta.id) } }
+                            // The iPhone's stand-in for the Mac's hover button.
+                            .swipeActions(edge: .leading) {
+                                Button("Folders", systemImage: "folder") { filing = meta.id }.tint(Theme.Colors.accent)
+                            }
                         }
                         .onDelete(perform: delete)
                         if shown.isEmpty {
@@ -59,6 +65,12 @@ struct MeetingsView: View {
             DetailPlaceholder(systemImage: "doc.text", title: "No note selected")
         }
         .meetingFolderEditing(folders, noun: "notes")
+        .sheet(isPresented: Binding(get: { filing != nil }, set: { if !$0 { filing = nil } })) {
+            if let filing {
+                MeetingFolderPicker(model: folders, meeting: filing) { self.filing = nil }
+                    .presentationDetents([.medium, .large])
+            }
+        }
     }
 
     private var shown: [MeetingMeta] { folders.shown(meetings) }

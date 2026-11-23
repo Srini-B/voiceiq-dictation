@@ -16,6 +16,8 @@ struct MeetingsPane: View {
     @State private var confirmingDelete = false
     @State private var exported: ExportResult?
     @StateObject private var folders = MeetingFolderModel()
+    /// The row under the pointer, which shows its folder button.
+    @State private var hovered: MeetingID?
 
     var body: some View {
         HStack(spacing: 0) {
@@ -80,6 +82,26 @@ struct MeetingsPane: View {
                         Text("\(Image(systemName: "folder")) \(names.joined(separator: ", "))")
                             .font(VoiceIQUI.TypeScale.labelSmall()).foregroundStyle(.secondary).lineLimit(1)
                     }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .overlay(alignment: .trailing) {
+                    if hovered == meeting.id {
+                        Menu {
+                            MeetingFolderToggles(model: folders, meeting: meeting.id)
+                        } label: {
+                            Image(systemName: "folder.badge.plus").accessibilityLabel("Folders")
+                        }
+                        .menuStyle(.borderlessButton)
+                        .menuIndicator(.hidden)
+                        .fixedSize()
+                        .padding(6)
+                        // Over the row's text, which runs to its edge.
+                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: VoiceIQUI.Radius.medium))
+                        .help("Put this meeting in folders")
+                    }
+                }
+                .onHover { inside in
+                    if inside { hovered = meeting.id } else if hovered == meeting.id { hovered = nil }
                 }
                 .tag(meeting.id)
                 .contextMenu { Menu("Folders") { MeetingFolderToggles(model: folders, meeting: meeting.id) } }
