@@ -236,7 +236,9 @@ speaker-labelled words.
 The extension is in `App/Resources/ChromeExtension` (Manifest V3, Chrome 116
 or later). Its manifest `key` fixes the extension ID at
 `gjobkaplebdoedjfopfmogibphjmglaa`, so the native host manifest can name it.
-The only permission is `nativeMessaging`. Its content scripts run at
+Its permissions are `nativeMessaging`, and since 1.2 `scripting` with host
+access to the same call sites, which it uses only to put `relay.js` back into
+open call pages after it reloads itself. Its content scripts run at
 `document_start`, in every frame, on Google Meet, Teams
 (`teams.microsoft.com`, `teams.live.com`, `teams.cloud.microsoft`), Zoom
 (`*.zoom.us`, `*.zoom.com`), Jitsi Meet (`meet.jit.si`), Whereby, Slack,
@@ -318,7 +320,12 @@ said 1.1.0. Two things now swap it without the user:
    version on disk differs from the running one and no call tab has reported
    for a minute, it calls `chrome.runtime.reload()`, which swaps the worker
    and the content scripts at once and sends a new `hello`. A reload during a
-   call would cut off that tab's content scripts, so it waits. Measured: with
+   call would cut off that tab's content scripts, so it waits. A call page
+   left open after its call keeps its page script but loses its relay in a
+   reload, so on `onInstalled` with reason `update` the worker injects
+   `relay.js` again into every open tab on the call sites; a relay whose
+   extension context is still alive keeps the new copy from adding a second
+   listener. Measured: with
    a call tab open the old version kept reporting, and 61 s after the call
    ended the new version said hello through a newly started host.
 

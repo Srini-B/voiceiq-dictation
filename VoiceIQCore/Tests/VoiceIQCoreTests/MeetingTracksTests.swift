@@ -60,6 +60,13 @@ final class MeetingTracksTests: XCTestCase {
         XCTAssertEqual(out, ["you", "you", "s2", "s2"])
     }
 
+    func testAWordMovedToTheOwnerLendsNoIdToFarSideWords() throws {
+        let audio = try call(mic: [0...1], system: [1.2...11])
+        let words = [word("ok", "s1", 0.2), word("so", "you", 2), word("then", "s2", 8)]
+
+        XCTAssertEqual(MeetingTranscriber.byTrack(words, audio: audio).map(\.speaker), ["you", "s2", "s2"])
+    }
+
     func testFarSideWordsWithNoFarSpeakerNearbyStayOnePerson() throws {
         let audio = try call(mic: [0...1], system: [5...11])
         let words = [word("hi", "you", 0.2), word("so", "you", 6), word("the", "you", 7), word("plan", "you", 8)]

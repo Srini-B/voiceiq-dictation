@@ -59,10 +59,11 @@ enum CallWindowText {
     private static func buttonText(_ element: AXUIElement) -> String? {
         var parts: [String] = []
         for key in [kAXTitleAttribute, kAXDescriptionAttribute] {
-            if let text = value(element, key) as? String, !text.isEmpty { parts.append(text) }
+            if let text = value(element, key) as? String, !text.isEmpty, !parts.contains(text) { parts.append(text) }
         }
         for child in (value(element, kAXChildrenAttribute) as? [AXUIElement] ?? []).prefix(4) {
-            if let text = value(child, kAXValueAttribute) as? String ?? value(child, kAXTitleAttribute) as? String, !text.isEmpty {
+            if let text = value(child, kAXValueAttribute) as? String ?? value(child, kAXTitleAttribute) as? String, !text.isEmpty,
+               !parts.contains(text) {
                 parts.append(text)
             }
         }

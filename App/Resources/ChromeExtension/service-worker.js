@@ -62,7 +62,21 @@ chrome.runtime.onMessage.addListener((message, sender) => {
 });
 
 function announceInstalled() { send({ t: Date.now(), page: 'hello', tab: -1, active: [] }); }
-chrome.runtime.onInstalled.addListener(announceInstalled);
+
+// A reload cuts off the relay in pages already open, while their page script
+// keeps running, so a call joined later in the same page would report
+// nothing until the page reloads. The relay goes back into those pages.
+async function restoreRelays() {
+  const pages = chrome.runtime.getManifest().content_scripts.flatMap((script) => script.matches);
+  for (const tab of await chrome.tabs.query({ url: pages })) {
+    chrome.scripting.executeScript({ target: { tabId: tab.id, allFrames: true }, files: ['relay.js'] }).catch(() => {});
+  }
+}
+
+chrome.runtime.onInstalled.addListener(({ reason }) => {
+  announceInstalled();
+  if (reason === 'update') restoreRelays().catch(() => {});
+});
 chrome.runtime.onStartup.addListener(announceInstalled);
 checkForUpdate();
 // The open port keeps this worker alive between calls, so an update that

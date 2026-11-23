@@ -1,5 +1,11 @@
 // Passes the page script's speaker events to the extension's service worker.
 // The page can post anything, so only the expected shape goes on.
+// The worker injects this file again into open call pages after the
+// extension reloads; a relay whose extension context is still alive stays
+// the only one.
+(() => {
+if (globalThis.__voiceiqRelayAlive && globalThis.__voiceiqRelayAlive()) return;
+globalThis.__voiceiqRelayAlive = () => { try { return !!chrome.runtime.id; } catch { return false; } };
 window.addEventListener('message', (event) => {
   const data = event.data;
   if (event.source !== window || !data || data.voiceiq !== 'speakers') return;
@@ -21,3 +27,4 @@ window.addEventListener('message', (event) => {
   }
   chrome.runtime.sendMessage(message).catch(() => {});
 });
+})();

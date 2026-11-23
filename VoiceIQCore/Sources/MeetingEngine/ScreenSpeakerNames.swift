@@ -161,7 +161,7 @@ public enum ScreenSpeakerNames {
     public static func expectedRemote(samples: [ScreenNameSample], roster: MeetingRoster?) -> Int? {
         var counts: [Int: Int] = [:]
         for count in samples.compactMap(\.count) { counts[count, default: 0] += 1 }
-        let fromScreen = counts.filter { $0.value >= min(minimumSeen, counts.values.reduce(0, +)) }.keys.max().map { $0 - 1 }
+        let fromScreen = counts.filter { $0.value >= minimumSeen }.keys.max().map { $0 - 1 }
         let fromRoster = roster.map { max($0.remote.count, ($0.count ?? 0) - 1) }
         let all = [fromScreen, fromRoster].compactMap { $0 }
         return all.isEmpty ? nil : max(0, all.max()!)

@@ -151,7 +151,9 @@ one file per day. The extension reports during every call on those sites
 while Chrome runs, whether or not VoiceiQ records it. It also sends one
 "hello" report, with no streams and no page, when it is installed or updated
 and when Chrome starts. To update itself it reads its own version from the
-folder VoiceiQ copies it to; it reads no other files. Settings reads which
+folder VoiceiQ copies it to; it reads no other files. After updating it puts
+its relay back into call pages already open; that is the only use of its
+access to the call sites. Settings reads which
 Chrome profiles have the extension from those profiles' preference files on
 this Mac, and keeps nothing from them. When a recording stops, VoiceiQ copies the
 reports from that meeting's tab to `browser-speakers.json` in the meeting's

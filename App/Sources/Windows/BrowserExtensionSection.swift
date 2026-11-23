@@ -139,7 +139,9 @@ struct BrowserExtensionSection: View {
         return "On in \(places). Last heard from it \(lastHeard.formatted(.relative(presentation: .named)))"
     }
 
-    /// Chrome runs an older copy than this VoiceiQ ships. From 1.2 the
+    /// The newest report came from an older copy than this VoiceiQ ships. The
+    /// report may be from a profile that since removed the extension, so the
+    /// note speaks of the last report. From 1.2 the
     /// extension reloads itself once no call is open; 1.1 and older cannot,
     /// and Chrome swaps them only when it next starts (their service worker
     /// had another file name).
@@ -147,9 +149,9 @@ struct BrowserExtensionSection: View {
         guard !enabled.isEmpty, let bundled = BrowserExtension.bundledVersion,
               let latest = BrowserSpeakerLog.latest(root: FileLayout.appSupportRoot) else { return nil }
         guard let running = latest.version else {
-            return "Chrome is still running an older copy of the extension. It switches to \(bundled) the next time Chrome starts."
+            return "The extension last reported from an older copy than \(bundled). Chrome switches to \(bundled) the next time it starts."
         }
-        return running == bundled ? nil : "Chrome is running version \(running) of the extension. It updates itself to \(bundled) once no call is open."
+        return running == bundled ? nil : "The extension last reported as version \(running). It updates itself to \(bundled) once no call is open."
     }
 
     private func install() {

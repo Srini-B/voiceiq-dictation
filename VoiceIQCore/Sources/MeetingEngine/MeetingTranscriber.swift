@@ -215,7 +215,9 @@ public struct MeetingTranscriber: Sendable {
     /// far-side speaker's.
     static func byTrack(_ words: [TimedWord], audio: CallAudio) -> [TimedWord] {
         let heard = words.map { audio.sources($0.start...max($0.end, $0.start)) }
-        let far = words.indices.filter { words[$0].speaker != MeetingSpeaker.you }
+        // Far-side speakers heard on the system track; a mic-only word is no evidence of one.
+        let micOnly = heard.map { $0.system == 0 && $0.mic >= 2 }
+        let far = words.indices.filter { (index: Int) -> Bool in words[index].speaker != MeetingSpeaker.you && !micOnly[index] }
         // One id for all such words: they are most likely one person.
         let fallback = "s\((words.compactMap { Int($0.speaker.dropFirst()) }.max() ?? 0) + 1)"
         var out = words
@@ -229,7 +231,7 @@ public struct MeetingTranscriber: Sendable {
                 } else {
                     out[index].speaker = fallback
                 }
-            } else if source.system == 0, source.mic >= 2 {
+            } else if micOnly[index] {
                 out[index].speaker = MeetingSpeaker.you
             }
         }
