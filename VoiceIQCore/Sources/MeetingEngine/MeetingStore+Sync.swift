@@ -2,14 +2,19 @@ import CryptoKit
 import Foundation
 
 /// A meeting as it travels through iCloud: everything but the audio.
+/// The folder list itself syncs apart, through `MeetingFolderSync`.
 public struct SyncedMeeting: Codable, Equatable, Sendable {
     public var meta: MeetingMeta
     public var notes: MeetingNotes?
     public var transcript: [TranscriptSegment]
     public var chat: [MeetingChatTurn]
+    /// The folders it is filed in (`MeetingStore.folderIDs(of:)`). Nil for
+    /// none, so a meeting in no folder has the digest it had before folders.
+    public var folderIDs: [UUID]?
 
-    public init(meta: MeetingMeta, notes: MeetingNotes?, transcript: [TranscriptSegment], chat: [MeetingChatTurn]) {
-        self.meta = meta; self.notes = notes; self.transcript = transcript; self.chat = chat
+    public init(meta: MeetingMeta, notes: MeetingNotes?, transcript: [TranscriptSegment], chat: [MeetingChatTurn],
+                folderIDs: [UUID]? = nil) {
+        self.meta = meta; self.notes = notes; self.transcript = transcript; self.chat = chat; self.folderIDs = folderIDs
     }
 
     /// Names the content, so a meeting goes up again only when it changed.
@@ -141,8 +146,11 @@ extension MeetingStore {
               meta.status == .done else { return nil }
         let notes = try? loadNotes(id: id), transcript = try? loadTranscript(id: id)
         let exists = { FileManager.default.fileExists(atPath: folder.appendingPathComponent($0).path) }
-        if notes == nil && exists("notes.json") || transcript == nil && exists("transcript.json") { return nil }
-        return SyncedMeeting(meta: meta, notes: notes, transcript: transcript ?? [], chat: loadChat(id: id))
+        let folderIDs = try? load([UUID].self, from: folder.appendingPathComponent(Self.folderIDsFile))
+        if notes == nil && exists("notes.json") || transcript == nil && exists("transcript.json")
+            || folderIDs == nil && exists(Self.folderIDsFile) { return nil }
+        return SyncedMeeting(meta: meta, notes: notes, transcript: transcript ?? [], chat: loadChat(id: id),
+                             folderIDs: folderIDs.flatMap { $0.isEmpty ? nil : $0 })
     }
 
     /// Finished, and changed since it was last sent or received.
@@ -236,6 +244,7 @@ extension MeetingStore {
         }
         try save(meeting.transcript, id: id, name: "transcript.json", fromSync: true)
         try save(meeting.chat, id: id, name: "chat.json", fromSync: true)
+        try writeFolderIDs(meeting.folderIDs ?? [], id: id, fromSync: true)
         try save(meeting.meta, id: id, name: "meta.json", fromSync: true)
     }
 

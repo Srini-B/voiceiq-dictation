@@ -124,6 +124,39 @@ final class AgentAPITests: XCTestCase {
         XCTAssertTrue(try toolText("get_meeting", ["id": "nope"]).isError)
     }
 
+    func testMeetingsShowTheirFoldersAndFilterByOne() throws {
+        let meetings = MeetingStore(root: root.appendingPathComponent("meetings"))
+        let clients = try meetings.createFolder(named: "Clients"), sales = try meetings.createFolder(named: "Sales")
+        let gone = try meetings.createFolder(named: "Old")
+        try meetings.setFolderIDs([sales.id, gone.id, clients.id], for: older)
+        try meetings.setFolderIDs([clients.id], for: newer)
+        try meetings.deleteFolder(gone.id)
+
+        func ids(_ arguments: [String: Any]) throws -> [String]? {
+            let list = try JSONSerialization.jsonObject(with: Data(try toolText("list_meetings", arguments).text.utf8)) as? [[String: Any]]
+            return list?.compactMap { $0["id"] as? String }
+        }
+        XCTAssertEqual(try ids(["folder": "sales"]), [older.uuid.uuidString])
+        XCTAssertEqual(try ids(["folder": clients.id.uuidString]), [newer.uuid.uuidString, older.uuid.uuidString])
+        XCTAssertEqual(try ids(["folder": "Clients", "query": "budget"]), [older.uuid.uuidString])
+        let unknown = try toolText("list_meetings", ["folder": "Old"])
+        XCTAssertTrue(unknown.isError)
+        XCTAssertTrue(unknown.text.contains("Clients, Sales"), unknown.text)
+        // An id wins over a folder whose name is that id.
+        try meetings.createFolder(named: sales.id.uuidString)
+        XCTAssertEqual(try ids(["folder": sales.id.uuidString]), [older.uuid.uuidString])
+
+        // A deleted folder no longer shows; the rest show by name.
+        let json = try toolText("get_meeting", ["id": older.uuid.uuidString, "format": "json"]).text
+        let meeting = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any])
+        XCTAssertEqual((meeting["meeting"] as? [String: Any])?["folders"] as? [String], ["Clients", "Sales"])
+        XCTAssertTrue(try toolText("get_meeting", ["id": older.uuid.uuidString]).text.contains("Folders: Clients, Sales\n"))
+
+        let rest = try JSONSerialization.jsonObject(with: get("/v1/meetings", query: ["folder": "SALES"]).body) as? [[String: Any]]
+        XCTAssertEqual(rest?.compactMap { $0["id"] as? String }, [older.uuid.uuidString])
+        XCTAssertEqual(get("/v1/meetings", query: ["folder": "nope"]).status, 404)
+    }
+
     func testParseWaitsForTheWholeBody() {
         let head = "POST /mcp?x=1 HTTP/1.1\r\nHost: 127.0.0.1:47823\r\nContent-Length: 4\r\n\r\n"
         XCTAssertEqual(AgentAPI.parse(Data((head + "ab").utf8)), .incomplete)

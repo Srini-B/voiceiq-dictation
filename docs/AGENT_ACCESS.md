@@ -16,6 +16,7 @@ It is off until you turn it on in **Settings › Advanced › Coding agents**.
 |---|---|
 | Dictations: text as inserted, raw text when it differs, app, time, length, status, the device for ones synced from another device | History (`HistoryStore`) |
 | Meetings: title, start and end, length, status, speakers | `MeetingStore` meta |
+| The folders each meeting is in, by name | `folders.json` and each meeting's `folder-ids.json` |
 | Notes: summary, decisions, action items with owners and deadlines, type-specific sections | `notes.json` |
 | Transcript: each turn with the speaker's display name and start and end seconds | `transcript.json` |
 | Questions asked about a meeting in VoiceiQ, with answers | `chat.json` |
@@ -84,8 +85,8 @@ A client that only runs stdio servers can reach it through a bridge such as
 | Tool | Arguments | Returns |
 |---|---|---|
 | `list_dictations` | `query`, `since`, `limit` (default 50) | Dictations, newest first, as JSON |
-| `list_meetings` | `query`, `since`, `limit` (default 20) | Meetings, newest first, as JSON. With `query`, only meetings whose title, notes or transcript mention it, with up to five matching lines such as `[01:04] Priya: ...` |
-| `get_meeting` | `id` (or `latest`), `format` (`markdown` default, or `json`) | Notes, transcript with `[mm:ss]` times and speaker names, and the questions asked in VoiceiQ |
+| `list_meetings` | `query`, `folder`, `since`, `limit` (default 20) | Meetings, newest first, as JSON, each with the names of its folders. With `folder` (a folder's name in any case, or its id), only the meetings in it; an unknown name is an error that lists the folders. With `query`, only meetings whose title, notes or transcript mention it, with up to five matching lines such as `[01:04] Priya: ...` |
+| `get_meeting` | `id` (or `latest`), `format` (`markdown` default, or `json`) | Its folders, notes, transcript with `[mm:ss]` times and speaker names, and the questions asked in VoiceiQ |
 
 `since` takes a day (`2026-11-01`, midnight in the Mac's time zone) or an ISO
 8601 time. Every tool is marked read-only. The server's instructions tell the
@@ -100,7 +101,7 @@ Every route needs the same `Authorization: Bearer <key>` header.
 | `GET /v1/health` | `{"status":"ok","version":"0.7.12"}` |
 | `GET /v1/dictations?query=&since=&limit=` | Dictations |
 | `GET /v1/dictations/<id>` | One dictation |
-| `GET /v1/meetings?query=&since=&limit=` | Meetings |
+| `GET /v1/meetings?query=&folder=&since=&limit=` | Meetings; an unknown `folder` is a 404 |
 | `GET /v1/meetings/<id>` | One meeting with notes, transcript and questions (JSON) |
 | `GET /v1/meetings/<id>?format=markdown` | The same as Markdown |
 
