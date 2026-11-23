@@ -119,6 +119,25 @@ after a delete.
    recording and a Gemini key exists, the dictation goes to Gemini and the
    load finishes as a warm-up.
 
+Two fixes from Hex (MIT) apply to the on-device transcript:
+
+- **Numbers as digits** (English, Fluid Speech Mini and Pro, Mac and iPhone).
+  The model's `EnglishText` writes numbers with `SpokenNumbers`, for every
+  dictation: the text inserted with writing Off and the transcript the
+  writers (Gemini or on device) receive. "Ten to fifteen percent" → "10 to
+  15%", "five dollars" → "$5", while "No one came", "I work nine to five" and
+  "four ninety nine" stay as said. Text that already has digits keeps them.
+  It replaced FluidAudio's NeMo inverse normalization, which got 32 of Hex's
+  110 number cases right ("Ten to fifteen percent" → "14:50 %"), so the
+  `NemoTextProcessing` trait is no longer linked.
+- **Sound-alike spellings.** After the Dictionary's replacement rules,
+  `SoundAlikeSpelling` gives a capitalised name that sounds like a Dictionary
+  term, and is spelled nearly the same, the term's spelling: "Stacy" →
+  "Stacey"; mid-sentence only, a name that just sounds the same and is at
+  most two letters off, as in "Let's invite Jeff" → "Let's invite Geoff"
+  ("Jeff fixed it" stays). English only. It runs on the text inserted as
+  transcribed (writing Off, no key, or the writer failing).
+
 History's Retry and launch recovery use `OnDeviceFirstTranscription`: the
 saved recording goes to the on-device model first, then Gemini when a key is
 stored. With no key nothing is sent (`GeminiClient` refuses to send).

@@ -30,7 +30,7 @@ repository's Apache 2.0 license. See `App/Resources/Sounds/ATTRIBUTION.md`.
 |---|---|
 | [Sauce](https://github.com/Clipy/Sauce) (Clipy) | MIT |
 | [GRDB.swift](https://github.com/groue/GRDB.swift) (Gwendal Roué) | MIT |
-| [FluidAudio](https://github.com/FluidInference/FluidAudio) 0.18.2 (Fluid Inference), with the `NemoTextProcessing` and `Diarizer` traits | Apache 2.0; bundled dependencies retain their upstream notices |
+| [FluidAudio](https://github.com/FluidInference/FluidAudio) 0.18.2 (Fluid Inference), with the `Diarizer` trait | Apache 2.0; bundled dependencies retain their upstream notices |
 | [Sparkle](https://github.com/sparkle-project/Sparkle) (from M8) | Sparkle License (permissive, MIT-style) |
 
 ## Vendored libraries
@@ -114,21 +114,6 @@ one pack. No weights are bundled with the app. File hashes are in
   https://huggingface.co/FluidInference/parakeet-ctc-110m-coreml (Fluid
   Inference), revision `accdafd8cf8a2ff1cabe3c11e54416b405d409aa`. License:
   [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
-
-### NeMo text processing (inverse text normalization)
-
-- Linked through FluidAudio's `NemoTextProcessing` trait into the Mac speech
-  helper and the iOS app, not the Mac UI.
-- Binary: `NemoTextProcessing.xcframework` from
-  https://github.com/FluidInference/text-processing-rs release v0.3.1
-  (Fluid Inference). License: Apache 2.0.
-- Includes compiled weighted-FST grammars derived from
-  https://github.com/NVIDIA/NeMo-text-processing (Copyright (c) NVIDIA
-  CORPORATION & AFFILIATES), Apache 2.0. It statically links rustfst and
-  flate2, each MIT OR Apache 2.0, and their MIT or Apache 2.0 dependencies.
-  It contains no neural network weights.
-- Full notice: `ThirdPartyLicenses/NemoTextProcessing-LICENSE.md` in the
-  FluidAudio 0.18.2 source.
 
 ### WebRTC audio processing (AEC3 echo canceller)
 - File: `VoiceIQCore/Vendor/WebRTCAEC/CVoiceIQAEC.xcframework` (static library, arm64 and x86_64)
@@ -228,6 +213,17 @@ SOFTWARE.
   `src/dictation/yolo_mode.rs`), the calendar reader
   (`VoiceIQCore/Sources/MeetingEngine/CalendarMeetings.swift`, from
   `src/calendar.rs`) and the sound volume setting (`src/feedback.rs`)
+- Also, from Hex at `db515bda`: `VoiceIQCore/Speech/SpokenNumbers.swift`
+  (numbers as digits, from `ios/HEXShared/Formatting/SpokenNumbers.swift`,
+  added in `06ac30af` and `339a5caa`) and
+  `VoiceIQCore/Sources/FormattingPipeline/SoundAlikeSpelling.swift`
+  (Dictionary sound-alike spellings, from
+  `ios/HEXShared/Spelling/SoundAlikeSpelling.swift`, added in `165fa676`),
+  adapted with their test cases in
+  `VoiceIQCore/Tests/VoiceIQCoreTests/OnDeviceTextTests.swift`; and voice
+  isolation (`492d8c28`: `src/voice_processing.swift`,
+  `ios/HEXMobile/AudioBackend.swift`), rewritten in Swift in
+  `AudioCaptureEngine.swift` and `KeepAliveAudio.swift`
 - License: MIT
 
 ```

@@ -175,6 +175,19 @@ public struct SettingsStore: Sendable {
         Self.set(enabled, forKey: "calendarForMeetings")
     }
 
+    /// Voice isolation: dictation records through Apple's voice processing,
+    /// which turns down background noise. Off by default, as it is in Hex,
+    /// where it is an experiment: voice processing changes the microphone's
+    /// sound and level, can lower other audio a little, and can move a
+    /// Bluetooth headset to its call profile.
+    public var voiceIsolation: Bool {
+        Self.defaults.bool(forKey: "voiceIsolation")
+    }
+
+    public func setVoiceIsolation(_ enabled: Bool) {
+        Self.set(enabled, forKey: "voiceIsolation")
+    }
+
     /// Press Return after a dictation lands (Mac). Off by default: a Return
     /// sends messages, and a wrong send can't be taken back.
     public var pressReturnAfterPaste: Bool {

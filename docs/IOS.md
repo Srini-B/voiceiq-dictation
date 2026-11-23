@@ -178,6 +178,15 @@ mic. The setting replaced the Bool `preferBuiltInMic`: a stored `true` reads
 as Automatic and `false` as Bluetooth until the user picks again. The port
 orders come from Hex (see `THIRD_PARTY_NOTICES.md`).
 
+Voice isolation (Settings › Dictation, `SettingsStore.voiceIsolation`, off by
+default) turns on voice processing in the dictation's `AudioCaptureEngine`,
+which turns down background noise, with the same raw fallback as the Mac, and
+records in the `.voiceChat` session mode; the warm session goes back to
+`.default` with the iPhone's mic. The mode alone does not process the mic
+(Apple applies voice processing only with Voice-Processing I/O). Voice chat enables hands-free Bluetooth by
+itself, so with AirPods connected a dictation can switch them to call audio
+whatever the Microphone choice. From Hex `492d8c28` (MIT).
+
 The session also ends when the user taps End (app or Dynamic Island) or when
 an audio interruption cannot be resumed. A call or Siri interruption
 finalizes an in-progress dictation, so the words are kept. Settings ›

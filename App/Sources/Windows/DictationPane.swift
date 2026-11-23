@@ -34,6 +34,7 @@ struct DictationPane: View {
     @State private var screenContext = SettingsStore().screenContextEnabled
     @State private var copyRecovered = SettingsStore().copyRecoveredToClipboard
     @State private var calendar = SettingsStore().calendarForMeetings && CalendarMeetings.isAuthorized
+    @State private var voiceIsolation = SettingsStore().voiceIsolation
     @State private var pressReturn = SettingsStore().pressReturnAfterPaste
     @State private var pressReturnApps = SettingsStore().pressReturnApps
     @State private var preferredMicrophone = SettingsStore().preferredInputDeviceUID
@@ -57,6 +58,11 @@ struct DictationPane: View {
                 .onChange(of: preferredMicrophone) { _, uid in
                     settings.setPreferredInputDeviceUID(uid)
                 }
+                Toggle(isOn: $voiceIsolation) {
+                    Text("Voice isolation")
+                    Text("Turns down background noise while you dictate, using Apple's voice processing. It can lower other audio a little and move a Bluetooth headset to call quality. If the mic doesn't start with it, VoiceiQ records without it.")
+                }
+                .onChange(of: voiceIsolation) { _, enabled in settings.setVoiceIsolation(enabled) }
                 Toggle("Mute other audio while dictating", isOn: $muteOtherAudio)
                     .onChange(of: muteOtherAudio) { _, enabled in
                         settings.setMuteOtherAudioWhileDictating(enabled)

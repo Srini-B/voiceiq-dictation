@@ -92,6 +92,7 @@ actor ParakeetSession: LocalSpeechSession {
         let audioURL = audioURL
         let tools = tools
         let english = options.language.hasPrefix("en")
+        let options = options
         let task = Task { () throws -> LocalSpeechOutput? in
             guard SpeechAudio.fitsInMemory(framesWritten) else {
                 // FluidAudio's disk-backed path keeps memory constant.
@@ -102,7 +103,7 @@ actor ParakeetSession: LocalSpeechSession {
                 var decoder = TdtDecoderState.make(decoderLayers: await manager.decoderLayerCount)
                 let result = try await manager.transcribeDiskBacked(audioURL, decoderState: &decoder)
                 try Task.checkCancellation()
-                return Self.output(original: result.text, english: english, confidence: result.confidence)
+                return Self.output(original: result.text, english: english, confidence: result.confidence, options: options)
             }
             // The decoder and CTC spotter see the same samples, so token
             // timings and CTC frames share one clock.
@@ -123,7 +124,7 @@ actor ParakeetSession: LocalSpeechSession {
                 }
             }
             // Uncalibrated decoder confidence, for diagnostics only.
-            return Self.output(original: result.text, corrected: corrected, english: english, confidence: result.confidence)
+            return Self.output(original: result.text, corrected: corrected, english: english, confidence: result.confidence, options: options)
         }
         recognition = task
         let started = Date()
@@ -141,12 +142,14 @@ actor ParakeetSession: LocalSpeechSession {
     }
 
     /// English number formatting would rewrite other languages as English.
-    private static func output(original: String, corrected: String? = nil, english: Bool, confidence: Float?) -> LocalSpeechOutput? {
+    private static func output(original: String, corrected: String? = nil, english: Bool, confidence: Float?,
+                               options: LocalSpeechOptions) -> LocalSpeechOutput? {
         guard english else {
             let text = original.trimmingCharacters(in: .whitespacesAndNewlines)
             return text.isEmpty ? nil : LocalSpeechOutput(original: text, normalized: text, confidence: confidence)
         }
-        return EnglishText.output(original: original, corrected: corrected, confidence: confidence)
+        return EnglishText.output(original: original, corrected: corrected, confidence: confidence,
+                                  protectedTerms: options.vocabulary.map(\.text))
     }
 
     /// Joins in-flight Core ML work before deletion can remove its model files.

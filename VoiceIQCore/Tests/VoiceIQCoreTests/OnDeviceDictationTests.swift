@@ -8,19 +8,23 @@ final class OnDeviceDictationTests: XCTestCase {
     override func setUp() {
         UserDefaults.standard.removeObject(forKey: "dictionaryEntries")
         UserDefaults.standard.removeObject(forKey: "cleanupSource")
+        UserDefaults.standard.removeObject(forKey: "onDeviceSpeechLanguage")
     }
 
     override func tearDown() { setUp() }
 
     /// With Gemini writing off, an on-device transcript goes in as
-    /// transcribed, never to the network, and the Dictionary still fixes it.
+    /// transcribed, never to the network, and the Dictionary still fixes it,
+    /// sound-alike spellings included.
     func testWritingOffKeepsTranscriptAndAppliesDictionary() async throws {
         SettingsStore().setCleanupSource(.none)
+        SettingsStore().setLocalSpeechLanguage("en-US")
         _ = DictionaryStore().add(term: "Srini", misspelling: "Sreenie")
-        let transcript = TranscriptionResult(rawTranscript: "ping sreenie on Slack", cleanedTranscript: "Ping Sreenie on Slack.",
+        _ = DictionaryStore().add(term: "Stacey", misspelling: nil)
+        let transcript = TranscriptionResult(rawTranscript: "ping sreenie on Slack", cleanedTranscript: "Ping Sreenie and Stacy on Slack.",
                                              modelID: "fluid-speech-pro-local")
         let written = try await service.write(transcript, context: DictationContext())
-        XCTAssertEqual(written.cleanedTranscript, "Ping Srini on Slack.")
+        XCTAssertEqual(written.cleanedTranscript, "Ping Srini and Stacey on Slack.")
         XCTAssertEqual(written.rawTranscript, "ping sreenie on Slack")
         XCTAssertEqual(written.modelID, "fluid-speech-pro-local")
     }

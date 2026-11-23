@@ -80,10 +80,19 @@ final class KeepAliveAudio {
         // everything they play.
         var options: AVAudioSession.CategoryOptions = [.defaultToSpeaker, .allowBluetoothA2DP, .mixWithOthers]
         if dictationChoice == .bluetooth { options.insert(.allowBluetoothHFP) }
+        // Voice isolation: the capture engine turns on voice processing, and a
+        // dictation records in the voice-chat mode that goes with it. Between
+        // dictations the session goes back to the default mode. After Hex (MIT,
+        // github.com/anomalyco/hex 492d8c28, ios/HEXMobile/AudioBackend.swift).
+        let mode: AVAudioSession.Mode = dictationChoice != nil && SettingsStore().voiceIsolation ? .voiceChat : .default
+        // Voice chat turns on hands-free Bluetooth by itself, so the options
+        // read back with it even though they were set without it.
+        var current = session.categoryOptions
+        if mode == .voiceChat, !options.contains(.allowBluetoothHFP) { current.remove(.allowBluetoothHFP) }
         // Setting the same category again can still renegotiate the route, so
         // a dictation that changes nothing leaves it alone.
-        if session.category != .playAndRecord || session.mode != .default || session.categoryOptions != options {
-            try session.setCategory(.playAndRecord, mode: .default, options: options)
+        if session.category != .playAndRecord || session.mode != mode || current != options {
+            try session.setCategory(.playAndRecord, mode: mode, options: options)
         }
         try session.setActive(true)
         applyPreferredInput()

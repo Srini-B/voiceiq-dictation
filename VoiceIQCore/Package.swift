@@ -16,9 +16,10 @@ let package = Package(
     dependencies: [
         .package(url: "https://github.com/groue/GRDB.swift.git", from: "7.12.0"),
         .package(url: "https://github.com/Clipy/Sauce.git", from: "2.5.1"),
-        // Listing traits turns FluidAudio's defaults off: TTS stays out, and
-        // Diarizer gates OfflineDiarizerManager (LocalMeetingJob).
-        .package(url: "https://github.com/FluidInference/FluidAudio.git", exact: "0.18.2", traits: ["NemoTextProcessing", "Diarizer"]),
+        // Listing traits turns FluidAudio's defaults off: TTS and NeMo text
+        // processing stay out (`SpokenNumbers` writes numbers), and Diarizer
+        // gates OfflineDiarizerManager (LocalMeetingJob).
+        .package(url: "https://github.com/FluidInference/FluidAudio.git", exact: "0.18.2", traits: ["Diarizer"]),
     ],
     targets: [
         // WebRTC's AEC3 echo canceller and a small C bridge, built by
