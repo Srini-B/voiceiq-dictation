@@ -28,6 +28,9 @@ menu-bar menu. Mac and iPhone the same where possible.
   three states from call detection: Join and Record (no call from that
   service heard), Record (the call is heard, so the user joined another
   way), In Progress, disabled (recording).
+  Then Record was dropped: call detection knows a call's service, not which
+  meeting it is, so a call heard on Zoom may be an earlier meeting (Codex
+  review). cyron chose to keep Join and Record until a recording runs.
 - iPhone and iPad: a "Next meeting" section above the record card in Notes
   (`NextMeetingSection`).
 - The calendar permission text and the Settings copy on both say the next

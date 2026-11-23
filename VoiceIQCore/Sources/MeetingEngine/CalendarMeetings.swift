@@ -41,7 +41,7 @@ public enum CalendarMeetings {
     }
 
     /// An event may start this long after the recording does and still be its meeting.
-    public static let earlyStart: TimeInterval = 10 * 60
+    static let earlyStart: TimeInterval = 10 * 60
 
     /// The meeting the user is in at `date`: not all-day, cancelled, free or
     /// declined, with other people invited or a call link. When several
@@ -73,20 +73,6 @@ public enum CalendarMeetings {
         public struct Join: Equatable, Sendable {
             public var app: String
             public var url: URL
-            /// The service's domain, such as "zoom.us".
-            var service: String
-
-            /// Whether `call`, as call detection hears it, is this service's
-            /// call: its app, or one of its pages in a browser.
-            public func matches(_ call: CallSource) -> Bool {
-                switch call {
-                case let .app(bundleID, _):
-                    return CalendarMeetings.joinApps.contains { $0.service == service && $0.bundleIDs.contains(bundleID) }
-                case let .browser(_, host):
-                    let host = host.lowercased()
-                    return host == service || host.hasSuffix("." + service)
-                }
-            }
         }
 
         public var title: String
@@ -116,12 +102,12 @@ public enum CalendarMeetings {
     }
 
     /// Slack is left out: a slack.com link in an invite is rarely the call itself.
-    static let joinApps: [(service: String, app: String, bundleIDs: Set<String>)] = [
-        ("zoom.us", "Zoom", ["us.zoom.xos"]),
-        ("meet.google.com", "Google Meet", []),
-        ("teams.microsoft.com", "Teams", ["com.microsoft.teams2", "com.microsoft.teams"]),
-        ("teams.live.com", "Teams", ["com.microsoft.teams2", "com.microsoft.teams"]),
-        ("webex.com", "Webex", ["com.cisco.webexmeetingsapp", "Cisco-Systems.Spark", "com.webex.meetingmanager"]),
+    static let joinApps: [(service: String, app: String)] = [
+        ("zoom.us", "Zoom"),
+        ("meet.google.com", "Google Meet"),
+        ("teams.microsoft.com", "Teams"),
+        ("teams.live.com", "Teams"),
+        ("webex.com", "Webex"),
     ]
 
     /// The first https link in `text` to a call service, with the service's name.
@@ -130,7 +116,7 @@ public enum CalendarMeetings {
         for match in detector.matches(in: text, range: NSRange(text.startIndex..., in: text)) {
             guard let url = match.url, url.scheme == "https", let host = url.host?.lowercased() else { continue }
             if let entry = joinApps.first(where: { host == $0.service || host.hasSuffix("." + $0.service) }) {
-                return Upcoming.Join(app: entry.app, url: url, service: entry.service)
+                return Upcoming.Join(app: entry.app, url: url)
             }
         }
         return nil

@@ -126,23 +126,16 @@ minutes ago still shows, as "Now", so a late joiner can still join it. When
 the invite's link, location or notes hold a Zoom, Google Meet, Teams or Webex
 https link, a button joins it; Slack links are not offered, since an
 invite's slack.com link is rarely the call. On the Mac the card's button and
-the menu item follow the call (`NextMeetingButton`):
+the menu item (`NextMeetingButton`) read:
 
-- **Join Zoom and Record** while call detection hears no call from that
-  service: starts a recording, then opens the link, so the call is recorded
-  from its first second. The recording has no call source, even when another
-  call is detected at that moment, so it records all system audio and is not
-  stopped when the call ends.
-- **Record** once call detection hears that service's call (its app, or one
-  of its pages in a browser; `Upcoming.Join.matches`) and the meeting starts
-  within 10 minutes or has started: the user joined some other way. It
-  records that call like an accepted offer, following its audio and stopping
-  when it ends. Detection knows the service, not the meeting, so an earlier
-  call on the same service can look joined; the card keeps an "Open Zoom
-  Link" under Record, in the card and the menu, for that case.
+- **Join Zoom and Record**: starts a recording, then opens the link, so the
+  call is recorded from its first second. The recording has no call source,
+  so it records all system audio and is not stopped when the call ends. The
+  button reads the same when call detection hears a Zoom call: detection
+  knows the service, not the meeting, so that call may be another one.
 - **In Progress**, disabled, while any recording runs.
 
-Either way the recording takes the joined event's title and invitees
+The recording takes the joined event's title and invitees
 (`Upcoming.event`), not whatever event the clock falls in, so a meeting
 joined early is still named right. A recording started from the menu shows
 the pill, with its Stop, even when Accessibility is not granted. On iPhone
