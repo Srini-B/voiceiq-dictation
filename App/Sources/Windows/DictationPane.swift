@@ -39,6 +39,7 @@ struct DictationPane: View {
     @State private var pressReturnApps = SettingsStore().pressReturnApps
     @State private var preferredMicrophone = SettingsStore().preferredInputDeviceUID
     @State private var microphones = AudioInputDevices.list()
+    @State private var dictationSource = SettingsStore().dictationSource
 
     var body: some View {
         Form {
@@ -98,9 +99,12 @@ struct DictationPane: View {
             }
             .onChange(of: pressReturnApps) { _, apps in settings.setPressReturnApps(apps) }
 
-            SpeechSourceSection(device: "Mac") { Text("Speech") }
+            SpeechSourceSection(device: "Mac") { Text($0) }
 
-            SpokenLanguagesSection()
+            // On device, the selected model's own language picker applies.
+            if dictationSource == .gemini {
+                SpokenLanguagesSection()
+            }
 
             Section {
                 Toggle("Sounds", isOn: $sounds)
@@ -168,6 +172,7 @@ struct DictationPane: View {
             case "screenContextEnabled": screenContext = settings.screenContextEnabled
             case "copyRecoveredToClipboard": copyRecovered = settings.copyRecoveredToClipboard
             case "preferredInputDeviceUID": preferredMicrophone = settings.preferredInputDeviceUID
+            case "transcriptionSource": dictationSource = settings.dictationSource
             default: break
             }
         }
@@ -175,7 +180,7 @@ struct DictationPane: View {
 }
 
 /// The languages the user speaks (`SettingsStore.spokenLanguages`), sent to
-/// the dictation model as a hint.
+/// Gemini as a hint while it transcribes dictation.
 struct SpokenLanguagesSection: View {
     private let settings = SettingsStore()
     @State private var languages = SettingsStore().spokenLanguages

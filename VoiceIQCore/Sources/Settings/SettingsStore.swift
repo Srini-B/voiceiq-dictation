@@ -108,8 +108,9 @@ public struct SettingsStore: Sendable {
 
     /// The languages the user speaks, as ISO 639-3 codes from
     /// `SpokenLanguage.all`: the first is the main language and the rest are
-    /// the others it may hear. Empty detects the language. Dictation gets them
-    /// as a hint (`SpokenLanguage.promptLine`).
+    /// the others it may hear. Empty detects the language. A Gemini dictation
+    /// gets them as a hint (`SpokenLanguage.promptLine`); on-device dictation
+    /// uses `localSpeechLanguage` instead.
     /// Codes typed into the earlier free-text field read as their
     /// three-letter form ("hi" as "hin"); ones not listed are dropped.
     public var spokenLanguages: [String] {

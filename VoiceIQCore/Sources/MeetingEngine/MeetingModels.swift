@@ -257,6 +257,9 @@ public struct MeetingMeta: Codable, Equatable, Sendable, Identifiable {
     public var notesSpeakerNames: [String: String]?
     /// The calendar event that was on when the recording started, if the calendar is connected.
     public var calendarEvent: CalendarMeetings.Event?
+    /// The app the meeting was imported from ("Granola"); nil for one recorded
+    /// here. An imported meeting has no audio and no known length.
+    public var importedFrom: String?
 
     /// Speakers were named, renamed or cleared since the notes were written,
     /// so the notes may credit the wrong people.

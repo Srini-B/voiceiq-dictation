@@ -82,7 +82,8 @@ let package = Package(
         .testTarget(
             name: "VoiceIQCoreTests",
             dependencies: ["VoiceIQCore", "VoiceIQSpeech"],
-            path: "Tests"
+            path: "Tests",
+            resources: [.copy("VoiceIQCoreTests/Fixtures")]
         ),
     ],
     swiftLanguageModes: [.v6]

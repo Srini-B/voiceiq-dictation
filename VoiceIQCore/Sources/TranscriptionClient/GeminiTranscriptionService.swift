@@ -159,7 +159,7 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
         }
     }
 
-    private func dictationPrompt(context: DictationContext, writtenParts: [String]? = nil, transcript: String? = nil) -> String {
+    func dictationPrompt(context: DictationContext, writtenParts: [String]? = nil, transcript: String? = nil) -> String {
         let dictionary = DictionaryStore()
         let place = DictationPlace(appName: context.targetAppName,
                                    windowTitle: context.focusedField?.windowTitle,
@@ -167,7 +167,10 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
         return PromptV1.dictationPrompt(
             vocabulary: dictionary.sanitizedVocabulary(), spellings: dictionary.spellings(),
             customRules: settings.customWritingRules, spelling: SpellingVariant.system.promptLine,
-            languages: SpokenLanguage.promptLine(settings.spokenLanguages),
+            // The spoken languages are a Gemini dictation setting. On device,
+            // the model's own language applies, and a Gemini fallback or
+            // writing step gets no hint.
+            languages: settings.dictationSource == .gemini ? SpokenLanguage.promptLine(settings.spokenLanguages) : nil,
             imagesAttached: writtenParts == nil && !context.screenshots.isEmpty,
             surroundingText: context.focusedField?.surroundingText,
             place: place,

@@ -54,6 +54,28 @@ the meeting is marked failed.
 Screen context, when on, sends its screenshots with the Gemini writing
 request as it does with a Gemini dictation.
 
+Below the three choices, the models are grouped by their job, each group
+under its own header (`SpeechSourceSection`, the same on Mac, iPhone and
+iPad):
+
+| Group | Rows | Shown while |
+| --- | --- | --- |
+| On-device transcription | Fluid Speech Mini and Pro (the checked one is used, with its Language picker while Dictation is On device), Speaker Separation | Dictation or Meetings is On device; Speaker Separation only for Meetings |
+| Add-on for English dictation | English tools | Dictation is On device |
+| On-device writing | LFM3-Omni-2B | Writing rules and notes is On device |
+
+A group whose choice is not On device still shows while one of its models is
+on disk or downloading, with a note that it is not used, so the model can be
+deleted or the download cancelled.
+
+**Languages.** Settings → Dictation → Languages (Spoken language and Also
+spoken) shows only while Dictation is Gemini, and only a Gemini dictation's
+prompt gets them (`GeminiTranscriptionService.dictationPrompt`). With
+Dictation On device, the transcription group's Language picker applies, and
+neither the Gemini writing step nor a Gemini fallback is told the spoken
+languages. Meetings never get them: Gemini and the on-device models work out
+each language in a meeting by themselves.
+
 ## Models
 
 | Model | Size | Languages | Offered on |

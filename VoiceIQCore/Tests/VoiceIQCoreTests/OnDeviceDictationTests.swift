@@ -47,6 +47,23 @@ final class OnDeviceDictationTests: XCTestCase {
         }
     }
 
+    /// The spoken languages are a Gemini dictation setting: with Dictation On
+    /// device, the Gemini prompt (writing step or fallback) carries no hint.
+    func testSpokenLanguagesReachOnlyGeminiDictation() throws {
+        try XCTSkipUnless(LocalModelSupport.isAvailable, "On device reads as Gemini here")
+        let settings = SettingsStore()
+        settings.setSpokenLanguages(["eng", "tam"])
+        defer {
+            UserDefaults.standard.removeObject(forKey: "spokenLanguages")
+            UserDefaults.standard.removeObject(forKey: "transcriptionSource")
+        }
+        settings.setDictationSource(.gemini)
+        XCTAssertTrue(service.dictationPrompt(context: DictationContext()).contains("may also speak Tamil"))
+        settings.setDictationSource(.onDevice)
+        XCTAssertFalse(service.dictationPrompt(context: DictationContext(), transcript: "hello").contains("LANGUAGES:"))
+        XCTAssertFalse(service.dictationPrompt(context: DictationContext()).contains("LANGUAGES:"))
+    }
+
     /// A decode with no words is an empty dictation, judged by the
     /// coordinator like an empty Gemini transcript, not an empty insert.
     func testEmptyTranscriptIsAnEmptyDictation() async {
