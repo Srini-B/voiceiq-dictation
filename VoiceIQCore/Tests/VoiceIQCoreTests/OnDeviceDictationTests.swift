@@ -90,4 +90,51 @@ final class OnDeviceDictationTests: XCTestCase {
         XCTAssertTrue(fitted.contains("S1: opening"))
         XCTAssertTrue(fitted.contains("S2: final decision"))
     }
+
+    /// Core ML's prepared copies of the models (on the Mac, about 1 GB in
+    /// `~/Library/Caches/io.blue.voiceiq.localspeech`) go when a model is
+    /// deleted, and a launch with no model downloaded removes copies an older
+    /// build left behind. While a model is downloaded, the launch keeps them.
+    func testPreparedModelsGoWithTheModels() throws {
+        let fileManager = FileManager.default
+        let root = fileManager.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        FileLayout.overrideRoot = root
+        defer {
+            FileLayout.overrideRoot = nil
+            try? fileManager.removeItem(at: root)
+        }
+        let cache = LocalModelInstaller.preparedModelCache
+        func prepare() throws {
+            let bundle = cache.appendingPathComponent("com.apple.e5rt.e5bundlecache/25A1/model.bundle", isDirectory: true)
+            try fileManager.createDirectory(at: bundle, withIntermediateDirectories: true)
+            try Data("program".utf8).write(to: bundle.appendingPathComponent("main.e5"))
+        }
+
+        let manifest = LocalModelManifest.speakerDiarizer
+        for file in manifest.files {
+            let url = manifest.installDirectory.appendingPathComponent(file.path)
+            try fileManager.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            XCTAssertTrue(fileManager.createFile(atPath: url.path, contents: nil))
+            let handle = try FileHandle(forWritingTo: url)
+            try handle.truncate(atOffset: UInt64(file.size))
+            try handle.close()
+        }
+        try Data(manifest.revision.utf8).write(to: manifest.installDirectory.appendingPathComponent(LocalModelManifest.markerName))
+        XCTAssertTrue(LocalModelInstaller.isInstalled(manifest))
+        try prepare()
+
+        LocalModelInstaller.removeUnusedPreparedModels()
+        XCTAssertTrue(fileManager.fileExists(atPath: cache.path), "a downloaded model still uses its prepared copy")
+
+        // What `LocalModelStore.deleteModel` runs. The store itself is a
+        // singleton whose launch cleanup could reach the real folder once
+        // the override is gone.
+        try LocalModelInstaller.removeAll(manifest)
+        XCTAssertFalse(fileManager.fileExists(atPath: manifest.rootDirectory.path))
+        XCTAssertFalse(fileManager.fileExists(atPath: cache.path))
+
+        try prepare()
+        LocalModelInstaller.removeUnusedPreparedModels()
+        XCTAssertFalse(fileManager.fileExists(atPath: cache.path))
+    }
 }

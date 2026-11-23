@@ -74,6 +74,18 @@ renames the folder into `Application Support/VoiceiQ/Models/<name>/<revision>`.
 The model rows show download progress, the size on disk once ready, and a
 delete button.
 
+On a model's first load Core ML writes a prepared copy of it for this device
+into the loading process's caches, `com.apple.e5rt.e5bundlecache/<OS build>/`.
+Copies of the speech models can reach about 1 GB. On the Mac the models load in the
+`VoiceiQLocalSpeech` helper, so the copies, with Metal's shader cache for the
+writer, sit in `~/Library/Caches/io.blue.voiceiq.localspeech`; on iOS they sit
+in the app's `Library/Caches/<bundle id>/com.apple.e5rt.e5bundlecache`. The
+cache has no per-model index, so deleting any model removes all of it
+(`LocalModelInstaller.removeAll`) and the models still downloaded are prepared
+again on their next load. Each launch with no model downloaded removes it too
+(`FileLayout.removeStaleFiles`), which clears what 0.7.13 and earlier left
+after a delete.
+
 ## Dictation flow
 
 1. `DictationCoordinator` asks `localFactory` for a `LocalTranscriber` when
