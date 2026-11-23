@@ -85,6 +85,7 @@ final class ChromeExtensionScriptTests: XCTestCase {
         XCTAssertEqual(json(page, "messages[messages.length - 1].roster"), #"["Muhammed Hafeed","Nihal"]"#)
         XCTAssertEqual(json(page, "messages[messages.length - 1].me"), #""cyron""#)
         XCTAssertEqual(json(page, "messages[messages.length - 1].count"), "3")
+        XCTAssertEqual(json(page, "messages[messages.length - 1].probe"), "2")
         XCTAssertEqual(json(page, "messages[0].diag"), #"{"receivers":1,"sources":1,"maxLevel":0.3,"clockOffset":5000}"#)
     }
 

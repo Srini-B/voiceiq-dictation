@@ -55,7 +55,7 @@ chrome.runtime.onMessage.addListener((message, sender) => {
   callAt = Date.now();
   send({
     t: message.t, page: message.page, tab: sender.tab.id, active: message.active, names: message.names,
-    roster: message.roster, me: message.me, count: message.count, diag: message.diag,
+    roster: message.roster, me: message.me, count: message.count, diag: message.diag, probe: message.probe,
   });
   clearTimeout(quietTimer);
   quietTimer = setTimeout(checkForUpdate, CALL_QUIET_MS + 1000);

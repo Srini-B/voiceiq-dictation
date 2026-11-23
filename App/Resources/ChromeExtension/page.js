@@ -176,7 +176,9 @@
     const diagnose = now - diagnosedAt >= DIAGNOSE_EVERY;
     if (key === last && !diagnose && (!active.length || now - sentAt < REPEAT)) return;
     last = key; sentAt = now;
-    const message = { voiceiq: 'speakers', t: now, active, names, page: location.host + location.pathname };
+    // `probe` says which page script reports: a page open since before the
+    // extension updated keeps the old one until it reloads.
+    const message = { voiceiq: 'speakers', probe: 2, t: now, active, names, page: location.host + location.pathname };
     if (people) Object.assign(message, { roster: people.remote, me: people.me, count: people.count });
     if (diagnose) { message.diag = diagnostic; diagnosedAt = now; }
     window.postMessage(message, location.origin);

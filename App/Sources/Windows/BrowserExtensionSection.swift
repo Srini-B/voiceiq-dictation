@@ -148,6 +148,9 @@ struct BrowserExtensionSection: View {
     private var runningNote: String? {
         guard !enabled.isEmpty, let bundled = BrowserExtension.bundledVersion,
               let latest = BrowserSpeakerLog.latest(root: FileLayout.appSupportRoot) else { return nil }
+        if latest.page != "hello", latest.version != nil, latest.probe == nil {
+            return "A meeting page open since before the extension updated still reports the old way. Reload that page when its call is over."
+        }
         guard let running = latest.version else {
             return "The extension last reported from an older copy than \(bundled). Chrome switches to \(bundled) the next time it starts."
         }

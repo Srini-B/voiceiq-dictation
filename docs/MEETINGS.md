@@ -325,7 +325,11 @@ said 1.1.0. Two things now swap it without the user:
    reload, so on `onInstalled` with reason `update` the worker injects
    `relay.js` again into every open tab on the call sites; a relay whose
    extension context is still alive keeps the new copy from adding a second
-   listener. Measured: with
+   listener. The page script itself cannot be replaced in a page that stays
+   open: its `RTCPeerConnection` wrapper holds the call's connections. From
+   1.2 it sends `probe: 2`; a report with a `version` but no `probe` comes
+   from an older page script, and Settings asks to reload that page once its
+   call is over. Measured: with
    a call tab open the old version kept reporting, and 61 s after the call
    ended the new version said hello through a newly started host.
 
@@ -444,14 +448,14 @@ two snapshots, less one), whichever is larger. It is used three ways:
   and the call showed at most one other person. With two or more, a new
   voice becomes a new speaker.
 - When the call showed more other people than the transcript has far-side
-  ids and the extension's timeline left the words as they were (too few sources
-  or too little of the meeting covered), the cloud path runs
+  ids, the cloud path runs
   the on-device speaker model on the system track alone (no speech model) and
   gives the far-side words to its voices when it hears more of them
   (`MeetingTranscriber.splitFarSide`, cached as
   `transcribe-far-speakers-v1.json`). Without the model downloaded
   (Speaker Separation, pyannote community-1, in Settings) nothing changes and the log says
-  so.
+  so. The extension's timeline runs after it and decides the words it
+  covers; the rest keep the split's speaker.
 - `ScreenNames.remote` keeps the count and `ScreenNames.probablyMerged` marks
   a transcript with fewer far-side ids than that. The log says "speakers
   probably merged", and the notes request tells the notes model one label may

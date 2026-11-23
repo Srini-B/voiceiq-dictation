@@ -16,6 +16,7 @@ window.addEventListener('message', (event) => {
   const message = { t: data.t, active, names: names(data.names, 16), page: data.page.slice(0, 300) };
   if (Array.isArray(data.roster)) message.roster = names(data.roster, 64);
   if (typeof data.me === 'string' && data.me.length > 0 && data.me.length <= 80) message.me = data.me;
+  if (Number.isInteger(data.probe) && data.probe > 0 && data.probe < 100) message.probe = data.probe;
   if (Number.isInteger(data.count) && data.count >= 0 && data.count <= 1000) message.count = data.count;
   const diag = data.diag;
   if (diag && typeof diag === 'object') {

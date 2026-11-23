@@ -83,14 +83,10 @@ public struct MeetingTranscriber: Sendable {
             words = Self.mergeOwner(owner, into: words, overlaps: overlaps)
         }
         if audio.isOnline { words = Self.byTrack(words, audio: audio) }
-        // The extension's timeline decides where it covers the meeting;
-        // otherwise the on-device speaker model may split the far side.
-        let browser = BrowserSpeakers.apply(words, folder: folder)
-        if browser == words, let remote {
-            words = try await splitFarSide(words, remote: remote, audio: audio, folder: folder)
-        } else {
-            words = browser
-        }
+        // The speaker model's split first: the extension's timeline then
+        // decides the words it covers, and the rest keep the split's speaker.
+        if let remote { words = try await splitFarSide(words, remote: remote, audio: audio, folder: folder) }
+        words = BrowserSpeakers.apply(words, folder: folder)
         return SpeakerLinker.overlappingTurns(words).map { turn in
             TranscriptSegment(speaker: turn.speaker, text: turn.text, chunkIndex: 0, start: turn.start, end: turn.end)
         }

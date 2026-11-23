@@ -30,12 +30,16 @@ public struct BrowserSpeakerEvent: Codable, Equatable, Sendable {
     public var version: String?
     /// What the page script saw on its last poll, every ten seconds.
     public var diag: BrowserProbeDiagnostic?
+    /// The page script's own version, 2 from extension 1.2. Nil from an
+    /// older page script, also one left running in a page that was open
+    /// while the extension updated.
+    public var probe: Int?
 
     public init(t: Double, page: String, tab: Int, active: [String], names: [String]? = nil,
                 roster: [String]? = nil, me: String? = nil, count: Int? = nil, version: String? = nil,
-                diag: BrowserProbeDiagnostic? = nil) {
+                diag: BrowserProbeDiagnostic? = nil, probe: Int? = nil) {
         self.t = t; self.page = page; self.tab = tab; self.active = active; self.names = names
-        self.roster = roster; self.me = me; self.count = count; self.version = version; self.diag = diag
+        self.roster = roster; self.me = me; self.count = count; self.version = version; self.diag = diag; self.probe = probe
     }
 }
 
