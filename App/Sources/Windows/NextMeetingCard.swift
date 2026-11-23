@@ -24,6 +24,13 @@ struct NextMeetingCard: View {
                 .disabled(!button.enabled)
                 .padding(.top, VoiceIQUI.Spacing.xs)
                 .help(meeting.join?.url.absoluteString ?? "")
+                // Detection knows the service, not the meeting: the call it
+                // hears may be an earlier one, so this one can still be opened.
+                if case .record = button, let join = meeting.join {
+                    Link("Open \(join.app) Link", destination: join.url)
+                        .font(VoiceIQUI.TypeScale.labelSmall())
+                        .frame(maxWidth: .infinity)
+                }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -69,9 +76,13 @@ extension MeetingEngine {
         return .joinAndRecord(app: join.app)
     }
 
-    /// The call detection hears, when it is this meeting's service.
+    /// The call detection hears, when it is this meeting's service and the
+    /// meeting is due: from 10 minutes before its start, the window in which a
+    /// recording takes an event's title. Earlier, a call on the same service is
+    /// another meeting.
     private func joinedCall(_ meeting: CalendarMeetings.Upcoming) -> CallSource? {
-        guard let call = detectedSource, meeting.join?.matches(call) == true else { return nil }
+        guard let call = detectedSource, meeting.join?.matches(call) == true,
+              meeting.start.timeIntervalSinceNow <= CalendarMeetings.earlyStart else { return nil }
         return call
     }
 

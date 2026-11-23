@@ -41,7 +41,7 @@ public enum CalendarMeetings {
     }
 
     /// An event may start this long after the recording does and still be its meeting.
-    static let earlyStart: TimeInterval = 10 * 60
+    public static let earlyStart: TimeInterval = 10 * 60
 
     /// The meeting the user is in at `date`: not all-day, cancelled, free or
     /// declined, with other people invited or a call link. When several

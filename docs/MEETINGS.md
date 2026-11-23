@@ -134,9 +134,12 @@ the menu item follow the call (`NextMeetingButton`):
   call is detected at that moment, so it records all system audio and is not
   stopped when the call ends.
 - **Record** once call detection hears that service's call (its app, or one
-  of its pages in a browser; `Upcoming.Join.matches`): the user joined some
-  other way. It records that call like an accepted offer, following its
-  audio and stopping when it ends.
+  of its pages in a browser; `Upcoming.Join.matches`) and the meeting starts
+  within 10 minutes or has started: the user joined some other way. It
+  records that call like an accepted offer, following its audio and stopping
+  when it ends. Detection knows the service, not the meeting, so an earlier
+  call on the same service can look joined; the card keeps an "Open Zoom
+  Link" under Record, in the card and the menu, for that case.
 - **In Progress**, disabled, while any recording runs.
 
 Either way the recording takes the joined event's title and invitees

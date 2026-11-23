@@ -124,7 +124,9 @@ final class StatusItemController: NSObject {
         nextTitle.isEnabled = false
         let join = NSMenuItem(title: "", action: #selector(joinNextMeeting(_:)), keyEquivalent: "")
         join.target = self
-        nextMeetingItems = [.separator(), .sectionHeader(title: ""), nextTitle, join]
+        let openLink = NSMenuItem(title: "", action: #selector(openNextMeetingLink(_:)), keyEquivalent: "")
+        openLink.target = self
+        nextMeetingItems = [.separator(), .sectionHeader(title: ""), nextTitle, join, openLink]
         nextMeetingItems.forEach { $0.isHidden = true; menu.addItem($0) }
 
         menu.addItem(.separator())
@@ -177,6 +179,7 @@ final class StatusItemController: NSObject {
     private func showNextMeeting() {
         let next = CalendarMeetings.next(after: Date())
         let header = nextMeetingItems[1], title = nextMeetingItems[2], join = nextMeetingItems[3]
+        let openLink = nextMeetingItems[4]
         nextMeetingItems.forEach { $0.isHidden = next == nil }
         guard let next else { return }
         header.title = "Next Meeting · \(CalendarMeetings.when(next.start, now: Date()))"
@@ -187,6 +190,14 @@ final class StatusItemController: NSObject {
         // The menu enables an item by its action: none greys out In Progress.
         join.action = button?.enabled == true ? #selector(joinNextMeeting(_:)) : nil
         join.representedObject = next
+        // Detection knows the service, not the meeting: keep this one's link
+        // reachable when Record may be pointing at an earlier call.
+        if case .record = button, let link = next.join {
+            openLink.title = "Open \(link.app) Link"
+            openLink.representedObject = link.url
+        } else {
+            openLink.isHidden = true
+        }
     }
 
     @objc private func openHistory() {
@@ -216,6 +227,11 @@ final class StatusItemController: NSObject {
     @objc private func joinNextMeeting(_ sender: NSMenuItem) {
         guard let meeting = sender.representedObject as? CalendarMeetings.Upcoming else { return }
         onJoinMeeting(meeting)
+    }
+
+    @objc private func openNextMeetingLink(_ sender: NSMenuItem) {
+        guard let url = sender.representedObject as? URL else { return }
+        NSWorkspace.shared.open(url)
     }
 
     @objc private func selectMicrophone(_ sender: NSMenuItem) {
