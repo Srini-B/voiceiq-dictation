@@ -31,6 +31,9 @@ final class PasteCheckTests: XCTestCase {
         let selected = reading("draft", caret: 0, selected: 5)
         XCTAssertEqual(PasteCheck.verdict(before: selected, after: reading("Draft", caret: 0), text: "hello"), .unknown)
         XCTAssertEqual(PasteCheck.verdict(before: selected, after: reading("Draft", caret: 5), text: "hello"), .unknown)
+        // The selection already held the dictated words.
+        let same = reading("hello draft", caret: 0, selected: 5)
+        XCTAssertEqual(PasteCheck.verdict(before: same, after: reading("hello Draft", caret: 5), text: "hello"), .unknown)
     }
 
     #if os(macOS)

@@ -38,10 +38,12 @@ public enum PasteCheck {
         let added = text.utf16.count
         let grewBy = after.value.utf16.count - before.value.utf16.count
         // The length alone could be a same-length edit elsewhere ("draft" →
-        // "Draft"), so the text must also sit where the paste put it.
-        if after.value != before.value, grewBy == added - before.selectionLength,
-           holds(text, at: before.caret, in: after.value) { return .landed }
-        if after.caret == before.caret + added, added > 0, holds(text, at: before.caret, in: after.value) { return .landed }
+        // "Draft"), so the text must also sit where the paste put it, and
+        // must not have been there already (a selected "hello" pasted over
+        // with "hello" proves nothing).
+        let placed = holds(text, at: before.caret, in: after.value) && !holds(text, at: before.caret, in: before.value)
+        if after.value != before.value, grewBy == added - before.selectionLength, placed { return .landed }
+        if after.caret == before.caret + added, added > 0, placed { return .landed }
         if occurrences(of: text, in: after.value) > occurrences(of: text, in: before.value) { return .landed }
         return after == before ? .missed : .unknown
     }
