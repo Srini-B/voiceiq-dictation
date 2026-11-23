@@ -31,6 +31,9 @@ import VoiceIQSpeech
     private lazy var detector = CallDetector()
     private var mic: MicTap?, system: SystemAudioTap?
     private var currentFolder: URL?, currentMeta: MeetingMeta?
+    /// Set while a recorded call has ended and the recording counts down to
+    /// stopping; nil otherwise. The pill shows Stop now and Keep recording.
+    @Published public private(set) var endingAt: Date?
     /// Whether to read speaker name tags off the screen while recording.
     #if os(macOS)
     private var screenNames: ScreenNameSampler?
@@ -48,7 +51,64 @@ import VoiceIQSpeech
             }
         }
     }
+
+    private var endWatch: Task<Void, Never>?
+    /// Keep recording was chosen; asked again only after the call comes back and ends again.
+    private var keepAfterCallEnd = false
+
+    /// The call's app let go of all its sound this long ago,
+    static let callGoneGrace: TimeInterval = 20
+    /// and neither track has heard anyone for this long, so a quiet stretch
+    /// in a call that is still going never asks.
+    static let quietBeforeAsking: TimeInterval = 45
+    static let endCountdown: TimeInterval = 30
+
+    /// A recording started from a detected call stops on its own once the call
+    /// is over, after a countdown the user can stop or cancel. The rules follow
+    /// FluidVoice's (altic-dev/FluidVoice, `MeetingEndCountdown`); the code is ours.
+    private func watchForCallEnd(_ source: CallSource, mic: MicTap, system: SystemAudioTap) -> Task<Void, Never> {
+        Task { @MainActor [weak self] in
+            var goneSince: Date?
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(self?.endingAt == nil ? 5 : 1))
+                guard let self, !Task.isCancelled else { return }
+                let live = await Task.detached { CallDetector.processes(for: source)?.isRunningAudio == true }.value
+                // A stop during the query cancelled this watcher and cleared
+                // the countdown; don't set it again.
+                guard !Task.isCancelled else { return }
+                let now = Date()
+                if live {
+                    goneSince = nil; keepAfterCallEnd = false
+                    if endingAt != nil { endingAt = nil; Log.meeting.info("call came back — recording continues") }
+                    continue
+                }
+                let gone = goneSince ?? now
+                goneSince = gone
+                let heard = max(mic.sound.lastSound, system.sound.lastSound)
+                if endingAt == nil, !keepAfterCallEnd,
+                   now.timeIntervalSince(gone) >= Self.callGoneGrace,
+                   now.timeIntervalSince(heard) >= Self.quietBeforeAsking {
+                    Log.meeting.info("call ended — stopping in \(Int(Self.endCountdown), privacy: .public)s unless kept")
+                    endingAt = now.addingTimeInterval(Self.endCountdown)
+                }
+                if let end = endingAt, now >= end {
+                    stopRecording()
+                    return
+                }
+            }
+        }
+    }
     #endif
+
+    /// The countdown's Keep recording.
+    public func keepRecordingAfterCallEnd() {
+        guard endingAt != nil else { return }
+        endingAt = nil
+        #if os(macOS)
+        keepAfterCallEnd = true
+        #endif
+    }
+
     /// The call the detector currently sees, whether or not it was accepted.
     public private(set) var detectedSource: CallSource?
 
@@ -117,7 +177,9 @@ import VoiceIQSpeech
 
     public func startRecording(source: CallSource? = nil) {
         if case .recording = phase { return }
-        let id = MeetingID(), now = Date(), meta = MeetingMeta(id: id, startedAt: now, source: source)
+        let id = MeetingID(), now = Date()
+        var meta = MeetingMeta(id: id, startedAt: now, source: source)
+        if SettingsStore().calendarForMeetings { meta.calendarEvent = CalendarMeetings.event(at: now) }
         do {
             let folder = try store.create(meta: meta)
             #if os(macOS)
@@ -140,7 +202,13 @@ import VoiceIQSpeech
             currentFolder = folder; currentMeta = meta
             #if os(macOS)
             screenNames = ScreenNameSampler(source: source); screenNames?.start()
-            if let source, call != nil { following = Self.follow(source, mic: mic, system: system) }
+            if let source {
+                // A call that already ended before the offer was accepted has
+                // no processes to follow, but its recording still stops.
+                if call != nil { following = Self.follow(source, mic: mic, system: system) }
+                keepAfterCallEnd = false
+                endWatch = watchForCallEnd(source, mic: mic, system: system)
+            }
             #endif
             phase = .recording(id, since: now)
         } catch { fail(id, error) }
@@ -150,7 +218,9 @@ import VoiceIQSpeech
         guard case let .recording(id, _) = phase, let folder = currentFolder, var meta = currentMeta else { return }
         #if os(macOS)
         following?.cancel(); following = nil
+        endWatch?.cancel(); endWatch = nil
         #endif
+        endingAt = nil
         let micDuration = mic?.stop() ?? 0, systemDuration = system?.stop() ?? 0
         mic = nil; system = nil; currentFolder = nil; currentMeta = nil
         #if os(macOS)
@@ -336,7 +406,8 @@ import VoiceIQSpeech
             startedAt: meta.startedAt, durationSeconds: meta.durationSeconds,
             app: meta.source.map(Self.name), names: meta.speakerNames, screenNames: meta.screenNames,
             ownerName: settings.meetingOwnerName, vocabulary: dictionary.sanitizedVocabulary(),
-            spellings: dictionary.spellings(), writingRules: settings.customWritingRules))
+            spellings: dictionary.spellings(), writingRules: settings.customWritingRules,
+            calendarEvent: meta.calendarEvent))
         let text = try await client.meetingNotesJSON(prompt: prompt, model: cfg.writingModel, endpoint: cfg.endpoint,
                                                      deadline: 300)
         return try MeetingNotesPrompt.parse(text)
@@ -383,7 +454,7 @@ import VoiceIQSpeech
             startedAt: meta.startedAt, durationSeconds: meta.durationSeconds, app: meta.source.map(Self.name),
             names: meta.speakerNames, screenNames: meta.screenNames, ownerName: settings.meetingOwnerName,
             vocabulary: dictionary.sanitizedVocabulary(), spellings: dictionary.spellings(),
-            writingRules: settings.customWritingRules)
+            writingRules: settings.customWritingRules, calendarEvent: meta.calendarEvent)
         return try await LocalWriter.notes(system: MeetingNotesPrompt.onDeviceSystem,
                                            user: MeetingNotesPrompt.onDeviceUser(transcript: transcript, context: context),
                                            runner: runner)

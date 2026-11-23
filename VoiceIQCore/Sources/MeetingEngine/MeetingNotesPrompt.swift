@@ -18,12 +18,15 @@ public enum MeetingNotesPrompt {
         public var vocabulary: [String]
         public var spellings: [(wrong: String, right: String)]
         public var writingRules: String?
+        /// The calendar event the meeting belongs to, when the calendar is connected.
+        public var calendarEvent: CalendarMeetings.Event?
         public init(startedAt: Date, durationSeconds: Double, app: String?, names: [String: String], screenNames: ScreenNames? = nil,
                     ownerName: String? = nil, vocabulary: [String] = [], spellings: [(wrong: String, right: String)] = [],
-                    writingRules: String? = nil) {
+                    writingRules: String? = nil, calendarEvent: CalendarMeetings.Event? = nil) {
             self.startedAt = startedAt; self.durationSeconds = durationSeconds; self.app = app; self.names = names
             self.screenNames = screenNames; self.ownerName = ownerName
             self.vocabulary = vocabulary; self.spellings = spellings; self.writingRules = writingRules
+            self.calendarEvent = calendarEvent
         }
 
         /// Typed names, then names read off the screen. The owner's comes from
@@ -62,6 +65,15 @@ public enum MeetingNotesPrompt {
         let owner = hasOwner ? "\(label(MeetingSpeaker.you, names)), who recorded the meeting" + (names[MeetingSpeaker.you] == nil ? " (name unknown: write \"the note owner\" in sentences)" : "")
             : "not identified; nobody in the transcript is known to be the note owner"
         let seen = context.screenNames?.seen ?? []
+        let oneLine: (String) -> String = { String($0.replacingOccurrences(of: "\n", with: " ").replacingOccurrences(of: "\r", with: " ").prefix(120)) }
+        let calendar = context.calendarEvent.map { event in
+            let invited = event.attendees.map(oneLine)
+            return """
+
+            - Calendar event: \(oneLine(event.title)) (its scheduled title; use it for "title" unless the discussion is clearly about something else)
+            - Invited: \(invited.isEmpty ? "nobody else" : invited.joined(separator: ", ")) (use these spellings for invitees the transcript mentions; being invited does not make someone a speaker)
+            """
+        } ?? ""
         let language = dominantLanguage(transcript).map {
             "OUTPUT LANGUAGE: \($0). The transcript was detected as mostly \($0); write every field in \($0)."
         } ?? "OUTPUT LANGUAGE: follow the LANGUAGE rule."
@@ -80,7 +92,7 @@ public enum MeetingNotesPrompt {
         - Confirmed names: \(confirmed.isEmpty ? "none" : confirmed.joined(separator: ", "))
         - Names read from the meeting screen: \(fromScreen.isEmpty ? "none" : fromScreen.joined(separator: ", "))
         - Other text seen on screen that may be participant names: \(seen.isEmpty ? "none" : seen.joined(separator: ", "))
-        - Anonymous speakers: \(anonymous.isEmpty ? "none" : anonymous.joined(separator: ", "))
+        - Anonymous speakers: \(anonymous.isEmpty ? "none" : anonymous.joined(separator: ", "))\(calendar)
 
         \(language)
 

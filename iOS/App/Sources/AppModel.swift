@@ -59,8 +59,11 @@ final class AppModel: ObservableObject {
             localWriter: LocalSpeechInference.write
         )
         let inserter = self.inserter
+        let session = self.session
         coordinator = DictationCoordinator(
+            // Called once per dictation, before its capture engine starts.
             audioFactory: {
+                session.useDictationInput()
                 #if DEBUG
                 if let simulated = SimulatedMicrophone.make() { return simulated }
                 #endif
@@ -186,7 +189,7 @@ final class AppModel: ObservableObject {
         retryQueue = queue
         Task {
             // A keyboard start can launch the app straight into a dictation.
-            await scanner.scanAndRecover(sparing: { [weak self] in self?.coordinator.activeSessionFolder })
+            await scanner.scanAndRecover(sparing: { [weak self] in self?.coordinator.activeSessionFolders ?? [] })
             queue.start()
             Task.detached(priority: .utility) { RetentionPolicy().purge() }
         }
@@ -501,6 +504,9 @@ final class AppModel: ObservableObject {
             session.recordingStartedAt = nil
             session.dictationPhase = .processing
             if processingSince == nil { processingSince = Date() }
+            // Capture has stopped once transcription starts (finalizing may
+            // still drain buffers), so a Bluetooth dictation leaves call audio here.
+            if case .transcribing = state, !(previousState == .transcribing) { session.useKeepAliveInput() }
         case .idle, .done, .cancelled, .failed:
             if let since = processingSince {
                 // How long the transcript and cleanup took, and where the app was.

@@ -117,7 +117,7 @@ final class RecoveryClipboardTests: XCTestCase {
         }
         let active = folders[1]
         let scanner = RecoveryScanner(store: store, transcription: FolderTranscription(), recordingsRoot: root)
-        await scanner.scanAndRecover(sparing: { active })
+        await scanner.scanAndRecover(sparing: { [active] })
 
         let live = try XCTUnwrap(SessionMeta.read(from: active))
         XCTAssertEqual(live.status, .recording, "the running dictation's meta is untouched")

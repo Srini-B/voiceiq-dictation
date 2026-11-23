@@ -22,15 +22,15 @@ public final class RecoveryScanner {
 
     /// `sparing` is the session the app is recording or transcribing now,
     /// read once the reindex is done: it is unfinished, not interrupted.
-    public func scanAndRecover(sparing active: @MainActor () -> URL? = { nil }) async {
+    public func scanAndRecover(sparing active: @MainActor () -> [URL] = { [] }) async {
         // The reindex walks every recording folder and decodes every meta.json —
         // unbounded as history grows, and the hotkey is already armed by now, so
         // a key press would queue behind it on the main actor.
         let store = self.store
         let root = recordingsRoot
         await Task.detached(priority: .utility) { store.reindex(recordingsRoot: root) }.value
-        let live = active()?.standardizedFileURL
-        let interrupted = store.interruptedRecords().filter { $0.folderURL.standardizedFileURL != live }
+        let live = Set(active().map(\.standardizedFileURL))
+        let interrupted = store.interruptedRecords().filter { !live.contains($0.folderURL.standardizedFileURL) }
         guard !interrupted.isEmpty else { return }
         Log.history.info("RecoveryScanner: \(interrupted.count) interrupted session(s) found")
 

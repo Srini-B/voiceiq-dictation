@@ -34,6 +34,9 @@ public struct InsertionCoordinator: TextInserting {
 
     @MainActor
     public func insert(_ text: String, context: DictationContext) async -> InsertionOutcome {
+        // Before the guards, so the frontmost app and the field they check
+        // are still the target after waiting out an earlier paste.
+        await paster.finishPendingRestore()
         // Guard 2: secure input — the transcript stays in History only.
         if SecureInput.isActive {
             Log.insertion.warning("secure input active at insert time — refusing (text in History only)")
@@ -48,11 +51,16 @@ public struct InsertionCoordinator: TextInserting {
             return .frontmostChanged
         }
 
+        // The field the text is about to go into, taken before any tier
+        // waits: Return goes only to this field.
+        let returnTarget = ReturnAfterPaste.isWanted(for: context) ? ReturnAfterPaste.focusedElement() : nil
+
         // Tier 1: AX direct insertion.
         switch await AXInserter.insert(text, targetPID: context.targetPID, bundleID: context.targetAppBundleID,
                                        startField: context.focusedField?.element) {
         case .landed:
             Log.insertion.info("inserted via AX")
+            await ReturnAfterPaste.pressIfWanted(context: context, target: returnTarget)
             return .inserted
         case .focusElsewhere:
             // PROVEN focus theft — a blind ⌘V would paste into the thief.
@@ -82,6 +90,7 @@ public struct InsertionCoordinator: TextInserting {
             switch await TypingInserter.type(text, mode: mode, targetPID: context.targetPID) {
             case .typed:
                 Log.insertion.info("typed instead of pasting (\(String(describing: mode), privacy: .public))")
+                await ReturnAfterPaste.pressIfWanted(context: context, target: returnTarget)
                 return .inserted
             case .stopped(let rest):
                 // The user switched apps part way: the rest must not land
@@ -95,11 +104,34 @@ public struct InsertionCoordinator: TextInserting {
             }
         }
 
-        // Tier 2: guarded paste. Note: "true" means the ⌘V was POSTED — there is
-        // no OS-level delivery receipt for synthetic paste (industry-wide floor;
-        // the text also stays recoverable in History).
+        // Tier 2: guarded paste. "true" means the ⌘V was POSTED — there is no
+        // OS-level delivery receipt for synthetic paste, so a readable field is
+        // read back afterwards (PasteCheck) and a certain miss is copied.
+        let before = PasteCheck.focusedReading()
         if await paster.paste(text) {
-            Log.insertion.info("⌘V posted (delivery is best-effort)")
+            Log.insertion.info("⌘V posted")
+            guard let before else {
+                await ReturnAfterPaste.pressIfWanted(context: context, target: returnTarget)
+                return .inserted
+            }
+            let postedAt = Date()
+            let check = Task { @MainActor [paster] () -> PasteCheck.Verdict in
+                await PasteCheck.watch(element: before.element, before: before.reading, text: text, postedAt: postedAt) {
+                    paster.copyOnly(text)
+                    NotificationCenter.default.post(name: .voiceIQPasteMissed, object: text)
+                }
+            }
+            paster.pasteCheck = check
+            // A readable field must show the text before Return goes in: a
+            // paste the app ignored would otherwise send whatever draft or
+            // command was already in the field.
+            if ReturnAfterPaste.isWanted(for: context) {
+                if await check.value == .landed {
+                    await ReturnAfterPaste.pressIfWanted(context: context, target: returnTarget)
+                } else {
+                    Log.insertion.info("paste not seen in the field — no Return")
+                }
+            }
             return .inserted
         }
 

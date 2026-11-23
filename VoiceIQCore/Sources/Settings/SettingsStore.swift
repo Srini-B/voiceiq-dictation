@@ -153,6 +153,46 @@ public struct SettingsStore: Sendable {
         Self.set(enabled, forKey: "soundsEnabled")
     }
 
+    /// Loudness of the dictation sounds, 0.05–1. 0.9 was the fixed level
+    /// before the slider existed, so it stays the default. Hex has the same
+    /// slider (anomalyco/hex, MIT).
+    public var soundVolume: Double {
+        min(max(Self.defaults.object(forKey: "soundVolume") as? Double ?? 0.9, 0.05), 1)
+    }
+
+    public func setSoundVolume(_ volume: Double) {
+        Self.set(min(max(volume, 0.05), 1), forKey: "soundVolume")
+    }
+
+    /// Read the calendar for each meeting's title and invitees. Off until the
+    /// user connects the calendar, which is when access is asked for.
+    public var calendarForMeetings: Bool {
+        Self.defaults.bool(forKey: "calendarForMeetings")
+    }
+
+    public func setCalendarForMeetings(_ enabled: Bool) {
+        Self.set(enabled, forKey: "calendarForMeetings")
+    }
+
+    /// Press Return after a dictation lands (Mac). Off by default: a Return
+    /// sends messages, and a wrong send can't be taken back.
+    public var pressReturnAfterPaste: Bool {
+        Self.defaults.bool(forKey: "pressReturnAfterPaste")
+    }
+
+    public func setPressReturnAfterPaste(_ enabled: Bool) {
+        Self.set(enabled, forKey: "pressReturnAfterPaste")
+    }
+
+    /// Bundle IDs Press Return after paste is limited to; empty means every app.
+    public var pressReturnApps: [String] {
+        Self.defaults.stringArray(forKey: "pressReturnApps") ?? []
+    }
+
+    public func setPressReturnApps(_ bundleIDs: [String]) {
+        Self.set(bundleIDs, forKey: "pressReturnApps")
+    }
+
     /// Where the pill sits along the bottom of the screen, as a fraction of the
     /// visible width: 0 far left, 0.5 centre, 1 far right. Snapped to five
     /// stops so a drag ends somewhere predictable.

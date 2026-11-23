@@ -88,6 +88,9 @@ public struct DictationContext: Equatable, Sendable {
     public var targetPID: pid_t?
     public var focusedField: FocusedFieldCapture?
     public var screenshots: [Data]
+    /// When the key ended the recording. Press Return after paste skips the
+    /// Return when Esc came after it.
+    public var recordingEndedAt: Date?
 
     public init(
         targetAppBundleID: String? = nil,

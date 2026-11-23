@@ -28,16 +28,18 @@ final class KeepAliveAudio {
     private var engine: AVAudioEngine?
     private var player: AVAudioPlayerNode?
     private var observers: [NSObjectProtocol] = []
-    private var preferBuiltInMic = true
+    /// The microphone choice of the dictation in progress; nil between
+    /// dictations, when the session holds the iPhone's mic.
+    private var dictationChoice: MobileSettings.MicrophoneChoice?
 
-    func start(preferBuiltInMic: Bool) throws {
+    func start() throws {
         guard !isRunning else { return }
-        self.preferBuiltInMic = preferBuiltInMic
+        dictationChoice = nil
         try configureSession()
         try startSilence()
         observe()
         isRunning = true
-        Log.audio.info("keep-alive started (built-in mic preferred: \(preferBuiltInMic))")
+        Log.audio.info("keep-alive started")
     }
 
     func stop() {
@@ -50,10 +52,21 @@ final class KeepAliveAudio {
         Log.audio.info("keep-alive stopped")
     }
 
-    /// Re-applies the input preference, e.g. after the setting changes.
-    func setPreferBuiltInMic(_ prefer: Bool) {
-        preferBuiltInMic = prefer
+    /// A dictation is about to start: move to the input its microphone choice
+    /// picks. Called before its capture engine starts.
+    func useDictationInput(_ choice: MobileSettings.MicrophoneChoice) {
         guard isRunning else { return }
+        dictationChoice = choice
+        try? configureSession()
+        let input = AVAudioSession.sharedInstance().preferredInput?.portName ?? "iOS default"
+        Log.audio.info("dictation input (\(choice.rawValue, privacy: .public)): \(input, privacy: .public)")
+    }
+
+    /// The dictation is over: back to the iPhone's mic, without Bluetooth
+    /// hands-free, for the rest of the warm session.
+    func useKeepAliveInput() {
+        guard isRunning, dictationChoice != nil else { return }
+        dictationChoice = nil
         try? configureSession()
     }
 
@@ -62,23 +75,36 @@ final class KeepAliveAudio {
     private func configureSession() throws {
         let session = AVAudioSession.sharedInstance()
         // Mix with others so music and podcasts keep playing. HFP Bluetooth is
-        // only allowed when the user wants their headset mic: enabling it moves
-        // AirPods to the low-quality call profile for everything they play.
+        // only allowed while a dictation set to Bluetooth records: enabling it
+        // moves AirPods or a car to the low-quality call profile for
+        // everything they play.
         var options: AVAudioSession.CategoryOptions = [.defaultToSpeaker, .allowBluetoothA2DP, .mixWithOthers]
-        if !preferBuiltInMic { options.insert(.allowBluetoothHFP) }
-        try session.setCategory(.playAndRecord, mode: .default, options: options)
+        if dictationChoice == .bluetooth { options.insert(.allowBluetoothHFP) }
+        // Setting the same category again can still renegotiate the route, so
+        // a dictation that changes nothing leaves it alone.
+        if session.category != .playAndRecord || session.mode != .default || session.categoryOptions != options {
+            try session.setCategory(.playAndRecord, mode: .default, options: options)
+        }
         try session.setActive(true)
         applyPreferredInput()
     }
 
+    /// The warm session always pins the iPhone's mic, so it never holds a car
+    /// or headset in call audio between dictations. A dictation takes the
+    /// first input its choice lists that iOS offers. The port orders follow
+    /// Hex (MIT, github.com/anomalyco/hex, ios/HEXShared/MicrophoneChoice.swift).
     private func applyPreferredInput() {
         let session = AVAudioSession.sharedInstance()
-        if preferBuiltInMic {
-            let builtIn = session.availableInputs?.first { $0.portType == .builtInMic }
-            try? session.setPreferredInput(builtIn)
-        } else {
-            try? session.setPreferredInput(nil)
+        let inputs = session.availableInputs ?? []
+        let ports: [AVAudioSession.Port] = switch dictationChoice {
+        case nil, .iPhone: [.builtInMic]
+        case .automatic: [.headsetMic, .usbAudio, .carAudio, .builtInMic]
+        case .bluetooth: [.headsetMic, .usbAudio, .carAudio, .bluetoothHFP, .bluetoothLE, .builtInMic]
         }
+        let input = ports.lazy.compactMap { port in inputs.first(where: { $0.portType == port }) }.first
+        // The route change this causes calls back here; only a real change is applied.
+        guard session.preferredInput?.uid != input?.uid else { return }
+        try? session.setPreferredInput(input)
     }
 
     // MARK: - Silence

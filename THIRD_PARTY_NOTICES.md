@@ -215,6 +215,19 @@ SOFTWARE.
   `src/dictation.rs`, `src/feedback.rs`), rewritten in Swift
 - Also `VoiceIQCore/Sources/AudioEngine/MacLid.swift` (the closed-lid check),
   from Hex at `afd7da22` (`src/audio/lid.rs`), rewritten in Swift
+- Also the iPhone microphone choice in
+  `iOS/App/Sources/Support/MobileSettings.swift` and
+  `iOS/App/Sources/Session/KeepAliveAudio.swift` (input order per choice,
+  Bluetooth hands-free only for Bluetooth, the warm session on the iPhone's
+  mic), from Hex at `afd7da22` (`ios/HEXShared/MicrophoneChoice.swift`),
+  rewritten in Swift
+- Also, from Hex at `afd7da22`, rewritten in Swift: the spoken-order insert
+  queue (`VoiceIQCore/Sources/SessionCoordinator/InsertTurns.swift`, from
+  `OrderedOutputs` in `src/parakeet.rs`), Press Return after pasting
+  (`VoiceIQCore/Sources/InsertionEngine/ReturnAfterPaste.swift`, from
+  `src/dictation/yolo_mode.rs`), the calendar reader
+  (`VoiceIQCore/Sources/MeetingEngine/CalendarMeetings.swift`, from
+  `src/calendar.rs`) and the sound volume setting (`src/feedback.rs`)
 - License: MIT
 
 ```
@@ -262,8 +275,10 @@ at `87fbef8b`, from a written description: no paste when focus is on a
 control that takes no text, waking any Electron app's accessibility,
 ignoring the dictation key at the lock screen, F13–F19 as keys of their own,
 dictionary spellings in meeting transcripts, a 30-minute quiet time after
-dismissing a call offer, VoiceOver announcements for the pill, and ⌘C in
-History.
+dismissing a call offer, VoiceOver announcements for the pill, ⌘C in
+History, reading a field back after a paste to catch a ⌘V that missed
+(`PasteCheck.swift`), and stopping a detected call's recording after a
+countdown once the call ends (`MeetingEngine.watchForCallEnd`).
 
 ## Trademarks
 

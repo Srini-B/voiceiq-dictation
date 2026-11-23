@@ -35,7 +35,7 @@ public final class PasteInserter {
     /// after the text visibly landed (production pass 2, P0: the next dictation's
     /// begin was silently rejected in that window).
     public func paste(_ text: String) async -> Bool {
-        restoreTask?.cancel()
+        await finishPendingRestore()
         let pasteboard = NSPasteboard.general
         let snapshot = Self.snapshot(pasteboard)
 
@@ -70,6 +70,20 @@ public final class PasteInserter {
         }
         return true
     }
+
+    /// A paste still inside its restore window (the previous of two queued
+    /// dictations) keeps the clipboard until a slow app has read it, and its
+    /// restore brings back the user's clipboard for the next snapshot. Up to
+    /// `restoreDelay`; at once when nothing is pending.
+    public func finishPendingRestore() async {
+        if let check = pasteCheck { _ = await check.value }
+        if let pending = restoreTask { await pending.value }
+    }
+
+    /// The read-back of the last paste (PasteCheck), which may copy its text
+    /// on a miss: the next paste waits for it so that copy can't replace the
+    /// newer text on the clipboard.
+    public var pasteCheck: Task<PasteCheck.Verdict, Never>?
 
     /// Puts text on the clipboard WITHOUT restore — the tier-3 floor and the
     /// focus-changed path ("Copied — press ⌘V"). Marked transient so clipboard

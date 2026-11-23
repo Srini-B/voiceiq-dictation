@@ -150,8 +150,8 @@ not start in place on the owner's device; removed on 2026-10-21 along with
 the Skip app switching picker).
 
 `KeepAliveAudio` is the one keeper. It plays silence on a `.playAndRecord`
-session (default to speaker, A2DP, mix with others; HFP only when "Use
-iPhone microphone" is off) and taps `inputNode` without keeping the buffers,
+session (default to speaker, A2DP, mix with others; HFP only while a
+dictation set to Bluetooth records) and taps `inputNode` without keeping the buffers,
 so the mic stays open and the orange dot shows. `VoiceSession.isActive` says
 whether it is up. It lasts `MobileSettings.warmWindow` after each dictation
 (Settings › Dictation › "Keep mic on after dictating": Never, 5 s to 12 h,
@@ -162,6 +162,21 @@ VoiceiQ again. The audio session stays open until then: it is what keeps iOS
 from suspending the app while a slow transcription runs, at the cost of the
 mic dot showing until the text arrives.
 `AudioCaptureEngine` never configures the session, so each dictation's capture engine records into it.
+
+Settings › Dictation › Microphone (`MobileSettings.microphoneChoice`, key
+`microphoneChoice`) picks what a dictation records from: Automatic (the
+default) takes a wired headset's mic, then USB, then the car's in CarPlay,
+then the iPhone's; iPhone always takes the iPhone's; Bluetooth takes the same
+list with Bluetooth hands-free and LE mics before the iPhone's, and is the
+only choice that adds `.allowBluetoothHFP`, so AirPods or a car switch to
+call audio only while such a dictation records. Between dictations the warm
+session always pins the iPhone's mic without HFP: `AppModel`'s capture
+factory calls `VoiceSession.useDictationInput()` before each capture engine
+starts, and the session returns to the iPhone's mic once transcription
+starts (capture has stopped by then), and again at `.warm`. Meetings record from the warm session's input, the iPhone's
+mic. The setting replaced the Bool `preferBuiltInMic`: a stored `true` reads
+as Automatic and `false` as Bluetooth until the user picks again. The port
+orders come from Hex (see `THIRD_PARTY_NOTICES.md`).
 
 The session also ends when the user taps End (app or Dynamic Island) or when
 an audio interruption cannot be resumed. A call or Siri interruption
@@ -544,7 +559,7 @@ runs. Everything needs Full Access.
 | Dictionary with search, CSV and Auto-learned | Same, synced through iCloud, plus adding a selection or a copied word from the keyboard |
 | Custom rules, spoken languages; spelling from the region | Same: custom rules and Languages in Settings › Dictation, spelling from the iPhone's region |
 | `[transcription] timing:` and `[session] timing` debug log lines | Same lines, in the app's debug log file |
-| Microphone picker | "Use iPhone microphone" (prefer the built-in mic over a headset) |
+| Microphone picker | Microphone: Automatic, iPhone or Bluetooth (see the voice session section) |
 | History, retry, crash recovery, retention | Same. The detail shows Pipeline, the seconds from Stop to the text being ready (`DictationRecord.pipelineSeconds`, as on the Mac; absent for dictations synced from the Mac), the cost and one row per stage and model (stage, model, call count when above one, summed cost; `UsageLine.lines` over `UsageStore.records(forSession:)`), and Copy turns into "Copied" with a checkmark and a success haptic for 1.5 s |
 | Cost for Gemini (plus OpenAI, ElevenLabs or Claude while History has calls booked to them), periods and Detailed | Same |
 | Advanced: Dictation model and Meeting model | Same, as Dictation and Notes, plus the session log |

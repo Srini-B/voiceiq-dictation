@@ -146,6 +146,12 @@ final class DictationController {
             }
         }
 
+        NotificationCenter.default.addObserver(forName: .voiceIQPasteMissed, object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor in
+                self?.showBackgroundNotice("The text didn't go in — copied, press ⌘V to paste", for: 5.0, sound: nil)
+            }
+        }
+
         NotificationCenter.default.addObserver(forName: .pillStopTapped, object: nil, queue: .main) { [weak self] _ in
             Task { @MainActor in
                 self?.coordinator.handle(.finalize)
@@ -462,7 +468,7 @@ final class DictationController {
         // actor that grows without bound as history grows — and the hotkey is
         // already armed, so a key press would queue behind it.
         Task {
-            await scanner.scanAndRecover()
+            await scanner.scanAndRecover(sparing: { [weak self] in self?.coordinator.activeSessionFolders ?? [] })
             queue.start()
             Task.detached(priority: .utility) {
                 RetentionPolicy().purge()
@@ -523,7 +529,7 @@ final class DictationController {
                     if let store = self.historyStore {
                         store.deleteAll(
                             removeFolders: true,
-                            sparing: self.coordinator.activeSessionFolder
+                            sparing: self.coordinator.activeSessionFolders
                         )
                     } else {
                         // No DB handle (quarantined at launch) must not turn the
@@ -532,8 +538,8 @@ final class DictationController {
                         let folders = (try? FileManager.default.contentsOfDirectory(
                             at: FileLayout.recordingsRoot, includingPropertiesForKeys: nil
                         )) ?? []
-                        let active = self.coordinator.activeSessionFolder?.standardizedFileURL
-                        for folder in folders where folder.hasDirectoryPath && folder.standardizedFileURL != active {
+                        let active = Set(self.coordinator.activeSessionFolders.map(\.standardizedFileURL))
+                        for folder in folders where folder.hasDirectoryPath && !active.contains(folder.standardizedFileURL) {
                             try? FileManager.default.removeItem(at: folder)
                         }
                     }
@@ -683,6 +689,7 @@ final class DictationController {
     // MARK: - State → HUD/earcons (frame-synced: sound fires on the same tick)
 
     private func bind() {
+        coordinator.onDetachedResult = { [weak self] result in self?.reportDetached(result) }
         coordinator.$state
             .receive(on: DispatchQueue.main)
             .sink { [weak self] state in
@@ -753,6 +760,7 @@ final class DictationController {
 
         switch state {
         case .idle:
+            clearSlowTimer() // an in-flight dictation may have moved to the background
             setPill(restingPill(for: .idle))
             onStatusItemState?(.idle)
             meetingHUD.dictationBecameIdle()
@@ -824,7 +832,7 @@ final class DictationController {
         case .idle, .done, .cancelled, .failed: break
         default: return true
         }
-        guard meetings.processing.isEmpty, retryQueue?.draining != true else { return true }
+        guard meetings.processing.isEmpty, retryQueue?.draining != true, !coordinator.hasBackgroundJobs else { return true }
         switch meetings.phase {
         case .idle, .failed: break
         default: return true
@@ -871,6 +879,23 @@ final class DictationController {
         }
         if case .silent = outcome {} else {
             consecutiveSilentSessions = 0
+        }
+    }
+
+    /// A dictation that finished in the background while a newer one took the
+    /// pill. A pasted one needs no word; anything else is said once the pill
+    /// is free.
+    private func reportDetached(_ result: DictationCoordinator.DetachedResult) {
+        switch result {
+        case .outcome(.inserted), .outcome(.silent): break
+        case .outcome(.copiedToClipboard): showBackgroundNotice("Copied — press ⌘V to paste", for: 4.0, sound: .success)
+        case .outcome(.awaitingChip): showBackgroundNotice("You switched apps — press ⌘V to paste", for: 5.0, sound: nil)
+        case .outcome(.heldForSecureField): showBackgroundNotice("Secure input is on — saved to History", for: 4.0, sound: nil)
+        case .outcome(.queuedForRetry): showBackgroundNotice("You're offline — saved to History", for: 4.0, sound: nil)
+        case .failure(let failure):
+            // Same timed drain as a foreground throttle: nothing else retries it.
+            if failure == .rateLimited { retryQueue?.scheduleDrain(after: TimeoutPolicy.rateLimitWait) }
+            showBackgroundNotice(Self.copy(for: failure), for: 6.0, sound: .error)
         }
     }
 

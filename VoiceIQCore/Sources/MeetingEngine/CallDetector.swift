@@ -128,7 +128,7 @@ import CoreAudio
         let appPIDs = Set(apps.map(\.processIdentifier))
         let appPaths = Set(apps.compactMap { $0.bundleURL?.standardizedFileURL.path })
         let viaDaemons = CallApps.daemonCallApps.contains(bundleID)
-        var matched: [AudioObjectID] = [], input: AudioDeviceID?
+        var matched: [AudioObjectID] = [], input: AudioDeviceID?, running = false
         for object in list {
             guard let pid = pid(of: object), pid != getpid() else { continue }
             let owner = responsiblePID?(pid)
@@ -139,12 +139,13 @@ import CoreAudio
                 || executablePath(pid).flatMap(containingBundle).map(appPaths.contains) == true
             guard ours else { continue }
             matched.append(object)
+            running = running || flag(object, kAudioProcessPropertyIsRunningInput) || flag(object, kAudioProcessPropertyIsRunningOutput)
             if input == nil, flag(object, kAudioProcessPropertyIsRunningInput),
                let devices = objects(object, kAudioProcessPropertyDevices, scope: kAudioObjectPropertyScopeInput) {
                 input = devices.first
             }
         }
-        return matched.isEmpty ? nil : CallProcesses(objects: matched, inputDevice: input)
+        return matched.isEmpty ? nil : CallProcesses(objects: matched, inputDevice: input, isRunningAudio: running)
     }
 
     private nonisolated static func pid(of process: AudioObjectID) -> pid_t? {
@@ -260,6 +261,8 @@ import CoreAudio
 public struct CallProcesses: Equatable, Sendable {
     public var objects: [AudioObjectID]
     public var inputDevice: AudioDeviceID?
+    /// Any of them plays or captures sound now. A call that ended lets go of both.
+    public var isRunningAudio = false
 }
 
 /// The pages a browser shows, read through the Accessibility API.

@@ -79,7 +79,7 @@ final class VoiceSession: ObservableObject {
             }
             return
         }
-        try audio.start(preferBuiltInMic: MobileSettings.preferBuiltInMic)
+        try audio.start()
         isActive = true
         startedByActionButton = fromActionButton
         if fromActionButton { activity.start(activityState) }
@@ -127,10 +127,18 @@ final class VoiceSession: ObservableObject {
         case .recording:
             cancelWarmEnd()
         case .warm:
+            audio.useKeepAliveInput()
             becameIdle()
         default:
             break
         }
+    }
+
+    /// Back to the iPhone's mic for the warm session, once a dictation's
+    /// capture has stopped.
+    func useKeepAliveInput() {
+        guard isActive else { return }
+        audio.useKeepAliveInput()
     }
 
     /// No dictation or meeting is running. The warm window counts down.
@@ -208,8 +216,11 @@ final class VoiceSession: ObservableObject {
         warmHold = nil
     }
 
-    func setPreferBuiltInMic(_ prefer: Bool) {
-        audio.setPreferBuiltInMic(prefer)
+    /// A dictation is about to start its capture: move to the input
+    /// Settings › Dictation › Microphone picks. It returns to the iPhone's
+    /// mic once transcription starts, and again at `.warm`.
+    func useDictationInput() {
+        audio.useDictationInput(MobileSettings.microphoneChoice)
     }
 
     // MARK: - Results for the keyboard

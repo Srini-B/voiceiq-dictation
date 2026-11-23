@@ -1,11 +1,29 @@
+import AppKit
+import UniformTypeIdentifiers
 import VoiceIQCore
 import SwiftUI
 
 // MARK: - Dictation
 
 struct DictationPane: View {
+    private static func appName(_ bundleID: String) -> String {
+        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else { return bundleID }
+        return FileManager.default.displayName(atPath: url.path).replacingOccurrences(of: ".app", with: "")
+    }
+
+    private func chooseReturnApp() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.application]
+        panel.directoryURL = URL(fileURLWithPath: "/Applications")
+        panel.prompt = "Choose"
+        guard panel.runModal() == .OK, let url = panel.url,
+              let bundleID = Bundle(url: url)?.bundleIdentifier, !pressReturnApps.contains(bundleID) else { return }
+        pressReturnApps.append(bundleID)
+    }
+
     private let settings = SettingsStore()
     @State private var sounds = SettingsStore().soundsEnabled
+    @State private var soundVolume = SettingsStore().soundVolume
     @State private var customRules = SettingsStore().customWritingRules
     @State private var meetingDetection = SettingsStore().meetingDetectionEnabled
     @State private var meetingOwnerName = SettingsStore().meetingOwnerName
@@ -15,6 +33,9 @@ struct DictationPane: View {
     @State private var pauseMedia = SettingsStore().pauseMediaWhileDictating
     @State private var screenContext = SettingsStore().screenContextEnabled
     @State private var copyRecovered = SettingsStore().copyRecoveredToClipboard
+    @State private var calendar = SettingsStore().calendarForMeetings && CalendarMeetings.isAuthorized
+    @State private var pressReturn = SettingsStore().pressReturnAfterPaste
+    @State private var pressReturnApps = SettingsStore().pressReturnApps
     @State private var preferredMicrophone = SettingsStore().preferredInputDeviceUID
     @State private var microphones = AudioInputDevices.list()
 
@@ -49,6 +70,28 @@ struct DictationPane: View {
                     }
             }
 
+            Section {
+                Toggle("Press Return after pasting", isOn: $pressReturn)
+                    .onChange(of: pressReturn) { _, enabled in settings.setPressReturnAfterPaste(enabled) }
+                if pressReturn {
+                    ForEach(pressReturnApps, id: \.self) { bundleID in
+                        LabeledContent(Self.appName(bundleID)) {
+                            Button {
+                                pressReturnApps.removeAll { $0 == bundleID }
+                            } label: { Image(systemName: "minus.circle") }
+                            .buttonStyle(.plain)
+                            .help("Remove")
+                        }
+                    }
+                    Button(pressReturnApps.isEmpty ? "Only in Some Apps…" : "Add App…", action: chooseReturnApp)
+                }
+            } footer: {
+                Text(pressReturnApps.isEmpty
+                     ? "Sends what you dictated, in every app. Press Esc after you stop speaking to keep the text without sending it."
+                     : "Sends what you dictated, only in these apps. Press Esc after you stop speaking to keep the text without sending it.")
+            }
+            .onChange(of: pressReturnApps) { _, apps in settings.setPressReturnApps(apps) }
+
             SpeechSourceSection(device: "Mac") { Text("Speech") }
 
             SpokenLanguagesSection()
@@ -56,6 +99,17 @@ struct DictationPane: View {
             Section {
                 Toggle("Sounds", isOn: $sounds)
                     .onChange(of: sounds) { _, enabled in settings.setSoundsEnabled(enabled) }
+                if sounds {
+                    LabeledContent("Volume") {
+                        Slider(value: $soundVolume, in: 0.05...1, step: 0.05) { editing in
+                            // Let go of the slider to hear the new level.
+                            if !editing { NotificationCenter.default.post(name: .voiceIQPreviewSound, object: nil) }
+                        }
+                        .frame(maxWidth: 220)
+                        .accessibilityValue("\(Int((soundVolume * 100).rounded())) percent")
+                    }
+                    .onChange(of: soundVolume) { _, volume in settings.setSoundVolume(volume) }
+                }
                 Toggle("Show resting indicator", isOn: $showIdleDot)
                     .onChange(of: showIdleDot) { _, show in settings.setShowIdleIndicator(show) }
                 Toggle("Hide pill from screen sharing", isOn: $hidePillFromScreenSharing)
@@ -87,8 +141,12 @@ struct DictationPane: View {
                     .onChange(of: meetingDetection) { _, enabled in settings.setMeetingDetection(enabled) }
                 TextField("Your name in meeting notes", text: $meetingOwnerName)
                     .onChange(of: meetingOwnerName) { _, name in settings.setMeetingOwnerName(name) }
+                Toggle("Use calendar for meeting notes", isOn: $calendar)
+                    .onChange(of: calendar) { _, enabled in
+                        Task { calendar = await CalendarMeetings.connect(enabled) }
+                    }
             } footer: {
-                Text("Screen context sends a snapshot of what you're looking at, taken when dictation starts and when you switch apps, so names and paths on screen are spelled right; it adds about 0.2–0.9 s to a dictation. When a call app or a meeting tab is using the microphone, the pill asks before recording; the Meeting recording shortcut starts and stops a recording at any time. Notes appear under Meetings. While a meeting records, VoiceiQ reads the name tags in the call window on this Mac to name its speakers; no image is kept.")
+                Text("Screen context sends a snapshot of what you're looking at, taken when dictation starts and when you switch apps, so names and paths on screen are spelled right; it adds about 0.2–0.9 s to a dictation. When a call app or a meeting tab is using the microphone, the pill asks before recording; the Meeting recording shortcut starts and stops a recording at any time. Notes appear under Meetings. While a meeting records, VoiceiQ reads the name tags in the call window on this Mac to name its speakers; no image is kept. With the calendar on, notes take the title of the event you're in and the spelling of its invitees' names\(calendar || !CalendarMeetings.isDenied ? "" : "; calendar access is off in System Settings → Privacy & Security → Calendars").")
             }
         }
         .onAppear { microphones = AudioInputDevices.list() }

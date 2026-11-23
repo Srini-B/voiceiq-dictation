@@ -55,7 +55,7 @@ struct HistoryView: View {
             }
             .confirmationDialog("Delete all history?", isPresented: $confirmDeleteAll, titleVisibility: .visible) {
                 Button("Delete All", role: .destructive) {
-                    model.historyStore?.deleteAll(removeFolders: true, sparing: model.coordinator.activeSessionFolder)
+                    model.historyStore?.deleteAll(removeFolders: true, sparing: model.coordinator.activeSessionFolders)
                     model.coordinator.clearLastResult()
                     reload()
                 }

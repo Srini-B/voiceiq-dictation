@@ -1,6 +1,11 @@
 import AVFoundation
 import VoiceIQCore
 
+extension Notification.Name {
+    /// Settings' volume slider was let go: play a sound at the new level.
+    static let voiceIQPreviewSound = Notification.Name("io.blue.voiceiq.sound.preview")
+}
+
 /// Preloaded earcon playback (<10ms trigger latency). Sounds fire on the same
 /// state-machine tick as the matching animation — the Pixel frame-sync principle.
 /// No sounds on hover/menus, ever: design the silence.
@@ -18,6 +23,9 @@ final class EarconPlayer {
         // Loading 7 players blocks the caller (~120ms measured) — never on the
         // main thread at launch, and never in front of the first key press.
         loadInBackground()
+        NotificationCenter.default.addObserver(forName: .voiceIQPreviewSound, object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor in self?.play(.start) }
+        }
     }
 
     private func loadInBackground() {
@@ -58,17 +66,17 @@ final class EarconPlayer {
     private func warmOutputRoute() {
         guard let player = players[.start] else { return }
         nonisolated(unsafe) let warm = player
-        let volume = warm.volume
         warm.volume = 0
         Task.detached(priority: .utility) {
             warm.play()
             try? await Task.sleep(nanoseconds: UInt64((warm.duration + 0.05) * 1_000_000_000))
-            await MainActor.run { warm.volume = volume }
+            await MainActor.run { warm.volume = Self.volume }
         }
     }
 
     func play(_ earcon: Earcon) {
         guard enabled, let player = players[earcon] else { return }
+        player.volume = Self.volume
         player.currentTime = 0
         player.play()
     }
@@ -114,7 +122,8 @@ final class EarconPlayer {
     }
 
     private let startGate = StartGate()
-    nonisolated private static let volume: Float = 0.9
+    /// Read on every play, so the Settings slider applies at once.
+    nonisolated private static var volume: Float { Float(SettingsStore().soundVolume) }
 }
 
 /// Which delayed start sound may still play, and which start owns the player.

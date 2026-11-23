@@ -274,6 +274,7 @@ struct MeetingsPane: View {
 
     private func title(_ meeting: MeetingMeta) -> String {
         if let title = meeting.title, !title.isEmpty { return title }
+        if let title = meeting.calendarEvent?.title, !title.isEmpty { return title }
         return meeting.startedAt.formatted(date: .abbreviated, time: .shortened)
     }
     /// "26 Sep 2026, 2:23 – 2:24 PM", the same shape as a dictation's timestamp

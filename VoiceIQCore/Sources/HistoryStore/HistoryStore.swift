@@ -221,12 +221,14 @@ public final class HistoryStore: @unchecked Sendable {
         }
     }
 
-    public func deleteAll(removeFolders: Bool, sparing activeFolder: URL? = nil) {
+    public func deleteAll(removeFolders: Bool, sparing activeFolders: [URL] = []) {
+        // Live sessions keep their rows as well as their folders (audit L7).
+        let spared = Set(activeFolders.map(\.standardizedFileURL))
         do {
             let inCloud = try queue.write { db -> [String] in
-                let ids = try DictationRecord.fetchAll(db).filter(\.mayBeInCloud).map(\.id)
-                try DictationRecord.deleteAll(db)
-                return ids
+                let doomed = try DictationRecord.fetchAll(db).filter { !spared.contains($0.folderURL.standardizedFileURL) }
+                for record in doomed { try record.delete(db) }
+                return doomed.filter(\.mayBeInCloud).map(\.id)
             }
             Self.notifyChanged(deletedCloudIDs: inCloud)
         } catch {
@@ -235,14 +237,11 @@ public final class HistoryStore: @unchecked Sendable {
         if removeFolders {
             // Sweep the DIRECTORY, not the query — the visible-records filter hides
             // cancelled sessions whose audio would otherwise survive (audit #5).
-            // The live session's folder is spared (audit L7).
+            // Live sessions' folders are spared (audit L7).
             let folders = (try? FileManager.default.contentsOfDirectory(
                 at: FileLayout.recordingsRoot, includingPropertiesForKeys: nil
             )) ?? []
-            for folder in folders where folder.hasDirectoryPath {
-                if let activeFolder, folder.standardizedFileURL == activeFolder.standardizedFileURL {
-                    continue
-                }
+            for folder in folders where folder.hasDirectoryPath && !spared.contains(folder.standardizedFileURL) {
                 try? FileManager.default.removeItem(at: folder)
             }
         }
@@ -299,6 +298,7 @@ public final class HistoryStore: @unchecked Sendable {
              OR status IN ('failed','queuedForRetry')
              OR (status = 'cancelled' AND durationSeconds >= 10))
             AND status != 'silent'
+            AND status NOT IN ('recording','recorded','transcribing')
             """
         return (try? queue.read { db in
             if let query, !query.trimmingCharacters(in: .whitespaces).isEmpty {

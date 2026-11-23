@@ -29,6 +29,7 @@ public final class SystemAudioTap: @unchecked Sendable {
 
 
     public init(url: URL, processes: [AudioObjectID] = []) { self.url = url; self.processes = processes; tapped = processes }
+    public let sound = SoundClock()
 
     public func start() throws {
         guard #available(macOS 14.2, *) else { throw TapError.unsupported }
@@ -108,6 +109,7 @@ public final class SystemAudioTap: @unchecked Sendable {
             supplied = true; outStatus.pointee = .haveData; return buffer
         }
         guard status != .error, output.frameLength > 0 else { return }
+        sound.hear(output)
         do { try writer.write(output); frames += Int64(output.frameLength) }
         catch { Log.meeting.error("system write failed: \(String(describing: error), privacy: .public)") }
     }
