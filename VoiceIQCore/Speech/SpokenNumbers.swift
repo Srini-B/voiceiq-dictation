@@ -392,7 +392,7 @@ public enum SpokenNumbers {
 
     /// "nineteen ninety nine", "twenty twenty six", "nineteen oh five".
     private static func year(_ t: [Token], at i: Int) -> Cardinal? {
-        guard t[i].open, i + 1 < t.count, !t[i + 1].hasDigit else { return nil }
+        guard t[i].open, i + 1 < t.count, !t[i + 1].hasDigit, !t[i + 1].protected else { return nil }
         let century: Int
         switch t[i].word {
         case "nineteen": century = 19
@@ -403,7 +403,7 @@ public enum SpokenNumbers {
         var rest: Int?
         var end = j
         func digit(after k: Int) -> Int? {
-            guard t[k].open, k + 1 < t.count, !t[k + 1].hasDigit, case let .digit(value)? = kind(t[k + 1].word),
+            guard t[k].open, k + 1 < t.count, !t[k + 1].hasDigit, !t[k + 1].protected, case let .digit(value)? = kind(t[k + 1].word),
                   value > 0 else { return nil }
             return value
         }
@@ -448,7 +448,9 @@ public enum SpokenNumbers {
             var zero = false
             scan: while j < t.count {
                 let token = t[j]
-                if token.hasDigit { break }
+                // A protected Dictionary term ends the number (VoiceiQ: Hex let a
+                // later token of the number run into one).
+                if token.hasDigit || token.protected { break }
                 if token.word == "and", last == .hundred || last == .big, token.open, j + 1 < t.count,
                    isNumberish(t[j + 1]), additive(kind(t[j + 1].word)) {
                     last = .and

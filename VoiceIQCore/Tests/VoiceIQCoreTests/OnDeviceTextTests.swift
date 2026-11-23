@@ -194,6 +194,11 @@ final class SpokenNumbersTests: XCTestCase {
             SpokenNumbers.digits(in: "Five guys ordered twenty five burgers.", language: "en-US", protectedTerms: ["Five Guys"]),
             "Five guys ordered 25 burgers."
         )
+        // A number right before a protected term stops at the term.
+        XCTAssertEqual(
+            SpokenNumbers.digits(in: "We ordered twenty Five Guys burgers.", language: "en-US", protectedTerms: ["Five Guys"]),
+            "We ordered 20 Five Guys burgers."
+        )
         XCTAssertEqual(SpokenNumbers.digits(in: "Cinco punto cinco.", language: "es-ES"), "Cinco punto cinco.")
         XCTAssertEqual(SpokenNumbers.digits(in: "The ratio is five point five.", language: "fr-FR"), "The ratio is five point five.")
     }

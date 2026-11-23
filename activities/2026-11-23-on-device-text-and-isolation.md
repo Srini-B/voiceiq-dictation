@@ -32,6 +32,12 @@ cases are adapted with its notice (`THIRD_PARTY_NOTICES.md`). Hex reviewed at
   prewarmed) on the cloud Mac's virtual input; with it off it recorded raw.
   Not tried on a real microphone, AirPods or an iPhone.
 - iOS Settings › Dictation shows the toggle (screenshots in the PR).
+- Review (Codex): Hex's iOS voice isolation only sets the `.voiceChat` mode,
+  which by itself applies no voice processing, so the iPhone capture engine
+  now turns voice processing on as the Mac's does. Not run on an iPhone.
+  Also fixed a `SpokenNumbers` case Hex gets wrong: "twenty Five Guys" with
+  "Five Guys" in the Dictionary became "25 Guys"; the number now stops at a
+  protected term.
 
 ## Rollback
 

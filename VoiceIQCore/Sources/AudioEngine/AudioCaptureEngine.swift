@@ -96,8 +96,8 @@ public final class AudioCaptureEngine: AudioCapturing, @unchecked Sendable {
     private var startGeneration = 0
     private var noBufferRebuilds = 0
     /// Whether the current graph records through voice processing (Settings ›
-    /// Voice isolation, Mac). Voice isolation on iOS is the audio session's
-    /// `.voiceChat` mode instead, set by the app.
+    /// Voice isolation). On iOS the app also puts the session in `.voiceChat`
+    /// mode while a dictation records.
     private var graphUsesVoiceProcessing = false
     /// Inputs where voice processing failed to build, delivered no audio, or
     /// kept reconfiguring: they record raw until relaunch. Process-wide, as
@@ -469,25 +469,20 @@ public final class AudioCaptureEngine: AudioCapturing, @unchecked Sendable {
         Log.audio.info("AudioCaptureEngine: engine running (\(reason, privacy: .public); hw=\(Int(hwFormat.sampleRate))Hz/\(hwFormat.channelCount)ch, device=\(self.sessionDevice.map(String.init) ?? "default", privacy: .public)\(usesVoiceProcessing ? ", voice isolation" : "", privacy: .public))")
     }
 
-    // MARK: - Voice isolation (Mac)
+    // MARK: - Voice isolation
 
     /// Voice processing for the next graph: the setting is on and this input
     /// has not fallen back to raw.
     private func wantsVoiceProcessing() -> Bool {
-        #if os(macOS)
         guard SettingsStore().voiceIsolation, let device = AudioDeviceQuery.defaultInputDevice() else { return false }
         Self.fallbackLock.lock()
         defer { Self.fallbackLock.unlock() }
         return !Self.voiceProcessingFallback.contains(device)
-        #else
-        return false
-        #endif
     }
 
     /// Turns on Apple's voice processing on the input, with the least ducking
-    /// of other audio macOS offers. A refusal falls back to raw capture.
+    /// of other audio the system offers. A refusal falls back to raw capture.
     private func enableVoiceProcessing(on input: AVAudioInputNode) -> Bool {
-        #if os(macOS)
         do {
             var failure: Error?
             try Self.catchingException("voice processing") {
@@ -501,9 +496,6 @@ public final class AudioCaptureEngine: AudioCapturing, @unchecked Sendable {
             abandonVoiceProcessing(String(describing: error))
             return false
         }
-        #else
-        return false
-        #endif
     }
 
     /// Records this input raw from now on.
