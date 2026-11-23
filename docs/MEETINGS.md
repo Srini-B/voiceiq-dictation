@@ -554,7 +554,7 @@ mirrored or AirPlay display, still shows the pill.
 
 | File | Shows |
 | --- | --- |
-| `MeetingsView.swift` | Record button above the list, the detail header (title, progress while transcribing or making notes, Update notes after a speaker is renamed, Play and Download audio (`RecordingAudioButtons.swift`), Export menu, `…` menu with Redo notes / Redo transcript and notes / Retry / Delete, transcript toggle), the export message |
+| `MeetingsView.swift` | Record button and folder menu above the list, each row's folders, the folder line under the title ([Folders](#folders)), the detail header (title, progress while transcribing or making notes, Update notes after a speaker is renamed, Play and Download audio (`RecordingAudioButtons.swift`), Export menu, `…` menu with Redo notes / Redo transcript and notes / Retry / Delete, transcript toggle), the export message |
 | `MeetingNotesColumn.swift` | Title, Summary, the meeting type's sections, Decisions, Action items as open circles ("Owner: task"), Notes, then the meeting's questions and answers (`MeetingChatView.swift`, which also has the question box `MeetingsView.swift` puts under both columns) |
 | `MeetingTranscriptColumn.swift` | The transcript in one `NSTextView`: speaker names in their own colour (`SpeakerPalette`), time on a right tab stop, search that filters and highlights |
 | `AssignSpeakersView.swift` | One card per speaker: name, a sample line, shuffle (next line), play (that line's audio) |
@@ -567,6 +567,49 @@ notes**, which runs `MeetingEngine.regenerateNotes` with the typed names. A
 name typed while the notes are written is kept and shows the button again. Play uses `mic-aec.caf` (else
 `mic.caf`) for "you" and `system.caf` for everyone else, from the turn's start
 to its end, through `AVAudioPlayer`.
+
+## Folders
+
+Folders file meetings like tags: a meeting can be in several, and deleting a
+folder never deletes a meeting. The Mac and the iPhone use the same model and
+menus (`MeetingFolderModel`, `MeetingFolderToggles`, `MeetingFolderFilterItems`
+and `meetingFolderEditing` in `VoiceIQCore/Sources/MeetingEngine/MeetingFolderViews.swift`):
+
+- **Show one folder.** The menu above the list (Mac) or the folder button in
+  the toolbar (iPhone and iPad) picks All meetings or one folder, and makes,
+  renames, or deletes the folder shown. Deleting asks first and says the
+  meetings stay.
+- **File a meeting.** The folder line under the meeting's title (Mac), the
+  folder button on an open note (iPhone and iPad), or a right-click or long
+  press on a row lists every folder with a check mark, then New Folder…, which
+  makes the folder and files the meeting in it. Filing works while a meeting
+  is still being transcribed.
+- **See a meeting's folders.** Each row and each open meeting shows its
+  folders by name.
+
+The store API (`MeetingFolders.swift`, an extension on `MeetingStore`):
+`folders()`, `createFolder(named:)` (returns the existing folder when the name
+matches in any case, so an import run twice files into the same folders),
+`renameFolder(_:to:)`, `deleteFolder(_:)`, `folderIDs(of:)`,
+`setFolderIDs(_:for:)` and `setMeeting(_:inFolder:_:)`. An importer creates its
+meetings first, then calls `createFolder(named:)` and `setFolderIDs(_:for:)`.
+
+On disk:
+
+- `meetings/folders.json` holds the list (`MeetingFoldersSnapshot`): each
+  folder's id, name, and creation and edit times; when each deleted folder was
+  deleted (kept 180 days, as the dictionary keeps its deletions); and
+  `aliases`, folders that became another (below).
+- `meetings/<meeting>/folder-ids.json` holds the ids of the folders the meeting
+  is in, apart from `meta.json`, so the engine's saves of a meeting it is
+  transcribing never drop a folder chosen meanwhile. No file means no folder.
+  A deleted folder's id stays in the file and is skipped: removing it would
+  send every meeting in it to iCloud again.
+
+Two folders with one name (any case), made apart on two devices or by a
+rename, become the older one. The newer id goes in `aliases`, and meetings
+filed in it count as filed in the survivor, so none has to be written or sent
+again.
 
 ## Asking about a meeting
 
@@ -658,6 +701,16 @@ CloudKit database, through `CKSyncEngine`.
   Retention never deletes meetings.
 - **Account changes.** Signing out of iCloud, switching accounts, or a deleted zone removes the meetings that
   came from another device and forgets which local ones were sent.
+- **Folders.** The folders a meeting is in travel in its record
+  (`SyncedMeeting.folderIDs`; absent for a meeting in none, so meetings filed
+  nowhere keep the digest they had and are not sent again). The two-device rule
+  above applies: the device that sends last keeps its folders for that
+  meeting. The folder list itself syncs through the iCloud key-value store, as
+  one value, `meetingFolders.v1` (`MeetingFolderSync`), merged per folder like
+  the dictionary: the newer edit wins and a delete wins over older edits. That
+  needs no new CloudKit record type, which would need a schema deploy. A build
+  older than folders keeps a meeting's folders as it found them but drops them
+  when it changes that meeting and sends it.
 - The engine's state is `meeting-sync-state.json` next to
   `history-sync-state.json`. The iPhone fetches on every return to the
   foreground. Debug Mac builds have no container entitlement and stay local.

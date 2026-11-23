@@ -117,6 +117,7 @@ final class AppModel: ObservableObject {
         let deviceName = UIDevice.current.name
         Task { await HistorySync.shared.start(deviceName: deviceName) }
         Task { await MeetingSync.shared.start() }
+        MeetingFolderSync.shared.start()
         ActionButtonBridge.toggle = { [weak self] in await self?.toggleFromActionButton() }
         RecordingPlayer.voiceSessionIsActive = { [weak self] in self?.session.isActive ?? false }
         commandObserver = DarwinNotifier.observe(.command) { [weak self] in
@@ -471,6 +472,7 @@ final class AppModel: ObservableObject {
         WritingRulesSync.shared.refresh()
         Task { await HistorySync.shared.refresh() }
         Task { await MeetingSync.shared.refresh() }
+        MeetingFolderSync.shared.refresh()
         ModelWarmer.warmIfSystemUpdated()
     }
 

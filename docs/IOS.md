@@ -350,6 +350,9 @@ iOS). Speaker linking, meeting-type notes, suggested speaker names and Redo
 (notes only, or transcript and notes) work as on the Mac. Dictation is refused
 while notes record. Notes are transcribed by Gemini after you stop, as on the
 Mac; there is no live transcript while they record.
+Folders work as on the Mac (MEETINGS.md, Folders): the folder button in the
+list's toolbar shows one folder and makes, renames, or deletes folders; the
+folder button on an open note, or a long press on a row, files it.
 
 ### Keyboard
 

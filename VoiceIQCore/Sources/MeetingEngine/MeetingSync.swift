@@ -7,8 +7,8 @@ import Foundation
 /// entitlement (Debug builds on the Mac), meetings stay local.
 ///
 /// One record per meeting, `Meeting` in zone `Meetings`, named by the meeting
-/// id. Its `payload` is a `SyncedMeeting` (meta, notes, transcript and chat;
-/// never the audio) as LZFSE-compressed JSON. A meeting goes up once it is
+/// id. Its `payload` is a `SyncedMeeting` (meta, notes, transcript, chat and
+/// the folders it is filed in; never the audio) as LZFSE-compressed JSON. A meeting goes up once it is
 /// done, and again whenever it changes on either device: renamed speakers,
 /// redone notes, a new question. When both devices changed it, the one that
 /// sends last keeps its notes and names, and the questions from both stay

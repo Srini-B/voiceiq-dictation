@@ -39,6 +39,8 @@ public struct AgentLibrary: Sendable {
         /// Display names, the note owner first, then in order of first turn.
         public var speakers: [String]
         public var hasNotes: Bool
+        /// Names of the folders the user filed it in, by name.
+        public var folders: [String]
         /// Transcript lines that contain the search text, at most five.
         public var matches: [String]?
     }
@@ -86,14 +88,28 @@ public struct AgentLibrary: Sendable {
 
     // MARK: - Meetings
 
-    /// Newest first. `query` matches the title, the notes or what was said.
-    public func meetings(query: String?, since: Date?, limit: Int) -> [MeetingListing] {
+    /// A folder by its name (any case) or id.
+    public func folder(_ reference: String) -> MeetingFolder? {
+        let reference = reference.trimmingCharacters(in: .whitespacesAndNewlines)
+        return meetings.folders().first {
+            $0.id.uuidString.caseInsensitiveCompare(reference) == .orderedSame
+                || $0.name.caseInsensitiveCompare(reference) == .orderedSame
+        }
+    }
+
+    public func folderNames() -> [String] { meetings.folders().map(\.name) }
+
+    /// Newest first. `query` matches the title, the notes or what was said;
+    /// `folder` keeps only the meetings filed in it.
+    public func meetings(query: String?, since: Date?, limit: Int, folder: MeetingFolder? = nil) -> [MeetingListing] {
         let needle = query?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
+        let folders = meetings.foldersSnapshot()
         var found: [MeetingListing] = []
         for meta in meetings.list() where since == nil || meta.startedAt >= since! {
+            if let folder, !folders.resolve(meetings.storedFolderIDs(of: meta.id)).contains(folder.id) { continue }
             let notes = try? meetings.loadNotes(id: meta.id)
             let transcript = (try? meetings.loadTranscript(id: meta.id)) ?? []
-            var listing = self.listing(meta, notes: notes, transcript: transcript)
+            var listing = self.listing(meta, notes: notes, transcript: transcript, folders: folders)
             if !needle.isEmpty {
                 let lines = transcript.filter { $0.text.lowercased().contains(needle) }
                     .map { Self.line($0, meta: meta, notes: notes) }
@@ -113,7 +129,7 @@ public struct AgentLibrary: Sendable {
         let notes = try? meetings.loadNotes(id: meta.id)
         let transcript = (try? meetings.loadTranscript(id: meta.id)) ?? []
         return Meeting(
-            meeting: listing(meta, notes: notes, transcript: transcript), notes: notes,
+            meeting: listing(meta, notes: notes, transcript: transcript, folders: meetings.foldersSnapshot()), notes: notes,
             transcript: transcript.map {
                 Turn(speaker: meta.displayName($0.speaker, notes: notes), start: $0.start, end: $0.end, text: $0.text)
             },
@@ -131,7 +147,9 @@ public struct AgentLibrary: Sendable {
             text += "\n## Questions asked in VoiceiQ\n"
             for turn in chat { text += "\n**Q:** \(turn.question)\n\n**A:** \(turn.answer)\n" }
         }
-        return "Meeting id: \(meta.id.uuid.uuidString)\n\n" + text
+        let folders = folderNames(of: meta.id, in: meetings.foldersSnapshot())
+        let header = folders.isEmpty ? "" : "Folders: \(folders.joined(separator: ", "))\n"
+        return "Meeting id: \(meta.id.uuid.uuidString)\n\(header)\n" + text
     }
 
     private func meta(_ reference: String) throws -> MeetingMeta {
@@ -143,7 +161,8 @@ public struct AgentLibrary: Sendable {
         return meta
     }
 
-    private func listing(_ meta: MeetingMeta, notes: MeetingNotes?, transcript: [TranscriptSegment]) -> MeetingListing {
+    private func listing(_ meta: MeetingMeta, notes: MeetingNotes?, transcript: [TranscriptSegment],
+                         folders: MeetingFoldersSnapshot) -> MeetingListing {
         let speakers = (transcript.contains { $0.speaker == MeetingSpeaker.you } ? [MeetingSpeaker.you] : [])
             + MeetingSpeaker.others(in: transcript)
         let status: (String, String?) = switch meta.status {
@@ -157,8 +176,15 @@ public struct AgentLibrary: Sendable {
         return MeetingListing(
             id: meta.id.uuid.uuidString, title: title, startedAt: meta.startedAt, endedAt: meta.endedAt,
             durationSeconds: meta.durationSeconds.rounded(), status: status.0, failure: status.1,
-            speakers: speakers.map { meta.displayName($0, notes: notes) }, hasNotes: notes != nil, matches: nil
+            speakers: speakers.map { meta.displayName($0, notes: notes) }, hasNotes: notes != nil,
+            folders: folderNames(of: meta.id, in: folders), matches: nil
         )
+    }
+
+    /// By name, like the folder list.
+    private func folderNames(of meeting: MeetingID, in folders: MeetingFoldersSnapshot) -> [String] {
+        let filed = Set(folders.resolve(meetings.storedFolderIDs(of: meeting)))
+        return folders.folders.filter { filed.contains($0.id) }.map(\.name)
     }
 
     private static func line(_ segment: TranscriptSegment, meta: MeetingMeta, notes: MeetingNotes?) -> String {

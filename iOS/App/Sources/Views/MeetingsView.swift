@@ -4,6 +4,7 @@ import VoiceIQCore
 struct MeetingsView: View {
     @EnvironmentObject private var model: AppModel
     @State private var meetings: [MeetingMeta] = []
+    @StateObject private var folders = MeetingFolderModel()
 
     var body: some View {
         ListDetailNavigation {
@@ -18,14 +19,20 @@ struct MeetingsView: View {
                         .listRowSeparator(.hidden)
                 }
                 if !meetings.isEmpty {
-                    Section("Past notes") {
-                        ForEach(meetings) { meta in
-                            NavigationLink { MeetingDetail(meta: meta) } label: { MeetingRow(meta: meta) }
-                                // Deleting mid-transcription would leave its Gemini calls running
-                                // with nowhere to save (the Mac's More menu is disabled the same way).
-                                .deleteDisabled(model.meetings.isBusy(meta.id))
+                    Section(folders.filterFolder?.name ?? "Past notes") {
+                        ForEach(shown) { meta in
+                            NavigationLink { MeetingDetail(meta: meta, folders: folders) } label: {
+                                MeetingRow(meta: meta, folders: folders.names(of: meta.id))
+                            }
+                            // Deleting mid-transcription would leave its Gemini calls running
+                            // with nowhere to save (the Mac's More menu is disabled the same way).
+                            .deleteDisabled(model.meetings.isBusy(meta.id))
+                            .contextMenu { Menu("Folders", systemImage: "folder") { MeetingFolderToggles(model: folders, meeting: meta.id) } }
                         }
                         .onDelete(perform: delete)
+                        if shown.isEmpty {
+                            Text("No notes in this folder").font(Theme.Fonts.callout()).foregroundStyle(Theme.Colors.muted)
+                        }
                     }
                 }
             }
@@ -33,6 +40,15 @@ struct MeetingsView: View {
             .listRowBackground(Theme.Colors.surface)
             .themedBackground()
             .navigationTitle("Notes")
+            .toolbar {
+                if !meetings.isEmpty {
+                    Menu {
+                        MeetingFolderFilterItems(model: folders, allTitle: "All notes")
+                    } label: {
+                        Label("Folders", systemImage: folders.filter == nil ? "folder" : "folder.fill")
+                    }
+                }
+            }
             .onAppear(perform: reload)
             .onReceive(model.meetings.$phase) { _ in reload() }
             .onReceive(model.meetings.$processing) { _ in reload() }
@@ -42,17 +58,22 @@ struct MeetingsView: View {
         } placeholder: {
             DetailPlaceholder(systemImage: "doc.text", title: "No note selected")
         }
+        .meetingFolderEditing(folders, noun: "notes")
     }
 
+    private var shown: [MeetingMeta] { folders.shown(meetings) }
+
     private func delete(_ offsets: IndexSet) {
-        for index in offsets where !model.meetings.isBusy(meetings[index].id) {
-            try? model.meetings.store.delete(id: meetings[index].id)
+        let shown = shown
+        for index in offsets where !model.meetings.isBusy(shown[index].id) {
+            try? model.meetings.store.delete(id: shown[index].id)
         }
         reload()
     }
 
     private func reload() {
         meetings = model.meetings.store.list().sorted { $0.startedAt > $1.startedAt }
+        folders.reload(meetings)
     }
 }
 
@@ -122,6 +143,7 @@ private struct RecorderCard: View {
 
 private struct MeetingRow: View {
     let meta: MeetingMeta
+    let folders: [String]
     /// `.increased` while the row is selected in the iPad split view.
     @Environment(\.backgroundProminence) private var prominence
 
@@ -136,6 +158,13 @@ private struct MeetingRow: View {
                 Text("\(meta.startedAt.formatted(date: .abbreviated, time: .shortened)) · \(duration)")
                     .font(Theme.Fonts.caption())
                     .foregroundStyle(selected ? Theme.Colors.onAccent.opacity(0.8) : Theme.Colors.muted)
+                if !folders.isEmpty {
+                    // Text, not a Label: a list row gives a Label's icon a column of its own.
+                    Text("\(Image(systemName: "folder")) \(folders.joined(separator: ", "))")
+                        .font(Theme.Fonts.caption())
+                        .foregroundStyle(selected ? Theme.Colors.onAccent.opacity(0.8) : Theme.Colors.muted)
+                        .lineLimit(1)
+                }
             }
             Spacer(minLength: 0)
             status
@@ -175,8 +204,12 @@ private struct MeetingDetail: View {
     @State private var naming: String?
     /// What the note is doing in the background; nil when idle.
     @State private var step: MeetingStatus?
+    @ObservedObject var folders: MeetingFolderModel
 
-    init(meta: MeetingMeta) { _meta = State(initialValue: meta) }
+    init(meta: MeetingMeta, folders: MeetingFolderModel) {
+        _meta = State(initialValue: meta)
+        self.folders = folders
+    }
 
     /// Nothing to play while the note is still recording.
     private var audio: RecordedAudio {
@@ -195,6 +228,12 @@ private struct MeetingDetail: View {
                 VStack(alignment: .leading, spacing: Theme.Spacing.xl) {
                     if gone {
                         Card { Text("This note was deleted on another device.").font(Theme.Fonts.body()).foregroundStyle(Theme.Colors.muted) }
+                    }
+                    let filedIn = folders.names(of: meta.id)
+                    if !filedIn.isEmpty && !gone {
+                        Label(filedIn.joined(separator: ", "), systemImage: "folder")
+                            .font(Theme.Fonts.footnote())
+                            .foregroundStyle(Theme.Colors.muted)
                     }
                     if let step { processingCard(step) }
                     if let notes { notesContent(notes) }
@@ -221,6 +260,13 @@ private struct MeetingDetail: View {
         .navigationTitle(notes?.title ?? meta.title ?? "Notes")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
+            if !gone {
+                Menu {
+                    MeetingFolderToggles(model: folders, meeting: meta.id)
+                } label: {
+                    Label("Folders", systemImage: folders.names(of: meta.id).isEmpty ? "folder" : "folder.fill")
+                }
+            }
             if meta.status == .done && !gone {
                 Menu {
                     Button("Notes") { model.meetings.regenerateNotes(id: meta.id) }.disabled(transcript.isEmpty)

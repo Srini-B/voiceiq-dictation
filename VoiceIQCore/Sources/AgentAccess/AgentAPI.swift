@@ -116,7 +116,12 @@ public struct AgentAPI: Sendable {
         case let path where path.count == 3 && path[0] == "v1" && path[1] == "dictations":
             return found { .encoded(try library.dictation(id: path[2])) }
         case ["v1", "meetings"]:
-            return list(request.query, defaultLimit: 20) { .encoded(library.meetings(query: $0, since: $1, limit: $2)) }
+            var folder: MeetingFolder?
+            if let name = request.query["folder"], !name.isEmpty {
+                guard let found = library.folder(name) else { return .error(404, unknownFolder(name)) }
+                folder = found
+            }
+            return list(request.query, defaultLimit: 20) { .encoded(library.meetings(query: $0, since: $1, limit: $2, folder: folder)) }
         case let path where path.count == 3 && path[0] == "v1" && path[1] == "meetings":
             if request.query["format"] == "markdown" {
                 return found { Response(status: 200, contentType: "text/markdown", body: Data(try library.meetingMarkdown(path[2]).utf8)) }
@@ -125,6 +130,13 @@ public struct AgentAPI: Sendable {
         default:
             return .error(404, "No such route. Try GET /v1/dictations, /v1/meetings, /v1/meetings/<id> or POST /mcp.")
         }
+    }
+
+    private func unknownFolder(_ name: String) -> String {
+        let names = library.folderNames()
+        return "No meeting folder is named \(name). " + (names.isEmpty
+            ? "The user has no folders."
+            : "Folders: \(names.joined(separator: ", ")).")
     }
 
     private func list(_ query: [String: String], defaultLimit: Int,
@@ -214,7 +226,12 @@ public struct AgentAPI: Sendable {
         case "list_dictations":
             return json(library.dictations(query: query, since: since, limit: Self.limit(limit, default: 50)))
         case "list_meetings":
-            return json(library.meetings(query: query, since: since, limit: Self.limit(limit, default: 20)))
+            var folder: MeetingFolder?
+            if let name = arguments["folder"] as? String, !name.isEmpty {
+                guard let found = library.folder(name) else { return text(unknownFolder(name), isError: true) }
+                folder = found
+            }
+            return json(library.meetings(query: query, since: since, limit: Self.limit(limit, default: 20), folder: folder))
         case "get_meeting":
             let reference = arguments["id"] as? String ?? "latest"
             do {
@@ -265,11 +282,12 @@ public struct AgentAPI: Sendable {
         [
             "name": "list_meetings",
             "title": "List meetings",
-            "description": "Meetings VoiceiQ recorded, newest first: id, title, start time, length, status and speakers. With query, only meetings whose title, notes or transcript mention it, with the matching transcript lines and their [mm:ss] times.",
+            "description": "Meetings VoiceiQ recorded, newest first: id, title, start time, length, status, speakers and the folders the user filed it in. With folder, only meetings in that folder. With query, only meetings whose title, notes or transcript mention it, with the matching transcript lines and their [mm:ss] times.",
             "inputSchema": [
                 "type": "object",
                 "properties": [
                     "query": ["type": "string", "description": "Text to look for in the title, notes or what was said."],
+                    "folder": ["type": "string", "description": "A folder name (any case) or id; only meetings filed in it."],
                     "since": sinceProperty,
                     "limit": ["type": "integer", "minimum": 1, "maximum": 500, "description": "At most this many, default 20."],
                 ],
@@ -279,7 +297,7 @@ public struct AgentAPI: Sendable {
         [
             "name": "get_meeting",
             "title": "Get a meeting",
-            "description": "One meeting in full: the notes (summary, decisions, action items with owners), the transcript with speaker names and [mm:ss] times, and questions the user asked about it in VoiceiQ with their answers. An hour of transcript is about 10,000 words.",
+            "description": "One meeting in full: its folders, the notes (summary, decisions, action items with owners), the transcript with speaker names and [mm:ss] times, and questions the user asked about it in VoiceiQ with their answers. An hour of transcript is about 10,000 words.",
             "inputSchema": [
                 "type": "object",
                 "properties": [

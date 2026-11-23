@@ -15,6 +15,7 @@ struct MeetingsPane: View {
     @State private var assigning = false
     @State private var confirmingDelete = false
     @State private var exported: ExportResult?
+    @StateObject private var folders = MeetingFolderModel()
 
     var body: some View {
         HStack(spacing: 0) {
@@ -45,9 +46,11 @@ struct MeetingsPane: View {
         .onReceive(NotificationCenter.default.publisher(for: .gtMeetingsDidChange).receive(on: RunLoop.main)) { note in
             if note.object as? String == "sync" { reload() }
         }
+        .onChange(of: folders.filter) { _, _ in showFirstIfHidden() }
         .confirmationDialog("Delete this meeting?", isPresented: $confirmingDelete) {
             Button("Delete", role: .destructive, action: remove)
         }
+        .meetingFolderEditing(folders, noun: "meetings")
     }
 
     private var sidebar: some View {
@@ -65,15 +68,45 @@ struct MeetingsPane: View {
             .padding(.horizontal, VoiceIQUI.Spacing.s)
             .padding(.top, VoiceIQUI.Spacing.l)
             .padding(.bottom, VoiceIQUI.Spacing.xs)
-            List(meetings, selection: $selection) { meeting in
+            folderFilter
+            List(folders.shown(meetings), selection: $selection) { meeting in
                 VStack(alignment: .leading, spacing: 3) {
                     Text(title(meeting)).font(VoiceIQUI.TypeScale.body()).lineLimit(1)
                     Text(timeRange(meeting)).font(VoiceIQUI.TypeScale.labelSmall()).foregroundStyle(.secondary)
                     Text(durationLine(meeting)).font(VoiceIQUI.TypeScale.labelSmall()).foregroundStyle(.secondary)
-                }.tag(meeting.id)
+                    let names = folders.names(of: meeting.id)
+                    if !names.isEmpty {
+                        // Text, not a Label: a list row gives a Label's icon a column of its own.
+                        Text("\(Image(systemName: "folder")) \(names.joined(separator: ", "))")
+                            .font(VoiceIQUI.TypeScale.labelSmall()).foregroundStyle(.secondary).lineLimit(1)
+                    }
+                }
+                .tag(meeting.id)
+                .contextMenu { Menu("Folders") { MeetingFolderToggles(model: folders, meeting: meeting.id) } }
             }
-            .overlay { if meetings.isEmpty { Text("No meetings yet").foregroundStyle(.secondary) } }
+            .overlay {
+                if meetings.isEmpty {
+                    Text("No meetings yet").foregroundStyle(.secondary)
+                } else if folders.shown(meetings).isEmpty {
+                    Text("No meetings in this folder").foregroundStyle(.secondary)
+                }
+            }
         }
+    }
+
+    /// Which meetings the list shows: all, or one folder's.
+    private var folderFilter: some View {
+        Menu {
+            MeetingFolderFilterItems(model: folders, allTitle: "All meetings")
+        } label: {
+            Label(folders.filterFolder?.name ?? "All meetings", systemImage: folders.filter == nil ? "tray.full" : "folder")
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .help("Show one folder's meetings, or make, rename and delete folders")
+        .padding(.horizontal, VoiceIQUI.Spacing.s)
+        .padding(.vertical, VoiceIQUI.Spacing.xs)
     }
 
     /// Below this the notes and the transcript take turns.
@@ -82,8 +115,22 @@ struct MeetingsPane: View {
     private func detail(_ meeting: MeetingMeta, width paneWidth: CGFloat) -> some View {
         let wide = paneWidth >= Self.wideWidth
         let transcriptShown = !transcript.isEmpty && (wide ? !hidesTranscript : narrowShowsTranscript)
+        let filedIn = folders.names(of: meeting.id)
         return VStack(spacing: 0) {
             header(meeting, wide: wide, transcriptShown: transcriptShown)
+            // The meeting's folders, and the menu that changes them, under the title.
+            Menu {
+                MeetingFolderToggles(model: folders, meeting: meeting.id)
+            } label: {
+                Label(filedIn.isEmpty ? "Add to folder" : filedIn.joined(separator: ", "), systemImage: "folder")
+                    .font(VoiceIQUI.TypeScale.labelSmall())
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .help("Put this meeting in folders")
+            .padding(.horizontal, VoiceIQUI.Spacing.l)
+            .padding(.bottom, VoiceIQUI.Spacing.s)
             Divider()
             if case .failed(let reason) = meeting.status {
                 Label(reason, systemImage: "exclamationmark.triangle.fill")
@@ -218,9 +265,14 @@ struct MeetingsPane: View {
     private var recording: Bool { if case .recording = engine.phase { return true }; return false }
     private func reload() {
         meetings = store.list()
+        folders.reload(meetings)
         // A meeting deleted on another device leaves the list.
-        if !meetings.contains(where: { $0.id == selection }) { selection = meetings.first?.id }
+        showFirstIfHidden()
         loadSelection()
+    }
+    private func showFirstIfHidden() {
+        let shown = folders.shown(meetings)
+        if !shown.contains(where: { $0.id == selection }) { selection = shown.first?.id }
     }
     private func loadSelection() {
         guard let id = selection else { notes = nil; transcript = []; return }
