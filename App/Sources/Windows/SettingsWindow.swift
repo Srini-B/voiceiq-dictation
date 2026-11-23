@@ -326,13 +326,14 @@ struct PrivacyPane: View {
                 LabeledContent("Dictionary") { Text("Synced to your iPhone through your iCloud account") }
                 LabeledContent("History") { Text("Final text synced to your iPhone through your iCloud account") }
                 LabeledContent("Meetings") { Text("Notes, transcripts and questions synced to your iPhone through your iCloud account; recordings stay on this Mac") }
+                LabeledContent("Coding agents") { Text("Only if you let them read History and meetings; what they read goes to their AI provider") }
                 LabeledContent("Screen snapshots") { Text("Only if screen context is on; never stored") }
                 LabeledContent("Names on a call screen") { Text("Read on this Mac while a meeting records; only the names go to Gemini for notes") }
                 LabeledContent("Everything else") { Text("Never leaves this Mac") }
             } header: {
                 Text("What leaves your Mac")
             } footer: {
-                Text("No middleman server, no account, no analytics, no keystroke logging. Only Google.")
+                Text("No middleman server, no account, no analytics, no keystroke logging. Only Google, plus the AI providers of any coding agents you let read History and meetings.")
             }
 
             Section {
@@ -385,6 +386,8 @@ struct AdvancedPane: View {
             geminiKeySection
 
             geminiModelSections
+
+            AgentAccessSection()
 
             BrowserExtensionSection()
 
