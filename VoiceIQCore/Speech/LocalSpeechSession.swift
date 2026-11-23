@@ -13,10 +13,14 @@ public struct LocalSpeechOptions: Codable, Sendable {
     public var toolsDirectory: URL?
     /// Locale code of the dictation language. English turns on number formatting.
     public var language: String
-    public init(vocabulary: [Term] = [], toolsDirectory: URL? = nil, language: String = "en-US") {
+    /// English numbers by `SpokenNumbers` instead of inverse normalization:
+    /// set with writing Off, where the transcript is inserted as it is.
+    public var spokenNumbers: Bool
+    public init(vocabulary: [Term] = [], toolsDirectory: URL? = nil, language: String = "en-US", spokenNumbers: Bool = false) {
         self.vocabulary = vocabulary
         self.toolsDirectory = toolsDirectory
         self.language = language
+        self.spokenNumbers = spokenNumbers
     }
 }
 

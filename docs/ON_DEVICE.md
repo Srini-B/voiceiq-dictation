@@ -97,6 +97,23 @@ after a delete.
    recording and a Gemini key exists, the dictation goes to Gemini and the
    load finishes as a warm-up.
 
+With writing Off, the transcript goes in as transcribed, with two fixes from
+Hex (MIT):
+
+- **Numbers as digits** (English, Fluid Speech Mini and Pro).
+  `LocalTranscriber.sessionOptions` sets `LocalSpeechOptions.spokenNumbers`
+  when writing is Off, and the model's `EnglishText` then writes numbers with
+  `SpokenNumbers` instead of NeMo inverse normalization: "Ten to fifteen
+  percent" → "10 to 15%", "five dollars" → "$5", while "No one came", "I work
+  nine to five" and "four ninety nine" stay as said. Text that already has
+  digits keeps them. With a writer (Gemini or on device) the transcript keeps
+  NeMo's numbers, so what the writers receive is unchanged.
+- **Sound-alike spellings.** After the Dictionary's replacement rules,
+  `SoundAlikeSpelling` gives a capitalised name that sounds like a Dictionary
+  term, and is spelled nearly the same, the term's spelling: "Stacy" →
+  "Stacey", "Jeff" → "Geoff" (English only). It runs on the text inserted as
+  transcribed (writing Off, no key, or the writer failing).
+
 History's Retry and launch recovery use `OnDeviceFirstTranscription`: the
 saved recording goes to the on-device model first, then Gemini when a key is
 stored. With no key nothing is sent (`GeminiClient` refuses to send).

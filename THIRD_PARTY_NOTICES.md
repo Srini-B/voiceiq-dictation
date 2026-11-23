@@ -228,6 +228,17 @@ SOFTWARE.
   `src/dictation/yolo_mode.rs`), the calendar reader
   (`VoiceIQCore/Sources/MeetingEngine/CalendarMeetings.swift`, from
   `src/calendar.rs`) and the sound volume setting (`src/feedback.rs`)
+- Also, from Hex at `db515bda`: `VoiceIQCore/Speech/SpokenNumbers.swift`
+  (numbers as digits, from `ios/HEXShared/Formatting/SpokenNumbers.swift`,
+  added in `06ac30af` and `339a5caa`) and
+  `VoiceIQCore/Sources/FormattingPipeline/SoundAlikeSpelling.swift`
+  (Dictionary sound-alike spellings, from
+  `ios/HEXShared/Spelling/SoundAlikeSpelling.swift`, added in `165fa676`),
+  adapted with their test cases in
+  `VoiceIQCore/Tests/VoiceIQCoreTests/OnDeviceTextTests.swift`; and voice
+  isolation (`492d8c28`: `src/voice_processing.swift`,
+  `ios/HEXMobile/AudioBackend.swift`), rewritten in Swift in
+  `AudioCaptureEngine.swift` and `KeepAliveAudio.swift`
 - License: MIT
 
 ```

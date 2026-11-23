@@ -95,6 +95,16 @@ public final class AudioCaptureEngine: AudioCapturing, @unchecked Sendable {
     /// different value and does nothing.
     private var startGeneration = 0
     private var noBufferRebuilds = 0
+    /// Whether the current graph records through voice processing (Settings ›
+    /// Voice isolation, Mac). Voice isolation on iOS is the audio session's
+    /// `.voiceChat` mode instead, set by the app.
+    private var graphUsesVoiceProcessing = false
+    /// Inputs where voice processing failed to build, delivered no audio, or
+    /// kept reconfiguring: they record raw until relaunch. Process-wide, as
+    /// each dictation takes a new engine. Follows Hex's remembered fallback
+    /// (MIT, github.com/anomalyco/hex 492d8c28). Guarded by `fallbackLock`.
+    nonisolated(unsafe) private static var voiceProcessingFallback: Set<AudioDeviceID> = []
+    private static let fallbackLock = NSLock()
 
     /// `onEngineDied` message when the microphone never delivered audio.
     public static let noAudioMessage = "Mic didn't start"
@@ -160,6 +170,10 @@ public final class AudioCaptureEngine: AudioCapturing, @unchecked Sendable {
         let currentFormat = sessionDevice.flatMap(AudioDeviceQuery.inputFormat(of:))
         if isPrewarmed, prewarmedDevice == sessionDevice, let currentFormat, let prewarmedFormat, currentFormat != prewarmedFormat {
             Log.audio.info("prepared graph is \(prewarmedFormat.description, privacy: .public) but the input is \(currentFormat.description, privacy: .public) — building a fresh one")
+            tearDownEngine()
+        }
+        if isPrewarmed, graphUsesVoiceProcessing != wantsVoiceProcessing() {
+            Log.audio.info("voice isolation changed since the graph was prepared — building a fresh one")
             tearDownEngine()
         }
         if isPrewarmed, let engine, prewarmedDevice == sessionDevice {
@@ -331,6 +345,9 @@ public final class AudioCaptureEngine: AudioCapturing, @unchecked Sendable {
         stateLock.unlock()
         guard current, !delivered else { return }
 
+        // Voice processing that delivers nothing is a failure of voice
+        // processing: the rebuild records raw.
+        if graphUsesVoiceProcessing { abandonVoiceProcessing("no audio") }
         guard rebuilds < Self.maxNoBufferRebuilds else {
             Log.audio.error("no audio from the microphone after a rebuild — failing the dictation now, not at key-up")
             onEngineDied?(Self.noAudioMessage)
@@ -391,10 +408,15 @@ public final class AudioCaptureEngine: AudioCapturing, @unchecked Sendable {
         let engine = AVAudioEngine()
         self.engine = engine
         let input = engine.inputNode
+        graphUsesVoiceProcessing = wantsVoiceProcessing() && enableVoiceProcessing(on: input)
 
         // Tap at the hardware format; conversion to 16k mono happens on our queue.
         let hwFormat = input.outputFormat(forBus: 0)
         guard hwFormat.sampleRate > 0, hwFormat.channelCount > 0 else {
+            if graphUsesVoiceProcessing {
+                abandonVoiceProcessing("no usable format")
+                return try buildEngine(reason: reason + "-raw", start: shouldStart)
+            }
             throw CaptureError.noInputDevice
         }
         let converter = AVAudioConverter(from: hwFormat, to: targetFormat)
@@ -414,24 +436,83 @@ public final class AudioCaptureEngine: AudioCapturing, @unchecked Sendable {
             self?.receive(audio, frames: frameCount, at: timestamp.pointee, format: hwFormat)
             return noErr
         }
-        try Self.catchingException("connect sink") {
-            engine.attach(sink)
-            engine.connect(input, to: sink, format: hwFormat)
-        }
+        // Voice processing records into the same sink. Hex also routes the
+        // input to a silent output; that graph failed to start (-10875) on a
+        // Mac whose input and output are one device, where the sink alone
+        // delivered audio (measured 2026-11-23, macOS 27).
+        let usesVoiceProcessing = graphUsesVoiceProcessing
+        do {
+            try Self.catchingException("connect sink") {
+                engine.attach(sink)
+                engine.connect(input, to: sink, format: hwFormat)
+            }
 
-        try Self.catchingException("prepare") { engine.prepare() }
-        guard shouldStart else {
-            Log.audio.info("AudioCaptureEngine: graph prepared in \(ms(t0), format: .fixed(precision: 1))ms (\(reason, privacy: .public), not started)")
+            try Self.catchingException("prepare") { engine.prepare() }
+            guard shouldStart else {
+                Log.audio.info("AudioCaptureEngine: graph prepared in \(ms(t0), format: .fixed(precision: 1))ms (\(reason, privacy: .public), not started)")
+                return
+            }
+            var startError: Error?
+            try Self.catchingException("start") {
+                do { try engine.start() } catch { startError = error }
+            }
+            if let startError { throw CaptureError.engineStart(String(describing: startError)) }
+        } catch where usesVoiceProcessing {
+            // A graph voice processing refuses records raw instead, now and
+            // for the rest of this run.
+            abandonVoiceProcessing(String(describing: error))
+            try buildEngine(reason: reason + "-raw", start: shouldStart)
             return
         }
-        var startError: Error?
-        try Self.catchingException("start") {
-            do { try engine.start() } catch { startError = error }
-        }
-        if let startError { throw CaptureError.engineStart(String(describing: startError)) }
 
         observeConfigurationChanges(of: engine)
-        Log.audio.info("AudioCaptureEngine: engine running (\(reason, privacy: .public); hw=\(Int(hwFormat.sampleRate))Hz/\(hwFormat.channelCount)ch, device=\(self.sessionDevice.map(String.init) ?? "default", privacy: .public))")
+        Log.audio.info("AudioCaptureEngine: engine running (\(reason, privacy: .public); hw=\(Int(hwFormat.sampleRate))Hz/\(hwFormat.channelCount)ch, device=\(self.sessionDevice.map(String.init) ?? "default", privacy: .public)\(usesVoiceProcessing ? ", voice isolation" : "", privacy: .public))")
+    }
+
+    // MARK: - Voice isolation (Mac)
+
+    /// Voice processing for the next graph: the setting is on and this input
+    /// has not fallen back to raw.
+    private func wantsVoiceProcessing() -> Bool {
+        #if os(macOS)
+        guard SettingsStore().voiceIsolation, let device = AudioDeviceQuery.defaultInputDevice() else { return false }
+        Self.fallbackLock.lock()
+        defer { Self.fallbackLock.unlock() }
+        return !Self.voiceProcessingFallback.contains(device)
+        #else
+        return false
+        #endif
+    }
+
+    /// Turns on Apple's voice processing on the input, with the least ducking
+    /// of other audio macOS offers. A refusal falls back to raw capture.
+    private func enableVoiceProcessing(on input: AVAudioInputNode) -> Bool {
+        #if os(macOS)
+        do {
+            var failure: Error?
+            try Self.catchingException("voice processing") {
+                do { try input.setVoiceProcessingEnabled(true) } catch { failure = error; return }
+                input.voiceProcessingOtherAudioDuckingConfiguration =
+                    AVAudioVoiceProcessingOtherAudioDuckingConfiguration(enableAdvancedDucking: true, duckingLevel: .min)
+            }
+            if let failure { throw failure }
+            return true
+        } catch {
+            abandonVoiceProcessing(String(describing: error))
+            return false
+        }
+        #else
+        return false
+        #endif
+    }
+
+    /// Records this input raw from now on.
+    private func abandonVoiceProcessing(_ why: String) {
+        guard let device = AudioDeviceQuery.defaultInputDevice() else { return }
+        Self.fallbackLock.lock()
+        Self.voiceProcessingFallback.insert(device)
+        Self.fallbackLock.unlock()
+        Log.audio.warning("voice isolation off for \(AudioInputDevices.currentDefaultName() ?? "this mic", privacy: .public) until relaunch: \(why, privacy: .public)")
     }
 
     /// Observe THIS engine only. Rebuilding creates a new engine which posts its
@@ -464,6 +545,7 @@ public final class AudioCaptureEngine: AudioCapturing, @unchecked Sendable {
             }
         }
         engine = nil
+        graphUsesVoiceProcessing = false
         isPrewarmed = false
         prewarmedDevice = nil
         prewarmedFormat = nil
@@ -492,6 +574,11 @@ public final class AudioCaptureEngine: AudioCapturing, @unchecked Sendable {
             self.stateLock.unlock()
             guard !stoppedNow else { return }
             self.rebuildCount += 1
+            // Voice processing that keeps reconfiguring falls back to raw,
+            // well before the circuit breaker (Hex: more than 3 in 30 s).
+            if self.graphUsesVoiceProcessing, self.rebuildCount >= 2 {
+                self.abandonVoiceProcessing("the mic kept reconfiguring")
+            }
             guard self.rebuildCount <= self.maxRebuildsPerSession else {
                 Log.audio.error("AudioCaptureEngine: rebuild circuit breaker tripped (\(self.rebuildCount)) — leaving engine down; captured audio is preserved")
                 self.onEngineDied?("Mic kept reconnecting")

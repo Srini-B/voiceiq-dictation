@@ -127,6 +127,7 @@ struct DictationSettingsView: View {
     @State private var calendar = SettingsStore().calendarForMeetings && CalendarMeetings.isAuthorized
     private var calendarDenied: Bool { !calendar && CalendarMeetings.isDenied }
     @State private var microphone = MobileSettings.microphoneChoice
+    @State private var voiceIsolation = SettingsStore().voiceIsolation
     @State private var warmWindow = MobileSettings.warmWindow
     @State private var languages = SettingsStore().spokenLanguages
 
@@ -156,8 +157,10 @@ struct DictationSettingsView: View {
                     ForEach(MobileSettings.MicrophoneChoice.allCases) { Text($0.label).tag($0) }
                 }
                 .onChange(of: microphone) { _, value in MobileSettings.microphoneChoice = value }
+                Toggle("Voice isolation", isOn: $voiceIsolation)
+                    .onChange(of: voiceIsolation) { _, value in settings.setVoiceIsolation(value) }
             } footer: {
-                Text("Automatic uses a wired headset's mic, or the car's in CarPlay, and otherwise your \(UIDevice.current.localizedModel)'s, so AirPods keep playing in full quality. \(UIDevice.current.localizedModel) always uses its own mic. Bluetooth also uses AirPods and car kits, which switch to call-quality sound while you dictate.")
+                Text("Automatic uses a wired headset's mic, or the car's in CarPlay, and otherwise your \(UIDevice.current.localizedModel)'s, so AirPods keep playing in full quality. \(UIDevice.current.localizedModel) always uses its own mic. Bluetooth also uses AirPods and car kits, which switch to call-quality sound while you dictate. Voice isolation turns down background noise while you dictate; it can switch Bluetooth headphones to call-quality sound too.")
             }
             SpeechSourceSection(device: UIDevice.current.localizedModel) { SettingsSectionHeader("Speech") }
             Section {

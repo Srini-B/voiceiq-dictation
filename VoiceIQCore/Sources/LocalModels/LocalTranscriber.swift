@@ -45,7 +45,10 @@ public final class LocalTranscriber: Sendable {
         let options = LocalSpeechOptions(
             vocabulary: vocabulary,
             toolsDirectory: toolsReady ? LocalModelManifest.englishTools.installDirectory : nil,
-            language: language.code
+            language: language.code,
+            // Writing Off inserts the transcript as it is, so its numbers
+            // are written by `SpokenNumbers`; the writers keep NeMo's.
+            spokenNumbers: SettingsStore().cleanupSource == .none
         )
         return (options, toolsReady)
     }

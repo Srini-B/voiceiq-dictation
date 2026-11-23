@@ -112,7 +112,11 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
         let raw = transcript.cleanedTranscript
         guard !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw TranscriptionError.emptyTranscript }
         var asTranscribed = transcript
-        asTranscribed.cleanedTranscript = ReplacementEngine.apply(rules, to: raw)
+        // Dictionary names spelled another way ("Stacy" for "Stacey") take
+        // the Dictionary's spelling; the writers get the transcript as heard.
+        asTranscribed.cleanedTranscript = SoundAlikeSpelling.apply(
+            DictionaryStore().entries().map(\.term), to: ReplacementEngine.apply(rules, to: raw),
+            language: settings.localSpeechLanguage.code)
         if settings.cleanupSource == .onDevice, let written = try await writeOnDevice(transcript, context: context, rules: rules) {
             return written
         }
