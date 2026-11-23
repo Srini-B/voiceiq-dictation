@@ -79,13 +79,19 @@ public final class ScreenNameSampler: @unchecked Sendable {
     /// `apps` limits the call apps; browsers always count.
     static func frontCallApp(among apps: Set<String>? = nil) -> String? {
         let windows = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] ?? []
+        var browsersRead = Set<pid_t>()
         for window in windows where window[kCGWindowLayer as String] as? Int == 0 {
             guard let pid = window[kCGWindowOwnerPID as String] as? pid_t,
                   let id = NSRunningApplication(processIdentifier: pid)?.bundleIdentifier else { continue }
             if CallApps.known[id] != nil, apps?.contains(id) ?? true { return id }
-            // Window titles need Screen Recording, which snapshots need anyway.
-            if CallApps.browsers.contains(id), let title = window[kCGWindowName as String] as? String,
-               CallApps.meetingPages.contains(where: { title.localizedCaseInsensitiveContains($0) }) { return id }
+            guard CallApps.browsers.contains(id) else { continue }
+            // Window titles need Screen Recording; without it, Accessibility
+            // reads the browser's pages, once per browser.
+            if let title = window[kCGWindowName as String] as? String {
+                if CallApps.meetingPages.contains(where: { title.localizedCaseInsensitiveContains($0) }) { return id }
+            } else if AXIsProcessTrusted(), browsersRead.insert(pid).inserted, BrowserPages.read(pid: pid).meeting != nil {
+                return id
+            }
         }
         return nil
     }
