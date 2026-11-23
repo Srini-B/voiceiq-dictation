@@ -238,6 +238,20 @@ final class AgentClientsTests: XCTestCase {
         XCTAssertEqual(try String(contentsOf: codex, encoding: .utf8), escapedQuotes)
     }
 
+    func testLinkedConfigIsChangedWhereItLives() throws {
+        let target = try write("model = \"o3\"\n", to: "dotfiles/codex.toml")
+        let link = home.appendingPathComponent(".codex/config.toml")
+        try FileManager.default.createDirectory(at: link.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: target)
+
+        try AgentClient.codex.install(key: "a", home: home)
+        XCTAssertEqual(try FileManager.default.destinationOfSymbolicLink(atPath: link.path), target.path)
+        XCTAssertEqual(AgentClient.codex.status(key: "a", home: home), .setUp)
+        XCTAssertTrue(try String(contentsOf: target, encoding: .utf8).contains("[mcp_servers.voiceiq]"))
+        try AgentClient.codex.remove(home: home)
+        XCTAssertEqual(try String(contentsOf: target, encoding: .utf8), "model = \"o3\"\n")
+    }
+
     func testAmpSetUpInAFreshConfigFolder() throws {
         try FileManager.default.createDirectory(at: home.appendingPathComponent(".config/amp"), withIntermediateDirectories: true)
         try AgentClient.amp.install(key: "a", home: home)

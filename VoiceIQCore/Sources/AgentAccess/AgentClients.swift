@@ -150,7 +150,10 @@ public enum AgentClient: String, CaseIterable, Identifiable, Sendable {
     // MARK: - Writing
 
     private func write(home: URL, _ edit: (String) throws -> String) throws {
-        let file = configFile(home: home)
+        // A config kept elsewhere and linked in, as with dotfiles, is changed
+        // where it lives, so the link stays; the backup stays beside the link.
+        let link = configFile(home: home)
+        let file = link.resolvingSymlinksInPath()
         let fileManager = FileManager.default
         let old = exists(file) ? try String(contentsOf: file, encoding: .utf8) : nil
         let new = try edit(old ?? "")
@@ -160,7 +163,7 @@ public enum AgentClient: String, CaseIterable, Identifiable, Sendable {
         let existing = (try? fileManager.attributesOfItem(atPath: file.path)[.posixPermissions] as? Int) ?? 0o600
         let permissions = existing & 0o700
         if let old {
-            let backup = file.deletingLastPathComponent().appendingPathComponent(file.lastPathComponent + ".voiceiq-backup")
+            let backup = link.deletingLastPathComponent().appendingPathComponent(link.lastPathComponent + ".voiceiq-backup")
             try Self.replace(backup, with: Data(old.utf8), permissions: permissions)
         }
         try Self.replace(file, with: Data(new.utf8), permissions: permissions)
