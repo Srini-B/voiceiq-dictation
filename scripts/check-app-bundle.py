@@ -47,8 +47,9 @@ def main():
             raise SystemExit("Speech helper lacks the expected inference runtime")
     elif "10FluidAudio" not in symbols:
         raise SystemExit("iOS app lacks the expected inference runtime")
-    if "_nemo_normalize_sentence" not in symbols:
-        raise SystemExit("Inference lacks the required English normalization runtime")
+    # SpokenNumbers replaced NeMo inverse normalization (docs/ON_DEVICE.md).
+    if "_nemo_normalize" in symbols:
+        raise SystemExit("Inference still links the retired NeMo normalizer")
 
     print(json.dumps({
         "app": str(app),
