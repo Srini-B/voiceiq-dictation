@@ -70,10 +70,45 @@ enum LocalModelInstaller {
         }
     }
 
+    /// Removes the model and the prepared copies Core ML made of it. The cache
+    /// cannot be split by model, so the others are prepared again on their
+    /// next load.
     static func removeAll(_ manifest: LocalModelManifest) throws {
+        removePreparedModels()
         let root = manifest.rootDirectory
         guard FileManager.default.fileExists(atPath: root.path) else { return }
         try FileManager.default.removeItem(at: root)
+    }
+
+    /// Every model the app can download.
+    static let allManifests: [LocalModelManifest] = [.parakeet, .fluidSpeechPro, .englishTools, .speakerDiarizer, .writer]
+
+    /// Where the process that loads the models keeps its caches: Core ML's
+    /// prepared copies (`com.apple.e5rt.e5bundlecache`, written on a model's
+    /// first load) and Metal's shader cache. On the Mac that is the
+    /// `VoiceiQLocalSpeech` helper's own folder, which holds nothing else; on
+    /// iOS the models load in the app, so only the Core ML folder is ours to
+    /// remove.
+    static var preparedModelCache: URL {
+        if let root = FileLayout.overrideRoot { return root.appendingPathComponent("PreparedModels", isDirectory: true) }
+        let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+        #if os(macOS)
+        return caches.appendingPathComponent("io.blue.voiceiq.localspeech", isDirectory: true)
+        #else
+        return caches.appendingPathComponent(Bundle.main.bundleIdentifier ?? "", isDirectory: true)
+            .appendingPathComponent("com.apple.e5rt.e5bundlecache", isDirectory: true)
+        #endif
+    }
+
+    static func removePreparedModels() {
+        try? FileManager.default.removeItem(at: preparedModelCache)
+    }
+
+    /// At launch: the prepared copies outlive their models when a model was
+    /// deleted by a build that left them (0.7.13 and earlier) or by hand.
+    static func removeUnusedPreparedModels() {
+        guard !allManifests.contains(where: isInstalled) else { return }
+        removePreparedModels()
     }
 
     /// Downloads every file into a staging folder, verifies each one, then

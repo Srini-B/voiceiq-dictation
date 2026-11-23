@@ -46,7 +46,7 @@ final class AppModel: ObservableObject {
     init() {
         FormattingSettingsMigration.splitWritingRulesOnce()
         FormattingSettingsMigration.removeLiveTranscriptionSettings()
-        FileLayout.removeStaleRenders()
+        FileLayout.removeStaleFiles()
         SettingsStore().removeRetiredSettingsOnce()
         let client = GeminiClient(apiKey: { KeychainStore.loadAPIKey() })
         transcription = GeminiTranscriptionService(client: client, localWriter: LocalSpeechInference.write)

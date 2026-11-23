@@ -49,7 +49,7 @@ final class DictationController {
 
     init() {
         KeychainStore.migrateDevKeyFileIfPresent()
-        FileLayout.removeStaleRenders()
+        FileLayout.removeStaleFiles()
         SettingsStore().removeRetiredSettingsOnce()
         let client = GeminiClient(apiKey: { KeychainStore.loadAPIKey() })
         let service = GeminiTranscriptionService(client: client, localWriter: LocalWriterHelper.run)

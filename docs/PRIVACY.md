@@ -213,12 +213,11 @@ provider's terms. It is off by default; details in
   API keys, tokens or text the app marks private, and keeps 7 days.
 - Local files are protected by FileVault if enabled; they are not separately
   encrypted (stated honestly).
-- Builds before 2026-11-10 could download speech models into
-  `~/Library/Application Support/VoiceiQ/Models`. Every launch deletes that
-  folder, and on the Mac the helper's cache in
-  `~/Library/Caches/io.blue.voiceiq.localspeech` (`FileLayout.removeRetiredModels`).
-  That cleanup can be removed once every install has launched a build from
-  2026-11-10 or later.
+- On-device models you download live in
+  `~/Library/Application Support/VoiceiQ/Models` until you delete them in
+  Settings. Core ML's prepared copies of them (on the Mac,
+  `~/Library/Caches/io.blue.voiceiq.localspeech`) are deleted with any model,
+  and at launch when no model is downloaded. See [ON_DEVICE.md](ON_DEVICE.md).
 - The first launch of 0.7.12 deletes the OpenAI, ElevenLabs, TinyFish and
   agent-provider keys that earlier versions stored in the Keychain, their
   settings, and Agent mode's saved runs

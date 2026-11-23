@@ -44,11 +44,14 @@ public enum FileLayout {
 
     /// Deletes everything in the temporary `recorded-audio` folder but this
     /// launch's renders: the playback copies 0.7.1 (75) kept there, and
-    /// renders cut short by the app quitting. Runs at every launch, off the
-    /// main thread; a missing folder or a failed delete is ignored.
-    /// Downloaded on-device models (`Models`) are kept; Settings deletes them.
-    public static func removeStaleRenders() {
+    /// renders cut short by the app quitting. With no on-device model
+    /// downloaded, also deletes Core ML's prepared copies of models deleted
+    /// earlier. Runs at every launch, off the main thread; a missing folder
+    /// or a failed delete is ignored. Downloaded on-device models (`Models`)
+    /// are kept; Settings deletes them.
+    public static func removeStaleFiles() {
         Task.detached(priority: .utility) {
+            LocalModelInstaller.removeUnusedPreparedModels()
             let fileManager = FileManager.default
             let renders = FileLayout.partialRendersFolder.deletingLastPathComponent()
             for old in (try? fileManager.contentsOfDirectory(at: renders, includingPropertiesForKeys: nil)) ?? []
