@@ -110,6 +110,8 @@ final class ChromeExtensionScriptTests: XCTestCase {
     function setTimeout(f, ms) { timers.push(f); return timers.length; }
     function clearTimeout(id) { if (id) timers[id - 1] = null; }
     function fireTimers() { var due = timers; timers = []; due.forEach(function (f) { if (f) f(); }); }
+    var intervals = [];
+    function setInterval(f, ms) { intervals.push(f); }
     """
 
     func testAnUpdatedFolderReloadsTheExtensionOnceNoCallIsOpen() throws {
@@ -126,6 +128,13 @@ final class ChromeExtensionScriptTests: XCTestCase {
         XCTAssertEqual(json(worker, "reloads"), "0", "a call was open a moment ago")
 
         worker.evaluateScript("now += 61000; fireTimers();")
+        XCTAssertEqual(json(worker, "reloads"), "1")
+    }
+
+    func testAnUpdateThatLandsBetweenCallsIsFoundWhileIdle() throws {
+        let worker = try context(chromeAPIs, script: "service-worker.js")
+        worker.evaluateScript("onDisk = '1.3.0'; now += 600000; intervals.forEach(function (f) { f(); });")
+
         XCTAssertEqual(json(worker, "reloads"), "1")
     }
 }

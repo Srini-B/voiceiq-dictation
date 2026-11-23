@@ -312,7 +312,8 @@ said 1.1.0. Two things now swap it without the user:
    (Measured the same way: a renamed worker ran at the first restart.)
 2. The 1.2.0 worker fetches its own `manifest.json`, which Chrome reads from
    the folder on disk on every request, when it starts, when the native host
-   goes away, and 61 s after the last event from a call tab. When the
+   goes away, 61 s after the last event from a call tab, and every 5 minutes
+   (the open port keeps the worker alive between calls). When the
    version on disk differs from the running one and no call tab has reported
    for a minute, it calls `chrome.runtime.reload()`, which swaps the worker
    and the content scripts at once and sends a new `hello`. A reload during a

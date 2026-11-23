@@ -36,7 +36,8 @@ function send(message) {
 // every fetch, so a version there that differs from the running one is an
 // update. A reload cuts off the content scripts of open call tabs, so it
 // waits until no call page has reported for a minute; the check runs when
-// this worker starts, when the host goes away, and once each call goes quiet.
+// this worker starts, when the host goes away, once each call goes quiet,
+// and every 5 minutes.
 async function checkForUpdate() {
   let onDisk;
   try {
@@ -64,3 +65,6 @@ function announceInstalled() { send({ t: Date.now(), page: 'hello', tab: -1, act
 chrome.runtime.onInstalled.addListener(announceInstalled);
 chrome.runtime.onStartup.addListener(announceInstalled);
 checkForUpdate();
+// The open port keeps this worker alive between calls, so an update that
+// lands while no call is open is also looked for on a timer.
+setInterval(checkForUpdate, 5 * 60000);

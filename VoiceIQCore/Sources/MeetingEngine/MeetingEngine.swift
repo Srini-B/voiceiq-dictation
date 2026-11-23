@@ -389,12 +389,13 @@ import VoiceIQSpeech
     /// downloaded, or stays busy for a minute.
     nonisolated static func farSideDiarizer(_ runner: @escaping LocalMeetingRunner) -> MeetingTranscriber.FarSideDiarizer {
         { audio in
-            let id = UUID()
+            let id = UUID(), job = FarSideJob()
             var directory: URL?
             for _ in 0..<30 {
                 directory = await MainActor.run {
+                    // Deleting the model stops the pass and waits for it before the files go.
                     LocalModelStore.speakerDiarizer.state == .ready
-                        ? LocalModelStore.speakerDiarizer.acquireSession(id: id, cancel: {}) : nil
+                        ? LocalModelStore.speakerDiarizer.acquireSession(id: id, cancel: { await job.cancel() }) : nil
                 }
                 if directory != nil { break }
                 guard await MainActor.run(body: { LocalModelStore.speakerDiarizer.state == .ready }) else { return nil }
@@ -402,7 +403,9 @@ import VoiceIQSpeech
             }
             guard let directory else { return nil }
             defer { Task { @MainActor in LocalModelStore.speakerDiarizer.releaseSession(id: id) } }
-            return try await runner(LocalMeetingRequest(speechDirectory: nil, diarizerDirectory: directory, audio: audio)).segments
+            return try await job.run {
+                try await runner(LocalMeetingRequest(speechDirectory: nil, diarizerDirectory: directory, audio: audio)).segments
+            }
         }
     }
 
@@ -593,5 +596,25 @@ public enum MeetingFailure: Error, Equatable {
         default:
             return "Transcription failed: \(error.localizedDescription). \(fixHint)"
         }
+    }
+}
+
+/// The far-side speaker pass, so deleting the speaker model can stop it and
+/// wait for it: on the Mac cancelling kills its helper.
+private actor FarSideJob {
+    private var task: Task<[LocalMeetingResult.Segment], Error>?
+    private var cancelled = false
+
+    func run(_ body: @escaping @Sendable () async throws -> [LocalMeetingResult.Segment]) async throws -> [LocalMeetingResult.Segment] {
+        guard !cancelled else { throw CancellationError() }
+        let task = Task { try await body() }
+        self.task = task
+        return try await withTaskCancellationHandler { try await task.value } onCancel: { task.cancel() }
+    }
+
+    func cancel() async {
+        cancelled = true
+        task?.cancel()
+        _ = await task?.result
     }
 }
