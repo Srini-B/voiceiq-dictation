@@ -743,8 +743,9 @@ public enum SpokenNumbers {
             secondEnd = point.end
             secondPlain = false
         }
-        // The count-noun rule leaves a second "zero" in words, so the first stays too.
-        if second.value == 0, secondPlain { return .skip(secondEnd) }
+        // The count-noun rule leaves a second "zero" or "one" in words ("five to
+        // one foot"), so the first stays too.
+        if second.value <= 1, secondPlain { return .skip(secondEnd) }
         // "from zero to one hundred": a second number that is plainly a number takes the first.
         guard secondPlain else {
             // "two to three hundred" and "one or two hundred" mean hundreds: both stay as said.

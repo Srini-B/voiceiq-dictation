@@ -210,6 +210,7 @@ final class SpokenNumbersTests: XCTestCase {
         XCTAssertEqual(SpokenNumbers.digits(in: "I said twenty one direction.", language: "en-US", protectedTerms: ["One Direction"]),
                        "I said twenty one direction.")
         XCTAssertEqual(SpokenNumbers.digits(in: "Five to zero degrees.", language: "en-US"), "Five to zero degrees.")
+        XCTAssertEqual(SpokenNumbers.digits(in: "Five to one foot.", language: "en-US"), "Five to one foot.")
         XCTAssertEqual(SpokenNumbers.digits(in: "It costs one point two point three dollars.", language: "en-US"),
                        "It costs one point two point three dollars.")
         XCTAssertEqual(SpokenNumbers.digits(in: "Five to ten minutes.", language: "en-US"), "5 to 10 minutes.")
