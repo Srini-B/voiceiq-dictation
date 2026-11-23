@@ -138,6 +138,15 @@ of only hesitation sounds is not sent at all; in other languages "um" and
 prompt is saved next to the model (`prefix-<hash>.state`) and restored for
 the next dictation, so only the dictation itself is read.
 
+**Screen context.** Only Gemini writing uses the screenshots. The on-device
+writer gets the target app's name and nothing from the screen. LFM3's vision
+projector (291.6 MB at Q4_K_M) was not adopted, and giving the writer the
+screenshots' text (Vision OCR, up to 80 names and terms) was tried and
+dropped: about 230 more prompt tokens added 1.1 s on the CPU and 1.3 s on the
+VM's GPU per dictation, and on three dictations full of names the model fixed
+none of the misheard ones ("Sreenie", "voice iq", "graph ana"), with or
+without the terms.
+
 **Memory.** Every local model loads only for the step that needs it:
 
 1. The speech model loads at recording start and is released after decoding.

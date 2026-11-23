@@ -137,3 +137,15 @@ transcription failure. `onDeviceFallsBackToGemini` and
 `TranscriptionError.onDeviceFailed` are gone; Off now only means no writing
 step for a transcript made on device. The Gemini call-count tests expect one
 audio call with each writing choice when the on-device model is unavailable.
+
+## Screen context stays Gemini-only
+
+cyron asked whether LFM3-Omni-2B could read the screen for on-device writing.
+Its vision and audio encoders ship in a separate projector file (291.6 MB at
+Q4_K_M) that our llama.cpp build does not support, so the cheaper route was
+tried instead: Vision OCR on the screenshots, with up to 80 names and terms
+put in the writer's prompt. On the cloud Mac it added 1.1 s (CPU) to 1.3 s
+(VM GPU) per dictation and fixed no misheard name on three test dictations,
+also when given as dictionary words. cyron chose to drop it; screen context
+goes to Gemini writing only.
+
