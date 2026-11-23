@@ -268,10 +268,6 @@ import VoiceIQSpeech
     private func transcribe(folder: URL, config cfg: GeminiConfig) async throws -> ([TranscriptSegment], Bool) {
         let cloud = MeetingTranscriber(client: client, models: .init(transcribe: cfg.transcribeModel), endpoint: cfg.endpoint)
         guard let local = try await acquireLocal() else {
-            let settings = SettingsStore()
-            guard !settings.localMeetingTranscriptionEnabled || settings.onDeviceFallsBackToGemini else {
-                throw TranscriptionError.onDeviceFailed
-            }
             guard hasKey() else { throw MeetingFailure.noKey }
             return (try await cloud.transcribe(folder: folder), false)
         }
@@ -280,21 +276,21 @@ import VoiceIQSpeech
             Log.meeting.info("transcribed on device: \(transcript.count, privacy: .public) turns")
             return (transcript, true)
         } catch {
-            guard hasKey(), SettingsStore().onDeviceFallsBackToGemini, !(error is CancellationError) else { throw error }
+            guard hasKey(), !(error is CancellationError) else { throw error }
             Log.meeting.error("on-device transcription failed, using Gemini: \(String(describing: error), privacy: .public)")
             return (try await cloud.transcribe(folder: folder), false)
         }
     }
 
     /// Nil when the meeting should go to Gemini: on device is off or not
-    /// downloaded, or the models stayed busy, a key is stored and Writing
-    /// rules and notes is Gemini. Otherwise the busy error is the failure.
+    /// downloaded, or the models stayed busy and a key is stored. Without a
+    /// key the busy error is the failure.
     private func acquireLocal() async throws -> LocalMeetingTranscriber? {
         guard let runner = localMeeting else { return nil }
         do {
             return try await LocalMeetingTranscriber.acquire(runner: runner)
         } catch {
-            guard hasKey(), SettingsStore().onDeviceFallsBackToGemini, !(error is CancellationError) else { throw error }
+            guard hasKey(), !(error is CancellationError) else { throw error }
             Log.meeting.error("on-device models unavailable, using Gemini: \(String(describing: error), privacy: .public)")
             return nil
         }
@@ -448,7 +444,7 @@ public enum MeetingFailure: Error, Equatable {
                 return "Couldn't reach Gemini. \(fixHint)"
             case .safetyBlocked:
                 return "Gemini declined to transcribe this meeting. \(fixHint)"
-            case .badRequest, .emptyTranscript, .onDeviceFailed:
+            case .badRequest, .emptyTranscript:
                 return "Transcription failed. \(fixHint)"
             }
         default:

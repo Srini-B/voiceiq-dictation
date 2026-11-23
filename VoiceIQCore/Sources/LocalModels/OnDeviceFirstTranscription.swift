@@ -4,8 +4,8 @@ import VoiceIQSpeech
 
 /// History's Retry and launch recovery: the saved recording goes to the
 /// on-device model when the settings pick it and it is downloaded, then to
-/// Gemini's writing step; otherwise Gemini transcribes it. If the model
-/// fails, Gemini hears it only when Writing rules and notes is Gemini. A live dictation
+/// Gemini's writing step; otherwise, or if the model fails, Gemini
+/// transcribes it. A live dictation
 /// takes the same route through `DictationCoordinator`, which loads the model
 /// while the user speaks.
 public struct OnDeviceFirstTranscription: TranscriptionServicing {
@@ -29,10 +29,6 @@ public struct OnDeviceFirstTranscription: TranscriptionServicing {
             }
         }
         try Task.checkCancellation()
-        let settings = SettingsStore()
-        guard !settings.localTranscriptionEnabled || settings.onDeviceFallsBackToGemini else {
-            throw TranscriptionError.onDeviceFailed
-        }
         return try await gemini.transcribe(audioURL: audioURL, durationSeconds: durationSeconds, context: context)
     }
 

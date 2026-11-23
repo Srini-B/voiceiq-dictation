@@ -14,8 +14,9 @@ and the audio only if the on-device model is missing, busy or fails. Set to
 On device, it gets nothing while the on-device models work; if one is
 missing, busy or fails and a key is stored, Gemini gets the audio (or, when
 only the on-device writer failed, the transcript text) as it would with
-Gemini. Set to Off, no audio or text of it goes to Gemini or any model
-service, even then. Finished text still syncs to your own iCloud like any dictation
+Gemini. Set to Off, nothing transcribed on device goes to Gemini for
+writing, but a recording the on-device models could not transcribe still goes
+to Gemini as audio when a key is stored. Finished text still syncs to your own iCloud like any dictation
 (see iCloud below). A row of
 Speech left on Gemini (say, Dictation while Meetings are on device) still
 sends that audio to Gemini. Models download from Hugging Face only when you ask for them.

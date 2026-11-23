@@ -132,7 +132,8 @@ speaker separation or LFM3-Omni-2B) now hands the dictation or meeting to
 Gemini when a key is stored, as with Gemini: `onDeviceFallsBackToGemini` is
 `cleanupSource != .none`, and a failed or missing on-device writer passes the
 transcript to Gemini writing (dictations, meeting notes, Redo notes). Off
-keeps nothing transcribed on device leaving the device; whether Off should
-also fall back on a transcription failure is left for cyron to decide. The
-Gemini call-count tests now expect zero calls with Off and one with On device
-or Gemini.
+no longer means local-only either: cyron chose that Off also falls back on a
+transcription failure. `onDeviceFallsBackToGemini` and
+`TranscriptionError.onDeviceFailed` are gone; Off now only means no writing
+step for a transcript made on device. The Gemini call-count tests expect one
+audio call with each writing choice when the on-device model is unavailable.

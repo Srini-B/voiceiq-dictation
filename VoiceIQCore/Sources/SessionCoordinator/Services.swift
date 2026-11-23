@@ -52,9 +52,6 @@ public enum TranscriptionError: Error, Equatable, Sendable {
     case timeout
     case emptyTranscript
     case safetyBlocked
-    /// On-device transcription failed and the settings keep the words on
-    /// the device, so the recording was not sent to Gemini.
-    case onDeviceFailed
 }
 
 /// The text field that had focus when dictation started, and the text around

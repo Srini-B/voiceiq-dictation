@@ -71,11 +71,6 @@ public extension SettingsStore {
         return CleanupSource.offered.contains(stored) ? stored : .none
     }
 
-    /// An on-device dictation or meeting whose model fails, is busy or isn't
-    /// downloaded goes to Gemini as audio, as with the Gemini source, unless
-    /// writing is Off: then nothing transcribed on device leaves the device.
-    var onDeviceFallsBackToGemini: Bool { cleanupSource != .none }
-
     func setCleanupSource(_ source: CleanupSource) {
         Self.set(source.rawValue, forKey: "cleanupSource")
     }

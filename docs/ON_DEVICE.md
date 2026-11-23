@@ -33,10 +33,11 @@ who writes an on-device transcript:
   a key is stored, as with Gemini; with no key the dictation goes in as
   transcribed. On a device that does not offer it the choice reads as Off.
   See [On-device writer](#on-device-writer).
-- **Off**: no on-device transcript or its audio goes to Gemini. Dictations
-  go in as transcribed, with the Dictionary's replacements. Meetings keep
-  their transcript with speaker labels and a short note that no summary was
-  written. As with every dictation and meeting, the finished text syncs to
+- **Off**: no writing step for an on-device transcript; it never goes to
+  Gemini as text. Dictations go in as transcribed, with the Dictionary's
+  replacements. Meetings keep their transcript with speaker labels and a short
+  note that no summary was written. A recording the on-device models could not
+  transcribe still goes to Gemini (see below). As with every dictation and meeting, the finished text syncs to
   your own iCloud when History sync is on (see PRIVACY.md).
 
 These choices cover what was transcribed on device. A row set to Gemini still
@@ -45,11 +46,11 @@ dictations go to Gemini whatever this row says. A Gemini transcription always
 applies the writing rules in the same request, so "Gemini transcribes,
 on-device writes" does not exist.
 
-With Gemini or On device, an on-device dictation or meeting whose model is
-missing, busy, fails or loads too slowly goes to Gemini as audio when a key is
-stored, and Gemini transcribes and writes it as with the Gemini source. With
-Off it never does: the dictation fails and stays in History for Retry, and the
-meeting is marked failed (`SettingsStore.onDeviceFallsBackToGemini`).
+Whatever this row says, Off included, an on-device dictation or meeting whose
+model is missing, busy, fails or loads too slowly goes to Gemini as audio when
+a key is stored, and Gemini transcribes and writes it as with the Gemini
+source. Without a key the dictation fails and stays in History for Retry, and
+the meeting is marked failed.
 Screen context, when on, sends its screenshots with the Gemini writing
 request as it does with a Gemini dictation.
 

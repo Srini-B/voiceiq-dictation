@@ -89,7 +89,7 @@ final class DictationController {
                 )
             },
             localFactory: {
-                LocalTranscriber.makeFromSettings(audioURL: $0, cloudOnColdLoad: KeychainStore.hasModelKey && SettingsStore().onDeviceFallsBackToGemini,
+                LocalTranscriber.makeFromSettings(audioURL: $0, cloudOnColdLoad: KeychainStore.hasModelKey,
                                                   makeSession: LocalSpeechHelper.makeSession)
             }
         )

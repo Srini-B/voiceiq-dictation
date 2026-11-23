@@ -154,27 +154,16 @@ final class DictationCoordinatorTests: XCTestCase {
     }
 
     /// Dictation set to On device with the model missing or busy (no local
-    /// session): with writing Off the recording must not go to Gemini, so the
-    /// dictation fails and nothing is inserted. With writing On device or
-    /// Gemini it falls back to Gemini.
-    func testOnDeviceDictationWithoutItsModelFallsBackToGeminiUnlessWritingIsOff() async {
+    /// session): the recording falls back to Gemini whatever the writing
+    /// choice, Off included.
+    func testOnDeviceDictationWithoutItsModelFallsBackToGemini() async {
         let settings = SettingsStore()
         settings.setDictationSource(.onDevice)
         defer {
             UserDefaults.standard.removeObject(forKey: "transcriptionSource")
             UserDefaults.standard.removeObject(forKey: "cleanupSource")
         }
-        settings.setCleanupSource(.none)
-        let offCloud = FakeTranscription()
-        let off = makeCoordinator(transcription: offCloud)
-        off.handle(.begin)
-        await pump()
-        off.handle(.finalize)
-        await settle()
-        XCTAssertEqual(off.state, .failed(.validation))
-        XCTAssertNil(inserter.insertedText)
-        XCTAssertEqual(offCloud.audioCalls.value, 0)
-        for writing in [CleanupSource.onDevice, .gemini] where CleanupSource.offered.contains(writing) {
+        for writing in [CleanupSource.none, .onDevice, .gemini] where CleanupSource.offered.contains(writing) {
             settings.setCleanupSource(writing)
             let cloud = FakeTranscription()
             let c = makeCoordinator(transcription: cloud)
