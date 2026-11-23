@@ -149,7 +149,7 @@ actor ParakeetSession: LocalSpeechSession {
             return text.isEmpty ? nil : LocalSpeechOutput(original: text, normalized: text, confidence: confidence)
         }
         return EnglishText.output(original: original, corrected: corrected, confidence: confidence,
-                                  spokenNumbers: options.spokenNumbers, protectedTerms: options.vocabulary.map(\.text))
+                                  protectedTerms: options.vocabulary.map(\.text))
     }
 
     /// Joins in-flight Core ML work before deletion can remove its model files.

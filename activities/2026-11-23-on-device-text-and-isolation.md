@@ -8,14 +8,16 @@ cases are adapted with its notice (`THIRD_PARTY_NOTICES.md`). Hex reviewed at
 
 ## Why
 
-- **Numbers.** Fluid Speech English output runs FluidAudio's NeMo inverse
+- **Numbers.** Fluid Speech English output ran FluidAudio's NeMo inverse
   normalization. On Hex's 110 number cases it matched 32: it wrote "Between 15
   minutes" for "Between five and ten minutes", "14:50 %" for "Ten to fifteen
   percent", "I work 04:51" for "I work nine to five", "No 1 came" for "No one
   came". Hex's `SpokenNumbers` passes all 110, as it should on its own cases.
-  It replaces NeMo only with writing Off; the writers still receive NeMo's
-  text, because cyron asked for no change to what Gemini gets. NeMo's errors
-  also reach the writers today; that is open for cyron to decide.
+  First it replaced NeMo only with writing Off. After seeing the NeMo errors,
+  cyron asked for the writers to get it too, on Mac and iPhone, so it now
+  replaces NeMo everywhere and the `NemoTextProcessing` trait is dropped. The
+  Gemini request, prompt and hedging are unchanged; only the numbers in the
+  transcript Gemini is given change.
 - **Sound-alike spellings.** Speech models write a name's commonest spelling,
   so a Dictionary term spelled another way ("Stacey") never matched.
 - **Voice isolation.** Ships as a setting, off by default, for the reasons in

@@ -1,7 +1,7 @@
 // Ported from Hex (github.com/anomalyco/hex, ios/HEXShared/Formatting/SpokenNumbers.swift at
 // db515bda; added in 06ac30af and 339a5caa). MIT licence, Copyright (c) 2026 Christopher
 // Langton; see THIRD_PARTY_NOTICES.md. In VoiceiQ it writes the on-device English transcript's
-// numbers with writing Off, in place of NeMo inverse normalization (`EnglishText`).
+// numbers (`EnglishText`), in place of NeMo inverse normalization.
 import Foundation
 
 /// English numbers said in words written in digits, as Apple's `SpeechTranscriber` writes them,

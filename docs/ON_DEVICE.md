@@ -97,17 +97,17 @@ after a delete.
    recording and a Gemini key exists, the dictation goes to Gemini and the
    load finishes as a warm-up.
 
-With writing Off, the transcript goes in as transcribed, with two fixes from
-Hex (MIT):
+Two fixes from Hex (MIT) apply to the on-device transcript:
 
-- **Numbers as digits** (English, Fluid Speech Mini and Pro).
-  `LocalTranscriber.sessionOptions` sets `LocalSpeechOptions.spokenNumbers`
-  when writing is Off, and the model's `EnglishText` then writes numbers with
-  `SpokenNumbers` instead of NeMo inverse normalization: "Ten to fifteen
-  percent" → "10 to 15%", "five dollars" → "$5", while "No one came", "I work
-  nine to five" and "four ninety nine" stay as said. Text that already has
-  digits keeps them. With a writer (Gemini or on device) the transcript keeps
-  NeMo's numbers, so what the writers receive is unchanged.
+- **Numbers as digits** (English, Fluid Speech Mini and Pro, Mac and iPhone).
+  The model's `EnglishText` writes numbers with `SpokenNumbers`, for every
+  dictation: the text inserted with writing Off and the transcript the
+  writers (Gemini or on device) receive. "Ten to fifteen percent" → "10 to
+  15%", "five dollars" → "$5", while "No one came", "I work nine to five" and
+  "four ninety nine" stay as said. Text that already has digits keeps them.
+  It replaced FluidAudio's NeMo inverse normalization, which got 32 of Hex's
+  110 number cases right ("Ten to fifteen percent" → "14:50 %"), so the
+  `NemoTextProcessing` trait is no longer linked.
 - **Sound-alike spellings.** After the Dictionary's replacement rules,
   `SoundAlikeSpelling` gives a capitalised name that sounds like a Dictionary
   term, and is spelled nearly the same, the term's spelling: "Stacy" →
