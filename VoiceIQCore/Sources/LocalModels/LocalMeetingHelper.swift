@@ -1,0 +1,93 @@
+#if os(macOS)
+import AVFoundation
+import Darwin
+import Foundation
+import os
+import VoiceIQSpeech
+
+/// Runs one meeting through its own copy of the local speech helper, apart
+/// from the dictation helper, so a meeting being written up never holds up a
+/// dictation and a stuck meeting is ended by killing a process that owns
+/// nothing else.
+public enum LocalMeetingHelper {
+    enum Failure: LocalizedError {
+        case helper(String)
+        case timedOut
+        case disconnected
+
+        var errorDescription: String? {
+            switch self {
+            case .helper(let reason): return reason
+            case .timedOut: return "On-device transcription took too long."
+            case .disconnected: return "The on-device transcription helper stopped."
+            }
+        }
+    }
+
+    public static let run: LocalMeetingRunner = { request in try await transcribe(request) }
+
+    static func transcribe(_ request: LocalMeetingRequest) async throws -> LocalMeetingResult {
+        let duration = (try? AVAudioFile(forReading: request.audio)).map { Double($0.length) / $0.fileFormat.sampleRate } ?? 0
+        let reply = try await oneShot(.meeting(request), timeout: TimeoutPolicy.localMeeting(audioSeconds: duration))
+        switch reply {
+        case .meeting(let result): return result
+        case .meetingFailed(let reason): throw Failure.helper(reason)
+        case .ready, .loadFailed, .accepted, .transcript, .written, .writeFailed: throw Failure.disconnected
+        }
+    }
+
+    /// Sends one command to a helper started for it alone and kills the
+    /// helper after the reply, so everything it loaded goes with it.
+    static func oneShot(_ command: ParakeetCommand, timeout: TimeInterval) async throws -> ParakeetReply {
+        let process = Process()
+        process.executableURL = Bundle.main.bundleURL.appendingPathComponent(
+            "Contents/Helpers/VoiceiQLocalSpeech.app/Contents/MacOS/VoiceiQLocalSpeech")
+        let commands = Pipe(), replies = Pipe()
+        _ = fcntl(commands.fileHandleForWriting.fileDescriptor, F_SETNOSIGPIPE, 1)
+        process.standardInput = commands
+        process.standardOutput = replies
+        process.standardError = FileHandle.standardError
+        try process.run()
+        commands.fileHandleForReading.closeFile()
+        replies.fileHandleForWriting.closeFile()
+        let input = commands.fileHandleForWriting, output = replies.fileHandleForReading
+        let end: @Sendable () -> Void = {
+            // Core ML and llama.cpp work is not cooperatively cancellable; the kill is the stop.
+            if process.isRunning { kill(process.processIdentifier, SIGKILL) }
+            process.waitUntilExit()
+            try? input.close()
+            try? output.close()
+        }
+        defer { end() }
+        let timedOut = OSAllocatedUnfairLock(initialState: false)
+        let deadline = Task {
+            do { try await Task.sleep(for: .seconds(timeout)) } catch { return }
+            timedOut.withLock { $0 = true }
+            end()
+        }
+        defer { deadline.cancel() }
+        do {
+            return try await withTaskCancellationHandler {
+                try await Task.detached {
+                    try ParakeetWire.write(command, to: input)
+                    return try ParakeetWire.read(ParakeetReply.self, from: output)
+                }.value
+            } onCancel: { end() }
+        } catch {
+            throw timedOut.withLock { $0 } ? Failure.timedOut : Failure.disconnected
+        }
+    }
+}
+
+/// The on-device writer through a helper started for each request: the
+/// model's memory is gone the moment the answer is back.
+public enum LocalWriterHelper {
+    public static let run: LocalWriteRunner = { request in
+        switch try await LocalMeetingHelper.oneShot(.write(request), timeout: TimeoutPolicy.localWrite(maxTokens: request.maxTokens, context: request.maxContext)) {
+        case .written(let result): return result
+        case .writeFailed(let reason): throw LocalMeetingHelper.Failure.helper(reason)
+        default: throw LocalMeetingHelper.Failure.disconnected
+        }
+    }
+}
+#endif

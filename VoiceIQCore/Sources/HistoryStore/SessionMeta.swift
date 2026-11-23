@@ -92,8 +92,9 @@ public struct DictationSteps: Codable, Equatable, Sendable {
     /// Encoding and the one model request that hears the audio and writes
     /// the text.
     public var transcription: TimeInterval
-    /// The separate writing model's request. Only dictations from before
-    /// 0.7.12, which transcribed and then cleaned up in two calls, have it.
+    /// The separate writing request: Gemini writing an on-device transcript,
+    /// and dictations from before 0.7.12, which transcribed and then cleaned
+    /// up in two calls.
     public var writing: TimeInterval?
     /// Saving the result and typing it.
     public var insert: TimeInterval?

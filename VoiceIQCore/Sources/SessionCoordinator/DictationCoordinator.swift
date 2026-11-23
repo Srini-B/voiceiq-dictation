@@ -67,6 +67,11 @@ public final class DictationCoordinator: ObservableObject {
     private var session: Session? {
         didSet {
             guard oldValue?.id != session?.id else { return }
+            if let local = localTranscriber {
+                localTranscriber = nil
+                let scope = oldValue.map { UsageScope(activity: .dictation, sessionID: $0.id.uuidString) }
+                Task { await UsageMeter.$scope.withValue(scope) { await local.abort() } }
+            }
             if oldValue != nil, let collector = screenContextCollector {
                 screenContextCollector = nil
                 _ = collector.stop()
@@ -74,6 +79,8 @@ public final class DictationCoordinator: ObservableObject {
         }
     }
     private var capture: AudioCapturing?
+    /// The on-device model loading for this dictation while the user speaks.
+    private var localTranscriber: LocalTranscriber?
     /// When the user let go; the gap to the audio's end is the finalize stage.
     private var finalizeRequestedAt: Date?
     /// The engine stop a finalize started, until its result is used.
@@ -108,6 +115,8 @@ public final class DictationCoordinator: ObservableObject {
     private let transcription: TranscriptionServicing
     private let insertion: TextInserting
     private let contextProvider: @MainActor () -> DictationContext
+    /// The on-device transcriber for a recording, or nil when Gemini transcribes it.
+    private let localFactory: @MainActor (URL) -> LocalTranscriber?
     /// Injectable clock so hold-duration classification is testable.
     private let now: () -> Date
     /// Injectable so the noise behaviours can be exercised both ways headlessly,
@@ -124,6 +133,7 @@ public final class DictationCoordinator: ObservableObject {
         transcription: TranscriptionServicing,
         insertion: TextInserting,
         contextProvider: @escaping @MainActor () -> DictationContext = { DictationContext() },
+        localFactory: @escaping @MainActor (URL) -> LocalTranscriber? = { _ in nil },
         now: @escaping () -> Date = Date.init,
         secureInputActive: @escaping @MainActor () -> Bool = { SecureInput.isActive }
     ) {
@@ -131,6 +141,7 @@ public final class DictationCoordinator: ObservableObject {
         self.transcription = transcription
         self.insertion = insertion
         self.contextProvider = contextProvider
+        self.localFactory = localFactory
         self.now = now
         self.secureInputActive = secureInputActive
     }
@@ -229,6 +240,10 @@ public final class DictationCoordinator: ObservableObject {
 
             let capture = audioFactory()
             self.capture = capture
+            // The model loads while the user speaks. Its usage is booked against this dictation.
+            localTranscriber = UsageMeter.$scope.withValue(UsageScope(activity: .dictation, sessionID: id.uuidString)) {
+                localFactory(FileLayout.audioCAF(in: folder))
+            }
             capture.onLevel = { [weak self] level in
                 Task { @MainActor [weak self] in
                     self?.ingestLevel(level)
@@ -445,22 +460,36 @@ public final class DictationCoordinator: ObservableObject {
         let finalizeStartedAt = Date()
         let finalizeSeconds = finalizeStartedAt.timeIntervalSince(finalizeRequestedAt ?? finalizeStartedAt)
         let usageScope = UsageScope(activity: .dictation, sessionID: sessionID.uuidString)
+        let local = localTranscriber
+        localTranscriber = nil
         inFlightTask = Task { [weak self] in
           await UsageMeter.$scope.withValue(usageScope) {
             guard let self else { return }
             do {
-                let outcome = try await self.transcription.transcribe(
-                    audioURL: FileLayout.audioCAF(in: session.folder),
-                    durationSeconds: result.durationSeconds,
-                    context: session.context
-                )
-                // One model call hears the audio and writes the text, so the
-                // whole request is the transcription step.
+                let audioURL = FileLayout.audioCAF(in: session.folder)
+                let outcome: TranscriptionResult
+                var stages: DictationSteps
+                if let local, let decoded = await local.finish(framesWritten: result.framesWritten) {
+                    try Task.checkCancellation()
+                    let decodedAt = Date()
+                    outcome = try await self.transcription.write(decoded, context: session.context)
+                    stages = DictationSteps(finishRecording: finalizeSeconds,
+                                            transcription: decodedAt.timeIntervalSince(finalizeStartedAt))
+                    if outcome.modelID != decoded.modelID { stages.writing = Date().timeIntervalSince(decodedAt) }
+                } else {
+                    // Gemini hears the audio and writes the text in one call, so
+                    // the whole request is the transcription step. Counted from
+                    // the recording's end, so a slow on-device load shows too.
+                    // With On device chosen and the model busy, missing or
+                    // failed, the audio goes to Gemini whatever the writing choice.
+                    try Task.checkCancellation()
+                    outcome = try await self.transcription.transcribe(
+                        audioURL: audioURL, durationSeconds: result.durationSeconds, context: session.context
+                    )
+                    stages = DictationSteps(finishRecording: finalizeSeconds,
+                                            transcription: Date().timeIntervalSince(finalizeStartedAt))
+                }
                 let readyAt = Date()
-                let stages = DictationSteps(
-                    finishRecording: finalizeSeconds,
-                    transcription: readyAt.timeIntervalSince(finalizeStartedAt)
-                )
                 guard !Task.isCancelled else { return }
                 await self.completeTranscription(
                     sessionID: sessionID, outcome: outcome,
@@ -601,6 +630,11 @@ public final class DictationCoordinator: ObservableObject {
             return
         }
         finishScreenContext()
+        if let local = localTranscriber {
+            let scope = session.map { UsageScope(activity: .dictation, sessionID: $0.id.uuidString) }
+            localTranscriber = nil
+            Task { await UsageMeter.$scope.withValue(scope) { await local.abort() } }
+        }
         inFlightTask?.cancel() // stop the network work too (audit L8)
         inFlightTask = nil
         micLevel = 0

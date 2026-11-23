@@ -49,6 +49,8 @@ struct DictationPane: View {
                     }
             }
 
+            SpeechSourceSection(device: "Mac") { Text("Speech") }
+
             SpokenLanguagesSection()
 
             Section {

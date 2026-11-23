@@ -6,7 +6,9 @@ extension, and names from the call screen), and how the Meetings window shows
 and exports it. Meetings are transcribed by `gemini-3.5-transcribe` through
 the Interactions API (`v1beta/interactions`), always from the saved tracks
 after the recording stops; there is no live transcript while a meeting
-records. Notes and meeting chat come from `gemini-3.8-flash`. What is sent,
+records. Notes and meeting chat come from `gemini-3.8-flash`. With
+Meetings set to On device, the tracks are transcribed and labelled by speaker
+on this device instead ([ON_DEVICE.md](ON_DEVICE.md)). What is sent,
 and the notes prompt, are covered in
 [PRIVACY.md](PRIVACY.md) and [design/meeting-prompt-rulebook.md](design/meeting-prompt-rulebook.md).
 

@@ -6,6 +6,7 @@ import VoiceIQBridge
 import VoiceIQCore
 
 struct SetupStatus: Equatable {
+    /// A Gemini key, or the on-device model the settings pick, downloaded.
     var hasKey: Bool
     var micGranted: Bool
     var micDenied: Bool
@@ -18,7 +19,7 @@ struct SetupStatus: Equatable {
     var keyboardReady: Bool { keyboardAdded && fullAccess }
     var isComplete: Bool { hasKey && micGranted && keyboardReady }
 
-    static func current() -> SetupStatus {
+    @MainActor static func current() -> SetupStatus {
         SharedStore.shared.reloadFromDisk()
         // Removing the keyboard voids the Full Access proof: added back, it
         // has to run once with Full Access again before it counts as ready.
@@ -27,7 +28,7 @@ struct SetupStatus: Equatable {
         }
         let record = AVAudioApplication.shared.recordPermission
         return SetupStatus(
-            hasKey: KeychainStore.hasModelKey,
+            hasKey: DictationRoute.isAvailable,
             micGranted: record == .granted,
             micDenied: record == .denied,
             keyboardAdded: MobileSettings.keyboardAdded,
