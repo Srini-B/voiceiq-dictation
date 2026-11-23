@@ -26,27 +26,29 @@ final class OnDeviceDictationTests: XCTestCase {
     }
 
     /// History's Retry with Dictation On device and the model unavailable:
-    /// the saved audio reaches Gemini only with Gemini writing.
-    func testRetryWithoutTheModelSendsAudioOnlyWithGeminiWriting() async throws {
+    /// the saved audio goes to Gemini unless writing is Off.
+    func testRetryWithoutTheModelSendsAudioUnlessWritingIsOff() async throws {
         let settings = SettingsStore()
         settings.setDictationSource(.onDevice)
         defer { UserDefaults.standard.removeObject(forKey: "transcriptionSource") }
         let cloud = DictationCoordinatorTests.FakeTranscription()
         let retry = OnDeviceFirstTranscription(gemini: cloud, makeSession: { _, _, _, _ in fatalError("no session expected") })
         let audio = FileManager.default.temporaryDirectory.appendingPathComponent("missing-\(UUID()).caf")
-        for writing in [CleanupSource.none, .onDevice] {
-            settings.setCleanupSource(writing)
-            do {
-                _ = try await retry.transcribe(audioURL: audio, durationSeconds: 3, context: DictationContext())
-                XCTFail("expected onDeviceFailed with writing \(writing)")
-            } catch {
-                XCTAssertEqual(error as? TranscriptionError, .onDeviceFailed)
-            }
+        settings.setCleanupSource(.none)
+        do {
+            _ = try await retry.transcribe(audioURL: audio, durationSeconds: 3, context: DictationContext())
+            XCTFail("expected onDeviceFailed with writing Off")
+        } catch {
+            XCTAssertEqual(error as? TranscriptionError, .onDeviceFailed)
         }
         XCTAssertEqual(cloud.audioCalls.value, 0)
-        settings.setCleanupSource(.gemini)
-        _ = try await retry.transcribe(audioURL: audio, durationSeconds: 3, context: DictationContext())
-        XCTAssertEqual(cloud.audioCalls.value, 1)
+        var expected = 0
+        for writing in [CleanupSource.onDevice, .gemini] where CleanupSource.offered.contains(writing) {
+            settings.setCleanupSource(writing)
+            _ = try await retry.transcribe(audioURL: audio, durationSeconds: 3, context: DictationContext())
+            expected += 1
+            XCTAssertEqual(cloud.audioCalls.value, expected, "writing \(writing)")
+        }
     }
 
     /// A decode with no words is an empty dictation, judged by the

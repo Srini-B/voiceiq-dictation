@@ -99,11 +99,11 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
         return TranscriptionResult(rawTranscript: written, cleanedTranscript: text, modelID: modelID)
     }
 
-    /// Writes an on-device transcript by the writing rules: with Gemini when
-    /// the user lets text go to Gemini and a key is stored, or with the
-    /// on-device writer when they picked it and it is downloaded. Otherwise,
-    /// or when writing fails, the transcript is inserted as transcribed; an
-    /// on-device choice never falls back to Gemini. The dictionary's
+    /// Writes an on-device transcript by the writing rules: with the
+    /// on-device writer when the user picked it and it is downloaded, else
+    /// with Gemini when a key is stored, so an on-device writer that is
+    /// missing or fails hands the text to Gemini. With writing Off, no key,
+    /// or Gemini failing, the transcript is inserted as transcribed. The dictionary's
     /// replacement rules apply either way. A transcript with no words, or one
     /// the writer finds holds no speech (only "um" and "uh"), is an empty
     /// dictation, as a Gemini transcription of the audio would be.
@@ -113,10 +113,10 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
         guard !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw TranscriptionError.emptyTranscript }
         var asTranscribed = transcript
         asTranscribed.cleanedTranscript = ReplacementEngine.apply(rules, to: raw)
-        if settings.cleanupSource == .onDevice {
-            return try await writeOnDevice(transcript, context: context, rules: rules, fallback: asTranscribed)
+        if settings.cleanupSource == .onDevice, let written = try await writeOnDevice(transcript, context: context, rules: rules) {
+            return written
         }
-        guard settings.cleanupSource == .gemini, KeychainStore.loadAPIKey() != nil else { return asTranscribed }
+        guard settings.cleanupSource != .none, KeychainStore.loadAPIKey() != nil else { return asTranscribed }
         let config = settings.geminiConfig
         let prompt = dictationPrompt(context: context, transcript: raw)
         // About fifteen characters a second of speech.
@@ -138,8 +138,8 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
     }
 
     private func writeOnDevice(_ transcript: TranscriptionResult, context: DictationContext,
-                               rules: [ReplacementEngine.Rule], fallback: TranscriptionResult) async throws -> TranscriptionResult {
-        guard let localWriter, await LocalWriter.isReady else { return fallback }
+                               rules: [ReplacementEngine.Rule]) async throws -> TranscriptionResult? {
+        guard let localWriter, await LocalWriter.isReady else { return nil }
         do {
             let written = try await LocalWriter.dictation(raw: transcript.cleanedTranscript, context: context, runner: localWriter)
             guard !written.isEmpty else { throw TranscriptionError.emptyTranscript }
@@ -150,8 +150,8 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
             throw TranscriptionError.emptyTranscript
         } catch {
             try Task.checkCancellation()
-            Log.transcription.error("On-device writing skipped: \(String(describing: error), privacy: .public)")
-            return fallback
+            Log.transcription.error("On-device writing failed: \(String(describing: error), privacy: .public)")
+            return nil
         }
     }
 

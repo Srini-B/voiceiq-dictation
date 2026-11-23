@@ -72,7 +72,7 @@ public struct SpeechSourceSection<Header: View>: View {
     private var cleanupNote: String {
         switch cleanupSource {
         case .gemini: return Self.geminiWrites
-        case .onDevice: return "\(LocalWriterSupport.displayName) writes on-device transcripts by your writing rules and writes meeting notes on this \(device), so Gemini never sees what was transcribed here. It loads only while it writes. Until it is downloaded, dictations go in as transcribed."
+        case .onDevice: return "\(LocalWriterSupport.displayName) writes on-device transcripts by your writing rules and writes meeting notes on this \(device). It loads only while it writes. Until it is downloaded, or if an on-device step fails, Gemini takes over when a key is saved."
         case .none: return "Nothing transcribed on device goes to Gemini: dictations go in as transcribed, with your Dictionary's replacements, and meetings keep their transcript with speaker labels but no notes."
         }
     }

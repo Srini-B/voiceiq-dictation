@@ -170,18 +170,19 @@ import VoiceIQSpeech
     }
 
     /// New notes from the saved transcript, using the speaker names typed since.
-    /// With meetings on device, only the writer chosen under Writing rules
-    /// and notes may write them: with Off, or On device and its model
-    /// missing, nothing happens and the transcript stays on the device.
+    /// With meetings on device and writing Off, nothing happens and the
+    /// transcript stays on the device. With On device and its model missing,
+    /// Gemini writes them, as it would after a failed on-device pass.
     public func regenerateNotes(id: MeetingID) {
         guard !isBusy(id), var meta = store.list().first(where: { $0.id == id }),
               let transcript = try? store.loadTranscript(id: id), !transcript.isEmpty else { return }
         let settings = SettingsStore()
-        let writesLocally = settings.meetingSource == .onDevice && settings.cleanupSource != .gemini
-        if writesLocally, settings.cleanupSource == .none || localWriter == nil || !LocalWriter.isReady {
-            Log.meeting.notice("notes not regenerated: meetings stay on device and no on-device writer is available")
+        if settings.meetingSource == .onDevice, settings.cleanupSource == .none {
+            Log.meeting.notice("notes not regenerated: writing is off for on-device meetings")
             return
         }
+        let writesLocally = settings.meetingSource == .onDevice && settings.cleanupSource == .onDevice
+            && localWriter != nil && LocalWriter.isReady
         processing[id] = .summarizing
         Task { await UsageMeter.$scope.withValue(UsageScope(activity: .meeting, sessionID: id.uuid.uuidString)) {
             do {
@@ -255,6 +256,7 @@ import VoiceIQSpeech
                 try finish(id: id, meta: &meta, transcript: transcript, notes: notes)
                 return
             }
+            try Task.checkCancellation()
             let notes = try await writeNotes(transcript: transcript, meta: meta)
             try finish(id: id, meta: &meta, transcript: transcript, notes: notes)
         } catch { saveFailure(id: id, meta: &meta, error: error) }
@@ -323,10 +325,11 @@ import VoiceIQSpeech
         return try MeetingNotesPrompt.parse(text)
     }
 
-    /// The notes of a meeting transcribed on device, when they must stay on
-    /// it: written by the on-device writer when the user picked it, or the
-    /// transcript-only stub when writing is off, there is no key, or the
-    /// writer is missing or fails. Nil when Gemini writes them.
+    /// The notes of a meeting transcribed on device, when they stay on it:
+    /// written by the on-device writer when the user picked it, or the
+    /// transcript-only stub when writing is off, or when no key is stored and
+    /// Gemini would have to write them. Nil when Gemini writes them, which
+    /// includes an on-device writer that is missing or fails.
     private func notesKeptOnDevice(transcript: [TranscriptSegment], meta: MeetingMeta) async -> MeetingNotes? {
         switch SettingsStore().cleanupSource {
         case .gemini:
@@ -334,13 +337,14 @@ import VoiceIQSpeech
         case .none:
             return Self.onDeviceNotes(meta: meta)
         case .onDevice:
-            guard let localWriter, LocalWriter.isReady else { return Self.onDeviceNotes(meta: meta) }
-            do {
-                return try await localNotes(transcript: transcript, meta: meta, runner: localWriter)
-            } catch {
-                Log.meeting.error("on-device notes failed: \(String(describing: error), privacy: .public)")
-                return Self.onDeviceNotes(meta: meta)
+            if let localWriter, LocalWriter.isReady {
+                do {
+                    return try await localNotes(transcript: transcript, meta: meta, runner: localWriter)
+                } catch {
+                    Log.meeting.error("on-device notes failed: \(String(describing: error), privacy: .public)")
+                }
             }
+            return hasKey() ? nil : Self.onDeviceNotes(meta: meta)
         }
     }
 

@@ -481,8 +481,8 @@ public final class DictationCoordinator: ObservableObject {
                     // the whole request is the transcription step. Counted from
                     // the recording's end, so a slow on-device load shows too.
                     // On device chosen, whether or not the model could be taken
-                    // (busy, missing): the audio goes to Gemini only when the
-                    // user lets the words reach Gemini.
+                    // (busy, missing): the audio goes to Gemini unless writing
+                    // is Off, which keeps on-device words on the device.
                     let settings = SettingsStore()
                     if local != nil || settings.localTranscriptionEnabled {
                         try Task.checkCancellation()

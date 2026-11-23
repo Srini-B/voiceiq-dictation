@@ -11,8 +11,11 @@ meetings on your Mac, iPhone or iPad (Settings → Dictation → Speech, see
 rules and notes" decides what Gemini gets. Set to Gemini, it gets the
 transcript text (with screen-context screenshots, if screen context is on),
 and the audio only if the on-device model is missing, busy or fails. Set to
-On device or Off, no audio or text of it goes to Gemini or any model service,
-even then. Finished text still syncs to your own iCloud like any dictation
+On device, it gets nothing while the on-device models work; if one is
+missing, busy or fails and a key is stored, Gemini gets the audio (or, when
+only the on-device writer failed, the transcript text) as it would with
+Gemini. Set to Off, no audio or text of it goes to Gemini or any model
+service, even then. Finished text still syncs to your own iCloud like any dictation
 (see iCloud below). A row of
 Speech left on Gemini (say, Dictation while Meetings are on device) still
 sends that audio to Gemini. Models download from Hugging Face only when you ask for them.

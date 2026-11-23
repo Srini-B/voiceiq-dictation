@@ -123,3 +123,16 @@ when that row is Gemini (`onDeviceFallsBackToGemini`); otherwise the dictation
 fails with `onDeviceFailed` and stays in History, and the meeting is marked
 failed. A stored On device choice on a device that does not offer the writer
 reads as Off, not Gemini.
+
+## On device falls back to Gemini again
+
+cyron chose "Fallback" over the stricter rule above. With Writing rules and
+notes set to On device, a missing, busy or failing on-device model (speech,
+speaker separation or LFM3-Omni-2B) now hands the dictation or meeting to
+Gemini when a key is stored, as with Gemini: `onDeviceFallsBackToGemini` is
+`cleanupSource != .none`, and a failed or missing on-device writer passes the
+transcript to Gemini writing (dictations, meeting notes, Redo notes). Off
+keeps nothing transcribed on device leaving the device; whether Off should
+also fall back on a transcription failure is left for cyron to decide. The
+Gemini call-count tests now expect zero calls with Off and one with On device
+or Gemini.

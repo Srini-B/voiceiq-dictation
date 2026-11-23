@@ -29,9 +29,10 @@ who writes an on-device transcript:
 - **On device**: LFM3-Omni-2B writes the transcript by the same rules and
   writes meeting notes. Offered on the Mac, and on iPhone and iPad with 6 GB
   of RAM or more; below that the row offers Gemini and Off only. If it fails
-  or is not downloaded, the dictation goes in as transcribed. It never falls
-  back to Gemini, and on a device that does not offer it the choice reads as
-  Off. See [On-device writer](#on-device-writer).
+  or is not downloaded, Gemini writes the dictation or the meeting notes when
+  a key is stored, as with Gemini; with no key the dictation goes in as
+  transcribed. On a device that does not offer it the choice reads as Off.
+  See [On-device writer](#on-device-writer).
 - **Off**: no on-device transcript or its audio goes to Gemini. Dictations
   go in as transcribed, with the Dictionary's replacements. Meetings keep
   their transcript with speaker labels and a short note that no summary was
@@ -44,10 +45,11 @@ dictations go to Gemini whatever this row says. A Gemini transcription always
 applies the writing rules in the same request, so "Gemini transcribes,
 on-device writes" does not exist.
 
-With Gemini, an on-device dictation or meeting whose model is missing, busy,
-fails or loads too slowly goes to Gemini as audio when a key is stored. With
-On device or Off it never does: the dictation fails and stays in History for
-Retry, and the meeting is marked failed (`SettingsStore.onDeviceFallsBackToGemini`).
+With Gemini or On device, an on-device dictation or meeting whose model is
+missing, busy, fails or loads too slowly goes to Gemini as audio when a key is
+stored, and Gemini transcribes and writes it as with the Gemini source. With
+Off it never does: the dictation fails and stays in History for Retry, and the
+meeting is marked failed (`SettingsStore.onDeviceFallsBackToGemini`).
 Screen context, when on, sends its screenshots with the Gemini writing
 request as it does with a Gemini dictation.
 

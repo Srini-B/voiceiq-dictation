@@ -255,7 +255,7 @@ public struct LocalModelFooter: View {
             } else {
                 Text(SettingsStore().onDeviceFallsBackToGemini
                      ? "Gemini transcribes until \(store.displayName) is downloaded."
-                     : "Download \(store.displayName) to dictate. Until then, dictations are kept in History and nothing is sent.")
+                     : "Download \(store.displayName) to dictate. Until then, dictations wait in History and nothing is sent, because Writing rules is Off.")
             }
         }
     }
