@@ -65,7 +65,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             onStartHandsFree: { [weak controller] in controller?.startHandsFree() },
             onOpenAbout: { [weak controller] in controller?.openSettings(section: "about") },
             onCheckForUpdates: { AppUpdater.shared.checkForUpdates() },
-            onJoinMeeting: { [weak controller] join in controller?.joinMeeting(join) }
+            onJoinMeeting: { [weak controller] meeting in controller?.joinMeeting(meeting) }
         )
         AppUpdater.shared.start()
         availableUpdateObservation = AppUpdater.shared.$availableUpdate.sink { [weak self] update in

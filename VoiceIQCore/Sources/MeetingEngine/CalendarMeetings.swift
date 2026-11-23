@@ -54,13 +54,18 @@ public enum CalendarMeetings {
             .filter { $0.startDate.addingTimeInterval(-earlyStart) <= date && date < $0.endDate && isMeeting($0) }
             .min { abs($0.startDate.timeIntervalSince(date)) < abs($1.startDate.timeIntervalSince(date)) }
         guard let best, let title = best.title?.trimmingCharacters(in: .whitespacesAndNewlines), !title.isEmpty else { return nil }
-        let people = (best.attendees ?? []).filter { !$0.isCurrentUser && $0.participantType == .person }
+        return Event(title: title, attendees: attendees(of: best))
+    }
+
+    /// Invitees other than the user, by name or address, at most 30.
+    private static func attendees(of event: EKEvent) -> [String] {
+        let people = (event.attendees ?? []).filter { !$0.isCurrentUser && $0.participantType == .person }
         let names = people.compactMap { person -> String? in
             if let name = person.name?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty { return name }
             let address = person.url.absoluteString.replacingOccurrences(of: "mailto:", with: "")
             return address.isEmpty ? nil : address
         }
-        return Event(title: title, attendees: Array(names.prefix(30)))
+        return Array(names.prefix(30))
     }
 
     /// A meeting still to come, for the Meetings screens and the menu-bar menu.
@@ -74,6 +79,8 @@ public enum CalendarMeetings {
         public var start: Date
         /// The call to join, when the event links to a known call service.
         public var join: Join?
+        /// What a recording of this meeting keeps, as `event(at:)` gives it.
+        public var event: Event
     }
 
     /// The next meeting from `date`, by the rules of `event(at:)`, up to a
@@ -89,7 +96,9 @@ public enum CalendarMeetings {
         guard let next else { return nil }
         let title = next.title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let text = [next.url?.absoluteString, next.location, next.notes].compactMap { $0 }.joined(separator: " ")
-        return Upcoming(title: title.isEmpty ? "Meeting" : title, start: next.startDate, join: joinLink(in: text))
+        let shown = title.isEmpty ? "Meeting" : title
+        return Upcoming(title: shown, start: next.startDate, join: joinLink(in: text),
+                        event: Event(title: shown, attendees: attendees(of: next)))
     }
 
     /// Slack is left out: a slack.com link in an invite is rarely the call itself.

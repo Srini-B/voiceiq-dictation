@@ -175,11 +175,13 @@ import VoiceIQSpeech
         switch source { case let .app(bundleID, _): return bundleID; case let .browser(_, host): return host }
     }
 
-    public func startRecording(source: CallSource? = nil) {
+    /// `event`: the calendar meeting the user chose to record (Join and
+    /// Record); otherwise the one under way now, when the calendar is on.
+    public func startRecording(source: CallSource? = nil, event: CalendarMeetings.Event? = nil) {
         if case .recording = phase { return }
         let id = MeetingID(), now = Date()
         var meta = MeetingMeta(id: id, startedAt: now, source: source)
-        if SettingsStore().calendarForMeetings { meta.calendarEvent = CalendarMeetings.event(at: now) }
+        if SettingsStore().calendarForMeetings { meta.calendarEvent = event ?? CalendarMeetings.event(at: now) }
         do {
             let folder = try store.create(meta: meta)
             #if os(macOS)

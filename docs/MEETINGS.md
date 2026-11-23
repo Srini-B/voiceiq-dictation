@@ -129,7 +129,9 @@ https link, a button joins it; Slack links are not offered, since an
 invite's slack.com link is rarely the call. On the Mac the button and the
 menu item are **Join Zoom and Record**: they start a recording, then open the
 link (`MeetingEngine.join`), so the call is recorded from its first second;
-already recording, they only open the link. The recording has no call source,
+already recording, they only open the link. The recording takes the joined
+event's title and invitees (`Upcoming.event`), not whatever event the clock
+falls in, so a meeting joined early is still named right. It has no call source,
 even when another call is detected at that moment: it records all system
 audio, and like any recording started without a detected call it is not
 stopped automatically when the call ends. On iPhone it
