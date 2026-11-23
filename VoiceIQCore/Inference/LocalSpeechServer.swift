@@ -1,0 +1,87 @@
+#if os(macOS)
+import Darwin
+import Foundation
+import VoiceIQSpeech
+
+/// Runs only in the embedded background application, never in the UI process.
+public enum ParakeetHelperServer {
+    public static func run() async {
+        signal(SIGPIPE, SIG_IGN)
+        let output = FileHandle(fileDescriptor: dup(STDOUT_FILENO), closeOnDealloc: true)
+        // Third-party diagnostic prints must not corrupt the reply pipe.
+        dup2(STDERR_FILENO, STDOUT_FILENO)
+        let lifetime = HelperLifetime()
+        while true {
+            do {
+                let command = try await Task.detached {
+                    try ParakeetWire.read(ParakeetCommand.self, from: .standardInput)
+                }.value
+                let reply = await lifetime.handle(command)
+                do {
+                    try ParakeetWire.write(reply, to: output)
+                } catch let error as CocoaError where error.code == .fileReadTooLarge {
+                    // A very long meeting: say why instead of exiting with no reply.
+                    try ParakeetWire.write(Self.tooLarge(reply), to: output)
+                }
+            } catch {
+                exit(0) // EOF also covers host termination.
+            }
+        }
+    }
+
+    private static func tooLarge(_ reply: ParakeetReply) -> ParakeetReply {
+        if case .written = reply { return .writeFailed("The answer is larger than the helper's 8 MB reply limit.") }
+        return .meetingFailed("The meeting's transcript is larger than the helper's 8 MB reply limit.")
+    }
+}
+
+private actor HelperLifetime {
+    private var session: (any LocalSpeechSession)?
+    private var idleExit: Task<Void, Never>?
+
+    func handle(_ command: ParakeetCommand) async -> ParakeetReply {
+        idleExit?.cancel()
+        idleExit = nil
+        switch command {
+        case .load(let model, let directory, let audio, let streaming, let options):
+            await session?.stop()
+            let next = LocalSpeechInference.makeSession(model, audio, streaming, options)
+            session = next
+            guard await next.load(from: directory) else {
+                await next.stop()
+                session = nil
+                return .loadFailed
+            }
+            return .ready
+        case .append(let pcm):
+            return .accepted(await session?.append(pcm))
+        case .transcribe(let frames):
+            let output = await session?.transcribe(framesWritten: frames)
+            await session?.stop()
+            session = nil
+            idleExit = Task {
+                do { try await Task.sleep(for: .seconds(60)) } catch { return }
+                exit(0)
+            }
+            return .transcript(output)
+        case .meeting(let request):
+            await session?.stop()
+            session = nil
+            do {
+                let result = try await LocalMeetingJob.run(request)
+                return .meeting(result)
+            } catch {
+                return .meetingFailed(error.localizedDescription)
+            }
+        case .write(let request):
+            await session?.stop()
+            session = nil
+            do {
+                return .written(try LocalWriterJob.run(request, isCancelled: { false }))
+            } catch {
+                return .writeFailed(error.localizedDescription)
+            }
+        }
+    }
+}
+#endif

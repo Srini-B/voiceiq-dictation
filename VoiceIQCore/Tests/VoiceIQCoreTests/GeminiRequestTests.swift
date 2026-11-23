@@ -31,6 +31,21 @@ final class GeminiRequestTests: XCTestCase {
         return (result, try XCTUnwrap(server.requests.last))
     }
 
+    /// An on-device fallback with no key stored fails before anything is
+    /// sent, so the recording never leaves the device.
+    func testNoKeySendsNothing() async throws {
+        let server = try ScriptedServer(reply: Self.reply("{}"))
+        defer { server.stop() }
+        do {
+            _ = try await GeminiClient(apiKey: { nil })
+                .dictate(prompt: "RULES", audio: Data([1, 2, 3]), model: "gemini-3.8-flash", endpoint: server.url, deadline: 10)
+            XCTFail("expected auth")
+        } catch {
+            XCTAssertEqual(error as? TranscriptionError, .auth)
+        }
+        XCTAssertTrue(server.requests.isEmpty)
+    }
+
     func testDictationSendsThePromptThenTheAudioAndReadsTheTextField() async throws {
         let audio = Data("flac bytes".utf8)
         let (text, request) = try await dictate(replying: #"{"text":"Let's meet at 3 on Thursday."}"#, audio: audio)

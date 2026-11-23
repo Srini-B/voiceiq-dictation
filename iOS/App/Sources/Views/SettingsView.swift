@@ -110,7 +110,7 @@ struct SettingsView: View {
 
     @ViewBuilder private func chip(for section: SettingsSection) -> some View {
         switch section {
-        case .keys where !KeychainStore.hasModelKey:
+        case .keys where !DictationRoute.isAvailable:
             StatusChip(text: "Missing", tone: .pending)
         case .keyboard where !setup.status.keyboardReady || !setup.status.micGranted:
             StatusChip(text: "Set up", tone: .pending)
@@ -156,6 +156,7 @@ struct DictationSettingsView: View {
                         session.setPreferBuiltInMic(value)
                     }
             }
+            SpeechSourceSection(device: UIDevice.current.localizedModel) { SettingsSectionHeader("Speech") }
             Section {
                 SearchablePicker("Main language", selection: Binding(get: { languages.first ?? "" }, set: {
                     saveLanguages(SpokenLanguage.choosing(main: $0, in: languages))
@@ -332,8 +333,11 @@ struct PrivacyView: View {
                 }
             }
             Section {
-                LabeledContent("Audio", value: "Google's Gemini API, with your key")
-                LabeledContent("Notes audio", value: "Gemini, for the transcript and notes")
+                LocalAudioPrivacyRow(provider: "Gemini", cloudDescription: "Google's Gemini API, with your key")
+                LocalMeetingPrivacyRow(
+                    label: "Notes audio",
+                    localDescription: { "Transcribed on device by \($0); transcript to Gemini for notes, if writing is on" },
+                    cloudDescription: "Gemini, for the transcript and notes")
                 LabeledContent("Dictionary terms", value: "With each dictation and notes")
                 LabeledContent("Dictionary", value: "Your iCloud, to sync")
                 LabeledContent("History", value: "Your iCloud, to sync final text")

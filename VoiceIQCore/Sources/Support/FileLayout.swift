@@ -42,26 +42,19 @@ public enum FileLayout {
         appSupportRoot.appendingPathComponent("agent-runs", isDirectory: true)
     }
 
-    /// Deletes the on-device models that builds before 2026-11-10 downloaded
-    /// (the whole `Models` folder), on the Mac the speech helper's Core ML
-    /// cache, and everything in the temporary `recorded-audio` folder but
-    /// this launch's renders: the playback copies 0.7.1 (75) kept there, and
-    /// renders cut short by the app quitting.
-    /// Runs at every launch, off the main thread; a missing folder or a
-    /// failed delete is ignored.
-    public static func removeRetiredModels() {
+    /// Deletes everything in the temporary `recorded-audio` folder but this
+    /// launch's renders: the playback copies 0.7.1 (75) kept there, and
+    /// renders cut short by the app quitting. Runs at every launch, off the
+    /// main thread; a missing folder or a failed delete is ignored.
+    /// Downloaded on-device models (`Models`) are kept; Settings deletes them.
+    public static func removeStaleRenders() {
         Task.detached(priority: .utility) {
             let fileManager = FileManager.default
-            try? fileManager.removeItem(at: FileLayout.appSupportRoot.appendingPathComponent("Models", isDirectory: true))
             let renders = FileLayout.partialRendersFolder.deletingLastPathComponent()
             for old in (try? fileManager.contentsOfDirectory(at: renders, includingPropertiesForKeys: nil)) ?? []
             where old.lastPathComponent != FileLayout.partialRendersFolder.lastPathComponent {
                 try? fileManager.removeItem(at: old)
             }
-            #if os(macOS)
-            let caches = fileManager.urls(for: .cachesDirectory, in: .userDomainMask)[0]
-            try? fileManager.removeItem(at: caches.appendingPathComponent("io.blue.voiceiq.localspeech", isDirectory: true))
-            #endif
         }
     }
 
