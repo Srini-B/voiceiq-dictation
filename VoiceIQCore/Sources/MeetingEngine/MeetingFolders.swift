@@ -84,9 +84,17 @@ public struct MeetingFoldersSnapshot: Codable, Equatable, Sendable {
             kept.append(folder)
         }
         // Of the two, the one that still leads to a live folder, so its meetings stay filed.
-        let live = Set(kept.map(\.id)), chains = MeetingFoldersSnapshot(aliases: aliases)
-        for (key, targets) in conflicts {
-            aliases[key] = targets.first { live.contains(chains.canonical($0)) } ?? targets[0]
+        // Settling one conflict can revive another's chain, so repeat until none changes; a
+        // choice only ever moves to a live chain, so this ends within one pass per conflict.
+        let live = Set(kept.map(\.id))
+        for _ in 0...conflicts.count {
+            let chains = MeetingFoldersSnapshot(aliases: aliases)
+            var changed = false
+            for (key, targets) in conflicts {
+                let choice = targets.first { live.contains(chains.canonical($0)) } ?? targets[0]
+                if aliases[key] != choice { aliases[key] = choice; changed = true }
+            }
+            if !changed { break }
         }
         return MeetingFoldersSnapshot(folders: kept.sorted(by: MeetingStore.byName), tombstones: tombstones, aliases: aliases)
     }

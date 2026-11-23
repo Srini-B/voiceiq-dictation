@@ -123,6 +123,16 @@ final class MeetingFoldersTests: XCTestCase {
         for merged in [MeetingFoldersSnapshot.merge(mac, phone, now: time(10)), MeetingFoldersSnapshot.merge(phone, mac, now: time(10))] {
             XCTAssertEqual(merged.resolve([x.id]), [here.id])
         }
+        // Two such conflicts, one behind the other (ids sort A < B < C < Y < X): X reaches C through Y.
+        func id(_ n: Int) -> UUID { UUID(uuidString: String(format: "00000000-0000-0000-0000-%012d", n))! }
+        let (a, b, c, y, x2) = (id(1), id(2), id(3), id(4), id(5))
+        let c3 = MeetingFolder(id: c, name: "C", createdAt: time(0))
+        let one = MeetingFoldersSnapshot(folders: [c3], tombstones: [a.uuidString: time(5), b.uuidString: time(5)],
+                                         aliases: [x2.uuidString: a, y.uuidString: b])
+        let two = MeetingFoldersSnapshot(folders: [c3], aliases: [x2.uuidString: y, y.uuidString: c])
+        for merged in [MeetingFoldersSnapshot.merge(one, two, now: time(10)), MeetingFoldersSnapshot.merge(two, one, now: time(10))] {
+            XCTAssertEqual(merged.resolve([x2]), [c])
+        }
 
         // A loop, which a merge cannot make but a bad file could, ends instead of hanging.
         let loop = [ids[0].uuidString: ids[1], ids[1].uuidString: ids[0]]
