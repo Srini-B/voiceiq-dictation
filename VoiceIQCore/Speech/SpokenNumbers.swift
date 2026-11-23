@@ -353,7 +353,8 @@ public enum SpokenNumbers {
         var groups: [Int] = []
         var group = 1
         var end = i
-        while end + 1 < t.count, let next = spokenDigit(t[end + 1]), t[end].open || t[end].trail == "," {
+        while end + 1 < t.count, let next = spokenDigit(t[end + 1]),
+              t[end].open || (t[end].trail == "," && !t[end].beforeMark) {
             if !t[end].open {
                 groups.append(group)
                 group = 0

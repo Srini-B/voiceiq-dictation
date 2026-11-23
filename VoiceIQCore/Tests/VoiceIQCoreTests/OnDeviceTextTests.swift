@@ -211,6 +211,11 @@ final class SpokenNumbersTests: XCTestCase {
                        "I said twenty one direction.")
         XCTAssertEqual(SpokenNumbers.digits(in: "Five to zero degrees.", language: "en-US"), "Five to zero degrees.")
         XCTAssertEqual(SpokenNumbers.digits(in: "Five to one foot.", language: "en-US"), "Five to one foot.")
+        // Comma-separated digit groups stop at a new line or an opening mark.
+        XCTAssertFalse(SpokenNumbers.digits(in: "Call five five five,\none two three, four five six seven.", language: "en-US")
+            .contains("555-123-4567"))
+        XCTAssertFalse(SpokenNumbers.digits(in: "Call five five five, (one two three, four five six seven).", language: "en-US")
+            .contains("555-123-4567"))
         XCTAssertEqual(SpokenNumbers.digits(in: "It costs one point two point three dollars.", language: "en-US"),
                        "It costs one point two point three dollars.")
         XCTAssertEqual(SpokenNumbers.digits(in: "Five to ten minutes.", language: "en-US"), "5 to 10 minutes.")
