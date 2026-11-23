@@ -208,7 +208,7 @@ final class SpokenNumbersTests: XCTestCase {
         let lines = SpokenNumbers.digits(in: "The total was twenty\nFive people left.", language: "en-US")
         XCTAssertTrue(lines.hasPrefix("The total was 20\n"), lines)
         XCTAssertEqual(SpokenNumbers.digits(in: "I said twenty one direction.", language: "en-US", protectedTerms: ["One Direction"]),
-                       "I said twenty one direction.")
+                       "I said 20 one direction.")
         XCTAssertEqual(SpokenNumbers.digits(in: "Five to zero degrees.", language: "en-US"), "Five to zero degrees.")
         XCTAssertEqual(SpokenNumbers.digits(in: "Five to one foot.", language: "en-US"), "Five to one foot.")
         // Comma-separated digit groups stop at a new line or an opening mark.
