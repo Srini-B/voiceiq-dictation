@@ -99,6 +99,23 @@ final class MeetingFoldersTests: XCTestCase {
         try store.renameFolder(a.id, to: "c")
         XCTAssertEqual(store.folders().map(\.id), [a.id])
         XCTAssertEqual(store.folderIDs(of: id), [a.id])
+
+        // A membership file that cannot be read is never saved over by a toggle.
+        let url = try XCTUnwrap(store.folder(for: id)).appendingPathComponent(MeetingStore.folderIDsFile)
+        try Data("[".utf8).write(to: url)
+        XCTAssertThrowsError(try store.setMeeting(id, inFolder: a.id, false))
+        XCTAssertEqual(try String(contentsOf: url, encoding: .utf8), "[")
+    }
+
+    func testAMeetingStaysFiledThroughAnyNumberOfMerges() {
+        // Each folder merged into the next, ten times: the first id still leads to the last.
+        let ids = (0..<11).map { _ in UUID() }
+        let aliases = Dictionary(uniqueKeysWithValues: zip(ids.dropLast(), ids.dropFirst()).map { ($0.uuidString, $1) })
+        let last = MeetingFolder(id: ids[10], name: "Last", createdAt: time(0))
+        XCTAssertEqual(MeetingFoldersSnapshot(folders: [last], aliases: aliases).resolve([ids[0]]), [ids[10]])
+        // A loop, which a merge cannot make but a bad file could, ends instead of hanging.
+        let loop = [ids[0].uuidString: ids[1], ids[1].uuidString: ids[0]]
+        XCTAssertEqual(MeetingFoldersSnapshot(folders: [], aliases: loop).resolve([ids[0]]), [])
     }
 
     func testFoldersTravelWithTheMeetingAndNoneLeavesItAsBefore() throws {

@@ -45,10 +45,11 @@ public struct MeetingFoldersSnapshot: Codable, Equatable, Sendable {
         return ids.map(canonical).filter { live.contains($0) && seen.insert($0).inserted }
     }
 
-    /// The folder an id stands for now: itself, or the folder it became.
+    /// The folder an id stands for now: itself, or the end of the chain of
+    /// folders it became, however long.
     func canonical(_ id: UUID) -> UUID {
-        var id = id
-        for _ in 0..<8 { guard let next = aliases[id.uuidString] else { break }; id = next }
+        var id = id, seen: Set<UUID> = [id]
+        while let next = aliases[id.uuidString], seen.insert(next).inserted { id = next }
         return id
     }
 
@@ -164,7 +165,7 @@ extension MeetingStore {
     /// apart from the meetings and may arrive later.
     public func setMeeting(_ meeting: MeetingID, inFolder folder: UUID, _ member: Bool) throws {
         let snapshot = foldersSnapshot()
-        var ids = storedFolderIDs(of: meeting)
+        var ids = try readStoredFolderIDs(of: meeting)
         ids.removeAll { snapshot.canonical($0) == snapshot.canonical(folder) }
         if member { ids.append(folder) }
         try setFolderIDs(ids, for: meeting)
@@ -174,9 +175,15 @@ extension MeetingStore {
 
     /// No file: no folders. A file that cannot be read is treated as none
     /// here, and `synced(id:)` keeps such a meeting from going up.
-    func storedFolderIDs(of meeting: MeetingID) -> [UUID] {
+    func storedFolderIDs(of meeting: MeetingID) -> [UUID] { (try? readStoredFolderIDs(of: meeting)) ?? [] }
+
+    /// For changing: no file is no folders, but a file that cannot be read
+    /// throws, so toggling one folder never drops the others.
+    func readStoredFolderIDs(of meeting: MeetingID) throws -> [UUID] {
         guard let folder = folder(for: meeting) else { return [] }
-        return (try? load([UUID].self, from: folder.appendingPathComponent(Self.folderIDsFile))) ?? []
+        let url = folder.appendingPathComponent(Self.folderIDsFile)
+        guard FileManager.default.fileExists(atPath: url.path) else { return [] }
+        return try load([UUID].self, from: url)
     }
 
     /// Empty removes the file, so a meeting in no folder syncs as it did
