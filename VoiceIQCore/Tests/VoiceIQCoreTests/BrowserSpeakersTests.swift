@@ -213,4 +213,38 @@ final class BrowserSpeakersTests: XCTestCase {
 
         XCTAssertEqual(BrowserSpeakers.apply(words, folder: folder), words)
     }
+
+    func testAMeetingKeepsThePagesRosterEvenWhenNobodyWasHeardLoud() throws {
+        // A silent stretch of a Meet call: the roster arrives every second, no source is loud.
+        let roster = (0..<6).map {
+            BrowserSpeakerEvent(t: (start.timeIntervalSince1970 + Double($0)) * 1000, page: "meet.google.com/abc-defg-hij", tab: 7,
+                                active: [], roster: $0 == 3 ? ["Muhammed Hafeed", "Nihal", "Someone Passing"] : ["Muhammed Hafeed", "Nihal"],
+                                me: "cyron", count: 3, version: "1.2.0")
+        }
+        let folder = try meeting(roster)
+
+        XCTAssertEqual(BrowserSpeakers.roster(folder: folder), MeetingRoster(remote: ["Muhammed Hafeed", "Nihal"], me: "cyron", count: 3))
+        XCTAssertEqual(ScreenSpeakerNames.expectedRemote(folder: folder), 2)
+    }
+
+    func testAFarSideTheCloudMergedComesOutAsTwoNamedPeopleWithNoModel() throws {
+        // Meet, three people: the cloud gave Nihal and Muhammed one id. The
+        // extension heard each from their own source and lit their tiles.
+        let roster = ["Muhammed Hafeed", "Nihal"]
+        let timeline = events("csrc:11", names: ["Nihal"], from: 0, to: 6) + events("csrc:22", names: ["Muhammed Hafeed"], from: 6, to: 12)
+            + events(nil, names: [], from: 12, to: 14)
+        let folder = try meeting(timeline.map { var event = $0; event.roster = roster; event.me = "cyron"; event.count = 3; return event })
+        let words = (0..<12).map { word("w\($0)", "s1", Double($0) + 0.2) } + [word("ok", "you", 12.5)]
+
+        let split = BrowserSpeakers.apply(words, folder: folder)
+        let transcript = SpeakerLinker.overlappingTurns(split).map {
+            TranscriptSegment(speaker: $0.speaker, text: $0.text, chunkIndex: 0, start: $0.start, end: $0.end)
+        }
+        let screen = ScreenSpeakerNames.match(samples: [], transcript: transcript, roster: BrowserSpeakers.roster(folder: folder))
+        let named = try XCTUnwrap(BrowserSpeakers.name(screen, transcript: transcript, folder: folder))
+
+        XCTAssertEqual(Set(split.map(\.speaker)), ["s1", "s2", "you"])
+        XCTAssertEqual(named.speakers.mapValues(\.name), ["s1": "Nihal", "s2": "Muhammed Hafeed"])
+        XCTAssertNil(named.probablyMerged)
+    }
 }

@@ -7,7 +7,15 @@ public struct ScreenNameSample: Codable, Equatable, Sendable {
     public var names: [String]
     /// Names marked as the note owner's own ("Priya Raman (me)", "Priya (Host, me)", "Priya (You)").
     public var me: [String]?
-    public init(time: Double, names: [String], me: [String]? = nil) { self.time = time; self.names = names; self.me = me }
+    /// Lone capitalised words on a line of their own ("Nihal"). Mostly UI;
+    /// `match` keeps the ones that stay on screen and are no UI word.
+    public var single: [String]?
+    /// People in the call, the owner included, from the call app's
+    /// participants button ("People (3)").
+    public var count: Int?
+    public init(time: Double, names: [String], me: [String]? = nil, single: [String]? = nil, count: Int? = nil) {
+        self.time = time; self.names = names; self.me = me; self.single = single; self.count = count
+    }
 }
 
 /// What the screen said about who was in the meeting.
@@ -30,6 +38,28 @@ public struct ScreenNames: Codable, Equatable, Sendable {
     /// Speaker id → the name on screen while that speaker alone was talking.
     /// "you" comes from the owner marker call apps put on the user's own tile or row.
     public var speakers: [String: Match]
+    /// How many other people the call showed (its roster or participant
+    /// count), when it showed any.
+    public var remote: Int?
+    /// The call had more other people than the transcript has far-side
+    /// speakers: one speaker id probably holds several people. Silent
+    /// listeners count too, so this is a likelihood, not a finding.
+    public var probablyMerged: Bool?
+
+    public init(seen: [String], speakers: [String: Match], remote: Int? = nil, probablyMerged: Bool? = nil) {
+        self.seen = seen; self.speakers = speakers; self.remote = remote; self.probablyMerged = probablyMerged
+    }
+}
+
+/// Who the call showed, from the Chrome extension's roster (Google Meet's tiles).
+public struct MeetingRoster: Equatable, Sendable {
+    /// Everyone but the owner who had a tile, in name order.
+    public var remote: [String]
+    /// The name on the owner's own tile.
+    public var me: String?
+    /// The most people in the call at once, the owner included.
+    public var count: Int?
+    public init(remote: [String], me: String? = nil, count: Int? = nil) { self.remote = remote; self.me = me; self.count = count }
 }
 
 /// Names speakers from what the meeting app showed while they talked.
@@ -81,14 +111,79 @@ public enum ScreenSpeakerNames {
         return out
     }
 
+    /// Lone capitalised words on a line of their own, such as a tile reading
+    /// "Nihal". `candidates` drops them since most are UI ("Meet", "Chat");
+    /// `match` keeps the ones that stay on screen and are not UI words.
+    public static func singleNames(in lines: [String]) -> [String] {
+        var out: [String] = []
+        for line in lines {
+            let text = line.trimmingCharacters(in: .whitespaces)
+            guard text.wholeMatch(of: single) != nil, !uiWords.contains(text.lowercased()), !out.contains(text) else { continue }
+            out.append(text)
+        }
+        return out
+    }
+
+    /// People in the call from a participants button or header: "People (3)",
+    /// "Participants 3", "Show everyone (3)", "3 participants".
+    public static func participantCount(in lines: [String]) -> Int? {
+        for line in lines {
+            let text = line.trimmingCharacters(in: .whitespacesAndNewlines)
+            if let match = text.wholeMatch(of: countAfter) ?? text.wholeMatch(of: countBefore), let count = Int(match.output.1), count > 0 {
+                return count
+            }
+        }
+        return nil
+    }
+
+    nonisolated(unsafe) private static let single = #/\p{Lu}[\p{L}'’.-]{1,30}/#
+    nonisolated(unsafe) private static let countAfter = #/(?i:people|participants|attendees|everyone|show everyone|in call|in this call)\s*[(:]?\s*(\d{1,4})\s*\)?/#
+    nonisolated(unsafe) private static let countBefore = #/(\d{1,4})\s+(?i:participants|people|attendees|in call)/#
+
+    /// Single words call apps and browsers show that are not names.
+    static let uiWords: Set<String> = [
+        "meet", "chat", "people", "participants", "attendees", "everyone", "activities", "present", "presenting",
+        "presentation", "you", "me", "host", "cohost", "mute", "unmute", "muted", "camera", "microphone", "mic", "more",
+        "leave", "join", "share", "record", "recording", "reactions", "captions", "settings", "details", "info", "apps",
+        "view", "gallery", "speaker", "spotlight", "pin", "unpin", "raise", "hand", "search", "admit", "remove",
+        "google", "teams", "zoom", "slack", "discord", "webex", "jitsi", "whereby", "chrome", "calendar", "gmail",
+        "inbox", "home", "meeting", "meetings", "call", "calls", "video", "audio", "connecting", "waiting", "lobby",
+        "effects", "whiteboard", "layout", "tiles", "sidebar", "fullscreen", "close", "cancel", "done", "ok", "send",
+        "message", "messages", "notifications", "help", "feedback", "menu", "options", "network", "controls",
+        "toolbar", "new", "open", "edit", "file", "window", "tab", "tabs", "bookmarks", "history", "profile",
+        "account", "back", "forward", "reload", "live", "rec", "busy", "away", "offline", "available", "guest",
+        "now", "today", "yesterday", "files", "notes", "tasks", "contacts", "react", "hide", "show", "unknown",
+    ]
+
+    /// Other people the call showed: the extension's roster, or the
+    /// participants button less the owner, whichever is larger. A count
+    /// read in only one snapshot is a misread.
+    public static func expectedRemote(samples: [ScreenNameSample], roster: MeetingRoster?) -> Int? {
+        var counts: [Int: Int] = [:]
+        for count in samples.compactMap(\.count) { counts[count, default: 0] += 1 }
+        let fromScreen = counts.filter { $0.value >= minimumSeen }.keys.max().map { $0 - 1 }
+        let fromRoster = roster.map { max($0.remote.count, ($0.count ?? 0) - 1) }
+        let all = [fromScreen, fromRoster].compactMap { $0 }
+        return all.isEmpty ? nil : max(0, all.max()!)
+    }
+
+    /// `expectedRemote` from what a meeting folder kept.
+    public static func expectedRemote(folder: URL) -> Int? {
+        let samples = (try? JSONDecoder().decode([ScreenNameSample].self,
+                                                 from: Data(contentsOf: folder.appendingPathComponent("screen-names.json")))) ?? []
+        return expectedRemote(samples: samples, roster: BrowserSpeakers.roster(folder: folder))
+    }
+
     nonisolated(unsafe) private static let mine = #/^(\p{Lu}[\p{L}'’.-]+(?: \p{Lu}[\p{L}'’.-]+){0,3})\s*\((?:[^)]*,\s*)?(?i:me|you)\)/#
 
     nonisolated(unsafe) private static let counter = #/.*\(\d+\)/#
     nonisolated(unsafe) private static let tag = #/^(\p{Lu}[\p{L}'’.-]+(?: \p{Lu}[\p{L}'’.-]+){0,3})\s*(?:[-–|(,]|$)/#
 
-    public static func match(samples: [ScreenNameSample], transcript: [TranscriptSegment]) -> ScreenNames? {
-        guard !samples.isEmpty else { return nil }
-        let samples = folded(samples)
+    /// `roster`: who the meeting page showed (`BrowserSpeakers.roster`).
+    public static func match(samples: [ScreenNameSample], transcript: [TranscriptSegment],
+                             roster: MeetingRoster? = nil) -> ScreenNames? {
+        guard !samples.isEmpty || roster != nil else { return nil }
+        let samples = folded(withSteadySingles(samples, roster: roster))
         var total: [String: Int] = [:]
         for sample in samples { for name in sample.names { total[name, default: 0] += 1 } }
 
@@ -127,8 +222,48 @@ public enum ScreenSpeakerNames {
             speakers[candidate.speaker] = .init(name: candidate.name, seen: candidate.seen, of: candidate.of)
             used.insert(candidate.name)
         }
-        let seen = total.sorted { $0.value != $1.value ? $0.value > $1.value : $0.key < $1.key }.prefix(seenLimit).map(\.key)
-        return ScreenNames(seen: seen, speakers: speakers)
+
+        // A name always on screen tells nothing about who talked when, but
+        // with one other person in the call and one far-side speaker, it is
+        // theirs.
+        let far = Set(transcript.map(\.speaker)).subtracting([MeetingSpeaker.you])
+        let remote = expectedRemote(samples: samples, roster: roster)
+        let owners = Set(marked.keys).union(roster?.me.map { [$0] } ?? [])
+        let others = roster.map { $0.remote.filter { !owners.contains($0) } }
+            ?? total.filter { $0.value * 2 >= samples.count && !owners.contains($0.key) && !isUIText($0.key) }.map(\.key)
+        if far.count == 1, let speaker = far.first, speakers[speaker] == nil, others.count == 1, (remote ?? 1) <= 1,
+           !used.contains(others[0]) {
+            speakers[speaker] = .init(name: others[0], seen: total[others[0]] ?? 0, of: samples.count)
+        }
+        var ranked = total.sorted { $0.value != $1.value ? $0.value > $1.value : $0.key < $1.key }.map(\.key)
+        ranked = (roster?.remote ?? []).filter { !ranked.contains($0) } + ranked
+        let merged = remote.map { !far.isEmpty && $0 > far.count }
+        return ScreenNames(seen: Array(ranked.prefix(seenLimit)), speakers: speakers, remote: remote,
+                           probablyMerged: merged == true ? true : nil)
+    }
+
+    /// Names made only of UI words, such as "Google Meet".
+    static func isUIText(_ name: String) -> Bool {
+        name.split(separator: " ").allSatisfy { uiWords.contains($0.lowercased()) }
+    }
+
+    /// Single words join a snapshot's names when they are on the roster, or
+    /// on screen in at least a quarter of the snapshots and not the first
+    /// word of a longer name seen too ("Muhammed" of "Muhammed Hafeed").
+    static func withSteadySingles(_ samples: [ScreenNameSample], roster: MeetingRoster?) -> [ScreenNameSample] {
+        var counts: [String: Int] = [:]
+        for sample in samples { for word in Set(sample.single ?? []) { counts[word, default: 0] += 1 } }
+        let longer = Set(samples.flatMap(\.names))
+        let listed = Set(roster?.remote ?? [])
+        let steady = Set(counts.filter { word, count in
+            listed.contains(word) || (count >= minimumSeen && Double(count) >= 0.25 * Double(samples.count)
+                                      && !longer.contains { $0.hasPrefix(word + " ") })
+        }.keys)
+        return samples.map { sample in
+            var out = sample
+            for word in sample.single ?? [] where steady.contains(word) && !out.names.contains(word) { out.names.append(word) }
+            return out
+        }
     }
 
     private static func onlySpeaker(at time: Double, in transcript: [TranscriptSegment]) -> String? {
@@ -157,7 +292,7 @@ public enum ScreenSpeakerNames {
     /// OCR reads one tag several ways ("Halil Coban", "Hall Coban", "Halll Coban").
     /// Each spelling folds into the most frequent close spelling, so votes are not split.
     static func folded(_ samples: [ScreenNameSample]) -> [ScreenNameSample] {
-        let samples = samples.map { ScreenNameSample(time: $0.time, names: $0.names.map(withoutStatus), me: $0.me) }
+        let samples = samples.map { ScreenNameSample(time: $0.time, names: $0.names.map(withoutStatus), me: $0.me, single: $0.single, count: $0.count) }
         var counts: [String: Int] = [:]
         for sample in samples { for name in Set(sample.names) { counts[name, default: 0] += 1 } }
         var heads: [String] = [], canonical: [String: String] = [:]
@@ -169,7 +304,7 @@ public enum ScreenSpeakerNames {
         return samples.map { sample in
             var names: [String] = []
             for name in sample.names { let head = canonical[name] ?? name; if !names.contains(head) { names.append(head) } }
-            return ScreenNameSample(time: sample.time, names: names, me: sample.me?.map { canonical[$0] ?? $0 })
+            return ScreenNameSample(time: sample.time, names: names, me: sample.me?.map { canonical[$0] ?? $0 }, single: sample.single, count: sample.count)
         }
     }
 

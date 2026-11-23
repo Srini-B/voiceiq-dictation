@@ -19,9 +19,41 @@ public struct BrowserSpeakerEvent: Codable, Equatable, Sendable {
     /// while a source is loud. Nil from extensions before 1.1 and on pages it
     /// cannot read names on.
     public var names: [String]?
+    /// Every other participant with a tile at `t`, talking or not, and the
+    /// name on the user's own tile. From extension 1.2, on Google Meet.
+    public var roster: [String]?
+    public var me: String?
+    /// People in the call at `t`, the user included.
+    public var count: Int?
+    /// The extension's version. Nil before 1.2, also from a 1.2 page script
+    /// still running under an older service worker.
+    public var version: String?
+    /// What the page script saw on its last poll, every ten seconds.
+    public var diag: BrowserProbeDiagnostic?
+    /// The page script's own version, 2 from extension 1.2. Nil from an
+    /// older page script, also one left running in a page that was open
+    /// while the extension updated.
+    public var probe: Int?
 
-    public init(t: Double, page: String, tab: Int, active: [String], names: [String]? = nil) {
+    public init(t: Double, page: String, tab: Int, active: [String], names: [String]? = nil,
+                roster: [String]? = nil, me: String? = nil, count: Int? = nil, version: String? = nil,
+                diag: BrowserProbeDiagnostic? = nil, probe: Int? = nil) {
         self.t = t; self.page = page; self.tab = tab; self.active = active; self.names = names
+        self.roster = roster; self.me = me; self.count = count; self.version = version; self.diag = diag; self.probe = probe
+    }
+}
+
+/// The page script's view of the call's audio: live audio receivers, the
+/// sources they report, the loudest level among them, and how far behind the
+/// page's clock the newest source's timestamp is, in ms. A source that is
+/// never loud with a high level points at the probe, not at the call.
+public struct BrowserProbeDiagnostic: Codable, Equatable, Sendable {
+    public var receivers: Double?
+    public var sources: Double?
+    public var maxLevel: Double?
+    public var clockOffset: Double?
+    public init(receivers: Double? = nil, sources: Double? = nil, maxLevel: Double? = nil, clockOffset: Double? = nil) {
+        self.receivers = receivers; self.sources = sources; self.maxLevel = maxLevel; self.clockOffset = clockOffset
     }
 }
 
@@ -73,6 +105,16 @@ public enum BrowserSpeakerLog {
         }
         .filter { range.contains($0.t) }
         .sorted { $0.t < $1.t }
+    }
+
+    /// The newest event in the newest day file: what the extension last said.
+    public static func latest(root: URL? = nil) -> BrowserSpeakerEvent? {
+        let files = (try? FileManager.default.contentsOfDirectory(at: folder(root: root), includingPropertiesForKeys: nil)) ?? []
+        guard let newest = files.filter({ $0.pathExtension == "jsonl" }).max(by: { $0.lastPathComponent < $1.lastPathComponent }),
+              let text = try? String(contentsOf: newest, encoding: .utf8) else { return nil }
+        let decoder = JSONDecoder()
+        return text.split(separator: "\n").reversed().lazy
+            .compactMap { try? decoder.decode(BrowserSpeakerEvent.self, from: Data($0.utf8)) }.first
     }
 
     /// Day files older than a week: their meetings have copied what they need.

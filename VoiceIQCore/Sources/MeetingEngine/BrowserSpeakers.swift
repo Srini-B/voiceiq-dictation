@@ -27,7 +27,7 @@ public enum BrowserSpeakers {
         #endif
         let events = BrowserSpeakerLog.events(from: meta.startedAt.addingTimeInterval(-5), to: end.addingTimeInterval(5), root: logRoot)
         let tabs = Dictionary(grouping: events) { "\($0.tab) \($0.page)" }.values
-            .filter { tab in tab.contains { !$0.active.isEmpty } }
+            .filter { tab in tab.contains { !$0.active.isEmpty || !($0.roster ?? []).isEmpty } }
         var host: String?
         if case let .browser(_, page) = meta.source { host = page }
         // `host` can name a title match ("Google Meet") rather than a host, so no match still falls back.
@@ -39,7 +39,29 @@ public enum BrowserSpeakers {
         BrowserSpeakerLog.prune(root: logRoot)
     }
 
-    private static func busy(_ events: [BrowserSpeakerEvent]) -> Int { events.filter { !$0.active.isEmpty }.count }
+    private static func busy(_ events: [BrowserSpeakerEvent]) -> Int {
+        events.filter { !$0.active.isEmpty }.count * 2 + events.filter { !($0.roster ?? []).isEmpty }.count
+    }
+
+    static func saved(folder: URL) -> Saved? {
+        guard let data = try? Data(contentsOf: folder.appendingPathComponent(fileName)) else { return nil }
+        return try? JSONDecoder().decode(Saved.self, from: data)
+    }
+
+    /// Who the meeting page showed, from the extension's roster. A name on
+    /// a single roster is a tile seen for one second, not a participant.
+    public static func roster(folder: URL) -> MeetingRoster? { saved(folder: folder).flatMap { roster($0.events) } }
+
+    static func roster(_ events: [BrowserSpeakerEvent]) -> MeetingRoster? {
+        let rosters = events.compactMap(\.roster)
+        guard !rosters.isEmpty else { return nil }
+        var counts: [String: Int] = [:], mine: [String: Int] = [:]
+        for roster in rosters { for name in Set(roster) { counts[name, default: 0] += 1 } }
+        for name in events.compactMap(\.me) { mine[name, default: 0] += 1 }
+        let me = mine.max { $0.value != $1.value ? $0.value < $1.value : $0.key > $1.key }?.key
+        let remote = counts.filter { $0.value >= min(2, rosters.count) && $0.key != me }.keys.sorted()
+        return MeetingRoster(remote: remote, me: me, count: events.compactMap(\.count).max())
+    }
 
     /// How long one event holds without the next: the extension repeats the
     /// state every second while anyone talks, so a longer gap is a lost page.
@@ -58,8 +80,7 @@ public enum BrowserSpeakers {
     /// with one that covers too few words to be this meeting's, the words
     /// come back as they were.
     public static func apply(_ words: [TimedWord], folder: URL) -> [TimedWord] {
-        guard let data = try? Data(contentsOf: folder.appendingPathComponent(fileName)),
-              let saved = try? JSONDecoder().decode(Saved.self, from: data) else { return words }
+        guard let saved = saved(folder: folder) else { return words }
         return apply(words, saved: saved)
     }
 
@@ -192,8 +213,7 @@ public enum BrowserSpeakers {
     /// and every lit name joins `seen`. Without names in the folder, `screen`
     /// comes back as it was.
     public static func name(_ screen: ScreenNames?, transcript: [TranscriptSegment], folder: URL) -> ScreenNames? {
-        guard let data = try? Data(contentsOf: folder.appendingPathComponent(fileName)),
-              let saved = try? JSONDecoder().decode(Saved.self, from: data) else { return screen }
+        guard let saved = saved(folder: folder) else { return screen }
         return name(screen, transcript: transcript, saved: saved)
     }
 

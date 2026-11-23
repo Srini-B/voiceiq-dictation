@@ -4,8 +4,12 @@
 // contributing source (CSRC) per person where the server mixes people into a
 // few streams (Google Meet, Teams), else one stream (SSRC) per person. While
 // a source is loud it also reads the name on each tile the page marks as
-// talking. Only those ids and names, the time, and the page's host and path
-// leave the page; no audio, video or other page content.
+// talking. On Google Meet it also reads every tile's name once a second
+// (the roster, the user's own apart). Every ten seconds a diagnostic says how
+// many receivers and sources it saw, the loudest level and how far the
+// sources' clock sits from the page's. Only those ids, names and numbers,
+// the time, and the page's host and path leave the page; no audio, video or
+// other page content.
 (() => {
   if (window.__voiceiqSpeakers || !window.RTCPeerConnection) return;
   window.__voiceiqSpeakers = true;
@@ -24,33 +28,48 @@
 
   // audioLevel is linear: 0.01 is -40 dBov, below any speech and above silence.
   const LOUD = 0.01;
-  // A source counts while it played this recently, in ms.
-  const RECENT = 400;
   // While anyone talks the state is repeated this often, so the app can tell
   // a pause in the call from a page that stopped reporting.
   const REPEAT = 1000;
+  // The roster is read this often.
+  const ROSTER_EVERY = 1000;
+  // How often a diagnostic goes out while the tab is in a call. It also
+  // tells the extension the call is still open during a long silence.
+  const DIAGNOSE_EVERY = 10000;
 
-  // The spec stamps sources on the page's time origin plus performance.now(),
-  // not on Date.now(), which can drift from it. A small value is an engine
-  // that stamps relative to the page instead.
-  const age = (timestamp) => (timestamp > 1e12 ? performance.timeOrigin : 0) + performance.now() - timestamp;
+  // Each source's timestamp and rtpTimestamp at the previous poll. A source
+  // is playing when either moved since: comparing its timestamp with the
+  // page's clock fails where the two clocks drift apart, which left every
+  // source looking stale on Meet and Teams (webrtc issue 42222258).
+  let previous = new Map();
+  let diagnostic = { receivers: 0, sources: 0, maxLevel: 0, clockOffset: 0 };
 
   function loud() {
-    const active = new Set();
+    const active = new Set(), current = new Map();
+    let receivers = 0, count = 0, maxLevel = 0, clockOffset = null;
     for (const pc of peers) {
       if (pc.connectionState === 'closed' || pc.signalingState === 'closed') { peers.delete(pc); continue; }
       for (const receiver of pc.getReceivers()) {
         const track = receiver.track;
         if (!track || track.kind !== 'audio' || track.readyState !== 'live') continue;
+        receivers += 1;
         const csrc = receiver.getContributingSources ? receiver.getContributingSources() : [];
         const sources = csrc.length
           ? csrc.map((s) => ['csrc', s])
           : (receiver.getSynchronizationSources ? receiver.getSynchronizationSources() : []).map((s) => ['ssrc', s]);
         for (const [kind, s] of sources) {
-          if ((s.audioLevel || 0) >= LOUD && age(s.timestamp) < RECENT) active.add(`${kind}:${s.source}`);
+          count += 1;
+          const id = `${kind}:${s.source}`, level = s.audioLevel || 0, stamp = `${s.timestamp}/${s.rtpTimestamp}`;
+          maxLevel = Math.max(maxLevel, level);
+          const behind = performance.timeOrigin + performance.now() - s.timestamp;
+          if (Number.isFinite(behind)) clockOffset = clockOffset === null ? behind : Math.min(clockOffset, behind);
+          if (level >= LOUD && previous.has(id) && previous.get(id) !== stamp) active.add(id);
+          current.set(id, stamp);
         }
       }
     }
+    previous = current;
+    diagnostic = { receivers, sources: count, maxLevel: Math.round(maxLevel * 1000) / 1000, clockOffset: Math.round(clockOffset || 0) };
     return [...active].sort();
   }
 
@@ -76,6 +95,10 @@
       talking: (tile) => ['Oaajhc', 'HX2H7', 'wEsLMd', 'OgVli']
         .some((name) => tile.classList.contains(name) || !!tile.querySelector(`.${name}`)),
       name: (tile) => text(tile.querySelector('span.notranslate')),
+      // Every tile, talking or not; Meet nests elements carrying the same
+      // participant id, and a shared screen is another tile named
+      // "… (Presentation)".
+      roster: true,
     },
     {
       // Each stream wrapper names its person in data-tid; a talking person's
@@ -123,16 +146,41 @@
     return [...names].sort().slice(0, 16);
   }
 
-  let last = '', sentAt = 0;
+  // Everyone with a tile, the user's own apart, where the site draws a tile
+  // for each person whether they talk or not.
+  function roster() {
+    if (!site || !site.roster) return null;
+    const people = new Map();
+    let me = '';
+    for (const tile of document.querySelectorAll(site.tiles)) {
+      const name = site.name(tile);
+      // A shared screen is its presenter again, under an id of its own.
+      if (!name || name.length > 80 || /\((?:presentation|presenting)\)$/i.test(name)) continue;
+      if (site.self(tile)) { me = name; continue; }
+      people.set(tile.getAttribute('data-participant-id') || name, name);
+    }
+    // Counted by participant id: two people can show the same name.
+    const remote = [...new Set(people.values())].sort().slice(0, 64);
+    return { remote, me, count: people.size + (me ? 1 : 0) };
+  }
+
+  let last = '', sentAt = 0, rosterAt = 0, diagnosedAt = 0, people = null;
   setInterval(() => {
     if (peers.size === 0) return;
     const active = loud(), now = Date.now();
+    if (now - rosterAt >= ROSTER_EVERY) { people = roster(); rosterAt = now; }
     // A tile can stay lit after its person stops (Zoom and Jitsi keep the
     // last speaker), so names count only while someone is loud.
     const names = active.length ? talking() : [];
-    const key = JSON.stringify([active, names]);
-    if (key === last && (!active.length || now - sentAt < REPEAT)) return;
+    const key = JSON.stringify([active, names, people]);
+    const diagnose = now - diagnosedAt >= DIAGNOSE_EVERY;
+    if (key === last && !diagnose && (!active.length || now - sentAt < REPEAT)) return;
     last = key; sentAt = now;
-    window.postMessage({ voiceiq: 'speakers', t: now, active, names, page: location.host + location.pathname }, location.origin);
+    // `probe` says which page script reports: a page open since before the
+    // extension updated keeps the old one until it reloads.
+    const message = { voiceiq: 'speakers', probe: 2, t: now, active, names, page: location.host + location.pathname };
+    if (people) Object.assign(message, { roster: people.remote, me: people.me, count: people.count });
+    if (diagnose) { message.diag = diagnostic; diagnosedAt = now; }
+    window.postMessage(message, location.origin);
   }, 250);
 })();

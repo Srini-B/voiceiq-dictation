@@ -339,9 +339,14 @@ import VoiceIQSpeech
                 return
             }
             try store.save(transcript: transcript, id: id)
-            if let samples = store.loadScreenSamples(id: id) {
-                meta.screenNames = ScreenSpeakerNames.match(samples: samples, transcript: transcript)
-                Log.meeting.info("screen names: \(meta.screenNames?.speakers.count ?? 0, privacy: .public) speakers named, \(meta.screenNames?.seen.count ?? 0, privacy: .public) names seen")
+            let roster = BrowserSpeakers.roster(folder: folder)
+            if let screen = ScreenSpeakerNames.match(samples: store.loadScreenSamples(id: id) ?? [], transcript: transcript, roster: roster) {
+                meta.screenNames = screen
+                Log.meeting.info("screen names: \(screen.speakers.count, privacy: .public) speakers named, \(screen.seen.count, privacy: .public) names seen, \(roster?.remote.count ?? 0, privacy: .public) on the page's roster")
+                if screen.probablyMerged == true {
+                    let heard = Set(transcript.map(\.speaker)).subtracting([MeetingSpeaker.you]).count
+                    Log.meeting.notice("speakers probably merged: the call showed \(screen.remote ?? 0, privacy: .public) other people, the transcript has \(heard, privacy: .public) far-side speakers")
+                }
             }
             meta.screenNames = BrowserSpeakers.name(meta.screenNames, transcript: transcript, folder: folder)
             let fromPage = meta.screenNames?.speakers.values.filter { $0.talkSeconds != nil }.count ?? 0
@@ -362,7 +367,8 @@ import VoiceIQSpeech
     /// otherwise, or if the on-device pass fails and a key is stored, Gemini.
     /// This mirrors dictation. The flag says whether the words never left the device.
     private func transcribe(folder: URL, config cfg: GeminiConfig) async throws -> ([TranscriptSegment], Bool) {
-        let cloud = MeetingTranscriber(client: client, models: .init(transcribe: cfg.transcribeModel), endpoint: cfg.endpoint)
+        let cloud = MeetingTranscriber(client: client, models: .init(transcribe: cfg.transcribeModel), endpoint: cfg.endpoint,
+                                       diarizeFarSide: localMeeting.map(Self.farSideDiarizer))
         guard let local = try await acquireLocal() else {
             guard hasKey() else { throw MeetingFailure.noKey }
             return (try await cloud.transcribe(folder: folder), false)
@@ -375,6 +381,31 @@ import VoiceIQSpeech
             guard hasKey(), !(error is CancellationError) else { throw error }
             Log.meeting.error("on-device transcription failed, using Gemini: \(String(describing: error), privacy: .public)")
             return (try await cloud.transcribe(folder: folder), false)
+        }
+    }
+
+    /// The on-device speaker model alone, for splitting a far side the cloud
+    /// heard as fewer people than the call showed. Nil when the model is not
+    /// downloaded, or stays busy for a minute.
+    nonisolated static func farSideDiarizer(_ runner: @escaping LocalMeetingRunner) -> MeetingTranscriber.FarSideDiarizer {
+        { audio in
+            let id = UUID(), job = FarSideJob()
+            var directory: URL?
+            for _ in 0..<30 {
+                directory = await MainActor.run {
+                    // Deleting the model stops the pass and waits for it before the files go.
+                    LocalModelStore.speakerDiarizer.state == .ready
+                        ? LocalModelStore.speakerDiarizer.acquireSession(id: id, cancel: { await job.cancel() }) : nil
+                }
+                if directory != nil { break }
+                guard await MainActor.run(body: { LocalModelStore.speakerDiarizer.state == .ready }) else { return nil }
+                try await Task.sleep(for: .seconds(2))
+            }
+            guard let directory else { return nil }
+            defer { Task { @MainActor in LocalModelStore.speakerDiarizer.releaseSession(id: id) } }
+            return try await job.run {
+                try await runner(LocalMeetingRequest(speechDirectory: nil, diarizerDirectory: directory, audio: audio)).segments
+            }
         }
     }
 
@@ -565,5 +596,25 @@ public enum MeetingFailure: Error, Equatable {
         default:
             return "Transcription failed: \(error.localizedDescription). \(fixHint)"
         }
+    }
+}
+
+/// The far-side speaker pass, so deleting the speaker model can stop it and
+/// wait for it: on the Mac cancelling kills its helper.
+private actor FarSideJob {
+    private var task: Task<[LocalMeetingResult.Segment], Error>?
+    private var cancelled = false
+
+    func run(_ body: @escaping @Sendable () async throws -> [LocalMeetingResult.Segment]) async throws -> [LocalMeetingResult.Segment] {
+        guard !cancelled else { throw CancellationError() }
+        let task = Task { try await body() }
+        self.task = task
+        return try await withTaskCancellationHandler { try await task.value } onCancel: { task.cancel() }
+    }
+
+    func cancel() async {
+        cancelled = true
+        task?.cancel()
+        _ = await task?.result
     }
 }
