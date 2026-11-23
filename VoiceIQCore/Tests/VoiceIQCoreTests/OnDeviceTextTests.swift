@@ -262,6 +262,10 @@ final class SoundAlikeSpellingTests: XCTestCase {
         XCTAssertEqual(spell(["Stacey"], "Stacy hat angerufen.", language: "de-DE"), "Stacy hat angerufen.", "English only")
     }
 
+    func testAWordOfAListedTermStays() {
+        XCTAssertEqual(spell(["Stacy Smith", "Stacey"], "Ask Stacy Smith tomorrow."), "Ask Stacy Smith tomorrow.")
+    }
+
     func testQuotesAndBracketsAroundAName() {
         XCTAssertEqual(spell(["Stacey"], "Tell 'Stacy' today."), "Tell 'Stacey' today.")
         XCTAssertEqual(spell(["Vercel"], "Notes. [Versal is next.]"), "Notes. [Versal is next.]")

@@ -24,7 +24,9 @@ public enum SoundAlikeSpelling {
 
     public static func apply(_ terms: [String], to text: String, language: String) -> String {
         guard language.lowercased().hasPrefix("en"), !text.isEmpty else { return text }
-        let listed = Set(terms.map(letters))
+        // Every word of a listed term counts as listed (VoiceiQ): a Dictionary
+        // replacement to "Stacy Smith" keeps "Stacy" even with "Stacey" listed.
+        let listed = Set(terms.flatMap { $0.split(whereSeparator: \.isWhitespace).map { letters(String($0)) } })
         let candidates = terms.compactMap(Term.init)
         guard !candidates.isEmpty else { return text }
 
