@@ -39,24 +39,33 @@ public final class ScreenNameSampler: @unchecked Sendable {
         // A meeting never raises a permission prompt; the dictation onboarding
         // asks for Screen Recording and Accessibility. Either one is enough.
         snapshots = CGPreflightScreenCaptureAccess()
-        // A recording started by hand, with no call detected (a call app
-        // without microphone access, say), reads the frontmost call app.
-        if bundleID == nil { bundleID = Self.frontCallApp() }
-        if let bundleID, AXIsProcessTrusted(),
-           let app = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).first {
-            pid = app.processIdentifier
-            AccessibilityWaker.wakeIfNeeded(bundleID: bundleID, pid: app.processIdentifier)
-        }
-        guard bundleID != nil, snapshots || pid != nil else {
-            Log.meeting.info("screen names off: no call window, or no Screen Recording or Accessibility access")
+        let accessibility = AXIsProcessTrusted()
+        guard snapshots || accessibility else {
+            Log.meeting.info("screen names off: no Screen Recording or Accessibility access")
             return
         }
         task = Task.detached(priority: .utility) { [weak self] in
             while !Task.isCancelled {
-                await self?.sample()
+                // Resolved on each tick until found: Join and Record starts
+                // recording before the call app has opened its window.
+                if let self, self.resolveCallApp(accessibility: accessibility) { await self.sample() }
                 try? await Task.sleep(for: Self.interval)
             }
         }
+    }
+
+    /// Whether there is a call app to read. A recording started by hand, with
+    /// no call detected (a call app without microphone access, or one just
+    /// being opened), reads the frontmost call app once there is one.
+    private func resolveCallApp(accessibility: Bool) -> Bool {
+        if bundleID == nil { bundleID = Self.frontCallApp() }
+        guard let bundleID else { return false }
+        if pid == nil, accessibility,
+           let app = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).first {
+            pid = app.processIdentifier
+            AccessibilityWaker.wakeIfNeeded(bundleID: bundleID, pid: app.processIdentifier)
+        }
+        return snapshots || pid != nil
     }
 
     /// The known call app with the frontmost normal window.
