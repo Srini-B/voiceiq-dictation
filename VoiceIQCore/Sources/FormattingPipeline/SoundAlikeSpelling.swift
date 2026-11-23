@@ -335,6 +335,9 @@ public enum SoundAlikeSpelling {
 
     private static func append(_ range: Range<String.Index>, of text: String, to words: inout [Word]) {
         var word = text[range]
+        // VoiceiQ: an opening quote stays in the text ("Tell 'Stacy' today").
+        while let first = word.first, first == "'" || first == "‘" { word = word.dropFirst() }
+        let range = word.startIndex..<range.upperBound
         while let last = word.last, last == "'" || last == "’" { word = word.dropLast() }
         guard let first = word.first, first.isLetter else { return }
         var stem = String(word), possessive = ""
@@ -354,7 +357,7 @@ public enum SoundAlikeSpelling {
         while i > text.startIndex {
             i = text.index(before: i)
             let c = text[i]
-            if c == " " || c == "\t" || "\"“”'‘(".contains(c) { continue }
+            if c == " " || c == "\t" || "\"“”'‘([".contains(c) { continue }
             return ".!?…:\n".contains(c)
         }
         return true

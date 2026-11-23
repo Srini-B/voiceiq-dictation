@@ -50,7 +50,10 @@ public enum SpokenNumbers {
         while index < tokens.count {
             switch match(tokens, at: index) {
             case let .edit(first, last, written):
-                edits.append((tokens[first].range.lowerBound..<tokens[last].range.upperBound, written))
+                // VoiceiQ: no edit rewrites a protected Dictionary term.
+                if !tokens[first...last].contains(where: \.protected) {
+                    edits.append((tokens[first].range.lowerBound..<tokens[last].range.upperBound, written))
+                }
                 index = last + 1
             case let .skip(last):
                 index = max(last, index) + 1
@@ -81,7 +84,7 @@ public enum SpokenNumbers {
         let startsSentence: Bool
         /// Inside a protected term.
         var protected = false
-        /// The next word opens with a mark, such as "(" or a quote.
+        /// The next word opens with a mark, such as "(" or a quote, or a new line.
         var beforeMark = false
         var word: String { core.lowercased() }
         /// Nothing but the word: no mark after it, or before the next word,
@@ -118,7 +121,9 @@ public enum SpokenNumbers {
             ))
             index = end
         }
-        for k in tokens.indices.dropLast() where !tokens[k + 1].lead.isEmpty { tokens[k].beforeMark = true }
+        for k in tokens.indices.dropLast() where !tokens[k + 1].lead.isEmpty || tokens[k + 1].startsSentence {
+            tokens[k].beforeMark = true
+        }
         return tokens
     }
 
@@ -733,9 +738,13 @@ public enum SpokenNumbers {
         var secondEnd = second.end
         var secondPlain = !second.isYear && !second.hasScale && second.value < 100
         if let point = decimal(t, after: second, from: link + 1) {
+            // VoiceiQ: both ends go into digits or neither.
+            if point.ambiguous { return .skip(point.end) }
             secondEnd = point.end
             secondPlain = false
         }
+        // The count-noun rule leaves a second "zero" in words, so the first stays too.
+        if second.value == 0, secondPlain { return .skip(secondEnd) }
         // "from zero to one hundred": a second number that is plainly a number takes the first.
         guard secondPlain else {
             // "two to three hundred" and "one or two hundred" mean hundreds: both stay as said.
@@ -795,6 +804,8 @@ public enum SpokenNumbers {
 
     /// "$5", "$15.40" (with "and forty cents"), "$1.2 million", "$5.50".
     private static func money(_ t: [Token], at i: Int, amount: String, isDecimal: Bool, dollars: Int) -> Outcome {
+        // VoiceiQ: "one point two point three dollars" is no amount.
+        if amount.filter({ $0 == "." }).count > 1 { return .skip(dollars) }
         var written = amount
         var end = dollars
         if isDecimal, let dot = written.firstIndex(of: "."), written.distance(from: dot, to: written.endIndex) == 2 {

@@ -204,6 +204,15 @@ final class SpokenNumbersTests: XCTestCase {
                        "We need 20 (five optional) chairs.")
         XCTAssertEqual(SpokenNumbers.digits(in: "I said twenty \"five\" times.", language: "en-US"),
                        "I said 20 \"five\" times.")
+        // A new line ends a number too.
+        let lines = SpokenNumbers.digits(in: "The total was twenty\nFive people left.", language: "en-US")
+        XCTAssertTrue(lines.hasPrefix("The total was 20\n"), lines)
+        XCTAssertEqual(SpokenNumbers.digits(in: "I said twenty one direction.", language: "en-US", protectedTerms: ["One Direction"]),
+                       "I said twenty one direction.")
+        XCTAssertEqual(SpokenNumbers.digits(in: "Five to zero degrees.", language: "en-US"), "Five to zero degrees.")
+        XCTAssertEqual(SpokenNumbers.digits(in: "It costs one point two point three dollars.", language: "en-US"),
+                       "It costs one point two point three dollars.")
+        XCTAssertEqual(SpokenNumbers.digits(in: "Five to ten minutes.", language: "en-US"), "5 to 10 minutes.")
         XCTAssertEqual(SpokenNumbers.digits(in: "Cinco punto cinco.", language: "es-ES"), "Cinco punto cinco.")
         XCTAssertEqual(SpokenNumbers.digits(in: "The ratio is five point five.", language: "fr-FR"), "The ratio is five point five.")
     }
@@ -245,6 +254,11 @@ final class SoundAlikeSpellingTests: XCTestCase {
         XCTAssertEqual(spell(["kubectl", "Al"], "Ask Cubectl and Al."), "Ask Cubectl and Al.", "lowercase and short terms")
         XCTAssertEqual(spell(["Stacey"], "STACY said hi."), "STACY said hi.", "all capitals")
         XCTAssertEqual(spell(["Stacey"], "Stacy hat angerufen.", language: "de-DE"), "Stacy hat angerufen.", "English only")
+    }
+
+    func testQuotesAndBracketsAroundAName() {
+        XCTAssertEqual(spell(["Stacey"], "Tell 'Stacy' today."), "Tell 'Stacey' today.")
+        XCTAssertEqual(spell(["Vercel"], "Notes. [Versal is next.]"), "Notes. [Versal is next.]")
     }
 
     func testTwoTermsThatFitEquallyLeaveTheWordAsHeard() {

@@ -8,6 +8,7 @@ final class OnDeviceDictationTests: XCTestCase {
     override func setUp() {
         UserDefaults.standard.removeObject(forKey: "dictionaryEntries")
         UserDefaults.standard.removeObject(forKey: "cleanupSource")
+        UserDefaults.standard.removeObject(forKey: "onDeviceSpeechLanguage")
     }
 
     override func tearDown() { setUp() }
@@ -17,6 +18,7 @@ final class OnDeviceDictationTests: XCTestCase {
     /// sound-alike spellings included.
     func testWritingOffKeepsTranscriptAndAppliesDictionary() async throws {
         SettingsStore().setCleanupSource(.none)
+        SettingsStore().setLocalSpeechLanguage("en-US")
         _ = DictionaryStore().add(term: "Srini", misspelling: "Sreenie")
         _ = DictionaryStore().add(term: "Stacey", misspelling: nil)
         let transcript = TranscriptionResult(rawTranscript: "ping sreenie on Slack", cleanedTranscript: "Ping Sreenie and Stacy on Slack.",

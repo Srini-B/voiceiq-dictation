@@ -111,7 +111,9 @@ Hex (MIT):
 - **Sound-alike spellings.** After the Dictionary's replacement rules,
   `SoundAlikeSpelling` gives a capitalised name that sounds like a Dictionary
   term, and is spelled nearly the same, the term's spelling: "Stacy" →
-  "Stacey", "Jeff" → "Geoff" (English only). It runs on the text inserted as
+  "Stacey"; mid-sentence only, a name that just sounds the same and is at
+  most two letters off, as in "Let's invite Jeff" → "Let's invite Geoff"
+  ("Jeff fixed it" stays). English only. It runs on the text inserted as
   transcribed (writing Off, no key, or the writer failing).
 
 History's Retry and launch recovery use `OnDeviceFirstTranscription`: the
