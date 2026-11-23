@@ -113,6 +113,17 @@ final class MeetingFoldersTests: XCTestCase {
         let aliases = Dictionary(uniqueKeysWithValues: zip(ids.dropLast(), ids.dropFirst()).map { ($0.uuidString, $1) })
         let last = MeetingFolder(id: ids[10], name: "Last", createdAt: time(0))
         XCTAssertEqual(MeetingFoldersSnapshot(folders: [last], aliases: aliases).resolve([ids[0]]), [ids[10]])
+        // One folder merged into a different folder on each device, and the first of those deleted:
+        // its meetings land in the one still here, whichever device merges.
+        let x = MeetingFolder(id: UUID(uuidString: "00000000-0000-0000-0000-00000000000A")!, name: "X", createdAt: time(0))
+        let gone = MeetingFolder(id: UUID(uuidString: "00000000-0000-0000-0000-000000000001")!, name: "Gone", createdAt: time(0))
+        let here = MeetingFolder(id: UUID(uuidString: "00000000-0000-0000-0000-000000000002")!, name: "Here", createdAt: time(0))
+        let mac = MeetingFoldersSnapshot(folders: [here], tombstones: [gone.id.uuidString: time(5)], aliases: [x.id.uuidString: gone.id])
+        let phone = MeetingFoldersSnapshot(folders: [here], aliases: [x.id.uuidString: here.id])
+        for merged in [MeetingFoldersSnapshot.merge(mac, phone, now: time(10)), MeetingFoldersSnapshot.merge(phone, mac, now: time(10))] {
+            XCTAssertEqual(merged.resolve([x.id]), [here.id])
+        }
+
         // A loop, which a merge cannot make but a bad file could, ends instead of hanging.
         let loop = [ids[0].uuidString: ids[1], ids[1].uuidString: ids[0]]
         XCTAssertEqual(MeetingFoldersSnapshot(folders: [], aliases: loop).resolve([ids[0]]), [])

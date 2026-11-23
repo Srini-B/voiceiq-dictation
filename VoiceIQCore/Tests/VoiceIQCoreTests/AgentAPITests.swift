@@ -142,6 +142,9 @@ final class AgentAPITests: XCTestCase {
         let unknown = try toolText("list_meetings", ["folder": "Old"])
         XCTAssertTrue(unknown.isError)
         XCTAssertTrue(unknown.text.contains("Clients, Sales"), unknown.text)
+        // An id wins over a folder whose name is that id.
+        try meetings.createFolder(named: sales.id.uuidString)
+        XCTAssertEqual(try ids(["folder": sales.id.uuidString]), [older.uuid.uuidString])
 
         // A deleted folder no longer shows; the rest show by name.
         let json = try toolText("get_meeting", ["id": older.uuid.uuidString, "format": "json"]).text

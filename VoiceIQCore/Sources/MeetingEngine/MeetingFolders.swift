@@ -63,6 +63,10 @@ public struct MeetingFoldersSnapshot: Codable, Equatable, Sendable {
         let tombstones = a.tombstones.merging(b.tombstones) { max($0, $1) }
             .filter { now.timeIntervalSince($0.value) < tombstoneLifetime }
         var aliases = a.aliases.merging(b.aliases) { $0.uuidString < $1.uuidString ? $0 : $1 }
+        // The same id merged into different folders on two devices: settled below, once the live folders are known.
+        let conflicts = a.aliases.compactMap { key, target in
+            b.aliases[key].flatMap { $0 == target ? nil : (key, [target, $0].sorted { $0.uuidString < $1.uuidString }) }
+        }
         var byID: [UUID: MeetingFolder] = [:]
         for folder in a.folders + b.folders {
             if let existing = byID[folder.id], !isNewer(folder, than: existing) { continue }
@@ -78,6 +82,11 @@ public struct MeetingFoldersSnapshot: Codable, Equatable, Sendable {
             if let survivor = byName[key] { aliases[folder.id.uuidString] = survivor; continue }
             byName[key] = folder.id
             kept.append(folder)
+        }
+        // Of the two, the one that still leads to a live folder, so its meetings stay filed.
+        let live = Set(kept.map(\.id)), chains = MeetingFoldersSnapshot(aliases: aliases)
+        for (key, targets) in conflicts {
+            aliases[key] = targets.first { live.contains(chains.canonical($0)) } ?? targets[0]
         }
         return MeetingFoldersSnapshot(folders: kept.sorted(by: MeetingStore.byName), tombstones: tombstones, aliases: aliases)
     }

@@ -47,12 +47,11 @@ struct MeetingsView: View {
             .themedBackground()
             .navigationTitle("Notes")
             .toolbar {
-                if !meetings.isEmpty {
-                    Menu {
-                        MeetingFolderFilterItems(model: folders, allTitle: "All notes")
-                    } label: {
-                        Label("Folders", systemImage: folders.filter == nil ? "folder" : "folder.fill")
-                    }
+                // Also with no notes, as on the Mac: folders outlive their notes.
+                Menu {
+                    MeetingFolderFilterItems(model: folders, allTitle: "All notes")
+                } label: {
+                    Label("Folders", systemImage: folders.filter == nil ? "folder" : "folder.fill")
                 }
             }
             .onAppear(perform: reload)

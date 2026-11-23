@@ -88,13 +88,12 @@ public struct AgentLibrary: Sendable {
 
     // MARK: - Meetings
 
-    /// A folder by its name (any case) or id.
+    /// A folder by its id, else by its name (any case): a name can look like another folder's id.
     public func folder(_ reference: String) -> MeetingFolder? {
         let reference = reference.trimmingCharacters(in: .whitespacesAndNewlines)
-        return meetings.folders().first {
-            $0.id.uuidString.caseInsensitiveCompare(reference) == .orderedSame
-                || $0.name.caseInsensitiveCompare(reference) == .orderedSame
-        }
+        let folders = meetings.folders()
+        return folders.first { $0.id.uuidString.caseInsensitiveCompare(reference) == .orderedSame }
+            ?? folders.first { $0.name.caseInsensitiveCompare(reference) == .orderedSame }
     }
 
     public func folderNames() -> [String] { meetings.folders().map(\.name) }
