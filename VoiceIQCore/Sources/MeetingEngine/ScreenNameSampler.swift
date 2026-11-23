@@ -22,17 +22,23 @@ public final class ScreenNameSampler: @unchecked Sendable {
     private let startedAt = Date()
     private var bundleID: String?
     private var pid: pid_t?
+    /// With no source: the apps the call being joined runs in, besides a
+    /// browser. Nil reads any call app.
+    private let joining: Set<String>?
     private var snapshots = false
     private let samples = OSAllocatedUnfairLock(initialState: [ScreenNameSample]())
     private var task: Task<Void, Never>?
 
     /// `source` is the call app or browser, when one was detected. With none,
-    /// the frontmost known call app is read; with no call app, nothing is.
-    public init(source: CallSource?) {
+    /// the frontmost known call app is read, or with `joining` (Join and
+    /// Record) the frontmost of those apps or a browser meeting tab, so
+    /// another call app left open is not read; with none of them, nothing is.
+    public init(source: CallSource?, joining: Set<String>? = nil) {
         switch source {
         case let .app(bundleID, _), let .browser(bundleID, _): self.bundleID = bundleID
         case nil: bundleID = nil
         }
+        self.joining = joining
     }
 
     public func start() {
@@ -58,7 +64,7 @@ public final class ScreenNameSampler: @unchecked Sendable {
     /// no call detected (a call app without microphone access, or one just
     /// being opened), reads the frontmost call app once there is one.
     private func resolveCallApp(accessibility: Bool) -> Bool {
-        if bundleID == nil { bundleID = Self.frontCallApp() }
+        if bundleID == nil { bundleID = Self.frontCallApp(among: joining) }
         guard let bundleID else { return false }
         if pid == nil, accessibility,
            let app = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).first {
@@ -70,12 +76,13 @@ public final class ScreenNameSampler: @unchecked Sendable {
 
     /// The known call app, or the browser showing a meeting page (Google Meet
     /// opened by Join and Record, say), with the frontmost normal window.
-    static func frontCallApp() -> String? {
+    /// `apps` limits the call apps; browsers always count.
+    static func frontCallApp(among apps: Set<String>? = nil) -> String? {
         let windows = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] ?? []
         for window in windows where window[kCGWindowLayer as String] as? Int == 0 {
             guard let pid = window[kCGWindowOwnerPID as String] as? pid_t,
                   let id = NSRunningApplication(processIdentifier: pid)?.bundleIdentifier else { continue }
-            if CallApps.known[id] != nil { return id }
+            if CallApps.known[id] != nil, apps?.contains(id) ?? true { return id }
             // Window titles need Screen Recording, which snapshots need anyway.
             if CallApps.browsers.contains(id), let title = window[kCGWindowName as String] as? String,
                CallApps.meetingPages.contains(where: { title.localizedCaseInsensitiveContains($0) }) { return id }

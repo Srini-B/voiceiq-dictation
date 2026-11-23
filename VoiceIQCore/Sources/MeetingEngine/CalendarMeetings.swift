@@ -73,6 +73,8 @@ public enum CalendarMeetings {
         public struct Join: Equatable, Sendable {
             public var app: String
             public var url: URL
+            /// The service's apps, by bundle ID; a browser can open any service.
+            var bundleIDs: Set<String> = []
         }
 
         public var title: String
@@ -102,12 +104,12 @@ public enum CalendarMeetings {
     }
 
     /// Slack is left out: a slack.com link in an invite is rarely the call itself.
-    static let joinApps: [(service: String, app: String)] = [
-        ("zoom.us", "Zoom"),
-        ("meet.google.com", "Google Meet"),
-        ("teams.microsoft.com", "Teams"),
-        ("teams.live.com", "Teams"),
-        ("webex.com", "Webex"),
+    static let joinApps: [(service: String, app: String, bundleIDs: Set<String>)] = [
+        ("zoom.us", "Zoom", ["us.zoom.xos"]),
+        ("meet.google.com", "Google Meet", []),
+        ("teams.microsoft.com", "Teams", ["com.microsoft.teams2", "com.microsoft.teams"]),
+        ("teams.live.com", "Teams", ["com.microsoft.teams2", "com.microsoft.teams"]),
+        ("webex.com", "Webex", ["com.cisco.webexmeetingsapp", "Cisco-Systems.Spark", "com.webex.meetingmanager"]),
     ]
 
     /// The first https link in `text` to a call service, with the service's name.
@@ -116,7 +118,7 @@ public enum CalendarMeetings {
         for match in detector.matches(in: text, range: NSRange(text.startIndex..., in: text)) {
             guard let url = match.url, url.scheme == "https", let host = url.host?.lowercased() else { continue }
             if let entry = joinApps.first(where: { host == $0.service || host.hasSuffix("." + $0.service) }) {
-                return Upcoming.Join(app: entry.app, url: url)
+                return Upcoming.Join(app: entry.app, url: url, bundleIDs: entry.bundleIDs)
             }
         }
         return nil

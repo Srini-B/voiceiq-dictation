@@ -133,6 +133,9 @@ the menu item (`NextMeetingButton`) read:
   so it records all system audio and is not stopped when the call ends. The
   button reads the same when call detection hears a Zoom call: detection
   knows the service, not the meeting, so that call may be another one.
+  Speaker names are read from the linked app's window once it opens (Zoom,
+  Teams, Webex), or from a browser tab showing a meeting page (Google Meet),
+  never from another call app left open.
 - **In Progress**, disabled, while any recording runs.
 
 The recording takes the joined event's title and invitees

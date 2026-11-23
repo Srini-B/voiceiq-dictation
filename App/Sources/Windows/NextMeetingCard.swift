@@ -72,7 +72,7 @@ extension MeetingEngine {
     /// when it is joined early.
     func join(_ meeting: CalendarMeetings.Upcoming) {
         guard !isRecording, let url = meeting.join?.url else { return }
-        startRecording(event: meeting.event)
+        startRecording(event: meeting.event, joining: meeting.join)
         NSWorkspace.shared.open(url)
     }
 }

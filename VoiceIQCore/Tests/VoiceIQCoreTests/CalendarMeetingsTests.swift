@@ -12,7 +12,7 @@ final class CalendarMeetingsTests: XCTestCase {
         Backup: https://meet.google.com/abc-defg-hij
         """
         XCTAssertEqual(CalendarMeetings.joinLink(in: notes),
-                       .init(app: "Zoom", url: URL(string: "https://acme.zoom.us/j/123456789?pwd=xyz")!))
+                       .init(app: "Zoom", url: URL(string: "https://acme.zoom.us/j/123456789?pwd=xyz")!, bundleIDs: ["us.zoom.xos"]))
         XCTAssertEqual(CalendarMeetings.joinLink(in: "Room 4 https://teams.microsoft.com/l/meetup-join/19%3a")?.app, "Teams")
         XCTAssertNil(CalendarMeetings.joinLink(in: "https://acme.slack.com/huddle https://notzoom.us/j/1"))
     }
