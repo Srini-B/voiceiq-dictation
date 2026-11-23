@@ -29,7 +29,8 @@ importer accepts any column order and extra columns.
   progress, then a report.
 - Each note becomes a finished meeting whose id is Granola's `document_id`,
   so a repeat import, or the same note arriving through iCloud, is never
-  doubled. Meetings deleted in VoiceiQ are not brought back.
+  doubled. Meetings deleted in VoiceiQ on this device are not brought back
+  (`deleted-imports.json`).
 - `MeetingMeta.importedFrom` ("Granola") marks imported meetings. Exports
   and the agent Markdown say "Imported from Granola" instead of a length.
 - The ZIP is read by a small reader on the Compression framework
@@ -56,3 +57,10 @@ importer accepts any column order and extra columns.
   work owns (`MeetingsView.swift` on both platforms, `AgentLibrary.swift`),
   so they follow once that lands.
 - Not tried against a real Granola export, nor on an iPhone.
+- Not tried in a signed, notarized build, as AGENTS.md asks for Mac app
+  testing. That needs the release flow and its signing credentials. The
+  Debug build has no iCloud entitlement, so iCloud sync of imported
+  meetings was not exercised end to end; `MeetingSyncTests` and
+  `GranolaImportTests` cover that they queue for upload.
+- A meeting deleted on another device comes back if this device imports the
+  same export again: only deletes made here are remembered.

@@ -416,7 +416,7 @@ public enum GranolaImport {
     /// Sorts the export against what is already here, without saving anything.
     public static func plan(_ export: GranolaExport, store: MeetingStore) -> GranolaImportPlan {
         let here = Set(((try? FileManager.default.contentsOfDirectory(atPath: store.root.path)) ?? []).map { $0.suffix(36).uppercased() })
-        let deleted = store.pendingDeletes
+        let deleted = store.deletedImports
         var plan = GranolaImportPlan(new: [], existing: [], skipped: export.skipped)
         for meeting in export.meetings.sorted(by: { $0.createdAt < $1.createdAt }) {
             let id = meeting.id.uuid.uuidString
@@ -461,4 +461,22 @@ public enum GranolaImport {
         progress(plan.new.count)
         return report
     }
+}
+
+extension MeetingStore {
+    /// Imported meetings deleted on this device, kept for good (unlike the
+    /// sync queue's `pendingDeletes`), so importing the same export again
+    /// does not bring them back.
+    var deletedImports: Set<String> {
+        get {
+            (try? Data(contentsOf: deletedImportsURL)).flatMap { try? JSONDecoder().decode(Set<String>.self, from: $0) } ?? []
+        }
+        set {
+            try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+            if let data = try? JSONEncoder().encode(newValue) { try? data.write(to: deletedImportsURL, options: .atomic) }
+        }
+    }
+
+    /// Beside the meeting folders; `list()` skips it, having no meta.json.
+    private var deletedImportsURL: URL { root.appendingPathComponent("deleted-imports.json") }
 }

@@ -118,6 +118,8 @@ final class GranolaImportTests: XCTestCase {
     func testAMeetingDeletedHereIsNotBroughtBack() async throws {
         _ = try await importFixture()
         try store.delete(id: hiring)
+        // As after iCloud confirmed the delete and dropped it from its queue.
+        store.pendingDeletes = []
 
         let plan = GranolaImport.plan(try GranolaImport.read(try fixture("granola-export")), store: store)
         XCTAssertTrue(plan.new.isEmpty)

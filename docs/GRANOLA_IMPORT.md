@@ -76,7 +76,9 @@ notes from the transcript, replacing Granola's.
 
 - A meeting already in VoiceiQ is left as it is, including any edits made
   since. Importing the same export twice changes nothing.
-- A meeting deleted in VoiceiQ is not brought back.
+- A meeting deleted in VoiceiQ on this device is not brought back; the
+  ids of deleted imports are kept in `deleted-imports.json` beside the
+  meeting folders. One deleted on another device is.
 - A row that appears twice in the export is imported once.
 - Rows are skipped, with the reason shown, when their date cannot be read,
   they have no summary, notes or transcript, or they have the wrong number of

@@ -56,7 +56,11 @@ public final class MeetingStore: @unchecked Sendable {
     /// has the meeting unfinished again. Deleting a record that never went up
     /// fails with `unknownItem`, which sync takes as done.
     public func delete(id: MeetingID) throws {
-        try FileManager.default.removeItem(at: requiredFolder(id))
+        let folder = try requiredFolder(id)
+        if (try? load(MeetingMeta.self, from: folder.appendingPathComponent("meta.json")))?.importedFrom != nil {
+            deletedImports.insert(id.uuid.uuidString)
+        }
+        try FileManager.default.removeItem(at: folder)
         pendingDeletes.insert(id.uuid.uuidString)
         Self.notifyChanged(id, deletedFromCloud: true)
     }
