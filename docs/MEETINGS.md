@@ -263,10 +263,11 @@ Discord, and Webex.
   is quiet, because Zoom and Jitsi keep the last speaker lit after they stop.
   A change of names is posted like a change of sources.
 - On Google Meet, `page.js` also reads the roster once a second: the name on
-  every `[data-participant-id]` tile, talking or not, one per participant id,
-  with " (Presentation)" removed. It sends the other people as `roster`, the
-  user's own tile (`[data-self-name]`) as `me`, and the head count as `count`,
-  posted like a change of sources.
+  every `[data-participant-id]` tile, talking or not, leaving out shared
+  screens ("… (Presentation)"). It sends the other people's names as
+  `roster`, the user's own tile (`[data-self-name]`) as `me`, and the head
+  count by participant id as `count`, so two people with one name count
+  twice. It is posted like a change of sources.
 - Every 10 s while the tab is in a call it adds `diag` to the next event: live
   audio receivers, sources, the loudest `audioLevel`, and how far the newest
   source's `timestamp` sits behind the page's clock, in ms. The 10 s events

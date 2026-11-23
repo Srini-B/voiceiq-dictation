@@ -96,7 +96,8 @@
         .some((name) => tile.classList.contains(name) || !!tile.querySelector(`.${name}`)),
       name: (tile) => text(tile.querySelector('span.notranslate')),
       // Every tile, talking or not; Meet nests elements carrying the same
-      // participant id, and a shared screen is a tile named "… (Presentation)".
+      // participant id, and a shared screen is another tile named
+      // "… (Presentation)".
       roster: true,
     },
     {
@@ -152,13 +153,15 @@
     const people = new Map();
     let me = '';
     for (const tile of document.querySelectorAll(site.tiles)) {
-      const name = site.name(tile).replace(/\s*\((?:presentation|presenting)\)$/i, '');
-      if (!name || name.length > 80) continue;
+      const name = site.name(tile);
+      // A shared screen is its presenter again, under an id of its own.
+      if (!name || name.length > 80 || /\((?:presentation|presenting)\)$/i.test(name)) continue;
       if (site.self(tile)) { me = name; continue; }
       people.set(tile.getAttribute('data-participant-id') || name, name);
     }
+    // Counted by participant id: two people can show the same name.
     const remote = [...new Set(people.values())].sort().slice(0, 64);
-    return { remote, me, count: remote.length + (me ? 1 : 0) };
+    return { remote, me, count: people.size + (me ? 1 : 0) };
   }
 
   let last = '', sentAt = 0, rosterAt = 0, diagnosedAt = 0, people = null;

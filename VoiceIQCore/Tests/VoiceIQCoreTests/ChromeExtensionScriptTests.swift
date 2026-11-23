@@ -58,6 +58,7 @@ final class ChromeExtensionScriptTests: XCTestCase {
       tile('p1', [span('Nihal')]),
       tile('p2', [span('Muhammed Hafeed')]),
       tile('p3', [new Node('div', { 'data-self-name': 'cyron' }, [], '', []), span('cyron')]),
+      tile('p2/presentation', [span('Muhammed Hafeed (Presentation)')]),
     ]);
     var document = {
       querySelectorAll: function (sel) { return body.all().filter(function (n) { return matches(n, sel); }); },
@@ -85,6 +86,14 @@ final class ChromeExtensionScriptTests: XCTestCase {
         XCTAssertEqual(json(page, "messages[messages.length - 1].me"), #""cyron""#)
         XCTAssertEqual(json(page, "messages[messages.length - 1].count"), "3")
         XCTAssertEqual(json(page, "messages[0].diag"), #"{"receivers":1,"sources":1,"maxLevel":0.3,"clockOffset":5000}"#)
+    }
+
+    func testTwoPeopleWithOneNameCountAsTwo() throws {
+        let page = try context(meetPage + "body.children.push(tile('p4', [span('Nihal')])); body.children[body.children.length - 1].parent = body;", script: "page.js")
+        page.evaluateScript("new RTCPeerConnection(); tick(true); tick(true);")
+
+        XCTAssertEqual(json(page, "messages[messages.length - 1].roster"), #"["Muhammed Hafeed","Nihal"]"#)
+        XCTAssertEqual(json(page, "messages[messages.length - 1].count"), "4")
     }
 
     func testASourceWhoseTimestampsStopIsNotLoud() throws {
