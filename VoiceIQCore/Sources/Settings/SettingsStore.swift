@@ -329,4 +329,24 @@ public struct SettingsStore: Sendable {
     public func setTranscriptRetentionDays(_ days: Int) {
         Self.set(days, forKey: "transcriptRetentionDays")
     }
+
+    /// Lets coding agents on this Mac read History and meetings through the
+    /// local API and MCP server (`AgentServer`). Off until the user turns it on.
+    public var agentAccessEnabled: Bool {
+        Self.defaults.bool(forKey: "agentAccessEnabled")
+    }
+
+    public func setAgentAccessEnabled(_ enabled: Bool) {
+        Self.set(enabled, forKey: "agentAccessEnabled")
+    }
+
+    /// `AgentClient` raw values the user removed VoiceiQ from, so turning
+    /// agent access on, a new key or a relaunch does not set them up again.
+    public var agentAccessRemovedClients: Set<String> {
+        Set(Self.defaults.stringArray(forKey: "agentAccessRemovedClients") ?? [])
+    }
+
+    public func setAgentAccessRemovedClients(_ clients: Set<String>) {
+        Self.set(clients.sorted(), forKey: "agentAccessRemovedClients")
+    }
 }

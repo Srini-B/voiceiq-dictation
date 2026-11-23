@@ -39,11 +39,13 @@ public final class MeetingStore: @unchecked Sendable {
     /// Questions asked about the meeting and their answers; empty before the first.
     /// A chat.json that no longer decodes is moved aside to chat-unreadable-<time>.json,
     /// so the next answer starts a new chat instead of overwriting the old one.
-    public func loadChat(id: MeetingID) -> [MeetingChatTurn] {
+    /// Read-only callers pass `setAsideUnreadable: false` to leave it in place.
+    public func loadChat(id: MeetingID, setAsideUnreadable: Bool = true) -> [MeetingChatTurn] {
         guard let folder = try? requiredFolder(id) else { return [] }
         let url = folder.appendingPathComponent("chat.json")
         guard FileManager.default.fileExists(atPath: url.path) else { return [] }
         if let turns = try? load([MeetingChatTurn].self, from: url) { return turns }
+        guard setAsideUnreadable else { return [] }
         let aside = folder.appendingPathComponent("chat-unreadable-\(Int(Date().timeIntervalSince1970)).json")
         try? FileManager.default.moveItem(at: url, to: aside)
         return []

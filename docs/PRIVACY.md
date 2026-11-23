@@ -152,10 +152,21 @@ with reports stops, when Chrome starts the helper, and every hour while it
 runs. To stop the reports, remove the extension on Chrome's
 Extensions page.
 
+## Coding agents (only if you turn it on)
+
+Settings › Advanced › Coding agents lets coding agents on this Mac, such as
+Claude Code and Codex, read your dictations and meetings (notes, transcripts
+and questions, never audio). VoiceiQ itself sends nothing anywhere for this:
+it answers requests on 127.0.0.1 that carry the access key you gave the
+agent. But an agent sends what it reads to its own AI provider, under that
+provider's terms. It is off by default; details in
+[AGENT_ACCESS.md](AGENT_ACCESS.md).
+
 ## What never leaves
 
 - Your history database and stored recordings — audio and transcript text leave
-  only as part of the requests above, never in bulk and never anywhere else
+  only as part of the requests above (or to a coding agent you allowed), never
+  in bulk and never anywhere else
 - Your dictionary as a file, to anyone but you. Individual terms and
   "heard as" spellings ride with the audio as described above. The
   dictionary itself (words,

@@ -14,11 +14,23 @@ public enum KeychainStore {
     /// One keychain item per secret. `rawValue` is the `kSecAttrAccount`.
     public enum Secret: String {
         case gemini = "gemini-api-key"
+        /// The bearer key coding agents send to the local API (`AgentServer`).
+        case agentAccess = "agent-access-key"
 
-        var label: String { "VoiceiQ — Gemini API key" }
+        var label: String {
+            switch self {
+            case .gemini: "VoiceiQ — Gemini API key"
+            case .agentAccess: "VoiceiQ — coding agent access key"
+            }
+        }
 
         /// `object` of `.gtSettingDidChange` when this secret changes.
-        public var settingKey: String { "apiKey" }
+        public var settingKey: String {
+            switch self {
+            case .gemini: "apiKey"
+            case .agentAccess: "agentAccessKey"
+            }
+        }
     }
 
     /// Accounts of the keys older builds stored for OpenAI, ElevenLabs,
@@ -68,6 +80,13 @@ public enum KeychainStore {
 
     /// Whether a Gemini key is stored.
     public static var hasModelKey: Bool { loadAPIKey() != nil }
+
+    // MARK: - Coding agent access
+
+    public static func loadAgentAccessKey() -> String? { load(.agentAccess, service: service) }
+
+    @discardableResult
+    public static func saveAgentAccessKey(_ key: String) -> Bool { save(key, for: .agentAccess) }
 
     // MARK: - Generic
 
