@@ -2,22 +2,33 @@ import SwiftUI
 import VoiceIQSpeech
 
 /// Gemini or this device, chosen apart for dictation, for meetings, and for
-/// the writing step of an on-device dictation (and a meeting's notes), with
-/// the on-device models' downloads. Shared by the macOS and iOS settings.
+/// the writing step of an on-device dictation (and a meeting's notes), then
+/// the on-device models grouped by their job: transcription, the English
+/// add-on, and writing. Shared by the macOS and iOS settings.
+///
+/// A group shows while its choice is On device. Otherwise it shows only while
+/// one of its models is on disk or downloading, so it can still be deleted
+/// or cancelled.
 @MainActor
 public struct SpeechSourceSection<Header: View>: View {
     private let device: String
-    private let header: Header
+    private let header: (String) -> Header
     private let settings = SettingsStore()
     @State private var dictationSource = SettingsStore().dictationSource
     @State private var cleanupSource = SettingsStore().cleanupSource
     @State private var meetingSource = SettingsStore().meetingSource
     @State private var localModel = SettingsStore().localSpeechModel
+    @ObservedObject private var mini = LocalModelStore.store(for: .parakeet)
+    @ObservedObject private var pro = LocalModelStore.store(for: .fluidSpeechPro)
+    @ObservedObject private var diarizer = LocalModelStore.speakerDiarizer
+    @ObservedObject private var englishTools = LocalModelStore.englishTools
+    @ObservedObject private var writer = LocalModelStore.writer
 
-    /// `device` names this device in the footer ("Mac", "iPhone").
-    public init(device: String, @ViewBuilder header: () -> Header) {
+    /// `device` names this device in the footer ("Mac", "iPhone"); `header`
+    /// draws each section's title.
+    public init(device: String, @ViewBuilder header: @escaping (String) -> Header) {
         self.device = device
-        self.header = header()
+        self.header = header
     }
 
     public var body: some View {
@@ -40,19 +51,13 @@ public struct SpeechSourceSection<Header: View>: View {
                 }
                 .sourcePickerStyle()
             }
-            LocalModelControls(localEnabled: dictationSource == .onDevice, meetingsLocal: meetingSource == .onDevice,
-                               selection: $localModel)
-            LocalMeetingControls(meetingsLocal: meetingSource == .onDevice)
-            LocalWriterControls(offered: anyOnDevice && cleanupSource == .onDevice)
         } header: {
-            header
+            header("Speech")
         } footer: {
-            VStack(alignment: .leading, spacing: 4) {
-                LocalModelFooter(localEnabled: dictationSource == .onDevice, selection: localModel)
-                LocalMeetingFooter(enabled: meetingSource == .onDevice, model: localModel)
-                if anyOnDevice {
-                    Text(cleanupNote)
-                }
+            if !LocalModelSupport.isAvailable {
+                Text(LocalModelSupport.requirement)
+            } else if anyOnDevice, cleanupSource != .onDevice {
+                Text(cleanupNote)
             }
         }
         .onChange(of: localModel) { _, model in settings.setLocalSpeechModel(model) }
@@ -65,9 +70,65 @@ public struct SpeechSourceSection<Header: View>: View {
             default: break
             }
         }
+
+        if LocalModelSupport.isAvailable {
+            if shows(speechModels, offered: anyOnDevice) || shows([diarizer], offered: meetingsLocal) {
+                Section {
+                    LocalModelControls(localEnabled: dictationLocal, meetingsLocal: meetingsLocal, selection: $localModel)
+                    LocalModelRow(store: diarizer, offered: meetingsLocal, selection: nil)
+                } header: {
+                    header("On-device transcription")
+                } footer: {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(transcriptionNote)
+                        LocalModelFooter(localEnabled: dictationLocal, selection: localModel)
+                        LocalMeetingFooter(enabled: meetingsLocal, model: localModel)
+                    }
+                }
+            }
+            if shows([englishTools], offered: dictationLocal) {
+                Section {
+                    LocalModelRow(store: englishTools, offered: dictationLocal, selection: nil)
+                } header: {
+                    header("Add-on for English dictation")
+                } footer: {
+                    Text(dictationLocal ? "Dictionary correction for English on-device dictation. Without it, on-device transcription still works."
+                                       : "Not used while Dictation is set to Gemini.")
+                }
+            }
+            if shows([writer], offered: writesOnDevice) {
+                Section {
+                    LocalModelRow(store: writer, offered: writesOnDevice, selection: nil)
+                } header: {
+                    header("On-device writing")
+                } footer: {
+                    Text(writesOnDevice ? cleanupNote : "Not used while Writing rules and notes is not set to On device.")
+                }
+            }
+        }
     }
 
-    private var anyOnDevice: Bool { dictationSource == .onDevice || meetingSource == .onDevice }
+    private var dictationLocal: Bool { dictationSource == .onDevice }
+    private var meetingsLocal: Bool { meetingSource == .onDevice }
+    private var anyOnDevice: Bool { dictationLocal || meetingsLocal }
+    private var writesOnDevice: Bool { anyOnDevice && cleanupSource == .onDevice }
+
+    private var speechModels: [LocalModelStore] { LocalSpeechModel.available.map(LocalModelStore.store(for:)) }
+
+    /// Whether any of `stores` has a row: offered, or with something on disk
+    /// or in transit.
+    private func shows(_ stores: [LocalModelStore], offered: Bool) -> Bool {
+        stores.contains { LocalModelRow.isVisible($0.state, offered: offered) }
+    }
+
+    private var transcriptionNote: String {
+        switch (dictationLocal, meetingsLocal) {
+        case (true, true): return "Dictation and meetings use the checked model. Speaker Separation tells meeting speakers apart."
+        case (true, false): return "Dictation uses the checked model, in the language picked under it."
+        case (false, true): return "Meetings use the checked model, and Speaker Separation tells speakers apart."
+        case (false, false): return "Not used while Dictation and Meetings are set to Gemini."
+        }
+    }
 
     private var cleanupNote: String {
         switch cleanupSource {
