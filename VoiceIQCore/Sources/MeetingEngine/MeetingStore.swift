@@ -56,7 +56,11 @@ public final class MeetingStore: @unchecked Sendable {
     /// has the meeting unfinished again. Deleting a record that never went up
     /// fails with `unknownItem`, which sync takes as done.
     public func delete(id: MeetingID) throws {
-        try FileManager.default.removeItem(at: requiredFolder(id))
+        let folder = try requiredFolder(id)
+        if (try? load(MeetingMeta.self, from: folder.appendingPathComponent("meta.json")))?.importedFrom != nil {
+            deletedImports.insert(id.uuid.uuidString)
+        }
+        try FileManager.default.removeItem(at: folder)
         pendingDeletes.insert(id.uuid.uuidString)
         Self.notifyChanged(id, deletedFromCloud: true)
     }
@@ -83,7 +87,7 @@ public final class MeetingStore: @unchecked Sendable {
         let folder = try requiredFolder(id), meta = try load(MeetingMeta.self, from: folder.appendingPathComponent("meta.json"))
         let notes = try? loadNotes(id: id)
         var lines = ["# \(notes?.title ?? meta.title ?? "Meeting")", "", meta.startedAt.formatted(date: .long, time: .shortened),
-                     Duration.seconds(meta.durationSeconds.rounded())
+                     meta.importedFrom.map { "Imported from \($0)" } ?? Duration.seconds(meta.durationSeconds.rounded())
                          .formatted(.units(allowed: [.hours, .minutes, .seconds], width: .wide, maximumUnitCount: 2))]
         if parts.contains(.notes), let notes {
             lines += ["", "## Summary", notes.summary]
