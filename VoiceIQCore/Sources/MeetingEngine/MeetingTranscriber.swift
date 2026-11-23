@@ -83,10 +83,14 @@ public struct MeetingTranscriber: Sendable {
             words = Self.mergeOwner(owner, into: words, overlaps: overlaps)
         }
         if audio.isOnline { words = Self.byTrack(words, audio: audio) }
-        if let remote, !BrowserSpeakers.separatesPeople(folder: folder) {
+        // The extension's timeline decides where it covers the meeting;
+        // otherwise the on-device speaker model may split the far side.
+        let browser = BrowserSpeakers.apply(words, folder: folder)
+        if browser == words, let remote {
             words = try await splitFarSide(words, remote: remote, audio: audio, folder: folder)
+        } else {
+            words = browser
         }
-        words = BrowserSpeakers.apply(words, folder: folder)
         return SpeakerLinker.overlappingTurns(words).map { turn in
             TranscriptSegment(speaker: turn.speaker, text: turn.text, chunkIndex: 0, start: turn.start, end: turn.end)
         }
@@ -204,14 +208,16 @@ public struct MeetingTranscriber: Sendable {
     /// its speaker. Mic silence under a far-side word says the owner was
     /// silent only when the mic is echo-free; otherwise far-side speech
     /// hides the mic and only the second rule applies. A far-side word taken
-    /// from the owner goes to the far-side speaker talking nearest to it.
+    /// from the owner goes to the far-side speaker talking nearest to it,
+    /// within 30 s, else to one new far-side id.
     /// MEASURED 2026-11-23 on a 22-minute three-person Meet call: 114 s of
     /// far-side speech came back as the owner's and 49 s of mic speech as a
     /// far-side speaker's.
     static func byTrack(_ words: [TimedWord], audio: CallAudio) -> [TimedWord] {
         let heard = words.map { audio.sources($0.start...max($0.end, $0.start)) }
         let far = words.indices.filter { words[$0].speaker != MeetingSpeaker.you }
-        var next = (words.compactMap { Int($0.speaker.dropFirst()) }.max() ?? 0) + 1
+        // One id for all such words: they are most likely one person.
+        let fallback = "s\((words.compactMap { Int($0.speaker.dropFirst()) }.max() ?? 0) + 1)"
         var out = words
         for index in words.indices {
             let source = heard[index], word = words[index]
@@ -221,7 +227,7 @@ public struct MeetingTranscriber: Sendable {
                 if let nearest, abs(words[nearest].start - word.start) <= 30 {
                     out[index].speaker = words[nearest].speaker
                 } else {
-                    out[index].speaker = "s\(next)"; next += 1
+                    out[index].speaker = fallback
                 }
             } else if source.system == 0, source.mic >= 2 {
                 out[index].speaker = MeetingSpeaker.you

@@ -63,10 +63,6 @@ public enum BrowserSpeakers {
         return MeetingRoster(remote: remote, me: me, count: events.compactMap(\.count).max())
     }
 
-    /// The extension's loud sources tell the far side's people apart, so
-    /// `apply` relabels their words and nothing else needs to.
-    public static func separatesPeople(folder: URL) -> Bool { saved(folder: folder).map { tellsPeopleApart($0.events) } ?? false }
-
     /// How long one event holds without the next: the extension repeats the
     /// state every second while anyone talks, so a longer gap is a lost page.
     static let hold: Double = 3

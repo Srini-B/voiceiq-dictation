@@ -435,7 +435,8 @@ two snapshots, less one), whichever is larger. It is used three ways:
   and the call showed at most one other person. With two or more, a new
   voice becomes a new speaker.
 - When the call showed more other people than the transcript has far-side
-  ids and the extension's sources do not tell them apart, the cloud path runs
+  ids and the extension's timeline left the words as they were (too few sources
+  or too little of the meeting covered), the cloud path runs
   the on-device speaker model on the system track alone (no speech model) and
   gives the far-side words to its voices when it hears more of them
   (`MeetingTranscriber.splitFarSide`, cached as
@@ -458,7 +459,8 @@ stay on screen in at least a quarter of the snapshots and are no UI word
 `MeetingTranscriber.byTrack` runs on every call after the owner is marked: a
 word heard only on the system track is not the owner's (when the mic is
 echo-free, so mic silence means the owner was silent) and goes to the nearest
-far-side speaker; a word heard only on the mic is the owner's. MEASURED
+far-side speaker within 30 s, else to one new far-side id; a word heard
+only on the mic is the owner's. MEASURED
 2026-11-23 on a 22-minute three-person Meet call: 114 s of far-side speech had
 come back as the owner's and 49 s of mic speech as a far-side speaker's. The
 on-device path, which transcribes each track alone when the mic is

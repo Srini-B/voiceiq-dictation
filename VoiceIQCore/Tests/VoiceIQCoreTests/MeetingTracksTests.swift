@@ -60,6 +60,13 @@ final class MeetingTracksTests: XCTestCase {
         XCTAssertEqual(out, ["you", "you", "s2", "s2"])
     }
 
+    func testFarSideWordsWithNoFarSpeakerNearbyStayOnePerson() throws {
+        let audio = try call(mic: [0...1], system: [5...11])
+        let words = [word("hi", "you", 0.2), word("so", "you", 6), word("the", "you", 7), word("plan", "you", 8)]
+
+        XCTAssertEqual(MeetingTranscriber.byTrack(words, audio: audio).map(\.speaker), ["you", "s1", "s1", "s1"])
+    }
+
     func testTheFarSideIsSplitByTheVoicesOnTheSystemTrack() {
         let words = [word("hi", "you", 0.2), word("we", "s1", 1), word("shipped", "s1", 2), word("then", "s1", 6), word("Hafeez", "s1", 7)]
         let segments = [LocalMeetingResult.Segment(speaker: 0, start: 0.5, end: 3), LocalMeetingResult.Segment(speaker: 1, start: 5, end: 8)]
