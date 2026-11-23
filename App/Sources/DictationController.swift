@@ -476,9 +476,16 @@ final class DictationController {
         }
     }
 
-    /// The menu's Join and Record for the next calendar meeting.
+    /// The menu's button for the next calendar meeting.
     func joinMeeting(_ meeting: CalendarMeetings.Upcoming) {
         meetings.join(meeting)
+        // Without Accessibility the pill was never shown, and a recording
+        // started from the menu would have no Stop on screen.
+        if meetings.isRecording { hud.show() }
+    }
+
+    func nextMeetingButton(for meeting: CalendarMeetings.Upcoming) -> NextMeetingButton? {
+        meetings.nextMeetingButton(for: meeting)
     }
 
     func openHistory() {

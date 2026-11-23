@@ -21,6 +21,7 @@ final class StatusItemController: NSObject {
     private let onOpenAbout: () -> Void
     private let onCheckForUpdates: () -> Void
     private let onJoinMeeting: (CalendarMeetings.Upcoming) -> Void
+    private let nextMeetingButton: (CalendarMeetings.Upcoming) -> NextMeetingButton?
     private let templateImage: NSImage
     private var animationTimer: Timer?
     private var animationStartedAt = Date()
@@ -33,7 +34,8 @@ final class StatusItemController: NSObject {
         onStartHandsFree: @escaping () -> Void,
         onOpenAbout: @escaping () -> Void,
         onCheckForUpdates: @escaping () -> Void,
-        onJoinMeeting: @escaping (CalendarMeetings.Upcoming) -> Void
+        onJoinMeeting: @escaping (CalendarMeetings.Upcoming) -> Void,
+        nextMeetingButton: @escaping (CalendarMeetings.Upcoming) -> NextMeetingButton?
     ) {
         self.statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         self.onOpenHistory = onOpenHistory
@@ -43,6 +45,7 @@ final class StatusItemController: NSObject {
         self.onOpenAbout = onOpenAbout
         self.onCheckForUpdates = onCheckForUpdates
         self.onJoinMeeting = onJoinMeeting
+        self.nextMeetingButton = nextMeetingButton
         self.templateImage = Self.loadTemplateImage()
         super.init()
 
@@ -178,8 +181,11 @@ final class StatusItemController: NSObject {
         guard let next else { return }
         header.title = "Next Meeting · \(CalendarMeetings.when(next.start, now: Date()))"
         title.title = next.title
-        join.isHidden = next.join == nil
-        join.title = next.join.map { "Join \($0.app) and Record" } ?? ""
+        let button = nextMeetingButton(next)
+        join.isHidden = button == nil
+        join.title = button?.title ?? ""
+        // The menu enables an item by its action: none greys out In Progress.
+        join.action = button?.enabled == true ? #selector(joinNextMeeting(_:)) : nil
         join.representedObject = next
     }
 

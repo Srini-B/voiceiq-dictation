@@ -24,6 +24,10 @@ menu-bar menu. Mac and iPhone the same where possible.
   window now starts at the window's top edge (the title sits over the
   sidebar, so the transparent titlebar strip above the panes was empty), and
   each keeps its own padding.
+  Then: the button looked the same before and after joining. It now has
+  three states from call detection: Join and Record (no call from that
+  service heard), Record (the call is heard, so the user joined another
+  way), In Progress, disabled (recording).
 - iPhone and iPad: a "Next meeting" section above the record card in Notes
   (`NextMeetingSection`).
 - The calendar permission text and the Settings copy on both say the next

@@ -125,18 +125,27 @@ the time, "Tomorrow 10:00 AM" or "Wed 10:00 AM"). One that started up to 10
 minutes ago still shows, as "Now", so a late joiner can still join it. When
 the invite's link, location or notes hold a Zoom, Google Meet, Teams or Webex
 https link, a button joins it; Slack links are not offered, since an
-invite's slack.com link is rarely the call. On the Mac the button and the
-menu item are **Join Zoom and Record**: they start a recording, then open the
-link (`MeetingEngine.join`), so the call is recorded from its first second;
-already recording, they only open the link. The recording takes the joined
-event's title and invitees (`Upcoming.event`), not whatever event the clock
-falls in, so a meeting joined early is still named right. It has no call source,
-even when another call is detected at that moment: it records all system
-audio, and like any recording started without a detected call it is not
-stopped automatically when the call ends. On iPhone it
-is **Join Zoom** alone, since the phone cannot record calls.
-The screens refresh every 30 seconds and whenever the calendar changes
-(`NextMeetingModel`); the menu reads the calendar each time it opens
+invite's slack.com link is rarely the call. On the Mac the card's button and
+the menu item follow the call (`NextMeetingButton`):
+
+- **Join Zoom and Record** while call detection hears no call from that
+  service: starts a recording, then opens the link, so the call is recorded
+  from its first second. The recording has no call source, even when another
+  call is detected at that moment, so it records all system audio and is not
+  stopped when the call ends.
+- **Record** once call detection hears that service's call (its app, or one
+  of its pages in a browser; `Upcoming.Join.matches`): the user joined some
+  other way. It records that call like an accepted offer, following its
+  audio and stopping when it ends.
+- **In Progress**, disabled, while any recording runs.
+
+Either way the recording takes the joined event's title and invitees
+(`Upcoming.event`), not whatever event the clock falls in, so a meeting
+joined early is still named right. A recording started from the menu shows
+the pill, with its Stop, even when Accessibility is not granted. On iPhone
+the button is **Join Zoom** alone, since the phone cannot record calls.
+The screens refresh every 30 seconds, whenever the calendar changes and when
+the calendar setting changes (`NextMeetingModel`); the menu reads the calendar each time it opens
 (`CalendarMeetings.next(after:)`). With the calendar off or access denied,
 nothing shows.
 

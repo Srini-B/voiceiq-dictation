@@ -110,7 +110,8 @@ import VoiceIQSpeech
     }
 
     /// The call the detector currently sees, whether or not it was accepted.
-    public private(set) var detectedSource: CallSource?
+    /// Published: the next meeting's button turns from Join to Record when it hears that call.
+    @Published public private(set) var detectedSource: CallSource?
 
     public init(client: GeminiClient, store: MeetingStore = MeetingStore(), config: @escaping () -> GeminiConfig,
                 hasKey: @escaping @Sendable () -> Bool = { KeychainStore.loadAPIKey() != nil },

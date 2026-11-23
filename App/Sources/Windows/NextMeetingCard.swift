@@ -14,15 +14,16 @@ struct NextMeetingCard: View {
                 .font(VoiceIQUI.TypeScale.labelSmall())
                 .foregroundStyle(.secondary)
             Text(meeting.title).font(VoiceIQUI.TypeScale.body()).lineLimit(2)
-            if let join = meeting.join {
+            if let button = engine.nextMeetingButton(for: meeting) {
                 Button { engine.join(meeting) } label: {
-                    Label("Join \(join.app) and Record", systemImage: "video")
+                    Label(button.title, systemImage: button.icon)
                         .frame(maxWidth: .infinity)
                 }
                 .controlSize(.large)
                 .buttonStyle(.bordered)
+                .disabled(!button.enabled)
                 .padding(.top, VoiceIQUI.Spacing.xs)
-                .help(join.url.absoluteString)
+                .help(meeting.join?.url.absoluteString ?? "")
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -31,16 +32,61 @@ struct NextMeetingCard: View {
     }
 }
 
+/// The next meeting's button, on the card and in the menu-bar menu.
+enum NextMeetingButton {
+    /// The call is not on yet: open it and record from its first second.
+    case joinAndRecord(app: String)
+    /// Call detection hears this meeting's service: the user has joined.
+    case record
+    /// A recording is running.
+    case inProgress
+
+    var title: String {
+        switch self {
+        case let .joinAndRecord(app): return "Join \(app) and Record"
+        case .record: return "Record"
+        case .inProgress: return "In Progress"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .joinAndRecord: return "video"
+        case .record: return "record.circle"
+        case .inProgress: return "waveform"
+        }
+    }
+
+    var enabled: Bool { if case .inProgress = self { return false }; return true }
+}
+
 extension MeetingEngine {
-    /// Records the call from before it is joined, then opens it. Already
-    /// recording: only opens it. No call source: a call detected now is not
-    /// this one, and following its processes would miss the joined call's
-    /// audio and stop when that other call ends. The recording takes this
-    /// meeting's title and invitees, which a lookup by the clock can miss
-    /// when it is joined early.
+    /// Nil when the invite has no call link.
+    func nextMeetingButton(for meeting: CalendarMeetings.Upcoming) -> NextMeetingButton? {
+        guard let join = meeting.join else { return nil }
+        if isRecording { return .inProgress }
+        if joinedCall(meeting) != nil { return .record }
+        return .joinAndRecord(app: join.app)
+    }
+
+    /// The call detection hears, when it is this meeting's service.
+    private func joinedCall(_ meeting: CalendarMeetings.Upcoming) -> CallSource? {
+        guard let call = detectedSource, meeting.join?.matches(call) == true else { return nil }
+        return call
+    }
+
+    /// Joined already: records that call, following its audio and its end
+    /// like an accepted call offer. Not yet: records from before the call is
+    /// opened, with no call source, since a call detected now is not this
+    /// one. Either way the recording takes this meeting's title and invitees,
+    /// which a lookup by the clock can miss when it is joined early.
     func join(_ meeting: CalendarMeetings.Upcoming) {
-        guard let url = meeting.join?.url else { return }
-        if !isRecording { startRecording(event: meeting.event) }
-        NSWorkspace.shared.open(url)
+        guard !isRecording, let url = meeting.join?.url else { return }
+        if let call = joinedCall(meeting) {
+            startRecording(source: call, event: meeting.event)
+        } else {
+            startRecording(event: meeting.event)
+            NSWorkspace.shared.open(url)
+        }
     }
 }
