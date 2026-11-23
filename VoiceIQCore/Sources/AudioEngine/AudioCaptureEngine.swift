@@ -121,7 +121,12 @@ public final class AudioCaptureEngine: AudioCapturing, @unchecked Sendable {
             try buildEngine(reason: "prewarm", start: false)
             isPrewarmed = true
             prewarmedDevice = AudioDeviceQuery.defaultInputDevice()
-            prewarmedFormat = engine.map { AudioDeviceQuery.InputFormat($0.inputNode.outputFormat(forBus: 0)) }
+            // start() compares this with the device's own format. Voice
+            // processing reports its own (4 channels on a 2-channel input),
+            // so a processed graph keeps the device's.
+            prewarmedFormat = graphUsesVoiceProcessing
+                ? prewarmedDevice.flatMap(AudioDeviceQuery.inputFormat(of:))
+                : engine.map { AudioDeviceQuery.InputFormat($0.inputNode.outputFormat(forBus: 0)) }
         } catch {
             // Prewarm is an optimization, never a failure mode — the session's
             // own start() will build fresh and report any real problem.

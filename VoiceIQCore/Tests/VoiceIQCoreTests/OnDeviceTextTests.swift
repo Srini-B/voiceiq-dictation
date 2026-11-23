@@ -199,6 +199,11 @@ final class SpokenNumbersTests: XCTestCase {
             SpokenNumbers.digits(in: "We ordered twenty Five Guys burgers.", language: "en-US", protectedTerms: ["Five Guys"]),
             "We ordered 20 Five Guys burgers."
         )
+        // A mark before the next word ends the number.
+        XCTAssertEqual(SpokenNumbers.digits(in: "We need twenty (five optional) chairs.", language: "en-US"),
+                       "We need 20 (five optional) chairs.")
+        XCTAssertEqual(SpokenNumbers.digits(in: "I said twenty \"five\" times.", language: "en-US"),
+                       "I said 20 \"five\" times.")
         XCTAssertEqual(SpokenNumbers.digits(in: "Cinco punto cinco.", language: "es-ES"), "Cinco punto cinco.")
         XCTAssertEqual(SpokenNumbers.digits(in: "The ratio is five point five.", language: "fr-FR"), "The ratio is five point five.")
     }

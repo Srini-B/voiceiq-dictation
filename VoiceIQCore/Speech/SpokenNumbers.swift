@@ -81,9 +81,12 @@ public enum SpokenNumbers {
         let startsSentence: Bool
         /// Inside a protected term.
         var protected = false
+        /// The next word opens with a mark, such as "(" or a quote.
+        var beforeMark = false
         var word: String { core.lowercased() }
-        /// Nothing but the word: no mark after it ends the number.
-        var open: Bool { trail.isEmpty }
+        /// Nothing but the word: no mark after it, or before the next word,
+        /// ends the number. VoiceiQ: Hex read "twenty (five optional)" as 25.
+        var open: Bool { trail.isEmpty && !beforeMark }
     }
 
     private static func tokenize(_ text: String) -> [Token] {
@@ -115,6 +118,7 @@ public enum SpokenNumbers {
             ))
             index = end
         }
+        for k in tokens.indices.dropLast() where !tokens[k + 1].lead.isEmpty { tokens[k].beforeMark = true }
         return tokens
     }
 
