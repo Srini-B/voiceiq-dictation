@@ -96,10 +96,6 @@ public final class LocalModelStore: ObservableObject {
     public func acquireSession(id: UUID, replacing: Set<UUID> = [],
                                cancel: @escaping @Sendable () async -> Void) -> URL? {
         guard canAcquire(replacing: replacing) else { return nil }
-        guard LocalModelInstaller.isInstalled(manifest) else {
-            state = .notDownloaded
-            return nil
-        }
         for old in replacing { sessions[old] = nil }
         sessions[id] = cancel
         return manifest.installDirectory
@@ -107,9 +103,15 @@ public final class LocalModelStore: ObservableObject {
 
     /// `acquireSession` would succeed now. Nothing can change in between on
     /// the main actor, so checking both stores first makes taking both atomic.
+    /// A ready model whose files have gone reads as not downloaded again, so
+    /// the user can download it anew.
     func canAcquire(replacing: Set<UUID> = []) -> Bool {
-        state == .ready && deleteTask == nil && sessions.keys.allSatisfy(replacing.contains)
-            && LocalModelInstaller.isInstalled(manifest)
+        guard state == .ready, deleteTask == nil else { return false }
+        guard LocalModelInstaller.isInstalled(manifest) else {
+            state = .notDownloaded
+            return false
+        }
+        return sessions.keys.allSatisfy(replacing.contains)
     }
 
     public func releaseSession(id: UUID) {
@@ -141,8 +143,13 @@ public final class LocalModelStore: ObservableObject {
             self.downloadTask = nil
             // A delete in progress owns the state until it finishes.
             if self.deleteTask == nil { self.state = outcome }
+            // Without a key, a model arriving is what makes dictation possible.
+            if outcome == .ready { NotificationCenter.default.post(name: .gtSettingDidChange, object: LocalModelStore.readyKey) }
         }
     }
+
+    /// `object` of `.gtSettingDidChange` when a model finishes downloading.
+    public static let readyKey = "localModelReady"
 
     public func cancelDownload() {
         downloadTask?.cancel()

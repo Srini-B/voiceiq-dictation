@@ -376,7 +376,7 @@ final class DictationController {
             if !engineActive {
                 activateEngine()
             }
-        case "apiKey":
+        case "apiKey", "transcriptionSource", "onDeviceSpeechModel", LocalModelStore.readyKey:
             if DictationRoute.isAvailable {
                 // Covers the "I'll add it later" onboarding path, where the
                 // engine was never started: a key arriving in Settings must

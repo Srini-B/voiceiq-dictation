@@ -82,12 +82,12 @@ delete button.
 3. The coordinator passes the result to `TranscriptionServicing.write`
    (Gemini text cleanup, or dictionary replacements when Off).
 4. If the model is still loading `TimeoutPolicy.localColdLoad` after the
-   recording, a Gemini key exists and writing is Gemini, the dictation goes to Gemini and the load
-   finishes as a warm-up.
+   recording and a Gemini key exists, the dictation goes to Gemini and the
+   load finishes as a warm-up.
 
 History's Retry and launch recovery use `OnDeviceFirstTranscription`: the
-saved recording goes to the on-device model first, then Gemini (only with
-writing set to Gemini).
+saved recording goes to the on-device model first, then Gemini when a key is
+stored. With no key nothing is sent (`GeminiClient` refuses to send).
 `DictationRoute.isAvailable` (a key, or the selected model downloaded) decides
 whether VoiceiQ asks for an API key, so fully offline use needs no key.
 
@@ -101,8 +101,8 @@ update.
 With Meetings set to On device, `MeetingEngine.transcribe` sends the saved
 tracks to `LocalMeetingTranscriber`: speech stretches are transcribed with the
 selected model and labelled by speaker with pyannote. Nothing is shown while
-recording, and the work runs after you stop. If it fails, a key exists and
-writing is Gemini, the meeting falls back to Gemini. With Writing rules and notes set to On
+recording, and the work runs after you stop. If it fails and a key exists,
+the meeting falls back to Gemini. With Writing rules and notes set to On
 device, LFM3-Omni-2B writes the notes after the transcript is saved.
 
 ## On-device writer

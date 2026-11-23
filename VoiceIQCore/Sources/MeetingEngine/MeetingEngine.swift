@@ -188,8 +188,17 @@ import VoiceIQSpeech
             do {
                 try mark(&meta, .summarizing)
                 let notes: MeetingNotes
+                var written: MeetingNotes?
                 if writesLocally, let localWriter {
-                    notes = try await localNotes(transcript: transcript, meta: meta, runner: localWriter)
+                    do {
+                        written = try await localNotes(transcript: transcript, meta: meta, runner: localWriter)
+                    } catch {
+                        guard hasKey(), !(error is CancellationError) else { throw error }
+                        Log.meeting.error("on-device notes failed, using Gemini: \(String(describing: error), privacy: .public)")
+                    }
+                }
+                if let written {
+                    notes = written
                 } else {
                     guard hasKey() else { throw MeetingFailure.noKey }
                     notes = try await writeNotes(transcript: transcript, meta: meta)

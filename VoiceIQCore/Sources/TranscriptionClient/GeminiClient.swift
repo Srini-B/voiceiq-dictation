@@ -188,6 +188,9 @@ public actor GeminiClient {
         stage: UsageStage,
         isRetryAfter429: Bool = false
     ) async throws -> Data {
+        // No key, no upload: an on-device fallback must not send audio or
+        // text that the server would only refuse.
+        guard apiKey() != nil else { throw TranscriptionError.auth }
         let url = endpoint.appendingPathComponent(path)
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
