@@ -74,7 +74,7 @@ enum LocalModelInstaller {
     /// cannot be split by model, so the others are prepared again on their
     /// next load.
     static func removeAll(_ manifest: LocalModelManifest) throws {
-        removePreparedModels()
+        try removePreparedModels()
         let root = manifest.rootDirectory
         guard FileManager.default.fileExists(atPath: root.path) else { return }
         try FileManager.default.removeItem(at: root)
@@ -100,15 +100,19 @@ enum LocalModelInstaller {
         #endif
     }
 
-    static func removePreparedModels() {
-        try? FileManager.default.removeItem(at: preparedModelCache)
+    /// A cache that is already gone counts as removed.
+    static func removePreparedModels() throws {
+        do {
+            try FileManager.default.removeItem(at: preparedModelCache)
+        } catch CocoaError.fileNoSuchFile {
+        }
     }
 
     /// At launch: the prepared copies outlive their models when a model was
     /// deleted by a build that left them (0.7.13 and earlier) or by hand.
     static func removeUnusedPreparedModels() {
         guard !allManifests.contains(where: isInstalled) else { return }
-        removePreparedModels()
+        try? removePreparedModels()
     }
 
     /// Downloads every file into a staging folder, verifies each one, then
