@@ -20,6 +20,7 @@ Needs GEMINI_API_KEY and eval/make_assets.py's output.
 import argparse
 import base64
 import concurrent.futures
+import http.client
 import hashlib
 import json
 import os
@@ -63,14 +64,22 @@ class Hedge:
 HEDGE = Hedge()
 
 
+def is_connection_failure(error: BaseException) -> bool:
+    # GeminiClient.isConnectionFailure: the request never got an HTTP answer.
+    return (isinstance(error, (ConnectionError, TimeoutError, http.client.HTTPException))
+            or (isinstance(error, urllib.error.URLError) and not isinstance(error, urllib.error.HTTPError)))
+
+
 def first_success(send, delay: float) -> tuple[dict, bool]:
     """GeminiClient.firstSuccess: a second request starts when the first has
-    not answered after `delay`; the first answer wins. Returns the reply and
-    whether the second request was sent."""
+    not answered after `delay`, or at once when the first loses its
+    connection; the first answer wins. Returns the reply and whether the
+    second request was sent."""
     pool = concurrent.futures.ThreadPoolExecutor(2)
-    pending = {pool.submit(send)}
+    first = pool.submit(send)
+    pending = {first}
     done, _ = concurrent.futures.wait(pending, timeout=delay)
-    second = not done
+    second = not done or (first.exception() is not None and is_connection_failure(first.exception()))
     if second:
         pending.add(pool.submit(send))
     error = None

@@ -30,13 +30,15 @@ for path in paths:
         raise SystemExit(f"{path}: incomplete run; rerun run.py with its label")
     if not run.get("screenshots"):
         raise SystemExit(f"{path}: screen context was off; D5 is measured with every option on")
-    settings.add((run["model"], run["prompt_chars"], run.get("hedge_ceiling")))
+    # Each call's fingerprint covers model, screen setting, hedge ceiling,
+    # prompt and audio, so equal sets mean the same experiment.
+    settings.add(frozenset((r["id"], r["request"]) for r in run["results"]))
     times = [r["seconds"] + APP_OVERHEAD_S for r in run["results"]]
     pool += times
     second += sum(r["usage"].get("secondRequests", 0) > 0 for r in run["results"])
     per_run[path] = d5(times)["D5"]
 if len(settings) > 1:
-    raise SystemExit(f"runs differ in model, prompt or hedge ceiling: {sorted(settings, key=str)}")
+    raise SystemExit("runs differ in model, prompt, audio or hedge ceiling: pool only runs of one experiment")
 report = {"runs": len(paths), **d5(pool), "e2e_max": round(max(pool), 2),
           "second_requests": f"{second}/{len(pool)}", "per_run_D5": per_run}
 if len(paths) < 5:
