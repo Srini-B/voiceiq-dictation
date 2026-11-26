@@ -29,7 +29,7 @@ public enum UsageMeter {
                                  sessionID: scope.sessionID, usage: usage)
         let cost = record.costUSD.map { String(format: "$%.5f", $0) } ?? "unpriced"
         Log.usage.info(
-            "usage \(scope.activity.rawValue, privacy: .public)/\(stage.rawValue, privacy: .public) \(model, privacy: .public): in \(usage.totalIn, privacy: .public) (audio \(usage.audioIn, privacy: .public), image \(usage.imageIn, privacy: .public)) out \(usage.totalOut, privacy: .public)\(usage.isEstimated ? " est" : "", privacy: .public) \(cost, privacy: .public)"
+            "usage \(scope.activity.rawValue, privacy: .public)/\(stage.rawValue, privacy: .public) \(model, privacy: .public): in \(usage.totalIn, privacy: .public) (audio \(usage.audioIn, privacy: .public), image \(usage.imageIn, privacy: .public), cached \(usage.cachedIn, privacy: .public)) out \(usage.totalOut, privacy: .public)\(usage.isEstimated ? " est" : "", privacy: .public) \(cost, privacy: .public)"
         )
         store?.append(record)
     }
