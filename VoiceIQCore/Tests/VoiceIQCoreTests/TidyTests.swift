@@ -90,13 +90,13 @@ final class TidyTests: XCTestCase {
     }
 
     func testSpokenSymbols() {
-        XCTAssertEqual(SpokenMarks.symbols(in: "Done, comma, thanks."), "Done, thanks.")
         XCTAssertEqual(SpokenMarks.symbols(in: "Dear Sam comma thanks"), "Dear Sam, thanks")
         XCTAssertEqual(SpokenMarks.symbols(in: "Is it ready question mark"), "Is it ready?")
         // Names that are also prose words, and Spanish marks, stay as said.
         for kept in ["commas", "hashtag release", "my underscore variable", "and slash or", "the colonel",
                      "Colon biopsy results", "a bigger colon", "comma separated values", "one question mark left",
-                     "Hey Comma, can you check this?", "He typed, comma, nothing else.", "Hi comma club members"] {
+                     "Hey Comma, can you check this?", "He typed, comma, nothing else.", "Hi comma club members",
+                     "Note, comma, goes inside the quotes."] {
             XCTAssertEqual(SpokenMarks.symbols(in: kept), kept)
         }
         for kept in ["mi guion bajo variable", "la lista dos puntos manzanas", "Juan coma bien"] {
@@ -112,8 +112,8 @@ final class TidyTests: XCTestCase {
     /// glue to "rate" or "sign".
     func testSpokenAddresses() {
         for (spoken, written) in [
-            ("My email is priya dot sharma at the rate company dot co dot in, call me too",
-             "My email is priya.sharma@company.co.in, call me too"),
+            ("My email is priya dot sharma at the rate company dot co dot in.",
+             "My email is priya.sharma@company.co.in."),
             ("ravi at the rate, gmail dot com", "ravi@gmail.com"),
             ("My email is John at the rategmail.com.", "My email is john@gmail.com."),
             ("Send it to Priya at signyahoo.com.", "Send it to priya@yahoo.com."),
@@ -121,7 +121,8 @@ final class TidyTests: XCTestCase {
             XCTAssertEqual(SpokenAddresses.joining(in: spoken), written)
         }
         for kept in ["At the rate you're going, you'll finish early.", "john at the rate gmail", "Wait at the gate dot com",
-                     "Rates went up at the ratepayers' meeting.", "My email is john at gmail.com."] {
+                     "Rates went up at the ratepayers' meeting.", "My email is john at gmail.com.",
+                     "We grew at the rate Amazon dot com predicted.", "The password is \"john at sign gmail dot com\"."] {
             XCTAssertEqual(SpokenAddresses.joining(in: kept), kept)
         }
     }

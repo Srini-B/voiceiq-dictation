@@ -188,9 +188,8 @@ styles, MIT):
    New paragraph styles are live" or "shoes, new line, and socks"); "open
    quote" … "close quote" or "quote" … "unquote" after a word; a lowercase
    "comma" after a greeting and who it greets ("Dear Sam comma", "Hi team
-   comma please review"; not "Hi comma club members" or "Hey Comma", a name)
-   or set off by the model's commas after one opening word ("Done, comma,
-   thanks"); "question mark", "exclamation mark" and "full stop" after a
+   comma please review"; not "Hi comma club members", "Hey Comma", a name,
+   or "Note, comma, goes inside the quotes"); "question mark", "exclamation mark" and "full stop" after a
    clause of two words or more. None after an article, a quantifier, a
    preposition, a title, a describing word or an instruction about the mark
    ("an Oxford comma", "one question mark left", "came to full stop"), before
@@ -204,8 +203,10 @@ styles, MIT):
    then:
    - Spoken email addresses join (`SpokenAddresses`): "priya dot sharma at
      the rate gmail dot com" → "priya.sharma@gmail.com", only with a
-     spoken domain or one the model glued to "rate" ("rategmail.com"). "at
-     the rate of 5%" and "grew at the rate Amazon.com" stay.
+     spoken domain or one the model glued to "rate" ("rategmail.com"), at
+     the end of a sentence. "at the rate of 5%", "grew at the rate
+     Amazon.com" and "grew at the rate Amazon dot com predicted" stay, and so
+     does an address in quotation marks, which may be a literal password.
    - Hesitations ("um", "uh", "er", "hmm"; not "ah", "err", "uh huh", a
      unit after a number such as "5 um", a name such as "Mr. Um", or one
      spelling an identifier such as "um underscore server") go with their commas

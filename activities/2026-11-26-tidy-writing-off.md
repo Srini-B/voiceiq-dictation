@@ -97,13 +97,26 @@ wait. The on-device writer's removal shipped first, on its own (PR #90).
   style keeps a capital after a title's full stop ("thanks Mr. Ruiz").
   Eight kept-as-said cases added; quote-spoken-comma now keeps "comma".
 
+- **Seventh round (Neon and Codex at `d52be6b`).** No High left. Neon's
+  Medium still lost a word ("Note, comma, goes inside the quotes" → "Note,
+  goes inside the quotes"), so a comma set off by the model's commas no
+  longer converts at all. Codex found "at the rate" joining an address
+  mid-sentence ("We grew at the rate Amazon dot com predicted" → "We
+  grew@amazon.com predicted") and inside quotation marks (a quoted
+  password): "at the rate" now needs the domain to end the sentence, and
+  quoted words never join. The two fixture cases that dictated a quoted
+  address now keep its words. Messages style keeps the capital after more
+  titles ("Prof.", "Capt.", "Sgt.").
+
 ## Verification
 
 - D4 on the writing-Off path (Claude Fable 5.2,
   T-01a2177d-d730-720b-bf02-f5ffc2f25386): 99.2 over 161 cases at
   `fc6b481`, then 97.5 over 230 cases at `83e91e4` with no meant word lost,
   changed or added (after the second round), then 97.4 over 273 cases at
-  `fe36564`, 0 meant words lost. The fifth round changed no scored output.
+  `fe36564`, 0 meant words lost. The fifth round changed no scored output;
+  97.5 over 287 cases at `28b0594` and 97.5 over 295 at `d52be6b`, both with
+  0 lost.
 - `swift test --package-path VoiceIQCore` on a macOS 27 Mac satellite, and
   `xcodebuild build` for VoiceIQ and VoiceIQiOS.
 

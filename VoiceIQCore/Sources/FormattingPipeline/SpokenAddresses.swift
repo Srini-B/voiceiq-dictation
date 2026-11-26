@@ -27,9 +27,12 @@ enum SpokenAddresses {
         var edits: [(range: Range<String.Index>, text: String)] = []
         // The first word an address may take: none already in an earlier one.
         var free = 0
+        // Quoted words are literal: The password is "john at sign gmail dot com".
+        let literal = TidyText.quoteMask(Array(text))
         var index = 0
         while index < tokens.count {
-            guard let marker = marker(tokens, at: index) else {
+            guard let marker = marker(tokens, at: index),
+                  !literal[text.distance(from: text.startIndex, to: tokens[index].range.lowerBound)] else {
                 index += 1
                 continue
             }
@@ -38,13 +41,13 @@ enum SpokenAddresses {
                 index = next
                 continue
             }
-            // "at the rate stripe.com charges": plain English unless the domain
-            // ends the sentence.
             guard let domain = domain(tokens, from: next),
                   // "at the rate" is plain English before a written domain ("grew at the
                   // rate Amazon.com"): only a spoken one ("company dot co dot in") or one
-                  // the model glued to "rate" ("rategmail.com") is an address.
-                  !marker.ambiguous || domain.end > next || tokens[next].glued else {
+                  // the model glued to "rate" ("rategmail.com") is an address, and only
+                  // when it ends the sentence ("grew at the rate Amazon dot com predicted").
+                  !marker.ambiguous || ((domain.end > next || tokens[next].glued)
+                      && (domain.end == tokens.count - 1 || domain.trailing.contains(where: { ".!?".contains($0) }))) else {
                 index = marker.end + 1
                 continue
             }

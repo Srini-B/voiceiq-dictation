@@ -514,7 +514,8 @@
       "check": "email layout",
       "said": "send it to quote john at sign gmail dot com",
       "heard": "Send it to \"John at sign gmail dot com.\"",
-      "written": "Send it to \"john@gmail.com.\""
+      "written": "Send it to \"john@gmail.com.\"",
+      "tidy": "Send it to \"John at sign gmail dot com.\""
     },
     {
       "id": "kept-deep-coma",
@@ -624,7 +625,8 @@
       "check": "email layout",
       "said": "quote john dot smith at sign gmail dot com",
       "heard": "\"John dot Smith at sign gmail dot com.\"",
-      "written": "\"john.smith@gmail.com.\""
+      "written": "\"john.smith@gmail.com.\"",
+      "tidy": "\"John dot Smith at sign gmail dot com.\""
     },
     {
       "id": "list-initialism",
@@ -2142,6 +2144,42 @@
       "said": "thanks mr. ruiz for the update",
       "heard": "Thanks Mr. Ruiz for the update.",
       "written": "thanks Mr. Ruiz for the update",
+      "style": "messages"
+    },
+    {
+      "id": "kept-note-comma",
+      "check": "kept as said",
+      "said": "note, comma, goes inside the quotes",
+      "heard": "Note, comma, goes inside the quotes.",
+      "written": "Note, comma, goes inside the quotes."
+    },
+    {
+      "id": "kept-type-comma-space",
+      "check": "kept as said",
+      "said": "type, comma, space, then your name",
+      "heard": "Type, comma, space, then your name.",
+      "written": "Type, comma, space, then your name."
+    },
+    {
+      "id": "kept-rate-clause-domain",
+      "check": "kept as said",
+      "said": "we grew at the rate amazon dot com predicted",
+      "heard": "We grew at the rate Amazon dot com predicted.",
+      "written": "We grew at the rate Amazon dot com predicted."
+    },
+    {
+      "id": "kept-quoted-address",
+      "check": "kept as said",
+      "said": "the password is quote john at sign gmail dot com unquote",
+      "heard": "The password is \"john at sign gmail dot com\".",
+      "written": "The password is \"john at sign gmail dot com\"."
+    },
+    {
+      "id": "kept-title-casing-prof",
+      "check": "kept as said",
+      "said": "ask mrs. rao and prof. iyer",
+      "heard": "Ask Mrs. Rao and Prof. Iyer.",
+      "written": "ask Mrs. Rao and Prof. Iyer",
       "style": "messages"
     }
   ]

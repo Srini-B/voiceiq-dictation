@@ -286,14 +286,14 @@ enum TidyText {
         return String(chars)
     }
 
-    /// Whether the full stop at `index` ends "i.e.", "e.g." or "vs.".
+    /// Whether the full stop at `index` ends "i.e.", "e.g.", "vs." or a title ("Prof.").
     private static func endsAbbreviation(_ chars: [Character], at index: Int) -> Bool {
         var start = index
         while start > 0, !chars[start - 1].isWhitespace { start -= 1 }
         let word = String(chars[start...index]).lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "(\"“"))
         // "at 9 a.m. tomorrow", "Apple Inc. announced", "the U.S. yesterday": the model's case stays.
         return ["i.e.", "e.g.", "vs.", "cf.", "inc.", "ltd.", "co.", "corp.", "mr.", "mrs.", "ms.", "dr.", "jr.", "sr.",
-                "st.", "no.", "approx."].contains(word)
+                "st.", "no.", "approx.", "prof.", "sgt.", "capt.", "gen.", "col.", "lt.", "rev.", "hon."].contains(word)
             || endsWithInitialism(word)
     }
 
