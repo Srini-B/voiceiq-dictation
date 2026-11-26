@@ -67,7 +67,7 @@ Eval meetings: AMI ES2004a (headset mix, four people; the mic track is one perso
 
 | Item | What it measures | How |
 | --- | --- | --- |
-| C1 Gemini cost per month | Dictation and meetings together at the owner's pace (`cost.json` profile `owner`), at the highest announced prices | `cost.py`: each eval call's tokens at `cost.json`'s prices (a backup request pays one more call), times dictations a month, plus meeting hours a month times the per-hour cost; 100 at or under ₹200, 90 at ₹250, minus 1 per 1% over ₹250 |
+| C1 Gemini cost per month | Dictation and meetings together at the owner's pace (`cost.json` profile `owner`), at the highest announced prices | `cost.py`: each eval call's tokens at `cost.json`'s prices (each extra request Gemini bills pays one more call), times dictations a month, plus meeting hours a month times the per-hour cost; 100 at or under ₹200, 90 at ₹250, minus 1 per 1% over ₹250 |
 
 ```sh
 python3 -m doctest eval/cost.py

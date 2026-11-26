@@ -5,9 +5,11 @@
 
 Per dictation: each call's input (audio, and prompt text at the cache hit
 share measured in use) and output (answer plus thinking) at the prices in eval/cost.json. A
-call that also sent the backup request pays for one more whole call: both
-requests run until one answers, and the app cancels the other, which Gemini
-may still bill in full. Per meeting hour: the
+call pays for one more whole call per extra request Gemini bills:
+usage.billedSecondRequests when the runner records it (a streamed request
+cancelled before its first chunk is not billed, one cancelled after a chunk
+may be, per ai.google.dev/gemini-api/docs/billing, read 2026-11-26), otherwise
+every backup request sent (usage.secondRequests). Per meeting hour: the
 figure in cost.json until the meeting pipeline records its own usage.
 
 Monthly = per dictation x dictations + per meeting hour x meeting hours. The
@@ -49,7 +51,7 @@ def call_cost(usage: dict, price: dict, cache_share: float) -> float:
     m = 1e-6
     one_input = audio * price["audio_in"] * m + text * price["text_in"] * m + cached * price["cached_in"] * m
     one = one_input + out * price["out"] * m
-    return one + usage.get("secondRequests", 0) * one
+    return one + usage.get("billedSecondRequests", usage.get("secondRequests", 0)) * one
 
 
 def main() -> None:
