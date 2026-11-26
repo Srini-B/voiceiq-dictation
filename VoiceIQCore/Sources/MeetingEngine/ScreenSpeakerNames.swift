@@ -228,6 +228,9 @@ public enum ScreenSpeakerNames {
     /// `named` holds the far-side names already known, by speaker id.
     public static func byElimination(_ screen: ScreenNames?, transcript: [TranscriptSegment], named: [String: String],
                                      invited: [String]) -> ScreenNames? {
+        // Without the owner on their own track (a mic-only or in-room
+        // recording) any voice may be the owner's, so none is known to be remote.
+        guard transcript.contains(where: { $0.speaker == MeetingSpeaker.you }) else { return screen }
         let far = MeetingSpeaker.others(in: transcript)
         let unnamed = far.filter { named[$0] == nil }
         guard unnamed.count == 1, let speaker = unnamed.first, far.count == invited.count else { return screen }

@@ -89,5 +89,8 @@ final class ScreenSpeakerNamesTests: XCTestCase {
         // The last voice said almost nothing: likely echo or a sound, not a person.
         let blip = Array(call.prefix(2)) + [TranscriptSegment(speaker: "s2", text: "mm", chunkIndex: 0, start: 9, end: 10)]
         XCTAssertNil(ScreenSpeakerNames.byElimination(nil, transcript: blip, named: ["s1": "Dana"], invited: invited)?.speakers["s2"])
+        // A mic-only recording: no owner track, so the unnamed voice may be the owner.
+        let room = Array(call.dropFirst())
+        XCTAssertNil(ScreenSpeakerNames.byElimination(nil, transcript: room, named: ["s1": "Dana"], invited: invited)?.speakers["s2"])
     }
 }
