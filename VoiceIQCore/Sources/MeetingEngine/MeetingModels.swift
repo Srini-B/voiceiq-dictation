@@ -319,7 +319,7 @@ public struct MeetingMeta: Codable, Equatable, Sendable, Identifiable {
     public func suggestions(_ notes: MeetingNotes?) -> [SpeakerSuggestion] {
         let screen = (screenNames?.speakers ?? [:]).sorted { $0.key < $1.key }.map { id, match in
             SpeakerSuggestion(label: MeetingSpeaker.defaultName(id), name: match.name,
-                              evidence: "On screen while this speaker talked (\(match.seen) of \(match.of) snapshots)")
+                              evidence: match.reason ?? "On screen while this speaker talked (\(match.seen) of \(match.of) snapshots)")
         }
         return screen + (notes?.speakers ?? [])
     }

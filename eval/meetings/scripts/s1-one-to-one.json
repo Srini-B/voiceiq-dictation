@@ -1,0 +1,36 @@
+{
+  "id": "s1-one-to-one",
+  "title": "Pricing page review",
+  "app": "us.zoom.xos",
+  "owner": "Priya Raman",
+  "participants": [
+    {"name": "Priya Raman", "voice": "Karen"},
+    {"name": "Tom Fletcher", "voice": "Daniel"}
+  ],
+  "calendar": ["Tom Fletcher"],
+  "screen": "gallery",
+  "turns": [
+    ["Priya Raman", "Hi Tom, thanks for making time. I wanted to go over the new pricing page before it goes live."],
+    ["Tom Fletcher", "Sure. I looked at the draft this morning. The layout is clean, but the annual discount is hard to find."],
+    ["Priya Raman", "Agreed. Where would you put it?"],
+    ["Tom Fletcher", "Right under the plan names, as a toggle between monthly and annual. Most competitors do it that way."],
+    ["Priya Raman", "Okay, let's do the toggle. What about the enterprise tier? Sales wants a contact form instead of a price."],
+    ["Tom Fletcher", "I think that's fine for enterprise. Keep the starter and team prices visible though."],
+    ["Priya Raman", "Decision then: starter and team show prices, enterprise shows a contact form."],
+    ["Tom Fletcher", "Yes. I can update the Figma file by Thursday."],
+    ["Priya Raman", "Great. And I will ask legal to check the refund wording by Friday."],
+    ["Tom Fletcher", "One more thing. The page still says fourteen day trial, but we moved to thirty days last month."],
+    ["Priya Raman", "Good catch. Please fix that in the same pass."],
+    ["Tom Fletcher", "Will do. Anything else?"],
+    ["Priya Raman", "No, that's it. Thanks Tom."]
+  ],
+  "decisions": [
+    "Add a monthly/annual toggle under the plan names",
+    "Starter and team tiers show prices; enterprise shows a contact form"
+  ],
+  "actions": [
+    {"owner": "Tom Fletcher", "text": "Update the Figma file with the toggle and tier changes", "due": "Thursday"},
+    {"owner": "Priya Raman", "text": "Ask legal to check the refund wording", "due": "Friday"},
+    {"owner": "Tom Fletcher", "text": "Change the trial length from 14 to 30 days on the page"}
+  ]
+}

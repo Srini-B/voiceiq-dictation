@@ -48,11 +48,14 @@ public enum SpeakerLinker {
         return mapping
     }
 
-    /// Consecutive words of one speaker, joined across pauses under `gap` seconds.
-    public static func turns(_ words: [TimedWord], gap: Double = 1.0) -> [TimedWord] {
+    /// Consecutive words of one speaker, joined across pauses under `gap`
+    /// seconds. A turn that has run `paragraph` seconds ends at its next
+    /// sentence end, so a long monologue reads as paragraphs with their own times.
+    public static func turns(_ words: [TimedWord], gap: Double = 1.0, paragraph: Double = .infinity) -> [TimedWord] {
         var out: [TimedWord] = []
         for word in words {
-            if var last = out.last, last.speaker == word.speaker, word.start - last.end < gap {
+            if var last = out.last, last.speaker == word.speaker, word.start - last.end < gap,
+               last.end - last.start < paragraph || !endsSentence(last.text) {
                 last.end = max(last.end, word.end)
                 last.text = TranscriptText.join(last.text, word.text)
                 out[out.count - 1] = last
@@ -65,10 +68,15 @@ public enum SpeakerLinker {
 
     /// Each speaker's turns, then all turns in time order. When two people
     /// talk at once, each keeps one entry instead of alternating word by word.
-    public static func overlappingTurns(_ words: [TimedWord], gap: Double = 1.0) -> [TimedWord] {
+    public static func overlappingTurns(_ words: [TimedWord], gap: Double = 1.0, paragraph: Double = .infinity) -> [TimedWord] {
         Dictionary(grouping: words, by: \.speaker).values
-            .flatMap { turns($0.sorted { $0.start < $1.start }, gap: gap) }
+            .flatMap { turns($0.sorted { $0.start < $1.start }, gap: gap, paragraph: paragraph) }
             .sorted { $0.start < $1.start }
+    }
+
+    static func endsSentence(_ text: String) -> Bool {
+        guard let last = text.last else { return false }
+        return ".?!。？！".contains(last)
     }
 
     /// The longest turns of each speaker, up to `anchorSeconds` in total.

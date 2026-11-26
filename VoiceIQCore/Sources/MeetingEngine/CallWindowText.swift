@@ -23,11 +23,15 @@ enum CallWindowText {
     /// holds `AXStaticText` "Cyron Test (me)" for the user's own row.
     private static let textRoles: Set<String> = ["AXStaticText", "AXImage", "AXGroup", "AXCell", "AXRow", "AXHeading", "AXTabGroup"]
 
-    static func lines(pid: pid_t) -> [String] {
+    /// `browser`: only the window whose tab is the meeting is read. Every
+    /// window was read before; on 2026-11-23 a GitHub tab's names reached a
+    /// Meet call's notes.
+    static func lines(pid: pid_t, browser: Bool = false) -> [String] {
         guard AXIsProcessTrusted() else { return [] }
         let app = AXUIElementCreateApplication(pid)
         AXUIElementSetMessagingTimeout(app, 0.25)
-        guard let windows = value(app, kAXWindowsAttribute) as? [AXUIElement] else { return [] }
+        guard var windows = value(app, kAXWindowsAttribute) as? [AXUIElement] else { return [] }
+        if browser { windows = windows.filter(isMeeting) }
         let deadline = Date().addingTimeInterval(timeBudget)
         var budget = elementBudget
         var out: [String] = [], seen = Set<String>()
@@ -69,6 +73,12 @@ enum CallWindowText {
         }
         let line = parts.joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
         return line.isEmpty || line.count > 80 ? nil : line
+    }
+
+    /// The window's front tab is a call page, by its title or address.
+    private static func isMeeting(_ window: AXUIElement) -> Bool {
+        let strings = [kAXTitleAttribute as String, kAXDocumentAttribute as String].compactMap { value(window, $0) as? String }
+        return CallApps.meetingPages.contains { page in strings.contains { $0.localizedCaseInsensitiveContains(page) } }
     }
 
     private static func value(_ element: AXUIElement, _ key: String) -> CFTypeRef? {

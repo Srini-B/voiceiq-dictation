@@ -46,6 +46,20 @@ public extension GeminiClient {
                                          stage: .meetingSummary)
     }
 
+    /// The notes for a prompt from `MeetingNotesPrompt`, asked once more when
+    /// the reply is not notes JSON. MEASURED 2026-11-26: across 14 notes
+    /// requests on the evaluator's meetings, gemini-3.8-flash twice wrote
+    /// JSON the decoder refused (text after the object, and a badly formed
+    /// object), and each of those meetings ended without notes.
+    func meetingNotes(prompt: String, model: String, endpoint: URL, deadline: TimeInterval) async throws -> MeetingNotes {
+        do {
+            return try MeetingNotesPrompt.parse(try await meetingNotesJSON(prompt: prompt, model: model, endpoint: endpoint, deadline: deadline))
+        } catch let error where error is DecodingError || (error as NSError).domain == NSCocoaErrorDomain {
+            Log.transcription.info("notes reply was not notes JSON; asking again")
+            return try MeetingNotesPrompt.parse(try await meetingNotesJSON(prompt: prompt, model: model, endpoint: endpoint, deadline: deadline))
+        }
+    }
+
     static func parseDiarizedWords(_ data: Data) throws -> [DiarizedWord] {
         guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             throw TranscriptionError.network("unparseable_response")

@@ -136,11 +136,36 @@ public enum MeetingNotesPrompt {
 
     /// Decodes the model's JSON; an unknown type falls back to general.
     public static func parse(_ text: String) throws -> MeetingNotes {
-        var notes = try JSONDecoder().decode(MeetingNotes.self, from: flattened(Data(GeminiClient.stripFences(text).utf8)))
+        let json = firstObject(GeminiClient.stripFences(text))
+        var notes = try JSONDecoder().decode(MeetingNotes.self, from: flattened(Data(json.utf8)))
         if let type = notes.type, MeetingKind(rawValue: type) == nil { notes.type = MeetingKind.general.rawValue }
         notes.sections = notes.sections?.filter { !$0.items.isEmpty }
         notes.speakers = notes.speakers?.filter { !($0.name ?? "").isEmpty }
         return notes
+    }
+
+    /// The first whole JSON object in `text`. MEASURED 2026-11-26: on a
+    /// three-person synthetic call the notes model wrote a complete object
+    /// and then more text after it, and the strict decoder failed the meeting.
+    static func firstObject(_ text: String) -> String {
+        guard let open = text.firstIndex(of: "{") else { return text }
+        var depth = 0, inString = false, escaped = false
+        for index in text[open...].indices {
+            let character = text[index]
+            if inString {
+                if escaped { escaped = false } else if character == "\\" { escaped = true } else if character == "\"" { inString = false }
+                continue
+            }
+            switch character {
+            case "\"": inString = true
+            case "{": depth += 1
+            case "}":
+                depth -= 1
+                if depth == 0 { return String(text[open...index]) }
+            default: break
+            }
+        }
+        return text
     }
 
     /// MEASURED 2026-09-27: asked to keep a decision's reason, the model
@@ -226,7 +251,7 @@ public enum MeetingNotesPrompt {
 
     SPEAKER NAMES
     - "speakers": one entry for every anonymous speaker listed in the meeting context, with "label" exactly as listed.
-    - Set "name" only when the transcript shows it: the speaker introduces themselves ("Hi, I'm Priya"), or others address this speaker by the same name in two or more separate turns and the speaker answers. Put the words that show it in "evidence". Otherwise "name" and "evidence" are null.
+    - Set "name" only when the transcript shows it: the speaker introduces themselves ("Hi, I'm Priya"); others address this speaker by the same name in two or more separate turns and the speaker answers; or someone addresses a person by a name that is in "Invited" or "Names read from the meeting screen" ("Sarah, you first.") and this speaker answers in the very next turn. Match spellings loosely ("Sarah" is "Sara Lindqvist") and write the listed spelling. Put the words that show it in "evidence". Otherwise "name" and "evidence" are null.
     - Being called a name identifies the listener, not the speaker who said it. Never infer a name from role, topic, tone, or speaking order. Never give one name to two labels.
     - When the transcript mentions a person whose name was seen on screen, use the on-screen spelling.
     - "participants": the entries from "Other text seen on screen" that are people's names, spelled as seen. Leave out titles, product, company, and app names, and anything that is not a person. Empty when there is none.

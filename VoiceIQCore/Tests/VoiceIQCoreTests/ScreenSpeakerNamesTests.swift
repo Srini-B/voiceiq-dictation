@@ -70,4 +70,24 @@ final class ScreenSpeakerNamesTests: XCTestCase {
         let decoded = try JSONDecoder().decode(ScreenNames.self, from: Data(legacyJSON.utf8))
         XCTAssertEqual(decoded.speakers["s1"], ScreenNames.Match(name: "Priya Raman", seen: 12, of: 15))
     }
+
+    func testTheLastUnnamedVoiceGetsTheLastInviteeOnlyWhenTheInviteAccountsForEveryone() {
+        let call = [TranscriptSegment(speaker: "you", text: "let us start", chunkIndex: 0, start: 0, end: 3),
+                    TranscriptSegment(speaker: "s1", text: "hi this is Dana from finance with the quote", chunkIndex: 0, start: 3, end: 9),
+                    TranscriptSegment(speaker: "s2", text: "our usage went down after we moved the logs to cold storage", chunkIndex: 0, start: 9, end: 15)]
+        let invited = ["Dana Whitfield", "Kenji Watanabe"]
+
+        let named = ScreenSpeakerNames.byElimination(nil, transcript: call, named: ["s1": "Dana"], invited: invited)
+        XCTAssertEqual(named?.speakers["s2"]?.name, "Kenji Watanabe")
+        XCTAssertNotNil(named?.speakers["s2"]?.reason)
+
+        // A third invitee nobody heard: the voice could be either of two people.
+        XCTAssertNil(ScreenSpeakerNames.byElimination(nil, transcript: call, named: ["s1": "Dana"],
+                                                      invited: invited + ["Lee Park"])?.speakers["s2"])
+        // Two voices unnamed: nothing to eliminate.
+        XCTAssertNil(ScreenSpeakerNames.byElimination(nil, transcript: call, named: [:], invited: invited)?.speakers["s2"])
+        // The last voice said almost nothing: likely echo or a sound, not a person.
+        let blip = Array(call.prefix(2)) + [TranscriptSegment(speaker: "s2", text: "mm", chunkIndex: 0, start: 9, end: 10)]
+        XCTAssertNil(ScreenSpeakerNames.byElimination(nil, transcript: blip, named: ["s1": "Dana"], invited: invited)?.speakers["s2"])
+    }
 }

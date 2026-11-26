@@ -193,28 +193,6 @@ public struct CallAudio: Sendable {
         }
     }
 
-    /// Stretches where the owner talks over the far side, padded and merged.
-    /// Only meaningful with an echo-free mic: otherwise mic sound under the
-    /// far side is mostly echo.
-    public func overlapRegions(minimum: Double = 0.5, pad: Double = 0.5) -> [ClosedRange<Double>] {
-        guard micIsEchoFree else { return [] }
-        var regions: [ClosedRange<Double>] = [], start: Int?
-        let count = min(systemSpeech.count, micSpeech.count)
-        for index in 0...count {
-            let both = index < count && systemSpeech[index] && micSpeech[index]
-            if both, start == nil { start = index }
-            if !both, let first = start {
-                start = nil
-                guard Double(index - first) / 10 >= minimum else { continue }
-                let region = max(0, Double(first) / 10 - pad)...min(duration, Double(index) / 10 + pad)
-                if let last = regions.last, region.lowerBound <= last.upperBound + 1 {
-                    regions[regions.count - 1] = last.lowerBound...region.upperBound
-                } else { regions.append(region) }
-            }
-        }
-        return regions
-    }
-
     /// Which track a stretch of speech came from, in 100 ms windows. With an
     /// echo-free mic, a window where both talk counts for both; otherwise mic
     /// speech under the far side may be echo and counts for the far side.
@@ -252,15 +230,11 @@ public struct AssembledAudio: Sendable {
         samples.append(contentsOf: repeatElement(0, count: Int(seconds * TrackAudio.sampleRate)))
     }
 
-    mutating func appendAnchor(id: String, clips: [ClosedRange<Double>], from audio: CallAudio) throws {
+    mutating func appendAnchor(id: String, clips: [ClosedRange<Double>], source: (ClosedRange<Double>) throws -> [Int16]) throws {
         let start = duration
-        for clip in clips { samples.append(contentsOf: try audio.samples(clip)); appendSilence(Self.gap) }
+        for clip in clips { samples.append(contentsOf: try source(clip)); appendSilence(Self.gap) }
         anchors[id] = start...duration
         appendSilence(Self.anchorGap)
-    }
-
-    mutating func appendBody(_ regions: [ClosedRange<Double>], from audio: CallAudio) throws {
-        try appendBody(regions, source: audio.samples)
     }
 
     mutating func appendBody(_ regions: [ClosedRange<Double>], source: (ClosedRange<Double>) throws -> [Int16]) throws {

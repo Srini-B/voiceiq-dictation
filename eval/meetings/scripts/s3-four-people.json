@@ -1,0 +1,40 @@
+{
+  "id": "s3-four-people",
+  "title": "Weekly growth sync",
+  "app": "com.microsoft.teams2",
+  "owner": "Alex Morgan",
+  "participants": [
+    {"name": "Alex Morgan", "voice": "Daniel"},
+    {"name": "Sara Lindqvist", "voice": "Karen"},
+    {"name": "Rahul Mehta", "voice": "Aman"},
+    {"name": "Grace O'Neill", "voice": "Moira"}
+  ],
+  "calendar": ["Sara Lindqvist", "Rahul Mehta", "Grace O'Neill"],
+  "screen": "gallery",
+  "turns": [
+    ["Alex Morgan", "Morning everyone. Let's go round. Sara, you first."],
+    ["Sara Lindqvist", "Thanks Alex. Signups were up eight percent last week, mostly from the new referral link."],
+    ["Alex Morgan", "Nice. Rahul, how did the onboarding email test go?"],
+    ["Rahul Mehta", "The shorter email won. Activation went from thirty one to thirty six percent. I want to ship it to everyone."],
+    ["Grace O'Neill", "Before we do, can we check it with the Spanish users? The short version drops the setup video."],
+    ["Rahul Mehta", "Fair point Grace. I can run it on the Spanish segment for one more week."],
+    ["Alex Morgan", "Let's do that. The short email ships to English users now, and Spanish waits a week."],
+    ["Sara Lindqvist", "On referrals, I'd like to double the reward for the holiday period."],
+    ["Grace O'Neill", "What does that cost us?"],
+    ["Sara Lindqvist", "About four thousand dollars if usage stays the same. I'll write up the numbers."],
+    ["Alex Morgan", "Send me the write up by Wednesday and I'll decide then."],
+    ["Grace O'Neill", "Last thing from me. The app store rating dropped to four point two after the update."],
+    ["Rahul Mehta", "That's probably the login bug. Engineering has a fix in review."],
+    ["Grace O'Neill", "Then I'll reply to the worst reviews once the fix is live."],
+    ["Alex Morgan", "Good. That's everything. Thanks all."]
+  ],
+  "decisions": [
+    "The short onboarding email ships to English users now; Spanish users wait one more week of testing"
+  ],
+  "actions": [
+    {"owner": "Rahul Mehta", "text": "Run the short onboarding email test on the Spanish segment for one more week"},
+    {"owner": "Sara Lindqvist", "text": "Write up the cost of doubling the referral reward", "due": "Wednesday"},
+    {"owner": "Alex Morgan", "text": "Decide on doubling the referral reward", "due": "Wednesday"},
+    {"owner": "Grace O'Neill", "text": "Reply to the worst app store reviews once the login fix is live"}
+  ]
+}

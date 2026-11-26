@@ -25,6 +25,8 @@ public struct ScreenNames: Codable, Equatable, Sendable {
         /// Snapshots showing the name while only this speaker talked, out of all such snapshots.
         public var seen: Int
         public var of: Int
+        /// Why the name was given, when it was not seen on screen while they talked.
+        public var reason: String? = nil
     }
     /// Name-like text seen on screen, most frequent first. Can hold titles or
     /// product names; the notes model picks out the people.
@@ -216,6 +218,46 @@ public enum ScreenSpeakerNames {
         let merged = remote.map { !far.isEmpty && $0 > far.count }
         return ScreenNames(seen: Array(ranked.prefix(seenLimit)), speakers: speakers, remote: remote,
                            probablyMerged: merged == true ? true : nil)
+    }
+
+    /// The one far-side speaker left without a name gets the one invitee left
+    /// unmatched, when the invite lists as many other people as the far side
+    /// has voices and that speaker said enough to be a person, not a stray
+    /// sound. Wispr Flow names the last voice the same way, and also keeps the
+    /// number when the evidence is short of that.
+    /// `named` holds the far-side names already known, by speaker id.
+    public static func byElimination(_ screen: ScreenNames?, transcript: [TranscriptSegment], named: [String: String],
+                                     invited: [String]) -> ScreenNames? {
+        let far = MeetingSpeaker.others(in: transcript)
+        let unnamed = far.filter { named[$0] == nil }
+        guard unnamed.count == 1, let speaker = unnamed.first, far.count == invited.count else { return screen }
+        let left = invited.filter { invitee in !named.values.contains { sameName($0, invitee) } }
+        let words = transcript.filter { $0.speaker == speaker }.reduce(0) { $0 + $1.text.split(separator: " ").count }
+        guard left.count == 1, words >= minimumEliminationWords else { return screen }
+        var out = screen ?? ScreenNames(seen: [], speakers: [:])
+        out.speakers[speaker] = .init(name: left[0], seen: 0, of: 0, reason: "The only invitee not matched to another voice")
+        return out
+    }
+
+    /// `byElimination` once the notes are written: every name the meeting
+    /// shows for a far-side speaker counts as known, and the calendar's
+    /// invitees are the people expected.
+    public static func byElimination(meta: MeetingMeta, transcript: [TranscriptSegment], notes: MeetingNotes) -> ScreenNames? {
+        var named: [String: String] = [:]
+        for id in MeetingSpeaker.others(in: transcript) {
+            let name = meta.displayName(id, notes: notes)
+            if name != MeetingSpeaker.defaultName(id) { named[id] = name }
+        }
+        return byElimination(meta.screenNames, transcript: transcript, named: named, invited: meta.calendarEvent?.attendees ?? [])
+    }
+
+    /// Fewer words than this from the last unnamed voice and it may be echo or a notification sound.
+    static let minimumEliminationWords = 10
+
+    /// "Muhammed Hafeed" and "Hafeed", "Nihal" and "nihal": one name holds all of the other's words.
+    static func sameName(_ a: String, _ b: String) -> Bool {
+        let x = Set(a.lowercased().split(separator: " ")), y = Set(b.lowercased().split(separator: " "))
+        return !x.isEmpty && !y.isEmpty && (x.isSubset(of: y) || y.isSubset(of: x))
     }
 
     /// Names made only of UI words, such as "Google Meet".

@@ -80,4 +80,20 @@ final class MeetingTracksTests: XCTestCase {
 
         XCTAssertEqual(MeetingTranscriber.split(words, segments: segments).map(\.speaker), ["you", "s1", "s1", "s2", "s2"])
     }
+
+    func testAnIncompleteRequestIsResentAsTwoHalves() {
+        XCTAssertEqual(MeetingTranscriber.halves([0...5, 10...15, 20...25])?.0, [0...5])
+        XCTAssertEqual(MeetingTranscriber.halves([0...5, 10...15, 20...25])?.1, [10...15, 20...25])
+        XCTAssertEqual(MeetingTranscriber.halves([0...60])?.1, [30...60])
+        XCTAssertNil(MeetingTranscriber.halves([0...6]))
+    }
+
+    func testALongTurnBreaksAtASentenceEndIntoParagraphs() {
+        let words = (0..<30).map { index in
+            TimedWord(text: index % 10 == 9 ? "end." : "word", speaker: "s1", start: Double(index), end: Double(index) + 0.8)
+        }
+        let turns = SpeakerLinker.overlappingTurns(words, paragraph: 15)
+        XCTAssertEqual(turns.map(\.start), [0, 20])
+        XCTAssertEqual(SpeakerLinker.overlappingTurns(words).count, 1)
+    }
 }
