@@ -54,9 +54,9 @@ matches. Rules 1 to 3 win over rule 4, whatever order the apps come in:
    voice note does not raise the offer. Each bundle ID added on 2026-11-17 was
    read from the vendor's installer or the App Store, not guessed; Whereby is
    browser-only;
-3. a browser (`CallApps.browsers`, which includes Dia, Comet, Orion, Safari
-   Technology Preview and Edge Beta, Dev and Canary, or any app named Chrome or
-   Chromium) captures the mic on a page in `CallApps.meetingPages`, matched
+3. a browser (`CallApps.browsers`, which includes Dia, Comet, Orion, Aside,
+   Safari Technology Preview and Edge Beta, Dev and Canary, or any app named
+   Chrome or Chromium) captures the mic on a page in `CallApps.meetingPages`, matched
    against window titles and the URL of each window's `AXWebArea` (searched 9
    levels deep, 300 elements at most, as FluidVoice does for Safari). The
    offer names the page's host ("meet.google.com"); a page found only by its
@@ -102,9 +102,16 @@ sound above about −40 dBFS for 45 s (`SoundClock`), the pill shows "Meeting
 ended · Stopping in 30s" with Stop now and Keep recording. At zero the
 recording stops and the notes are made as usual. The call coming back
 cancels the countdown, and Keep recording holds until the call comes back
-and ends again. A recording started without a detected call is never stopped automatically. The rules
+and ends again. "Keep recording" keeps its full width beside "Stop now".
+A recording started without a detected call is never stopped automatically. The rules
 follow FluidVoice's; a browser call ends only when the browser plays no
-other sound.
+other sound. While the screen is locked, a browser call counts only while
+the browser captures the mic (`CallProcesses.isLive`): a browser can keep
+its output open after the call hangs up as the Mac locks, and the recording
+would otherwise run on. A call app keeps its output counting, since some
+let go of the mic on mute. Hex does the same (`092a9b33`).
+Option-M or Record pressed while a call is detected records that call, so
+it stops the same way.
 
 **Calendar (Mac and iPhone).** With **Use calendar for meeting notes** on
 (off by default; turning it on asks for calendar access), a recording takes
@@ -169,8 +176,10 @@ call, both come from the call alone. When the recording starts,
   it is responsible for (Chrome's audio service, Safari's WebKit GPU
   process) or whose executable sits inside the app's bundle, and, for FaceTime and Phone (`CallApps.daemonCallApps`), of the
   call daemons that carry the audio.
-- `inputDevice`: the input device that the first of those processes with
-  running input captures.
+- `inputDevice`: the first device with input channels that the first of
+  those processes with running input captures. A process can list
+  output-only devices (the built-in speakers) there, and the mic track never
+  follows one (`CallDetector.firstInput`, from Hex `657aa0cf`).
 
 `SystemAudioTap` taps only those processes
 (`CATapDescription(stereoMixdownOfProcesses:)`). The tap takes their sound
@@ -187,6 +196,41 @@ again every 5 s. `SystemAudioTap.follow(processes:)` writes a new tap
 description with the same UUID onto the running tap when the set changed,
 for example when Chrome restarts its audio service mid-call. `MicTap.use(device:)`
 moves the mic track when the call moves to another input.
+
+**Output changes and silent taps.** A tap hears the output that was the
+default when it was made. When the default output changes mid-meeting
+(headphones in or out), or `system.caf` carried sound and then gets 15 s of
+exact zeros while the tapped processes (all audio: the default output) still
+play, `SystemAudioTap` starts a new tap on the same processes before it stops
+the old one, and writes into the same file. The time between the old tap's
+last buffer and the new one's first is written as silence
+(`SystemTapWatch.gapFrames`, gaps under 50 ms are ignored), so `system.caf`
+stays aligned with `mic.caf`. A new tap that fails to start leaves the old one
+running and is tried again up to five times. A rebuild restarts the 15 s
+count without waiting for sound, so a replacement that also delivers only
+zeros is rebuilt again; a call that is really quiet while its app plays
+digital silence is rebuilt about every 15 s, which loses nothing. Before 2026-11-26, switching headphones mid-call could leave the
+rest of `system.caf` silent. From Hex (`5704885d`, `4a3e9d49`); not yet
+measured on a live call.
+
+**Mute my mic.** While a meeting records, the Meetings window shows **Mute
+my mic** under Stop recording. Muted, `mic.caf` records silence of the same
+length, so the timeline stays aligned, and the far side keeps recording;
+the pill reads "Mic muted". **Unmute my mic** records your voice again.
+Every recording starts unmuted. Hex has the same switch (`6118eb82`).
+
+**Discard.** A recording you don't want can be thrown away instead of
+stopped. The pill has a quiet × beside Stop; it asks "Discard this
+recording?" with Keep and Discard in the pill itself, and moving the pointer
+off the pill answers Keep. The Meetings window has a trash button beside
+Mute my mic, which asks the same in a dialog. Discard
+(`MeetingEngine.discardRecording`) stops both tracks, skips transcription
+and notes, and deletes the meeting's folder through `MeetingStore.delete`,
+not to the Trash; the pill shows "Recording discarded". Nothing was sent to
+iCloud while it recorded (only finished meetings go up), and the delete is
+sent like any other. If the folder can't be deleted, the meeting stays in
+the list as failed with its audio, so it can be deleted by hand. Nothing
+discards without that confirmation. From Hex (`01e5209b`).
 
 With no call detected (a recording started by hand), or when none of the
 call app's processes has audio open at the start, `system.caf` is a global
@@ -424,7 +468,7 @@ mirrored or AirPlay display, still shows the pill.
 
 | File | Shows |
 | --- | --- |
-| `MeetingsView.swift` | Record button and folder menu above the list, each row's folders, the folder line under the title ([Folders](#folders)), the detail header (title, progress while transcribing or making notes, Update notes after a speaker is renamed, Play and Download audio (`RecordingAudioButtons.swift`), Export menu, `…` menu with Redo notes / Redo transcript and notes / Retry / Delete, transcript toggle), the export message |
+| `MeetingsView.swift` | Record button (with Mute my mic and Discard under it while recording) and folder menu above the list, each row's folders, the folder line under the title ([Folders](#folders)), the detail header (title, progress while transcribing or making notes, Update notes after a speaker is renamed, Play and Download audio (`RecordingAudioButtons.swift`), Export menu, `…` menu with Redo notes / Redo transcript and notes / Retry / Delete, transcript toggle), the export message |
 | `MeetingNotesColumn.swift` | Title, Summary, the meeting type's sections, Decisions, Action items as open circles ("Owner: task"), Notes, then the meeting's questions and answers (`MeetingChatView.swift`, which also has the question box `MeetingsView.swift` puts under both columns) |
 | `MeetingTranscriptColumn.swift` | The transcript in one `NSTextView`: speaker names in their own colour (`SpeakerPalette`), time on a right tab stop, search that filters and highlights |
 | `AssignSpeakersView.swift` | One card per speaker: name, a sample line, shuffle (next line), play (that line's audio) |

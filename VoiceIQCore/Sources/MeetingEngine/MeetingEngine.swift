@@ -52,6 +52,16 @@ import VoiceIQSpeech
         }
     }
 
+    /// The mic track records silence while set; the far side keeps
+    /// recording. Hex has the same switch (anomalyco/hex `6118eb82`).
+    @Published public private(set) var micMuted = false
+
+    public func setMicMuted(_ muted: Bool) {
+        guard isRecording, let mic else { return }
+        mic.muted = muted; micMuted = muted
+        Log.meeting.info("meeting mic \(muted ? "muted" : "unmuted", privacy: .public)")
+    }
+
     private var endWatch: Task<Void, Never>?
     /// Keep recording was chosen; asked again only after the call comes back and ends again.
     private var keepAfterCallEnd = false
@@ -72,7 +82,11 @@ import VoiceIQSpeech
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(self?.endingAt == nil ? 5 : 1))
                 guard let self, !Task.isCancelled else { return }
-                let live = await Task.detached { CallDetector.processes(for: source)?.isRunningAudio == true }.value
+                let browser: Bool
+                if case .browser = source { browser = true } else { browser = false }
+                let live = await Task.detached {
+                    CallDetector.processes(for: source)?.isLive(locked: CallDetector.screenLocked(), browser: browser) == true
+                }.value
                 // A stop during the query cancelled this watcher and cleared
                 // the countdown; don't set it again.
                 guard !Task.isCancelled else { return }
@@ -214,6 +228,7 @@ import VoiceIQSpeech
         #if os(macOS)
         following?.cancel(); following = nil
         endWatch?.cancel(); endWatch = nil
+        micMuted = false
         #endif
         endingAt = nil
         let micDuration = mic?.stop() ?? 0, systemDuration = system?.stop() ?? 0
@@ -228,6 +243,36 @@ import VoiceIQSpeech
         Task { await UsageMeter.$scope.withValue(UsageScope(activity: .meeting, sessionID: id.uuid.uuidString)) {
             await process(id: id, folder: folder, meta: meta)
         } }
+    }
+
+    /// Ends the recording and deletes it: no transcript, no notes, no audio
+    /// kept. Only for an explicit, confirmed Discard. A meeting still
+    /// recording never goes to iCloud, so nothing half-made was sent; the
+    /// delete is sent like any other. From Hex (anomalyco/hex `01e5209b`).
+    public func discardRecording() {
+        guard case let .recording(id, _) = phase, var meta = currentMeta else { return }
+        #if os(macOS)
+        following?.cancel(); following = nil
+        endWatch?.cancel(); endWatch = nil
+        micMuted = false
+        _ = screenNames?.stop(); screenNames = nil
+        #endif
+        endingAt = nil
+        let micDuration = mic?.stop() ?? 0, systemDuration = system?.stop() ?? 0
+        mic = nil; system = nil; currentFolder = nil; currentMeta = nil
+        phase = .idle
+        do {
+            try store.delete(id: id)
+            Log.meeting.info("meeting \(id.uuid.uuidString, privacy: .public) discarded")
+            onNotice?("Recording discarded")
+        } catch {
+            // The audio stays and the meeting is listed, so nothing goes without the user knowing.
+            Log.meeting.error("discarded meeting could not be deleted: \(String(describing: error), privacy: .public)")
+            meta.endedAt = Date(); meta.durationSeconds = max(micDuration, systemDuration)
+            meta.status = .failed("This recording was discarded, but its files could not be deleted. Delete it from the list.")
+            try? store.save(meta: meta)
+            onNotice?("Couldn't delete the recording — see \(MeetingFailure.listName)")
+        }
     }
 
     /// Transcribes again from the audio and writes new notes. A retry after a

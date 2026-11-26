@@ -51,6 +51,7 @@ enum CallApps {
         "company.thebrowser.Browser", "com.brave.Browser", "com.vivaldi.Vivaldi", "com.operasoftware.Opera",
         "company.thebrowser.dia", "ai.perplexity.comet", "com.kagi.kagimacOS", "com.apple.SafariTechnologyPreview",
         "com.microsoft.edgemac.Beta", "com.microsoft.edgemac.Dev", "com.microsoft.edgemac.Canary",
+        "at.studio.AsideBrowser",
     ]
 
     /// Pages whose microphone use is a call on its own, matched against the

@@ -96,9 +96,9 @@ struct PillView: View {
                 MeetingPromptContent(name: name)
             }
 
-        case .meetingRecording(let since):
-            pillSurface(width: 300) {
-                MeetingRecordingContent(since: since)
+        case let .meetingRecording(since, micMuted):
+            pillSurface(width: 340) {
+                MeetingRecordingContent(since: since, micMuted: micMuted)
             }
 
         case .meetingEnding(let until):
@@ -222,6 +222,7 @@ struct PillView: View {
         case .notice(let message): return message
         case .error(let message): return "Error — \(message)"
         case .meetingPrompt(let name): return "Meeting detected in \(name)"
+        case .meetingRecording(_, true): return "Recording meeting — mic muted"
         case .meetingRecording: return "Recording meeting"
         case .meetingEnding: return "Meeting ended — stopping the recording soon"
         }
@@ -375,4 +376,5 @@ extension Notification.Name {
     static let pillMeetingDismissed = Notification.Name("io.blue.voiceiq.pill.meeting.dismiss")
     static let pillMeetingStopTapped = Notification.Name("io.blue.voiceiq.pill.meeting.stop")
     static let pillMeetingKeepTapped = Notification.Name("io.blue.voiceiq.pill.meeting.keep")
+    static let pillMeetingDiscardTapped = Notification.Name("io.blue.voiceiq.pill.meeting.discard")
 }

@@ -60,49 +60,106 @@ struct MeetingEndingContent: View {
             .buttonStyle(.borderedProminent)
             .controlSize(.small)
             .tint(VoiceIQUI.Colors.primary)
+            .fixedSize()
+            .layoutPriority(1)
             .accessibilityLabel("Stop recording now and make meeting notes")
+            // Never squeezed or cut beside Stop now.
             Button("Keep recording") {
                 NotificationCenter.default.post(name: .pillMeetingKeepTapped, object: nil)
             }
             .controlSize(.small)
+            .lineLimit(1)
+            .fixedSize()
+            .layoutPriority(1)
         }
     }
 }
 
-/// Recording: elapsed time, working bars, and Stop.
+/// Recording: elapsed time, working bars, Discard and Stop.
 /// The timer is a `TimelineView` over the start date, so no published tick is needed.
+/// Discard asks first, in the pill; moving the pointer off the pill answers Keep.
 struct MeetingRecordingContent: View {
     let since: Date
+    /// Mute my mic in the Meetings window: only the far side is recorded.
+    let micMuted: Bool
+    @State private var confirmingDiscard = false
 
     var body: some View {
         HStack(spacing: VoiceIQUI.Spacing.s) {
-            Image(systemName: "record.circle")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(VoiceIQUI.Colors.error)
-            TimelineView(.periodic(from: since, by: 1)) { context in
-                Text(Self.clock(context.date.timeIntervalSince(since)))
-                    .font(VoiceIQUI.TypeScale.numeric())
-                    .foregroundStyle(VoiceIQUI.Colors.onSurfaceVariant)
-            }
-            WaveformView(processing: true)
-            Text("Recording meeting")
-                .font(VoiceIQUI.TypeScale.label())
-                .foregroundStyle(VoiceIQUI.Colors.onSurfaceVariant)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            Button {
-                NotificationCenter.default.post(name: .pillMeetingStopTapped, object: nil)
-            } label: {
-                ZStack {
-                    Circle().fill(VoiceIQUI.Colors.primary)
-                    RoundedRectangle(cornerRadius: 2.5)
-                        .fill(VoiceIQUI.Colors.onPrimary)
-                        .frame(width: 10, height: 10)
-                }
-                .frame(width: 32, height: 32)
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Stop recording and make meeting notes")
+            if confirmingDiscard { discardQuestion } else { recording }
         }
+        .onHover { inside in if !inside { confirmingDiscard = false } }
+    }
+
+    @ViewBuilder
+    private var recording: some View {
+        Image(systemName: "record.circle")
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundStyle(VoiceIQUI.Colors.error)
+        TimelineView(.periodic(from: since, by: 1)) { context in
+            Text(Self.clock(context.date.timeIntervalSince(since)))
+                .font(VoiceIQUI.TypeScale.numeric())
+                .foregroundStyle(VoiceIQUI.Colors.onSurfaceVariant)
+        }
+        WaveformView(processing: true)
+        Group {
+            if micMuted {
+                Label("Mic muted", systemImage: "mic.slash.fill")
+            } else {
+                Text("Recording meeting")
+            }
+        }
+        .font(VoiceIQUI.TypeScale.label())
+        .foregroundStyle(VoiceIQUI.Colors.onSurfaceVariant)
+        .lineLimit(1)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        Button {
+            confirmingDiscard = true
+        } label: {
+            Image(systemName: "xmark")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(VoiceIQUI.Colors.onSurfaceVariant)
+                .frame(width: 24, height: 24)
+        }
+        .buttonStyle(.plain)
+        .help("Discard this recording")
+        .accessibilityLabel("Discard this recording")
+        Button {
+            NotificationCenter.default.post(name: .pillMeetingStopTapped, object: nil)
+        } label: {
+            ZStack {
+                Circle().fill(VoiceIQUI.Colors.primary)
+                RoundedRectangle(cornerRadius: 2.5)
+                    .fill(VoiceIQUI.Colors.onPrimary)
+                    .frame(width: 10, height: 10)
+            }
+            .frame(width: 32, height: 32)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Stop recording and make meeting notes")
+    }
+
+    @ViewBuilder
+    private var discardQuestion: some View {
+        Text("Discard this recording?")
+            .font(VoiceIQUI.TypeScale.label())
+            .foregroundStyle(VoiceIQUI.Colors.onSurface)
+            .lineLimit(1)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .accessibilityLabel("Discard this recording? Its audio is deleted and no notes are made.")
+        Button("Keep") { confirmingDiscard = false }
+            .controlSize(.small)
+            .fixedSize()
+            .accessibilityLabel("Keep recording")
+        Button("Discard") {
+            confirmingDiscard = false
+            NotificationCenter.default.post(name: .pillMeetingDiscardTapped, object: nil)
+        }
+        .buttonStyle(.borderedProminent)
+        .controlSize(.small)
+        .tint(VoiceIQUI.Colors.error)
+        .fixedSize()
+        .accessibilityLabel("Discard the recording without notes")
     }
 
     private static func clock(_ seconds: TimeInterval) -> String {

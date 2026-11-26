@@ -3,6 +3,7 @@ import AudioToolbox
 import AVFoundation
 import CoreAudio
 import Foundation
+import os
 
 /// Records the call's input device, or the default input, to a 16 kHz mono CAF file.
 ///
@@ -55,6 +56,14 @@ public final class MicTap: @unchecked Sendable {
 
     public init(url: URL, device: AudioDeviceID? = nil) { self.url = url; preferred = device }
     public let sound = SoundClock()
+
+    /// Writes silence in place of the mic while set, so the track keeps its
+    /// length and stays aligned with the far side.
+    public var muted: Bool {
+        get { mute.withLock { $0 } }
+        set { mute.withLock { $0 = newValue } }
+    }
+    private let mute = OSAllocatedUnfairLock(initialState: false)
 
     public func start() throws {
         writer = try CAFWriter(url: url, format: target); frames = 0
@@ -166,6 +175,7 @@ public final class MicTap: @unchecked Sendable {
             supplied = true; outStatus.pointee = .haveData; return buffer
         }
         guard status != .error, output.frameLength > 0 else { return }
+        if muted, let samples = output.int16ChannelData?[0] { samples.update(repeating: 0, count: Int(output.frameLength)) }
         sound.hear(output)
         do { try writer.write(output); frames += Int64(output.frameLength) }
         catch { Log.meeting.error("mic write failed: \(String(describing: error), privacy: .public)") }

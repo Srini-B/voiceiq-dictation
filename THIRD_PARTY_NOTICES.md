@@ -244,6 +244,21 @@ SOFTWARE.
   `9d6e0990`, `src/dictation/cancel_confirm.rs`), and the pill's return to
   the active Space (`App/Sources/HUD/PillHUDController.swift`, from
   `8c9489b6`, `src/rune_hud/macos.rs`)
+- Also, from Hex between `db515bda` and `012bdbbe`, rewritten in Swift:
+  rebuilding the meeting system tap when the default output changes or the
+  track goes to exact zeros, new tap before old, with the gap written as
+  silence (`5704885d`, `4a3e9d49`: `src/meeting/capture.rs`,
+  `src/meeting/macos.rs`, `src/meeting/macos/system_audio.rs`) in
+  `VoiceIQCore/Sources/MeetingEngine/SystemAudioTap.swift` and
+  `SystemTapWatch.swift`; never following an output-only device as the call
+  mic (`657aa0cf`, `src/microphone_activity.rs`) and a browser call ending
+  while the Mac is locked (`092a9b33`, `src/meeting/watcher/call_end.rs`) in
+  `CallDetector.swift`; the meeting mic mute (`6118eb82`,
+  `src/meeting/capture.rs`) in `MicTap.swift`; and the Aside browser's
+  bundle ID (`ae1cdf71`, `src/meeting/detection.rs`) in `CallApps.swift`;
+  and discarding a meeting while it records, after an inline confirmation
+  (`01e5209b`, `src/rune_ui/meeting_capsules.rs` and `panel.rs`), in
+  `MeetingEngine.swift` and `App/Sources/HUD/MeetingPillContent.swift`
 - License: MIT
 
 ```
