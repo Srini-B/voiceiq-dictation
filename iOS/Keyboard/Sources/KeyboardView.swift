@@ -79,7 +79,8 @@ struct KeyboardView: View {
                     ) {
                         editOpen.toggle()
                     }
-                    if typing.pasteInRow {
+                    // The cursor page has its own Paste last key.
+                    if typing.pasteInRow, !showingEdit {
                         ShortcutIconButton(systemImage: Self.pasteLastSymbol, label: "Paste last dictation", height: buttonHeight) {
                             model.pasteLast()
                         }
@@ -199,10 +200,15 @@ private struct DictateButton: View {
                         .controlSize(.small)
                         .tint(writing ? KeyboardPalette.accent : .white)
                 } else {
-                    Image("DictateMark")
-                        .resizable()
-                        .scaledToFit()
-                        .frame(height: min(22, height - 10))
+                    // VoiceiQ's mark listens; the waveform in front of its face says "speak".
+                    HStack(spacing: 2) {
+                        Image(systemName: "waveform")
+                            .font(.system(size: 10, weight: .bold))
+                        Image("DictateMark")
+                            .resizable()
+                            .scaledToFit()
+                            .frame(height: min(20, height - 12))
+                    }
                 }
             }
             .foregroundStyle(.white)

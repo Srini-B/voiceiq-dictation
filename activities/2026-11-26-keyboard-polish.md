@@ -77,3 +77,12 @@ and space-bar label.
   simulator, "wil hav thi hel th tha " became "Will have this hel the that".
   "jus" and "wha" stay as typed. Apple's keyboard on the same iOS 26.5
   simulator corrected none of these words.
+## Follow-up (Fable's remaining points)
+
+- Dictate: a small waveform in front of the mark's face, so the button says
+  "speak" and keeps VoiceiQ's mark.
+- The cursor page no longer shows Paste last twice: the bar drops it while the
+  page, which has its own Paste last key, is open.
+- The flat grey left side of the landscape recording strip was a capture
+  artifact: the fake recording wrote 48 level bars, while the app keeps 256
+  (`LevelBars.capacity`). With a full history, the strip fills edge to edge.

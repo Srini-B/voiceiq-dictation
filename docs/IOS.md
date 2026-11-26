@@ -507,8 +507,9 @@ app as before.
 VoiceiQ adds no row.
 
 - The suggestion row holds VoiceiQ's shortcuts at its ends: cursor control
-  and Paste last dictation on the left, Dictate (VoiceiQ's mark on the blue
-  pill) on the right; without Full Access Dictate opens the app's setup. All
+  and Paste last dictation on the left (on the cursor page only its own key
+  has it), Dictate (a waveform in front of VoiceiQ's mark, on the blue pill)
+  on the right; without Full Access Dictate opens the app's setup. All
   are 44 pt wide with 6 pt gaps (`TypingBridge.buttonWidth`), and the row is
   laid out between the keys' outer edges, so the buttons line up with the
   keys in every orientation (`stripRow`, from Hex's `onStripRowLayout`). Hex's
