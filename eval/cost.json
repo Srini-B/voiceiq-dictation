@@ -1,0 +1,47 @@
+{
+ "_sources": "Prices: ai.google.dev/gemini-api/docs/pricing, read 2026-11-26 (gemini-3.8-flash doubles on 2027-01-01; thinking bills as output). INR: open.er-api.com 2026-11-25, 92.93, rounded to 93. Meeting hour: cost study T-05688efa, 2026-11-26: Gemini transcription of about 60 min of speech (90k audio tokens in, 12.6k out on gemini-3.5-transcribe), one notes call (about 17k in, 5k out, estimated) and about Rs 1 of chat. Profiles: owner is the owner's measured pace (about 160 dictations a month, 2026-11-12 to 11-18) plus 4 meeting hours, which is the cost study's estimate until usage.sqlite gives the real figure; typical and heavy from the cost study.",
+ "inr_per_usd": 93,
+ "target_inr": 200,
+ "ceiling_inr": 250,
+ "score_prices": "2027-01",
+ "prices_usd_per_mtok": {
+  "2026-12": {
+   "gemini-3.8-flash": {
+    "audio_in": 0.75,
+    "text_in": 0.75,
+    "cached_in": 0.075,
+    "out": 3.75
+   }
+  },
+  "2027-01": {
+   "gemini-3.8-flash": {
+    "audio_in": 1.5,
+    "text_in": 1.5,
+    "cached_in": 0.15,
+    "out": 7.5
+   }
+  }
+ },
+ "meeting_inr_per_hour": {
+  "2026-12": 35.7,
+  "2027-01": 40.7
+ },
+ "score_profile": "owner",
+ "profiles": {
+  "owner": {
+   "dictations_per_month": 160,
+   "meeting_hours_per_month": 4
+  },
+  "typical": {
+   "dictations_per_month": 600,
+   "meeting_hours_per_month": 10
+  },
+  "heavy": {
+   "dictations_per_month": 2000,
+   "meeting_hours_per_month": 30
+  }
+ },
+ "_gate": "C1 is scored on the owner profile at the highest announced prices: under Rs 250 a month is the gate (90), Rs 200 or less is 100. Typical use is reported as a check; heavy is reported, not gated. Meetings stay on Gemini.",
+ "cache_hit_share_in_use": 0.0,
+ "_cache": "cache_hit_share_in_use: share of prompt text billed at the cached rate in real use. 0 until the app's usage log (cachedIn) measures it; the eval's own hit share is optimistic because its calls run back to back."
+}

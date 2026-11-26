@@ -1,6 +1,6 @@
 # VoiceiQ quality scorecard
 
-Every item scores 0–100. The target is 90 or more on every item, and dictation in 3 s or less from key-up to inserted text with every option on. Score main, then score each feature PR before it merges.
+Every item scores 0–100. The target is 90 or more on every item, dictation in 3 s or less from key-up to inserted text with every option on, and Gemini cost under ₹250 a month at the owner's pace for dictation and meetings together, at the highest announced prices. Score main, then score each feature PR before it merges. A change that adds Gemini calls or tokens (a backup request, sending on a pause, another meeting call) shows its C1 before it ships.
 
 **Who scores.** Claude Fable 5.2 is the scorer of record, run as its own Amp thread so it never sees how the output was made.
 - Items marked *judged* get the rubric for that item and their inputs:
@@ -62,6 +62,19 @@ D5 of record is pooled: the same commit run at least 5 times spread across a day
 | M6 UI and UX | Live status during a call, transcript by person, notes screen | judged from screenshots; Granola is the bar |
 
 Eval meetings: AMI ES2004a (headset mix, four people; the mic track is one person, the far side the other three) and synthetic TTS meetings where people introduce and address each other by name. The pipeline writes one JSON per meeting in the format in `meetings/score.py`. Score all eval meetings in one call (`score.py OUT1 REF1 OUT2 REF2 …`): the `pooled` scores are the scores of record. M1 is the mean of the per-meeting M1 scores; M2–M4 pool error time over speech time and word errors over reference words, so the long real meeting weighs by its length and short synthetic calls can't outvote it.
+
+## Cost
+
+| Item | What it measures | How |
+| --- | --- | --- |
+| C1 Gemini cost per month | Dictation and meetings together at the owner's pace (`cost.json` profile `owner`), at the highest announced prices | `cost.py`: each eval call's tokens at `cost.json`'s prices (a backup request pays one more call), times dictations a month, plus meeting hours a month times the per-hour cost; 100 at or under ₹200, 90 at ₹250, minus 1 per 1% over ₹250 |
+
+```sh
+python3 -m doctest eval/cost.py
+python3 eval/cost.py eval/dictation/results/LABEL.json   # --profile typical for the everyday figure
+```
+
+Every release reports cost per dictation and per meeting hour beside C1, with the typical profile (600 dictations and 10 meeting hours) as a check and the heavy profile reported but not gated. Meetings stay on Gemini; switching them to On device is not a cost lever. The backup request and any early send-on-pause request share a cap of about 10% extra dictation calls. `cost.json` records where its prices, exchange rate and profiles come from. Meetings use a per-hour figure from the cost study until the meeting pipeline records its own token usage.
 
 ## Known limits
 
