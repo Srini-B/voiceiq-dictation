@@ -38,7 +38,16 @@ reads usage on a 200. Two envelopes are handled by `TokenUsage`:
 
 - `:generateContent` → `usageMetadata` (`promptTokensDetails`,
   `candidatesTokensDetails`, `thoughtsTokenCount`, `cachedContentTokenCount`).
-  Dictation, meeting notes and meeting chat use it.
+  Meeting notes and meeting chat use it. Dictation uses
+  `:streamGenerateContent?alt=sse`; `GeminiClient.joinedEventStream` joins
+  the events into the same envelope with the last event's usage, so it is
+  metered the same way.
+- A dictation request that is cancelled is not recorded: the slower of two
+  raced attempts (`DictationHedge`), or a send-on-pause request the speaker
+  talked over. Gemini bills nothing for a stream cancelled before its first
+  chunk, and the answer is the first chunk. A cancelled request that had
+  already answered is billed but not in the ledger; the
+  `send-on-pause: ... billed: true` log lines count those.
 - `v1beta/interactions` → `usage`. `total_output_tokens` came back 0 while
   `model_invocation_token_counts` carried the real output count (probed
   2026-09-26), so the per-invocation list is authoritative. Meeting
