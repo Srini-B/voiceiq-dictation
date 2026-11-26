@@ -40,10 +40,33 @@ How to run it and the dataset licences are in `eval/hard-audio/README.md`.
 
 ## Baseline: main 62835c6 (before #101), Gemini audio, every option on
 
-D7 is provisional (integrator, 2026-11-26): one judge, on main before #101.
-A second judge (Fable 5.2, on a stratified 180-draft packet, no new API
-calls) is in progress, and the Gemini 4 Argon pass stays unfinished because
-it would bill the empty eval key.
+D7 is provisional (integrator, 2026-11-26): it was measured on main before
+#101, and the table below is GPT-6 Astra's. The Gemini 4 Argon pass stays
+unfinished because it would bill the empty eval key.
+
+**Second judge.** Claude Fable 5.2 scored a stratified sample of 180 of the
+451 drafts blind, with the same rubric and no API calls. The packet and its
+verdicts are thread artifacts.
+
+| | GPT-6 Astra | Fable 5.2 | Both agree it's send-ready |
+| --- | --- | --- | --- |
+| Send-ready on the sample | 60.0% | 66.7% | 57.2% |
+| Reweighted to the 451-clip strata | 62.1% | 68.3% | 59.5% |
+
+- **Agreement:** 87.8% on send-ready (Cohen's κ 0.74), 88.9% on zero-edit.
+- **Where they split:** 22 drafts. 17 pass under Fable and fail under GPT,
+  and 5 the other way.
+- **Fable is more lenient:**
+  - on unclear words in corpus references, where the draft's reading is the
+    sensible one (navigate/negative, pot/part, thinking/things);
+  - on dropped openers or closers ("Yes, ma'am", "I guess");
+  - on missing content in Tamil references.
+- **GPT is more lenient** on inner capitals in product names (PayBridge for
+  Paybridge) and on two invented or kept words.
+- **Two-judge score:** the both-agree figure (about 60%) is the conservative
+  D7, Voice Arena-style. The spread between judges is about 6 points, mostly
+  on conversational clips with doubtful references. On the Voice Arena
+  dictations the judges are 2 points apart (76% vs 78% on 50 clips).
 
 One pass, 451 clips. The request is the app's: Dictionary, English (India)
 spelling line, place, screen text and the backup request. GPT-6 Astra judged
