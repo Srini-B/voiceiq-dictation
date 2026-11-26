@@ -329,13 +329,17 @@ public struct MeetingTranscriber: Sendable {
     /// from the other people, and it cost the participant score 10 points.
     static let strayVoiceShare = 0.01
 
+    /// And for less than this long: someone who speaks 30 s in a one-hour
+    /// call is a participant, though under 1% of it.
+    static let strayVoiceSeconds = 15.0
+
     /// A stray voice's words go to the nearest far-side word of a kept voice,
     /// so no words are lost.
     static func foldingStrayVoices(_ words: [TimedWord]) -> [TimedWord] {
         guard let first = words.map(\.start).min(), let last = words.map(\.end).max() else { return words }
         var talk: [String: Double] = [:]
         for word in words where word.speaker != MeetingSpeaker.you { talk[word.speaker, default: 0] += word.end - word.start }
-        let stray = Set(talk.filter { $0.value < (last - first) * strayVoiceShare }.keys)
+        let stray = Set(talk.filter { $0.value < min((last - first) * strayVoiceShare, strayVoiceSeconds) }.keys)
         let kept = words.filter { $0.speaker != MeetingSpeaker.you && !stray.contains($0.speaker) }
         guard !stray.isEmpty, !kept.isEmpty else { return words }
         return words.map { word in

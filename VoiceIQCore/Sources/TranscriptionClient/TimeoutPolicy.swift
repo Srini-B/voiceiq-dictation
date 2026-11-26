@@ -38,14 +38,6 @@ public enum TimeoutPolicy {
         max(600, 3 * audioSeconds)
     }
 
-    /// One on-device writer request: loading the model, then reading the
-    /// prompt at 100 tokens a second and writing at 10, a phone's CPU with
-    /// room to spare. The Mac kills its helper at this point; iOS stops the
-    /// generation.
-    public static func localWrite(maxTokens: Int, context: Int) -> TimeInterval {
-        30 + Double(context) / 100 + Double(maxTokens) / 10
-    }
-
     /// Overall per-request deadline. Scales gently with audio length:
     /// 5s clip → 31s; 10min clip → 2.5min. Never the unbounded 2×duration formula.
     public static func overallDeadline(audioDuration: TimeInterval) -> TimeInterval {

@@ -12,6 +12,10 @@ import Network
 public struct CellularDownloadConsent: Equatable, Sendable {
     public enum Network: Sendable {
         case offline, wifi, cellular
+        /// The monitor has not reported a path yet (its first update arrives
+        /// just after it starts). Treated as cellular: asking costs a tap,
+        /// guessing wrong costs the user's data or a false "No internet".
+        case unknown
 
         /// Cellular, or a connection iOS marks expensive (a personal hotspot).
         /// Read from `NWPath` as Hex does: `usesInterfaceType(.cellular)` and
@@ -39,7 +43,7 @@ public struct CellularDownloadConsent: Equatable, Sendable {
         if started.contains(download) { return .start }
         switch network {
         case .offline: return .offline
-        case .cellular: return .ask
+        case .cellular, .unknown: return .ask
         case .wifi:
             started.insert(download)
             return .start
@@ -69,20 +73,22 @@ public final class CellularModelDownloads: ObservableObject {
     @Published public var pending: LocalModelStore?
     private var consent = CellularDownloadConsent()
     private let monitor = NWPathMonitor()
+    /// `.unknown` until the monitor's first update: `currentPath` before then reads
+    /// as unsatisfied, which would refuse a download as offline.
+    private var network: CellularDownloadConsent.Network = .unknown
 
     private init() {
-        // Started ahead of the first tap: a monitor reports its path only
-        // after it has started.
-        monitor.start(queue: DispatchQueue(label: "io.blue.voiceiq.model-download-network", qos: .utility))
-    }
-
-    private var network: CellularDownloadConsent.Network {
-        let path = monitor.currentPath
-        return .init(
-            satisfied: path.status == .satisfied,
-            cellular: path.usesInterfaceType(.cellular),
-            expensive: path.isExpensive
-        )
+        monitor.pathUpdateHandler = { [weak self] path in
+            let network = CellularDownloadConsent.Network(
+                satisfied: path.status == .satisfied,
+                cellular: path.usesInterfaceType(.cellular),
+                expensive: path.isExpensive
+            )
+            // Delivered on the main queue, in order; separate Tasks could reorder a quick handoff.
+            MainActor.assumeIsolated { self?.network = network }
+        }
+        // Started ahead of the first tap so its first update has usually arrived.
+        monitor.start(queue: .main)
     }
 
     /// Called as `store` is asked to download. `.ask` leaves `store` pending

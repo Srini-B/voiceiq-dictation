@@ -52,6 +52,14 @@ public final class MicTap: @unchecked Sendable {
     /// reporting it, and each new try stops the default for the retries.
     private var failed: (device: AudioDeviceID, at: Date)?
     static let failedBackoff: TimeInterval = 60
+    /// Bumped by each new move; a retry from an older move gives up, so it
+    /// never tears down a mic that already recovered. On `control` only.
+    private var moveGeneration = 0
+    /// When the last buffer was written, and set across a device move to the
+    /// time the old device stopped, so the gap is written as silence and the
+    /// mic track stays aligned with the system track.
+    private var lastBufferAt: TimeInterval = 0
+    private var padFrom: TimeInterval?
 
 
     public init(url: URL, device: AudioDeviceID? = nil) { self.url = url; preferred = device }
@@ -67,12 +75,19 @@ public final class MicTap: @unchecked Sendable {
 
     public func start() throws {
         writer = try CAFWriter(url: url, format: target); frames = 0
-        try control.sync {
-            do { try attach(to: wanted) }
-            catch {
-                guard let device = preferred else { throw error }
-                failed = (device, Date()); preferred = nil; try attach(to: wanted)
+        lastBufferAt = ProcessInfo.processInfo.systemUptime; padFrom = nil
+        do {
+            try control.sync {
+                do { try attach(to: wanted) }
+                catch {
+                    guard let device = preferred else { throw error }
+                    failed = (device, Date()); preferred = nil; try attach(to: wanted)
+                }
             }
+        } catch {
+            // A mic that never started leaves no open file behind.
+            writer?.close(); writer = nil
+            throw error
         }
         _ = AudioObjectAddPropertyListenerBlock(AudioObjectID(kAudioObjectSystemObject), &defaultInputAddress, control, deviceListener)
         listening = true
@@ -104,10 +119,18 @@ public final class MicTap: @unchecked Sendable {
               let converter = AVAudioConverter(from: input, to: target) else { throw MicError.format }
         if channels > 2 { converter.channelMap = [0] }
         inputFormat = input; self.converter = converter; deviceID = device
-        try check(AudioDeviceCreateIOProcIDWithBlock(&procID, device, ioQueue) { [weak self] _, inputData, _, _, _ in
-            self?.consume(inputData)
-        })
-        try check(AudioDeviceStart(device, procID))
+        do {
+            try check(AudioDeviceCreateIOProcIDWithBlock(&procID, device, ioQueue) { [weak self] _, inputData, _, _, _ in
+                self?.consume(inputData)
+            })
+            try check(AudioDeviceStart(device, procID))
+        } catch {
+            // Leave nothing attached: the next attach would overwrite and leak
+            // procID, and a stale deviceID makes a move look like a no-op.
+            if let procID { _ = AudioDeviceDestroyIOProcID(device, procID) }
+            procID = nil; deviceID = kAudioObjectUnknown; self.converter = nil; inputFormat = nil
+            throw error
+        }
         _ = AudioObjectAddPropertyListenerBlock(device, &formatAddress, control, formatListener)
         Log.meeting.notice("mic started on device \(device): \(input.description, privacy: .public)")
     }
@@ -137,11 +160,18 @@ public final class MicTap: @unchecked Sendable {
 
     private var wanted: AudioDeviceID { preferred ?? Self.defaultInputDevice() }
 
-    private func moveToWantedDevice(force: Bool = false, attempt: Int = 0) {
+    private func moveToWantedDevice(force: Bool = false, attempt: Int = 0, generation: Int? = nil) {
         guard writer != nil else { return }
+        if let generation, generation != moveGeneration { return }
         let device = wanted
         guard force || device != deviceID else { return }
+        // Only a move that will attach supersedes a pending retry.
+        if generation == nil { moveGeneration += 1 }
+        let current = moveGeneration
+        let wasRunning = deviceID != kAudioObjectUnknown
         detach()
+        // The callbacks are drained, so lastBufferAt is the old device's last write.
+        if wasRunning, padFrom == nil { padFrom = lastBufferAt }
         do { try attach(to: device); Log.meeting.notice("mic moved to device \(device) (frames=\(self.frames))") }
         catch {
             Log.meeting.error("mic move failed (attempt \(attempt + 1)): \(String(describing: error), privacy: .public)")
@@ -150,7 +180,9 @@ public final class MicTap: @unchecked Sendable {
                 failed = (device, Date()); preferred = nil; moveToWantedDevice(force: true); return
             }
             guard attempt < Self.attachRetries else { return }
-            control.asyncAfter(deadline: .now() + 0.5) { [weak self] in self?.moveToWantedDevice(force: true, attempt: attempt + 1) }
+            control.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+                self?.moveToWantedDevice(force: true, attempt: attempt + 1, generation: current)
+            }
         }
     }
 
@@ -176,9 +208,28 @@ public final class MicTap: @unchecked Sendable {
         }
         guard status != .error, output.frameLength > 0 else { return }
         if muted, let samples = output.int16ChannelData?[0] { samples.update(repeating: 0, count: Int(output.frameLength)) }
+        let now = ProcessInfo.processInfo.systemUptime
+        if let from = padFrom {
+            padFrom = nil
+            let gap = SystemTapWatch.gapFrames(lastBufferAt: from, now: now,
+                                               bufferSeconds: Double(output.frameLength) / target.sampleRate,
+                                               sampleRate: target.sampleRate)
+            if gap > 0 { writeSilence(frames: gap, to: writer) }
+        }
+        lastBufferAt = now
         sound.hear(output)
         do { try writer.write(output); frames += Int64(output.frameLength) }
         catch { Log.meeting.error("mic write failed: \(String(describing: error), privacy: .public)") }
+    }
+
+    private func writeSilence(frames count: Int, to writer: CAFWriter) {
+        guard let gap = AVAudioPCMBuffer(pcmFormat: target, frameCapacity: AVAudioFrameCount(count)),
+              let samples = gap.int16ChannelData?[0] else { return }
+        gap.frameLength = AVAudioFrameCount(count)
+        samples.update(repeating: 0, count: count)
+        do { try writer.write(gap); frames += Int64(count) }
+        catch { Log.meeting.error("mic gap write failed: \(String(describing: error), privacy: .public)") }
+        Log.meeting.notice("mic track padded \(count) frames across a device move")
     }
 
     private static func defaultInputDevice() -> AudioDeviceID {

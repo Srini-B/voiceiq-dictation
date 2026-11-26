@@ -1,0 +1,22 @@
+diff --git a/iOS/Keyboard/Hex/FullKeyboard/View/FullKeyboardView.swift b/iOS/Keyboard/Hex/FullKeyboard/View/FullKeyboardView.swift
+index 7a95feb..2213a9e 100644
+--- a/iOS/Keyboard/Hex/FullKeyboard/View/FullKeyboardView.swift
++++ b/iOS/Keyboard/Hex/FullKeyboard/View/FullKeyboardView.swift
+@@ -33,6 +33,9 @@ final class FullKeyboardView: UIView {
+     /// VoiceiQ: where the suggestion row is, in this view, and whether the emoji panel covers
+     /// it, after each layout, so the host can place its shortcut buttons at the row's ends.
+     var onStripRowLayout: ((CGRect, Bool) -> Void)?
++    /// VoiceiQ: the words the strip is about to show, after Hex has set the strip's
++    /// visibility for a selection, so the host can hide it again while it covers the row.
++    var onStripSuggestions: (([String]) -> Void)?
+     /// The return key is about to type its line break.
+     var onReturnKey: (() -> Void)?
+ 
+@@ -941,6 +944,7 @@ final class FullKeyboardView: UIView {
+         if hidesWordSuggestions {
+             suggestions = suggestions.filter { $0.kind == .revert }
+         }
++        onStripSuggestions?(suggestions.map(\.displayText))
+         stripView.update(
+             suggestions: suggestions,
+             showsUndo: lastDictation != nil,

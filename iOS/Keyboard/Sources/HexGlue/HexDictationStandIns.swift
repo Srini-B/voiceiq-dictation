@@ -31,8 +31,10 @@ nonisolated enum HexDictationRoute: Equatable, Sendable {
 final class KeyboardViewModel: ObservableObject {
     enum StagePhase: Equatable { case idle, starting, recording, transcribing, failed }
 
-    /// Always true so Hex's Full Access strip never replaces VoiceiQ's own bar.
-    var hasFullAccess = true
+    /// The keyboard's Full Access, from `TypingBridge.refreshHostTraits`: it gates Hex's
+    /// clipboard offer and the selection strip's Copy and Paste. Hex's own Full Access hint
+    /// only follows a tap on the Hex key, which VoiceiQ hides.
+    var hasFullAccess = false
     @Published var needsGlobeKey = true
     /// Always idle: VoiceiQ renders its own LevelGlow RecordingStrip above the keys,
     /// so Hex's recording panel and Metal DotScope never mount.
@@ -91,7 +93,9 @@ enum KeyboardLaunchRequest {
     var url: URL {
         switch self {
         case .setup: BridgeURL.setup
-        case .pasteSettings, .home, .translationSettings: BridgeURL.app
+        // VoiceiQ's page in iOS Settings, where Paste from Other Apps is.
+        case .pasteSettings: BridgeURL.settings
+        case .home, .translationSettings: BridgeURL.app
         }
     }
 }
@@ -230,12 +234,14 @@ struct CustomVocabularySettings {
     }
 
     static func sanitize(_ raw: [String]) -> [String] {
+        // Oldest first: over the cap the newest terms stay, and a repeated term keeps its newest
+        // place, so a word just added is never the one cut.
         var seen = Set<String>()
-        let kept = raw.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { term in
+        let kept = raw.reversed().map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { term in
             let key = VocabularySpelling.normalizedKey(term)
             return key.count >= 2 && term.count <= 64 && seen.insert(key).inserted
         }
-        return Array(kept.prefix(maxTermCount))
+        return Array(kept.prefix(maxTermCount).reversed())
     }
 }
 

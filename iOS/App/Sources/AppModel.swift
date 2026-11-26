@@ -50,14 +50,13 @@ final class AppModel: ObservableObject {
         FileLayout.removeStaleFiles()
         SettingsStore().removeRetiredSettingsOnce()
         let client = GeminiClient(apiKey: { KeychainStore.loadAPIKey() })
-        transcription = GeminiTranscriptionService(client: client, localWriter: LocalSpeechInference.write)
+        transcription = GeminiTranscriptionService(client: client)
         historyStore = try? HistoryStore.standard()
         UsageMeter.store = try? UsageStore.standard()
         meetings = MeetingEngine(
             client: client,
             config: { SettingsStore().geminiConfig },
-            localMeeting: LocalSpeechInference.transcribeMeeting,
-            localWriter: LocalSpeechInference.write
+            localMeeting: LocalSpeechInference.transcribeMeeting
         )
         let inserter = self.inserter
         let session = self.session
@@ -381,6 +380,8 @@ final class AppModel: ObservableObject {
             setup.refresh()
             banner = nil
             NotificationCenter.default.post(name: .voiceIQShowKeyboardSetup, object: nil)
+        case .settings:
+            if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) }
         case nil:
             break
         }

@@ -1,9 +1,0 @@
-module llama {
-    header "llama.h"
-    link "c++"
-    link framework "Accelerate"
-    link framework "Metal"
-    link framework "MetalKit"
-    link framework "Foundation"
-    export *
-}

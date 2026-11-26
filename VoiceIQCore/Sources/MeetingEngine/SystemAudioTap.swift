@@ -62,6 +62,8 @@ public final class SystemAudioTap: @unchecked Sendable {
         self?.control.asyncAfter(deadline: .now() + 0.5) { [weak self] in self?.outputChanged() }
     }
     static let rebuildRetries = 5
+    /// Bumped by each new rebuild; read and written on `control` only.
+    private var rebuildGeneration = 0
 
     public init(url: URL, processes: [AudioObjectID] = []) { self.url = url; self.processes = processes; tapped = processes }
     public let sound = SoundClock()
@@ -69,6 +71,12 @@ public final class SystemAudioTap: @unchecked Sendable {
     public func start() throws {
         guard #available(macOS 14.2, *) else { throw TapError.unsupported }
         writer = try CAFWriter(url: url, format: target); frames = 0
+        // A tap that never started leaves no open file behind.
+        do { try startTap() } catch { queue.sync { live = nil; writer?.close(); writer = nil }; throw error }
+    }
+
+    private func startTap() throws {
+        guard #available(macOS 14.2, *) else { throw TapError.unsupported }
         try control.sync {
             let stream = try makeStream(processes: processes)
             queue.sync { live = stream; lastBufferAt = ProcessInfo.processInfo.systemUptime }
@@ -180,13 +188,20 @@ public final class SystemAudioTap: @unchecked Sendable {
         guard running else { return }
         // Nothing playing: the silence is real. The watch asks again after another stretch of it.
         guard outputPlaying() else { return }
-        rebuild("system track went to exact zeros while sound plays")
+        rebuild("system track went to exact zeros while sound plays", forSilence: true)
     }
 
     /// Starts a new tap before stopping the old one, so a rebuild that fails,
     /// or was not needed, loses nothing.
-    private func rebuild(_ reason: String, attempt: Int = 0) {
+    /// Only a rebuild for silence advances the watch's backoff; one for an
+    /// output move restarts the count at the current wait.
+    private func rebuild(_ reason: String, forSilence: Bool = false, attempt: Int = 0, generation: Int? = nil) {
         guard #available(macOS 14.2, *), running, let old = stream else { return }
+        // A newer rebuild supersedes this retry chain, so a stale retry
+        // never replaces a tap that already recovered.
+        if let generation, generation != rebuildGeneration { return }
+        if generation == nil { rebuildGeneration += 1 }
+        let current = rebuildGeneration
         let next: Stream
         do {
             next = try makeStream(processes: tapped)
@@ -194,12 +209,14 @@ public final class SystemAudioTap: @unchecked Sendable {
         } catch {
             Log.meeting.error("system tap rebuild failed (attempt \(attempt + 1)): \(String(describing: error), privacy: .public)")
             guard attempt < Self.rebuildRetries else { return }
-            control.asyncAfter(deadline: .now() + 1) { [weak self] in self?.rebuild(reason, attempt: attempt + 1) }
+            control.asyncAfter(deadline: .now() + 1) { [weak self] in
+                self?.rebuild(reason, forSilence: forSilence, attempt: attempt + 1, generation: current)
+            }
             return
         }
         tearDown(old)
         // After the old stream's queued buffers, so they are written first.
-        queue.sync { live = next; padFrom = lastBufferAt; silence.rebuilt() }
+        queue.sync { live = next; padFrom = lastBufferAt; silence.rebuilt(backingOff: forSilence) }
         stream = next
         Log.meeting.notice("system tap rebuilt: \(reason, privacy: .public)")
     }

@@ -510,6 +510,25 @@ VoiceiQ adds no row.
 - Undo dictation deletes the dictation only when the text on both sides of it
   still matches what was there when it went in, so an earlier copy of the
   same words is never the one removed (`0005-voiceiq-undo-context.patch`).
+- Hex's clipboard offer and the selection strip's Cut and Copy follow the
+  keyboard's real Full Access (`KeyboardViewModel.hasFullAccess`, set in
+  `TypingBridge.refreshHostTraits`). The Settings chip on Hex's Allow Paste
+  notice opens `voiceiq://keyboard/settings`, and the app opens its own page
+  in iOS Settings, where Paste from Other Apps is.
+- While VoiceiQ shows its own content in the suggestion row (recording strip,
+  notice, Dictionary offer, edit panel), Hex's strip stays hidden: the flag is
+  stored and applied again each time Hex refreshes its strip, which covers the
+  emoji panel closing and a selection ending
+  (`0006-voiceiq-strip-refresh.patch`).
+- A secure field (`isSecureTextEntry`, including custom and web ones without a
+  password content type) gets no auto-correction and nothing goes into the
+  typing journal (`TypingBridge.autocorrectionType`,
+  `0007-voiceiq-secure-journal.patch`).
+- Off screen (`viewDidDisappear`), the keyboard closes Hex's emoji panel,
+  drops the emoji library and saves the typing journal.
+- VoiceiQ's Dictionary words reach Hex's vocabulary capped at 100; over the
+  cap the newest are kept, so a word added from the suggestion strip is never
+  the one dropped.
 - Hex's in-keyboard dictation, its recording panel and Metal dot scope, the
   style menu, translation and model notices are permanent stand-ins that
   never show (`HexDictationStandIns.swift`). Hex's wording that names its app
@@ -725,7 +744,7 @@ runs. Everything needs Full Access.
 | Gemini API key | Same, in Settings › API Key and the iOS Keychain. The key card carries Gemini's favicon from `Assets.xcassets/ProviderGemini.imageset` (`BrandTile`) |
 | History stats: words, dictations, WPM, audio time, time saved, day streak, with a period menu | Statistics (`StatsView`), opened from the row above History's days or from Home's stats grid. Same `HistoryStore.stats(period:)` and the same remembered period (`historyStatsPeriod`); the Mac's streak tooltip (longest streak, active days) is a line under the tiles. Home's grid shows all time |
 | Dictionary with search, CSV and Auto-learned | Same, synced through iCloud, plus adding a selection or a copied word from the keyboard |
-| Custom rules, spoken languages; spelling from the region | Same: custom rules and Languages in Settings › Dictation, spelling from the iPhone's region |
+| Custom rules; spelling from the region | Same: custom rules in Settings › Dictation, spelling from the iPhone's region |
 | `[transcription] timing:` and `[session] timing` debug log lines | Same lines, in the app's debug log file |
 | Microphone picker | Microphone: Automatic, iPhone or Bluetooth (see the voice session section) |
 | History, retry, crash recovery, retention | Same. The detail shows Pipeline, the seconds from Stop to the text being ready (`DictationRecord.pipelineSeconds`, as on the Mac; absent for dictations synced from the Mac), the cost and one row per stage and model (stage, model, call count when above one, summed cost; `UsageLine.lines` over `UsageStore.records(forSession:)`), and Copy turns into "Copied" with a checkmark and a success haptic for 1.5 s |
