@@ -95,3 +95,9 @@ The commit restores Hindi "10 बजे" and tight short lists. One regression: 
 - #81 (Tidy) is held until Fable re-scores the two corrections that dropped words and Neon re-reviews.
 - #83 is held until its prompt examples no longer copy eval strings ("Update the README.", "Bump the version.", "दस बजे"). Neon found no High at c409c44.
 - #91 (keyboard findings 6 and 8) is merged as 62006dd. Neon found it clean.
+
+### e5ca037: name guard regression (12:10 UTC)
+
+After 137d5a9 reworded the list and hour rules, ctrl_01 ("Karen and Aaron") comes out as "Kiran and Arun" in 6 of 6 rounds at temperature 0. c409c44 gives "Karen and Aaron" in 6 of 6. Scores at e5ca037: D1 80.0 (4 control flips), D2 98.0, D5 60.1.
+
+The only prompt difference between the two commits is that wording, so the name guard flips on unrelated text. Decision: #83 is held until the name rule decides the case on its own, with ctrl_01–03 checked over 4 rounds. The dictation thread owns the fix.
