@@ -188,7 +188,7 @@ def main() -> None:
             hard[key] = min(hard.get(key, 100), 50)
 
     judged = json.loads(Path(args.judge).read_text()) if args.judge else {}
-    bad = [k for k, v in judged.items() if not isinstance(v, int) or not 0 <= v <= 100]
+    bad = [k for k, v in judged.items() if isinstance(v, bool) or not isinstance(v, int) or not 0 <= v <= 100]
     if bad:
         raise SystemExit(f"{args.judge}: scores must be integers 0-100: {', '.join(bad[:5])}")
     items = {"D1": d1, "D2": d2, "D5": d5}
