@@ -95,7 +95,13 @@ public final class EditLearner {
         guard !defaults.bool(forKey: pruneFlag) else { return }
         defaults.set(true, forKey: pruneFlag)
         let entries = dictionary.entries()
-        let kept = entries.filter { $0.source != .auto || !CommonWords.isOrdinary($0.term) }
+        let kept = entries.filter { entry in
+            entry.source != .auto || !teachesNothing(LearnedCorrection(
+                original: entry.learnedFrom ?? "",
+                replacement: entry.term,
+                words: 0..<0
+            ))
+        }
         guard kept.count != entries.count else { return }
         dictionary.save(kept)
         Log.learning.info("Removed \(entries.count - kept.count) auto-learned ordinary word(s)")
@@ -278,7 +284,10 @@ public final class EditLearner {
             return Located(
                 id: insertion.0,
                 window: match.window,
-                edits: EditDiff.edits(original: insertion.2, replacement: match.window, earlier: insertion.3)
+                edits: EditDiff.edits(
+                    original: insertion.2, replacement: match.window, earlier: insertion.3,
+                    context: String(current[..<match.range.lowerBound].suffix(200))
+                )
             )
         }
         return .located(located, valueHash: valueHash)
@@ -291,6 +300,17 @@ public final class EditLearner {
     /// `stillTaught`: how many corrections in this field still teach each
     /// spelling, so undoing or revising one copy of a fix does not drop a word
     /// another copy keeps.
+    /// Only words the language does not already have: a name, a product term,
+    /// jargon. Many Indian names are English words in lowercase ("Saran",
+    /// "Ram", "Raja"), so a capitalized replacement for heard wording that was
+    /// not ordinary either ("Sharon" → "Saran") is still a name, unless the
+    /// capital only starts a sentence ("Sara, I'm late" → "Sorry, I'm late").
+    /// Changing "They" to "We" or "Then" to "Than" teaches nothing.
+    private static func teachesNothing(_ correction: LearnedCorrection) -> Bool {
+        guard CommonWords.isOrdinary(correction.replacement) else { return false }
+        return !(correction.nameLike && !CommonWords.isOrdinary(correction.original))
+    }
+
     func learn(_ steps: [LearningStep], stillTaught: [String: Int]) {
         var learned: [DictionaryEntry] = []
         var known = dictionary.entries()
@@ -345,7 +365,7 @@ public final class EditLearner {
                 learned.removeAll { staleIDs.contains($0.id) }
                 let replacement = correction.replacement.lowercased()
                 if known.contains(where: { $0.term.lowercased() == replacement })
-                    || CommonWords.isOrdinary(correction.replacement) {
+                    || Self.teachesNothing(correction) {
                     dictionary.remove(id: kept.id)
                     Log.learning.info("Dropped a just-learned word the user edited again")
                 } else {
@@ -372,10 +392,7 @@ public final class EditLearner {
                     || misspelling == original || misspelling == replacement
                     || (!isRevision && learnedFrom == original && !protected.contains($0.id))
             }) else { continue }
-            // Only words the language does not already have: a name, a
-            // product term, jargon. Changing "They" to "we" or fixing the
-            // case of "There's" is an edit, not a new word.
-            guard !CommonWords.isOrdinary(correction.replacement) else {
+            guard !Self.teachesNothing(correction) else {
                 Log.learning.info("Skipped an edit to ordinary words")
                 continue
             }

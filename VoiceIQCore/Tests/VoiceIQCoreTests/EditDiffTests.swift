@@ -24,6 +24,121 @@ final class EditDiffTests: XCTestCase {
         ])
     }
 
+    func testMisheardIndianAndTamilNamesFixedByEarAreLearned() {
+        let fixes = [
+            ("Sreeni", "Srini"), ("Karthick", "Karthik"), ("Vikinesh", "Vignesh"), ("Aravind", "Arvind"),
+            ("Sharon", "Saran"), ("Alagu", "Azhagu"), ("when cat", "Venkat"), ("Jai Shree", "Jayashree"),
+            ("Elakia", "Ilakkiya"), ("tongue gum", "Thangam"), ("shivon", "Siobhan"), ("feel lip", "Philip"),
+        ]
+        for (heard, meant) in fixes {
+            let corrections = EditDiff.edits(original: "I met \(heard) at noon.", replacement: "I met \(meant) at noon.").corrections
+            XCTAssertEqual(corrections.map(\.replacement), [meant], heard)
+            XCTAssertEqual(corrections.map(\.nameLike), [true], heard)
+        }
+    }
+
+    func testDifferentNamesAndRewordingDoNotPassAsSoundAlikes() {
+        let pairs = [
+            ("Mark", "Mike"), ("Monday", "Sunday"), ("Raj", "Priya"), ("Kumar", "Kamal"), ("Dan", "Tina"),
+            ("Kate", "Gita"), ("Paul", "Phil"), ("John", "Shane"), ("Anita", "Annette"), ("please", "Balaji"),
+            ("thanks", "Dinesh"), ("this week", "Deepak"), ("for", "Priya"), ("only", "Anil"),
+        ]
+        for (heard, meant) in pairs {
+            XCTAssertFalse(EditDiff.soundsAlike(heard, meant), meant)
+        }
+        let original = "Please call him tomorrow about it."
+        XCTAssertEqual(EditDiff.edits(original: original, replacement: "Please call Priya Monday about it.").corrections, [])
+    }
+
+    func testACapitalThatOnlyStartsASentenceIsNotAName() {
+        XCTAssertEqual(EditDiff.edits(original: "Karen is coming.", replacement: "Green is coming.").corrections, [])
+        for (original, edited) in [
+            ("He said, \"Karen is coming.\"", "He said, \"Green is coming.\""),
+            ("Note: Karen is coming.", "Note: Green is coming."),
+            ("- Karen is coming.", "- Green is coming."),
+        ] {
+            XCTAssertEqual(EditDiff.edits(original: original, replacement: edited).corrections, [], edited)
+        }
+        let continued = EditDiff.edits(original: "shivon will send it.", replacement: "Siobhan will send it.", context: "Please ask ")
+        XCTAssertEqual(continued.corrections.map(\.replacement), ["Siobhan"])
+        let listed = EditDiff.edits(original: "Sorey, I'm late.", replacement: "Sorry, I'm late.", context: "Notes\n- ")
+        XCTAssertEqual(listed.corrections.map(\.nameLike), [false])
+        let quoted = EditDiff.edits(original: "\"Wait,\" shivon said.", replacement: "\"Wait,\" Siobhan said.").corrections
+        XCTAssertEqual(quoted.map(\.replacement), ["Siobhan"])
+        let shivon = EditDiff.edits(original: "Ask shivon now.", replacement: "Ask Shivon now.")
+        let siobhan = EditDiff.edits(original: "Ask shivon now.", replacement: "Ask Siobhan now.", earlier: shivon.corrections)
+        XCTAssertEqual(EditDiff.steps(for: siobhan, after: shivon.corrections), [
+            .revise(replacing: [fix("shivon", "Shivon", 1..<2)], with: fix("shivon", "Siobhan", 1..<2)),
+        ])
+        let twoWords = EditDiff.edits(original: "Sharon raj works.", replacement: "Saran Raja works.").corrections
+        XCTAssertEqual(twoWords.map(\.nameLike), [true])
+        let sorry = EditDiff.edits(original: "Sorey, I'm late.", replacement: "Sorry, I'm late.").corrections
+        XCTAssertEqual(sorry.map(\.nameLike), [false])
+    }
+
+    func testARevisedNameStaysAName() {
+        let original = "Meet sharon in town."
+        let first = EditDiff.edits(original: original, replacement: "Meet Sarun in town.")
+        let second = EditDiff.edits(original: original, replacement: "Meet Saran at town.", earlier: first.corrections)
+        let revised = EditDiff.steps(for: second, after: first.corrections).compactMap { step -> LearnedCorrection? in
+            if case let .revise(_, correction) = step { return correction } else { return nil }
+        }
+        XCTAssertEqual(revised.map(\.replacement), ["Saran"])
+        XCTAssertEqual(revised.map(\.nameLike), [true])
+    }
+
+    func testANameOnlyBorrowsTheSoundAlikeRuleForItsOwnFix() {
+        let original = "Ask Srini for the update."
+        let learned = EditDiff.edits(original: "Ask Shrinny for the update.", replacement: original)
+        XCTAssertEqual(learned.corrections.map(\.replacement), ["Srini"])
+        let neighbour = EditDiff.edits(original: "Ask Shrinny for the update.", replacement: "Ask Srini Friday update.")
+        XCTAssertEqual(EditDiff.steps(for: neighbour, after: learned.corrections).filter {
+            if case .revise = $0 { return true } else { return false }
+        }, [])
+        let karen = "I met Karen yesterday."
+        let karan = EditDiff.edits(original: karen, replacement: "I met Karan yesterday.")
+        let green = EditDiff.edits(original: karen, replacement: "I met Green today.", earlier: karan.corrections)
+        XCTAssertEqual(EditDiff.steps(for: green, after: karan.corrections), [])
+        let grant = EditDiff.edits(original: karen, replacement: "I met Grant yesterday.", earlier: karan.corrections)
+        XCTAssertEqual(EditDiff.steps(for: grant, after: karan.corrections), [])
+    }
+
+    func testDeletingALearnedWordForgetsItButDeletingItsSentenceDoesNot() {
+        let original = "Ask whisper about it. Then go."
+        let learned = EditDiff.edits(original: original, replacement: "Ask Wispr about it. Then go.")
+        let deleted = EditDiff.edits(original: original, replacement: "Ask about it. Then go.")
+        XCTAssertEqual(EditDiff.steps(for: deleted, after: learned.corrections), [.forget(fix("whisper", "Wispr", 1..<2))])
+        XCTAssertEqual(EditDiff.history(after: deleted, earlier: learned.corrections), [])
+
+        let sentenceGone = EditDiff.edits(original: original, replacement: "Then go.")
+        XCTAssertEqual(EditDiff.steps(for: sentenceGone, after: learned.corrections), [])
+
+        let phrase = "I tried whisper flowcast yesterday."
+        let both = EditDiff.edits(original: phrase, replacement: "I tried Wispr Flow yesterday.")
+        let half = EditDiff.edits(original: phrase, replacement: "I tried flowcast yesterday.")
+        XCTAssertEqual(EditDiff.steps(for: half, after: both.corrections), [.forget(fix("whisper flowcast", "Wispr Flow", 2..<4))])
+        let secondGone = EditDiff.edits(original: phrase, replacement: "I tried Wispr yesterday.")
+        XCTAssertEqual(EditDiff.steps(for: secondGone, after: both.corrections), [.forget(fix("whisper flowcast", "Wispr Flow", 2..<4))])
+        // What is left of a phrase taken back is not learned at a later
+        // harvest, but typing the phrase back learns it again.
+        let joined = "I tried Wisprflow yesterday at the office."
+        let split = EditDiff.edits(original: joined, replacement: "I tried Wispr Flow yesterday at the office.")
+        let shortened = EditDiff.edits(original: joined, replacement: "I tried Wispr yesterday at the office.", earlier: split.corrections)
+        XCTAssertEqual(EditDiff.steps(for: shortened, after: split.corrections), [.forget(fix("Wisprflow", "Wispr Flow", 2..<3))])
+        let left = EditDiff.history(after: shortened, earlier: split.corrections)
+        XCTAssertEqual(left, [fix("Wisprflow", "Wispr", 2..<3)])
+        let laterPunctuation = EditDiff.edits(original: joined, replacement: "I tried Wispr yesterday at the office!", earlier: left)
+        XCTAssertEqual(EditDiff.steps(for: laterPunctuation, after: left), [])
+        let typedBack = EditDiff.edits(original: joined, replacement: "I tried Wispr Flow yesterday at the office.", earlier: left)
+        XCTAssertEqual(EditDiff.steps(for: typedBack, after: left), [
+            .revise(replacing: left, with: fix("Wisprflow", "Wispr Flow", 2..<3)),
+        ])
+        let firstGone = EditDiff.edits(original: phrase, replacement: "I tried Flow yesterday.")
+        XCTAssertEqual(EditDiff.steps(for: firstGone, after: both.corrections), [.forget(fix("whisper flowcast", "Wispr Flow", 2..<4))])
+        let all = EditDiff.edits(original: phrase, replacement: "")
+        XCTAssertEqual(EditDiff.steps(for: all, after: both.corrections), [])
+    }
+
     func testRewordingPunctuationDeletionsAndAdditionsTeachNothing() {
         let original = "Please call him tomorrow about the invoice, it is the second reminder."
         let edited = "Please ping Priya Monday about the invoice. it is the reminder we discussed."
