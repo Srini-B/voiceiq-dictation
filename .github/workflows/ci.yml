@@ -27,7 +27,10 @@ jobs:
       - name: Generate project
         run: xcodegen generate
       - name: Build (unsigned)
+        # pipefail: without it the job takes tail's exit status, and a
+        # BUILD FAILED passes (found 2026-11-26).
         run: |
+          set -o pipefail
           xcodebuild build \
             -project VoiceIQ.xcodeproj \
             -scheme VoiceIQ \
@@ -45,12 +48,16 @@ jobs:
         run: brew install xcodegen
       - name: Generate project
         run: xcodegen generate
-      - name: Build app, keyboard and Live Activity (Simulator, unsigned)
+      # The device build, arm64 only, as TestFlight ships it. The generic
+      # Simulator destination also builds x86_64, which a vendored
+      # framework may not carry, so it tested something that never ships.
+      - name: Build app, keyboard and Live Activity (iPhone, unsigned)
         run: |
+          set -o pipefail
           xcodebuild build \
             -project VoiceIQ.xcodeproj \
             -scheme VoiceIQiOS \
             -configuration Debug \
-            -destination 'generic/platform=iOS Simulator' \
-            CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO DEVELOPMENT_TEAM= \
+            -destination 'generic/platform=iOS' \
+            CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO DEVELOPMENT_TEAM= \
             | tail -20
