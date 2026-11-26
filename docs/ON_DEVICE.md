@@ -236,7 +236,7 @@ styles, MIT):
      capitals keep theirs), English "i", no comma after an opening "yeah" or
      "ok", and no final full stop on a message of one line and up to three
      sentences.
-   - **Lists**: spoken "bullet" and line breaks make lines; otherwise several
+   - **Lists**: spoken "bullet point" or "next bullet" and line breaks make lines; otherwise several
      sentences become a bulleted list, and three or more short items after a
      colon too. Opening "so", "and then" and "first" go, and no line ends
      with a full stop.

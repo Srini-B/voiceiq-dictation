@@ -2261,6 +2261,22 @@
       "said": "the password is quote red new line can you help new line blue unquote",
       "heard": "The password is \"red\ncan you help\nblue\".",
       "written": "The password is \"red\ncan you help\nblue\"."
+    },
+    {
+      "id": "kept-bullet-shaped",
+      "check": "kept as said",
+      "said": "bullet trains have bullet-shaped noses",
+      "heard": "Bullet trains have bullet-shaped noses.",
+      "written": "Bullet trains have bullet-shaped noses",
+      "style": "lists"
+    },
+    {
+      "id": "kept-quoted-interjection-comma",
+      "check": "kept as said",
+      "said": "the password is quote hello. yeah, fine. unquote",
+      "heard": "The password is \"Hello. Yeah, fine.\".",
+      "written": "the password is \"Hello. Yeah, fine.\"",
+      "style": "messages"
     }
   ]
 }

@@ -196,10 +196,18 @@ public enum Tidy {
 
     /// "Yeah, sounds good. Ok, see you." → "Yeah sounds good. Ok see you."
     private static func droppingInterjectionCommas(_ text: String) -> String {
+        // Quoted text is literal: The password is "Hello. Yeah, fine.".
+        let quoted = TidyText.quoteMask(Array(text))
         var words = text.components(separatedBy: " ")
         var atStart = true
+        var offset = 0
         for index in words.indices {
             let word = words[index]
+            defer { offset += word.count + 1 }
+            if !word.isEmpty, quoted[offset + word.count - 1] || quoted[offset] {
+                atStart = false
+                continue
+            }
             if atStart, word.hasSuffix(","), index + 1 < words.count, interjections.contains(String(word.dropLast()).lowercased()) {
                 words[index].removeLast()
             }
@@ -228,12 +236,11 @@ public enum Tidy {
 
     private static func notes(_ text: String, english: Bool) -> String {
         guard !text.isEmpty else { return "" }
-        let bareBullets = saysBareBullets(text)
         var working = ""
         // Quoted words are literal: Type "red bullet point blue".
         for (segment, quoted) in TidyText.quoteSegments(text) {
             // "bullet" is an English command; "Bullet Journal" in German is a name.
-            working += quoted || !english ? segment : bulletLines(segment, bareBullets: bareBullets)
+            working += quoted || !english ? segment : bulletLines(segment)
         }
         var lines = working.components(separatedBy: "\n")
         // Without spoken markers, one dictation of several things becomes a list.
@@ -322,30 +329,17 @@ public enum Tidy {
         return sentences.isEmpty ? [line] : sentences
     }
 
-    /// Spoken "bullet point" and "next bullet" start list items, and so does
-    /// a bare "bullet" in a dictation that opens with one and says it again.
-    private static func bulletLines(_ text: String, bareBullets: Bool) -> String {
-        // A standalone word, never part of an address ("bullet@gmail.com"). In a
-        // dictation that opens with one, any later one starts an item ("bullet ship it
-        // bullet tag it"); otherwise only after a mark or line break, never after a
-        // word ("a bullet point summary", "Use bullet point notation", "Use next
-        // bullet to move down").
-        let opens = text.range(of: #"^\s*(?:bullet|next bullet)\b"#, options: [.regularExpression, .caseInsensitive]) != nil
+    /// Spoken "bullet point" and "next bullet" start list items. A bare
+    /// "bullet" never does: "Bullet trains have bullet-shaped noses".
+    private static func bulletLines(_ text: String) -> String {
+        // A standalone phrase, never part of an address ("bullet@gmail.com"). In a
+        // dictation that opens with one, any later one starts an item ("bullet point
+        // milk bullet point eggs"); otherwise only after a mark or line break, never
+        // after a word ("a bullet point summary", "Use next bullet to move down").
+        let opens = text.range(of: #"^\s*(?:bullet point|next bullet)\b"#, options: [.regularExpression, .caseInsensitive]) != nil
         let before = opens ? #"(?:^|\s+)"# : #"(?:^|(?<=[.,;:!?\n])\s*)"#
-        var patterns = [before + #"(?:bullet point|next bullet)(?![\w@.-]*@)(?=[\s:,]|-\s|$)[:,-]?\s*"#]
-        // "Bullet trains are fast" opens with the word, once.
-        if bareBullets { patterns.append(#"(?:^|\s+)bullet(?![\w@.-]*@)(?=[\s:,]|-\s|$)[:,-]?\s*"#) }
-        var working = text
-        for pattern in patterns {
-            working = working.replacingOccurrences(of: pattern, with: "\n- ", options: [.regularExpression, .caseInsensitive])
-        }
-        return working
-    }
-
-    private static func saysBareBullets(_ text: String) -> Bool {
-        let opens = text.range(of: #"^\s*bullet\b"#, options: [.regularExpression, .caseInsensitive]) != nil
-        let count = text.ranges(of: #/(?i)\bbullet\b(?! point)/#).count
-        return opens && count >= 2
+        let pattern = before + #"(?:bullet point|next bullet)(?![\w@.-]*@)(?=[\s:,]|-\s|$)[:,-]?\s*"#
+        return text.replacingOccurrences(of: pattern, with: "\n- ", options: [.regularExpression, .caseInsensitive])
     }
 
     /// "Shopping list: eggs, milk and bread." → ("Shopping list", ["eggs",
