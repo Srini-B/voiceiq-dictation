@@ -109,8 +109,8 @@ final class TypingBridge: ObservableObject {
 
     private func applySuggestionsHidden() {
         guard let keyboard else { return }
-        // The emoji panel keeps the strip hidden itself while it is up.
-        let hidden = suggestionsHidden || keyboard.emojiPanel != nil
+        // The emoji panel and a two-thumb selection keep the strip hidden themselves while up.
+        let hidden = suggestionsHidden || keyboard.emojiPanel != nil || keyboard.engine.selectionPresentation != nil
         if keyboard.stripView.isHidden != hidden { keyboard.stripView.isHidden = hidden }
     }
 
