@@ -116,7 +116,9 @@ def attribution(ref, hyp, m):
         near = [i for i, h in enumerate(hw) if i not in used and abs(h[0] - t) <= 1.5 and h[1] == word]
         if not near:
             continue
-        i = min(near, key=lambda i: abs(hw[i][0] - t))
+        # Equal distances prefer the occurrence given to the same person, so
+        # overlapping speech scores the same whatever the segment order.
+        i = min(near, key=lambda i: (abs(hw[i][0] - t), m.get(hw[i][2]) != spk))
         used.add(i)
         if m.get(hw[i][2]) == spk:
             right += 1

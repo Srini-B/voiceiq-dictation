@@ -80,6 +80,8 @@ def main() -> None:
                     help="experiment: on-screen text (as OCR would read it) in the prompt instead of JPEGs")
     ap.add_argument("--promptdump", default=str(HERE.parent / "promptdump" / "promptdump"))
     args = ap.parse_args()
+    if args.screen_text:
+        args.screenshots = 0
     spec = json.loads((HERE / "cases.json").read_text())
     screen = (ASSETS / "screen.jpg").read_bytes()
     jobs = [(r, c, prompt_for(c, spec, args.promptdump, args.screenshots)) for r in range(args.rounds) for c in spec["cases"]]
