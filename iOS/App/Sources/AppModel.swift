@@ -361,6 +361,8 @@ final class AppModel: ObservableObject {
             setup.refresh()
             banner = nil
             NotificationCenter.default.post(name: .voiceIQShowKeyboardSetup, object: nil)
+        case .settings:
+            if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) }
         case nil:
             break
         }

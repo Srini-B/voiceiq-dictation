@@ -24,9 +24,14 @@ public enum BridgeURL {
     /// Opens the app's keyboard setup screen (Full Access missing).
     public static let setup = URL(string: "voiceiq://keyboard/setup")!
 
+    /// Opens the app's page in iOS Settings (Paste from Other Apps, for the keyboard's
+    /// Paste); a keyboard can't open it itself, since it would open the host app's page.
+    public static let settings = URL(string: "voiceiq://keyboard/settings")!
+
     public enum Route: Equatable {
         case start(commandID: UUID, host: String?)
         case setup
+        case settings
     }
 
     public static func parse(_ url: URL) -> Route? {
@@ -40,6 +45,8 @@ public enum BridgeURL {
             return .start(commandID: id, host: items.first(where: { $0.name == "host" })?.value)
         case "/setup":
             return .setup
+        case "/settings":
+            return .settings
         default:
             return nil
         }

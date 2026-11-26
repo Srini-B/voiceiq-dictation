@@ -94,3 +94,13 @@ and the number row switched on from the app. Memory 31 to 37 MB, peak 44 MB.
 ## Rollback
 
 Revert the PR. The 0.7.12 keyboard comes back unchanged.
+
+## Release fixes from the Gemini 4 Neon review (main 884208e)
+
+Three keyboard findings blocked the 8:00 PM IST release; fixed on `keyboard-fullaccess-fixes`.
+
+- **4, Full Access.** `KeyboardViewModel.hasFullAccess` was hard-coded true, so Hex's clipboard offer and the selection strip's Copy and Paste ran without Full Access. It now follows `controller.hasFullAccess`. Hex's own Full Access hint can't appear, because only the hidden Hex key raises it. The Allow Paste notice's Settings chip opened VoiceiQ's home; it now opens a new `voiceiq://keyboard/settings` route, which the app turns into its page in iOS Settings. The keyboard can't open that page itself: its `openURL` goes through the host app, whose page it would open.
+- **5, strip behind VoiceiQ's row.** `setSuggestionsHidden` didn't store the flag, so a call before the keyboard existed was lost and Hex's `closeEmojiPanel` and selection end showed the strip again behind the recording strip or Dictionary offer. The flag is stored and reapplied whenever Hex refreshes its strip (patch 0006).
+- **7, Add to vocabulary at 100 words.** `CustomVocabularySettings.sanitize` kept the first 100 terms, so the word just added was cut. It now keeps the newest 100, and a repeated term keeps its newest place.
+
+Verified on a Mac satellite: arm64 Simulator build, KeyboardTests 6/6, a scratch run of `sanitize` (a new word over the cap is kept and is the only one requested), and in the SE Simulator the recording strip after opening and closing the emoji panel mid-recording, with no Hex words behind it.
