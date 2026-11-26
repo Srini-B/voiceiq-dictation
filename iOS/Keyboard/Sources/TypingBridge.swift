@@ -7,6 +7,16 @@ import VoiceIQBridge
 @MainActor
 final class TypingBridge: ObservableObject {
     @Published var compact = false
+    /// Hex's suggestion row in the keyboard (VoiceiQ's buttons sit at its ends), the
+    /// landscape safe-area inset Hex keeps on both sides, and whether the emoji panel is up.
+    @Published private(set) var stripRow: CGRect = .zero
+    @Published private(set) var sideInset: CGFloat = 0
+    @Published private(set) var emojiOpen = false
+
+    /// Room at the suggestion row's ends for cursor control and Paste last (leading) and
+    /// Dictate (trailing); `KeyboardView` lays its buttons out in exactly this room.
+    static let leadingEnd: CGFloat = 86
+    static let trailingEnd: CGFloat = 56
 
     weak var controller: UIInputViewController?
     weak var editor: EditController?
@@ -18,7 +28,7 @@ final class TypingBridge: ObservableObject {
 
     var proxy: UITextDocumentProxy? { controller?.textDocumentProxy }
 
-    /// Height of Hex's suggestion strip + keys (and emoji search lift when active).
+    /// The whole keyboard's height: Hex's suggestion row and keys (and the emoji search lift).
     var keysHeight: CGFloat {
         keyboard?.preferredHeight ?? KeyboardLayout.height(
             for: compact ? .landscape : .portrait,
@@ -28,6 +38,7 @@ final class TypingBridge: ObservableObject {
 
     func makeKeyboard() -> FullKeyboardView {
         if let keyboard { return keyboard }
+        KeyboardLayout.reservedStripEnds = (Self.leadingEnd, Self.trailingEnd)
         let view = FullKeyboardView(model: dictation, target: WeakTextTarget(self))
         view.hostController = controller
         view.languageOverride = .english
@@ -40,6 +51,13 @@ final class TypingBridge: ObservableObject {
         view.onPreferredHeightChange = { [weak self] in self?.onPreferredHeightChange?() }
         view.onTextEdit = { [weak self] in self?.editor?.syncSelection() }
         view.onUndoDictation = { [weak self] in self?.editor?.resetUndo() }
+        view.onStripRowLayout = { [weak self, weak view] row, emojiOpen in
+            guard let self else { return }
+            let inset = view?.engine.horizontalInset ?? 0
+            if self.stripRow != row { self.stripRow = row }
+            if self.sideInset != inset { self.sideInset = inset }
+            if self.emojiOpen != emojiOpen { self.emojiOpen = emojiOpen }
+        }
         self.keyboard = view
         view.prepareForField()
         applyLexicon()
@@ -74,6 +92,12 @@ final class TypingBridge: ObservableObject {
     func loadLexicon(_ lexicon: UILexicon) {
         lexiconEntries = lexicon.entries.map { ($0.userInput, $0.documentText) }
         applyLexicon()
+    }
+
+    /// Hides Hex's suggestions while VoiceiQ shows something else in their row: the
+    /// recording strip, a notice, the Dictionary offer or the edit panel.
+    func setSuggestionsHidden(_ hidden: Bool) {
+        keyboard?.stripView.isHidden = hidden
     }
 
     func handleMemoryWarning() {

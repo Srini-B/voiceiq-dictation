@@ -52,10 +52,43 @@ to type is its own MIT code, not FUTO's.
   123, cursor control and recording; peak 44 MB with the emoji panel and a
   slide-to-type word. Simulator figures; not measured on a device.
 
+## Later the same day: one row, settings, decisions
+
+cyron asked for no extra height: the shortcuts moved into Hex's suggestion
+row (cursor control and Paste last on the left, Dictate on the right,
+suggestions between, truncated in the middle), and the recording strip takes
+that row while dictating. `0003-voiceiq-strip-row.patch` reserves the ends
+and middle-truncates; the keyboard is now exactly Hex's height. A rotation
+left the old height behind (Hex learns its orientation after the
+controller's trait change), so the controller rechecks it after layout.
+
+He then gave full autonomy on two open calls:
+
+- **Hex's code for other languages stays compiled.** It is unreachable:
+  `languageOverride` pins English, only English data ships, and the
+  language-switching paths return early. Cutting it means patching about 16
+  Hex files (`KeyboardLanguage`, the autocorrect engine, accent picker, smart
+  punctuation, shift, flicks, swipe) and redoing those patches on every Hex
+  update, for no change a user can see. The binary cost is code only (the
+  appex is 13 MB, 3.6 MB of it the English model).
+- **A Typing card in Keyboard & Permissions**, in VoiceiQ's card style:
+  Auto-correction, Auto-capitalization, Slide to type, Key haptics, Number
+  row, Learn how I type, and Erase what it learned. These are the switches a
+  user reaches for; Hex's key colours and Labs experiments stay at Hex's
+  defaults so the keyboard keeps VoiceiQ's look. The card writes Hex's own
+  App Group keys, so no Hex file changes.
+
+Keeping dictation going while cyron dismisses the keyboard and switches
+apps is a separate PR (app-side session work), not this one.
+
+Evidence: `KeyboardTests` 6/6; re-sync of Hex at `012bdbbe` with the three
+patches is byte-identical to the vendored tree; screenshots on iPhone 17 Pro
+and SE, light and dark (letters, long word, 123, cursor control,
+recording), SE landscape with the globe key and after rotating both ways,
+and the number row switched on from the app. Memory 31 to 37 MB, peak 44 MB.
+
 ## Not done
 
-- No screen in the app for Hex's keyboard settings (haptics, number row,
-  key colours, Learn how I type); Hex's defaults apply.
 - Not tried on a device or a signed build.
 
 ## Rollback

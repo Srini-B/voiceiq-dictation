@@ -2,9 +2,10 @@ import SwiftUI
 import UIKit
 import VoiceIQBridge
 
-/// Top shortcut bar (cursor control, Paste last, Dictionary offer, Dictate hand-off
-/// or VoiceiQ's LevelGlow recording strip) stacked above Hex's full QWERTY keyboard
-/// (or VoiceiQ's cursor-control EditPanel when toggled open).
+/// Hex's QWERTY keyboard with VoiceiQ's shortcuts in its suggestion row: cursor
+/// control and Paste last at the left end, Dictate (handing off to the app) at the
+/// right, suggestions between them. While a dictation runs, VoiceiQ's recording
+/// strip takes the whole row; cursor control swaps the keys for the edit panel.
 struct KeyboardView: View {
     @ObservedObject var model: KeyboardModel
     @ObservedObject var offer: DictionaryOffer
@@ -15,8 +16,6 @@ struct KeyboardView: View {
 
     private var compact: Bool { verticalSizeClass == .compact }
 
-    static func topBarHeight(compact: Bool) -> CGFloat { compact ? 36 : 42 }
-
     /// Recording, or writing the text while the app is running.
     private var isLive: Bool {
         model.hasFullAccess && (model.phase == .recording || (model.phase == .processing && !model.needsAppToFinish))
@@ -24,96 +23,114 @@ struct KeyboardView: View {
 
     private var showingEdit: Bool { editOpen && !isLive }
 
-    var body: some View {
-        VStack(spacing: 0) {
-            topBar
-                .frame(height: Self.topBarHeight(compact: compact))
-            ZStack {
-                HexKeyboardRepresentable(bridge: typing)
-                    .opacity(showingEdit ? 0 : 1)
-                    .allowsHitTesting(!showingEdit)
-                    .accessibilityHidden(showingEdit)
+    private var showsOffer: Bool {
+        offer.feedback != nil || offer.offer(selection: editor.selection) != nil
+    }
 
-                if showingEdit {
-                    editSurface
-                }
+    /// VoiceiQ shows something of its own where Hex's suggestions are.
+    private var coversSuggestions: Bool {
+        isLive || showingEdit || model.needsAppToFinish || model.notice != nil || showsOffer
+    }
+
+    var body: some View {
+        let row = typing.stripRow
+        ZStack(alignment: .topLeading) {
+            HexKeyboardRepresentable(bridge: typing)
+                .opacity(showingEdit ? 0 : 1)
+                .allowsHitTesting(!showingEdit)
+                .accessibilityHidden(showingEdit)
+
+            if showingEdit {
+                editSurface
+                    .padding(.top, row.maxY)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+            if row.height > 0, !typing.emojiOpen {
+                suggestionRow
+                    .padding(.horizontal, typing.sideInset)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: row.height)
+                    .padding(.top, row.minY)
+            }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .onChange(of: model.phase) { _, new in
-            if new == .recording || new == .processing { editOpen = false }
+            if new == .starting || new == .recording || new == .processing { editOpen = false }
+        }
+        .onChange(of: coversSuggestions, initial: true) { _, covered in
+            typing.setSuggestionsHidden(covered)
         }
     }
 
-    @ViewBuilder private var topBar: some View {
+    @ViewBuilder private var suggestionRow: some View {
         if isLive {
             RecordingStrip(model: model, compact: compact)
-                .frame(height: compact ? 32 : 36)
+                .frame(height: buttonHeight)
                 .background(Capsule().fill(Color(.secondarySystemFill)))
                 .clipShape(Capsule())
-                .padding(.horizontal, 8)
-                .padding(.vertical, compact ? 2 : 3)
+                .padding(.horizontal, 6)
+                .frame(maxHeight: .infinity)
         } else {
-            shortcutBar
-                .padding(.horizontal, 8)
-                .padding(.vertical, compact ? 2 : 3)
+            HStack(spacing: 0) {
+                HStack(spacing: 6) {
+                    ShortcutIconButton(
+                        systemImage: showingEdit ? "keyboard" : "character.cursor.ibeam",
+                        label: showingEdit ? "Keyboard" : "Cursor control",
+                        active: showingEdit,
+                        height: buttonHeight
+                    ) {
+                        editOpen.toggle()
+                    }
+                    ShortcutIconButton(
+                        systemImage: "doc.on.clipboard",
+                        label: "Paste last dictation",
+                        enabled: model.lastText != nil,
+                        height: buttonHeight
+                    ) {
+                        model.pasteLast()
+                    }
+                }
+                .padding(.leading, 6)
+                .frame(width: TypingBridge.leadingEnd, alignment: .leading)
+
+                // Clear, so touches between the ends reach Hex's suggestions underneath.
+                ZStack { Color.clear; centerSlot }
+                    .frame(maxWidth: .infinity)
+
+                DictateButton(
+                    phase: model.phase,
+                    waiting: model.waitingForApp,
+                    hasFullAccess: model.hasFullAccess,
+                    height: buttonHeight,
+                    action: model.micTapped
+                )
+                .padding(.trailing, 6)
+                .frame(width: TypingBridge.trailingEnd, alignment: .trailing)
+            }
         }
     }
 
-    private var shortcutBar: some View {
-        HStack(spacing: 6) {
-            ShortcutIconButton(
-                systemImage: showingEdit ? "keyboard" : "character.cursor.ibeam",
-                label: showingEdit ? "Keyboard" : "Cursor control",
-                active: showingEdit,
-                compact: compact
-            ) {
-                editOpen.toggle()
-            }
-
-            ShortcutIconButton(
-                systemImage: "doc.on.clipboard",
-                label: "Paste last",
-                enabled: model.lastText != nil,
-                compact: compact
-            ) {
-                model.pasteLast()
-            }
-
-            centerSlot
-                .frame(maxWidth: .infinity)
-
-            DictatePillButton(
-                phase: model.phase,
-                waiting: model.waitingForApp,
-                needsAppToFinish: model.needsAppToFinish,
-                hasFullAccess: model.hasFullAccess,
-                compact: compact,
-                action: model.micTapped
-            )
-        }
+    /// As tall as Hex's suggestion capsule, so the row reads as one bar.
+    private var buttonHeight: CGFloat {
+        min(compact ? 30 : 34, max(24, typing.stripRow.height - 8))
     }
 
     @ViewBuilder private var centerSlot: some View {
-        if !model.hasFullAccess {
-            Button("Allow Full Access") { model.micTapped() }
-                .font(.system(size: 13, weight: .semibold))
+        if model.needsAppToFinish {
+            Button("Open VoiceiQ to finish", action: model.micTapped)
+                .font(.footnote.weight(.semibold))
                 .foregroundStyle(KeyboardPalette.accent)
                 .lineLimit(1)
-                .padding(.horizontal, 10)
-                .frame(height: compact ? 28 : 32)
-                .background(Capsule().fill(KeyboardPalette.accent.opacity(0.14)))
                 .buttonStyle(.plain)
         } else if let notice = model.notice {
             Text(notice)
                 .font(.caption.weight(.medium))
                 .foregroundStyle(KeyboardPalette.recording)
                 .lineLimit(1)
-                .truncationMode(.tail)
-        } else if offer.feedback != nil || offer.offer(selection: editor.selection) != nil {
+                .truncationMode(.middle)
+                .padding(.horizontal, 6)
+        } else if showsOffer, !showingEdit {
             DictionaryOfferChip(offer: offer, selection: editor.selection)
-        } else {
-            Color.clear.frame(height: 1)
         }
     }
 
@@ -150,17 +167,15 @@ private struct ShortcutIconButton: View {
     let label: String
     var active = false
     var enabled = true
-    let compact: Bool
+    let height: CGFloat
     let action: () -> Void
-
-    private var height: CGFloat { compact ? 30 : 34 }
 
     var body: some View {
         Button(action: action) {
             Image(systemName: systemImage)
-                .font(.system(size: compact ? 14 : 15, weight: .medium))
+                .font(.system(size: 15, weight: .medium))
                 .foregroundStyle(active ? Color.white : Color.primary)
-                .frame(width: compact ? 34 : 38, height: height)
+                .frame(width: 36, height: height)
                 .background(
                     Capsule().fill(active ? KeyboardPalette.accent : Color(.secondarySystemFill))
                 )
@@ -172,55 +187,40 @@ private struct ShortcutIconButton: View {
     }
 }
 
-private struct DictatePillButton: View {
+/// VoiceiQ's blue mic: opens the app to dictate (or its setup without Full Access);
+/// a spinner while the app starts or writes the text.
+private struct DictateButton: View {
     let phase: SessionSnapshot.Phase
     let waiting: Bool
-    let needsAppToFinish: Bool
     let hasFullAccess: Bool
-    let compact: Bool
+    let height: CGFloat
     let action: () -> Void
 
-    private var height: CGFloat { compact ? 30 : 34 }
-
-    private var title: String {
-        if !hasFullAccess { return "Dictate" }
-        if waiting, phase != .recording { return "Starting…" }
-        if phase == .processing { return needsAppToFinish ? "Open VoiceiQ" : "Writing…" }
-        return "Dictate"
-    }
-
-    private var showsSpinner: Bool {
-        hasFullAccess && (phase == .processing || (waiting && phase != .recording))
-    }
+    private var writing: Bool { hasFullAccess && phase == .processing }
+    private var starting: Bool { hasFullAccess && (phase == .starting || (waiting && phase != .recording)) }
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 5) {
-                if showsSpinner {
+            Group {
+                if writing || starting {
                     ProgressView()
-                        .controlSize(.mini)
-                        .tint(phase == .processing ? KeyboardPalette.accent : .white)
+                        .controlSize(.small)
+                        .tint(writing ? KeyboardPalette.accent : .white)
                 } else {
                     Image(systemName: "mic.fill")
-                        .font(.system(size: compact ? 12 : 13, weight: .semibold))
+                        .font(.system(size: 16, weight: .semibold))
                 }
-                Text(title)
-                    .font(.system(size: compact ? 13 : 14, weight: .semibold))
-                    .lineLimit(1)
             }
-            .foregroundStyle(phase == .processing ? Color.primary : Color.white)
-            .padding(.horizontal, compact ? 10 : 12)
-            .frame(height: height)
-            .background(
-                Capsule().fill(phase == .processing ? Color(.secondarySystemFill) : KeyboardPalette.accent)
-            )
+            .foregroundStyle(.white)
+            .frame(width: 46, height: height)
+            .background(Capsule().fill(writing ? Color(.secondarySystemFill) : KeyboardPalette.accent))
         }
         .buttonStyle(MicBarButtonStyle())
-        .accessibilityLabel(title)
+        .accessibilityLabel(writing ? "Writing" : starting ? "Starting" : hasFullAccess ? "Dictate" : "Allow Full Access to dictate")
     }
 }
 
-/// Stands in for the top shortcut bar while a dictation runs: Cancel, elapsed
+/// Stands in for the suggestion row while a dictation runs: Cancel, elapsed
 /// time over VoiceiQ's LevelGlow waveform that rises with the voice, Done.
 /// While the text is written: a spinner and "Writing…".
 private struct RecordingStrip: View {

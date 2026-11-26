@@ -792,8 +792,16 @@ nonisolated struct KeyboardLayout: Equatable, Sendable {
     var totalHeight: CGFloat { metrics.totalHeight }
 
     /// Apple's predictive bar here: the strip with the Hex key's room (`stripFrame` leaves it out).
+    /// VoiceiQ: room its shortcut buttons take at the bar's two ends (cursor control and
+    /// Paste last on the left, Dictate on the right), set once by the keyboard's host.
+    nonisolated(unsafe) static var reservedStripEnds: (leading: CGFloat, trailing: CGFloat) = (0, 0)
+
     var stripBarFrame: CGRect {
-        var full = CGRect(x: horizontalInset, y: metrics.stripTop, width: width - 2 * horizontalInset, height: metrics.stripHeight)
+        let ends = Self.reservedStripEnds
+        var full = CGRect(
+            x: horizontalInset + ends.leading, y: metrics.stripTop,
+            width: width - 2 * horizontalInset - ends.leading - ends.trailing, height: metrics.stripHeight
+        )
         if let split {
             if hexOnLeading {
                 // Over the left half with the Hex key, for the left thumb, mirroring the right.

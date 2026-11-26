@@ -889,7 +889,8 @@ final class KeyboardStripView: UIView {
                 let gx = glyph.fixedX ?? (x + glyph.offset)
                 if let box = glyph.box {
                     let style = NSMutableParagraphStyle()
-                    style.lineBreakMode = .byTruncatingTail
+                    // VoiceiQ: a long word keeps its start and end ("extraord…ily").
+                    style.lineBreakMode = .byTruncatingMiddle
                     style.alignment = .center
                     var boxed = attributes
                     boxed[.paragraphStyle] = style

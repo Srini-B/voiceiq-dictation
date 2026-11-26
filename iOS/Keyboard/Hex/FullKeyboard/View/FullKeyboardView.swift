@@ -30,6 +30,9 @@ final class FullKeyboardView: UIView {
     var onTextEdit: (() -> Void)?
     /// Undo dictation took the last dictation back.
     var onUndoDictation: (() -> Void)?
+    /// VoiceiQ: where the suggestion row is, in this view, and whether the emoji panel covers
+    /// it, after each layout, so the host can place its shortcut buttons at the row's ends.
+    var onStripRowLayout: ((CGRect, Bool) -> Void)?
     /// The return key is about to type its line break.
     var onReturnKey: (() -> Void)?
 
@@ -775,6 +778,7 @@ final class FullKeyboardView: UIView {
         callout.frame = content
         accentCallout.frame = content
         stripView.frame = layout.stripFrame.offsetBy(dx: 0, dy: lift)
+        onStripRowLayout?(CGRect(x: 0, y: lift + layout.metrics.stripTop, width: bounds.width, height: layout.metrics.stripHeight), emojiPanel != nil)
         selectionStrip.frame = stripView.frame
         stripView.slotFrames = layout.stripSlotFrames.map { $0.offsetBy(dx: -layout.stripFrame.minX, dy: -layout.stripFrame.minY) }
         stripView.pillInset = layout.metrics.stripInset

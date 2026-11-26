@@ -238,6 +238,10 @@ struct KeyboardSetupView: View {
                     GroupLabel(text: "Try it")
                     TryItCard()
                 }
+                VStack(alignment: .leading, spacing: Theme.Spacing.m) {
+                    GroupLabel(text: "Typing")
+                    TypingSettingsCard()
+                }
             }
             .padding(.horizontal, Theme.Spacing.page)
             .padding(.vertical, Theme.Spacing.l)

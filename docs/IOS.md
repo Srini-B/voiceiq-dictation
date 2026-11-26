@@ -390,14 +390,18 @@ the shortcut row, the recording strip, the edit panel and the dictation
 hand-off are VoiceiQ's. The keyboard never records: Dictate hands off to the
 app as before.
 
-**Layout** (`KeyboardView`, top to bottom):
+**Layout** (`KeyboardView`). The keyboard is exactly as tall as Hex's own:
+VoiceiQ adds no row.
 
-- The shortcut row (42 pt, 36 pt in landscape on an iPhone): cursor control
-  (opens the edit panel in place of the keys; a keyboard icon closes it),
-  Paste last, a middle slot and the Dictate pill. The middle slot shows
-  "Allow Full Access" without Full Access (opens the app's setup), else a
-  notice from the app, else the Dictionary offer. While a dictation runs, the
-  recording strip takes the row's place until the text is delivered.
+- The suggestion row holds VoiceiQ's shortcuts at its ends: cursor control
+  and Paste last dictation on the left, the blue Dictate mic on the right
+  (without Full Access it opens the app's setup). Hex's three suggestions sit
+  between them (`KeyboardLayout.reservedStripEnds`, `0003-voiceiq-strip-row.patch`);
+  a long suggestion keeps its start and end ("Inco…sible"). In the middle,
+  VoiceiQ's own items replace the suggestions while they show: "Open VoiceiQ
+  to finish", a notice from the app, or the Dictionary offer. While a
+  dictation runs, the recording strip (Cancel, time over the LevelGlow
+  waveform, Done) takes the whole row until the text is delivered.
 - Hex's keyboard (`FullKeyboardView`, hosted by `TypingBridge`): the
   suggestion bar (predictions and the pending auto-correction), letters,
   123 and #+= layers, emoji with search, slide to type, the space-bar
@@ -475,7 +479,7 @@ cursor moves, because it replays at the cursor. A keyboard cannot select text
 or reach the app's own undo.
 
 **Add to Dictionary.** With Full Access, selecting text in the field shows
-"Add “word” to Dictionary" in the shortcut row. The keyboard rereads the
+"Add “word” to Dictionary" in the suggestion row. The keyboard rereads the
 selection after each of its own edits (`EditController.selection`), because
 iOS does not report a keyboard's own edits to it. Text selected in another app
 or elsewhere on screen is not visible to a keyboard: copy it, and the next
@@ -491,15 +495,19 @@ background.
 
 **Memory.** The keyboard maps Hex's English typing model (`en.hextm`, 3.6 MB)
 and loads the English emoji index when the emoji panel opens. Measured in the
-iOS 27.2 Simulator (Debug, iPhone 17 Pro, 2026-11-26): 35 MB after typing,
-the 123 layer, cursor control and the recording strip, peaking at 44 MB with
-the emoji panel and a slide-to-type word. iOS ends keyboards near 60 to 70 MB.
+iOS 27.2 Simulator (Debug, 2026-11-26): 31 to 37 MB after typing, the 123
+layer, cursor control, rotation and the recording strip on the iPhone SE and
+17 Pro, peaking at 44 MB with the emoji panel and a slide-to-type word. iOS ends keyboards near 60 to 70 MB.
 
 **Learning.** Hex's "Learn how I type" is on, as in Hex: per-key tap offsets
 (`AdaptiveTouch`) and word-level fixes (`TypingJournal`) stay on the iPhone,
 in the App Group and the keyboard's own container. Nothing is sent anywhere.
-The app has no screen for Hex's keyboard settings yet, so Hex's defaults
-apply.
+Settings › Keyboard & Permissions › Typing turns it off and erases what it
+learned (`TypingSettingsCard`), beside Auto-correction, Auto-capitalization,
+Slide to type, Key haptics and Number row. The card writes Hex's own keys in
+the App Group, which the keyboard reads each time it appears; Hex's other
+switches (key colours, emoji shortcodes and its Labs experiments) keep Hex's
+defaults.
 
 **Tests.** `KeyboardTests` (in the `VoiceIQiOS` scheme) compiles
 `EditController.swift` on its own against a fake text field: undo and redo of
@@ -607,7 +615,7 @@ Key-value storage holds 1 MB; a dictionary over 900 KB stays on the device and
 the session log says so.
 
 **Adding from the keyboard.** When text is selected in the field the keyboard
-is typing into, the keyboard shows "Add “…” to Dictionary" in the shortcut row
+is typing into, the keyboard shows "Add “…” to Dictionary" in the suggestion row
 (or "“…” is in your Dictionary"). A keyboard can see only its own field, so
 text selected anywhere else (a web page, a message) comes in through the
 clipboard: after a copy, the next time the keyboard opens it shows "Add copied

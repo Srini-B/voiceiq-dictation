@@ -69,7 +69,7 @@ final class KeyboardViewController: UIInputViewController {
             hosting.view.topAnchor.constraint(equalTo: view.topAnchor),
             hosting.view.bottomAnchor.constraint(equalTo: view.bottomAnchor),
         ])
-        let height = view.heightAnchor.constraint(equalToConstant: preferredTotalHeight)
+        let height = view.heightAnchor.constraint(equalToConstant: typing.keysHeight)
         height.priority = .defaultHigh
         height.isActive = true
         self.height = height
@@ -108,15 +108,18 @@ final class KeyboardViewController: UIInputViewController {
         updateHeight()
     }
 
-    private var preferredTotalHeight: CGFloat {
-        let compact = traitCollection.verticalSizeClass == .compact
-        return KeyboardView.topBarHeight(compact: compact) + typing.keysHeight
-    }
-
     private func updateHeight() {
         let compact = traitCollection.verticalSizeClass == .compact
         if typing.compact != compact { typing.compact = compact }
-        height?.constant = KeyboardView.topBarHeight(compact: compact) + typing.keysHeight
+        let keys = typing.keysHeight
+        if height?.constant != keys { height?.constant = keys }
+    }
+
+    /// Hex's keyboard learns its new orientation from its own traits, after this
+    /// controller's trait change, so the height is checked again once it has laid out.
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        updateHeight()
     }
 
     override func didReceiveMemoryWarning() {
