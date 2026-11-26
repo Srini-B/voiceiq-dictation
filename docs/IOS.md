@@ -39,8 +39,8 @@ Keyboard ──command + Darwin ping──▶ App Group ──▶ App (backgroun
 `VoiceIQBridge` defines the protocol:
 
 - `KeyboardCommand` (`start`, `stop`, `cancel`), written only by the keyboard.
-- `SessionSnapshot` (`off`, `warm`, `recording`, `processing`, plus the last
-  `Delivery` and `Notice`), written only by the app.
+- `SessionSnapshot` (`off`, `warm`, `starting`, `recording`, `processing`,
+  plus the last `Delivery` and `Notice`), written only by the app.
 - `ActivityRequest`, written only by the Live Activity buttons.
 - A heartbeat the app writes every second while a session is up.
 
@@ -48,6 +48,19 @@ Every key has one writer, so nothing is locked. Darwin notifications
 (`io.blue.voiceiq.bridge.command`, `…state`) carry no data. They only mean
 "reread the App Group". Both sides also reread on their own lifecycle events,
 because pings are dropped while a process is suspended.
+
+### Starting, then recording
+
+A dictation reads as recording only once audio flows. Starting the audio
+engine is not that moment: on a Bluetooth route the first buffer can come
+seconds later. Until `AudioCaptureEngine` delivers its first non-empty buffer
+(`AudioCapturing.onFirstAudio`, `DictationCoordinator.audioFlowing`), the app
+publishes `starting`: the keyboard's mic bar shows "Starting…" with a spinner
+and the Live Activity shows "Starting…". Then it publishes `recording`, and the
+recording strip, its timer and the Live Activity's "Listening" begin. Stop
+during `starting` (the keyboard's mic bar, the Live Activity's Stop) cancels the
+start quietly, since there is nothing to transcribe. Adapted from Hex
+(`a2d940e3`, MIT). The Mac is unchanged.
 
 ### Mic tap
 
@@ -212,11 +225,12 @@ dictation, and the result has no host app, so whichever field has the
 VoiceiQ keyboard within two minutes receives it. Keyboard-started sessions
 have no Live Activity.
 
-The control is a `ControlWidgetToggle`, on while a dictation records. Its
-value provider reads `SharedStore.isDictating()`, which is the snapshot phase
-`recording` with a live heartbeat. `VoiceSession.publish` calls
-`ControlCenter.reloadControls(ofKind:)` each time the phase enters or leaves
-`recording`, so the control stays lit for the whole dictation and should turn
+The control is a `ControlWidgetToggle`, on while a dictation starts or
+records. Its value provider reads `SharedStore.isDictating()`, which is the
+snapshot phase `starting` or `recording` with a live heartbeat.
+`VoiceSession.publish` calls `ControlCenter.reloadControls(ofKind:)` each time
+the phase enters or leaves those two, so the control stays lit for the whole
+dictation and should turn
 off when it stops from any path. A press, from Control Center or the Action
 button, runs `SetDictationIntent`, a `SetValueIntent` with the same work as
 `ToggleDictationIntent` (`ActionButtonBridge.run`). It ignores the value iOS

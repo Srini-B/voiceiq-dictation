@@ -124,7 +124,7 @@ final class VoiceSession: ObservableObject {
         clearDictationTrace()
         guard isActive else { return }
         switch dictationPhase {
-        case .recording:
+        case .starting, .recording:
             cancelWarmEnd()
         case .warm:
             audio.useKeepAliveInput()
@@ -280,6 +280,7 @@ final class VoiceSession: ObservableObject {
             return .init(phase: .meeting, since: meetingStartedAt)
         }
         switch dictationPhase {
+        case .starting: return .init(phase: .starting)
         case .recording: return .init(phase: .recording, since: recordingStartedAt)
         case .processing: return .init(phase: .processing)
         case .warm, .off: return .init(phase: .ready)
@@ -296,10 +297,10 @@ final class VoiceSession: ObservableObject {
         if current.phase != lastPublished?.phase {
             SessionDiagnostics.note("phase \(current.phase.rawValue)")
         }
-        let wasRecording = lastPublished?.phase == .recording
+        let wasDictating = lastPublished?.phase.isDictating == true
         lastPublished = current
         store.publish(current)
-        if #available(iOS 18.0, *), wasRecording != (current.phase == .recording) {
+        if #available(iOS 18.0, *), wasDictating != current.phase.isDictating {
             // The Control Center toggle shows whether a dictation records.
             ControlCenter.shared.reloadControls(ofKind: SharedStore.dictationControlKind)
         }

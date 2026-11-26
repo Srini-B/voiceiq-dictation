@@ -106,7 +106,7 @@ final class KeyboardModel: ObservableObject {
         }
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
         switch phase {
-        case .recording:
+        case .starting, .recording:
             send(KeyboardCommand(action: .stop))
         case .processing:
             if needsAppToFinish { controller?.openURL(BridgeURL.app) }

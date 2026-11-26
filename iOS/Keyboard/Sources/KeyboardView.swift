@@ -30,7 +30,7 @@ struct KeyboardView: View {
         .padding(.vertical, compact ? 4 : 8)
         .onChange(of: model.phase) { _, new in
             // A dictation started elsewhere shows its progress.
-            if new == .recording || new == .processing { editOpen = false }
+            if new == .starting || new == .recording || new == .processing { editOpen = false }
         }
     }
 
@@ -84,6 +84,7 @@ struct KeyboardView: View {
     private var micTitle: String {
         if model.waitingForApp, model.phase != .recording { return "Starting…" }
         switch model.phase {
+        case .starting: return "Starting…"
         case .recording: return "Tap to finish"
         case .processing: return model.needsAppToFinish ? "Open VoiceiQ to finish" : "Writing…"
         case .warm, .off: return "Tap to speak"
@@ -137,11 +138,11 @@ private struct MicBar: View {
             .shadow(color: .black.opacity(0.12), radius: 4, y: 2)
         }
         .buttonStyle(MicBarButtonStyle())
-        .accessibilityLabel(label ?? (phase == .recording ? "Stop" : phase == .processing ? title : "Dictate"))
+        .accessibilityLabel(label ?? (phase == .recording ? "Stop" : phase == .processing || phase == .starting ? title : "Dictate"))
     }
 
     @ViewBuilder private var leadingContent: some View {
-        if phase == .processing || waiting {
+        if phase == .processing || phase == .starting || waiting {
             ProgressView().tint(phase == .processing ? KeyboardPalette.accent : .white)
         } else {
             Image(systemName: "mic.fill").font(.system(size: 18, weight: .semibold))
@@ -152,7 +153,7 @@ private struct MicBar: View {
         switch phase {
         case .recording: return KeyboardPalette.recording
         case .processing: return Color(.secondarySystemFill)
-        case .warm, .off: return KeyboardPalette.accent
+        case .warm, .off, .starting: return KeyboardPalette.accent
         }
     }
 
