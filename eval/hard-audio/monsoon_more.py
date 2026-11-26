@@ -11,7 +11,7 @@ have = [r for r in rows if r["stratum"] == "monsoon_ta"]
 seen_ids = {r["id"] for r in rows}
 rng = random.Random(7)
 if len(have) < 60 and any("speaker_id" not in r for r in have):
-    raise SystemExit("monsoon_ta rows without speaker_id: rerun fetch.py first so speakers can be checked")
+    raise SystemExit("monsoon_ta rows lack speaker_id; add it from the Monsoon parquet before topping up, so speakers are not repeated")
 cand = []
 for i in (1, 2, 3):
     t = pq.read_table(hf("VoiceArena/MonsoonASR-Open-ASR-leaderboard-en-IN", f"data/test-0000{i}-of-00004.parquet"),
