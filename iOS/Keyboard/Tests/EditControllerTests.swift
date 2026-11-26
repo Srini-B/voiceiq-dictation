@@ -142,4 +142,32 @@ final class EditControllerTests: XCTestCase {
         editor.textChanged()
         XCTAssertTrue(editor.undoStack.isEmpty)
     }
+
+    /// Hex's auto-correction deletes the typed word and types the fix in one
+    /// turn: undo takes back the fix alone, then the typing. Backspaces on a
+    /// later turn are their own step.
+    func testAutocorrectionFromTheKeysIsOneUndoStep() {
+        let field = Field("I said ")
+        let editor = editor(for: field)
+        for letter in "teh" { editor.typeFromKeyboard(String(letter)) }
+        for _ in 0..<3 { editor.deleteFromKeyboard() }
+        editor.typeFromKeyboard("the")
+        XCTAssertEqual(field.string, "I said the")
+
+        editor.undo()
+        XCTAssertEqual(field.string, "I said teh")
+        editor.undo()
+        XCTAssertEqual(field.string, "I said ")
+
+        editor.redo()
+        editor.redo()
+        XCTAssertEqual(field.string, "I said the")
+        RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+        editor.deleteFromKeyboard()
+        editor.deleteFromKeyboard()
+        RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+        XCTAssertEqual(field.string, "I said t")
+        editor.undo()
+        XCTAssertEqual(field.string, "I said the")
+    }
 }

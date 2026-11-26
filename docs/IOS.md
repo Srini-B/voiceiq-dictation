@@ -1,6 +1,6 @@
 # VoiceiQ for iOS
 
-A small keyboard with VoiceiQ dictation on one tap, and a cursor control
+A full QWERTY keyboard with VoiceiQ dictation on one tap and a cursor control
 panel. The keyboard never records or calls a model. It sends
 commands to the VoiceiQ app, which records, transcribes with your own API key,
 and hands the text back.
@@ -11,7 +11,7 @@ Like the Mac, it runs Gemini models with your own Gemini API key.
 | Target | Contents |
 | --- | --- |
 | `VoiceIQiOS` | App: onboarding, keys, settings, history, notes (meetings), background voice session |
-| `VoiceIQKeyboard` | Keyboard extension (`RequestsOpenAccess`), links `VoiceIQBridge` only; no letter keys |
+| `VoiceIQKeyboard` | Keyboard extension (`RequestsOpenAccess`), links `VoiceIQBridge` only; Hex's typing keyboard (`iOS/Keyboard/Hex`) |
 | `VoiceIQLiveActivity` | Dynamic Island and lock-screen Live Activity |
 
 All three share one App Group. Bundle IDs, the App Group and profile names
@@ -384,31 +384,68 @@ Delete (MEETINGS.md, Editing the transcript).
 
 ### Keyboard
 
-The keyboard has no letter keys. It offers Dictate through the VoiceiQ app,
-and an edit panel that moves the cursor. Type with another keyboard; the
-globe key switches to it.
+A full English QWERTY keyboard with VoiceiQ's shortcut row on top. The typing
+keyboard is Hex's (`anomalyco/hex`, MIT), vendored under `iOS/Keyboard/Hex`;
+the shortcut row, the recording strip, the edit panel and the dictation
+hand-off are VoiceiQ's. The keyboard never records: Dictate hands off to the
+app as before.
 
-**Layout** (`KeyboardView`, 164 pt tall, 136 pt in landscape on an iPhone):
+**Layout** (`KeyboardView`, top to bottom):
 
-- The voice panel: the mic bar ("Tap to speak"), with a notice from the app
-  or the Dictionary offer under it. While a dictation runs, the recording
-  strip takes the mic bar's place, as wide as the key row, until the text is
-  delivered. Without Full Access it shows "Allow Full Access" instead, which
-  opens the app's setup.
-- The edit panel (`EditPanel`, `EditController`), in place of the voice
-  panel: line start, previous word, left and right arrows that repeat while
-  held, next word and line end; then copy, cut and paste (Full Access), undo
-  and redo. A dictation that starts closes it.
-- The bottom row, under both panels: the globe (only when
-  `needsInputModeSwitchKey` is true), the edit key (cursor icon; a mic icon
-  goes back to the voice panel), Paste last, space, delete (repeats while
-  held) and return.
+- The shortcut row (42 pt, 36 pt in landscape on an iPhone): cursor control
+  (opens the edit panel in place of the keys; a keyboard icon closes it),
+  Paste last, a middle slot and the Dictate pill. The middle slot shows
+  "Allow Full Access" without Full Access (opens the app's setup), else a
+  notice from the app, else the Dictionary offer. While a dictation runs, the
+  recording strip takes the row's place until the text is delivered.
+- Hex's keyboard (`FullKeyboardView`, hosted by `TypingBridge`): the
+  suggestion bar (predictions and the pending auto-correction), letters,
+  123 and #+= layers, emoji with search, slide to type, the space-bar
+  trackpad, accent pop-ups, smart punctuation and number pads for number
+  fields. English only: `TypingBridge` pins the keyboard to English QWERTY
+  (`languageOverride`, `HexLanguageSettings.swift`), so there is no language
+  list, no space-bar language swipe or label, no second autocorrect language
+  and no language detection, and only English data ships (the `en.hextm`
+  word model and the English emoji search index). The globe key shows only
+  when iOS asks for one (`needsInputModeSwitchKey`), as on the iPhone SE.
+- The edit panel (`EditPanel`, `EditController`), in place of the keys: line
+  start, previous word, left and right arrows that repeat while held, next
+  word and line end; then copy, cut and paste (Full Access), undo and redo;
+  under them the globe (only when `needsInputModeSwitchKey` is true), space,
+  delete and return. A dictation that starts closes it.
 
-The keyboard sends only dictation commands and types every result it
-receives.
+**VoiceiQ, not Hex.** VoiceiQ changes Hex's keyboard only through
+`iOS/Keyboard/Sources/HexGlue` and the patches in `iOS/Keyboard/Hex/patches`:
+
+- No Hex key or logo: `HexKeyPlacement.hidden` takes the Hex key out of every
+  layout, so the suggestion bar spans the full width, and the bar's
+  hold-to-dictate is off (`0001-voiceiq-keyboard.patch`).
+- VoiceiQ's look: the return, go and send keys, the slide-to-type trail and
+  the trackpad selection use VoiceiQ's accent (the Dictate pill's blue), and
+  the keys have the 1 pt under-shadow of VoiceiQ's keycaps
+  (`0002-voiceiq-style.patch`).
+- Hex's in-keyboard dictation, its recording panel and Metal dot scope, the
+  style menu, translation and model notices are permanent stand-ins that
+  never show (`HexDictationStandIns.swift`). Hex's wording that names its app
+  reads "VoiceiQ" (`iOS/Keyboard/Resources/en.lproj/Localizable.strings`).
+- Hex's custom vocabulary is VoiceiQ's Dictionary: its words are never
+  auto-corrected away, and holding a suggestion adds the word to the
+  Dictionary.
+
+Typing goes through `EditController` (`TypingBridge.insertText` and
+`deleteBackward`), so undo covers typing, dictation and the edit panel alike.
+
+**Updating Hex's keyboard.** `scripts/sync-hex-keyboard.sh --check` lists
+Hex commits not synced yet; `scripts/sync-hex-keyboard.sh [ref]` replaces
+everything `iOS/Keyboard/Hex/MANIFEST` lists, applies the patches in name
+order and records the commit in `iOS/Keyboard/Hex/UPSTREAM`. Never edit files
+under `iOS/Keyboard/Hex` by hand: change the glue, or add a patch made with
+`git diff` after editing the synced file. The manifest leaves out the German,
+Spanish and Norwegian emoji indexes and every typing model but English
+(`es.hextm` is MPL 1.1; the others add about 24 MB).
 
 **Recording strip** (`RecordingStrip`, `LevelGlow`), modelled on Gboard's
-Rambler. In place of the mic bar: Cancel (x) on the left, a red stop button on the
+Rambler. In place of the shortcut row: Cancel (x) on the left, a red stop button on the
 right, the elapsed time in the middle. Behind them a red glow rises from the bottom edge as loud
 as the voice was: silence keeps 8% of the strip's height, and the height grows
 linearly with the mic level up to the full strip for the loudest speech. It is
@@ -438,7 +475,7 @@ cursor moves, because it replays at the cursor. A keyboard cannot select text
 or reach the app's own undo.
 
 **Add to Dictionary.** With Full Access, selecting text in the field shows
-"Add “word” to Dictionary" under the mic bar. The keyboard rereads the
+"Add “word” to Dictionary" in the shortcut row. The keyboard rereads the
 selection after each of its own edits (`EditController.selection`), because
 iOS does not report a keyboard's own edits to it. Text selected in another app
 or elsewhere on screen is not visible to a keyboard: copy it, and the next
@@ -452,18 +489,27 @@ ended the extension and showed its own keyboard. iOS also drops a keyboard's
 touches on fully transparent pixels, so the SwiftUI root has a 1% gray
 background.
 
-**Memory.** The keyboard loads no word list, model or emoji data, and keeps
-no typing state beyond the undo steps of its own edits.
+**Memory.** The keyboard maps Hex's English typing model (`en.hextm`, 3.6 MB)
+and loads the English emoji index when the emoji panel opens. Measured in the
+iOS 27.2 Simulator (Debug, iPhone 17 Pro, 2026-11-26): 35 MB after typing,
+the 123 layer, cursor control and the recording strip, peaking at 44 MB with
+the emoji panel and a slide-to-type word. iOS ends keyboards near 60 to 70 MB.
+
+**Learning.** Hex's "Learn how I type" is on, as in Hex: per-key tap offsets
+(`AdaptiveTouch`) and word-level fixes (`TypingJournal`) stay on the iPhone,
+in the App Group and the keyboard's own container. Nothing is sent anywhere.
+The app has no screen for Hex's keyboard settings yet, so Hex's defaults
+apply.
 
 **Tests.** `KeyboardTests` (in the `VoiceIQiOS` scheme) compiles
 `EditController.swift` on its own against a fake text field: undo and redo of
 a dictation and deletes, typing over a selection, word and line steps, and an
 edit by the app dropping undo.
 
-The full typing keyboard (letters, predictions, auto-correction, slide to
-type, emoji) and the keyboard's Ask and Translate modes were removed on
-2026-11-22; see
-`activities/2026-11-22-mini-keyboard.md`.
+The earlier typing keyboard and the keyboard's Ask and Translate modes were
+removed on 2026-11-22 (`activities/2026-11-22-mini-keyboard.md`); Hex's
+keyboard came back in its place on 2026-11-26
+(`activities/2026-11-26-hex-qwerty-keyboard.md`).
 
 ### Dictionary
 
@@ -561,7 +607,7 @@ Key-value storage holds 1 MB; a dictionary over 900 KB stays on the device and
 the session log says so.
 
 **Adding from the keyboard.** When text is selected in the field the keyboard
-is typing into, the keyboard shows "Add “…” to Dictionary" under the mic bar
+is typing into, the keyboard shows "Add “…” to Dictionary" in the shortcut row
 (or "“…” is in your Dictionary"). A keyboard can see only its own field, so
 text selected anywhere else (a web page, a message) comes in through the
 clipboard: after a copy, the next time the keyboard opens it shows "Add copied

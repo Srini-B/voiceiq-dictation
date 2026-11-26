@@ -76,8 +76,8 @@ struct FullKeyboardPalette: Equatable {
     var spaceHeldFill: UIColor { colors?.spaceHeldFill ?? (isDark ? UIColor(white: 1, alpha: 0.1) : Self.rgb(0xF2F2F7)) }
     /// Secondary fill for non-key chips and the recording panel's cancel pill.
     var functionFill: UIColor { isDark ? UIColor(white: 1, alpha: 0.09) : UIColor(white: 0, alpha: 0.065) }
-    /// Flat keycaps, with or without a theme.
-    var keyShadow: UIColor { .clear }
+    /// VoiceiQ: its keycaps' 1 pt under-shadow (`KeyCapStyle`), so the keys match its edit panel.
+    var keyShadow: UIColor { UIColor(white: 0, alpha: 0.28) }
 
     /// Opaque so balloons and menus float cleanly over the strip and neighbouring keys.
     var popupFill: UIColor { isDark ? Self.rgb(0x4E5056) : .white }
@@ -108,8 +108,11 @@ struct FullKeyboardPalette: Equatable {
     var stripPillText: UIColor { isDark ? .white : UIColor(white: 0, alpha: 0.81) }
 
     /// Apple system keyboard action blue (`#007AFF`).
-    var actionFill: UIColor { colors?.actionFill ?? Self.rgb(0x007AFF) }
-    var actionPressedFill: UIColor { colors?.actionPressedFill ?? Self.rgb(0x0062CC) }
+    /// VoiceiQ: its accent, the Dictate pill's blue, in place of Apple's.
+    var actionFill: UIColor {
+        colors?.actionFill ?? KeyboardPalette.accentUIColor.resolvedColor(with: UITraitCollection(userInterfaceStyle: isDark ? .dark : .light))
+    }
+    var actionPressedFill: UIColor { colors?.actionPressedFill ?? actionFill.withAlphaComponent(0.78) }
     /// A send, go or search key that's off while the field is empty: Apple's grey (191, 192, 197;
     /// 121 on dark, iOS 27.2).
     /// With a theme, a step lighter than its keys, so it stays one of them.
