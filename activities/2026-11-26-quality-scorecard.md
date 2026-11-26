@@ -151,3 +151,16 @@ cyron never speaks Hindi; his second language is Tamil mixed with English.
 - Both accented-English cases are right in 4 of 4.
 
 The dictation thread owns the prompt fixes. Hindi-specific prompt rules stay only if they cost nothing on other languages.
+
+## Later on 2026-11-26
+
+- **#81 (Tidy for writing Off)** merged at c31bbc1.
+  - Fable D4 is 97.5 over 320 cases, with no meant word lost.
+  - Neon cleared it.
+  - Tidy runs only when the user sets writing to Off, and never as a fallback for Gemini.
+- **#100 (meeting cost metering, one notes call):** Fable puts M5 at 92.2 against 92.6 on record, which is inside run-to-run variation, so it can merge. The one slip worth chasing is the s2-echo date ("in the evening" without "tomorrow"). Section names also still vary between runs.
+- **#97 (streaming and send-on-pause), decided:**
+  - **⌘Esc after an early send** cancels in-flight requests and inserts nothing, but it can't unsend audio that already went to Gemini. The privacy policy says so. The exposure is no wider than a normal dictation, because the same audio goes at key-up.
+  - **Merge:** #97 merges when CI is green and no review threads are open.
+- **#101 (prompt −436 tokens):** dictation cost at January prices goes from ₹1.131 to ₹1.070, and C1 from 52.5 to 56.4. Fable is scoring it. Cut 1 was rejected because it made gemini-3.8-flash think on about a third of calls.
+- **Lever 4 (screen-text cap)** is not shipped. The eval's screen text is only 367 characters, so it can't measure either the saving or the risk. Real screen-text sizes come first.
