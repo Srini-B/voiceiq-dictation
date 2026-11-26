@@ -17,7 +17,7 @@ VoiceIQ.xcodeproj/
 Package.resolved
 build/
 xcuserdata/
-eval/dictation/.assets/
+eval/dictation/.assets
 eval/dictation/results/
 eval/promptdump/.build/
 eval/promptdump/promptdump

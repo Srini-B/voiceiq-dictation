@@ -19,7 +19,7 @@ from pathlib import Path
 
 HERE = Path(__file__).parent
 ASSETS = HERE / ".assets"
-VOICE_NAMES = {"in": "ash", "us": "coral", "native": "sage", "literal": "coral"}
+VOICE_NAMES = {"in": "ash", "us": "coral", "native": "sage", "literal": "coral", "ta_en": "ash"}
 
 
 def tts(text: str, instructions: str, voice: str, out: Path) -> None:
