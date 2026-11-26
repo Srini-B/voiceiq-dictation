@@ -39,8 +39,8 @@ final class KeyboardModel: ObservableObject {
     private var loggedWaitingID: UUID?
     /// The result this keyboard held back while it was in no field, logged once.
     private var loggedHeldID: UUID?
-    /// The input session this keyboard is in. Nil while it is in no field,
-    /// and until the first poll after it appears.
+    /// The input session this keyboard is in. Nil until the first poll
+    /// after it appears, and once it has been in no field for `moveGap`.
     private var session: InputSession?
 
     private struct InputSession {
@@ -55,6 +55,11 @@ final class KeyboardModel: ObservableObject {
         let movedHere: Bool
     }
 
+    /// Since when this keyboard has been in no field. Focus that moves from
+    /// one field to another can read as no field for one poll (measured in
+    /// the iOS 27.2 Simulator); a dismissal lasts longer than `moveGap`.
+    private var noFieldSince: Date?
+    private static let moveGap: TimeInterval = 1
     private var hostRetriedAt = Date.distantPast
     private static let hostRetryLimit = 3
     /// Fields for an address, a code or a number, besides `TypingBridge.noAssistance`.
@@ -96,6 +101,7 @@ final class KeyboardModel: ObservableObject {
     func appeared() {
         Self.onScreen = self
         session = nil
+        noFieldSince = nil
         hasFullAccess = controller?.hasFullAccess ?? false
         if hasFullAccess { store.noteKeyboardSeen() }
         observer = DarwinNotifier.observe(.state) { [weak self] in
@@ -219,10 +225,17 @@ final class KeyboardModel: ObservableObject {
     /// Notes each new input session, so a result can tell whether the keyboard
     /// has been in another field of its app since (`Delivery.isFirstReturn`).
     private func trackSession() {
-        guard Self.onScreen === self, controller?.viewIfLoaded?.window != nil, let documentID else {
+        guard Self.onScreen === self, controller?.viewIfLoaded?.window != nil else {
             session = nil
             return
         }
+        guard let documentID else {
+            let since = noFieldSince ?? Date()
+            noFieldSince = since
+            if Date().timeIntervalSince(since) > Self.moveGap { session = nil }
+            return
+        }
+        noFieldSince = nil
         guard session?.documentID != documentID else { return }
         let host = controller.flatMap(HostAppResolver.currentHost(for:))
         session = InputSession(documentID: documentID, host: host, hostMisses: host == nil ? 1 : 0,

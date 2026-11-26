@@ -114,6 +114,94 @@ records. On an earlier build of this branch, one run of the Live Activity
 scenario had a 57 second Gemini call. The keyboard typed the text in the same
 second it was ready.
 
+## Review round 2
+
+**2026-11-26, afternoon.** The integrator reviewed `b788702` and found two
+high, three medium and one low issue. All six are fixed on the same branch,
+in the seven changes below. The first high finding took two of them. The
+table of Simulator runs above is from round 1. The runs for the final tree
+are in this section.
+
+1. **The first return counts from Stop, not from when the text was ready
+   (high).** Stop in chat A, open chat B while the text is written, dismiss
+   the keyboard, come back to B: `b788702` typed A's text into B, because B's
+   visit predated the text and did not count. `Delivery.stoppedAt` now carries
+   the time of the stop, and `isFirstReturn` counts from it. The fix follows
+   the reviewer's proposal. Its cost: after Stop, any visit to another field
+   of the app turns the typed result into an offer.
+2. **A field that focus moved to is not a return (high, same finding).** The
+   reviewer's scenario as written, where focus moves straight from A to B and
+   the text arrives there, still typed into B after fix 1. No visit list
+   separates B from a return to A. The keyboard itself can: it never left
+   the screen. `KeyboardModel` now marks a session that began while it was
+   already in another one (`movedHere`) and does not make the empty-field
+   guess there. The first version reset the mark whenever a poll read no
+   field. Three instrumented runs showed that a move between two fields can
+   read as no field for one 0.1 s poll, and 1 run in 3 typed into B. The
+   keyboard now treats less than one second in no field as a move. Five
+   runs in a row offered the text.
+3. **A keyboard in no field holds the result (high).** A dismissed keyboard
+   can keep polling with its view in a window. On `b788702` it could then
+   mark a result handled that it had typed into nothing. `deliverIfNeeded`
+   now returns while `documentIdentifier` is nil. The loss did not reproduce
+   in the Simulator on `b788702`. The state behind it does occur there: the
+   new log line "result held: this keyboard is in no field" appeared in the
+   runs below.
+4. **Address, code and number fields are never taken for the destination
+   (medium).** A result must not land in an email or one-time-code field
+   because the field is empty and the app matches. Such a field receives a
+   result only when Stop was tapped in it and the keyboard never left.
+5. **The host resolver is asked three times per session while polling, and
+   the visit list is read only for the empty-field rule (medium).** The
+   keyboard asked once a second for as long as it was up, and each miss wrote
+   a log line.
+6. **A replaced waiting result is announced (medium).** The snapshot holds
+   one result. A new dictation silently replaced one that still waited for
+   its field. The keyboard now shows "Previous dictation is in History".
+   Keeping a queue of results was rejected: Paste last and the Live Activity
+   show one result, and History already has every text.
+7. **A settled result drops the fingerprint of its field's text (low).** The
+   fingerprint stayed in the App Group for as long as the result did.
+
+`TypingBridge.noAssistance` changed from `private` to internal so that
+`KeyboardModel` can read it. That is the only edit in a file that PR #74
+owns.
+
+**What remains of the guess.** Stop in an empty field, dismiss the keyboard,
+and open another empty field of the same app first: that field gets the
+text. Making the third rule offer-only would close it. It was not done,
+because the three K2 scenarios all end in an empty field and all three land
+through that rule. cyron or the integrator can reverse this in one line of
+`Delivery.route`.
+
+### Verification of round 2
+
+Mac satellite (macos-27, Xcode 27.2), `origin/main` at `a9431c4` merged in.
+
+- `swift test --package-path VoiceIQCore`: 276 tests, 0 failures.
+- `xcodebuild build`, schemes VoiceIQ and VoiceIQiOS, unsigned, as CI runs
+  them: succeeded.
+
+Simulator runs on the final tree, same setup as above, with an email field
+added to the scratch host. Zero keyboard crash reports in every run.
+
+| Scenario | Result | Keyboard log |
+| --- | --- | --- |
+| K2-a keyboard dismissed while recording and again before the text came | Pass, text in Field A | `first return to an empty field` |
+| K2-b switched to Settings and scrolled, left again before the text came | Pass, text in Field A | `first return to an empty field` |
+| K2-c scrolled the keyboard away, and again before the text came | Pass, text in Field A | `first return to an empty field` |
+| Stopped from the Live Activity, keyboard dismissed | Pass, text in Field A | `first return to an empty field` |
+| A field with text, returned to directly | Pass, appended; the snapshot's destination has no `draft` afterwards | `same draft` |
+| A field with text, another field first | Pass, offered, typed only by Paste last | `offered in …` |
+| Stop in A, B while the text is written, keyboard dismissed, B again (change 1) | Pass, offered in B and in A, typed nowhere. `b788702` typed it into B. | `offered in …` |
+| Stop in A, focus straight to B, the text arrives there (change 2) | Pass in 5 of 5 runs, offered | `offered in …` |
+| Stop, then keyboard hidden, scrolled away, or app switched; the text arrives meanwhile (change 3) | Pass in all three, nothing typed while away, text in Field A after the return | `result held: this keyboard is in no field` in the hide run |
+| An email field, returned to (change 4) | Pass, offered, typed only by Paste last | `offered in …` |
+| A waiting result replaced by a new dictation (change 6) | Pass, notice shown, new text typed | `same session` |
+| App terminated while recording, reopened from the keyboard | Pass, text in Field A | `first return to an empty field` |
+| A new dictation during the launch recovery | Pass, new text typed once, recovered text in History only | `same session` |
+| Both fields empty, keyboard dismissed, the other field first | Typed into the other field: the limit that remains | `first return to an empty field` |
+
 ## What only an iPhone can prove
 
 - The microphone keeps recording across an app switch and a long lookup.
@@ -127,6 +215,12 @@ second it was ready.
   that reports no text around the cursor for a field with text would get the
   empty-field rule.
 - `AppLauncher` returning to the host, which was already device-unverified.
+- That a keyboard brought back after a dismissal appears again
+  (`viewWillAppear`), as it did in every Simulator run, and that a move
+  between two fields reads as no field for less than one second. If a device
+  differs, a return to an empty field gets an offer and not typed text.
+- That a dismissed keyboard on a device polls in no field, as the Simulator
+  showed. The guard of change 3 costs nothing if it does not.
 - Recovery after iOS itself ends the app.
 
 ## Rollback

@@ -133,8 +133,21 @@ result. It checks these rules in order:
 | --- | --- |
 | the same input session as the destination | types the text |
 | the same app, and the text around the cursor is the same as at the destination | types the text |
-| the same app, both fields are empty, the keyboard has been in no other field of that app since the text was ready, and the text is less than 10 minutes old | types the text |
+| the same app, both fields are empty, focus did not move here from another field with the keyboard up, the keyboard has been in no other field of that app since Stop, and the text is less than 10 minutes old | types the text |
 | any other field | shows "Dictation ready. Paste last puts it here." in the shortcut row |
+
+The second and third rules apply only in a field that takes ordinary text
+(`KeyboardModel.fieldTakesProse`). A field for a username, an email address,
+a URL, a password, a one-time code, a card number, a phone number or a postal
+code, and any field with a keyboard type other than the default, receives a
+result only under the first rule. Everywhere else such a field gets the
+offer.
+
+A keyboard that is in no field does nothing with a result. iOS can leave a
+dismissed keyboard polling with its view still in a window, and its text
+connection then reaches nothing. `deliverIfNeeded` returns while
+`documentIdentifier` is nil and logs "result held: this keyboard is in no
+field" once.
 
 Paste last types the result in the field on screen and marks it handled.
 A result is typed once: the keyboard that types it writes
@@ -143,11 +156,27 @@ After one hour the keyboard no longer types or offers the result unasked.
 Paste last and History still have it.
 
 The third rule is a guess. Nothing tells two empty fields of one app apart,
-so the first empty field of that app receives the text, whichever field it
-is. `Delivery.isFirstReturn` reads `SharedStore.fieldVisits` for that rule.
+so the first empty field of that app that a keyboard comes up in receives
+the text, whichever field it is. Two checks narrow the guess:
+
+- `Delivery.isFirstReturn` reads `SharedStore.fieldVisits` and counts the
+  input sessions since the user stopped the dictation (`Delivery.stoppedAt`),
+  not since the text was ready. A field that had the keyboard while the text
+  was being written counts. Without a stop time (a call ended the dictation,
+  or the launch recovery wrote it), sessions count from when the text was
+  ready. The destination's own session does not count.
+- A field that focus moved to while the keyboard stayed up is never the
+  field the result left, so the keyboard does not make the guess there
+  (`InputSession.movedHere`). It offers the text. During such a move the
+  keyboard can read no field for one 0.1 s poll, so it counts less than one
+  second in no field as a move (`KeyboardModel.moveGap`). A keyboard that
+  appears again (`KeyboardModel.appeared`) starts fresh.
+
 An input session in an app that the keyboard could not name counts as a
 session in the destination's app, so an unknown session leads to an offer,
-not to typed text.
+not to typed text. While it polls, the keyboard asks the host resolver for a
+missing app name at most three times per session
+(`KeyboardModel.hostRetryLimit`). A tap on Dictate or Stop always asks.
 
 The second and third rules compare what the field looks like, so the
 keyboard acts on them only when two polls in a row read the same field. A
@@ -159,7 +188,15 @@ that reaches no field. The keyboard inserts with
 the previous word.
 
 A new dictation replaces the pending result of the one before. The earlier
-text stays in History.
+text stays in History. When the earlier result still waited for its field,
+the keyboard shows "Previous dictation is in History" and the session log
+records "a waiting result was replaced; it is in History".
+
+The fingerprint in `Delivery.destination.draft` is needed only while the
+result is pending. Once a keyboard typed the result, the app copied it, or
+the hour passed, the app writes the result back without the fingerprint
+(`Delivery.forgettingDraft`, `VoiceSession.resultSettled`). The app does the
+same at launch.
 
 A result with no destination (the Action button with no VoiceiQ keyboard on
 screen) is typed by the first VoiceiQ keyboard on screen within two minutes.
@@ -806,8 +843,15 @@ is `false`, so builds skip the export-compliance question.
 - The first dictation after a cold start costs one trip to the app.
 - A keyboard cannot recognise a field it has left. After a return, the text
   is typed only when the app and the field's text match, or into the first
-  empty field of that app. In an app with several empty fields (two empty
-  chats), that can be the wrong one. The text is typed, never sent.
+  empty field of that app that a keyboard comes up in after Stop. In an app
+  with several empty fields (two empty chats), that can be the wrong one:
+  stop in one chat, dismiss the keyboard, and open the other chat first. The
+  text is typed, never sent.
+- After Stop, a visit to another field of the app turns a typed result into
+  an offer, also when the user ends up back in the first empty field. So does
+  a keyboard dismissed and brought back within one second.
+- An address, code or number field gets its text typed only when Stop was
+  tapped in it and the keyboard never left. After a return it gets the offer.
 - A field that the user edited while the text was being written no longer
   matches, so the result is offered through Paste last and not typed.
 - Background recording across an app switch, the Live Activity buttons in
