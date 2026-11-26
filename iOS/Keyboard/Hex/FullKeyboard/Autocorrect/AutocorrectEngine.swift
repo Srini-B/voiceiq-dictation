@@ -1202,8 +1202,8 @@ final class AutocorrectEngine {
     }
 
     /// VoiceiQ: a short prefix is an unfinished word, not a typo, so spatial autocorrect leaves
-    /// it as Apple's keyboard does. A three-letter start is never extended ("Hel" stays, not
-    /// "Help" or "Held"; "th" still becomes "the"), and a 1-3 letter one is not swapped for
+    /// it as Apple's keyboard does. A three-letter start is extended only to a clear finish
+    /// ("wil" becomes "will"; "Hel" stays, not "Help" or "Held"; "th" still becomes "the"), and a 1-3 letter one is not swapped for
     /// other letters the model ranks below the best completion of what was typed ("Hel" is not
     /// "Gel"; "teh" is still "the"). A missed space ("iam", "I am") or a word the model lacks
     /// (a Dictionary name) is never held back.
@@ -1211,14 +1211,26 @@ final class AutocorrectEngine {
         let lower = token.lowercased(), fixed = replacement.lowercased()
         guard (1...3).contains(lower.count), !fixed.contains(" "),
               let model = contextModel ?? decoder?.model, model.language == language.rawValue else { return false }
-        // Finishing the word: a one or two letter start may be ("th", "the"), a three-letter one not.
-        if fixed.count > lower.count, fixed.hasPrefix(lower) { return lower.count == 3 }
         let previous = Self.previousWord(beforeInput ?? "", token: token)
-        guard let corrected = model.cost(of: fixed, after: previous),
-              let best = model.completions(of: lower, after: previous, allowing: { mayOffer($0, after: previous) }).first,
+        let completions = model.completions(of: lower, after: previous, allowing: { mayOffer($0, after: previous) })
+        // Finishing the word: a one or two letter start may be ("th", "the"); a three-letter one
+        // only when the finish is clear ("wil", "will"), not when it could go several ways
+        // ("Hel": help, hello, held) or is a word already.
+        if fixed.count > lower.count, fixed.hasPrefix(lower) {
+            guard lower.count == 3 else { return false }
+            guard completions.first == fixed, model.cost(of: lower, after: previous) == nil,
+                  let finished = model.cost(of: fixed, after: previous) else { return true }
+            guard completions.count > 1, let next = model.cost(of: completions[1], after: previous) else { return false }
+            return next - finished < Self.clearFinishMargin
+        }
+        guard let corrected = model.cost(of: fixed, after: previous), let best = completions.first,
               best != fixed, let finished = model.cost(of: best, after: previous) else { return false }
         return finished < corrected
     }
+
+    /// How much likelier (in the model's cost) a three-letter start's best finish must be than
+    /// its next before space applies it.
+    private static let clearFinishMargin = 1.5
 
     /// What spatial autocorrect makes of `token`'s taps, or nil when it doesn't apply: off,
     /// another language's model, an apostrophe or one letter typed, a letter the model lacks,

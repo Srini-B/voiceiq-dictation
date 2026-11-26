@@ -68,3 +68,12 @@ and space-bar label.
   so a newer identical one is not cut short.
 - Fable's Pro landscape clipping was the screenshot crop: an uncropped capture
   shows the buttons whole.
+
+## Second review round (Neon Medium)
+
+- A three-letter start that is missing its last letter is completed again
+  when the finish is clear: the model's best completion must be at least 1.5
+  cheaper than the next, and the typed letters must not be a word. On the SE
+  simulator, "wil hav thi hel th tha " became "Will have this hel the that".
+  "jus" and "wha" stay as typed. Apple's keyboard on the same iOS 26.5
+  simulator corrected none of these words.

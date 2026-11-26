@@ -461,9 +461,10 @@ VoiceiQ adds no row.
 - Spatial autocorrect reads where each key was tapped, so "Hel" with the H
   tapped toward the G scored "Gel" above the typed word. A short start is now
   treated as an unfinished word (`AutocorrectEngine.unfinished`,
-  `0009-voiceiq-unfinished-words.patch`): a three-letter start is never
-  extended ("Hel" stays, with Help offered but not highlighted; "th" still
-  becomes "the"), and a 1–3 letter start is not swapped for other letters the
+  `0009-voiceiq-unfinished-words.patch`): a three-letter start is
+  extended only to a clear finish ("wil" to "will"; "Hel" stays, with Help
+  offered but not highlighted, because help, hello and held are all likely;
+  "th" still becomes "the"), and a 1–3 letter start is not swapped for other letters the
   model ranks below the best completion of what was typed. The same rule keeps
   such words out of the strip's other candidates. A missed space ("iam" to
   "I am") and words the model lacks, such as Dictionary names, are never held
