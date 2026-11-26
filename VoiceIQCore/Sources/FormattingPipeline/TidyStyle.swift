@@ -253,12 +253,15 @@ public enum Tidy {
                 lines = ["\(intro):"] + items.map { "- " + $0 }
             }
         }
-        // A line that starts inside a quotation is literal: The password is "red\nand then blue".
+        // Quoted lines are literal: The password is "red\nand then blue".
         let quoted = TidyText.quoteMask(Array(lines.joined(separator: "\n")))
         var offset = 0
         let written = lines.map { raw -> String in
             defer { offset += raw.count + 1 }
-            if offset > 0, quoted[offset - 1] { return raw }
+            // A line that starts or ends inside a quotation is literal too.
+            if (offset > 0 && quoted[offset - 1]) || (offset + raw.count < quoted.count && quoted[offset + raw.count]) {
+                return raw
+            }
             let line = TidyText.collapsingSpaces(raw)
             guard line.hasPrefix("- ") else { return conciseNote(line, english: english) }
             let note = conciseNote(TidyText.trimmed(line.dropFirst(2)), english: english)
