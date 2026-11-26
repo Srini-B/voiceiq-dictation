@@ -118,12 +118,36 @@ public final class LocalModelStore: ObservableObject {
         sessions[id] = nil
     }
 
+    /// On an iPhone on cellular data, a download that has not started yet
+    /// waits for the user to confirm it (`CellularModelDownloads`).
     public func download() {
-        guard downloadTask == nil, deleteTask == nil else { return }
+        guard canStartDownload else { return }
+        #if os(iOS)
+        guard !CellularModelDownloads.shared.needsConfirmation(self, id: manifest.directoryName) else { return }
+        #endif
+        startDownload()
+    }
+
+    #if os(iOS)
+    /// The user agreed to download over cellular data.
+    func startConfirmedDownload() {
+        guard canStartDownload else { return }
+        startDownload()
+    }
+    #endif
+
+    private var canStartDownload: Bool {
+        guard downloadTask == nil, deleteTask == nil else { return false }
         switch state {
-        case .notDownloaded, .failed: break
-        case .unsupported, .downloading, .ready, .deleting: return
+        case .notDownloaded, .failed: return true
+        case .unsupported, .downloading, .ready, .deleting: return false
         }
+    }
+
+    private func startDownload() {
+        #if os(iOS)
+        CellularModelDownloads.shared.began(id: manifest.directoryName)
+        #endif
         state = .downloading(progress: 0)
         let manifest = manifest
         downloadTask = Task { [weak self] in
@@ -141,6 +165,12 @@ public final class LocalModelStore: ObservableObject {
             }
             guard let self else { return }
             self.downloadTask = nil
+            #if os(iOS)
+            // A failed download keeps its consent: Retry carries it on.
+            if outcome == .ready || outcome == .notDownloaded {
+                CellularModelDownloads.shared.ended(id: manifest.directoryName)
+            }
+            #endif
             // A delete in progress owns the state until it finishes.
             if self.deleteTask == nil { self.state = outcome }
             // Without a key, a model arriving is what makes dictation possible.

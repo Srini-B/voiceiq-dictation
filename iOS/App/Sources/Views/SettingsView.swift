@@ -131,6 +131,7 @@ struct DictationSettingsView: View {
     @State private var warmWindow = MobileSettings.warmWindow
     @State private var languages = SettingsStore().spokenLanguages
     @State private var dictationSource = SettingsStore().dictationSource
+    @ObservedObject private var cellularDownloads = CellularModelDownloads.shared
 
     private static func options(_ languages: [SpokenLanguage]) -> [SearchOption<String>] {
         languages.map { SearchOption(value: $0.code, name: $0.name, keywords: $0.code) }
@@ -212,6 +213,16 @@ struct DictationSettingsView: View {
             }
         }
         .settingsPage(title: "Dictation")
+        // A model download started on cellular data asks once, then runs on any network.
+        .alert("Download on cellular data?", isPresented: Binding(
+            get: { cellularDownloads.pending != nil },
+            set: { if !$0 { cellularDownloads.pending = nil } }
+        ), presenting: cellularDownloads.pending) { store in
+            Button("Download") { cellularDownloads.confirm(store) }
+            Button("Cancel", role: .cancel) {}
+        } message: { store in
+            Text("\(store.displayName) is a \(ByteCountFormatter.string(fromByteCount: store.downloadBytes, countStyle: .file)) download, and you're on cellular data.")
+        }
         // A change made elsewhere (another screen, a migration) must not
         // leave a stale toggle here.
         .onReceive(NotificationCenter.default.publisher(for: .gtSettingDidChange).receive(on: RunLoop.main)) { note in

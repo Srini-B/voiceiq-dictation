@@ -208,6 +208,10 @@ final class LocalModelFileDownloader: NSObject, URLSessionDownloadDelegate, @unc
         let configuration = URLSessionConfiguration.ephemeral
         configuration.timeoutIntervalForRequest = 60
         configuration.httpMaximumConnectionsPerHost = 1
+        // The iPhone asks before a download starts on cellular data, then lets
+        // it run on any network (`CellularDownloadConsent`).
+        configuration.allowsCellularAccess = true
+        configuration.allowsExpensiveNetworkAccess = true
         let queue = OperationQueue()
         queue.maxConcurrentOperationCount = 1
         session = URLSession(configuration: configuration, delegate: self, delegateQueue: queue)

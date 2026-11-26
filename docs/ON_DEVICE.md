@@ -96,6 +96,19 @@ renames the folder into `Application Support/VoiceiQ/Models/<name>/<revision>`.
 The model rows show download progress, the size on disk once ready, and a
 delete button.
 
+On an iPhone on cellular data (an `NWPath` that uses the cellular interface or
+is expensive, such as a personal hotspot), Download or Retry first asks
+"Download on cellular data?" with the model's size from its manifest. Download
+starts it; Cancel starts nothing. It asks once per download: a download that
+has started, on Wi-Fi or after the user confirmed, never asks again, even if
+the network drops and comes back or moves from Wi-Fi to cellular, and a Retry
+after a failure carries the same consent. Once the model is downloaded or its
+download is cancelled, the next download asks again. On Wi-Fi there is no
+alert. Downloads are never held for Wi-Fi and there is no setting; the
+decision is `CellularDownloadConsent`, held by `CellularModelDownloads` in
+memory only. Hex holds its downloads for Wi-Fi behind a "Use mobile data"
+button (`9e41970e`, MIT); VoiceiQ asks instead. The Mac never asks.
+
 On a model's first load Core ML writes a prepared copy of it for this device
 into the loading process's caches, `com.apple.e5rt.e5bundlecache/<OS build>/`.
 Copies of the speech models can reach about 1 GB. On the Mac the models load in the
