@@ -52,7 +52,8 @@
   from sentence case or a second name ("Wispr Slack"); fixing both words
   before the 4 s settle still learns "Wispr Flow". A phrase that spans two separately
   learned fixes ("Wispr" and "Supabase", then the word between them) is not
-  merged; both words stay learned.
+  merged; both words stay learned. Nor is a fix that grows a learned word on both
+  sides at once.
 
 ## Verification
 

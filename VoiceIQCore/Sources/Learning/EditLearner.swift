@@ -235,7 +235,8 @@ public final class EditLearner {
             } else {
                 fields[key] = current
             }
-            let taught = Set(current.insertions.flatMap(\.edits).map { $0.replacement.lowercased() })
+            let taught = current.insertions.flatMap(\.edits)
+                .reduce(into: [String: Int]()) { $0[$1.replacement.lowercased(), default: 0] += 1 }
             learn(steps, stillTaught: taught)
         }
     }
@@ -272,9 +273,10 @@ public final class EditLearner {
         entry.source == .auto && Date().timeIntervalSince(entry.updatedAt) <= reEditSeconds
     }
 
-    /// `stillTaught`: spellings a correction in this field still teaches, so
-    /// undoing one copy of a fix does not drop a word another copy keeps.
-    private func learn(_ steps: [LearningStep], stillTaught: Set<String>) {
+    /// `stillTaught`: how many corrections in this field still teach each
+    /// spelling, so undoing or revising one copy of a fix does not drop a word
+    /// another copy keeps.
+    private func learn(_ steps: [LearningStep], stillTaught: [String: Int]) {
         var learned: [DictionaryEntry] = []
         var known = dictionary.entries()
         for step in steps {
@@ -284,7 +286,7 @@ public final class EditLearner {
             var heardAs: String?
             switch step {
             case let .forget(edit):
-                guard !stillTaught.contains(edit.replacement.lowercased()) else { continue }
+                guard stillTaught[edit.replacement.lowercased(), default: 0] == 0 else { continue }
                 // By spelling alone: a rename from another dictation keeps
                 // the older wording.
                 let gone = known.filter { Self.isFresh($0) && $0.term.lowercased() == edit.replacement.lowercased() }
@@ -310,8 +312,11 @@ public final class EditLearner {
                 let terms = Set(replacing.map { $0.replacement.lowercased() })
                 // A spelling another fix in the field still teaches stays; the
                 // revision is then learned as its own word.
+                // This revision's own spelling counts once toward that.
                 stale = known.filter {
-                    Self.isFresh($0) && terms.contains($0.term.lowercased()) && !stillTaught.contains($0.term.lowercased())
+                    let term = $0.term.lowercased()
+                    let own = term == edit.replacement.lowercased() ? 1 : 0
+                    return Self.isFresh($0) && terms.contains(term) && stillTaught[term, default: 0] - own == 0
                 }
             }
             if let kept = stale.first {
