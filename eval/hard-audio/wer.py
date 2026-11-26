@@ -30,7 +30,9 @@ from score import spelled_numbers_as_digits  # noqa: E402
 def norm(text: str) -> str:
     text = unicodedata.normalize("NFKC", text).lower().replace("’", "'")
     text = re.sub(r"(?<=\d),(?=\d{3})", "", text)
-    text = re.sub(r"[^\w\s'%$₹]", " ", text)
+    # Punctuation and symbols go; letters, digits and combining marks (Tamil
+    # vowel signs and pulli) stay.
+    text = "".join(ch if ch in "'%$₹" or unicodedata.category(ch)[0] not in "PS" else " " for ch in text)
     text = re.sub(r"\s'|'\s", " ", text)
     return " ".join(spelled_numbers_as_digits(text.split()))
 

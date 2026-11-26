@@ -47,6 +47,7 @@ for session in ("S02", "S09"):
                         accent="far-field Kinect, dinner party (UK/US English)", duration=round(e - s + 0.6, 2),
                         spoken=clean, intended=None))
 print(len(out))
-with (HERE / "manifest.jsonl").open("a") as f:
-    for r in out:
-        f.write(json.dumps(r, ensure_ascii=False) + "\n")
+# A rerun replaces the stratum instead of adding it again.
+manifest = HERE / "manifest.jsonl"
+kept = [line for line in manifest.read_text().splitlines() if json.loads(line)["stratum"] != "chime6"]
+manifest.write_text("".join(line + "\n" for line in kept + [json.dumps(r, ensure_ascii=False) for r in out]))

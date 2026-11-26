@@ -40,6 +40,11 @@ How to run it and the dataset licences are in `eval/hard-audio/README.md`.
 
 ## Baseline: main 62835c6 (before #101), Gemini audio, every option on
 
+D7 is provisional (integrator, 2026-11-26): one judge, on main before #101.
+A second judge (Fable 5.2, on a stratified 180-draft packet, no new API
+calls) is in progress, and the Gemini 4 Argon pass stays unfinished because
+it would bill the empty eval key.
+
 One pass, 451 clips. The request is the app's: Dictionary, English (India)
 spelling line, place, screen text and the backup request. GPT-6 Astra judged
 every clip.
@@ -51,14 +56,14 @@ every clip.
 | Svarah Indian English | 40 | 85.0% | 85.0% | 0.90% | 7.1% |
 | Monsoon, other Indian states | 60 | 70.0% | 71.7% | 2.57% | 15.5% |
 | Monsoon, Tamil Nadu speakers | 60 | 56.7% | 60.0% | 2.91% | 15.1% |
-| IndicVoices Tamil | 50 | 40.0% | 42.0% | 7.66% | CER 17.6% |
+| IndicVoices Tamil | 50 | 40.0% | 42.0% | 7.66% | CER 20.7% |
 | Whispered | 28 | 50.0% | 57.1% | 20.3% | 24.1% |
 | EdAcc other accents | 32 | 28.1% | 28.1% | 9.44% | 18.3% |
 | CHiME-6 far-field | 30 | 26.7% | 26.7% | 15.7% | 26.2% |
 
 - **Latency:** end to end p50 3.22 s and p90 6.87 s, with the 0.39 s app
   overhead added. 3 of 451 calls thought. The backup request fired on 67
-  calls (14.9%), above the 10% extra-call budget.
+  calls (14.9%), above the 10% extra-call budget; PR #105 removes it.
 - **Cost:** a median prompt of 8.0k tokens, about ₹0.47 per dictation with
   backups. At cyron's 160 dictations a month that is about ₹75, inside
   ₹250.
@@ -117,7 +122,7 @@ and has no layout. On-device with Gemini writing was not measured, because it
 needs paid calls. No stratum shows on-device at 90 or above, so on-device
 stays a rare fallback.
 
-## Proposed fixes (not applied; each needs one paid A/B before it ships)
+## Proposed fixes (parked: no paid A/B runs while the key is empty)
 
 All proposed changes go against current main (after #101). The A/B for each
 is a pass over the affected strata, with ctrl_01–03 and the names cases from
@@ -167,9 +172,8 @@ model think on a third of calls in #101's tests.
    judge's correction in 54 of 97 content misses. It needs a guard against
    copying Parakeet's own errors and fillers, so it must be A/B tested on
    Voice Arena and names before it ships.
-3. **Backup-request rate.** 14.9% of calls sent a second request, against
-   the 10% budget. Raising the 4 s floor to 5 s would cut it, at some cost to
-   p90. Decide this with the pooled D5 runs, not this single pass.
+3. **Backup-request rate: dropped.** PR #105 turns the backup request off,
+   so the 14.9% backup share goes away.
 
 ## Not done
 

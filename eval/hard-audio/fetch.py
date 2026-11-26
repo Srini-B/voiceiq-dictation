@@ -15,7 +15,7 @@ Strata (cyron speaks English and Tamil, never Hindi):
 Order: fetch.py, then monsoon_more.py (Tamil Nadu speakers from the other
 Monsoon shards), then chime6.py.
 """
-import json, os, random, subprocess, sys, urllib.parse, urllib.request
+import hashlib, json, os, random, subprocess, sys, urllib.parse, urllib.request
 from pathlib import Path
 import pyarrow.parquet as pq
 
@@ -37,10 +37,16 @@ def hf(repo, path):
 
 
 def to_flac(data: bytes, cid: str) -> float:
+    # Positional IDs (ivta_003, svarah_012) can name another source row after
+    # an interrupted fetch, so a cached clip is reused only when it was cut
+    # from the same source audio.
     out = CLIPS / f"{cid}.flac"
-    if not out.exists():
+    source = out.with_suffix(".src")
+    digest = hashlib.sha256(data).hexdigest()
+    if not out.exists() or not source.exists() or source.read_text() != digest:
         subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", "pipe:0", "-ac", "1", "-ar", "16000", str(out)],
                        input=data, check=True)
+        source.write_text(digest)
     dur = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", str(out)],
                          capture_output=True, text=True).stdout.strip()
     return round(float(dur), 2)

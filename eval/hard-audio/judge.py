@@ -295,6 +295,9 @@ def judge_prompt(clip: dict, intended: str, draft: str) -> str:
 def judge_run(path: Path, cache: Cache, workers: int) -> list[dict]:
     clips, extra = manifest(), (json.loads(INTENDED.read_text()) if INTENDED.exists() else {})
     run = json.loads(path.read_text())
+    # As score.py: a partial run would drop its failed calls from the score.
+    if not run.get("complete") or run.get("failed"):
+        raise SystemExit(f"{path}: incomplete run; rerun run.py with its label")
     rows = []
     for r in run["results"]:
         clip = clips[r["id"]]
