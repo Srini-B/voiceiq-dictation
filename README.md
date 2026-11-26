@@ -51,7 +51,7 @@ Google's Gemini API with *your* key. No middleman server, no account, no
 analytics, no keystroke logging — one network host, and you can read every
 line of the code that talks to it. Each dictation also sends the app, window
 and page you are in and the text around the cursor, so the dictation fits
-what is already in the field. Screen context (the text on your screen, read
+what is already in the field. Screen context (the text in the window you dictate into, read
 on the Mac while you speak and sent with each dictation so on-screen names and
 paths are spelled right; no image is sent) can be switched off in
 Settings → Dictation.

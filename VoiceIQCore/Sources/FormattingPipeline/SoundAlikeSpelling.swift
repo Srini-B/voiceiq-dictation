@@ -14,10 +14,11 @@ import Foundation
 /// (a name or a product, never a lowercase word like "kubectl"). A transcript word is a
 /// candidate only if the engine capitalized it and it isn't itself listed. It takes a term
 /// when, after the interchangeable spellings `folded` evens out, it is spelled the same
-/// ("Catherine" and "Katherine" both read "katherine"). Inside a sentence, where only a name
-/// keeps a capital, and not right after another capitalized word (a title such as "A Study in
-/// Scarlet"), it may instead sound the same by `SoundKey` and be at most two edits away
-/// ("Jeff" → "Geoff", "Versal" → "Vercel"). Two terms that fit equally well leave the
+/// ("Catherine" and "Katherine" both read "katherine"). A word opening a sentence is left
+/// alone (VoiceiQ). Not right after another capitalized word (a title such as "A Study in
+/// Scarlet"), it may instead read the same once romanized or sound the same by `SoundKey`,
+/// and be at most two edits away ("Jeff" → "Geoff", "Versal" → "Vercel", "Sreeni" →
+/// "Srini"). Two terms that fit equally well leave the
 /// word as heard. Self-contained, so it ports to the shared core as it is.
 public enum SoundAlikeSpelling {
     private static let maxEdits = 2
@@ -38,7 +39,10 @@ public enum SoundAlikeSpelling {
             let followsCapital = index > 0 && !opensSentence
                 && all[index - 1].stem.first?.isUppercase == true
                 && !startsSentence(all[index - 1].range.lowerBound, in: text)
-            guard let term = match(word, candidates: candidates, listed: listed, soundsAlike: !opensSentence && !followsCapital)
+            // Every word opening a sentence has a capital, so there a common word ("Feel",
+            // "Carry") could pass for a name: VoiceiQ leaves it as heard.
+            guard !opensSentence,
+                  let term = match(word, candidates: candidates, listed: listed, soundsAlike: !followsCapital)
             else { continue }
             output.append(contentsOf: text[copied..<word.range.lowerBound])
             output.append(term)
@@ -53,6 +57,7 @@ public enum SoundAlikeSpelling {
         let text: String
         let letters: String
         let folded: String
+        let romanized: String
         let key: SoundKey
 
         init?(_ term: String) {
@@ -63,6 +68,7 @@ public enum SoundAlikeSpelling {
             letters = SoundAlikeSpelling.letters(trimmed)
             guard letters.count >= 3 else { return nil }
             folded = SoundAlikeSpelling.folded(letters)
+            romanized = SoundAlikeSpelling.folded(letters, romanized: true)
             key = SoundKey(letters)
         }
     }
@@ -80,16 +86,18 @@ public enum SoundAlikeSpelling {
         let heard = letters(stem)
         guard !listed.contains(heard) else { return nil }
         let heardFolded = folded(heard)
+        let heardRomanized = folded(heard, romanized: true)
         let heardKey = SoundKey(heard)
 
-        // Rank: spelled the same once folded (0), else sounds the same (1 + edits).
+        // Rank: spelled the same once folded (0), else, inside a sentence, the same once
+        // romanized or sounding the same (1 + edits).
         var best: (term: String, rank: Int)?
         var tied = false
         for term in candidates {
             let rank: Int
             if term.folded == heardFolded {
                 rank = 0
-            } else if soundsAlike, term.key == heardKey,
+            } else if soundsAlike, term.romanized == heardRomanized || term.key == heardKey,
                       let edits = editDistance(heard, term.letters, limit: maxEdits) {
                 rank = 1 + edits
             } else {
@@ -115,11 +123,14 @@ public enum SoundAlikeSpelling {
 
     /// Evens out spellings English names write interchangeably: "ph" is "f", "ck" and a hard
     /// "c" are "k", "chr" is "kr", a soft "c" is "s", "ae" is "e", a leading "ai" is "a",
-    /// a final "y", "ey", "ie", "ee" or "i" is "i", any other "ee" or "y" is "i", "oo" is "u",
-    /// a silent "h" (after a vowel before a consonant or the end, or after g, k, r, d, b, j, w
-    /// or t) goes,
-    /// and doubled letters are single.
-    static func folded(_ word: String) -> String {
+    /// a final "y", "ey", "ie", "ee" or "i" is "i", any other "y" is "i", a silent "h"
+    /// (after a vowel before a consonant or the end, or after g, k, r, d, b, j or w) goes,
+    /// and doubled letters are single. `romanized` also evens out how Indian names are
+    /// written in English: "ee" is "i", "oo" is "u", and the "h" of "th" goes ("Sreeni" and
+    /// "Srini", "Pooja" and "Puja", "Prashanth" and "Prashant"). Those also join ordinary
+    /// words to names ("Feel" and "Phil", "Set" and "Seth"), so they count only inside a
+    /// sentence.
+    static func folded(_ word: String, romanized: Bool = false) -> String {
         var s = Array(letters(word))
         func replace(_ from: String, _ to: String) {
             let f = Array(from), t = Array(to)
@@ -150,10 +161,10 @@ public enum SoundAlikeSpelling {
             s.removeLast(2)
             s.append("i")
         }
-        // VoiceiQ: Indian names are romanized with "ee" or "i" and "oo" or "u" for one sound
-        // ("Sreeni" and "Srini", "Pooja" and "Puja").
-        replace("ee", "i")
-        replace("oo", "u")
+        if romanized {
+            replace("ee", "i")
+            replace("oo", "u")
+        }
         s = s.map { $0 == "y" ? "i" : $0 }
         var kept: [Character] = []
         for (i, c) in s.enumerated() {
@@ -161,9 +172,7 @@ public enum SoundAlikeSpelling {
                 let previous = s[i - 1]
                 let next = i + 1 < s.count ? s[i + 1] : nil
                 if isVowel(previous), next.map(isVowel) != true { continue }
-                // VoiceiQ: "t" too, for the aspirated "th" of Indian names ("Prashanth" and
-                // "Prashant", "Kirthi" and "Kirti").
-                if "gkrdbjwt".contains(previous) { continue }
+                if "gkrdbjw".contains(previous) || (romanized && previous == "t") { continue }
             }
             if let last = kept.last, last == c { continue }
             kept.append(c)

@@ -51,37 +51,22 @@ public actor GeminiClient {
         endpoint: URL,
         deadline: TimeInterval
     ) async throws -> String {
-        func body(_ text: String) -> [String: Any] {
-            var parts: [[String: Any]] = [["text": text]]
-            if let audio {
-                parts.append(["inline_data": ["mime_type": "audio/flac", "data": audio.base64EncodedString()]])
-            }
-            return [
-                "contents": [["role": "user", "parts": parts]],
-                "generationConfig": [
-                    "temperature": 0,
-                    "thinkingConfig": Self.thinkingConfig(model: model),
-                    "responseMimeType": "application/json",
-                    "responseJsonSchema": PromptV1.dictationSchema,
-                ] as [String: Any],
-            ]
+        var parts: [[String: Any]] = [["text": prompt]]
+        if let audio {
+            parts.append(["inline_data": ["mime_type": "audio/flac", "data": audio.base64EncodedString()]])
         }
-        let stage: UsageStage = audio == nil ? .cleanup : .transcribe
-        var reply: String?
-        if let boundary = prompt.range(of: PromptV1.cacheBoundary) {
-            reply = try await generateWithPromptCache(
-                prefix: String(prompt[..<boundary.lowerBound]),
-                body: body(String(prompt[boundary.lowerBound...]).trimmingCharacters(in: .newlines)),
-                model: model, endpoint: endpoint, deadline: deadline, stage: stage)
-        }
-        let answer: String
-        if let reply {
-            answer = reply
-        } else {
-            answer = try await generateContent(body: body(prompt), model: model, endpoint: endpoint,
-                                               deadline: deadline, stage: stage)
-        }
-        guard let text = PromptV1.dictationText(fromJSON: answer) else {
+        let body: [String: Any] = [
+            "contents": [["role": "user", "parts": parts]],
+            "generationConfig": [
+                "temperature": 0,
+                "thinkingConfig": Self.thinkingConfig(model: model),
+                "responseMimeType": "application/json",
+                "responseJsonSchema": PromptV1.dictationSchema,
+            ] as [String: Any],
+        ]
+        let reply = try await generateContent(body: body, model: model, endpoint: endpoint, deadline: deadline,
+                                              stage: audio == nil ? .cleanup : .transcribe)
+        guard let text = PromptV1.dictationText(fromJSON: reply) else {
             // Never paste the model's working. Retryable: the next attempt
             // usually answers with the object.
             Log.transcription.warning("dictation reply was not the JSON answer")

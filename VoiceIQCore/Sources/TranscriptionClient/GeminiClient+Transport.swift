@@ -116,18 +116,6 @@ extension GeminiClient {
         Log.transcription.notice("call \(event.stage, privacy: .public) (\(model, privacy: .public)) id=\(requestID, privacy: .public) attempt=\(attempt) \(event.networkProtocol ?? "-", privacy: .public)\(event.reusedConnection == true ? " reused" : "", privacy: .public) \(outcome, privacy: .public) in \(event.totalMs)ms, first byte \(event.firstByteMs ?? -1)ms, sent \(event.requestBytes ?? 0) bytes")
     }
 
-    /// When a dictation's second request starts, for `speechSeconds` of speech.
-    /// Most answers come in about 2–3 s whatever the length (a 45 s dictation
-    /// that does not think answers about as fast as a 5 s one), and the rest
-    /// are a call that thinks or a slow server, which a new request rarely
-    /// repeats.
-    /// Starting it at 14–20 s, as before, left those dictations at 15–20 s
-    /// (2026-11-26). A retry processes the entire prompt, so it gets an entire
-    /// request budget of its own.
-    static func hedgeDelay(speechSeconds: TimeInterval) -> TimeInterval {
-        min(2 + speechSeconds / 20, 20)
-    }
-
     /// Errors a new connection can fix. Anything about the key, the model, the
     /// request or a quota fails the same way on any connection.
     static func isConnectionFailure(_ error: Error) -> Bool {

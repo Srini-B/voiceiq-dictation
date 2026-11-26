@@ -168,7 +168,7 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
             // the model's own language applies, and a Gemini fallback or
             // writing step gets no hint.
             languages: settings.dictationSource == .gemini ? SpokenLanguage.promptLine(settings.spokenLanguages) : nil,
-            screenText: writtenParts == nil ? context.screenText : [],
+            screenText: writtenParts == nil && settings.screenContextEnabled ? context.screenText : [],
             surroundingText: context.focusedField?.surroundingText,
             place: place,
             writtenParts: writtenParts,
@@ -198,8 +198,11 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
             try await client.dictate(prompt: prompt, audio: flac, model: config.writingModel,
                                      endpoint: config.endpoint, deadline: deadline)
         }
-        let text = try await GeminiClient.firstSuccess(retryAfter: GeminiClient.hedgeDelay(speechSeconds: speechSeconds),
-                                                       first: attempt, retry: attempt)
+        let hedge = DictationHedge.shared
+        let delay = await hedge.delay()
+        let started = Date()
+        let text = try await GeminiClient.firstSuccess(retryAfter: delay, first: attempt, retry: attempt)
+        await hedge.record(answeredAfter: Date().timeIntervalSince(started), delay: delay)
         return ValidationGate.stripArtifacts(text).trimmingCharacters(in: .whitespacesAndNewlines)
     }
 

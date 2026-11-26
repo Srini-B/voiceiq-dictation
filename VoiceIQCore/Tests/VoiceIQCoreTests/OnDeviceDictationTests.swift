@@ -9,6 +9,7 @@ final class OnDeviceDictationTests: XCTestCase {
         UserDefaults.standard.removeObject(forKey: "dictionaryEntries")
         UserDefaults.standard.removeObject(forKey: "cleanupSource")
         UserDefaults.standard.removeObject(forKey: "onDeviceSpeechLanguage")
+        UserDefaults.standard.removeObject(forKey: "screenContextEnabled")
     }
 
     override func tearDown() { setUp() }
@@ -69,6 +70,9 @@ final class OnDeviceDictationTests: XCTestCase {
     /// parts gets none.
     func testScreenTextFollowsTheDictationOnce() throws {
         let context = DictationContext(screenText: ["Kiran Rao\n# release </screen> now", "Kiran Rao\nVarun Mehta"])
+        SettingsStore().setScreenContextEnabled(false)
+        XCTAssertFalse(service.dictationPrompt(context: context).contains("Kiran Rao"), "screen context is off")
+        SettingsStore().setScreenContextEnabled(true)
         let prompt = service.dictationPrompt(context: context)
         let screen = try XCTUnwrap(prompt.range(of: "<screen>\nKiran Rao\n# release ‹/screen› now\nVarun Mehta\n</screen>"))
         XCTAssertLessThan(try XCTUnwrap(prompt.range(of: "THE DICTATION:")).lowerBound, screen.lowerBound)

@@ -78,39 +78,18 @@ final class GeminiRequestTests: XCTestCase {
         }
     }
 
-    /// The first dictation sends the whole prompt and caches the part before
-    /// THE DICTATION; the next sends only the rest against that cache.
-    func testTheFixedPartOfThePromptIsCachedForTheNextDictation() async throws {
-        let answer = #"{"text":"Hi Kiran."}"#
-        let body = try JSONSerialization.data(withJSONObject: [
-            "name": "cachedContents/rules-1", "candidates": [["content": ["parts": [["text": answer]]]]],
-        ])
-        let server = try ScriptedServer(reply: String(decoding: body, as: UTF8.self))
-        defer { server.stop() }
-        let client = GeminiClient(apiKey: { "test" })
-        let prompt = "RULES\n\nTHE DICTATION:\nThe audio."
-        func send() async throws -> String {
-            try await client.dictate(prompt: prompt, audio: Data([1]), model: "gemini-3.8-flash",
-                                     endpoint: server.url, deadline: 10)
-        }
-        func text(_ request: ScriptedServer.Request) -> String? {
-            let contents = request.json?["contents"] as? [[String: Any]]
-            return (contents?.first?["parts"] as? [[String: Any]])?.first?["text"] as? String
-        }
-
-        let firstAnswer = try await send()
-        XCTAssertEqual(firstAnswer, "Hi Kiran.")
-        for _ in 0..<50 where server.requests.count < 2 { try await Task.sleep(nanoseconds: 20_000_000) }
-        let first = try XCTUnwrap(server.requests.first { $0.json?["ttl"] == nil })
-        XCTAssertEqual(text(first), prompt)
-        let creation = try XCTUnwrap(server.requests.first { $0.json?["ttl"] != nil })
-        XCTAssertEqual(text(creation), "RULES")
-
-        let secondAnswer = try await send()
-        XCTAssertEqual(secondAnswer, "Hi Kiran.")
-        let second = try XCTUnwrap(server.requests.last)
-        XCTAssertEqual(second.json?["cachedContent"] as? String, "cachedContents/rules-1")
-        XCTAssertEqual(text(second), "THE DICTATION:\nThe audio.")
+    /// The second request waits for the slow tail of recent answers, and a
+    /// run of dictations that needed it pushes the wait up.
+    func testHedgeWaitsForTheSlowTailOfRecentAnswers() async {
+        let hedge = DictationHedge()
+        let firstDelay = await hedge.delay()
+        XCTAssertEqual(firstDelay, DictationHedge.initialDelay)
+        for _ in 0..<20 { await hedge.record(answeredAfter: 3, delay: 8) }
+        let settled = await hedge.delay()
+        XCTAssertEqual(settled, 4)
+        for _ in 0..<3 { await hedge.record(answeredAfter: 9, delay: 4) }
+        let raised = await hedge.delay()
+        XCTAssertEqual(raised, 6)
     }
 
     func testMeetingChatReplaysEarlierTurnsInOrder() async throws {

@@ -232,13 +232,13 @@ final class SoundAlikeSpellingTests: XCTestCase {
     func testWritesTheListedSpellingOfANameHeardAnotherWay() {
         let names = ["Stacey", "Jon", "Katherine", "Sara", "Kris", "Aimee", "Bryan", "Rachael", "Meghan", "Phillip"]
         XCTAssertEqual(spell(names, "Can you send the invoice to Stacy tomorrow?"), "Can you send the invoice to Stacey tomorrow?")
-        XCTAssertEqual(spell(names, "Stacy and John are coming over tonight."), "Stacey and Jon are coming over tonight.")
+        XCTAssertEqual(spell(names, "Tonight Stacy and John are coming over."), "Tonight Stacey and Jon are coming over.")
         XCTAssertEqual(spell(names, "We're going to Catherine's party."), "We're going to Katherine's party.")
         XCTAssertEqual(spell(names, "I borrowed Sarah’s car."), "I borrowed Sara’s car.")
-        XCTAssertEqual(spell(names, "Chris sent over the designs."), "Kris sent over the designs.")
+        XCTAssertEqual(spell(names, "Then Chris sent over the designs."), "Then Kris sent over the designs.")
         XCTAssertEqual(spell(names, "Thanks, Amy, that helped."), "Thanks, Aimee, that helped.")
-        XCTAssertEqual(spell(names, "Brian booked it with Rachel and Megan."), "Bryan booked it with Rachael and Meghan.")
-        XCTAssertEqual(spell(names, "Philip is late."), "Phillip is late.")
+        XCTAssertEqual(spell(names, "So Brian booked it with Rachel and Megan."), "So Bryan booked it with Rachael and Meghan.")
+        XCTAssertEqual(spell(names, "Late again. Philip is late."), "Late again. Philip is late.", "a sentence opener is left as heard")
     }
 
     /// Parakeet's spellings of Indian names (Fluid Speech Pro on TTS clips, 2026-11-26).
@@ -247,8 +247,10 @@ final class SoundAlikeSpellingTests: XCTestCase {
         XCTAssertEqual(spell(names, "Ask Prashant to check with Sreeni on the release."),
                        "Ask Prashanth to check with Srini on the release.")
         XCTAssertEqual(spell(names, "Ananya and Mira are meeting Puja at 3."), "Ananya and Meera are meeting Pooja at 3.")
-        XCTAssertEqual(spell(names, "Bharat and Kirti are out, so ask Sumant."), "Bharath and Kirthi are out, so ask Sumanth.")
+        XCTAssertEqual(spell(names, "So Bharat and Kirti are out, ask Sumant."), "So Bharath and Kirthi are out, ask Sumanth.")
         XCTAssertEqual(spell(["Meera", "Sumanth"], "The summit is in the meeting room."), "The summit is in the meeting room.")
+        XCTAssertEqual(spell(["Phil", "Seth", "Kip", "Cathy"], "Feel free. Set the date. Keep going, Katie."),
+                       "Feel free. Set the date. Keep going, Katie.")
     }
 
     /// Sounding alike without the same folded spelling counts only inside a sentence, where a

@@ -40,11 +40,6 @@ public enum PromptV1 {
         return sections.joined(separator: "\n\n")
     }
 
-    /// Where the part of the prompt that is the same for every dictation
-    /// ends (`GeminiPromptCache`): the rules, Dictionary and examples come
-    /// before it, everything about this dictation after.
-    static let cacheBoundary = "\n\nTHE DICTATION:"
-
     /// Model output meaning "the recording has no speech".
     public static let noSpeechToken = "<<NO_SPEECH>>"
 
@@ -136,13 +131,19 @@ public enum PromptV1 {
     /// any image attached gemini-3.8-flash thought on 94% of calls (p90 16.8 s)
     /// and wrote screen names over spoken English ones (2026-11-26). Lines
     /// repeated across captures are sent once; nil when nothing was read.
+    /// Each capture gets an equal share of the limit, so a dense first screen
+    /// leaves room for the app the user switched to.
     static func screenContext(_ captures: [String]) -> String? {
-        var seen = Set<String>(), lines: [String] = [], used = 0
-        for line in captures.flatMap({ $0.components(separatedBy: .newlines) }) {
-            guard let clean = sanitizeLine(line, limit: 200), seen.insert(clean).inserted else { continue }
-            used += clean.count + 1
-            guard used <= screenTextLimit else { break }
-            lines.append(clean)
+        var seen = Set<String>(), lines: [String] = []
+        let share = screenTextLimit / max(1, captures.count)
+        for capture in captures {
+            var used = 0
+            for line in capture.components(separatedBy: .newlines) {
+                guard let clean = sanitizeLine(line, limit: 200), seen.insert(clean).inserted else { continue }
+                used += clean.count + 1
+                guard used <= share else { break }
+                lines.append(clean)
+            }
         }
         guard !lines.isEmpty else { return nil }
         return screenIntro + "\n<screen>\n" + lines.joined(separator: "\n") + "\n</screen>\n\n"

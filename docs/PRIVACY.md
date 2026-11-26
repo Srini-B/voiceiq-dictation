@@ -42,21 +42,19 @@ With no usable key, nothing is sent and the recording stays on your Mac.
    model reads intent from your speech and uses the app and window names
    only to tell what kind of text this is and how names on screen are
    spelled.
-   The fixed part of the prompt (built-in and custom rules, Dictionary,
-   examples, with no audio, field or screen text) is also stored as a Gemini
-   context cache under your key for one hour, so the next dictations send
-   only what changes. Google deletes it when the hour ends.
 2. **Your dictionary terms**, in that same request. The model uses them to
    bias what it hears, which is why names and jargon come out spelled right
    as you speak rather than being corrected afterwards. Up to 100 words and
    up to 10 "heard as" spellings (the misspelling and its correction) are
    sent.
 3. **Screen context**, while "Screen context" is on in Settings → Dictation — off
-   by default since 2026-10-13. VoiceiQ captures the display under the
-   frontmost window when dictation starts and when the frontmost app changes
-   during that dictation, reads its text on the Mac with Apple's Vision
-   framework, and sends that text (up to 6,000 characters) in the same
-   dictation request. No image leaves the Mac; the captures stay in memory
+   by default since 2026-10-13. VoiceiQ captures the frontmost window (only
+   that window, never the rest of the display) when dictation starts and when
+   the frontmost app changes during that dictation, reads its text on the Mac
+   with Apple's Vision framework, and sends that text (up to 6,000 characters)
+   in the same dictation request. Nothing is captured while a password field
+   has secure input on or while a password manager (1Password, Passwords,
+   Bitwarden, LastPass, Dashlane, KeePassXC, Enpass) is in front. No image leaves the Mac; the captures stay in memory
    only until they are read and are never stored on disk. macOS asks for
    Screen Recording permission the first time this feature runs. If you deny
    access, dictation continues without screen text. Turn off "Screen context"
