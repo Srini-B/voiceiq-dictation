@@ -108,6 +108,13 @@ wait. The on-device writer's removal shipped first, on its own (PR #90).
   address now keep its words. Messages style keeps the capital after more
   titles ("Prof.", "Capt.", "Sgt.").
 
+- **Codex after the seventh round (`3a4ab62`…`609f867`).** Quoted text now
+  keeps its spacing (tightening, collapsing and self-corrections skip it),
+  gets no added question mark or line-end period, and a spoken bullet after
+  a word ("Use bullet point notation") stays. An end mark's name mid-line
+  converts only before a word that opens a clause ("The Unicode question
+  mark is U+003F" stays). No scored output changed.
+
 ## Verification
 
 - D4 on the writing-Off path (Claude Fable 5.2,

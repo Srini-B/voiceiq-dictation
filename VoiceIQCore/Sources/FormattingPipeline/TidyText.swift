@@ -77,11 +77,19 @@ enum TidyText {
     /// Each line without runs of spaces or tabs, and without the spaces at its
     /// ends; the lines stay separate.
     static func collapsingSpaces(_ text: String) -> String {
+        // Quoted text is literal: Type "a  b" into the field.
+        let quoted = quoteMask(Array(text))
+        var offset = 0
         let lines = text.split(separator: "\n", omittingEmptySubsequences: false).map { line -> String in
             var collapsed = ""
             var afterSpace = false
-            for c in line {
-                if c == " " || c == "\t" {
+            let start = offset
+            offset += line.count + 1
+            for (number, c) in line.enumerated() {
+                if quoted[start + number] {
+                    collapsed.append(c)
+                    afterSpace = false
+                } else if c == " " || c == "\t" {
                     if !afterSpace { collapsed.append(" ") }
                     afterSpace = true
                 } else {

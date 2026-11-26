@@ -187,8 +187,11 @@ enum SpokenMarks {
                           // "He typed, comma, nothing else" and "Note, comma, goes inside the
                           // quotes" may mean the word.
                           ? inGreeting(chars, before: index) && wordFollows(chars, after: end)
-                          // "Move question mark to the end": an end mark follows a clause.
-                          : wordsInSentence(chars, before: index).count > 1,
+                          // "Move question mark to the end": an end mark follows a clause, and
+                          // ends the line or comes before a word that opens one ("ready
+                          // exclamation mark please test it"). "The Unicode question mark is
+                          // U+003F" names the mark.
+                          : wordsInSentence(chars, before: index).count > 1 && opensClause(chars, after: end),
                       words != ["comma"] || !beforeCompound(chars, after: end, ["separated", "separate", "delimited", "splice", "splices", "rules", "key"]),
                       // "That's my final answer, full stop.": emphasis, said after a comma.
                       words != ["full", "stop"] || !afterComma(chars, at: index) else { return nil }
@@ -254,6 +257,22 @@ enum SpokenMarks {
         let before = words(chars[..<index]).suffix(2)
         let after = words(chars[end...]).prefix(2)
         return before.contains(where: markNames.contains) || after.contains(where: markNames.contains)
+    }
+
+    /// Whether nothing but marks follows on the line, or a word that opens a
+    /// clause: a pronoun, "please", "thanks", "so", "but", "also", "ok".
+    private static func opensClause(_ chars: [Character], after end: Int) -> Bool {
+        let start = skip(chars, from: end, also: ",.!?")
+        guard start < chars.count, chars[start] != "\n" else { return true }
+        // Spoken layout comes next: "Are you ready question mark close quote".
+        if [["close", "quote"], ["unquote"], ["new", "line"], ["new", "paragraph"]]
+            .contains(where: { phraseEnd($0, in: chars, at: start) != nil }) { return true }
+        var stop = start
+        while stop < chars.count, TidyText.isWordCharacter(chars[stop]) { stop += 1 }
+        return [
+            "i", "you", "we", "they", "he", "she", "it", "please", "thanks", "thank", "so", "but", "also", "ok",
+            "okay", "yes", "no", "let", "hope", "see",
+        ].contains(String(chars[start..<stop]).lowercased())
     }
 
     private static func afterComma(_ chars: [Character], at index: Int) -> Bool {

@@ -102,8 +102,13 @@ public enum Tidy {
         if english { written = expandingInformalContractions(written) }
         written = TidyText.capitalizingSentenceStarts(written)
         if english { written = TidyText.recasingPronounI(written, from: "i", to: "I") }
-        return written.split(separator: "\n", omittingEmptySubsequences: false)
-            .map { TidyText.endingSentence(String($0)) }.joined(separator: "\n")
+        // A line that ends inside a quotation ends no sentence: The password is "red\nblue".
+        let quoted = TidyText.quoteMask(Array(written))
+        var offset = 0
+        return written.split(separator: "\n", omittingEmptySubsequences: false).map { line -> String in
+            offset += line.count + 1
+            return offset - 1 < quoted.count && quoted[offset - 1] ? String(line) : TidyText.endingSentence(String(line))
+        }.joined(separator: "\n")
     }
 
     private static let informalContractions = [
