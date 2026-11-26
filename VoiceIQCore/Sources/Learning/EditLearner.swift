@@ -33,6 +33,9 @@ public final class EditLearner {
         var pendingSince: Date?
         var pollTask: Task<Void, Never>?
         var harvesting = false
+        /// Counts applied diffs, so a slow poll does not overwrite a newer
+        /// Return capture that finished while it ran.
+        var generation = 0
     }
 
     /// One matched insertion after a harvest: its text now reads `window`.
@@ -181,6 +184,7 @@ public final class EditLearner {
         let snapshot = tracked.snapshot
         let insertions = tracked.insertions.map { ($0.id, $0.text, $0.original, $0.edits) }
         let previousHash = tracked.lastValueHash
+        let generation = tracked.generation
         let settled = tracked.pendingSince.map { now.timeIntervalSince($0) >= Self.settleSeconds } == true
         let settledHash = captured?.hashValue ?? (settled ? tracked.pendingHash : nil)
         let result = await Task.detached(priority: .utility) {
@@ -206,6 +210,11 @@ public final class EditLearner {
             }
             fields[key] = current
         case let .located(located, valueHash):
+            guard current.generation == generation else {
+                fields[key] = current
+                return
+            }
+            current.generation += 1
             current.lastValueHash = valueHash
             current.pendingHash = nil
             current.pendingSince = nil

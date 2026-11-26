@@ -101,10 +101,12 @@ public enum EditDiff {
                 let originalText = clean(removed.map(\.text).joined(separator: " "))
                 let replacementText = clean(added.map(\.text).joined(separator: " "))
                 let span = (previousBefore + 1)..<pair.0
-                let respells = isPlausibleFix(originalText, replacementText) || earlier.contains {
-                    $0.words == span && isPlausibleFix($0.replacement, replacementText)
-                }
-                if valid(originalText), valid(replacementText), originalText != replacementText, respells {
+                // `valid` first: it caps both sides at 60 characters before
+                // the quadratic distance runs.
+                if valid(originalText), valid(replacementText), originalText != replacementText,
+                   isPlausibleFix(originalText, replacementText) || earlier.contains(where: {
+                       $0.words == span && isPlausibleFix($0.replacement, replacementText)
+                   }) {
                     output.corrections.append(LearnedCorrection(
                         original: originalText,
                         replacement: replacementText,
