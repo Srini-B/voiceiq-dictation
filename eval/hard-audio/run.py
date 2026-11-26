@@ -84,7 +84,7 @@ def main() -> None:
     # dropped and paid for again on the next full run.
     outside = sorted({r["id"] for r in saved} - set(wanted))
     if outside:
-        raise SystemExit(f"{out} holds {len(outside)} clips outside this selection; use another --label")
+        raise SystemExit(f"{out} holds {len(outside)} clips outside this selection; pass a different LABEL")
     results = [r for r in saved if wanted.get(r["id"]) == r["request"]]
     done = {r["id"] for r in results}
     todo = [job for job in jobs if job[0]["id"] not in done]

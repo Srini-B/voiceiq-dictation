@@ -17,8 +17,9 @@ for i in (1, 2, 3):
     cand += [r for r in t if 4.0 <= r["audio_length_s"] <= 30 and words(r["text"]) >= 8]
 print("candidates", len(cand))
 rng.shuffle(cand)
-# Rows written before speaker_id was recorded cannot be checked here.
-speakers = {r["speaker_id"] for r in have if "speaker_id" in r}
+if len(have) < 60 and any("speaker_id" not in r for r in have):
+    raise SystemExit("monsoon_ta rows without speaker_id: rerun fetch.py first so speakers can be checked")
+speakers = {r["speaker_id"] for r in have}
 new = []
 for r in cand:
     if len(have) + len(new) >= 60:
