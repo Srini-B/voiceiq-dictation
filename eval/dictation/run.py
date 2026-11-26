@@ -131,9 +131,13 @@ def main() -> None:
 
     def save():
         results.sort(key=lambda r: (r["round"], r["id"]))
-        out.write_text(json.dumps({"label": args.label, "model": MODEL, "prompt_chars": len(jobs[0][2]),
-                                   "screenshots": args.screenshots, "complete": len(results) == len(jobs),
-                                   "failed": failed, "results": results}, indent=1, ensure_ascii=False))
+        # Written aside and renamed over the old file, so a stop mid-write
+        # leaves the previous complete file in place.
+        part = out.with_suffix(".part")
+        part.write_text(json.dumps({"label": args.label, "model": MODEL, "prompt_chars": len(jobs[0][2]),
+                                    "screenshots": args.screenshots, "complete": len(results) == len(jobs),
+                                    "failed": failed, "results": results}, indent=1, ensure_ascii=False))
+        os.replace(part, out)
 
     with concurrent.futures.ThreadPoolExecutor(args.workers) as pool:
         futures = {pool.submit(run, job): job for job in todo}
