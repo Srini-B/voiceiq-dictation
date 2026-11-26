@@ -32,3 +32,15 @@ each:
   400 output tokens). The cost per meeting hour, transcription included, needs
   a run on AMI. The AMI download mirror returned HTTP 503 and the Gemini
   transcription quota was spent on 2026-11-26.
+- The eval prices every call at January 2027 prices (2027-01-02), the prices
+  the C1 gate uses; gemini-3.8-flash doubles then. At those prices, one notes
+  call on a 70-second call costs about $0.008 to $0.011.
+
+## Tried and not kept: the Flex tier for notes
+
+Gemini's Flex tier (`serviceTier: "flex"`, half price, latency of minutes) was
+tried for the notes request, with the standard tier as fallback. Every one of
+18 Flex requests on 2026-11-26 came back `http_503` (no capacity). One hung
+until the 300 s deadline before the fallback ran. Flex saved nothing and added
+up to five minutes to the notes, so it is not shipped. It is worth trying again
+when Flex capacity is reliable.

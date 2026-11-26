@@ -29,7 +29,7 @@ struct Output: Encodable {
     var notes: String
     var seconds: [String: Double]
     /// Every Gemini call the meeting made, as `UsageMeter` recorded it, priced
-    /// by `PriceBook`. Without transcription calls when EVAL_TRANSCRIPTS was set.
+    /// by `PriceBook` at January 2027 prices. Without transcription calls when EVAL_TRANSCRIPTS was set.
     var usage: [Call]
     var duration_seconds: Double
     var cost_usd: Double
@@ -100,6 +100,8 @@ if let diarizer {
 }
 let transcriber = MeetingTranscriber(client: client, models: .init(transcribe: config.transcribeModel),
                                      endpoint: config.endpoint, diarizeFarSide: diarizeFarSide)
+// Priced as of January 2027, the prices the C1 cost gate uses (gemini-3.8-flash doubles then).
+let pricedAt = ISO8601DateFormatter().date(from: "2027-01-02T00:00:00Z")!
 let scratch = FileManager.default.temporaryDirectory.appendingPathComponent("meetings-eval-usage-\(UUID().uuidString).sqlite")
 let usageStore = try UsageStore(databaseURL: scratch)
 UsageMeter.store = usageStore
@@ -186,7 +188,7 @@ exit(failures == 0 ? 0 : 2)
     let calls = usageStore.records(forSession: input.id).map { r in
         Output.Call(stage: r.stage, model: r.model, text_in: r.textIn, audio_in: r.audioIn, image_in: r.imageIn,
                     cached_in: r.cachedIn, text_out: r.textOut, audio_out: r.audioOut, thought_out: r.thoughtOut,
-                    estimated: r.isEstimated, cost_usd: r.costUSD)
+                    estimated: r.isEstimated, cost_usd: r.usage.reportedCostUSD ?? PriceBook.cost(model: r.model, usage: r.usage, at: pricedAt))
     }
     let cost = calls.compactMap(\.cost_usd).reduce(0, +)
     let result = Output(id: input.id, segments: segments, participants: participants,
