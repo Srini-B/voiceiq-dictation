@@ -51,13 +51,24 @@ public extension GeminiClient {
     /// requests on the evaluator's meetings, gemini-3.8-flash twice wrote
     /// JSON the decoder refused (text after the object, and a badly formed
     /// object), and each of those meetings ended without notes.
-    func meetingNotes(prompt: String, model: String, endpoint: URL, deadline: TimeInterval) async throws -> MeetingNotes {
-        do {
-            return try MeetingNotesPrompt.parse(try await meetingNotesJSON(prompt: prompt, model: model, endpoint: endpoint, deadline: deadline))
-        } catch let error where error is DecodingError || (error as NSError).domain == NSCocoaErrorDomain {
-            Log.transcription.info("notes reply was not notes JSON; asking again")
-            return try MeetingNotesPrompt.parse(try await meetingNotesJSON(prompt: prompt, model: model, endpoint: endpoint, deadline: deadline))
+    /// Notes with no action items for a transcript that holds commitments are
+    /// asked for once more with those lines quoted
+    /// (`MeetingNotesPrompt.missingActions`).
+    func meetingNotes(prompt: String, transcript: [TranscriptSegment], model: String, endpoint: URL,
+                      deadline: TimeInterval) async throws -> MeetingNotes {
+        let ask = { (prompt: String) in
+            do {
+                return try MeetingNotesPrompt.parse(try await self.meetingNotesJSON(prompt: prompt, model: model, endpoint: endpoint, deadline: deadline))
+            } catch let error where error is DecodingError || (error as NSError).domain == NSCocoaErrorDomain {
+                Log.transcription.info("notes reply was not notes JSON; asking again")
+                return try MeetingNotesPrompt.parse(try await self.meetingNotesJSON(prompt: prompt, model: model, endpoint: endpoint, deadline: deadline))
+            }
         }
+        let notes = try await ask(prompt)
+        guard let missing = MeetingNotesPrompt.missingActions(notes, transcript: transcript) else { return notes }
+        Log.transcription.info("notes had no action items for a transcript with commitments; asking again")
+        guard let again = try? await ask(prompt + missing), !again.actions.isEmpty else { return notes }
+        return again
     }
 
     static func parseDiarizedWords(_ data: Data) throws -> [DiarizedWord] {

@@ -483,7 +483,7 @@ import VoiceIQSpeech
                 app: meta.source.map(Self.name), names: meta.speakerNames, screenNames: meta.screenNames,
                 ownerName: settings.meetingOwnerName, vocabulary: dictionary.sanitizedVocabulary(),
                 spellings: dictionary.spellings(), writingRules: settings.customWritingRules,
-                calendarEvent: meta.calendarEvent)), model: cfg.writingModel, endpoint: cfg.endpoint, deadline: 300)
+                calendarEvent: meta.calendarEvent)), transcript: transcript, model: cfg.writingModel, endpoint: cfg.endpoint, deadline: 300)
         }
         let notes = try await write(meta)
         var named = meta

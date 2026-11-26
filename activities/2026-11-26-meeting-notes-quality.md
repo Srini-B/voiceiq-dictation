@@ -24,6 +24,18 @@ Points were lost because:
 - `MeetingEngine.writeNotes` writes the notes again when `byElimination` names
   a voice the first notes left unnamed. That costs one more notes request,
   only on such calls.
+- **Round 2 regression (M5 83.1).** Both s2 runs came back with
+  `actions: []`, although the call had four spoken commitments. The new owner
+  rule ("the "I'll" speaker owns it, by name") likely left the model with
+  owners it had not named yet. Two fixes:
+  - A check after generation: `MeetingNotesPrompt.missingActions` lists
+    every transcript line with "I'll", "I will", "I can" or "I'm going to".
+    When the notes have no action items and that list is not empty,
+    `GeminiClient.meetingNotes` asks once more with those lines quoted, and
+    keeps the second reply only if it has actions.
+  - A speaker the model names in `speakers` owns their tasks under that name.
+- Notes never show a raw "Speaker 3" label, and keep the speaker's hedge
+  ("probably") wherever a point appears.
 - Eval: `EVAL_TRANSCRIPTS=DIR` reuses an earlier run's transcripts and writes
   only the notes. The transcription quota ran out on 2026-11-26
   (`retryAfter` about 22 h).
@@ -42,8 +54,12 @@ Points were lost because:
 - s3: 4 of 4 actions, with owners and Wednesday dates.
 - s4 and s4-echo: Kenji Watanabe owns the usage-numbers action.
 - AMI: the group next step is an action.
-- `swift test --package-path VoiceIQCore`: 245 tests, 0 failures.
-- M5 judging of the new packet is with the integrator.
+- `swift test --package-path VoiceIQCore`: 246 tests, 0 failures.
+- Round 2 judged 83.1: s3 and s4 at 92 to 95, s2 at 50 and 60.
+- Round 3: s2 had 4 or 5 actions in all 6 runs, with owners and dates. No
+  meeting shows a raw speaker label. Judging is with the integrator.
+- Not fixed: AMI's recorded problem (the budget may not cover every feature)
+  is voiced only as "I think that's a cost thing", so the notes leave it out.
 
 ## Rollback
 

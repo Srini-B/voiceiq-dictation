@@ -442,6 +442,9 @@ Rules added 2026-11-26 after a Fable judge scored the notes
 - `notes` keeps every problem or concern someone raised and nothing nobody
   said. A call of a few minutes gets a short summary and only the sections
   that add something.
+- When the notes come back with no action items but the transcript has a
+  line with "I'll", "I will", "I can" or "I'm going to", the request is sent
+  once more with those lines quoted (`MeetingNotesPrompt.missingActions`).
 - When `byElimination` names a far-side voice the notes left unnamed, the
   notes are written once more with that name (`MeetingEngine.writeNotes`), so
   the voice's tasks carry it.
