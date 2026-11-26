@@ -535,7 +535,8 @@ enum Hesitations {
     }
 
     private static func englishEnd(_ chars: [Character], at start: Int) -> Int? {
-        if start > 0, joinsWord(chars[start - 1]) || joinsAddress(chars, at: start - 1) { return nil }
+        // "~/.um", "C:\\Users\\er\\Documents": a path's part, not a hesitation.
+        if start > 0, joinsWord(chars[start - 1]) || ".\\".contains(chars[start - 1]) || joinsAddress(chars, at: start - 1) { return nil }
         if Hesitations.isWord(chars, at: start) { return nil }
         for word in english {
             let end = start + word.count
@@ -543,7 +544,7 @@ enum Hesitations {
             let matches = zip(chars[start..<end], word).enumerated().allSatisfy { number, pair in
                 pair.0 == pair.1 || (number == 0 && pair.0 == TidyText.upper(pair.1))
             }
-            if matches, end == chars.count || !(joinsWord(chars[end]) || joinsAddress(chars, at: end)) { return end }
+            if matches, end == chars.count || !(joinsWord(chars[end]) || chars[end] == "\\" || joinsAddress(chars, at: end)) { return end }
         }
         return nil
     }
