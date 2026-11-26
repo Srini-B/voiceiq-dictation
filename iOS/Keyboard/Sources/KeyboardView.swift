@@ -86,7 +86,7 @@ struct KeyboardView: View {
                         }
                     }
                 }
-                .frame(width: typing.leadingEnd, alignment: .leading)
+                .frame(width: TypingBridge.leadingEnd(pasteInRow: typing.pasteInRow && !showingEdit), alignment: .leading)
 
                 // Clear, so touches between the ends reach Hex's suggestions underneath.
                 ZStack { Color.clear; centerSlot }
@@ -201,14 +201,21 @@ private struct DictateButton: View {
                         .tint(writing ? KeyboardPalette.accent : .white)
                 } else {
                     // VoiceiQ's mark listens; the waveform in front of its face says "speak".
-                    HStack(spacing: 2) {
-                        Image(systemName: "waveform")
-                            .font(.system(size: 10, weight: .bold))
+                    // Four 2 pt bars: SF's waveform has 1 pt strokes that blur on the pill.
+                    let mark = min(20, height - 12)
+                    HStack(spacing: 3) {
+                        HStack(alignment: .center, spacing: 1.5) {
+                            ForEach([0.4, 0.8, 0.55, 0.3], id: \.self) { share in
+                                Capsule().frame(width: 2, height: (mark * share).rounded())
+                            }
+                        }
                         Image("DictateMark")
                             .resizable()
                             .scaledToFit()
-                            .frame(height: min(20, height - 12))
+                            .frame(height: mark)
                     }
+                    // The mark faces left in every language: the waveform stays in front of its face.
+                    .environment(\.layoutDirection, .leftToRight)
                 }
             }
             .foregroundStyle(.white)

@@ -25,7 +25,7 @@ final class TypingBridge: ObservableObject {
     var leadingEnd: CGFloat { Self.leadingEnd(pasteInRow: pasteInRow) }
     static let trailingEnd: CGFloat = buttonWidth + buttonGap
 
-    private static func leadingEnd(pasteInRow: Bool) -> CGFloat {
+    static func leadingEnd(pasteInRow: Bool) -> CGFloat {
         (pasteInRow ? 2 * buttonWidth + buttonGap : buttonWidth) + buttonGap
     }
 
