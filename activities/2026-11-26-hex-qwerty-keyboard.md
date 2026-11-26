@@ -104,3 +104,8 @@ Three keyboard findings blocked the 8:00 PM IST release; fixed on `keyboard-full
 - **7, Add to vocabulary at 100 words.** `CustomVocabularySettings.sanitize` kept the first 100 terms, so the word just added was cut. It now keeps the newest 100, and a repeated term keeps its newest place.
 
 Verified on a Mac satellite: arm64 Simulator build, KeyboardTests 6/6, a scratch run of `sanitize` (a new word over the cap is kept and is the only one requested), and in the SE Simulator the recording strip after opening and closing the emoji panel mid-recording, with no Hex words behind it.
+
+## Follow-up: findings 6 and 8 (after #89)
+
+- **8, secure fields.** iOS already swaps in its own keyboard for standard secure fields, but custom and web ones can reach a third-party keyboard. `TypingBridge.autocorrectionType` returns `.no` for `isSecureTextEntry`, and `TypingJournal.allows` (patch 0007) refuses `isSecureTextEntry` directly, so a password never enters the journal even if a field allows autocorrect. Password, new-password and one-time-code content types were already `.no` in both.
+- **6, off screen.** `viewDidDisappear` now closes Hex's emoji panel, lets `handleMemoryWarning` drop the emoji library, and saves the typing journal, since iOS may end the extension before it is shown again.

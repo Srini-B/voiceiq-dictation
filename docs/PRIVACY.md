@@ -10,12 +10,8 @@ meetings on your Mac, iPhone or iPad (Settings → Dictation → Speech, see
 [ON_DEVICE.md](ON_DEVICE.md)). For what is transcribed on device, "Writing
 rules and notes" decides what Gemini gets. Set to Gemini, it gets the
 transcript text (with the screen's text, if screen context is on),
-and the audio only if the on-device model is missing, busy or fails. Set to
-On device, it gets nothing while the on-device models work; if one is
-missing, busy or fails and a key is stored, Gemini gets the audio (or, when
-only the on-device writer failed, the transcript text) as it would with
-Gemini. Set to Off, nothing transcribed on device goes to Gemini for
-writing, but a recording the on-device models could not transcribe still goes
+and the audio only if the on-device model is missing, busy or fails. Set
+to Off, nothing transcribed on device goes to Gemini for writing, but a recording the on-device models could not transcribe still goes
 to Gemini as audio when a key is stored. Finished text still syncs to your own iCloud like any dictation
 (see iCloud below). A row of
 Speech left on Gemini (say, Dictation while Meetings are on device) still
@@ -31,7 +27,7 @@ With no usable key, nothing is sent and the recording stays on your Mac.
    sent while you speak. The request holds the FLAC-compressed recording
    and the dictation prompt, and the model answers with the finished text.
    The prompt contains the built-in writing rules, your custom rules from
-   Settings → Dictation, the spoken languages you set, the regional spelling
+   Settings → Dictation, the regional spelling
    of your Mac (read from its region for each dictation), the frontmost
    app's name and the title of its focused window (a document name, a page
    title, a chat name), in Safari, Chrome, Edge, Brave, Vivaldi, Arc, Dia,

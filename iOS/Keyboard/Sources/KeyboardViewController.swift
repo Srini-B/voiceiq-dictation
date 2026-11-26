@@ -145,6 +145,7 @@ final class KeyboardViewController: UIInputViewController {
         updateBackdrop()
         model.disappeared()
         dictionaryOffer.disappeared()
+        typing.disappeared()
     }
 
     override func textDidChange(_ textInput: UITextInput?) {

@@ -18,12 +18,10 @@ public enum TranscriptionSource: String, CaseIterable, Sendable, Identifiable {
 }
 
 /// Who applies the writing rules to an on-device transcript and writes an
-/// on-device meeting's notes: Gemini, the on-device writer (LFM3-Omni-2B),
-/// or nobody. With the last two the words never leave the device. A Gemini
-/// transcript is always written by the rules in the same request.
+/// on-device meeting's notes: Gemini, or nobody, so the words never leave the
+/// device. A Gemini transcript is always written by the rules in the same request.
 public enum CleanupSource: String, CaseIterable, Sendable, Identifiable {
     case gemini
-    case onDevice
     case none
 
     public var id: String { rawValue }
@@ -31,14 +29,8 @@ public enum CleanupSource: String, CaseIterable, Sendable, Identifiable {
     public var displayName: String {
         switch self {
         case .gemini: return "Gemini"
-        case .onDevice: return "On device"
         case .none: return "Off"
         }
-    }
-
-    /// The choices this device offers: On device needs the writer.
-    public static var offered: [CleanupSource] {
-        allCases.filter { $0 != .onDevice || LocalWriterSupport.isAvailable }
     }
 }
 
@@ -64,11 +56,14 @@ public extension SettingsStore {
     var localMeetingTranscriptionEnabled: Bool { meetingSource == .onDevice }
 
     /// Who applies the writing rules to an on-device dictation. Gemini unless
-    /// the user chose otherwise. On device where this device does not offer
-    /// the writer reads as Off, so a local-only choice never turns into Gemini.
+    /// the user chose Off. "onDevice", stored by 0.7.15 and earlier for the
+    /// retired on-device writer, reads as Off, so a local-only choice never
+    /// turns into Gemini.
     var cleanupSource: CleanupSource {
-        let stored = Self.defaults.string(forKey: "cleanupSource").flatMap(CleanupSource.init(rawValue:)) ?? .gemini
-        return CleanupSource.offered.contains(stored) ? stored : .none
+        switch Self.defaults.string(forKey: "cleanupSource") {
+        case "onDevice": return .none
+        case let stored: return stored.flatMap(CleanupSource.init(rawValue:)) ?? .gemini
+        }
     }
 
     func setCleanupSource(_ source: CleanupSource) {

@@ -18,14 +18,10 @@ import VoiceIQSpeech
 public struct GeminiTranscriptionService: TranscriptionServicing {
     let client: GeminiClient
     let settings: SettingsStore
-    /// The on-device writer, for "Writing rules" set to On device. Nil where
-    /// the app does not link it (tests).
-    let localWriter: LocalWriteRunner?
 
-    public init(client: GeminiClient, settings: SettingsStore = SettingsStore(), localWriter: LocalWriteRunner? = nil) {
+    public init(client: GeminiClient, settings: SettingsStore = SettingsStore()) {
         self.client = client
         self.settings = settings
-        self.localWriter = localWriter
     }
 
     public func transcribe(audioURL: URL, durationSeconds: Double, context: DictationContext) async throws -> TranscriptionResult {
@@ -97,27 +93,22 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
         return TranscriptionResult(rawTranscript: written, cleanedTranscript: text, modelID: modelID)
     }
 
-    /// Writes an on-device transcript by the writing rules: with the
-    /// on-device writer when the user picked it and it is downloaded, else
-    /// with Gemini when a key is stored, so an on-device writer that is
-    /// missing or fails hands the text to Gemini. With writing Off, no key,
-    /// or Gemini failing, the transcript is inserted as transcribed. The dictionary's
-    /// replacement rules apply either way. A transcript with no words, or one
-    /// the writer finds holds no speech (only "um" and "uh"), is an empty
-    /// dictation, as a Gemini transcription of the audio would be.
+    /// Writes an on-device transcript. With Gemini and a key stored, Gemini
+    /// writes it by the writing rules; with writing Off, no key, or Gemini
+    /// failing, it goes in as transcribed. The dictionary's replacement rules
+    /// and sound-alike spellings apply on every path but Gemini's, which gets
+    /// the transcript as heard and applies the replacements after. A
+    /// transcript with no words is an empty dictation.
     public func write(_ transcript: TranscriptionResult, context: DictationContext) async throws -> TranscriptionResult {
         let rules = DictionaryStore().replacementRules()
         let raw = transcript.cleanedTranscript
         guard !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw TranscriptionError.emptyTranscript }
         var asTranscribed = transcript
         // Dictionary names spelled another way ("Stacy" for "Stacey") take
-        // the Dictionary's spelling; the writers get the transcript as heard.
+        // the Dictionary's spelling; Gemini gets the transcript as heard.
         asTranscribed.cleanedTranscript = SoundAlikeSpelling.apply(
             DictionaryStore().entries().map(\.term), to: ReplacementEngine.apply(rules, to: raw),
             language: settings.localSpeechLanguage.code)
-        if settings.cleanupSource == .onDevice, let written = try await writeOnDevice(transcript, context: context, rules: rules) {
-            return written
-        }
         guard settings.cleanupSource != .none, KeychainStore.loadAPIKey() != nil else { return asTranscribed }
         let config = settings.geminiConfig
         let prompt = dictationPrompt(context: context, transcript: raw)
@@ -138,24 +129,6 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
         }
     }
 
-    private func writeOnDevice(_ transcript: TranscriptionResult, context: DictationContext,
-                               rules: [ReplacementEngine.Rule]) async throws -> TranscriptionResult? {
-        guard let localWriter, await LocalWriter.isReady else { return nil }
-        do {
-            let written = try await LocalWriter.dictation(raw: transcript.cleanedTranscript, context: context, runner: localWriter)
-            guard !written.isEmpty else { throw TranscriptionError.emptyTranscript }
-            return TranscriptionResult(rawTranscript: transcript.rawTranscript,
-                                       cleanedTranscript: ReplacementEngine.apply(rules, to: written),
-                                       modelID: "\(transcript.modelID)+lfm3-omni-2b/writing-rules")
-        } catch TranscriptionError.emptyTranscript {
-            throw TranscriptionError.emptyTranscript
-        } catch {
-            try Task.checkCancellation()
-            Log.transcription.error("On-device writing failed: \(String(describing: error), privacy: .public)")
-            return nil
-        }
-    }
-
     func dictationPrompt(context: DictationContext, writtenParts: [String]? = nil, transcript: String? = nil) -> String {
         let dictionary = DictionaryStore()
         let place = DictationPlace(appName: context.targetAppName,
@@ -164,10 +137,6 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
         return PromptV1.dictationPrompt(
             vocabulary: dictionary.sanitizedVocabulary(), spellings: dictionary.spellings(),
             customRules: settings.customWritingRules, spelling: SpellingVariant.system.promptLine,
-            // The spoken languages are a Gemini dictation setting. On device,
-            // the model's own language applies, and a Gemini fallback or
-            // writing step gets no hint.
-            languages: settings.dictationSource == .gemini ? SpokenLanguage.promptLine(settings.spokenLanguages) : nil,
             screenText: writtenParts == nil && settings.screenContextEnabled ? context.screenText : [],
             surroundingText: context.focusedField?.surroundingText,
             place: place,
