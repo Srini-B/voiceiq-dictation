@@ -197,7 +197,9 @@ def main() -> None:
         # Unavailable until every case has a judge score: a hard rule can
         # only lower a judged score, never stand in for one, except a
         # hard-rule zero, which is final.
-        scores = []
+        # A case's "weight" (default 1) sets its share: D3 leans on
+        # Tamil-English, the owner's second language.
+        scores, weights = [], []
         for r in results:
             if judged_item(spec[r["id"]]) != item:
                 continue
@@ -208,7 +210,9 @@ def main() -> None:
             elif s is not None and key in hard:
                 s = min(s, hard[key])
             scores.append(s)
-        items[item] = statistics.mean(scores) if scores and None not in scores else None
+            weights.append(spec[r["id"]].get("weight", 1))
+        items[item] = (sum(s * w for s, w in zip(scores, weights)) / sum(weights)
+                       if scores and None not in scores else None)
         unjudged += [f"{r['id']}/r{r['round']}" for r in results
                      if judged_item(spec[r["id"]]) == item and f"{r['id']}/r{r['round']}" not in judged
                      and hard.get(f"{r['id']}/r{r['round']}") != 0]

@@ -128,3 +128,26 @@ At 0.7.16, meetings are ₹163 of the ₹344 and dictation is ₹181. To get und
 3. A cheaper meeting hour on Gemini.
 
 **Standing rule from cyron, later the same day.** Gemini is the default for dictation, writing and meetings. On device is used only in rare cases, about 5% of use at most, only where it clearly helps and scores 90 or more. Moving work on device is never how the budget is met; caching, shorter prompts and fewer extra calls are.
+
+## D3 reweighted toward Tamil-English
+
+cyron never speaks Hindi; his second language is Tamil mixed with English.
+
+**What changed in the cases:**
+- D3 now has four Tamil-English cases at full weight, half of D3:
+  - ml_ta (existing).
+  - ml_ta_2: Tanglish in Latin letters.
+  - ml_ta_3: a time and a name.
+  - ml_ta_4: a spoken self-correction, "illa illa".
+- ml_hi and ml_hinglish drop to half weight.
+- Spanish, French and German stay at full weight.
+- D4 gains two Tamil-accented English cases (acc_01, acc_02, `ta_en` voice).
+- For the new Tamil cases, either Tamil script or all-Latin Tanglish is accepted, as long as it is never translated and English words are never respelled in Tamil script.
+
+**First look on main e477ef9** (6 cases × 4 rounds, unjudged):
+- The Tamil self-correction is ignored in 3 of 4 rounds ("Friday … illa illa, Thursday" keeps Friday). The prompt's correction cues are English only.
+- ml_ta_3 writes "3:00 மணிக்கு" in 1 of 4 rounds.
+- ml_ta_2 writes "Machi" for the spoken "Machan".
+- Both accented-English cases are right in 4 of 4.
+
+The dictation thread owns the prompt fixes. Hindi-specific prompt rules stay only if they cost nothing on other languages.
