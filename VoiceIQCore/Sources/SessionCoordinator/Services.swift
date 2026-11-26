@@ -87,7 +87,8 @@ public struct DictationContext: Equatable, Sendable {
     public var targetAppName: String?
     public var targetPID: pid_t?
     public var focusedField: FocusedFieldCapture?
-    public var screenshots: [Data]
+    /// The screen's text, one entry per capture, when screen context is on.
+    public var screenText: [String]
     /// When the key ended the recording. Press Return after paste skips the
     /// Return when Esc came after it.
     public var recordingEndedAt: Date?
@@ -97,13 +98,13 @@ public struct DictationContext: Equatable, Sendable {
         targetAppName: String? = nil,
         targetPID: pid_t? = nil,
         focusedField: FocusedFieldCapture? = nil,
-        screenshots: [Data] = []
+        screenText: [String] = []
     ) {
         self.targetAppBundleID = targetAppBundleID
         self.targetAppName = targetAppName
         self.targetPID = targetPID
         self.focusedField = focusedField
-        self.screenshots = screenshots
+        self.screenText = screenText
     }
 }
 

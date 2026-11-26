@@ -45,7 +45,7 @@ source. A meeting is the exception: with Meetings On device and writing Off,
 one that fell back to Gemini still gets no notes, and its note says Gemini
 transcribed it. Without a key the dictation fails and stays in History for Retry, and
 the meeting is marked failed.
-Screen context, when on, sends its screenshots with the Gemini writing
+Screen context, when on, sends the screen's text with the Gemini writing
 request as it does with a Gemini dictation.
 
 Below the three choices, the models are grouped by their job, each group
@@ -143,7 +143,10 @@ Two fixes from Hex (MIT) apply to the on-device transcript:
   term, and is spelled nearly the same, the term's spelling: "Stacy" →
   "Stacey"; mid-sentence only, a name that just sounds the same and is at
   most two letters off, as in "Let's invite Jeff" → "Let's invite Geoff"
-  ("Jeff fixed it" stays). English only. It runs on the text inserted as
+  ("Jeff fixed it" stays). Spellings Indian names share also count as the
+  same: "ee" and "i", "oo" and "u", "th" and "t", so Parakeet's "Sreeni",
+  "Puja", "Prashant" and "Kirti" take the Dictionary's "Srini", "Pooja",
+  "Prashanth" and "Kirthi". English only. It runs on the text inserted as
   transcribed (writing Off, no key, or Gemini failing).
 
 History's Retry and launch recovery use `OnDeviceFirstTranscription`: the

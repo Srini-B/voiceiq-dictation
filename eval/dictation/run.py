@@ -2,9 +2,11 @@
 """Runs the dictation eval the way the app sends a dictation, with every
 option on: the prompt comes from the app's own PromptV1.swift (via
 eval/promptdump), the Dictionary holds cases.json's terms, the place and
-field text are set, and the 1440x900 screen rides along as four JPEGs,
-the most ScreenContextCollector keeps. One gemini-3.8-flash call per case,
-same body as GeminiClient.dictate.
+field text are set, and the screen's text goes in the prompt's SCREEN TEXT
+section, as ScreenContextCollector reads it with Vision OCR (the window
+title and the lines in cases.json, which Vision's accurate recognizer reads
+off the 1440x900 screen). One gemini-3.8-flash call per case, same body as
+GeminiClient.dictate.
 
 Writes results/<label>.json with each output, call time and token usage.
 Usage: run.py LABEL [--rounds N] [--workers N] [--promptdump PATH]
@@ -28,9 +30,10 @@ ASSETS = HERE / ".assets"
 MODEL = "gemini-3.8-flash"
 
 
-def prompt_for(case: dict, spec: dict, promptdump: str, shots: int) -> str:
-    request = {"vocabulary": spec["dictionary"], "imagesAttached": shots > 0,
-               "app": spec["screen"]["app"], "window": spec["screen"]["window"]}
+def prompt_for(case: dict, spec: dict, promptdump: str, screen_on: bool) -> str:
+    request = {"vocabulary": spec["dictionary"], "app": spec["screen"]["app"], "window": spec["screen"]["window"]}
+    if screen_on:
+        request["screenText"] = ["\n".join([spec["screen"]["window"]] + spec["screen"]["lines"])]
     if "before" in case:
         request["before"] = case["before"]
     out = subprocess.run([promptdump], input=json.dumps(request).encode(), capture_output=True, check=True)
@@ -48,9 +51,8 @@ def dictation_text(raw: str) -> str | None:
     return value.get("text") if isinstance(value, dict) and isinstance(value.get("text"), str) else None
 
 
-def call(prompt: str, flac: bytes, screen: bytes, shots: int) -> tuple[str, float, dict]:
+def call(prompt: str, flac: bytes) -> tuple[str, float, dict]:
     parts = [{"text": prompt}]
-    parts += [{"inline_data": {"mime_type": "image/jpeg", "data": base64.b64encode(screen).decode()}}] * shots
     parts.append({"inline_data": {"mime_type": "audio/flac", "data": base64.b64encode(flac).decode()}})
     body = {"contents": [{"role": "user", "parts": parts}],
             "generationConfig": {"temperature": 0, "thinkingConfig": {"thinkingLevel": "low"},
@@ -96,23 +98,12 @@ def main() -> None:
     ap.add_argument("label")
     ap.add_argument("--rounds", type=int, default=2)
     ap.add_argument("--workers", type=int, default=3)
-    ap.add_argument("--screenshots", type=int, default=4, help="JPEGs attached; 0 = screen context off")
-    ap.add_argument("--screen-text", action="store_true",
-                    help="experiment: on-screen text (as OCR would read it) in the prompt instead of JPEGs")
+    ap.add_argument("--screenshots", type=int, default=4, help="0 = screen context off")
     ap.add_argument("--promptdump", default=str(HERE.parent / "promptdump" / "promptdump"))
     args = ap.parse_args()
-    if args.screen_text:
-        args.screenshots = 0
     spec = json.loads((HERE / "cases.json").read_text())
-    screen = (ASSETS / "screen.jpg").read_bytes()
-    jobs = [(r, c, prompt_for(c, spec, args.promptdump, args.screenshots)) for r in range(args.rounds) for c in spec["cases"]]
-    if args.screen_text:
-        ocr = "\n".join([spec["screen"]["window"]] + spec["screen"]["lines"])
-        section = ("SCREEN TEXT:\nText read from the user's screen while dictating. Use it only to spell names, identifiers, "
-                   "file paths and terms that the speaker actually says; never add screen content that was not spoken, and "
-                   "never change a spoken word into a screen word that merely looks similar.\n<screen>\n" + ocr + "\n</screen>")
-        jobs = [(r, c, p.replace("\n\nAnswer with a JSON object", "\n\n" + section + "\n\nAnswer with a JSON object"))
-                for r, c, p in jobs]
+    jobs = [(r, c, prompt_for(c, spec, args.promptdump, args.screenshots > 0))
+            for r in range(args.rounds) for c in spec["cases"]]
     print(f"{len(jobs)} calls, prompt {len(jobs[0][2])} chars")
 
     # A saved call is reused only when its request was the same: prompt,
@@ -122,13 +113,11 @@ def main() -> None:
         _, case, prompt = job
         digest = hashlib.sha256(f"{MODEL}|{args.screenshots}|{prompt}".encode())
         digest.update((ASSETS / f"{case['id']}.flac").read_bytes())
-        if args.screenshots:
-            digest.update(screen)
         return digest.hexdigest()[:16]
 
     def run(job):
         round_, case, prompt = job
-        text, seconds, usage = call(prompt, (ASSETS / f"{case['id']}.flac").read_bytes(), screen, args.screenshots)
+        text, seconds, usage = call(prompt, (ASSETS / f"{case['id']}.flac").read_bytes())
         print(f"{case['id']:<18} r{round_} {seconds:5.2f}s thoughts={usage.get('thoughtsTokenCount', 0)}", flush=True)
         return {"id": case["id"], "round": round_, "request": fingerprint(job), "output": text,
                 "seconds": round(seconds, 3), "usage": usage}

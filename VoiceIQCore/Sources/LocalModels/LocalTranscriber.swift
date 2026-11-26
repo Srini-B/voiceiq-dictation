@@ -39,7 +39,7 @@ public final class LocalTranscriber: Sendable {
     @MainActor static func sessionOptions(language: LocalSpeechLanguage) -> (options: LocalSpeechOptions, toolsReady: Bool) {
         // The English tools would trim and reformat other languages as English.
         let toolsReady = language.isEnglish && LocalModelStore.englishTools.state == .ready
-        let vocabulary = DictionaryStore().entries().prefix(256).map {
+        let vocabulary = DictionaryStore().ranked().prefix(256).map {
             LocalSpeechOptions.Term(text: $0.term, aliases: $0.misspelling.map { [$0] } ?? [])
         }
         let options = LocalSpeechOptions(
