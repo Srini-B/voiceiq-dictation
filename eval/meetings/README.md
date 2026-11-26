@@ -64,3 +64,24 @@ the call window shows everyone) and `reference.json`.
 (`start`, `end`, `speaker`, `text`), `summary` (AMI's abstractive summary, or
 the script's decisions and action items), and for synthetic meetings
 `decisions` and `actions` with owners.
+
+## Cost
+
+Every Gemini call a meeting makes is metered the way the app meters it
+(`UsageMeter`), priced by `PriceBook` **at January 2027 prices** (2027-01-02;
+gemini-3.8-flash doubles then, so until January these read about twice the
+app's Cost pane), and written to the output (values illustrative):
+
+```json
+"usage": [{"stage": "meetingSummary", "model": "gemini-3.8-flash", "text_in": 2001,
+           "audio_in": 0, "image_in": 0, "cached_in": 1500, "text_out": 410,
+           "audio_out": 0, "thought_out": 0, "estimated": false, "cost_usd": 0.0064}],
+"duration_seconds": 1049.2, "transcribe_cost_usd": 0.41, "notes_cost_usd": 0.012,
+"cost_usd": 0.42, "cost_usd_per_hour": 1.44
+```
+
+`transcribe_cost_usd`, `cost_usd` and `cost_usd_per_hour` are left out under
+`EVAL_TRANSCRIPTS` (no transcription ran), and any total is left out when a
+call had no price. A notes prompt is a fixed cost, so a 70-second call's per-hour
+figure is meaningless; take the meeting-hour cost (scorecard C1) from long
+meetings such as AMI.
