@@ -189,11 +189,20 @@ public enum EditDiff {
         let removedParts = segments(removed, in: original)
         let addedParts = segments(added, in: replacement)
         if removedParts.count == addedParts.count { return Array(zip(removedParts, addedParts)) }
-        if addedParts.count == 1, added.dropFirst().allSatisfy({ $0.text.first?.isUppercase == true }) {
+        if addedParts.count == 1, added.allSatisfy({ $0.text.first?.isUppercase == true }) {
             return [(removed, added)]
         }
         guard removed.count == added.count else { return [] }
-        return zip(removed.indices, added.indices).map { (removed[$0...$0], added[$1...$1]) }
+        // Cut both sides where the side with more breaks has them, so a full
+        // stop added after "Wispr Flow" keeps the phrase whole.
+        let lengths = (removedParts.count > addedParts.count ? removedParts : addedParts).map(\.count)
+        var offset = 0
+        return lengths.map { length in
+            defer { offset += length }
+            let r = removed.startIndex + offset
+            let a = added.startIndex + offset
+            return (removed[r..<(r + length)], added[a..<(a + length)])
+        }
     }
 
     /// `run` split wherever the text between two of its words holds a break.
@@ -233,7 +242,7 @@ public enum EditDiff {
             guard replacement.count == 1,
                   !correction.replacement.contains(where: { $0 == "'" || $0 == "’" }),
                   correction.replacement.lowercased() != earlier.replacement.lowercased(),
-                  isPlausibleFix(earlier.replacement, correction.replacement)
+                  respellsAs(letters(earlier.replacement), letters(correction.replacement), atStart: atStart)
             else { return nil }
             return correction
         }
@@ -252,6 +261,16 @@ public enum EditDiff {
         // replaced, so `kept` is really the learned part.
         guard addedWords.count == addedCount else { return nil }
         return LearnedCorrection(original: earlier.original, replacement: kept, words: inner)
+    }
+
+    private static func letters(_ text: String) -> String {
+        text.lowercased().filter { $0.isLetter || $0.isNumber }
+    }
+
+    /// The learned part kept as the start (or end) of the merged word:
+    /// "Py" in "PyTorch", "Supa" in "Supabase".
+    private static func respellsAs(_ learned: String, _ merged: String, atStart: Bool) -> Bool {
+        !learned.isEmpty && (atStart ? merged.hasPrefix(learned) : merged.hasSuffix(learned))
     }
 
     /// Whether `replacement` could be the same words respelled rather than

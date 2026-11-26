@@ -65,6 +65,12 @@
   pending value; a break added or removed while fixing pairs word by word;
   a protected entry no longer blocks learning the new spelling beside it.
   `EditLearnerTests` covers `learn(_:stillTaught:)`.
+- Third Neon pass: a phrase merged into one word revises when the learned
+  part starts (or ends) the merged word ("Py torch" → "PyTorch"); a break
+  added after a learned phrase keeps the phrase whole; joining across a
+  removed break needs every word capitalized; a protected entry's
+  `learnedFrom` no longer blocks the new spelling; the field is not dropped
+  while a Return capture is still diffing.
 
 ## Verification
 

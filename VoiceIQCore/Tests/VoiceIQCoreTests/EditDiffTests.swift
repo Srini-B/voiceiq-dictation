@@ -120,6 +120,18 @@ final class EditDiffTests: XCTestCase {
             fix("whisper", "Wispr", 2..<3),
             fix("He", "he", 3..<4),
         ])
+        XCTAssertEqual(EditDiff.edits(original: "I asked him. Shrinny left.", replacement: "I asked her Srini left.").corrections, [
+            fix("him", "her", 2..<3),
+            fix("Shrinny", "Srini", 3..<4),
+        ])
+
+        let original = "Use whisper flowcast he left."
+        let phrase = EditDiff.edits(original: original, replacement: "Use Wispr Flow he left.")
+        let stopped = EditDiff.edits(original: original, replacement: "Use Wispr Flow. He left.")
+        XCTAssertEqual(stopped.corrections.first, fix("whisper flowcast", "Wispr Flow", 1..<3))
+        XCTAssertEqual(EditDiff.steps(for: stopped, after: phrase.corrections).filter {
+            if case .learn = $0 { return false } else { return true }
+        }, [])
     }
 
     func testDeletingOrRewordingBesideALearnedNameLeavesIt() {
@@ -137,6 +149,12 @@ final class EditDiffTests: XCTestCase {
         let second = EditDiff.edits(original: original, replacement: "Deploy it on Supabase today.")
         XCTAssertEqual(EditDiff.steps(for: second, after: first.corrections), [
             .revise(replacing: [fix("super", "Supa", 3..<4)], with: fix("super base", "Supabase", 3..<5)),
+        ])
+        let torch = "Train it with pie torch now."
+        let py = EditDiff.edits(original: torch, replacement: "Train it with Py torch now.")
+        let merged = EditDiff.edits(original: torch, replacement: "Train it with PyTorch now.")
+        XCTAssertEqual(EditDiff.steps(for: merged, after: py.corrections), [
+            .revise(replacing: [fix("pie", "Py", 3..<4)], with: fix("pie torch", "PyTorch", 3..<5)),
         ])
     }
 

@@ -33,6 +33,8 @@ public final class EditLearner {
         var pendingSince: Date?
         var pollTask: Task<Void, Never>?
         var harvesting = false
+        /// Return captures still diffing: the field is not dropped under one.
+        var capturesInFlight = 0
         /// Harvests are numbered when they read the field; a result older
         /// than the last one applied (a slow poll behind a Return capture)
         /// is dropped.
@@ -180,7 +182,7 @@ public final class EditLearner {
             forget(key)
             return
         }
-        if captured == nil { tracked.harvesting = true }
+        if captured == nil { tracked.harvesting = true } else { tracked.capturesInFlight += 1 }
         let ticket = tracked.nextTicket
         tracked.nextTicket += 1
         fields[key] = tracked
@@ -200,13 +202,13 @@ public final class EditLearner {
         }.value
 
         guard var current = fields[key] else { return }
-        if captured == nil { current.harvesting = false }
+        if captured == nil { current.harvesting = false } else { current.capturesInFlight -= 1 }
         // Only the newest harvest may drop the field or move its pending
         // value: an older one read the field before a newer one did.
         let newest = ticket == current.nextTicket - 1
         switch result {
         case .fieldGone:
-            if newest { forget(key) } else { fields[key] = current }
+            if newest, current.capturesInFlight == 0 { forget(key) } else { fields[key] = current }
         case .unchanged:
             fields[key] = current
         case let .editing(valueHash):
@@ -236,7 +238,7 @@ public final class EditLearner {
                 updated.edits = EditDiff.history(after: match.edits, earlier: insertion.edits)
                 return updated
             }
-            if current.insertions.isEmpty, newest {
+            if current.insertions.isEmpty, newest, current.capturesInFlight == 0 {
                 forget(key)
             } else {
                 fields[key] = current
@@ -361,7 +363,7 @@ public final class EditLearner {
                 // learning the new spelling beside it.
                 return (term == original && !protected.contains($0.id)) || term == replacement
                     || misspelling == original || misspelling == replacement
-                    || (!isRevision && learnedFrom == original)
+                    || (!isRevision && learnedFrom == original && !protected.contains($0.id))
             }) else { continue }
             // Only words the language does not already have: a name, a
             // product term, jargon. Changing "They" to "we" or fixing the
