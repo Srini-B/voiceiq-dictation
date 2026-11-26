@@ -2,6 +2,7 @@
   "dictionary": ["Kiran", "Arun", "Harish", "Nitin", "Varun", "Rohan", "Nikhil", "Kalyan", "Karthik", "Srini",
                  "Srinivasan", "Priya", "Divya", "Shreya", "Deepak", "Siddharth", "Aishwarya", "Chaitanya",
                  "Subramanian", "Venkat", "Paige", "Stacey", "Vercel", "Supabase", "VoiceiQ", "Codex", "EFT"],
+  "spelling": "Spelling: when the dictation is in English, use English (India) spelling, vocabulary, and conventions for dates and units. Never translate into another language.",
   "voices": {
     "in": "Speak naturally in a clear Indian English accent at brisk conversational dictation speed, as an engineer dictating into a laptop microphone. Say names naturally in flow, never spelled out.",
     "us": "Speak naturally in a casual American English accent at brisk dictation speed, as someone dictating a message into a laptop microphone.",

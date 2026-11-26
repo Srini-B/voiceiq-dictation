@@ -31,6 +31,8 @@ MODEL = "gemini-3.8-flash"
 def prompt_for(case: dict, spec: dict, promptdump: str, shots: int) -> str:
     request = {"vocabulary": spec["dictionary"], "imagesAttached": shots > 0,
                "app": spec["screen"]["app"], "window": spec["screen"]["window"]}
+    if spec.get("spelling"):
+        request["spelling"] = spec["spelling"]
     if "before" in case:
         request["before"] = case["before"]
     out = subprocess.run([promptdump], input=json.dumps(request).encode(), capture_output=True, check=True)

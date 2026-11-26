@@ -94,6 +94,7 @@ def wer(ref: str, hyp: str) -> float:
 
 
 def has_word(term: str, text: str) -> bool:
+    term, text = unicodedata.normalize("NFC", term), unicodedata.normalize("NFC", text)
     return re.search(rf"(?<!\w){re.escape(term)}(?!\w)", text) is not None
 
 
@@ -119,6 +120,11 @@ def main() -> None:
     spec = {c["id"]: c for c in json.loads((HERE / "cases.json").read_text())["cases"]}
     run = json.loads(Path(args.result).read_text())
     results = run["results"]
+    have = {(r["id"], r["round"]) for r in results}
+    rounds = {r["round"] for r in results}
+    missing = [f"{c}/r{n}" for c in spec for n in sorted(rounds) if (c, n) not in have]
+    if missing:
+        raise SystemExit(f"{args.result}: no result for {len(missing)} current cases ({', '.join(missing[:5])}…); rerun run.py with this label")
     if not run.get("complete", True):
         raise SystemExit(f"{args.result}: incomplete run, {len(run['failed'])} calls failed; rerun before scoring")
 
