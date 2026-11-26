@@ -96,4 +96,18 @@ final class MeetingTracksTests: XCTestCase {
         XCTAssertEqual(turns.map(\.start), [0, 20])
         XCTAssertEqual(SpeakerLinker.overlappingTurns(words).count, 1)
     }
+
+    func testAVoiceHeardUnderOnePercentOfTheMeetingGivesItsWordsToTheNearestOtherVoice() {
+        // 1000 s meeting: "far a" talks at the start, "far b" at the end;
+        // "far c" says "yeah" near b for 0.5 s, "far d" talks 12 s and stays.
+        var words = (0..<200).map { TimedWord(text: "a", speaker: "far a", start: Double($0), end: Double($0) + 0.9) }
+        words += (0..<200).map { TimedWord(text: "b", speaker: "far b", start: 800 + Double($0), end: 800.9 + Double($0)) }
+        words += [TimedWord(text: "yeah", speaker: "far c", start: 850.2, end: 850.7)]
+        words += (0..<15).map { TimedWord(text: "d", speaker: "far d", start: 400 + Double($0), end: 400.8 + Double($0)) }
+        words += [TimedWord(text: "me", speaker: MeetingSpeaker.you, start: 851, end: 851.1)]
+        let out = MeetingTranscriber.foldingStrayVoices(words)
+        XCTAssertEqual(out.count, words.count)
+        XCTAssertEqual(out.first { $0.text == "yeah" }?.speaker, "far b")
+        XCTAssertEqual(Set(out.map(\.speaker)), ["far a", "far b", "far d", MeetingSpeaker.you])
+    }
 }

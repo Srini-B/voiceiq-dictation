@@ -32,8 +32,12 @@ T-01a216c8-4952-74a8-b308-cbc7879e8a45).
     as there are far-side voices and that voice said 10 words or more.
   - The notes request accepts a single address followed by an answer in the
     very next turn, when the name is an invitee or on-screen name.
+  - A far-side voice heard for under 1% of the meeting gives each word to
+    the nearest other far-side voice (`foldingStrayVoices`).
   - `CallWindowText.lines(pid:browser:)` reads only the meeting window in a
     browser, not every tab's window.
+- **Untimed mic text** (the API's no-annotation fallback) is kept as one
+  turn, as the far side already did (Codex review on #82).
 - **Notes.** `meetingNotes` retries once when the reply is not parseable
   JSON (2 of 14 requests on main failed this way), and the parser ignores
   text after the JSON object.
@@ -62,26 +66,30 @@ T-01a216c8-4952-74a8-b308-cbc7879e8a45).
 ## Verification
 
 Eval on an Amp Mac satellite (macos-27; the lobsters-mac-mini runner was not
-listed), scored with PR #80's `score.py` (cpWER for M4). Mean of AMI
-ES2004a and eight synthetic meetings:
+listed), scored with PR #80's `score.py` at 7ad4e32 (cpWER for M4, numbers
+normalised, HTML entities unescaped). Mean of AMI ES2004a and eight
+synthetic meetings:
 
 | Run | M1 | M2 | M3 | M4 |
 | --- | --- | --- | --- | --- |
-| main, speaker model downloaded | 95.0 | 92.2 | 87.8 | 84.0 |
-| this branch | 98.9 | 97.6 | 94.1 | 92.8 |
+| main, speaker model downloaded (six meetings) | 95.0 | 92.2 | 90.5 | 86.2 |
+| this branch | 100.0 | 97.7 | 96.2 | 94.9 |
 
-main without the model scored 78.3 / 80.6 / 76.9 / 68.3 on six meetings.
-Two runs of the branch gave the same numbers.
+AMI ES2004a alone: main 70.0 / 54.1 / 48.6 / 23.6, branch 100.0 / 84.7 /
+81.9 / 79.2. AMI's plain WER is 33% without fillers, so the remaining M3 and
+M4 gap is transcription, not speakers. Before `foldingStrayVoices` a fifth
+voice of 8.7 s cost AMI 10 points of M1. Every synthetic meeting is named in
+full, the same in three runs.
 
-AMI ES2004a alone: main 70.0 / 54.1 / 48.1 / 23.3, branch 90.0 / 84.3 /
-80.8 / 77.0. AMI's plain WER is 33% without fillers, so the remaining M4 gap
-is transcription, not speakers. One stray voice of 39 words costs M1 10
-points.
+Transcription hints cannot close the AMI gap: `custom_vocabulary` is the only
+hint field `gemini-3.5-transcribe` takes, and the API rejects it with
+diarization or word timestamps (ai.google.dev/gemini-api/docs/transcribe),
+which both requests need.
 
 The AMI reference had HTML entities (`we&#39;ve`) until `prepare.py`
-unescaped them; the numbers above use the fixed reference.
+unescaped them.
 
-`swift test --package-path VoiceIQCore`: 212 tests, 0 failures. The VoiceIQ
+`swift test --package-path VoiceIQCore`: 237 tests, 0 failures. The VoiceIQ
 (macOS) and VoiceIQiOS (simulator, arm64) schemes build unsigned. A live call
 was not tested.
 

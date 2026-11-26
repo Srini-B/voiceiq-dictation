@@ -92,7 +92,12 @@ public struct MeetingTranscriber: Sendable {
                 return request
             } place: { (raw: [DiarizedWord], request: AssembledAudio, _: [TimedWord]) -> [TimedWord] in
                 raw.compactMap { word -> TimedWord? in
-                    guard let start = word.start, let span = request.trackSpan(start, word.end ?? start) else { return nil }
+                    guard let start = word.start else {
+                        // Untimed text (the API's no-annotation fallback) is kept as one turn, as `place` does.
+                        return TimedWord(text: word.text, speaker: MeetingSpeaker.you,
+                                         start: request.trackTime(request.bodyStart) ?? 0, end: request.trackTime(request.duration) ?? 0)
+                    }
+                    guard let span = request.trackSpan(start, word.end ?? start) else { return nil }
                     return TimedWord(text: word.text, speaker: MeetingSpeaker.you, start: span.lowerBound, end: span.upperBound)
                 }
             }
@@ -315,7 +320,31 @@ public struct MeetingTranscriber: Sendable {
         let labelled = LocalMeetingTranscriber.settled(LocalMeetingTranscriber.label(farWords, segments: segments), segments: segments)
         var out = words
         for (offset, index) in far.enumerated() { out[index].speaker = "far " + labelled[offset].speaker }
-        return LocalMeetingTranscriber.renumber(out)
+        return LocalMeetingTranscriber.renumber(foldingStrayVoices(out))
+    }
+
+    /// A far-side voice heard for less than this share of the meeting is not
+    /// a participant. MEASURED 2026-11-26 on AMI ES2004a: the model heard a
+    /// fifth voice for 8.7 s of 1049 s, all overlapping "yeah" and "okay"
+    /// from the other people, and it cost the participant score 10 points.
+    static let strayVoiceShare = 0.01
+
+    /// A stray voice's words go to the nearest far-side word of a kept voice,
+    /// so no words are lost.
+    static func foldingStrayVoices(_ words: [TimedWord]) -> [TimedWord] {
+        guard let first = words.map(\.start).min(), let last = words.map(\.end).max() else { return words }
+        var talk: [String: Double] = [:]
+        for word in words where word.speaker != MeetingSpeaker.you { talk[word.speaker, default: 0] += word.end - word.start }
+        let stray = Set(talk.filter { $0.value < (last - first) * strayVoiceShare }.keys)
+        let kept = words.filter { $0.speaker != MeetingSpeaker.you && !stray.contains($0.speaker) }
+        guard !stray.isEmpty, !kept.isEmpty else { return words }
+        return words.map { word in
+            guard stray.contains(word.speaker),
+                  let nearest = kept.min(by: { abs($0.start - word.start) < abs($1.start - word.start) }) else { return word }
+            var word = word
+            word.speaker = nearest.speaker
+            return word
+        }
     }
 
     /// Consecutive speech regions grouped into requests of about `windowSpeech` seconds each.

@@ -64,6 +64,11 @@ without asking (`MeetingEngine.farSideDiarizer`); nothing it hears leaves the
 Mac. The decision is in
 [activities/2026-11-26-meeting-speakers-hybrid.md](../activities/2026-11-26-meeting-speakers-hybrid.md).
 
+A far-side voice the model hears for less than 1% of the meeting is not a
+participant: each of its words goes to the nearest word of another far-side
+voice (`MeetingTranscriber.foldingStrayVoices`). On AMI ES2004a it was 8.7 s
+of overlapping "yeah" and "okay".
+
 A speaker's turn that runs past 20 s ends at its next sentence end, so a long
 answer reads as paragraphs with their own times (`MeetingTranscriber.paragraphSeconds`).
 
