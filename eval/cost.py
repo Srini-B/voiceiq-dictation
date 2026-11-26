@@ -56,9 +56,20 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("run", help="eval/dictation/results/<label>.json")
     ap.add_argument("--prices", help="price period in cost.json; default its score_prices")
+    ap.add_argument("--backup-share", type=float,
+                    help="share of dictations that send the backup request, for a run whose runner did not send it")
     args = ap.parse_args()
     cfg = json.loads((HERE / "cost.json").read_text())
     run = json.loads(Path(args.run).read_text())
+    if not run.get("complete"):
+        raise SystemExit("incomplete run: rerun run.py with the same label to finish it before pricing it")
+    recorded = all("secondRequests" in r["usage"] for r in run["results"])
+    if not recorded and args.backup_share is None:
+        raise SystemExit("this run did not send the app's backup request (no usage.secondRequests): "
+                         "rerun it with a run.py that does, or pass --backup-share measured from the app")
+    if args.backup_share is not None:
+        for r in run["results"]:
+            r["usage"]["secondRequests"] = args.backup_share
     period = args.prices or cfg["score_prices"]
     price = cfg["prices_usd_per_mtok"][period][run["model"]]
     share = cfg["cache_hit_share_in_use"]
@@ -74,7 +85,7 @@ def main() -> None:
         "label": run["label"], "prices": period, "inr_per_dictation": round(per_dictation, 3),
         "cache_share_priced": share, "eval_cached_share": round(sum(r["usage"].get("cachedContentTokenCount", 0) for r in run["results"])
                               / max(1, sum(r["usage"].get("promptTokenCount", 0) for r in run["results"])), 3),
-        "backup_requests": sum(r["usage"].get("secondRequests", 0) for r in run["results"]),
+        "backup_requests": "given" if args.backup_share is not None else sum(r["usage"].get("secondRequests", 0) for r in run["results"]),
         "calls": len(run["results"]), "inr_meeting_hour": per_hour, "months": months,
         "C1": months[cfg["score_profile"]]["C1"],
     }, indent=1))

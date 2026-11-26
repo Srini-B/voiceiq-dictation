@@ -71,10 +71,10 @@ Eval meetings: AMI ES2004a (headset mix, four people; the mic track is one perso
 
 ```sh
 python3 -m doctest eval/cost.py
-python3 eval/cost.py eval/dictation/results/LABEL.json   # --profile typical for the everyday figure
+python3 eval/cost.py eval/dictation/results/LABEL.json   # --prices 2026-12 for today's prices
 ```
 
-Every release reports cost per dictation and per meeting hour beside C1, with the typical profile (600 dictations and 10 meeting hours) as a check and the heavy profile reported but not gated. Meetings stay on Gemini; switching them to On device is not a cost lever. The backup request and any early send-on-pause request share a cap of about 10% extra dictation calls. `cost.json` records where its prices, exchange rate and profiles come from. Meetings use a per-hour figure from the cost study until the meeting pipeline records its own token usage.
+Every release reports cost per dictation and per meeting hour beside C1, with the typical profile (600 dictations and 10 meeting hours) as a check and the heavy profile reported but not gated. Meetings stay on Gemini; switching them to On device is not a cost lever. The backup request and any early send-on-pause request share a cap of about 10% extra dictation calls. `cost.py` prices only a complete run whose runner sent the app's backup request (each result records `usage.secondRequests`); for an older run, `--backup-share` gives the share measured from the app. `cost.json` records where its prices, exchange rate and profiles come from. Meetings use a per-hour figure from the cost study until the meeting pipeline records its own token usage.
 
 ## Known limits
 
