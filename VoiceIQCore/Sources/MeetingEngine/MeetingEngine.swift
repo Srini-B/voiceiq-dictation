@@ -471,15 +471,25 @@ import VoiceIQSpeech
         }
     }
 
+    /// When the notes name every far-side voice but one and the invite names
+    /// the last, that voice is named by elimination and the notes are written
+    /// once more, so its tasks carry its name. MEASURED 2026-11-26: the first
+    /// notes of a vendor call left "pull the usage numbers" without an owner.
     private func writeNotes(transcript: [TranscriptSegment], meta: MeetingMeta) async throws -> MeetingNotes {
         let cfg = config(), settings = SettingsStore(), dictionary = DictionaryStore()
-        let prompt = MeetingNotesPrompt.build(transcript: transcript, context: .init(
-            startedAt: meta.startedAt, durationSeconds: meta.durationSeconds,
-            app: meta.source.map(Self.name), names: meta.speakerNames, screenNames: meta.screenNames,
-            ownerName: settings.meetingOwnerName, vocabulary: dictionary.sanitizedVocabulary(),
-            spellings: dictionary.spellings(), writingRules: settings.customWritingRules,
-            calendarEvent: meta.calendarEvent))
-        return try await client.meetingNotes(prompt: prompt, model: cfg.writingModel, endpoint: cfg.endpoint, deadline: 300)
+        let write = { (meta: MeetingMeta) in
+            try await self.client.meetingNotes(prompt: MeetingNotesPrompt.build(transcript: transcript, context: .init(
+                startedAt: meta.startedAt, durationSeconds: meta.durationSeconds,
+                app: meta.source.map(Self.name), names: meta.speakerNames, screenNames: meta.screenNames,
+                ownerName: settings.meetingOwnerName, vocabulary: dictionary.sanitizedVocabulary(),
+                spellings: dictionary.spellings(), writingRules: settings.customWritingRules,
+                calendarEvent: meta.calendarEvent)), transcript: transcript, model: cfg.writingModel, endpoint: cfg.endpoint, deadline: 300)
+        }
+        let notes = try await write(meta)
+        var named = meta
+        named.screenNames = ScreenSpeakerNames.byElimination(meta: meta, transcript: transcript, notes: notes)
+        guard named.screenNames != meta.screenNames else { return notes }
+        return (try? await write(named)) ?? notes
     }
 
     /// The dictionary's wrong → right spellings, applied to what was heard.

@@ -184,6 +184,32 @@ public enum MeetingNotesPrompt {
         return try JSONSerialization.data(withJSONObject: root.compactMapValues { $0 })
     }
 
+    /// Lines where a speaker commits to doing something ("I'll", "I will",
+    /// "I can", "I'm going to"), in transcript order.
+    static func commitments(in transcript: [TranscriptSegment]) -> [TranscriptSegment] {
+        transcript.filter { $0.text.contains(commitment) }
+    }
+
+    nonisolated(unsafe) private static let commitment = #/(?i)\bI(?:'ll|’ll| will| can| am going to|'m going to|’m going to)\b/#
+
+    /// What to add to the request when the reply has no action items but the
+    /// transcript holds commitments; nil when nothing is missing.
+    /// MEASURED 2026-11-26: on a three-person release call with four spoken
+    /// commitments ("I will upload them in the evening", "I can try it
+    /// today"), two runs of gemini-3.8-flash returned an empty action list.
+    public static func missingActions(_ notes: MeetingNotes, transcript: [TranscriptSegment]) -> String? {
+        let lines = commitments(in: transcript)
+        guard notes.actions.isEmpty, !lines.isEmpty else { return nil }
+        let quoted = lines.map { "- [\(clock($0.start ?? 0))] \($0.text)" }.joined(separator: "\n")
+        return """
+
+        CHECK BEFORE ANSWERING
+        A first draft of these notes had no action items, but these lines commit someone to a task:
+        \(quoted)
+        Every one of them that is a task to do after the meeting must be in "actions", with its owner and its spoken deadline. Return the complete JSON again.
+        """
+    }
+
     static func label(_ id: String, _ names: [String: String]) -> String {
         if let name = names[id], !name.isEmpty { return name }
         return id == MeetingSpeaker.you ? ownerPlaceholder : MeetingSpeaker.defaultName(id)
@@ -231,6 +257,10 @@ public enum MeetingNotesPrompt {
 
     FIDELITY
     - Use only what the transcript supports. Never invent participants, facts, decisions, owners, deadlines, or context. When unsure, leave it out.
+    - Keep a cost, risk, or doubt someone raised about an idea next to that idea. A point voiced as a doubt is a concern, not an idea.
+    - Keep the speaker's scope and terms. Never narrow or widen a claim ("sales fell after the move" is not "the move's sales fell"), shorten a term into another word ("the billing system" is not "the bill system"), or turn "not a priority" into "no limits".
+    - Keep each speaker's certainty: "probably the login bug" stays "probably" everywhere the point appears.
+    - Never write a label such as "Speaker 3" outside "speakers". For a speaker with no name, write "another participant" or the role they stated.
     - Keep exact names, numbers, amounts, percentages, dates, product and project names, and acronyms. Do not round figures or expand acronyms the speakers did not expand. Never replace a named thing with "the client" or "the project". If a name is unclear, write [name unclear].
     - Leave out passwords, one-time codes, and other secrets that were read aloud; say only that one was shared.
     - Never write an em dash or an en dash in any field. Use a comma, a colon, a period, or parentheses instead.
@@ -238,15 +268,15 @@ public enum MeetingNotesPrompt {
     CLASSIFY EACH ITEM BEFORE PLACING IT
     First decide whether each point was discussed, proposed, requested, agreed, or decided. Then:
     - decisions: only outcomes explicitly agreed, approved, or finalized. Proposals, preferences, "we should", and open suggestions are not decisions. Write each as a standalone sentence and include the stated reason when there is one. A vote or approval is a decision, not an action.
-    - actions: only tasks someone committed to ("I'll send it", "I can take that") or was asked to do after the meeting. Discussion topics, vague intentions ("we should look into"), general commitments, and steps done live during the meeting are not actions. Write "text" as an imperative task that makes sense without the transcript and names the object it acts on.
-      - owner: the person who takes the task or is asked to do it, not the person who raised the topic. Use the note owner's name, a confirmed name, or a name from "speakers" exactly as written. Use null when the owner is not explicit or unambiguous. "Speaker 2" is not a name; use null instead.
-      - deadline: the deadline exactly as spoken, such as "by Friday" or "end of Q3". Use null when none was spoken. Never compute or infer a date.
-    - notes: open questions (with the answer if one was given), risks, blockers, dependencies, important numbers, dates, links, and constraints that are not already a decision, an action, or in a section.
+    - actions: only tasks someone committed to ("I'll send it", "I can take that") or was asked to do after the meeting. Every such task goes in actions, one entry per task, even when a section covers its topic; a section or the summary may mention it but never instead of the action. A decision a named person will make later ("I'll decide by Wednesday") is that person's action. A next step the group agreed to take before the next meeting ("we'll all go off and do our parts") is an action with owner null; say what it prepares for when the transcript says so. Put the deadline only in "deadline", never also in "text". Discussion topics, vague intentions ("we should look into"), general commitments, and steps done live during the meeting are not actions. Write "text" as an imperative task that makes sense without the transcript and names the object it acts on.
+      - owner: the person who takes the task or is asked to do it, not the person who raised the topic. The speaker who says "I'll" or "I can" owns it. Use the note owner's name, a confirmed name, or a name from "speakers" exactly as written. An anonymous speaker you name in "speakers" owns their tasks under that name. Never write a role ("an engineering colleague") for a speaker whose name is known. Use null when the owner is not explicit or unambiguous. "Speaker 2" is not a name; use null instead.
+      - deadline: the deadline exactly as spoken for that task, such as "by Friday" or "end of Q3". Use null when none was spoken. Never compute or infer a date, and never carry one task's deadline to another.
+    - notes: open questions (with the answer if one was given), risks, problems, blockers, dependencies, important numbers, dates, links, and constraints that are not already a decision, an action, or in a section. Keep every problem or concern someone raised. Write only what someone said: a risk nobody voiced is your inference and is left out.
     - State each fact once across all fields.
     - Keep disagreement and each person's reasons separate. Do not merge objections unless the transcript says they are shared.
 
     SUMMARY AND TITLE
-    - summary: start with one or two sentences on what the meeting was about and what came out of it. Then add short paragraphs covering the discussion in order. Merge repeated points. Skip greetings, small talk, filler, and false starts. Give longer meetings more detail.
+    - summary: start with one or two sentences on what the meeting was about and what came out of it. Then add short paragraphs covering the discussion in order. Merge repeated points. Skip greetings, small talk, filler, and false starts. Give longer meetings more detail. Fit the length to the meeting: a call of a few minutes gets a summary of one to three sentences and only the sections that hold something not already in decisions or actions.
     - title: the main topic in 1 to 8 words, in the output language. Use a specific topic, not a generic title. No date, no quotes, no trailing punctuation.
 
     SPEAKER NAMES
