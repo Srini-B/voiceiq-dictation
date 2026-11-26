@@ -22,7 +22,7 @@ def d5(times: list[float]) -> dict:
 paths = sys.argv[1:]
 if len(set(paths)) != len(paths):
     raise SystemExit("a run is listed twice")
-pool, second, per_run, settings = [], 0, {}, set()
+pool, second, billed, per_run, settings = [], 0, 0, {}, set()
 for path in paths:
     run = json.load(open(path))
     # As score.py: a partial run would drop its slowest or failed calls from the pool.
@@ -36,11 +36,12 @@ for path in paths:
     times = [r["seconds"] + APP_OVERHEAD_S for r in run["results"]]
     pool += times
     second += sum(r["usage"].get("secondRequests", 0) > 0 for r in run["results"])
+    billed += sum(r["usage"].get("billedSecondRequests", 0) > 0 for r in run["results"])
     per_run[path] = d5(times)["D5"]
 if len(settings) > 1:
     raise SystemExit("runs differ in model, prompt, audio or hedge ceiling: pool only runs of one experiment")
 report = {"runs": len(paths), **d5(pool), "e2e_max": round(max(pool), 2),
-          "second_requests": f"{second}/{len(pool)}", "per_run_D5": per_run}
+          "second_requests": f"{second}/{len(pool)}", "billed_second_requests": f"{billed}/{len(pool)}", "per_run_D5": per_run}
 if len(paths) < 5:
     report["note"] = "fewer than 5 runs: not a D5 of record"
 print(json.dumps(report, indent=1))

@@ -65,7 +65,7 @@ public actor GeminiClient {
             ] as [String: Any],
         ]
         let reply = try await generateContent(body: body, model: model, endpoint: endpoint, deadline: deadline,
-                                              stage: audio == nil ? .cleanup : .transcribe)
+                                              stage: audio == nil ? .cleanup : .transcribe, stream: true)
         guard let text = PromptV1.dictationText(fromJSON: reply) else {
             // Never paste the model's working. Retryable: the next attempt
             // usually answers with the object.
@@ -154,10 +154,19 @@ public actor GeminiClient {
     // MARK: - Core
 
     /// Thin parser over `post` — the classic `candidates/content/parts` envelope.
+    /// `stream`: the answer comes as server-sent events, joined here into the
+    /// same envelope. Gemini bills nothing for a stream cancelled before its
+    /// first chunk (Gemini API billing FAQ), and an answer arrives in one or
+    /// a few chunks within half a second, so a request dropped before it
+    /// answered (the slower of two raced attempts, a send-on-pause request
+    /// the speaker talked over) costs nothing. Time to the last chunk matched
+    /// a plain call: p50 2.72 s against 2.88 s, p90 5.82 against 5.77, 66
+    /// paired calls (2026-11-26).
     func generateContent(body: [String: Any], model: String, endpoint: URL, deadline: TimeInterval,
-                         stage: UsageStage) async throws -> String {
+                         stage: UsageStage, stream: Bool = false) async throws -> String {
         let data = try await post(
-            path: "v1beta/models/\(model):generateContent",
+            path: "v1beta/models/\(model):\(stream ? "streamGenerateContent" : "generateContent")",
+            query: stream ? [URLQueryItem(name: "alt", value: "sse")] : [],
             body: try JSONSerialization.data(withJSONObject: body),
             endpoint: endpoint, deadline: deadline, modelLabel: model, stage: stage
         )
@@ -171,6 +180,7 @@ public actor GeminiClient {
     /// and "mark it failed", so two copies would drift into a data-loss bug.
     func post(
         path: String,
+        query: [URLQueryItem] = [],
         body: Data,
         endpoint: URL,
         deadline: TimeInterval,
@@ -188,7 +198,9 @@ public actor GeminiClient {
         // No key, no upload: an on-device fallback must not send audio or
         // text that the server would only refuse.
         guard apiKey() != nil else { throw TranscriptionError.auth }
-        let url = endpoint.appendingPathComponent(path)
+        var components = URLComponents(url: endpoint.appendingPathComponent(path), resolvingAgainstBaseURL: false)
+        if !query.isEmpty { components?.queryItems = query }
+        guard let url = components?.url else { throw TranscriptionError.network("bad_url") }
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -196,7 +208,7 @@ public actor GeminiClient {
         applyAuth(&request)
         request.httpBody = body
 
-        let data: Data
+        var data: Data
         let response: URLResponse
         do {
             (data, response) = try await Self.perform(request, deadline: deadline, stage: stage, modelLabel: modelLabel)
@@ -218,6 +230,9 @@ public actor GeminiClient {
         }
         switch http.statusCode {
         case 200:
+            if query.contains(where: { $0.name == "alt" && $0.value == "sse" }) {
+                data = Self.joinedEventStream(data) ?? data
+            }
             // Every billed call passes through here, so this is the one place
             // usage is read. Both envelopes are tried; a body with neither is
             // simply not metered.
@@ -249,7 +264,7 @@ public actor GeminiClient {
                 // replaced it) stops here instead of sending again.
                 try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
                 try Task.checkCancellation()
-                return try await post(path: path, body: body, endpoint: endpoint, deadline: deadline,
+                return try await post(path: path, query: query, body: body, endpoint: endpoint, deadline: deadline,
                                       modelLabel: modelLabel, modelIsInPath: modelIsInPath, stage: stage,
                                       isRetryAfter429: true)
             }
@@ -351,6 +366,29 @@ public actor GeminiClient {
     }
 
     // MARK: - Response parsing (pure, tested)
+
+    /// A `streamGenerateContent?alt=sse` body as one `generateContent`
+    /// envelope: each chunk's answer text joined in order, thought parts left
+    /// out, with the last chunk's finish reason, prompt feedback and usage.
+    static func joinedEventStream(_ data: Data) -> Data? {
+        guard let body = String(data: data, encoding: .utf8) else { return nil }
+        var text = ""
+        var envelope: [String: Any] = [:]
+        var candidate: [String: Any] = [:]
+        for line in body.split(whereSeparator: \.isNewline) where line.hasPrefix("data:") {
+            guard let chunk = try? JSONSerialization.jsonObject(with: Data(line.dropFirst(5).utf8)) as? [String: Any]
+            else { continue }
+            for key in ["usageMetadata", "promptFeedback"] where chunk[key] != nil { envelope[key] = chunk[key] }
+            guard let first = (chunk["candidates"] as? [[String: Any]])?.first else { continue }
+            if let finish = first["finishReason"] { candidate["finishReason"] = finish }
+            let parts = (first["content"] as? [String: Any])?["parts"] as? [[String: Any]] ?? []
+            text += parts.filter { ($0["thought"] as? Bool) != true }.compactMap { $0["text"] as? String }.joined()
+        }
+        guard !envelope.isEmpty || !text.isEmpty || !candidate.isEmpty else { return nil }
+        candidate["content"] = ["parts": [["text": text]]]
+        envelope["candidates"] = [candidate]
+        return try? JSONSerialization.data(withJSONObject: envelope)
+    }
 
     static func extractText(from data: Data) throws -> String {
         guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
