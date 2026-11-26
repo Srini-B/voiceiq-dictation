@@ -406,6 +406,77 @@ docs/design/meeting-prompt-rulebook.md. Fixes from 2026-10-29:
   or on iPhone (no swipe to delete), so its Gemini calls never run on with
   nowhere to save.
 
+## Renaming a meeting
+
+A meeting's title comes from its notes (the notes model writes one), else
+the calendar event, else its start time. **Rename…** in the Mac's `…` menu,
+or in the long-press menu of a note's row on iPhone, sets the user's own
+title (`MeetingStore.renameMeeting(id:title:)`, kept in
+`MeetingMeta.userTitle`). It wins over the notes' title everywhere
+(`MeetingMeta.shownTitle(notes:)`): the list, the detail, Export, and
+agent access (`list_meetings` and `get_meeting`, whose search matches it
+too). Redo notes writes its new title into `MeetingMeta.title` and leaves
+`userTitle` alone. Renaming to an empty title puts the notes' title back.
+Rename is unavailable while the meeting is recording or being written up,
+like the rest of the menu. The title goes to iCloud with the meeting, like
+a renamed speaker.
+
+## Copy prompt for an AI agent
+
+With coding-agent access on (Settings › Advanced › Coding agents,
+[AGENT_ACCESS.md](AGENT_ACCESS.md)), the Mac's Export menu has **Copy prompt
+for an AI agent**. It copies a short prompt (`AgentAPI.meetingPrompt`) that
+names the meeting, tells the agent to read it with `get_meeting` and the
+meeting's id (its UUID, as `list_meetings` gives it), and to search with
+`list_meetings` and a query. The prompt says to turn access on if the agent
+has no VoiceiQ tools. With access off, the item is not shown.
+
+## Other side not heard
+
+When macOS does not allow VoiceiQ to record system audio, the tap still
+writes `system.caf`, but every sample is zero. On the Mac, a meeting that
+call detection started (it has a `source`), that lasted over a minute and
+whose `system.caf` is all zeros shows a warning under its title: "VoiceiQ
+couldn't hear the other people on this call. Check System Settings > Privacy
+& Security > Screen & System Audio Recording." with **Open System Settings**
+(`Privacy_ScreenCapture`). `SilentSystemAudio.check` reads the track off
+the main thread and stops at the first sample that is not zero, so only a
+silent track is read to its end. A recording started by hand is not checked,
+because a tap of all system audio is silent too when nothing plays; nor is
+a meeting with no audio on this Mac (synced or imported). No permission is
+queried.
+
+## Editing the transcript
+
+A finished meeting's transcript can be corrected one line (one speaker's
+turn) at a time. On the Mac, right-click a line in the transcript column:
+**Edit** opens a field above the transcript with the line's words (Return
+or Save keeps them, Escape or Cancel leaves them), and **Delete…** asks
+first, as deleting a meeting does. On iPhone, touch and hold a line in the
+note's Transcript card: **Edit** opens a sheet with the words, and
+**Delete** removes the line at once, as a swipe deletes a note. Neither is
+offered while the meeting is recording, transcribing or writing notes,
+since a redo then would write over the change.
+
+- The speaker and times of the line stay as they were, and every other
+  line is untouched. `MeetingStore.editTranscriptSegment(_:text:meeting:)`
+  and `deleteTranscriptSegment(_:meeting:)` name the line by
+  `TranscriptSegment.id`, which stays the same when other lines are edited
+  or deleted and when the line's own words change. Until a line is edited
+  its id is a hash of its content, so no id is written for it and
+  transcripts saved before editing existed are unchanged on disk and in
+  sync. An edited line, or an exact repeat of an earlier line (a second
+  "Yeah." with no times), keeps its id in `transcript.json` (`savedID`).
+- The notes are not written again. **Redo notes** (Mac: the `…` menu;
+  iPhone: Redo → Notes) writes them from the edited transcript.
+- Everything that reads the transcript reads the edited words: the
+  transcript views and their search, Export, questions about the meeting,
+  Redo notes, and agent access (`AgentLibrary`'s meeting and search).
+- An edit is a meeting change like a renamed speaker: it goes up to iCloud
+  and the other device takes it
+  ([Sync through iCloud](#sync-through-icloud)). **Redo transcript and
+  notes** hears the meeting again and replaces the edited transcript.
+
 ## Redo and progress
 
 - **Redo notes** writes the notes again from the saved transcript.
@@ -468,9 +539,9 @@ mirrored or AirPlay display, still shows the pill.
 
 | File | Shows |
 | --- | --- |
-| `MeetingsView.swift` | Record button (with Mute my mic and Discard under it while recording) and folder menu above the list, each row's folders, the folder line under the title ([Folders](#folders)), the detail header (title, progress while transcribing or making notes, Update notes after a speaker is renamed, Play and Download audio (`RecordingAudioButtons.swift`), Export menu, `…` menu with Redo notes / Redo transcript and notes / Retry / Delete, transcript toggle), the export message |
+| `MeetingsView.swift` | Record button (with Mute my mic and Discard under it while recording) and folder menu above the list, each row's folders, the folder line under the title ([Folders](#folders)), the detail header (title, progress while transcribing or making notes, Update notes after a speaker is renamed, Play and Download audio (`RecordingAudioButtons.swift`), Export menu with Copy prompt for an AI agent, `…` menu with Rename / Redo notes / Redo transcript and notes / Retry / Delete, transcript toggle), the warning on a call whose other side was not heard, the export message |
 | `MeetingNotesColumn.swift` | Title, Summary, the meeting type's sections, Decisions, Action items as open circles ("Owner: task"), Notes, then the meeting's questions and answers (`MeetingChatView.swift`, which also has the question box `MeetingsView.swift` puts under both columns) |
-| `MeetingTranscriptColumn.swift` | The transcript in one `NSTextView`: speaker names in their own colour (`SpeakerPalette`), time on a right tab stop, search that filters and highlights |
+| `MeetingTranscriptColumn.swift` | The transcript in one `NSTextView`: speaker names in their own colour (`SpeakerPalette`), time on a right tab stop, search that filters and highlights, Edit and Delete… on each line's right-click menu and the edit field above the transcript ([Editing the transcript](#editing-the-transcript)) |
 | `AssignSpeakersView.swift` | One card per speaker: name, a sample line, shuffle (next line), play (that line's audio) |
 
 In Assign speakers, clicking a name lists `knownNames`, a field for another
@@ -583,7 +654,8 @@ CloudKit database, through `CKSyncEngine`.
   fails partway waits there too: it is not sent as a local edit, and the
   copy fetched again replaces it whole.
 - **When.** A meeting goes up once its status is `done`, and again whenever
-  it changes: renamed speakers, redone notes, a new question.
+  it changes: renamed speakers, redone notes, an edited or deleted
+  transcript line, a new question.
   `MeetingStore` posts `.gtMeetingsDidChange` for every write and delete;
   `MeetingSync` compares the meeting's content digest with the one in its
   `cloud.json` (`MeetingCloudState`: digest, the record's system fields,

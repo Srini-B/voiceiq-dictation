@@ -15,6 +15,10 @@ struct MeetingsPane: View {
     @State private var assigning = false
     @State private var confirmingDelete = false
     @State private var confirmingDiscard = false
+    @State private var renaming = false
+    @State private var titleDraft = ""
+    /// The selected meeting is a call whose other side was never heard (`SilentSystemAudio`).
+    @State private var unheardCall: MeetingID?
     @State private var exported: ExportResult?
     @StateObject private var folders = MeetingFolderModel()
     /// The row under the pointer, which shows its folder button.
@@ -54,6 +58,14 @@ struct MeetingsPane: View {
         .confirmationDialog("Delete this meeting?", isPresented: $confirmingDelete) {
             Button("Delete", role: .destructive, action: remove)
         }
+        .alert("Rename Meeting", isPresented: $renaming) {
+            TextField("Title", text: $titleDraft)
+            Button("Cancel", role: .cancel) {}
+            Button("Rename", action: renameMeeting)
+        } message: {
+            Text("Leave it empty to use the title from the notes.")
+        }
+        .task(id: selected.map { "\($0.id.uuid.uuidString) \($0.status)" }) { await checkSystemAudio() }
         .meetingFolderEditing(folders, noun: "meetings")
     }
 
@@ -204,6 +216,7 @@ struct MeetingsPane: View {
                     .background(RoundedRectangle(cornerRadius: VoiceIQUI.Radius.medium).fill(VoiceIQUI.Colors.error.opacity(0.1)))
                     .padding([.horizontal, .top], VoiceIQUI.Spacing.l)
             }
+            if unheardCall == meeting.id { unheardWarning }
             HStack(spacing: 0) {
                 if wide || !transcriptShown {
                     MeetingNotesColumn(meeting: meeting, notes: notes, step: step(meeting), chat: chat(meeting))
@@ -220,8 +233,16 @@ struct MeetingsPane: View {
                                                rename: { speaker, name in rename(meeting, speaker, name) },
                                                back: { assigning = false })
                         } else {
-                            MeetingTranscriptColumn(meeting: meeting, notes: notes, transcript: transcript,
-                                                    width: width) { assigning = true }
+                            let editable = !engine.isBusy(meeting.id)
+                            MeetingTranscriptColumn(meeting: meeting, notes: notes, transcript: transcript, width: width,
+                                                    edit: editable ? { segment, text in
+                                                        try? store.editTranscriptSegment(segment, text: text, meeting: meeting.id)
+                                                        loadSelection()
+                                                    } : nil,
+                                                    delete: editable ? { segment in
+                                                        try? store.deleteTranscriptSegment(segment, meeting: meeting.id)
+                                                        loadSelection()
+                                                    } : nil) { assigning = true }
                         }
                     }
                     .frame(width: width)
@@ -270,12 +291,18 @@ struct MeetingsPane: View {
             Menu {
                 Section("Save to Downloads") { exportItems { export(meeting, $0) } }
                 Section("Copy") { exportItems { copy(meeting, $0) } }
+                if SettingsStore().agentAccessEnabled {
+                    Divider()
+                    Button("Copy prompt for an AI agent") { copyAgentPrompt(meeting) }
+                }
             } label: {
                 Label("Export", systemImage: "square.and.arrow.up")
             }
             .fixedSize()
             .disabled(notes == nil && transcript.isEmpty)
             Menu {
+                Button("Rename…") { titleDraft = title(meeting); renaming = true }
+                Divider()
                 if case .failed = meeting.status {
                     Button("Retry") { engine.retry(id: meeting.id) }
                 } else {
@@ -341,6 +368,12 @@ struct MeetingsPane: View {
         notes = try? store.loadNotes(id: id); transcript = (try? store.loadTranscript(id: id)) ?? []
     }
     private func remove() { guard let id = selection else { return }; try? store.delete(id: id); selection = nil; reload() }
+    private func renameMeeting() {
+        guard let meeting = selected,
+              titleDraft.trimmingCharacters(in: .whitespacesAndNewlines) != title(meeting) else { return }
+        try? store.renameMeeting(id: meeting.id, title: titleDraft)
+        meetings = store.list()
+    }
     private func rename(_ meeting: MeetingMeta, _ speaker: String, _ name: String) {
         try? store.renameSpeaker(id: meeting.id, label: speaker, name: name)
         meetings = store.list()
@@ -351,6 +384,40 @@ struct MeetingsPane: View {
         Button("Notes") { action(.notes) }.disabled(notes == nil)
         Button("Transcript") { action(.transcript) }.disabled(transcript.isEmpty)
         Button("Notes and transcript") { action(.both) }.disabled(notes == nil || transcript.isEmpty)
+    }
+
+    /// A prompt that sends a coding agent to this meeting through agent access.
+    private func copyAgentPrompt(_ meeting: MeetingMeta) {
+        NSPasteboard.general.clearContents()
+        guard NSPasteboard.general.setString(AgentAPI.meetingPrompt(id: meeting.id, title: title(meeting)), forType: .string) else {
+            exported = .failed("the clipboard didn't accept the text")
+            return
+        }
+        exported = .copied("prompt for an AI agent", UUID())
+    }
+
+    private var unheardWarning: some View {
+        HStack(spacing: VoiceIQUI.Spacing.s) {
+            Label("VoiceiQ couldn't hear the other people on this call. Check System Settings > Privacy & Security > Screen & System Audio Recording.",
+                  systemImage: "speaker.slash")
+                .font(VoiceIQUI.TypeScale.body())
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
+            Button("Open System Settings") {
+                NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")!)
+            }
+        }
+        .padding(VoiceIQUI.Spacing.m)
+        .background(RoundedRectangle(cornerRadius: VoiceIQUI.Radius.medium).fill(VoiceIQUI.Colors.surfaceContainer))
+        .padding([.horizontal, .top], VoiceIQUI.Spacing.l)
+    }
+
+    /// Off the main thread: a silent track is read to its end.
+    private func checkSystemAudio() async {
+        unheardCall = nil
+        guard let meeting = selected, let folder = store.folder(for: meeting.id) else { return }
+        let unheard = await Task.detached(priority: .utility) { SilentSystemAudio.check(meeting, folder: folder) }.value
+        if !Task.isCancelled, unheard { unheardCall = meeting.id }
     }
 
     /// The same Markdown as the saved file, on the clipboard.
@@ -387,7 +454,7 @@ struct MeetingsPane: View {
     }
 
     private func title(_ meeting: MeetingMeta) -> String {
-        if let title = meeting.title, !title.isEmpty { return title }
+        if let title = meeting.shownTitle() { return title }
         if let title = meeting.calendarEvent?.title, !title.isEmpty { return title }
         return meeting.startedAt.formatted(date: .abbreviated, time: .shortened)
     }

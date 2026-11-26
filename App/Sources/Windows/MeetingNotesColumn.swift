@@ -23,7 +23,7 @@ struct MeetingNotesColumn: View {
                 Text(kind.displayName).font(VoiceIQUI.TypeScale.labelSmall()).foregroundStyle(.secondary)
                     .padding(.bottom, -VoiceIQUI.Spacing.s)
             }
-            Text(notes?.title ?? meeting.title ?? "Meeting").font(GTFont.flex(22, weight: 600))
+            Text(meeting.shownTitle(notes: notes) ?? "Meeting").font(GTFont.flex(22, weight: 600))
             if let notes {
                 section("Summary") { Text(notes.summary) }
                 ForEach(Array((notes.sections ?? []).enumerated()), id: \.offset) { _, part in

@@ -259,6 +259,13 @@ SOFTWARE.
   and discarding a meeting while it records, after an inline confirmation
   (`01e5209b`, `src/rune_ui/meeting_capsules.rs` and `panel.rs`), in
   `MeetingEngine.swift` and `App/Sources/HUD/MeetingPillContent.swift`
+- Also, from Hex at `01e5209b` and `4a3e9d49` (`src/rune_ui/list_detail.rs`,
+  `src/rune_ui/meeting_capsules/panel.rs`), rewritten in Swift for VoiceiQ's
+  Meetings window: Rename in the meeting's `…` menu, the prompt that Copy
+  prompt for an AI agent writes (`AgentAPI.meetingPrompt`, pointing at
+  VoiceiQ's MCP tools instead of Hex's CLI), and the warning on a call whose
+  system audio was not heard (`MeetingEngine/SilentSystemAudio.swift`,
+  which checks the saved track instead of reading the permission)
 - License: MIT
 
 ```

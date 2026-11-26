@@ -377,6 +377,10 @@ Folders work as on the Mac (MEETINGS.md, Folders): the folder button in the
 list's toolbar shows one folder and makes, renames, or deletes folders; the
 folder button on an open note, a long press on a row, or a swipe right on a
 row (Folders, which opens a sheet) files it.
+A long press on a note's row also offers Rename… (a title of your own that
+Redo notes keeps; MEETINGS.md, Renaming a meeting). A long press on a line
+of a note's transcript offers Edit (a sheet with the line's words) and
+Delete (MEETINGS.md, Editing the transcript).
 
 ### Keyboard
 

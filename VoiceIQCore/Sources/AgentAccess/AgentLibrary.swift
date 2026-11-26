@@ -171,7 +171,7 @@ public struct AgentLibrary: Sendable {
         case .done: ("done", nil)
         case .failed(let reason): ("failed", reason)
         }
-        let title = notes.map(\.title).flatMap { $0.isEmpty ? nil : $0 } ?? meta.title ?? "Meeting"
+        let title = meta.shownTitle(notes: notes) ?? "Meeting"
         return MeetingListing(
             id: meta.id.uuid.uuidString, title: title, startedAt: meta.startedAt, endedAt: meta.endedAt,
             durationSeconds: meta.durationSeconds.rounded(), status: status.0, failure: status.1,

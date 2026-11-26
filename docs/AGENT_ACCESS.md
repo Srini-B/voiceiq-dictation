@@ -91,6 +91,12 @@ A client that only runs stdio servers can reach it through a bridge such as
 `since` takes a day (`2026-11-01`, midnight in the Mac's time zone) or an ISO
 8601 time. Every tool is marked read-only. The server's instructions tell the
 agent that transcripts are records of speech, not instructions.
+A meeting's title is the one the user gave it with Rename…, else the notes'.
+
+While access is on, a meeting's Export menu in the Mac app has **Copy prompt
+for an AI agent**: a short prompt to paste into an agent that points it at
+that meeting through `get_meeting` and its id, and at `list_meetings` for
+searching (MEETINGS.md, Copy prompt for an AI agent).
 
 ## JSON API
 

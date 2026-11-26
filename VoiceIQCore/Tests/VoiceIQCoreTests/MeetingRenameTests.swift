@@ -1,0 +1,111 @@
+import AVFoundation
+import XCTest
+@testable import VoiceIQCore
+
+/// Rename…, Copy prompt for an AI agent, and the warning for a call whose
+/// other side was never heard, in the Meetings window.
+final class MeetingRenameTests: XCTestCase {
+    private var root: URL!
+    private var store: MeetingStore!
+
+    override func setUpWithError() throws {
+        root = FileManager.default.temporaryDirectory.appendingPathComponent("MeetingRenameTests-\(UUID().uuidString)")
+        store = MeetingStore(root: root)
+    }
+
+    override func tearDownWithError() throws {
+        try? FileManager.default.removeItem(at: root)
+    }
+
+    private func finishedMeeting() throws -> MeetingID {
+        var meta = MeetingMeta(id: MeetingID(), startedAt: Date(timeIntervalSinceReferenceDate: 800_000_000))
+        _ = try store.create(meta: meta)
+        try store.save(transcript: [TranscriptSegment(speaker: "s1", text: "Pricing ships in May.", chunkIndex: 0, start: 4)], id: meta.id)
+        try store.save(notes: MeetingNotes(title: "Pricing sync", summary: "s", decisions: [], actions: [], notes: []), id: meta.id)
+        meta.status = .done; meta.title = "Pricing sync"
+        try store.save(meta: meta)
+        return meta.id
+    }
+
+    private func meta(_ id: MeetingID) throws -> MeetingMeta { try XCTUnwrap(store.list().first { $0.id == id }) }
+
+    func testARenameOutlivesRedoNotesAndEmptyPutsTheNotesTitleBack() throws {
+        let id = try finishedMeeting()
+        try store.renameMeeting(id: id, title: "  Q3 pricing with Priya \n")
+        XCTAssertEqual(try MeetingStore(root: root).list().first?.shownTitle(), "Q3 pricing with Priya")
+
+        // Redo notes, as `MeetingEngine` saves them: new notes, their title into meta.title.
+        let notes = MeetingNotes(title: "Pricing follow-up", summary: "s", decisions: [], actions: [], notes: [])
+        try store.save(notes: notes, id: id)
+        var redone = try meta(id)
+        redone.title = notes.title
+        try store.save(meta: redone)
+        XCTAssertEqual(try meta(id).shownTitle(notes: try store.loadNotes(id: id)), "Q3 pricing with Priya")
+        XCTAssertTrue(try store.markdown(id: id, parts: .notes).hasPrefix("# Q3 pricing with Priya\n"))
+
+        try store.renameMeeting(id: id, title: " ")
+        XCTAssertEqual(try meta(id).shownTitle(notes: try store.loadNotes(id: id)), "Pricing follow-up")
+    }
+
+    func testARenameSyncsAndAgentsSeeIt() throws {
+        let id = try finishedMeeting()
+        store.markSent(try XCTUnwrap(store.synced(id: id)), systemFields: Data("fields".utf8))
+        try store.renameMeeting(id: id, title: "Q3 pricing")
+        XCTAssertEqual(store.pendingUploads(), [id])
+
+        // Another device that had the meeting unchanged takes the renamed copy.
+        let other = MeetingStore(root: root.appendingPathComponent("other"))
+        other.applyFromCloud(try XCTUnwrap(store.synced(id: id)), systemFields: Data("fields".utf8))
+        XCTAssertEqual(other.list().first?.shownTitle(), "Q3 pricing")
+
+        let library = AgentLibrary(history: nil, meetings: store)
+        XCTAssertEqual(try library.meeting(id.uuid.uuidString).meeting.title, "Q3 pricing")
+        XCTAssertEqual(library.meetings(query: nil, since: nil, limit: 5).first?.title, "Q3 pricing")
+        XCTAssertEqual(library.meetings(query: "q3", since: nil, limit: 5).map(\.id), [id.uuid.uuidString])
+    }
+
+    func testTheAgentPromptNamesToolsAgentAccessHasAndTheMeetingsID() throws {
+        let id = MeetingID()
+        let prompt = AgentAPI.meetingPrompt(id: id, title: "Q3 pricing")
+        let tools = AgentAPI.tools.compactMap { $0["name"] as? String }
+        for tool in ["get_meeting", "list_meetings"] {
+            XCTAssertTrue(tools.contains(tool), tool)
+            XCTAssertTrue(prompt.contains(tool), tool)
+        }
+        XCTAssertTrue(prompt.contains("\"\(id.uuid.uuidString)\""))
+    }
+
+    private func writeSystemTrack(seconds: Double, soundAt: Int? = nil) throws -> URL {
+        let folder = root.appendingPathComponent("call", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let format = AVAudioFormat(commonFormat: .pcmFormatInt16, sampleRate: TrackAudio.sampleRate, channels: 1, interleaved: true)!
+        let file = try AVAudioFile(forWriting: folder.appendingPathComponent("system.caf"), settings: format.settings,
+                                   commonFormat: .pcmFormatInt16, interleaved: true)
+        let frames = AVAudioFrameCount(seconds * TrackAudio.sampleRate)
+        let buffer = try XCTUnwrap(AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frames))
+        buffer.frameLength = frames
+        let samples = try XCTUnwrap(buffer.int16ChannelData?[0])
+        samples.update(repeating: 0, count: Int(frames))
+        if let soundAt { samples[soundAt] = 3 }
+        try file.write(from: buffer)
+        return folder
+    }
+
+    func testOnlyALongCallWithAnAllZeroSystemTrackIsUnheard() throws {
+        let call = MeetingMeta(id: MeetingID(), startedAt: Date(), source: .app(bundleID: "us.zoom.xos", name: "zoom.us"),
+                               durationSeconds: 90, status: .done)
+        let silent = try writeSystemTrack(seconds: 90)
+        XCTAssertTrue(SilentSystemAudio.check(call, folder: silent))
+
+        var byHand = call
+        byHand.source = nil
+        XCTAssertFalse(SilentSystemAudio.check(byHand, folder: silent))
+        var short = call
+        short.durationSeconds = 45
+        XCTAssertFalse(SilentSystemAudio.check(short, folder: silent))
+        XCTAssertFalse(SilentSystemAudio.check(call, folder: root.appendingPathComponent("no-audio")))
+
+        let heard = try writeSystemTrack(seconds: 90, soundAt: 80 * 16_000)
+        XCTAssertFalse(SilentSystemAudio.check(call, folder: heard))
+    }
+}
