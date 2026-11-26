@@ -76,13 +76,7 @@ public final class ScreenContextCollector {
     }
 
     private func capture() {
-        guard isRunning else { return }
-        // Never read a password field's screen or a password manager.
-        if SecureInput.isActive || NSWorkspace.shared.frontmostApplication?.bundleIdentifier
-            .map(Self.passwordManagers.contains) == true {
-            Log.screen.info("screen context skipped: secure input or a password manager is in front")
-            return
-        }
+        guard isRunning, Self.mayRead() else { return }
         guard let windowID = Self.frontmostWindowID() else { return }
         let pixelsPerPoint = NSScreen.main?.backingScaleFactor ?? 2
         let maxDimension = CGFloat(maxDimension)
@@ -104,7 +98,8 @@ public final class ScreenContextCollector {
                     contentFilter: SCContentFilter(desktopIndependentWindow: window),
                     configuration: configuration
                 )
-                guard !Task.isCancelled else { return }
+                // Checked again: the app in front can change during the awaits.
+                guard !Task.isCancelled, Self.mayRead(), Self.frontmostWindowID() == windowID else { return }
                 let started = Date()
                 let text = await ScreenText.read(image, vocabulary: vocabulary)
                 guard !Task.isCancelled, let self, self.isRunning, !text.isEmpty else { return }
@@ -117,10 +112,20 @@ public final class ScreenContextCollector {
         })
     }
 
+    /// Never a password field's screen, a password manager, or VoiceiQ itself.
+    private static func mayRead() -> Bool {
+        let front = NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+        guard !SecureInput.isActive, !(front.map(passwordManagers.contains) ?? false) else {
+            Log.screen.info("screen context skipped: secure input or a password manager is in front")
+            return false
+        }
+        return front != Bundle.main.bundleIdentifier
+    }
+
     private static let passwordManagers: Set<String> = [
         "com.1password.1password", "com.agilebits.onepassword7", "com.apple.Passwords",
         "com.bitwarden.desktop", "com.lastpass.LastPass", "com.dashlane.dashlanephonefinal",
-        "com.keepassxc.keepassxc", "in.sinew.Enpass-Desktop",
+        "org.keepassxc.keepassxc", "in.sinew.Enpass-Desktop", "com.apple.keychainaccess",
     ]
 
     private func append(_ text: String) {
@@ -135,9 +140,13 @@ public final class ScreenContextCollector {
         guard let pid = NSWorkspace.shared.frontmostApplication?.processIdentifier,
               let windows = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements],
                                                         kCGNullWindowID) as? [[String: Any]] else { return nil }
+        // Layer 0, visible and big enough to be a document, not a helper window.
         return windows.first(where: {
-            ($0[kCGWindowOwnerPID as String] as? NSNumber)?.int32Value == pid
+            let bounds = $0[kCGWindowBounds as String] as? [String: CGFloat]
+            return ($0[kCGWindowOwnerPID as String] as? NSNumber)?.int32Value == pid
                 && ($0[kCGWindowLayer as String] as? NSNumber)?.intValue == 0
+                && (($0[kCGWindowAlpha as String] as? NSNumber)?.doubleValue ?? 1) > 0
+                && (bounds?["Width"] ?? 0) >= 200 && (bounds?["Height"] ?? 0) >= 100
         })?[kCGWindowNumber as String].flatMap { ($0 as? NSNumber)?.uint32Value }
     }
 }
@@ -154,7 +163,7 @@ enum ScreenText {
             request.usesLanguageCorrection = true
             request.customWords = vocabulary
             let read = await withTaskCancellationHandler {
-                await Task.detached(priority: .userInitiated) {
+                await Task.detached(priority: .utility) {
                     (try? VNImageRequestHandler(cgImage: image).perform([request])) != nil
                 }.value
             } onCancel: {

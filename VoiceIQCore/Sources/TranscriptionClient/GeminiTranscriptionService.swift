@@ -200,9 +200,12 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
         }
         let hedge = DictationHedge.shared
         let delay = await hedge.delay()
-        let started = Date()
+        let clock = ContinuousClock()
+        let started = clock.now
         let text = try await GeminiClient.firstSuccess(retryAfter: delay, first: attempt, retry: attempt)
-        await hedge.record(answeredAfter: Date().timeIntervalSince(started), delay: delay)
+        let elapsed = clock.now - started
+        await hedge.record(answeredAfter: Double(elapsed.components.seconds) + Double(elapsed.components.attoseconds) / 1e18,
+                           delay: delay)
         return ValidationGate.stripArtifacts(text).trimmingCharacters(in: .whitespacesAndNewlines)
     }
 

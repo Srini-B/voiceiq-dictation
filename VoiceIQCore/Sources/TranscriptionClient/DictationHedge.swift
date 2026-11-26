@@ -25,7 +25,7 @@ actor DictationHedge {
     func delay() -> TimeInterval {
         guard recent.count >= 5 else { return Self.initialDelay }
         let sorted = recent.sorted()
-        let p90 = sorted[Int((Double(sorted.count - 1) * 0.9).rounded(.up))]
+        let p90 = sorted[Int(Double(sorted.count - 1) * 0.9)]
         return min(max(p90, Self.floor), Self.ceiling)
     }
 

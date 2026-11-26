@@ -28,7 +28,7 @@ python3 eval/dictation/score.py eval/dictation/results/LABEL.json --judge eval/d
 
 `run.py` saves after every call; if a run stops or a call fails, run the same command again and it sends only the missing calls. `score.py` refuses an incomplete run and lists cases still waiting for the judge.
 
-`run.py` sends the request `GeminiClient.dictate` sends, with the prompt the app builds, the Dictionary from `cases.json`, the place and field text, and the screen's text in the prompt (the window title and the lines in `cases.json`, as `ScreenContextCollector` reads them with Vision OCR; no image is sent). A change to how the app sends screen context or builds the prompt must be mirrored in `run.py` before its score counts.
+`run.py` sends the request `GeminiClient.dictate` sends, with the prompt the app builds, the Dictionary from `cases.json`, the place and field text, and the screen's text in the prompt (the window title and the lines in `cases.json`, an ideal OCR read of one window, where the app sends Vision OCR of the frontmost window, which can lose accents or add window chrome; no image is sent). D5 is measured without the app's backup request (`DictationHedge`). A change to how the app sends screen context or builds the prompt must be mirrored in `run.py` before its score counts.
 
 ### Judge rubric (D3, D4)
 

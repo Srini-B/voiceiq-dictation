@@ -54,7 +54,7 @@ With no usable key, nothing is sent and the recording stays on your Mac.
    with Apple's Vision framework, and sends that text (up to 6,000 characters)
    in the same dictation request. Nothing is captured while a password field
    has secure input on or while a password manager (1Password, Passwords,
-   Bitwarden, LastPass, Dashlane, KeePassXC, Enpass) is in front. No image leaves the Mac; the captures stay in memory
+   Bitwarden, LastPass, Dashlane, KeePassXC, Enpass, Keychain Access) or VoiceiQ itself is in front. No image leaves the Mac; the captures stay in memory
    only until they are read and are never stored on disk. macOS asks for
    Screen Recording permission the first time this feature runs. If you deny
    access, dictation continues without screen text. Turn off "Screen context"
