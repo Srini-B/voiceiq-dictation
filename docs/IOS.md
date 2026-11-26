@@ -431,6 +431,9 @@ VoiceiQ adds no row.
 - With Learn how I type off, keeping a suggestion holds the word for the
   session only; Hex would otherwise save it to its learned words
   (`0004-voiceiq-learning-opt-out.patch`).
+- Undo dictation deletes the dictation only when the text on both sides of it
+  still matches what was there when it went in, so an earlier copy of the
+  same words is never the one removed (`0005-voiceiq-undo-context.patch`).
 - Hex's in-keyboard dictation, its recording panel and Metal dot scope, the
   style menu, translation and model notices are permanent stand-ins that
   never show (`HexDictationStandIns.swift`). Hex's wording that names its app

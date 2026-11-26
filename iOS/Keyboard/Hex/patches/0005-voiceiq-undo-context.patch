@@ -1,0 +1,22 @@
+diff --git a/iOS/Keyboard/Hex/FullKeyboard/View/FullKeyboardView.swift b/iOS/Keyboard/Hex/FullKeyboard/View/FullKeyboardView.swift
+index cf64449..7a95feb 100644
+--- a/iOS/Keyboard/Hex/FullKeyboard/View/FullKeyboardView.swift
++++ b/iOS/Keyboard/Hex/FullKeyboard/View/FullKeyboardView.swift
+@@ -1325,8 +1325,16 @@ final class FullKeyboardView: UIView {
+         let before = target.documentContextBeforeInput ?? ""
+         let after = target.documentContextAfterInput ?? ""
+         // Right before the cursor, with what followed it when it went in still after the cursor.
++        // VoiceiQ: and what preceded it still before it, so an earlier copy of the same
++        // words is never the one deleted (either window may be cut short; empty only at the start).
++        let prior = before.hasSuffix(text) ? String(before.dropLast(text.count)) : nil
++        let priorMatches = prior.map { prior in
++            prior.isEmpty || undo.before.isEmpty
++                ? prior == undo.before
++                : prior.hasSuffix(undo.before) || undo.before.hasSuffix(prior)
++        }
+         if after.hasPrefix(undo.after) || undo.after.hasPrefix(after),
+-           before.hasSuffix(text) || (!before.isEmpty && before.count < text.count && text.hasSuffix(before)) {
++           priorMatches == true || (prior == nil && !before.isEmpty && before.count < text.count && text.hasSuffix(before)) {
+             return DictationUndo.Plan(toEnd: 0, delete: text.count, back: 0)
+         }
+         return undo.plan(before: before, after: after, selected: selected)
