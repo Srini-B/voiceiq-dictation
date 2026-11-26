@@ -32,7 +32,11 @@ def hf(repo, path):
     if not dest.exists():
         dest.parent.mkdir(parents=True, exist_ok=True)
         url = f"https://huggingface.co/datasets/{repo}/resolve/main/{path}"
-        subprocess.run(["curl", "-sfL", "-o", str(dest), url], check=True)
+        # Downloaded aside and renamed only when complete, so a failed
+        # download is fetched again next time instead of read as cached.
+        part = dest.with_name(dest.name + ".part")
+        subprocess.run(["curl", "-sfL", "-o", str(part), url], check=True)
+        part.replace(dest)
     return dest
 
 
