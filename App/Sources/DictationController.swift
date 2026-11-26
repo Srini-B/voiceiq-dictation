@@ -35,6 +35,7 @@ final class DictationController {
 
     private var previousState: DictationState = .idle
     private var sessionStartedAt: Date?
+    private var cancelConfirmation = CancelConfirmation()
     private var elapsedTimer: Timer?
     private var slowTimer: Timer?
     private var dismissTask: Task<Void, Never>?
@@ -130,6 +131,15 @@ final class DictationController {
                 // (FluidVoice ignores it too, altic-dev/FluidVoice).
                 if intent == .begin, Self.screenIsLocked {
                     self.engine.resetGrammar()
+                    continue
+                }
+                // Only the keyboard's cancel asks: the pill's × is a deliberate
+                // click, and the notice would cover it. The grammar has gone idle,
+                // so the second ⌘Esc arrives as an external-session cancel and
+                // the dictation key still stops and inserts.
+                if intent == .cancel, case .recording = self.coordinator.state,
+                   !self.cancelConfirmation.cancels(recordingSince: self.sessionStartedAt, now: Date()) {
+                    self.showNotice("Press ⌘Esc again to cancel", for: CancelConfirmation.window, sound: nil)
                     continue
                 }
                 let accepted = self.coordinator.handle(intent)
@@ -509,6 +519,12 @@ final class DictationController {
 
     func openDictionary() {
         openMainWindow(section: .dictionary)
+    }
+
+    /// The menu bar's Add to Dictionary…: the Dictionary pane, ready to type.
+    func addToDictionary() {
+        openMainWindow(section: .dictionary)
+        mainWindow?.requestAddWord()
     }
 
     /// voiceiq://onboarding — re-run setup on demand (also drives headless UI checks).

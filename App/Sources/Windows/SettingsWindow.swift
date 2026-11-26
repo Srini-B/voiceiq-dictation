@@ -64,6 +64,11 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
         showWindow(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
+
+    /// Puts the cursor in Dictionary's add row.
+    func requestAddWord() {
+        model.addWordRequested = true
+    }
 }
 
 enum MainSection: String, CaseIterable, Identifiable {
@@ -118,6 +123,7 @@ enum MainSection: String, CaseIterable, Identifiable {
 @MainActor
 final class MainWindowModel: ObservableObject {
     @Published var selection: MainSection = .history
+    @Published var addWordRequested = false
 }
 
 private struct MainView: View {
@@ -193,7 +199,7 @@ private struct MainView: View {
             case .meetings:
                 MeetingsPane(engine: meetings, store: meetings.store)
             case .dictionary:
-                DictionaryView()
+                DictionaryView(addWordRequested: $model.addWordRequested)
             case .cost:
                 if let usage = UsageMeter.store {
                     CostPane(store: usage)

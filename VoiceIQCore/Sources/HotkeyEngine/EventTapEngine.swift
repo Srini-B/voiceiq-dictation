@@ -44,6 +44,7 @@ public final class EventTapEngine: @unchecked Sendable {
     /// Key code of a combo whose keyDown we consumed, so its keyUp is
     /// swallowed too instead of reaching the frontmost app as a stray release.
     private var comboKeyHeld: UInt16?
+    private var middleMouse = MiddleMouseHold()
     /// Set by the app while a session is in flight beyond the grammar's view
     /// (transcribing/inserting, or UI-started hands-free) so ⌘Esc still cancels
     /// (audit L8/L13 — the machine supported cancel, the tap never delivered it).
@@ -148,10 +149,13 @@ public final class EventTapEngine: @unchecked Sendable {
 
     private func threadMain(started: DispatchSemaphore) {
         defer { started.signal() }
-        let mask: CGEventMask =
-            (1 << CGEventType.flagsChanged.rawValue)
-            | (1 << CGEventType.keyDown.rawValue)
-            | (1 << CGEventType.keyUp.rawValue)
+        // The other-mouse events are for the middle-mouse trigger, which
+        // watches them and never consumes them.
+        let types: [CGEventType] = [
+            .flagsChanged, .keyDown, .keyUp,
+            .otherMouseDown, .otherMouseDragged, .otherMouseUp,
+        ]
+        let mask = types.reduce(CGEventMask(0)) { $0 | (CGEventMask(1) << $1.rawValue) }
 
         let selfPtr = Unmanaged.passUnretained(self).toOpaque()
         guard let tap = CGEvent.tapCreate(
@@ -316,9 +320,53 @@ public final class EventTapEngine: @unchecked Sendable {
             lock.unlock()
             return nil
 
+        case .otherMouseDown, .otherMouseDragged, .otherMouseUp:
+            trackMiddleMouse(type: type, event: event)
+            return Unmanaged.passUnretained(event) // every middle press is still the app's
+
         default:
             return Unmanaged.passUnretained(event)
         }
+    }
+
+    private func trackMiddleMouse(type: CGEventType, event: CGEvent) {
+        guard event.getIntegerValueField(.mouseEventButtonNumber) == 2 else { return }
+        lock.lock()
+        defer { lock.unlock() }
+        // While Settings records a trigger the click is the recorder's.
+        guard trigger == .middleMouse, !ShortcutCapture.isActive else {
+            middleMouse.up()
+            return
+        }
+        switch type {
+        case .otherMouseDown:
+            let id = middleMouse.down(at: event.location)
+            timerQueue.asyncAfter(deadline: .now() + MiddleMouseHold.holdDuration) { [weak self] in
+                self?.middleMouseHeld(id)
+            }
+        case .otherMouseDragged:
+            middleMouse.dragged(to: event.location)
+        default:
+            middleMouse.up()
+        }
+    }
+
+    /// The press is a tap of the trigger, like a combo's: it starts a
+    /// hands-free dictation or stops the one recording.
+    private func middleMouseHeld(_ id: Int) {
+        // A release the tap missed (it was disabled for a moment) must not
+        // read as a hold.
+        let stillDown = CGEventSource.buttonState(.combinedSessionState, button: .center)
+        lock.lock()
+        guard trigger == .middleMouse, middleMouse.fire(id), stillDown else {
+            lock.unlock()
+            return
+        }
+        let now = ProcessInfo.processInfo.systemUptime
+        var fx = processor.handle(.hotkeyDown, at: now)
+        fx.intents += processor.handle(.hotkeyUp, at: now).intents
+        lock.unlock()
+        apply(fx)
     }
 
     private func apply(_ fx: HotkeyProcessor.Effects) {

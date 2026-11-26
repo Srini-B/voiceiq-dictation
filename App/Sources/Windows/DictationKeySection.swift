@@ -6,8 +6,9 @@ import SwiftUI
 
 /// The dictation key, recorded by pressing it like the other shortcuts. A
 /// bare modifier (fn, ⌘, ⌥, ⌃ on either side; the side is part of the key) or
-/// a modifier-plus-key combination both qualify. Combos already bound to
-/// another shortcut are refused so two taps never race for one keystroke.
+/// a modifier-plus-key combination both qualify, and so does a middle click,
+/// for the middle mouse button. Combos already bound to another shortcut are
+/// refused so two taps never race for one keystroke.
 struct DictationKeySection: View {
     private let settings = SettingsStore()
     private let shortcuts = ShortcutStore()
@@ -24,7 +25,7 @@ struct DictationKeySection: View {
         Section("Dictation key") {
             LabeledContent("Press to start and stop") {
                 HStack(spacing: 8) {
-                    Button(isRecording ? "Press a key…" : trigger.displayName) {
+                    Button(isRecording ? "Press a key or middle-click…" : trigger.displayName) {
                         isRecording ? stopRecording() : startRecording()
                     }
                     .buttonStyle(.bordered)
@@ -58,6 +59,11 @@ struct DictationKeySection: View {
                     .buttonStyle(.plain)
                     .help("Reset to fn")
                 }
+            }
+            if trigger == .middleMouse {
+                Text("Hold the middle button for half a second to start or stop. Clicks still reach the app.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
             if let conflict {
                 Text(conflict)
@@ -108,8 +114,14 @@ struct DictationKeySection: View {
         isRecording = true
         conflict = nil
         ShortcutCapture.begin(owner: captureID)
-        monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .flagsChanged]) { event in
+        monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .flagsChanged, .otherMouseDown]) { event in
             switch event.type {
+            case .otherMouseDown:
+                guard event.buttonNumber == 2 else { return event }
+                pendingModifier = nil
+                apply(.middleMouse)
+                stopRecording()
+                return nil
             case .keyDown:
                 if event.keyCode == 53 {
                     stopRecording()
