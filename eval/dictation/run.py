@@ -181,9 +181,11 @@ class MalformedAnswer(Exception):
     """The reply was not {"text": ...}; the app sends the request once more."""
 
 
-def call(prompt: str, flac: bytes) -> tuple[str, float, dict]:
+def call(prompt: str, flac: bytes | None) -> tuple[str, float, dict]:
+    # flac None: an on-device transcript written by Gemini, sent as text only.
     parts = [{"text": prompt}]
-    parts.append({"inline_data": {"mime_type": "audio/flac", "data": base64.b64encode(flac).decode()}})
+    if flac is not None:
+        parts.append({"inline_data": {"mime_type": "audio/flac", "data": base64.b64encode(flac).decode()}})
     body = {"contents": [{"role": "user", "parts": parts}],
             "generationConfig": {"temperature": 0, "thinkingConfig": {"thinkingLevel": "low"},
                                  "responseMimeType": "application/json",

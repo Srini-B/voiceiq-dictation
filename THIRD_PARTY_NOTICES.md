@@ -310,6 +310,14 @@ SOFTWARE.
   (`Sources/Fluid/Services/Meeting/`), GPLv3. VoiceiQ includes no FluidVoice
   source code; the design was reimplemented on FluidAudio.
 
+### Voice Arena AMEND (dictation eval judge prompt)
+
+- `eval/hard-audio/judge.py` adapts the AMEND v1 judge prompt and its text
+  normalisation, with an added question about form. Eval tooling only; nothing
+  from it ships in the app.
+- Source: [VoiceArenaAI/AMEND](https://github.com/VoiceArenaAI/AMEND),
+  Apache-2.0.
+
 ## Behaviour studied, no code used
 
 ### FluidVoice (dictation and meetings behaviours)
