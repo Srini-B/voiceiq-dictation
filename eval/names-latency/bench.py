@@ -50,6 +50,12 @@ def prompt_builder(root: str):
     src = (fp / "PromptV1.swift").read_text()
     rules, examples = swift_string(src, "rules"), swift_string(src, "examples")
     reminder, audio = swift_string(src, "layoutReminder"), swift_string(src, "audioSection")
+    if audio is None:
+        # Since #95 audioSection(hasDictionary:) adds its name sentence only with a Dictionary.
+        m = re.search(r'static func audioSection\(hasDictionary: Bool\) -> String \{\n\s*"((?:[^"\\]|\\.)*)"'
+                      r'\s*\+ \(hasDictionary \? "((?:[^"\\]|\\.)*)" : ""\)\s*\+ "((?:[^"\\]|\\.)*)"', src)
+        head, names, tail = (g.replace("\\n", "\n").replace('\\"', '"') for g in m.groups())
+        audio = (head, names, tail)
     intro = swift_string(src, "dictionaryIntro") or OLD_VOCAB
     m = re.search(r'static func transcriptSection\(_ raw: String\) -> String \{\n\s*"(.*?)\\\(raw\)', src, re.S)
     transcript_head = m.group(1).replace("\\n", "\n").replace('\\"', '"')
@@ -85,7 +91,10 @@ def prompt_builder(root: str):
         if image:
             sections.append(screen)
         sections += [examples, reminder]
-        sections.append(transcript_head + transcript + "\n</raw>" if transcript is not None else audio)
+        if transcript is not None:
+            sections.append(transcript_head + transcript + "\n</raw>")
+        else:
+            sections.append(audio if isinstance(audio, str) else audio[0] + (audio[1] if vocabulary else "") + audio[2])
         if screen_captures:
             sections.append(screen_block(screen_captures))
         sections.append(answer)

@@ -190,11 +190,11 @@ def main() -> None:
     print(f"{len(jobs)} calls, prompt {len(jobs[0][2])} chars")
 
     # A saved call is reused only when its request was the same: prompt,
-    # screenshot count, audio and model, so a label rerun with other
+    # screenshot count, backup-request ceiling, audio and model, so a label rerun with other
     # settings sends fresh calls instead of relabelling old ones.
     def fingerprint(job):
         _, case, prompt = job
-        digest = hashlib.sha256(f"{MODEL}|{args.screenshots}|{prompt}".encode())
+        digest = hashlib.sha256(f"{MODEL}|{args.screenshots}|hedge{args.hedge_ceiling}|{prompt}".encode())
         digest.update((ASSETS / f"{case['id']}.flac").read_bytes())
         return digest.hexdigest()[:16]
 
@@ -235,7 +235,7 @@ def main() -> None:
         # leaves the previous complete file in place.
         part = out.with_suffix(".part")
         part.write_text(json.dumps({"label": args.label, "model": MODEL, "prompt_chars": len(jobs[0][2]),
-                                    "screenshots": args.screenshots, "complete": len(results) == len(jobs),
+                                    "screenshots": args.screenshots, "hedge_ceiling": args.hedge_ceiling, "complete": len(results) == len(jobs),
                                     "failed": failed, "results": results}, indent=1, ensure_ascii=False))
         os.replace(part, out)
 

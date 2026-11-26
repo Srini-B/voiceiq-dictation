@@ -12,15 +12,33 @@ import sys
 
 from score import APP_OVERHEAD_S, percentile
 
-e2e, second, runs = [], 0, 0
-for path in sys.argv[1:]:
+
+def d5(times: list[float]) -> dict:
+    p50, p90 = statistics.median(times), percentile(times, 0.9)
+    score = max(0.0, 100 - 15 * max(0, p50 - 3.0) - 10 * max(0, p90 - 3.5))
+    return {"calls": len(times), "e2e_p50": round(p50, 2), "e2e_p90": round(p90, 2), "D5": round(score, 1)}
+
+
+paths = sys.argv[1:]
+if len(set(paths)) != len(paths):
+    raise SystemExit("a run is listed twice")
+pool, second, per_run, settings = [], 0, {}, set()
+for path in paths:
     run = json.load(open(path))
-    runs += 1
-    for r in run["results"]:
-        e2e.append(r["seconds"] + APP_OVERHEAD_S)
-        second += r["usage"].get("secondRequests", 0) > 0
-p50, p90 = statistics.median(e2e), percentile(e2e, 0.9)
-d5 = max(0.0, 100 - 15 * max(0, p50 - 3.0) - 10 * max(0, p90 - 3.5))
-print(json.dumps({"runs": runs, "calls": len(e2e), "e2e_p50": round(p50, 2), "e2e_p90": round(p90, 2),
-                  "e2e_max": round(max(e2e), 2), "second_requests": f"{second}/{len(e2e)}", "D5": round(d5, 1)},
-                 indent=1))
+    # As score.py: a partial run would drop its slowest or failed calls from the pool.
+    if not run.get("complete") or run.get("failed"):
+        raise SystemExit(f"{path}: incomplete run; rerun run.py with its label")
+    if not run.get("screenshots"):
+        raise SystemExit(f"{path}: screen context was off; D5 is measured with every option on")
+    settings.add((run["model"], run["prompt_chars"], run.get("hedge_ceiling")))
+    times = [r["seconds"] + APP_OVERHEAD_S for r in run["results"]]
+    pool += times
+    second += sum(r["usage"].get("secondRequests", 0) > 0 for r in run["results"])
+    per_run[path] = d5(times)["D5"]
+if len(settings) > 1:
+    raise SystemExit(f"runs differ in model, prompt or hedge ceiling: {sorted(settings, key=str)}")
+report = {"runs": len(paths), **d5(pool), "e2e_max": round(max(pool), 2),
+          "second_requests": f"{second}/{len(pool)}", "per_run_D5": per_run}
+if len(paths) < 5:
+    report["note"] = "fewer than 5 runs: not a D5 of record"
+print(json.dumps(report, indent=1))
