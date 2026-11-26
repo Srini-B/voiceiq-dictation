@@ -185,7 +185,7 @@ final class TypingBridge: ObservableObject {
 }
 
 extension TypingBridge: @MainActor KeyboardTextTarget {
-    private static let noAssistance: Set<UITextContentType> = [
+    static let noAssistance: Set<UITextContentType> = [
         .oneTimeCode, .password, .newPassword, .creditCardNumber, .telephoneNumber, .postalCode,
     ]
 

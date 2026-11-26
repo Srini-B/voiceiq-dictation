@@ -11,9 +11,10 @@ import VoiceIQCore
 /// or when the Action button runs `ToggleDictationIntent`. `KeepAliveAudio`
 /// holds the mic open for `MobileSettings.warmWindow` after each dictation,
 /// then the session ends ("Never" ends it as soon as the text is delivered). Once it ends, the next keyboard tap
-/// bounces again. The Live Activity is
-/// shown only for sessions the Action button started (iOS requires one for an
-/// audio-recording intent) and for meetings.
+/// bounces again. The Live Activity, with Stop and Cancel for when no keyboard
+/// is on screen, is up for the whole session
+/// (`MobileSettings.showsSessionActivity`); sessions the Action button started
+/// (iOS requires one for an audio-recording intent) and meetings always have it.
 @MainActor
 final class VoiceSession: ObservableObject {
     @Published private(set) var isActive = false
@@ -23,11 +24,21 @@ final class VoiceSession: ObservableObject {
     /// What the dictation pipeline is doing. Set by the app model.
     @Published var dictationPhase: SessionSnapshot.Phase = .warm {
         didSet {
+            // A dictation begun in this process is newer than the one an
+            // earlier process left: that one's recovered text stays in History.
+            if dictationPhase.hasDictation { orphan = nil }
             publishIfChanged()
             if dictationPhase != oldValue { phaseChanged() }
         }
     }
     var recordingStartedAt: Date? { didSet { publishIfChanged() } }
+    /// Where the dictation in progress will land. Set by the app model.
+    var dictationField: FieldIdentity? { didSet { publishIfChanged() } }
+    /// A dictation an earlier process was recording or writing when iOS
+    /// ended it, and when that process last ran. The launch recovery takes it
+    /// so the recovered text still reaches its field, unless a new dictation
+    /// began first.
+    private(set) var orphan: (field: FieldIdentity, lastAlive: Date)?
     var meetingStartedAt: Date? {
         didSet {
             publishIfChanged()
@@ -56,8 +67,13 @@ final class VoiceSession: ObservableObject {
 
     init() {
         LiveActivityController.endLeftovers()
-        // Whatever an earlier process left in the App Group is stale.
-        delivery = store.snapshot.delivery
+        // Whatever an earlier process left in the App Group is stale, except
+        // the last result and where an unfinished dictation was going.
+        let left = store.snapshot
+        delivery = left.delivery.map { $0.isPending(handledID: store.insertedDeliveryID) ? $0 : $0.forgettingDraft() }
+        if left.phase == .recording || left.phase == .processing, let field = left.field, let lastAlive = store.heartbeat {
+            orphan = (field, lastAlive)
+        }
         publish(force: true)
         audio.onInterruptionBegan = { [weak self] in self?.onInterruptionBegan?() }
         audio.onLost = { [weak self] message in
@@ -82,7 +98,7 @@ final class VoiceSession: ObservableObject {
         try audio.start()
         isActive = true
         startedByActionButton = fromActionButton
-        if fromActionButton { activity.start(activityState) }
+        if wantsActivity { activity.start(activityState) }
         heartbeat = Timer.scheduledTimer(withTimeInterval: SharedStore.heartbeatInterval, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.beat() }
         }
@@ -230,6 +246,33 @@ final class VoiceSession: ObservableObject {
         publish(force: true)
     }
 
+    /// A keyboard typed the result, or the app copied it.
+    func resultSettled() {
+        forgetDraftIfSettled()
+        refreshActivity()
+    }
+
+    /// The fingerprint of the destination's text is needed only while the
+    /// result is pending. Typed, copied or too old, the result drops it.
+    private func forgetDraftIfSettled() {
+        guard let settled = delivery, settled.destination?.draft != nil,
+              !settled.isPending(handledID: store.insertedDeliveryID) else { return }
+        delivery = settled.forgettingDraft()
+        publish(force: true)
+    }
+
+    /// The launch recovery used the orphan, or found nothing to recover.
+    func takeOrphan() -> (field: FieldIdentity, lastAlive: Date)? {
+        defer { orphan = nil }
+        return orphan
+    }
+
+    /// A result that belongs in a field and has not reached it yet.
+    private var resultIsWaiting: Bool {
+        guard let delivery, delivery.destination != nil else { return false }
+        return delivery.isPending(handledID: store.insertedDeliveryID)
+    }
+
     func post(notice text: String) {
         notice = Notice(text: text)
         publish(force: true)
@@ -271,7 +314,8 @@ final class VoiceSession: ObservableObject {
             recordingStartedAt: recordingStartedAt,
             delivery: delivery,
             notice: notice,
-            meetingActive: meetingStartedAt != nil
+            meetingActive: meetingStartedAt != nil,
+            field: dictationPhase.hasDictation ? dictationField : nil
         )
     }
 
@@ -283,8 +327,14 @@ final class VoiceSession: ObservableObject {
         case .starting: return .init(phase: .starting)
         case .recording: return .init(phase: .recording, since: recordingStartedAt)
         case .processing: return .init(phase: .processing)
-        case .warm, .off: return .init(phase: .ready)
+        case .warm, .off: return .init(phase: resultIsWaiting ? .waiting : .ready)
         }
+    }
+
+    /// Keyboard sessions carry the Live Activity when the setting is on;
+    /// meetings and Action button sessions always do.
+    private var wantsActivity: Bool {
+        meetingStartedAt != nil || startedByActionButton || MobileSettings.showsSessionActivity
     }
 
     private func publishIfChanged() {
@@ -304,13 +354,21 @@ final class VoiceSession: ObservableObject {
             // The Control Center toggle shows whether a dictation records.
             ControlCenter.shared.reloadControls(ofKind: SharedStore.dictationControlKind)
         }
+        refreshActivity()
+    }
+
+    /// Brings the Live Activity in line with the session. Also called when
+    /// something outside the snapshot changes what it shows: the setting or
+    /// the app coming to the front.
+    func refreshActivity() {
         guard isActive else { return }
-        if meetingStartedAt != nil || startedByActionButton {
+        if wantsActivity {
             if activity.isRunning {
                 activity.update(activityState)
-            } else if meetingStartedAt != nil, UIApplication.shared.applicationState == .active {
-                // Meetings start in the app, so the activity with its Stop
-                // button can be requested here.
+            } else if UIApplication.shared.applicationState == .active {
+                // ActivityKit refuses a request from the background, so a
+                // session that lost its activity gets one back the next time
+                // the app is in front.
                 activity.start(activityState)
             }
         } else if activity.isRunning {
@@ -320,5 +378,9 @@ final class VoiceSession: ObservableObject {
 
     private func beat() {
         store.heartbeat = Date()
+        // A waiting result turns into "ready" once it is typed or too old;
+        // the keyboard's ping can be missed.
+        forgetDraftIfSettled()
+        if activity.isRunning { activity.update(activityState) }
     }
 }

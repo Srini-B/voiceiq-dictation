@@ -93,23 +93,33 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
         return TranscriptionResult(rawTranscript: written, cleanedTranscript: text, modelID: modelID)
     }
 
-    /// Writes an on-device transcript. With Gemini and a key stored, Gemini
-    /// writes it by the writing rules; with writing Off, no key, or Gemini
-    /// failing, it goes in as transcribed. The dictionary's replacement rules
-    /// and sound-alike spellings apply on every path but Gemini's, which gets
-    /// the transcript as heard and applies the replacements after. A
-    /// transcript with no words is an empty dictation.
+    /// Writes an on-device transcript. With writing Off it is tidied on the
+    /// device in the chosen style (`Tidy`), and one left with no words (only
+    /// "um" and "uh") is an empty dictation. With Gemini and a key stored,
+    /// Gemini writes it by the writing rules; with no key, or Gemini failing,
+    /// it goes in as transcribed. The dictionary's replacement rules and
+    /// sound-alike spellings apply on every path but Gemini's, which gets
+    /// the transcript as heard and applies the replacements after.
     public func write(_ transcript: TranscriptionResult, context: DictationContext) async throws -> TranscriptionResult {
         let rules = DictionaryStore().replacementRules()
         let raw = transcript.cleanedTranscript
         guard !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw TranscriptionError.emptyTranscript }
+        let language = settings.localSpeechLanguage.code
+        let terms = DictionaryStore().entries().map(\.term)
+        // Dictionary names spelled another way ("Stacy" for "Stacey") take the Dictionary's spelling.
+        func corrected(_ text: String) -> String {
+            SoundAlikeSpelling.apply(terms, to: ReplacementEngine.apply(rules, to: text), language: language)
+        }
         var asTranscribed = transcript
-        // Dictionary names spelled another way ("Stacy" for "Stacey") take
-        // the Dictionary's spelling; Gemini gets the transcript as heard.
-        asTranscribed.cleanedTranscript = SoundAlikeSpelling.apply(
-            DictionaryStore().entries().map(\.term), to: ReplacementEngine.apply(rules, to: raw),
-            language: settings.localSpeechLanguage.code)
-        guard settings.cleanupSource != .none, KeychainStore.loadAPIKey() != nil else { return asTranscribed }
+        if settings.cleanupSource == .none {
+            let style = settings.tidyStyle
+            asTranscribed.cleanedTranscript = Tidy.styled(corrected(Tidy.spoken(raw, style: style, language: language)),
+                                                          style: style, language: language)
+            guard !asTranscribed.cleanedTranscript.isEmpty else { throw TranscriptionError.emptyTranscript }
+            return asTranscribed
+        }
+        asTranscribed.cleanedTranscript = corrected(raw)
+        guard KeychainStore.loadAPIKey() != nil else { return asTranscribed }
         let config = settings.geminiConfig
         let prompt = dictationPrompt(context: context, transcript: raw)
         do {

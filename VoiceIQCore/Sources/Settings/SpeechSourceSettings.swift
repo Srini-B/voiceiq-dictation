@@ -19,7 +19,8 @@ public enum TranscriptionSource: String, CaseIterable, Sendable, Identifiable {
 
 /// Who applies the writing rules to an on-device transcript and writes an
 /// on-device meeting's notes: Gemini, or nobody, so the words never leave the
-/// device. A Gemini transcript is always written by the rules in the same request.
+/// device. With Off, a dictation is tidied on the device (`TidyStyle`). A
+/// Gemini transcript is always written by the rules in the same request.
 public enum CleanupSource: String, CaseIterable, Sendable, Identifiable {
     case gemini
     case none
@@ -68,6 +69,15 @@ public extension SettingsStore {
 
     func setCleanupSource(_ source: CleanupSource) {
         Self.set(source.rawValue, forKey: "cleanupSource")
+    }
+
+    /// How an on-device dictation is tidied while writing is Off.
+    var tidyStyle: TidyStyle {
+        Self.defaults.string(forKey: "tidyStyle").flatMap(TidyStyle.init(rawValue:)) ?? .sentences
+    }
+
+    func setTidyStyle(_ style: TidyStyle) {
+        Self.set(style.rawValue, forKey: "tidyStyle")
     }
 
     /// The on-device model to download and use. An unknown value, or one this

@@ -73,7 +73,7 @@ let package = Package(
         ),
         .testTarget(
             name: "VoiceIQCoreTests",
-            dependencies: ["VoiceIQCore", "VoiceIQSpeech"],
+            dependencies: ["VoiceIQCore", "VoiceIQSpeech", "VoiceIQBridge"],
             path: "Tests",
             resources: [.copy("VoiceIQCoreTests/Fixtures")]
         ),

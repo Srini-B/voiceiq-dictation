@@ -101,3 +101,30 @@ The commit restores Hindi "10 बजे" and tight short lists. One regression: 
 After 137d5a9 reworded the list and hour rules, ctrl_01 ("Karen and Aaron") comes out as "Kiran and Arun" in 6 of 6 rounds at temperature 0. c409c44 gives "Karen and Aaron" in 6 of 6. Scores at e5ca037: D1 80.0 (4 control flips), D2 98.0, D5 60.1.
 
 The only prompt difference between the two commits is that wording, so the name guard flips on unrelated text. Decision: #83 is held until the name rule decides the case on its own, with ctrl_01–03 checked over 4 rounds. The dictation thread owns the fix.
+
+## Cost becomes a scorecard item (C1)
+
+Standing rule from cyron: Gemini cost stays low for dictation and meetings together, and a change that adds Gemini calls or tokens shows its cost before release. Decisions from the dispatcher, under cyron's autonomy rule:
+
+- **The gate.** C1 is scored at the owner's pace: about 160 dictations a month, measured 2026-11-12 to 11-18, plus 4 meeting hours, the cost study's estimate. It must stay under ₹250 a month at the highest announced prices, which are the January 2027 prices, double today's. Scoring: 100 at ₹200 or less, 90 at ₹250. Typical use (600 dictations and 10 hours) is a check; heavy use is reported but not gated.
+- **Meetings stay on Gemini.** On device is not a cost lever.
+- **Shared cap on extra calls.** The backup request and send-on-pause together may add about 10% extra dictation calls. The backup goes off if the data shows it barely helps p90.
+- **Screen text is capped in length,** not turned off.
+- **Every release reports** cost per dictation and per meeting hour.
+
+**How it is computed.** Prices come from ai.google.dev, read 2026-11-26, at ₹93 per USD. Prompt text is priced uncached until the app's usage log measures the real cache hit share. The eval's own hit share of about 53% is optimistic, because its calls run back to back.
+
+**C1 at January prices, owner pace, uncached:**
+
+| Commit | Monthly | C1 | Per dictation | Per meeting hour |
+| --- | --- | --- | --- | --- |
+| main 517c65d | ₹532 | 0 | ₹2.31 | ₹40.7 |
+| 0.7.16 | ₹344 | 52.3 | ₹1.13 | ₹40.7 |
+| #95 cda61ee | ₹359 | 46.6 | ₹1.22 | ₹40.7 |
+
+At 0.7.16, meetings are ₹163 of the ₹344 and dictation is ₹181. To get under ₹250 with meetings on Gemini, dictation must fall by about half, or the meeting hour must get cheaper. The levers in order are:
+1. Byte-stable prompt prefix so implicit caching hits, with cachedIn logged.
+2. A shorter prompt, as far as the scorecard holds 90.
+3. A cheaper meeting hour on Gemini.
+
+**Standing rule from cyron, later the same day.** Gemini is the default for dictation, writing and meetings. On device is used only in rare cases, about 5% of use at most, only where it clearly helps and scores 90 or more. Moving work on device is never how the budget is met; caching, shorter prompts and fewer extra calls are.

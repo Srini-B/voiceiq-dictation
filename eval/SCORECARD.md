@@ -1,6 +1,6 @@
 # VoiceiQ quality scorecard
 
-Every item scores 0–100. The target is 90 or more on every item, and dictation in 3 s or less from key-up to inserted text with every option on. Score main, then score each feature PR before it merges.
+Every item scores 0–100. The target is 90 or more on every item, dictation in 3 s or less from key-up to inserted text with every option on, and Gemini cost under ₹250 a month at the owner's pace for dictation and meetings together, at the highest announced prices. Score main, then score each feature PR before it merges. A change that adds Gemini calls or tokens (a backup request, sending on a pause, another meeting call) shows its C1 before it ships.
 
 **Who scores.** Claude Fable 5.2 is the scorer of record, run as its own Amp thread so it never sees how the output was made.
 - Items marked *judged* get the rubric for that item and their inputs:
@@ -38,9 +38,9 @@ python3 eval/dictation/score.py eval/dictation/results/LABEL.json --judge eval/d
 
 `run.py` saves after every call; if a run stops or a call fails, run the same command again and it sends only the missing calls. `score.py` refuses an incomplete run and lists cases still waiting for the judge.
 
-`run.py` sends the request `GeminiClient.dictate` sends, with the prompt the app builds, the Dictionary from `cases.json`, the place and field text, and the screen's text in the prompt (the window title and the lines in `cases.json`, an ideal OCR read of one window, where the app sends Vision OCR of the frontmost window, which can lose accents or add window chrome; no image is sent). A change to how the app sends screen context or builds the prompt must be mirrored in `run.py` before its score counts. Like the app, it strips answer artifacts (`ValidationGate.stripArtifacts`) and sends an empty answer once more. Known differences from the app: the app's backup request (`DictationHedge`) is not sent, so D5 is measured without it; a 429 wait counts as latency, as the user would feel it; the 0.39 s app overhead is the 2026-11-18 measurement, not measured per run. `cases.json` sets the English (India) spelling line, the owner's system locale.
+`run.py` sends the request `GeminiClient.dictate` sends, with the prompt the app builds, the Dictionary from `cases.json`, the place and field text, and the screen's text in the prompt (the window title and the lines in `cases.json`, an ideal OCR read of one window, where the app sends Vision OCR of the frontmost window, which can lose accents or add window chrome; no image is sent). A change to how the app sends screen context or builds the prompt must be mirrored in `run.py` before its score counts. Each call goes out with the app's backup request (`DictationHedge`: a second request when the first has not answered after 4–6 s, first answer wins); `--hedge-ceiling 20` mirrors commits before that cap. Like the app, it strips answer artifacts (`ValidationGate.stripArtifacts`) and sends an empty answer once more. Known differences from the app: a 429 wait counts as latency, as the user would feel it; the 0.39 s app overhead is the 2026-11-18 measurement, not measured per run. `cases.json` sets the English (India) spelling line, the owner's system locale.
 
-D5 of record is pooled: the same commit run at least 5 times spread across a day, with p50 and p90 taken over all calls together and each run's score reported beside the pooled one. To credit a commit with a speed change, interleave its runs with main's in the same session so both see the same Gemini load.
+D5 of record is pooled: the same commit run at least 5 times spread across a day, with p50 and p90 taken over all calls together and each run's score reported beside the pooled one. To credit a commit with a speed change, interleave its runs with main's in the same session so both see the same Gemini load. `pool_latency.py` scores the pooled files.
 
 ### Judge rubric
 
@@ -62,6 +62,21 @@ D5 of record is pooled: the same commit run at least 5 times spread across a day
 | M6 UI and UX | Live status during a call, transcript by person, notes screen | judged from screenshots; Granola is the bar |
 
 Eval meetings: AMI ES2004a (headset mix, four people; the mic track is one person, the far side the other three) and synthetic TTS meetings where people introduce and address each other by name. The pipeline writes one JSON per meeting in the format in `meetings/score.py`. Score all eval meetings in one call (`score.py OUT1 REF1 OUT2 REF2 …`): the `pooled` scores are the scores of record. M1 is the mean of the per-meeting M1 scores; M2–M4 pool error time over speech time and word errors over reference words, so the long real meeting weighs by its length and short synthetic calls can't outvote it.
+
+## Cost
+
+| Item | What it measures | How |
+| --- | --- | --- |
+| C1 Gemini cost per month | Dictation and meetings together at the owner's pace (`cost.json` profile `owner`), at the highest announced prices | `cost.py`: each eval call's tokens at `cost.json`'s prices (each extra request Gemini bills pays one more call), times dictations a month, plus meeting hours a month times the per-hour cost; 100 at or under ₹200, 90 at ₹250, minus 1 per 1% over ₹250 |
+
+```sh
+python3 -m doctest eval/cost.py
+python3 eval/cost.py eval/dictation/results/LABEL.json   # default: 2027-01 prices (the highest announced); --prices 2026-12 for the 2026 prices
+# a run from a runner that does not send the backup request needs the share the app sends it on:
+python3 eval/cost.py eval/dictation/results/LABEL.json --backup-share 0.08
+```
+
+Every release reports cost per dictation and per meeting hour beside C1, with the typical profile (600 dictations and 10 meeting hours) as a check and the heavy profile reported but not gated. Gemini is the default for dictation, writing and meetings. On device is used only in rare cases (about 5% of use at most), only where it clearly helps and scores 90 or more, and never to meet the budget: cost comes down through caching, shorter prompts and fewer extra calls. The backup request and any early send-on-pause request share a cap of about 10% extra dictation calls. `cost.py` prices only a complete run whose runner sent the app's backup request (each result records `usage.secondRequests`); for an older run, `--backup-share` gives the share measured from the app. `cost.json` records where its prices, exchange rate and profiles come from. Meetings use a per-hour figure from the cost study until the meeting pipeline records its own token usage.
 
 ## Known limits
 

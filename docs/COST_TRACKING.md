@@ -10,7 +10,10 @@ Each successful model call becomes one `UsageRecord` in
 `~/Library/Application Support/VoiceiQ/usage.sqlite` (GRDB, WAL). Fields:
 time, activity, stage, model, session ID, token counts by modality (text,
 audio, image, cached in; text, audio, thought out), an `isEstimated` flag,
-`costUSD`, and `audioSeconds`. The table also has `fxRateINR`, `fxDate`
+`costUSD`, and `audioSeconds`. Each call also writes a `usage` line to the
+log with its tokens in (audio, image and cached shown separately) and out, so
+the implicit-cache hit share of real dictations can be read with
+`log show --predicate 'eventMessage BEGINSWITH "usage dictation"'`. The table also has `fxRateINR`, `fxDate`
 (migration `v3-fx`) and `listINR` (migration `v4-listINR`) from the removed
 Sarvam integration. The migrations stay registered so existing databases keep
 a known history, but nothing reads or writes those columns.

@@ -39,9 +39,14 @@ Keyboard ──command + Darwin ping──▶ App Group ──▶ App (backgroun
 `VoiceIQBridge` defines the protocol:
 
 - `KeyboardCommand` (`start`, `stop`, `cancel`), written only by the keyboard.
+  `start` and `stop` carry the field the keyboard is in (`FieldIdentity`).
 - `SessionSnapshot` (`off`, `warm`, `starting`, `recording`, `processing`,
-  plus the last `Delivery` and `Notice`), written only by the app.
-- `ActivityRequest`, written only by the Live Activity buttons.
+  plus the last `Delivery` and `Notice`, and the field a dictation in
+  progress is for), written only by the app.
+- `ActivityRequest` (`stopDictation`, `cancelDictation`, `copyResult`,
+  `endSession`, `stopMeeting`), written only by the Live Activity buttons.
+- `fieldVisits`, the input sessions the keyboard was last in, written only by
+  the keyboard.
 - A heartbeat the app writes every second while a session is up.
 
 Every key has one writer, so nothing is locked. Darwin notifications
@@ -78,30 +83,125 @@ start quietly, since there is nothing to transcribe. Adapted from Hex
    background), starts the dictation, waits until the mic is live (0.6 s at
    most), and sends the user back to the host app. When it can't, it shows
    "Swipe right along the bottom edge to go back".
-4. Stop sends `stop`. The app transcribes, writes a `Delivery`, and pings.
-   Whichever app the keyboard is in when the result arrives gets it, even when
-   the dictation started in another app: the user stopped it there. The
-   keyboard inserts the text with `textDocumentProxy.insertText`, adding a
-   space when it would run into the previous word. Only the keyboard instance
-   on screen may type: iOS can keep an earlier instance alive in the same
-   process, still polling, with a text connection that reaches no field. The
-   keyboard that types a result marks it handled (`insertedDeliveryID`).
-5. Two seconds after delivering, the app checks `insertedDeliveryID`. If no
-   keyboard typed the result (the keyboard was closed, or the user is on a
-   screen with no text field), the app puts it on the clipboard and marks it
-   handled, so a keyboard opened later doesn't type it too. Paste last always
-   has it. The keyboard's decisions go to `SharedStore.keyboardLog`, shown
-   under "Keyboard" in Settings › Advanced › Session log. Every line of
-   that log, the app's and the keyboard's, starts with the date and time
-   (`SharedStore.logStamp`, "2026-10-22 06:52:04", device time zone).
-6. If the heartbeat stops while the snapshot says `processing`, iOS suspended
-   or ended the app mid-dictation. The keyboard keeps the spinner and shows
-   "Open VoiceiQ to finish" (`KeyboardModel.needsAppToFinish`); a tap opens
-   `BridgeURL.app`. A suspended app resumes the dictation; an ended one
-   recovers the saved recording at launch. The session log records each
-   dictation's processing time and whether the app was in the foreground
-   ("processed in 94.2s (background)"), and when the app was opened during
-   processing.
+4. Stop sends `stop` with the field the keyboard is in. The app transcribes,
+   writes a `Delivery`, and pings. The delivery stays pending until a keyboard
+   types it. [Where the text lands](#where-the-text-lands) has the rules.
+5. If the heartbeat stops while the snapshot says `recording` or `processing`,
+   iOS suspended or ended the app mid-dictation. The keyboard keeps the
+   spinner and shows "Open VoiceiQ to finish"
+   (`KeyboardModel.needsAppToFinish`). A tap opens `BridgeURL.app`. A suspended
+   app resumes the dictation. An ended app recovers the saved recording at
+   launch and delivers the text to the field the dictation was for
+   (`VoiceSession.orphan`, `AppModel.deliverRecovered`), when the app ended
+   less than an hour ago. When a new dictation began before the recovery
+   finished, the recovered text stays in History and does not replace the
+   new result. The session log records each dictation's processing
+   time and whether the app was in the foreground ("processed in 94.2s
+   (background)"), and when the app was opened during processing.
+
+The keyboard's decisions go to `SharedStore.keyboardLog`, shown under
+"Keyboard" in Settings › Advanced › Session log. Every line of that log, the
+app's and the keyboard's, starts with the date and time
+(`SharedStore.logStamp`, "2026-10-22 06:52:04", device time zone).
+
+### Where the text lands
+
+A dictation records in the app, so it keeps recording while the keyboard is
+dismissed, while another app is in front, and while the user scrolls. The
+text then has to find its field again.
+
+The destination of a result (`Delivery.destination`) is the field where Stop
+was tapped in a keyboard. When the dictation was stopped from outside a
+keyboard (the Live Activity, the Action button, a call), the destination is
+the field where Dictate was tapped. A result with a destination stays pending
+for one hour (`Delivery.pendingWindow`). The app never copies it to the
+clipboard unasked: the clipboard may hold what the user went to fetch.
+
+iOS gives a keyboard no identity for a text field.
+`UITextDocumentProxy.documentIdentifier` names one input session: the same
+field reports a new identifier after the keyboard was dismissed, after another
+field had focus, and after the app was left and reopened. So the keyboard
+describes a field (`FieldIdentity`) by three things: the host app, the
+session identifier, and a fingerprint of the text around the cursor
+(`Draft.fingerprint`, an FNV-1a hash, nil for an empty field). The text itself
+never enters the App Group.
+
+`Delivery.route` decides what the keyboard on screen does with a pending
+result. It checks these rules in order:
+
+| The keyboard is in | It |
+| --- | --- |
+| the same input session as the destination | types the text |
+| the same app, and the text around the cursor is the same as at the destination | types the text |
+| the same app, both fields are empty, focus did not move here from another field with the keyboard up, the keyboard has been in no other field of that app since Stop, and the text is less than 10 minutes old | types the text |
+| any other field | shows "Dictation ready. Paste last puts it here." in the shortcut row |
+
+The second and third rules apply only in a field that takes ordinary text
+(`KeyboardModel.fieldTakesProse`). A field for a username, an email address,
+a URL, a password, a one-time code, a card number, a phone number or a postal
+code, and any field with a keyboard type other than the default, receives a
+result only under the first rule. Everywhere else such a field gets the
+offer.
+
+A keyboard that is in no field does nothing with a result. iOS can leave a
+dismissed keyboard polling with its view still in a window, and its text
+connection then reaches nothing. `deliverIfNeeded` returns while
+`documentIdentifier` is nil and logs "result held: this keyboard is in no
+field" once.
+
+Paste last types the result in the field on screen and marks it handled.
+A result is typed once: the keyboard that types it writes
+`insertedDeliveryID` and pings the app (`io.blue.voiceiq.bridge.inserted`).
+After one hour the keyboard no longer types or offers the result unasked.
+Paste last and History still have it.
+
+The third rule is a guess. Nothing tells two empty fields of one app apart,
+so the first empty field of that app that a keyboard comes up in receives
+the text, whichever field it is. Two checks narrow the guess:
+
+- `Delivery.isFirstReturn` reads `SharedStore.fieldVisits` and counts the
+  input sessions since the user stopped the dictation (`Delivery.stoppedAt`),
+  not since the text was ready. A field that had the keyboard while the text
+  was being written counts. Without a stop time (a call ended the dictation,
+  or the launch recovery wrote it), sessions count from when the text was
+  ready. The destination's own session does not count.
+- A field that focus moved to while the keyboard stayed up is never the
+  field the result left, so the keyboard does not make the guess there
+  (`InputSession.movedHere`). It offers the text. During such a move the
+  keyboard can read no field for one 0.1 s poll, so it counts less than one
+  second in no field as a move (`KeyboardModel.moveGap`). A keyboard that
+  appears again (`KeyboardModel.appeared`) starts fresh.
+
+An input session in an app that the keyboard could not name counts as a
+session in the destination's app, so an unknown session leads to an offer,
+not to typed text. While it polls, the keyboard asks the host resolver for a
+missing app name at most three times per session
+(`KeyboardModel.hostRetryLimit`). A tap on Dictate or Stop always asks.
+
+The second and third rules compare what the field looks like, so the
+keyboard acts on them only when two polls in a row read the same field. A
+reading taken while the host app is still connecting cannot place a result.
+Only the keyboard instance on screen may type: iOS can keep an earlier
+instance alive in the same process, still polling, with a text connection
+that reaches no field. The keyboard inserts with
+`textDocumentProxy.insertText` and adds a space when the text would run into
+the previous word.
+
+A new dictation replaces the pending result of the one before. The earlier
+text stays in History. When the earlier result still waited for its field,
+the keyboard shows "Previous dictation is in History" and the session log
+records "a waiting result was replaced; it is in History".
+
+The fingerprint in `Delivery.destination.draft` is needed only while the
+result is pending. Once a keyboard typed the result, the app copied it, or
+the hour passed, the app writes the result back without the fingerprint
+(`Delivery.forgettingDraft`, `VoiceSession.resultSettled`). The app does the
+same at launch.
+
+A result with no destination (the Action button with no VoiceiQ keyboard on
+screen) is typed by the first VoiceiQ keyboard on screen within two minutes.
+When no keyboard typed it two seconds after delivery, the app puts it on the
+clipboard and marks it handled.
 
 Settings › Privacy has
 the same "Keep dictations" picker as the Mac (`transcriptRetentionDays`);
@@ -200,6 +300,19 @@ records in the `.voiceChat` session mode; the warm session goes back to
 itself, so with AirPods connected a dictation can switch them to call audio
 whatever the Microphone choice. From Hex `492d8c28` (MIT).
 
+A session that the keyboard started shows a Live Activity (Settings ›
+Dictation › "Show in the Dynamic Island", `MobileSettings.showsSessionActivity`,
+on by default; "Show on the Lock Screen" on iPad). It is how the user stops
+or cancels a dictation while no VoiceiQ keyboard is on screen. While a
+dictation starts or records, the activity has Cancel and Stop. While a result
+waits for its field, the activity says "Text ready" and has Copy, which puts
+the text on the clipboard and marks it handled. The activity is a control,
+not a keeper: the open mic is what lets the app record in the background.
+ActivityKit starts an activity only from the foreground, so
+`VoiceSession.refreshActivity` starts a missing one the next time the app is
+in front. The activity ends with the session, so "Text ready" shows only for
+the warm window. The result stays pending without it.
+
 The session also ends when the user taps End (app or Dynamic Island) or when
 an audio interruption cannot be resumed. A call or Siri interruption
 finalizes an in-progress dictation, so the words are kept. Settings ›
@@ -221,9 +334,9 @@ forward. It calls `ActionButtonBridge.toggle`, which `AppModel` sets at launch:
 stop the dictation in progress, or begin a session with a Live Activity (iOS
 requires one for an audio-recording intent) and start a dictation for whatever
 app is in front. The keyboard follows the shared snapshot like any other
-dictation, and the result has no host app, so whichever field has the
-VoiceiQ keyboard within two minutes receives it. Keyboard-started sessions
-have no Live Activity.
+dictation. When a VoiceiQ keyboard stops it, the text goes to that keyboard's
+field. Otherwise the result has no destination, and
+[Where the text lands](#where-the-text-lands) says what happens to it.
 
 The control is a `ControlWidgetToggle`, on while a dictation starts or
 records. Its value provider reads `SharedStore.isDictating()`, which is the
@@ -753,5 +866,22 @@ is `false`, so builds skip the export-compliance question.
   the field: iPadOS hides third-party keyboards while a hardware keyboard is
   attached, so nothing can type it in place.
 - The first dictation after a cold start costs one trip to the app.
+- A keyboard cannot recognise a field it has left. After a return, the text
+  is typed only when the app and the field's text match, or into the first
+  empty field of that app that a keyboard comes up in after Stop. In an app
+  with several empty fields (two empty chats), that can be the wrong one:
+  stop in one chat, dismiss the keyboard, and open the other chat first. The
+  text is typed, never sent.
+- After Stop, a visit to another field of the app turns a typed result into
+  an offer, also when the user ends up back in the first empty field. So does
+  a keyboard dismissed and brought back within one second.
+- An address, code or number field gets its text typed only when Stop was
+  tapped in it and the keyboard never left. After a return it gets the offer.
+- A field that the user edited while the text was being written no longer
+  matches, so the result is offered through Paste last and not typed.
+- Background recording across an app switch, the Live Activity buttons in
+  the Dynamic Island, and Copy from a locked phone are verified in the
+  Simulator only. The Simulator has no real microphone, no jetsam and no
+  Dynamic Island hardware.
 - Keys make no sound and no haptic tap: neither worked reliably from the
   extension, so both were removed (2026-10-30).
