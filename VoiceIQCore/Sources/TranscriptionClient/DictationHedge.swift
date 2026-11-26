@@ -1,7 +1,7 @@
 import Foundation
 
 /// When a dictation's second request starts: at the 90th percentile of the
-/// last 20 dictations' answer times, between 4 and 6 s, so it goes out only
+/// last 20 dictations' answer times, between 4 and 20 s, so it goes out only
 /// for the slow tail (a call that thinks, a stalled server).
 ///
 /// Answer times barely depend on the recording's length or the prompt: on
@@ -17,12 +17,13 @@ actor DictationHedge {
     private var recent: [TimeInterval] = []
     private static let window = 20
     private static let floor: TimeInterval = 4
-    /// Past 6 s a dictation is slow whatever the API's mood; without this cap a
-    /// long tail (calls that think for 15–25 s) pushed the delay to 20 s, where
-    /// the second request rarely answered first.
-    private static let ceiling: TimeInterval = 6
+    /// A 6 s cap was tried and measured worse (2026-11-26, 198 calls each,
+    /// paired sessions): p90 9.2 s against 7.0 s at 20 s, with a backup on 22%
+    /// of dictations against 15%. When the API is slow both requests are slow,
+    /// so an earlier backup adds calls without shortening the wait.
+    private static let ceiling: TimeInterval = 20
     /// Before five dictations have answered.
-    static let initialDelay: TimeInterval = 6
+    static let initialDelay: TimeInterval = 8
 
     func delay() -> TimeInterval {
         guard recent.count >= 5 else { return Self.initialDelay }
