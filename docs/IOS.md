@@ -428,6 +428,9 @@ VoiceiQ adds no row.
   the trackpad selection use VoiceiQ's accent (the Dictate pill's blue), and
   the keys have the 1 pt under-shadow of VoiceiQ's keycaps
   (`0002-voiceiq-style.patch`).
+- With Learn how I type off, keeping a suggestion holds the word for the
+  session only; Hex would otherwise save it to its learned words
+  (`0004-voiceiq-learning-opt-out.patch`).
 - Hex's in-keyboard dictation, its recording panel and Metal dot scope, the
   style menu, translation and model notices are permanent stand-ins that
   never show (`HexDictationStandIns.swift`). Hex's wording that names its app

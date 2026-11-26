@@ -495,7 +495,8 @@ final class AutocorrectEngine {
 
     func suppressAndKeep(_ word: String) {
         suppressedInSession.insert(word.lowercased())
-        learnedWords.recordExplicitKeep(word)
+        // VoiceiQ: with Learn how I type off, a kept word holds for this session only.
+        if TypingJournalSettings().isEnabled { learnedWords.recordExplicitKeep(word) }
         userWordsRevision += 1
         // The partner never learns this keep itself; it only drops its copy of your words.
         partner?.suppressedInSession.insert(word.lowercased())
