@@ -10,6 +10,8 @@ rows = [json.loads(l) for l in MANIFEST.read_text().splitlines()]
 have = [r for r in rows if r["stratum"] == "monsoon_ta"]
 seen_ids = {r["id"] for r in rows}
 rng = random.Random(7)
+if len(have) < 60 and any("speaker_id" not in r for r in have):
+    raise SystemExit("monsoon_ta rows without speaker_id: rerun fetch.py first so speakers can be checked")
 cand = []
 for i in (1, 2, 3):
     t = pq.read_table(hf("VoiceArena/MonsoonASR-Open-ASR-leaderboard-en-IN", f"data/test-0000{i}-of-00004.parquet"),
@@ -17,9 +19,7 @@ for i in (1, 2, 3):
     cand += [r for r in t if 4.0 <= r["audio_length_s"] <= 30 and words(r["text"]) >= 8]
 print("candidates", len(cand))
 rng.shuffle(cand)
-if len(have) < 60 and any("speaker_id" not in r for r in have):
-    raise SystemExit("monsoon_ta rows without speaker_id: rerun fetch.py first so speakers can be checked")
-speakers = {r["speaker_id"] for r in have}
+speakers = {r.get("speaker_id") for r in have}
 new = []
 for r in cand:
     if len(have) + len(new) >= 60:
