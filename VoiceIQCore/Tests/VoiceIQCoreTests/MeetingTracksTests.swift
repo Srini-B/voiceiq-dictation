@@ -109,5 +109,10 @@ final class MeetingTracksTests: XCTestCase {
         XCTAssertEqual(out.count, words.count)
         XCTAssertEqual(out.first { $0.text == "yeah" }?.speaker, "far b")
         XCTAssertEqual(Set(out.map(\.speaker)), ["far a", "far b", "far d", MeetingSpeaker.you])
+
+        // An hour-long call: 30 s of speech is under 1% but a participant.
+        var hour = (0..<3600).map { TimedWord(text: "a", speaker: "far a", start: Double($0), end: Double($0) + 0.9) }
+        hour += (0..<30).map { TimedWord(text: "e", speaker: "far e", start: 1800 + Double($0), end: 1801 + Double($0)) }
+        XCTAssertTrue(MeetingTranscriber.foldingStrayVoices(hour).contains { $0.speaker == "far e" })
     }
 }

@@ -96,10 +96,12 @@ def ami(meeting, out, cache):
         words = {}
         for agent in agents:
             xml = z.read(f"words/{meeting}.{agent}.words.xml").decode()
-            words[agent] = [(float(s), float(e), html.unescape(text)) for attrs, text in re.findall(r"<w ([^>]*)>([^<]*)</w>", xml)
+            # Some words carry no times; they cannot be placed, so they are left out.
+            words[agent] = [(float(s.group(1)), float(e.group(1)), html.unescape(text))
+                            for attrs, text in re.findall(r"<w ([^>]*)>([^<]*)</w>", xml)
                             if 'punc="true"' not in attrs
-                            for s, e in [(re.search(r'starttime="([\d.]+)"', attrs).group(1),
-                                          re.search(r'endtime="([\d.]+)"', attrs).group(1))]]
+                            for s, e in [(re.search(r'starttime="([\d.]+)"', attrs), re.search(r'endtime="([\d.]+)"', attrs))]
+                            if s and e]
         summary = ""
         name = f"abstractive/{meeting}.abssumm.xml"
         if name in z.namelist():

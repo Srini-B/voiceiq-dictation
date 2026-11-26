@@ -319,7 +319,7 @@ import VoiceIQSpeech
                     notes = written
                 } else {
                     guard hasKey() else { throw MeetingFailure.noKey }
-                    notes = try await writeNotes(transcript: transcript, meta: meta)
+                    notes = try await writeNotes(transcript: transcript, meta: &meta)
                 }
                 try finish(id: id, meta: &meta, transcript: transcript, notes: notes)
             } catch { saveFailure(id: id, meta: &meta, error: error) }
@@ -386,7 +386,7 @@ import VoiceIQSpeech
                 return
             }
             try Task.checkCancellation()
-            let notes = try await writeNotes(transcript: transcript, meta: meta)
+            let notes = try await writeNotes(transcript: transcript, meta: &meta)
             try finish(id: id, meta: &meta, transcript: transcript, notes: notes)
         } catch { saveFailure(id: id, meta: &meta, error: error) }
     }
@@ -475,7 +475,9 @@ import VoiceIQSpeech
     /// the last, that voice is named by elimination and the notes are written
     /// once more, so its tasks carry its name. MEASURED 2026-11-26: the first
     /// notes of a vendor call left "pull the usage numbers" without an owner.
-    private func writeNotes(transcript: [TranscriptSegment], meta: MeetingMeta) async throws -> MeetingNotes {
+    /// The name goes into `meta.screenNames`, so the transcript shows the
+    /// name the notes were written with, and `finish` has nothing left to eliminate.
+    private func writeNotes(transcript: [TranscriptSegment], meta: inout MeetingMeta) async throws -> MeetingNotes {
         let cfg = config(), settings = SettingsStore(), dictionary = DictionaryStore()
         let write = { (meta: MeetingMeta) in
             try await self.client.meetingNotes(prompt: MeetingNotesPrompt.build(transcript: transcript, context: .init(
@@ -486,10 +488,14 @@ import VoiceIQSpeech
                 calendarEvent: meta.calendarEvent)), transcript: transcript, model: cfg.writingModel, endpoint: cfg.endpoint, deadline: 300)
         }
         let notes = try await write(meta)
-        var named = meta
-        named.screenNames = ScreenSpeakerNames.byElimination(meta: meta, transcript: transcript, notes: notes)
-        guard named.screenNames != meta.screenNames else { return notes }
-        return (try? await write(named)) ?? notes
+        let named = ScreenSpeakerNames.byElimination(meta: meta, transcript: transcript, notes: notes)
+        guard named != meta.screenNames else { return notes }
+        meta.screenNames = named
+        guard var again = try? await write(meta) else { return notes }
+        // A name the first notes found (a self-introduction) stays when the rewrite leaves that speaker out.
+        let renamed = Set((again.speakers ?? []).filter { $0.name != nil }.map(\.label))
+        again.speakers = (again.speakers ?? []) + (notes.speakers ?? []).filter { $0.name != nil && !renamed.contains($0.label) }
+        return again
     }
 
     /// The dictionary's wrong → right spellings, applied to what was heard.
