@@ -81,7 +81,7 @@ final class GeminiRequestTests: XCTestCase {
     /// The second request waits for the slow tail of recent answers, and a
     /// run of dictations that needed it pushes the wait up.
     func testHedgeWaitsForTheSlowTailOfRecentAnswers() async {
-        let hedge = DictationHedge()
+        let hedge = DictationHedge(sendsBackup: true)
         let firstDelay = await hedge.delay()
         XCTAssertEqual(firstDelay, DictationHedge.initialDelay)
         for _ in 0..<20 { await hedge.record(answeredAfter: 3, delay: 8) }
@@ -90,6 +90,15 @@ final class GeminiRequestTests: XCTestCase {
         for _ in 0..<3 { await hedge.record(answeredAfter: 9, delay: 4) }
         let raised = await hedge.delay()
         XCTAssertEqual(raised, 6)
+    }
+
+    /// The app sends no backup request: its delay outlasts the deadline of
+    /// even a ten-minute dictation, however slow recent answers were.
+    func testAppSendsNoBackupRequest() async {
+        let hedge = DictationHedge.shared
+        for _ in 0..<20 { await hedge.record(answeredAfter: 30, delay: 4) }
+        let delay = await hedge.delay()
+        XCTAssertGreaterThan(delay, TimeoutPolicy.overallDeadline(audioDuration: 600))
     }
 
     func testMeetingChatReplaysEarlierTurnsInOrder() async throws {
