@@ -56,3 +56,19 @@ Accepted: D1 67.9, D2 97.5, D3 89.2, D5 0, M1 100, M5 92.6. Corrected:
 The dictation thread found that gpt-4o-mini-tts leaves out a closing "Thanks, <name>.": long_01's audio ends at "…we ship Friday morning." (checked with gpt-4o-transcribe on the last 5 s and on the whole clip). The sign-off was never spoken, so it is no longer in long_01's script. `check_assets.py` now transcribes every clip with a different model and refuses clips whose ending or words don't match. clean_punct was regenerated with a voice told to say the punctuation words aloud.
 
 Effect on main's baseline: D1 names 67.9 → **70.0** (94/94 names; the six English-name swaps remain), D2 97.5 → 97.6. Fable re-scored long_01 at 94 per round (two points for blank lines inside the list), so **D4 of record is 91.6**. clean_punct's 50 came from the old clip, which may not have said the punctuation words; that clip was replaced before it could be checked, so the 50 is unverified. Voiding it would make D4 95.4; above 90 either way. `check_assets.py` passes on all other English clips, including clean_email, whose sign-off was spoken.
+
+## Release gates for the next release (decided 2026-11-26)
+
+Gemini Neon's review of main 884208e found five High issues. Each must be fixed on main, or rebutted in code, before release:
+- **Fixed:** finding 3 (meeting notes and transcript names), #87.
+- **In review:** findings 4, 5 and 7 (iPhone keyboard Full Access, suggestion strip, vocabulary cap), #89, ready to merge.
+- **In review:** findings 1, 2, 9b and 12 (system-audio rebuild loop, mic leak and drift, cellular check, onboarding), #88. Blocked on the onboarding `needsRestart` refresh.
+
+Not gates, to follow soon after:
+- **Keyboard memory on dismissal (finding 6).**
+- **Secure-field checks (finding 8).** iOS already gives standard secure fields the system keyboard.
+- **#81 and #83**, held for these reasons:
+  - Tidy deletes words the speaker meant.
+  - The 2 s backup request fires on most dictations and doubles billed calls.
+  - Full-display OCR runs with no secure-field or password-manager guard.
+  - Sound-alike matching changes sentence-start words ("Feel free" → "Phil").
