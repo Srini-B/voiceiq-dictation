@@ -192,7 +192,9 @@ enum SpokenRepairs {
         text.split(separator: "\n", omittingEmptySubsequences: false).map { line -> String in
             let line = String(line)
             let trimmed = line.trimmingCharacters(in: .whitespaces)
-            guard let last = trimmed.last, last.isLetter || last.isNumber else { return line }
+            guard let last = trimmed.last, last.isLetter || last.isNumber,
+                  // A quotation hides where the sentence starts: He said "Hello. How are you" and left.
+                  !trimmed.contains(where: { "\"“”«»".contains($0) }) else { return line }
             // The last sentence: after a mark followed by a space, so "1.2" splits nothing.
             let sentence = trimmed.ranges(of: #/[.!?]\s/#).last.map { String(trimmed[$0.upperBound...]) } ?? trimmed
             let words = sentence.split(separator: " ").map { bare(String($0)) }.filter { !$0.isEmpty }
