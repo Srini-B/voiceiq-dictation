@@ -67,11 +67,12 @@ the right to contribute it under this repository's license.
    uses standard SwiftUI controls and the `Brand` colors in
    `iOS/App/Sources/VoiceIQMobileApp.swift`.
 8. **Prompt changes need evidence in the PR.** `PromptV1.swift` is the
-   dictation prompt: one call hears the recording and writes the text. There
-   is no automated eval set yet, so verify by hand and put the results in the
-   PR: dictate a self-correction, a spoken list, question-shaped speech,
-   spoken punctuation, an all-filler take, and a spoken instruction that must
-   be written down rather than obeyed.
+   dictation prompt: one call hears the recording and writes the text. Run
+   the eval set in `eval/SCORECARD.md` on main and on your branch and put both
+   scores in the PR. It covers a self-correction, a spoken list,
+   question-shaped speech, spoken punctuation, an all-filler take, a spoken
+   instruction that must be written down rather than obeyed, names and
+   latency with screen context on.
 9. **Never-lose-words is an invariant.** Any change touching audio, networking,
    or insertion must keep these true on both platforms: audio is on disk before
    network I/O begins; every failure writes a terminal status; errors are never
