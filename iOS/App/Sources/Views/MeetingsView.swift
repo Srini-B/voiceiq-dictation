@@ -7,6 +7,9 @@ struct MeetingsView: View {
     @StateObject private var folders = MeetingFolderModel()
     /// The note a swipe is filing, in the folder sheet.
     @State private var filing: MeetingID?
+    /// The note being renamed, and the title typed so far.
+    @State private var renaming: MeetingMeta?
+    @State private var titleDraft = ""
 
     var body: some View {
         ListDetailNavigation {
@@ -30,7 +33,11 @@ struct MeetingsView: View {
                             // Deleting mid-transcription would leave its Gemini calls running
                             // with nowhere to save (the Mac's More menu is disabled the same way).
                             .deleteDisabled(model.meetings.isBusy(meta.id))
-                            .contextMenu { Menu("Folders", systemImage: "folder") { MeetingFolderToggles(model: folders, meeting: meta.id) } }
+                            .contextMenu {
+                                Button("Rename…", systemImage: "pencil") { titleDraft = rowTitle(meta); renaming = meta }
+                                    .disabled(model.meetings.isBusy(meta.id))
+                                Menu("Folders", systemImage: "folder") { MeetingFolderToggles(model: folders, meeting: meta.id) }
+                            }
                             // The iPhone's stand-in for the Mac's hover button.
                             .swipeActions(edge: .leading) {
                                 Button("Folders", systemImage: "folder") { filing = meta.id }.tint(Theme.Colors.accent)
@@ -65,6 +72,13 @@ struct MeetingsView: View {
             DetailPlaceholder(systemImage: "doc.text", title: "No note selected")
         }
         .meetingFolderEditing(folders, noun: "notes")
+        .alert("Rename Note", isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })) {
+            TextField("Title", text: $titleDraft)
+            Button("Cancel", role: .cancel) {}
+            Button("Rename", action: rename)
+        } message: {
+            Text("Leave it empty to use the title from the notes.")
+        }
         .sheet(isPresented: Binding(get: { filing != nil }, set: { if !$0 { filing = nil } })) {
             if let filing {
                 MeetingFolderPicker(model: folders, meeting: filing) { self.filing = nil }
@@ -83,10 +97,21 @@ struct MeetingsView: View {
         reload()
     }
 
+    private func rename() {
+        guard let meta = renaming, titleDraft.trimmingCharacters(in: .whitespacesAndNewlines) != rowTitle(meta) else { return }
+        try? model.meetings.store.renameMeeting(id: meta.id, title: titleDraft)
+        reload()
+    }
+
     private func reload() {
         meetings = model.meetings.store.list().sorted { $0.startedAt > $1.startedAt }
         folders.reload(meetings)
     }
+}
+
+/// The title a note's row shows.
+private func rowTitle(_ meta: MeetingMeta) -> String {
+    [meta.shownTitle(), meta.calendarEvent?.title].compactMap { $0 }.first { !$0.isEmpty } ?? "Notes"
 }
 
 private struct RecorderCard: View {
@@ -163,7 +188,7 @@ private struct MeetingRow: View {
         let selected = prominence == .increased
         HStack(alignment: .top, spacing: Theme.Spacing.m) {
             VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                Text([meta.title, meta.calendarEvent?.title].compactMap { $0 }.first { !$0.isEmpty } ?? "Notes")
+                Text(rowTitle(meta))
                     .font(Theme.Fonts.callout())
                     .foregroundStyle(selected ? Theme.Colors.onAccent : Theme.Colors.ink)
                     .lineLimit(1)
@@ -231,7 +256,7 @@ private struct MeetingDetail: View {
     /// Nothing to play while the note is still recording.
     private var audio: RecordedAudio {
         .meeting(folder: meta.status == .recording ? nil : model.meetings.store.folder(for: meta.id),
-                 name: notes?.title ?? meta.title ?? "Notes")
+                 name: meta.shownTitle(notes: notes) ?? "Notes")
     }
 
     /// Nil until the note has a transcript to ask about.
@@ -274,7 +299,7 @@ private struct MeetingDetail: View {
             if let chat { MeetingChatInput(chat: chat) }
         }
         .themedBackground()
-        .navigationTitle(notes?.title ?? meta.title ?? "Notes")
+        .navigationTitle(meta.shownTitle(notes: notes) ?? "Notes")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             if !gone {
@@ -320,7 +345,7 @@ private struct MeetingDetail: View {
     @ViewBuilder private func notesContent(_ notes: MeetingNotes) -> some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.m) {
             HStack(alignment: .firstTextBaseline) {
-                Text(notes.title).font(Theme.Fonts.title2()).foregroundStyle(Theme.Colors.ink)
+                Text(meta.shownTitle(notes: notes) ?? notes.title).font(Theme.Fonts.title2()).foregroundStyle(Theme.Colors.ink)
                 Spacer(minLength: Theme.Spacing.s)
                 if let kind = notes.type.flatMap(MeetingKind.init(rawValue:)) {
                     StatusChip(text: kind.displayName, tone: .off)
@@ -462,7 +487,7 @@ private struct MeetingDetail: View {
         notes = try? store.loadNotes(id: meta.id)
         transcript = (try? store.loadTranscript(id: meta.id)) ?? []
         // Shared as files so "Save to Files" keeps a .md named after the note.
-        let title = (notes?.title ?? meta.title ?? "Notes").replacingOccurrences(of: "/", with: "-")
+        let title = (meta.shownTitle(notes: notes) ?? "Notes").replacingOccurrences(of: "/", with: "-")
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent(meta.id.uuid.uuidString, isDirectory: true)
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         var choices: [(String, String, MeetingStore.ExportParts)] = []

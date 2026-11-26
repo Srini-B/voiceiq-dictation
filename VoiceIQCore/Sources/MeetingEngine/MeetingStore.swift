@@ -71,6 +71,13 @@ public final class MeetingStore: @unchecked Sendable {
         meta.speakerNames[label] = name.trimmingCharacters(in: .whitespacesAndNewlines)
         try save(meta: meta)
     }
+    /// Empty puts back the title from the notes.
+    public func renameMeeting(id: MeetingID, title: String) throws {
+        var meta = try load(MeetingMeta.self, from: requiredFolder(id).appendingPathComponent("meta.json"))
+        let title = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        meta.userTitle = title.isEmpty ? nil : title
+        try save(meta: meta)
+    }
     /// New words for one turn; its speaker, times and id stay, and so does
     /// every other turn. The notes are not written again. Nothing happens
     /// when the turn is gone, as after a sync replaced the transcript.
@@ -105,7 +112,7 @@ public final class MeetingStore: @unchecked Sendable {
     public func markdown(id: MeetingID, parts: ExportParts) throws -> String {
         let folder = try requiredFolder(id), meta = try load(MeetingMeta.self, from: folder.appendingPathComponent("meta.json"))
         let notes = try? loadNotes(id: id)
-        var lines = ["# \(notes?.title ?? meta.title ?? "Meeting")", "", meta.startedAt.formatted(date: .long, time: .shortened),
+        var lines = ["# \(meta.shownTitle(notes: notes) ?? "Meeting")", "", meta.startedAt.formatted(date: .long, time: .shortened),
                      meta.importedFrom.map { "Imported from \($0)" } ?? Duration.seconds(meta.durationSeconds.rounded())
                          .formatted(.units(allowed: [.hours, .minutes, .seconds], width: .wide, maximumUnitCount: 2))]
         if parts.contains(.notes), let notes {
