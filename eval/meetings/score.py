@@ -15,6 +15,8 @@ matched by name; without them, by the best one-to-one overlap. `--packet`
 prints the notes and summary for the judge (M5).
 """
 import argparse
+import html
+import importlib.util
 import json
 import re
 import unicodedata
@@ -24,8 +26,17 @@ STEP = 0.01
 COLLAR = 0.25
 
 
+# One word normalizer for every scorer: "8%" and "eight percent", "31" and
+# "thirty one" count as the same words, and HTML entities in reference text
+# (AMI's we&#39;ve) are unescaped.
+_spec = importlib.util.spec_from_file_location(
+    "dictation_score", Path(__file__).resolve().parent.parent / "dictation" / "score.py")
+_dictation = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(_dictation)
+
+
 def words(text: str) -> list[str]:
-    return re.findall(r"[\w']+", unicodedata.normalize("NFC", text.lower()))
+    return _dictation.words(html.unescape(text))
 
 
 def norm_name(name: str) -> str:
