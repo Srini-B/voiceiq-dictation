@@ -113,12 +113,14 @@ public final class MicTap: @unchecked Sendable {
               let converter = AVAudioConverter(from: input, to: target) else { throw MicError.format }
         if channels > 2 { converter.channelMap = [0] }
         inputFormat = input; self.converter = converter; deviceID = device
-        try check(AudioDeviceCreateIOProcIDWithBlock(&procID, device, ioQueue) { [weak self] _, inputData, _, _, _ in
-            self?.consume(inputData)
-        })
-        do { try check(AudioDeviceStart(device, procID)) }
-        catch {
-            // Without this the next attach overwrites procID and leaks it.
+        do {
+            try check(AudioDeviceCreateIOProcIDWithBlock(&procID, device, ioQueue) { [weak self] _, inputData, _, _, _ in
+                self?.consume(inputData)
+            })
+            try check(AudioDeviceStart(device, procID))
+        } catch {
+            // Leave nothing attached: the next attach would overwrite and leak
+            // procID, and a stale deviceID makes a move look like a no-op.
             if let procID { _ = AudioDeviceDestroyIOProcID(device, procID) }
             procID = nil; deviceID = kAudioObjectUnknown; self.converter = nil; inputFormat = nil
             throw error
@@ -155,10 +157,11 @@ public final class MicTap: @unchecked Sendable {
     private func moveToWantedDevice(force: Bool = false, attempt: Int = 0, generation: Int? = nil) {
         guard writer != nil else { return }
         if let generation, generation != moveGeneration { return }
-        if generation == nil { moveGeneration += 1 }
-        let current = moveGeneration
         let device = wanted
         guard force || device != deviceID else { return }
+        // Only a move that will attach supersedes a pending retry.
+        if generation == nil { moveGeneration += 1 }
+        let current = moveGeneration
         let wasRunning = deviceID != kAudioObjectUnknown
         detach()
         // The callbacks are drained, so lastBufferAt is the old device's last write.
