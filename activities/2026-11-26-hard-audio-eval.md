@@ -90,15 +90,22 @@ every clip.
 - **Cost:** a median prompt of 8.0k tokens, about ₹0.47 per dictation with
   backups at today's gemini-3.8-flash prices. At cyron's 160 dictations a
   month that is about ₹75. When the price doubles on 2027-01-01, it is about
-  ₹150, still inside ₹250.
+  ₹150. The ₹250 ceiling (`eval/cost.json`, owner profile) also covers 4
+  meeting hours, about ₹143 in December and ₹163 from January, so the total
+  is about ₹218 in December (inside) and about ₹313 from January (over).
+  Dictation alone is not what breaks the budget, but it has no room to
+  grow.
 - **Caveats:** the dictation-style strata (Voice Arena, Svarah) are close to
   cyron's use. The conversational strata (Monsoon, EdAcc, CHiME-6,
   IndicVoices) are cut from longer talk, so some clips start or end
   mid-thought, and their human references contain errors. A clip-level
   cross-check against Fluid Speech Pro shows about one judged content fix in
   seven points toward a doubtful reference (13 of 97 that could be decided).
-  One judge is noisier than Voice Arena's five. Fable has not scored this
-  yet.
+  One judge is noisier than Voice Arena's five; the Fable second judge
+  above covers 180 of the drafts, not the whole set.
+- **Case:** AMEND's normalisation lowercases, so a case-only fix
+  ("Paybridge" to "PayBridge") counts as zero edits. That is a limit of the
+  method, and it slightly flatters names.
 
 ## Failure classes
 
@@ -117,7 +124,7 @@ on every stratum.
 | Empty output | 5 | CHiME-6 (3), whispers with background talk (2) | `<<NO_SPEECH>>` on clear speech, both attempts |
 | Slang kept on purpose | 2 | Voice Arena | "89 bucks", "3 grand": the prompt keeps slang as spoken, and AMEND's rubric does not |
 
-Fluid Speech Pro decoded 3 of the 5 empty clips correctly ("Can you just use
+Fluid Speech Pro's raw transcript was right on 3 of the 5 empty clips ("Can you just use
 a wipe for the dining table?"). On both background-talker clips it wrote the
 whisperer, not the background voice.
 
@@ -144,9 +151,11 @@ errors, while Parakeet's raw WER counts the fillers it keeps. The
 Tamil-accented and far-field gaps are small enough that rewording alone could
 explain them. The whispered gap (24.1% vs 11.8%) is not, and Parakeet decoded
 3 of the 5 empty clips. Raw on-device output cannot be sent without reading:
-it keeps fillers and has no layout. On-device with Gemini writing was not
-measured, because it needs paid calls. No stratum shows on-device at 90 or
-above, so on-device stays a rare fallback.
+it keeps fillers and has no layout. D7 was not measured for on-device: with
+Gemini writing it needs paid calls, and a WER table does not give a D7
+score (Pro's 1 − WER is above 90 on Voice Arena and Svarah, but that counts
+words, not send-ready drafts). With no on-device D7 at 90 or above, on-device
+stays a rare fallback.
 
 ## Proposed fixes (parked: no paid A/B runs while the key is empty)
 
@@ -189,8 +198,11 @@ model think on a third of calls in #101's tests.
    `<<NO_SPEECH>>` or empty for a recording that has speech, the app today
    sends the same audio once more. When Fluid Speech is downloaded, send its
    transcript to Gemini as text instead (`PromptV1.transcriptSection`). That
-   is the same number of calls and a cheaper text request, and it recovered 3
-   of the 5 empty clips here.
+   is the same number of calls and a cheaper text request. Pro's raw
+   transcript was right on 3 of the 5 empty clips here; the Gemini writing
+   step on it was not run. PR #107 built this and is parked: on 47 key
+   presses with no near-field speaker Pro wrote background speech on 35, and
+   no level gate kept 2 of the 3 recoveries at 1 false insert or fewer.
 2. **On-device transcript as a hint (Mac with Fluid Speech Pro).** Pro
    decodes during or right after capture (about 0.14 s for a 15 s clip). Add
    its transcript to the audio request as a labelled second opinion, with no
@@ -203,7 +215,8 @@ model think on a third of calls in #101's tests.
 
 ## Not done
 
-- Fable has not scored the baseline, and the two-judge score is incomplete.
+- Fable scored 180 stratified drafts, not the whole baseline, so the
+  two-judge score is a reweighted estimate.
 - No proposal is measured. Each needs a paid pass, which needs cyron's
   go-ahead.
 - Voice Arena's 3-of-5 judge panel is not reproduced, and its 151 public

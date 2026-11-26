@@ -32,6 +32,7 @@ import hashlib
 import json
 import os
 import re
+import threading
 import time
 import unicodedata
 import urllib.request
@@ -261,6 +262,7 @@ def ask(model: str, prompt: str) -> dict:
 class Cache:
     def __init__(self):
         self.items = {}
+        self.lock = threading.Lock()
         if CACHE.exists():
             for line in CACHE.read_text().splitlines():
                 k, v = json.loads(line)
@@ -268,12 +270,17 @@ class Cache:
 
     def get(self, model: str, prompt: str):
         key = hashlib.sha256(f"{model}|{prompt}".encode()).hexdigest()
-        if key not in self.items:
-            value = ask(model, prompt)
+        with self.lock:
+            if key in self.items:
+                return self.items[key]
+        value = ask(model, prompt)
+        if not isinstance(value.get("fixed"), str):
+            raise SystemExit(f"{model} gave no \"fixed\" text; nothing cached, judge again")
+        with self.lock:
             self.items[key] = value
             with CACHE.open("a") as f:
                 f.write(json.dumps([key, value], ensure_ascii=False) + "\n")
-        return self.items[key]
+        return value
 
 
 def manifest() -> dict:
