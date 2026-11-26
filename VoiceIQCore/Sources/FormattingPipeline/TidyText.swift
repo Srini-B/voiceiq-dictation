@@ -81,23 +81,26 @@ enum TidyText {
         let quoted = quoteMask(Array(text))
         var offset = 0
         let lines = text.split(separator: "\n", omittingEmptySubsequences: false).map { line -> String in
-            var collapsed = ""
+            // Each kept character, and whether it is quoted: quoted spaces stay at a line's edges too.
+            var collapsed: [(Character, Bool)] = []
             var afterSpace = false
             let start = offset
             offset += line.count + 1
             for (number, c) in line.enumerated() {
                 if quoted[start + number] {
-                    collapsed.append(c)
+                    collapsed.append((c, true))
                     afterSpace = false
                 } else if c == " " || c == "\t" {
-                    if !afterSpace { collapsed.append(" ") }
+                    if !afterSpace { collapsed.append((" ", false)) }
                     afterSpace = true
                 } else {
-                    collapsed.append(c)
+                    collapsed.append((c, false))
                     afterSpace = false
                 }
             }
-            return collapsed.trimmingCharacters(in: CharacterSet(charactersIn: " \t"))
+            while let first = collapsed.first, first == (" ", false) { collapsed.removeFirst() }
+            while let last = collapsed.last, last == (" ", false) { collapsed.removeLast() }
+            return String(collapsed.map(\.0))
         }
         return trimmed(lines.joined(separator: "\n"))
     }

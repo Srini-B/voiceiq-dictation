@@ -2240,6 +2240,20 @@
       "heard": "The password is \"red\nand then blue\".",
       "written": "The password is \"red\nand then blue\".",
       "style": "lists"
+    },
+    {
+      "id": "kept-curly-open-quote-symbol",
+      "check": "kept as said",
+      "said": "use the curly open quote symbol",
+      "heard": "Use the curly open quote symbol.",
+      "written": "Use the curly open quote symbol."
+    },
+    {
+      "id": "kept-quoted-line-edge-spaces",
+      "check": "kept as said",
+      "said": "the password is quote red space new line space blue unquote",
+      "heard": "The password is \"red \n blue\".",
+      "written": "The password is \"red \n blue\"."
     }
   ]
 }

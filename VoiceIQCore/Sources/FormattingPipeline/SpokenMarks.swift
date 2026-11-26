@@ -88,6 +88,8 @@ enum SpokenMarks {
         var index = 0
         // Where the "unquote" closing an open "quote" starts.
         var pendingUnquote: Int?
+        // Whether a spoken "open quote" is waiting for its "close quote".
+        var openQuote = false
         while index < chars.count {
             let wordStart = !address[index] && !quoted[index] && (index == 0 || !joinsIdentifier(chars[index - 1]))
             if pendingUnquote == index {
@@ -102,7 +104,10 @@ enum SpokenMarks {
             if wordStart, pendingUnquote == nil,
                let (layout, end) = layouts.lazy.compactMap({ words, layout in
                 phraseEnd(words, in: chars, at: index, foldsAccents: spanish).map { (layout, $0) }
-            }).first, !nounAfterLayout(chars, after: end), saysLayout(layout, chars, at: index, end: end) {
+            }).first, !nounAfterLayout(chars, after: end), saysLayout(layout, chars, at: index, end: end),
+               pairs(layout, chars, after: end, open: openQuote, spanish: spanish) {
+                if case .openQuote = layout { openQuote = true }
+                if case .closeQuote = layout { openQuote = false }
                 index = write(layout, into: &out, chars, after: end)
                 continue
             }
@@ -119,6 +124,21 @@ enum SpokenMarks {
             index += 1
         }
         return String(out)
+    }
+
+    /// "open quote" only with a "close quote" after it, and "close quote" only
+    /// after an "open quote": "Use the curly open quote symbol" describes the mark.
+    private static func pairs(_ layout: Layout, _ chars: [Character], after end: Int, open: Bool, spanish: Bool) -> Bool {
+        switch layout {
+        case .lineBreak: return true
+        case .closeQuote: return open
+        case .openQuote:
+            let closes = spanish ? [["cerrar", "comillas"], ["cierra", "comillas"]] : [["close", "quote"]]
+            return (end..<chars.count).contains { index in
+                (index == 0 || !TidyText.isWordCharacter(chars[index - 1]))
+                    && closes.contains { phraseEnd($0, in: chars, at: index, foldsAccents: spanish) != nil }
+            }
+        }
     }
 
     /// Where the first whole-word "unquote" after `from` starts, when words
