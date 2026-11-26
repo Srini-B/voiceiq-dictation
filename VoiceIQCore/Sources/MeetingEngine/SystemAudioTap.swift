@@ -199,7 +199,7 @@ public final class SystemAudioTap: @unchecked Sendable {
         }
         tearDown(old)
         // After the old stream's queued buffers, so they are written first.
-        queue.sync { live = next; padFrom = lastBufferAt; silence = SystemTapWatch.Silence() }
+        queue.sync { live = next; padFrom = lastBufferAt; silence.rebuilt() }
         stream = next
         Log.meeting.notice("system tap rebuilt: \(reason, privacy: .public)")
     }

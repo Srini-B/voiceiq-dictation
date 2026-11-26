@@ -29,6 +29,14 @@ public enum SystemTapWatch {
             zeros = 0
             return true
         }
+
+        /// A rebuilt tap restarts the count but stays armed: a replacement
+        /// that also delivers only zeros (an output still settling) is
+        /// rebuilt again after another `silenceLimit`, instead of leaving
+        /// the rest of the meeting silent.
+        public mutating func rebuilt() {
+            zeros = 0
+        }
     }
 
     /// The default output moved to another device the tap was not made on.

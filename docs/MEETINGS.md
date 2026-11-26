@@ -206,9 +206,10 @@ the old one, and writes into the same file. The time between the old tap's
 last buffer and the new one's first is written as silence
 (`SystemTapWatch.gapFrames`, gaps under 50 ms are ignored), so `system.caf`
 stays aligned with `mic.caf`. A new tap that fails to start leaves the old one
-running and is tried again up to five times. A rebuilt tap's zeros count
-again only after it carries sound, so a quiet call is rebuilt at most once
-per silence. Before 2026-11-26, switching headphones mid-call could leave the
+running and is tried again up to five times. A rebuild restarts the 15 s
+count without waiting for sound, so a replacement that also delivers only
+zeros is rebuilt again; a call that is really quiet while its app plays
+digital silence is rebuilt about every 15 s, which loses nothing. Before 2026-11-26, switching headphones mid-call could leave the
 rest of `system.caf` silent. From Hex (`5704885d`, `4a3e9d49`); not yet
 measured on a live call.
 

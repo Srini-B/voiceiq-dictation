@@ -31,13 +31,14 @@ final class MeetingCaptureTests: XCTestCase {
         XCTAssertTrue(silence.hear(seconds: 1, exactZero: true))
     }
 
-    /// A rebuilt tap starts with a fresh watch, which must hear sound again before its zeros count.
-    func testAFreshWatchAfterARebuildStartsUnarmed() {
+    /// A replacement tap that also delivers only zeros is caught again after another full stretch.
+    func testARebuildRestartsTheCountButStaysArmed() {
         var silence = SystemTapWatch.Silence()
         _ = silence.hear(seconds: 1, exactZero: false)
-        XCTAssertTrue(silence.hear(seconds: 15, exactZero: true))
-        silence = SystemTapWatch.Silence()
-        XCTAssertFalse(silence.hear(seconds: 60, exactZero: true))
+        XCTAssertFalse(silence.hear(seconds: 10, exactZero: true))
+        silence.rebuilt()
+        XCTAssertFalse(silence.hear(seconds: 14, exactZero: true))
+        XCTAssertTrue(silence.hear(seconds: 1, exactZero: true))
     }
 
     func testOnlyAMoveToAnotherReadableOutputRebuilds() {
