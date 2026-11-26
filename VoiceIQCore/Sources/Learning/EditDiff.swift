@@ -14,6 +14,15 @@ public struct LearnedCorrection: Equatable, Sendable {
     }
 }
 
+/// How a dictation's current text differs from what was inserted.
+public struct DictationEdits: Equatable, Sendable {
+    /// The replacements that can teach a word.
+    public var corrections: [LearnedCorrection] = []
+    /// Every span of original words that is no longer as inserted, including
+    /// spans no correction covers (too long, reworded, deleted).
+    public var changed: [Range<Int>] = []
+}
+
 public enum LearningStep: Equatable, Sendable {
     /// A new word or phrase.
     case learn(LearnedCorrection)
@@ -72,24 +81,25 @@ public enum EditDiff {
         return solve(0, 0).choices
     }
 
-    public static func corrections(original: String, replacement: String) -> [LearnedCorrection] {
+    public static func edits(original: String, replacement: String) -> DictationEdits {
         let before = words(in: original)
         let after = words(in: replacement)
-        guard !before.isEmpty, !after.isEmpty else { return [] }
+        guard !before.isEmpty, !after.isEmpty else { return DictationEdits() }
         let matches = lcsPairs(before.map(\.text), after.map(\.text), caseSensitive: true)
-        var output: [LearnedCorrection] = []
+        var output = DictationEdits()
         var previousBefore = -1
         var previousAfter = -1
 
         for pair in matches + [(before.count, after.count)] {
             let removed = before[(previousBefore + 1)..<pair.0]
             let added = after[(previousAfter + 1)..<pair.1]
+            if !removed.isEmpty { output.changed.append((previousBefore + 1)..<pair.0) }
             if (1...3).contains(removed.count), (1...3).contains(added.count) {
                 let originalText = clean(removed.map(\.text).joined(separator: " "))
                 let replacementText = clean(added.map(\.text).joined(separator: " "))
                 if valid(originalText), valid(replacementText), originalText != replacementText,
                    isPlausibleFix(originalText, replacementText) {
-                    output.append(LearnedCorrection(
+                    output.corrections.append(LearnedCorrection(
                         original: originalText,
                         replacement: replacementText,
                         words: (previousBefore + 1)..<pair.0
@@ -102,21 +112,21 @@ public enum EditDiff {
         return output
     }
 
-    /// What learning should do with `corrections`, the edits a dictation now
-    /// carries against its original text, given `earlier`, the edits it carried
-    /// at the previous harvest. Edits seen before are skipped. An edit over the
+    /// What learning should do with `edits`, how a dictation now differs from
+    /// its original text, given `earlier`, the corrections it carried at the
+    /// previous harvest. Edits seen before are skipped. An edit over the
     /// same words as earlier ones, because the user changed that word again or
     /// edited the word next to it, revises what those taught, so "Wispr" then
     /// "Flow" typed a few seconds apart ends as the one phrase "Wispr Flow".
-    /// An earlier edit the user undid is forgotten.
-    public static func steps(for corrections: [LearnedCorrection], after earlier: [LearnedCorrection]) -> [LearningStep] {
-        let changed: [LearningStep] = corrections.compactMap { correction in
+    /// An earlier edit is forgotten only when its original words are back.
+    public static func steps(for edits: DictationEdits, after earlier: [LearnedCorrection]) -> [LearningStep] {
+        let changed: [LearningStep] = edits.corrections.compactMap { correction in
             guard !earlier.contains(correction) else { return nil }
             let overlapped = earlier.filter { $0.words.overlaps(correction.words) }
             guard !overlapped.isEmpty else { return .learn(correction) }
             return .revise(replacing: overlapped.map(\.original), with: correction)
         }
-        let undone = earlier.filter { edit in !corrections.contains { $0.words.overlaps(edit.words) } }
+        let undone = earlier.filter { edit in !edits.changed.contains { $0.overlaps(edit.words) } }
         return changed + undone.map { .forget($0) }
     }
 

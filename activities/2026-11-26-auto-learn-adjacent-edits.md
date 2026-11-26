@@ -38,12 +38,14 @@
 - Review follow-up: corrections carry the word positions they cover, so the
   same word fixed at another place is a separate edit. A correction the user
   undoes removes the fresh entry it taught, and fixing a word learned moments
-  ago in another dictation still renames that entry.
+  ago in another dictation still renames that entry. A fix is forgotten only
+  when its original words are back, not when a longer edit covers it, and a
+  revision made after the 120 s window is learned as a new word.
 
 ## Verification
 
 - `swift test --package-path VoiceIQCore` on a Mac satellite (Xcode 27):
-  254 tests, 0 failures. New `EditDiffTests` cover separate and adjacent
+  255 tests, 0 failures. New `EditDiffTests` cover separate and adjacent
   edits across a paragraph, edits a few seconds apart folding into a phrase,
   a learned word changed again, and rewording, punctuation and deletions
   teaching nothing. With the respelling check disabled, the rewording test

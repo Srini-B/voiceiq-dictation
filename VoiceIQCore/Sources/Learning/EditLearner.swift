@@ -39,7 +39,7 @@ public final class EditLearner {
     private struct Located: Sendable {
         let id: UUID
         let window: String
-        let corrections: [LearnedCorrection]
+        let edits: DictationEdits
     }
 
     private enum Harvest: Sendable {
@@ -215,10 +215,10 @@ public final class EditLearner {
             current.insertions = current.insertions.compactMap { insertion in
                 guard harvested.contains(insertion.id) else { return insertion }
                 guard let match = byID[insertion.id] else { return nil }
-                steps += EditDiff.steps(for: match.corrections, after: insertion.edits)
+                steps += EditDiff.steps(for: match.edits, after: insertion.edits)
                 var updated = insertion
                 updated.text = match.window
-                updated.edits = match.corrections
+                updated.edits = match.edits.corrections
                 return updated
             }
             if current.insertions.isEmpty {
@@ -252,7 +252,7 @@ public final class EditLearner {
             return Located(
                 id: insertion.0,
                 window: match.window,
-                corrections: EditDiff.corrections(original: insertion.2, replacement: match.window)
+                edits: EditDiff.edits(original: insertion.2, replacement: match.window)
             )
         }
         return .located(located, valueHash: valueHash)
@@ -320,13 +320,16 @@ public final class EditLearner {
             }
             let original = correction.original.lowercased()
             let replacement = correction.replacement.lowercased()
+            // A revision too late to rename its entry is a new spelling of the
+            // same transcript wording, so that wording does not block it.
+            let isRevision = heardAs != nil
             guard !known.contains(where: {
                 let term = $0.term.lowercased()
                 let misspelling = $0.misspelling?.lowercased()
                 let learnedFrom = $0.learnedFrom?.lowercased()
                 return term == original || term == replacement
                     || misspelling == original || misspelling == replacement
-                    || learnedFrom == original
+                    || (!isRevision && learnedFrom == original)
             }) else { continue }
             // Only words the language does not already have: a name, a
             // product term, jargon. Changing "They" to "we" or fixing the
