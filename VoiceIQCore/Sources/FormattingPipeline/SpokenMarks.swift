@@ -49,10 +49,9 @@ enum SpokenMarks {
     /// Only names that are rarely prose. Not "slash", "underscore", "hyphen",
     /// "hashtag" or "at sign", which are verbs and nouns too ("to slash
     /// costs", "our hashtag is trending", "look at sign language"), nor
-    /// "period" ("a trial period").
+    /// "period" ("a trial period") or "colon" (the organ, and a surname: "Hi Colon").
     private static let englishSymbols: [([String], Character, Join)] = [
         (["comma"], ",", .previous),
-        (["colon"], ":", .previous),
         (["full", "stop"], ".", .previous),
         (["question", "mark"], "?", .previous),
         (["exclamation", "mark"], "!", .previous),
@@ -177,21 +176,25 @@ enum SpokenMarks {
                 guard let end = phraseEnd(words, in: chars, at: index, foldsAccents: spanish),
                       // A mark follows a word: "Colon biopsy results…" opens with the organ.
                       let before = wordBefore(chars, at: index), !namesTheMark(before),
+                      // A transcriber capitalizes a name, not a spoken mark: "Hi Colon", "Hey Comma".
+                      chars[index].isLowercase,
                       // "Replace comma with period", "Please fix comma placement": a mark next to
-                      // another mark's name, or before a place, is talked about. A comma or
-                      // colon comes between words in a greeting ("Dear Sam comma", "Hi team
-                      // comma please review"); anywhere else it may be the word.
+                      // another mark's name, or before a place, is talked about.
                       !marksNearby(chars, around: index, end: end), !beforePlace(chars, after: end),
-                      ["comma", "colon"].contains(words[0])
-                          // or set off by the model's commas: "Done, comma, thanks".
-                          ? (inGreeting(chars, before: index) || (afterComma(chars, at: index) && commaFollows(chars, after: end)))
+                      words == ["comma"]
+                          // A comma comes between words after a greeting and who it greets ("Dear
+                          // Sam comma", "Hi team comma please review"), or set off by the model's
+                          // commas after one opening word ("Done, comma, thanks"). "He typed,
+                          // comma, nothing else" and "Hi comma club members" may mean the word.
+                          ? (inGreeting(chars, before: index)
+                              || (afterComma(chars, at: index) && commaFollows(chars, after: end)
+                                  && wordsInSentence(chars, before: index).count == 1))
                               && wordFollows(chars, after: end)
                           // "Move question mark to the end": an end mark follows a clause.
                           : wordsInSentence(chars, before: index).count > 1,
                       words != ["comma"] || !beforeCompound(chars, after: end, ["separated", "separate", "delimited", "splice", "splices", "rules", "key"]),
                       // "That's my final answer, full stop.": emphasis, said after a comma.
-                      words != ["full", "stop"] || !afterComma(chars, at: index),
-                      words != ["colon"] || !beforeCompound(chars, after: end, colonCompounds) else { return nil }
+                      words != ["full", "stop"] || !afterComma(chars, at: index) else { return nil }
                 return (symbol, join, end)
             }).first {
                 if join != .next {
@@ -209,11 +212,6 @@ enum SpokenMarks {
         return String(out)
     }
 
-    /// "colon cancer", "a colon cleanse": the organ, not the mark.
-    private static let colonCompounds: Set<String> = [
-        "cancer", "cancers", "cleanse", "cleansing", "polyp", "polyps", "health", "screening", "surgery", "wall",
-    ]
-
     private static func beforeCompound(_ chars: [Character], after end: Int, _ compounds: Set<String>) -> Bool {
         let start = skip(chars, from: end, also: "")
         var stop = start
@@ -230,11 +228,11 @@ enum SpokenMarks {
         return words.lastIndex(of: "quote").map { Array(words[($0 + 1)...]) } ?? words
     }
 
-    /// Whether `index` comes one to three words into a sentence that opens
-    /// with a greeting: "Dear Sam", "Hi team", "Hello", "Thanks".
+    /// Whether `index` comes two or three words into a sentence that opens
+    /// with a greeting: "Dear Sam", "Hi team", "Thanks Priya".
     private static func inGreeting(_ chars: [Character], before index: Int) -> Bool {
         let words = wordsInSentence(chars, before: index)
-        return (1...3).contains(words.count) && greetings.contains(words[0])
+        return (2...3).contains(words.count) && greetings.contains(words[0])
     }
 
     private static let greetings: Set<String> = ["hello", "hi", "hey", "dear", "thanks", "thank", "yes", "ok", "okay"]
@@ -340,9 +338,11 @@ enum SpokenMarks {
             "one", "no", "any", "some", "every", "each", "another", "single", "extra", "missing", "stray",
             "trailing", "oxford", "serial", "big", "bigger", "huge", "giant", "inverted", "un", "una", "el", "la",
             "mi", "su", "este", "esta",
+            // A title starts a name: "Dear Mr comma".
+            "mr", "mrs", "ms", "dr", "prof",
             // A preposition makes it a noun: "came to full stop", "press enter for new line".
             "to", "for", "at", "of", "with", "in", "on", "from", "by", "about",
-            // So does an instruction about the mark: "Add colon then space", "or comma there".
+            // So does an instruction about the mark: "Add comma then space", "or comma there".
             "add", "type", "put", "insert", "use", "press", "delete", "remove", "or", "and", "need", "want",
         ].contains(word)
     }

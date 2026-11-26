@@ -87,6 +87,16 @@ wait. The on-device writer's removal shipped first, on its own (PR #90).
   two findings were fixed: "i-th" keeps its case, and «quoted» words are not
   expanded. 14 kept-as-said cases added; no earlier case's output changed.
 
+- **Sixth round (Neon at `28b0594`, 44 sentences).** The greeting rule read
+  the surname Colon as a mark ("Hi Colon, welcome aboard" → "Hi: welcome
+  aboard"), and a company called Comma the same way. A spoken "colon" no
+  longer converts at all, and no capitalized mark name does; a greeting
+  comma needs a word between the greeting and the mark ("Hi comma club
+  members" stays), and a comma set off by the model's commas converts only
+  after one opening word ("He typed, comma, nothing else" stays). Messages
+  style keeps a capital after a title's full stop ("thanks Mr. Ruiz").
+  Eight kept-as-said cases added; quote-spoken-comma now keeps "comma".
+
 ## Verification
 
 - D4 on the writing-Off path (Claude Fable 5.2,

@@ -97,8 +97,8 @@ final class OnDeviceDictationTests: XCTestCase {
                                     context: DictationContext()).cleanedTranscript
         }
         settings.setTidyStyle(.lists)
-        let list = try await written("Um, so, first, call Sreenie. And then book the flights, comma, please.")
-        XCTAssertEqual(list, "- Call Srini\n- Book the flights, please")
+        let list = try await written("Um, so, first, call Sreenie. And then book the flights exclamation mark")
+        XCTAssertEqual(list, "- Call Srini\n- Book the flights!")
         settings.setTidyStyle(.messages)
         let message = try await written("Yeah, I'll ping Sreenie, new line, thanks.")
         XCTAssertEqual(message, "yeah i'll ping Srini\nthanks.")

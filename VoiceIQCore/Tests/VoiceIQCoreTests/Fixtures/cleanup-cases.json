@@ -1013,7 +1013,7 @@
       "said": "he said open quote hello comma world close quote",
       "heard": "He said open quote hello comma world close quote",
       "written": "He said \"hello, world.\"",
-      "tidy": "He said \"hello, world\""
+      "tidy": "He said \"hello comma world\""
     },
     {
       "id": "kept-a-new-line",
@@ -2086,6 +2086,63 @@
       "said": "the password is gonna, in guillemets",
       "heard": "The password is «gonna».",
       "written": "The password is «gonna»."
+    },
+    {
+      "id": "kept-surname-colon-greeting",
+      "check": "kept as said",
+      "said": "hi colon, welcome aboard",
+      "heard": "Hi Colon, welcome aboard.",
+      "written": "Hi Colon, welcome aboard."
+    },
+    {
+      "id": "kept-surname-colon-title",
+      "check": "kept as said",
+      "said": "dear mr colon, thanks for the call",
+      "heard": "Dear Mr Colon, thanks for the call.",
+      "written": "Dear Mr Colon, thanks for the call."
+    },
+    {
+      "id": "kept-surname-colon-set-off",
+      "check": "kept as said",
+      "said": "thanks, colon, for the help",
+      "heard": "Thanks, Colon, for the help.",
+      "written": "Thanks, Colon, for the help."
+    },
+    {
+      "id": "kept-company-comma",
+      "check": "kept as said",
+      "said": "hey comma, can you check this",
+      "heard": "Hey Comma, can you check this?",
+      "written": "Hey Comma, can you check this?"
+    },
+    {
+      "id": "kept-dear-colon-surgeon",
+      "check": "kept as said",
+      "said": "dear colon surgeon team",
+      "heard": "Dear colon surgeon team.",
+      "written": "Dear colon surgeon team."
+    },
+    {
+      "id": "kept-comma-club",
+      "check": "kept as said",
+      "said": "hi comma club members",
+      "heard": "Hi comma club members.",
+      "written": "Hi comma club members."
+    },
+    {
+      "id": "kept-typed-comma",
+      "check": "kept as said",
+      "said": "he typed, comma, nothing else",
+      "heard": "He typed, comma, nothing else.",
+      "written": "He typed, comma, nothing else."
+    },
+    {
+      "id": "kept-title-casing",
+      "check": "kept as said",
+      "said": "thanks mr. ruiz for the update",
+      "heard": "Thanks Mr. Ruiz for the update.",
+      "written": "thanks Mr. Ruiz for the update",
+      "style": "messages"
     }
   ]
 }

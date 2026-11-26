@@ -340,7 +340,8 @@ enum TidyText {
                 atStart = false
                 continue
             }
-            if c == "\n" || endsSentence(chars, at: index) {
+            // "Thanks Mr. Ruiz": a title's full stop ends no sentence.
+            if c == "\n" || (endsSentence(chars, at: index) && !(c == "." && endsAbbreviation(chars, at: index))) {
                 atStart = true
             } else if !c.isWhitespace && !"\"“'‘(¿¡”’)]".contains(c) {
                 atStart = false
