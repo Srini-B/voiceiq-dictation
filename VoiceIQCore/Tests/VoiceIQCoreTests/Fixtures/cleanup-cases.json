@@ -2195,6 +2195,22 @@
       "said": "he said hello how are you and walked away",
       "heard": "He said \"Hello. How are you\" and walked away",
       "written": "He said \"Hello. How are you\" and walked away."
+    },
+    {
+      "id": "kept-bullet-point-notation",
+      "check": "kept as said",
+      "said": "use bullet point notation for this section",
+      "heard": "Use bullet point notation for this section.",
+      "written": "Use bullet point notation for this section",
+      "style": "lists"
+    },
+    {
+      "id": "kept-next-bullet-instruction",
+      "check": "kept as said",
+      "said": "use next bullet to move down",
+      "heard": "Use next bullet to move down.",
+      "written": "Use next bullet to move down",
+      "style": "lists"
     }
   ]
 }

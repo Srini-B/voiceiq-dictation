@@ -315,9 +315,14 @@ public enum Tidy {
     /// Spoken "bullet point" and "next bullet" start list items, and so does
     /// a bare "bullet" in a dictation that opens with one and says it again.
     private static func bulletLines(_ text: String, bareBullets: Bool) -> String {
-        // A standalone word only: never part of an address ("bullet@gmail.com"),
-        // and never after an article ("a bullet point summary").
-        var patterns = [#"(?:^|(?<!\b(?:a|an|the|this|that|one|each|every|another))\s+)(?:bullet point|next bullet)(?![\w@.-]*@)(?=[\s:,]|-\s|$)[:,-]?\s*"#]
+        // A standalone word, never part of an address ("bullet@gmail.com"). In a
+        // dictation that opens with one, any later one starts an item ("bullet ship it
+        // bullet tag it"); otherwise only after a mark or line break, never after a
+        // word ("a bullet point summary", "Use bullet point notation", "Use next
+        // bullet to move down").
+        let opens = text.range(of: #"^\s*(?:bullet|next bullet)\b"#, options: [.regularExpression, .caseInsensitive]) != nil
+        let before = opens ? #"(?:^|\s+)"# : #"(?:^|(?<=[.,;:!?\n])\s*)"#
+        var patterns = [before + #"(?:bullet point|next bullet)(?![\w@.-]*@)(?=[\s:,]|-\s|$)[:,-]?\s*"#]
         // "Bullet trains are fast" opens with the word, once.
         if bareBullets { patterns.append(#"(?:^|\s+)bullet(?![\w@.-]*@)(?=[\s:,]|-\s|$)[:,-]?\s*"#) }
         var working = text
