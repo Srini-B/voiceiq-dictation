@@ -67,7 +67,8 @@ enum SpokenRepairs {
     }
 
     private static func correctingLine(_ line: String, quote: Quote) -> String {
-        var tokens = line.split(separator: " ", omittingEmptySubsequences: true).map { Token(word: String($0)) }
+        // Empty words keep runs of spaces: Type "a  b" into the field.
+        var tokens = line.split(separator: " ", omittingEmptySubsequences: false).map { Token(word: String($0)) }
         var index = 0
         while index < tokens.count {
             // Most words open no cue; only then is the quotation state read, so

@@ -190,7 +190,9 @@ styles, MIT):
    "comma" after a greeting and who it greets ("Dear Sam comma", "Hi team
    comma please review"; not "Hi comma club members", "Hey Comma", a name,
    or "Note, comma, goes inside the quotes"); "question mark", "exclamation mark" and "full stop" after a
-   clause of two words or more. None after an article, a quantifier, a
+   clause of two words or more, at the end of a line or before a word that
+   opens a new clause ("ready exclamation mark please test it"; not "The
+   Unicode question mark is U+003F"). None after an article, a quantifier, a
    preposition, a title, a describing word or an instruction about the mark
    ("an Oxford comma", "one question mark left", "came to full stop"), before
    a place ("Move question mark to the end", "Add comma then space"), or within

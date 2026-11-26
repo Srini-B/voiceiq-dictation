@@ -2211,6 +2211,27 @@
       "heard": "Use next bullet to move down.",
       "written": "Use next bullet to move down",
       "style": "lists"
+    },
+    {
+      "id": "kept-quoted-double-space",
+      "check": "kept as said",
+      "said": "type quote a space space b unquote into the field",
+      "heard": "Type \"a  b\" into the field.",
+      "written": "Type \"a  b\" into the field."
+    },
+    {
+      "id": "kept-unicode-question-mark",
+      "check": "kept as said",
+      "said": "the unicode question mark is u plus zero zero three f",
+      "heard": "The Unicode question mark is U+003F.",
+      "written": "The Unicode question mark is U+003F."
+    },
+    {
+      "id": "kept-quoted-across-lines",
+      "check": "kept as said",
+      "said": "the password is quote red new line blue unquote",
+      "heard": "The password is \"red\nblue\".",
+      "written": "The password is \"red\nblue\"."
     }
   ]
 }
