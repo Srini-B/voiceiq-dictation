@@ -26,10 +26,8 @@ def main():
         # FluidAudio's resource bundles (LuxTTS G2P data) come only with its TTS trait.
         if (path.name.startswith("FluidAudio_") and path.suffix == ".bundle") or path.name.startswith("ggml-"):
             forbidden.append(str(path.relative_to(app)))
-        if path.name == "ChromeExtension":
-            forbidden.append(str(path.relative_to(app)))
     if forbidden:
-        raise SystemExit(f"Unexpected bundled models, TTS resources, or retired Chrome extension: {forbidden}")
+        raise SystemExit(f"Unexpected bundled models or TTS resources: {forbidden}")
 
     executable = app / ("Contents/MacOS" if mac else "") / metadata["CFBundleExecutable"]
     # Device archives strip local symbols from the app but retain them in dSYMs.
@@ -42,13 +40,9 @@ def main():
         helper = app / "Contents/Helpers/VoiceiQLocalSpeech.app/Contents/MacOS/VoiceiQLocalSpeech"
         if "10FluidAudio" in symbols or "_nemo_normalize" in symbols:
             raise SystemExit("Mac UI still links the inference runtime")
-        if any(name in symbols for name in ["15BrowserSpeakers", "23BrowserExtensionSection", "24BrowserExtensionInstalls"]):
-            raise SystemExit("Mac UI still links retired Chrome extension code")
         symbols = subprocess.run(["nm", str(helper)], check=True, capture_output=True, text=True).stdout
         if any(name in symbols for name in ["11VoiceIQCore", "GRDB"]):
             raise SystemExit("Speech helper still links app/database code")
-        if any(name in symbols for name in ["17BrowserHostServer", "17BrowserSpeakerLog"]):
-            raise SystemExit("Speech helper still links retired Chrome extension host code")
         if "10FluidAudio" not in symbols:
             raise SystemExit("Speech helper lacks the expected inference runtime")
     elif "10FluidAudio" not in symbols:

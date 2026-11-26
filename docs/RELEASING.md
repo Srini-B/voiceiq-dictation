@@ -41,10 +41,9 @@ separation, and writing models run outside the UI process.
 
 Both release scripts run `scripts/check-app-bundle.py` to reject bundled model
 weights and accidental runtime dependencies. It fails if the app bundles a
-Core ML, ONNX, GGUF or safetensors model, FluidAudio TTS bundles, or the
-retired `ChromeExtension` folder, if the Mac UI links FluidAudio or retired
-extension code, if any binary links the retired NeMo normalizer, or if the
-helper links app, database, or retired Chrome extension host code. To check
+Core ML, ONNX, GGUF or safetensors model or FluidAudio TTS bundles, if the
+Mac UI links FluidAudio, if any binary links the retired NeMo normalizer, or
+if the helper links app or database code. To check
 an existing build, pass the Mac app path or the app inside an iOS device
 archive:
 

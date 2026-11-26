@@ -35,9 +35,8 @@ speaker identification is being reworked separately.
   `~/Library/Application Support/VoiceiQ/browser-speakers/`, and
   `NativeMessagingHosts/io.blue.voiceiq.browser.json` from each Chromium
   browser's Application Support folder.
-- Tightened `scripts/check-app-bundle.py` to fail if `ChromeExtension` is
-  bundled or if retired extension symbols are linked into the Mac UI or speech
-  helper.
+- Left `scripts/check-app-bundle.py` as it was on main: it never checked the
+  extension, and guards naming deleted symbols would only pin dead names.
 - Updated `docs/MEETINGS.md`, `docs/PRIVACY.md`, `docs/DEBUG_LOG.md`,
   `docs/RELEASING.md`, `README.md`, and `DebugLogSection.swift`.
 
