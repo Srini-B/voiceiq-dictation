@@ -30,7 +30,28 @@ def words(text: str) -> list[str]:
 
 
 def norm_name(name: str) -> str:
-    return unicodedata.normalize("NFKD", name).encode("ascii", "ignore").decode().lower().split(" ")[0]
+    # Accents fold away; letters in any script are kept.
+    decomposed = unicodedata.normalize("NFKD", name.casefold())
+    return " ".join("".join(c for c in decomposed if not unicodedata.combining(c)).split())
+
+
+def match_names(hyp_names, ref_names):
+    # Full names first, then a first name that points at exactly one
+    # remaining person on both sides; never two speakers on one person.
+    out, free = {}, list(ref_names)
+    for h in hyp_names:
+        r = next((r for r in free if norm_name(r) == norm_name(h)), None)
+        if r:
+            out[h] = r
+            free.remove(r)
+    first = lambda n: norm_name(n).split(" ")[0] if norm_name(n) else ""
+    for h in [h for h in hyp_names if h not in out]:
+        cands = [r for r in free if first(r) and first(r) == first(h)]
+        rivals = [x for x in hyp_names if x not in out and first(x) == first(h)]
+        if len(cands) == 1 and len(rivals) == 1:
+            out[h] = cands[0]
+            free.remove(cands[0])
+    return {h: out.get(h) for h in hyp_names}
 
 
 def frames(segments, key):
@@ -44,7 +65,7 @@ def frames(segments, key):
 def mapping(ref, hyp, ref_names):
     hyp_names = sorted({s["speaker_name"] for s in hyp})
     if ref_names:
-        return {h: next((r for r in ref_names if norm_name(r) == norm_name(h)), None) for h in hyp_names}
+        return match_names(hyp_names, ref_names)
     ref_spk = sorted({s["speaker"] for s in ref})
     rf, hf = frames(ref, "speaker"), frames(hyp, "speaker_name")
     overlap = {(h, r): sum(1 for f, hs in hf.items() if h in hs and r in rf.get(f, ())) for h in hyp_names for r in ref_spk}
@@ -86,12 +107,18 @@ def timed_words(segments, key):
 
 
 def attribution(ref, hyp, m):
+    # Each output word can stand for one reference word only.
     hw = timed_words(hyp, "speaker_name")
+    used = set()
     right = 0
     rw = timed_words(ref, "speaker")
     for t, word, spk in rw:
-        near = [h for h in hw if abs(h[0] - t) <= 1.5 and h[1] == word]
-        if near and m.get(min(near, key=lambda h: abs(h[0] - t))[2]) == spk:
+        near = [i for i, h in enumerate(hw) if i not in used and abs(h[0] - t) <= 1.5 and h[1] == word]
+        if not near:
+            continue
+        i = min(near, key=lambda i: abs(hw[i][0] - t))
+        used.add(i)
+        if m.get(hw[i][2]) == spk:
             right += 1
     return right / max(1, len(rw))
 

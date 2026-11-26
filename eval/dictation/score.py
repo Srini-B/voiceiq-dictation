@@ -107,17 +107,21 @@ def main() -> None:
     judged = json.loads(Path(args.judge).read_text()) if args.judge else {}
     items = {"D1": d1, "D2": d2, "D5": d5}
     for item in ("D3", "D4"):
+        # Unavailable until every case has a judge score: a hard rule can
+        # only lower a judged score, never stand in for one, except a
+        # hard-rule zero, which is final.
         scores = []
         for r in results:
             if spec[r["id"]]["item"] != item:
                 continue
             key = f"{r['id']}/r{r['round']}"
             s = judged.get(key)
-            if key in hard:
-                s = hard[key] if s is None else min(s, hard[key])
-            if s is not None:
-                scores.append(s)
-        items[item] = statistics.mean(scores) if scores else None
+            if hard.get(key) == 0:
+                s = 0
+            elif s is not None and key in hard:
+                s = min(s, hard[key])
+            scores.append(s)
+        items[item] = statistics.mean(scores) if scores and None not in scores else None
 
     thoughts = [r["usage"].get("thoughtsTokenCount", 0) for r in results]
     report = {"label": run["label"], "prompt_chars": run["prompt_chars"], "calls": len(results),
