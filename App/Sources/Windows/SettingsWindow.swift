@@ -394,8 +394,6 @@ struct AdvancedPane: View {
 
             AgentAccessSection()
 
-            BrowserExtensionSection()
-
             DebugLogSection()
         }
         // Key saved elsewhere (onboarding, dev-file migration) while this pane is

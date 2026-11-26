@@ -96,7 +96,7 @@ public struct LocalMeetingTranscriber: Sendable {
         }
         UsageMeter.record(stage: .meetingTranscribe, model: model.modelID,
                           usage: TokenUsage(reportedCostUSD: 0, audioSeconds: audio.duration))
-        words = BrowserSpeakers.apply(Self.renumber(words), folder: folder)
+        words = Self.renumber(words)
         return SpeakerLinker.overlappingTurns(words).map { turn in
             TranscriptSegment(speaker: turn.speaker, text: turn.text, chunkIndex: 0, start: turn.start, end: turn.end)
         }

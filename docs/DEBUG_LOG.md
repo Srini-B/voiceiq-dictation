@@ -7,7 +7,6 @@
 | Session log (`SessionDiagnostics`) | iOS | `Caches/session-log.txt` in the app container | The newest 400 lines | Each new line past 400 drops the oldest. No age limit. **Clear** in Settings › Advanced › Session log deletes it. iOS may also empty Caches when storage runs low. |
 | Keyboard log (`SharedStore.keyboardLog`) | iOS | App Group defaults | The newest 100 lines | Each new line past 100 drops the oldest. No age limit. The same **Clear** deletes it. |
 | Request log (`TransportLog`) | iOS and Mac | `Application Support/VoiceiQ/transport.jsonl` | Up to 2 MB, plus the previous 2 MB in `transport.1.jsonl` | When the file passes 2 MB it replaces `transport.1.jsonl`. No age limit and no button. |
-| Chrome extension speaker events (`BrowserSpeakerLog`) | Mac | `Application Support/VoiceiQ/browser-speakers/` | One file per day | Files older than 7 days, when the native host starts and hourly while it runs. |
 | Unified log (`Log`, `os.Logger`) | iOS and Mac | The system log | Set by the OS | `info` and `debug` messages are kept in memory only. `notice`, `error` and `fault` messages are kept on disk until the OS rotates them by size, usually a few days. Read them with Console or a sysdiagnose. |
 
 None of these hold API keys or transcript text. Dictation history is separate:
@@ -29,9 +28,6 @@ are:
   warm-window choices), as the key and a short value. Text over 80
   characters, lists and data are logged by size only;
 - the iOS keyboard's decisions (`KeyboardLog`);
-- the Chrome extension's native host on the Mac: start, the site each tab's
-  speaker events come from (the site only, not the meeting code), errors,
-  and a count when it stops;
 - one line per process launch with the version, build, OS and device model.
 
 New code is covered by logging through `Log` as before; nothing else is needed.
@@ -40,13 +36,11 @@ New code is covered by logging through `Log` as before; nothing else is needed.
 
 | Platform | Folder |
 | --- | --- |
-| Mac | `~/Library/Logs/VoiceiQ/` (the app and the Chrome host) |
+| Mac | `~/Library/Logs/VoiceiQ/` |
 | iOS | `Library/Logs/VoiceiQ/` in the App Group container (the app and the keyboard) |
 
 Each process writes its own file per day, such as
-`debug-2026-11-12-app.log` and `debug-2026-11-12-keyboard.log`; each Chrome
-host process adds its process id (`debug-2026-11-12-chrome-host-4211.log`),
-since Chrome starts one per profile. Two processes never write the same file. A line looks like:
+`debug-2026-11-12-app.log` and `debug-2026-11-12-keyboard.log`. Two processes never write the same file. A line looks like:
 
 ```text
 2026-11-22 14:03:22.481 app notice [transcription] call transcribe (gemini-3.8-flash) id=… attempt=1 h2 ok in 812ms, first byte 640ms, sent 52311 bytes

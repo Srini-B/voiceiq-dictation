@@ -119,52 +119,6 @@ dictionary, checked on the Mac). They ride with your audio like any other
 dictionary term and are never applied as automatic text replacements.
 Everything it reads stays on this Mac.
 
-The VoiceiQ Meetings extension for Chrome sends nothing off your Mac. It is
-optional: you install it from Settings → Advanced and load it in Chrome
-yourself. On Google Meet, Teams, Zoom, Jitsi Meet, Whereby, Slack, Discord
-and Webex pages, it checks four times a second which of the call's incoming
-WebRTC audio streams is loud, from the level number the browser reports for
-each stream. While a stream is loud, on Google Meet, Teams, Zoom and Jitsi
-Meet, it also reads the name on each participant tile the page lights as
-talking, leaving out your own tile. On Google Meet it also reads the name on
-every participant tile once a second, talking or not, with your own tile
-marked. It does not read the audio itself, the video, or any other page text.
-Each report holds only:
-
-- the time;
-- the ids of the loud streams, numbers the call service gives each stream or
-  speaker (such as `csrc:3141`);
-- the names on the tiles lit as talking, as the call service shows them;
-- on Google Meet, the names on all tiles, the name on your own tile, and how
-  many people are in the call;
-- every ten seconds, four numbers about the call's audio: how many incoming
-  audio streams and speakers the browser reports, the loudest level, and how
-  far the browser's audio clock is from the page's;
-- the extension's version number;
-- the page's host and path, such as `meet.google.com/abc-defg-hij`, never
-  the query string;
-- Chrome's number for the tab.
-
-Chrome passes the reports to VoiceiQ's speech helper on this Mac, which
-appends them to `~/Library/Application Support/VoiceiQ/browser-speakers/`,
-one file per day. The extension reports during every call on those sites
-while Chrome runs, whether or not VoiceiQ records it. It also sends one
-"hello" report, with no streams and no page, when it is installed or updated
-and when Chrome starts. To update itself it reads its own version from the
-folder VoiceiQ copies it to; it reads no other files. After updating it puts
-its relay back into call pages already open; that is the only use of its
-access to the call sites. Settings reads which
-Chrome profiles have the extension from those profiles' preference files on
-this Mac, and keeps nothing from them. When a recording stops, VoiceiQ copies the
-reports from that meeting's tab to `browser-speakers.json` in the meeting's
-folder and uses them to tell the other speakers apart and name them. The
-names given to speakers go to Gemini with the transcript when the
-notes are written, like names read off the screen. That file is deleted
-with the meeting. Day files older than 7 days are deleted when a meeting
-with reports stops, when Chrome starts the helper, and every hour while it
-runs. To stop the reports, remove the extension on Chrome's
-Extensions page.
-
 ## Coding agents (only if you turn it on)
 
 Settings › Advanced › Coding agents lets coding agents on this Mac, such as
@@ -236,6 +190,13 @@ provider's terms. It is off by default; details in
   settings, and Agent mode's saved runs
   (`SettingsStore.removeRetiredSettingsOnce`). Those providers and features
   are gone; nothing is sent to them.
+- On the Mac, launch cleanup (`FileLayout.removeStaleFiles`) removes any files
+  left behind by the retired Chrome extension:
+  `~/Library/Application Support/VoiceiQ/ChromeExtension`,
+  `~/Library/Application Support/VoiceiQ/browser-speakers/`, and the
+  `io.blue.voiceiq.browser.json` native messaging host manifests in
+  Chromium browsers' `NativeMessagingHosts` folders. If you loaded the
+  extension in a browser, remove it on that browser's Extensions page.
 
 ## Google's side of the wire
 

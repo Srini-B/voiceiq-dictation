@@ -1,8 +1,8 @@
 # Meetings on the Mac
 
 How VoiceiQ notices a call, what audio it records, how each line goes to the
-right person (Gemini's speaker labels, the VoiceiQ Meetings Chrome
-extension, and names from the call screen), and how the Meetings window shows
+right person (Gemini's speaker labels, on-device speaker separation, and
+names from the call screen), and how the Meetings window shows
 and exports it. Meetings are transcribed by `gemini-3.5-transcribe` through
 the Interactions API (`v1beta/interactions`), always from the saved tracks
 after the recording stops; there is no live transcript while a meeting
@@ -217,231 +217,12 @@ Before 2026-10-27 every recording needed 20 s. A 2.5-minute Meet call had
 15.9 s, so the owner became an ordinary speaker and got a participant's name
 from the screen.
 
-## Speakers in browser calls from the Chrome extension
-
-In a browser call, everyone on the far side arrives in one audio track, and
-the diarizer can merge two people who sound alike. The VoiceiQ Meetings
-extension for Chrome reports which of the call's WebRTC audio sources is loud,
-and when. Each source is one participant, so the extension tells people
-apart however alike they sound. While a source is loud it also reports the
-names on the tiles the meeting page lights as talking, which name the
-speakers. It reads no audio and no other page text. What it reports and
-where that is kept is in [PRIVACY.md](PRIVACY.md).
-
-Everything here runs after Gemini's transcript is back, on its
-speaker-labelled words.
-
-### What the extension reports
-
-The extension is in `App/Resources/ChromeExtension` (Manifest V3, Chrome 116
-or later). Its manifest `key` fixes the extension ID at
-`gjobkaplebdoedjfopfmogibphjmglaa`, so the native host manifest can name it.
-Its permissions are `nativeMessaging`, and since 1.2 `scripting` with host
-access to the same call sites, which it uses only to put `relay.js` back into
-open call pages after it reloads itself. Its content scripts run at
-`document_start`, in every frame, on Google Meet, Teams
-(`teams.microsoft.com`, `teams.live.com`, `teams.cloud.microsoft`), Zoom
-(`*.zoom.us`, `*.zoom.com`), Jitsi Meet (`meet.jit.si`), Whereby, Slack,
-Discord, and Webex.
-
-- `page.js` runs in the page's MAIN world, before the page's own scripts. It
-  replaces `RTCPeerConnection` with a subclass that keeps each connection.
-  Every 250 ms it reads the sources of each live remote audio receiver. It
-  uses the contributing sources (CSRC) when the receiver has them: Meet and
-  Teams mix people into a few streams and mark each person with a CSRC.
-  Otherwise it uses the synchronization sources (SSRC), one stream per
-  person. A source is loud when its `audioLevel` is at least 0.01 (about
-  -40 dBov) and its `timestamp` or `rtpTimestamp` moved since the previous
-  poll, so it is still playing. Until extension 1.2 it compared the source's
-  `timestamp` with the page's clock instead (played within 400 ms); where the
-  two clocks drift apart (webrtc issue 42222258) no source was ever loud, and
-  no Meet or Teams call ever reported a speaker. The script posts the sorted loud ids
-  (such as `csrc:3141` or `ssrc:2718`) with the time and the page's host and
-  path. It posts when the list changes, and every 1 s while the list is not
-  empty, so a pause in the call differs from a page that stopped reporting.
-- While at least one source is loud, `page.js` also reads `names`: the name
-  on each tile the page lights as talking, from the site's entry in `SITES`.
-  It leaves out the user's own tile, and it reads nothing while every source
-  is quiet, because Zoom and Jitsi keep the last speaker lit after they stop.
-  A change of names is posted like a change of sources.
-- On Google Meet, `page.js` also reads the roster once a second: the name on
-  every `[data-participant-id]` tile, talking or not, leaving out shared
-  screens ("… (Presentation)"). It sends the other people's names as
-  `roster`, the user's own tile (`[data-self-name]`) as `me`, and the head
-  count by participant id as `count`, so two people with one name count
-  twice. It is posted like a change of sources.
-- Every 10 s while the tab is in a call it adds `diag` to the next event: live
-  audio receivers, sources, the loudest `audioLevel`, and how far the newest
-  source's `timestamp` sits behind the page's clock, in ms. The 10 s events
-  also tell the service worker a call is still open during a long silence.
-
-  | Site | Tiles | Lit as talking | Name | Own tile |
-  | --- | --- | --- | --- | --- |
-  | Google Meet | `[data-participant-id]` | class `Oaajhc`, `HX2H7`, `wEsLMd` or `OgVli` on the tile or inside it | `span.notranslate` | has `[data-self-name]` |
-  | Teams | `[data-stream-type][data-tid]` | its `[data-tid="voice-level-stream-outline"]` has `vdi-frame-occlusion` | the tile's `data-tid`, unless it looks like a machine id (`video-stream-2`, `videoTile`) | not detected |
-  | Zoom web | the active-speaker frame (`.speaker-active-container__video-frame` and the `single-…-container__video-frame` family) | always | `.video-avatar__avatar-footer` | not detected |
-  | Jitsi Meet | `.videocontainer.dominant-speaker` | always | `.displayname` | id `localVideoContainer…` |
-
-  Whereby, Slack, Discord and Webex report sources only. The selectors are
-  the services' own markup, taken from Vexa's open-source meeting bots
-  (Meet, Teams, Zoom) and Jitsi's source; Meet's classes are obfuscated and
-  Teams' speaking mark is unconfirmed even there. A service that changes its
-  markup usually gives no names rather than wrong ones, and a name is used
-  only where it agrees with the transcript's timing (see below).
-- `relay.js` runs in the content script world and passes on only messages
-  of that shape: a numeric time, a page cut to 300 characters, at most 64
-  ids of up to 40 characters each, at most 16 names and 64 roster names of
-  up to 80, a count up to 1000, and the four numbers of `diag`.
-- `service-worker.js` adds the tab id and the extension's `version` and sends
-  each event to the native messaging host `io.blue.voiceiq.browser`. When the
-  host cannot be reached it waits 30 s before it connects again; a host that
-  ran 5 s or more and then stopped was replaced, so it connects again with the
-  next event. On install, on update and at browser start it sends a `hello`
-  event (tab `-1`) with its version.
-
-### How the extension updates itself
-
-VoiceiQ copies the extension out again at each launch, but Chrome keeps
-running the service worker it cached for an unpacked extension, also across
-browser restarts, while `chrome://extensions` already shows the new
-manifest's version. MEASURED 2026-11-23 with Chrome 157 for Testing: files
-changed from 1.0.0 to 1.1.0 kept the 1.0.0 worker through three restarts,
-which is why one Mac ran the 1.0.0 worker (no names) while the Extensions page
-said 1.1.0. Two things now swap it without the user:
-
-1. From 1.2.0 the worker file is `service-worker.js`, not `background.js`.
-   Chrome registers a worker under a new file name the next time it starts,
-   so a Chrome still running 1.1.0 or older runs 1.2.0 after its next start.
-   (Measured the same way: a renamed worker ran at the first restart.)
-2. The 1.2.0 worker fetches its own `manifest.json`, which Chrome reads from
-   the folder on disk on every request, when it starts, when the native host
-   goes away, 61 s after the last event from a call tab, and every 5 minutes
-   (the open port keeps the worker alive between calls). When the
-   version on disk differs from the running one and no call tab has reported
-   for a minute, it calls `chrome.runtime.reload()`, which swaps the worker
-   and the content scripts at once and sends a new `hello`. A reload during a
-   call would cut off that tab's content scripts, so it waits. A call page
-   left open after its call keeps its page script but loses its relay in a
-   reload, so on `onInstalled` with reason `update` the worker injects
-   `relay.js` again into every open tab on the call sites; a relay whose
-   extension context is still alive keeps the new copy from adding a second
-   listener. The page script itself cannot be replaced in a page that stays
-   open: its `RTCPeerConnection` wrapper holds the call's connections. From
-   1.2 it sends `probe: 2`; a report with a `version` but no `probe` comes
-   from an older page script, and Settings asks to reload that page once its
-   call is over. Measured: with
-   a call tab open the old version kept reporting, and 61 s after the call
-   ended the new version said hello through a newly started host.
-
-So every change to the extension must raise the manifest `version`; files
-changed under the same version are not picked up until Chrome restarts and
-then only for content scripts. `BrowserExtension.install` copies to
-`ChromeExtension.new` and swaps it in whole, so a check never reads a
-half-copied folder.
-
-The native host stops when the helper's build number on disk changes (checked
-every 30 s while events arrive), because Chrome keeps one host process for as
-long as the extension stays connected: a host from 0.7.12 was still writing
-events from a 0.7.14 extension, and an old host drops fields it does not know.
-The extension starts the new host with its next event.
-
-### The native host
-
-The host is the `VoiceiQLocalSpeech` helper. It ran the on-device speech
-models until 2026-11-10 and keeps its name and bundle id, because installed
-host manifests point at it; it now links only `VoiceIQSpeech`. Chrome starts it with the extension's origin as
-the first argument, and `BrowserHostServer.isBrowserLaunch` sends that launch
-to `BrowserHostServer.run`. The host reads length-prefixed JSON messages of up
-to 64 KB from stdin. `BrowserSpeakerLog.append` writes each event as one JSON
-line to `~/Library/Application Support/VoiceiQ/browser-speakers/<UTC day>.jsonl`.
-VoiceiQ does not need to run while the extension reports.
-
-### How the events label the words
-
-1. `MeetingEngine.stopRecording` calls `BrowserSpeakers.save`. It reads the
-   events from 5 s before the meeting started to 5 s after it ended, groups
-   them by tab and page, and keeps the tabs where a source was loud or that
-   sent a roster. It takes
-   the tab on the detected meeting page, else the busiest one, and writes its
-   events to `browser-speakers.json` in the meeting folder, where Retry and
-   Redo find them. A call in a known call app (`CallApps.known`, Zoom or
-   FaceTime, say) gets no timeline, because any browser tab is another call.
-   An app detected only because it looks like a call keeps the fallback: it
-   can be a Chromium browser that `CallApps.browsers` does not list. A recording that
-   was interrupted gets its timeline at the next launch
-   (`MeetingEngine.failInterruptedRecordings`), up to the last write to its
-   tracks. `save` then calls `BrowserSpeakerLog.prune`, which deletes day
-   files older than 7 days. The native host prunes the same way when Chrome
-   starts it and then hourly, so the log is pruned even when no meeting is
-   recorded.
-2. Each event lasts until the next one, for at most 3 s (`hold`), widened by
-   0.3 s on each side (`slack`). These are each source's loud stretches.
-3. `BrowserSpeakers.apply` runs before turns are built, in
-   `MeetingTranscriber`. The owner's words stay `you`.
-4. A far-side word goes to the source whose loud stretches overlap the
-   word's time more than twice as much as any other source's. The rule uses
-   overlap, not the word's midpoint, because the recognizer often starts a
-   word early or stretches a turn's last word over the silence after it.
-5. A far-side word with no such source goes where most of its diarizer
-   speaker's words went, weighted by word length.
-6. The speakers are renumbered `s1`, `s2`, and so on, in order of first
-   appearance. Screen names are matched to them afterwards as usual.
-
-The words stay as they were unless the timeline has at least 2 sources and
-covers at least 30 % of the far-side words. One source means a call with one
-other person, or a service that sends everyone in one stream with no CSRCs,
-and the diarizer knows those better. Too little coverage means the timeline
-is from another call. When every source is a stream id (`ssrc:`), at least
-one must be loud again after another source was (`tellsPeopleApart`): a
-mixed stream that reconnects comes back under a new id, so its ids follow
-one another and none returns. Only events with one loud stream count, because
-the old and new stream can both be loud for a moment.
-
-When the sources do not tell people apart but the page lit two or more
-names (Zoom web, which sends everyone on one stream), the lit names stand in
-for the sources in steps 2 to 6 (`BrowserSpeakers.byName`). The same 30 %
-coverage rule applies. Tiles trail the voices, so on this path the words in
-the first 1.5 s of a diarizer turn (`BrowserSpeakers.tileLag`) take the name
-heard first after that stretch (`BrowserSpeakers.steadied`), or none when
-the turn ends before then, so a short turn follows the diarizer; a later
-change of name within one turn still splits it.
-
-### How the names name the speakers
-
-`MeetingEngine.process` calls `BrowserSpeakers.name` once the transcript is
-saved, after the screen names are matched, and on every Retry or Redo:
-
-1. Each name's lit stretches are built as in step 2 above, from the events'
-   `names`, and joined where they overlap.
-2. For each far-side speaker in the transcript, it adds up how long each
-   name was lit during that speaker's turns.
-3. A speaker takes a name that was lit for at least half of their talk and
-   more than twice as long as any other name. The tile lights about a second
-   after the voice starts and can stay lit into the next turn, so the rule
-   uses overlap over whole turns and skips the first 1.5 s after the
-   speaker changes (`BrowserSpeakers.tileLag`), across every segment of
-   that turn.
-4. A name goes to one speaker only, the one it overlaps most. It replaces a
-   name read off the screen for that speaker, and the screen's match is
-   dropped wherever it gave that name to someone else.
-5. Each match keeps when the page first lit the name (`talkStart`, seconds
-   from the start of the recording) and how long it was lit in all
-   (`talkSeconds`), counting only time after the recording started; `seen` and `of` hold the overlap and the speaker's talk
-   in seconds. They are stored in `MeetingMeta.screenNames`, so the
-   Meetings window, Assign speakers and the notes request use them like
-   screen names. Every lit name also goes to the front of `seen`, longest
-   first, so the notes model knows the participants.
-
-The owner's words are never named this way; their name comes from the
-owner marker, the typed name or Settings, as before.
-
-### How many people the call had
+## How many people the call had
 
 `ScreenSpeakerNames.expectedRemote` counts the other people the call showed:
-the extension's roster (names on at least two rosters, the owner's own tile
-left out, or the head count less one), or the participants button read off
-the window (`ScreenSpeakerNames.participantCount`, a count seen in at least
-two snapshots, less one), whichever is larger. It is used three ways:
+the participants button read off the window
+(`ScreenSpeakerNames.participantCount`, a count seen in at least two
+snapshots, less one). It is used three ways:
 
 - `MeetingTranscriber.place` maps a lone new far-side label onto the only
   known remote speaker only when the reference clip got no label of its own
@@ -454,8 +235,7 @@ two snapshots, less one), whichever is larger. It is used three ways:
   (`MeetingTranscriber.splitFarSide`, cached as
   `transcribe-far-speakers-v1.json`). Without the model downloaded
   (Speaker Separation, pyannote community-1, in Settings) nothing changes and the log says
-  so. The extension's timeline runs after it and decides the words it
-  covers; the rest keep the split's speaker.
+  so.
 - `ScreenNames.remote` keeps the count and `ScreenNames.probablyMerged` marks
   a transcript with fewer far-side ids than that. The log says "speakers
   probably merged", and the notes request tells the notes model one label may
@@ -463,11 +243,11 @@ two snapshots, less one), whichever is larger. It is used three ways:
 
 `ScreenSpeakerNames.match` also gives the one far-side speaker the one other
 name on screen when the call had at most one other person, though that name
-was always visible. Single-word names count when they are on the roster or
-stay on screen in at least a quarter of the snapshots and are no UI word
+was always visible. Single-word names count when they stay on screen in at
+least a quarter of the snapshots and are no UI word
 (`ScreenSpeakerNames.singleNames`, `uiWords`).
 
-### Words follow their track
+## Words follow their track
 
 `MeetingTranscriber.byTrack` runs on every call after the owner is marked: a
 word heard only on the system track is not the owner's (when the mic is
@@ -478,66 +258,6 @@ only on the mic is the owner's. MEASURED
 come back as the owner's and 49 s of mic speech as a far-side speaker's. The
 on-device path, which transcribes each track alone when the mic is
 echo-free, uses the same step when it transcribes a mix.
-
-### Install the extension
-
-The extension is not on the Chrome Web Store. Chrome 137 removed
-`--load-extension`, and on a Mac an extension from outside the store installs
-only through MDM, so you load it once as an unpacked extension.
-
-1. In Settings → Advanced → **Chrome extension for meetings**
-   (`BrowserExtensionSection`), click **Install in Chrome…**.
-   VoiceiQ copies the extension to
-   `~/Library/Application Support/VoiceiQ/ChromeExtension`. It writes the host
-   manifest `io.blue.voiceiq.browser.json` into the `NativeMessagingHosts`
-   folder of each Chromium browser that has a support folder: Chrome, Chrome
-   Beta, Chrome Canary, Chrome for Testing, Chromium, Edge, Brave, Arc, and
-   Vivaldi. Then it opens `chrome://extensions` in Chrome and selects the
-   folder in Finder.
-2. On the Extensions page, turn on **Developer mode**.
-3. Drag the `ChromeExtension` folder onto the page, or click **Load unpacked**
-   and choose it.
-
-At each launch, VoiceiQ copies the files and writes the host manifests again
-when they were copied out before (`BrowserExtension.refreshIfInstalled`),
-so both follow app updates, and the extension reloads itself (see above).
-
-**Status** reads whether a browser has the extension from each profile's own
-record (`BrowserExtensionInstalls.find`): every profile folder ("Default",
-"Profile 4") of each browser above, its `Secure Preferences` (where Chrome
-keeps unpacked extensions) and `Preferences`, entry
-`extensions.settings.gjobkaplebdoedjfopfmogibphjmglaa`. An entry counts only
-with its `location`: removing the extension can leave an empty entry behind
-(measured with Chrome 157). A non-empty `disable_reasons`, or `state` 0 in old
-versions, means turned off. Profile names come from `Local State`. The row
-shows "Not added to Chrome", "Turned off in Chrome, Profile 4", or "On in
-Chrome, Work (Profile 4)" with when it was last heard from, and reads the
-profiles again every 3 s while Settings is open. The button says **Install in
-Chrome…** whenever no profile has the extension, also after it was removed,
-and **Show in Chrome…** otherwise. When the newest event in the log came from
-an older extension, a note says Chrome still runs it and when it will switch.
-
-### Measured
-
-On the Mac mini, with a notarized build and Chrome for Testing, a call with
-two similar voices (Samantha and Karen, 10 turns): the diarizer alone found
-one speaker. With the extension, all 10 turns went to the right person. An
-earlier rule that used each word's midpoint put 6 words at turn edges on the
-wrong person. The overlap rule puts them right
-(`BrowserSpeakersTests.testWordsTheRecognizerTimesPastTheirTurnStillGoToTheirSpeaker`).
-Real Google Meet and Teams calls, which use the CSRC path, were not tested.
-
-Names, 2026-11-12, on Linux with Chrome for Testing 157 and the unpacked
-extension: fixture pages served as `meet.google.com`, `teams.microsoft.com`,
-`app.zoom.us` and `meet.jit.si` built each site's tiles as in the table
-above, ran a real WebRTC audio loopback, lit Priya's tile for 3.5 s and then
-Max's, then went silent with Max still lit. On all four, the native host
-received Priya's name with the first loud event, Max's within 250 ms of the
-switch, and no names once the audio stopped; the user's own tile and Teams'
-`video-stream-2` tile never appeared. The Zoom log, put through `save`,
-`apply` and `name`, split one diarizer speaker into Priya and Max and named
-both. No real Meet, Teams, Zoom or Jitsi call has been tested, so whether
-those services still use this markup is not known.
 
 ## Speaker names from the screen
 
@@ -601,8 +321,7 @@ meeting never raises a permission prompt (`CGPreflightScreenCaptureAccess`,
    `seen`; the notes model returns `participants`, the people among them.
 
 Name shown for a speaker (`MeetingMeta.displayName`): the name the user typed,
-then the screen match (where the Chrome extension's name, when it has one,
-has replaced what was read off the screen), then the notes model's
+then the screen match, then the notes model's
 suggestion, then "Speaker N".
 `MeetingMeta.knownNames` lists every name from those sources for Assign speakers.
 
@@ -649,7 +368,7 @@ docs/design/meeting-prompt-rulebook.md. Fixes from 2026-10-29:
 - **Redo transcript and notes** (`MeetingEngine.retry(id:fresh: true)`) drops
   the cached words (`transcribe-*`, and `local-words-*` and `speakers-*` from
   builds before 2026-11-10) and hears
-  the whole meeting again. `browser-speakers.json` stays. **Retry** after a
+  the whole meeting again. **Retry** after a
   failure keeps the finished windows.
 - Redo and Retry transcribe from the saved tracks with the meeting model set
   at that moment (Settings → Advanced → Meeting model). `mic.caf` and

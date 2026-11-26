@@ -2,11 +2,10 @@ import Foundation
 
 /// The debug log the user turns on in Settings › Advanced: one line for
 /// everything the app logs (`Log` in VoiceIQCore sends each message here),
-/// plus the keyboard, the Chrome extension's host and every network request,
+/// plus the keyboard and every network request,
 /// so a user can send support one file.
 ///
-/// Each process writes its own file per day, `debug-<day>-<process>.log`
-/// (Chrome hosts add their process id), so
+/// Each process writes its own file per day, `debug-<day>-<process>.log`, so
 /// two processes never write the same file. Files older than `keepDays` days
 /// go, and the oldest go first once all of them pass `maxTotalBytes`.
 /// API keys and tokens are removed from every line before it is written.
@@ -30,8 +29,7 @@ public enum DebugLog {
     // MARK: - On or off
 
     /// iOS: the App Group, so the keyboard follows the app's switch. Mac: the
-    /// app's own defaults, which the Chrome host reads by name. UserDefaults
-    /// is thread-safe but not marked Sendable.
+    /// app's own defaults. UserDefaults is thread-safe but not marked Sendable.
     nonisolated(unsafe) private static let defaults: UserDefaults = {
         #if os(iOS)
         return UserDefaults(suiteName: SharedStore.appGroupID) ?? .standard
@@ -74,7 +72,7 @@ public enum DebugLog {
             }
             lines += line(now, level, category, redact(text))
             bytesSincePrune += lines.utf8.count
-            append(lines, to: folder.appendingPathComponent("debug-\(day)-\(fileProcess).log"))
+            append(lines, to: folder.appendingPathComponent("debug-\(day)-\(process).log"))
         }
     }
 
@@ -253,20 +251,15 @@ public enum DebugLog {
 
     // MARK: - Facts
 
-    /// "app", "keyboard" or "chrome-host": which process wrote a line.
+    /// "app" or "keyboard": which process wrote a line.
     static let process: String = {
         switch Bundle.main.bundleIdentifier {
         case "io.blue.voiceiq", "io.blue.voiceiq.ios": return "app"
         case "io.blue.voiceiq.ios.keyboard": return "keyboard"
-        case "io.blue.voiceiq.localspeech": return "chrome-host"
         case let id?: return id.split(separator: ".").last.map(String.init) ?? id
         case nil: return ProcessInfo.processInfo.processName
         }
     }()
-
-    /// `process` in the file name. Chrome starts one host per profile, so
-    /// each host process writes its own file.
-    static let fileProcess = process == "chrome-host" ? "chrome-host-\(ProcessInfo.processInfo.processIdentifier)" : process
 
     static let launchDescription: String = {
         let info = Bundle.main.infoDictionary ?? [:]

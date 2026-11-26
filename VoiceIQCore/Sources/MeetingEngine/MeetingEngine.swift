@@ -129,16 +129,6 @@ import VoiceIQSpeech
             meta.status = .failed("interrupted")
             meta.endedAt = meta.endedAt ?? meta.startedAt.addingTimeInterval(meta.durationSeconds)
             try? store.save(meta: meta)
-            #if os(macOS)
-            // The tracks were written until the process died; a Retry needs the browser's speakers too.
-            if let folder = store.folder(for: meta.id) {
-                var written = meta
-                written.endedAt = ["mic.caf", "system.caf"].compactMap {
-                    try? folder.appendingPathComponent($0).resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
-                }.max() ?? meta.endedAt
-                BrowserSpeakers.save(meta: written, folder: folder)
-            }
-            #endif
         }
     }
 
@@ -233,9 +223,6 @@ import VoiceIQSpeech
         screenNames = nil
         #endif
         meta.endedAt = Date(); meta.durationSeconds = max(micDuration, systemDuration)
-        #if os(macOS)
-        BrowserSpeakers.save(meta: meta, folder: folder)
-        #endif
         try? mark(&meta, .transcribing)
         phase = .idle
         Task { await UsageMeter.$scope.withValue(UsageScope(activity: .meeting, sessionID: id.uuid.uuidString)) {
@@ -339,18 +326,14 @@ import VoiceIQSpeech
                 return
             }
             try store.save(transcript: transcript, id: id)
-            let roster = BrowserSpeakers.roster(folder: folder)
-            if let screen = ScreenSpeakerNames.match(samples: store.loadScreenSamples(id: id) ?? [], transcript: transcript, roster: roster) {
-                meta.screenNames = screen
-                Log.meeting.info("screen names: \(screen.speakers.count, privacy: .public) speakers named, \(screen.seen.count, privacy: .public) names seen, \(roster?.remote.count ?? 0, privacy: .public) on the page's roster")
+            meta.screenNames = ScreenSpeakerNames.match(samples: store.loadScreenSamples(id: id) ?? [], transcript: transcript)
+            if let screen = meta.screenNames {
+                Log.meeting.info("screen names: \(screen.speakers.count, privacy: .public) speakers named, \(screen.seen.count, privacy: .public) names seen")
                 if screen.probablyMerged == true {
                     let heard = Set(transcript.map(\.speaker)).subtracting([MeetingSpeaker.you]).count
                     Log.meeting.notice("speakers probably merged: the call showed \(screen.remote ?? 0, privacy: .public) other people, the transcript has \(heard, privacy: .public) far-side speakers")
                 }
             }
-            meta.screenNames = BrowserSpeakers.name(meta.screenNames, transcript: transcript, folder: folder)
-            let fromPage = meta.screenNames?.speakers.values.filter { $0.talkSeconds != nil }.count ?? 0
-            Log.meeting.info("browser names: \(fromPage, privacy: .public) speakers named")
             try mark(&meta, .summarizing)
             if onDevice, let notes = await notesKeptOnDevice(transcript: transcript, meta: meta) {
                 // Nothing leaves the device.
