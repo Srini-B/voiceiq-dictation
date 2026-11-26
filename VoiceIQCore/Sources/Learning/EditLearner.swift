@@ -268,12 +268,6 @@ public final class EditLearner {
         watched.set(key, nil)
     }
 
-    /// Whether text typed before an insertion leaves a sentence open.
-    private nonisolated static func continuesSentence(before text: Substring) -> Bool {
-        guard let last = text.last(where: { !$0.isWhitespace || $0.isNewline }) else { return false }
-        return !last.isNewline && !".!?…:".contains(last)
-    }
-
     private nonisolated static func compute(
         value: String?,
         insertions: [(UUID, String, String, [LearnedCorrection])],
@@ -292,7 +286,7 @@ public final class EditLearner {
                 window: match.window,
                 edits: EditDiff.edits(
                     original: insertion.2, replacement: match.window, earlier: insertion.3,
-                    continuesSentence: continuesSentence(before: current[..<match.range.lowerBound])
+                    context: String(current[..<match.range.lowerBound].suffix(200))
                 )
             )
         }

@@ -59,8 +59,10 @@ final class EditDiffTests: XCTestCase {
         ] {
             XCTAssertEqual(EditDiff.edits(original: original, replacement: edited).corrections, [], edited)
         }
-        let continued = EditDiff.edits(original: "shivon will send it.", replacement: "Siobhan will send it.", continuesSentence: true)
+        let continued = EditDiff.edits(original: "shivon will send it.", replacement: "Siobhan will send it.", context: "Please ask ")
         XCTAssertEqual(continued.corrections.map(\.replacement), ["Siobhan"])
+        let listed = EditDiff.edits(original: "Sorey, I'm late.", replacement: "Sorry, I'm late.", context: "Notes\n- ")
+        XCTAssertEqual(listed.corrections.map(\.nameLike), [false])
         let twoWords = EditDiff.edits(original: "Sharon raj works.", replacement: "Saran Raja works.").corrections
         XCTAssertEqual(twoWords.map(\.nameLike), [true])
         let sorry = EditDiff.edits(original: "Sorey, I'm late.", replacement: "Sorry, I'm late.").corrections
@@ -90,6 +92,8 @@ final class EditDiffTests: XCTestCase {
         let karan = EditDiff.edits(original: karen, replacement: "I met Karan yesterday.")
         let green = EditDiff.edits(original: karen, replacement: "I met Green today.", earlier: karan.corrections)
         XCTAssertEqual(EditDiff.steps(for: green, after: karan.corrections), [])
+        let greenAlone = EditDiff.edits(original: karen, replacement: "I met Green yesterday.", earlier: karan.corrections)
+        XCTAssertEqual(EditDiff.steps(for: greenAlone, after: karan.corrections), [])
     }
 
     func testDeletingALearnedWordForgetsItButDeletingItsSentenceDoesNot() {

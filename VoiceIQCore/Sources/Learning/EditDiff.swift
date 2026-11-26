@@ -105,10 +105,10 @@ public enum EditDiff {
     /// `earlier`: the corrections at the previous harvest. A fix to the same
     /// words may stray further from the transcript than one edit allows, as
     /// long as it reads as a respelling of what the earlier fix taught.
-    /// `continuesSentence`: the field text before `replacement` does not end
-    /// a sentence, so its first word does not start one.
+    /// `context`: the field text just before `replacement`, so its first word
+    /// is judged as a sentence start the same way as the words inside it.
     public static func edits(
-        original: String, replacement: String, earlier: [LearnedCorrection] = [], continuesSentence: Bool = false
+        original: String, replacement: String, earlier: [LearnedCorrection] = [], context: String = ""
     ) -> DictationEdits {
         let before = words(in: original)
         let after = words(in: replacement)
@@ -130,7 +130,7 @@ public enum EditDiff {
                 let originalText = clean(removedPart.map(\.text).joined(separator: " "))
                 let replacementText = clean(addedPart.map(\.text).joined(separator: " "))
                 let span = removedPart.startIndex..<removedPart.endIndex
-                let opensSentence = startsSentence(addedPart[addedPart.startIndex], in: replacement, continues: continuesSentence)
+                let opensSentence = startsSentence(addedPart[addedPart.startIndex], in: replacement, after: context)
                 let candidate = LearnedCorrection(
                     original: originalText, replacement: replacementText, words: span, startsSentence: opensSentence
                 )
@@ -138,7 +138,10 @@ public enum EditDiff {
                 // the quadratic distance runs.
                 if valid(originalText), valid(replacementText), originalText != replacementText,
                    isLetterRespelling(originalText, replacementText)
-                       || (candidate.nameLike && soundsAlike(originalText, replacementText))
+                       // Sound only for a first fix: a learned word edited
+                       // again must respell what it taught.
+                       || (candidate.nameLike && !earlier.contains(where: { $0.words.overlaps(span) })
+                           && soundsAlike(originalText, replacementText))
                        || earlier.contains(where: {
                        $0.words == span && isLetterRespelling($0.replacement, replacementText)
                    }) {
@@ -353,10 +356,11 @@ public enum EditDiff {
 
     /// Whether `word` begins a sentence: after `.`, `!`, `?`, `…`, `:` or a
     /// line break, after a list marker (`-`, `*`, `•`) that starts a line, or
-    /// in a quotation opened after a comma (`He said, "Green…`). At the start
-    /// of `text`, unless `continues`.
-    private static func startsSentence(_ word: Word, in text: String, continues: Bool = false) -> Bool {
-        var index = word.range.lowerBound
+    /// in a quotation opened after a comma (`He said, "Green…`), or at the
+    /// start of the field. `context` is the text before `text`.
+    private static func startsSentence(_ word: Word, in text: String, after context: String = "") -> Bool {
+        let text = context + text[..<word.range.lowerBound]
+        var index = text.endIndex
         var quoted = false
         var marker = false
         while index > text.startIndex {
@@ -369,7 +373,7 @@ public enum EditDiff {
             if marker { return false }
             return ".!?…:".contains(character) || (quoted && character == ",")
         }
-        return marker || !continues
+        return true
     }
 
     /// Every word capitalized, as a name is written.
