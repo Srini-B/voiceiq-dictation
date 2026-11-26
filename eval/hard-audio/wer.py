@@ -47,7 +47,10 @@ def main() -> None:
     if args.ondevice:
         drafts = json.loads(Path(args.ondevice).read_text())["texts"]
     else:
-        drafts = {r["id"]: r["output"] for r in json.loads(Path(args.result).read_text())["results"]}
+        run = json.loads(Path(args.result).read_text())
+        if not run.get("complete") or run.get("failed"):
+            raise SystemExit(f"{args.result}: incomplete run; rerun run.py with its label")
+        drafts = {r["id"]: r["output"] for r in run["results"]}
     by = defaultdict(lambda: [[], []])
     for cid, draft in drafts.items():
         clip = clips[cid]
