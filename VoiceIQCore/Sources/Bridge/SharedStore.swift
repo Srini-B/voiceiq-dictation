@@ -15,6 +15,8 @@ public final class SharedStore: @unchecked Sendable {
     public static let heartbeatTimeout: TimeInterval = 3
     /// Commands kept for the app to read. The keyboard trims to this.
     static let commandLimit = 8
+    /// How many input sessions `fieldVisits` keeps.
+    public static let fieldVisitLimit = 24
 
     private let defaults: UserDefaults
     private let encoder = JSONEncoder()
@@ -37,6 +39,7 @@ public final class SharedStore: @unchecked Sendable {
         static let heartbeat = "bridge.heartbeat"
         static let levelBars = "bridge.levelBars"
         static let insertedDeliveryID = "bridge.insertedDeliveryID"
+        static let fieldVisits = "bridge.fieldVisits"
         static let keyboardSeenAt = "bridge.keyboardSeenAt"
         static let activityRequest = "bridge.activityRequest"
         static let keyboardLog = "bridge.keyboardLog"
@@ -89,10 +92,37 @@ public final class SharedStore: @unchecked Sendable {
 
     /// The last delivery handled, so a result is inserted once even when
     /// state pings repeat. Writers: the keyboard when it types a result, the
-    /// app when no keyboard did and it put the result on the clipboard.
+    /// app when it puts the result on the clipboard.
     public var insertedDeliveryID: UUID? {
         get { defaults.string(forKey: Key.insertedDeliveryID).flatMap(UUID.init(uuidString:)) }
         set { defaults.set(newValue?.uuidString, forKey: Key.insertedDeliveryID) }
+    }
+
+    /// The input sessions the keyboard was last shown in, oldest first, so
+    /// `Delivery.isFirstReturn` can tell whether another field of an app had
+    /// the keyboard since a result was ready. No text. Writer: keyboard.
+    public var fieldVisits: [FieldVisit] {
+        decode([FieldVisit].self, forKey: Key.fieldVisits) ?? []
+    }
+
+    /// Called by the keyboard when it finds itself in a new input session,
+    /// and again when it learns that session's app.
+    public func noteFieldVisit(host: String?, session: UUID, at: Date = Date()) {
+        var visits = fieldVisits
+        if let last = visits.last, last.documentID == session {
+            guard last.hostBundleID != host else { return }
+            visits[visits.count - 1].hostBundleID = host
+        } else {
+            visits.append(FieldVisit(hostBundleID: host, documentID: session, at: at))
+        }
+        encode(Array(visits.suffix(Self.fieldVisitLimit)), forKey: Key.fieldVisits)
+    }
+
+    /// Called by the keyboard that types a result. Pings the app, which shows
+    /// in the Live Activity whether a result is still waiting.
+    public func markInserted(_ delivery: Delivery) {
+        insertedDeliveryID = delivery.id
+        DarwinNotifier.post(.inserted)
     }
 
     /// When a keyboard with Full Access last ran. The app reads it to tell

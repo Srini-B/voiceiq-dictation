@@ -99,6 +99,7 @@ private func title(for state: VoiceSessionAttributes.ContentState) -> String {
     case .starting: return "Starting…"
     case .recording: return "Listening"
     case .processing: return "Writing"
+    case .waiting: return "Text ready"
     case .meeting: return "Recording notes"
     }
 }
@@ -112,7 +113,7 @@ private struct CompactLeading: View {
             EmptyView()
         case .recording:
             TinyWaveform()
-        case .starting, .processing:
+        case .starting, .processing, .waiting:
             Image("BrandMark").resizable().scaledToFit().frame(width: 20, height: 20)
         case .meeting:
             Image(systemName: "record.circle.fill").foregroundStyle(recordingRed)
@@ -134,6 +135,8 @@ private struct CompactTrailing: View {
                 .frame(maxWidth: 46)
         case .starting, .processing:
             ProgressView().controlSize(.mini).tint(brandBlue)
+        case .waiting:
+            WaitingMark()
         }
     }
 }
@@ -149,9 +152,18 @@ private struct MinimalView: View {
             TinyWaveform()
         case .starting, .processing:
             ProgressView().controlSize(.mini).tint(brandBlue)
+        case .waiting:
+            WaitingMark()
         case .meeting:
             Image(systemName: "record.circle.fill").foregroundStyle(recordingRed)
         }
+    }
+}
+
+/// A result is written and waits for the keyboard.
+private struct WaitingMark: View {
+    var body: some View {
+        Image(systemName: "text.insert").font(.system(size: 13, weight: .semibold)).foregroundStyle(brandBlue)
     }
 }
 
@@ -168,11 +180,13 @@ private struct TinyWaveform: View {
 
 private struct TimerText: View {
     let state: VoiceSessionAttributes.ContentState
+    /// A timer text is as wide as it is offered; this is the side its digits sit on.
+    var alignment: TextAlignment = .trailing
 
     @ViewBuilder var body: some View {
         if let since = state.since, isRecording(state.phase) {
             Text(timerInterval: since...Date.distantFuture, countsDown: false)
-                .multilineTextAlignment(.trailing)
+                .multilineTextAlignment(alignment)
         }
     }
 }
@@ -187,6 +201,8 @@ private struct TrailingStatus: View {
                 .foregroundStyle(recordingRed)
         } else if state.phase == .starting || state.phase == .processing {
             ProgressView().tint(brandBlue)
+        } else if state.phase == .waiting {
+            WaitingMark()
         } else {
             Text("Ready").font(.caption).foregroundStyle(.secondary)
         }
@@ -198,13 +214,26 @@ private struct ActionButton: View {
     var expanded = false
 
     var body: some View {
-        Group {
+        HStack(spacing: 8) {
             switch state.phase {
             case .starting, .recording:
+                Button(intent: CancelDictationIntent()) {
+                    if expanded {
+                        Label("Cancel", systemImage: "xmark")
+                    } else {
+                        Image(systemName: "xmark").accessibilityLabel("Cancel")
+                    }
+                }
+                .tint(.white.opacity(0.18))
                 Button(intent: StopDictationIntent()) {
                     Label("Stop", systemImage: "stop.fill")
                 }
                 .tint(recordingRed)
+            case .waiting:
+                Button(intent: CopyResultIntent()) {
+                    Label("Copy", systemImage: "doc.on.doc")
+                }
+                .tint(.white.opacity(0.18))
             case .meeting:
                 Button(intent: StopMeetingIntent()) {
                     Label("Stop", systemImage: "stop.fill")
@@ -244,13 +273,15 @@ private struct LockScreenView: View {
                         .font(.headline)
                         .foregroundStyle(.white)
                     if isRecording(state.phase) {
-                        TimerText(state: state)
+                        TimerText(state: state, alignment: .leading)
                             .font(.subheadline.monospacedDigit())
                             .foregroundStyle(.white.opacity(0.72))
                     } else {
-                        Text("In progress")
+                        Text(state.phase == .waiting ? "Waits for the keyboard" : "In progress")
                             .font(.subheadline)
                             .foregroundStyle(.white.opacity(0.72))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
                     }
                 }
             }

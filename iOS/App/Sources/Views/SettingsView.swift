@@ -129,6 +129,7 @@ struct DictationSettingsView: View {
     @State private var microphone = MobileSettings.microphoneChoice
     @State private var voiceIsolation = SettingsStore().voiceIsolation
     @State private var warmWindow = MobileSettings.warmWindow
+    @State private var showsSessionActivity = MobileSettings.showsSessionActivity
     @State private var languages = SettingsStore().spokenLanguages
     @State private var dictationSource = SettingsStore().dictationSource
     @ObservedObject private var cellularDownloads = CellularModelDownloads.shared
@@ -153,6 +154,15 @@ struct DictationSettingsView: View {
                 }
             } footer: {
                 Text("While the mic is on, the next keyboard tap starts right away. After that, the tap opens VoiceiQ for a moment.")
+            }
+            Section {
+                Toggle(UIDevice.isPad ? "Show on the Lock Screen" : "Show in the Dynamic Island", isOn: $showsSessionActivity)
+                    .onChange(of: showsSessionActivity) { _, value in
+                        MobileSettings.showsSessionActivity = value
+                        session.refreshActivity()
+                    }
+            } footer: {
+                Text("Stop or cancel a dictation while the keyboard is closed. The text waits for the VoiceiQ keyboard: it is typed when you return to the field as you left it, and Paste last puts it anywhere else.")
             }
             Section {
                 Picker("Microphone", selection: $microphone) {

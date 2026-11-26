@@ -30,6 +30,7 @@ final class AppModel: ObservableObject {
     private var recoveryScanner: RecoveryScanner?
     private var cancellables: Set<AnyCancellable> = []
     private var commandObserver: UUID?
+    private var insertedObserver: UUID?
     /// Commands acted on in this process. Guards against acting twice when a
     /// command arrives both by Darwin ping and by URL.
     private var processed: Set<UUID> = []
@@ -123,6 +124,9 @@ final class AppModel: ObservableObject {
         commandObserver = DarwinNotifier.observe(.command) { [weak self] in
             Task { @MainActor in self?.drainCommands() }
         }
+        insertedObserver = DarwinNotifier.observe(.inserted) { [weak self] in
+            Task { @MainActor in self?.session.refreshActivity() }
+        }
     }
 
     // MARK: - Wiring
@@ -190,7 +194,10 @@ final class AppModel: ObservableObject {
         guard let historyStore else { return }
         let retry = OnDeviceFirstTranscription(gemini: transcription, makeSession: LocalSpeechInference.makeSession)
         let scanner = RecoveryScanner(store: historyStore, transcription: retry)
-        scanner.onRecovered = { [weak self] _ in self?.banner = RecoveryNotice.message(for: .relaunch, copied: false) }
+        scanner.onRecovered = { [weak self] text in
+            self?.banner = RecoveryNotice.message(for: .relaunch, copied: false)
+            self?.deliverRecovered(text)
+        }
         recoveryScanner = scanner
         let queue = RetryQueue(store: historyStore, transcription: retry)
         queue.onDrained = { [weak self] texts in
@@ -198,9 +205,11 @@ final class AppModel: ObservableObject {
             self?.banner = count == 1 ? "A queued dictation is ready in History" : "\(count) queued dictations are ready in History"
         }
         retryQueue = queue
-        Task {
+        Task { [session] in
             // A keyboard start can launch the app straight into a dictation.
             await scanner.scanAndRecover(sparing: { [weak self] in self?.coordinator.activeSessionFolders ?? [] })
+            // Nothing recovered: the orphan must not attach to a later recovery.
+            _ = session.takeOrphan()
             queue.start()
             Task.detached(priority: .utility) { RetentionPolicy().purge() }
         }
@@ -266,7 +275,7 @@ final class AppModel: ObservableObject {
         case .start:
             start(command)
         case .stop:
-            stopDictation()
+            stopDictation(in: command.field)
         case .cancel:
             coordinator.handle(.cancel)
         }
@@ -275,7 +284,13 @@ final class AppModel: ObservableObject {
     private func handle(_ request: ActivityRequest) {
         switch request.action {
         case .stopDictation:
+            if coordinator.state.isCapturing { SessionDiagnostics.note("stopped from the Live Activity") }
             stopDictation()
+        case .cancelDictation:
+            SessionDiagnostics.note("cancelled from the Live Activity")
+            coordinator.handle(.cancel)
+        case .copyResult:
+            copyWaitingResult()
         case .stopMeeting:
             meetings.stopRecording()
         case .endSession:
@@ -286,13 +301,14 @@ final class AppModel: ObservableObject {
     /// Stop from the keyboard or the Live Activity. Before the microphone
     /// delivered any audio there is nothing to transcribe, so the start is
     /// cancelled quietly (Hex a2d940e3) instead of failing as "no audio".
-    private func stopDictation() {
-        switch coordinator.state {
-        case .warming, .recording:
-            coordinator.handle(coordinator.audioFlowing ? .finalize : .cancel)
-        default:
-            break
+    /// `field` is where a keyboard's Stop was tapped: the text goes there.
+    private func stopDictation(in field: FieldIdentity? = nil) {
+        guard coordinator.state.isCapturing else { return }
+        if let field {
+            target.fields.stoppedIn = field
+            session.dictationField = target.destination
         }
+        coordinator.handle(coordinator.audioFlowing ? .finalize : .cancel)
     }
 
     /// Starts the command's dictation, or posts why it can't and returns that.
@@ -302,12 +318,16 @@ final class AppModel: ObservableObject {
             session.post(notice: problem)
             return problem
         }
-        target.host = command.hostBundleID
+        // A refused start leaves the dictation in progress its own target.
+        let previous = target.fields
+        target.fields = .init(host: command.hostBundleID, origin: command.field)
         guard coordinator.handle(.begin) else {
+            target.fields = previous
             let problem = coordinator.coachingHint ?? "Still working on the last one"
             session.post(notice: problem)
             return problem
         }
+        session.dictationField = target.destination
         coordinator.handle(.lockIn)
         return nil
     }
@@ -435,12 +455,15 @@ final class AppModel: ObservableObject {
             return "Couldn't start the microphone"
         }
         SessionDiagnostics.note("action button: start")
-        target.host = nil
+        let previous = target.fields
+        target.fields = .init()
         guard coordinator.handle(.begin) else {
+            target.fields = previous
             let notice = coordinator.coachingHint ?? "Still working on the last one"
             session.post(notice: notice)
             return notice
         }
+        session.dictationField = nil
         coordinator.handle(.lockIn)
         // The intent returns once recording is underway; iOS needs the Live
         // Activity up by then.
@@ -489,6 +512,7 @@ final class AppModel: ObservableObject {
         }
         needsForeground = false
         setup.refresh()
+        session.refreshActivity()
         drainCommands()
         DictionaryBridge.appBecameActive()
         WritingRulesSync.shared.refresh()
@@ -542,6 +566,7 @@ final class AppModel: ObservableObject {
             // still drain buffers), so a Bluetooth dictation leaves call audio here.
             if case .transcribing = state, !(previousState == .transcribing) { session.useKeepAliveInput() }
         case .idle, .done, .cancelled, .failed:
+            session.dictationField = nil
             if let since = processingSince {
                 // How long the transcript and cleanup took, and where the app was.
                 let place = UIApplication.shared.applicationState == .active ? "foreground" : "background"
@@ -571,15 +596,49 @@ final class AppModel: ObservableObject {
         session.setLevel(level)
     }
 
+    /// A result with a destination waits for the keyboard in that field
+    /// (`Delivery.route`), however long the user is away looking something
+    /// up; it is never copied unasked, because the clipboard may hold what
+    /// they went to fetch. A result no keyboard took part in has nowhere to
+    /// wait for, so it keeps the clipboard fallback.
     private func deliver(_ text: String) {
-        let delivery = Delivery(text: text, hostBundleID: target.host)
+        let delivery = Delivery(text: text, destination: target.destination)
         session.deliver(delivery)
-        copyIfNotTyped(delivery)
+        if let destination = delivery.destination {
+            SessionDiagnostics.note("result ready; waits for the keyboard in \(destination.hostBundleID ?? "its field")")
+        } else {
+            copyIfNotTyped(delivery)
+        }
     }
 
-    /// The keyboard on screen types the result wherever the user is. When no
-    /// keyboard has typed it shortly after (the user closed it, or is on a
-    /// screen with no text field), the result goes on the clipboard.
+    /// The launch recovery transcribed the dictation iOS ended this app in
+    /// the middle of. It goes to the field it was for, like any result, when
+    /// the app was ended within `Delivery.pendingWindow`. The text is ready
+    /// now: the keyboard the user opened the app from does not count as
+    /// having been in another field since.
+    private func deliverRecovered(_ text: String) {
+        guard let orphan = session.takeOrphan(), !text.isEmpty,
+              Date().timeIntervalSince(orphan.lastAlive) < Delivery.pendingWindow else { return }
+        session.deliver(Delivery(text: text, destination: orphan.field))
+        SessionDiagnostics.note("recovered dictation waits for the keyboard in \(orphan.field.hostBundleID ?? "its field")")
+    }
+
+    /// "Copy" in the Live Activity: the user wants the waiting result now,
+    /// in a field the VoiceiQ keyboard is not in.
+    private func copyWaitingResult() {
+        guard let delivery = store.snapshot.delivery, delivery.isPending(handledID: store.insertedDeliveryID) else { return }
+        store.insertedDeliveryID = delivery.id
+        UIPasteboard.general.string = delivery.text
+        DispatchQueue.main.async { [store, session] in
+            store.appPasteboardChangeCount = UIPasteboard.general.changeCount
+            session.refreshActivity()
+        }
+        SessionDiagnostics.note("waiting result copied from the Live Activity")
+    }
+
+    /// A result no keyboard took part in (the Action button with no keyboard
+    /// on screen): the first keyboard on screen types it. When none has
+    /// shortly after, it goes on the clipboard.
     private func copyIfNotTyped(_ delivery: Delivery) {
         var task = UIBackgroundTaskIdentifier.invalid
         task = UIApplication.shared.beginBackgroundTask(withName: "Copy result") {
@@ -653,5 +712,13 @@ private extension DictationState {
     var isRecording: Bool {
         if case .recording = self { return true }
         return false
+    }
+
+    /// Warming or recording: a Stop ends it.
+    var isCapturing: Bool {
+        switch self {
+        case .warming, .recording: return true
+        default: return false
+        }
     }
 }
