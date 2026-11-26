@@ -140,8 +140,7 @@ def prompt_for(case: dict, spec: dict, promptdump: str, screen_on: bool) -> str:
 
 def dictation_text(raw: str) -> str | None:
     body = raw.strip()
-    if body.startswith("```"):
-        body = re.sub(r"^```[a-z]*\s*|\s*```$", "", body)
+    body = re.sub(r"^```[a-z]*\s*|\s*```$", "", body)
     # As PromptV1.dictationText: the joined stream can carry unflagged
     # working before the answer, so the answer is the last {"text": ...}
     # object that ends the reply.
@@ -201,6 +200,11 @@ def call(prompt: str, flac: bytes) -> tuple[str, float, dict]:
                 lines.append(line)
                 state["chunks"] += line.startswith(b"data:")
             reply = joined_event_stream(b"".join(lines))
+        if "error" in reply:
+            # As GeminiClient.post: an error event after the 200 headers is
+            # handled as that status (a 429 waits and sends again).
+            raise urllib.error.HTTPError(req.full_url, reply["error"].get("code", 500),
+                                         reply["error"].get("message", ""), None, None)
         text = dictation_text(reply["candidates"][0]["content"]["parts"][0]["text"])
         if text is None:
             raise MalformedAnswer()

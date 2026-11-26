@@ -45,9 +45,9 @@ reads usage on a 200. Two envelopes are handled by `TokenUsage`:
 - A dictation request that is cancelled is not recorded: the slower of two
   raced attempts (`DictationHedge`), or a send-on-pause request the speaker
   talked over. Gemini bills nothing for a stream cancelled before its first
-  chunk, and the answer is the first chunk. A cancelled request that had
-  already answered is billed but not in the ledger; the
-  `send-on-pause: ... billed: true` log lines count those.
+  chunk. A request that finished streaming before it was cancelled is
+  metered as usual. One cancelled mid-stream may be billed but is not in the
+  ledger; the `send-on-pause: ... billed: true` log lines count those.
 - `v1beta/interactions` → `usage`. `total_output_tokens` came back 0 while
   `model_invocation_token_counts` carried the real output count (probed
   2026-09-26), so the per-invocation list is authoritative. Meeting

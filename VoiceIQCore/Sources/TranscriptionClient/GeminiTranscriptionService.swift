@@ -36,7 +36,11 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
         let deadline = TimeoutPolicy.overallDeadline(audioDuration: seconds)
         Log.transcription.notice("send-on-pause: sent for \(String(format: "%.1f", seconds), privacy: .public)s of speech")
         return SpeculativeDictation(range: speech.range, prompt: prompt, sentAt: ContinuousClock().now) { [client] onFirstChunk in
-            let flac = try FLACEncoder.encode(samples: speech.samples)
+            // A TranscriptionError, so key-up's own request starts at once
+            // instead of the dictation failing.
+            guard let flac = try? FLACEncoder.encode(samples: speech.samples) else {
+                throw TranscriptionError.network("speculate_encode")
+            }
             return try await GeminiClient.$onFirstBodyByte.withValue(onFirstChunk) {
                 try await client.dictate(prompt: prompt, audio: flac, model: config.writingModel,
                                          endpoint: config.endpoint, deadline: deadline)
