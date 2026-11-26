@@ -77,7 +77,15 @@ public final class LocalTranscriber: Sendable {
                                         language: LocalSpeechModel.fluidSpeechPro.language(code: SettingsStore().localSpeechLanguageCode),
                                         cloudOnColdLoad: false, makeSession: makeSession)
             }) else { return nil }
-            return await local.finish(framesWritten: frames)
+            // Gemini already answered empty; a cold Pro load must not hold the
+            // pill for minutes. Past the cold-load limit the audio is re-sent.
+            switch await bounded(seconds: TimeoutPolicy.localColdLoad, { await local.finish(framesWritten: frames) }) {
+            case .finished(let transcript): return transcript
+            case .timedOut:
+                Log.transcription.notice("Fluid Speech Pro not ready \(TimeoutPolicy.localColdLoad, format: .fixed(precision: 0))s after an empty Gemini answer; re-sending the audio")
+                Task { await local.abort() }
+                return nil
+            }
         }
     }
 

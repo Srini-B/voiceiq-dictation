@@ -45,6 +45,16 @@ where Gemini gave nothing. Mini invents text on p058, so only Pro is used.
 - A recording in a language Pro doesn't cover (Tamil, for one) that Gemini
   answers empty would reach the writing step as Pro's English-sounding guess.
   No Tamil clip came back empty in the eval.
+- A key press with nothing said while a TV, a call or a colleague is
+  audible: Gemini's "no speech" is right, but Pro may transcribe the
+  background voice, and that text would be written and inserted. Before this
+  change the re-send came back empty and nothing was inserted. The eval has
+  no such clips, so it can't measure this. Guarding it (for example, using
+  Pro only when the recording's own level shows the user spoke) is a product
+  decision, and this PR waits on it.
+- Pro's load is bounded at `TimeoutPolicy.localColdLoad` (5 s). Past that,
+  the audio is re-sent as before, so a cold Pro load can't hold the pill
+  for minutes.
 - On the on-device route, a dictation whose model failed and went to Gemini
   may run Pro once more if Gemini then answers empty. That costs time, not
   calls.
