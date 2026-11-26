@@ -125,14 +125,14 @@ public final class LocalModelStore: ObservableObject {
         #if os(iOS)
         guard !CellularModelDownloads.shared.needsConfirmation(self, id: manifest.directoryName) else { return }
         #endif
-        startDownload()
+        startDownload(confirmed: false)
     }
 
     #if os(iOS)
     /// The user agreed to download over cellular data.
     func startConfirmedDownload() {
         guard canStartDownload else { return }
-        startDownload()
+        startDownload(confirmed: true)
     }
     #endif
 
@@ -144,9 +144,9 @@ public final class LocalModelStore: ObservableObject {
         }
     }
 
-    private func startDownload() {
+    private func startDownload(confirmed: Bool) {
         #if os(iOS)
-        CellularModelDownloads.shared.began(id: manifest.directoryName)
+        CellularModelDownloads.shared.began(id: manifest.directoryName, confirmed: confirmed)
         #endif
         state = .downloading(progress: 0)
         let manifest = manifest

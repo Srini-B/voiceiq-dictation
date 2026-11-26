@@ -19,8 +19,12 @@ public struct CellularDownloadConsent: Equatable, Sendable {
         onCellular && !started.contains(download)
     }
 
-    /// The download started: on Wi-Fi, or on cellular after the user confirmed.
-    public mutating func begin(_ download: String) {
+    /// The download started. It counts as consented only after the user
+    /// confirmed, or when it started on a working network that is not
+    /// cellular. One started offline fails at once and leaves nothing
+    /// behind, so its Retry decides afresh.
+    public mutating func begin(_ download: String, confirmed: Bool, online: Bool) {
+        guard confirmed || online else { return }
         started.insert(download)
     }
 
@@ -73,8 +77,8 @@ public final class CellularModelDownloads: ObservableObject {
         return true
     }
 
-    func began(id: String) {
-        consent.begin(id)
+    func began(id: String, confirmed: Bool) {
+        consent.begin(id, confirmed: confirmed, online: monitor.currentPath.status == .satisfied)
     }
 
     func ended(id: String) {
