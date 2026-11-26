@@ -1,0 +1,58 @@
+diff --git a/iOS/Keyboard/Hex/FullKeyboard/KeyboardLayout.swift b/iOS/Keyboard/Hex/FullKeyboard/KeyboardLayout.swift
+index a6f5ccf..ee95dc6 100644
+--- a/iOS/Keyboard/Hex/FullKeyboard/KeyboardLayout.swift
++++ b/iOS/Keyboard/Hex/FullKeyboard/KeyboardLayout.swift
+@@ -792,8 +792,16 @@ nonisolated struct KeyboardLayout: Equatable, Sendable {
+     var totalHeight: CGFloat { metrics.totalHeight }
+ 
+     /// Apple's predictive bar here: the strip with the Hex key's room (`stripFrame` leaves it out).
++    /// VoiceiQ: room its shortcut buttons take at the bar's two ends (cursor control and
++    /// Paste last on the left, Dictate on the right), set once by the keyboard's host.
++    nonisolated(unsafe) static var reservedStripEnds: (leading: CGFloat, trailing: CGFloat) = (0, 0)
++
+     var stripBarFrame: CGRect {
+-        var full = CGRect(x: horizontalInset, y: metrics.stripTop, width: width - 2 * horizontalInset, height: metrics.stripHeight)
++        let ends = Self.reservedStripEnds
++        var full = CGRect(
++            x: horizontalInset + ends.leading, y: metrics.stripTop,
++            width: width - 2 * horizontalInset - ends.leading - ends.trailing, height: metrics.stripHeight
++        )
+         if let split {
+             if hexOnLeading {
+                 // Over the left half with the Hex key, for the left thumb, mirroring the right.
+diff --git a/iOS/Keyboard/Hex/FullKeyboard/KeyboardStripView.swift b/iOS/Keyboard/Hex/FullKeyboard/KeyboardStripView.swift
+index b259699..0e85f4d 100644
+--- a/iOS/Keyboard/Hex/FullKeyboard/KeyboardStripView.swift
++++ b/iOS/Keyboard/Hex/FullKeyboard/KeyboardStripView.swift
+@@ -889,7 +889,8 @@ final class KeyboardStripView: UIView {
+                 let gx = glyph.fixedX ?? (x + glyph.offset)
+                 if let box = glyph.box {
+                     let style = NSMutableParagraphStyle()
+-                    style.lineBreakMode = .byTruncatingTail
++                    // VoiceiQ: a long word keeps its start and end ("extraord…ily").
++                    style.lineBreakMode = .byTruncatingMiddle
+                     style.alignment = .center
+                     var boxed = attributes
+                     boxed[.paragraphStyle] = style
+diff --git a/iOS/Keyboard/Hex/FullKeyboard/View/FullKeyboardView.swift b/iOS/Keyboard/Hex/FullKeyboard/View/FullKeyboardView.swift
+index c5a1f20..cf64449 100644
+--- a/iOS/Keyboard/Hex/FullKeyboard/View/FullKeyboardView.swift
++++ b/iOS/Keyboard/Hex/FullKeyboard/View/FullKeyboardView.swift
+@@ -30,6 +30,9 @@ final class FullKeyboardView: UIView {
+     var onTextEdit: (() -> Void)?
+     /// Undo dictation took the last dictation back.
+     var onUndoDictation: (() -> Void)?
++    /// VoiceiQ: where the suggestion row is, in this view, and whether the emoji panel covers
++    /// it, after each layout, so the host can place its shortcut buttons at the row's ends.
++    var onStripRowLayout: ((CGRect, Bool) -> Void)?
+     /// The return key is about to type its line break.
+     var onReturnKey: (() -> Void)?
+ 
+@@ -775,6 +778,7 @@ final class FullKeyboardView: UIView {
+         callout.frame = content
+         accentCallout.frame = content
+         stripView.frame = layout.stripFrame.offsetBy(dx: 0, dy: lift)
++        onStripRowLayout?(CGRect(x: 0, y: lift + layout.metrics.stripTop, width: bounds.width, height: layout.metrics.stripHeight), emojiPanel != nil)
+         selectionStrip.frame = stripView.frame
+         stripView.slotFrames = layout.stripSlotFrames.map { $0.offsetBy(dx: -layout.stripFrame.minX, dy: -layout.stripFrame.minY) }
+         stripView.pillInset = layout.metrics.stripInset

@@ -292,6 +292,26 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
+### Hex (iOS typing keyboard)
+
+- Files: everything under `iOS/Keyboard/Hex` (letters and number layers,
+  suggestion bar, auto-correction, slide to type, emoji panel, trackpad
+  cursor, the English typing model `en.hextm`), copied unchanged by
+  `scripts/sync-hex-keyboard.sh` except for the patches in
+  `iOS/Keyboard/Hex/patches`. The commit is in `iOS/Keyboard/Hex/UPSTREAM`
+  (`012bdbbe`, 2026-11-25).
+- Source: [anomalyco/hex](https://github.com/anomalyco/hex)
+  (`ios/HEXShared/FullKeyboard`, `ios/HEXKeyboard`), MIT, the licence above;
+  its text is also in `iOS/Keyboard/Hex/LICENSE`.
+- Data inside it, per Hex's `ios/docs/acknowledgements.md`: `en.hextm` is
+  built from Google Books Ngram (CC BY 3.0), SCOWL and WordNet (permissive
+  licences) and Hex's own word list (MIT); `never-suggest.tsv` is curated
+  from LDNOOBW (CC BY 4.0); `Emoji/emoji-index-en.txt` is built from
+  Unicode's emoji-test.txt and CLDR (Unicode License v3, text in
+  `iOS/Keyboard/Hex/FullKeyboard/Emoji/LICENSE-Unicode.txt`).
+- No GPL code. Hex's other languages' word models and emoji indexes are not
+  included (the Spanish model is MPL 1.1).
+
 ### FluidVoice (on-device meetings design)
 
 - The on-device meeting path (`LocalMeetingTranscriber`, `LocalMeetingJob`)

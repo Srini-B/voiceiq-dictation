@@ -178,6 +178,11 @@ provider's terms. It is off by default; details in
 - Logs. See [DEBUG_LOG.md](DEBUG_LOG.md). The opt-in debug log (Settings ›
   Advanced) stays on the device until you export or share it. It never holds
   API keys, tokens or text the app marks private, and keeps 7 days.
+- On the iPhone, the keyboard learns how you type, as Hex's keyboard does:
+  where your finger lands on each key and word-level fixes (a word you
+  erased and retyped, auto-corrections you undid, suggestions you picked),
+  never a keystroke log. It stays in the App Group and the keyboard's own
+  container and is never sent anywhere.
 - Local files are protected by FileVault if enabled; they are not separately
   encrypted (stated honestly).
 - On-device models you download live in

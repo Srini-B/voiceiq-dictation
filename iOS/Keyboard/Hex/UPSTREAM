@@ -1,0 +1,4 @@
+# Written by scripts/sync-hex-keyboard.sh. Do not edit.
+repository=https://github.com/anomalyco/hex
+commit=012bdbbebe93415a17add0f58a2f6178b13437f1
+committed=2026-11-25T23:06:52-08:00
