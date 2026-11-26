@@ -219,7 +219,8 @@ final class TypingJournal {
     /// Fields a journal may learn from: plain text or web search that allows autocorrect,
     /// never addresses, codes, or anything credential-shaped.
     static func allows(field: KeyboardFieldKind, target: KeyboardTextTarget) -> Bool {
-        guard field.takesWords, target.autocorrectionType != .no else { return false }
+        // VoiceiQ: a secure field, custom or web, never reaches the journal.
+        guard field.takesWords, target.autocorrectionType != .no, target.isSecureTextEntry != true else { return false }
         let blocked: Set<UITextContentType> = [
             .password, .newPassword, .oneTimeCode, .username, .emailAddress, .URL,
             .creditCardNumber, .telephoneNumber,
