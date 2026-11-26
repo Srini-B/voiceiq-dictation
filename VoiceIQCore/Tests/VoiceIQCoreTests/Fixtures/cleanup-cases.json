@@ -1185,6 +1185,22 @@
       "said": "what matters is that we finish on time",
       "heard": "What matters is that we finish on time",
       "written": "What matters is that we finish on time."
+    },
+    {
+      "id": "kept-quoted-sentence-list",
+      "check": "kept as said",
+      "said": "the password is quote red. blue unquote",
+      "heard": "The password is \"red. blue\".",
+      "written": "The password is \"red. blue\"",
+      "style": "lists"
+    },
+    {
+      "id": "kept-quoted-colon-list",
+      "check": "kept as said",
+      "said": "type colon quote eggs, milk, bread unquote",
+      "heard": "Type: \"eggs, milk, bread\".",
+      "written": "Type: \"eggs, milk, bread\"",
+      "style": "lists"
     }
   ]
 }
