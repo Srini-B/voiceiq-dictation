@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Generate synthetic dictation audio corpus (WAV 16kHz mono + FLAC) via OpenAI gpt-4o-mini-tts."""
+import hashlib
 import json
 import os
 import subprocess
@@ -326,14 +327,16 @@ for clip in CLIPS:
     wav_raw = AUDIO_DIR / f"{clip['id']}.raw.wav"
     wav_16k = AUDIO_DIR / f"{clip['id']}.wav"
     flac_16k = AUDIO_DIR / f"{clip['id']}.flac"
-    if not flac_16k.exists():
-        body = json.dumps({
-            "model": "gpt-4o-mini-tts",
-            "voice": clip["voice"],
-            "input": clip["text"],
-            "instructions": clip["instructions"],
-            "response_format": "wav",
-        }).encode()
+    inputs_sha = AUDIO_DIR / f"{clip['id']}.inputs.sha"
+    body = json.dumps({
+        "model": "gpt-4o-mini-tts",
+        "voice": clip["voice"],
+        "input": clip["text"],
+        "instructions": clip["instructions"],
+        "response_format": "wav",
+    }).encode()
+    fingerprint = hashlib.sha256(body).hexdigest()
+    if not (flac_16k.exists() and wav_16k.exists() and inputs_sha.exists() and inputs_sha.read_text() == fingerprint):
         req = urllib.request.Request(
             "https://api.openai.com/v1/audio/speech",
             data=body,
@@ -351,6 +354,7 @@ for clip in CLIPS:
             check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
         )
         wav_raw.unlink(missing_ok=True)
+        inputs_sha.write_text(fingerprint)
     # Get duration via ffprobe
     dur = float(subprocess.check_output(
         ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=nw=1:nk=1", str(wav_16k)]
@@ -366,16 +370,18 @@ for clip in CLIPS:
 for clip in [c for c in manifest["clips"] if c["category"] in ("indian_names", "hard_names", "english_names")]:
     noisy_wav = AUDIO_DIR / f"{clip['id']}_noisy.wav"
     noisy_flac = AUDIO_DIR / f"{clip['id']}_noisy.flac"
-    if not noisy_flac.exists():
-        subprocess.run(
-            ["ffmpeg", "-y", "-i", clip["wav"], "-f", "lavfi", "-i", "anoisesrc=color=pink:amplitude=0.03:seed=7",
-             "-filter_complex",
-             "[0:a]atempo=1.12,highpass=f=250,lowpass=f=3600[s];[s][1:a]amix=inputs=2:duration=first:weights=1 1[m]",
-             "-map", "[m]", "-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le", str(noisy_wav)],
-            check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-        )
+    noisy_sha = AUDIO_DIR / f"{clip['id']}_noisy.inputs.sha"
+    noisy_cmd = ["ffmpeg", "-y", "-i", clip["wav"], "-f", "lavfi", "-i", "anoisesrc=color=pink:amplitude=0.03:seed=7",
+                 "-filter_complex",
+                 "[0:a]atempo=1.12,highpass=f=250,lowpass=f=3600[s];[s][1:a]amix=inputs=2:duration=first:weights=1 1[m]",
+                 "-map", "[m]", "-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le", str(noisy_wav)]
+    fingerprint = hashlib.sha256(hashlib.sha256(Path(clip["wav"]).read_bytes()).digest()
+                                 + json.dumps(noisy_cmd).encode()).hexdigest()
+    if not (noisy_flac.exists() and noisy_wav.exists() and noisy_sha.exists() and noisy_sha.read_text() == fingerprint):
+        subprocess.run(noisy_cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         subprocess.run(["ffmpeg", "-y", "-i", str(noisy_wav), "-c:a", "flac", str(noisy_flac)],
                        check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        noisy_sha.write_text(fingerprint)
     dur = float(subprocess.check_output(
         ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=nw=1:nk=1", str(noisy_wav)]
     ).decode().strip())
