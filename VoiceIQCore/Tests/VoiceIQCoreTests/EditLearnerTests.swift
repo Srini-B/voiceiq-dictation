@@ -41,6 +41,12 @@ final class EditLearnerTests: XCTestCase {
         XCTAssertEqual(store.entries().map(\.term), ["Qrinza"])
     }
 
+    func testANameThatIsAlsoAnEnglishWordIsLearnedButAWordFixIsNot() {
+        let learner = EditLearner(dictionary: store)
+        learner.learn([.learn(fix("Sharon", "Saran", 2..<3)), .learn(fix("Then", "Than", 0..<1))], stillTaught: [:])
+        XCTAssertEqual(store.entries().map(\.term), ["Saran"])
+    }
+
     func testAKeptWordHeardAsItsOwnLowercaseDoesNotBlockTheNewSpelling() {
         let learner = EditLearner(dictionary: store)
         learner.learn([.learn(fix("qrinzo", "Qrinzo", 1..<2))], stillTaught: ["qrinzo": 1])

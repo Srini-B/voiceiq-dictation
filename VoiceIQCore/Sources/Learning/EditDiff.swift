@@ -21,6 +21,8 @@ public struct DictationEdits: Equatable, Sendable {
     /// Every span of original words that is no longer as inserted, including
     /// spans no correction covers (too long, reworded, deleted).
     public var changed: [Range<Int>] = []
+    /// Spans of original words removed with nothing typed in their place.
+    public var deleted: [Range<Int>] = []
 }
 
 public enum LearningStep: Equatable, Sendable {
@@ -97,6 +99,7 @@ public enum EditDiff {
             let removed = before[(previousBefore + 1)..<pair.0]
             let added = after[(previousAfter + 1)..<pair.1]
             if !removed.isEmpty { output.changed.append((previousBefore + 1)..<pair.0) }
+            if !removed.isEmpty, added.isEmpty { output.deleted.append((previousBefore + 1)..<pair.0) }
             for (removedPart, addedPart) in pieces(removed, original, added, replacement)
             where (1...3).contains(removedPart.count) && (1...3).contains(addedPart.count) {
                 let originalText = clean(removedPart.map(\.text).joined(separator: " "))
@@ -138,7 +141,7 @@ public enum EditDiff {
             return .revise(replacing: overlapped, with: correction)
         }
         let undone = earlier.filter { edit in
-            !edits.changed.contains { $0.overlaps(edit.words) }
+            (!edits.changed.contains { $0.overlaps(edit.words) } || isDeleted(edit, in: edits))
                 && !corrections.contains { $0.replacement.lowercased() == edit.replacement.lowercased() }
         }
         return changed + undone.map { .forget($0) }
@@ -152,7 +155,14 @@ public enum EditDiff {
         return corrections + earlier.filter { edit in
             !corrections.contains { $0.words.overlaps(edit.words) }
                 && edits.changed.contains { $0.overlaps(edit.words) }
+                && !isDeleted(edit, in: edits)
         }
+    }
+
+    /// The user deleted the corrected words outright: what they taught goes,
+    /// as when the original words are put back.
+    private static func isDeleted(_ edit: LearnedCorrection, in edits: DictationEdits) -> Bool {
+        edits.deleted.contains { $0.lowerBound <= edit.words.lowerBound && edit.words.upperBound <= $0.upperBound }
     }
 
     /// The corrections that may teach or revise a word. One that grows an
@@ -299,6 +309,60 @@ public enum EditDiff {
             previous = row
         }
         return previous[b.count] <= max(2, max(a.count, b.count) / 2)
+            || (isNameLike(replacement) && soundsAlike(original, replacement))
+    }
+
+    /// Every word capitalized, as a name is written.
+    static func isNameLike(_ text: String) -> Bool {
+        let parts = words(in: text)
+        return !parts.isEmpty && parts.allSatisfy { $0.text.first?.isUppercase == true }
+    }
+
+    /// Whether two spellings could be the same name heard by an English
+    /// speech model. Compares consonant skeletons that ignore what Indian
+    /// languages (Tamil above all) do not distinguish or English spells
+    /// differently: vowels and vowel length, aspiration (th, dh, bh, kh),
+    /// voicing (k/g, t/d, p/b), s/sh/ch/j, v/w/b/f/ph, Tamil zh as l,
+    /// doubled letters. "Sharon" and "Saran", "Vikinesh" and "Vignesh",
+    /// "lucky me" and "Lakshmi", "shivon" and "Siobhan" match; "Monday" and
+    /// "Sunday", "Mark" and "Mike" do not.
+    static func soundsAlike(_ a: String, _ b: String) -> Bool {
+        let x = Array(skeleton(a))
+        let y = Array(skeleton(b))
+        guard x.count >= 2, y.count >= 2 else { return false }
+        var previous = Array(0...y.count)
+        for i in 1...x.count {
+            var row = [i] + Array(repeating: 0, count: y.count)
+            for j in 1...y.count {
+                row[j] = min(previous[j] + 1, row[j - 1] + 1, previous[j - 1] + (x[i - 1] == y[j - 1] ? 0 : 1))
+            }
+            previous = row
+        }
+        return previous[y.count] <= max(x.count, y.count) / 4
+    }
+
+    private static func skeleton(_ text: String) -> String {
+        var s = text.lowercased().folding(options: .diacriticInsensitive, locale: nil).filter(\.isLetter)
+        for (from, to) in [("zh", "l"), ("ck", "k"), ("ph", "p"), ("sh", "s"), ("ch", "s"), ("x", "ks"), ("q", "k")] {
+            s = s.replacingOccurrences(of: from, with: to)
+        }
+        let letters = Array(s)
+        var out: [Character] = []
+        for (index, letter) in letters.enumerated() {
+            let next = index + 1 < letters.count ? letters[index + 1] : " "
+            let mapped: Character?
+            switch letter {
+            case "a", "e", "i", "o", "u", "y", "h": mapped = index == 0 && letter != "h" ? "a" : nil
+            case "c": mapped = "eiy".contains(next) ? "s" : "k"
+            case "g", "k": mapped = "k"
+            case "d", "t": mapped = "t"
+            case "b", "p", "v", "w", "f": mapped = "p"
+            case "j", "z", "s": mapped = "s"
+            default: mapped = letter
+            }
+            if let mapped, out.last != mapped { out.append(mapped) }
+        }
+        return String(out)
     }
 
     private struct State: Hashable {

@@ -24,6 +24,34 @@ final class EditDiffTests: XCTestCase {
         ])
     }
 
+    func testMisheardIndianAndTamilNamesFixedByEarAreLearned() {
+        let fixes = [
+            ("Sreeni", "Srini"), ("Karthick", "Karthik"), ("Vikinesh", "Vignesh"), ("Aravind", "Arvind"),
+            ("Sharon", "Saran"), ("lucky me", "Lakshmi"), ("Mootoo", "Muthu"), ("Alagu", "Azhagu"),
+            ("when cat", "Venkat"), ("Jai Shree", "Jayashree"), ("Elakia", "Ilakkiya"), ("shivon", "Siobhan"),
+        ]
+        for (heard, meant) in fixes {
+            let corrections = EditDiff.edits(original: "I met \(heard) at noon.", replacement: "I met \(meant) at noon.").corrections
+            XCTAssertEqual(corrections.map(\.replacement), [meant], heard)
+        }
+    }
+
+    func testDifferentNamesAndRewordingDoNotPassAsSoundAlikes() {
+        for (heard, meant) in [("Mark", "Mike"), ("Monday", "Sunday"), ("Raj", "Priya"), ("Kumar", "Kamal"), ("Ravi", "Rahul")] {
+            XCTAssertFalse(EditDiff.soundsAlike(heard, meant), meant)
+        }
+        let original = "Please call him tomorrow about it."
+        XCTAssertEqual(EditDiff.edits(original: original, replacement: "Please call Priya Monday about it.").corrections, [])
+    }
+
+    func testDeletingALearnedWordForgetsIt() {
+        let original = "Ask whisper about it."
+        let learned = EditDiff.edits(original: original, replacement: "Ask Wispr about it.")
+        let deleted = EditDiff.edits(original: original, replacement: "Ask about it.")
+        XCTAssertEqual(EditDiff.steps(for: deleted, after: learned.corrections), [.forget(fix("whisper", "Wispr", 1..<2))])
+        XCTAssertEqual(EditDiff.history(after: deleted, earlier: learned.corrections), [])
+    }
+
     func testRewordingPunctuationDeletionsAndAdditionsTeachNothing() {
         let original = "Please call him tomorrow about the invoice, it is the second reminder."
         let edited = "Please ping Priya Monday about the invoice. it is the reminder we discussed."
