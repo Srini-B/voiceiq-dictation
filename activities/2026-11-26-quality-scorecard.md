@@ -31,3 +31,9 @@ Scores with every option on: **D1 67.9 (94/96 names, 6 swaps at 10 each), D2 97.
 - D4: spoken "new paragraph" and "exclamation mark" were dropped (50).
 
 Meetings on main are not scored end to end yet. The meetings thread's AMI ES2004a probe of today's mixed request gives about 75% word recall and 73.5% word attribution, with one of four voices lost. That is about M1 75, M3 73 and M4 75, before notes and naming.
+
+## Meetings, PR #82 (Gemini per track plus the on-device far-side split)
+
+Scored by the meetings thread with `eval/meetings/score.py` at 7ad4e32, mean over AMI ES2004a and 8 synthetic calls: **M1 100.0, M2 97.7, M3 96.2, M4 94.9** (main with the speaker model: 95.0 / 92.2 / 87.8 / 84.0). AMI alone: 100.0 / 84.7 / 81.9 / 79.2. AMI's remaining gap is transcription (33% plain WER), which the meeting request can't take hints for while it asks for timestamps.
+
+**M5 notes, judged by Claude Fable 5.2: 85.3 mean, 4 of 9 meetings at 90+.** No invented commitments, no wrong owners. The misses: actions left in prose instead of the action list (s3: 1 of 4 listed), actions without an owner although the speaker was known, a recorded problem dropped (AMI budget), six sections for a 69-second call, and a date carried from one item to another. Notes become a follow-up PR; #82 merges on M1–M4.
