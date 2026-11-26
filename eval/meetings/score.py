@@ -130,7 +130,7 @@ def der(ref, hyp, m):
         h = {m.get(x) or f"?{x}" for x in hf.get(f, set())}
         total += len(r)
         errors += max(len(r), len(h)) - len(r & h)
-    return errors / max(1, total)
+    return errors, total
 
 
 def timed_words(segments, key):
@@ -163,7 +163,7 @@ def attribution(ref, hyp, m):
         used.add(i)
         if m.get(hw[i][2]) == spk:
             right += 1
-    return right / max(1, len(rw))
+    return right, len(rw)
 
 
 def edit_distance(r, h):
@@ -186,37 +186,55 @@ def cp_word_error(ref, hyp, m):
     errors = sum(edit_distance(stream(ref, "speaker", lambda x: x == p),
                                stream(hyp, "speaker_name", lambda x: m.get(x) == p)) for p in people)
     errors += len(stream(hyp, "speaker_name", lambda x: m.get(x) not in people))
-    return errors / max(1, sum(len(words(s["text"])) for s in ref))
+    return errors, sum(len(words(s["text"])) for s in ref)
 
 
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("output")
-    ap.add_argument("reference")
-    ap.add_argument("--packet", action="store_true")
-    a = ap.parse_args()
-    out, ref = json.loads(Path(a.output).read_text()), json.loads(Path(a.reference).read_text())
-    if a.packet:
-        print(json.dumps({"reference_summary": ref.get("summary"), "notes": out.get("notes")}, ensure_ascii=False))
-        return
+def counts(out, ref):
+    """Error and total counts for one meeting, so several meetings pool."""
     ref_names = ref.get("participants")
     hyp, refseg = out["segments"], ref["segments"]
     m = mapping(refseg, hyp, ref_names)
-    ref_spk = sorted({s["speaker"] for s in refseg})
-    found = len({v for v in m.values() if v})
-    extra = len([h for h, v in m.items() if not v])
-    if ref_names:
-        named = len({v for v in m.values() if v})
-        m1 = 100 * named / len(ref_names) - 10 * extra
-    else:
-        m1 = 100 * found / len(ref_spk) - 10 * extra
-    m2 = 100 * (1 - der(refseg, hyp, m))
-    m3 = 100 * attribution(refseg, hyp, m)
-    m4 = 100 * (1 - cp_word_error(refseg, hyp, m))
-    print(json.dumps({"M1": round(max(0, m1), 1), "M2": round(max(0, m2), 1), "M3": round(m3, 1),
-                      "M4": round(max(0, m4), 1), "speakers_ref": len(ref_spk), "speakers_out": len(m),
-                      "mapping": m}, indent=1, ensure_ascii=False))
+    people = len(ref_names) if ref_names else len({s["speaker"] for s in refseg})
+    return {"found": len({v for v in m.values() if v}), "people": people,
+            "extra": len([h for h, v in m.items() if not v]),
+            "der": der(refseg, hyp, m), "attr": attribution(refseg, hyp, m),
+            "cpwer": cp_word_error(refseg, hyp, m), "mapping": m}
 
+
+def scores(c):
+    ratio = lambda pair: pair[0] / max(1, pair[1])
+    return {"M1": round(max(0, 100 * c["found"] / max(1, c["people"]) - 10 * c["extra"]), 1),
+            "M2": round(max(0, 100 * (1 - ratio(c["der"]))), 1),
+            "M3": round(100 * ratio(c["attr"]), 1),
+            "M4": round(max(0, 100 * (1 - ratio(c["cpwer"]))), 1)}
+
+
+def main():
+    ap = argparse.ArgumentParser(description="Scores OUTPUT REFERENCE pairs; with several pairs, "
+                                 "the summary pools totals (error time over speech time, word errors "
+                                 "over reference words), so long meetings weigh by their length.")
+    ap.add_argument("files", nargs="+", help="OUTPUT REFERENCE [OUTPUT REFERENCE ...]")
+    ap.add_argument("--packet", action="store_true")
+    a = ap.parse_args()
+    if len(a.files) % 2:
+        ap.error("files come in OUTPUT REFERENCE pairs")
+    pairs = [(json.loads(Path(o).read_text()), json.loads(Path(r).read_text()), o)
+             for o, r in zip(a.files[::2], a.files[1::2])]
+    if a.packet:
+        for out, ref, _ in pairs:
+            print(json.dumps({"reference_summary": ref.get("summary"), "notes": out.get("notes")}, ensure_ascii=False))
+        return
+    per = [(name, counts(out, ref)) for out, ref, name in pairs]
+    if len(per) == 1:
+        c = per[0][1]
+        print(json.dumps({**scores(c), "speakers_ref": c["people"], "speakers_out": len(c["mapping"]),
+                          "mapping": c["mapping"]}, indent=1, ensure_ascii=False))
+        return
+    pooled = {k: sum(c[k] for _, c in per) for k in ("found", "people", "extra")}
+    for k in ("der", "attr", "cpwer"):
+        pooled[k] = (sum(c[k][0] for _, c in per), sum(c[k][1] for _, c in per))
+    print(json.dumps({"pooled": scores(pooled), "meetings": {n: scores(c) for n, c in per}},
+                     indent=1, ensure_ascii=False))
 
 if __name__ == "__main__":
     main()

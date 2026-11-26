@@ -44,3 +44,9 @@ Scored by the meetings thread with `eval/meetings/score.py` at 7ad4e32, mean ove
 
 - Claude Fable 5.2 is the scorer of record for every item. The scripts' numbers count once Fable accepts or corrects them.
 - Gemini Neon, through the Antigravity CLI on the BlueLobster runner, is a second reviewer of each PR and of main before each release. Its review is weighed with Fable's scores before a merge or release.
+
+## Fable's baseline rulings for main 517c65d
+
+Accepted: D1 67.9, D2 97.5, D3 89.2, D5 0, M1 100, M5 92.6. Corrected:
+- **D4 cleanup:** the long dictations are now judged for cleanup too, and a dropped spoken clause caps a case at 70. long_01 drops "Thanks, Srini." in both rounds.
+- **M2–M4:** the per-meeting mean let eight 70-second synthetic calls outvote the 17-minute AMI meeting. `meetings/score.py` now pools totals across meetings. Fable's duration-weighted estimate for main after #82 and #84: **M2 ≈ 89.8, M3 ≈ 87.6, M4 ≈ 85.4**.

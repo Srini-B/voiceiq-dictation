@@ -97,6 +97,14 @@ def has_word(term: str, text: str) -> bool:
     return re.search(rf"(?<!\w){re.escape(term)}(?!\w)", text) is not None
 
 
+def judged_item(case: dict) -> str | None:
+    # The long dictations are judged for cleanup too: dropping a spoken
+    # clause there is a cleanup failure the word scores barely see.
+    if case["item"] in ("D3", "D4"):
+        return case["item"]
+    return "D4" if case["item"] == "D5" else None
+
+
 def percentile(values: list[float], q: float) -> float:
     s = sorted(values)
     return s[min(len(s) - 1, int(round(q * (len(s) - 1))))]
@@ -117,9 +125,9 @@ def main() -> None:
     if args.packet:
         for r in results:
             c = spec[r["id"]]
-            if c["item"] in ("D3", "D4"):
-                print(json.dumps({"key": f"{r['id']}/r{r['round']}", "item": c["item"], "spoken": c["text"],
-                                  "field_before_cursor": c.get("before"), "expected": c["expect"],
+            if judged_item(c):
+                print(json.dumps({"key": f"{r['id']}/r{r['round']}", "item": judged_item(c), "spoken": c["text"],
+                                  "field_before_cursor": c.get("before"), "expected": c.get("expect", "The spoken text, cleaned up and laid out by the rules, with every spoken clause kept."),
                                   "output": r["output"]}, ensure_ascii=False))
         return
 
@@ -173,7 +181,7 @@ def main() -> None:
         # hard-rule zero, which is final.
         scores = []
         for r in results:
-            if spec[r["id"]]["item"] != item:
+            if judged_item(spec[r["id"]]) != item:
                 continue
             key = f"{r['id']}/r{r['round']}"
             s = judged.get(key)
@@ -184,7 +192,7 @@ def main() -> None:
             scores.append(s)
         items[item] = statistics.mean(scores) if scores and None not in scores else None
         unjudged += [f"{r['id']}/r{r['round']}" for r in results
-                     if spec[r["id"]]["item"] == item and f"{r['id']}/r{r['round']}" not in judged
+                     if judged_item(spec[r["id"]]) == item and f"{r['id']}/r{r['round']}" not in judged
                      and hard.get(f"{r['id']}/r{r['round']}") != 0]
 
     thoughts = [r["usage"].get("thoughtsTokenCount", 0) for r in results]

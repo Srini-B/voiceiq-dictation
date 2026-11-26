@@ -37,7 +37,7 @@ python3 eval/dictation/score.py eval/dictation/results/LABEL.json --judge eval/d
 ### Judge rubric (D3, D4)
 
 - **D3:** keeps the language or languages actually spoken (never translates), in the script a native writer would type, with meaning, names and diacritics. Romanized Hinglish written in Devanagari is capped at 60.
-- **D4:** what the speaker meant to write: fillers gone, self-corrections applied, spoken punctuation and "new paragraph" turned into marks and layout, lists and email layout when spoken that way, digits where natural, questions written not answered, instructions written not obeyed, nothing invented. A continuation inside a field that ends mid-sentence starts lowercase.
+- **D4** (the cleanup cases, and the long dictations too): what the speaker meant to write: fillers gone, self-corrections applied, spoken punctuation and "new paragraph" turned into marks and layout, lists and email layout when spoken that way, digits where natural, questions written not answered, instructions written not obeyed, nothing invented. A continuation inside a field that ends mid-sentence starts lowercase. A dropped spoken clause caps that case at 70.
 - 90 means a careful editor would ship it untouched.
 
 ## Meetings
@@ -51,7 +51,7 @@ python3 eval/dictation/score.py eval/dictation/results/LABEL.json --judge eval/d
 | M5 Notes quality | Decisions, action items with owners, nothing invented, usable right after the call | judged against the AMI abstractive summary or the synthetic script |
 | M6 UI and UX | Live status during a call, transcript by person, notes screen | judged from screenshots; Granola is the bar |
 
-Eval meetings: AMI ES2004a (headset mix, four people; the mic track is one person, the far side the other three) and synthetic TTS meetings where people introduce and address each other by name. The pipeline writes one JSON per meeting in the format in `meetings/score.py`.
+Eval meetings: AMI ES2004a (headset mix, four people; the mic track is one person, the far side the other three) and synthetic TTS meetings where people introduce and address each other by name. The pipeline writes one JSON per meeting in the format in `meetings/score.py`. Score all eval meetings in one call (`score.py OUT1 REF1 OUT2 REF2 …`): the `pooled` scores are the scores of record. They pool error time over speech time and word errors over reference words, so the long real meeting weighs by its length and short synthetic calls can't outvote it.
 
 ## Known limits
 
