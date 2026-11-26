@@ -32,8 +32,13 @@ struct Output: Encodable {
     /// by `PriceBook` at January 2027 prices. Without transcription calls when EVAL_TRANSCRIPTS was set.
     var usage: [Call]
     var duration_seconds: Double
-    var cost_usd: Double
-    var cost_usd_per_hour: Double
+    /// Nil when a call had no price. Transcription is nil when
+    /// EVAL_TRANSCRIPTS skipped it. A short call's per-hour cost is dominated
+    /// by its fixed notes prompt; take C1's per-hour figure from long meetings.
+    var transcribe_cost_usd: Double?
+    var notes_cost_usd: Double?
+    var cost_usd: Double?
+    var cost_usd_per_hour: Double?
 
     struct Call: Encodable {
         var stage: String; var model: String
@@ -188,13 +193,19 @@ exit(failures == 0 ? 0 : 2)
     let calls = usageStore.records(forSession: input.id).map { r in
         Output.Call(stage: r.stage, model: r.model, text_in: r.textIn, audio_in: r.audioIn, image_in: r.imageIn,
                     cached_in: r.cachedIn, text_out: r.textOut, audio_out: r.audioOut, thought_out: r.thoughtOut,
-                    estimated: r.isEstimated, cost_usd: r.usage.reportedCostUSD ?? PriceBook.cost(model: r.model, usage: r.usage, at: pricedAt))
+                    estimated: r.isEstimated, cost_usd: PriceBook.cost(model: r.model, usage: r.usage, at: pricedAt))
     }
-    let cost = calls.compactMap(\.cost_usd).reduce(0, +)
+    let total = { (calls: [Output.Call]) -> Double? in
+        calls.allSatisfy { $0.cost_usd != nil } ? calls.compactMap(\.cost_usd).reduce(0, +) : nil
+    }
+    let notesCost = total(calls.filter { $0.stage == UsageStage.meetingSummary.rawValue })
+    let transcribeCost = earlierTranscripts == nil ? total(calls.filter { $0.stage != UsageStage.meetingSummary.rawValue }) : nil
+    let cost = transcribeCost.flatMap { t in notesCost.map { t + $0 } }
     let result = Output(id: input.id, segments: segments, participants: participants,
                         notes: try store.markdown(id: meta.id, parts: .notes), seconds: seconds,
-                        usage: calls, duration_seconds: meta.durationSeconds, cost_usd: cost,
-                        cost_usd_per_hour: meta.durationSeconds > 0 ? cost * 3600 / meta.durationSeconds : 0)
+                        usage: calls, duration_seconds: meta.durationSeconds,
+                        transcribe_cost_usd: transcribeCost, notes_cost_usd: notesCost, cost_usd: cost,
+                        cost_usd_per_hour: meta.durationSeconds > 0 ? cost.map { $0 * 3600 / meta.durationSeconds } : nil)
     let encoder = JSONEncoder(); encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
     try encoder.encode(result).write(to: out.appendingPathComponent("\(input.id).json"))
     print("\(input.id): \(participants.joined(separator: ", "))")

@@ -44,3 +44,14 @@ tried for the notes request, with the standard tier as fallback. Every one of
 until the 300 s deadline before the fallback ran. Flex saved nothing and added
 up to five minutes to the notes, so it is not shipped. It is worth trying again
 when Flex capacity is reliable.
+
+## Review fixes (Neon on 2dde019)
+
+- Every key in the notes schema is required, nested ones too. A schema lets
+  the model skip optional keys, and a skipped `glossary` or `speakers` would lose
+  spellings and conversation-derived names. `type` is limited to the
+  `MeetingKind` values.
+- The eval writes `transcribe_cost_usd` and `notes_cost_usd` separately. It
+  leaves totals out when transcription was skipped or a call had no price. Per-hour cost
+  for C1 comes from long meetings only: a notes prompt is a fixed cost, so a
+  70-second call's per-hour figure is meaningless.

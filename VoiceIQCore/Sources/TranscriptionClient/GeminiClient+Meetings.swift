@@ -56,21 +56,24 @@ public extension GeminiClient {
         let text: [String: Any] = ["type": "STRING"]
         let maybe: [String: Any] = ["type": "STRING", "nullable": true]
         let texts: [String: Any] = ["type": "ARRAY", "items": text]
-        func object(_ fields: [(String, [String: Any])], required: [String]) -> [String: Any] {
+        // Every key is required: a schema lets the model skip optional keys, and a
+        // skipped glossary or speakers list loses spellings and names. Empty
+        // arrays and nulls stay allowed.
+        func object(_ fields: [(String, [String: Any])]) -> [String: Any] {
             ["type": "OBJECT", "properties": Dictionary(uniqueKeysWithValues: fields),
-             "propertyOrdering": fields.map(\.0), "required": required]
+             "propertyOrdering": fields.map(\.0), "required": fields.map(\.0)]
         }
         func list(_ item: [String: Any]) -> [String: Any] { ["type": "ARRAY", "items": item] }
         return object([
-            ("glossary", list(object([("term", text), ("heard", texts)], required: ["term", "heard"]))),
-            ("type", text), ("title", text), ("summary", text),
-            ("sections", list(object([("title", text), ("items", texts)], required: ["title", "items"]))),
+            ("glossary", list(object([("term", text), ("heard", texts)]))),
+            ("type", ["type": "STRING", "enum": MeetingKind.allCases.map(\.rawValue)] as [String: Any]), ("title", text), ("summary", text),
+            ("sections", list(object([("title", text), ("items", texts)]))),
             ("decisions", texts),
-            ("actions", list(object([("text", text), ("owner", maybe), ("deadline", maybe)], required: ["text"]))),
+            ("actions", list(object([("text", text), ("owner", maybe), ("deadline", maybe)]))),
             ("notes", texts),
-            ("speakers", list(object([("label", text), ("name", maybe), ("evidence", maybe)], required: ["label"]))),
+            ("speakers", list(object([("label", text), ("name", maybe), ("evidence", maybe)]))),
             ("participants", texts),
-        ], required: ["type", "title", "summary", "decisions", "actions", "notes"])
+        ])
     }
 
     /// The notes for a prompt from `MeetingNotesPrompt`, asked once more when
