@@ -56,8 +56,16 @@ Points were lost because:
 - AMI: the group next step is an action.
 - `swift test --package-path VoiceIQCore`: 246 tests, 0 failures.
 - Round 2 judged 83.1: s3 and s4 at 92 to 95, s2 at 50 and 60.
-- Round 3: s2 had 4 or 5 actions in all 6 runs, with owners and dates. No
-  meeting shows a raw speaker label. Judging is with the integrator.
+- Round 3 (c4ed268) judged 92.6, with 8 of 9 meetings at 90 or more and
+  nothing invented: ami 88, s1 92, s1-echo 93, s2 95, s2-echo 94, s3 94,
+  s3-echo 94, s4 91, s4-echo 92. s2 had 4 or 5 actions in all 6 runs.
+- After round 3: a cost or doubt raised about an idea stays next to it; a
+  doubt is not filed as an idea; a task's deadline appears once; a group
+  next step says what it prepares for; claims keep their scope. On the saved
+  transcripts, AMI's action now reads "Work on individual tasks for
+  functional design before reconvening (in half an hour)". Not judged yet.
+- "host contract" in s4 is Gemini's transcript ("hosting contract" was
+  said); the notes copy it faithfully.
 - Not fixed: AMI's recorded problem (the budget may not cover every feature)
   is voiced only as "I think that's a cost thing", so the notes leave it out.
 
