@@ -1,0 +1,24 @@
+# What scripts/sync-hex-keyboard.sh copies from https://github.com/anomalyco/hex.
+# One mapping per line: <path in Hex> <path in this repository>.
+# "exclude <path in Hex>" leaves a file or folder out; VoiceiQ ships English
+# QWERTY only, so other languages' models and emoji indexes stay out.
+# Each destination is replaced wholesale on every sync, so never edit files under
+# it by hand: put VoiceiQ's changes in iOS/Keyboard/Sources/HexGlue, or, when a
+# Hex file itself must change, in a patch under iOS/Keyboard/Hex/patches.
+LICENSE                                    iOS/Keyboard/Hex/LICENSE
+
+# Keyboard, slide to type, autocorrect, predictions and emoji (keyboard extension).
+ios/HEXShared/FullKeyboard                 iOS/Keyboard/Hex/FullKeyboard
+ios/HEXKeyboard/TypingModel/en.hextm       iOS/Keyboard/Hex/TypingModel/en.hextm
+ios/HEXKeyboard/KeyboardInputView.swift    iOS/Keyboard/Hex/KeyboardInputView.swift
+exclude ios/HEXShared/FullKeyboard/Emoji/emoji-index-de.txt
+exclude ios/HEXShared/FullKeyboard/Emoji/emoji-index-es.txt
+exclude ios/HEXShared/FullKeyboard/Emoji/emoji-index-nb.txt
+
+# Support files FullKeyboard calls that live beside it in Hex.
+ios/HEXShared/InputModeListTouch.swift     iOS/Keyboard/Hex/Support/InputModeListTouch.swift
+ios/HEXShared/KeyboardsOnScreen.swift      iOS/Keyboard/Hex/Support/KeyboardsOnScreen.swift
+ios/HEXShared/Spelling/HexWordList.swift   iOS/Keyboard/Hex/Support/HexWordList.swift
+ios/HEXShared/TypingLog                    iOS/Keyboard/Hex/TypingLog
+ios/HEXShared/DictationEditInference.swift iOS/Keyboard/Hex/Dictation/DictationEditInference.swift
+ios/HEXShared/DictationCorrections.swift   iOS/Keyboard/Hex/Dictation/DictationCorrections.swift
