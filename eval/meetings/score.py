@@ -233,7 +233,11 @@ def main():
     pooled = {k: sum(c[k] for _, c in per) for k in ("found", "people", "extra")}
     for k in ("der", "attr", "cpwer"):
         pooled[k] = (sum(c[k][0] for _, c in per), sum(c[k][1] for _, c in per))
-    print(json.dumps({"pooled": scores(pooled), "meetings": {n: scores(c) for n, c in per}},
+    # M1 is a per-meeting count with a per-meeting penalty, so it averages
+    # over meetings; summing extra speakers would grow with the suite size.
+    result = scores(pooled)
+    result["M1"] = round(sum(scores(c)["M1"] for _, c in per) / len(per), 1)
+    print(json.dumps({"pooled": result, "meetings": {n: scores(c) for n, c in per}},
                      indent=1, ensure_ascii=False))
 
 if __name__ == "__main__":
