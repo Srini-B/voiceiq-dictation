@@ -25,6 +25,24 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
     }
 
     public func transcribe(audioURL: URL, durationSeconds: Double, context: DictationContext) async throws -> TranscriptionResult {
+        try await transcribe(audioURL: audioURL, durationSeconds: durationSeconds, context: context, speculation: nil)
+    }
+
+    public func speculate(_ speech: PausedSpeech, context: DictationContext) -> SpeculativeDictation? {
+        guard KeychainStore.loadAPIKey() != nil, let flac = try? FLACEncoder.encode(samples: speech.samples) else { return nil }
+        let config = settings.geminiConfig
+        let prompt = dictationPrompt(context: context)
+        let seconds = Double(speech.samples.count) / 16_000
+        let deadline = TimeoutPolicy.overallDeadline(audioDuration: seconds)
+        Log.transcription.notice("send-on-pause: sent for \(String(format: "%.1f", seconds), privacy: .public)s of speech")
+        return SpeculativeDictation(range: speech.range, prompt: prompt, sentAt: ContinuousClock().now) { [client] in
+            try await client.dictate(prompt: prompt, audio: flac, model: config.writingModel,
+                                     endpoint: config.endpoint, deadline: deadline)
+        }
+    }
+
+    public func transcribe(audioURL: URL, durationSeconds: Double, context: DictationContext,
+                           speculation: SpeculativeDictation?) async throws -> TranscriptionResult {
         let config = settings.geminiConfig
         // Built once per dictation: a rule edited mid-flight must not change
         // the rules this text is being written under.
@@ -36,6 +54,20 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
         // One request per chunk. A short dictation is one chunk. Leading and
         // trailing silence is left out of every request.
         let (ranges, fileFrames) = try AudioChunker.ranges(cafURL: audioURL)
+
+        // The request sent at a pause holds for exactly this speech and prompt.
+        var early: SpeculativeDictation?
+        if let speculation {
+            if ranges == [speculation.range], prompt == speculation.prompt {
+                early = speculation
+                Log.transcription.notice("send-on-pause: used, sent \(Int((started - speculation.sentAt) / .milliseconds(1)))ms before key-up")
+            } else {
+                let billed = speculation.hasAnswered
+                speculation.cancel()
+                let reason = ranges == [speculation.range] ? "the prompt changed" : "speech went on after the pause"
+                Log.transcription.notice("send-on-pause: dropped at key-up, \(reason, privacy: .public), billed: \(billed, privacy: .public)")
+            }
+        }
 
         // A multi-chunk upload can fail half way (a per-minute quota often
         // refuses chunk 1 right after chunk 0). Finished chunks are kept next
@@ -55,7 +87,8 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
             let flac = try encodeChunk(audioURL: audioURL, range: range, index: index)
             encoded += clock.now - encodeStart
             let seconds = durationSeconds * Double(range.count) / Double(max(1, fileFrames))
-            var text = try await sendWithRetry(flac: flac, prompt: prompt, config: config, speechSeconds: seconds)
+            var text = try await sendWithRetry(flac: flac, prompt: prompt, config: config, speechSeconds: seconds,
+                                               early: early)
             if text.isEmpty, seconds >= 0.6 {
                 // F9a second chance: an empty result on real audio is sometimes model
                 // nondeterminism — one re-send before surfacing anything (audit L25).
@@ -160,8 +193,10 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
     /// The ONE place a dictation request is sent, for `speechSeconds` of
     /// speech. A second attempt starts on its own connection when the first
     /// has not answered in time or lost its connection; the first answer wins.
+    /// `early`, a request already sent at a pause, stands in for the first
+    /// attempt; the second one's delay counts from when it was sent.
     private func send(flac: Data?, prompt: String, config: GeminiConfig,
-                      speechSeconds: TimeInterval) async throws -> String {
+                      speechSeconds: TimeInterval, early: SpeculativeDictation? = nil) async throws -> String {
         let deadline = TimeoutPolicy.overallDeadline(audioDuration: speechSeconds)
         let attempt: @Sendable () async throws -> String = { [client] in
             try await client.dictate(prompt: prompt, audio: flac, model: config.writingModel,
@@ -170,8 +205,16 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
         let hedge = DictationHedge.shared
         let delay = await hedge.delay()
         let clock = ContinuousClock()
-        let started = clock.now
-        let text = try await GeminiClient.firstSuccess(retryAfter: delay, first: attempt, retry: attempt)
+        let started = early?.sentAt ?? clock.now
+        let first: @Sendable () async throws -> String
+        if let early {
+            first = { try await early.answer.value }
+        } else {
+            first = attempt
+        }
+        let waited = (clock.now - started) / .seconds(1)
+        defer { early?.cancel() }
+        let text = try await GeminiClient.firstSuccess(retryAfter: max(0, delay - waited), first: first, retry: attempt)
         let elapsed = clock.now - started
         await hedge.record(answeredAfter: Double(elapsed.components.seconds) + Double(elapsed.components.attoseconds) / 1e18,
                            delay: delay)
@@ -179,9 +222,10 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
     }
 
     private func sendWithRetry(flac: Data?, prompt: String, config: GeminiConfig,
-                               speechSeconds: TimeInterval) async throws -> String {
+                               speechSeconds: TimeInterval, early: SpeculativeDictation? = nil) async throws -> String {
         do {
-            return try await send(flac: flac, prompt: prompt, config: config, speechSeconds: speechSeconds)
+            return try await send(flac: flac, prompt: prompt, config: config, speechSeconds: speechSeconds,
+                                  early: early)
         } catch let error as TranscriptionError {
             switch error {
             case .network, .timeout:

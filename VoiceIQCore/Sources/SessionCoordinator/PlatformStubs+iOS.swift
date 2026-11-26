@@ -4,6 +4,7 @@ import Foundation
 /// iOS cannot capture other apps' screens, so dictation carries no screen text.
 /// Same shape as the macOS collector so the coordinator needs no branches.
 final class ScreenContextCollector {
+    let texts: [String] = []
     init(vocabulary: [String] = []) {}
     func start() {}
     func stop() -> [String] { [] }
