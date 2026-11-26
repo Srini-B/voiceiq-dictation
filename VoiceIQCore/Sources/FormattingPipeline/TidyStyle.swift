@@ -140,8 +140,8 @@ public enum Tidy {
             word = ""
         }
         for (index, c) in chars.enumerated() {
-            // "_" joins an identifier: "server_gonna_value" is one word.
-            if TidyText.isWordCharacter(c) || c == "'" || c == "’" || c == "_" {
+            // "_" and "-" join an identifier: "server_gonna_value" and "server-gonna-value" are one word.
+            if TidyText.isWordCharacter(c) || c == "'" || c == "’" || c == "_" || c == "-" {
                 if word.isEmpty { inAddress = address[index] }
                 word.append(c)
                 continue

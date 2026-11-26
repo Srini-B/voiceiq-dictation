@@ -1164,6 +1164,13 @@
       "said": "ah, i see what you mean",
       "heard": "Ah, I see what you mean.",
       "written": "Ah, I see what you mean."
+    },
+    {
+      "id": "kept-hyphen-gonna",
+      "check": "kept as said",
+      "said": "use gonna hyphen server",
+      "heard": "Use gonna hyphen server.",
+      "written": "Use gonna-server."
     }
   ]
 }
