@@ -103,9 +103,9 @@ def ami(meeting, out, cache):
         summary = ""
         name = f"abstractive/{meeting}.abssumm.xml"
         if name in z.namelist():
-            xml = z.read(name).decode()
+            xml = z.read(name).decode("latin-1")
             parts = [(kind.capitalize(), [re.sub(r"\s+", " ", html.unescape(t)).strip() for t in re.findall(r"<sentence[^>]*>([^<]*)</sentence>", body)])
-                     for kind, body in re.findall(r"<(abstract|actions|decisions|problems)>(.*?)</\1>", xml, re.S)]
+                     for kind, body in re.findall(r"<(abstract|actions|decisions|problems)\b[^>]*>(.*?)</\1>", xml, re.S)]
             summary = "\n\n".join(f"{kind}:\n" + "\n".join(f"- {t}" for t in lines) for kind, lines in parts if lines)
     tracks = {}
     for agent, channel in agents.items():
@@ -179,7 +179,8 @@ def synthetic(script_path, out, echo):
     write_json(os.path.join(folder, "reference.json"), {
         "id": script["id"] + suffix, "source": "synthetic (macOS voices)", "owner": owner, "participants": names,
         "segments": segments, "decisions": script["decisions"], "actions": script["actions"],
-        "summary": "Decisions:\n" + "\n".join(f"- {d}" for d in script["decisions"]) + "\n\nAction items:\n"
+        "summary": "Script (every line said in the meeting):\n" + "\n".join(f"{who}: {line}" for who, line in script["turns"])
+                   + "\n\nDecisions:\n" + "\n".join(f"- {d}" for d in script["decisions"]) + "\n\nAction items:\n"
                    + "\n".join(f"- {a['owner']}: {a['text']}" + (f" (by {a['due']})" if a.get("due") else "") for a in script["actions"])})
 
 
