@@ -8,6 +8,11 @@ title and the lines in cases.json, which Vision's accurate recognizer reads
 off the 1440x900 screen). One gemini-3.8-flash call per case, same body as
 GeminiClient.dictate.
 
+Each call goes out the way GeminiTranscriptionService sends it, with the
+app's backup request (DictationHedge): a second request when the first has
+not answered after 4-6 s, the first answer winning. usage.secondRequests
+counts them.
+
 Writes results/<label>.json with each output, call time and token usage.
 Usage: run.py LABEL [--rounds N] [--workers N] [--promptdump PATH]
 Needs GEMINI_API_KEY and eval/make_assets.py's output.
@@ -20,6 +25,7 @@ import json
 import os
 import re
 import subprocess
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -28,6 +34,55 @@ from pathlib import Path
 HERE = Path(__file__).parent
 ASSETS = HERE / ".assets"
 MODEL = "gemini-3.8-flash"
+
+
+class Hedge:
+    """DictationHedge as the app runs it: the second request starts at the
+    90th percentile of the last 20 answer times, between 4 and 6 s (6 s
+    before five have answered); an answer that needed the second request
+    counts as 1.5 times the delay. Shared by the workers like the app's one
+    instance is shared by its dictations."""
+
+    def __init__(self, ceiling: float = 6.0):
+        self.ceiling = ceiling
+        self.recent: list[float] = []
+        self.lock = threading.Lock()
+
+    def delay(self) -> float:
+        with self.lock:
+            if len(self.recent) < 5:
+                return min(8.0, self.ceiling)
+            ordered = sorted(self.recent)
+            return min(max(ordered[int((len(ordered) - 1) * 0.9)], 4.0), self.ceiling)
+
+    def record(self, seconds: float, delay: float) -> None:
+        with self.lock:
+            self.recent = (self.recent + [delay * 1.5 if seconds > delay else seconds])[-20:]
+
+
+HEDGE = Hedge()
+
+
+def first_success(send, delay: float) -> tuple[dict, bool]:
+    """GeminiClient.firstSuccess: a second request starts when the first has
+    not answered after `delay`; the first answer wins. Returns the reply and
+    whether the second request was sent."""
+    pool = concurrent.futures.ThreadPoolExecutor(2)
+    pending = {pool.submit(send)}
+    done, _ = concurrent.futures.wait(pending, timeout=delay)
+    second = not done
+    if second:
+        pending.add(pool.submit(send))
+    error = None
+    while pending:
+        done, pending = concurrent.futures.wait(pending, return_when=concurrent.futures.FIRST_COMPLETED)
+        for future in done:
+            if future.exception() is None:
+                pool.shutdown(wait=False, cancel_futures=True)
+                return future.result(), second
+            error = future.exception()
+    pool.shutdown(wait=False)
+    raise error
 
 
 def prompt_for(case: dict, spec: dict, promptdump: str, screen_on: bool) -> str:
@@ -65,15 +120,23 @@ def call(prompt: str, flac: bytes) -> tuple[str, float, dict]:
         f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL}:generateContent",
         data=json.dumps(body).encode(),
         headers={"x-goog-api-key": os.environ["GEMINI_API_KEY"], "Content-Type": "application/json"})
+    def send() -> dict:
+        with urllib.request.urlopen(req, timeout=120) as r:
+            return json.loads(r.read())
+
     # Parsed as GeminiClient.dictate and PromptV1.dictationText parse it: a
     # fenced object is unwrapped, anything that is not {"text": ...} is a
     # malformed answer, which the app sends once more (sendWithRetry).
     start = time.monotonic()
+    hedged = 0
     for answer in range(2):
         for attempt in range(3):
             try:
-                with urllib.request.urlopen(req, timeout=120) as r:
-                    reply = json.loads(r.read())
+                delay = HEDGE.delay()
+                sent = time.monotonic()
+                reply, second = first_success(send, delay)
+                HEDGE.record(time.monotonic() - sent, delay)
+                hedged += second
                 break
             except urllib.error.HTTPError as e:
                 if e.code != 429 or attempt == 2:
@@ -92,7 +155,7 @@ def call(prompt: str, flac: bytes) -> tuple[str, float, dict]:
     seconds = time.monotonic() - start
     if "<<NO_SPEECH>>" in text:
         text = ""
-    return strip_artifacts(text), seconds, reply.get("usageMetadata", {})
+    return strip_artifacts(text), seconds, dict(reply.get("usageMetadata", {}), secondRequests=hedged)
 
 
 def strip_artifacts(text: str) -> str:
@@ -114,8 +177,11 @@ def main() -> None:
     ap.add_argument("--rounds", type=int, default=2)
     ap.add_argument("--workers", type=int, default=3)
     ap.add_argument("--screenshots", type=int, default=4, help="0 = screen context off")
+    ap.add_argument("--hedge-ceiling", type=float, default=6.0,
+                    help="DictationHedge's ceiling in the commit under test (20 before the follow-up to #83)")
     ap.add_argument("--promptdump", default=str(HERE.parent / "promptdump" / "promptdump"))
     args = ap.parse_args()
+    HEDGE.ceiling = args.hedge_ceiling
     spec = json.loads((HERE / "cases.json").read_text())
     jobs = [(r, c, prompt_for(c, spec, args.promptdump, args.screenshots > 0))
             for r in range(args.rounds) for c in spec["cases"]]
@@ -138,9 +204,11 @@ def main() -> None:
         text, seconds, usage = call(prompt, flac)
         if not text:
             # As the app: an empty answer on real audio is sent once more.
-            text, again, usage = call(prompt, flac)
+            text, again, retry_usage = call(prompt, flac)
             seconds += again
-        print(f"{case['id']:<18} r{round_} {seconds:5.2f}s thoughts={usage.get('thoughtsTokenCount', 0)}", flush=True)
+            usage = dict(retry_usage, secondRequests=usage["secondRequests"] + retry_usage["secondRequests"])
+        print(f"{case['id']:<18} r{round_} {seconds:5.2f}s thoughts={usage.get('thoughtsTokenCount', 0)}"
+              f"{' hedged' if usage['secondRequests'] else ''}", flush=True)
         return {"id": case["id"], "round": round_, "request": fingerprint(job), "output": text,
                 "seconds": round(seconds, 3), "usage": usage}
 
