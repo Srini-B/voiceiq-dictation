@@ -39,6 +39,10 @@ final class TypingBridge: ObservableObject {
     /// the emoji panel or a selection, so this is applied again each time the strip refreshes.
     private var suggestionsHidden = false
     private var lexiconEntries: [(userInput: String, documentText: String)] = []
+    /// The words Hex's strip shows now, and where Paste last is headed (applied on the next
+    /// run-loop turn, see `fitEnds`).
+    private var stripWords: [String] = []
+    private var pasteTarget = true
 
     var proxy: UITextDocumentProxy? { controller?.textDocumentProxy }
 
@@ -67,11 +71,15 @@ final class TypingBridge: ObservableObject {
         view.onUndoDictation = { [weak self] in self?.editor?.resetUndo() }
         view.onStripRowLayout = { [weak self] row, emojiOpen in
             guard let self else { return }
+            let widthChanged = self.stripRow.width != row.width
             if self.stripRow != row { self.stripRow = row }
             if self.emojiOpen != emojiOpen { self.emojiOpen = emojiOpen }
+            // Rotation, or the first layout: the same words may need the room now, or no longer.
+            if widthChanged { self.fitEnds(to: self.stripWords) }
         }
         view.onStripSuggestions = { [weak self] words in
             self?.applySuggestionsHidden()
+            self?.stripWords = words
             self?.fitEnds(to: words)
         }
         self.keyboard = view
@@ -82,6 +90,8 @@ final class TypingBridge: ObservableObject {
     }
 
     func appeared() {
+        // Shared by every keyboard instance in the process: put back this one's ends.
+        KeyboardLayout.reservedStripEnds = (leadingEnd, Self.trailingEnd)
         refreshHostTraits()
         keyboard?.prepareForField()
         applyLexicon()
@@ -114,21 +124,25 @@ final class TypingBridge: ObservableObject {
 
     /// Paste last leaves the row once a word would need type smaller than 13 pt to fit its
     /// slot beside both left buttons (a third of the room, less 3 pt a side): "Incomprehensible",
-    /// not "Including". It comes back only between words, so the row doesn't change under
-    /// the thumb at every letter.
+    /// not "Including". It comes back only between words (after a space, punctuation, a symbol
+    /// or emoji), so the row doesn't change under the thumb at every letter.
     private func fitEnds(to words: [String]) {
         guard stripRow.width > 0 else { return }
         let slot = (stripRow.width - Self.leadingEnd(pasteInRow: true) - Self.trailingEnd) / 3 - 6
         let font = UIFont.systemFont(ofSize: 13)
         let long = words.contains { ($0 as NSString).size(withAttributes: [.font: font]).width > slot }
-        let betweenWords = proxy?.documentContextBeforeInput?.last.map { $0.isWhitespace || $0.isPunctuation } ?? true
-        let inRow = long ? false : (betweenWords ? true : pasteInRow)
-        guard inRow != pasteInRow else { return }
+        var target = !long
+        if target, !pasteTarget {
+            let last = proxy?.documentContextBeforeInput?.last
+            target = last.map { !($0.isLetter || $0.isNumber) } ?? true
+        }
+        guard target != pasteTarget else { return }
+        pasteTarget = target
         // Hex refreshes its strip inside SwiftUI's layout pass, where a published change is
-        // dropped: apply it on the next turn of the run loop.
+        // dropped: the latest target is applied on the next turn of the run loop.
         DispatchQueue.main.async { [weak self] in
-            guard let self, self.pasteInRow != inRow else { return }
-            self.pasteInRow = inRow
+            guard let self, self.pasteInRow != self.pasteTarget else { return }
+            self.pasteInRow = self.pasteTarget
             KeyboardLayout.reservedStripEnds = (self.leadingEnd, Self.trailingEnd)
             self.keyboard?.setNeedsLayout()
         }

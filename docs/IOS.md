@@ -406,8 +406,10 @@ VoiceiQ adds no row.
   cursor page and comes back only between words (`TypingBridge.fitEnds`). When
   a word would not fit a third of the bar even at 10 pt, as "Incomprehensible"
   on the iPhone SE and 17 Pro in portrait, two suggestions share the bar in
-  halves, as Apple's bar does. Tapping Paste last with nothing dictated yet
-  shows "Nothing dictated yet". In the middle,
+  halves, as Apple's bar does; a lone suggestion takes the whole bar. Tapping Paste last with nothing dictated yet
+  shows "Nothing dictated yet" (without Full Access, "Allow Full Access to
+  paste dictations"), in secondary text and announced to VoiceOver; the app's
+  own notices stay red. In the middle,
   VoiceiQ's own items replace the suggestions while they show: "Open VoiceiQ
   to finish", a notice from the app, or the Dictionary offer. While a
   dictation runs, the recording strip (Cancel, time over the LevelGlow
@@ -457,11 +459,15 @@ VoiceiQ adds no row.
   emoji panel closing and a selection ending
   (`0006-voiceiq-strip-refresh.patch`).
 - Spatial autocorrect reads where each key was tapped, so "Hel" with the H
-  tapped toward the G scored "Gel" above the typed word. A one to three letter
-  prefix is now replaced by a spatial reading only when that reading is
-  likelier than the model's best completion of what was typed ("Hel" stays
-  and offers "Help"; "teh" still becomes "The";
-  `AutocorrectEngine.finishesBetter`, `0009-voiceiq-unfinished-words.patch`).
+  tapped toward the G scored "Gel" above the typed word. A short start is now
+  treated as an unfinished word (`AutocorrectEngine.unfinished`,
+  `0009-voiceiq-unfinished-words.patch`): a three-letter start is never
+  extended ("Hel" stays, with Help offered but not highlighted; "th" still
+  becomes "the"), and a 1–3 letter start is not swapped for other letters the
+  model ranks below the best completion of what was typed. The same rule keeps
+  such words out of the strip's other candidates. A missed space ("iam" to
+  "I am") and words the model lacks, such as Dictionary names, are never held
+  back. What the strip highlights is what space applies.
 - A secure field (`isSecureTextEntry`, including custom and web ones without a
   password content type) gets no auto-correction and nothing goes into the
   typing journal (`TypingBridge.autocorrectionType`,

@@ -44,3 +44,27 @@ and space-bar label.
 - `scripts/sync-hex-keyboard.sh 012bdbbe` reproduces `iOS/Keyboard/Hex`
   byte for byte with patches 0001 to 0009.
 - `KeyboardTests` pass on the iPhone 17 Pro simulator (iOS 26.5).
+
+## Review round (Neon, Fable K1 92 / D6 90)
+
+- Neon High: the unfinished-word veto blocked every replacement the language
+  model has no cost for, such as "iam" to "I am" and Dictionary names. Now
+  those pass. A three-letter start is never extended, so the strip no longer
+  highlights "Help" for "Hel" (Fable's K1 point: the highlight is what space
+  applies). Spelling guesses and spatial readings follow the same rule, so
+  "Gel" is no longer a candidate. Checked on the SE simulator: "Hel" stays
+  unhighlighted, "so th " gives "So the" (at 42e2f6f it gave "Th"), "teh"
+  gives "the", "iam " gives "I am", and "hwl" is still corrected.
+- Not taken: veto only in the strip preview and not on space (Neon 1b). The
+  strip and space must agree, or space would apply a fix the bar never showed.
+- `fitEnds` re-runs when the row's width changes (rotation, first layout) and
+  applies only the latest target. It reads the host's text only when Paste
+  last might come back. The shared strip ends are put back on each appearance.
+- In two-up, a lone suggestion of any kind takes the whole bar, and the
+  revert arrow counts toward fit. The shrink-to-fit size is cached per word
+  and width instead of being measured on every animation frame.
+- Paste last's hint is secondary text, announced to VoiceOver, and asks for
+  Full Access when that is what is missing. A notice is cleared by identity,
+  so a newer identical one is not cut short.
+- Fable's Pro landscape clipping was the screenshot crop: an uncropped capture
+  shows the buttons whole.

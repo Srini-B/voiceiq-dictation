@@ -8,7 +8,9 @@ import VoiceIQBridge
 final class KeyboardModel: ObservableObject {
     @Published private(set) var snapshot = SessionSnapshot()
     @Published private(set) var appAlive = false
-    @Published private(set) var notice: String?
+    /// A line in the suggestion row for a few seconds: the app's notices (problems, in red)
+    /// and the keyboard's own hints (in secondary text).
+    @Published private(set) var notice: Notice?
     @Published private(set) var waitingForApp = false
     @Published private(set) var hasFullAccess = true
     /// Read once per appearance: UIKit answers wrongly before the host connects.
@@ -123,15 +125,27 @@ final class KeyboardModel: ObservableObject {
         send(KeyboardCommand(action: .cancel))
     }
 
-    func pasteLast() {
-        guard let lastText else { return flash("Nothing dictated yet", for: 3) }
-        insert(lastText)
+    struct Notice: Equatable {
+        let id = UUID()
+        let text: String
+        let isProblem: Bool
     }
 
-    private func flash(_ text: String, for seconds: Double) {
-        notice = text
+    func pasteLast() {
+        if let lastText {
+            insert(lastText)
+            return
+        }
+        // Without Full Access the app's last dictation can't be read, not that there is none.
+        flash(hasFullAccess ? "Nothing dictated yet" : "Allow Full Access to paste dictations", for: 3, isProblem: false)
+    }
+
+    private func flash(_ text: String, for seconds: Double, isProblem: Bool) {
+        let shown = Notice(text: text, isProblem: isProblem)
+        notice = shown
+        UIAccessibility.post(notification: .announcement, argument: text)
         DispatchQueue.main.asyncAfter(deadline: .now() + seconds) { [weak self] in
-            if self?.notice == text { self?.notice = nil }
+            if self?.notice == shown { self?.notice = nil }
         }
     }
 
@@ -192,7 +206,7 @@ final class KeyboardModel: ObservableObject {
         guard let fresh = snapshot.notice, fresh.id != shownNoticeID,
               Date().timeIntervalSince(fresh.createdAt) < 10 else { return }
         shownNoticeID = fresh.id
-        flash(fresh.text, for: 4)
+        flash(fresh.text, for: 4, isProblem: true)
     }
 
     /// Fits the new text to the text around the cursor: spaces on both

@@ -121,9 +121,9 @@ struct KeyboardView: View {
                 .lineLimit(1)
                 .buttonStyle(.plain)
         } else if let notice = model.notice {
-            Text(notice)
+            Text(notice.text)
                 .font(.caption.weight(.medium))
-                .foregroundStyle(KeyboardPalette.recording)
+                .foregroundStyle(notice.isProblem ? KeyboardPalette.recording : Color.secondary)
                 .lineLimit(1)
                 .truncationMode(.middle)
                 .padding(.horizontal, 6)

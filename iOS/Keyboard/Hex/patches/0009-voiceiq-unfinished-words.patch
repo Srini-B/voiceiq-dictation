@@ -1,33 +1,57 @@
 diff --git a/iOS/Keyboard/Hex/FullKeyboard/Autocorrect/AutocorrectEngine.swift b/iOS/Keyboard/Hex/FullKeyboard/Autocorrect/AutocorrectEngine.swift
-index ec0f24e..26becf0 100644
+index ec0f24e..1002c6b 100644
 --- a/iOS/Keyboard/Hex/FullKeyboard/Autocorrect/AutocorrectEngine.swift
 +++ b/iOS/Keyboard/Hex/FullKeyboard/Autocorrect/AutocorrectEngine.swift
-@@ -1085,7 +1085,8 @@ final class AutocorrectEngine {
+@@ -779,7 +779,8 @@ final class AutocorrectEngine {
+ 
+         // Spatial autocorrect's other readings of your taps.
+         if corrects, let decision = decoderDecision(for: token) {
+-            for reading in decision.readings where pool.count < end && mayOffer(reading.text, replacing: token) {
++            for reading in decision.readings
++            where pool.count < end && mayOffer(reading.text, replacing: token) && !unfinished(token, replacedBy: reading.text) {
+                 let text = cased(reading.text, typed: token)
+                 if !has(text) {
+                     pool.append(text)
+@@ -792,7 +793,8 @@ final class AutocorrectEngine {
+             if !knowsAsTyped(token) {
+                 for guess in rankedGuesses(for: token) {
+                     let fixed = cased(guess, typed: token)
+-                    if fixed.caseInsensitiveCompare(token) != .orderedSame, mayOffer(guess, replacing: token), !has(fixed) {
++                    if fixed.caseInsensitiveCompare(token) != .orderedSame, mayOffer(guess, replacing: token), !has(fixed),
++                       !unfinished(token, replacedBy: guess) {
+                         pool.append(fixed)
+                     }
+                     if pool.count >= end { break }
+@@ -1085,7 +1087,8 @@ final class AutocorrectEngine {
  
          // Spatial autocorrect, when on, decides alone: your taps, the word before, and a margin.
          if let decision = decoderDecision(for: token) {
 -            if let replacement = decision.replacement, mayOffer(replacement, replacing: token) {
 +            if let replacement = decision.replacement, mayOffer(replacement, replacing: token),
-+               !finishesBetter(token, than: replacement) {
++               !unfinished(token, replacedBy: replacement) {
                  var cased = self.cased(replacement, typed: token)
                  // A missed space after English "i" ("iwant") gives "I want", as "i" alone does.
                  if language.usesEnglishFixes, cased.contains(" ") {
-@@ -1198,6 +1199,21 @@ final class AutocorrectEngine {
+@@ -1198,6 +1201,25 @@ final class AutocorrectEngine {
          return best?.word
      }
  
-+    /// VoiceiQ: a short prefix that a likelier word starts with is an unfinished word, not a
-+    /// typo: "Hel" stays (help, hello) instead of becoming a rarer word its taps also spell
-+    /// ("Gel", "Hell"), as Apple's keyboard leaves it; "th" still becomes "the", its own best
-+    /// completion. Only for 1-3 letters (`completions` covers no more), and only against a
-+    /// word the model ranks above the replacement in this phrase.
-+    private func finishesBetter(_ token: String, than replacement: String) -> Bool {
-+        guard let model = contextModel ?? decoder?.model, model.language == language.rawValue else { return false }
++    /// VoiceiQ: a short prefix is an unfinished word, not a typo, so spatial autocorrect leaves
++    /// it as Apple's keyboard does. A three-letter start is never extended ("Hel" stays, not
++    /// "Help" or "Held"; "th" still becomes "the"), and a 1-3 letter one is not swapped for
++    /// other letters the model ranks below the best completion of what was typed ("Hel" is not
++    /// "Gel"; "teh" is still "the"). A missed space ("iam", "I am") or a word the model lacks
++    /// (a Dictionary name) is never held back.
++    private func unfinished(_ token: String, replacedBy replacement: String) -> Bool {
 +        let lower = token.lowercased(), fixed = replacement.lowercased()
++        guard (1...3).contains(lower.count), !fixed.contains(" "),
++              let model = contextModel ?? decoder?.model, model.language == language.rawValue else { return false }
++        // Finishing the word: a one or two letter start may be ("th", "the"), a three-letter one not.
++        if fixed.count > lower.count, fixed.hasPrefix(lower) { return lower.count == 3 }
 +        let previous = Self.previousWord(beforeInput ?? "", token: token)
-+        guard let best = model.completions(of: lower, after: previous, allowing: { _ in true }).first,
++        guard let corrected = model.cost(of: fixed, after: previous),
++              let best = model.completions(of: lower, after: previous, allowing: { mayOffer($0, after: previous) }).first,
 +              best != fixed, let finished = model.cost(of: best, after: previous) else { return false }
-+        guard let corrected = model.cost(of: fixed, after: previous) else { return true }
 +        return finished < corrected
 +    }
 +

@@ -481,7 +481,8 @@ final class KeyboardStripView: UIView {
         // when a word wouldn't fit a third even at 10 pt; a lone one takes the whole bar.
         let bar = thirds[0].union(thirds[2])
         let none = CGRect(x: bar.maxX, y: bar.minY, width: 0, height: bar.height)
-        if Self.slots(for: currentSuggestions) == [1] { return [none, bar, none] }
+        let shown = Self.slots(for: currentSuggestions)
+        if shown.count == 1 { return (0..<3).map { $0 == shown[0] ? bar : none } }
         let (left, right) = bar.divided(atDistance: (bar.width / 2).rounded(), from: .minXEdge)
         return [left, right, none]
     }
@@ -489,7 +490,8 @@ final class KeyboardStripView: UIView {
     private func twoUp(in third: CGFloat) -> Bool {
         let font = UIFont.systemFont(ofSize: 10, weight: .regular)
         return currentSuggestions.prefix(3).contains {
-            ($0.displayText as NSString).size(withAttributes: [.font: font]).width.rounded(.up) + 1 > third - 6
+            let arrow = $0.kind == .revert ? SlotButton.revertArrowSize + SlotButton.revertArrowGap : 0
+            return ($0.displayText as NSString).size(withAttributes: [.font: font]).width.rounded(.up) + 1 > third - 6 - arrow
         }
     }
 
@@ -836,6 +838,9 @@ final class KeyboardStripView: UIView {
             let glyphs: [Glyph]
         }
 
+        /// The last shrunk word's type size for its room.
+        private var fit: (text: String, room: CGFloat, size: CGFloat)?
+
         private func layout(_ suggestion: KeyboardSuggestion) -> Word {
             let midY = textCenterY ?? bounds.height * 0.5
             // Apple's words are all SF 17 pt regular, the one in the capsule included.
@@ -859,16 +864,20 @@ final class KeyboardStripView: UIView {
             }
             // VoiceiQ: as the system keyboard does, the type shrinks until the whole word fits
             // the slot's width less 3 pt a side (down to 10 pt); only a longer word loses its middle.
-            // SF is tracked wider at smaller sizes, so each half point is measured.
+            // SF is tracked wider at smaller sizes, so each half point is measured, once per
+            // word and width (this runs at every animation frame).
             let room = max(20, bounds.width - 6 - arrowRoom)
             var fitted = max(10, min(15, (17 * room / size.width * 2).rounded(.down) / 2))
-            var small = UIFont.systemFont(ofSize: fitted, weight: .regular)
-            var smallSize = (text as NSString).size(withAttributes: [.font: small])
-            while fitted > 10, smallSize.width.rounded(.up) + 1 > room {
-                fitted -= 0.5
-                small = UIFont.systemFont(ofSize: fitted, weight: .regular)
-                smallSize = (text as NSString).size(withAttributes: [.font: small])
+            if let fit, fit.text == text, fit.room == room {
+                fitted = fit.size
+            } else {
+                while fitted > 10, (text as NSString).size(withAttributes: [.font: UIFont.systemFont(ofSize: fitted)]).width.rounded(.up) + 1 > room {
+                    fitted -= 0.5
+                }
+                fit = (text, room, fitted)
             }
+            let small = UIFont.systemFont(ofSize: fitted, weight: .regular)
+            let smallSize = (text as NSString).size(withAttributes: [.font: small])
             let width = min(room, smallSize.width.rounded(.up) + 1)
             let origin = CGPoint(x: textMidX - width / 2, y: midY - smallSize.height / 2)
             let box = CGSize(width: width, height: smallSize.height)
