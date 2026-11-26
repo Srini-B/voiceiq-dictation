@@ -117,7 +117,8 @@ def timed_words(segments, key):
     for s in segments:
         w = words(s["text"])
         for i, word in enumerate(w):
-            out.append((s["start"] + (s["end"] - s["start"]) * (i + 0.5) / max(1, len(w)), word, s[key]))
+            out.append((s["start"] + (s["end"] - s["start"]) * (i + 0.5) / max(1, len(w)), word, s[key],
+                        s["start"], s["end"]))
     return out
 
 
@@ -127,8 +128,12 @@ def attribution(ref, hyp, m):
     used = set()
     right = 0
     rw = timed_words(ref, "speaker")
-    for t, word, spk in rw:
-        near = [i for i, h in enumerate(hw) if i not in used and abs(h[0] - t) <= 1.5 and h[1] == word]
+    # A word's time inside a segment is only interpolated, so the gate is
+    # segment overlap (with 1.5 s slack), not distance between guesses;
+    # the nearest guess only picks among the candidates.
+    for t, word, spk, start, end in rw:
+        near = [i for i, h in enumerate(hw)
+                if i not in used and h[1] == word and h[3] - 1.5 <= end and start <= h[4] + 1.5]
         if not near:
             continue
         # Equal distances prefer the occurrence given to the same person, so
@@ -147,7 +152,7 @@ def bucket_word_error(ref, hyp, seconds=20):
     from collections import Counter
     buckets = {}
     for side, segments, key in ((0, ref, "speaker"), (1, hyp, "speaker_name")):
-        for t, word, _ in timed_words(segments, key):
+        for t, word, *_ in timed_words(segments, key):
             buckets.setdefault(int(t // seconds), (Counter(), Counter()))[side][word] += 1
     errors = sum(max(sum((r - h).values()), sum((h - r).values())) for r, h in buckets.values())
     return errors / max(1, sum(sum(r.values()) for r, _ in buckets.values()))

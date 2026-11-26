@@ -13,6 +13,7 @@ Needs GEMINI_API_KEY and eval/make_assets.py's output.
 import argparse
 import base64
 import concurrent.futures
+import hashlib
 import json
 import os
 import re
@@ -110,11 +111,23 @@ def main() -> None:
                 for r, c, p in jobs]
     print(f"{len(jobs)} calls, prompt {len(jobs[0][2])} chars")
 
+    # A saved call is reused only when its request was the same: prompt,
+    # screenshot count, audio and model, so a label rerun with other
+    # settings sends fresh calls instead of relabelling old ones.
+    def fingerprint(job):
+        _, case, prompt = job
+        digest = hashlib.sha256(f"{MODEL}|{args.screenshots}|{prompt}".encode())
+        digest.update((ASSETS / f"{case['id']}.flac").read_bytes())
+        if args.screenshots:
+            digest.update(screen)
+        return digest.hexdigest()[:16]
+
     def run(job):
         round_, case, prompt = job
         text, seconds, usage = call(prompt, (ASSETS / f"{case['id']}.flac").read_bytes(), screen, args.screenshots)
         print(f"{case['id']:<18} r{round_} {seconds:5.2f}s thoughts={usage.get('thoughtsTokenCount', 0)}", flush=True)
-        return {"id": case["id"], "round": round_, "output": text, "seconds": round(seconds, 3), "usage": usage}
+        return {"id": case["id"], "round": round_, "request": fingerprint(job), "output": text,
+                "seconds": round(seconds, 3), "usage": usage}
 
     # The result file is rewritten after every call, so an interrupted run
     # keeps what it paid for. A rerun with the same label sends only the
@@ -122,7 +135,11 @@ def main() -> None:
     # recorded, and the run stays incomplete, which score.py refuses.
     out = HERE / "results" / f"{args.label}.json"
     out.parent.mkdir(exist_ok=True)
-    results = json.loads(out.read_text())["results"] if out.exists() else []
+    wanted = {(job[1]["id"], job[0]): fingerprint(job) for job in jobs}
+    saved = json.loads(out.read_text())["results"] if out.exists() else []
+    results = [r for r in saved if wanted.get((r["id"], r["round"])) == r.get("request")]
+    if len(results) < len(saved):
+        print(f"{len(saved) - len(results)} saved calls were made with other settings; sending them again")
     done = {(r["id"], r["round"]) for r in results}
     todo = [job for job in jobs if (job[1]["id"], job[0]) not in done]
     if done:
