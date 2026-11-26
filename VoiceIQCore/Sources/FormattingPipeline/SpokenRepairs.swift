@@ -169,7 +169,10 @@ enum SpokenRepairs {
            !isSubject(anchor) || said.count - at <= 2,
            // A repeated "the" or "to" restates a short phrase ("to the team, I
            // mean, to Sarah"), not a clause ("the summary still needs work").
-           !(determiners.contains(anchor) || prepositions.contains(anchor)) || fixed.count - (fixed.firstIndex(of: anchor) ?? 0) <= 3 {
+           !(determiners.contains(anchor) || prepositions.contains(anchor)) || fixed.count - (fixed.firstIndex(of: anchor) ?? 0) <= 3,
+           // After a repeated preposition comes a new object ("to Sarah", "to
+           // the team"), not a verb ("to Sarah, I mean, to say thanks").
+           !prepositions.contains(anchor) || namesObject(fixed, after: anchor, tokens, correction) {
             return start + at
         }
         // A like-for-like swap: a day for a day, a number for a number, a
@@ -269,6 +272,23 @@ enum SpokenRepairs {
     private static let subjects: Set<String> = [
         "i", "you", "we", "they", "he", "she", "it", "this", "that", "there", "these", "those", "anyone", "someone",
     ]
+    /// "what time is it", "how long is the call": a noun (or "long", "much")
+    /// after the question word. "What matters is…" and "What happened is…"
+    /// have a verb there and state something.
+    private static func asksAbout(_ questionWord: String, _ word: String) -> Bool {
+        if questionWord == "how" { return ["long", "much", "many", "far", "often", "old", "soon", "big", "late"].contains(word) }
+        return !subjects.contains(word) && !word.hasSuffix("s") && !word.hasSuffix("ed")
+    }
+
+    /// Whether the word after the preposition `anchor` in the correction
+    /// starts a noun phrase: a determiner, a name, a number or a pronoun.
+    private static func namesObject(_ fixed: [String], after anchor: String, _ tokens: [Token], _ correction: Int) -> Bool {
+        guard let at = fixed.firstIndex(of: anchor), correction + at + 1 < tokens.count else { return false }
+        let object = tokens[correction + at + 1].word
+        return determiners.contains(bare(object)) || objectPronouns.contains(bare(object))
+            || (object.first.map { $0.isUppercase || $0.isNumber } ?? false)
+    }
+
     /// "it's", "we're", "that's": a subject with its verb.
     private static func isSubject(_ word: String) -> Bool {
         subjects.contains(word) || word.firstIndex(of: "'").map { subjects.contains(String(word[..<$0])) } ?? false
@@ -319,8 +339,8 @@ enum SpokenRepairs {
         // "when is the call", "what time is it", but not "where it is".
         if questionWords.contains(words[0]) {
             return auxiliaries.contains(words[1])
-                || (nounQuestionWords.contains(words[0]) && !subjects.contains(words[1]) && words.count > 2
-                    && auxiliaries.contains(words[2]))
+                || (nounQuestionWords.contains(words[0]) && words.count > 2 && auxiliaries.contains(words[2])
+                    && asksAbout(words[0], words[1]))
         }
         // "what's the plan", "where're they", "who's coming"; but "What's left
         // goes in the trash" and "What's worse, we missed it" are statements.

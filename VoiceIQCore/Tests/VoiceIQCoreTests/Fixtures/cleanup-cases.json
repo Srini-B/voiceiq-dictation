@@ -1171,6 +1171,20 @@
       "said": "use gonna hyphen server",
       "heard": "Use gonna hyphen server.",
       "written": "Use gonna-server."
+    },
+    {
+      "id": "kept-to-purpose",
+      "check": "kept as said",
+      "said": "i gave it to sarah, i mean, to say thanks",
+      "heard": "I gave it to Sarah, I mean, to say thanks.",
+      "written": "I gave it to Sarah, I mean, to say thanks."
+    },
+    {
+      "id": "kept-what-matters",
+      "check": "kept as said",
+      "said": "what matters is that we finish on time",
+      "heard": "What matters is that we finish on time",
+      "written": "What matters is that we finish on time."
     }
   ]
 }
