@@ -37,31 +37,42 @@ public extension TranscriptionServicing {
 /// Send-on-pause: the dictation request for speech that ended in a pause,
 /// sent while the recording goes on. At key-up it stands in for the request
 /// only when the recording's speech and the prompt are unchanged; otherwise
-/// it is cancelled. Requests stream, so one cancelled before it answered is
-/// not billed.
+/// it is cancelled. Requests stream, so one cancelled before the first chunk
+/// of its answer is not billed.
 public final class SpeculativeDictation: Sendable {
     public let range: Range<Int64>
     public let prompt: String
     public let sentAt: ContinuousClock.Instant
     public let answer: Task<String, Error>
-    private let answered: OSAllocatedUnfairLock<Bool>
+    private let progress: OSAllocatedUnfairLock<Progress>
 
+    private struct Progress {
+        var streamed = false
+        var answeredAt: ContinuousClock.Instant?
+    }
+
+    /// `answer` sends the request off the main actor and calls the closure
+    /// it is given when the first chunk of the answer arrives.
     public init(range: Range<Int64>, prompt: String, sentAt: ContinuousClock.Instant,
-                answer: @escaping @Sendable () async throws -> String) {
-        let answered = OSAllocatedUnfairLock(initialState: false)
+                answer: @escaping @Sendable (_ onFirstChunk: @escaping @Sendable () -> Void) async throws -> String) {
+        let progress = OSAllocatedUnfairLock(initialState: Progress())
         self.range = range
         self.prompt = prompt
         self.sentAt = sentAt
-        self.answered = answered
+        self.progress = progress
         self.answer = Task {
-            let text = try await answer()
-            answered.withLock { $0 = true }
+            let text = try await answer { progress.withLock { $0.streamed = true } }
+            progress.withLock { $0.streamed = true; $0.answeredAt = ContinuousClock().now }
             return text
         }
     }
 
-    /// The answer arrived, so the request is billed whether or not it is used.
-    public var hasAnswered: Bool { answered.withLock { $0 } }
+    /// Part of the answer arrived, so Gemini bills the request whether or
+    /// not it is used.
+    public var isBilled: Bool { progress.withLock { $0.streamed } }
+
+    /// When the whole answer arrived; nil until then.
+    public var answeredAt: ContinuousClock.Instant? { progress.withLock { $0.answeredAt } }
 
     public func cancel() { answer.cancel() }
 }

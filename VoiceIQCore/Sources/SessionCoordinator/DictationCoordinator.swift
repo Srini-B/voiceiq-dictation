@@ -106,7 +106,7 @@ public final class DictationCoordinator: ObservableObject {
             pauseWatch = nil
             if let speculation {
                 self.speculation = nil
-                let billed = speculation.hasAnswered
+                let billed = speculation.isBilled
                 speculation.cancel()
                 Log.transcription.notice("send-on-pause: dropped, the dictation ended without using it, billed: \(billed, privacy: .public)")
             }
@@ -396,8 +396,8 @@ public final class DictationCoordinator: ObservableObject {
 
     /// Send-on-pause: once the speaker has been silent for
     /// `sendOnPauseSeconds`, the request goes out for the speech so far.
-    /// When they speak again it is cancelled, unbilled unless it already
-    /// answered, and the next pause may send again. Recording goes on until
+    /// When they speak again it is cancelled, unbilled unless its answer
+    /// had started to arrive, and the next pause may send again. Recording goes on until
     /// key-up either way.
     private func watchForPause(_ capture: AudioCapturing, sessionID: UUID) {
         pauseWatch = Task { @MainActor [weak self] in
@@ -406,16 +406,18 @@ public final class DictationCoordinator: ObservableObject {
                 try? await Task.sleep(nanoseconds: 100_000_000)
                 guard let self, self.session?.id == sessionID, self.capture === capture,
                       var context = self.session?.context else { return }
-                let speech = capture.pausedSpeech(after: Self.sendOnPauseSeconds,
-                                                  minimumSpeech: Self.sendOnPauseMinimumSpeech)
+                let range = capture.pausedSpeech(after: Self.sendOnPauseSeconds,
+                                                 minimumSpeech: Self.sendOnPauseMinimumSpeech)
                 if let early = self.speculation {
-                    guard speech?.range != early.range else { continue }
+                    guard range != early.range else { continue }
                     self.speculation = nil
-                    let billed = early.hasAnswered
+                    let billed = early.isBilled
                     early.cancel()
                     Log.transcription.notice("send-on-pause: cancelled, speech resumed, billed: \(billed, privacy: .public)")
                 }
-                guard let speech, sent < Self.sendOnPauseMaxRequests else { continue }
+                guard let range, sent < Self.sendOnPauseMaxRequests,
+                      let samples = capture.recordedSamples(in: range) else { continue }
+                let speech = PausedSpeech(range: range, samples: samples)
                 context.screenText = self.screenContextCollector?.texts ?? []
                 self.speculation = UsageMeter.$scope.withValue(UsageScope(activity: .dictation, sessionID: sessionID.uuidString)) {
                     self.transcription.speculate(speech, context: context)

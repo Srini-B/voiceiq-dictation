@@ -19,4 +19,13 @@ data: {"candidates": [{"content": {"parts": [{"text": "","thoughtSignature": "si
                        "I need three things from you. First, update the readme. Second, fix the flaky login test. Third, bump the version.")
         XCTAssertEqual(TokenUsage.fromGenerateContent(joined)?.totalOut, 32)
     }
+
+    /// gemini-3.8-flash can send its working as an unflagged part before the
+    /// answer; the stream joins both, and the answer is still found.
+    func testWorkingStreamedBeforeTheAnswerIsLeftOut() {
+        let joined = #"The speaker says to call Anil. Let me check the dictionary.{"text": "Call Anil at 3."}"#
+        XCTAssertEqual(PromptV1.dictationText(fromJSON: joined), "Call Anil at 3.")
+        XCTAssertEqual(PromptV1.dictationText(fromJSON: #"{"text": "Say {\"text\": 1} here."}"#), #"Say {"text": 1} here."#)
+        XCTAssertNil(PromptV1.dictationText(fromJSON: "Call Anil at 3."))
+    }
 }

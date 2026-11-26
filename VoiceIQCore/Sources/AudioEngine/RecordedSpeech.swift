@@ -41,15 +41,19 @@ struct RecordedSpeech {
         }
     }
 
-    /// The speech, once the speaker has said `minimumSpeech` seconds and
-    /// then been silent for `pause` seconds.
-    func pausedSpeech(after pause: Double, minimumSpeech: Double) -> PausedSpeech? {
-        guard !isTooLong,
-              let range = AudioChunker.pausedSpeech(levels: levels, frameLength: Self.frameLength,
-                                                     length: AVAudioFramePosition(samples.count),
-                                                     rate: Self.sampleRate, pause: pause, minimumSpeech: minimumSpeech)
-        else { return nil }
-        return PausedSpeech(range: range, samples: Array(samples[Int(range.lowerBound)..<Int(range.upperBound)]))
+    /// The speech's range, once the speaker has said `minimumSpeech` seconds
+    /// and then been silent for `pause` seconds.
+    func pausedSpeech(after pause: Double, minimumSpeech: Double) -> Range<AVAudioFramePosition>? {
+        guard !isTooLong else { return nil }
+        return AudioChunker.pausedSpeech(levels: levels, frameLength: Self.frameLength,
+                                         length: AVAudioFramePosition(samples.count),
+                                         rate: Self.sampleRate, pause: pause, minimumSpeech: minimumSpeech)
+    }
+
+    /// The samples in `range`, or nil when they were not kept.
+    func samples(in range: Range<AVAudioFramePosition>) -> [Int16]? {
+        guard !isTooLong, range.lowerBound >= 0, range.upperBound <= samples.count else { return nil }
+        return Array(samples[Int(range.lowerBound)..<Int(range.upperBound)])
     }
 
     /// Seconds from the last voiced frame to the end of the recording.

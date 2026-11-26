@@ -26,9 +26,10 @@ final class DictationCoordinatorTests: XCTestCase {
         private(set) var started = false
         private(set) var stopCount = 0
         /// What `pausedSpeech` reports: the speaker has paused.
-        var paused: PausedSpeech?
+        var paused: Range<Int64>?
 
-        func pausedSpeech(after pause: Double, minimumSpeech: Double) -> PausedSpeech? { paused }
+        func pausedSpeech(after pause: Double, minimumSpeech: Double) -> Range<Int64>? { paused }
+        func recordedSamples(in range: Range<Int64>) -> [Int16]? { [] }
 
         func start(writingTo url: URL) throws {
             if let startError { throw startError }
@@ -64,7 +65,7 @@ final class DictationCoordinatorTests: XCTestCase {
         private(set) var sent: [SpeculativeDictation] = []
         private(set) var handedBack: [SpeculativeDictation?] = []
         func speculate(_ speech: PausedSpeech, context: DictationContext) -> SpeculativeDictation? {
-            let early = SpeculativeDictation(range: speech.range, prompt: "p", sentAt: ContinuousClock().now) { "early" }
+            let early = SpeculativeDictation(range: speech.range, prompt: "p", sentAt: ContinuousClock().now) { _ in "early" }
             sent.append(early)
             return early
         }
@@ -224,14 +225,14 @@ final class DictationCoordinatorTests: XCTestCase {
         try await Task.sleep(nanoseconds: 300_000_000)
         XCTAssertTrue(cloud.sent.isEmpty, "no pause yet")
 
-        capture.paused = PausedSpeech(range: 0..<16_000, samples: [])
+        capture.paused = 0..<16_000
         try await Task.sleep(nanoseconds: 500_000_000)
         XCTAssertEqual(cloud.sent.count, 1)
 
         capture.paused = nil
         try await Task.sleep(nanoseconds: 300_000_000)
         XCTAssertTrue(cloud.sent[0].answer.isCancelled)
-        capture.paused = PausedSpeech(range: 0..<40_000, samples: [])
+        capture.paused = 0..<40_000
         try await Task.sleep(nanoseconds: 300_000_000)
         XCTAssertEqual(cloud.sent.count, 2)
 

@@ -29,15 +29,18 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
     }
 
     public func speculate(_ speech: PausedSpeech, context: DictationContext) -> SpeculativeDictation? {
-        guard KeychainStore.loadAPIKey() != nil, let flac = try? FLACEncoder.encode(samples: speech.samples) else { return nil }
+        guard KeychainStore.loadAPIKey() != nil else { return nil }
         let config = settings.geminiConfig
         let prompt = dictationPrompt(context: context)
         let seconds = Double(speech.samples.count) / 16_000
         let deadline = TimeoutPolicy.overallDeadline(audioDuration: seconds)
         Log.transcription.notice("send-on-pause: sent for \(String(format: "%.1f", seconds), privacy: .public)s of speech")
-        return SpeculativeDictation(range: speech.range, prompt: prompt, sentAt: ContinuousClock().now) { [client] in
-            try await client.dictate(prompt: prompt, audio: flac, model: config.writingModel,
-                                     endpoint: config.endpoint, deadline: deadline)
+        return SpeculativeDictation(range: speech.range, prompt: prompt, sentAt: ContinuousClock().now) { [client] onFirstChunk in
+            let flac = try FLACEncoder.encode(samples: speech.samples)
+            return try await GeminiClient.$onFirstBodyByte.withValue(onFirstChunk) {
+                try await client.dictate(prompt: prompt, audio: flac, model: config.writingModel,
+                                         endpoint: config.endpoint, deadline: deadline)
+            }
         }
     }
 
@@ -62,7 +65,7 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
                 early = speculation
                 Log.transcription.notice("send-on-pause: used, sent \(Int((started - speculation.sentAt) / .milliseconds(1)))ms before key-up")
             } else {
-                let billed = speculation.hasAnswered
+                let billed = speculation.isBilled
                 speculation.cancel()
                 let reason = ranges == [speculation.range] ? "the prompt changed" : "speech went on after the pause"
                 Log.transcription.notice("send-on-pause: dropped at key-up, \(reason, privacy: .public), billed: \(billed, privacy: .public)")
@@ -216,10 +219,13 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
         }
         let waited = (clock.now - started) / .seconds(1)
         defer { early?.cancel() }
-        let text = try await GeminiClient.firstSuccess(retryAfter: max(0, delay - waited), first: first, retry: attempt)
-        let elapsed = clock.now - started
-        await hedge.record(answeredAfter: Double(elapsed.components.seconds) + Double(elapsed.components.attoseconds) / 1e18,
-                           delay: delay)
+        // An early request that already answered needs no backup.
+        let retryAfter = early?.answeredAt != nil ? deadline : max(0, delay - waited)
+        let text = try await GeminiClient.firstSuccess(retryAfter: retryAfter, first: first, retry: attempt)
+        // The early request's own answer time, not the speaker's pause before
+        // key-up, which would pin the backup delay at its ceiling.
+        let elapsed = (early?.answeredAt ?? clock.now) - started
+        await hedge.record(answeredAfter: elapsed / .seconds(1), delay: delay)
         return ValidationGate.stripArtifacts(text).trimmingCharacters(in: .whitespacesAndNewlines)
     }
 

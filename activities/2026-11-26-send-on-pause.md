@@ -32,6 +32,15 @@ A single early request at 0.8 s with no cancelling, the first design, fired mid-
 
 With the backup forced at 1.5 s on all 33 eval cases, 33 backups were sent and 1 was billed: the loser had streamed its first chunk by the time the winner finished. Expected extra billed calls per 100 dictations: backup well under 1 (it is sent on 5–9 of 100 at the 4–6 s delay), early requests 0–2. A dictation that sends three requests (an early one, the key-up one and a backup) is billed for more than one only when two of them answer at the same moment. Requests sent but cancelled still count against the per-minute request quota.
 
+## Review fixes (Codex and Neon on 0f03cfb)
+
+- Billing state: a cancelled early request now counts as billed once the first byte of its answer arrives (a task-local hook on the transport), not only once the whole answer was parsed. The eval counts every attempt that did not win, including one that finished in the same wait as the winner.
+- Backup timing: when the early answer is used, the backup delay learns the early request's own answer time, not that time plus the speaker's pause before key-up, and no backup starts for an early request that has already answered.
+- A failure Gemini reports as an `error` event after the 200 headers is handled as that status (a 429 waits, a 503 retries) instead of as an unreadable answer.
+- The answer is the last `{"text": …}` object in the joined stream, so working the model sends as an earlier unflagged part no longer fails the parse and resends.
+- The pause watcher sorts the levels once per tick, not three times, copies samples only when it sends, and the FLAC encode runs inside the request task instead of on the main actor.
+- docs/PRIVACY.md item 1 said nothing is sent while you speak. It now says audio up to a pause can be sent before key-up, including when the dictation is then cancelled.
+
 ## Not measured
 
 The real gap between the last word and the second key press. Every dictation now logs it (`send-on-pause: key-up N s after the last speech`) with what the early request did (`sent`, `used`, `cancelled, speech resumed`, `dropped`, each with `billed:`), so the hit and waste rates come from the debug log or `log show --predicate 'eventMessage CONTAINS "send-on-pause"'`.

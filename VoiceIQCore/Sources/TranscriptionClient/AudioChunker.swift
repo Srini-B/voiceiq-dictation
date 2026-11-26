@@ -93,6 +93,11 @@ enum AudioChunker {
     static func speechRange(levels: [Double], frameLength: Int, length: AVAudioFramePosition,
                             rate: Double) -> Range<AVAudioFramePosition>? {
         guard let voiced = voicedFrames(levels) else { return nil }
+        return withMargins(voiced, frameLength: frameLength, length: length, rate: rate)
+    }
+
+    private static func withMargins(_ voiced: ClosedRange<Int>, frameLength: Int, length: AVAudioFramePosition,
+                                    rate: Double) -> Range<AVAudioFramePosition>? {
         let start = max(0, AVAudioFramePosition(voiced.lowerBound * frameLength) - AVAudioFramePosition(rate * trimLeadSeconds))
         let end = min(length, AVAudioFramePosition((voiced.upperBound + 1) * frameLength) + AVAudioFramePosition(rate * trimTrailSeconds))
         return start < end ? start..<end : nil
@@ -101,7 +106,10 @@ enum AudioChunker {
     /// The first and last voiced 10 ms frames.
     static func voicedFrames(_ levels: [Double]) -> ClosedRange<Int>? {
         guard levels.count > trimLoudFrames else { return nil }
-        let threshold = voicedThreshold(levels)
+        return voicedFrames(levels, threshold: voicedThreshold(levels))
+    }
+
+    private static func voicedFrames(_ levels: [Double], threshold: Double) -> ClosedRange<Int>? {
         guard let first = levels.firstIndex(where: { $0 >= threshold }),
               let last = levels.lastIndex(where: { $0 >= threshold }) else { return nil }
         return first...last
@@ -117,15 +125,17 @@ enum AudioChunker {
     /// at key-up if no more speech comes, once the speaker has said at least
     /// `minimumSpeech` seconds and then been silent for `pause` seconds. The
     /// pause is at least the trailing margin, so the range is already complete.
+    /// Runs every 100 ms while recording, so the levels are sorted once.
     static func pausedSpeech(levels: [Double], frameLength: Int, length: AVAudioFramePosition, rate: Double,
                              pause: Double, minimumSpeech: Double) -> Range<AVAudioFramePosition>? {
-        guard let voiced = voicedFrames(levels) else { return nil }
+        guard levels.count > trimLoudFrames else { return nil }
+        let threshold = voicedThreshold(levels)
+        guard let voiced = voicedFrames(levels, threshold: threshold) else { return nil }
         let silence = Double(length - AVAudioFramePosition((voiced.upperBound + 1) * frameLength)) / rate
         guard silence >= max(pause, trimTrailSeconds) else { return nil }
-        let threshold = voicedThreshold(levels)
         let spoken = Double(levels[voiced].filter { $0 >= threshold }.count * frameLength) / rate
         guard spoken >= minimumSpeech else { return nil }
-        return speechRange(levels: levels, frameLength: frameLength, length: length, rate: rate)
+        return withMargins(voiced, frameLength: frameLength, length: length, rate: rate)
     }
 
     /// The start of the lowest-RMS hop inside `[boundary - window, boundary]`.

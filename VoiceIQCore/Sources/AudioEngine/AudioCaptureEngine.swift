@@ -203,8 +203,12 @@ public final class AudioCaptureEngine: AudioCapturing, @unchecked Sendable {
         armFirstBufferWatchdog(generation: generation)
     }
 
-    public func pausedSpeech(after pause: Double, minimumSpeech: Double) -> PausedSpeech? {
+    public func pausedSpeech(after pause: Double, minimumSpeech: Double) -> Range<AVAudioFramePosition>? {
         withStateLock { recorded.pausedSpeech(after: pause, minimumSpeech: minimumSpeech) }
+    }
+
+    public func recordedSamples(in range: Range<AVAudioFramePosition>) -> [Int16]? {
+        withStateLock { recorded.samples(in: range) }
     }
 
     public func trailingSilence() -> Double? {

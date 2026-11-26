@@ -52,15 +52,16 @@ final class SendOnPauseTests: XCTestCase {
 
     func testPausedRangeIsWhatKeyUpSendsWhenNoSpeechFollows() throws {
         let spoken = silence(0.5) + tone(1.2) + silence(0.3) + tone(0.4, amplitude: 3_000)
-        let paused = try XCTUnwrap(recorded(spoken + silence(0.9)).pausedSpeech(after: 0.8, minimumSpeech: 1))
-        XCTAssertEqual(paused.range, try keyUpRange(spoken + silence(2.5)))
-        XCTAssertEqual(paused.samples, Array((spoken + silence(0.9))[Int(paused.range.lowerBound)..<Int(paused.range.upperBound)]))
+        let speech = recorded(spoken + silence(0.9))
+        let paused = try XCTUnwrap(speech.pausedSpeech(after: 0.8, minimumSpeech: 1))
+        XCTAssertEqual(paused, try keyUpRange(spoken + silence(2.5)))
+        XCTAssertEqual(speech.samples(in: paused), Array((spoken + silence(0.9))[Int(paused.lowerBound)..<Int(paused.upperBound)]))
     }
 
     func testSpeechAfterThePauseChangesTheRange() throws {
         let spoken = silence(0.5) + tone(1.2)
         let paused = try XCTUnwrap(recorded(spoken + silence(0.9)).pausedSpeech(after: 0.8, minimumSpeech: 1))
-        XCTAssertNotEqual(paused.range, try keyUpRange(spoken + silence(0.9) + tone(0.5) + silence(1)))
+        XCTAssertNotEqual(paused, try keyUpRange(spoken + silence(0.9) + tone(0.5) + silence(1)))
     }
 
     /// The service answers from the early request when it covers the speech
@@ -72,8 +73,8 @@ final class SendOnPauseTests: XCTestCase {
         let spoken = silence(0.5) + tone(1.2)
         let paused = try XCTUnwrap(recorded(spoken + silence(0.9)).pausedSpeech(after: 0.8, minimumSpeech: 1))
         func early() -> SpeculativeDictation {
-            SpeculativeDictation(range: paused.range, prompt: service.dictationPrompt(context: context),
-                                 sentAt: ContinuousClock().now) { "Sent at the pause." }
+            SpeculativeDictation(range: paused, prompt: service.dictationPrompt(context: context),
+                                 sentAt: ContinuousClock().now) { _ in "Sent at the pause." }
         }
 
         let same = try caf(spoken + silence(2))
@@ -91,6 +92,29 @@ final class SendOnPauseTests: XCTestCase {
         } catch {
             XCTAssertTrue(dropped.answer.isCancelled)
         }
+    }
+
+    /// Gemini bills a stream from its first chunk, so a request cancelled
+    /// after part of its answer arrived counts as billed, and one cancelled
+    /// before does not.
+    func testAnEarlyRequestIsBilledOnceItsAnswerStartsToArrive() async {
+        func early(streaming: Bool) -> SpeculativeDictation {
+            SpeculativeDictation(range: 0..<1, prompt: "p", sentAt: ContinuousClock().now) { onFirstChunk in
+                if streaming { onFirstChunk() }
+                try await Task.sleep(nanoseconds: 10_000_000_000)
+                return "never"
+            }
+        }
+        let waiting = early(streaming: false)
+        let streaming = early(streaming: true)
+        try? await Task.sleep(nanoseconds: 100_000_000)
+        waiting.cancel()
+        streaming.cancel()
+        _ = await waiting.answer.result
+        _ = await streaming.answer.result
+        XCTAssertFalse(waiting.isBilled)
+        XCTAssertTrue(streaming.isBilled)
+        XCTAssertNil(streaming.answeredAt)
     }
 
     func testAPauseAfterTooLittleSpeechSendsNothing() {

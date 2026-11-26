@@ -31,6 +31,11 @@ extension GeminiClient {
 
     static let requestIDHeader = "X-Client-Request-Id"
 
+    /// Called when the first byte of a successful response body arrives.
+    /// Send-on-pause sets it: Gemini bills a stream from its first chunk, so
+    /// this tells a cancelled request that cost something from one that did not.
+    @TaskLocal static var onFirstBodyByte: (@Sendable () -> Void)?
+
     /// The response of one call. A connection lost before any response
     /// (`-1005`: a reset, a dead pooled connection, a Wi-Fi blip) gets one
     /// immediate attempt on a new session with whatever deadline is left.
@@ -59,7 +64,15 @@ extension GeminiClient {
                 // URLRequest.timeoutInterval is an IDLE timer; enforce the true
                 // overall deadline ourselves (audit L5).
                 let result = try await withDeadline(seconds: remaining) { [session, request] in
-                    try await session.data(for: request)
+                    guard let onFirstBodyByte = Self.onFirstBodyByte else { return try await session.data(for: request) }
+                    let (bytes, response) = try await session.bytes(for: request)
+                    let succeeded = (response as? HTTPURLResponse)?.statusCode == 200
+                    var data = Data()
+                    for try await byte in bytes {
+                        if data.isEmpty, succeeded { onFirstBodyByte() }
+                        data.append(byte)
+                    }
+                    return (data, response)
                 }
                 let status = (result.1 as? HTTPURLResponse)?.statusCode
                 record(collector, requestID: requestID, attempt: attempt, stage: stage, model: modelLabel,

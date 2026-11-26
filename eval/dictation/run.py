@@ -79,7 +79,7 @@ def first_success(send, delay: float) -> tuple[dict, bool, list]:
     not answered after `delay`, or at once when the first loses its
     connection; the first answer wins and the other request is cancelled.
     Returns the reply, whether the second request was sent, and the
-    cancelled attempts as (future, state), for billed_losers()."""
+    attempts that did not win as (future, state), for billed_losers()."""
     pool = concurrent.futures.ThreadPoolExecutor(2)
     attempts = [(pool.submit(send, state := {"response": None, "chunks": 0, "cancelled": False}), state)]
     first = attempts[0][0]
@@ -93,10 +93,12 @@ def first_success(send, delay: float) -> tuple[dict, bool, list]:
         done, pending = concurrent.futures.wait(pending, return_when=concurrent.futures.FIRST_COMPLETED)
         for future in done:
             if future.exception() is None:
-                losers = [(f, state) for f, state in attempts if f in pending]
-                for _, state in losers:
+                # Every other attempt counts for billing, including one that
+                # finished in the same wait; only those still running are cut.
+                losers = [(f, state) for f, state in attempts if f is not future]
+                for f, state in losers:
                     state["cancelled"] = True
-                    if state["response"] is not None:
+                    if f in pending and state["response"] is not None:
                         abort(state["response"])
                 pool.shutdown(wait=False)
                 return future.result(), second, losers
@@ -140,11 +142,17 @@ def dictation_text(raw: str) -> str | None:
     body = raw.strip()
     if body.startswith("```"):
         body = re.sub(r"^```[a-z]*\s*|\s*```$", "", body)
-    try:
-        value = json.loads(body)
-    except ValueError:
-        return None
-    return value.get("text") if isinstance(value, dict) and isinstance(value.get("text"), str) else None
+    # As PromptV1.dictationText: the joined stream can carry unflagged
+    # working before the answer, so the answer is the last {"text": ...}
+    # object that ends the reply.
+    for start in reversed([m.start() for m in re.finditer(r'\{\s*"text"\s*:', body)]):
+        try:
+            value = json.loads(body[start:])
+        except ValueError:
+            continue
+        if isinstance(value, dict) and isinstance(value.get("text"), str):
+            return value["text"]
+    return None
 
 
 def joined_event_stream(body: bytes) -> dict:
@@ -155,7 +163,7 @@ def joined_event_stream(body: bytes) -> dict:
         if not line.startswith("data:"):
             continue
         chunk = json.loads(line[5:])
-        envelope.update({k: chunk[k] for k in ("usageMetadata", "promptFeedback") if k in chunk})
+        envelope.update({k: chunk[k] for k in ("usageMetadata", "promptFeedback", "error") if k in chunk})
         first = (chunk.get("candidates") or [{}])[0]
         if "finishReason" in first:
             candidate["finishReason"] = first["finishReason"]

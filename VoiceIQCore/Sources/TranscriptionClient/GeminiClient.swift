@@ -228,11 +228,17 @@ public actor GeminiClient {
         guard let http = response as? HTTPURLResponse else {
             throw TranscriptionError.network("non-http")
         }
-        switch http.statusCode {
-        case 200:
-            if query.contains(where: { $0.name == "alt" && $0.value == "sse" }) {
-                data = Self.joinedEventStream(data) ?? data
+        var status = http.statusCode
+        if status == 200, query.contains(where: { $0.name == "alt" && $0.value == "sse" }) {
+            data = Self.joinedEventStream(data) ?? data
+            // A failure after the 200 headers comes as an error event, and is
+            // handled as its status would have been.
+            if let error = (try? JSONSerialization.jsonObject(with: data) as? [String: Any])?["error"] as? [String: Any] {
+                status = error["code"] as? Int ?? 500
             }
+        }
+        switch status {
+        case 200:
             // Every billed call passes through here, so this is the one place
             // usage is read. Both envelopes are tried; a body with neither is
             // simply not metered.
@@ -246,12 +252,12 @@ public actor GeminiClient {
             // renamed, or unknown. "Fix your key" would misdirect — name the
             // model instead.
             let message = Self.errorMessage(from: data)
-            Log.transcription.error("GeminiClient: \(http.statusCode) on \(path, privacy: .public) (\(modelLabel, privacy: .public)) — \(message ?? "no detail", privacy: .private)")
+            Log.transcription.error("GeminiClient: \(status) on \(path, privacy: .public) (\(modelLabel, privacy: .public)) — \(message ?? "no detail", privacy: .private)")
             guard modelIsInPath else {
                 // The transcription endpoint itself is unreachable for this key.
                 // Retryable, and the copy points at the Advanced escape hatch
                 // rather than at a model the key demonstrably can reach.
-                throw TranscriptionError.network("interactions_unavailable_\(http.statusCode)")
+                throw TranscriptionError.network("interactions_unavailable_\(status)")
             }
             throw TranscriptionError.modelUnavailable(model: modelLabel, detail: message)
         case 429:
@@ -278,14 +284,14 @@ public actor GeminiClient {
             throw TranscriptionError.rateLimitedTransient(retryAfter: retryAfter)
         case 400:
             // Permanent: malformed request — retrying is pointless.
-            let message = Self.errorMessage(from: data) ?? "http_\(http.statusCode)"
-            Log.transcription.error("GeminiClient: \(http.statusCode) — \(message, privacy: .private)")
+            let message = Self.errorMessage(from: data) ?? "http_\(status)"
+            Log.transcription.error("GeminiClient: \(status) — \(message, privacy: .private)")
             throw TranscriptionError.badRequest(message)
         case 500...599:
-            throw TranscriptionError.network("http_\(http.statusCode)")
+            throw TranscriptionError.network("http_\(status)")
         default:
-            let message = Self.errorMessage(from: data) ?? "http_\(http.statusCode)"
-            Log.transcription.error("GeminiClient: \(http.statusCode) — \(message, privacy: .private)")
+            let message = Self.errorMessage(from: data) ?? "http_\(status)"
+            Log.transcription.error("GeminiClient: \(status) — \(message, privacy: .private)")
             throw TranscriptionError.network(message)
         }
 
@@ -369,7 +375,8 @@ public actor GeminiClient {
 
     /// A `streamGenerateContent?alt=sse` body as one `generateContent`
     /// envelope: each chunk's answer text joined in order, thought parts left
-    /// out, with the last chunk's finish reason, prompt feedback and usage.
+    /// out, with the last chunk's finish reason, prompt feedback, usage and
+    /// error.
     static func joinedEventStream(_ data: Data) -> Data? {
         guard let body = String(data: data, encoding: .utf8) else { return nil }
         var text = ""
@@ -378,7 +385,7 @@ public actor GeminiClient {
         for line in body.split(whereSeparator: \.isNewline) where line.hasPrefix("data:") {
             guard let chunk = try? JSONSerialization.jsonObject(with: Data(line.dropFirst(5).utf8)) as? [String: Any]
             else { continue }
-            for key in ["usageMetadata", "promptFeedback"] where chunk[key] != nil { envelope[key] = chunk[key] }
+            for key in ["usageMetadata", "promptFeedback", "error"] where chunk[key] != nil { envelope[key] = chunk[key] }
             guard let first = (chunk["candidates"] as? [[String: Any]])?.first else { continue }
             if let finish = first["finishReason"] { candidate["finishReason"] = finish }
             let parts = (first["content"] as? [String: Any])?["parts"] as? [[String: Any]] ?? []
