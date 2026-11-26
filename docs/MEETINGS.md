@@ -429,7 +429,24 @@ unmatched invitee.
 ## The notes request
 
 `MeetingNotesPrompt.build` writes the request; its rules and sources are in
-docs/design/meeting-prompt-rulebook.md. Fixes from 2026-10-29:
+docs/design/meeting-prompt-rulebook.md.
+
+Rules added 2026-11-26 after a Fable judge scored the notes
+([activities/2026-11-26-meeting-notes-quality.md](../activities/2026-11-26-meeting-notes-quality.md)):
+
+- Every task with an owner goes in `actions`, one entry per task, even when a
+  section covers its topic. A decision someone will make later is their
+  action; a next step the whole group agreed to is an action with no owner.
+- The speaker who says "I'll" owns the task, by name, never by role. A task
+  keeps only its own spoken deadline.
+- `notes` keeps every problem or concern someone raised and nothing nobody
+  said. A call of a few minutes gets a short summary and only the sections
+  that add something.
+- When `byElimination` names a far-side voice the notes left unnamed, the
+  notes are written once more with that name (`MeetingEngine.writeNotes`), so
+  the voice's tasks carry it.
+
+Fixes from 2026-10-29:
 
 - **Output language.** `NLLanguageRecognizer` names the transcript's main
   language when it is at least 60 % sure, and the request says

@@ -243,7 +243,7 @@ public enum MeetingKind: String, CaseIterable, Sendable {
                                 ("Risks", "risks and dependencies")]
         case .statusUpdate: return [("Progress", "what moved forward"),
                                     ("Risks and blockers", "what is late, at risk, or stuck"),
-                                    ("Coming up", "what happens next")]
+                                    ("Coming up", "upcoming events and dates; tasks belong in actions")]
         case .retrospective: return [("Went well", "what worked"),
                                      ("Did not go well", "what did not work"),
                                      ("Improvements", "changes proposed for next time")]

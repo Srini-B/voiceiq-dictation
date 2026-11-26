@@ -21,8 +21,8 @@ struct Input: Decodable {
     var people: [String]?
 }
 
-struct Output: Encodable {
-    struct Segment: Encodable { var start: Double; var end: Double; var speaker_name: String; var speaker_id: String; var text: String }
+struct Output: Codable {
+    struct Segment: Codable { var start: Double; var end: Double; var speaker_name: String; var speaker_id: String; var text: String }
     var id: String
     var segments: [Segment]
     var participants: [String]
@@ -72,7 +72,11 @@ let config = GeminiConfig()
 let client = GeminiClient(apiKey: { key })
 // EVAL_NO_SPEAKER_MODEL=1 runs without the on-device speaker model, as an
 // install that never downloaded it did before it was fetched automatically.
-let useSpeakerModel = ProcessInfo.processInfo.environment["EVAL_NO_SPEAKER_MODEL"] == nil
+// EVAL_TRANSCRIPTS=DIR takes each meeting's transcript from an earlier run's
+// output in DIR and only writes the notes again, for notes changes when the
+// transcription quota is spent.
+let earlierTranscripts = ProcessInfo.processInfo.environment["EVAL_TRANSCRIPTS"].map { URL(fileURLWithPath: $0) }
+let useSpeakerModel = ProcessInfo.processInfo.environment["EVAL_NO_SPEAKER_MODEL"] == nil && earlierTranscripts == nil
 let diarizer = useSpeakerModel ? await diarizerDirectory() : nil
 var diarizeFarSide: MeetingTranscriber.FarSideDiarizer?
 if let diarizer {
@@ -116,17 +120,29 @@ exit(failures == 0 ? 0 : 2)
 
     var clock = Date()
     var seconds: [String: Double] = [:]
-    let transcript = try await transcriber.transcribe(folder: folder)
+    let transcript: [TranscriptSegment]
+    if let earlierTranscripts {
+        transcript = try earlierTranscript(input.id, in: earlierTranscripts)
+    } else {
+        transcript = try await transcriber.transcribe(folder: folder)
+    }
     seconds["transcribe"] = Date().timeIntervalSince(clock)
     meta.screenNames = ScreenSpeakerNames.match(samples: samples, transcript: transcript)
     try store.save(transcript: transcript, id: meta.id)
 
     print("\(input.id): notes")
     clock = Date()
-    let prompt = MeetingNotesPrompt.build(transcript: transcript, context: .init(
-        startedAt: meta.startedAt, durationSeconds: meta.durationSeconds, app: input.app, names: [:],
-        screenNames: meta.screenNames, ownerName: input.owner, calendarEvent: meta.calendarEvent))
-    let notes = try await client.meetingNotes(prompt: prompt, model: config.writingModel, endpoint: config.endpoint, deadline: 300)
+    let write = { (meta: MeetingMeta) in
+        try await client.meetingNotes(prompt: MeetingNotesPrompt.build(transcript: transcript, context: .init(
+            startedAt: meta.startedAt, durationSeconds: meta.durationSeconds, app: input.app, names: [:],
+            screenNames: meta.screenNames, ownerName: input.owner, calendarEvent: meta.calendarEvent)),
+            model: config.writingModel, endpoint: config.endpoint, deadline: 300)
+    }
+    // As MeetingEngine.writeNotes does: a voice named by elimination gets the notes written again.
+    var notes = try await write(meta)
+    var named = meta
+    named.screenNames = ScreenSpeakerNames.byElimination(meta: meta, transcript: transcript, notes: notes)
+    if named.screenNames != meta.screenNames { notes = (try? await write(named)) ?? notes }
     seconds["notes"] = Date().timeIntervalSince(clock)
     meta.title = notes.title
     // As MeetingEngine.finish does.
@@ -147,4 +163,9 @@ exit(failures == 0 ? 0 : 2)
     let encoder = JSONEncoder(); encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
     try encoder.encode(result).write(to: out.appendingPathComponent("\(input.id).json"))
     print("\(input.id): \(participants.joined(separator: ", "))")
+}
+
+func earlierTranscript(_ id: String, in folder: URL) throws -> [TranscriptSegment] {
+    let earlier = try JSONDecoder().decode(Output.self, from: Data(contentsOf: folder.appendingPathComponent("\(id).json")))
+    return earlier.segments.map { TranscriptSegment(speaker: $0.speaker_id, text: $0.text, chunkIndex: 0, start: $0.start, end: $0.end) }
 }
