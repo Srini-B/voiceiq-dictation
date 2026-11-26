@@ -71,7 +71,7 @@ Eval meetings: AMI ES2004a (headset mix, four people; the mic track is one perso
 
 ```sh
 python3 -m doctest eval/cost.py
-python3 eval/cost.py eval/dictation/results/LABEL.json   # --prices 2026-12 for today's prices
+python3 eval/cost.py eval/dictation/results/LABEL.json   # default: 2027-01 prices (the highest announced); --prices 2026-12 for the 2026 prices
 # a run from a runner that does not send the backup request needs the share the app sends it on:
 python3 eval/cost.py eval/dictation/results/LABEL.json --backup-share 0.08
 ```
