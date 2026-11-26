@@ -46,7 +46,11 @@
   keeps a word another tracked dictation in the field still teaches.
 - Known limits: the respelling bound rejects some phonetic name fixes
   ("shivon" → "Siobhan"), the same bound the iPhone classifier uses; deleting
-  a learned word leaves its entry.
+  a learned word leaves its entry. A neighbour that only changes case
+  ("whisper flow" fixed to "Wispr", then "flow" to "Flow" after a pause) does
+  not fold into the learned name, because a case change alone cannot be told
+  from sentence case or a second name ("Wispr Slack"); fixing both words
+  before the 4 s settle still learns "Wispr Flow".
 
 ## Verification
 
