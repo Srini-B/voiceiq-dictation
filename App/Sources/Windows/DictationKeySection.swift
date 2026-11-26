@@ -159,7 +159,10 @@ struct DictationKeySection: View {
 /// to be visible only from the menu bar; here each row opens the matching
 /// System Settings pane and updates on its own once the grant lands.
 struct PermissionsSection: View {
-    @State private var accessibility = AXIsProcessTrusted()
+    @State private var accessibility = KeystrokeAccess.isReady
+    /// Accessibility is on but macOS 27.3+ has not let VoiceiQ post key
+    /// events; that grant counts only after a restart.
+    @State private var postAccessPending = false
     @State private var screenRecording = CGPreflightScreenCaptureAccess()
     @State private var microphone = AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
 
@@ -167,7 +170,8 @@ struct PermissionsSection: View {
 
     var body: some View {
         Section("Permissions") {
-            PermissionRow(title: "Accessibility", granted: accessibility, settingsAnchor: "Privacy_Accessibility")
+            PermissionRow(title: KeystrokeAccess.listName, granted: accessibility, settingsAnchor: "Privacy_Accessibility",
+                          offersRestart: postAccessPending, onOpen: KeystrokeAccess.requestPostAccess)
             PermissionRow(title: "Screen Recording", granted: screenRecording, settingsAnchor: "Privacy_ScreenCapture")
             PermissionRow(title: "Microphone", granted: microphone, settingsAnchor: "Privacy_Microphone")
         }
@@ -176,7 +180,8 @@ struct PermissionsSection: View {
     }
 
     private func refresh() {
-        accessibility = AXIsProcessTrusted()
+        accessibility = KeystrokeAccess.isReady
+        postAccessPending = !accessibility && KeystrokeAccess.isSplit && AXIsProcessTrusted()
         screenRecording = CGPreflightScreenCaptureAccess()
         microphone = AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
     }
@@ -186,6 +191,8 @@ private struct PermissionRow: View {
     let title: String
     let granted: Bool
     let settingsAnchor: String
+    var offersRestart = false
+    var onOpen: () -> Void = {}
 
     var body: some View {
         LabeledContent(title) {
@@ -196,9 +203,14 @@ private struct PermissionRow: View {
                     .foregroundStyle(.secondary)
                 if !granted {
                     Button("Open System Settings") {
+                        onOpen()
                         NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?\(settingsAnchor)")!)
                     }
                     .controlSize(.small)
+                }
+                if offersRestart {
+                    Button("Restart VoiceiQ") { AppRestart.now() }
+                        .controlSize(.small)
                 }
             }
         }

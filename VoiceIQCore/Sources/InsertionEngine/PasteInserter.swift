@@ -34,7 +34,14 @@ public final class PasteInserter {
     /// background task so the session isn't pinned in .inserting for a second
     /// after the text visibly landed (production pass 2, P0: the next dictation's
     /// begin was silently rejected in that window).
+    ///
+    /// Returns false without touching the clipboard when macOS 27.3+ would
+    /// drop the ⌘V silently (`KeystrokeAccess`).
     public func paste(_ text: String) async -> Bool {
+        guard KeystrokeAccess.mayPost else {
+            Log.insertion.warning("no System & App Protection Override grant — ⌘V not posted")
+            return false
+        }
         await finishPendingRestore()
         let pasteboard = NSPasteboard.general
         let snapshot = Self.snapshot(pasteboard)

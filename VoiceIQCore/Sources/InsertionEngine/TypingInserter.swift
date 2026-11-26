@@ -119,6 +119,10 @@ public enum TypingInserter {
     /// window (Windows App opens one per remote session), and stops otherwise.
     @MainActor
     public static func type(_ text: String, mode: Mode, targetPID: pid_t?) async -> Result {
+        guard KeystrokeAccess.mayPost else {
+            Log.insertion.warning("no System & App Protection Override grant — nothing typed")
+            return .unsupported
+        }
         guard let source = CGEventSource(stateID: .privateState) else { return .unsupported }
         switch mode {
         case .burst:

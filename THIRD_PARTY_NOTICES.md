@@ -224,6 +224,11 @@ SOFTWARE.
   isolation (`492d8c28`: `src/voice_processing.swift`,
   `ios/HEXMobile/AudioBackend.swift`), rewritten in Swift in
   `AudioCaptureEngine.swift` and `KeepAliveAudio.swift`
+- Also, from Hex at `012bdbbe`, rewritten in Swift: the macOS 27.3 posting
+  grant in `VoiceIQCore/Sources/InsertionEngine/KeystrokeAccess.swift` and the
+  checks that use it (`341046f8`: `src/paste.rs`, `src/paste/macos.rs`,
+  `src/desktop/permission_guide.rs`), and the Privacy & Security list name for
+  each macOS version (`0744db0d`: `native/permission_guide.m`)
 - License: MIT
 
 ```
