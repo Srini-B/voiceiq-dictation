@@ -76,4 +76,7 @@ main 35351ad, before this change:
   phrase followed by a comma, renames the entry instead of forgetting it.
 - Title abbreviations read as sentence ends, so "Dr. shivon" → "Dr. Siobhan"
   is not learned by sound.
+- After part of a learned phrase is deleted ("Wispr Flow" → "Wispr"), the
+  leftover stays in the field's history, so a later harvest does not learn
+  "Wispr" on its own; typing the phrase back learns it again (Codex review).
 - Unsigned Mac Debug build succeeds. Not tested live on a signed build.

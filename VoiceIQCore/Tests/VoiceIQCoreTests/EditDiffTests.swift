@@ -119,7 +119,20 @@ final class EditDiffTests: XCTestCase {
         XCTAssertEqual(EditDiff.steps(for: half, after: both.corrections), [.forget(fix("whisper flowcast", "Wispr Flow", 2..<4))])
         let secondGone = EditDiff.edits(original: phrase, replacement: "I tried Wispr yesterday.")
         XCTAssertEqual(EditDiff.steps(for: secondGone, after: both.corrections), [.forget(fix("whisper flowcast", "Wispr Flow", 2..<4))])
-        XCTAssertEqual(EditDiff.history(after: secondGone, earlier: both.corrections), [])
+        // What is left of a phrase taken back is not learned at a later
+        // harvest, but typing the phrase back learns it again.
+        let joined = "I tried Wisprflow yesterday at the office."
+        let split = EditDiff.edits(original: joined, replacement: "I tried Wispr Flow yesterday at the office.")
+        let shortened = EditDiff.edits(original: joined, replacement: "I tried Wispr yesterday at the office.", earlier: split.corrections)
+        XCTAssertEqual(EditDiff.steps(for: shortened, after: split.corrections), [.forget(fix("Wisprflow", "Wispr Flow", 2..<3))])
+        let left = EditDiff.history(after: shortened, earlier: split.corrections)
+        XCTAssertEqual(left, [fix("Wisprflow", "Wispr", 2..<3)])
+        let laterPunctuation = EditDiff.edits(original: joined, replacement: "I tried Wispr yesterday at the office!", earlier: left)
+        XCTAssertEqual(EditDiff.steps(for: laterPunctuation, after: left), [])
+        let typedBack = EditDiff.edits(original: joined, replacement: "I tried Wispr Flow yesterday at the office.", earlier: left)
+        XCTAssertEqual(EditDiff.steps(for: typedBack, after: left), [
+            .revise(replacing: left, with: fix("Wisprflow", "Wispr Flow", 2..<3)),
+        ])
         let firstGone = EditDiff.edits(original: phrase, replacement: "I tried Flow yesterday.")
         XCTAssertEqual(EditDiff.steps(for: firstGone, after: both.corrections), [.forget(fix("whisper flowcast", "Wispr Flow", 2..<4))])
         let all = EditDiff.edits(original: phrase, replacement: "")
