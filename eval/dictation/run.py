@@ -42,21 +42,26 @@ class Hedge:
     90th percentile of the last 20 answer times, between 4 and 6 s (6 s
     before five have answered); an answer that needed the second request
     counts as 1.5 times the delay. Shared by the workers like the app's one
-    instance is shared by its dictations."""
+    instance is shared by its dictations. A ceiling of 0 is the app since
+    2026-11-26: no backup request."""
 
-    def __init__(self, ceiling: float = 6.0):
+    def __init__(self, ceiling: float = 0.0):
         self.ceiling = ceiling
         self.recent: list[float] = []
         self.lock = threading.Lock()
 
-    def delay(self) -> float:
+    def delay(self) -> float | None:
+        if not self.ceiling:
+            return None  # concurrent.futures.wait(timeout=None): no backup
         with self.lock:
             if len(self.recent) < 5:
                 return min(8.0, self.ceiling)
             ordered = sorted(self.recent)
             return min(max(ordered[int((len(ordered) - 1) * 0.9)], 4.0), self.ceiling)
 
-    def record(self, seconds: float, delay: float) -> None:
+    def record(self, seconds: float, delay: float | None) -> None:
+        if delay is None:
+            return
         with self.lock:
             self.recent = (self.recent + [delay * 1.5 if seconds > delay else seconds])[-20:]
 
@@ -195,8 +200,9 @@ def main() -> None:
     ap.add_argument("--rounds", type=int, default=2)
     ap.add_argument("--workers", type=int, default=3)
     ap.add_argument("--screenshots", type=int, default=4, help="0 = screen context off")
-    ap.add_argument("--hedge-ceiling", type=float, default=6.0,
-                    help="DictationHedge's ceiling in the commit under test (20 before the follow-up to #83)")
+    ap.add_argument("--hedge-ceiling", type=float, default=0.0,
+                    help="DictationHedge's ceiling in the commit under test: 0 = no backup request (the app since"
+                         " 2026-11-26), 6 for #95, 20 before the follow-up to #83")
     ap.add_argument("--promptdump", default=str(HERE.parent / "promptdump" / "promptdump"))
     args = ap.parse_args()
     HEDGE.ceiling = args.hedge_ceiling
