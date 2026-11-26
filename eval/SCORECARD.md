@@ -2,7 +2,11 @@
 
 Every item scores 0–100. The target is 90 or more on every item, and dictation in 3 s or less from key-up to inserted text with every option on. Score main, then score each feature PR before it merges.
 
-The judge for the items marked *judged* is Claude Fable 5.2, run as its own Amp thread so it never sees how the output was made. Give it the rubric below and the JSON lines from `score.py --packet`, and save its answer as `results/<label>.judge.json`.
+**Who scores.** Claude Fable 5.2 is the scorer of record, run as its own Amp thread so it never sees how the output was made.
+- Items marked *judged*: give it the rubric below and the JSON lines from `score.py --packet`, and save its answer as `results/<label>.judge.json`.
+- Measured items (names, word accuracy, latency, M1–M4): the scripts compute the numbers; send Fable the report with its misses, and the score counts once Fable accepts it or corrects it.
+
+**Second review.** Gemini Neon, through the Antigravity CLI, reviews each PR, and main before each release. Weigh its review with Fable's scores before merging or releasing. A finding it raises that Fable's scores don't reflect gets fixed or answered in the PR before the merge.
 
 ## Dictation
 

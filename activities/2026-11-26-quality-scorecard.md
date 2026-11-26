@@ -39,3 +39,8 @@ Scored by the meetings thread with `eval/meetings/score.py` at 7ad4e32, mean ove
 **M5 notes, judged by Claude Fable 5.2: 85.3 mean, 4 of 9 meetings at 90+.** No invented commitments, no wrong owners. The misses: actions left in prose instead of the action list (s3: 1 of 4 listed), actions without an owner although the speaker was known, a recorded problem dropped (AMI budget), six sections for a 69-second call, and a date carried from one item to another. Notes become a follow-up PR; #82 merges on M1–M4.
 
 **M5 after the notes follow-up (meeting-notes-quality, round 3): 92.6 mean, 8 of 9 at 90+, nothing invented.** Round 2 lost s2's action items (the model returned none); the fix is structural: when notes have no actions but the transcript has "I'll / I will / I can / I'm going to" lines, the app asks once more with those lines quoted. AMI stays at 88 (unowned generic next step, flip-top cost caveat missing).
+
+## Scorers (owner's direction, 2026-11-26)
+
+- Claude Fable 5.2 is the scorer of record for every item. The scripts' numbers count once Fable accepts or corrects them.
+- Gemini Neon, through the Antigravity CLI on the BlueLobster runner, is a second reviewer of each PR and of main before each release. Its review is weighed with Fable's scores before a merge or release.
