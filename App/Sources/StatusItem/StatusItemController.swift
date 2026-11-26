@@ -17,6 +17,7 @@ final class StatusItemController: NSObject {
     private let onOpenHistory: () -> Void
     private let onPasteLast: () -> Void
     private let onOpenSettings: () -> Void
+    private let onAddToDictionary: () -> Void
     private let onStartHandsFree: () -> Void
     private let onOpenAbout: () -> Void
     private let onCheckForUpdates: () -> Void
@@ -31,6 +32,7 @@ final class StatusItemController: NSObject {
         onOpenHistory: @escaping () -> Void,
         onPasteLast: @escaping () -> Void,
         onOpenSettings: @escaping () -> Void,
+        onAddToDictionary: @escaping () -> Void,
         onStartHandsFree: @escaping () -> Void,
         onOpenAbout: @escaping () -> Void,
         onCheckForUpdates: @escaping () -> Void,
@@ -41,6 +43,7 @@ final class StatusItemController: NSObject {
         self.onOpenHistory = onOpenHistory
         self.onPasteLast = onPasteLast
         self.onOpenSettings = onOpenSettings
+        self.onAddToDictionary = onAddToDictionary
         self.onStartHandsFree = onStartHandsFree
         self.onOpenAbout = onOpenAbout
         self.onCheckForUpdates = onCheckForUpdates
@@ -141,6 +144,10 @@ final class StatusItemController: NSObject {
         history.target = self
         menu.addItem(history)
 
+        let addWord = NSMenuItem(title: "Add to Dictionary…", action: #selector(addToDictionary), keyEquivalent: "")
+        addWord.target = self
+        menu.addItem(addWord)
+
         menu.addItem(.separator())
 
         // Which mic VoiceiQ hears through — moves the SYSTEM default input, exactly
@@ -195,6 +202,10 @@ final class StatusItemController: NSObject {
 
     @objc private func openSettings() {
         onOpenSettings()
+    }
+
+    @objc private func addToDictionary() {
+        onAddToDictionary()
     }
 
     @objc private func startHandsFree() {

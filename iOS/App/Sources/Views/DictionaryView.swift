@@ -18,8 +18,16 @@ struct DictionaryView: View {
     var body: some View {
         Form {
             Section {
-                TextField("Word or name", text: $newTerm).textInputAutocapitalization(.never).autocorrectionDisabled()
-                TextField("Heard as (optional)", text: $misspelling).textInputAutocapitalization(.never).autocorrectionDisabled()
+                // Labels beside the fields stay once they are filled in, so the
+                // two can't be typed into each other's field.
+                LabeledContent("Write it as") {
+                    TextField("Write it as", text: $newTerm, prompt: Text("e.g. Kubernetes"))
+                        .textInputAutocapitalization(.never).autocorrectionDisabled()
+                }
+                LabeledContent("Heard as") {
+                    TextField("Heard as", text: $misspelling, prompt: Text("Optional, e.g. cooper netties"))
+                        .textInputAutocapitalization(.never).autocorrectionDisabled()
+                }
                 HStack {
                     if let feedback {
                         Text(feedback).font(Theme.Fonts.footnote()).foregroundStyle(Theme.Colors.muted)

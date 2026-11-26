@@ -142,6 +142,22 @@ final class PillHUDController {
     private func reposition() {
         guard let screen = targetScreen() else { return }
         place(on: screen)
+        rehomeIfStranded()
+    }
+
+    /// The window server can tie a `.canJoinAllSpaces` panel to one Space
+    /// (another app's full-screen Space, or after a display change) and keep it
+    /// there while AppKit still reports the behaviour. Ordering it in once with
+    /// `.moveToActiveSpace` brings it to the Space in front; the usual
+    /// behaviour goes back on at once so it joins every Space again. Hex does
+    /// the same (anomalyco/hex, MIT).
+    private func rehomeIfStranded() {
+        guard panel.isVisible, !panel.isOnActiveSpace else { return }
+        let joinsAll = panel.collectionBehavior
+        panel.orderOut(nil)
+        panel.collectionBehavior = joinsAll.subtracting(.canJoinAllSpaces).union(.moveToActiveSpace)
+        panel.orderFrontRegardless()
+        panel.collectionBehavior = joinsAll
     }
 
     /// The bottom of `screen`, at the anchor the user chose.

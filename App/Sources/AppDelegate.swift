@@ -61,6 +61,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             onOpenHistory: { [weak controller] in controller?.openHistory() },
             onPasteLast: { [weak controller] in controller?.pasteLastTranscript() },
             onOpenSettings: { [weak controller] in controller?.openSettings() },
+            onAddToDictionary: { [weak controller] in controller?.addToDictionary() },
             onStartHandsFree: { [weak controller] in controller?.startHandsFree() },
             onOpenAbout: { [weak controller] in controller?.openSettings(section: "about") },
             onCheckForUpdates: { AppUpdater.shared.checkForUpdates() },

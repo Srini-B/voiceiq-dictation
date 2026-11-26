@@ -463,7 +463,8 @@ type, emoji) and the keyboard's Ask and Translate modes were removed on
 
 ### Dictionary
 
-Settings › Dictionary matches the Mac: search, add with "Heard as", separate
+Settings › Dictionary matches the Mac: search, add with "Write it as" and
+"Heard as" labels that stay beside the fields, separate
 Dictionary and Auto-learned sections (auto-learned words come from the Mac's
 edits),
 stars, swipe to delete, and CSV import and export from the ⋯ menu.

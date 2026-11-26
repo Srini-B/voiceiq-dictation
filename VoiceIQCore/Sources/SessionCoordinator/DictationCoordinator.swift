@@ -135,7 +135,7 @@ public final class DictationCoordinator: ObservableObject {
 
     /// Cancelled recordings at least this long stay recoverable in History —
     /// an accidental Esc after minutes of dictation must not destroy the words.
-    static let cancelKeepThreshold: Double = 10
+    nonisolated static let cancelKeepThreshold: Double = 10
 
     private let audioFactory: @MainActor () -> AudioCapturing
     private let transcription: TranscriptionServicing

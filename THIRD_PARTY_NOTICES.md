@@ -236,6 +236,14 @@ SOFTWARE.
   and from `9e41970e`, the cellular test on `NWPath` (`usesInterfaceType(.cellular)`,
   `isExpensive`, from `ios/HEXMobile/KeyboardParakeetDownload.swift`) in
   `VoiceIQCore/Sources/LocalModels/CellularDownloadConsent.swift`
+- Also, rewritten in Swift: the middle-mouse hold
+  (`VoiceIQCore/Sources/HotkeyEngine/MiddleMouseHold.swift` and its use in
+  `EventTapEngine.swift`, from `dc0e6e7c`, `src/middle_mouse_dictation.rs`),
+  the second ⌘Esc for long dictations
+  (`VoiceIQCore/Sources/SessionCoordinator/CancelConfirmation.swift`, from
+  `9d6e0990`, `src/dictation/cancel_confirm.rs`), and the pill's return to
+  the active Space (`App/Sources/HUD/PillHUDController.swift`, from
+  `8c9489b6`, `src/rune_hud/macos.rs`)
 - License: MIT
 
 ```

@@ -6,12 +6,17 @@ import VoiceIQCore
 /// Terms ride in the cleanup prompt; explicit misspelling rules are enforced
 /// deterministically after every dictation.
 struct DictionaryView: View {
+    /// Set by the menu bar's Add to Dictionary…; the pane puts the cursor in
+    /// the add row and clears it.
+    @Binding var addWordRequested: Bool
     private let store = DictionaryStore()
 
     @State private var entries: [DictionaryEntry] = []
     @State private var newTerm = ""
     @State private var newMisspelling = ""
     @State private var search = ""
+    @FocusState private var focusedField: AddField?
+    private enum AddField { case term, heardAs }
     /// Transient feedback under the add row / in the footer ("Already in your
     /// dictionary", "Imported 12 words") — silence on a failed action reads as
     /// a broken button.
@@ -31,6 +36,11 @@ struct DictionaryView: View {
             footer
         }
         .onAppear(perform: reload)
+        .task(id: addWordRequested) {
+            guard addWordRequested else { return }
+            focusedField = .term
+            addWordRequested = false
+        }
         // Auto-learned words and entries synced from the iPhone arrive while
         // the pane is open.
         .onReceive(NotificationCenter.default.publisher(for: .gtDictionaryDidChange).receive(on: RunLoop.main)) { _ in reload() }
@@ -54,17 +64,13 @@ struct DictionaryView: View {
         .padding(.top, VoiceIQUI.Spacing.l)
     }
 
+    /// The labels stay above the fields once they are filled in, so the right
+    /// spelling and the misheard one can't be typed into each other's field
+    /// (Hex labels its two columns for the same reason, anomalyco/hex, MIT).
     private var addRow: some View {
-        HStack(spacing: VoiceIQUI.Spacing.xs) {
-            TextField("Add a word or phrase…", text: $newTerm)
-                .textFieldStyle(.plain)
-                .font(VoiceIQUI.TypeScale.body(grad: grad))
-                .onSubmit(add)
-            TextField("Heard as… (optional)", text: $newMisspelling)
-                .textFieldStyle(.plain)
-                .font(VoiceIQUI.TypeScale.body(grad: grad))
-                .foregroundStyle(VoiceIQUI.Colors.onSurfaceVariant)
-                .onSubmit(add)
+        HStack(alignment: .bottom, spacing: VoiceIQUI.Spacing.xs) {
+            labeledField("Write it as", example: "e.g. Kubernetes", text: $newTerm, field: .term)
+            labeledField("Heard as (optional)", example: "e.g. cooper netties", text: $newMisspelling, field: .heardAs)
             Button(action: add) {
                 Image(systemName: "plus.circle.fill")
                     .foregroundStyle(newTerm.isEmpty ? VoiceIQUI.Colors.onSurfaceVariant : VoiceIQUI.Colors.primary)
@@ -76,6 +82,19 @@ struct DictionaryView: View {
         .background(RoundedRectangle(cornerRadius: VoiceIQUI.Radius.medium).fill(VoiceIQUI.Colors.surfaceContainer))
         .padding(.horizontal, VoiceIQUI.Spacing.l)
         .padding(.vertical, VoiceIQUI.Spacing.s)
+    }
+
+    private func labeledField(_ label: String, example: String, text: Binding<String>, field: AddField) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(label)
+                .font(VoiceIQUI.TypeScale.labelSmall(grad: grad))
+                .foregroundStyle(VoiceIQUI.Colors.onSurfaceVariant)
+            TextField(example, text: text)
+                .textFieldStyle(.plain)
+                .font(VoiceIQUI.TypeScale.body(grad: grad))
+                .focused($focusedField, equals: field)
+                .onSubmit(add)
+        }
     }
 
     private var filtered: [DictionaryEntry] {

@@ -26,8 +26,8 @@ while you talk, and a History window that proves nothing was ever lost.
 
 | Key | What happens |
 | --- | --- |
-| **Dictation key** (default `fn`) | One press starts, one press finishes. Hands-free, no holding. A bare modifier or a combination like ⌥D. |
-| **⌘Esc** | Cancels. A bare `Esc` goes to the app you are in. Anything over 10 seconds is still kept in History. |
+| **Dictation key** (default `fn`) | One press starts, one press finishes. Hands-free, no holding. A bare modifier, a combination like ⌥D, or the middle mouse button held for half a second. |
+| **⌘Esc** | Cancels. A bare `Esc` goes to the app you are in. After 10 seconds of recording it asks for a second ⌘Esc first, and the cancelled take is still kept in History. |
 | **⌥M** | Start or stop meeting notes. |
 | **⌘⇧V** | Paste the last transcript again. |
 
