@@ -116,7 +116,8 @@ wait. The on-device writer's removal shipped first, on its own (PR #90).
   changed or added (after the second round), then 97.4 over 273 cases at
   `fe36564`, 0 meant words lost. The fifth round changed no scored output;
   97.5 over 287 cases at `28b0594` and 97.5 over 295 at `d52be6b`, both with
-  0 lost.
+  0 lost; 97.3 over 300 cases at `f234957`, 0 lost (the two quoted-address
+  cases now keep their words). Neon at `f234957`: no High or Medium.
 - `swift test --package-path VoiceIQCore` on a macOS 27 Mac satellite, and
   `xcodebuild build` for VoiceIQ and VoiceIQiOS.
 
