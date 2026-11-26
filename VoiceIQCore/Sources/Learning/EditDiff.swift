@@ -118,7 +118,8 @@ public enum EditDiff {
     /// same words as earlier ones, because the user changed that word again or
     /// edited the word next to it, revises what those taught, so "Wispr" then
     /// "Flow" typed a few seconds apart ends as the one phrase "Wispr Flow".
-    /// An earlier edit is forgotten only when its original words are back.
+    /// An earlier edit is forgotten only when its original words are back and
+    /// no remaining correction teaches the same spelling.
     public static func steps(for edits: DictationEdits, after earlier: [LearnedCorrection]) -> [LearningStep] {
         let changed: [LearningStep] = edits.corrections.compactMap { correction in
             guard !earlier.contains(correction) else { return nil }
@@ -126,7 +127,10 @@ public enum EditDiff {
             guard !overlapped.isEmpty else { return .learn(correction) }
             return .revise(replacing: overlapped, with: correction)
         }
-        let undone = earlier.filter { edit in !edits.changed.contains { $0.overlaps(edit.words) } }
+        let undone = earlier.filter { edit in
+            !edits.changed.contains { $0.overlaps(edit.words) }
+                && !edits.corrections.contains { $0.replacement.lowercased() == edit.replacement.lowercased() }
+        }
         return changed + undone.map { .forget($0) }
     }
 

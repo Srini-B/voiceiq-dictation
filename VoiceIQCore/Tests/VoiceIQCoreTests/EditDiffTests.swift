@@ -63,6 +63,9 @@ final class EditDiffTests: XCTestCase {
         let first = EditDiff.edits(original: original, replacement: "Srini said hi, and later Shrinny left.")
         let second = EditDiff.edits(original: original, replacement: "Srini said hi, and later Shrini left.")
         XCTAssertEqual(EditDiff.steps(for: second, after: first.corrections), [.learn(fix("Shrinny", "Shrini", 5..<6))])
+
+        let both = EditDiff.edits(original: original, replacement: "Srini said hi, and later Srini left.")
+        XCTAssertEqual(EditDiff.steps(for: first, after: both.corrections), [])
     }
 
     func testAnEditTooLongToLearnDoesNotForgetTheWordsInsideIt() {

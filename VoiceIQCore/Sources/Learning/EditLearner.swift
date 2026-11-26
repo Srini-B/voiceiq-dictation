@@ -272,11 +272,9 @@ public final class EditLearner {
             var heardAs: String?
             switch step {
             case let .forget(edit):
-                let gone = known.filter {
-                    Self.isFresh($0)
-                        && $0.term.lowercased() == edit.replacement.lowercased()
-                        && $0.learnedFrom?.lowercased() == edit.original.lowercased()
-                }
+                // By spelling alone: a rename from another dictation keeps
+                // the older wording.
+                let gone = known.filter { Self.isFresh($0) && $0.term.lowercased() == edit.replacement.lowercased() }
                 guard !gone.isEmpty else { continue }
                 let goneIDs = Set(gone.map(\.id))
                 for entry in gone { dictionary.remove(id: entry.id) }
