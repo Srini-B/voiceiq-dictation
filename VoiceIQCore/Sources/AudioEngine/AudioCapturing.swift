@@ -39,6 +39,9 @@ public struct AudioCaptureResult: Equatable, Sendable {
 public protocol AudioCapturing: AnyObject, Sendable {
     /// ~30Hz RMS level in 0…1, delivered on an arbitrary queue.
     var onLevel: (@Sendable (Float) -> Void)? { get set }
+    /// Fired once per start, when the first buffer of audio arrives. `start`
+    /// returning is not that moment: on a Bluetooth route it can be seconds earlier.
+    var onFirstAudio: (@Sendable () -> Void)? { get set }
     /// Fired when the input device changed mid-recording (informational).
     var onDeviceChange: (@Sendable (String) -> Void)? { get set }
     /// Fired once when disk writes fail persistently (F22) — captured audio up to

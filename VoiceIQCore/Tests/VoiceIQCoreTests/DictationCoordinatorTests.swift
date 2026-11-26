@@ -17,6 +17,7 @@ final class DictationCoordinatorTests: XCTestCase {
     /// state is never touched from two places at once.
     final class FakeCapture: AudioCapturing, @unchecked Sendable {
         var onLevel: (@Sendable (Float) -> Void)?
+        var onFirstAudio: (@Sendable () -> Void)?
         var onDeviceChange: (@Sendable (String) -> Void)?
         var onWriteFailure: (@Sendable () -> Void)?
         var onEngineDied: (@Sendable (String) -> Void)?
@@ -150,6 +151,28 @@ final class DictationCoordinatorTests: XCTestCase {
         XCTAssertEqual(capture.stopCount, 1)
         await settle()
         XCTAssertEqual(c.state, .done(.inserted))
+    }
+
+    /// The engine reporting started is not audio: the session says it is
+    /// hearing the mic only once the first buffer arrives (Hex a2d940e3).
+    func testAudioFlowsOnlyAfterTheFirstBuffer() async {
+        let c = makeCoordinator()
+        c.handle(.begin)
+        XCTAssertFalse(c.audioFlowing)
+        await pump()
+        XCTAssertEqual(c.state, .recording(locked: false))
+        XCTAssertFalse(c.audioFlowing)
+
+        capture.onFirstAudio?()
+        await pump()
+        XCTAssertTrue(c.audioFlowing)
+
+        c.handle(.finalize)
+        XCTAssertFalse(c.audioFlowing)
+        await settle()
+        c.handle(.begin)
+        await pump()
+        XCTAssertFalse(c.audioFlowing, "the next dictation starts without audio")
     }
 
     func testHappyPathInserts() async {

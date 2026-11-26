@@ -229,6 +229,13 @@ SOFTWARE.
   checks that use it (`341046f8`: `src/paste.rs`, `src/paste/macos.rs`,
   `src/desktop/permission_guide.rs`), and the Privacy & Security list name for
   each macOS version (`0744db0d`: `native/permission_guide.m`)
+- Also, from Hex at `a2d940e3`, rewritten in Swift: the iPhone shows a
+  dictation as recording only once its first audio buffer arrives, and a stop
+  before then cancels quietly (`ios/HEXKeyboard/KeyboardLocalDictation.swift`;
+  here `DictationCoordinator.audioFlowing`, `iOS/App/Sources/AppModel.swift`);
+  and from `9e41970e`, the cellular test on `NWPath` (`usesInterfaceType(.cellular)`,
+  `isExpensive`, from `ios/HEXMobile/KeyboardParakeetDownload.swift`) in
+  `VoiceIQCore/Sources/LocalModels/CellularDownloadConsent.swift`
 - License: MIT
 
 ```

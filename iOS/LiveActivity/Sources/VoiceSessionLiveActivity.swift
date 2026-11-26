@@ -16,8 +16,8 @@ struct VoiceIQWidgets: WidgetBundle {
 
 /// "VoiceiQ Dictate" in Control Center, assignable to the Action button.
 /// Press once to start dictating in whatever app is open, again to stop.
-/// It stays on while the dictation records; the app reloads it when that
-/// changes.
+/// It stays on while the dictation starts and records; the app reloads it
+/// when that changes.
 @available(iOS 18.0, *)
 struct DictationControl: ControlWidget {
     var body: some ControlWidgetConfiguration {
@@ -96,6 +96,7 @@ private func isRecording(_ phase: VoiceSessionAttributes.ContentState.Phase) -> 
 private func title(for state: VoiceSessionAttributes.ContentState) -> String {
     switch state.phase {
     case .ready: return "VoiceiQ ready"
+    case .starting: return "Starting…"
     case .recording: return "Listening"
     case .processing: return "Writing"
     case .meeting: return "Recording notes"
@@ -111,7 +112,7 @@ private struct CompactLeading: View {
             EmptyView()
         case .recording:
             TinyWaveform()
-        case .processing:
+        case .starting, .processing:
             Image("BrandMark").resizable().scaledToFit().frame(width: 20, height: 20)
         case .meeting:
             Image(systemName: "record.circle.fill").foregroundStyle(recordingRed)
@@ -131,7 +132,7 @@ private struct CompactTrailing: View {
                 .font(.caption2.monospacedDigit())
                 .foregroundStyle(recordingRed)
                 .frame(maxWidth: 46)
-        case .processing:
+        case .starting, .processing:
             ProgressView().controlSize(.mini).tint(brandBlue)
         }
     }
@@ -146,7 +147,7 @@ private struct MinimalView: View {
             EmptyView()
         case .recording:
             TinyWaveform()
-        case .processing:
+        case .starting, .processing:
             ProgressView().controlSize(.mini).tint(brandBlue)
         case .meeting:
             Image(systemName: "record.circle.fill").foregroundStyle(recordingRed)
@@ -184,7 +185,7 @@ private struct TrailingStatus: View {
             TimerText(state: state)
                 .font(.title3.monospacedDigit())
                 .foregroundStyle(recordingRed)
-        } else if state.phase == .processing {
+        } else if state.phase == .starting || state.phase == .processing {
             ProgressView().tint(brandBlue)
         } else {
             Text("Ready").font(.caption).foregroundStyle(.secondary)
@@ -199,7 +200,7 @@ private struct ActionButton: View {
     var body: some View {
         Group {
             switch state.phase {
-            case .recording:
+            case .starting, .recording:
                 Button(intent: StopDictationIntent()) {
                     Label("Stop", systemImage: "stop.fill")
                 }

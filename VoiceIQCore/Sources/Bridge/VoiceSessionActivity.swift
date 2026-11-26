@@ -8,6 +8,8 @@ public struct VoiceSessionAttributes: ActivityAttributes {
     public struct ContentState: Codable, Hashable, Sendable {
         public enum Phase: String, Codable, Hashable, Sendable {
             case ready
+            /// A dictation waiting for its microphone's first audio.
+            case starting
             case recording
             case processing
             case meeting
@@ -120,11 +122,11 @@ public struct SetDictationIntent: SetValueIntent, AudioRecordingIntent, LiveActi
 }
 
 extension SharedStore {
-    /// The control is on while the app records a dictation.
+    /// The control is on while the app records a dictation, or is starting one.
     public static let dictationControlKind = "io.blue.voiceiq.ios.control.dictate"
 
     public func isDictating(now: Date = Date()) -> Bool {
-        snapshot.phase == .recording && appIsAlive(now: now)
+        snapshot.phase.isDictating && appIsAlive(now: now)
     }
 }
 

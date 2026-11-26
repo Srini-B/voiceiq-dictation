@@ -23,6 +23,7 @@ import VoiceIQObjC
 /// writer change only on the caller's start/stop sequence and on `queue`.
 public final class AudioCaptureEngine: AudioCapturing, @unchecked Sendable {
     public var onLevel: (@Sendable (Float) -> Void)?
+    public var onFirstAudio: (@Sendable () -> Void)?
     public var onDeviceChange: (@Sendable (String) -> Void)?
     public var onWriteFailure: (@Sendable () -> Void)?
     public var onEngineDied: (@Sendable (String) -> Void)?
@@ -815,11 +816,14 @@ public final class AudioCaptureEngine: AudioCapturing, @unchecked Sendable {
     /// Phase 0: the number that actually matters for capture latency, and the one
     /// any voice-processing watchdog must be calibrated against.
     private func logFirstBufferIfNeeded(_ buffer: AVAudioPCMBuffer) {
+        guard buffer.frameLength > 0 else { return }
         stateLock.lock()
         let shouldLog = !firstBufferLogged
         firstBufferLogged = true
         stateLock.unlock()
-        guard shouldLog, let startedClock else { return }
+        guard shouldLog else { return }
+        onFirstAudio?()
+        guard let startedClock else { return }
         let ms = Double(DispatchTime.now().uptimeNanoseconds - startedClock.uptimeNanoseconds) / 1_000_000
         let format = buffer.format
         Log.audio.info("first buffer: \(ms, format: .fixed(precision: 1))ms after start on \(AudioInputDevices.currentDefaultName() ?? "unknown", privacy: .public) [\(AudioDeviceQuery.transportDescription(), privacy: .public)] — input \(Int(format.sampleRate))Hz/\(format.channelCount)ch/\(format.commonFormat.rawValue)\(format.isInterleaved ? "/interleaved" : ""), \(buffer.frameLength) frames")

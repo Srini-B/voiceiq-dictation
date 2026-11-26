@@ -118,12 +118,40 @@ public final class LocalModelStore: ObservableObject {
         sessions[id] = nil
     }
 
+    /// On an iPhone on cellular data, a download that has not started yet
+    /// waits for the user to confirm it (`CellularModelDownloads`).
     public func download() {
-        guard downloadTask == nil, deleteTask == nil else { return }
-        switch state {
-        case .notDownloaded, .failed: break
-        case .unsupported, .downloading, .ready, .deleting: return
+        guard canStartDownload else { return }
+        #if os(iOS)
+        switch CellularModelDownloads.shared.tap(self, id: manifest.directoryName) {
+        case .start: break
+        case .ask: return
+        case .offline:
+            state = .failed("No internet connection. Connect and try again.")
+            return
         }
+        #endif
+        startDownload()
+    }
+
+    #if os(iOS)
+    /// The user agreed to download over cellular data.
+    func startConfirmedDownload() {
+        guard canStartDownload else { return }
+        CellularModelDownloads.shared.confirmed(id: manifest.directoryName)
+        startDownload()
+    }
+    #endif
+
+    private var canStartDownload: Bool {
+        guard downloadTask == nil, deleteTask == nil else { return false }
+        switch state {
+        case .notDownloaded, .failed: return true
+        case .unsupported, .downloading, .ready, .deleting: return false
+        }
+    }
+
+    private func startDownload() {
         state = .downloading(progress: 0)
         let manifest = manifest
         downloadTask = Task { [weak self] in
@@ -141,6 +169,12 @@ public final class LocalModelStore: ObservableObject {
             }
             guard let self else { return }
             self.downloadTask = nil
+            #if os(iOS)
+            // A failed download keeps its consent: Retry carries it on.
+            if outcome == .ready || outcome == .notDownloaded {
+                CellularModelDownloads.shared.ended(id: manifest.directoryName)
+            }
+            #endif
             // A delete in progress owns the state until it finishes.
             if self.deleteTask == nil { self.state = outcome }
             // Without a key, a model arriving is what makes dictation possible.

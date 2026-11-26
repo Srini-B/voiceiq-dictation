@@ -13,6 +13,10 @@ public final class DictationCoordinator: ObservableObject {
     // Observable surface for the HUD / status item.
     @Published public private(set) var state: DictationState = .idle
     @Published public private(set) var micLevel: Float = 0
+    /// The recording session's microphone has delivered audio. Until then the
+    /// session is warming, or recording on an engine whose first buffer has not
+    /// arrived; the iPhone says "Starting…" rather than that it is listening.
+    @Published public private(set) var audioFlowing = false
     @Published public private(set) var lastResult: String?
     @Published public private(set) var coachingHint: String?
 
@@ -240,6 +244,7 @@ public final class DictationCoordinator: ObservableObject {
         state = .idle
         coachingHint = nil
         pendingLockIn = false // never inherit a stale latch from a dead session
+        audioFlowing = false
         apply(.hotkeyBegin)
 
         let id = UUID()
@@ -270,6 +275,12 @@ public final class DictationCoordinator: ObservableObject {
             capture.onLevel = { [weak self] level in
                 Task { @MainActor [weak self] in
                     self?.ingestLevel(level)
+                }
+            }
+            capture.onFirstAudio = { [weak self] in
+                Task { @MainActor [weak self] in
+                    guard let self, self.session?.id == id, self.capture != nil else { return }
+                    self.audioFlowing = true
                 }
             }
             capture.onDeviceChange = { [weak self] message in
@@ -404,6 +415,7 @@ public final class DictationCoordinator: ObservableObject {
         let engine = capture
         capture = nil
         micLevel = 0
+        audioFlowing = false
         let stop = Task { @MainActor in
             await engine?.stop() ?? AudioCaptureResult(framesWritten: 0, durationSeconds: 0)
         }
@@ -725,6 +737,7 @@ public final class DictationCoordinator: ObservableObject {
         inFlightTask?.cancel() // stop the network work too (audit L8)
         inFlightTask = nil
         micLevel = 0
+        audioFlowing = false
         coachingHint = hint // feedback is immediate; the bookkeeping can wait
 
         // Teardown is async (it drains the HAL tail), so the keep-or-discard

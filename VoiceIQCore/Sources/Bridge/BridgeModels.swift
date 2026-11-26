@@ -71,8 +71,14 @@ public struct SessionSnapshot: Codable, Equatable, Sendable {
         case off
         /// Session alive, mic off. The next mic tap records in place.
         case warm
+        /// A dictation was started and its microphone has not delivered audio
+        /// yet. The keyboard says "Starting…", not that it is listening.
+        case starting
         case recording
         case processing
+
+        /// A dictation is starting or recording: the Control Center toggle is on.
+        public var isDictating: Bool { self == .starting || self == .recording }
     }
 
     public var phase: Phase

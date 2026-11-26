@@ -11,6 +11,7 @@ import VoiceIQCore
 /// coordinator, the main run loop's timer, and `stop`, which hops there).
 final class SimulatedMicrophone: AudioCapturing, @unchecked Sendable {
     var onLevel: (@Sendable (Float) -> Void)?
+    var onFirstAudio: (@Sendable () -> Void)?
     var onDeviceChange: (@Sendable (String) -> Void)?
     var onWriteFailure: (@Sendable () -> Void)?
     var onEngineDied: (@Sendable (String) -> Void)?
@@ -39,6 +40,7 @@ final class SimulatedMicrophone: AudioCapturing, @unchecked Sendable {
         levelIndex = 0
         timer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] _ in
             guard let self else { return }
+            if levelIndex == 0 { onFirstAudio?() }
             onLevel?(levels[levelIndex % levels.count])
             levelIndex += 1
         }

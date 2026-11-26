@@ -134,6 +134,16 @@ final class AppModel: ObservableObject {
         coordinator.$micLevel
             .sink { [weak self] level in self?.levelChanged(level) }
             .store(in: &cancellables)
+        coordinator.$audioFlowing
+            .sink { [weak self] flowing in
+                // Fires before the property changes, so the value is passed on.
+                guard let self, flowing else { return }
+                switch self.coordinator.state {
+                case .warming, .recording: self.showRecording()
+                default: break
+                }
+            }
+            .store(in: &cancellables)
         coordinator.onSessionUpdate = { [weak self] meta, folder in
             self?.historyStore?.upsert(meta: meta, folder: folder)
             if SettingsStore().audioRetentionDays < 0, meta.rawTranscript != nil || meta.status == .silent {
@@ -256,7 +266,7 @@ final class AppModel: ObservableObject {
         case .start:
             start(command)
         case .stop:
-            if case .recording = coordinator.state { coordinator.handle(.finalize) }
+            stopDictation()
         case .cancel:
             coordinator.handle(.cancel)
         }
@@ -265,11 +275,23 @@ final class AppModel: ObservableObject {
     private func handle(_ request: ActivityRequest) {
         switch request.action {
         case .stopDictation:
-            if case .recording = coordinator.state { coordinator.handle(.finalize) }
+            stopDictation()
         case .stopMeeting:
             meetings.stopRecording()
         case .endSession:
             endSession()
+        }
+    }
+
+    /// Stop from the keyboard or the Live Activity. Before the microphone
+    /// delivered any audio there is nothing to transcribe, so the start is
+    /// cancelled quietly (Hex a2d940e3) instead of failing as "no audio".
+    private func stopDictation() {
+        switch coordinator.state {
+        case .warming, .recording:
+            coordinator.handle(coordinator.audioFlowing ? .finalize : .cancel)
+        default:
+            break
         }
     }
 
@@ -395,7 +417,7 @@ final class AppModel: ObservableObject {
         switch coordinator.state {
         case .recording, .warming:
             SessionDiagnostics.note("action button: stop")
-            coordinator.handle(.finalize)
+            stopDictation()
             return nil
         default:
             break
@@ -492,6 +514,11 @@ final class AppModel: ObservableObject {
 
     private var processingSince: Date?
 
+    private func showRecording() {
+        if session.recordingStartedAt == nil { session.recordingStartedAt = Date() }
+        session.dictationPhase = .recording
+    }
+
     private func stateChanged(_ state: DictationState) {
         defer { previousState = state }
         switch state {
@@ -500,8 +527,13 @@ final class AppModel: ObservableObject {
                UIApplication.shared.applicationState != .active {
                 SessionDiagnostics.note("microphone started from the background")
             }
-            if session.recordingStartedAt == nil { session.recordingStartedAt = Date() }
-            session.dictationPhase = .recording
+            // "Recording" only once audio flows (Hex a2d940e3): a Bluetooth
+            // route can take seconds after the engine starts.
+            if coordinator.audioFlowing {
+                showRecording()
+            } else {
+                session.dictationPhase = .starting
+            }
         case .finalizing, .transcribing, .inserting:
             session.recordingStartedAt = nil
             session.dictationPhase = .processing
