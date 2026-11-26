@@ -24,6 +24,9 @@ final class TypingBridge: ObservableObject {
 
     let dictation = KeyboardViewModel()
     private(set) var keyboard: FullKeyboardView?
+    /// VoiceiQ shows its own content in the suggestion row; Hex shows its strip again after
+    /// the emoji panel or a selection, so this is applied again each time the strip refreshes.
+    private var suggestionsHidden = false
     private var lexiconEntries: [(userInput: String, documentText: String)] = []
 
     var proxy: UITextDocumentProxy? { controller?.textDocumentProxy }
@@ -51,6 +54,7 @@ final class TypingBridge: ObservableObject {
         view.onPreferredHeightChange = { [weak self] in self?.onPreferredHeightChange?() }
         view.onTextEdit = { [weak self] in self?.editor?.syncSelection() }
         view.onUndoDictation = { [weak self] in self?.editor?.resetUndo() }
+        view.onStripSuggestions = { [weak self] _ in self?.applySuggestionsHidden() }
         view.onStripRowLayout = { [weak self, weak view] row, emojiOpen in
             guard let self else { return }
             let inset = view?.engine.horizontalInset ?? 0
@@ -59,6 +63,7 @@ final class TypingBridge: ObservableObject {
             if self.emojiOpen != emojiOpen { self.emojiOpen = emojiOpen }
         }
         self.keyboard = view
+        applySuggestionsHidden()
         view.prepareForField()
         applyLexicon()
         return view
@@ -79,6 +84,7 @@ final class TypingBridge: ObservableObject {
 
     func refreshHostTraits() {
         dictation.needsGlobeKey = controller?.needsInputModeSwitchKey ?? true
+        dictation.hasFullAccess = controller?.hasFullAccess ?? false
     }
 
     func textDidChange() {
@@ -97,7 +103,15 @@ final class TypingBridge: ObservableObject {
     /// Hides Hex's suggestions while VoiceiQ shows something else in their row: the
     /// recording strip, a notice, the Dictionary offer or the edit panel.
     func setSuggestionsHidden(_ hidden: Bool) {
-        keyboard?.stripView.isHidden = hidden
+        suggestionsHidden = hidden
+        applySuggestionsHidden()
+    }
+
+    private func applySuggestionsHidden() {
+        guard let keyboard else { return }
+        // The emoji panel and a two-thumb selection keep the strip hidden themselves while up.
+        let hidden = suggestionsHidden || keyboard.emojiPanel != nil || keyboard.engine.selectionPresentation != nil
+        if keyboard.stripView.isHidden != hidden { keyboard.stripView.isHidden = hidden }
     }
 
     func handleMemoryWarning() {

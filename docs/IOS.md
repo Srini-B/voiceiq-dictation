@@ -434,6 +434,19 @@ VoiceiQ adds no row.
 - Undo dictation deletes the dictation only when the text on both sides of it
   still matches what was there when it went in, so an earlier copy of the
   same words is never the one removed (`0005-voiceiq-undo-context.patch`).
+- Hex's clipboard offer and the selection strip's Copy and Paste follow the
+  keyboard's real Full Access (`KeyboardViewModel.hasFullAccess`, set in
+  `TypingBridge.refreshHostTraits`). The Settings chip on Hex's Allow Paste
+  notice opens `voiceiq://keyboard/settings`, and the app opens its own page
+  in iOS Settings, where Paste from Other Apps is.
+- While VoiceiQ shows its own content in the suggestion row (recording strip,
+  notice, Dictionary offer, edit panel), Hex's strip stays hidden: the flag is
+  stored and applied again each time Hex refreshes its strip, which covers the
+  emoji panel closing and a selection ending
+  (`0006-voiceiq-strip-refresh.patch`).
+- VoiceiQ's Dictionary words reach Hex's vocabulary capped at 100; over the
+  cap the newest are kept, so a word added from the suggestion strip is never
+  the one dropped.
 - Hex's in-keyboard dictation, its recording panel and Metal dot scope, the
   style menu, translation and model notices are permanent stand-ins that
   never show (`HexDictationStandIns.swift`). Hex's wording that names its app
