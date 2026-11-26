@@ -732,7 +732,12 @@ private struct AccessibilityScreen: View {
     @State private var granted = KeystrokeAccess.isReady
     @State private var screenGranted = CGPreflightScreenCaptureAccess()
     @State private var pollTimer: Timer?
+    @State private var slowGrantTimer: Timer?
     @State private var slowGrant = false
+
+    /// On 27.3+ with Accessibility on, the posting grant only reads true
+    /// after a restart, so waiting would only hide the way forward.
+    private var needsRestart: Bool { !granted && AXIsProcessTrusted() && KeystrokeAccess.isSplit }
 
     var body: some View {
         ScreenScaffold("Let it type for you.", "\(KeystrokeAccess.listName) lets VoiceiQ place text at your cursor. Screen Recording lets VoiceiQ read names and paths on screen while you talk. It is optional.") {
@@ -749,10 +754,9 @@ private struct AccessibilityScreen: View {
                         NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")!)
                     }
                 }
-                if slowGrant && !granted {
+                if (slowGrant && !granted) || needsRestart {
                     HStack(spacing: VoiceIQUI.Spacing.xs) {
-                        // On 27.3+ the posting grant never shows before a restart.
-                        Text(AXIsProcessTrusted() && KeystrokeAccess.isSplit
+                        Text(needsRestart
                              ? "Allowed it? macOS applies it after a restart."
                              : "Granted but not detected? A relaunch may be needed.")
                             .font(VoiceIQUI.TypeScale.labelSmall())
@@ -781,12 +785,13 @@ private struct AccessibilityScreen: View {
                     screenGranted = CGPreflightScreenCaptureAccess()
                 }
             }
-            Timer.scheduledTimer(withTimeInterval: 10, repeats: false) { _ in
+            slowGrantTimer = Timer.scheduledTimer(withTimeInterval: 10, repeats: false) { _ in
                 Task { @MainActor in slowGrant = true }
             }
         }
         .onDisappear {
             pollTimer?.invalidate()
+            slowGrantTimer?.invalidate()
         }
     }
 }
