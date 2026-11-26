@@ -2277,6 +2277,14 @@
       "heard": "The password is \"Hello. Yeah, fine.\".",
       "written": "the password is \"Hello. Yeah, fine.\"",
       "style": "messages"
+    },
+    {
+      "id": "kept-bullet-point-notation-subject",
+      "check": "kept as said",
+      "said": "bullet point notation is useful",
+      "heard": "Bullet point notation is useful.",
+      "written": "Bullet point notation is useful",
+      "style": "lists"
     }
   ]
 }
