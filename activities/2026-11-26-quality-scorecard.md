@@ -49,4 +49,4 @@ Scored by the meetings thread with `eval/meetings/score.py` at 7ad4e32, mean ove
 
 Accepted: D1 67.9, D2 97.5, D3 89.2, D5 0, M1 100, M5 92.6. Corrected:
 - **D4 cleanup: 91.3 → 89.5.** The long dictations are now judged for cleanup too, and a dropped spoken clause caps a case at 70. long_01 drops "Thanks, Srini." in both rounds (68 each).
-- **M2–M4:** the per-meeting mean let eight 70-second synthetic calls outvote the 17-minute AMI meeting. `meetings/score.py` now pools totals across meetings. Pooled with the new scorer for main after #82 and #84 (9 meetings): **M1 100.0, M2 90.5, M3 87.5, M4 85.4** (Fable's duration-weighted estimate was 89.8 / 87.6 / 85.4).
+- **M2–M4:** the per-meeting mean let eight 70-second synthetic calls outvote the 17-minute AMI meeting. `meetings/score.py` now pools totals across meetings. Pooled with the new scorer for main after #82 and #84 (9 meetings): **M1 100.0, M2 90.5, M3 87.5, M4 85.4** (Fable's duration-weighted estimate was 89.8 / 87.6 / 85.4). Fable accepted all four; M2 stands because AMI alone still scores 84.7 under the new scorer, so the 0.7 comes only from weighting by speech time.
