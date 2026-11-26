@@ -2,6 +2,7 @@
 import AppKit
 #endif
 import Foundation
+import os
 import VoiceIQBridge
 
 /// Transcription seam. `GeminiTranscriptionService` in the app; tests use fakes.
@@ -12,12 +13,68 @@ public protocol TranscriptionServicing: Sendable {
     /// by the writing rules, or as transcribed. Never throws for a failed
     /// writing request; the transcript is the fallback.
     func write(_ transcript: TranscriptionResult, context: DictationContext) async throws -> TranscriptionResult
+    /// Sends the request for speech that ended in a pause before the
+    /// recording ends; nil when this service does not.
+    func speculate(_ speech: PausedSpeech, context: DictationContext) -> SpeculativeDictation?
+    /// `transcribe`, answered by `speculation` when it covers the same speech
+    /// and prompt.
+    func transcribe(audioURL: URL, durationSeconds: Double, context: DictationContext,
+                    speculation: SpeculativeDictation?) async throws -> TranscriptionResult
 }
 
 public extension TranscriptionServicing {
     func write(_ transcript: TranscriptionResult, context: DictationContext) async throws -> TranscriptionResult {
         transcript
     }
+    func speculate(_ speech: PausedSpeech, context: DictationContext) -> SpeculativeDictation? { nil }
+    func transcribe(audioURL: URL, durationSeconds: Double, context: DictationContext,
+                    speculation: SpeculativeDictation?) async throws -> TranscriptionResult {
+        speculation?.cancel()
+        return try await transcribe(audioURL: audioURL, durationSeconds: durationSeconds, context: context)
+    }
+}
+
+/// Send-on-pause: the dictation request for speech that ended in a pause,
+/// sent while the recording goes on. At key-up it stands in for the request
+/// only when the recording's speech and the prompt are unchanged; otherwise
+/// it is cancelled. Requests stream, so one cancelled before the first chunk
+/// of its answer is not billed.
+public final class SpeculativeDictation: Sendable {
+    public let range: Range<Int64>
+    public let prompt: String
+    public let sentAt: ContinuousClock.Instant
+    public let answer: Task<String, Error>
+    private let progress: OSAllocatedUnfairLock<Progress>
+
+    private struct Progress {
+        var streamed = false
+        var answeredAt: ContinuousClock.Instant?
+    }
+
+    /// `answer` sends the request off the main actor and calls the closure
+    /// it is given when the first chunk of the answer arrives.
+    public init(range: Range<Int64>, prompt: String, sentAt: ContinuousClock.Instant,
+                answer: @escaping @Sendable (_ onFirstChunk: @escaping @Sendable () -> Void) async throws -> String) {
+        let progress = OSAllocatedUnfairLock(initialState: Progress())
+        self.range = range
+        self.prompt = prompt
+        self.sentAt = sentAt
+        self.progress = progress
+        self.answer = Task {
+            let text = try await answer { progress.withLock { $0.streamed = true } }
+            progress.withLock { $0.streamed = true; $0.answeredAt = ContinuousClock().now }
+            return text
+        }
+    }
+
+    /// Part of the answer arrived, so Gemini bills the request whether or
+    /// not it is used.
+    public var isBilled: Bool { progress.withLock { $0.streamed } }
+
+    /// When the whole answer arrived; nil until then.
+    public var answeredAt: ContinuousClock.Instant? { progress.withLock { $0.answeredAt } }
+
+    public func cancel() { answer.cancel() }
 }
 
 public struct TranscriptionResult: Equatable, Sendable {

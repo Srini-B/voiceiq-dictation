@@ -73,17 +73,25 @@ public enum PromptV1 {
         "required": ["text"],
     ]
 
-    /// The `text` of the answer, or nil when the reply is not that object
-    /// (a model that ignored the schema, or its working leaking out).
+    nonisolated(unsafe) private static let answerStart = try! NSRegularExpression(pattern: #"\{\s*"text"\s*:"#)
+
+    /// The `text` of the answer, or nil when the reply holds no such object
+    /// (a model that ignored the schema). A streamed answer joins every part,
+    /// and gemini-3.8-flash sometimes sends its working as a part before the
+    /// answer without flagging it as thought (see `GeminiClient.extractText`),
+    /// so the answer is the last `{"text": ...}` object that ends the reply.
     static func dictationText(fromJSON reply: String) -> String? {
-        var body = reply.trimmingCharacters(in: .whitespacesAndNewlines)
-        if body.hasPrefix("```") {
-            body = body.replacingOccurrences(of: "^```[a-z]*\\s*|\\s*```$", with: "", options: .regularExpression)
+        let body = reply.trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "^```[a-z]*\\s*|\\s*```$", with: "", options: .regularExpression)
+        let starts = answerStart.matches(in: body, range: NSRange(body.startIndex..., in: body))
+            .compactMap { Range($0.range, in: body)?.lowerBound }
+        for start in starts.reversed() {
+            if let object = try? JSONSerialization.jsonObject(with: Data(body[start...].utf8)) as? [String: Any],
+               let text = object["text"] as? String {
+                return text
+            }
         }
-        guard let data = body.data(using: .utf8),
-              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let text = object["text"] as? String else { return nil }
-        return text
+        return nil
     }
 
     /// Where the text is going: the app and window title the cursor is in.

@@ -102,8 +102,32 @@ public final class DictationCoordinator: ObservableObject {
                 screenContextCollector = nil
                 _ = collector.stop()
             }
+            pauseWatch?.cancel()
+            pauseWatch = nil
+            if let speculation {
+                self.speculation = nil
+                let billed = speculation.isBilled
+                speculation.cancel()
+                Log.transcription.notice("send-on-pause: dropped, the dictation ended without using it, billed: \(billed, privacy: .public)")
+            }
         }
     }
+    /// Watches for a pause in the speech while recording, to send the request early.
+    private var pauseWatch: Task<Void, Never>?
+    /// The request sent at a pause, until key-up uses or drops it.
+    private var speculation: SpeculativeDictation?
+    /// Send-on-pause timing, from silent gaps measured on real speech with
+    /// AudioChunker's voicing rule (2026-11-26): spontaneous headset speech
+    /// (AMI, 65 segments of 8 s or more) paused 1 s or longer 5.4 times a
+    /// minute, read speech (LibriSpeech, 73 clips) 0.6 times. Replayed on
+    /// both with measured answer times, 1 s after at least 1 s of speech,
+    /// cancelled when speech resumes, sent at most 3 times: on AMI 165
+    /// requests per 100 dictations, 2 of them answered before being
+    /// cancelled (billed), and 95 used at key-up when the key came 1 s or
+    /// more after the last word.
+    static let sendOnPauseSeconds = 1.0
+    static let sendOnPauseMinimumSpeech = 1.0
+    static let sendOnPauseMaxRequests = 3
     private var capture: AudioCapturing?
     /// The on-device model loading for this dictation while the user speaks.
     private var localTranscriber: LocalTranscriber?
@@ -346,6 +370,7 @@ public final class DictationCoordinator: ObservableObject {
         do {
             try capture.start(writingTo: FileLayout.audioCAF(in: folder))
             apply(.engineStarted)
+            if localTranscriber == nil { watchForPause(capture, sessionID: sessionID) }
             if pendingLockIn {
                 pendingLockIn = false
                 apply(.lockIn)
@@ -366,6 +391,39 @@ public final class DictationCoordinator: ObservableObject {
             self.capture = nil
             discardSessionArtifacts()
             self.session = nil
+        }
+    }
+
+    /// Send-on-pause: once the speaker has been silent for
+    /// `sendOnPauseSeconds`, the request goes out for the speech so far.
+    /// When they speak again it is cancelled, unbilled unless its answer
+    /// had started to arrive, and the next pause may send again. Recording goes on until
+    /// key-up either way.
+    private func watchForPause(_ capture: AudioCapturing, sessionID: UUID) {
+        pauseWatch = Task { @MainActor [weak self] in
+            var sent = 0
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 100_000_000)
+                guard let self, self.session?.id == sessionID, self.capture === capture,
+                      var context = self.session?.context else { return }
+                let range = capture.pausedSpeech(after: Self.sendOnPauseSeconds,
+                                                 minimumSpeech: Self.sendOnPauseMinimumSpeech)
+                if let early = self.speculation {
+                    guard range != early.range else { continue }
+                    self.speculation = nil
+                    let billed = early.isBilled
+                    early.cancel()
+                    Log.transcription.notice("send-on-pause: cancelled, speech resumed, billed: \(billed, privacy: .public)")
+                }
+                guard let range, sent < Self.sendOnPauseMaxRequests,
+                      let samples = capture.recordedSamples(in: range) else { continue }
+                let speech = PausedSpeech(range: range, samples: samples)
+                context.screenText = self.screenContextCollector?.texts ?? []
+                self.speculation = UsageMeter.$scope.withValue(UsageScope(activity: .dictation, sessionID: sessionID.uuidString)) {
+                    self.transcription.speculate(speech, context: context)
+                }
+                sent += 1
+            }
         }
     }
 
@@ -408,6 +466,11 @@ public final class DictationCoordinator: ObservableObject {
         finalizeRequestedAt = Date()
         session?.context.recordingEndedAt = finalizeRequestedAt
         finishScreenContext()
+        pauseWatch?.cancel()
+        pauseWatch = nil
+        if let silence = capture?.trailingSilence() {
+            Log.transcription.notice("send-on-pause: key-up \(String(format: "%.2f", silence), privacy: .public)s after the last speech, request sent early: \(self.speculation != nil, privacy: .public)")
+        }
         // Recording ends at key-up: no listening past it, even mid-word. stop()
         // only collects the buffer the HAL already holds (audio from before
         // key-up, at most one I/O buffer away) and tears the graph down, off the
@@ -514,9 +577,12 @@ public final class DictationCoordinator: ObservableObject {
         let usageScope = UsageScope(activity: .dictation, sessionID: sessionID.uuidString)
         let local = localTranscriber
         localTranscriber = nil
+        let early = speculation
+        speculation = nil
         inFlightTask = Task { [weak self] in
-          // Every way out of the job frees the next one's turn.
-          defer { ticket.finish() }
+          // Every way out of the job frees the next one's turn, and drops an
+          // early request nothing used.
+          defer { ticket.finish(); early?.cancel() }
           await UsageMeter.$scope.withValue(usageScope) {
             guard let self else { return }
             do {
@@ -538,7 +604,8 @@ public final class DictationCoordinator: ObservableObject {
                     // failed, the audio goes to Gemini whatever the writing choice.
                     try Task.checkCancellation()
                     outcome = try await self.transcription.transcribe(
-                        audioURL: audioURL, durationSeconds: result.durationSeconds, context: session.context
+                        audioURL: audioURL, durationSeconds: result.durationSeconds, context: session.context,
+                        speculation: early
                     )
                     stages = DictationSteps(finishRecording: finalizeSeconds,
                                             transcription: Date().timeIntervalSince(finalizeStartedAt))
@@ -736,6 +803,16 @@ public final class DictationCoordinator: ObservableObject {
         }
         inFlightTask?.cancel() // stop the network work too (audit L8)
         inFlightTask = nil
+        // A request sent at a pause stops now, not after the engine drains;
+        // its answer is never used.
+        pauseWatch?.cancel()
+        pauseWatch = nil
+        if let speculation {
+            self.speculation = nil
+            let billed = speculation.isBilled
+            speculation.cancel()
+            Log.transcription.notice("send-on-pause: cancelled with the dictation, billed: \(billed, privacy: .public)")
+        }
         micLevel = 0
         audioFlowing = false
         coachingHint = hint // feedback is immediate; the bookkeeping can wait

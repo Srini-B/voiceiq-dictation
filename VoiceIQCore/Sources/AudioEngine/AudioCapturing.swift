@@ -58,4 +58,18 @@ public protocol AudioCapturing: AnyObject, Sendable {
     /// Stops and finalizes the file, first draining the HAL's in-flight buffer
     /// so the tail of the last word is not discarded. Safe to call once.
     func stop() async -> AudioCaptureResult
+    /// The range of the speech written so far, once the speaker has said
+    /// `minimumSpeech` seconds and then been silent for `pause` seconds; nil
+    /// while they speak, or for a recording too long to send early.
+    func pausedSpeech(after pause: Double, minimumSpeech: Double) -> Range<Int64>?
+    /// The samples written in `range`, for a request sent at a pause.
+    func recordedSamples(in range: Range<Int64>) -> [Int16]?
+    /// Seconds between the last speech and the end of what was written.
+    func trailingSilence() -> Double?
+}
+
+public extension AudioCapturing {
+    func pausedSpeech(after pause: Double, minimumSpeech: Double) -> Range<Int64>? { nil }
+    func recordedSamples(in range: Range<Int64>) -> [Int16]? { nil }
+    func trailingSilence() -> Double? { nil }
 }

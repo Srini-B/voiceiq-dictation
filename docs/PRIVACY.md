@@ -23,9 +23,16 @@ With no usable key, nothing is sent and the recording stays on your Mac.
 
 ## What leaves your machine (the complete list)
 
-1. **Each dictation**, in one request to Gemini after you stop. Nothing is
-   sent while you speak. The request holds the FLAC-compressed recording
-   and the dictation prompt, and the model answers with the finished text.
+1. **Each dictation**, in a request to Gemini. The request holds the
+   FLAC-compressed recording and the dictation prompt, and the model
+   answers with the finished text. To save time, a request can go out
+   while you are still recording: once you have spoken for a second and
+   then paused for a second, the speech so far is sent, up to three times
+   per dictation. If you speak again, that request is cancelled and its
+   answer is never used, but the audio up to the pause has already left
+   your Mac. If you cancel after a pause, audio up to that pause may
+   already have been sent to Gemini; nothing is inserted or kept. Once a
+   recording passes two minutes, nothing more is sent before you stop.
    The prompt contains the built-in writing rules, your custom rules from
    Settings → Dictation, the regional spelling
    of your Mac (read from its region for each dictation), the frontmost

@@ -10,8 +10,11 @@ GeminiClient.dictate.
 
 Each call goes out the way GeminiTranscriptionService sends it, with the
 app's backup request (DictationHedge): a second request when the first has
-not answered after 4-6 s, the first answer winning. usage.secondRequests
-counts them.
+not answered after 4-6 s, the first answer winning and the other one
+cancelled. Requests stream (alt=sse) as the app's do, so a cancelled one is
+billed only if it had already streamed part of its answer.
+usage.secondRequests counts backups sent, usage.billedSecondRequests the
+billed ones.
 
 Writes results/<label>.json with each output, call time and token usage.
 Usage: run.py LABEL [--rounds N] [--workers N] [--promptdump PATH]
@@ -25,6 +28,7 @@ import hashlib
 import json
 import os
 import re
+import socket
 import subprocess
 import threading
 import time
@@ -75,28 +79,56 @@ def is_connection_failure(error: BaseException) -> bool:
             or (isinstance(error, urllib.error.URLError) and not isinstance(error, urllib.error.HTTPError)))
 
 
-def first_success(send, delay: float) -> tuple[dict, bool]:
+def first_success(send, delay: float) -> tuple[dict, bool, list]:
     """GeminiClient.firstSuccess: a second request starts when the first has
     not answered after `delay`, or at once when the first loses its
-    connection; the first answer wins. Returns the reply and whether the
-    second request was sent."""
+    connection; the first answer wins and the other request is cancelled.
+    Returns the reply, whether the second request was sent, and the
+    attempts that did not win as (future, state), for billed_losers()."""
     pool = concurrent.futures.ThreadPoolExecutor(2)
-    first = pool.submit(send)
-    pending = {first}
-    done, _ = concurrent.futures.wait(pending, timeout=delay)
+    attempts = [(pool.submit(send, state := {"response": None, "chunks": 0, "cancelled": False}), state)]
+    first = attempts[0][0]
+    done, _ = concurrent.futures.wait({first}, timeout=delay)
     second = not done or (first.exception() is not None and is_connection_failure(first.exception()))
     if second:
-        pending.add(pool.submit(send))
+        attempts.append((pool.submit(send, state := {"response": None, "chunks": 0, "cancelled": False}), state))
+    pending = {future for future, _ in attempts}
     error = None
     while pending:
         done, pending = concurrent.futures.wait(pending, return_when=concurrent.futures.FIRST_COMPLETED)
         for future in done:
             if future.exception() is None:
-                pool.shutdown(wait=False, cancel_futures=True)
-                return future.result(), second
+                # Every other attempt counts for billing, including one that
+                # finished in the same wait; only those still running are cut.
+                losers = [(f, state) for f, state in attempts if f is not future]
+                for f, state in losers:
+                    state["cancelled"] = True
+                    if f in pending and state["response"] is not None:
+                        abort(state["response"])
+                pool.shutdown(wait=False)
+                return future.result(), second, losers
             error = future.exception()
     pool.shutdown(wait=False)
     raise error
+
+
+def abort(response) -> None:
+    """Closes a response another thread may be blocked reading, the way the
+    app's task cancellation drops the connection."""
+    try:
+        response.fp.raw._sock.shutdown(socket.SHUT_RDWR)
+    except (AttributeError, OSError):
+        pass
+    response.close()
+
+
+def billed_losers(losers: list) -> int:
+    """Waits for cancelled attempts to wind down and counts those that had
+    streamed part of an answer, which Gemini bills; one cancelled before its
+    first chunk is not. An attempt still waiting for its response headers
+    when it lost is closed as soon as they arrive."""
+    concurrent.futures.wait([future for future, _ in losers])
+    return sum(state["chunks"] > 0 for _, state in losers)
 
 
 def prompt_for(case: dict, spec: dict, promptdump: str, screen_on: bool) -> str:
@@ -113,13 +145,36 @@ def prompt_for(case: dict, spec: dict, promptdump: str, screen_on: bool) -> str:
 
 def dictation_text(raw: str) -> str | None:
     body = raw.strip()
-    if body.startswith("```"):
-        body = re.sub(r"^```[a-z]*\s*|\s*```$", "", body)
-    try:
-        value = json.loads(body)
-    except ValueError:
-        return None
-    return value.get("text") if isinstance(value, dict) and isinstance(value.get("text"), str) else None
+    body = re.sub(r"^```[a-z]*\s*|\s*```$", "", body)
+    # As PromptV1.dictationText: the joined stream can carry unflagged
+    # working before the answer, so the answer is the last {"text": ...}
+    # object that ends the reply.
+    for start in reversed([m.start() for m in re.finditer(r'\{\s*"text"\s*:', body)]):
+        try:
+            value = json.loads(body[start:])
+        except ValueError:
+            continue
+        if isinstance(value, dict) and isinstance(value.get("text"), str):
+            return value["text"]
+    return None
+
+
+def joined_event_stream(body: bytes) -> dict:
+    """GeminiClient.joinedEventStream: the server-sent events of a streamed
+    answer as one generateContent envelope, thought parts left out."""
+    text, envelope, candidate = "", {}, {}
+    for line in body.decode().splitlines():
+        if not line.startswith("data:"):
+            continue
+        chunk = json.loads(line[5:])
+        envelope.update({k: chunk[k] for k in ("usageMetadata", "promptFeedback", "error") if k in chunk})
+        first = (chunk.get("candidates") or [{}])[0]
+        if "finishReason" in first:
+            candidate["finishReason"] = first["finishReason"]
+        text += "".join(p.get("text", "") for p in first.get("content", {}).get("parts", []) if not p.get("thought"))
+    candidate["content"] = {"parts": [{"text": text}]}
+    envelope["candidates"] = [candidate]
+    return envelope
 
 
 class MalformedAnswer(Exception):
@@ -135,19 +190,27 @@ def call(prompt: str, flac: bytes) -> tuple[str, float, dict]:
                                  "responseJsonSchema": {"type": "object", "properties": {"text": {"type": "string"}},
                                                         "required": ["text"]}}}
     req = urllib.request.Request(
-        f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL}:generateContent",
+        f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL}:streamGenerateContent?alt=sse",
         data=json.dumps(body).encode(),
         headers={"x-goog-api-key": os.environ["GEMINI_API_KEY"], "Content-Type": "application/json"})
-    def send() -> tuple[dict, str]:
+    def send(state: dict) -> tuple[dict, str]:
         # As GeminiClient.dictate: the answer is parsed inside each raced
         # attempt, so a malformed one cannot beat a valid one still running.
         with urllib.request.urlopen(req, timeout=120) as r:
-            reply = json.loads(r.read())
-        # As GeminiClient.extractText: the last non-empty, non-thought text
-        # part is the answer; an earlier one can be unflagged working.
-        texts = [p["text"] for p in reply["candidates"][0].get("content", {}).get("parts", [])
-                 if not p.get("thought") and isinstance(p.get("text"), str) and p["text"].strip()]
-        text = dictation_text(texts[-1] if texts else "")
+            state["response"] = r
+            if state["cancelled"]:
+                raise ConnectionAbortedError("lost the race before its answer")
+            lines = []
+            for line in r:
+                lines.append(line)
+                state["chunks"] += line.startswith(b"data:")
+            reply = joined_event_stream(b"".join(lines))
+        if "error" in reply:
+            # As GeminiClient.post: an error event after the 200 headers is
+            # handled as that status (a 429 waits and sends again).
+            raise urllib.error.HTTPError(req.full_url, reply["error"].get("code", 500),
+                                         reply["error"].get("message", ""), None, None)
+        text = dictation_text(reply["candidates"][0]["content"]["parts"][0]["text"])
         if text is None:
             raise MalformedAnswer()
         return reply, text
@@ -156,14 +219,14 @@ def call(prompt: str, flac: bytes) -> tuple[str, float, dict]:
     # fenced object is unwrapped, anything that is not {"text": ...} is a
     # malformed answer, which the app sends once more (sendWithRetry).
     start = time.monotonic()
-    hedged = 0
+    hedged = billed_second = 0
     for answer in range(2):
         try:
             for attempt in range(3):
                 try:
                     delay = HEDGE.delay()
                     sent = time.monotonic()
-                    (reply, text), second = first_success(send, delay)
+                    (reply, text), second, losers = first_success(send, delay)
                     HEDGE.record(time.monotonic() - sent, delay)
                     hedged += second
                     break
@@ -176,9 +239,11 @@ def call(prompt: str, flac: bytes) -> tuple[str, float, dict]:
             if answer == 1:
                 raise RuntimeError("malformed_answer twice")
     seconds = time.monotonic() - start
+    billed_second += billed_losers(losers)
     if "<<NO_SPEECH>>" in text:
         text = ""
-    return strip_artifacts(text), seconds, dict(reply.get("usageMetadata", {}), secondRequests=hedged)
+    return strip_artifacts(text), seconds, dict(reply.get("usageMetadata", {}), secondRequests=hedged,
+                                                billedSecondRequests=billed_second)
 
 
 def strip_artifacts(text: str) -> str:
@@ -218,7 +283,9 @@ def main() -> None:
     # settings sends fresh calls instead of relabelling old ones.
     def fingerprint(job):
         _, case, prompt = job
-        digest = hashlib.sha256(f"{MODEL}|{args.screenshots}|hedge{args.hedge_ceiling}|{prompt}".encode())
+        # "stream": calls made before requests streamed (and losers were
+        # cancelled) are not reused or pooled with these.
+        digest = hashlib.sha256(f"{MODEL}|stream|{args.screenshots}|hedge{args.hedge_ceiling}|{prompt}".encode())
         digest.update((ASSETS / f"{case['id']}.flac").read_bytes())
         return digest.hexdigest()[:16]
 
@@ -230,7 +297,8 @@ def main() -> None:
             # As the app: an empty answer on real audio is sent once more.
             text, again, retry_usage = call(prompt, flac)
             seconds += again
-            usage = dict(retry_usage, secondRequests=usage["secondRequests"] + retry_usage["secondRequests"])
+            usage = dict(retry_usage, secondRequests=usage["secondRequests"] + retry_usage["secondRequests"],
+                         billedSecondRequests=usage["billedSecondRequests"] + retry_usage["billedSecondRequests"])
         print(f"{case['id']:<18} r{round_} {seconds:5.2f}s thoughts={usage.get('thoughtsTokenCount', 0)}"
               f"{' hedged' if usage['secondRequests'] else ''}", flush=True)
         return {"id": case["id"], "round": round_, "request": fingerprint(job), "output": text,
