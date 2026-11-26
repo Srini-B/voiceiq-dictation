@@ -277,7 +277,9 @@ def main() -> None:
     # settings sends fresh calls instead of relabelling old ones.
     def fingerprint(job):
         _, case, prompt = job
-        digest = hashlib.sha256(f"{MODEL}|{args.screenshots}|hedge{args.hedge_ceiling}|{prompt}".encode())
+        # "stream": calls made before requests streamed (and losers were
+        # cancelled) are not reused or pooled with these.
+        digest = hashlib.sha256(f"{MODEL}|stream|{args.screenshots}|hedge{args.hedge_ceiling}|{prompt}".encode())
         digest.update((ASSETS / f"{case['id']}.flac").read_bytes())
         return digest.hexdigest()[:16]
 

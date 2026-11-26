@@ -30,7 +30,7 @@ for path in paths:
         raise SystemExit(f"{path}: incomplete run; rerun run.py with its label")
     if not run.get("screenshots"):
         raise SystemExit(f"{path}: screen context was off; D5 is measured with every option on")
-    # Each call's fingerprint covers model, screen setting, hedge ceiling,
+    # Each call's fingerprint covers model, transport, screen setting, hedge ceiling,
     # prompt and audio, so equal sets mean the same experiment.
     settings.add(frozenset((r["id"], r["request"]) for r in run["results"]))
     times = [r["seconds"] + APP_OVERHEAD_S for r in run["results"]]
