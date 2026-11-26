@@ -161,6 +161,11 @@ public enum EditDiff {
             let overlapped = earlier.filter { $0.words.overlaps(correction.words) }
             guard !overlapped.isEmpty, !overlapped.allSatisfy({ $0.words == correction.words }) else { return true }
             guard overlapped.count == 1 else { return false }
+            let earlier = overlapped[0].words
+            // Inside an earlier phrase: the user put back part of it.
+            if earlier.lowerBound <= correction.words.lowerBound, correction.words.upperBound <= earlier.upperBound {
+                return true
+            }
             return extendsRespelled(overlapped[0], to: correction)
         }
     }

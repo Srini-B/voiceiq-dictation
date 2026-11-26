@@ -46,6 +46,10 @@ final class EditDiffTests: XCTestCase {
         ])
         XCTAssertEqual(EditDiff.steps(for: secondEdits, after: secondEdits.corrections), [])
 
+        let shrunk = EditDiff.edits(original: dictated, replacement: second.replacingOccurrences(of: "Wispr Flow", with: "Wisper flowcast"))
+        XCTAssertEqual(EditDiff.steps(for: shrunk, after: secondEdits.corrections).first,
+                       .revise(replacing: [fix("whisper flowcast", "Wispr Flow", 2..<4)], with: fix("whisper", "Wisper", 2..<3)))
+
         let respelled = EditDiff.edits(original: dictated, replacement: second.replacingOccurrences(of: "Wispr", with: "Wisper"))
         XCTAssertEqual(EditDiff.steps(for: respelled, after: firstEdits.corrections).first,
                        .revise(replacing: [fix("whisper", "Wispr", 2..<3)], with: fix("whisper flowcast", "Wisper Flow", 2..<4)))
