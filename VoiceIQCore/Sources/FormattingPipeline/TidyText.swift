@@ -345,7 +345,7 @@ enum TidyText {
                 var end = index
                 while end < chars.count, chars[end].isLetter || "'’".contains(chars[end]) { end += 1 }
                 let word = String(chars[index..<end])
-                if !keepsCapital(word) && !isAddress(chars, at: index) {
+                if !keepsCapital(word) && !isAddress(chars, at: index) && !isPath(chars, at: index) {
                     let lowered = Array(word == "OK" ? "ok" : lowercasingFirst(word))
                     chars.replaceSubrange(index..<end, with: lowered)
                     index += lowered.count

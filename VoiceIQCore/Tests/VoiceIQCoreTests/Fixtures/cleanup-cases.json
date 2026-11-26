@@ -2300,6 +2300,22 @@
       "heard": "config.json is missing.",
       "written": "config.json is missing",
       "style": "lists"
+    },
+    {
+      "id": "kept-path-case-messages",
+      "check": "kept as said",
+      "said": "src slash main dot swift",
+      "heard": "Src/main.swift",
+      "written": "Src/main.swift",
+      "style": "messages"
+    },
+    {
+      "id": "kept-quoted-period-list",
+      "check": "kept as said",
+      "said": "the password is quote red period new line blue unquote",
+      "heard": "The password is \"red.\nblue\".",
+      "written": "The password is \"red.\nblue\".",
+      "style": "lists"
     }
   ]
 }
