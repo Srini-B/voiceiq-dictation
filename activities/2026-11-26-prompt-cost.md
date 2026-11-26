@@ -26,6 +26,27 @@ The 4 failed checks in both main and this change are clean_punct, whose check is
 
 Moving the two recognizer bullets ("Words that sound alike…", "The recognizer writes what the audio sounded like…") out of the audio prompt made gemini-3.8-flash think on about a third of calls, at about 550 thought tokens each, which are billed as output. p50 rose from 2.6 s to 4.8 s, and ml_hi gained ":00" twice. A rerun reproduced it: 14 of 38 calls thought. A control edit (one blank line after "Rules:") caused no thinking in 38 calls, so the cause is the bullets' content, not a changed prompt or a colder cache. Every later cut is checked for thinking as well as quality.
 
+## Tamil-English (after PR #102's cases)
+
+cyron speaks Tamil mixed with English, never Hindi. On the integrator's clips for PR #102, with main and this prompt run in the same hour:
+
+| Check | main (62835c6) | this prompt |
+| --- | --- | --- |
+| ml_ta_4: the spoken "illa illa" correction applied | 0/5 | 10/10 |
+| ml_ta_3: a whole hour as a digit, no ":00" | 3/6 | 10/10 |
+| ml_ta: "ready" stays English | 6/6 | 10/10 |
+
+Names were 136/136 with no control flips, and acc_01 and acc_02 (Tamil-accented English) were 4/4. The D3 packet is on PR #101.
+
+Three edits on top of this prompt were tried at 4 rounds and not kept:
+- A language-neutral retraction rule with a Tanglish example, plus a Tamil whole-hour line: ml_ta_4 3/4, no gain, about 100 tokens more.
+- The same with the Hindi-specific sentences dropped: ml_hi wrote "10:00 बजे" in 4 of 4.
+- The Hindi sentences replaced by Tamil ones, without the retraction rule: ml_hi 1/3, ml_ta_4 2/3, and one call thought.
+
+A plain drop of the Hindi sentences, with no Tamil replacement, is untested: the eval key returned HTTP 402 before it ran.
+
+ml_ta_2's clip does not clearly say "Machan": whisper-1 hears "மகாண்" and gpt-4o-transcribe hears "மகன்", so "Machi" is a fair reading of the audio, not a model error.
+
 ## Lever 4: not changed
 
 Capping screen text at 2,000 characters instead of 6,000 would save up to about 920 tokens (₹0.13 per dictation at 2027 prices), but only on dictations with dense screens. The eval cannot show either the saving or the risk, because its single screen is 367 characters. The risk: each of up to 4 captures gets an equal share of the cap, which would be 500 characters, and the lines are kept from the top. In a chat app the recent messages, and the names in them, are at the bottom of the screen, so they are dropped first. Deciding needs the size of real screen text, which usage.sqlite already holds as prompt tokens per call.
