@@ -218,7 +218,8 @@ def main() -> None:
               "scores": {k: (round(v, 1) if v is not None else None) for k, v in items.items()},
               "names": f"{hit}/{total}", "control_flips": flips, "mean_wer": round(statistics.mean(wers), 3),
               "e2e_p50": round(p50, 2), "e2e_p90": round(p90, 2), "e2e_max": round(max(e2e), 2),
-              "calls_with_thinking": sum(t > 0 for t in thoughts), "misses": misses,
+              "calls_with_thinking": sum(t > 0 for t in thoughts),
+              "second_requests": sum(r["usage"].get("secondRequests", 0) > 0 for r in results), "misses": misses,
               "unjudged": unjudged}
     print(json.dumps(report, indent=1, ensure_ascii=False))
 

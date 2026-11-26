@@ -14,7 +14,9 @@ python3 eval/names-latency/bench.py --a /tmp/base-src --b . --mode audio --round
 import argparse
 import base64
 import concurrent.futures
+import http.client
 import json
+import math
 import os
 import re
 import statistics
@@ -48,6 +50,12 @@ def prompt_builder(root: str):
     src = (fp / "PromptV1.swift").read_text()
     rules, examples = swift_string(src, "rules"), swift_string(src, "examples")
     reminder, audio = swift_string(src, "layoutReminder"), swift_string(src, "audioSection")
+    if audio is None:
+        # Since #95 audioSection(hasDictionary:) adds its name sentence only with a Dictionary.
+        m = re.search(r'static func audioSection\(hasDictionary: Bool\) -> String \{\n\s*"((?:[^"\\]|\\.)*)"'
+                      r'\s*\+ \(hasDictionary \? "((?:[^"\\]|\\.)*)" : ""\)\s*\+ "((?:[^"\\]|\\.)*)"', src)
+        head, names, tail = (g.replace("\\n", "\n").replace('\\"', '"') for g in m.groups())
+        audio = (head, names, tail)
     intro = swift_string(src, "dictionaryIntro") or OLD_VOCAB
     m = re.search(r'static func transcriptSection\(_ raw: String\) -> String \{\n\s*"(.*?)\\\(raw\)', src, re.S)
     transcript_head = m.group(1).replace("\\n", "\n").replace('\\"', '"')
@@ -83,7 +91,10 @@ def prompt_builder(root: str):
         if image:
             sections.append(screen)
         sections += [examples, reminder]
-        sections.append(transcript_head + transcript + "\n</raw>" if transcript is not None else audio)
+        if transcript is not None:
+            sections.append(transcript_head + transcript + "\n</raw>")
+        else:
+            sections.append(audio if isinstance(audio, str) else audio[0] + (audio[1] if vocabulary else "") + audio[2])
         if screen_captures:
             sections.append(screen_block(screen_captures))
         sections.append(answer)
@@ -129,8 +140,9 @@ def call(prompt, flac, images=(), media_resolution=None, cache=False):
     req = urllib.request.Request(f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL}:generateContent",
                                  data=json.dumps(body).encode(), method="POST",
                                  headers={"Content-Type": "application/json", "x-goog-api-key": API_KEY})
-    t0 = time.monotonic()
+    t0 = time.monotonic()  # latency counts every attempt and the waits between them
     for attempt in range(3):
+        t_attempt = time.monotonic()
         try:
             with urllib.request.urlopen(req, timeout=120) as resp:
                 raw = json.loads(resp.read())
@@ -138,10 +150,11 @@ def call(prompt, flac, images=(), media_resolution=None, cache=False):
         except urllib.error.HTTPError as e:
             if e.code in (429, 500, 503) and attempt < 2:
                 time.sleep(5)
-                t0 = time.monotonic()
                 continue
             return {"ok": False, "error": f"http {e.code}", "dt": 0, "text": ""}
-    dt = time.monotonic() - t0
+        except (urllib.error.URLError, OSError, http.client.HTTPException) as e:
+            return {"ok": False, "error": f"transport {type(e).__name__}: {e}", "dt": 0, "text": ""}
+    dt, attempt_dt = time.monotonic() - t0, time.monotonic() - t_attempt
     usage = raw.get("usageMetadata", {})
     parts = raw.get("candidates", [{}])[0].get("content", {}).get("parts", [])
     reply = [p.get("text", "") for p in parts if not p.get("thought") and p.get("text", "").strip()]
@@ -149,7 +162,8 @@ def call(prompt, flac, images=(), media_resolution=None, cache=False):
         text = json.loads(reply[-1])["text"]
     except Exception:
         return {"ok": False, "error": "bad json", "dt": dt, "text": ""}
-    return {"ok": True, "dt": round(dt, 2), "text": "" if "<<NO_SPEECH>>" in text else text,
+    return {"ok": True, "dt": round(dt, 2), "attempts": attempt + 1, "attempt_dt": round(attempt_dt, 2),
+            "text": "" if "<<NO_SPEECH>>" in text else text,
             "prompt_tokens": usage.get("promptTokenCount", 0), "cached_tokens": usage.get("cachedContentTokenCount", 0),
             "thought_tokens": usage.get("thoughtsTokenCount", 0) or 0}
 
@@ -164,10 +178,15 @@ def hedged(send, after):
         pool.shutdown(wait=False)
         return dict(first.result(), hedged=False)
     second = pool.submit(send)
-    done, _ = concurrent.futures.wait([first, second], return_when=concurrent.futures.FIRST_COMPLETED)
-    winner = done.pop()
+    pending = {first, second}
+    while pending:  # the first success wins; a failure waits for the other request
+        done, pending = concurrent.futures.wait(pending, return_when=concurrent.futures.FIRST_COMPLETED)
+        results = [f.result() for f in done]
+        result = next((r for r in results if r["ok"]), results[0])
+        if result["ok"]:
+            break
     pool.shutdown(wait=False, cancel_futures=True)
-    return dict(winner.result(), dt=round(time.monotonic() - t0, 2), hedged=True)
+    return dict(result, dt=round(time.monotonic() - t0, 2), hedged=True)
 
 
 def score(clip, text):
@@ -217,15 +236,18 @@ def main():
 
     manifest = json.loads((EVAL_DIR / "manifest.json").read_text())
     clips = manifest["clips"]
-    if args.only:
-        keep = set(args.only.split(","))
-        clips = [c for c in clips if c["category"] in keep or c["id"] in keep]
     modes = {"A": args.a_mode or args.mode, "B": args.b_mode or args.mode}
     heard = json.loads((HERE / "parakeet_transcripts.json").read_text())["none"]
     clips = [dict(c, raw=heard.get(c["id"])) for c in clips]
     if set(modes.values()) == {"text"}:
-        clips = [c for c in clips if c["raw"]]
+        clips = [c for c in clips if c["raw"] is not None]
         clips += [dict(c, id=c["id"] + "_eng", raw=c["raw_english"]) for c in json.loads((HERE / "text_cases.json").read_text())]
+    if args.only:
+        keep = set(args.only.split(","))
+        clips = [c for c in clips if c["category"] in keep or c["id"] in keep]
+    missing = [c["id"] for c in clips if c["raw"] is None]
+    if "text" in modes.values() and missing:
+        raise SystemExit(f"no Parakeet transcript in parakeet_transcripts.json for: {', '.join(missing)}")
     builders = {"A": prompt_builder(args.a), "B": prompt_builder(args.b)}
     screen = None
     if args.screen_text:
@@ -260,7 +282,7 @@ def main():
         ok = [x for x in vr if x["ok"]]
         dts = sorted(x["dt"] for x in ok)
         print(f"{v}: prompt {vr[0]['prompt_chars']} chars, {len(ok)}/{len(vr)} ok | latency median {statistics.median(dts):.2f}s "
-              f"p90 {dts[int(len(dts) * 0.9) - 1]:.2f}s max {dts[-1]:.2f}s | thinking in {sum(x['thought_tokens'] > 0 for x in ok)} calls, "
+              f"p90 {dts[math.ceil(len(dts) * 0.9) - 1]:.2f}s max {dts[-1]:.2f}s | thinking in {sum(x['thought_tokens'] > 0 for x in ok)} calls, "
               f"{sum(x['thought_tokens'] for x in ok)} tokens | Dictionary names {sum(x['names_hit'] for x in vr)}/{sum(x['names_total'] for x in vr)} "
               f"| English names kept {sum(x['english_kept'] for x in vr)}/{sum(x['english_total'] for x in vr)} "
               f"| flips {sum(len(x['flips']) for x in vr)} | checks failed {sum(not x['eval_ok'] for x in vr)}")

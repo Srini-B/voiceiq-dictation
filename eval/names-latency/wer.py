@@ -15,14 +15,13 @@ from collections import defaultdict
 from pathlib import Path
 
 SKIP = {"eval_self_correction", "eval_punctuation", "eval_all_filler", "eval_spoken_list", "long_01", "long_02"}
-NUMBERS = {"ten": "10", "three": "3", "four": "4", "two": "2", "one": "1"}
 manifest = json.loads(Path(".amp/in/orb-backup/eval/manifest.json").read_text())
 script = {c["id"]: c["text"] for c in manifest["clips"]}
 
 
 def words(text):
     text = text.lower().replace("o'clock", "").replace("’", "'")
-    return [NUMBERS.get(w, w) for w in re.findall(r"[a-z0-9']+", text)]
+    return re.findall(r"[a-z0-9']+", text)
 
 
 def distance(a, b):

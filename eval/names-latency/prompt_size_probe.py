@@ -17,11 +17,13 @@ root, n = sys.argv[1], int(sys.argv[2])
 manifest = json.loads((b.EVAL_DIR / "manifest.json").read_text())
 raw = json.loads((b.HERE / "parakeet_transcripts.json").read_text())["none"]["name_01"]
 full = b.prompt_builder(root)(manifest["dictionary"], raw)
+examples = b.swift_string((Path(root) / "VoiceIQCore/Sources/FormattingPipeline/PromptV1.swift").read_text(), "examples")
+assert "\n\n" + examples + "\n\n" in full
 head, tail = full.split("Examples:", 1)
 tail = tail[tail.index("THE DICTATION:"):]
 variants = {
     "full": full,
-    "no examples": head + tail,
+    "no examples": full.replace("\n\n" + examples, "", 1),  # keeps layoutReminder, which follows the examples
     "rules cut to 2k chars": head[:2000] + "\n\n" + tail,
 }
 times = {k: [] for k in variants}
