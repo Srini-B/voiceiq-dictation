@@ -39,29 +39,12 @@ final class OnDeviceDictationTests: XCTestCase {
         let retry = OnDeviceFirstTranscription(gemini: cloud, makeSession: { _, _, _, _ in fatalError("no session expected") })
         let audio = FileManager.default.temporaryDirectory.appendingPathComponent("missing-\(UUID()).caf")
         var expected = 0
-        for writing in [CleanupSource.none, .onDevice, .gemini] where CleanupSource.offered.contains(writing) {
+        for writing in CleanupSource.allCases {
             settings.setCleanupSource(writing)
             _ = try await retry.transcribe(audioURL: audio, durationSeconds: 3, context: DictationContext())
             expected += 1
             XCTAssertEqual(cloud.audioCalls.value, expected, "writing \(writing)")
         }
-    }
-
-    /// The spoken languages are a Gemini dictation setting: with Dictation On
-    /// device, the Gemini prompt (writing step or fallback) carries no hint.
-    func testSpokenLanguagesReachOnlyGeminiDictation() throws {
-        try XCTSkipUnless(LocalModelSupport.isAvailable, "On device reads as Gemini here")
-        let settings = SettingsStore()
-        settings.setSpokenLanguages(["eng", "tam"])
-        defer {
-            UserDefaults.standard.removeObject(forKey: "spokenLanguages")
-            UserDefaults.standard.removeObject(forKey: "transcriptionSource")
-        }
-        settings.setDictationSource(.gemini)
-        XCTAssertTrue(service.dictationPrompt(context: DictationContext()).contains("may also speak Tamil"))
-        settings.setDictationSource(.onDevice)
-        XCTAssertFalse(service.dictationPrompt(context: DictationContext(), transcript: "hello").contains("LANGUAGES:"))
-        XCTAssertFalse(service.dictationPrompt(context: DictationContext()).contains("LANGUAGES:"))
     }
 
     /// A decode with no words is an empty dictation, judged by the
@@ -82,34 +65,15 @@ final class OnDeviceDictationTests: XCTestCase {
         XCTAssertEqual(LocalSpeechModel.suggested(physicalMemory: 3_900_000_000), .parakeet)
         XCTAssertEqual(LocalSpeechModel.suggested(physicalMemory: 5_700_000_000), .fluidSpeechPro)
         XCTAssertEqual(LocalSpeechModel.suggested(physicalMemory: 8_000_000_000), .fluidSpeechPro)
-        XCTAssertFalse(LocalWriterSupport.isOffered(physicalMemory: 3_900_000_000))
-        XCTAssertTrue(LocalWriterSupport.isOffered(physicalMemory: 5_700_000_000))
     }
 
-    /// Hesitation sounds and a spoken "period" written as ".." are removed
-    /// before the on-device writer sees RAW; words that only contain those
-    /// sounds stay, and a dictation of nothing but hesitation is not sent.
-    func testOnDeviceWriterInputDropsHesitationOnly() {
-        XCTAssertEqual(PromptOnDevice.prepared("Um, tell Uhura the summer plan .. Uh thanks ..", english: true),
-                       "tell Uhura the summer plan. thanks.")
-        XCTAssertEqual(PromptOnDevice.prepared("Er kommt um 3 Uhr ..", english: false), "Er kommt um 3 Uhr.")
-        XCTAssertTrue(PromptOnDevice.isOnlyHesitation("Um, uh, hun.", english: true))
-        XCTAssertFalse(PromptOnDevice.isOnlyHesitation("Um, send it.", english: true))
-        XCTAssertFalse(PromptOnDevice.isOnlyHesitation("10:30", english: true))
-        XCTAssertFalse(PromptOnDevice.isOnlyHesitation("Er.", english: false))
-        XCTAssertEqual(PromptOnDevice.text(fromAnswer: #"{"text": "Dear Priya,\n\nThanks."}"#), "Dear Priya,\n\nThanks.")
-        XCTAssertEqual(PromptOnDevice.text(fromAnswer: #"{"text": "\#(PromptV1.noSpeechToken)"}"#), "")
-        XCTAssertNil(PromptOnDevice.text(fromAnswer: "Here is the cleaned text"))
-    }
-
-    /// A meeting too long for the on-device notes keeps its start and end,
-    /// also when one speaker talked through most of it.
-    func testOnDeviceNotesKeepBothEndsOfAnOversizedTurn() {
-        let long = "S1: opening " + String(repeating: "word ", count: 2_000) + "closing remark"
-        let fitted = MeetingNotesPrompt.fitted([long, "S2: final decision"], characters: 2_000)
-        XCTAssertLessThanOrEqual(fitted.count, 2_200)
-        XCTAssertTrue(fitted.contains("S1: opening"))
-        XCTAssertTrue(fitted.contains("S2: final decision"))
+    /// On device writing, retired after 0.7.15, reads as Off: a local-only
+    /// choice never starts sending text to Gemini.
+    func testRetiredOnDeviceWritingReadsAsOff() {
+        UserDefaults.standard.set("onDevice", forKey: "cleanupSource")
+        XCTAssertEqual(SettingsStore().cleanupSource, CleanupSource.none)
+        UserDefaults.standard.removeObject(forKey: "cleanupSource")
+        XCTAssertEqual(SettingsStore().cleanupSource, .gemini)
     }
 
     /// Core ML's prepared copies of the models (on the Mac, about 1 GB in

@@ -10,14 +10,13 @@ import VoiceIQBridge
 public enum PromptV1 {
     /// The prompt for one dictation: the model writes the text by the writing
     /// rules. Static-prefix-first ordering keeps the cacheable
-    /// part stable: what changes per dictation (languages, place, field)
-    /// comes last, and the recording is attached after the prompt.
+    /// part stable: what changes per dictation (place, field) comes last, and
+    /// the recording is attached after the prompt.
     public static func dictationPrompt(
         vocabulary: [String] = [],
         spellings: [(wrong: String, right: String)] = [],
         customRules: String? = nil,
         spelling: String? = nil,
-        languages: String? = nil,
         imagesAttached: Bool = false,
         surroundingText: SurroundingText? = nil,
         place: DictationPlace? = nil,
@@ -33,7 +32,7 @@ public enum PromptV1 {
             sections.append(fieldSection)
         }
         sections.append(transcript.map(transcriptSection) ?? writtenParts.map(partsSection) ?? audioSection)
-        let context = (languages.map { "\($0)\n\n" } ?? "") + (place.flatMap(placeContext) ?? "") + (field ?? "")
+        let context = (place.flatMap(placeContext) ?? "") + (field ?? "")
         if !context.isEmpty { sections.append(context.trimmingCharacters(in: .newlines)) }
         sections.append(answerFormat)
         return sections.joined(separator: "\n\n")

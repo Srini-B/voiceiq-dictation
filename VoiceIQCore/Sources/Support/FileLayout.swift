@@ -47,12 +47,15 @@ public enum FileLayout {
     /// renders cut short by the app quitting. With no on-device model
     /// downloaded, also deletes Core ML's prepared copies of models deleted
     /// earlier. On the Mac, removes files left behind by the retired Chrome
-    /// extension. Runs at every launch, off the main thread; a missing folder
-    /// or a failed delete is ignored. Downloaded on-device models (`Models`)
-    /// are kept; Settings deletes them.
+    /// extension. Deletes the retired on-device writer (LFM3-Omni-2B, 1.1 GB,
+    /// 0.7.15 and earlier). Runs at every launch, off the main thread; a
+    /// missing folder or a failed delete is ignored. Downloaded on-device
+    /// models (`Models`) are kept; Settings deletes them.
     public static func removeStaleFiles() {
         Task.detached(priority: .utility) {
             LocalModelInstaller.removeUnusedPreparedModels()
+            try? FileManager.default.removeItem(at: FileLayout.appSupportRoot
+                .appendingPathComponent("Models/lfm3-omni-2b", isDirectory: true))
             #if os(macOS)
             if FileLayout.overrideRoot == nil {
                 FileLayout.removeRetiredChromeExtensionFiles()

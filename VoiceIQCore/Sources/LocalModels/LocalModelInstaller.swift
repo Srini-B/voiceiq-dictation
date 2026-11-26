@@ -81,7 +81,7 @@ enum LocalModelInstaller {
     }
 
     /// Every model the app can download.
-    static let allManifests: [LocalModelManifest] = [.parakeet, .fluidSpeechPro, .englishTools, .speakerDiarizer, .writer]
+    static let allManifests: [LocalModelManifest] = [.parakeet, .fluidSpeechPro, .englishTools, .speakerDiarizer]
 
     /// Where the process that loads the models keeps its caches: Core ML's
     /// prepared copies (`com.apple.e5rt.e5bundlecache`, written on a model's

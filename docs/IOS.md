@@ -649,7 +649,7 @@ runs. Everything needs Full Access.
 | Gemini API key | Same, in Settings › API Key and the iOS Keychain. The key card carries Gemini's favicon from `Assets.xcassets/ProviderGemini.imageset` (`BrandTile`) |
 | History stats: words, dictations, WPM, audio time, time saved, day streak, with a period menu | Statistics (`StatsView`), opened from the row above History's days or from Home's stats grid. Same `HistoryStore.stats(period:)` and the same remembered period (`historyStatsPeriod`); the Mac's streak tooltip (longest streak, active days) is a line under the tiles. Home's grid shows all time |
 | Dictionary with search, CSV and Auto-learned | Same, synced through iCloud, plus adding a selection or a copied word from the keyboard |
-| Custom rules, spoken languages; spelling from the region | Same: custom rules and Languages in Settings › Dictation, spelling from the iPhone's region |
+| Custom rules; spelling from the region | Same: custom rules in Settings › Dictation, spelling from the iPhone's region |
 | `[transcription] timing:` and `[session] timing` debug log lines | Same lines, in the app's debug log file |
 | Microphone picker | Microphone: Automatic, iPhone or Bluetooth (see the voice session section) |
 | History, retry, crash recovery, retention | Same. The detail shows Pipeline, the seconds from Stop to the text being ready (`DictationRecord.pipelineSeconds`, as on the Mac; absent for dictations synced from the Mac), the cost and one row per stage and model (stage, model, call count when above one, summed cost; `UsageLine.lines` over `UsageStore.records(forSession:)`), and Copy turns into "Copied" with a checkmark and a success haptic for 1.5 s |

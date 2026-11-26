@@ -106,25 +106,6 @@ public struct SettingsStore: Sendable {
         "didMigrateSmartFormattingKeys", "didEnableWritingRules", "didRestoreAutoDegradedWritingRules",
     ]
 
-    /// The languages the user speaks, as ISO 639-3 codes from
-    /// `SpokenLanguage.all`: the first is the main language and the rest are
-    /// the others it may hear. Empty detects the language. A Gemini dictation
-    /// gets them as a hint (`SpokenLanguage.promptLine`); on-device dictation
-    /// uses `localSpeechLanguage` instead.
-    /// Codes typed into the earlier free-text field read as their
-    /// three-letter form ("hi" as "hin"); ones not listed are dropped.
-    public var spokenLanguages: [String] {
-        (Self.defaults.stringArray(forKey: "spokenLanguages") ?? []).map { code in
-            code.count == 2 ? Locale.LanguageCode(code).identifier(.alpha3) ?? code : code
-        }.filter(SpokenLanguage.isListed)
-    }
-
-    /// Main language first; each code once. Empty is automatic detection.
-    public func setSpokenLanguages(_ codes: [String]) {
-        var seen = Set<String>()
-        Self.set(codes.filter { seen.insert($0).inserted }, forKey: "spokenLanguages")
-    }
-
     /// Show the resting dot at the bottom of the screen when idle. Off = the pill
     /// only appears while dictating. Off by default since 2026-11-12, the
     /// owner's choice; it was on before. A user who set the toggle keeps it.

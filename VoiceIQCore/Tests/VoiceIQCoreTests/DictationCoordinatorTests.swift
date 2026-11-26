@@ -199,7 +199,7 @@ final class DictationCoordinatorTests: XCTestCase {
             UserDefaults.standard.removeObject(forKey: "transcriptionSource")
             UserDefaults.standard.removeObject(forKey: "cleanupSource")
         }
-        for writing in [CleanupSource.none, .onDevice, .gemini] where CleanupSource.offered.contains(writing) {
+        for writing in CleanupSource.allCases {
             settings.setCleanupSource(writing)
             let cloud = FakeTranscription()
             let c = makeCoordinator(transcription: cloud)

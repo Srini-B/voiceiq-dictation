@@ -28,13 +28,6 @@ let package = Package(
             name: "CVoiceIQAEC",
             path: "Vendor/WebRTCAEC/CVoiceIQAEC.xcframework"
         ),
-        // llama.cpp's text runtime for the on-device writer (LFM3-Omni-2B),
-        // built by Vendor/llama/build.sh for macOS, iOS and the iOS Simulator.
-        // MIT-licensed; see Vendor/llama/LICENSE.
-        .binaryTarget(
-            name: "llama",
-            path: "Vendor/llama/llama.xcframework"
-        ),
         // Catches Objective-C exceptions that Swift cannot (AVFAudio raises
         // them while the input device is changing).
         .target(
@@ -61,13 +54,12 @@ let package = Package(
             ]
         ),
         // On-device speech (Fluid Speech Mini and Pro, the English tools and the
-        // meeting diarizer) and the on-device writer. The Mac runs it in the
-        // VoiceiQLocalSpeech helper, iOS in-process; the Mac UI never links it.
+        // meeting diarizer). The Mac runs it in the VoiceiQLocalSpeech helper,
+        // iOS in-process; the Mac UI never links it.
         .target(
             name: "VoiceIQInference",
             dependencies: [
                 "VoiceIQSpeech",
-                "llama",
                 .product(name: "FluidAudio", package: "FluidAudio"),
             ],
             path: "Inference"
