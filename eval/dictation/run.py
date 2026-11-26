@@ -108,6 +108,10 @@ def dictation_text(raw: str) -> str | None:
     return value.get("text") if isinstance(value, dict) and isinstance(value.get("text"), str) else None
 
 
+class MalformedAnswer(Exception):
+    """The reply was not {"text": ...}; the app sends the request once more."""
+
+
 def call(prompt: str, flac: bytes) -> tuple[str, float, dict]:
     parts = [{"text": prompt}]
     parts.append({"inline_data": {"mime_type": "audio/flac", "data": base64.b64encode(flac).decode()}})
@@ -120,9 +124,19 @@ def call(prompt: str, flac: bytes) -> tuple[str, float, dict]:
         f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL}:generateContent",
         data=json.dumps(body).encode(),
         headers={"x-goog-api-key": os.environ["GEMINI_API_KEY"], "Content-Type": "application/json"})
-    def send() -> dict:
+    def send() -> tuple[dict, str]:
+        # As GeminiClient.dictate: the answer is parsed inside each raced
+        # attempt, so a malformed one cannot beat a valid one still running.
         with urllib.request.urlopen(req, timeout=120) as r:
-            return json.loads(r.read())
+            reply = json.loads(r.read())
+        # As GeminiClient.extractText: the last non-empty, non-thought text
+        # part is the answer; an earlier one can be unflagged working.
+        texts = [p["text"] for p in reply["candidates"][0].get("content", {}).get("parts", [])
+                 if not p.get("thought") and isinstance(p.get("text"), str) and p["text"].strip()]
+        text = dictation_text(texts[-1] if texts else "")
+        if text is None:
+            raise MalformedAnswer()
+        return reply, text
 
     # Parsed as GeminiClient.dictate and PromptV1.dictationText parse it: a
     # fenced object is unwrapped, anything that is not {"text": ...} is a
@@ -130,28 +144,23 @@ def call(prompt: str, flac: bytes) -> tuple[str, float, dict]:
     start = time.monotonic()
     hedged = 0
     for answer in range(2):
-        for attempt in range(3):
-            try:
-                delay = HEDGE.delay()
-                sent = time.monotonic()
-                reply, second = first_success(send, delay)
-                HEDGE.record(time.monotonic() - sent, delay)
-                hedged += second
-                break
-            except urllib.error.HTTPError as e:
-                if e.code != 429 or attempt == 2:
-                    raise
-                time.sleep(10)
-        # As GeminiClient.extractText: the last non-empty, non-thought text
-        # part is the answer; an earlier one can be unflagged working.
-        texts = [p["text"] for p in reply["candidates"][0].get("content", {}).get("parts", [])
-                 if not p.get("thought") and isinstance(p.get("text"), str) and p["text"].strip()]
-        raw = texts[-1] if texts else ""
-        text = dictation_text(raw)
-        if text is not None:
+        try:
+            for attempt in range(3):
+                try:
+                    delay = HEDGE.delay()
+                    sent = time.monotonic()
+                    (reply, text), second = first_success(send, delay)
+                    HEDGE.record(time.monotonic() - sent, delay)
+                    hedged += second
+                    break
+                except urllib.error.HTTPError as e:
+                    if e.code != 429 or attempt == 2:
+                        raise
+                    time.sleep(10)
             break
-    else:
-        raise RuntimeError("malformed_answer twice")
+        except MalformedAnswer:
+            if answer == 1:
+                raise RuntimeError("malformed_answer twice")
     seconds = time.monotonic() - start
     if "<<NO_SPEECH>>" in text:
         text = ""
