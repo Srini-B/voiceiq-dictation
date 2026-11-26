@@ -179,7 +179,7 @@ public final class EditLearner {
         fields[key] = tracked
 
         let snapshot = tracked.snapshot
-        let insertions = tracked.insertions.map { ($0.id, $0.text, $0.original) }
+        let insertions = tracked.insertions.map { ($0.id, $0.text, $0.original, $0.edits) }
         let previousHash = tracked.lastValueHash
         let settled = tracked.pendingSince.map { now.timeIntervalSince($0) >= Self.settleSeconds } == true
         let settledHash = captured?.hashValue ?? (settled ? tracked.pendingHash : nil)
@@ -239,7 +239,7 @@ public final class EditLearner {
 
     private nonisolated static func compute(
         value: String?,
-        insertions: [(UUID, String, String)],
+        insertions: [(UUID, String, String, [LearnedCorrection])],
         previousHash: Int?,
         settledHash: Int?
     ) -> Harvest {
@@ -253,7 +253,7 @@ public final class EditLearner {
             return Located(
                 id: insertion.0,
                 window: match.window,
-                edits: EditDiff.edits(original: insertion.2, replacement: match.window)
+                edits: EditDiff.edits(original: insertion.2, replacement: match.window, earlier: insertion.3)
             )
         }
         return .located(located, valueHash: valueHash)

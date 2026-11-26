@@ -81,7 +81,10 @@ public enum EditDiff {
         return solve(0, 0).choices
     }
 
-    public static func edits(original: String, replacement: String) -> DictationEdits {
+    /// `earlier`: the corrections at the previous harvest. A fix to the same
+    /// words may stray further from the transcript than one edit allows, as
+    /// long as it reads as a respelling of what the earlier fix taught.
+    public static func edits(original: String, replacement: String, earlier: [LearnedCorrection] = []) -> DictationEdits {
         let before = words(in: original)
         let after = words(in: replacement)
         guard !before.isEmpty, !after.isEmpty else { return DictationEdits() }
@@ -97,12 +100,15 @@ public enum EditDiff {
             if (1...3).contains(removed.count), (1...3).contains(added.count) {
                 let originalText = clean(removed.map(\.text).joined(separator: " "))
                 let replacementText = clean(added.map(\.text).joined(separator: " "))
-                if valid(originalText), valid(replacementText), originalText != replacementText,
-                   isPlausibleFix(originalText, replacementText) {
+                let span = (previousBefore + 1)..<pair.0
+                let respells = isPlausibleFix(originalText, replacementText) || earlier.contains {
+                    $0.words == span && isPlausibleFix($0.replacement, replacementText)
+                }
+                if valid(originalText), valid(replacementText), originalText != replacementText, respells {
                     output.corrections.append(LearnedCorrection(
                         original: originalText,
                         replacement: replacementText,
-                        words: (previousBefore + 1)..<pair.0
+                        words: span
                     ))
                 }
             }
@@ -168,9 +174,9 @@ public enum EditDiff {
         let original = words(in: correction.original).map(\.text)
         let replacement = words(in: correction.replacement).map(\.text)
         let taught = words(in: earlier.replacement).map(\.text)
-        guard replacement.count > taught.count,
-              atStart ? replacement.starts(with: taught) : replacement.reversed().starts(with: taught.reversed())
-        else { return false }
+        guard replacement.count > taught.count else { return false }
+        let kept = atStart ? replacement.prefix(taught.count) : replacement.suffix(taught.count)
+        guard isPlausibleFix(taught.joined(separator: " "), kept.joined(separator: " ")) else { return false }
         let addedCount = wider.count - inner.count
         let addedOriginal = (atStart ? original.suffix(addedCount) : original.prefix(addedCount)).joined(separator: " ")
         let addedWords = atStart ? replacement.dropFirst(taught.count) : replacement.dropLast(taught.count)

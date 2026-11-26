@@ -45,6 +45,10 @@ final class EditDiffTests: XCTestCase {
             .learn(fix("Shrinny", "Srini", 17..<18)),
         ])
         XCTAssertEqual(EditDiff.steps(for: secondEdits, after: secondEdits.corrections), [])
+
+        let respelled = EditDiff.edits(original: dictated, replacement: second.replacingOccurrences(of: "Wispr", with: "Wisper"))
+        XCTAssertEqual(EditDiff.steps(for: respelled, after: firstEdits.corrections).first,
+                       .revise(replacing: [fix("whisper", "Wispr", 2..<3)], with: fix("whisper flowcast", "Wisper Flow", 2..<4)))
     }
 
     func testEditingTheWordBesideALearnedNameDoesNotFoldItIn() {
@@ -75,6 +79,11 @@ final class EditDiffTests: XCTestCase {
         XCTAssertEqual(EditDiff.steps(for: second, after: first.corrections), [
             .revise(replacing: [fix("Paystack", "Pastack", 4..<5)], with: fix("Paystack", "pstack", 4..<5)),
         ])
+        let renamed = EditDiff.edits(
+            original: "Ask Shrinny now.", replacement: "Ask Srinivas now.", earlier: [fix("Shrinny", "Shrini", 1..<2)]
+        )
+        XCTAssertEqual(renamed.corrections, [fix("Shrinny", "Srinivas", 1..<2)])
+        XCTAssertEqual(EditDiff.edits(original: "Ask Shrinny now.", replacement: "Ask Srinivas now.").corrections, [])
         let reverted = EditDiff.edits(original: original, replacement: original)
         XCTAssertEqual(EditDiff.steps(for: reverted, after: second.corrections), [.forget(fix("Paystack", "pstack", 4..<5))])
     }
