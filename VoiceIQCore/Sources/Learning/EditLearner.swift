@@ -218,7 +218,7 @@ public final class EditLearner {
                 steps += EditDiff.steps(for: match.edits, after: insertion.edits)
                 var updated = insertion
                 updated.text = match.window
-                updated.edits = match.edits.corrections
+                updated.edits = EditDiff.history(after: match.edits, earlier: insertion.edits)
                 return updated
             }
             if current.insertions.isEmpty {
@@ -294,8 +294,14 @@ public final class EditLearner {
                 // dictation, or edited the word beside one.
                 correction = edit
                 heardAs = edit.original
-                let wordings = Set(replacing.map { $0.lowercased() })
-                stale = known.filter { Self.isFresh($0) && wordings.contains($0.learnedFrom?.lowercased() ?? "") }
+                // Matched by wording or by the spelling it taught: a rename
+                // from another dictation keeps the older wording.
+                let wordings = Set(replacing.map { $0.original.lowercased() })
+                let terms = Set(replacing.map { $0.replacement.lowercased() })
+                stale = known.filter {
+                    Self.isFresh($0)
+                        && (wordings.contains($0.learnedFrom?.lowercased() ?? "") || terms.contains($0.term.lowercased()))
+                }
             }
             if let kept = stale.first {
                 // The entry follows the edit, and entries for the parts of a

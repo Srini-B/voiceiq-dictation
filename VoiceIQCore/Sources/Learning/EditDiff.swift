@@ -26,9 +26,9 @@ public struct DictationEdits: Equatable, Sendable {
 public enum LearningStep: Equatable, Sendable {
     /// A new word or phrase.
     case learn(LearnedCorrection)
-    /// The words earlier edits taught from the transcript wording in
-    /// `replacing` become this correction's replacement.
-    case revise(replacing: [String], with: LearnedCorrection)
+    /// What the earlier corrections in `replacing` taught becomes this
+    /// correction's replacement.
+    case revise(replacing: [LearnedCorrection], with: LearnedCorrection)
     /// The user put the original words back: what this taught goes.
     case forget(LearnedCorrection)
 }
@@ -124,10 +124,20 @@ public enum EditDiff {
             guard !earlier.contains(correction) else { return nil }
             let overlapped = earlier.filter { $0.words.overlaps(correction.words) }
             guard !overlapped.isEmpty else { return .learn(correction) }
-            return .revise(replacing: overlapped.map(\.original), with: correction)
+            return .revise(replacing: overlapped, with: correction)
         }
         let undone = earlier.filter { edit in !edits.changed.contains { $0.overlaps(edit.words) } }
         return changed + undone.map { .forget($0) }
+    }
+
+    /// The corrections to compare the next harvest with: the current ones,
+    /// plus earlier ones a longer edit now covers, so putting their words
+    /// back later is still recognized.
+    public static func history(after edits: DictationEdits, earlier: [LearnedCorrection]) -> [LearnedCorrection] {
+        edits.corrections + earlier.filter { edit in
+            !edits.corrections.contains { $0.words.overlaps(edit.words) }
+                && edits.changed.contains { $0.overlaps(edit.words) }
+        }
     }
 
     /// Whether `replacement` could be the same words respelled rather than

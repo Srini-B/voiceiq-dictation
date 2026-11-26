@@ -41,7 +41,7 @@ final class EditDiffTests: XCTestCase {
 
         let secondEdits = EditDiff.edits(original: dictated, replacement: second)
         XCTAssertEqual(EditDiff.steps(for: secondEdits, after: firstEdits.corrections), [
-            .revise(replacing: ["whisper"], with: fix("whisper flowcast", "Wispr Flow", 2..<4)),
+            .revise(replacing: [fix("whisper", "Wispr", 2..<3)], with: fix("whisper flowcast", "Wispr Flow", 2..<4)),
             .learn(fix("Shrinny", "Srini", 17..<18)),
         ])
         XCTAssertEqual(EditDiff.steps(for: secondEdits, after: secondEdits.corrections), [])
@@ -52,7 +52,7 @@ final class EditDiffTests: XCTestCase {
         let first = EditDiff.edits(original: original, replacement: "We moved billing to Pastack last week.")
         let second = EditDiff.edits(original: original, replacement: "We moved billing to pstack last week.")
         XCTAssertEqual(EditDiff.steps(for: second, after: first.corrections), [
-            .revise(replacing: ["Paystack"], with: fix("Paystack", "pstack", 4..<5)),
+            .revise(replacing: [fix("Paystack", "Pastack", 4..<5)], with: fix("Paystack", "pstack", 4..<5)),
         ])
         let reverted = EditDiff.edits(original: original, replacement: original)
         XCTAssertEqual(EditDiff.steps(for: reverted, after: second.corrections), [.forget(fix("Paystack", "pstack", 4..<5))])
@@ -70,5 +70,9 @@ final class EditDiffTests: XCTestCase {
         let first = EditDiff.edits(original: original, replacement: "Ask the Kubernetes team today.")
         let second = EditDiff.edits(original: original, replacement: "Ask the Kubernetes platform crew members today.")
         XCTAssertEqual(EditDiff.steps(for: second, after: first.corrections), [])
+
+        let history = EditDiff.history(after: second, earlier: first.corrections)
+        let restored = EditDiff.edits(original: original, replacement: "Ask the cooper netties platform crew members today.")
+        XCTAssertEqual(EditDiff.steps(for: restored, after: history), [.forget(fix("cooper netties", "Kubernetes", 2..<4))])
     }
 }
