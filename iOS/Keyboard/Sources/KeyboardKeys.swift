@@ -35,8 +35,9 @@ struct KeyCap: View {
     var enabled = true
     let action: () -> Void
 
-    init(title: String, action: @escaping () -> Void) {
+    init(title: String, label: String? = nil, action: @escaping () -> Void) {
         self.title = title
+        self.label = label
         self.action = action
     }
 
@@ -52,7 +53,7 @@ struct KeyCap: View {
             Group {
                 if let systemImage { Image(systemName: systemImage) } else { Text(title ?? "") }
             }
-            .font(.system(size: 16))
+            .font(.system(size: 17))
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .buttonStyle(KeyCapStyle())

@@ -1,0 +1,116 @@
+diff --git a/iOS/Keyboard/Hex/FullKeyboard/KeyboardLayout.swift b/iOS/Keyboard/Hex/FullKeyboard/KeyboardLayout.swift
+index ee95dc6..7496f10 100644
+--- a/iOS/Keyboard/Hex/FullKeyboard/KeyboardLayout.swift
++++ b/iOS/Keyboard/Hex/FullKeyboard/KeyboardLayout.swift
+@@ -793,14 +793,15 @@ nonisolated struct KeyboardLayout: Equatable, Sendable {
+ 
+     /// Apple's predictive bar here: the strip with the Hex key's room (`stripFrame` leaves it out).
+     /// VoiceiQ: room its shortcut buttons take at the bar's two ends (cursor control and
+-    /// Paste last on the left, Dictate on the right), set once by the keyboard's host.
++    /// Paste last on the left, Dictate on the right), measured from the keys' outer edges.
+     nonisolated(unsafe) static var reservedStripEnds: (leading: CGFloat, trailing: CGFloat) = (0, 0)
+ 
+     var stripBarFrame: CGRect {
+         let ends = Self.reservedStripEnds
++        let side = ends.leading + ends.trailing > 0 ? metrics.side : 0
+         var full = CGRect(
+-            x: horizontalInset + ends.leading, y: metrics.stripTop,
+-            width: width - 2 * horizontalInset - ends.leading - ends.trailing, height: metrics.stripHeight
++            x: horizontalInset + side + ends.leading, y: metrics.stripTop,
++            width: width - 2 * (horizontalInset + side) - ends.leading - ends.trailing, height: metrics.stripHeight
+         )
+         if let split {
+             if hexOnLeading {
+diff --git a/iOS/Keyboard/Hex/FullKeyboard/KeyboardStripView.swift b/iOS/Keyboard/Hex/FullKeyboard/KeyboardStripView.swift
+index 0e85f4d..8c5e175 100644
+--- a/iOS/Keyboard/Hex/FullKeyboard/KeyboardStripView.swift
++++ b/iOS/Keyboard/Hex/FullKeyboard/KeyboardStripView.swift
+@@ -452,6 +452,7 @@ final class KeyboardStripView: UIView {
+         for (idx, button) in slotButtons.enumerated() {
+             button.inSystemPlatter = inSystemPlatter
+             button.frame = slots[idx]
++            button.isHidden = slots[idx].width == 0
+         }
+         updateDividers(animated: false)
+     }
+@@ -468,9 +469,28 @@ final class KeyboardStripView: UIView {
+     }
+ 
+     private var currentSlotFrames: [CGRect] {
+-        if let slotFrames, slotFrames.count == 3 { return slotFrames }
+-        let slotW = bounds.width / 3
+-        return (0..<3).map { CGRect(x: CGFloat($0) * slotW, y: 0, width: slotW, height: bounds.height) }
++        let thirds: [CGRect]
++        if let slotFrames, slotFrames.count == 3 {
++            thirds = slotFrames
++        } else {
++            let slotW = bounds.width / 3
++            thirds = (0..<3).map { CGRect(x: CGFloat($0) * slotW, y: 0, width: slotW, height: bounds.height) }
++        }
++        guard twoUp(in: thirds[0].width) else { return thirds }
++        // VoiceiQ: as Apple's bar does on a narrow phone, two suggestions share it in halves
++        // when a word wouldn't fit a third even at 10 pt; a lone one takes the whole bar.
++        let bar = thirds[0].union(thirds[2])
++        let none = CGRect(x: bar.maxX, y: bar.minY, width: 0, height: bar.height)
++        if Self.slots(for: currentSuggestions) == [1] { return [none, bar, none] }
++        let (left, right) = bar.divided(atDistance: (bar.width / 2).rounded(), from: .minXEdge)
++        return [left, right, none]
++    }
++
++    private func twoUp(in third: CGFloat) -> Bool {
++        let font = UIFont.systemFont(ofSize: 10, weight: .regular)
++        return currentSuggestions.prefix(3).contains {
++            ($0.displayText as NSString).size(withAttributes: [.font: font]).width.rounded(.up) + 1 > third - 6
++        }
+     }
+ 
+     /// Apple's dividers: 1 pt wide, ending on the slot boundary, centred on the words' line, no
+@@ -837,9 +857,19 @@ final class KeyboardStripView: UIView {
+                 }
+                 return Word(text: text, font: font, origin: origin, width: size.width, box: nil, glyphs: glyphs)
+             }
+-            let small = UIFont.systemFont(ofSize: 15, weight: .regular)
+-            let smallSize = (text as NSString).size(withAttributes: [.font: small])
+-            let width = min(maxTextW, smallSize.width)
++            // VoiceiQ: as the system keyboard does, the type shrinks until the whole word fits
++            // the slot's width less 3 pt a side (down to 10 pt); only a longer word loses its middle.
++            // SF is tracked wider at smaller sizes, so each half point is measured.
++            let room = max(20, bounds.width - 6 - arrowRoom)
++            var fitted = max(10, min(15, (17 * room / size.width * 2).rounded(.down) / 2))
++            var small = UIFont.systemFont(ofSize: fitted, weight: .regular)
++            var smallSize = (text as NSString).size(withAttributes: [.font: small])
++            while fitted > 10, smallSize.width.rounded(.up) + 1 > room {
++                fitted -= 0.5
++                small = UIFont.systemFont(ofSize: fitted, weight: .regular)
++                smallSize = (text as NSString).size(withAttributes: [.font: small])
++            }
++            let width = min(room, smallSize.width.rounded(.up) + 1)
+             let origin = CGPoint(x: textMidX - width / 2, y: midY - smallSize.height / 2)
+             let box = CGSize(width: width, height: smallSize.height)
+             let glyph = Glyph(text: text, font: small, offset: 0, y: origin.y, box: box)
+diff --git a/iOS/Keyboard/Hex/FullKeyboard/View/FullKeyboardView.swift b/iOS/Keyboard/Hex/FullKeyboard/View/FullKeyboardView.swift
+index 2213a9e..c8e21d5 100644
+--- a/iOS/Keyboard/Hex/FullKeyboard/View/FullKeyboardView.swift
++++ b/iOS/Keyboard/Hex/FullKeyboard/View/FullKeyboardView.swift
+@@ -30,8 +30,9 @@ final class FullKeyboardView: UIView {
+     var onTextEdit: (() -> Void)?
+     /// Undo dictation took the last dictation back.
+     var onUndoDictation: (() -> Void)?
+-    /// VoiceiQ: where the suggestion row is, in this view, and whether the emoji panel covers
+-    /// it, after each layout, so the host can place its shortcut buttons at the row's ends.
++    /// VoiceiQ: where the suggestion row is, in this view, between the keys' outer edges, and
++    /// whether the emoji panel covers it, after each layout, so the host can place its
++    /// shortcut buttons at the row's ends.
+     var onStripRowLayout: ((CGRect, Bool) -> Void)?
+     /// VoiceiQ: the words the strip is about to show, after Hex has set the strip's
+     /// visibility for a selection, so the host can hide it again while it covers the row.
+@@ -781,7 +782,8 @@ final class FullKeyboardView: UIView {
+         callout.frame = content
+         accentCallout.frame = content
+         stripView.frame = layout.stripFrame.offsetBy(dx: 0, dy: lift)
+-        onStripRowLayout?(CGRect(x: 0, y: lift + layout.metrics.stripTop, width: bounds.width, height: layout.metrics.stripHeight), emojiPanel != nil)
++        let keysEdge = layout.horizontalInset + layout.metrics.side
++        onStripRowLayout?(CGRect(x: keysEdge, y: lift + layout.metrics.stripTop, width: bounds.width - 2 * keysEdge, height: layout.metrics.stripHeight), emojiPanel != nil)
+         selectionStrip.frame = stripView.frame
+         stripView.slotFrames = layout.stripSlotFrames.map { $0.offsetBy(dx: -layout.stripFrame.minX, dy: -layout.stripFrame.minY) }
+         stripView.pillInset = layout.metrics.stripInset

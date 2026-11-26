@@ -394,14 +394,25 @@ app as before.
 VoiceiQ adds no row.
 
 - The suggestion row holds VoiceiQ's shortcuts at its ends: cursor control
-  and Paste last dictation on the left, the blue Dictate mic on the right
-  (without Full Access it opens the app's setup). Hex's three suggestions sit
-  between them (`KeyboardLayout.reservedStripEnds`, `0003-voiceiq-strip-row.patch`);
-  a long suggestion keeps its start and end ("Inco…sible"). In the middle,
+  and Paste last dictation on the left, Dictate (VoiceiQ's mark on the blue
+  pill) on the right; without Full Access Dictate opens the app's setup. All
+  are 44 pt wide with 6 pt gaps (`TypingBridge.buttonWidth`), and the row is
+  laid out between the keys' outer edges, so the buttons line up with the
+  keys in every orientation (`stripRow`, from Hex's `onStripRowLayout`). Hex's
+  suggestions sit between them (`KeyboardLayout.reservedStripEnds`,
+  `0003-voiceiq-strip-row.patch`). A long suggestion shrinks from 15 pt down to
+  10 pt to fit whole (`0008-voiceiq-strip-fit.patch`). When a word would need
+  less than 13 pt beside both left buttons, Paste last leaves the row for the
+  cursor page and comes back only between words (`TypingBridge.fitEnds`). When
+  a word would not fit a third of the bar even at 10 pt, as "Incomprehensible"
+  on the iPhone SE and 17 Pro in portrait, two suggestions share the bar in
+  halves, as Apple's bar does. Tapping Paste last with nothing dictated yet
+  shows "Nothing dictated yet". In the middle,
   VoiceiQ's own items replace the suggestions while they show: "Open VoiceiQ
   to finish", a notice from the app, or the Dictionary offer. While a
   dictation runs, the recording strip (Cancel, time over the LevelGlow
-  waveform, Done) takes the whole row until the text is delivered.
+  waveform, Done) takes the whole row until the text is delivered; Cancel
+  and Done are the same size as the row's buttons.
 - Hex's keyboard (`FullKeyboardView`, hosted by `TypingBridge`): the
   suggestion bar (predictions and the pending auto-correction), letters,
   123 and #+= layers, emoji with search, slide to type, the space-bar
@@ -412,11 +423,12 @@ VoiceiQ adds no row.
   and no language detection, and only English data ships (the `en.hextm`
   word model and the English emoji search index). The globe key shows only
   when iOS asks for one (`needsInputModeSwitchKey`), as on the iPhone SE.
-- The edit panel (`EditPanel`, `EditController`), in place of the keys: line
-  start, previous word, left and right arrows that repeat while held, next
-  word and line end; then copy, cut and paste (Full Access), undo and redo;
-  under them the globe (only when `needsInputModeSwitchKey` is true), space,
-  delete and return. A dictation that starts closes it.
+- The edit panel (`EditPanel`, `EditController`), in place of the keys, in
+  three rows of one height: line start, previous word, left and right chevrons
+  that repeat while held, next word and line end; then copy, cut, paste (Full
+  Access), Paste last dictation, undo and redo; under them the globe (only when
+  `needsInputModeSwitchKey` is true), a blank space bar, delete and return. A
+  dictation that starts closes it.
 
 **VoiceiQ, not Hex.** VoiceiQ changes Hex's keyboard only through
 `iOS/Keyboard/Sources/HexGlue` and the patches in `iOS/Keyboard/Hex/patches`:
@@ -444,6 +456,12 @@ VoiceiQ adds no row.
   stored and applied again each time Hex refreshes its strip, which covers the
   emoji panel closing and a selection ending
   (`0006-voiceiq-strip-refresh.patch`).
+- Spatial autocorrect reads where each key was tapped, so "Hel" with the H
+  tapped toward the G scored "Gel" above the typed word. A one to three letter
+  prefix is now replaced by a spatial reading only when that reading is
+  likelier than the model's best completion of what was typed ("Hel" stays
+  and offers "Help"; "teh" still becomes "The";
+  `AutocorrectEngine.finishesBetter`, `0009-voiceiq-unfinished-words.patch`).
 - A secure field (`isSecureTextEntry`, including custom and web ones without a
   password content type) gets no auto-correction and nothing goes into the
   typing journal (`TypingBridge.autocorrectionType`,

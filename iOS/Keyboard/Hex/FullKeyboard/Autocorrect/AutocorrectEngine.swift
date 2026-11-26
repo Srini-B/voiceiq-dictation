@@ -1085,7 +1085,8 @@ final class AutocorrectEngine {
 
         // Spatial autocorrect, when on, decides alone: your taps, the word before, and a margin.
         if let decision = decoderDecision(for: token) {
-            if let replacement = decision.replacement, mayOffer(replacement, replacing: token) {
+            if let replacement = decision.replacement, mayOffer(replacement, replacing: token),
+               !finishesBetter(token, than: replacement) {
                 var cased = self.cased(replacement, typed: token)
                 // A missed space after English "i" ("iwant") gives "I want", as "i" alone does.
                 if language.usesEnglishFixes, cased.contains(" ") {
@@ -1196,6 +1197,21 @@ final class AutocorrectEngine {
             if best == nil || cost < best!.cost { best = (word, cost) }
         }
         return best?.word
+    }
+
+    /// VoiceiQ: a short prefix that a likelier word starts with is an unfinished word, not a
+    /// typo: "Hel" stays (help, hello) instead of becoming a rarer word its taps also spell
+    /// ("Gel", "Hell"), as Apple's keyboard leaves it; "th" still becomes "the", its own best
+    /// completion. Only for 1-3 letters (`completions` covers no more), and only against a
+    /// word the model ranks above the replacement in this phrase.
+    private func finishesBetter(_ token: String, than replacement: String) -> Bool {
+        guard let model = contextModel ?? decoder?.model, model.language == language.rawValue else { return false }
+        let lower = token.lowercased(), fixed = replacement.lowercased()
+        let previous = Self.previousWord(beforeInput ?? "", token: token)
+        guard let best = model.completions(of: lower, after: previous, allowing: { _ in true }).first,
+              best != fixed, let finished = model.cost(of: best, after: previous) else { return false }
+        guard let corrected = model.cost(of: fixed, after: previous) else { return true }
+        return finished < corrected
     }
 
     /// What spatial autocorrect makes of `token`'s taps, or nil when it doesn't apply: off,

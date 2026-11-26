@@ -124,8 +124,15 @@ final class KeyboardModel: ObservableObject {
     }
 
     func pasteLast() {
-        guard let lastText else { return }
+        guard let lastText else { return flash("Nothing dictated yet", for: 3) }
         insert(lastText)
+    }
+
+    private func flash(_ text: String, for seconds: Double) {
+        notice = text
+        DispatchQueue.main.asyncAfter(deadline: .now() + seconds) { [weak self] in
+            if self?.notice == text { self?.notice = nil }
+        }
     }
 
     private func start() {
@@ -185,10 +192,7 @@ final class KeyboardModel: ObservableObject {
         guard let fresh = snapshot.notice, fresh.id != shownNoticeID,
               Date().timeIntervalSince(fresh.createdAt) < 10 else { return }
         shownNoticeID = fresh.id
-        notice = fresh.text
-        DispatchQueue.main.asyncAfter(deadline: .now() + 4) { [weak self] in
-            if self?.notice == fresh.text { self?.notice = nil }
-        }
+        flash(fresh.text, for: 4)
     }
 
     /// Fits the new text to the text around the cursor: spaces on both
