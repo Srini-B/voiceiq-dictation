@@ -2331,6 +2331,14 @@
       "heard": "Um, src/main.swift",
       "written": "src/main.swift",
       "style": "lists"
+    },
+    {
+      "id": "kept-leading-colon-command",
+      "check": "kept as said",
+      "said": "colon w q",
+      "heard": ":wq",
+      "written": ":wq",
+      "style": "lists"
     }
   ]
 }

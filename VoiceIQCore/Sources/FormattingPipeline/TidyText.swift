@@ -136,7 +136,12 @@ enum TidyText {
         var start = 0
         if let first = out.first, ",;:".contains(first) {
             while start < out.count, ",;:".contains(out[start]) { start += 1 }
-            while start < out.count, out[start].isWhitespace { start += 1 }
+            // ":wq" is a command, not stray punctuation.
+            if start < out.count, !out[start].isWhitespace {
+                start = 0
+            } else {
+                while start < out.count, out[start].isWhitespace { start += 1 }
+            }
         }
         return trimmed(String(out[start...]))
     }
