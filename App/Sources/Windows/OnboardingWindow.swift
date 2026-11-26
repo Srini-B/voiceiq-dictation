@@ -738,7 +738,7 @@ private struct AccessibilityScreen: View {
     /// On 27.3+ with Accessibility on, the posting grant only reads true
     /// after a restart, so waiting would only hide the way forward. State,
     /// refreshed by the poll: SwiftUI does not observe `AXIsProcessTrusted()`.
-    @State private var needsRestart = false
+    @State private var needsRestart = Self.restartNeeded
 
     private static var restartNeeded: Bool {
         !KeystrokeAccess.isReady && AXIsProcessTrusted() && KeystrokeAccess.isSplit

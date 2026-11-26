@@ -72,7 +72,7 @@ public final class SystemAudioTap: @unchecked Sendable {
         guard #available(macOS 14.2, *) else { throw TapError.unsupported }
         writer = try CAFWriter(url: url, format: target); frames = 0
         // A tap that never started leaves no open file behind.
-        do { try startTap() } catch { writer?.close(); writer = nil; throw error }
+        do { try startTap() } catch { queue.sync { live = nil; writer?.close(); writer = nil }; throw error }
     }
 
     private func startTap() throws {
