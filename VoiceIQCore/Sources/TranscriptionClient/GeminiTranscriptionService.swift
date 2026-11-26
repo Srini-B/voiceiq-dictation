@@ -208,7 +208,9 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
         let started = early?.sentAt ?? clock.now
         let first: @Sendable () async throws -> String
         if let early {
-            first = { try await early.answer.value }
+            // Awaiting another task's value ignores this child's cancellation,
+            // so a winning backup or a cancelled dictation cancels it directly.
+            first = { try await withTaskCancellationHandler { try await early.answer.value } onCancel: { early.cancel() } }
         } else {
             first = attempt
         }

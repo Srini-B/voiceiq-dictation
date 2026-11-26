@@ -28,6 +28,7 @@ import hashlib
 import json
 import os
 import re
+import socket
 import subprocess
 import threading
 import time
@@ -73,38 +74,54 @@ def is_connection_failure(error: BaseException) -> bool:
             or (isinstance(error, urllib.error.URLError) and not isinstance(error, urllib.error.HTTPError)))
 
 
-def first_success(send, delay: float) -> tuple[dict, bool, bool]:
+def first_success(send, delay: float) -> tuple[dict, bool, list]:
     """GeminiClient.firstSuccess: a second request starts when the first has
     not answered after `delay`, or at once when the first loses its
     connection; the first answer wins and the other request is cancelled.
-    Returns the reply, whether the second request was sent, and whether the
-    cancelled one had already streamed part of its answer, which Gemini
-    bills; a stream cancelled before its first chunk is not billed."""
+    Returns the reply, whether the second request was sent, and the
+    cancelled attempts as (future, state), for billed_losers()."""
     pool = concurrent.futures.ThreadPoolExecutor(2)
-    states = [{"response": None, "chunks": 0}]
-    first = pool.submit(send, states[0])
-    pending = {first}
-    done, _ = concurrent.futures.wait(pending, timeout=delay)
+    attempts = [(pool.submit(send, state := {"response": None, "chunks": 0, "cancelled": False}), state)]
+    first = attempts[0][0]
+    done, _ = concurrent.futures.wait({first}, timeout=delay)
     second = not done or (first.exception() is not None and is_connection_failure(first.exception()))
     if second:
-        states.append({"response": None, "chunks": 0})
-        pending.add(pool.submit(send, states[1]))
+        attempts.append((pool.submit(send, state := {"response": None, "chunks": 0, "cancelled": False}), state))
+    pending = {future for future, _ in attempts}
     error = None
     while pending:
         done, pending = concurrent.futures.wait(pending, return_when=concurrent.futures.FIRST_COMPLETED)
         for future in done:
             if future.exception() is None:
-                billed = False
-                for other in pending:
-                    state = states[0] if other is first else states[1]
-                    billed |= state["chunks"] > 0
+                losers = [(f, state) for f, state in attempts if f in pending]
+                for _, state in losers:
+                    state["cancelled"] = True
                     if state["response"] is not None:
-                        state["response"].close()
-                pool.shutdown(wait=False, cancel_futures=True)
-                return future.result(), second, billed
+                        abort(state["response"])
+                pool.shutdown(wait=False)
+                return future.result(), second, losers
             error = future.exception()
     pool.shutdown(wait=False)
     raise error
+
+
+def abort(response) -> None:
+    """Closes a response another thread may be blocked reading, the way the
+    app's task cancellation drops the connection."""
+    try:
+        response.fp.raw._sock.shutdown(socket.SHUT_RDWR)
+    except (AttributeError, OSError):
+        pass
+    response.close()
+
+
+def billed_losers(losers: list) -> int:
+    """Waits for cancelled attempts to wind down and counts those that had
+    streamed part of an answer, which Gemini bills; one cancelled before its
+    first chunk is not. An attempt still waiting for its response headers
+    when it lost is closed as soon as they arrive."""
+    concurrent.futures.wait([future for future, _ in losers])
+    return sum(state["chunks"] > 0 for _, state in losers)
 
 
 def prompt_for(case: dict, spec: dict, promptdump: str, screen_on: bool) -> str:
@@ -169,6 +186,8 @@ def call(prompt: str, flac: bytes) -> tuple[str, float, dict]:
         # attempt, so a malformed one cannot beat a valid one still running.
         with urllib.request.urlopen(req, timeout=120) as r:
             state["response"] = r
+            if state["cancelled"]:
+                raise ConnectionAbortedError("lost the race before its answer")
             lines = []
             for line in r:
                 lines.append(line)
@@ -190,10 +209,9 @@ def call(prompt: str, flac: bytes) -> tuple[str, float, dict]:
                 try:
                     delay = HEDGE.delay()
                     sent = time.monotonic()
-                    (reply, text), second, billed = first_success(send, delay)
+                    (reply, text), second, losers = first_success(send, delay)
                     HEDGE.record(time.monotonic() - sent, delay)
                     hedged += second
-                    billed_second += billed
                     break
                 except urllib.error.HTTPError as e:
                     if e.code != 429 or attempt == 2:
@@ -204,6 +222,7 @@ def call(prompt: str, flac: bytes) -> tuple[str, float, dict]:
             if answer == 1:
                 raise RuntimeError("malformed_answer twice")
     seconds = time.monotonic() - start
+    billed_second += billed_losers(losers)
     if "<<NO_SPEECH>>" in text:
         text = ""
     return strip_artifacts(text), seconds, dict(reply.get("usageMetadata", {}), secondRequests=hedged,
