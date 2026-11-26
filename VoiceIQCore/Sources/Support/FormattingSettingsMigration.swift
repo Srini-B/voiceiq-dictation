@@ -40,13 +40,12 @@ public enum FormattingSettingsMigration {
     }
 
     static func customPart(of full: String) -> String {
-        let current = Set(DefaultWritingRules.text.components(separatedBy: .newlines))
         var kept: [String] = []
         for line in full.components(separatedBy: .newlines) {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
             if trimmed.isEmpty {
                 if kept.last?.isEmpty == false { kept.append("") }
-            } else if !current.contains(trimmed), !pastDefaultLines.contains(lineHash(trimmed)) {
+            } else if !pastDefaultLines.contains(lineHash(trimmed)) {
                 kept.append(line)
             }
         }
@@ -58,18 +57,21 @@ public enum FormattingSettingsMigration {
     }
 
     /// `lineHash` of every non-blank, trimmed line of every earlier default
-    /// (`DictationRulesSeed.text` from e2fd238 to 09f3141).
+    /// (`DictationRulesSeed.text` from e2fd238 to 09f3141, then `DefaultWritingRules.text`
+    /// until its rules moved into `PromptV1.rules`).
     private static let pastDefaultLines: Set<String> = [
         "022ff7fe4e3c190f", "0c35f2dd0533c246", "0cda31e5aad7fdc6", "0e23d88f5cea6a7b",
         "140b96e3be8e5159", "20c7572d8cf59add", "2983f0e5b3cea197", "2a14c0184b456ba2",
         "32fa35ac1007df61", "40a4c35b8781e7e4", "410f4df6aa1362d6", "42b8ee5afe8f5f8b",
-        "58ab57c04be56431", "5dee554abc0951b3", "6bc922d13dad2071", "6d4efff3faa50d66",
-        "6e2bb16e5a7f3415", "73687f8a983c82a5", "74db839f037e5955", "786795efb9cec886",
-        "7f8358811476ff17", "87295acea69c5fca", "88bf17416406f787", "89d5c786b2b24a0b",
-        "8daa9391372cc664", "9467d20e73b71f3e", "9dbd36133d946ead", "a76a361a2a9dbb16",
-        "a8aa38a25c8fec97", "ae79efe5a3538b9c", "b115fa16b8828d70", "ba633a17a2382090",
-        "bb299fdfc81d1ab1", "d4de3aa6b272de2a", "d6b8d3c9eefa34e8", "dcaf0513b5d093c3",
-        "e41b2970369d6a50", "e731fd6ea0a4d491", "e7a5c5dcba92c26d", "e8e7deb6dd0be7b0",
-        "eedee77257e33fde", "f5baa6505dc50519",
+        "51baaaf8d0189d13", "58ab57c04be56431", "595ba816f19e9754", "5dee554abc0951b3",
+        "6bc922d13dad2071", "6d4efff3faa50d66", "6e2bb16e5a7f3415", "73687f8a983c82a5",
+        "74db839f037e5955", "786795efb9cec886", "7f8358811476ff17", "87295acea69c5fca",
+        "88bf17416406f787", "89d5c786b2b24a0b", "8daa9391372cc664", "9467d20e73b71f3e",
+        "9715d8cae03c1ee1", "9dbd36133d946ead", "a0734cd1804fa966", "a5f62d19e2e9d2c2",
+        "a76a361a2a9dbb16", "a8aa38a25c8fec97", "ab07cb14e77ab062", "ae79efe5a3538b9c",
+        "b115fa16b8828d70", "ba633a17a2382090", "bb299fdfc81d1ab1", "d4de3aa6b272de2a",
+        "d6b8d3c9eefa34e8", "dcaf0513b5d093c3", "e41b2970369d6a50", "e435c23ec39c1d3d",
+        "e731fd6ea0a4d491", "e7a5c5dcba92c26d", "e8e7deb6dd0be7b0", "eedee77257e33fde",
+        "f5baa6505dc50519",
     ]
 }

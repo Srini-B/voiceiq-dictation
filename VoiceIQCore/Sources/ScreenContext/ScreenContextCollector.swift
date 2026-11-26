@@ -3,27 +3,35 @@ import AppKit
 import CoreGraphics
 import Foundation
 import ScreenCaptureKit
+import Vision
 
+/// Reads the screen while the user speaks: the display under the frontmost
+/// window at the start and after each app switch, as text from Vision OCR.
+/// The OCR runs during the recording, so key-up does not wait for it; a
+/// capture still being read at key-up is left out. Text replaced screenshots
+/// because any image attached to the dictation call made gemini-3.8-flash
+/// think on almost every call (2026-11-26).
 @MainActor
 public final class ScreenContextCollector {
-    public private(set) var images: [Data] = []
+    public private(set) var texts: [String] = []
 
-    private let maxImages: Int
-    private let maxDimension: CGFloat
-    private let jpegQuality: CGFloat
+    private let maxCaptures: Int
+    private let maxDimension: Int
+    private let vocabulary: [String]
     private var activationObserver: NSObjectProtocol?
     private var debounceTask: Task<Void, Never>?
     private var isRunning = false
 
-    public init(maxImages: Int = 4, maxDimension: CGFloat = 1280, jpegQuality: CGFloat = 0.6) {
-        self.maxImages = max(1, maxImages)
+    /// `vocabulary`: Dictionary terms, so OCR spells them as listed.
+    public init(maxCaptures: Int = 4, maxDimension: Int = 3200, vocabulary: [String] = []) {
+        self.maxCaptures = max(1, maxCaptures)
         self.maxDimension = max(1, maxDimension)
-        self.jpegQuality = min(1, max(0, jpegQuality))
+        self.vocabulary = vocabulary
     }
 
     public func start() {
         guard !isRunning else { return }
-        images = []
+        texts = []
         guard CGPreflightScreenCaptureAccess() || CGRequestScreenCaptureAccess() else {
             Log.screen.info("screen context unavailable because Screen Recording access was denied")
             return
@@ -50,7 +58,7 @@ public final class ScreenContextCollector {
         }
     }
 
-    public func stop() -> [Data] {
+    public func stop() -> [String] {
         isRunning = false
         if let activationObserver {
             NSWorkspace.shared.notificationCenter.removeObserver(activationObserver)
@@ -58,16 +66,18 @@ public final class ScreenContextCollector {
         }
         debounceTask?.cancel()
         debounceTask = nil
-        return images
+        return texts
     }
 
     private func capture() {
         guard isRunning else { return }
-        let displayID = Self.frontmostDisplay()?.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")]
+        let screen = Self.frontmostDisplay()
+        let displayID = screen?.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")]
             .flatMap { $0 as? NSNumber }
             .map { CGDirectDisplayID($0.uint32Value) } ?? CGMainDisplayID()
-        let maxDimension = maxDimension
-        let jpegQuality = jpegQuality
+        let pixelsPerPoint = screen?.backingScaleFactor ?? 2
+        let maxDimension = CGFloat(maxDimension)
+        let vocabulary = vocabulary
 
         Task { [weak self] in
             do {
@@ -75,7 +85,9 @@ public final class ScreenContextCollector {
                 guard !Task.isCancelled,
                       let display = content.displays.first(where: { $0.displayID == displayID })
                         ?? content.displays.first else { return }
-                let scale = min(1, maxDimension / CGFloat(max(display.width, display.height)))
+                // OCR reads small text only at the display's own pixels.
+                let longest = CGFloat(max(display.width, display.height)) * pixelsPerPoint
+                let scale = pixelsPerPoint * min(1, maxDimension / longest)
                 let configuration = SCStreamConfiguration()
                 configuration.width = max(1, Int(CGFloat(display.width) * scale))
                 configuration.height = max(1, Int(CGFloat(display.height) * scale))
@@ -85,16 +97,13 @@ public final class ScreenContextCollector {
                     configuration: configuration
                 )
                 guard !Task.isCancelled else { return }
-                let data = await Task.detached(priority: .utility) {
-                    let bitmap = NSBitmapImageRep(cgImage: image)
-                    return bitmap.representation(
-                        using: .jpeg,
-                        properties: [.compressionFactor: jpegQuality]
-                    )
+                let started = Date()
+                let text = await Task.detached(priority: .userInitiated) {
+                    ScreenText.read(image, vocabulary: vocabulary)
                 }.value
-                guard let self, self.isRunning, let data else { return }
-                self.append(data)
-                Log.screen.info("captured screen context (\(data.count, privacy: .public) bytes, \(self.images.count, privacy: .public) kept)")
+                guard let self, self.isRunning, !text.isEmpty else { return }
+                self.append(text)
+                Log.screen.info("read screen context (\(text.count, privacy: .public) characters in \(Int(Date().timeIntervalSince(started) * 1000), privacy: .public) ms, \(self.texts.count, privacy: .public) kept)")
             } catch is CancellationError {
             } catch {
                 Log.screen.info("screen context capture failed: \(String(describing: error), privacy: .public)")
@@ -102,11 +111,11 @@ public final class ScreenContextCollector {
         }
     }
 
-    private func append(_ image: Data) {
-        if images.count >= maxImages {
-            images.remove(at: images.count == 1 ? 0 : 1)
+    private func append(_ text: String) {
+        if texts.count >= maxCaptures {
+            texts.remove(at: texts.count == 1 ? 0 : 1)
         }
-        images.append(image)
+        texts.append(text)
     }
 
     private static func frontmostDisplay() -> NSScreen? {
@@ -125,6 +134,31 @@ public final class ScreenContextCollector {
         let desktopTop = NSScreen.screens.map(\.frame.maxY).max() ?? 0
         let appKitCenter = CGPoint(x: center.x, y: desktopTop - center.y)
         return NSScreen.screens.first(where: { $0.frame.contains(appKitCenter) }) ?? NSScreen.main
+    }
+}
+
+enum ScreenText {
+    /// The screen's text, one line per recognised line, top to bottom.
+    /// Accurate recognition needs the Neural Engine; where it fails (a
+    /// virtual Mac), the fast recognizer reads it instead.
+    static func read(_ image: CGImage, vocabulary: [String]) -> String {
+        for level in [VNRequestTextRecognitionLevel.accurate, .fast] {
+            let request = VNRecognizeTextRequest()
+            request.recognitionLevel = level
+            request.usesLanguageCorrection = true
+            request.customWords = vocabulary
+            do {
+                try VNImageRequestHandler(cgImage: image).perform([request])
+            } catch {
+                continue
+            }
+            let lines = (request.results ?? []).sorted {
+                $0.boundingBox.maxY != $1.boundingBox.maxY ? $0.boundingBox.maxY > $1.boundingBox.maxY
+                    : $0.boundingBox.minX < $1.boundingBox.minX
+            }
+            return lines.compactMap { $0.topCandidates(1).first?.string }.joined(separator: "\n")
+        }
+        return ""
     }
 }
 #endif

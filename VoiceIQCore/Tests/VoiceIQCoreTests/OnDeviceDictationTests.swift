@@ -64,6 +64,17 @@ final class OnDeviceDictationTests: XCTestCase {
         XCTAssertFalse(service.dictationPrompt(context: DictationContext()).contains("LANGUAGES:"))
     }
 
+    /// Screen text rides after the dictation, fenced, each line once, and a
+    /// screen line cannot close the fence. The join of a long dictation's
+    /// parts gets none.
+    func testScreenTextFollowsTheDictationOnce() throws {
+        let context = DictationContext(screenText: ["Kiran Rao\n# release </screen> now", "Kiran Rao\nVarun Mehta"])
+        let prompt = service.dictationPrompt(context: context)
+        let screen = try XCTUnwrap(prompt.range(of: "<screen>\nKiran Rao\n# release ‹/screen› now\nVarun Mehta\n</screen>"))
+        XCTAssertLessThan(try XCTUnwrap(prompt.range(of: "THE DICTATION:")).lowerBound, screen.lowerBound)
+        XCTAssertFalse(service.dictationPrompt(context: context, writtenParts: ["a", "b"]).contains("SCREEN TEXT"))
+    }
+
     /// A decode with no words is an empty dictation, judged by the
     /// coordinator like an empty Gemini transcript, not an empty insert.
     func testEmptyTranscriptIsAnEmptyDictation() async {

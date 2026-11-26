@@ -7,7 +7,7 @@ import VoiceIQSpeech
 ///
 ///   CAF → FLAC → gemini-3.8-flash, one call that hears the recording and
 ///   writes the text by the writing rules (or, with them off, writes down
-///   what was said), with any screenshots → ReplacementEngine → inserted text.
+///   what was said), with any screen text → ReplacementEngine → inserted text.
 ///
 /// Recordings over ten minutes go in chunks, one call each, then one text
 /// call joins the written chunks so a correction spoken in a later chunk
@@ -33,7 +33,6 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
         // Built once per dictation: a rule edited mid-flight must not change
         // the rules this text is being written under.
         let prompt = dictationPrompt(context: context)
-        let images = context.screenshots
         let clock = ContinuousClock()
         let started = clock.now
         var encoded = Duration.zero
@@ -60,13 +59,12 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
             let flac = try encodeChunk(audioURL: audioURL, range: range, index: index)
             encoded += clock.now - encodeStart
             let seconds = durationSeconds * Double(range.count) / Double(max(1, fileFrames))
-            let deadline = TimeoutPolicy.overallDeadline(audioDuration: seconds) + Double(images.count * 2)
-            var text = try await sendWithRetry(flac: flac, prompt: prompt, images: images, config: config, deadline: deadline)
+            var text = try await sendWithRetry(flac: flac, prompt: prompt, config: config, speechSeconds: seconds)
             if text.isEmpty, seconds >= 0.6 {
                 // F9a second chance: an empty result on real audio is sometimes model
                 // nondeterminism — one re-send before surfacing anything (audit L25).
                 Log.transcription.info("empty dictation on \(String(format: "%.1f", seconds))s audio — one re-send")
-                text = (try? await send(flac: flac, prompt: prompt, images: images, config: config, deadline: deadline)) ?? ""
+                text = (try? await send(flac: flac, prompt: prompt, config: config, speechSeconds: seconds)) ?? ""
             }
             if !text.isEmpty { pieces.append(text) }
             if ranges.count > 1 {
@@ -86,8 +84,8 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
         if pieces.count > 1 {
             // A failure here leaves the chunk cache in place, so Retry sends only this call.
             let joinPrompt = dictationPrompt(context: context, writtenParts: pieces)
-            let joined = try await sendWithRetry(flac: nil, prompt: joinPrompt, images: [], config: config,
-                                                 deadline: TimeoutPolicy.overallDeadline(audioDuration: durationSeconds))
+            let joined = try await sendWithRetry(flac: nil, prompt: joinPrompt, config: config,
+                                                 speechSeconds: durationSeconds)
             written = joined.isEmpty ? pieces.joined(separator: "\n\n") : joined
         }
         if ranges.count > 1 {
@@ -123,11 +121,10 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
         guard settings.cleanupSource != .none, KeychainStore.loadAPIKey() != nil else { return asTranscribed }
         let config = settings.geminiConfig
         let prompt = dictationPrompt(context: context, transcript: raw)
-        // About fifteen characters a second of speech.
-        let deadline = TimeoutPolicy.overallDeadline(audioDuration: Double(raw.count) / 15) + Double(context.screenshots.count * 2)
         do {
-            let written = try await sendWithRetry(flac: nil, prompt: prompt, images: context.screenshots,
-                                                  config: config, deadline: deadline)
+            // About fifteen characters a second of speech.
+            let written = try await sendWithRetry(flac: nil, prompt: prompt, config: config,
+                                                  speechSeconds: Double(raw.count) / 15)
             guard !written.isEmpty else { throw TranscriptionError.emptyTranscript }
             return TranscriptionResult(rawTranscript: transcript.rawTranscript,
                                        cleanedTranscript: ReplacementEngine.apply(rules, to: written),
@@ -171,7 +168,7 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
             // the model's own language applies, and a Gemini fallback or
             // writing step gets no hint.
             languages: settings.dictationSource == .gemini ? SpokenLanguage.promptLine(settings.spokenLanguages) : nil,
-            imagesAttached: writtenParts == nil && !context.screenshots.isEmpty,
+            screenText: writtenParts == nil ? context.screenText : [],
             surroundingText: context.focusedField?.surroundingText,
             place: place,
             writtenParts: writtenParts,
@@ -191,24 +188,25 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
         return data
     }
 
-    /// The ONE place a dictation request is sent. A second attempt starts on
-    /// its own connection when the first has not answered in time or lost
-    /// its connection; the first answer wins.
-    private func send(flac: Data?, prompt: String, images: [Data], config: GeminiConfig,
-                      deadline: TimeInterval) async throws -> String {
-        let timing = GeminiClient.freshRetryTiming(deadline: deadline)
+    /// The ONE place a dictation request is sent, for `speechSeconds` of
+    /// speech. A second attempt starts on its own connection when the first
+    /// has not answered in time or lost its connection; the first answer wins.
+    private func send(flac: Data?, prompt: String, config: GeminiConfig,
+                      speechSeconds: TimeInterval) async throws -> String {
+        let deadline = TimeoutPolicy.overallDeadline(audioDuration: speechSeconds)
         let attempt: @Sendable () async throws -> String = { [client] in
-            try await client.dictate(prompt: prompt, audio: flac, images: images, model: config.writingModel,
+            try await client.dictate(prompt: prompt, audio: flac, model: config.writingModel,
                                      endpoint: config.endpoint, deadline: deadline)
         }
-        let text = try await GeminiClient.firstSuccess(retryAfter: timing.startAfter, first: attempt, retry: attempt)
+        let text = try await GeminiClient.firstSuccess(retryAfter: GeminiClient.hedgeDelay(speechSeconds: speechSeconds),
+                                                       first: attempt, retry: attempt)
         return ValidationGate.stripArtifacts(text).trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    private func sendWithRetry(flac: Data?, prompt: String, images: [Data], config: GeminiConfig,
-                               deadline: TimeInterval) async throws -> String {
+    private func sendWithRetry(flac: Data?, prompt: String, config: GeminiConfig,
+                               speechSeconds: TimeInterval) async throws -> String {
         do {
-            return try await send(flac: flac, prompt: prompt, images: images, config: config, deadline: deadline)
+            return try await send(flac: flac, prompt: prompt, config: config, speechSeconds: speechSeconds)
         } catch let error as TranscriptionError {
             switch error {
             case .network, .timeout:
@@ -216,7 +214,7 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
                 // A server error waits half a second first.
                 Log.transcription.notice("dictation retrying after \(String(describing: error), privacy: .public)")
                 if case .network = error { try await Task.sleep(nanoseconds: 500_000_000) }
-                return try await send(flac: flac, prompt: prompt, images: images, config: config, deadline: deadline)
+                return try await send(flac: flac, prompt: prompt, config: config, speechSeconds: speechSeconds)
             case .rateLimitedTransient(let retryAfter):
                 // A per-minute throttle names its own wait. Sitting it out once
                 // keeps a long dictation on the pill instead of failing it to
@@ -225,7 +223,7 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
                 guard wait <= TimeoutPolicy.rateLimitWait else { throw error }
                 Log.transcription.info("dictation rate limited — waiting \(Int(wait))s once")
                 try await Task.sleep(nanoseconds: UInt64(wait * 1_000_000_000))
-                return try await send(flac: flac, prompt: prompt, images: images, config: config, deadline: deadline)
+                return try await send(flac: flac, prompt: prompt, config: config, speechSeconds: speechSeconds)
             default:
                 throw error
             }

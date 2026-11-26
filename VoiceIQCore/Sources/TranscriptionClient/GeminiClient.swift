@@ -40,36 +40,48 @@ public actor GeminiClient {
     /// One dictation in one call: the model hears the recording (FLAC) and
     /// answers `{"text": ...}` under `prompt`, which carries the writing
     /// rules. Without audio, the prompt carries the text to write (joining the
-    /// chunks of a long dictation). Screenshots ride along when
-    /// screen context is on. Returns the text, or "" when the model heard no
-    /// speech. Structured output keeps the model's working out of the answer:
+    /// chunks of a long dictation). Returns the text, or "" when the model
+    /// heard no speech. Structured output keeps the model's working out of the answer:
     /// with audio attached, gemini-3.8-flash sometimes wrote its re-listening
     /// and drafts as plain text before the result (measured 2026-09-28).
     public func dictate(
         prompt: String,
         audio: Data?,
-        images: [Data] = [],
         model: String,
         endpoint: URL,
         deadline: TimeInterval
     ) async throws -> String {
-        var parts: [[String: Any]] = [["text": prompt]]
-        parts += images.map { ["inline_data": ["mime_type": "image/jpeg", "data": $0.base64EncodedString()]] }
-        if let audio {
-            parts.append(["inline_data": ["mime_type": "audio/flac", "data": audio.base64EncodedString()]])
+        func body(_ text: String) -> [String: Any] {
+            var parts: [[String: Any]] = [["text": text]]
+            if let audio {
+                parts.append(["inline_data": ["mime_type": "audio/flac", "data": audio.base64EncodedString()]])
+            }
+            return [
+                "contents": [["role": "user", "parts": parts]],
+                "generationConfig": [
+                    "temperature": 0,
+                    "thinkingConfig": Self.thinkingConfig(model: model),
+                    "responseMimeType": "application/json",
+                    "responseJsonSchema": PromptV1.dictationSchema,
+                ] as [String: Any],
+            ]
         }
-        let body: [String: Any] = [
-            "contents": [["role": "user", "parts": parts]],
-            "generationConfig": [
-                "temperature": 0,
-                "thinkingConfig": Self.thinkingConfig(model: model),
-                "responseMimeType": "application/json",
-                "responseJsonSchema": PromptV1.dictationSchema,
-            ] as [String: Any],
-        ]
-        let reply = try await generateContent(body: body, model: model, endpoint: endpoint, deadline: deadline,
-                                              stage: audio == nil ? .cleanup : .transcribe)
-        guard let text = PromptV1.dictationText(fromJSON: reply) else {
+        let stage: UsageStage = audio == nil ? .cleanup : .transcribe
+        var reply: String?
+        if let boundary = prompt.range(of: PromptV1.cacheBoundary) {
+            reply = try await generateWithPromptCache(
+                prefix: String(prompt[..<boundary.lowerBound]),
+                body: body(String(prompt[boundary.lowerBound...]).trimmingCharacters(in: .newlines)),
+                model: model, endpoint: endpoint, deadline: deadline, stage: stage)
+        }
+        let answer: String
+        if let reply {
+            answer = reply
+        } else {
+            answer = try await generateContent(body: body(prompt), model: model, endpoint: endpoint,
+                                               deadline: deadline, stage: stage)
+        }
+        guard let text = PromptV1.dictationText(fromJSON: answer) else {
             // Never paste the model's working. Retryable: the next attempt
             // usually answers with the object.
             Log.transcription.warning("dictation reply was not the JSON answer")

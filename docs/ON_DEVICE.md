@@ -51,7 +51,7 @@ model is missing, busy, fails or loads too slowly goes to Gemini as audio when
 a key is stored, and Gemini transcribes and writes it as with the Gemini
 source. Without a key the dictation fails and stays in History for Retry, and
 the meeting is marked failed.
-Screen context, when on, sends its screenshots with the Gemini writing
+Screen context, when on, sends the screen's text with the Gemini writing
 request as it does with a Gemini dictation.
 
 Below the three choices, the models are grouped by their job, each group
@@ -151,7 +151,10 @@ Two fixes from Hex (MIT) apply to the on-device transcript:
   term, and is spelled nearly the same, the term's spelling: "Stacy" →
   "Stacey"; mid-sentence only, a name that just sounds the same and is at
   most two letters off, as in "Let's invite Jeff" → "Let's invite Geoff"
-  ("Jeff fixed it" stays). English only. It runs on the text inserted as
+  ("Jeff fixed it" stays). Spellings Indian names share also count as the
+  same: "ee" and "i", "oo" and "u", "th" and "t", so Parakeet's "Sreeni",
+  "Puja", "Prashant" and "Kirti" take the Dictionary's "Srini", "Pooja",
+  "Prashanth" and "Kirthi". English only. It runs on the text inserted as
   transcribed (writing Off, no key, or the writer failing).
 
 History's Retry and launch recovery use `OnDeviceFirstTranscription`: the
@@ -207,10 +210,10 @@ of only hesitation sounds is not sent at all; in other languages "um" and
 prompt is saved next to the model (`prefix-<hash>.state`) and restored for
 the next dictation, so only the dictation itself is read.
 
-**Screen context.** Only Gemini writing uses the screenshots. The on-device
+**Screen context.** Only Gemini writing uses the screen's text. The on-device
 writer gets the target app's name and nothing from the screen. LFM3's vision
 projector (291.6 MB at Q4_K_M) was not adopted, and giving the writer the
-screenshots' text (Vision OCR, up to 80 names and terms) was tried and
+screen's text (Vision OCR, up to 80 names and terms) was tried and
 dropped: about 230 more prompt tokens added 1.1 s on the CPU and 1.3 s on the
 VM's GPU per dictation, and on three dictations full of names the model fixed
 none of the misheard ones ("Sreenie", "voice iq", "graph ana"), with or
