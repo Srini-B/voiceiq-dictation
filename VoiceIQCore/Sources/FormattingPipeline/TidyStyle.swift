@@ -329,13 +329,15 @@ public enum Tidy {
         return sentences.isEmpty ? [line] : sentences
     }
 
-    /// Spoken "bullet point" and "next bullet" start list items. A bare
+    /// Spoken "bullet point" and "next bullet", said twice or more, start list items. A bare
     /// "bullet" never does: "Bullet trains have bullet-shaped noses".
     private static func bulletLines(_ text: String) -> String {
         // A standalone phrase, never part of an address ("bullet@gmail.com"). In a
         // dictation that opens with one, any later one starts an item ("bullet point
         // milk bullet point eggs"); otherwise only after a mark or line break, never
         // after a word ("a bullet point summary", "Use next bullet to move down").
+        // A list needs two items: one "Bullet point notation is useful" describes them.
+        guard text.ranges(of: #/(?i)\b(?:bullet point|next bullet)\b/#).count >= 2 else { return text }
         let opens = text.range(of: #"^\s*(?:bullet point|next bullet)\b"#, options: [.regularExpression, .caseInsensitive]) != nil
         let before = opens ? #"(?:^|\s+)"# : #"(?:^|(?<=[.,;:!?\n])\s*)"#
         let pattern = before + #"(?:bullet point|next bullet)(?![\w@.-]*@)(?=[\s:,]|-\s|$)[:,-]?\s*"#
