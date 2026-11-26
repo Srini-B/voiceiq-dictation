@@ -567,7 +567,7 @@ Every local edit and every change from iCloud merges the two copies with
 
 ### Writing rules sync
 
-The built-in writing rules (`DefaultWritingRules`) ship with the app and are
+The built-in writing rules (`PromptV1.rules`) ship with the app and are
 not shown or editable, so an update changes them on every device. Settings
 shows only "Custom rules", which the dictation prompt appends after the
 built-in rules. The custom rules are the same on the Mac and the iPhone,

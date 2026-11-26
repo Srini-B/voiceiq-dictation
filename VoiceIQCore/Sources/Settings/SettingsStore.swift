@@ -232,9 +232,9 @@ public struct SettingsStore: Sendable {
         Self.set(enabled, forKey: "copyRecoveredToClipboard")
     }
 
-    /// Off by default since 2026-10-13: three screenshots add about 1.3 s to
-    /// every cleanup (measured 2.4 s → 3.7 s). The app and window names go
-    /// with the transcript instead, at no cost.
+    /// Off by default since 2026-10-13, when it sent screenshots (about 1.3 s
+    /// more per dictation). It now sends the screen's text, read on device
+    /// while the user speaks.
     public var screenContextEnabled: Bool {
         Self.defaults.object(forKey: "screenContextEnabled") as? Bool ?? false
     }
@@ -264,7 +264,7 @@ public struct SettingsStore: Sendable {
         return .default
     }
 
-    /// Rules the user adds on top of `DefaultWritingRules`. Empty when there
+    /// Rules the user adds on top of the built-in `PromptV1.rules`. Empty when there
     /// are none.
     public var customWritingRules: String {
         Self.defaults.string(forKey: Self.customWritingRulesKey) ?? ""

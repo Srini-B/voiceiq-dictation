@@ -116,14 +116,6 @@ extension GeminiClient {
         Log.transcription.notice("call \(event.stage, privacy: .public) (\(model, privacy: .public)) id=\(requestID, privacy: .public) attempt=\(attempt) \(event.networkProtocol ?? "-", privacy: .public)\(event.reusedConnection == true ? " reused" : "", privacy: .public) \(outcome, privacy: .public) in \(event.totalMs)ms, first byte \(event.firstByteMs ?? -1)ms, sent \(event.requestBytes ?? 0) bytes")
     }
 
-    /// A retry processes the entire prompt, so it needs an entire request budget.
-    /// Giving it only the first request's remaining time makes both expire
-    /// together when the provider stalls before returning any bytes.
-    static func freshRetryTiming(deadline: TimeInterval) -> (startAfter: TimeInterval, deadline: TimeInterval) {
-        let startAfter = min(max(deadline * 0.45, 5), 20)
-        return (startAfter, deadline)
-    }
-
     /// Errors a new connection can fix. Anything about the key, the model, the
     /// request or a quota fails the same way on any connection.
     static func isConnectionFailure(_ error: Error) -> Bool {

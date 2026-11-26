@@ -259,7 +259,7 @@ public final class DictationCoordinator: ObservableObject {
             session = Session(id: id, folder: folder, startedAt: startedAt, context: context, meta: meta)
 
             if SettingsStore().screenContextEnabled {
-                let collector = ScreenContextCollector()
+                let collector = ScreenContextCollector(vocabulary: DictionaryStore().vocabulary())
                 screenContextCollector = collector
                 collector.start()
             }
@@ -797,9 +797,9 @@ public final class DictationCoordinator: ObservableObject {
     private func finishScreenContext() {
         guard let collector = screenContextCollector else { return }
         screenContextCollector = nil
-        let images = collector.stop()
+        let texts = collector.stop()
         guard var session else { return }
-        session.context.screenshots = images
+        session.context.screenText = texts
         self.session = session
     }
 

@@ -1,0 +1,214 @@
+[
+ {
+  "id": "t01",
+  "category": "text_english_swap",
+  "raw_english": "Please ask Karen and Harris to review the pull request before lunch today.",
+  "targets": [
+   "Kiran",
+   "Harish"
+  ]
+ },
+ {
+  "id": "t02",
+  "category": "text_english_swap",
+  "raw_english": "Nathan and Warren are joining the call with Aaron tomorrow morning at ten.",
+  "targets": [
+   "Nitin",
+   "Varun",
+   "Arun"
+  ]
+ },
+ {
+  "id": "t03",
+  "category": "text_english_swap",
+  "raw_english": "Rowan told Nicole that Colin already pushed the fix to the dashboard.",
+  "targets": [
+   "Rohan",
+   "Nikhil",
+   "Kalyan"
+  ]
+ },
+ {
+  "id": "t04",
+  "category": "text_english_swap",
+  "raw_english": "Dennis and Gareth will take the client call and Sharon can handle the follow up email.",
+  "targets": [
+   "Dinesh",
+   "Gaurav",
+   "Charan"
+  ]
+ },
+ {
+  "id": "t05",
+  "category": "text_english_swap",
+  "raw_english": "Tell Vincent that Samantha already signed off on the new design yesterday.",
+  "targets": [
+   "Vasanth",
+   "Sumanth"
+  ]
+ },
+ {
+  "id": "t06",
+  "category": "text_english_swap",
+  "raw_english": "Barrett and Kirsty are out today so ask Sarah to cover the stand up.",
+  "targets": [
+   "Bharath",
+   "Kirthi",
+   "Saurabh"
+  ]
+ },
+ {
+  "id": "t07",
+  "category": "text_english_swap",
+  "raw_english": "I spoke to Dave and Josh about the budget and Ramsey agreed with both of them.",
+  "targets": [
+   "Dev",
+   "Yash",
+   "Vamsi"
+  ]
+ },
+ {
+  "id": "t08",
+  "category": "text_english_swap",
+  "raw_english": "Hi Sarah, the build is ready for review. Loop in Harris and Colin when you can. Thanks, Nicole.",
+  "targets": [
+   "Shreya",
+   "Harish",
+   "Kalyan",
+   "Nikhil"
+  ]
+ },
+ {
+  "id": "t09",
+  "category": "text_english_swap",
+  "raw_english": "Check with Cartik and Sid Arth about the deployment and loop in Sreeni Vasan.",
+  "targets": [
+   "Karthik",
+   "Siddharth",
+   "Srinivasan"
+  ]
+ },
+ {
+  "id": "t10",
+  "category": "text_english_swap",
+  "raw_english": "Ask Freya and Davia to send the slides to Pradeep before Friday.",
+  "targets": [
+   "Priya",
+   "Divya",
+   "Pradeep"
+  ]
+ },
+ {
+  "id": "t11",
+  "category": "text_false_flip",
+  "raw_english": "Let's start on a new page and mark the spot where we left off yesterday.",
+  "must_not": [
+   "Paige",
+   "Marc",
+   "EFT"
+  ],
+  "must_keep": [
+   "page",
+   "mark",
+   "left"
+  ]
+ },
+ {
+  "id": "t12",
+  "category": "text_false_flip",
+  "raw_english": "The diva dropped a nickel on the stage and it looked pretty funny to everyone.",
+  "must_not": [
+   "Divya",
+   "Nikhil"
+  ],
+  "must_keep": [
+   "diva",
+   "nickel"
+  ]
+ },
+ {
+  "id": "t13",
+  "category": "text_false_flip",
+  "raw_english": "We need a sure answer from the vendor, and the dev server is down again.",
+  "must_not": [
+   "Suresh"
+  ],
+  "must_keep": [
+   "sure",
+   "dev server"
+  ]
+ },
+ {
+  "id": "q01",
+  "category": "text_quality",
+  "raw_english": "I'm going to send with my phone the photos to the group chat tonight",
+  "must_keep": [
+   "the photos to the group chat"
+  ]
+ },
+ {
+  "id": "q02",
+  "category": "text_quality",
+  "raw_english": "we need to send the invite to everyone on the we need to send the invite to everyone on the design team by Wednesday",
+  "must_keep": [
+   "design team by Wednesday"
+  ],
+  "must_not": [
+   "on the we"
+  ]
+ },
+ {
+  "id": "q03",
+  "category": "text_quality",
+  "raw_english": "I'll meet him Tuesday afternoon after that we'll go to the office and discuss the proposal I also need to bring the documents you know what actually we're meeting on Wednesday",
+  "must_keep": [
+   "Wednesday afternoon",
+   "documents"
+  ],
+  "must_not": [
+   "Tuesday",
+   "you know what"
+  ]
+ },
+ {
+  "id": "q04",
+  "category": "text_quality",
+  "raw_english": "write a python script that reads a csv file and prints the top five rows it should use pandas and it should handle a missing file without crashing",
+  "must_keep": [
+   "pandas",
+   "CSV",
+   "missing file"
+  ]
+ },
+ {
+  "id": "q05",
+  "category": "text_quality",
+  "raw_english": "so basically I think we should probably wait until Monday to ship it because the tests are still kind of flaky",
+  "must_keep": [
+   "probably",
+   "Monday",
+   "kind of flaky"
+  ],
+  "must_not": [
+   "Furthermore",
+   "Moreover"
+  ]
+ },
+ {
+  "id": "q06",
+  "category": "text_quality",
+  "raw_english": "the app crashed check the lock files on the server the error should be in there",
+  "must_keep": [
+   "log files"
+  ]
+ },
+ {
+  "id": "q07",
+  "category": "text_quality",
+  "raw_english": "hi team quick update the migration is done the dashboard is live and I'll send the numbers tomorrow thanks Rahul",
+  "must_keep": [
+   "Hi team,",
+   "Thanks,\nRahul"
+  ]
+ }
+]

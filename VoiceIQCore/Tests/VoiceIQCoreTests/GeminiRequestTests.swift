@@ -78,6 +78,20 @@ final class GeminiRequestTests: XCTestCase {
         }
     }
 
+    /// The second request waits for the slow tail of recent answers, and a
+    /// run of dictations that needed it pushes the wait up.
+    func testHedgeWaitsForTheSlowTailOfRecentAnswers() async {
+        let hedge = DictationHedge()
+        let firstDelay = await hedge.delay()
+        XCTAssertEqual(firstDelay, DictationHedge.initialDelay)
+        for _ in 0..<20 { await hedge.record(answeredAfter: 3, delay: 8) }
+        let settled = await hedge.delay()
+        XCTAssertEqual(settled, 4)
+        for _ in 0..<3 { await hedge.record(answeredAfter: 9, delay: 4) }
+        let raised = await hedge.delay()
+        XCTAssertEqual(raised, 6)
+    }
+
     func testMeetingChatReplaysEarlierTurnsInOrder() async throws {
         let server = try ScriptedServer(reply: Self.reply("Friday."))
         defer { server.stop() }
