@@ -49,7 +49,8 @@ final class AppModel: ObservableObject {
         FileLayout.removeStaleFiles()
         SettingsStore().removeRetiredSettingsOnce()
         let client = GeminiClient(apiKey: { KeychainStore.loadAPIKey() })
-        transcription = GeminiTranscriptionService(client: client)
+        transcription = GeminiTranscriptionService(
+            client: client, onDeviceTranscript: LocalTranscriber.proTranscriptIfDownloaded(makeSession: LocalSpeechInference.makeSession))
         historyStore = try? HistoryStore.standard()
         UsageMeter.store = try? UsageStore.standard()
         meetings = MeetingEngine(

@@ -49,6 +49,15 @@ source. A meeting is the exception: with Meetings On device and writing Off,
 one that fell back to Gemini still gets no notes, and its note says Gemini
 transcribed it. Without a key the dictation fails and stays in History for Retry, and
 the meeting is marked failed.
+**Empty Gemini answer.** When Dictation is set to Gemini and Gemini answers
+a one-part recording with no text, the app normally sends the same audio once
+more. If Fluid Speech Pro is downloaded, Pro transcribes the saved recording
+instead. Its transcript then goes to Gemini as text by the writing rules, or
+goes in as transcribed when writing is Off or Gemini can't be reached. That
+is the same number of Gemini calls. If Pro hears nothing or isn't
+downloaded, the audio is re-sent as before. Mini is not used for this,
+because it invented a sentence on one of the eval's silent-to-Gemini clips.
+
 Screen context, when on, sends the screen's text with the Gemini writing
 request as it does with a Gemini dictation.
 

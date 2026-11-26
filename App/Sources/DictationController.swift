@@ -53,7 +53,8 @@ final class DictationController {
         FileLayout.removeStaleFiles()
         SettingsStore().removeRetiredSettingsOnce()
         let client = GeminiClient(apiKey: { KeychainStore.loadAPIKey() })
-        let service = GeminiTranscriptionService(client: client)
+        let service = GeminiTranscriptionService(
+            client: client, onDeviceTranscript: LocalTranscriber.proTranscriptIfDownloaded(makeSession: LocalSpeechHelper.makeSession))
         transcriptionService = service
         historyStore = try? HistoryStore.standard()
         UsageMeter.store = try? UsageStore.standard()

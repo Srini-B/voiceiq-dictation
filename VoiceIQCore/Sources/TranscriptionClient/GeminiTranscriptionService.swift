@@ -18,10 +18,19 @@ import VoiceIQSpeech
 public struct GeminiTranscriptionService: TranscriptionServicing {
     let client: GeminiClient
     let settings: SettingsStore
+    /// The downloaded on-device model's transcript of a recording, or nil when
+    /// none is downloaded or it heard nothing. Used when Gemini answers a
+    /// one-part dictation with no text: on far-field and whispered speech
+    /// Gemini sometimes answers "no speech" twice where the device model
+    /// hears the words, so the transcript goes to Gemini as text instead of
+    /// sending the same audio again (the 2026-11-26 hard-audio eval).
+    let onDeviceTranscript: (@Sendable (URL) async -> TranscriptionResult?)?
 
-    public init(client: GeminiClient, settings: SettingsStore = SettingsStore()) {
+    public init(client: GeminiClient, settings: SettingsStore = SettingsStore(),
+                onDeviceTranscript: (@Sendable (URL) async -> TranscriptionResult?)? = nil) {
         self.client = client
         self.settings = settings
+        self.onDeviceTranscript = onDeviceTranscript
     }
 
     public func transcribe(audioURL: URL, durationSeconds: Double, context: DictationContext) async throws -> TranscriptionResult {
@@ -56,6 +65,12 @@ public struct GeminiTranscriptionService: TranscriptionServicing {
             encoded += clock.now - encodeStart
             let seconds = durationSeconds * Double(range.count) / Double(max(1, fileFrames))
             var text = try await sendWithRetry(flac: flac, prompt: prompt, config: config, speechSeconds: seconds)
+            if text.isEmpty, seconds >= 0.6, ranges.count == 1, let onDeviceTranscript,
+               let heard = await onDeviceTranscript(audioURL),
+               !heard.cleanedTranscript.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                Log.transcription.info("empty dictation on \(String(format: "%.1f", seconds))s audio — writing the on-device transcript instead")
+                return try await write(heard, context: context)
+            }
             if text.isEmpty, seconds >= 0.6 {
                 // F9a second chance: an empty result on real audio is sometimes model
                 // nondeterminism — one re-send before surfacing anything (audit L25).

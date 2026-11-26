@@ -1,3 +1,4 @@
+import AVFoundation
 import XCTest
 import VoiceIQSpeech
 @testable import VoiceIQCore
@@ -61,6 +62,63 @@ final class OnDeviceDictationTests: XCTestCase {
         let screen = try XCTUnwrap(prompt.range(of: "<screen>\nKiran Rao\n# release ‹/screen› now\nVarun Mehta\n</screen>"))
         XCTAssertLessThan(try XCTUnwrap(prompt.range(of: "THE DICTATION:")).lowerBound, screen.lowerBound)
         XCTAssertFalse(service.dictationPrompt(context: context, writtenParts: ["a", "b"]).contains("SCREEN TEXT"))
+    }
+
+    /// Gemini answers "no speech" for a recording the downloaded on-device
+    /// model heard (far-field and whispered speech in the 2026-11-26 eval):
+    /// the device transcript is written instead of sending the audio again.
+    /// Without a device transcript the audio is sent once more, as before.
+    func testNoSpeechAnswerWritesTheOnDeviceTranscriptInsteadOfResending() async throws {
+        let noSpeech = #"{"candidates":[{"content":{"parts":[{"text":"{\"text\":\"<<NO_SPEECH>>\"}"}]}}]}"#
+        let audio = try Self.toneRecording(seconds: 2)
+        FileLayout.overrideRoot = audio.deletingLastPathComponent()
+        defer {
+            FileLayout.overrideRoot = nil
+            try? FileManager.default.removeItem(at: audio.deletingLastPathComponent())
+        }
+        SettingsStore().setCleanupSource(.none)
+        defer { SettingsStore().setEndpointOverride(nil) }
+        let heard = TranscriptionResult(rawTranscript: "can you just use a wipe for the dining table",
+                                        cleanedTranscript: "Can you just use a wipe for the dining table?",
+                                        modelID: "fluid-speech-pro-local")
+
+        let withDevice = try ScriptedServer(reply: noSpeech)
+        defer { withDevice.stop() }
+        SettingsStore().setEndpointOverride(withDevice.url.absoluteString)
+        let service = GeminiTranscriptionService(client: GeminiClient(apiKey: { "test" }), onDeviceTranscript: { _ in heard })
+        let written = try await service.transcribe(audioURL: audio, durationSeconds: 2, context: DictationContext())
+        XCTAssertTrue(written.cleanedTranscript.contains("dining table"), written.cleanedTranscript)
+        XCTAssertEqual(written.modelID, "fluid-speech-pro-local")
+        XCTAssertEqual(withDevice.requests.count, 1, "the audio is not sent again")
+
+        let withoutDevice = try ScriptedServer(reply: noSpeech)
+        defer { withoutDevice.stop() }
+        SettingsStore().setEndpointOverride(withoutDevice.url.absoluteString)
+        let cloudOnly = GeminiTranscriptionService(client: GeminiClient(apiKey: { "test" }), onDeviceTranscript: { _ in nil })
+        do {
+            _ = try await cloudOnly.transcribe(audioURL: audio, durationSeconds: 2, context: DictationContext())
+            XCTFail("expected emptyTranscript")
+        } catch {
+            XCTAssertEqual(error as? TranscriptionError, .emptyTranscript)
+        }
+        XCTAssertEqual(withoutDevice.requests.count, 2, "one re-send of the audio")
+    }
+
+    /// A 16 kHz mono CAF holding a tone loud enough to count as speech.
+    private static func toneRecording(seconds: Double) throws -> URL {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("tone-\(UUID())")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let url = folder.appendingPathComponent("audio.caf")
+        let format = AVAudioFormat(commonFormat: .pcmFormatInt16, sampleRate: 16_000, channels: 1, interleaved: true)!
+        let file = try AVAudioFile(forWriting: url, settings: format.settings, commonFormat: .pcmFormatInt16, interleaved: true)
+        let frames = AVAudioFrameCount(16_000 * seconds)
+        let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frames)!
+        buffer.frameLength = frames
+        for i in 0..<Int(frames) {
+            buffer.int16ChannelData![0][i] = Int16(10_000 * sin(2 * Double.pi * 220 * Double(i) / 16_000))
+        }
+        try file.write(from: buffer)
+        return url
     }
 
     /// A decode with no words is an empty dictation, judged by the

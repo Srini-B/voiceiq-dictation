@@ -1,3 +1,4 @@
+import AVFoundation
 import Foundation
 import os
 import VoiceIQSpeech
@@ -59,6 +60,25 @@ public final class LocalTranscriber: Sendable {
         return LocalTranscriber(audioURL: audioURL, model: settings.localSpeechModel,
                                 language: settings.localSpeechLanguage,
                                 cloudOnColdLoad: cloudOnColdLoad, makeSession: makeSession)
+    }
+
+    /// Fluid Speech Pro's transcript of a saved recording, whatever the
+    /// Dictation source, or nil when Pro is not downloaded, is busy or
+    /// fails. Gemini's empty-answer fallback. Only Pro: on the 2026-11-26
+    /// eval's five empty Gemini answers Pro wrote three right and stayed
+    /// silent on two, while Mini invented a sentence for one of those two.
+    public static func proTranscriptIfDownloaded(makeSession: @escaping LocalSpeechSessionFactory)
+        -> @Sendable (URL) async -> TranscriptionResult? {
+        { audioURL in
+            let frames = (try? AVAudioFile(forReading: audioURL))?.length ?? 0
+            guard frames > 0, let local = await MainActor.run(body: { () -> LocalTranscriber? in
+                guard LocalModelStore.store(for: .fluidSpeechPro).state == .ready else { return nil }
+                return LocalTranscriber(audioURL: audioURL, model: .fluidSpeechPro,
+                                        language: LocalSpeechModel.fluidSpeechPro.language(code: SettingsStore().localSpeechLanguageCode),
+                                        cloudOnColdLoad: false, makeSession: makeSession)
+            }) else { return nil }
+            return await local.finish(framesWritten: frames)
+        }
     }
 
     /// `cloudOnColdLoad`: Gemini can transcribe, so a dictation whose model
