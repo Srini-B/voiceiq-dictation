@@ -94,6 +94,17 @@ enum MobileSettings {
         }
     }
 
+    /// Whether a session the keyboard started shows in the Dynamic Island and
+    /// on the Lock Screen, with Stop and Cancel for a dictation whose
+    /// keyboard is no longer on screen. On by default.
+    static var showsSessionActivity: Bool {
+        get { defaults.object(forKey: "showsSessionActivity") as? Bool ?? true }
+        set {
+            defaults.set(newValue, forKey: "showsSessionActivity")
+            Log.ui.info("setting showsSessionActivity changed to \(newValue)")
+        }
+    }
+
     static let keyboardBundleID = "io.blue.voiceiq.ios.keyboard"
 
     /// The keyboard is in Settings › General › Keyboard › Keyboards.

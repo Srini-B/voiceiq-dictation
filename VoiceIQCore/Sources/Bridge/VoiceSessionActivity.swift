@@ -12,6 +12,8 @@ public struct VoiceSessionAttributes: ActivityAttributes {
             case starting
             case recording
             case processing
+            /// A result is ready and waits for the keyboard in its field.
+            case waiting
             case meeting
         }
 
@@ -50,6 +52,32 @@ public struct StopDictationIntent: LiveActivityIntent {
 
     public func perform() async throws -> some IntentResult {
         SharedStore.shared.request(.stopDictation)
+        return .result()
+    }
+}
+
+/// "Cancel" in the Dynamic Island while dictating. The recording is discarded.
+public struct CancelDictationIntent: LiveActivityIntent {
+    public static let title: LocalizedStringResource = "Cancel Dictation"
+    public static let isDiscoverable = false
+
+    public init() {}
+
+    public func perform() async throws -> some IntentResult {
+        SharedStore.shared.request(.cancelDictation)
+        return .result()
+    }
+}
+
+/// "Copy" in the Dynamic Island while a result waits for its field.
+public struct CopyResultIntent: LiveActivityIntent {
+    public static let title: LocalizedStringResource = "Copy Dictation"
+    public static let isDiscoverable = false
+
+    public init() {}
+
+    public func perform() async throws -> some IntentResult {
+        SharedStore.shared.request(.copyResult)
         return .result()
     }
 }
