@@ -4,30 +4,34 @@ VoiceiQ can transcribe dictations and meetings on the Mac, iPhone or iPad
 instead of sending audio to Gemini. Gemini stays the default. The models are
 Fluid Speech Pro and Fluid Speech Mini by FluidVoice (Parakeet TDT models
 converted to Core ML), run through the FluidAudio package, plus pyannote
-community-1 to tell meeting speakers apart. With writing Off, no model
-service sees the words of an on-device dictation or meeting. Finished text still syncs to your own iCloud like any
+community-1 to tell meeting speakers apart. With writing Off, an on-device
+dictation is tidied by rules on the device, with no model, so no model
+service sees the words. Finished text still syncs to your own iCloud like any
 dictation.
 
 ## Settings
 
-Settings → Dictation → Speech has three choices, each saved on its own:
+Settings → Dictation → Speech has these choices, each saved on its own:
 
 | Row | Values | Key | Default |
 | --- | --- | --- | --- |
 | Dictation | Gemini, On device | `transcriptionSource` | Gemini |
 | Meetings | Gemini, On device | `meetingTranscriptionSource` | Gemini |
 | Writing rules and notes | Gemini, Off | `cleanupSource` | Gemini |
+| Tidy dictation | Sentences, Messages, Lists, As spoken | `tidyStyle` | Sentences |
 
-The third row shows only when dictation or meetings run on device. It decides
-who writes an on-device transcript:
+The third row shows only when dictation or meetings run on device; the fourth
+only when Dictation is On device and writing is Off. The third decides who
+writes an on-device transcript:
 
 - **Gemini**: the transcript goes to Gemini as text, never as audio, with the
   built-in writing rules, your custom rules, dictionary and regional spelling
   (`PromptV1.transcriptSection`). Meetings get notes. If Gemini fails or there
   is no key, the dictation goes in as transcribed.
 - **Off**: no writing step for an on-device transcript; it never goes to
-  Gemini as text. Dictations go in as transcribed, with the Dictionary's
-  replacements. Meetings keep their transcript with speaker labels and a short
+  Gemini as text. Dictations are tidied on the device (see
+  [Tidy dictation](#tidy-dictation)), with the Dictionary's replacements.
+  Meetings keep their transcript with speaker labels and a short
   note that no summary was written. A recording the on-device models could not
   transcribe still goes to Gemini (see below). As with every dictation and meeting, the finished text syncs to
   your own iCloud when History sync is on (see PRIVACY.md).
@@ -122,7 +126,7 @@ after a delete, and deletes the retired on-device writer's folder
    the recording starts. The model loads while you speak.
 2. At stop, `LocalTranscriber.finish` decodes the saved CAF.
 3. The coordinator passes the result to `TranscriptionServicing.write`
-   (Gemini writing, or the Dictionary's replacements when Off).
+   (Gemini writing, or the tidy-up when Off).
 4. If the model is still loading `TimeoutPolicy.localColdLoad` after the
    recording and a Gemini key exists, the dictation goes to Gemini and the
    load finishes as a warm-up.
@@ -147,7 +151,7 @@ Two fixes from Hex (MIT) apply to the on-device transcript:
   same: "ee" and "i", "oo" and "u", "th" and "t", so Parakeet's "Sreeni",
   "Puja", "Prashant" and "Kirti" take the Dictionary's "Srini", "Pooja",
   "Prashanth" and "Kirthi". English only. It runs on the text inserted as
-  transcribed (writing Off, no key, or Gemini failing).
+  transcribed or tidied (writing Off, no key, or Gemini failing).
 
 History's Retry and launch recovery use `OnDeviceFirstTranscription`: the
 saved recording goes to the on-device model first, then Gemini when a key is
@@ -170,6 +174,71 @@ the meeting falls back to Gemini. With Writing rules and notes set to Gemini
 and a key stored, Gemini writes the notes from the transcript; with Off, the
 meeting keeps its transcript and no notes.
 
+## Tidy dictation
+
+With writing Off, `GeminiTranscriptionService.write` tidies an on-device
+dictation with rules and no model (`Tidy`, adapted from Hex's dictation
+styles, MIT):
+
+1. `Tidy.spoken`: layout and symbols said by name become the marks
+   (`SpokenMarks`): "new line", "new paragraph", "open quote" … "close quote"
+   or "quote" … "unquote", "comma", "colon", "semicolon", "hashtag",
+   "underscore", "hyphen", "slash", "at sign", "question mark", "exclamation
+   mark", "full stop" (not "period", which ends "a trial period" too), and
+   none of them after an article or a describing word ("an Oxford comma",
+   "the hashtag") or, for slash, underscore and hyphen, as a verb ("to slash
+   costs"); a Spanish dictation
+   uses the Spanish words instead ("coma", "nueva línea"), and other
+   languages neither. In English, then:
+   - Spoken email addresses join (`SpokenAddresses`): "priya dot sharma at
+     the rate gmail dot com" → "priya.sharma@gmail.com". "at the rate of 5%"
+     stays.
+   - Hesitations ("um", "uh", "er", "hmm"; not "ah" or "err") go with their commas
+     (`Hesitations`); a comma that only marked the pause goes too ("call
+     her, uh, tomorrow" → "call her tomorrow").
+   - Spoken self-corrections keep only the correction (`SpokenRepairs`):
+     "scratch that" or "strike that" drops what came before (not "delete
+     that", often an instruction); "no wait", "I mean", "make that", "or
+     rather" replace a short restated phrase ("I want, I mean, I need"), a
+     like-for-like word (a day, a number, a name, a list item), or, after
+     "no wait", a whole new clause. "actually" repairs only a narrowing
+     ("actually just to Sarah"), and "sorry" nothing. Only "no wait" reaches
+     into the sentence before. "you know" set off by commas is dropped; "I
+     mean" that corrects nothing stays. When a rule is unsure, the words stay.
+   - A last sentence left without a mark that asks ("can you send it",
+     "what time is it") gets a question mark; "When I get home, call me"
+     does not.
+2. The Dictionary's replacement rules and sound-alike spellings.
+3. `Tidy.styled` in the chosen style:
+   - **Sentences**: each sentence capitalized and ended, English "i" as "I"
+     and "gonna", "wanna", "gotta", "kinda", "lemme" written out.
+   - **Messages**: lowercase sentence starts (acronyms and names with inner
+     capitals keep theirs), English "i", no comma after an opening "yeah" or
+     "ok", and no final full stop on a message of one line and up to three
+     sentences.
+   - **Lists**: spoken "bullet" and line breaks make lines; otherwise several
+     sentences become a bulleted list, and three or more short items after a
+     colon too. Opening "so", "and then" and "first" go, and no line ends
+     with a full stop.
+   - **As spoken**: steps 1 and 3 are skipped; only extra spaces go.
+
+Each language drops only its own hesitation sounds: English "er" is a word in
+Norwegian and German and "um" in Portuguese, so those keep them. The rules for
+"I", "gonna", "yeah" and list connectives are English only. A dictation left
+with no words (only "um" and "uh") is an empty dictation, as Gemini would
+make it. Numbers are already digits before step 1 (`SpokenNumbers`). French
+drops "euh" and "heu".
+
+The cases both writing paths are scored on (self-corrections, spoken lists,
+questions, spoken punctuation, all-filler takes, instructions written down,
+email addresses, numbers, mixed punctuation, other languages, and words that
+must stay) are in
+`VoiceIQCore/Tests/VoiceIQCoreTests/Fixtures/cleanup-cases.json`;
+`CleanupCasesTests` runs each through the tidy-up. Where the tidy-up knowingly
+writes less than the ideal (`written`), the case records what it writes
+(`tidy`), for example "Send it to Sarah." where Gemini resolves "it" to "the
+invoice".
+
 ## Measured (cloud Mac, M4 Pro VM, 2026-11-22)
 
 Speech models:
@@ -182,5 +251,5 @@ Speech models:
   each 2.76%; on-device plus Gemini writing 1.97%.
 - On-device plus Gemini writing took a median 1.9–2.0 s, against 2.7 s for
   Gemini from audio.
-- Without a writing step, the text keeps "um" and "uh" and does not collapse
+- Without a writing step or tidy-up, the text keeps "um" and "uh" and does not collapse
   self-corrections.

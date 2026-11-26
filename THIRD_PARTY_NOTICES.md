@@ -246,6 +246,14 @@ SOFTWARE.
   VoiceiQ's MCP tools instead of Hex's CLI), and the warning on a call whose
   system audio was not heard (`MeetingEngine/SilentSystemAudio.swift`,
   which checks the saved track instead of reading the permission)
+- Also, from Hex at `012bdbbe`, rewritten in Swift: the writing-Off tidy-up
+  (`VoiceIQCore/Sources/FormattingPipeline/TidyStyle.swift`,
+  `TidyText.swift` and `SpokenMarks.swift`, from `src/dictation/style.rs`,
+  `style/spacing.rs`, `style/notes.rs`, `filler_words.rs`,
+  `spoken_formatting.rs` and `spoken_symbols.rs`), and spoken email
+  addresses (`SpokenAddresses.swift`, from
+  `ios/HEXShared/Formatting/SpokenCleanupRules.swift`), adapted with Hex's
+  test cases in `VoiceIQCore/Tests/VoiceIQCoreTests/TidyTests.swift`
 - License: MIT
 
 ```

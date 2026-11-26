@@ -8,14 +8,15 @@ final class OnDeviceDictationTests: XCTestCase {
     override func setUp() {
         UserDefaults.standard.removeObject(forKey: "dictionaryEntries")
         UserDefaults.standard.removeObject(forKey: "cleanupSource")
+        UserDefaults.standard.removeObject(forKey: "tidyStyle")
         UserDefaults.standard.removeObject(forKey: "onDeviceSpeechLanguage")
         UserDefaults.standard.removeObject(forKey: "screenContextEnabled")
     }
 
     override func tearDown() { setUp() }
 
-    /// With Gemini writing off, an on-device transcript goes in as
-    /// transcribed, never to the network, and the Dictionary still fixes it,
+    /// With Gemini writing off, an on-device transcript is tidied on the
+    /// device, never sent to the network, and the Dictionary still fixes it,
     /// sound-alike spellings included.
     func testWritingOffKeepsTranscriptAndAppliesDictionary() async throws {
         SettingsStore().setCleanupSource(.none)
@@ -80,6 +81,37 @@ final class OnDeviceDictationTests: XCTestCase {
         XCTAssertEqual(LocalSpeechModel.suggested(physicalMemory: 3_900_000_000), .parakeet)
         XCTAssertEqual(LocalSpeechModel.suggested(physicalMemory: 5_700_000_000), .fluidSpeechPro)
         XCTAssertEqual(LocalSpeechModel.suggested(physicalMemory: 8_000_000_000), .fluidSpeechPro)
+    }
+
+    /// Writing Off tidies in the chosen style, after the spoken marks and
+    /// before nothing else: the Dictionary's spelling lands inside a styled
+    /// list, a transcript of only "um" and "uh" is an empty dictation, and
+    /// "As spoken" keeps every word.
+    func testWritingOffTidiesInTheChosenStyle() async throws {
+        let settings = SettingsStore()
+        settings.setCleanupSource(.none)
+        settings.setLocalSpeechLanguage("en-US")
+        _ = DictionaryStore().add(term: "Srini", misspelling: "Sreenie")
+        func written(_ text: String) async throws -> String {
+            try await service.write(TranscriptionResult(rawTranscript: text, cleanedTranscript: text, modelID: "fluid-speech-mini-local"),
+                                    context: DictationContext()).cleanedTranscript
+        }
+        settings.setTidyStyle(.lists)
+        let list = try await written("Um, so, first, call Sreenie. And then book the flights comma please.")
+        XCTAssertEqual(list, "- Call Srini\n- Book the flights, please")
+        settings.setTidyStyle(.messages)
+        let message = try await written("Yeah, I'll ping Sreenie new line thanks.")
+        XCTAssertEqual(message, "yeah i'll ping Srini\nthanks.")
+        settings.setTidyStyle(.asSpoken)
+        let spoken = try await written("um ping Sreenie comma")
+        XCTAssertEqual(spoken, "um ping Srini comma")
+        settings.setTidyStyle(.sentences)
+        do {
+            _ = try await written("Um, uh.")
+            XCTFail("expected emptyTranscript")
+        } catch {
+            XCTAssertEqual(error as? TranscriptionError, .emptyTranscript)
+        }
     }
 
     /// On device writing, retired after 0.7.15, reads as Off: a local-only

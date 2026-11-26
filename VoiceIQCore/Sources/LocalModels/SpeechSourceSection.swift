@@ -3,7 +3,8 @@ import VoiceIQSpeech
 
 /// Gemini or this device, chosen apart for dictation and for meetings, then
 /// Gemini or Off for the writing step of an on-device dictation (and a
-/// meeting's notes), then the on-device models grouped by their job: transcription and the English
+/// meeting's notes), with how an unwritten dictation is tidied, then the
+/// on-device models grouped by their job: transcription and the English
 /// add-on. Shared by the macOS and iOS settings.
 ///
 /// A group shows while its choice is On device. Otherwise it shows only while
@@ -16,6 +17,7 @@ public struct SpeechSourceSection<Header: View>: View {
     private let settings = SettingsStore()
     @State private var dictationSource = SettingsStore().dictationSource
     @State private var cleanupSource = SettingsStore().cleanupSource
+    @State private var tidyStyle = SettingsStore().tidyStyle
     @State private var meetingSource = SettingsStore().meetingSource
     @State private var localModel = SettingsStore().localSpeechModel
     @ObservedObject private var mini = LocalModelStore.store(for: .parakeet)
@@ -50,6 +52,15 @@ public struct SpeechSourceSection<Header: View>: View {
                 }
                 .sourcePickerStyle()
             }
+            if tidies {
+                Picker("Tidy dictation", selection: Binding(get: { tidyStyle }, set: {
+                    tidyStyle = $0
+                    settings.setTidyStyle($0)
+                })) {
+                    ForEach(TidyStyle.allCases) { Text($0.displayName).tag($0) }
+                }
+                .sourcePickerStyle()
+            }
         } header: {
             header("Speech")
         } footer: {
@@ -65,6 +76,7 @@ public struct SpeechSourceSection<Header: View>: View {
             case "transcriptionSource": dictationSource = settings.dictationSource
             case "meetingTranscriptionSource": meetingSource = settings.meetingSource
             case "cleanupSource": cleanupSource = settings.cleanupSource
+            case "tidyStyle": tidyStyle = settings.tidyStyle
             case "onDeviceSpeechModel": localModel = settings.localSpeechModel
             default: break
             }
@@ -101,6 +113,8 @@ public struct SpeechSourceSection<Header: View>: View {
     private var dictationLocal: Bool { dictationSource == .onDevice }
     private var meetingsLocal: Bool { meetingSource == .onDevice }
     private var anyOnDevice: Bool { dictationLocal || meetingsLocal }
+    /// An on-device dictation goes in without a writing step, so it is tidied.
+    private var tidies: Bool { dictationLocal && cleanupSource == .none }
 
     private var speechModels: [LocalModelStore] { LocalSpeechModel.available.map(LocalModelStore.store(for:)) }
 
@@ -122,7 +136,12 @@ public struct SpeechSourceSection<Header: View>: View {
     private var cleanupNote: String {
         switch cleanupSource {
         case .gemini: return Self.geminiWrites
-        case .none: return "No writing step: dictations go in as transcribed, with your Dictionary's replacements, and meetings keep their transcript with speaker labels but no notes. If an on-device model is missing or fails, Gemini transcribes the recording when a key is saved."
+        case .none:
+            let marks = tidyStyle == .asSpoken ? "" : " Say \"new line\" or \"comma\" for the mark."
+            let dictation = dictationLocal
+                ? " Dictations are tidied on this \(device) with your Dictionary's replacements. \(tidyStyle.summary)\(marks)"
+                : ""
+            return "No writing step.\(dictation) Meetings keep their transcript with speaker labels but no notes. If an on-device model is missing or fails, Gemini transcribes the recording when a key is saved."
         }
     }
 
