@@ -2339,6 +2339,20 @@
       "heard": ":wq",
       "written": ":wq",
       "style": "lists"
+    },
+    {
+      "id": "kept-hidden-file-um",
+      "check": "kept as said",
+      "said": "open tilde slash dot um",
+      "heard": "Open ~/.um",
+      "written": "Open ~/.um."
+    },
+    {
+      "id": "kept-windows-path-er",
+      "check": "kept as said",
+      "said": "open c colon backslash users backslash er backslash documents",
+      "heard": "Open C:\\Users\\er\\Documents.",
+      "written": "Open C:\\Users\\er\\Documents."
     }
   ]
 }
