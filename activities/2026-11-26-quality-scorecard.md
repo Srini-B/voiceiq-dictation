@@ -82,3 +82,9 @@ With every option on, dictation went from p50 6.2 s / p90 16.8 s to **3.0 s / 8.
 Decision: merge #83 once Neon's re-review is clean. D5 becomes its own follow-up, with two parts:
 - The eval sends the app's real backup request, so D5 is measured the way the app behaves.
 - Time comes off before key-up: streaming the audio, or on-device transcription during speech followed by a text-only call.
+
+### c409c44 re-score (Fable)
+
+Scores: D1 100, D2 99.3, D3 94.4, D4 94.3 (96.1 without clean_punct), D5 54.7 (p50 3.31 s, p90 7.56 s).
+
+The commit restores Hindi "10 बजे" and tight short lists. One regression: in Tamil speech, the English word "ready" is now written in Tamil script, scoring 86 in both rounds. Decision: #83 still merges, because both scores are above main and the Tamil case is a follow-up, along with "new paragraph" and D5.
