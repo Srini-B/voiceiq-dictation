@@ -43,7 +43,7 @@ python3 eval/dictation/score.py eval/dictation/results/LABEL.json --judge eval/d
 | M1 Participants found and named | The right number of people, each with the right name | `meetings/score.py`: share of reference people found (named, when names are known) − 10 per extra speaker |
 | M2 Who spoke when | Speaker turns over time | `meetings/score.py`: 100 × (1 − DER), 0.25 s collar |
 | M3 Who said what | Each reference word given to the right person | `meetings/score.py` |
-| M4 Transcript accuracy | Words | `meetings/score.py`: 100 × (1 − WER) |
+| M4 Transcript accuracy | Words, in order, per person | `meetings/score.py`: 100 × (1 − cpWER), the CHiME meeting WER: each person's words against the words given to them |
 | M5 Notes quality | Decisions, action items with owners, nothing invented, usable right after the call | judged against the AMI abstractive summary or the synthetic script |
 | M6 UI and UX | Live status during a call, transcript by person, notes screen | judged from screenshots; Granola is the bar |
 
