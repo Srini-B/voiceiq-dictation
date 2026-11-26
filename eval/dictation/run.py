@@ -75,7 +75,11 @@ def call(prompt: str, flac: bytes, screen: bytes, shots: int) -> tuple[str, floa
                 if e.code != 429 or attempt == 2:
                     raise
                 time.sleep(10)
-        raw = "".join(p.get("text", "") for p in reply["candidates"][0]["content"]["parts"] if not p.get("thought"))
+        # As GeminiClient.extractText: the last non-empty, non-thought text
+        # part is the answer; an earlier one can be unflagged working.
+        texts = [p["text"] for p in reply["candidates"][0].get("content", {}).get("parts", [])
+                 if not p.get("thought") and isinstance(p.get("text"), str) and p["text"].strip()]
+        raw = texts[-1] if texts else ""
         text = dictation_text(raw)
         if text is not None:
             break
