@@ -103,11 +103,13 @@ enum SpokenMarks {
             if wordStart, pendingUnquote == nil,
                let (layout, end) = layouts.lazy.compactMap({ words, layout in
                 phraseEnd(words, in: chars, at: index, foldsAccents: spanish).map { (layout, $0) }
-            }).first, !nounAfterLayout(chars, after: end), saysLayout(layout, chars, at: index) {
+            }).first, !nounAfterLayout(chars, after: end), saysLayout(layout, chars, at: index, end: end) {
                 index = write(layout, into: &out, chars, after: end)
                 continue
             }
-            if wordStart, pendingUnquote == nil, !spanish, !(wordBefore(chars, at: index).map(namesTheMark) ?? false),
+            // "a quote for the job", "my quote": the noun.
+            if wordStart, pendingUnquote == nil, !spanish,
+               !(wordBefore(chars, at: index).map { ["a", "an", "the", "my", "your", "our", "their", "this", "that", "one", "no"].contains($0) } ?? false),
                let end = phraseEnd(["quote"], in: chars, at: index),
                let close = unquote(in: chars, after: end, outside: quoted) {
                 pendingUnquote = close
@@ -226,9 +228,19 @@ enum SpokenMarks {
     /// New line."): "Press enter for new line" and "Write new paragraph at the
     /// top" use the words as nouns. A quotation mark after any word that does
     /// not describe it.
-    private static func saysLayout(_ layout: Layout, _ chars: [Character], at index: Int) -> Bool {
+    private static func saysLayout(_ layout: Layout, _ chars: [Character], at index: Int, end: Int) -> Bool {
         let before = wordBefore(chars, at: index)
-        if case .lineBreak = layout { return before == "" }
+        if case .lineBreak = layout {
+            // Set off as a command: after a sentence's end or a spoken mark
+            // ("Hello. New line.", "Dear Sam comma new paragraph"), or with a
+            // mark after it too ("Thanks, new line, Sam"). "Sure, new paragraph
+            // styles look good" is a noun phrase.
+            guard before == "" else { return false }
+            var mark = index
+            while mark > 0, TidyText.isSpace(chars[mark - 1]) { mark -= 1 }
+            let after = skip(chars, from: end, also: "")
+            return ".!?\u{E000}".contains(chars[mark - 1]) || after == chars.count || ",.;:!?\n".contains(chars[after])
+        }
         return before.map { !describesLayout($0) } ?? false
     }
 
@@ -270,6 +282,8 @@ enum SpokenMarks {
             "mi", "su", "este", "esta",
             // A preposition makes it a noun: "came to full stop", "press enter for new line".
             "to", "for", "at", "of", "with", "in", "on", "from", "by", "about",
+            // So does an instruction about the mark: "Add colon then space", "or comma there".
+            "add", "type", "put", "insert", "use", "press", "delete", "remove", "or", "and", "need", "want",
         ].contains(word)
     }
 
@@ -405,7 +419,7 @@ enum Hesitations {
         // "Mr. Um", "server underscore um" spelling an identifier, and the sound
         // named as a word: "the um key", "He said um three times".
         if ["mr.", "mrs.", "ms.", "dr.", "prof.", "underscore", "hyphen", "slash", "dot", "the", "a", "an", "said", "say",
-            "says", "word", "type", "typed"].contains(previous) { return true }
+            "says", "saying", "word", "type", "typed"].contains(previous) { return true }
         if chars[start].isUppercase, before > 0, !".!?\n".contains(chars[before - 1]) { return true }
         let rest = String(chars[start...].prefix(16)).lowercased()
         if ["uh huh", "uh-huh", "uh oh", "uh-oh"].contains(where: rest.hasPrefix) { return true }
