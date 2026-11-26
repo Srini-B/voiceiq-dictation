@@ -41,11 +41,17 @@
   ago in another dictation still renames that entry. A fix is forgotten only
   when its original words are back, not when a longer edit covers it, and a
   revision made after the 120 s window is learned as a new word.
+- Review follow-up: an edit beside a learned name extends it only when the
+  added words are capitalized, not a case change, and a respelling; an undo
+  keeps a word another tracked dictation in the field still teaches.
+- Known limits: the respelling bound rejects some phonetic name fixes
+  ("shivon" → "Siobhan"), the same bound the iPhone classifier uses; deleting
+  a learned word leaves its entry.
 
 ## Verification
 
 - `swift test --package-path VoiceIQCore` on a Mac satellite (Xcode 27):
-  255 tests, 0 failures. New `EditDiffTests` cover separate and adjacent
+  256 tests, 0 failures. New `EditDiffTests` cover separate and adjacent
   edits across a paragraph, edits a few seconds apart folding into a phrase,
   a learned word changed again, and rewording, punctuation and deletions
   teaching nothing. With the respelling check disabled, the rewording test

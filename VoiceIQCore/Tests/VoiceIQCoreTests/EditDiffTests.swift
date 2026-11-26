@@ -47,6 +47,27 @@ final class EditDiffTests: XCTestCase {
         XCTAssertEqual(EditDiff.steps(for: secondEdits, after: secondEdits.corrections), [])
     }
 
+    func testEditingTheWordBesideALearnedNameDoesNotFoldItIn() {
+        let original = "I asked whisper yesterday about it."
+        let first = EditDiff.edits(original: original, replacement: "I asked Wispr yesterday about it.")
+        let second = EditDiff.edits(original: original, replacement: "I asked Wispr today about it.")
+        XCTAssertEqual(EditDiff.steps(for: second, after: first.corrections), [])
+
+        let history = EditDiff.history(after: second, earlier: first.corrections)
+        let undone = EditDiff.edits(original: original, replacement: "I asked whisper today about it.")
+        XCTAssertEqual(EditDiff.steps(for: undone, after: history), [.forget(fix("whisper", "Wispr", 2..<3))])
+
+        for (learned, edited) in [
+            ("We use Wispr. the app is fine.", "We use Wispr. The app is fine."),
+            ("We use Wispr slack daily.", "We use Wispr Slack daily."),
+        ] {
+            let dictated = learned.replacingOccurrences(of: "Wispr", with: "whisper")
+            let before = EditDiff.edits(original: dictated, replacement: learned)
+            let after = EditDiff.edits(original: dictated, replacement: edited)
+            XCTAssertEqual(EditDiff.steps(for: after, after: before.corrections), [], edited)
+        }
+    }
+
     func testChangingALearnedWordAgainRevisesItAndPuttingItBackForgetsIt() {
         let original = "We moved billing to Paystack last week."
         let first = EditDiff.edits(original: original, replacement: "We moved billing to Pastack last week.")

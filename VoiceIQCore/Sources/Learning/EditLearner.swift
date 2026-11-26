@@ -226,7 +226,8 @@ public final class EditLearner {
             } else {
                 fields[key] = current
             }
-            learn(steps)
+            let taught = Set(current.insertions.flatMap(\.edits).map { $0.replacement.lowercased() })
+            learn(steps, stillTaught: taught)
         }
     }
 
@@ -262,7 +263,9 @@ public final class EditLearner {
         entry.source == .auto && Date().timeIntervalSince(entry.updatedAt) <= reEditSeconds
     }
 
-    private func learn(_ steps: [LearningStep]) {
+    /// `stillTaught`: spellings a correction in this field still teaches, so
+    /// undoing one copy of a fix does not drop a word another copy keeps.
+    private func learn(_ steps: [LearningStep], stillTaught: Set<String>) {
         var learned: [DictionaryEntry] = []
         var known = dictionary.entries()
         for step in steps {
@@ -272,6 +275,7 @@ public final class EditLearner {
             var heardAs: String?
             switch step {
             case let .forget(edit):
+                guard !stillTaught.contains(edit.replacement.lowercased()) else { continue }
                 // By spelling alone: a rename from another dictation keeps
                 // the older wording.
                 let gone = known.filter { Self.isFresh($0) && $0.term.lowercased() == edit.replacement.lowercased() }

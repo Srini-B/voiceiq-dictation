@@ -115,13 +115,14 @@ public enum EditDiff {
     /// What learning should do with `edits`, how a dictation now differs from
     /// its original text, given `earlier`, the corrections it carried at the
     /// previous harvest. Edits seen before are skipped. An edit over the
-    /// same words as earlier ones, because the user changed that word again or
-    /// edited the word next to it, revises what those taught, so "Wispr" then
-    /// "Flow" typed a few seconds apart ends as the one phrase "Wispr Flow".
-    /// An earlier edit is forgotten only when its original words are back and
-    /// no remaining correction teaches the same spelling.
+    /// same words as an earlier one revises what it taught, and so does one
+    /// that adds a respelled neighbour to it, so "Wispr" then "Flow" typed a
+    /// few seconds apart ends as the one phrase "Wispr Flow". An earlier edit
+    /// is forgotten only when its original words are back and no remaining
+    /// correction teaches the same spelling.
     public static func steps(for edits: DictationEdits, after earlier: [LearnedCorrection]) -> [LearningStep] {
-        let changed: [LearningStep] = edits.corrections.compactMap { correction in
+        let corrections = accepted(edits, after: earlier)
+        let changed: [LearningStep] = corrections.compactMap { correction in
             guard !earlier.contains(correction) else { return nil }
             let overlapped = earlier.filter { $0.words.overlaps(correction.words) }
             guard !overlapped.isEmpty else { return .learn(correction) }
@@ -129,19 +130,54 @@ public enum EditDiff {
         }
         let undone = earlier.filter { edit in
             !edits.changed.contains { $0.overlaps(edit.words) }
-                && !edits.corrections.contains { $0.replacement.lowercased() == edit.replacement.lowercased() }
+                && !corrections.contains { $0.replacement.lowercased() == edit.replacement.lowercased() }
         }
         return changed + undone.map { .forget($0) }
     }
 
-    /// The corrections to compare the next harvest with: the current ones,
-    /// plus earlier ones a longer edit now covers, so putting their words
-    /// back later is still recognized.
+    /// The corrections to compare the next harvest with: the ones `steps`
+    /// acted on, plus earlier ones a longer or ignored edit now covers, so
+    /// putting their words back later is still recognized.
     public static func history(after edits: DictationEdits, earlier: [LearnedCorrection]) -> [LearnedCorrection] {
-        edits.corrections + earlier.filter { edit in
-            !edits.corrections.contains { $0.words.overlaps(edit.words) }
+        let corrections = accepted(edits, after: earlier)
+        return corrections + earlier.filter { edit in
+            !corrections.contains { $0.words.overlaps(edit.words) }
                 && edits.changed.contains { $0.overlaps(edit.words) }
         }
+    }
+
+    /// The corrections that may teach or revise a word. One that grows an
+    /// earlier correction is kept only when the words it adds are capitalized
+    /// like a name and are themselves a respelling, not a case change ("Wispr the" → "Wispr The") or other
+    /// wording ("Wispr yesterday" → "Wispr today") next to a learned name.
+    private static func accepted(_ edits: DictationEdits, after earlier: [LearnedCorrection]) -> [LearnedCorrection] {
+        edits.corrections.filter { correction in
+            let overlapped = earlier.filter { $0.words.overlaps(correction.words) }
+            guard !overlapped.isEmpty, !overlapped.allSatisfy({ $0.words == correction.words }) else { return true }
+            guard overlapped.count == 1 else { return false }
+            return extendsRespelled(overlapped[0], to: correction)
+        }
+    }
+
+    private static func extendsRespelled(_ earlier: LearnedCorrection, to correction: LearnedCorrection) -> Bool {
+        let wider = correction.words
+        let inner = earlier.words
+        guard wider.lowerBound <= inner.lowerBound, inner.upperBound <= wider.upperBound else { return false }
+        let atStart = inner.lowerBound == wider.lowerBound
+        guard atStart || inner.upperBound == wider.upperBound else { return false }
+        let original = words(in: correction.original).map(\.text)
+        let replacement = words(in: correction.replacement).map(\.text)
+        let taught = words(in: earlier.replacement).map(\.text)
+        guard replacement.count > taught.count,
+              atStart ? replacement.starts(with: taught) : replacement.reversed().starts(with: taught.reversed())
+        else { return false }
+        let addedCount = wider.count - inner.count
+        let addedOriginal = (atStart ? original.suffix(addedCount) : original.prefix(addedCount)).joined(separator: " ")
+        let addedWords = atStart ? replacement.dropFirst(taught.count) : replacement.dropLast(taught.count)
+        let addedReplacement = addedWords.joined(separator: " ")
+        return addedWords.allSatisfy { $0.first?.isUppercase == true }
+            && addedOriginal.lowercased() != addedReplacement.lowercased()
+            && isPlausibleFix(addedOriginal, addedReplacement)
     }
 
     /// Whether `replacement` could be the same words respelled rather than
