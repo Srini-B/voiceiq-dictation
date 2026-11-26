@@ -64,11 +64,16 @@ main 35351ad, before this change:
 ## Known limits
 
 - Different names with the same consonants still pass ("Peter" → "Pedro",
-  "Karen" → "Corinne"); only a name the user typed is learned.
+  "Karen" → "Corinne"), also when re-editing a learned name ("Karan" →
+  "Green" mid-sentence); only a name the user typed is learned. Re-edits
+  must sound like both the heard words and the learned spelling, so a fix of
+  a fix ("Shivon" → "Siobhan") is learned.
 - Garbles with an extra or missing consonant ("lucky me" → "Lakshmi") or
   only two consonants ("Mootoo" → "Muthu") need the letters bound.
 - A dictation that is only the name, or one deleted down to a few words,
   cannot be located, as before.
+- Deleting a word from one of two copies of a learned phrase, or from a
+  phrase followed by a comma, renames the entry instead of forgetting it.
 - Title abbreviations read as sentence ends, so "Dr. shivon" → "Dr. Siobhan"
   is not learned by sound.
 - Unsigned Mac Debug build succeeds. Not tested live on a signed build.

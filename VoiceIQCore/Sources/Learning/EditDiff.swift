@@ -138,10 +138,11 @@ public enum EditDiff {
                 // the quadratic distance runs.
                 if valid(originalText), valid(replacementText), originalText != replacementText,
                    isLetterRespelling(originalText, replacementText)
-                       // Sound only for a first fix: a learned word edited
-                       // again must respell what it taught.
-                       || (candidate.nameLike && !earlier.contains(where: { $0.words.overlaps(span) })
-                           && soundsAlike(originalText, replacementText))
+                       // A learned word edited again must also sound like
+                       // what it taught ("Shivon" → "Siobhan", not "Karan" →
+                       // "Green").
+                       || (candidate.nameLike && soundsAlike(originalText, replacementText)
+                           && earlier.filter({ $0.words.overlaps(span) }).allSatisfy { soundsAlike($0.replacement, replacementText) })
                        || earlier.contains(where: {
                        $0.words == span && isLetterRespelling($0.replacement, replacementText)
                    }) {
@@ -373,12 +374,14 @@ public enum EditDiff {
         var index = text.endIndex
         var quoted = false
         var marker = false
+        var spaced = false
         while index > text.startIndex {
             index = text.index(before: index)
             let character = text[index]
             if character.isNewline { return true }
-            if character.isWhitespace { continue }
-            if "\"“”'‘’([".contains(character) { quoted = quoted || "\"“'‘".contains(character); continue }
+            if character.isWhitespace { spaced = true; continue }
+            // A quote opens the word's sentence only when it touches the word.
+            if "\"“”'‘’([".contains(character) { quoted = quoted || (!spaced && "\"“'‘".contains(character)); continue }
             if !marker, "-*•".contains(character) { marker = true; continue }
             if marker { return false }
             return ".!?…:".contains(character) || (quoted && character == ",")

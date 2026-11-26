@@ -63,6 +63,13 @@ final class EditDiffTests: XCTestCase {
         XCTAssertEqual(continued.corrections.map(\.replacement), ["Siobhan"])
         let listed = EditDiff.edits(original: "Sorey, I'm late.", replacement: "Sorry, I'm late.", context: "Notes\n- ")
         XCTAssertEqual(listed.corrections.map(\.nameLike), [false])
+        let quoted = EditDiff.edits(original: "\"Wait,\" shivon said.", replacement: "\"Wait,\" Siobhan said.").corrections
+        XCTAssertEqual(quoted.map(\.replacement), ["Siobhan"])
+        let shivon = EditDiff.edits(original: "Ask shivon now.", replacement: "Ask Shivon now.")
+        let siobhan = EditDiff.edits(original: "Ask shivon now.", replacement: "Ask Siobhan now.", earlier: shivon.corrections)
+        XCTAssertEqual(EditDiff.steps(for: siobhan, after: shivon.corrections), [
+            .revise(replacing: [fix("shivon", "Shivon", 1..<2)], with: fix("shivon", "Siobhan", 1..<2)),
+        ])
         let twoWords = EditDiff.edits(original: "Sharon raj works.", replacement: "Saran Raja works.").corrections
         XCTAssertEqual(twoWords.map(\.nameLike), [true])
         let sorry = EditDiff.edits(original: "Sorey, I'm late.", replacement: "Sorry, I'm late.").corrections
@@ -92,8 +99,8 @@ final class EditDiffTests: XCTestCase {
         let karan = EditDiff.edits(original: karen, replacement: "I met Karan yesterday.")
         let green = EditDiff.edits(original: karen, replacement: "I met Green today.", earlier: karan.corrections)
         XCTAssertEqual(EditDiff.steps(for: green, after: karan.corrections), [])
-        let greenAlone = EditDiff.edits(original: karen, replacement: "I met Green yesterday.", earlier: karan.corrections)
-        XCTAssertEqual(EditDiff.steps(for: greenAlone, after: karan.corrections), [])
+        let grant = EditDiff.edits(original: karen, replacement: "I met Grant yesterday.", earlier: karan.corrections)
+        XCTAssertEqual(EditDiff.steps(for: grant, after: karan.corrections), [])
     }
 
     func testDeletingALearnedWordForgetsItButDeletingItsSentenceDoesNot() {
