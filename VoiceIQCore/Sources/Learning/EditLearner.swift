@@ -308,7 +308,11 @@ public final class EditLearner {
                 // Matched by the spelling the earlier fix taught, not by its
                 // transcript wording, which other fixes of that word share.
                 let terms = Set(replacing.map { $0.replacement.lowercased() })
-                stale = known.filter { Self.isFresh($0) && terms.contains($0.term.lowercased()) }
+                // A spelling another fix in the field still teaches stays; the
+                // revision is then learned as its own word.
+                stale = known.filter {
+                    Self.isFresh($0) && terms.contains($0.term.lowercased()) && !stillTaught.contains($0.term.lowercased())
+                }
             }
             if let kept = stale.first {
                 // The entry follows the edit, and entries for the parts of a

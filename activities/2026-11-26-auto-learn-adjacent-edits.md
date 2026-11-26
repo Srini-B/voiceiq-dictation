@@ -50,7 +50,9 @@
   ("whisper flow" fixed to "Wispr", then "flow" to "Flow" after a pause) does
   not fold into the learned name, because a case change alone cannot be told
   from sentence case or a second name ("Wispr Slack"); fixing both words
-  before the 4 s settle still learns "Wispr Flow".
+  before the 4 s settle still learns "Wispr Flow". A phrase that spans two separately
+  learned fixes ("Wispr" and "Supabase", then the word between them) is not
+  merged; both words stay learned.
 
 ## Verification
 
