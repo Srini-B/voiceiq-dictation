@@ -73,12 +73,27 @@ wait. The on-device writer's removal shipped first, on its own (PR #90).
 - VoiceiQ names, not Hex's. No Hex UI was copied.
 - The tidy-up does not run on the Gemini-failure fallback or on meetings.
 
+- **Fifth round (Neon at `fe36564`, 60 sentences).** A spoken "comma" or
+  "colon" after an instruction verb outside the guard list ("Replace comma
+  with period", "Drop comma here") and a line break after a sentence's end
+  before a noun ("It's official. New paragraph styles are live", Spanish
+  "Nueva línea de crédito") still lost words. Another word list would leak
+  the same way, so the rules were cut back instead: a spoken comma or colon
+  converts only in a greeting ("Dear Sam comma", "Hi team comma") or when
+  the model set it off with commas; no mark converts before a place word or
+  next to another mark's name; a line break after a sentence's end needs a
+  mark after it too and not "and"/"or" next. A number swap needs one number
+  for one with as many digits ("Call 555 1234, I mean, 5" stays). Codex's
+  two findings were fixed: "i-th" keeps its case, and «quoted» words are not
+  expanded. 14 kept-as-said cases added; no earlier case's output changed.
+
 ## Verification
 
 - D4 on the writing-Off path (Claude Fable 5.2,
   T-01a2177d-d730-720b-bf02-f5ffc2f25386): 99.2 over 161 cases at
   `fc6b481`, then 97.5 over 230 cases at `83e91e4` with no meant word lost,
-  changed or added (after the second round).
+  changed or added (after the second round), then 97.4 over 273 cases at
+  `fe36564`, 0 meant words lost. The fifth round changed no scored output.
 - `swift test --package-path VoiceIQCore` on a macOS 27 Mac satellite, and
   `xcodebuild build` for VoiceIQ and VoiceIQiOS.
 

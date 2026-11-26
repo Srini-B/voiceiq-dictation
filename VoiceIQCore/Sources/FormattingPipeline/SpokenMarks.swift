@@ -177,8 +177,17 @@ enum SpokenMarks {
                 guard let end = phraseEnd(words, in: chars, at: index, foldsAccents: spanish),
                       // A mark follows a word: "Colon biopsy results…" opens with the organ.
                       let before = wordBefore(chars, at: index), !namesTheMark(before),
-                      // A comma, colon or semicolon comes between words: "a bigger colon." is the organ.
-                      !["comma", "colon", "semicolon"].contains(words[0]) || wordFollows(chars, after: end),
+                      // "Replace comma with period", "Please fix comma placement": a mark next to
+                      // another mark's name, or before a place, is talked about. A comma or
+                      // colon comes between words in a greeting ("Dear Sam comma", "Hi team
+                      // comma please review"); anywhere else it may be the word.
+                      !marksNearby(chars, around: index, end: end), !beforePlace(chars, after: end),
+                      ["comma", "colon"].contains(words[0])
+                          // or set off by the model's commas: "Done, comma, thanks".
+                          ? (inGreeting(chars, before: index) || (afterComma(chars, at: index) && commaFollows(chars, after: end)))
+                              && wordFollows(chars, after: end)
+                          // "Move question mark to the end": an end mark follows a clause.
+                          : wordsInSentence(chars, before: index).count > 1,
                       words != ["comma"] || !beforeCompound(chars, after: end, ["separated", "separate", "delimited", "splice", "splices", "rules", "key"]),
                       // "That's my final answer, full stop.": emphasis, said after a comma.
                       words != ["full", "stop"] || !afterComma(chars, at: index),
@@ -212,6 +221,51 @@ enum SpokenMarks {
         return compounds.contains(String(chars[start..<stop]).lowercased())
     }
 
+    /// The words of the sentence before `index`, lowercased; a spoken
+    /// "quote" opens a new one: "He said open quote hello comma world".
+    private static func wordsInSentence(_ chars: [Character], before index: Int) -> [String] {
+        let start = chars[..<index].lastIndex { ".!?\n\"“«".contains($0) }.map { $0 + 1 } ?? 0
+        let words = String(chars[start..<index]).split { !TidyText.isWordCharacter($0) && !"'’".contains($0) }
+            .map { $0.lowercased() }
+        return words.lastIndex(of: "quote").map { Array(words[($0 + 1)...]) } ?? words
+    }
+
+    /// Whether `index` comes one to three words into a sentence that opens
+    /// with a greeting: "Dear Sam", "Hi team", "Hello", "Thanks".
+    private static func inGreeting(_ chars: [Character], before index: Int) -> Bool {
+        let words = wordsInSentence(chars, before: index)
+        return (1...3).contains(words.count) && greetings.contains(words[0])
+    }
+
+    private static let greetings: Set<String> = ["hello", "hi", "hey", "dear", "thanks", "thank", "yes", "ok", "okay"]
+
+    /// "question mark to the end", "comma here", "colon then space": the mark is placed, not written.
+    private static func beforePlace(_ chars: [Character], after end: Int) -> Bool {
+        beforeCompound(chars, after: end, [
+            "to", "at", "after", "before", "with", "for", "in", "on", "into", "onto", "between", "from", "instead",
+            "here", "there", "then", "placement", "usage", "rules", "key", "sign", "symbol",
+        ])
+    }
+
+    private static let markNames: Set<String> = [
+        "comma", "commas", "colon", "colons", "semicolon", "period", "dash", "hyphen", "question", "exclamation",
+        "stop", "mark", "marks", "point", "slash", "underscore", "apostrophe", "bracket", "parenthesis",
+    ]
+
+    /// Whether another mark's name is within two words of the one at
+    /// `index`…`end`: "comma or period", "colon for dash".
+    private static func marksNearby(_ chars: [Character], around index: Int, end: Int) -> Bool {
+        let words = { (text: ArraySlice<Character>) in String(text).split { !TidyText.isWordCharacter($0) }.map { $0.lowercased() } }
+        let before = words(chars[..<index]).suffix(2)
+        let after = words(chars[end...]).prefix(2)
+        return before.contains(where: markNames.contains) || after.contains(where: markNames.contains)
+    }
+
+    private static func commaFollows(_ chars: [Character], after end: Int) -> Bool {
+        let next = skip(chars, from: end, also: "")
+        return next < chars.count && chars[next] == ","
+    }
+
     private static func afterComma(_ chars: [Character], at index: Int) -> Bool {
         var before = index
         while before > 0, TidyText.isSpace(chars[before - 1]) { before -= 1 }
@@ -231,15 +285,21 @@ enum SpokenMarks {
     private static func saysLayout(_ layout: Layout, _ chars: [Character], at index: Int, end: Int) -> Bool {
         let before = wordBefore(chars, at: index)
         if case .lineBreak = layout {
-            // Set off as a command: after a sentence's end or a spoken mark
-            // ("Hello. New line.", "Dear Sam comma new paragraph"), or with a
-            // mark after it too ("Thanks, new line, Sam"). "Sure, new paragraph
-            // styles look good" is a noun phrase.
+            // Set off as a command: after a spoken mark ("Dear Sam comma new
+            // paragraph"), or with a mark on both sides ("Hello. New line.",
+            // "Thanks, new line, Sam"). "It's official. New paragraph styles
+            // are live" and "Sure, new paragraph styles" are noun phrases, and
+            // "shoes, new line, and socks" names a range.
             guard before == "" else { return false }
             var mark = index
             while mark > 0, TidyText.isSpace(chars[mark - 1]) { mark -= 1 }
+            if chars[mark - 1] == "\u{E000}" { return true }
             let after = skip(chars, from: end, also: "")
-            return ".!?\u{E000}".contains(chars[mark - 1]) || after == chars.count || ",.;:!?\n".contains(chars[after])
+            guard after == chars.count || ",.;:!?\n".contains(chars[after]) else { return false }
+            let next = skip(chars, from: after, also: ",.;:!?")
+            var stop = next
+            while stop < chars.count, TidyText.isWordCharacter(chars[stop]) { stop += 1 }
+            return !["and", "or", "but", "y", "o", "pero"].contains(String(chars[next..<stop]).lowercased())
         }
         return before.map { !describesLayout($0) } ?? false
     }

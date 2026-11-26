@@ -108,6 +108,13 @@ enum SpokenRepairs {
         }
         // "Gate 12, I mean, 12 PM": the same number restated is no correction.
         guard start < cue, tokens[start..<cue].map(\.bare) != [fixed[0].bare] else { return nil }
+        // One number for one of as many digits: "Call 555 1234, I mean, 5" and
+        // "Room 101, I mean, 2" fix a digit, not the number.
+        if kind == .number {
+            let digits = { (word: String) in word.filter(\.isNumber).count }
+            guard start == cue - 1, digits(tokens[start].word) == digits(fixed[0].word),
+                  start == 0 || self.kind(tokens[start - 1].word, opensClause: false) != .number else { return nil }
+        }
         return start
     }
 

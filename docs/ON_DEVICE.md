@@ -182,15 +182,20 @@ styles, MIT):
 
 1. `Tidy.spoken`: layout and marks said by name become the marks
    (`SpokenMarks`), only where the name cannot be prose: "new line" and "new
-   paragraph" after a sentence's end or a spoken mark, or set off by marks
-   on both sides ("Hello. New line.", "Dear Sam comma new paragraph",
-   "Thanks, new line, Sam"; not "Press enter for new line" or "Sure, new
-   paragraph styles look good"); "open quote" …
-   "close quote" or "quote" … "unquote" after a word; "comma" and "colon"
-   between two words; "question mark", "exclamation mark" and "full stop"
-   after a word. None after an article, a quantifier, a preposition, a
-   describing word or an instruction about the mark ("an Oxford comma",
-   "one question mark left", "came to full stop", "Add comma then space"). Not "period", "semicolon", "slash", "underscore", "hyphen",
+   paragraph" after a spoken mark, or set off by marks on both sides and not
+   before "and" or "or" ("Hello. New line.", "Dear Sam comma new paragraph",
+   "Thanks, new line, Sam"; not "Press enter for new line", "It's official.
+   New paragraph styles are live" or "shoes, new line, and socks"); "open
+   quote" … "close quote" or "quote" … "unquote" after a word; "comma" and
+   "colon" between words in a greeting's first three words ("Dear Sam comma",
+   "Hi team comma please review") or set off by the model's commas ("Done,
+   comma, thanks"); "question mark", "exclamation mark" and "full stop" after
+   a clause of two words or more. None after an article, a quantifier, a
+   preposition, a describing word or an instruction about the mark ("an
+   Oxford comma", "one question mark left", "came to full stop"), before a
+   place ("Move question mark to the end", "Add comma then space"), or within
+   two words of another mark's name ("Replace comma with period"). Not
+   "period", "semicolon", "slash", "underscore", "hyphen",
    "hashtag" or "at sign", which are prose words too ("a trial period",
    "semicolon rules", "to slash costs", "look at sign language"). A Spanish
    dictation gets only the layout words ("nueva línea"): "coma", "dos
@@ -206,9 +211,10 @@ styles, MIT):
      (`Hesitations`); a comma that only marked the pause goes too ("call
      her, uh, tomorrow" → "call her tomorrow").
    - A spoken self-correction keeps only the correction when it swaps like
-     for like and ends the sentence (`SpokenRepairs`): a day or a number
-     ("Meet on Tuesday, no wait, Wednesday." → "Meet on Wednesday."; "15,000,
-     I mean, 50,000 dollars" → "50,000 dollars"). Not names: "I met John, I
+     for like and ends the sentence (`SpokenRepairs`): a day, or one number
+     for one with as many digits ("Meet on Tuesday, no wait, Wednesday." →
+     "Meet on Wednesday."; "15,000, I mean, 50,000 dollars" → "50,000
+     dollars"; not "Call 555 1234, I mean, 5" or "Room 101, I mean, 2"). Not names: "I met John, I
      mean, Seriously." has a capital that is no name. The cues
      are "no wait", "wait no", "I mean", "make that" and "or rather".
      Everything else stays as said, cue included: "scratch that", "actually",
