@@ -33,17 +33,18 @@ preflight (tools, identity, credentials)
 3. Confirm the production models are available with a real dictation
    (`gemini-3.8-flash`) and a short meeting (`gemini-3.5-transcribe`).
 
-The apps run no speech or ML model of their own, and none ships in the
-bundle. The Mac UI links `VoiceIQCore`; the keyboard
+No model weights ship in either app bundle; downloaded on-device models live
+in Application Support. The Mac UI links `VoiceIQCore`; the keyboard
 and Live Activity link only `VoiceIQBridge`. The Mac helper,
-`VoiceiQLocalSpeech`, links only `VoiceIQSpeech`: it is the Chrome extension's
-native messaging host and keeps its name because installed host manifests
-point at it.
+`VoiceiQLocalSpeech`, links `VoiceIQInference` so downloaded speech, speaker
+separation, and writing models run outside the UI process.
 
 Both release scripts run `scripts/check-app-bundle.py` to reject bundled model
 weights and accidental runtime dependencies. It fails if the app bundles a
-Core ML, ONNX, GGUF or safetensors model, if any binary still links FluidAudio
-or the NeMo normalizer, or if the helper links app or database code. To check
+Core ML, ONNX, GGUF or safetensors model, FluidAudio TTS bundles, or the
+retired `ChromeExtension` folder, if the Mac UI links FluidAudio or retired
+extension code, if any binary links the retired NeMo normalizer, or if the
+helper links app, database, or retired Chrome extension host code. To check
 an existing build, pass the Mac app path or the app inside an iOS device
 archive:
 

@@ -26,16 +26,6 @@ final class ScreenSpeakerNamesTests: XCTestCase {
         XCTAssertEqual(names?.probablyMerged, true)
     }
 
-    func testTheRosterSaysHowManyPeopleTheFarSideHolds() {
-        let roster = MeetingRoster(remote: ["Muhammed Hafeed", "Nihal"], me: "cyron", count: 3)
-
-        let names = ScreenSpeakerNames.match(samples: samples(["Muhammed Hafeed"]), transcript: twoPeople, roster: roster)
-
-        XCTAssertNil(names?.speakers["s1"])
-        XCTAssertEqual(names?.probablyMerged, true)
-        XCTAssertTrue(names?.seen.contains("Nihal") == true)
-    }
-
     func testASingleWordNameSteadyOnScreenIsSeenAndUIWordsAreNot() {
         XCTAssertEqual(ScreenSpeakerNames.singleNames(in: ["Nihal", "Meet", "Chat", "Present now", "nihal_k", "Muhammed Hafeed"]), ["Nihal"])
 
@@ -59,6 +49,25 @@ final class ScreenSpeakerNamesTests: XCTestCase {
         var all = samples(["Priya Raman"], count: 2)
         all[4].count = 9
 
-        XCTAssertEqual(ScreenSpeakerNames.expectedRemote(samples: all, roster: nil), 1)
+        XCTAssertEqual(ScreenSpeakerNames.expectedRemote(samples: all), 1)
+    }
+
+    func testSavedScreenNamesWithRetiredExtensionFieldsStillDecode() throws {
+        let legacyJSON = """
+        {
+            "seen": ["Priya Raman"],
+            "speakers": {
+                "s1": {
+                    "name": "Priya Raman",
+                    "seen": 12,
+                    "of": 15,
+                    "talkStart": 1.0,
+                    "talkSeconds": 12.0
+                }
+            }
+        }
+        """
+        let decoded = try JSONDecoder().decode(ScreenNames.self, from: Data(legacyJSON.utf8))
+        XCTAssertEqual(decoded.speakers["s1"], ScreenNames.Match(name: "Priya Raman", seen: 12, of: 15))
     }
 }

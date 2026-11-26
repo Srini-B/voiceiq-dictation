@@ -38,7 +38,7 @@ struct DebugLogSection: View {
         } header: {
             Text("Debug log")
         } footer: {
-            Text("While this is on, VoiceiQ writes down everything it does: dictation, transcription with each provider, meetings, the Chrome extension, settings changes, sync, network requests and errors. Export the file and send it with a bug report. API keys and tokens are removed, and transcripts, window titles and page addresses are never written. VoiceiQ keeps the last \(DebugLog.keepDays) days, up to \(DebugLog.maxTotalBytes / 1_000_000) MB, and deletes older entries on its own.")
+            Text("While this is on, VoiceiQ writes down everything it does: dictation, transcription with each provider, meetings, settings changes, sync, network requests and errors. Export the file and send it with a bug report. API keys and tokens are removed, and transcripts, window titles and page addresses are never written. VoiceiQ keeps the last \(DebugLog.keepDays) days, up to \(DebugLog.maxTotalBytes / 1_000_000) MB, and deletes older entries on its own.")
         }
         .onAppear { refresh() }
         // The log grows while the pane is open; Export and Clear follow it.

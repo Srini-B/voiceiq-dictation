@@ -46,12 +46,18 @@ public enum FileLayout {
     /// launch's renders: the playback copies 0.7.1 (75) kept there, and
     /// renders cut short by the app quitting. With no on-device model
     /// downloaded, also deletes Core ML's prepared copies of models deleted
-    /// earlier. Runs at every launch, off the main thread; a missing folder
+    /// earlier. On the Mac, removes files left behind by the retired Chrome
+    /// extension. Runs at every launch, off the main thread; a missing folder
     /// or a failed delete is ignored. Downloaded on-device models (`Models`)
     /// are kept; Settings deletes them.
     public static func removeStaleFiles() {
         Task.detached(priority: .utility) {
             LocalModelInstaller.removeUnusedPreparedModels()
+            #if os(macOS)
+            if FileLayout.overrideRoot == nil {
+                FileLayout.removeRetiredChromeExtensionFiles()
+            }
+            #endif
             let fileManager = FileManager.default
             let renders = FileLayout.partialRendersFolder.deletingLastPathComponent()
             for old in (try? fileManager.contentsOfDirectory(at: renders, includingPropertiesForKeys: nil)) ?? []
@@ -60,6 +66,61 @@ public enum FileLayout {
             }
         }
     }
+
+    #if os(macOS)
+    /// Chromium browsers where earlier builds installed `io.blue.voiceiq.browser.json`.
+    static let retiredBrowserFolders = [
+        "Google/Chrome", "Google/Chrome Beta", "Google/Chrome Canary", "Google/Chrome for Testing",
+        "Google/ChromeForTesting", "Chromium", "Microsoft Edge", "BraveSoftware/Brave-Browser",
+        "Arc/User Data", "Vivaldi",
+    ]
+    static let retiredNativeHostManifestName = "io.blue.voiceiq.browser.json"
+
+    /// Removes files earlier builds installed for the retired Chrome extension:
+    /// the copied extension folder, its daily speaker log, and the native
+    /// messaging host manifest in each Chromium browser's support folder.
+    /// Idempotent and safe to run on every launch.
+    @discardableResult
+    static func removeRetiredChromeExtensionFiles(
+        appSupport: URL = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0],
+        voiceIQSupport: URL = FileLayout.appSupportRoot
+    ) -> Int {
+        let fileManager = FileManager.default
+        var removed = 0
+        for name in ["ChromeExtension", "ChromeExtension.new", "browser-speakers"] {
+            if removeIfPresent(voiceIQSupport.appendingPathComponent(name, isDirectory: true), fileManager: fileManager) {
+                removed += 1
+            }
+        }
+        for browser in retiredBrowserFolders {
+            let manifest = appSupport
+                .appendingPathComponent(browser, isDirectory: true)
+                .appendingPathComponent("NativeMessagingHosts", isDirectory: true)
+                .appendingPathComponent(retiredNativeHostManifestName)
+            if removeIfPresent(manifest, fileManager: fileManager) {
+                removed += 1
+            }
+        }
+        if removed > 0 {
+            Log.session.info("removed \(removed, privacy: .public) retired Chrome extension item(s)")
+        }
+        return removed
+    }
+
+    private static func removeIfPresent(_ url: URL, fileManager: FileManager) -> Bool {
+        do {
+            try fileManager.removeItem(at: url)
+            return true
+        } catch let error as NSError where
+            (error.domain == NSCocoaErrorDomain && error.code == NSFileNoSuchFileError)
+            || (error.domain == NSPOSIXErrorDomain && error.code == Int(ENOENT)) {
+            return false
+        } catch {
+            Log.session.error("failed to remove retired \(url.lastPathComponent, privacy: .public): \(String(describing: error), privacy: .public)")
+            return false
+        }
+    }
+    #endif
 
     /// Creates (if needed) and returns a fresh session folder. Name is
     /// timestamp-prefixed for human sortability in Finder.

@@ -207,9 +207,9 @@ generated from `project.yml`, not checked in. One project holds both apps:
 `VoiceIQ` (macOS) and `VoiceIQiOS` with its `VoiceIQKeyboard` and
 `VoiceIQLiveActivity` extensions. All of them build on the `VoiceIQCore`
 package; the extensions link only its small `VoiceIQBridge` library.
-The Mac's `VoiceiQLocalSpeech` helper links only `VoiceIQSpeech`: it is the
-VoiceiQ Meetings Chrome extension's native messaging host. It keeps its old
-name because installed browser manifests point at it.
+The Mac's `VoiceiQLocalSpeech` helper links `VoiceIQInference` so downloaded
+on-device speech, speaker separation, and writing models run outside the UI
+process.
 
 ```bash
 brew install xcodegen

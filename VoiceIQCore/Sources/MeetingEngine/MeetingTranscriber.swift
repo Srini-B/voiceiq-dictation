@@ -83,10 +83,7 @@ public struct MeetingTranscriber: Sendable {
             words = Self.mergeOwner(owner, into: words, overlaps: overlaps)
         }
         if audio.isOnline { words = Self.byTrack(words, audio: audio) }
-        // The speaker model's split first: the extension's timeline then
-        // decides the words it covers, and the rest keep the split's speaker.
         if let remote { words = try await splitFarSide(words, remote: remote, audio: audio, folder: folder) }
-        words = BrowserSpeakers.apply(words, folder: folder)
         return SpeakerLinker.overlappingTurns(words).map { turn in
             TranscriptSegment(speaker: turn.speaker, text: turn.text, chunkIndex: 0, start: turn.start, end: turn.end)
         }
@@ -280,7 +277,7 @@ public struct MeetingTranscriber: Sendable {
         let labelled = LocalMeetingTranscriber.settled(LocalMeetingTranscriber.label(farWords, segments: segments), segments: segments)
         var out = words
         for (offset, index) in far.enumerated() { out[index].speaker = "far " + labelled[offset].speaker }
-        return BrowserSpeakers.renumber(out)
+        return LocalMeetingTranscriber.renumber(out)
     }
 
     /// Consecutive speech regions grouped into requests of about `windowSpeech` seconds each.
