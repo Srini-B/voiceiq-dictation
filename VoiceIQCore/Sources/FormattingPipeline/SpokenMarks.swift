@@ -183,13 +183,10 @@ enum SpokenMarks {
                       !marksNearby(chars, around: index, end: end), !beforePlace(chars, after: end),
                       words == ["comma"]
                           // A comma comes between words after a greeting and who it greets ("Dear
-                          // Sam comma", "Hi team comma please review"), or set off by the model's
-                          // commas after one opening word ("Done, comma, thanks"). "He typed,
-                          // comma, nothing else" and "Hi comma club members" may mean the word.
-                          ? (inGreeting(chars, before: index)
-                              || (afterComma(chars, at: index) && commaFollows(chars, after: end)
-                                  && wordsInSentence(chars, before: index).count == 1))
-                              && wordFollows(chars, after: end)
+                          // Sam comma", "Hi team comma please review"). "Hi comma club members",
+                          // "He typed, comma, nothing else" and "Note, comma, goes inside the
+                          // quotes" may mean the word.
+                          ? inGreeting(chars, before: index) && wordFollows(chars, after: end)
                           // "Move question mark to the end": an end mark follows a clause.
                           : wordsInSentence(chars, before: index).count > 1,
                       words != ["comma"] || !beforeCompound(chars, after: end, ["separated", "separate", "delimited", "splice", "splices", "rules", "key"]),
@@ -257,11 +254,6 @@ enum SpokenMarks {
         let before = words(chars[..<index]).suffix(2)
         let after = words(chars[end...]).prefix(2)
         return before.contains(where: markNames.contains) || after.contains(where: markNames.contains)
-    }
-
-    private static func commaFollows(_ chars: [Character], after end: Int) -> Bool {
-        let next = skip(chars, from: end, also: "")
-        return next < chars.count && chars[next] == ","
     }
 
     private static func afterComma(_ chars: [Character], at index: Int) -> Bool {
