@@ -53,20 +53,44 @@ final class EditController: ObservableObject {
     @Published private(set) var redoStack: [UndoStep] = []
 
     weak var controller: UIInputViewController?
+    /// Notifies Hex's keyboard when EditPanel or KeyboardModel edits the field directly.
+    var onExternalEdit: (() -> Void)?
     private var proxy: UITextDocumentProxy? { controller?.textDocumentProxy }
     private var lastKind: Kind?
     /// The text around the cursor after the keyboard's last edit, to tell
     /// the app's own changes apart from the keyboard's.
     private var lastBefore: String?
     private var lastAfter: String?
+    /// Groups same-turn deletes followed by a replacement insert (autocorrect)
+    /// into one undo step without breaking ordinary Backspace runs.
+    private var deletedThisTurn = false
+    private var undoBeforeTurn: [UndoStep]?
+    private var turnDeletes: [String] = []
+    private var deleteTurn = 0
 
     /// The pasteboard needs Full Access.
     var canUsePasteboard: Bool { controller?.hasFullAccess == true }
 
     func appeared() {
+        resetUndo()
+        refresh()
+    }
+
+    func resetUndo() {
         undoStack = []
         redoStack = []
         lastKind = nil
+        deletedThisTurn = false
+        undoBeforeTurn = nil
+        turnDeletes = []
+    }
+
+    func syncSelection() {
+        refresh()
+    }
+
+    func cursorMovedExternally() {
+        resetUndo()
         refresh()
     }
 
@@ -74,9 +98,7 @@ final class EditController: ObservableObject {
     /// text before the cursor, which is no longer this text.
     func textChanged() {
         if proxy?.documentContextBeforeInput != lastBefore || proxy?.documentContextAfterInput != lastAfter {
-            undoStack = []
-            redoStack = []
-            lastKind = nil
+            resetUndo()
         }
         refresh()
     }
@@ -89,12 +111,62 @@ final class EditController: ObservableObject {
         checkpoint(kind)
         insert(text)
         refresh()
+        onExternalEdit?()
     }
 
     func deleteBackward() {
         checkpoint(.deleting)
         deleteBack()
         refresh()
+        onExternalEdit?()
+    }
+
+    /// Insert driven by Hex's `FullKeyboardEngine` (already owns keyboard state).
+    func typeFromKeyboard(_ text: String) {
+        guard !text.isEmpty else { return }
+        let wordCharacter = text.count == 1 && (text.first?.isLetter == true || text.first?.isNumber == true)
+        if deletedThisTurn {
+            groupTurnDeletes()
+            lastKind = .other
+        } else {
+            checkpoint(wordCharacter ? .typing : .other)
+        }
+        insert(text)
+        refresh()
+    }
+
+    /// Delete driven by Hex's `FullKeyboardEngine`.
+    func deleteFromKeyboard() {
+        if !deletedThisTurn {
+            deletedThisTurn = true
+            undoBeforeTurn = undoStack
+            turnDeletes = []
+            deleteTurn += 1
+            let turn = deleteTurn
+            DispatchQueue.main.async { [weak self] in
+                guard let self, self.deleteTurn == turn else { return }
+                self.deletedThisTurn = false
+                self.undoBeforeTurn = nil
+                self.turnDeletes = []
+            }
+        }
+        checkpoint(.deleting)
+        turnDeletes.append(deleteBackReturningDeleted())
+        refresh()
+    }
+
+    private func groupTurnDeletes() {
+        deletedThisTurn = false
+        guard let prior = undoBeforeTurn else { return }
+        undoBeforeTurn = nil
+        let removed = turnDeletes
+        turnDeletes = []
+        undoStack = prior
+        undoStack.append(UndoStep())
+        if undoStack.count > 50 { undoStack.removeFirst() }
+        for text in removed {
+            record(deleted: text, inserted: "")
+        }
     }
 
     func moveCursor(_ move: CursorMove) {
@@ -113,6 +185,8 @@ final class EditController: ObservableObject {
         guard offset != 0 else { return }
         proxy.adjustTextPosition(byCharacterOffset: offset)
         lastKind = nil
+        refresh()
+        onExternalEdit?()
     }
 
     func copySelection(cut: Bool) {
@@ -122,6 +196,7 @@ final class EditController: ObservableObject {
         checkpoint(.other)
         deleteBack()
         refresh()
+        onExternalEdit?()
     }
 
     func paste() {
@@ -149,6 +224,7 @@ final class EditController: ObservableObject {
         if !edit.append.isEmpty { proxy.insertText(edit.append) }
         lastKind = nil
         refresh()
+        onExternalEdit?()
     }
 
     /// Starts a new undo step unless this edit continues the last one.
@@ -170,10 +246,16 @@ final class EditController: ObservableObject {
     /// Presses Delete once and records what that removes: the selection, if
     /// any, or the character before the cursor.
     private func deleteBack() {
-        guard let proxy else { return }
+        _ = deleteBackReturningDeleted()
+    }
+
+    private func deleteBackReturningDeleted() -> String {
+        guard let proxy else { return "" }
         let selected = proxy.selectedText ?? ""
-        record(deleted: selected.isEmpty ? String((proxy.documentContextBeforeInput ?? "").suffix(1)) : selected, inserted: "")
+        let deleted = selected.isEmpty ? String((proxy.documentContextBeforeInput ?? "").suffix(1)) : selected
+        record(deleted: deleted, inserted: "")
         proxy.deleteBackward()
+        return deleted
     }
 
     private func record(deleted: String, inserted: String) {

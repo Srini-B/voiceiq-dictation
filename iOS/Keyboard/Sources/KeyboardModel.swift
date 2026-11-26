@@ -24,6 +24,8 @@ final class KeyboardModel: ObservableObject {
     weak var controller: KeyboardViewController?
     /// Makes the keyboard's edits, so the edit panel can undo a dictation.
     weak var editor: EditController?
+    /// Called after a dictation delivery is typed so Hex's suggestion strip can offer Undo dictation.
+    var onDidInsertDictation: ((String, String, String) -> Void)?
     private let store = SharedStore.shared
     private var observer: UUID?
     private var timer: Timer?
@@ -169,8 +171,11 @@ final class KeyboardModel: ObservableObject {
         guard Date().timeIntervalSince(delivery.createdAt) < Self.autoInsertWindow else { return }
         guard Self.onScreen === self, controller?.viewIfLoaded?.window != nil else { return }
         store.insertedDeliveryID = delivery.id
-        let typed = insert(delivery.text)
-        KeyboardLog.note(typed ? "[\(instanceTag)] result typed" : "[\(instanceTag)] result not typed: no text field")
+        let inserted = insert(delivery.text)
+        if let inserted {
+            onDidInsertDictation?(inserted.fitted, inserted.before, inserted.after)
+        }
+        KeyboardLog.note(inserted != nil ? "[\(instanceTag)] result typed" : "[\(instanceTag)] result not typed: no text field")
     }
 
     private func showNoticeIfNeeded() {
@@ -186,12 +191,14 @@ final class KeyboardModel: ObservableObject {
     /// Fits the new text to the text around the cursor: spaces on both
     /// sides and a capital at the start of a sentence.
     @discardableResult
-    private func insert(_ text: String) -> Bool {
-        guard let proxy = controller?.textDocumentProxy, !text.isEmpty else { return false }
-        let surrounding = SurroundingText(before: proxy.documentContextBeforeInput ?? "",
-                                          after: proxy.documentContextAfterInput ?? "")
-        editor?.type(surrounding.fitted(text))
-        return true
+    private func insert(_ text: String) -> (fitted: String, before: String, after: String)? {
+        guard let proxy = controller?.textDocumentProxy, !text.isEmpty else { return nil }
+        let before = proxy.documentContextBeforeInput ?? ""
+        let after = proxy.documentContextAfterInput ?? ""
+        let surrounding = SurroundingText(before: before, after: after)
+        let fitted = surrounding.fitted(text)
+        editor?.type(fitted)
+        return (fitted, before, after)
     }
 }
 

@@ -1,0 +1,124 @@
+diff --git a/iOS/Keyboard/Hex/FullKeyboard/KeyboardLayout.swift b/iOS/Keyboard/Hex/FullKeyboard/KeyboardLayout.swift
+index 12eec9a..a6f5ccf 100644
+--- a/iOS/Keyboard/Hex/FullKeyboard/KeyboardLayout.swift
++++ b/iOS/Keyboard/Hex/FullKeyboard/KeyboardLayout.swift
+@@ -570,6 +570,8 @@ nonisolated enum HexKeyPlacement: String, CaseIterable, Sendable {
+     case leftOfSpace
+     case stripLeading
+     case stripTrailing
++    /// VoiceiQ: omits the Hex key from every layout so the suggestion bar spans full width.
++    case hidden
+ 
+     /// The keyboard's, for typing logs: `FullKeyboardView` keeps Settings › Keyboard › Hex key
+     /// (`FullKeyboardSettings.hexKeyPlacement`) here; layouts take theirs as a parameter. The
+@@ -660,7 +662,7 @@ nonisolated struct KeyboardLayout: Equatable, Sendable {
+         let letters = pad?.isDocked == true && language == .german && offered == .own ? .qwertz : offered
+         self.letters = letters
+         // Docked on an iPad the Hex key is on the bottom row, where Apple's dictation key is.
+-        self.hexPlacement = pad?.isDocked == true ? .leftOfSpace : hexPlacement
++        self.hexPlacement = hexPlacement == .hidden ? .hidden : (pad?.isDocked == true ? .leftOfSpace : hexPlacement)
+         self.orientation = orientation
+         self.layer = layer
+         self.field = field
+@@ -699,7 +701,8 @@ nonisolated struct KeyboardLayout: Equatable, Sendable {
+             padLetterWidth = Self.padLetterWidth(innerWidth: innerWidth, metrics: metrics, layer: layer, language: language, letters: letters)
+             self.keys = Self.buildPadKeys(
+                 width: width, metrics: metrics, orientation: orientation, layer: layer, field: rowsField,
+-                showsGlobe: showsGlobe, showsEmoji: showsEmoji, inset: self.horizontalInset, language: language, letters: letters
++                showsGlobe: showsGlobe, showsEmoji: showsEmoji, showsHex: self.hexPlacement != .hidden,
++                inset: self.horizontalInset, language: language, letters: letters
+             )
+             self.split = nil
+             return
+@@ -1424,7 +1427,7 @@ extension KeyboardLayout {
+         add(.space, row: 3, x: x, w: leftSpaceW, label: "space", rightHalf: false)
+ 
+         var trailing = field.keysRightOfSpace(width: G.smallKeyWidth)
+-        if !placement.isInStrip {
++        if placement == .leftOfSpace || placement == .rightOfSpace {
+             trailing.append((.hex, G.smallKeyWidth, "hex"))
+         }
+         trailing.append((.returnKey, G.returnWidth, "return"))
+diff --git a/iOS/Keyboard/Hex/FullKeyboard/KeyboardPadRows.swift b/iOS/Keyboard/Hex/FullKeyboard/KeyboardPadRows.swift
+index 8b6dfc0..a9911a0 100644
+--- a/iOS/Keyboard/Hex/FullKeyboard/KeyboardPadRows.swift
++++ b/iOS/Keyboard/Hex/FullKeyboard/KeyboardPadRows.swift
+@@ -77,6 +77,7 @@ extension KeyboardLayout {
+         field: KeyboardFieldKind,
+         showsGlobe: Bool,
+         showsEmoji: Bool,
++        showsHex: Bool = true,
+         inset: CGFloat,
+         language: KeyboardLanguage,
+         letters: KeyboardLetterLayout
+@@ -125,7 +126,7 @@ extension KeyboardLayout {
+         var lead: [(KeyKind, CGFloat, String)] = []
+         if showsGlobe { lead.append((.globe, small, "globe")) }
+         lead.append((pageKey.0, small, pageKey.1))
+-        lead.append((.hex, small, "hex"))
++        if showsHex { lead.append((.hex, small, "hex")) }
+         // Apple's docked web search row is its text row, `.` staying on row 3 (iPad mini, iOS 27.2).
+         var trail = field == .webSearch ? [] : field.keysRightOfSpace(width: lw)
+         trail.append(showsEmoji && layer == .letters ? (.emoji, wide, "emoji") : (pageKey.0, wide, pageKey.1))
+diff --git a/iOS/Keyboard/Hex/FullKeyboard/KeyboardNumberPad.swift b/iOS/Keyboard/Hex/FullKeyboard/KeyboardNumberPad.swift
+index 7ae7bf9..7705f1d 100644
+--- a/iOS/Keyboard/Hex/FullKeyboard/KeyboardNumberPad.swift
++++ b/iOS/Keyboard/Hex/FullKeyboard/KeyboardNumberPad.swift
+@@ -127,7 +127,9 @@ nonisolated extension KeyboardLayout {
+                 keys.append(KeyboardKey(kind: kind, row: r, frame: frame, hitFrame: hit, label: label))
+             }
+         }
+-        keys.append(stripHexKey(width: width, metrics: m, inset: inset, placement: hexPlacement == .stripLeading ? .stripLeading : .stripTrailing))
++        if hexPlacement != .hidden {
++            keys.append(stripHexKey(width: width, metrics: m, inset: inset, placement: hexPlacement == .stripLeading ? .stripLeading : .stripTrailing))
++        }
+         return keys
+     }
+ 
+diff --git a/iOS/Keyboard/Hex/FullKeyboard/View/FullKeyboardView.swift b/iOS/Keyboard/Hex/FullKeyboard/View/FullKeyboardView.swift
+index 8e1d109..c5a1f20 100644
+--- a/iOS/Keyboard/Hex/FullKeyboard/View/FullKeyboardView.swift
++++ b/iOS/Keyboard/Hex/FullKeyboard/View/FullKeyboardView.swift
+@@ -802,6 +802,8 @@ final class FullKeyboardView: UIView {
+             hexKey.center = CGPoint(x: hit.midX, y: hit.midY)
+             hexKey.keycapFrame = hex.frame.offsetBy(dx: -hex.hitFrame.minX, dy: -hex.hitFrame.minY)
+             hexKey.markCenterY = layout.metrics.stripTop + layout.metrics.stripTextCenter - hex.hitFrame.minY
++        } else {
++            hexKey.isHidden = true
+         }
+         if let globe = layout.key(.globe), emojiPanel == nil || routedTarget.isSearching {
+             globeButton.isHidden = false
+@@ -1159,6 +1161,7 @@ final class FullKeyboardView: UIView {
+     /// the Hex key and the keys take their own. Not while the bar shows the Full Access hint
+     /// or a notice, or a dictation, the emoji panel or the style menu is up.
+     private func takesBarHold(at point: CGPoint) -> Bool {
++        guard engine.hexPlacement != .hidden else { return false }
+         let m = engine.layout.metrics
+         let bar = CGRect(x: 0, y: appliedLift, width: bounds.width, height: m.stripTop + m.stripHeight)
+         guard bar.contains(point), !showsRecording, emojiPanel == nil, styleMenu == nil,
+diff --git a/iOS/Keyboard/Hex/FullKeyboard/TypingDecoder.swift b/iOS/Keyboard/Hex/FullKeyboard/TypingDecoder.swift
+index 706e2b6..9897555 100644
+--- a/iOS/Keyboard/Hex/FullKeyboard/TypingDecoder.swift
++++ b/iOS/Keyboard/Hex/FullKeyboard/TypingDecoder.swift
+@@ -328,7 +328,7 @@ extension TypingDecoderModel {
+         if let cached = loaded[language] { return cached }
+         var url = Bundle.main.url(forResource: language, withExtension: "hextm")
+         if url == nil, let plugins = Bundle.main.builtInPlugInsURL,
+-           let keyboard = Bundle(url: plugins.appendingPathComponent("HEXKeyboard.appex")) {
++           let keyboard = Bundle(url: plugins.appendingPathComponent("VoiceIQKeyboard.appex")) {
+             url = keyboard.url(forResource: language, withExtension: "hextm")
+         }
+         let model = url.flatMap { TypingDecoderModel(url: $0) }
+diff --git a/iOS/Keyboard/Hex/Support/HexWordList.swift b/iOS/Keyboard/Hex/Support/HexWordList.swift
+index 959590c..f9c35a5 100644
+--- a/iOS/Keyboard/Hex/Support/HexWordList.swift
++++ b/iOS/Keyboard/Hex/Support/HexWordList.swift
+@@ -84,7 +84,7 @@ nonisolated final class HexWordList: @unchecked Sendable {
+         if let cached = loaded[name] { return cached }
+         var url = Bundle.main.url(forResource: language, withExtension: kind)
+         if url == nil, let plugins = Bundle.main.builtInPlugInsURL,
+-           let keyboard = Bundle(url: plugins.appendingPathComponent("HEXKeyboard.appex")) {
++           let keyboard = Bundle(url: plugins.appendingPathComponent("VoiceIQKeyboard.appex")) {
+             url = keyboard.url(forResource: language, withExtension: kind)
+         }
+         let list = url.flatMap { HexWordList(url: $0) }
