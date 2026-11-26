@@ -171,8 +171,11 @@ final class KeyboardModel: ObservableObject {
         guard Date().timeIntervalSince(delivery.createdAt) < Self.autoInsertWindow else { return }
         guard Self.onScreen === self, controller?.viewIfLoaded?.window != nil else { return }
         store.insertedDeliveryID = delivery.id
+        let replacesSelection = !(controller?.textDocumentProxy.selectedText ?? "").isEmpty
         let inserted = insert(delivery.text)
-        if let inserted {
+        // Hex's Undo chip only deletes the dictation; over a selection, the
+        // edit panel's Undo is the one that brings the selected text back.
+        if let inserted, !replacesSelection {
             onDidInsertDictation?(inserted.fitted, inserted.before, inserted.after)
         }
         KeyboardLog.note(inserted != nil ? "[\(instanceTag)] result typed" : "[\(instanceTag)] result not typed: no text field")

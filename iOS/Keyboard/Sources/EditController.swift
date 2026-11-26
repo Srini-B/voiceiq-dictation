@@ -184,7 +184,8 @@ final class EditController: ObservableObject {
         }
         guard offset != 0 else { return }
         proxy.adjustTextPosition(byCharacterOffset: offset)
-        lastKind = nil
+        // Undo replays at the cursor, so a moved cursor drops it.
+        resetUndo()
         refresh()
         onExternalEdit?()
     }

@@ -143,6 +143,18 @@ final class EditControllerTests: XCTestCase {
         XCTAssertTrue(editor.undoStack.isEmpty)
     }
 
+    /// Undo replays at the cursor, so moving it from the edit panel drops
+    /// undo instead of deleting text at the new place.
+    func testMovingTheCursorDropsUndo() {
+        let field = Field("hello ")
+        let editor = editor(for: field)
+        editor.type("world")
+        editor.moveCursor(.lineStart)
+        editor.textChanged()
+        editor.undo()
+        XCTAssertEqual(field.string, "hello world")
+    }
+
     /// Hex's auto-correction deletes the typed word and types the fix in one
     /// turn: undo takes back the fix alone, then the typing. Backspaces on a
     /// later turn are their own step.
