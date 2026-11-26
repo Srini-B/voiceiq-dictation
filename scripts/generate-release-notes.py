@@ -14,6 +14,10 @@ output-dir (default build/release-notes):
     mac.md     Mac and shared changes, for the Sparkle update alert
     ios.txt    iPhone and shared changes, for TestFlight "What to Test"
 
+release-notes/<version>.notice.md, when present, holds bullets a person wrote
+for something users must do themselves (such as removing a browser extension
+by hand). They go first in all three outputs, word for word.
+
 RELEASE_NOTES_MODEL overrides the model (default gpt-6-luna). See docs/UPDATES.md.
 """
 
@@ -143,17 +147,19 @@ def main():
     if not any(notes.values()):
         notes["both"] = ["Fixes and improvements."]
 
+    notice_path = os.path.join("release-notes", f"{current}.notice.md")
+    notice = open(notice_path).read().strip() + "\n" if os.path.exists(notice_path) else ""
     sections = [("Mac and iPhone", notes["both"]), ("Mac", notes["mac"]), ("iPhone", notes["iphone"])]
-    github = "".join(f"## {title}\n\n{bullets(items)}\n" for title, items in sections if items)
+    github = (f"## Before you update\n\n{notice}\n" if notice else "") + "".join(f"## {title}\n\n{bullets(items)}\n" for title, items in sections if items)
     repo = os.environ.get("GITHUB_REPOSITORY")
     if repo and previous:
         github += f"Full changes: https://github.com/{repo}/compare/{base[:12]}...v{current}\n"
     with open(os.path.join(out, "github.md"), "w") as f:
         f.write(github)
     with open(os.path.join(out, "mac.md"), "w") as f:
-        f.write(bullets(notes["both"] + notes["mac"]) or "- Fixes and improvements.\n")
+        f.write(notice + (bullets(notes["both"] + notes["mac"]) or "- Fixes and improvements.\n"))
     with open(os.path.join(out, "ios.txt"), "w") as f:
-        f.write((bullets(notes["both"] + notes["iphone"]) or "- Fixes and improvements.\n")[:3900])
+        f.write((notice + (bullets(notes["both"] + notes["iphone"]) or "- Fixes and improvements.\n"))[:3900])
     print(github)
 
 
