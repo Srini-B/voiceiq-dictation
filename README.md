@@ -127,7 +127,7 @@ Every dictation is one call: the model hears the recording and writes the
 text, with any screen text in the same request.
 Dictation and meetings can also be transcribed on device with Fluid Speech
 Pro or Mini by FluidVoice. Their transcripts are then written by Gemini, or,
-with writing Off, go in as transcribed; see
+with writing Off, tidied on the device by rules with no model; see
 [docs/ON_DEVICE.md](docs/ON_DEVICE.md).
 Settings → Advanced can pin other model names ("Dictation model" and
 "Meeting model").
