@@ -126,3 +126,5 @@ At 0.7.16, meetings are ₹163 of the ₹344 and dictation is ₹181. To get und
 1. Byte-stable prompt prefix so implicit caching hits, with cachedIn logged.
 2. A shorter prompt, as far as the scorecard holds 90.
 3. A cheaper meeting hour on Gemini.
+
+**Standing rule from cyron, later the same day.** Gemini is the default for dictation, writing and meetings. On device is used only in rare cases, about 5% of use at most, only where it clearly helps and scores 90 or more. Moving work on device is never how the budget is met; caching, shorter prompts and fewer extra calls are.
