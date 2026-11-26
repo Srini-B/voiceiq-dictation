@@ -182,13 +182,15 @@ styles, MIT):
 
 1. `Tidy.spoken`: layout and marks said by name become the marks
    (`SpokenMarks`), only where the name cannot be prose: "new line" and "new
-   paragraph" right after a mark ("Dear Sam, new paragraph", not "Press
-   enter for new line" or "Write new paragraph at the top"); "open quote" …
+   paragraph" after a sentence's end or a spoken mark, or set off by marks
+   on both sides ("Hello. New line.", "Dear Sam comma new paragraph",
+   "Thanks, new line, Sam"; not "Press enter for new line" or "Sure, new
+   paragraph styles look good"); "open quote" …
    "close quote" or "quote" … "unquote" after a word; "comma" and "colon"
    between two words; "question mark", "exclamation mark" and "full stop"
-   after a word. None after an article, a quantifier, a preposition or a
-   describing word ("an Oxford comma", "one question mark left", "came to
-   full stop"). Not "period", "semicolon", "slash", "underscore", "hyphen",
+   after a word. None after an article, a quantifier, a preposition, a
+   describing word or an instruction about the mark ("an Oxford comma",
+   "one question mark left", "came to full stop", "Add comma then space"). Not "period", "semicolon", "slash", "underscore", "hyphen",
    "hashtag" or "at sign", which are prose words too ("a trial period",
    "semicolon rules", "to slash costs", "look at sign language"). A Spanish
    dictation gets only the layout words ("nueva línea"): "coma", "dos

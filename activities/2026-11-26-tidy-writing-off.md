@@ -65,6 +65,10 @@ wait. The on-device writer's removal shipped first, on its own (PR #90).
   breaks need a mark before them, "at the rate" needs a spoken or glued
   domain, and hesitation sounds named as words ("the um key", "Uh oh")
   stay. The sentences are cases.
+- **Fourth round (Neon at `79a922f`, 70 sentences).** Line breaks after a
+  written comma ("Sure, new paragraph styles look good") now need a mark on
+  both sides; marks named in instructions ("Add comma then space") stay;
+  a swap needs digits on both sides and a different value.
 - Default style is Sentences: closest to what Gemini writes.
 - VoiceiQ names, not Hex's. No Hex UI was copied.
 - The tidy-up does not run on the Gemini-failure fallback or on meetings.

@@ -1877,6 +1877,116 @@
       "said": "the hmm in his voice said everything.",
       "heard": "The hmm in his voice said everything.",
       "written": "The hmm in his voice said everything."
+    },
+    {
+      "id": "kept-sure-new-paragraph",
+      "check": "kept as said",
+      "said": "sure, new paragraph styles look good.",
+      "heard": "Sure, new paragraph styles look good.",
+      "written": "Sure, new paragraph styles look good."
+    },
+    {
+      "id": "kept-yes-new-paragraph",
+      "check": "kept as said",
+      "said": "yes, new paragraph formatting is fine.",
+      "heard": "Yes, new paragraph formatting is fine.",
+      "written": "Yes, new paragraph formatting is fine."
+    },
+    {
+      "id": "kept-spanish-bueno-linea",
+      "check": "kept as said",
+      "said": "bueno, nueva línea de crédito aprobada.",
+      "heard": "Bueno, nueva línea de crédito aprobada.",
+      "written": "Bueno, nueva línea de crédito aprobada.",
+      "language": "es-ES"
+    },
+    {
+      "id": "kept-add-colon",
+      "check": "kept as said",
+      "said": "add colon then space.",
+      "heard": "Add colon then space.",
+      "written": "Add colon then space."
+    },
+    {
+      "id": "kept-add-comma",
+      "check": "kept as said",
+      "said": "add comma then space.",
+      "heard": "Add comma then space.",
+      "written": "Add comma then space."
+    },
+    {
+      "id": "kept-type-question-mark",
+      "check": "kept as said",
+      "said": "type question mark at the end.",
+      "heard": "Type question mark at the end.",
+      "written": "Type question mark at the end."
+    },
+    {
+      "id": "kept-semicolon-or-comma",
+      "check": "kept as said",
+      "said": "use semicolon or comma there.",
+      "heard": "Use semicolon or comma there.",
+      "written": "Use semicolon or comma there."
+    },
+    {
+      "id": "kept-dear-sam-written-comma",
+      "check": "kept as said",
+      "said": "dear sam, new paragraph thanks for coming.",
+      "heard": "Dear Sam, new paragraph thanks for coming.",
+      "written": "Dear Sam, new paragraph thanks for coming."
+    },
+    {
+      "id": "kept-swap-model-name",
+      "check": "kept as said",
+      "said": "the bug is in ios 17, i mean, m2.",
+      "heard": "The bug is in iOS 17, I mean, M2.",
+      "written": "The bug is in iOS 17, I mean, M2."
+    },
+    {
+      "id": "kept-saying-uh",
+      "check": "kept as said",
+      "said": "stop saying uh in meetings.",
+      "heard": "Stop saying uh in meetings.",
+      "written": "Stop saying uh in meetings."
+    },
+    {
+      "id": "kept-gate-12",
+      "check": "kept as said",
+      "said": "gate 12, i mean, 12 pm.",
+      "heard": "Gate 12, I mean, 12 PM.",
+      "written": "Gate 12, I mean, 12 PM."
+    },
+    {
+      "id": "hindi-question-no-mark",
+      "check": "multilingual",
+      "said": "क्या तुम आओगे",
+      "heard": "क्या तुम आओगे",
+      "written": "क्या तुम आओगे",
+      "language": "hi-IN"
+    },
+    {
+      "id": "layout-set-off",
+      "check": "spoken punctuation",
+      "said": "thanks, new line, sam",
+      "heard": "Thanks, new line, Sam",
+      "written": "Thanks,\nSam.",
+      "tidy": "Thanks.\nSam."
+    },
+    {
+      "id": "kept-list-path",
+      "check": "kept as said",
+      "said": "run new line dot slash build dot sh",
+      "heard": "Run\n./build.sh",
+      "written": "Run\n./build.sh",
+      "style": "lists"
+    },
+    {
+      "id": "kept-list-abs-path",
+      "check": "kept as said",
+      "said": "slash usr slash local slash bin",
+      "heard": "/usr/local/bin",
+      "written": "/usr/local/bin",
+      "style": "lists"
     }
   ]
 }

@@ -106,14 +106,17 @@ enum SpokenRepairs {
               self.kind(tokens[start - 1].word, opensClause: start - 1 == 0 || endsSentence(tokens[start - 2].word)) == kind {
             start -= 1
         }
-        return start < cue ? start : nil
+        // "Gate 12, I mean, 12 PM": the same number restated is no correction.
+        guard start < cue, tokens[start..<cue].map(\.bare) != [fixed[0].bare] else { return nil }
+        return start
     }
 
     private enum Kind { case number, day, name }
 
     private static func kind(_ word: String, opensClause: Bool) -> Kind? {
         let bare = bare(word)
-        if bare.contains(where: \.isNumber) { return .number }
+        // Digits only: "iOS 17, I mean, M2" names a model, not a number.
+        if bare.contains(where: \.isNumber) { return bare.contains(where: \.isLetter) ? nil : .number }
         if weekdays.contains(bare) { return .day }
         // A capital that opens a sentence says nothing about a name, nor does "I".
         guard bare != "i", !bare.hasPrefix("i'") else { return nil }

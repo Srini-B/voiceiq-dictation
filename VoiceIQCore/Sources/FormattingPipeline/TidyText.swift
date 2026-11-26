@@ -146,7 +146,8 @@ enum TidyText {
         }
         // Devanagari and Bengali end with "।"; an Arabic-script line keeps what the model wrote.
         if let value = last.unicodeScalars.first?.value {
-            if (0x0900...0x09FF).contains(value) { return line + "।" }
+            // Devanagari, Bengali and Gurmukhi; a question ("क्या…") keeps no mark rather than a wrong one.
+            if (0x0900...0x0A7F).contains(value) { return line.hasPrefix("क्या") ? line : line + "।" }
             if (0x0600...0x06FF).contains(value) { return line }
         }
         return line + (usesIdeographicFullStop(last) ? "。" : ".")
@@ -385,7 +386,9 @@ enum TidyText {
     /// stays.
     static func capitalizingFirstLetter(_ text: String) -> String {
         let chars = Array(text)
+        // Only a word that opens the text: "/usr/local/bin" and "./build.sh" are paths.
         guard let index = chars.firstIndex(where: isWordCharacter), chars[index].isLetter, !quoteMask(chars)[index],
+              chars[..<index].allSatisfy({ $0.isWhitespace || "(¿¡".contains($0) }),
               !isAddress(chars, at: index), !hasInnerCapital(chars, at: index) else { return text }
         var out = chars
         out[index] = upper(chars[index])
