@@ -39,3 +39,65 @@ Scored by the meetings thread with `eval/meetings/score.py` at 7ad4e32, mean ove
 **M5 notes, judged by Claude Fable 5.2: 85.3 mean, 4 of 9 meetings at 90+.** No invented commitments, no wrong owners. The misses: actions left in prose instead of the action list (s3: 1 of 4 listed), actions without an owner although the speaker was known, a recorded problem dropped (AMI budget), six sections for a 69-second call, and a date carried from one item to another. Notes become a follow-up PR; #82 merges on M1–M4.
 
 **M5 after the notes follow-up (meeting-notes-quality, round 3): 92.6 mean, 8 of 9 at 90+, nothing invented.** Round 2 lost s2's action items (the model returned none); the fix is structural: when notes have no actions but the transcript has "I'll / I will / I can / I'm going to" lines, the app asks once more with those lines quoted. AMI stays at 88 (unowned generic next step, flip-top cost caveat missing).
+
+## Scorers (owner's direction, 2026-11-26)
+
+- Claude Fable 5.2 is the scorer of record for every item. The scripts' numbers count once Fable accepts or corrects them.
+- Gemini Neon, through the Antigravity CLI on the BlueLobster runner, is a second reviewer of each PR and of main before each release. Its review is weighed with Fable's scores before a merge or release.
+
+## Fable's baseline rulings for main 517c65d
+
+Accepted: D1 67.9, D2 97.5, D3 89.2, D5 0, M1 100, M5 92.6. Corrected:
+- **D4 cleanup: 91.3 → 89.5.** The long dictations are now judged for cleanup too, and a dropped spoken clause caps a case at 70. long_01 drops "Thanks, Srini." in both rounds (68 each).
+- **M2–M4:** the per-meeting mean let eight 70-second synthetic calls outvote the 17-minute AMI meeting. `meetings/score.py` now pools totals across meetings. Pooled with the new scorer for main after #82 and #84 (9 meetings): **M1 100.0, M2 90.5, M3 87.5, M4 85.4** (Fable's duration-weighted estimate was 89.8 / 87.6 / 85.4). Fable accepted all four; M2 stands because AMI alone still scores 84.7 under the new scorer, so the 0.7 comes only from weighting by speech time.
+
+## TTS clips checked against their scripts
+
+The dictation thread found that gpt-4o-mini-tts leaves out a closing "Thanks, <name>.": long_01's audio ends at "…we ship Friday morning." (checked with gpt-4o-transcribe on the last 5 s and on the whole clip). The sign-off was never spoken, so it is no longer in long_01's script. `check_assets.py` now transcribes every clip with a different model and refuses clips whose ending or words don't match. clean_punct was regenerated with a voice told to say the punctuation words aloud.
+
+Effect on main's baseline: D1 names 67.9 → **70.0** (94/94 names; the six English-name swaps remain), D2 97.5 → 97.6. Fable re-scored long_01 at 94 per round (two points for blank lines inside the list), so **D4 of record is 91.6**. clean_punct's 50 came from the old clip, which may not have said the punctuation words; that clip was replaced before it could be checked, so the 50 is unverified. Voiding it would make D4 95.4; above 90 either way. `check_assets.py` passes on all other English clips, including clean_email, whose sign-off was spoken.
+
+## Release gates for the next release (decided 2026-11-26)
+
+Gemini Neon's review of main 884208e found five High issues. Each must be fixed on main, or rebutted in code, before release:
+- **Fixed:** finding 3 (meeting notes and transcript names), #87.
+- **In review:** findings 4, 5 and 7 (iPhone keyboard Full Access, suggestion strip, vocabulary cap), #89, ready to merge.
+- **In review:** findings 1, 2, 9b and 12 (system-audio rebuild loop, mic leak and drift, cellular check, onboarding), #88. Blocked on the onboarding `needsRestart` refresh.
+
+Not gates, to follow soon after:
+- **Keyboard memory on dismissal (finding 6).**
+- **Secure-field checks (finding 8).** iOS already gives standard secure fields the system keyboard.
+- **#81 and #83**, held for these reasons:
+  - Tidy deletes words the speaker meant.
+  - The 2 s backup request fires on most dictations and doubles billed calls.
+  - Full-display OCR runs with no secure-field or password-manager guard.
+  - Sound-alike matching changes sentence-start words ("Feel free" → "Phil").
+
+## PR #83 (dictation accuracy and speed), scores of record
+
+Run on main's clips with the branch's runner, judged by Fable: **D1 100, D2 99.2, D3 96.0, D4 94.3, D5 46.1** (main: 70.0 / 97.6 / 89.2 / 91.6 / 0).
+
+With every option on, dictation went from p50 6.2 s / p90 16.8 s to **3.0 s / 8.9 s**. The screenshots became screen text, and model thinking dropped from 62 of 66 calls to 2. The remaining tail is Gemini server time: 14–15 s with no thinking at all.
+
+Decision: merge #83 once Neon's re-review is clean. D5 becomes its own follow-up, with two parts:
+- The eval sends the app's real backup request, so D5 is measured the way the app behaves.
+- Time comes off before key-up: streaming the audio, or on-device transcription during speech followed by a text-only call.
+
+### c409c44 re-score (Fable)
+
+Scores: D1 100, D2 99.3, D3 94.4, D4 94.3 (96.1 without clean_punct), D5 54.7 (p50 3.31 s, p90 7.56 s).
+
+The commit restores Hindi "10 बजे" and tight short lists. One regression: in Tamil speech, the English word "ready" is now written in Tamil script, scoring 86 in both rounds. Decision: #83 still merges, because both scores are above main and the Tamil case is a follow-up, along with "new paragraph" and D5.
+
+## 0.7.16 batch notes (11:50 UTC)
+
+- #90 (drop on-device writer and Gemini language picker) merged as fc7993c. Release notes must say that a stored "On device" writing setting becomes Off, and that the downloaded model is deleted at launch.
+- #81 (Tidy) is held until Fable re-scores the two corrections that dropped words and Neon re-reviews.
+- #83 is held until its prompt examples no longer copy eval strings ("Update the README.", "Bump the version.", "दस बजे"). Neon found no High at c409c44.
+- #91 (keyboard findings 6 and 8) is merged as 62006dd. Neon found it clean.
+
+### e5ca037: name guard regression (11:58 UTC)
+
+After 137d5a9 reworded the list and hour rules, ctrl_01 ("Karen and Aaron") comes out as "Kiran and Arun" in 6 of 6 rounds at temperature 0. c409c44 gives "Karen and Aaron" in 6 of 6. Scores at e5ca037: D1 80.0 (4 control flips), D2 98.0, D5 60.1.
+
+The only prompt difference between the two commits is that wording, so the name guard flips on unrelated text. Decision: #83 is held until the name rule decides the case on its own, with ctrl_01–03 checked over 4 rounds. The dictation thread owns the fix.

@@ -32,6 +32,8 @@ MODEL = "gemini-3.8-flash"
 
 def prompt_for(case: dict, spec: dict, promptdump: str, screen_on: bool) -> str:
     request = {"vocabulary": spec["dictionary"], "app": spec["screen"]["app"], "window": spec["screen"]["window"]}
+    if spec.get("spelling"):
+        request["spelling"] = spec["spelling"]
     if screen_on:
         request["screenText"] = ["\n".join([spec["screen"]["window"]] + spec["screen"]["lines"])]
     if "before" in case:
@@ -90,7 +92,20 @@ def call(prompt: str, flac: bytes) -> tuple[str, float, dict]:
     seconds = time.monotonic() - start
     if "<<NO_SPEECH>>" in text:
         text = ""
-    return text.strip(), seconds, reply.get("usageMetadata", {})
+    return strip_artifacts(text), seconds, reply.get("usageMetadata", {})
+
+
+def strip_artifacts(text: str) -> str:
+    # ValidationGate.stripArtifacts: fences, a leading label, wrapping quotes.
+    s = text.strip()
+    if s.startswith("```"):
+        s = re.sub(r"```[a-z]*\n?", "", s).replace("```", "").strip()
+    for label in ("CLEAN:", "Clean:", "Transcript:", "TRANSCRIPT:"):
+        if s.startswith(label):
+            s = s[len(label):].strip()
+    if len(s) > 1 and s.startswith('"') and s.endswith('"'):
+        s = s[1:-1]
+    return s.strip()
 
 
 def main() -> None:
@@ -104,6 +119,8 @@ def main() -> None:
     spec = json.loads((HERE / "cases.json").read_text())
     jobs = [(r, c, prompt_for(c, spec, args.promptdump, args.screenshots > 0))
             for r in range(args.rounds) for c in spec["cases"]]
+    if spec.get("spelling") and spec["spelling"] not in jobs[0][2]:
+        raise SystemExit("the prompt has no spelling line: rebuild eval/promptdump (eval/promptdump/build.sh)")
     print(f"{len(jobs)} calls, prompt {len(jobs[0][2])} chars")
 
     # A saved call is reused only when its request was the same: prompt,
@@ -117,7 +134,12 @@ def main() -> None:
 
     def run(job):
         round_, case, prompt = job
-        text, seconds, usage = call(prompt, (ASSETS / f"{case['id']}.flac").read_bytes())
+        flac = (ASSETS / f"{case['id']}.flac").read_bytes()
+        text, seconds, usage = call(prompt, flac)
+        if not text:
+            # As the app: an empty answer on real audio is sent once more.
+            text, again, usage = call(prompt, flac)
+            seconds += again
         print(f"{case['id']:<18} r{round_} {seconds:5.2f}s thoughts={usage.get('thoughtsTokenCount', 0)}", flush=True)
         return {"id": case["id"], "round": round_, "request": fingerprint(job), "output": text,
                 "seconds": round(seconds, 3), "usage": usage}

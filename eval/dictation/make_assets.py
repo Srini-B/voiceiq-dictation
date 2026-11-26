@@ -8,7 +8,8 @@ band-limited to a laptop mic and mixed with pink noise. The screen is a
 JPEG (longest side 1280, quality 60).
 
 Needs OPENAI_API_KEY, ffmpeg and ImageMagick. Output goes to
-eval/dictation/.assets/ (git-ignored); existing files are kept.
+eval/dictation/.assets/ (git-ignored); a clip is kept only while its text,
+voice and noise are unchanged.
 """
 import json
 import os
@@ -18,7 +19,7 @@ from pathlib import Path
 
 HERE = Path(__file__).parent
 ASSETS = HERE / ".assets"
-VOICE_NAMES = {"in": "ash", "us": "coral", "native": "sage"}
+VOICE_NAMES = {"in": "ash", "us": "coral", "native": "sage", "literal": "coral"}
 
 
 def tts(text: str, instructions: str, voice: str, out: Path) -> None:
@@ -37,7 +38,13 @@ def ffmpeg(*args: str) -> None:
 def make_audio(spec: dict) -> None:
     for case in spec["cases"]:
         flac = ASSETS / f"{case['id']}.flac"
-        if flac.exists():
+        # A clip is reused only when it was made from the same text, voice
+        # and noise; any change, or a clip with no record, is made again.
+        made_from = ASSETS / f"{case['id']}.made-from.json"
+        inputs = json.dumps({"text": case["text"], "voice": VOICE_NAMES[case["voice"]],
+                             "instructions": spec["voices"][case["voice"]], "noisy": bool(case.get("noisy"))},
+                            sort_keys=True, ensure_ascii=False)
+        if flac.exists() and made_from.exists() and made_from.read_text() == inputs:
             continue
         wav = ASSETS / f"{case['id']}.wav"
         # Written under a temporary name and renamed when ffmpeg succeeds, so
@@ -51,6 +58,7 @@ def make_audio(spec: dict) -> None:
         else:
             ffmpeg("-i", wav.as_posix(), "-ar", "16000", "-ac", "1", "-c:a", "flac", part.as_posix())
         part.rename(flac)
+        made_from.write_text(inputs)
         wav.unlink()
         print("audio", case["id"])
 
