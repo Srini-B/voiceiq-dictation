@@ -273,7 +273,7 @@ enum TidyText {
             }
             if capitalizeNext && c.isLetter {
                 // "iPhone", "eBay" keep the spelling a Dictionary rule gave them; a URL keeps its case.
-                if !isAddress(chars, at: index) && !hasInnerCapital(chars, at: index) && !isURL(chars, at: index) {
+                if !isAddress(chars, at: index) && !hasInnerCapital(chars, at: index) && !isPath(chars, at: index) {
                     chars[index] = upper(c)
                 }
                 capitalizeNext = false
@@ -310,8 +310,10 @@ enum TidyText {
             || endsWithInitialism(word)
     }
 
-    private static func isURL(_ chars: [Character], at index: Int) -> Bool {
-        chars[index...].prefix { !$0.isWhitespace }.map(String.init).joined().contains("://")
+    /// A URL, path or filename starting at `index` keeps its case: "src/main.swift", "config.json".
+    private static func isPath(_ chars: [Character], at index: Int) -> Bool {
+        let token = String(chars[index...].prefix { !$0.isWhitespace }).trimmingCharacters(in: CharacterSet(charactersIn: ".,;:!?)\"”"))
+        return token.contains("/") || token.contains(#/\p{L}\.\p{L}/#)
     }
 
     /// Whether `text` ends in an initialism such as "U.S." or "p.m.".
@@ -403,7 +405,7 @@ enum TidyText {
         // Only a word that opens the text: "/usr/local/bin" and "./build.sh" are paths.
         guard let index = chars.firstIndex(where: isWordCharacter), chars[index].isLetter, !quoteMask(chars)[index],
               chars[..<index].allSatisfy({ $0.isWhitespace || "(¿¡".contains($0) }),
-              !isAddress(chars, at: index), !hasInnerCapital(chars, at: index) else { return text }
+              !isAddress(chars, at: index), !hasInnerCapital(chars, at: index), !isPath(chars, at: index) else { return text }
         var out = chars
         out[index] = upper(chars[index])
         return String(out)
