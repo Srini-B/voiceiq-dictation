@@ -57,6 +57,14 @@ wait. The on-device writer's removal shipped first, on its own (PR #90).
     names ("Mr. Um"), "uh huh", identifiers ("um underscore server").
   - The cost: corrections Gemini would resolve now stay as said, and spoken
     identifiers are not joined. The 64 sentences are fixture cases.
+- **Third round (Neon's fresh hunt at `83e91e4`, about 110 sentences).** The
+  name swap took any capital after a cue ("I met John, I mean,
+  Seriously."), line-break words were nouns after a verb or preposition
+  ("Press enter for new line"), "semicolon" was a noun, and "at the rate"
+  joined before a written domain. Name swaps and "semicolon" are gone, line
+  breaks need a mark before them, "at the rate" needs a spoken or glued
+  domain, and hesitation sounds named as words ("the um key", "Uh oh")
+  stay. The sentences are cases.
 - Default style is Sentences: closest to what Gemini writes.
 - VoiceiQ names, not Hex's. No Hex UI was copied.
 - The tidy-up does not run on the Gemini-failure fallback or on meetings.
@@ -65,8 +73,8 @@ wait. The on-device writer's removal shipped first, on its own (PR #90).
 
 - D4 on the writing-Off path (Claude Fable 5.2,
   T-01a2177d-d730-720b-bf02-f5ffc2f25386): 99.2 over 161 cases at
-  `fc6b481`, no instruction obeyed, no invented words. Its two lost-word
-  cases (correction-scratch, correction-new-clause) now stay as said.
+  `fc6b481`, then 97.5 over 230 cases at `83e91e4` with no meant word lost,
+  changed or added (after the second round).
 - `swift test --package-path VoiceIQCore` on a macOS 27 Mac satellite, and
   `xcodebuild build` for VoiceIQ and VoiceIQiOS.
 

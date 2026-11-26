@@ -29,7 +29,8 @@
       "check": "self-correction",
       "said": "send the notes to john smith, no wait, jon smyth",
       "heard": "Send the notes to John Smith, no wait, Jon Smyth.",
-      "written": "Send the notes to Jon Smyth."
+      "written": "Send the notes to Jon Smyth.",
+      "tidy": "Send the notes to John Smith, no wait, Jon Smyth."
     },
     {
       "id": "correction-scratch",
@@ -256,7 +257,7 @@
       "said": "eh, nos vemos mañana coma nueva línea gracias",
       "heard": "Eh, nos vemos mañana coma nueva línea gracias.",
       "written": "Nos vemos mañana,\nGracias.",
-      "tidy": "Nos vemos mañana coma.\nGracias."
+      "tidy": "Nos vemos mañana coma nueva línea gracias."
     },
     {
       "id": "french",
@@ -436,7 +437,8 @@
       "language": "es-ES",
       "said": "hola eh nueva línea adiós",
       "heard": "Hola eh nueva línea adiós",
-      "written": "Hola.\nAdiós."
+      "written": "Hola.\nAdiós.",
+      "tidy": "Hola nueva línea adiós."
     },
     {
       "id": "french-hesitation-line",
@@ -600,7 +602,8 @@
       "check": "spoken punctuation",
       "said": "hello new line question mark",
       "heard": "hello new line question mark",
-      "written": "Hello.\n?"
+      "written": "Hello.\n?",
+      "tidy": "Hello new line?"
     },
     {
       "id": "kept-quoted-command-inside",
@@ -1673,6 +1676,207 @@
       "heard": "Delete that bullet point from the slide.",
       "written": "Delete that bullet point from the slide",
       "style": "lists"
+    },
+    {
+      "id": "kept-path-gonna",
+      "check": "kept as said",
+      "said": "use slash gonna slash config",
+      "heard": "Use /gonna/config.",
+      "written": "Use /gonna/config."
+    },
+    {
+      "id": "kept-path-um",
+      "check": "kept as said",
+      "said": "use slash um slash config",
+      "heard": "Use /um/config.",
+      "written": "Use /um/config."
+    },
+    {
+      "id": "kept-path-i",
+      "check": "kept as said",
+      "said": "use slash i slash config",
+      "heard": "Use /i/config.",
+      "written": "Use /i/config."
+    },
+    {
+      "id": "kept-quoted-list-line",
+      "check": "kept as said",
+      "said": "the password is new line quote secret unquote",
+      "heard": "The password is\n\"secret\"",
+      "written": "The password is\n\"secret\"",
+      "style": "lists"
+    },
+    {
+      "id": "kept-swap-wow",
+      "check": "kept as said",
+      "said": "we went to paris, i mean, wow.",
+      "heard": "We went to Paris, I mean, Wow.",
+      "written": "We went to Paris, I mean, Wow."
+    },
+    {
+      "id": "kept-swap-seriously",
+      "check": "kept as said",
+      "said": "i met john, i mean, seriously.",
+      "heard": "I met John, I mean, Seriously.",
+      "written": "I met John, I mean, Seriously."
+    },
+    {
+      "id": "kept-swap-congrats",
+      "check": "kept as said",
+      "said": "she's at stanford, i mean, congrats.",
+      "heard": "She's at Stanford, I mean, Congrats.",
+      "written": "She's at Stanford, I mean, Congrats."
+    },
+    {
+      "id": "kept-swap-sir",
+      "check": "kept as said",
+      "said": "i spoke with tom, i mean, sir.",
+      "heard": "I spoke with Tom, I mean, Sir.",
+      "written": "I spoke with Tom, I mean, Sir."
+    },
+    {
+      "id": "kept-swap-lol",
+      "check": "kept as said",
+      "said": "i told sarah, i mean, lol.",
+      "heard": "I told Sarah, I mean, LOL.",
+      "written": "I told Sarah, I mean, LOL."
+    },
+    {
+      "id": "kept-swap-thanks",
+      "check": "kept as said",
+      "said": "thanks mark, i mean, thanks.",
+      "heard": "Thanks Mark, I mean, Thanks.",
+      "written": "Thanks Mark, I mean, Thanks."
+    },
+    {
+      "id": "kept-swap-hi-ann",
+      "check": "kept as said",
+      "said": "we're meeting ann, i mean, hi ann.",
+      "heard": "We're meeting Ann, I mean, Hi Ann.",
+      "written": "We're meeting Ann, I mean, Hi Ann."
+    },
+    {
+      "id": "kept-semicolon-rules",
+      "check": "kept as said",
+      "said": "we need semicolon rules in the style guide.",
+      "heard": "We need semicolon rules in the style guide.",
+      "written": "We need semicolon rules in the style guide."
+    },
+    {
+      "id": "kept-comma-separate",
+      "check": "kept as said",
+      "said": "can we comma separate the list?",
+      "heard": "Can we comma separate the list?",
+      "written": "Can we comma separate the list?"
+    },
+    {
+      "id": "kept-for-new-line",
+      "check": "kept as said",
+      "said": "press enter for new line.",
+      "heard": "Press enter for new line.",
+      "written": "Press enter for new line."
+    },
+    {
+      "id": "kept-to-full-stop",
+      "check": "kept as said",
+      "said": "the car came to full stop.",
+      "heard": "The car came to full stop.",
+      "written": "The car came to full stop."
+    },
+    {
+      "id": "kept-write-new-paragraph",
+      "check": "kept as said",
+      "said": "write new paragraph at the top of the page.",
+      "heard": "Write new paragraph at the top of the page.",
+      "written": "Write new paragraph at the top of the page."
+    },
+    {
+      "id": "kept-start-new-paragraph",
+      "check": "kept as said",
+      "said": "start new paragraph after the intro.",
+      "heard": "Start new paragraph after the intro.",
+      "written": "Start new paragraph after the intro."
+    },
+    {
+      "id": "kept-spanish-nueva-linea-de",
+      "check": "kept as said",
+      "said": "lanzamos nueva línea de productos.",
+      "heard": "Lanzamos nueva línea de productos.",
+      "written": "Lanzamos nueva línea de productos.",
+      "language": "es-ES"
+    },
+    {
+      "id": "kept-spanish-linea-credito",
+      "check": "kept as said",
+      "said": "vamos a abrir nueva línea de crédito.",
+      "heard": "Vamos a abrir nueva línea de crédito.",
+      "written": "Vamos a abrir nueva línea de crédito.",
+      "language": "es-ES"
+    },
+    {
+      "id": "kept-spanish-nuevo-parrafo",
+      "check": "kept as said",
+      "said": "escribe nuevo párrafo cuando acabes.",
+      "heard": "Escribe nuevo párrafo cuando acabes.",
+      "written": "Escribe nuevo párrafo cuando acabes.",
+      "language": "es-ES"
+    },
+    {
+      "id": "kept-at-the-rate-written",
+      "check": "kept as said",
+      "said": "our sales grew at the rate amazon.com.",
+      "heard": "Our sales grew at the rate Amazon.com.",
+      "written": "Our sales grew at the rate Amazon.com."
+    },
+    {
+      "id": "kept-the-um-key",
+      "check": "kept as said",
+      "said": "the um key is next to the er key.",
+      "heard": "The um key is next to the er key.",
+      "written": "The um key is next to the er key."
+    },
+    {
+      "id": "kept-said-um",
+      "check": "kept as said",
+      "said": "he said um three times.",
+      "heard": "He said um three times.",
+      "written": "He said um three times."
+    },
+    {
+      "id": "kept-er-pronoun",
+      "check": "kept as said",
+      "said": "er is a german pronoun.",
+      "heard": "Er is a German pronoun.",
+      "written": "Er is a German pronoun."
+    },
+    {
+      "id": "kept-uh-oh",
+      "check": "kept as said",
+      "said": "uh oh, we broke the build.",
+      "heard": "Uh oh, we broke the build.",
+      "written": "Uh oh, we broke the build."
+    },
+    {
+      "id": "kept-full-stop-emphasis",
+      "check": "kept as said",
+      "said": "that's my final answer, full stop.",
+      "heard": "That's my final answer, full stop.",
+      "written": "That's my final answer, full stop."
+    },
+    {
+      "id": "hindi-no-danda",
+      "check": "multilingual",
+      "said": "यह अच्छा है",
+      "heard": "यह अच्छा है",
+      "written": "यह अच्छा है।",
+      "language": "hi-IN"
+    },
+    {
+      "id": "kept-the-hmm",
+      "check": "kept as said",
+      "said": "the hmm in his voice said everything.",
+      "heard": "The hmm in his voice said everything.",
+      "written": "The hmm in his voice said everything."
     }
   ]
 }

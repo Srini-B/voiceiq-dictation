@@ -181,30 +181,33 @@ dictation with rules and no model (`Tidy`, adapted from Hex's dictation
 styles, MIT):
 
 1. `Tidy.spoken`: layout and marks said by name become the marks
-   (`SpokenMarks`), only where the name cannot be prose: "new line", "new
-   paragraph", "open quote" … "close quote" or "quote" … "unquote" after a
-   word (not "a new line of shoes", "New line cook wanted"); "comma",
-   "colon" and "semicolon" between two words; "question mark",
-   "exclamation mark" and "full stop" after a word. None after an article,
-   a quantifier or a describing word ("an Oxford comma", "one question mark
-   left", "a bigger colon"). Not "period", "slash", "underscore", "hyphen",
-   "hashtag" or "at sign", which are prose words too ("a trial period", "to
-   slash costs", "our hashtag is trending", "look at sign language"). A
-   Spanish dictation gets only the layout words ("nueva línea"): "coma",
-   "dos puntos" and "guion" are words too. Other languages get none. In
-   English, then:
+   (`SpokenMarks`), only where the name cannot be prose: "new line" and "new
+   paragraph" right after a mark ("Dear Sam, new paragraph", not "Press
+   enter for new line" or "Write new paragraph at the top"); "open quote" …
+   "close quote" or "quote" … "unquote" after a word; "comma" and "colon"
+   between two words; "question mark", "exclamation mark" and "full stop"
+   after a word. None after an article, a quantifier, a preposition or a
+   describing word ("an Oxford comma", "one question mark left", "came to
+   full stop"). Not "period", "semicolon", "slash", "underscore", "hyphen",
+   "hashtag" or "at sign", which are prose words too ("a trial period",
+   "semicolon rules", "to slash costs", "look at sign language"). A Spanish
+   dictation gets only the layout words ("nueva línea"): "coma", "dos
+   puntos" and "guion" are words too. Other languages get none. In English,
+   then:
    - Spoken email addresses join (`SpokenAddresses`): "priya dot sharma at
-     the rate gmail dot com" → "priya.sharma@gmail.com". "at the rate of 5%"
-     stays.
+     the rate gmail dot com" → "priya.sharma@gmail.com", only with a
+     spoken domain or one the model glued to "rate" ("rategmail.com"). "at
+     the rate of 5%" and "grew at the rate Amazon.com" stay.
    - Hesitations ("um", "uh", "er", "hmm"; not "ah", "err", "uh huh", a
      unit after a number such as "5 um", a name such as "Mr. Um", or one
      spelling an identifier such as "um underscore server") go with their commas
      (`Hesitations`); a comma that only marked the pause goes too ("call
      her, uh, tomorrow" → "call her tomorrow").
    - A spoken self-correction keeps only the correction when it swaps like
-     for like and ends the sentence (`SpokenRepairs`): "Meet on Tuesday, no
-     wait, Wednesday." → "Meet on Wednesday."; "15,000, I mean, 50,000
-     dollars" → "50,000 dollars"; "John Smith, I mean, Jon Smyth". The cues
+     for like and ends the sentence (`SpokenRepairs`): a day or a number
+     ("Meet on Tuesday, no wait, Wednesday." → "Meet on Wednesday."; "15,000,
+     I mean, 50,000 dollars" → "50,000 dollars"). Not names: "I met John, I
+     mean, Seriously." has a capital that is no name. The cues
      are "no wait", "wait no", "I mean", "make that" and "or rather".
      Everything else stays as said, cue included: "scratch that", "actually",
      a restated clause ("I want, I mean, I need"), a list item or a new

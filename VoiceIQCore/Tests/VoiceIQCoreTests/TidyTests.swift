@@ -52,7 +52,7 @@ final class TidyTests: XCTestCase {
         XCTAssertEqual(tidy("Dr. Patel called. Call her back.", .lists), "- Dr. Patel called\n- Call her back")
         XCTAssertEqual(tidy("Note: the build is green.", .lists), "Note: the build is green")
         XCTAssertEqual(tidy("bullet ship it bullet tag it", .lists), "- Ship it\n- Tag it")
-        XCTAssertEqual(tidy("Groceries new line milk new paragraph then eggs", .lists), "Groceries\nMilk\n\nThen eggs")
+        XCTAssertEqual(tidy("Groceries, new line, milk. New paragraph, then eggs", .lists), "Groceries\nMilk\n\nThen eggs")
         XCTAssertEqual(tidy("买牛奶。给妈妈打电话。", .lists, "zh-CN"), "- 买牛奶\n- 给妈妈打电话")
     }
 

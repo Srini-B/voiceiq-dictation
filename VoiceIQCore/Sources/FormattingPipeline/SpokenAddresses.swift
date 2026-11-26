@@ -13,6 +13,8 @@ enum SpokenAddresses {
     private struct Token {
         let word: String
         let range: Range<String.Index>
+        /// Split off "rate" or "sign" by `splittingGluedDomains`.
+        var glued = false
     }
 
     private static let openingMarks: Set<Character> = ["¿", "¡", "\"", "“", "«", "(", "„"]
@@ -39,10 +41,10 @@ enum SpokenAddresses {
             // "at the rate stripe.com charges": plain English unless the domain
             // ends the sentence.
             guard let domain = domain(tokens, from: next),
-                  // A spoken domain ("company dot co dot in") is an address before a comma too;
-                  // a written one ("Amazon.com, Walmart") only at a sentence's end.
-                  !marker.ambiguous || domain.end > next || domain.trailing.first.map({ ".!?".contains($0) })
-                      ?? (domain.end == tokens.count - 1) else {
+                  // "at the rate" is plain English before a written domain ("grew at the
+                  // rate Amazon.com"): only a spoken one ("company dot co dot in") or one
+                  // the model glued to "rate" ("rategmail.com") is an address.
+                  !marker.ambiguous || domain.end > next || tokens[next].glued else {
                 index = marker.end + 1
                 continue
             }
@@ -124,7 +126,7 @@ enum SpokenAddresses {
             }
             let cut = text.index(token.range.lowerBound, offsetBy: prefix.count)
             result.append(Token(word: String(token.word.prefix(prefix.count)), range: token.range.lowerBound..<cut))
-            result.append(Token(word: String(token.word.dropFirst(prefix.count)), range: cut..<token.range.upperBound))
+            result.append(Token(word: String(token.word.dropFirst(prefix.count)), range: cut..<token.range.upperBound, glued: true))
         }
         return result
     }
