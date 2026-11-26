@@ -186,16 +186,17 @@ styles, MIT):
    before "and" or "or" ("Hello. New line.", "Dear Sam comma new paragraph",
    "Thanks, new line, Sam"; not "Press enter for new line", "It's official.
    New paragraph styles are live" or "shoes, new line, and socks"); "open
-   quote" … "close quote" or "quote" … "unquote" after a word; "comma" and
-   "colon" between words in a greeting's first three words ("Dear Sam comma",
-   "Hi team comma please review") or set off by the model's commas ("Done,
-   comma, thanks"); "question mark", "exclamation mark" and "full stop" after
-   a clause of two words or more. None after an article, a quantifier, a
-   preposition, a describing word or an instruction about the mark ("an
-   Oxford comma", "one question mark left", "came to full stop"), before a
-   place ("Move question mark to the end", "Add comma then space"), or within
+   quote" … "close quote" or "quote" … "unquote" after a word; a lowercase
+   "comma" after a greeting and who it greets ("Dear Sam comma", "Hi team
+   comma please review"; not "Hi comma club members" or "Hey Comma", a name)
+   or set off by the model's commas after one opening word ("Done, comma,
+   thanks"); "question mark", "exclamation mark" and "full stop" after a
+   clause of two words or more. None after an article, a quantifier, a
+   preposition, a title, a describing word or an instruction about the mark
+   ("an Oxford comma", "one question mark left", "came to full stop"), before
+   a place ("Move question mark to the end", "Add comma then space"), or within
    two words of another mark's name ("Replace comma with period"). Not
-   "period", "semicolon", "slash", "underscore", "hyphen",
+   "colon" (the organ, and a surname: "Hi Colon"), "period", "semicolon", "slash", "underscore", "hyphen",
    "hashtag" or "at sign", which are prose words too ("a trial period",
    "semicolon rules", "to slash costs", "look at sign language"). A Spanish
    dictation gets only the layout words ("nueva línea"): "coma", "dos

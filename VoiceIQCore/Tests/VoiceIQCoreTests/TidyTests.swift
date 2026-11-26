@@ -90,12 +90,13 @@ final class TidyTests: XCTestCase {
     }
 
     func testSpokenSymbols() {
-        XCTAssertEqual(SpokenMarks.symbols(in: "Done, Comma, thanks."), "Done, thanks.")
+        XCTAssertEqual(SpokenMarks.symbols(in: "Done, comma, thanks."), "Done, thanks.")
         XCTAssertEqual(SpokenMarks.symbols(in: "Dear Sam comma thanks"), "Dear Sam, thanks")
         XCTAssertEqual(SpokenMarks.symbols(in: "Is it ready question mark"), "Is it ready?")
         // Names that are also prose words, and Spanish marks, stay as said.
         for kept in ["commas", "hashtag release", "my underscore variable", "and slash or", "the colonel",
-                     "Colon biopsy results", "a bigger colon", "comma separated values", "one question mark left"] {
+                     "Colon biopsy results", "a bigger colon", "comma separated values", "one question mark left",
+                     "Hey Comma, can you check this?", "He typed, comma, nothing else.", "Hi comma club members"] {
             XCTAssertEqual(SpokenMarks.symbols(in: kept), kept)
         }
         for kept in ["mi guion bajo variable", "la lista dos puntos manzanas", "Juan coma bien"] {
