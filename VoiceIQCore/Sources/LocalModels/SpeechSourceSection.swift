@@ -1,10 +1,10 @@
 import SwiftUI
 import VoiceIQSpeech
 
-/// Gemini or this device, chosen apart for dictation, for meetings, and for
-/// the writing step of an on-device dictation (and a meeting's notes), then
-/// the on-device models grouped by their job: transcription, the English
-/// add-on, and writing. Shared by the macOS and iOS settings.
+/// Gemini or this device, chosen apart for dictation and for meetings, then
+/// Gemini or Off for the writing step of an on-device dictation (and a
+/// meeting's notes), then the on-device models grouped by their job: transcription and the English
+/// add-on. Shared by the macOS and iOS settings.
 ///
 /// A group shows while its choice is On device. Otherwise it shows only while
 /// one of its models is on disk or downloading, so it can still be deleted
@@ -22,7 +22,6 @@ public struct SpeechSourceSection<Header: View>: View {
     @ObservedObject private var pro = LocalModelStore.store(for: .fluidSpeechPro)
     @ObservedObject private var diarizer = LocalModelStore.speakerDiarizer
     @ObservedObject private var englishTools = LocalModelStore.englishTools
-    @ObservedObject private var writer = LocalModelStore.writer
 
     /// `device` names this device in the footer ("Mac", "iPhone"); `header`
     /// draws each section's title.
@@ -47,7 +46,7 @@ public struct SpeechSourceSection<Header: View>: View {
                     cleanupSource = $0
                     settings.setCleanupSource($0)
                 })) {
-                    ForEach(CleanupSource.offered) { Text($0.displayName).tag($0) }
+                    ForEach(CleanupSource.allCases) { Text($0.displayName).tag($0) }
                 }
                 .sourcePickerStyle()
             }
@@ -56,7 +55,7 @@ public struct SpeechSourceSection<Header: View>: View {
         } footer: {
             if !LocalModelSupport.isAvailable {
                 Text(LocalModelSupport.requirement)
-            } else if anyOnDevice, cleanupSource != .onDevice {
+            } else if anyOnDevice {
                 Text(cleanupNote)
             }
         }
@@ -96,22 +95,12 @@ public struct SpeechSourceSection<Header: View>: View {
                                        : "Not used while Dictation is set to Gemini.")
                 }
             }
-            if shows([writer], offered: writesOnDevice) {
-                Section {
-                    LocalModelRow(store: writer, offered: writesOnDevice, selection: nil)
-                } header: {
-                    header("On-device writing")
-                } footer: {
-                    Text(writesOnDevice ? cleanupNote : "Not used while Writing rules and notes is not set to On device.")
-                }
-            }
         }
     }
 
     private var dictationLocal: Bool { dictationSource == .onDevice }
     private var meetingsLocal: Bool { meetingSource == .onDevice }
     private var anyOnDevice: Bool { dictationLocal || meetingsLocal }
-    private var writesOnDevice: Bool { anyOnDevice && cleanupSource == .onDevice }
 
     private var speechModels: [LocalModelStore] { LocalSpeechModel.available.map(LocalModelStore.store(for:)) }
 
@@ -133,7 +122,6 @@ public struct SpeechSourceSection<Header: View>: View {
     private var cleanupNote: String {
         switch cleanupSource {
         case .gemini: return Self.geminiWrites
-        case .onDevice: return "\(LocalWriterSupport.displayName) writes on-device transcripts by your writing rules and writes meeting notes on this \(device). It loads only while it writes. Until it is downloaded, or if an on-device step fails, Gemini takes over when a key is saved."
         case .none: return "No writing step: dictations go in as transcribed, with your Dictionary's replacements, and meetings keep their transcript with speaker labels but no notes. If an on-device model is missing or fails, Gemini transcribes the recording when a key is saved."
         }
     }
