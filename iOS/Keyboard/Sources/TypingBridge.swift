@@ -114,6 +114,15 @@ final class TypingBridge: ObservableObject {
         if keyboard.stripView.isHidden != hidden { keyboard.stripView.isHidden = hidden }
     }
 
+    /// Off screen: the emoji panel and its library go (`handleMemoryWarning` keeps them
+    /// while the panel is up), and what Learn how I type holds is written out, since iOS
+    /// may end the extension before it is shown again.
+    func disappeared() {
+        keyboard?.closeEmojiPanel()
+        keyboard?.handleMemoryWarning()
+        keyboard?.engine.journal?.save()
+    }
+
     func handleMemoryWarning() {
         keyboard?.handleMemoryWarning()
     }
@@ -135,7 +144,9 @@ extension TypingBridge: @MainActor KeyboardTextTarget {
     var documentContextBeforeInput: String? { proxy?.documentContextBeforeInput }
     var hasText: Bool { proxy?.hasText ?? false }
     var autocapitalizationType: UITextAutocapitalizationType? { proxy?.autocapitalizationType }
+    /// `.no` also turns off Hex's typing journal (`TypingJournal.allows`).
     var autocorrectionType: UITextAutocorrectionType? {
+        if proxy?.isSecureTextEntry == true { return .no }
         if let type = proxy?.textContentType ?? nil, Self.noAssistance.contains(type) { return .no }
         return proxy?.autocorrectionType
     }

@@ -434,7 +434,7 @@ VoiceiQ adds no row.
 - Undo dictation deletes the dictation only when the text on both sides of it
   still matches what was there when it went in, so an earlier copy of the
   same words is never the one removed (`0005-voiceiq-undo-context.patch`).
-- Hex's clipboard offer and the selection strip's Copy and Paste follow the
+- Hex's clipboard offer and the selection strip's Cut and Copy follow the
   keyboard's real Full Access (`KeyboardViewModel.hasFullAccess`, set in
   `TypingBridge.refreshHostTraits`). The Settings chip on Hex's Allow Paste
   notice opens `voiceiq://keyboard/settings`, and the app opens its own page
@@ -444,6 +444,12 @@ VoiceiQ adds no row.
   stored and applied again each time Hex refreshes its strip, which covers the
   emoji panel closing and a selection ending
   (`0006-voiceiq-strip-refresh.patch`).
+- A secure field (`isSecureTextEntry`, including custom and web ones without a
+  password content type) gets no auto-correction and nothing goes into the
+  typing journal (`TypingBridge.autocorrectionType`,
+  `0007-voiceiq-secure-journal.patch`).
+- Off screen (`viewDidDisappear`), the keyboard closes Hex's emoji panel,
+  drops the emoji library and saves the typing journal.
 - VoiceiQ's Dictionary words reach Hex's vocabulary capped at 100; over the
   cap the newest are kept, so a word added from the suggestion strip is never
   the one dropped.
