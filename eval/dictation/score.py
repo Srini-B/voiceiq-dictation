@@ -31,6 +31,16 @@ def spelled_numbers_as_digits(tokens: list[str]) -> list[str]:
     # the cleanup rules ask for count the same as the spoken words. Only a
     # well-formed phrase joins: "one two" stays two numbers, and "and" joins
     # only after "hundred" or "thousand" ("one and two" keeps its "and").
+    """
+    >>> spelled_numbers_as_digits("two thousand four hundred and fifty".split())
+    ['2450']
+    >>> spelled_numbers_as_digits("one and two".split())
+    ['1', 'and', '2']
+    >>> spelled_numbers_as_digits("twenty eleven".split())
+    ['20', '11']
+    >>> spelled_numbers_as_digits("twenty one and one hundred and five".split())
+    ['21', 'and', '105']
+    """
     out, number, last = [], None, None  # last: "unit", "tens", "scale", "and"
 
     def flush():
@@ -46,7 +56,7 @@ def spelled_numbers_as_digits(tokens: list[str]) -> list[str]:
         value = NUMBER_WORDS.get(t)
         if value is not None:
             kind = "tens" if value >= 20 else "unit"
-            joins = number is not None and (last in ("scale", "and") or (last == "tens" and kind == "unit"))
+            joins = number is not None and (last in ("scale", "and") or (last == "tens" and 1 <= value <= 9))
             if not joins:
                 flush()
                 number = (0, 0)

@@ -18,6 +18,7 @@ The judge for the items marked *judged* is Claude Fable 5.2, run as its own Amp 
 Run it:
 
 ```sh
+python3 -m doctest eval/dictation/score.py   # scorer self-checks
 eval/promptdump/build.sh            # compiles the app's PromptV1.swift into a prompt printer
 python3 eval/dictation/make_assets.py   # TTS audio and the screen, once (OPENAI_API_KEY)
 python3 eval/dictation/run.py LABEL --rounds 2   # GEMINI_API_KEY; --screenshots 0 for screen context off
