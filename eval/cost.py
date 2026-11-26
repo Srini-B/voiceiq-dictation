@@ -61,6 +61,8 @@ def main() -> None:
     args = ap.parse_args()
     cfg = json.loads((HERE / "cost.json").read_text())
     run = json.loads(Path(args.run).read_text())
+    if args.backup_share is not None and not 0 <= args.backup_share <= 1:
+        raise SystemExit("--backup-share is a share of dictations, from 0 to 1")
     if not run.get("complete"):
         raise SystemExit("incomplete run: rerun run.py with the same label to finish it before pricing it")
     recorded = all("secondRequests" in r["usage"] for r in run["results"])
