@@ -10,34 +10,50 @@ import Network
 /// The next download of the same model asks again. Downloads are never held
 /// for Wi-Fi (Hex holds them, anomalyco/hex 9e41970e; VoiceiQ asks instead).
 public struct CellularDownloadConsent: Equatable, Sendable {
+    public enum Network: Sendable {
+        case offline, wifi, cellular
+
+        /// Cellular, or a connection iOS marks expensive (a personal hotspot).
+        /// Read from `NWPath` as Hex does: `usesInterfaceType(.cellular)` and
+        /// `isExpensive` (anomalyco/hex 9e41970e, MIT).
+        public init(satisfied: Bool, cellular: Bool, expensive: Bool) {
+            if !satisfied { self = .offline } else { self = cellular || expensive ? .cellular : .wifi }
+        }
+    }
+
+    public enum Decision: Equatable, Sendable {
+        case start, ask
+        /// Not started: the downloader retries a lost connection by itself,
+        /// so a start with no network could come back on cellular unasked.
+        case offline
+    }
+
     /// Downloads in progress, by model folder name.
     private var started: Set<String> = []
 
     public init() {}
 
-    public func shouldAsk(for download: String, onCellular: Bool) -> Bool {
-        onCellular && !started.contains(download)
+    /// What tapping Download or Retry does. Starting records consent, so the
+    /// download carries on through drops and network changes.
+    public mutating func tap(_ download: String, on network: Network) -> Decision {
+        if started.contains(download) { return .start }
+        switch network {
+        case .offline: return .offline
+        case .cellular: return .ask
+        case .wifi:
+            started.insert(download)
+            return .start
+        }
     }
 
-    /// The download started. It counts as consented only after the user
-    /// confirmed, or when it started on a working network that is not
-    /// cellular. One started offline fails at once and leaves nothing
-    /// behind, so its Retry decides afresh.
-    public mutating func begin(_ download: String, confirmed: Bool, online: Bool) {
-        guard confirmed || online else { return }
+    /// The user agreed to download over cellular data.
+    public mutating func confirm(_ download: String) {
         started.insert(download)
     }
 
     /// The download finished or was cancelled; the next one is a new download.
     public mutating func end(_ download: String) {
         started.remove(download)
-    }
-
-    /// Cellular, or a connection iOS marks expensive (a personal hotspot).
-    /// Read from `NWPath` as Hex does: `usesInterfaceType(.cellular)` and
-    /// `isExpensive` (anomalyco/hex 9e41970e, MIT).
-    public static func isCellular(satisfied: Bool, cellular: Bool, expensive: Bool) -> Bool {
-        satisfied && (cellular || expensive)
     }
 }
 
@@ -60,25 +76,25 @@ public final class CellularModelDownloads: ObservableObject {
         monitor.start(queue: DispatchQueue(label: "io.blue.voiceiq.model-download-network", qos: .utility))
     }
 
-    private var onCellular: Bool {
+    private var network: CellularDownloadConsent.Network {
         let path = monitor.currentPath
-        return CellularDownloadConsent.isCellular(
+        return .init(
             satisfied: path.status == .satisfied,
             cellular: path.usesInterfaceType(.cellular),
             expensive: path.isExpensive
         )
     }
 
-    /// Called as `store` starts its download. True when the alert must
-    /// answer first; `store` is then pending.
-    func needsConfirmation(_ store: LocalModelStore, id: String) -> Bool {
-        guard consent.shouldAsk(for: id, onCellular: onCellular) else { return false }
-        pending = store
-        return true
+    /// Called as `store` is asked to download. `.ask` leaves `store` pending
+    /// for the alert.
+    func tap(_ store: LocalModelStore, id: String) -> CellularDownloadConsent.Decision {
+        let decision = consent.tap(id, on: network)
+        if decision == .ask { pending = store }
+        return decision
     }
 
-    func began(id: String, confirmed: Bool) {
-        consent.begin(id, confirmed: confirmed, online: monitor.currentPath.status == .satisfied)
+    func confirmed(id: String) {
+        consent.confirm(id)
     }
 
     func ended(id: String) {

@@ -104,7 +104,9 @@ has started, on Wi-Fi or after the user confirmed, never asks again, even if
 the network drops and comes back or moves from Wi-Fi to cellular, and a Retry
 after a failure carries the same consent. Once the model is downloaded or its
 download is cancelled, the next download asks again. On Wi-Fi there is no
-alert. Downloads are never held for Wi-Fi and there is no setting; the
+alert. A tap with no network starts nothing and shows "No internet
+connection", because the downloader retries a lost connection by itself and
+could otherwise come back on cellular unasked. Downloads are never held for Wi-Fi and there is no setting; the
 decision is `CellularDownloadConsent`, held by `CellularModelDownloads` in
 memory only. Hex holds its downloads for Wi-Fi behind a "Use mobile data"
 button (`9e41970e`, MIT); VoiceiQ asks instead. The Mac never asks.

@@ -123,16 +123,23 @@ public final class LocalModelStore: ObservableObject {
     public func download() {
         guard canStartDownload else { return }
         #if os(iOS)
-        guard !CellularModelDownloads.shared.needsConfirmation(self, id: manifest.directoryName) else { return }
+        switch CellularModelDownloads.shared.tap(self, id: manifest.directoryName) {
+        case .start: break
+        case .ask: return
+        case .offline:
+            state = .failed("No internet connection. Connect and try again.")
+            return
+        }
         #endif
-        startDownload(confirmed: false)
+        startDownload()
     }
 
     #if os(iOS)
     /// The user agreed to download over cellular data.
     func startConfirmedDownload() {
         guard canStartDownload else { return }
-        startDownload(confirmed: true)
+        CellularModelDownloads.shared.confirmed(id: manifest.directoryName)
+        startDownload()
     }
     #endif
 
@@ -144,10 +151,7 @@ public final class LocalModelStore: ObservableObject {
         }
     }
 
-    private func startDownload(confirmed: Bool) {
-        #if os(iOS)
-        CellularModelDownloads.shared.began(id: manifest.directoryName, confirmed: confirmed)
-        #endif
+    private func startDownload() {
         state = .downloading(progress: 0)
         let manifest = manifest
         downloadTask = Task { [weak self] in

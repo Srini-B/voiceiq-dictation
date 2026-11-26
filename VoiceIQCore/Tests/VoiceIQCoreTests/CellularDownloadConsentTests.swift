@@ -2,44 +2,41 @@ import XCTest
 @testable import VoiceIQCore
 
 final class CellularDownloadConsentTests: XCTestCase {
-    func testWiFiNeverAsks() {
+    func testWiFiStartsWithoutAskingAndCarriesOnOverCellular() {
         var consent = CellularDownloadConsent()
-        XCTAssertFalse(consent.shouldAsk(for: "fluid-speech-pro", onCellular: false))
-        consent.begin("fluid-speech-pro", confirmed: false, online: true)
-        // Moving to cellular partway through: a started download is consented.
-        XCTAssertFalse(consent.shouldAsk(for: "fluid-speech-pro", onCellular: true))
+        XCTAssertEqual(consent.tap("fluid-speech-pro", on: .wifi), .start)
+        // Retry after the download moved to cellular and dropped.
+        XCTAssertEqual(consent.tap("fluid-speech-pro", on: .cellular), .start)
     }
 
     func testCellularAsksOnceForADownload() {
         var consent = CellularDownloadConsent()
-        XCTAssertTrue(consent.shouldAsk(for: "fluid-speech-pro", onCellular: true))
-        consent.begin("fluid-speech-pro", confirmed: true, online: true)
-        // The network drops and comes back, on Wi-Fi or cellular: Retry carries on.
-        XCTAssertFalse(consent.shouldAsk(for: "fluid-speech-pro", onCellular: true))
-        XCTAssertFalse(consent.shouldAsk(for: "fluid-speech-pro", onCellular: false))
+        XCTAssertEqual(consent.tap("fluid-speech-pro", on: .cellular), .ask)
+        consent.confirm("fluid-speech-pro")
+        XCTAssertEqual(consent.tap("fluid-speech-pro", on: .cellular), .start)
+        XCTAssertEqual(consent.tap("fluid-speech-pro", on: .offline), .start)
         // Another model's download is its own decision.
-        XCTAssertTrue(consent.shouldAsk(for: "parakeet", onCellular: true))
+        XCTAssertEqual(consent.tap("parakeet", on: .cellular), .ask)
+    }
+
+    func testAnOfflineTapStartsNothingAndLaterCellularStillAsks() {
+        var consent = CellularDownloadConsent()
+        XCTAssertEqual(consent.tap("fluid-speech-pro", on: .offline), .offline)
+        XCTAssertEqual(consent.tap("fluid-speech-pro", on: .cellular), .ask)
     }
 
     func testANewDownloadAsksAgain() {
         var consent = CellularDownloadConsent()
-        consent.begin("fluid-speech-pro", confirmed: false, online: true)
+        _ = consent.tap("fluid-speech-pro", on: .wifi)
         consent.end("fluid-speech-pro")
-        XCTAssertTrue(consent.shouldAsk(for: "fluid-speech-pro", onCellular: true))
-    }
-
-    func testAStartWhileOfflineIsNotConsent() {
-        var consent = CellularDownloadConsent()
-        XCTAssertFalse(consent.shouldAsk(for: "fluid-speech-pro", onCellular: false))
-        consent.begin("fluid-speech-pro", confirmed: false, online: false)
-        // It failed offline; Retry once cellular returns still asks.
-        XCTAssertTrue(consent.shouldAsk(for: "fluid-speech-pro", onCellular: true))
+        XCTAssertEqual(consent.tap("fluid-speech-pro", on: .cellular), .ask)
     }
 
     func testCellularMeansACellularOrExpensivePath() {
-        XCTAssertTrue(CellularDownloadConsent.isCellular(satisfied: true, cellular: true, expensive: true))
-        XCTAssertTrue(CellularDownloadConsent.isCellular(satisfied: true, cellular: false, expensive: true))
-        XCTAssertFalse(CellularDownloadConsent.isCellular(satisfied: true, cellular: false, expensive: false))
-        XCTAssertFalse(CellularDownloadConsent.isCellular(satisfied: false, cellular: true, expensive: true))
+        typealias Network = CellularDownloadConsent.Network
+        XCTAssertEqual(Network(satisfied: true, cellular: true, expensive: true), .cellular)
+        XCTAssertEqual(Network(satisfied: true, cellular: false, expensive: true), .cellular)
+        XCTAssertEqual(Network(satisfied: true, cellular: false, expensive: false), .wifi)
+        XCTAssertEqual(Network(satisfied: false, cellular: true, expensive: true), .offline)
     }
 }
