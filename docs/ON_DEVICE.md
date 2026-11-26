@@ -104,7 +104,8 @@ has started, on Wi-Fi or after the user confirmed, never asks again, even if
 the network drops and comes back or moves from Wi-Fi to cellular, and a Retry
 after a failure carries the same consent. Once the model is downloaded or its
 download is cancelled, the next download asks again. On Wi-Fi there is no
-alert. A tap with no network starts nothing and shows "No internet
+alert. A tap before the network monitor has reported its first path asks, as on
+cellular. A tap with no network starts nothing and shows "No internet
 connection", because the downloader retries a lost connection by itself and
 could otherwise come back on cellular unasked. Downloads are never held for Wi-Fi and there is no setting; the
 decision is `CellularDownloadConsent`, held by `CellularModelDownloads` in

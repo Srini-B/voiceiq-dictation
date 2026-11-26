@@ -15,6 +15,15 @@ public enum SystemTapWatch {
     public struct Silence: Equatable, Sendable {
         public private(set) var armed = false
         private var zeros: TimeInterval = 0
+        /// Rebuilds since the track last carried sound. Each one waits four
+        /// times longer (15, 60, then 240 s), so a far side that went quiet
+        /// while its call app plays exact zeros is not rebuilt every 15 s.
+        private var rebuilds = 0
+
+        /// How long the zeros must last before the next check.
+        public var limit: TimeInterval {
+            SystemTapWatch.silenceLimit * Double(1 << (2 * min(rebuilds, 2)))
+        }
 
         public init() {}
 
@@ -22,20 +31,23 @@ public enum SystemTapWatch {
         /// sound, has been exact zeros for another `silenceLimit`, so the
         /// caller can check again later when the output was idle the first time.
         public mutating func hear(seconds: TimeInterval, exactZero: Bool) -> Bool {
-            guard exactZero else { armed = true; zeros = 0; return false }
+            guard exactZero else { armed = true; zeros = 0; rebuilds = 0; return false }
             guard armed else { return false }
             zeros += seconds
-            guard zeros >= SystemTapWatch.silenceLimit else { return false }
+            guard zeros >= limit else { return false }
             zeros = 0
             return true
         }
 
         /// A rebuilt tap restarts the count but stays armed: a replacement
         /// that also delivers only zeros (an output still settling) is
-        /// rebuilt again after another `silenceLimit`, instead of leaving
+        /// rebuilt again, after a longer wait each time, instead of leaving
         /// the rest of the meeting silent.
-        public mutating func rebuilt() {
+        /// `backingOff` is false for a rebuild after an output move, which
+        /// says nothing about whether the tap stalls.
+        public mutating func rebuilt(backingOff: Bool = true) {
             zeros = 0
+            if backingOff { rebuilds += 1 }
         }
     }
 

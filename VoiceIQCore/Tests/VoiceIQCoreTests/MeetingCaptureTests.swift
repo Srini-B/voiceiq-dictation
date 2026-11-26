@@ -31,12 +31,31 @@ final class MeetingCaptureTests: XCTestCase {
         XCTAssertTrue(silence.hear(seconds: 1, exactZero: true))
     }
 
-    /// A replacement tap that also delivers only zeros is caught again after another full stretch.
-    func testARebuildRestartsTheCountButStaysArmed() {
+    /// A replacement tap that also delivers only zeros is caught again, each
+    /// time after a longer wait (15, 60, 240 s), and sound resets the wait.
+    func testRebuildsBackOffUntilSoundReturns() {
         var silence = SystemTapWatch.Silence()
         _ = silence.hear(seconds: 1, exactZero: false)
-        XCTAssertFalse(silence.hear(seconds: 10, exactZero: true))
+        XCTAssertTrue(silence.hear(seconds: 15, exactZero: true))
         silence.rebuilt()
+        XCTAssertFalse(silence.hear(seconds: 59, exactZero: true))
+        XCTAssertTrue(silence.hear(seconds: 1, exactZero: true))
+        silence.rebuilt()
+        XCTAssertFalse(silence.hear(seconds: 239, exactZero: true))
+        XCTAssertTrue(silence.hear(seconds: 1, exactZero: true))
+        silence.rebuilt()
+        XCTAssertFalse(silence.hear(seconds: 239, exactZero: true))
+        XCTAssertTrue(silence.hear(seconds: 1, exactZero: true))
+        XCTAssertFalse(silence.hear(seconds: 0.01, exactZero: false))
+        XCTAssertTrue(silence.hear(seconds: 15, exactZero: true))
+    }
+
+    /// Headphones flipping the output twice must not push the next stall check to 240 s.
+    func testAnOutputMoveRebuildDoesNotBackOff() {
+        var silence = SystemTapWatch.Silence()
+        _ = silence.hear(seconds: 1, exactZero: false)
+        silence.rebuilt(backingOff: false)
+        silence.rebuilt(backingOff: false)
         XCTAssertFalse(silence.hear(seconds: 14, exactZero: true))
         XCTAssertTrue(silence.hear(seconds: 1, exactZero: true))
     }
