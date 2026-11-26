@@ -70,7 +70,7 @@ final class VoiceSession: ObservableObject {
         // Whatever an earlier process left in the App Group is stale, except
         // the last result and where an unfinished dictation was going.
         let left = store.snapshot
-        delivery = left.delivery
+        delivery = left.delivery.map { $0.isPending(handledID: store.insertedDeliveryID) ? $0 : $0.forgettingDraft() }
         if left.phase == .recording || left.phase == .processing, let field = left.field, let lastAlive = store.heartbeat {
             orphan = (field, lastAlive)
         }
@@ -246,6 +246,21 @@ final class VoiceSession: ObservableObject {
         publish(force: true)
     }
 
+    /// A keyboard typed the result, or the app copied it.
+    func resultSettled() {
+        forgetDraftIfSettled()
+        refreshActivity()
+    }
+
+    /// The fingerprint of the destination's text is needed only while the
+    /// result is pending. Typed, copied or too old, the result drops it.
+    private func forgetDraftIfSettled() {
+        guard let settled = delivery, settled.destination?.draft != nil,
+              !settled.isPending(handledID: store.insertedDeliveryID) else { return }
+        delivery = settled.forgettingDraft()
+        publish(force: true)
+    }
+
     /// The launch recovery used the orphan, or found nothing to recover.
     func takeOrphan() -> (field: FieldIdentity, lastAlive: Date)? {
         defer { orphan = nil }
@@ -343,8 +358,8 @@ final class VoiceSession: ObservableObject {
     }
 
     /// Brings the Live Activity in line with the session. Also called when
-    /// something outside the snapshot changes what it shows: the setting, the
-    /// app coming to the front, a result typed or copied.
+    /// something outside the snapshot changes what it shows: the setting or
+    /// the app coming to the front.
     func refreshActivity() {
         guard isActive else { return }
         if wantsActivity {
@@ -365,6 +380,7 @@ final class VoiceSession: ObservableObject {
         store.heartbeat = Date()
         // A waiting result turns into "ready" once it is typed or too old;
         // the keyboard's ping can be missed.
+        forgetDraftIfSettled()
         if activity.isRunning { activity.update(activityState) }
     }
 }

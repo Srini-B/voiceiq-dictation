@@ -124,7 +124,7 @@ final class AppModel: ObservableObject {
             Task { @MainActor in self?.drainCommands() }
         }
         insertedObserver = DarwinNotifier.observe(.inserted) { [weak self] in
-            Task { @MainActor in self?.session.refreshActivity() }
+            Task { @MainActor in self?.session.resultSettled() }
         }
     }
 
@@ -274,7 +274,7 @@ final class AppModel: ObservableObject {
         case .start:
             start(command)
         case .stop:
-            stopDictation(in: command.field)
+            stopDictation(in: command.field, at: command.issuedAt)
         case .cancel:
             coordinator.handle(.cancel)
         }
@@ -301,8 +301,11 @@ final class AppModel: ObservableObject {
     /// delivered any audio there is nothing to transcribe, so the start is
     /// cancelled quietly (Hex a2d940e3) instead of failing as "no audio".
     /// `field` is where a keyboard's Stop was tapped: the text goes there.
-    private func stopDictation(in field: FieldIdentity? = nil) {
+    /// `stoppedAt` is when it was tapped; the fields the keyboard is in after
+    /// that are the ones a return is judged by (`Delivery.isFirstReturn`).
+    private func stopDictation(in field: FieldIdentity? = nil, at stoppedAt: Date = Date()) {
         guard coordinator.state.isCapturing else { return }
+        target.fields.stoppedAt = stoppedAt
         if let field {
             target.fields.stoppedIn = field
             session.dictationField = target.destination
@@ -603,7 +606,14 @@ final class AppModel: ObservableObject {
     /// they went to fetch. A result no keyboard took part in has nowhere to
     /// wait for, so it keeps the clipboard fallback.
     private func deliver(_ text: String) {
-        let delivery = Delivery(text: text, destination: target.destination)
+        let delivery = Delivery(text: text, destination: target.destination, stoppedAt: target.fields.stoppedAt)
+        // The snapshot holds one result. One that still waited for its field
+        // is now only in History, so the keyboard says so.
+        if let waiting = store.snapshot.delivery, waiting.destination != nil,
+           waiting.isPending(handledID: store.insertedDeliveryID) {
+            session.post(notice: "Previous dictation is in History")
+            SessionDiagnostics.note("a waiting result was replaced; it is in History")
+        }
         session.deliver(delivery)
         if let destination = delivery.destination {
             SessionDiagnostics.note("result ready; waits for the keyboard in \(destination.hostBundleID ?? "its field")")
@@ -632,7 +642,7 @@ final class AppModel: ObservableObject {
         UIPasteboard.general.string = delivery.text
         DispatchQueue.main.async { [store, session] in
             store.appPasteboardChangeCount = UIPasteboard.general.changeCount
-            session.refreshActivity()
+            session.resultSettled()
         }
         SessionDiagnostics.note("waiting result copied from the Live Activity")
     }

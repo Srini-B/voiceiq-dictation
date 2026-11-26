@@ -37,10 +37,28 @@ final class KeyboardModel: ObservableObject {
     /// The waiting result this keyboard has logged, so the log has one line
     /// for it, not one per poll.
     private var loggedWaitingID: UUID?
-    /// The input session this keyboard is in and its app, resolved once per
-    /// session: the resolver logs each miss.
-    private var session: (documentID: UUID, host: String?)?
+    /// The result this keyboard held back while it was in no field, logged once.
+    private var loggedHeldID: UUID?
+    /// The input session this keyboard is in. Nil while it is in no field,
+    /// and until the first poll after it appears.
+    private var session: InputSession?
+
+    private struct InputSession {
+        let documentID: UUID
+        var host: String?
+        /// How often the app could not be named. The resolver logs each
+        /// miss, so polling asks it `hostRetryLimit` times and then stops.
+        var hostMisses: Int
+        /// Focus came here from another field while the keyboard stayed up.
+        /// The field a result left is never reached that way, so the
+        /// empty-field guess is not made here.
+        let movedHere: Bool
+    }
+
     private var hostRetriedAt = Date.distantPast
+    private static let hostRetryLimit = 3
+    /// Fields for an address, a code or a number, besides `TypingBridge.noAssistance`.
+    private static let notProse: Set<UITextContentType> = [.username, .emailAddress, .URL]
     /// The last poll's reading of the field. A result is typed on what the
     /// field looks like only when two polls agree, so a reading taken while
     /// the host is still connecting cannot place it.
@@ -77,6 +95,7 @@ final class KeyboardModel: ObservableObject {
 
     func appeared() {
         Self.onScreen = self
+        session = nil
         hasFullAccess = controller?.hasFullAccess ?? false
         if hasFullAccess { store.noteKeyboardSeen() }
         observer = DarwinNotifier.observe(.state) { [weak self] in
@@ -135,8 +154,7 @@ final class KeyboardModel: ObservableObject {
         switch phase {
         case .starting, .recording:
             // The text goes where Stop was tapped.
-            resolveHostIfMissing(now: true)
-            let field = currentField()
+            let field = fieldForCommand()
             KeyboardLog.note("[\(instanceTag)] stop in \(Self.describe(field))")
             send(KeyboardCommand(action: .stop, field: field))
         case .processing:
@@ -162,8 +180,7 @@ final class KeyboardModel: ObservableObject {
     }
 
     private func start() {
-        resolveHostIfMissing(now: true)
-        let field = currentField()
+        let field = fieldForCommand()
         KeyboardLog.note("[\(instanceTag)] start in \(Self.describe(field))")
         let command = KeyboardCommand(action: .start, field: field)
         let alive = appAlive
@@ -202,31 +219,60 @@ final class KeyboardModel: ObservableObject {
     /// Notes each new input session, so a result can tell whether the keyboard
     /// has been in another field of its app since (`Delivery.isFirstReturn`).
     private func trackSession() {
-        guard Self.onScreen === self, controller?.viewIfLoaded?.window != nil, let documentID else { return }
+        guard Self.onScreen === self, controller?.viewIfLoaded?.window != nil, let documentID else {
+            session = nil
+            return
+        }
         guard session?.documentID != documentID else { return }
-        session = (documentID, controller.flatMap(HostAppResolver.currentHost(for:)))
+        let host = controller.flatMap(HostAppResolver.currentHost(for:))
+        session = InputSession(documentID: documentID, host: host, hostMisses: host == nil ? 1 : 0,
+                               movedHere: session != nil)
         lastReading = nil
         store.noteFieldVisit(host: session?.host, session: documentID)
     }
 
     /// The app, the session and the text around the cursor: everything a
-    /// keyboard can say about the field it is in.
+    /// keyboard can say about the field it is in. The app is the one named
+    /// for this session; a tap can come before a poll has seen the session.
     private func currentField() -> FieldIdentity {
         let proxy = controller?.textDocumentProxy
-        return FieldIdentity(hostBundleID: session?.host, documentID: documentID,
+        let documentID = documentID
+        return FieldIdentity(hostBundleID: session?.documentID == documentID ? session?.host : nil,
+                             documentID: documentID,
                              draft: Draft.fingerprint(before: proxy?.documentContextBeforeInput,
                                                       after: proxy?.documentContextAfterInput))
     }
 
+    /// The field a tap on Dictate or Stop is for. The tap can come before
+    /// the next poll has seen a new session.
+    private func fieldForCommand() -> FieldIdentity {
+        trackSession()
+        resolveHostIfMissing(now: true)
+        return currentField()
+    }
+
+    /// Whether the field takes ordinary text. A result is typed into an
+    /// address, code or number field only when Stop was tapped there.
+    private var fieldTakesProse: Bool {
+        guard let proxy = controller?.textDocumentProxy else { return false }
+        if let type = proxy.textContentType ?? nil,
+           TypingBridge.noAssistance.contains(type) || Self.notProse.contains(type) { return false }
+        return (proxy.keyboardType ?? .default) == .default
+    }
+
     /// The arbiter often names the app only a moment after the keyboard
-    /// appears. Asked again when a decision needs it: once a second at most
-    /// while polling, and at once for a tap (`now`).
+    /// appears. Asked again when a decision needs it: once a second and
+    /// `hostRetryLimit` times at most while polling, and at once for a tap
+    /// (`now`).
     private func resolveHostIfMissing(now: Bool = false) {
-        guard let current = session, current.host == nil,
-              now || Date().timeIntervalSince(hostRetriedAt) > 1 else { return }
+        guard let current = session, current.host == nil, current.documentID == documentID else { return }
+        guard now || (current.hostMisses < Self.hostRetryLimit && Date().timeIntervalSince(hostRetriedAt) > 1) else { return }
         hostRetriedAt = Date()
-        guard let host = controller.flatMap(HostAppResolver.currentHost(for:)) else { return }
-        session = (current.documentID, host)
+        guard let host = controller.flatMap(HostAppResolver.currentHost(for:)) else {
+            session?.hostMisses += 1
+            return
+        }
+        session?.host = host
         store.noteFieldVisit(host: host, session: current.documentID)
     }
 
@@ -257,12 +303,23 @@ final class KeyboardModel: ObservableObject {
             if waitingResult != nil { waitingResult = nil }
             return
         }
+        // A dismissed keyboard can keep polling with its view in a window.
+        // It is in no field, so it must not type the result or mark it handled.
+        guard documentID != nil else {
+            if loggedHeldID != delivery.id {
+                loggedHeldID = delivery.id
+                KeyboardLog.note("[\(instanceTag)] result held: this keyboard is in no field")
+            }
+            return
+        }
         if delivery.destination?.hostBundleID != nil { resolveHostIfMissing() }
         let here = currentField()
         let settled = here == lastReading
         lastReading = here
         let route = delivery.route(in: here, handledID: store.insertedDeliveryID,
-                                   firstReturn: delivery.isFirstReturn(to: here, visits: store.fieldVisits))
+                                   firstReturn: session?.movedHere == false
+                                       && delivery.isFirstReturn(to: here, visits: store.fieldVisits),
+                                   takesProse: fieldTakesProse)
         switch route {
         case .type(let match):
             guard match == .sameSession || match == .unaddressed || settled else { return }

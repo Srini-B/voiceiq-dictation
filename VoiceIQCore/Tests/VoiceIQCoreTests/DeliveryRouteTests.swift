@@ -13,9 +13,10 @@ final class DeliveryRouteTests: XCTestCase {
     }
 
     private func route(to destination: FieldIdentity?, in here: FieldIdentity, firstReturn: Bool = false,
-                       after seconds: TimeInterval = 1) -> Delivery.Route {
+                       takesProse: Bool = true, after seconds: TimeInterval = 1) -> Delivery.Route {
         Delivery(text: "On my way", createdAt: made, destination: destination)
-            .route(in: here, handledID: nil, firstReturn: firstReturn, now: made.addingTimeInterval(seconds))
+            .route(in: here, handledID: nil, firstReturn: firstReturn, takesProse: takesProse,
+                   now: made.addingTimeInterval(seconds))
     }
 
     // MARK: - The keyboard never left
@@ -66,20 +67,36 @@ final class DeliveryRouteTests: XCTestCase {
         XCTAssertEqual(route(to: field(messages), in: field(messages, draft: hello), firstReturn: true), .offer)
     }
 
+    // MARK: - Fields that do not take prose
+
+    func testAnAddressOrNumberFieldIsNeverTakenForTheDestination() {
+        XCTAssertEqual(route(to: field(messages, draft: hello), in: field(messages, draft: hello), takesProse: false), .offer)
+        XCTAssertEqual(route(to: field(messages), in: field(messages), firstReturn: true, takesProse: false), .offer)
+    }
+
+    func testStopTappedInAnAddressFieldStillTypesThere() {
+        let session = UUID()
+        XCTAssertEqual(route(to: field(messages, session: session), in: field(messages, session: session), takesProse: false),
+                       .type(.sameSession))
+    }
+
     // MARK: - First return
 
+    /// Seconds are counted from when the text was ready.
     private func visit(_ host: String?, _ seconds: TimeInterval, session: UUID = UUID()) -> FieldVisit {
         FieldVisit(hostBundleID: host, documentID: session, at: made.addingTimeInterval(seconds))
     }
 
-    private func firstReturn(to back: FieldVisit, visits: [FieldVisit], destinationHost: String? = "com.apple.MobileSMS") -> Bool {
-        Delivery(text: "x", createdAt: made, destination: field(destinationHost))
+    private func firstReturn(to back: FieldVisit, visits: [FieldVisit], destinationHost: String? = "com.apple.MobileSMS",
+                             stopped seconds: TimeInterval? = -10) -> Bool {
+        Delivery(text: "x", createdAt: made, destination: field(destinationHost),
+                 stoppedAt: seconds.map(made.addingTimeInterval))
             .isFirstReturn(to: field(back.hostBundleID, session: back.documentID), visits: visits)
     }
 
-    func testOtherAppsSinceTheTextWasReadyDoNotCount() {
+    func testOtherAppsSinceTheStopDoNotCount() {
         let back = visit(messages, 90)
-        XCTAssertTrue(firstReturn(to: back, visits: [visit(messages, -30), visit(safari, 20), back]))
+        XCTAssertTrue(firstReturn(to: back, visits: [visit(messages, -30), visit(safari, -5), visit(safari, 20), back]))
     }
 
     func testAnotherFieldOfTheAppSinceTheTextWasReadyCounts() {
@@ -87,18 +104,32 @@ final class DeliveryRouteTests: XCTestCase {
         XCTAssertFalse(firstReturn(to: back, visits: [visit(messages, -30), visit(messages, 20), back]))
     }
 
-    /// A start that opens the app puts the keyboard back in the field under a
-    /// new session while the dictation records. Stopped from the Dynamic
-    /// Island, the text still goes back there.
-    func testSessionsOfTheAppBeforeTheTextWasReadyDoNotCount() {
+    /// Stop in one chat, then another chat's field while the text is still
+    /// being written: the text is not typed into a field opened after that.
+    func testAnotherFieldOfTheAppWhileTheTextWasWrittenCounts() {
         let back = visit(messages, 90)
-        XCTAssertTrue(firstReturn(to: back, visits: [visit(messages, -30), visit(messages, -28), visit(messages, -5), back]))
+        XCTAssertFalse(firstReturn(to: back, visits: [visit(messages, -30), visit(messages, -5), back]))
     }
 
-    /// The limit of the guess: the first field of the app after the text is
-    /// ready is taken for the one left, whichever field it really is.
-    func testTheFirstFieldOfTheAppIsTakenForTheOneLeft() {
-        let anotherChat = visit(messages, 90)
+    /// A start that opens the app puts the keyboard back in the field under a
+    /// new session while the dictation records.
+    func testSessionsOfTheAppBeforeTheStopDoNotCount() {
+        let back = visit(messages, 90)
+        XCTAssertTrue(firstReturn(to: back, visits: [visit(messages, -30), visit(messages, -28), visit(messages, -12), back]))
+    }
+
+    /// A call ended the dictation, or the launch recovery wrote it: nobody
+    /// tapped Stop, so sessions count from when the text was ready.
+    func testWithoutAStopSessionsCountFromWhenTheTextWasReady() {
+        let back = visit(messages, 90)
+        XCTAssertTrue(firstReturn(to: back, visits: [visit(messages, -5), back], stopped: nil))
+        XCTAssertFalse(firstReturn(to: back, visits: [visit(messages, 5), back], stopped: nil))
+    }
+
+    /// The limit of the guess: the first field of the app after the stop is
+    /// taken for the one left, whichever field it really is.
+    func testTheFirstFieldOfTheAppAfterTheStopIsTakenForTheOneLeft() {
+        let anotherChat = visit(messages, -5)
         XCTAssertTrue(firstReturn(to: anotherChat, visits: [visit(messages, -30), anotherChat]))
     }
 
@@ -111,7 +142,7 @@ final class DeliveryRouteTests: XCTestCase {
         let back = visit(messages, 90)
         let elsewhere = (1..<SharedStore.fieldVisitLimit).map { visit(safari, TimeInterval($0)) }
         XCTAssertFalse(firstReturn(to: back, visits: elsewhere + [back]))
-        XCTAssertTrue(firstReturn(to: back, visits: [visit(safari, -1)] + elsewhere.dropFirst() + [back]))
+        XCTAssertTrue(firstReturn(to: back, visits: [visit(safari, -11)] + elsewhere.dropFirst() + [back]))
     }
 
     func testWithoutADestinationAppNothingIsAFirstReturn() {
@@ -171,6 +202,19 @@ final class DeliveryRouteTests: XCTestCase {
         XCTAssertEqual(sent.hostBundleID, "com.apple.reminders")
     }
 
+    func testAHandledResultForgetsWhatItsFieldHeld() {
+        let result = Delivery(text: "On my way", createdAt: made, destination: field(messages, draft: hello),
+                              stoppedAt: made)
+        let kept = result.forgettingDraft()
+        XCTAssertNil(kept.destination?.draft)
+        XCTAssertEqual(kept.destination?.hostBundleID, messages)
+        XCTAssertEqual(kept.destination?.documentID, result.destination?.documentID)
+        XCTAssertEqual(kept.id, result.id)
+        XCTAssertEqual(kept.text, result.text)
+        XCTAssertEqual(kept.stoppedAt, made)
+        XCTAssertEqual(kept.forgettingDraft(), kept)
+    }
+
     /// A snapshot written by a build before destinations still decodes, and
     /// its result has none.
     func testASnapshotFromAnOlderBuildDecodes() throws {
@@ -182,6 +226,7 @@ final class DeliveryRouteTests: XCTestCase {
         let snapshot = try JSONDecoder().decode(SessionSnapshot.self, from: Data(json.utf8))
         XCTAssertEqual(snapshot.delivery?.text, "Hello")
         XCTAssertNil(snapshot.delivery?.destination)
+        XCTAssertNil(snapshot.delivery?.stoppedAt)
         XCTAssertNil(snapshot.field)
     }
 }

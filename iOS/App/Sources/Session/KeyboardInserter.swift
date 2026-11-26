@@ -1,3 +1,4 @@
+import Foundation
 import VoiceIQBridge
 import VoiceIQCore
 
@@ -11,6 +12,8 @@ final class DictationTarget {
         var origin: FieldIdentity?
         /// The field Stop was tapped in, when a keyboard stopped it.
         var stoppedIn: FieldIdentity?
+        /// When the user stopped it, from a keyboard or from outside one.
+        var stoppedAt: Date?
     }
 
     var fields = Fields()

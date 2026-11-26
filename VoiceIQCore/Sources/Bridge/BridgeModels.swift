@@ -111,12 +111,26 @@ public struct Delivery: Codable, Equatable, Sendable, Identifiable {
     /// otherwise where Dictate was. Nil when no keyboard took part (the
     /// Action button with no keyboard on screen).
     public let destination: FieldIdentity?
+    /// When the user stopped the dictation: the keyboard's Stop, the Live
+    /// Activity's, or the Action button. Nil when it ended another way (a
+    /// call, the launch recovery).
+    public let stoppedAt: Date?
 
-    public init(id: UUID = UUID(), text: String, createdAt: Date = Date(), destination: FieldIdentity?) {
+    public init(id: UUID = UUID(), text: String, createdAt: Date = Date(), destination: FieldIdentity?,
+                stoppedAt: Date? = nil) {
         self.id = id
         self.text = text
         self.createdAt = createdAt
         self.destination = destination
+        self.stoppedAt = stoppedAt
+    }
+
+    /// The same result without the fingerprint of the destination's text,
+    /// which is only needed while the result is pending.
+    public func forgettingDraft() -> Delivery {
+        guard var destination, destination.draft != nil else { return self }
+        destination.draft = nil
+        return Delivery(id: id, text: text, createdAt: createdAt, destination: destination, stoppedAt: stoppedAt)
     }
 
     /// Why the keyboard on screen may type a result unasked.
@@ -127,8 +141,8 @@ public struct Delivery: Codable, Equatable, Sendable, Identifiable {
         case sameDraft = "same draft"
         /// Back in the same app, in an empty field as the destination was,
         /// and the keyboard has been in no other field of that app since the
-        /// text was ready. A guess: nothing tells two empty fields of one app
-        /// apart.
+        /// dictation was stopped. A guess: nothing tells two empty fields of
+        /// one app apart.
         case firstEmptyReturn = "first return to an empty field"
         /// The result has no destination, and this is the first keyboard up.
         case unaddressed = "no destination"
@@ -157,8 +171,12 @@ public struct Delivery: Codable, Equatable, Sendable, Identifiable {
 
     /// The one rule for where a result lands. `handledID` is
     /// `SharedStore.insertedDeliveryID`; `firstReturn` is
-    /// `isFirstReturn(to:visits:)`.
-    public func route(in field: FieldIdentity, handledID: UUID?, firstReturn: Bool, now: Date = Date()) -> Route {
+    /// `isFirstReturn(to:visits:)`, asked only for the empty-field guess.
+    /// `takesProse` is false in a field for a username, an address, a code
+    /// or a number: such a field receives a result only when Stop was tapped
+    /// in it, never because it looks like the destination.
+    public func route(in field: FieldIdentity, handledID: UUID?, firstReturn: @autoclosure () -> Bool,
+                      takesProse: Bool = true, now: Date = Date()) -> Route {
         guard id != handledID else { return .leave }
         let age = now.timeIntervalSince(createdAt)
         guard let destination else { return age < Self.unaddressedWindow ? .type(.unaddressed) : .leave }
@@ -166,23 +184,25 @@ public struct Delivery: Codable, Equatable, Sendable, Identifiable {
         if let session = destination.documentID, session == field.documentID { return .type(.sameSession) }
         // Past this point the field is judged by what it looks like, which
         // only means anything inside the same app.
-        guard let host = destination.hostBundleID, host == field.hostBundleID else { return .offer }
+        guard takesProse, let host = destination.hostBundleID, host == field.hostBundleID else { return .offer }
         if let draft = destination.draft { return draft == field.draft ? .type(.sameDraft) : .offer }
-        return field.draft == nil && firstReturn && age < Self.emptyReturnWindow ? .type(.firstEmptyReturn) : .offer
+        return field.draft == nil && age < Self.emptyReturnWindow && firstReturn() ? .type(.firstEmptyReturn) : .offer
     }
 
     /// Whether `field` is the first field of the destination's app that the
-    /// keyboard has been in since the text was ready. `visits` is
-    /// `SharedStore.fieldVisits`. Fields it was in before that do not count:
-    /// the same field starts a new input session each time the keyboard
-    /// comes back to it during a dictation. A session in an app that could
-    /// not be named counts, and so does a list too short to reach back to
-    /// when the text was ready.
+    /// keyboard has been in since the dictation was stopped (since the text
+    /// was ready, when nobody stopped it). `visits` is
+    /// `SharedStore.fieldVisits`. Sessions before that do not count: the same
+    /// field starts a new input session each time the keyboard comes back to
+    /// it while a dictation records. A session in an app that could not be
+    /// named counts, and so does a list too short to reach back that far.
     public func isFirstReturn(to field: FieldIdentity, visits: [FieldVisit]) -> Bool {
-        guard let host = destination?.hostBundleID else { return false }
-        if visits.count >= SharedStore.fieldVisitLimit, let oldest = visits.first, oldest.at > createdAt { return false }
+        guard let destination, let host = destination.hostBundleID else { return false }
+        let left = stoppedAt ?? createdAt
+        if visits.count >= SharedStore.fieldVisitLimit, let oldest = visits.first, oldest.at > left { return false }
         return !visits.contains {
-            $0.at > createdAt && $0.documentID != field.documentID && ($0.hostBundleID == host || $0.hostBundleID == nil)
+            $0.at > left && $0.documentID != field.documentID && $0.documentID != destination.documentID
+                && ($0.hostBundleID == host || $0.hostBundleID == nil)
         }
     }
 
