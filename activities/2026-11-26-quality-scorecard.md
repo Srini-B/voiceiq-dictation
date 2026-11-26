@@ -50,3 +50,9 @@ Scored by the meetings thread with `eval/meetings/score.py` at 7ad4e32, mean ove
 Accepted: D1 67.9, D2 97.5, D3 89.2, D5 0, M1 100, M5 92.6. Corrected:
 - **D4 cleanup: 91.3 → 89.5.** The long dictations are now judged for cleanup too, and a dropped spoken clause caps a case at 70. long_01 drops "Thanks, Srini." in both rounds (68 each).
 - **M2–M4:** the per-meeting mean let eight 70-second synthetic calls outvote the 17-minute AMI meeting. `meetings/score.py` now pools totals across meetings. Pooled with the new scorer for main after #82 and #84 (9 meetings): **M1 100.0, M2 90.5, M3 87.5, M4 85.4** (Fable's duration-weighted estimate was 89.8 / 87.6 / 85.4). Fable accepted all four; M2 stands because AMI alone still scores 84.7 under the new scorer, so the 0.7 comes only from weighting by speech time.
+
+## TTS clips checked against their scripts
+
+The dictation thread found that gpt-4o-mini-tts leaves out a closing "Thanks, <name>.": long_01's audio ends at "…we ship Friday morning." (checked with gpt-4o-transcribe on the last 5 s and on the whole clip). The sign-off was never spoken, so it is no longer in long_01's script. `check_assets.py` now transcribes every clip with a different model and refuses clips whose ending or words don't match. clean_punct was regenerated with a voice told to say the punctuation words aloud.
+
+Effect on main's baseline: D1 names 67.9 → **70.0** (94/94 names; the six English-name swaps remain), D2 97.5 → 97.6. long_01's D4 score of 68 assumed a dropped clause; it goes back to Fable. clean_punct's D4 score of 50 came from the old clip, which may not have said the punctuation words, so it is re-judged on the next run.

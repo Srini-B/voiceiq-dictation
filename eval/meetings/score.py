@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Scores one meeting the pipeline wrote against its reference (eval/SCORECARD.md).
+"""Scores meetings the pipeline wrote against their references (eval/SCORECARD.md).
 
 Both files are JSON:
   output:    {"participants": ["Asha", ...], "segments": [{"start": s, "end": s,
@@ -10,7 +10,7 @@ Both files are JSON:
 
 M1 participants found and named, M2 who spoke when (1 - DER, 0.25 s collar),
 M3 who said what (reference words given to the right person) and M4 transcript
-accuracy (1 - WER) are computed here. With reference names, output names are
+accuracy (1 - cpWER) are computed here. With reference names, output names are
 matched by name; without them, by the best one-to-one overlap. `--packet`
 prints the notes and summary for the judge (M5).
 """
@@ -221,9 +221,13 @@ def main():
     pairs = [(json.loads(Path(o).read_text()), json.loads(Path(r).read_text()), o)
              for o, r in zip(a.files[::2], a.files[1::2])]
     if a.packet:
-        for out, ref, _ in pairs:
-            print(json.dumps({"reference_summary": ref.get("summary"), "notes": out.get("notes")}, ensure_ascii=False))
+        for out, ref, name in pairs:
+            print(json.dumps({"id": out.get("id") or Path(name).stem, "reference_summary": ref.get("summary"),
+                              "notes": out.get("notes")}, ensure_ascii=False))
         return
+    names = [o for o in a.files[::2]]
+    if len(set(names)) != len(names) or len(set(a.files[1::2])) != len(names):
+        ap.error("each OUTPUT and each REFERENCE may appear once")
     per = [(name, counts(out, ref)) for out, ref, name in pairs]
     if len(per) == 1:
         c = per[0][1]
@@ -237,7 +241,7 @@ def main():
     # over meetings; summing extra speakers would grow with the suite size.
     result = scores(pooled)
     result["M1"] = round(sum(scores(c)["M1"] for _, c in per) / len(per), 1)
-    print(json.dumps({"pooled": result, "meetings": {n: scores(c) for n, c in per}},
+    print(json.dumps({"pooled": result, "count": len(per), "meetings": {n: scores(c) for n, c in per}},
                      indent=1, ensure_ascii=False))
 
 if __name__ == "__main__":

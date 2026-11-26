@@ -21,3 +21,4 @@ eval/dictation/.assets/
 eval/dictation/results/
 eval/promptdump/.build/
 eval/promptdump/promptdump
+__pycache__/

@@ -120,13 +120,22 @@ def main() -> None:
     spec = {c["id"]: c for c in json.loads((HERE / "cases.json").read_text())["cases"]}
     run = json.loads(Path(args.result).read_text())
     results = run["results"]
-    have = {(r["id"], r["round"]) for r in results}
-    rounds = {r["round"] for r in results}
-    missing = [f"{c}/r{n}" for c in spec for n in sorted(rounds) if (c, n) not in have]
+    # A file that doesn't match the current cases one-to-one is refused,
+    # never scored on a subset.
+    if not run.get("complete", True):
+        raise SystemExit(f"{args.result}: incomplete run, {len(run['failed'])} calls failed; rerun run.py with this label")
+    if not results:
+        raise SystemExit(f"{args.result}: no results")
+    keys = [(r["id"], r["round"]) for r in results]
+    unknown = sorted({i for i, _ in keys if i not in spec})
+    if unknown:
+        raise SystemExit(f"{args.result}: cases no longer in cases.json: {', '.join(unknown)}; rerun run.py")
+    if len(set(keys)) != len(keys):
+        raise SystemExit(f"{args.result}: duplicate case/round rows")
+    rounds = {n for _, n in keys}
+    missing = [f"{c}/r{n}" for c in spec for n in sorted(rounds) if (c, n) not in set(keys)]
     if missing:
         raise SystemExit(f"{args.result}: no result for {len(missing)} current cases ({', '.join(missing[:5])}…); rerun run.py with this label")
-    if not run.get("complete", True):
-        raise SystemExit(f"{args.result}: incomplete run, {len(run['failed'])} calls failed; rerun before scoring")
 
     if args.packet:
         for r in results:
@@ -179,6 +188,9 @@ def main() -> None:
             hard[key] = min(hard.get(key, 100), 50)
 
     judged = json.loads(Path(args.judge).read_text()) if args.judge else {}
+    bad = [k for k, v in judged.items() if not isinstance(v, int) or not 0 <= v <= 100]
+    if bad:
+        raise SystemExit(f"{args.judge}: scores must be integers 0-100: {', '.join(bad[:5])}")
     items = {"D1": d1, "D2": d2, "D5": d5}
     unjudged = []
     for item in ("D3", "D4"):
@@ -202,7 +214,7 @@ def main() -> None:
                      and hard.get(f"{r['id']}/r{r['round']}") != 0]
 
     thoughts = [r["usage"].get("thoughtsTokenCount", 0) for r in results]
-    report = {"label": run["label"], "prompt_chars": run["prompt_chars"], "calls": len(results),
+    report = {"label": run["label"], "model": run.get("model"), "screenshots": run.get("screenshots"), "prompt_chars": run["prompt_chars"], "calls": len(results),
               "scores": {k: (round(v, 1) if v is not None else None) for k, v in items.items()},
               "names": f"{hit}/{total}", "control_flips": flips, "mean_wer": round(statistics.mean(wers), 3),
               "e2e_p50": round(p50, 2), "e2e_p90": round(p90, 2), "e2e_max": round(max(e2e), 2),

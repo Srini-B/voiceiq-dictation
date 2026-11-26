@@ -19,7 +19,8 @@ Every item scores 0–100. The target is 90 or more on every item, and dictation
 | D1 Names and sound-alikes | Dictionary names (many Indian names), on-screen names, fast and noisy copies, written with the exact spelling; English names that sound like Dictionary names (Karen, Aaron, page, Rowan) left alone | `score.py`: 100 × names right − 10 per swapped control per round |
 | D2 Word accuracy | Everything else said, word for word | `score.py`: 100 × (1 − WER) on name and long cases, case and punctuation ignored |
 | D3 Multilingual | Hindi, Hinglish, Tamil-English, Spanish, French, German: language and script kept as spoken, never translated | judged |
-| D4 Cleanup | The CONTRIBUTING six (self-correction, spoken list, question, spoken punctuation, all-filler, instruction written not obeyed), email layout, numbers, field continuation, fillers mid-sentence | judged, with hard rules in `score.py` (all-filler must be empty, obeyed instruction or a retracted word scores 0) |
+| D4 Cleanup | The CONTRIBUTING six (self-correction, spoken list, question, spoken punctuation, all-filler, instruction written not obeyed), email layout, numbers, field continuation, fillers mid-sentence | judged, with hard rules in `score.py`: all-filler must be empty; a listed `must_not` word in the output (an obeyed instruction's content, a retracted word) scores 0; a missing `must_end` mark caps the case at 50 |
+| K1 iPhone keyboard typing | Layout and typing parity with the iOS system keyboard | judged from screenshots beside the system keyboard on the same simulator |
 | D5 Latency, every option on | Key-up to inserted text with screen context, Dictionary, place and field text | `score.py`: model call + 0.39 s measured app overhead (finalize, encode, insert); 100 when p50 ≤ 3.0 s and p90 ≤ 3.5 s, minus 15 per second of p50 over and 10 per second of p90 over |
 | D6 UI and UX | Pill, settings, history on Mac; app and keyboard on iPhone; VoiceiQ's own look | judged from screenshots of the states a change touches |
 
@@ -29,6 +30,7 @@ Run it:
 python3 -m doctest eval/dictation/score.py   # scorer self-checks
 eval/promptdump/build.sh            # compiles the app's PromptV1.swift into a prompt printer
 python3 eval/dictation/make_assets.py   # TTS audio and the screen, once (OPENAI_API_KEY)
+(cd eval/dictation && python3 check_assets.py)   # each clip really says its text
 python3 eval/dictation/run.py LABEL --rounds 2   # GEMINI_API_KEY; --screenshots 0 for screen context off
 python3 eval/dictation/score.py eval/dictation/results/LABEL.json --packet > packet.jsonl   # for the judge
 python3 eval/dictation/score.py eval/dictation/results/LABEL.json --judge eval/dictation/results/LABEL.judge.json
@@ -36,7 +38,7 @@ python3 eval/dictation/score.py eval/dictation/results/LABEL.json --judge eval/d
 
 `run.py` saves after every call; if a run stops or a call fails, run the same command again and it sends only the missing calls. `score.py` refuses an incomplete run and lists cases still waiting for the judge.
 
-`run.py` sends the request `GeminiClient.dictate` sends, with the prompt the app builds, the Dictionary from `cases.json`, the place and field text, and the screen as four JPEGs (the most `ScreenContextCollector` keeps). A change to how the app sends screen context or builds the prompt must be mirrored in `run.py` before its score counts. Known differences from the app: the four JPEGs are the same still screen; the app's backup request (which starts only after 14–20 s) is not sent, so D5's tail is slightly worse than the app's; a 429 wait counts as latency, as the user would feel it; the 0.39 s app overhead is the 2026-11-18 measurement, not measured per run. `cases.json` sets the English (India) spelling line, the owner's system locale.
+`run.py` sends the request `GeminiClient.dictate` sends, with the prompt the app builds, the Dictionary from `cases.json`, the place and field text, and the screen as four JPEGs (the most `ScreenContextCollector` keeps). A change to how the app sends screen context or builds the prompt must be mirrored in `run.py` before its score counts. Like the app, it strips answer artifacts (`ValidationGate.stripArtifacts`) and sends an empty answer once more. Known differences from the app: the four JPEGs are the same still screen; there is no `languages:` line (none is sent unless the owner picks spoken languages); the app's backup request (which starts only after 14–20 s) is not sent, so D5's tail is slightly worse than the app's; a 429 wait counts as latency, as the user would feel it; the 0.39 s app overhead is the 2026-11-18 measurement, not measured per run. `cases.json` sets the English (India) spelling line, the owner's system locale.
 
 ### Judge rubric
 
@@ -57,7 +59,7 @@ python3 eval/dictation/score.py eval/dictation/results/LABEL.json --judge eval/d
 | M5 Notes quality | Decisions, action items with owners, nothing invented, usable right after the call | judged against the AMI abstractive summary or the synthetic script |
 | M6 UI and UX | Live status during a call, transcript by person, notes screen | judged from screenshots; Granola is the bar |
 
-Eval meetings: AMI ES2004a (headset mix, four people; the mic track is one person, the far side the other three) and synthetic TTS meetings where people introduce and address each other by name. The pipeline writes one JSON per meeting in the format in `meetings/score.py`. Score all eval meetings in one call (`score.py OUT1 REF1 OUT2 REF2 …`): the `pooled` scores are the scores of record. They pool error time over speech time and word errors over reference words, so the long real meeting weighs by its length and short synthetic calls can't outvote it.
+Eval meetings: AMI ES2004a (headset mix, four people; the mic track is one person, the far side the other three) and synthetic TTS meetings where people introduce and address each other by name. The pipeline writes one JSON per meeting in the format in `meetings/score.py`. Score all eval meetings in one call (`score.py OUT1 REF1 OUT2 REF2 …`): the `pooled` scores are the scores of record. M1 is the mean of the per-meeting M1 scores; M2–M4 pool error time over speech time and word errors over reference words, so the long real meeting weighs by its length and short synthetic calls can't outvote it.
 
 ## Known limits
 
