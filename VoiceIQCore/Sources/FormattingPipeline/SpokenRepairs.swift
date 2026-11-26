@@ -190,7 +190,12 @@ enum SpokenRepairs {
     /// its subject ("can you send it") or a question word before one ("when
     /// is the call"). "When I get home, call me" stays.
     static func askingQuestions(_ text: String) -> String {
-        text.split(separator: "\n", omittingEmptySubsequences: false).map { line -> String in
+        // A line inside a quotation is literal: The password is "red\ncan you help\nblue".
+        let quoted = TidyText.quoteMask(Array(text))
+        var offset = 0
+        return text.split(separator: "\n", omittingEmptySubsequences: false).map { line -> String in
+            defer { offset += line.count + 1 }
+            if offset > 0, quoted[offset - 1] { return String(line) }
             let line = String(line)
             let trimmed = line.trimmingCharacters(in: .whitespaces)
             guard let last = trimmed.last, last.isLetter || last.isNumber,

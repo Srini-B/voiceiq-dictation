@@ -2254,6 +2254,13 @@
       "said": "the password is quote red space new line space blue unquote",
       "heard": "The password is \"red \n blue\".",
       "written": "The password is \"red \n blue\"."
+    },
+    {
+      "id": "kept-quoted-question-across-lines",
+      "check": "kept as said",
+      "said": "the password is quote red new line can you help new line blue unquote",
+      "heard": "The password is \"red\ncan you help\nblue\".",
+      "written": "The password is \"red\ncan you help\nblue\"."
     }
   ]
 }
