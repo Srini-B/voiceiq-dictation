@@ -160,6 +160,9 @@ final class EditDiffTests: XCTestCase {
         let learned = EditDiff.edits(original: wispr, replacement: "Ask Wispr and me.")
         let plural = EditDiff.edits(original: wispr, replacement: "Ask Wisprs me.")
         XCTAssertEqual(EditDiff.steps(for: plural, after: learned.corrections), [])
+        let shortWord = EditDiff.edits(original: "Ask whisper to me.", replacement: "Ask Wisprs me.")
+        let shortLearned = EditDiff.edits(original: "Ask whisper to me.", replacement: "Ask Wispr to me.")
+        XCTAssertEqual(EditDiff.steps(for: shortWord, after: shortLearned.corrections), [])
     }
 
     // EditDiff reports a second spelling of the same heard word as a new edit;

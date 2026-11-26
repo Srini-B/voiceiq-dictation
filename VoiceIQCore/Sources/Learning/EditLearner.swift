@@ -126,6 +126,9 @@ public final class EditLearner {
             tracked.insertions.removeFirst(tracked.insertions.count - 20)
         }
         tracked.lastInsertionAt = now
+        // A poll that read the field before this insertion is no longer the
+        // newest, so it cannot drop the field or move its pending value.
+        tracked.nextTicket += 1
         tracked.lastValueHash = nil
         tracked.pendingHash = nil
         tracked.pendingSince = nil

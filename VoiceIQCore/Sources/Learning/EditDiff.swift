@@ -253,7 +253,7 @@ public enum EditDiff {
             let rest = String(atStart ? merged.dropFirst(learned) : merged.dropLast(learned))
             let addedCount = wider.count - inner.count
             let addedOriginal = (atStart ? original.suffix(addedCount) : original.prefix(addedCount)).joined(separator: " ")
-            guard !rest.isEmpty, isPlausibleFix(addedOriginal, rest) else { return nil }
+            guard rest.count >= 2, isPlausibleFix(addedOriginal, rest) else { return nil }
             return correction
         }
         let kept = (atStart ? replacement.prefix(taught.count) : replacement.suffix(taught.count)).joined(separator: " ")
