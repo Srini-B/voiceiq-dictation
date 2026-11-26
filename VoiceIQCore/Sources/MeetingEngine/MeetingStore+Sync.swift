@@ -144,7 +144,7 @@ extension MeetingStore {
         guard let folder = folder(for: id),
               let meta = try? load(MeetingMeta.self, from: folder.appendingPathComponent("meta.json")),
               meta.status == .done else { return nil }
-        let notes = try? loadNotes(id: id), transcript = try? loadTranscript(id: id)
+        let notes = try? loadNotes(id: id), transcript = try? loadStoredTranscript(id: id)
         let exists = { FileManager.default.fileExists(atPath: folder.appendingPathComponent($0).path) }
         let folderIDs = try? load([UUID].self, from: folder.appendingPathComponent(Self.folderIDsFile))
         if notes == nil && exists("notes.json") || transcript == nil && exists("transcript.json")

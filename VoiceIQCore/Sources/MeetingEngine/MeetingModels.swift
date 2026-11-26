@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 
 public enum CallSource: Equatable, Sendable, Codable {
@@ -21,15 +22,43 @@ public struct MeetingID: Hashable, Codable, Sendable, Identifiable {
 /// One speaker turn. `speaker` is a meeting-wide id: "you" for the note
 /// owner, "s1", "s2", … for everyone else. Recordings made before 2026-09-27
 /// carry the API's chunk-local labels ("spk:0") and no times.
-public struct TranscriptSegment: Codable, Equatable, Sendable {
+public struct TranscriptSegment: Codable, Equatable, Sendable, Identifiable {
     public var speaker: String
     public var text: String
     public var chunkIndex: Int
     /// Seconds from the start of the recording.
     public var start: Double?
     public var end: Double?
+    /// Written only once the turn is edited, or when it repeats an earlier
+    /// turn word for word, so transcripts saved before ids existed (and the
+    /// digests sync compares) stay as they were.
+    var savedID: String?
     public init(speaker: String, text: String, chunkIndex: Int, start: Double? = nil, end: Double? = nil) {
         self.speaker = speaker; self.text = text; self.chunkIndex = chunkIndex; self.start = start; self.end = end
+    }
+
+    /// Names the turn for editing and deleting (`MeetingStore.editTranscriptSegment`):
+    /// stays the same when other turns are edited or deleted, and when its own words are.
+    public var id: String { savedID ?? contentID }
+
+    var contentID: String {
+        let key = [speaker, text, String(chunkIndex), start.map { "\($0)" } ?? "", end.map { "\($0)" } ?? ""]
+        return SHA256.hash(data: Data(key.joined(separator: "\u{1F}").utf8)).prefix(8)
+            .map { String(format: "%02x", $0) }.joined()
+    }
+
+    /// Gives each exact repeat of an earlier turn (a second "Yeah." with no
+    /// times) an id of its own.
+    static func distinctIDs(_ transcript: [TranscriptSegment]) -> [TranscriptSegment] {
+        var seen = Set<String>()
+        return transcript.map { segment in
+            var segment = segment, copy = 1
+            while !seen.insert(segment.id).inserted {
+                copy += 1
+                segment.savedID = "\(segment.contentID)-\(copy)"
+            }
+            return segment
+        }
     }
 }
 

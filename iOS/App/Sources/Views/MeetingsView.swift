@@ -217,6 +217,8 @@ private struct MeetingDetail: View {
     @State private var exports: [(label: String, url: URL)] = []
     /// The speaker whose name is being chosen.
     @State private var naming: String?
+    /// The transcript line in the edit sheet.
+    @State private var editing: TranscriptSegment?
     /// What the note is doing in the background; nil when idle.
     @State private var step: MeetingStatus?
     @ObservedObject var folders: MeetingFolderModel
@@ -299,6 +301,12 @@ private struct MeetingDetail: View {
         .sheet(isPresented: Binding(get: { naming != nil }, set: { if !$0 { naming = nil } })) {
             if let speaker = naming { speakerNames(speaker) }
         }
+        .sheet(item: $editing) { segment in
+            TranscriptLineEditor(segment: segment, speaker: meta.displayName(segment.speaker, notes: notes)) { text in
+                try? model.meetings.store.editTranscriptSegment(segment.id, text: text, meeting: meta.id)
+                load()
+            }
+        }
         .onAppear(perform: load)
         .onReceive(model.meetings.$processing) { busy in
             step = busy[meta.id]
@@ -373,7 +381,7 @@ private struct MeetingDetail: View {
             GroupLabel(text: "Transcript")
             Card {
                 VStack(alignment: .leading, spacing: Theme.Spacing.l) {
-                    ForEach(Array(transcript.enumerated()), id: \.offset) { _, segment in
+                    ForEach(transcript) { segment in
                         VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
                             HStack(spacing: Theme.Spacing.s) {
                                 speakerMenu(segment.speaker)
@@ -383,6 +391,16 @@ private struct MeetingDetail: View {
                                 }
                             }
                             Text(segment.text).font(Theme.Fonts.body()).foregroundStyle(Theme.Colors.ink)
+                        }
+                        .contextMenu {
+                            // A redo running now would write over the change.
+                            if !model.meetings.isBusy(meta.id) && !gone {
+                                Button("Edit", systemImage: "pencil") { editing = segment }
+                                Button("Delete", systemImage: "trash", role: .destructive) {
+                                    try? model.meetings.store.deleteTranscriptSegment(segment.id, meeting: meta.id)
+                                    load()
+                                }
+                            }
                         }
                     }
                 }

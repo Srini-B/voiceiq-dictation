@@ -406,6 +406,37 @@ docs/design/meeting-prompt-rulebook.md. Fixes from 2026-10-29:
   or on iPhone (no swipe to delete), so its Gemini calls never run on with
   nowhere to save.
 
+## Editing the transcript
+
+A finished meeting's transcript can be corrected one line (one speaker's
+turn) at a time. On the Mac, right-click a line in the transcript column:
+**Edit** opens a field above the transcript with the line's words (Return
+or Save keeps them, Escape or Cancel leaves them), and **Delete…** asks
+first, as deleting a meeting does. On iPhone, touch and hold a line in the
+note's Transcript card: **Edit** opens a sheet with the words, and
+**Delete** removes the line at once, as a swipe deletes a note. Neither is
+offered while the meeting is recording, transcribing or writing notes,
+since a redo then would write over the change.
+
+- The speaker and times of the line stay as they were, and every other
+  line is untouched. `MeetingStore.editTranscriptSegment(_:text:meeting:)`
+  and `deleteTranscriptSegment(_:meeting:)` name the line by
+  `TranscriptSegment.id`, which stays the same when other lines are edited
+  or deleted and when the line's own words change. Until a line is edited
+  its id is a hash of its content, so no id is written for it and
+  transcripts saved before editing existed are unchanged on disk and in
+  sync. An edited line, or an exact repeat of an earlier line (a second
+  "Yeah." with no times), keeps its id in `transcript.json` (`savedID`).
+- The notes are not written again. **Redo notes** (Mac: the `…` menu;
+  iPhone: Redo → Notes) writes them from the edited transcript.
+- Everything that reads the transcript reads the edited words: the
+  transcript views and their search, Export, questions about the meeting,
+  Redo notes, and agent access (`AgentLibrary`'s meeting and search).
+- An edit is a meeting change like a renamed speaker: it goes up to iCloud
+  and the other device takes it
+  ([Sync through iCloud](#sync-through-icloud)). **Redo transcript and
+  notes** hears the meeting again and replaces the edited transcript.
+
 ## Redo and progress
 
 - **Redo notes** writes the notes again from the saved transcript.
@@ -470,7 +501,7 @@ mirrored or AirPlay display, still shows the pill.
 | --- | --- |
 | `MeetingsView.swift` | Record button (with Mute my mic and Discard under it while recording) and folder menu above the list, each row's folders, the folder line under the title ([Folders](#folders)), the detail header (title, progress while transcribing or making notes, Update notes after a speaker is renamed, Play and Download audio (`RecordingAudioButtons.swift`), Export menu, `…` menu with Redo notes / Redo transcript and notes / Retry / Delete, transcript toggle), the export message |
 | `MeetingNotesColumn.swift` | Title, Summary, the meeting type's sections, Decisions, Action items as open circles ("Owner: task"), Notes, then the meeting's questions and answers (`MeetingChatView.swift`, which also has the question box `MeetingsView.swift` puts under both columns) |
-| `MeetingTranscriptColumn.swift` | The transcript in one `NSTextView`: speaker names in their own colour (`SpeakerPalette`), time on a right tab stop, search that filters and highlights |
+| `MeetingTranscriptColumn.swift` | The transcript in one `NSTextView`: speaker names in their own colour (`SpeakerPalette`), time on a right tab stop, search that filters and highlights, Edit and Delete… on each line's right-click menu and the edit field above the transcript ([Editing the transcript](#editing-the-transcript)) |
 | `AssignSpeakersView.swift` | One card per speaker: name, a sample line, shuffle (next line), play (that line's audio) |
 
 In Assign speakers, clicking a name lists `knownNames`, a field for another
@@ -583,7 +614,8 @@ CloudKit database, through `CKSyncEngine`.
   fails partway waits there too: it is not sent as a local edit, and the
   copy fetched again replaces it whole.
 - **When.** A meeting goes up once its status is `done`, and again whenever
-  it changes: renamed speakers, redone notes, a new question.
+  it changes: renamed speakers, redone notes, an edited or deleted
+  transcript line, a new question.
   `MeetingStore` posts `.gtMeetingsDidChange` for every write and delete;
   `MeetingSync` compares the meeting's content digest with the one in its
   `cloud.json` (`MeetingCloudState`: digest, the record's system fields,

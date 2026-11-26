@@ -220,8 +220,16 @@ struct MeetingsPane: View {
                                                rename: { speaker, name in rename(meeting, speaker, name) },
                                                back: { assigning = false })
                         } else {
-                            MeetingTranscriptColumn(meeting: meeting, notes: notes, transcript: transcript,
-                                                    width: width) { assigning = true }
+                            let editable = !engine.isBusy(meeting.id)
+                            MeetingTranscriptColumn(meeting: meeting, notes: notes, transcript: transcript, width: width,
+                                                    edit: editable ? { segment, text in
+                                                        try? store.editTranscriptSegment(segment, text: text, meeting: meeting.id)
+                                                        loadSelection()
+                                                    } : nil,
+                                                    delete: editable ? { segment in
+                                                        try? store.deleteTranscriptSegment(segment, meeting: meeting.id)
+                                                        loadSelection()
+                                                    } : nil) { assigning = true }
                         }
                     }
                     .frame(width: width)

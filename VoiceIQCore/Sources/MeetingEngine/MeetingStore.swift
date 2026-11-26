@@ -31,7 +31,9 @@ public final class MeetingStore: @unchecked Sendable {
         return urls.compactMap { try? load(MeetingMeta.self, from: $0.appendingPathComponent("meta.json")) }
             .sorted { $0.startedAt > $1.startedAt }
     }
-    public func loadTranscript(id: MeetingID) throws -> [TranscriptSegment] { try load([TranscriptSegment].self, from: requiredFolder(id).appendingPathComponent("transcript.json")) }
+    public func loadTranscript(id: MeetingID) throws -> [TranscriptSegment] { TranscriptSegment.distinctIDs(try loadStoredTranscript(id: id)) }
+    /// As on disk, for sync: `loadTranscript`'s ids for repeated turns are not saved until an edit.
+    func loadStoredTranscript(id: MeetingID) throws -> [TranscriptSegment] { try load([TranscriptSegment].self, from: requiredFolder(id).appendingPathComponent("transcript.json")) }
     public func loadNotes(id: MeetingID) throws -> MeetingNotes { try load(MeetingNotes.self, from: requiredFolder(id).appendingPathComponent("notes.json")) }
     public func save(meta: MeetingMeta) throws { try save(meta, id: meta.id, name: "meta.json") }
     public func save(transcript: [TranscriptSegment], id: MeetingID) throws { try save(transcript, id: id, name: "transcript.json") }
@@ -68,6 +70,23 @@ public final class MeetingStore: @unchecked Sendable {
         var meta = try load(MeetingMeta.self, from: requiredFolder(id).appendingPathComponent("meta.json"))
         meta.speakerNames[label] = name.trimmingCharacters(in: .whitespacesAndNewlines)
         try save(meta: meta)
+    }
+    /// New words for one turn; its speaker, times and id stay, and so does
+    /// every other turn. The notes are not written again. Nothing happens
+    /// when the turn is gone, as after a sync replaced the transcript.
+    public func editTranscriptSegment(_ segmentID: TranscriptSegment.ID, text: String, meeting id: MeetingID) throws {
+        var transcript = try loadTranscript(id: id)
+        guard let index = transcript.firstIndex(where: { $0.id == segmentID }) else { return }
+        transcript[index].savedID = segmentID
+        transcript[index].text = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        try save(transcript: transcript, id: id)
+    }
+    /// Removes one turn and leaves every other one as it was.
+    public func deleteTranscriptSegment(_ segmentID: TranscriptSegment.ID, meeting id: MeetingID) throws {
+        var transcript = try loadTranscript(id: id)
+        guard let index = transcript.firstIndex(where: { $0.id == segmentID }) else { return }
+        transcript.remove(at: index)
+        try save(transcript: transcript, id: id)
     }
     /// Name-like text read off the screen while recording; see `ScreenNameSampler`.
     public func save(screenSamples: [ScreenNameSample], id: MeetingID) throws { try save(screenSamples, id: id, name: "screen-names.json") }
