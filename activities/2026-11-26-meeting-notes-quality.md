@@ -72,3 +72,21 @@ Points were lost because:
 ## Rollback
 
 Revert the commit. Nothing is stored differently.
+
+## Review fixes (Gemini 4 Neon on main ddcefe1..884208e)
+
+- **Finding 3 (release blocker).** After the elimination rewrite,
+  `MeetingEngine.writeNotes` returned only the second notes. It dropped the
+  elimination result, and `finish` eliminated again from those notes. If they
+  left out a self-introduced speaker, the transcript kept "Speaker N" while the
+  notes gave actions to the eliminated name. `writeNotes` now stores the name
+  in `meta.screenNames`, and `finish` finds nothing left to eliminate. Names
+  the first notes found and the rewrite left out are carried over.
+- **Finding 11.** A far-side voice is folded only below 1% of the meeting and
+  below 15 s, so 30 s in an hour-long call stays a participant.
+- **Finding 13, partly.** `prepare.py` skips AMI words without times instead
+  of crashing.
+- Not changed: finding 9a (the silent download is a recorded decision, above
+  and in the hybrid entry); `missingActions` stays English-only, and when it
+  misses a commitment the notes are kept as written; the eval's app id and
+  duration source.

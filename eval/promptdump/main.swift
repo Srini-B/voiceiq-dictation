@@ -4,7 +4,7 @@ import VoiceIQBridge
 // Prints the dictation prompt the app builds, from the real PromptV1.swift,
 // for one eval case read as JSON on stdin:
 // {"vocabulary": [...], "spellings": [["wrong","right"]], "customRules": "...", "spelling": "...",
-//  "imagesAttached": true, "app": "...", "window": "...", "page": "...",
+//  "screenText": ["..."], "app": "...", "window": "...", "page": "...",
 //  "before": "...", "after": "...", "transcript": "..."}
 
 struct Spec: Decodable {
@@ -12,7 +12,7 @@ struct Spec: Decodable {
     var spellings: [[String]]?
     var customRules: String?
     var spelling: String?
-    var imagesAttached: Bool?
+    var screenText: [String]?
     var app: String?
     var window: String?
     var page: String?
@@ -30,7 +30,7 @@ let prompt = PromptV1.dictationPrompt(
     spellings: (spec.spellings ?? []).compactMap { $0.count == 2 ? (wrong: $0[0], right: $0[1]) : nil },
     customRules: spec.customRules,
     spelling: spec.spelling,
-    imagesAttached: spec.imagesAttached ?? false,
+    screenText: spec.screenText ?? [],
     surroundingText: surrounding,
     place: place,
     transcript: spec.transcript

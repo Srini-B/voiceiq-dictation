@@ -25,6 +25,12 @@ final class CellularDownloadConsentTests: XCTestCase {
         XCTAssertEqual(consent.tap("fluid-speech-pro", on: .cellular), .ask)
     }
 
+    /// Before the network monitor's first update, a tap asks rather than refusing as offline.
+    func testAnUnknownNetworkAsks() {
+        var consent = CellularDownloadConsent()
+        XCTAssertEqual(consent.tap("fluid-speech-pro", on: .unknown), .ask)
+    }
+
     func testANewDownloadAsksAgain() {
         var consent = CellularDownloadConsent()
         _ = consent.tap("fluid-speech-pro", on: .wifi)

@@ -30,8 +30,7 @@ public enum ParakeetHelperServer {
     }
 
     private static func tooLarge(_ reply: ParakeetReply) -> ParakeetReply {
-        if case .written = reply { return .writeFailed("The answer is larger than the helper's 8 MB reply limit.") }
-        return .meetingFailed("The meeting's transcript is larger than the helper's 8 MB reply limit.")
+        .meetingFailed("The meeting's transcript is larger than the helper's 8 MB reply limit.")
     }
 }
 
@@ -72,14 +71,6 @@ private actor HelperLifetime {
                 return .meeting(result)
             } catch {
                 return .meetingFailed(error.localizedDescription)
-            }
-        case .write(let request):
-            await session?.stop()
-            session = nil
-            do {
-                return .written(try LocalWriterJob.run(request, isCancelled: { false }))
-            } catch {
-                return .writeFailed(error.localizedDescription)
             }
         }
     }

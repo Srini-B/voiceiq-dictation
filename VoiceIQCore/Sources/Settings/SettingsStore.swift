@@ -106,25 +106,6 @@ public struct SettingsStore: Sendable {
         "didMigrateSmartFormattingKeys", "didEnableWritingRules", "didRestoreAutoDegradedWritingRules",
     ]
 
-    /// The languages the user speaks, as ISO 639-3 codes from
-    /// `SpokenLanguage.all`: the first is the main language and the rest are
-    /// the others it may hear. Empty detects the language. A Gemini dictation
-    /// gets them as a hint (`SpokenLanguage.promptLine`); on-device dictation
-    /// uses `localSpeechLanguage` instead.
-    /// Codes typed into the earlier free-text field read as their
-    /// three-letter form ("hi" as "hin"); ones not listed are dropped.
-    public var spokenLanguages: [String] {
-        (Self.defaults.stringArray(forKey: "spokenLanguages") ?? []).map { code in
-            code.count == 2 ? Locale.LanguageCode(code).identifier(.alpha3) ?? code : code
-        }.filter(SpokenLanguage.isListed)
-    }
-
-    /// Main language first; each code once. Empty is automatic detection.
-    public func setSpokenLanguages(_ codes: [String]) {
-        var seen = Set<String>()
-        Self.set(codes.filter { seen.insert($0).inserted }, forKey: "spokenLanguages")
-    }
-
     /// Show the resting dot at the bottom of the screen when idle. Off = the pill
     /// only appears while dictating. Off by default since 2026-11-12, the
     /// owner's choice; it was on before. A user who set the toggle keeps it.
@@ -251,9 +232,9 @@ public struct SettingsStore: Sendable {
         Self.set(enabled, forKey: "copyRecoveredToClipboard")
     }
 
-    /// Off by default since 2026-10-13: three screenshots add about 1.3 s to
-    /// every cleanup (measured 2.4 s → 3.7 s). The app and window names go
-    /// with the transcript instead, at no cost.
+    /// Off by default since 2026-10-13, when it sent screenshots (about 1.3 s
+    /// more per dictation). It now sends the screen's text, read on device
+    /// while the user speaks.
     public var screenContextEnabled: Bool {
         Self.defaults.object(forKey: "screenContextEnabled") as? Bool ?? false
     }
@@ -283,7 +264,7 @@ public struct SettingsStore: Sendable {
         return .default
     }
 
-    /// Rules the user adds on top of `DefaultWritingRules`. Empty when there
+    /// Rules the user adds on top of the built-in `PromptV1.rules`. Empty when there
     /// are none.
     public var customWritingRules: String {
         Self.defaults.string(forKey: Self.customWritingRulesKey) ?? ""

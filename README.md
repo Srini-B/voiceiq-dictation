@@ -51,9 +51,10 @@ Google's Gemini API with *your* key. No middleman server, no account, no
 analytics, no keystroke logging — one network host, and you can read every
 line of the code that talks to it. Each dictation also sends the app, window
 and page you are in and the text around the cursor, so the dictation fits
-what is already in the field. Screen context (a few downscaled screenshots
-sent with each dictation so on-screen names and paths are spelled right) can
-be switched off in Settings → Dictation.
+what is already in the field. Screen context (the text in the window you dictate into, read
+on the Mac while you speak and sent with each dictation so on-screen names and
+paths are spelled right; no image is sent) can be switched off in
+Settings → Dictation.
 See [PRIVACY.md](docs/PRIVACY.md).
 
 **Your jargon, spelled right.** Names and product terms go in the Dictionary and
@@ -106,8 +107,8 @@ you through it:
 2. **Allow the microphone** — say hello and it advances by itself.
 3. **Allow Accessibility** — macOS requires this for any app that types into
    another app.
-4. **Allow Screen Recording** (optional) — lets a few downscaled screenshots
-   ride along with each dictation so on-screen names and paths are spelled right.
+4. **Allow Screen Recording** (optional) — lets VoiceiQ read the text on your
+   screen while you dictate so on-screen names and paths are spelled right.
 5. **Press the dictation key and talk.**
 
 **Cost:** you pay Google for what you dictate, at
@@ -123,10 +124,10 @@ typical dictation is a few seconds of audio. VoiceiQ itself is free and has no a
 | Meeting notes and meeting chat | `gemini-3.8-flash` |
 
 Every dictation is one call: the model hears the recording and writes the
-text, with any screenshots in the same request.
+text, with any screen text in the same request.
 Dictation and meetings can also be transcribed on device with Fluid Speech
-Pro or Mini by FluidVoice, and written by the writing rules (with meeting
-notes) on device with LFM3-Omni-2B by Liquid AI; see
+Pro or Mini by FluidVoice. Their transcripts are then written by Gemini, or,
+with writing Off, go in as transcribed; see
 [docs/ON_DEVICE.md](docs/ON_DEVICE.md).
 Settings → Advanced can pin other model names ("Dictation model" and
 "Meeting model").
@@ -136,7 +137,7 @@ Settings → Advanced can pin other model names ("Dictation model" and
 ```
 key ─▶ capture (CAF on disk from t=0) ─▶ key ─▶ FLAC ─▶ gemini-3.8-flash
                                                           (hears + writes, one call;
-                                                           screenshots, chunked past 10 min)
+                                                           screen text, chunked past 10 min)
                                                                 │
    cursor ◀─ insert (AX → paste → clipboard) ◀─ dictionary replacements
       │                                                         │
@@ -242,7 +243,7 @@ VoiceIQCore/        all engine logic, headless and testable
   HistoryStore/         GRDB index, recovery, retry queue, retention
   MeetingEngine/        call detection, mic + system audio taps, diarized notes
   AgentAccess/          local API and MCP server for coding agents (Mac)
-  ScreenContext/        screenshots on app switch for spelling context
+  ScreenContext/        on-device OCR of the screen on app switch, for spelling
   Learning/             dictionary auto-learn from your edits
   Usage/                token metering, price book, cost ledger
   Bridge/               VoiceIQBridge: keyboard ↔ app protocol, return-link table

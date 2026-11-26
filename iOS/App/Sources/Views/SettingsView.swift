@@ -129,18 +129,7 @@ struct DictationSettingsView: View {
     @State private var microphone = MobileSettings.microphoneChoice
     @State private var voiceIsolation = SettingsStore().voiceIsolation
     @State private var warmWindow = MobileSettings.warmWindow
-    @State private var languages = SettingsStore().spokenLanguages
-    @State private var dictationSource = SettingsStore().dictationSource
     @ObservedObject private var cellularDownloads = CellularModelDownloads.shared
-
-    private static func options(_ languages: [SpokenLanguage]) -> [SearchOption<String>] {
-        languages.map { SearchOption(value: $0.code, name: $0.name, keywords: $0.code) }
-    }
-
-    private func saveLanguages(_ codes: [String]) {
-        languages = codes
-        settings.setSpokenLanguages(codes)
-    }
 
     var body: some View {
         Form {
@@ -165,24 +154,6 @@ struct DictationSettingsView: View {
                 Text("Automatic uses a wired headset's mic, or the car's in CarPlay, and otherwise your \(UIDevice.current.localizedModel)'s, so AirPods keep playing in full quality. \(UIDevice.current.localizedModel) always uses its own mic. Bluetooth also uses AirPods and car kits, which switch to call-quality sound while you dictate. Voice isolation turns down background noise while you dictate; it can switch Bluetooth headphones to call-quality sound too.")
             }
             SpeechSourceSection(device: UIDevice.current.localizedModel) { SettingsSectionHeader($0) }
-            // On device, the selected model's own language picker applies.
-            if dictationSource == .gemini {
-                Section {
-                    SearchablePicker("Main language", selection: Binding(get: { languages.first ?? "" }, set: {
-                        saveLanguages(SpokenLanguage.choosing(main: $0, in: languages))
-                    }), options: [SearchOption(value: "", name: "Automatic")] + Self.options(SpokenLanguage.all))
-                    if let main = languages.first {
-                        SearchablePicker("Also spoken", summary: SpokenLanguage.names(languages.dropFirst(), none: "None"),
-                                         options: Self.options(SpokenLanguage.all.filter { $0.code != main }),
-                                         isSelected: { languages.dropFirst().contains($0) },
-                                         toggle: { saveLanguages(SpokenLanguage.toggling($0, in: languages)) })
-                    }
-                } header: {
-                    SettingsSectionHeader("Languages")
-                } footer: {
-                    Text("Dictation is told to expect these languages. Automatic works out the language each time, which can go wrong on a short phrase. Add every other language you speak, whole sentences or mixed in: each is written in its own script, never translated. Notes work out each language by themselves.")
-                }
-            }
             Section {
                 Toggle("Use calendar for notes", isOn: $calendar)
                     .onChange(of: calendar) { _, enabled in
@@ -228,8 +199,6 @@ struct DictationSettingsView: View {
         .onReceive(NotificationCenter.default.publisher(for: .gtSettingDidChange).receive(on: RunLoop.main)) { note in
             switch note.object as? String {
             case SettingsStore.customWritingRulesKey: customRules = settings.customWritingRules
-            case "spokenLanguages": languages = settings.spokenLanguages
-            case "transcriptionSource": dictationSource = settings.dictationSource
             default: break
             }
         }

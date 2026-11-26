@@ -16,17 +16,4 @@ public enum LocalSpeechInference {
     public static let transcribeMeeting: LocalMeetingRunner = { request in
         try await LocalMeetingJob.run(request)
     }
-
-    /// The on-device writer in this process (iOS). The Mac app runs it in a
-    /// helper it starts for each request.
-    public static let write: LocalWriteRunner = { request in
-        let cancelled = OSAllocatedUnfairLock(initialState: false)
-        return try await withTaskCancellationHandler {
-            try await Task.detached(priority: .userInitiated) {
-                try LocalWriterJob.run(request, isCancelled: { cancelled.withLock { $0 } })
-            }.value
-        } onCancel: {
-            cancelled.withLock { $0 = true }
-        }
-    }
 }

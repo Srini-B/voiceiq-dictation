@@ -39,7 +39,6 @@ struct DictationPane: View {
     @State private var pressReturnApps = SettingsStore().pressReturnApps
     @State private var preferredMicrophone = SettingsStore().preferredInputDeviceUID
     @State private var microphones = AudioInputDevices.list()
-    @State private var dictationSource = SettingsStore().dictationSource
 
     var body: some View {
         Form {
@@ -101,11 +100,6 @@ struct DictationPane: View {
 
             SpeechSourceSection(device: "Mac") { Text($0) }
 
-            // On device, the selected model's own language picker applies.
-            if dictationSource == .gemini {
-                SpokenLanguagesSection()
-            }
-
             Section {
                 Toggle("Sounds", isOn: $sounds)
                     .onChange(of: sounds) { _, enabled in settings.setSoundsEnabled(enabled) }
@@ -156,7 +150,7 @@ struct DictationPane: View {
                         Task { calendar = await CalendarMeetings.connect(enabled) }
                     }
             } footer: {
-                Text("Screen context sends a snapshot of what you're looking at, taken when dictation starts and when you switch apps, so names and paths on screen are spelled right; it adds about 0.2–0.9 s to a dictation. When a call app or a meeting tab is using the microphone, the pill asks before recording; the Meeting recording shortcut starts and stops a recording at any time. Notes appear under Meetings. While a meeting records, VoiceiQ reads the name tags in the call window on this Mac to name its speakers; no image is kept. With the calendar on, notes take the title of the event you're in and the spelling of its invitees' names, and your next meeting shows in Meetings and the menu-bar menu\(calendar || !CalendarMeetings.isDenied ? "" : "; calendar access is off in System Settings → Privacy & Security → Calendars").")
+                Text("Screen context reads the text in the window you're dictating into, on this Mac, when dictation starts and when you switch apps (never a password field or a password manager), and sends that text, not an image, so names and paths on screen are spelled right. It is read while you speak, so it adds almost nothing to a dictation. When a call app or a meeting tab is using the microphone, the pill asks before recording; the Meeting recording shortcut starts and stops a recording at any time. Notes appear under Meetings. While a meeting records, VoiceiQ reads the name tags in the call window on this Mac to name its speakers; no image is kept. With the calendar on, notes take the title of the event you're in and the spelling of its invitees' names, and your next meeting shows in Meetings and the menu-bar menu\(calendar || !CalendarMeetings.isDenied ? "" : "; calendar access is off in System Settings → Privacy & Security → Calendars").")
             }
         }
         .onAppear { microphones = AudioInputDevices.list() }
@@ -172,48 +166,8 @@ struct DictationPane: View {
             case "screenContextEnabled": screenContext = settings.screenContextEnabled
             case "copyRecoveredToClipboard": copyRecovered = settings.copyRecoveredToClipboard
             case "preferredInputDeviceUID": preferredMicrophone = settings.preferredInputDeviceUID
-            case "transcriptionSource": dictationSource = settings.dictationSource
             default: break
             }
         }
-    }
-}
-
-/// The languages the user speaks (`SettingsStore.spokenLanguages`), sent to
-/// Gemini as a hint while it transcribes dictation.
-struct SpokenLanguagesSection: View {
-    private let settings = SettingsStore()
-    @State private var languages = SettingsStore().spokenLanguages
-
-    private static func options(_ languages: [SpokenLanguage]) -> [SearchOption<String>] {
-        languages.map { SearchOption(value: $0.code, name: $0.name, keywords: $0.code) }
-    }
-
-    var body: some View {
-        Section {
-            SearchablePicker("Spoken language", selection: Binding(get: { languages.first ?? "" }, set: {
-                save(SpokenLanguage.choosing(main: $0, in: languages))
-            }), options: [SearchOption(value: "", name: "Automatic")] + Self.options(SpokenLanguage.all))
-            .help("The language you speak most when dictating. Automatic works it out each time, which can go wrong on a short phrase; pick a main language to add others.")
-            if let main = languages.first {
-                SearchablePicker("Also spoken", summary: SpokenLanguage.names(languages.dropFirst(), none: "None"),
-                                 options: Self.options(SpokenLanguage.all.filter { $0.code != main }),
-                                 isSelected: { languages.dropFirst().contains($0) },
-                                 toggle: { save(SpokenLanguage.toggling($0, in: languages)) })
-                .help("Other languages you speak, in whole sentences or mixed into the main language. Each is written in its own script, never translated.")
-            }
-        } header: {
-            Text("Languages")
-        } footer: {
-            Text("Dictation is told to expect these languages. Meetings work out each language and every switch between them by themselves.")
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .gtSettingDidChange).receive(on: RunLoop.main)) { _ in
-            languages = settings.spokenLanguages
-        }
-    }
-
-    private func save(_ codes: [String]) {
-        languages = codes
-        settings.setSpokenLanguages(codes)
     }
 }

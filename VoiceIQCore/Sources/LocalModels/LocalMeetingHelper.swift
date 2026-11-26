@@ -32,7 +32,7 @@ public enum LocalMeetingHelper {
         switch reply {
         case .meeting(let result): return result
         case .meetingFailed(let reason): throw Failure.helper(reason)
-        case .ready, .loadFailed, .accepted, .transcript, .written, .writeFailed: throw Failure.disconnected
+        case .ready, .loadFailed, .accepted, .transcript: throw Failure.disconnected
         }
     }
 
@@ -52,7 +52,7 @@ public enum LocalMeetingHelper {
         replies.fileHandleForWriting.closeFile()
         let input = commands.fileHandleForWriting, output = replies.fileHandleForReading
         let end: @Sendable () -> Void = {
-            // Core ML and llama.cpp work is not cooperatively cancellable; the kill is the stop.
+            // Core ML work is not cooperatively cancellable; the kill is the stop.
             if process.isRunning { kill(process.processIdentifier, SIGKILL) }
             process.waitUntilExit()
             try? input.close()
@@ -75,18 +75,6 @@ public enum LocalMeetingHelper {
             } onCancel: { end() }
         } catch {
             throw timedOut.withLock { $0 } ? Failure.timedOut : Failure.disconnected
-        }
-    }
-}
-
-/// The on-device writer through a helper started for each request: the
-/// model's memory is gone the moment the answer is back.
-public enum LocalWriterHelper {
-    public static let run: LocalWriteRunner = { request in
-        switch try await LocalMeetingHelper.oneShot(.write(request), timeout: TimeoutPolicy.localWrite(maxTokens: request.maxTokens, context: request.maxContext)) {
-        case .written(let result): return result
-        case .writeFailed(let reason): throw LocalMeetingHelper.Failure.helper(reason)
-        default: throw LocalMeetingHelper.Failure.disconnected
         }
     }
 }

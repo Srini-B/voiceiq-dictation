@@ -1,11 +1,12 @@
 #if os(iOS)
 import Foundation
 
-/// iOS cannot capture other apps' screens, so dictation carries no screenshots.
+/// iOS cannot capture other apps' screens, so dictation carries no screen text.
 /// Same shape as the macOS collector so the coordinator needs no branches.
 final class ScreenContextCollector {
+    init(vocabulary: [String] = []) {}
     func start() {}
-    func stop() -> [Data] { [] }
+    func stop() -> [String] { [] }
 }
 
 /// A keyboard extension is never offered secure text fields, so there is no

@@ -40,21 +40,18 @@ public actor GeminiClient {
     /// One dictation in one call: the model hears the recording (FLAC) and
     /// answers `{"text": ...}` under `prompt`, which carries the writing
     /// rules. Without audio, the prompt carries the text to write (joining the
-    /// chunks of a long dictation). Screenshots ride along when
-    /// screen context is on. Returns the text, or "" when the model heard no
-    /// speech. Structured output keeps the model's working out of the answer:
+    /// chunks of a long dictation). Returns the text, or "" when the model
+    /// heard no speech. Structured output keeps the model's working out of the answer:
     /// with audio attached, gemini-3.8-flash sometimes wrote its re-listening
     /// and drafts as plain text before the result (measured 2026-09-28).
     public func dictate(
         prompt: String,
         audio: Data?,
-        images: [Data] = [],
         model: String,
         endpoint: URL,
         deadline: TimeInterval
     ) async throws -> String {
         var parts: [[String: Any]] = [["text": prompt]]
-        parts += images.map { ["inline_data": ["mime_type": "image/jpeg", "data": $0.base64EncodedString()]] }
         if let audio {
             parts.append(["inline_data": ["mime_type": "audio/flac", "data": audio.base64EncodedString()]])
         }

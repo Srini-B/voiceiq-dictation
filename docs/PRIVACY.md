@@ -9,13 +9,9 @@ to any other model service. You can instead transcribe dictations and
 meetings on your Mac, iPhone or iPad (Settings → Dictation → Speech, see
 [ON_DEVICE.md](ON_DEVICE.md)). For what is transcribed on device, "Writing
 rules and notes" decides what Gemini gets. Set to Gemini, it gets the
-transcript text (with screen-context screenshots, if screen context is on),
-and the audio only if the on-device model is missing, busy or fails. Set to
-On device, it gets nothing while the on-device models work; if one is
-missing, busy or fails and a key is stored, Gemini gets the audio (or, when
-only the on-device writer failed, the transcript text) as it would with
-Gemini. Set to Off, nothing transcribed on device goes to Gemini for
-writing, but a recording the on-device models could not transcribe still goes
+transcript text (with the screen's text, if screen context is on),
+and the audio only if the on-device model is missing, busy or fails. Set
+to Off, nothing transcribed on device goes to Gemini for writing, but a recording the on-device models could not transcribe still goes
 to Gemini as audio when a key is stored. Finished text still syncs to your own iCloud like any dictation
 (see iCloud below). A row of
 Speech left on Gemini (say, Dictation while Meetings are on device) still
@@ -31,7 +27,7 @@ With no usable key, nothing is sent and the recording stays on your Mac.
    sent while you speak. The request holds the FLAC-compressed recording
    and the dictation prompt, and the model answers with the finished text.
    The prompt contains the built-in writing rules, your custom rules from
-   Settings → Dictation, the spoken languages you set, the regional spelling
+   Settings → Dictation, the regional spelling
    of your Mac (read from its region for each dictation), the frontmost
    app's name and the title of its focused window (a document name, a page
    title, a chat name), in Safari, Chrome, Edge, Brave, Vivaldi, Arc, Dia,
@@ -48,14 +44,17 @@ With no usable key, nothing is sent and the recording stays on your Mac.
    up to 10 "heard as" spellings (the misspelling and its correction) are
    sent.
 3. **Screen context**, while "Screen context" is on in Settings → Dictation — off
-   by default since 2026-10-13 (three images added about 1.3 s to every
-   dictation; the app and window names in item 1 replace them). VoiceiQ
-   captures the main display when dictation starts and when the frontmost
-   app changes during that dictation. It sends up to four reduced-size JPEG
-   images in the same dictation request. VoiceiQ keeps the images in memory
-   and never stores them on disk. macOS asks for Screen Recording permission
-   the first time this feature runs. If you deny access, dictation continues
-   without images. Turn off "Screen context" to stop capture.
+   by default since 2026-10-13. VoiceiQ captures the frontmost window (only
+   that window, never the rest of the display) when dictation starts and when
+   the frontmost app changes during that dictation, reads its text on the Mac
+   with Apple's Vision framework, and sends that text (up to 6,000 characters)
+   in the same dictation request. Nothing is captured while a password field
+   has secure input on or while a password manager (1Password, Passwords,
+   Bitwarden, LastPass, Dashlane, KeePassXC, Enpass, Keychain Access) or VoiceiQ itself is in front. No image leaves the Mac; the captures stay in memory
+   only until they are read and are never stored on disk. macOS asks for
+   Screen Recording permission the first time this feature runs. If you deny
+   access, dictation continues without screen text. Turn off "Screen context"
+   to stop capture.
 4. **Meeting audio**, only after you start a recording. With "Offer to record
    calls" on in Settings → Dictation (on by default), VoiceiQ watches which
    processes use your microphone (Core Audio's per-process list; nothing is
@@ -156,7 +155,7 @@ provider's terms. It is off by default; details in
   *fact that* another key was pressed (the accidental-chord guard; which key it
   was is never examined beyond its keycode, never logged, never stored, never
   transmitted). When you're not dictating, other keys pass through untouched.
-- Screen context images and meeting name snapshots are never stored on disk and
+- Screen context captures and meeting name snapshots are never stored on disk and
   are never attached to meeting requests.
 - Telemetry: there is none. No analytics SDK, no crash uploader, no phone-home
   beyond the update check in item 6.
@@ -222,8 +221,7 @@ the clipboard.
 - Watch traffic with Little Snitch or `nettop` — a dictation reaches
   `generativelanguage.googleapis.com` and no other model host.
 - Read the prompts: they are source files. The dictation prompt is
-  [PromptV1.swift](../VoiceIQCore/Sources/FormattingPipeline/PromptV1.swift) plus
-  the built-in writing rules in
-  [DefaultWritingRules.swift](../VoiceIQCore/Sources/FormattingPipeline/DefaultWritingRules.swift);
+  [PromptV1.swift](../VoiceIQCore/Sources/FormattingPipeline/PromptV1.swift), which holds
+  the built-in writing rules;
   meeting transcription and summarising are in
   [GeminiClient+Meetings.swift](../VoiceIQCore/Sources/TranscriptionClient/GeminiClient+Meetings.swift).

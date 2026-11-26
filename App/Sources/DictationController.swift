@@ -53,15 +53,14 @@ final class DictationController {
         FileLayout.removeStaleFiles()
         SettingsStore().removeRetiredSettingsOnce()
         let client = GeminiClient(apiKey: { KeychainStore.loadAPIKey() })
-        let service = GeminiTranscriptionService(client: client, localWriter: LocalWriterHelper.run)
+        let service = GeminiTranscriptionService(client: client)
         transcriptionService = service
         historyStore = try? HistoryStore.standard()
         UsageMeter.store = try? UsageStore.standard()
         meetings = MeetingEngine(
             client: client,
             config: { SettingsStore().geminiConfig },
-            localMeeting: LocalMeetingHelper.run,
-            localWriter: LocalWriterHelper.run
+            localMeeting: LocalMeetingHelper.run
         )
         coordinator = DictationCoordinator(
             audioFactory: { [warmEngines] in warmEngines.take() },
