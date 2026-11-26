@@ -98,6 +98,12 @@ from the accessibility tree.
 | App terminated while recording, reopened from the keyboard | Pass, text in Field A | `first return to an empty field, waited 3s`, after `recovered dictation waits for the keyboard` in the session log |
 | Both fields empty, the other one focused first | Typed into the other field: the limit of decision 4, run on purpose | `first return to an empty field, waited 7s` |
 
+A new dictation begun while the launch recovery still transcribed kept its
+own result: the recovery finished 4 seconds after the new dictation began,
+its text went to History only, and the keyboard typed the new result once.
+The Codex review of the pull request found that the recovered text would
+otherwise have replaced the newer result.
+
 Copy in the Live Activity put the text on the Simulator clipboard and the
 activity went back to "VoiceiQ ready".
 

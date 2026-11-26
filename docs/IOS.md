@@ -93,7 +93,9 @@ start quietly, since there is nothing to transcribe. Adapted from Hex
    app resumes the dictation. An ended app recovers the saved recording at
    launch and delivers the text to the field the dictation was for
    (`VoiceSession.orphan`, `AppModel.deliverRecovered`), when the app ended
-   less than an hour ago. The session log records each dictation's processing
+   less than an hour ago. When a new dictation began before the recovery
+   finished, the recovered text stays in History and does not replace the
+   new result. The session log records each dictation's processing
    time and whether the app was in the foreground ("processed in 94.2s
    (background)"), and when the app was opened during processing.
 

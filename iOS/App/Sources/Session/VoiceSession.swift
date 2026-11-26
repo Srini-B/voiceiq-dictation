@@ -24,6 +24,9 @@ final class VoiceSession: ObservableObject {
     /// What the dictation pipeline is doing. Set by the app model.
     @Published var dictationPhase: SessionSnapshot.Phase = .warm {
         didSet {
+            // A dictation begun in this process is newer than the one an
+            // earlier process left: that one's recovered text stays in History.
+            if dictationPhase.hasDictation { orphan = nil }
             publishIfChanged()
             if dictationPhase != oldValue { phaseChanged() }
         }
@@ -33,7 +36,8 @@ final class VoiceSession: ObservableObject {
     var dictationField: FieldIdentity? { didSet { publishIfChanged() } }
     /// A dictation an earlier process was recording or writing when iOS
     /// ended it, and when that process last ran. The launch recovery takes it
-    /// so the recovered text still reaches its field.
+    /// so the recovered text still reaches its field, unless a new dictation
+    /// began first.
     private(set) var orphan: (field: FieldIdentity, lastAlive: Date)?
     var meetingStartedAt: Date? {
         didSet {
