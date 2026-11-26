@@ -305,14 +305,10 @@ public final class EditLearner {
                 // dictation, or edited the word beside one.
                 correction = edit
                 heardAs = edit.original
-                // Matched by wording or by the spelling it taught: a rename
-                // from another dictation keeps the older wording.
-                let wordings = Set(replacing.map { $0.original.lowercased() })
+                // Matched by the spelling the earlier fix taught, not by its
+                // transcript wording, which other fixes of that word share.
                 let terms = Set(replacing.map { $0.replacement.lowercased() })
-                stale = known.filter {
-                    Self.isFresh($0)
-                        && (wordings.contains($0.learnedFrom?.lowercased() ?? "") || terms.contains($0.term.lowercased()))
-                }
+                stale = known.filter { Self.isFresh($0) && terms.contains($0.term.lowercased()) }
             }
             if let kept = stale.first {
                 // The entry follows the edit, and entries for the parts of a

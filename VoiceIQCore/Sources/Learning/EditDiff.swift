@@ -159,38 +159,44 @@ public enum EditDiff {
     /// like a name and are themselves a respelling, not a case change ("Wispr the" → "Wispr The") or other
     /// wording ("Wispr yesterday" → "Wispr today") next to a learned name.
     private static func accepted(_ edits: DictationEdits, after earlier: [LearnedCorrection]) -> [LearnedCorrection] {
-        edits.corrections.filter { correction in
+        edits.corrections.compactMap { correction in
             let overlapped = earlier.filter { $0.words.overlaps(correction.words) }
-            guard !overlapped.isEmpty, !overlapped.allSatisfy({ $0.words == correction.words }) else { return true }
-            guard overlapped.count == 1 else { return false }
+            guard !overlapped.isEmpty, !overlapped.allSatisfy({ $0.words == correction.words }) else { return correction }
+            guard overlapped.count == 1 else { return nil }
             let earlier = overlapped[0].words
             // Inside an earlier phrase: the user put back part of it.
             if earlier.lowerBound <= correction.words.lowerBound, correction.words.upperBound <= earlier.upperBound {
-                return true
+                return correction
             }
-            return extendsRespelled(overlapped[0], to: correction)
+            return grown(overlapped[0], to: correction)
         }
     }
 
-    private static func extendsRespelled(_ earlier: LearnedCorrection, to correction: LearnedCorrection) -> Bool {
+    /// `correction` when the words it adds to `earlier` are a respelled name;
+    /// otherwise only its change to the words `earlier` covers, so a re-edit of
+    /// a learned name still counts beside rewording that is ignored.
+    private static func grown(_ earlier: LearnedCorrection, to correction: LearnedCorrection) -> LearnedCorrection? {
         let wider = correction.words
         let inner = earlier.words
-        guard wider.lowerBound <= inner.lowerBound, inner.upperBound <= wider.upperBound else { return false }
+        guard wider.lowerBound <= inner.lowerBound, inner.upperBound <= wider.upperBound else { return nil }
         let atStart = inner.lowerBound == wider.lowerBound
-        guard atStart || inner.upperBound == wider.upperBound else { return false }
+        guard atStart || inner.upperBound == wider.upperBound else { return nil }
         let original = words(in: correction.original).map(\.text)
         let replacement = words(in: correction.replacement).map(\.text)
         let taught = words(in: earlier.replacement).map(\.text)
-        guard replacement.count > taught.count else { return false }
-        let kept = atStart ? replacement.prefix(taught.count) : replacement.suffix(taught.count)
-        guard isPlausibleFix(taught.joined(separator: " "), kept.joined(separator: " ")) else { return false }
+        guard replacement.count > taught.count else { return nil }
+        let kept = (atStart ? replacement.prefix(taught.count) : replacement.suffix(taught.count)).joined(separator: " ")
+        guard isPlausibleFix(earlier.replacement, kept) else { return nil }
         let addedCount = wider.count - inner.count
         let addedOriginal = (atStart ? original.suffix(addedCount) : original.prefix(addedCount)).joined(separator: " ")
         let addedWords = atStart ? replacement.dropFirst(taught.count) : replacement.dropLast(taught.count)
         let addedReplacement = addedWords.joined(separator: " ")
-        return addedWords.allSatisfy { $0.first?.isUppercase == true }
-            && addedOriginal.lowercased() != addedReplacement.lowercased()
-            && isPlausibleFix(addedOriginal, addedReplacement)
+        if addedWords.allSatisfy({ $0.first?.isUppercase == true }),
+           addedOriginal.lowercased() != addedReplacement.lowercased(),
+           isPlausibleFix(addedOriginal, addedReplacement) {
+            return correction
+        }
+        return LearnedCorrection(original: earlier.original, replacement: kept, words: inner)
     }
 
     /// Whether `replacement` could be the same words respelled rather than

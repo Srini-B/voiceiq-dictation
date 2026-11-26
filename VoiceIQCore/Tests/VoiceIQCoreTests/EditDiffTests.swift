@@ -65,6 +65,11 @@ final class EditDiffTests: XCTestCase {
         let undone = EditDiff.edits(original: original, replacement: "I asked whisper today about it.")
         XCTAssertEqual(EditDiff.steps(for: undone, after: history), [.forget(fix("whisper", "Wispr", 2..<3))])
 
+        let reEdited = EditDiff.edits(original: original, replacement: "I asked Wisper today about it.", earlier: history)
+        XCTAssertEqual(EditDiff.steps(for: reEdited, after: history), [
+            .revise(replacing: [fix("whisper", "Wispr", 2..<3)], with: fix("whisper", "Wisper", 2..<3)),
+        ])
+
         for (learned, edited) in [
             ("We use Wispr. the app is fine.", "We use Wispr. The app is fine."),
             ("We use Wispr slack daily.", "We use Wispr Slack daily."),
