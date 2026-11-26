@@ -28,7 +28,7 @@ final class EditDiffTests: XCTestCase {
         let fixes = [
             ("Sreeni", "Srini"), ("Karthick", "Karthik"), ("Vikinesh", "Vignesh"), ("Aravind", "Arvind"),
             ("Sharon", "Saran"), ("Alagu", "Azhagu"), ("when cat", "Venkat"), ("Jai Shree", "Jayashree"),
-            ("Elakia", "Ilakkiya"), ("tongue gum", "Thangam"), ("shivon", "Siobhan"),
+            ("Elakia", "Ilakkiya"), ("tongue gum", "Thangam"), ("shivon", "Siobhan"), ("feel lip", "Philip"),
         ]
         for (heard, meant) in fixes {
             let corrections = EditDiff.edits(original: "I met \(heard) at noon.", replacement: "I met \(meant) at noon.").corrections
@@ -52,8 +52,30 @@ final class EditDiffTests: XCTestCase {
 
     func testACapitalThatOnlyStartsASentenceIsNotAName() {
         XCTAssertEqual(EditDiff.edits(original: "Karen is coming.", replacement: "Green is coming.").corrections, [])
+        for (original, edited) in [
+            ("He said, \"Karen is coming.\"", "He said, \"Green is coming.\""),
+            ("Note: Karen is coming.", "Note: Green is coming."),
+            ("- Karen is coming.", "- Green is coming."),
+        ] {
+            XCTAssertEqual(EditDiff.edits(original: original, replacement: edited).corrections, [], edited)
+        }
+        let continued = EditDiff.edits(original: "shivon will send it.", replacement: "Siobhan will send it.", continuesSentence: true)
+        XCTAssertEqual(continued.corrections.map(\.replacement), ["Siobhan"])
+        let twoWords = EditDiff.edits(original: "Sharon raj works.", replacement: "Saran Raja works.").corrections
+        XCTAssertEqual(twoWords.map(\.nameLike), [true])
         let sorry = EditDiff.edits(original: "Sorey, I'm late.", replacement: "Sorry, I'm late.").corrections
         XCTAssertEqual(sorry.map(\.nameLike), [false])
+    }
+
+    func testARevisedNameStaysAName() {
+        let original = "Meet sharon in town."
+        let first = EditDiff.edits(original: original, replacement: "Meet Sarun in town.")
+        let second = EditDiff.edits(original: original, replacement: "Meet Saran at town.", earlier: first.corrections)
+        let revised = EditDiff.steps(for: second, after: first.corrections).compactMap { step -> LearnedCorrection? in
+            if case let .revise(_, correction) = step { return correction } else { return nil }
+        }
+        XCTAssertEqual(revised.map(\.replacement), ["Saran"])
+        XCTAssertEqual(revised.map(\.nameLike), [true])
     }
 
     func testANameOnlyBorrowsTheSoundAlikeRuleForItsOwnFix() {
@@ -84,6 +106,10 @@ final class EditDiffTests: XCTestCase {
         let both = EditDiff.edits(original: phrase, replacement: "I tried Wispr Flow yesterday.")
         let half = EditDiff.edits(original: phrase, replacement: "I tried flowcast yesterday.")
         XCTAssertEqual(EditDiff.steps(for: half, after: both.corrections), [.forget(fix("whisper flowcast", "Wispr Flow", 2..<4))])
+        let firstGone = EditDiff.edits(original: phrase, replacement: "I tried Flow yesterday.")
+        XCTAssertEqual(EditDiff.steps(for: firstGone, after: both.corrections), [.forget(fix("whisper flowcast", "Wispr Flow", 2..<4))])
+        let all = EditDiff.edits(original: phrase, replacement: "")
+        XCTAssertEqual(EditDiff.steps(for: all, after: both.corrections), [])
     }
 
     func testRewordingPunctuationDeletionsAndAdditionsTeachNothing() {

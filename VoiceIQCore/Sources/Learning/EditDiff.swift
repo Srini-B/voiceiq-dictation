@@ -6,15 +6,22 @@ public struct LearnedCorrection: Equatable, Sendable {
     /// Which words of the original text `original` spans, by index, so two
     /// edits of the same word at different places stay apart.
     public let words: Range<Int>
-    /// The replacement is written as a name: every word capitalized, and not
-    /// only because it starts a sentence ("Green is coming" is not a name).
-    public let nameLike: Bool
+    /// The replacement's first word begins a sentence, so its capital may
+    /// not mark a name.
+    public let startsSentence: Bool
 
-    public init(original: String, replacement: String, words: Range<Int>, nameLike: Bool = false) {
+    public init(original: String, replacement: String, words: Range<Int>, startsSentence: Bool = false) {
         self.original = original
         self.replacement = replacement
         self.words = words
-        self.nameLike = nameLike
+        self.startsSentence = startsSentence
+    }
+
+    /// The replacement is written as a name: every word capitalized, and not
+    /// only because one word starts a sentence ("Green is coming" is not a
+    /// name; "Saran Raja works" is).
+    public var nameLike: Bool {
+        EditDiff.isNameLike(replacement) && (!startsSentence || replacement.contains(" "))
     }
 
     /// The same edit: same wording at the same place.
@@ -32,6 +39,8 @@ public struct DictationEdits: Equatable, Sendable {
     public var changed: [Range<Int>] = []
     /// Spans of original words removed with nothing typed in their place.
     public var deleted: [Range<Int>] = []
+    /// What the user typed in place of each other changed span.
+    public var replacedBy: [Range<Int>: [String]] = [:]
 }
 
 public enum LearningStep: Equatable, Sendable {
@@ -96,10 +105,15 @@ public enum EditDiff {
     /// `earlier`: the corrections at the previous harvest. A fix to the same
     /// words may stray further from the transcript than one edit allows, as
     /// long as it reads as a respelling of what the earlier fix taught.
-    public static func edits(original: String, replacement: String, earlier: [LearnedCorrection] = []) -> DictationEdits {
+    /// `continuesSentence`: the field text before `replacement` does not end
+    /// a sentence, so its first word does not start one.
+    public static func edits(
+        original: String, replacement: String, earlier: [LearnedCorrection] = [], continuesSentence: Bool = false
+    ) -> DictationEdits {
         let before = words(in: original)
         let after = words(in: replacement)
-        guard !before.isEmpty, !after.isEmpty else { return DictationEdits() }
+        guard !before.isEmpty else { return DictationEdits() }
+        guard !after.isEmpty else { return DictationEdits(changed: [before.indices], deleted: [before.indices]) }
         let matches = lcsPairs(before.map(\.text), after.map(\.text), caseSensitive: true)
         var output = DictationEdits()
         var previousBefore = -1
@@ -110,26 +124,25 @@ public enum EditDiff {
             let added = after[(previousAfter + 1)..<pair.1]
             if !removed.isEmpty { output.changed.append((previousBefore + 1)..<pair.0) }
             if !removed.isEmpty, added.isEmpty { output.deleted.append((previousBefore + 1)..<pair.0) }
+            if !removed.isEmpty, !added.isEmpty { output.replacedBy[(previousBefore + 1)..<pair.0] = added.map(\.text) }
             for (removedPart, addedPart) in pieces(removed, original, added, replacement)
             where (1...3).contains(removedPart.count) && (1...3).contains(addedPart.count) {
                 let originalText = clean(removedPart.map(\.text).joined(separator: " "))
                 let replacementText = clean(addedPart.map(\.text).joined(separator: " "))
                 let span = removedPart.startIndex..<removedPart.endIndex
-                let nameLike = isNameLike(replacementText) && !startsSentence(addedPart[addedPart.startIndex], in: replacement)
+                let opensSentence = startsSentence(addedPart[addedPart.startIndex], in: replacement, continues: continuesSentence)
+                let candidate = LearnedCorrection(
+                    original: originalText, replacement: replacementText, words: span, startsSentence: opensSentence
+                )
                 // `valid` first: it caps both sides at 60 characters before
                 // the quadratic distance runs.
                 if valid(originalText), valid(replacementText), originalText != replacementText,
                    isLetterRespelling(originalText, replacementText)
-                       || (nameLike && soundsAlike(originalText, replacementText))
+                       || (candidate.nameLike && soundsAlike(originalText, replacementText))
                        || earlier.contains(where: {
                        $0.words == span && isLetterRespelling($0.replacement, replacementText)
                    }) {
-                    output.corrections.append(LearnedCorrection(
-                        original: originalText,
-                        replacement: replacementText,
-                        words: span,
-                        nameLike: nameLike
-                    ))
+                    output.corrections.append(candidate)
                 }
             }
             previousBefore = pair.0
@@ -176,11 +189,17 @@ public enum EditDiff {
     /// The user took the edit back: every change over its words since then
     /// is a deletion inside them. Nothing changed means the original words
     /// are back; deleting exactly the learned word, or one word of a learned
-    /// phrase, takes it back too. Deleting a whole sentence around it does
-    /// not: that is rewriting, not a verdict on the word.
+    /// phrase ("Wispr Flow" → "Flow" or "flowcast"), takes it back too.
+    /// Deleting a whole sentence around it does not: that is rewriting, not a
+    /// verdict on the word.
     private static func isUndone(_ edit: LearnedCorrection, in edits: DictationEdits) -> Bool {
-        edits.changed.filter { $0.overlaps(edit.words) }.allSatisfy { span in
-            edits.deleted.contains(span) && edit.words.lowerBound <= span.lowerBound && span.upperBound <= edit.words.upperBound
+        let taught = words(in: edit.replacement).map(\.text)
+        return edits.changed.filter { $0.overlaps(edit.words) }.allSatisfy { span in
+            if edits.deleted.contains(span) {
+                return edit.words.lowerBound <= span.lowerBound && span.upperBound <= edit.words.upperBound
+            }
+            guard span == edit.words, let typed = edits.replacedBy[span], typed.count < taught.count else { return false }
+            return (0...(taught.count - typed.count)).contains { Array(taught[$0..<($0 + typed.count)]) == typed }
         }
     }
 
@@ -219,7 +238,7 @@ public enum EditDiff {
         let removedParts = segments(removed, in: original)
         let addedParts = segments(added, in: replacement)
         if removedParts.count == addedParts.count { return Array(zip(removedParts, addedParts)) }
-        if addedParts.count == 1, added.allSatisfy({ $0.text.first?.isUppercase == true }) {
+        if addedParts.count == 1, added.count > 1, added.allSatisfy({ $0.text.first?.isUppercase == true }) {
             return [(removed, added)]
         }
         guard removed.count == added.count else { return [] }
@@ -299,7 +318,9 @@ public enum EditDiff {
         // Only when the added words line up one for one with the words they
         // replaced, so `kept` is really the learned part.
         guard addedWords.count == addedCount else { return nil }
-        return LearnedCorrection(original: earlier.original, replacement: kept, words: inner)
+        return LearnedCorrection(
+            original: earlier.original, replacement: kept, words: inner, startsSentence: atStart && correction.startsSentence
+        )
     }
 
     private static func letters(_ text: String) -> String {
@@ -330,18 +351,25 @@ public enum EditDiff {
         return previous[b.count] <= max(2, max(a.count, b.count) / 2)
     }
 
-    /// Whether `word` begins a sentence: at the start of the text, or after
-    /// `.`, `!`, `?`, `…` or a line break (quotes and brackets skipped).
-    private static func startsSentence(_ word: Word, in text: String) -> Bool {
+    /// Whether `word` begins a sentence: after `.`, `!`, `?`, `…`, `:` or a
+    /// line break, after a list marker (`-`, `*`, `•`) that starts a line, or
+    /// in a quotation opened after a comma (`He said, "Green…`). At the start
+    /// of `text`, unless `continues`.
+    private static func startsSentence(_ word: Word, in text: String, continues: Bool = false) -> Bool {
         var index = word.range.lowerBound
+        var quoted = false
+        var marker = false
         while index > text.startIndex {
             index = text.index(before: index)
             let character = text[index]
             if character.isNewline { return true }
-            if character.isWhitespace || "\"“”'‘’([".contains(character) { continue }
-            return ".!?…".contains(character)
+            if character.isWhitespace { continue }
+            if "\"“”'‘’([".contains(character) { quoted = quoted || "\"“'‘".contains(character); continue }
+            if !marker, "-*•".contains(character) { marker = true; continue }
+            if marker { return false }
+            return ".!?…:".contains(character) || (quoted && character == ",")
         }
-        return true
+        return marker || !continues
     }
 
     /// Every word capitalized, as a name is written.
@@ -354,7 +382,7 @@ public enum EditDiff {
     /// speech model: the same consonant skeleton, ignoring what Indian
     /// languages (Tamil above all) do not distinguish or English spells
     /// differently: vowels and vowel length, aspiration (th, dh, bh), voicing
-    /// of k/g and t/d, s/sh/ch/j, v/w/b/f, Tamil zh as l, doubled letters.
+    /// of k/g and t/d, s/sh/ch/j, v/w/b, f/ph, Tamil zh as l, doubled letters.
     /// At least three consonants, so short words ("for" and "Priya") never
     /// match. "Sharon" and "Saran", "shivon" and "Siobhan", "tongue gum" and
     /// "Thangam" match; "Mark" and "Mike", "please" and "Balaji" do not.
@@ -365,7 +393,7 @@ public enum EditDiff {
 
     private static func skeleton(_ text: String) -> String {
         var s = text.lowercased().folding(options: .diacriticInsensitive, locale: nil).filter(\.isLetter)
-        for (from, to) in [("zh", "l"), ("ck", "k"), ("ph", "p"), ("sh", "s"), ("ch", "s"), ("x", "ks"), ("q", "k")] {
+        for (from, to) in [("zh", "l"), ("ck", "k"), ("ph", "f"), ("sh", "s"), ("ch", "s"), ("x", "ks"), ("q", "k")] {
             s = s.replacingOccurrences(of: from, with: to)
         }
         let letters = Array(s)
@@ -378,7 +406,8 @@ public enum EditDiff {
             case "c": mapped = "eiy".contains(next) ? "s" : "k"
             case "g", "k": mapped = "k"
             case "d", "t": mapped = "t"
-            case "b", "v", "w", "f": mapped = "v"
+            case "b", "v", "w": mapped = "v"
+            case "f": mapped = "f"
             case "j", "z", "s": mapped = "s"
             default: mapped = letter
             }

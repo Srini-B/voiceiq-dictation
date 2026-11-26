@@ -41,7 +41,7 @@ main 35351ad, before this change:
 
 ## Verification
 
-- `swift test --package-path VoiceIQCore` on a Mac satellite: 320 tests, 0
+- `swift test --package-path VoiceIQCore` on a Mac satellite: 321 tests, 0
   failures. New tests cover eleven Indian, Tamil and Irish name fixes;
   fourteen different names and words that must not sound alike ("Mark" →
   "Mike", "please" → "Balaji", "for" → "Priya"); sentence-start capitals;
@@ -55,6 +55,11 @@ main 35351ad, before this change:
   re-edits, sentence-start capitals counting as names, a skeleton loose
   enough for "please" → "Balaji", and sentence deletions forgetting names.
   All fixed here.
+- Second Neon review (31ff01b): a narrowed revision lost its name flag;
+  sentence starts after `:`, list markers and quotes, and a dictation that
+  continues the field's sentence, were misread; `ph` no longer matched `f`;
+  deleting the first word of a learned phrase kept it. All fixed; corrections
+  now record whether they start a sentence and derive `nameLike` from it.
 
 ## Known limits
 
@@ -64,4 +69,6 @@ main 35351ad, before this change:
   only two consonants ("Mootoo" → "Muthu") need the letters bound.
 - A dictation that is only the name, or one deleted down to a few words,
   cannot be located, as before.
+- Title abbreviations read as sentence ends, so "Dr. shivon" → "Dr. Siobhan"
+  is not learned by sound.
 - Unsigned Mac Debug build succeeds. Not tested live on a signed build.

@@ -99,8 +99,7 @@ public final class EditLearner {
             entry.source != .auto || !teachesNothing(LearnedCorrection(
                 original: entry.learnedFrom ?? "",
                 replacement: entry.term,
-                words: 0..<0,
-                nameLike: EditDiff.isNameLike(entry.term)
+                words: 0..<0
             ))
         }
         guard kept.count != entries.count else { return }
@@ -269,6 +268,12 @@ public final class EditLearner {
         watched.set(key, nil)
     }
 
+    /// Whether text typed before an insertion leaves a sentence open.
+    private nonisolated static func continuesSentence(before text: Substring) -> Bool {
+        guard let last = text.last(where: { !$0.isWhitespace || $0.isNewline }) else { return false }
+        return !last.isNewline && !".!?…:".contains(last)
+    }
+
     private nonisolated static func compute(
         value: String?,
         insertions: [(UUID, String, String, [LearnedCorrection])],
@@ -285,7 +290,10 @@ public final class EditLearner {
             return Located(
                 id: insertion.0,
                 window: match.window,
-                edits: EditDiff.edits(original: insertion.2, replacement: match.window, earlier: insertion.3)
+                edits: EditDiff.edits(
+                    original: insertion.2, replacement: match.window, earlier: insertion.3,
+                    continuesSentence: continuesSentence(before: current[..<match.range.lowerBound])
+                )
             )
         }
         return .located(located, valueHash: valueHash)

@@ -44,9 +44,9 @@ final class EditLearnerTests: XCTestCase {
     func testANameThatIsAlsoAnEnglishWordIsLearnedButAWordFixIsNot() {
         let learner = EditLearner(dictionary: store)
         learner.learn([
-            .learn(LearnedCorrection(original: "Sharon", replacement: "Saran", words: 2..<3, nameLike: true)),
-            .learn(LearnedCorrection(original: "Then", replacement: "Than", words: 5..<6, nameLike: true)),
-            .learn(LearnedCorrection(original: "Sara", replacement: "Sorry", words: 0..<1, nameLike: false)),
+            .learn(LearnedCorrection(original: "Sharon", replacement: "Saran", words: 2..<3)),
+            .learn(LearnedCorrection(original: "Then", replacement: "Than", words: 5..<6)),
+            .learn(LearnedCorrection(original: "Sara", replacement: "Sorry", words: 0..<1, startsSentence: true)),
         ], stillTaught: [:])
         XCTAssertEqual(store.entries().map(\.term), ["Saran"])
     }
