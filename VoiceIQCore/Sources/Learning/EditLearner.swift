@@ -201,13 +201,16 @@ public final class EditLearner {
 
         guard var current = fields[key] else { return }
         if captured == nil { current.harvesting = false }
+        // Only the newest harvest may drop the field or move its pending
+        // value: an older one read the field before a newer one did.
+        let newest = ticket == current.nextTicket - 1
         switch result {
         case .fieldGone:
-            forget(key)
+            if newest { forget(key) } else { fields[key] = current }
         case .unchanged:
             fields[key] = current
         case let .editing(valueHash):
-            if valueHash != current.pendingHash {
+            if newest, valueHash != current.pendingHash {
                 current.pendingHash = valueHash
                 current.pendingSince = now
             }
@@ -233,7 +236,7 @@ public final class EditLearner {
                 updated.edits = EditDiff.history(after: match.edits, earlier: insertion.edits)
                 return updated
             }
-            if current.insertions.isEmpty {
+            if current.insertions.isEmpty, newest {
                 forget(key)
             } else {
                 fields[key] = current
@@ -279,7 +282,7 @@ public final class EditLearner {
     /// `stillTaught`: how many corrections in this field still teach each
     /// spelling, so undoing or revising one copy of a fix does not drop a word
     /// another copy keeps.
-    private func learn(_ steps: [LearningStep], stillTaught: [String: Int]) {
+    func learn(_ steps: [LearningStep], stillTaught: [String: Int]) {
         var learned: [DictionaryEntry] = []
         var known = dictionary.entries()
         for step in steps {
@@ -323,6 +326,7 @@ public final class EditLearner {
                 let own = term == correction.replacement.lowercased() ? 1 : 0
                 return stillTaught[term, default: 0] - own == 0
             }
+            let protected = Set(candidates.map(\.id)).subtracting(stale.map(\.id))
             if let kept = stale.first {
                 // The entry follows the edit, and entries for the parts of a
                 // phrase fold into the phrase.
@@ -353,7 +357,9 @@ public final class EditLearner {
                 let term = $0.term.lowercased()
                 let misspelling = $0.misspelling?.lowercased()
                 let learnedFrom = $0.learnedFrom?.lowercased()
-                return term == original || term == replacement
+                // A protected entry spelled as the original does not block
+                // learning the new spelling beside it.
+                return (term == original && !protected.contains($0.id)) || term == replacement
                     || misspelling == original || misspelling == replacement
                     || (!isRevision && learnedFrom == original)
             }) else { continue }

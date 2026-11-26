@@ -60,11 +60,16 @@
   "Supa"; starred entries are never revised; harvests are ordered by when
   they read the field. One auto-learned spelling per heard wording stays
   deliberate.
+- Second Neon pass: the one-word respelling path requires a real respelling
+  of the learned word; only the newest harvest may drop a field or move its
+  pending value; a break added or removed while fixing pairs word by word;
+  a protected entry no longer blocks learning the new spelling beside it.
+  `EditLearnerTests` covers `learn(_:stillTaught:)`.
 
 ## Verification
 
 - `swift test --package-path VoiceIQCore` on a Mac satellite (Xcode 27):
-  258 tests, 0 failures. New `EditDiffTests` cover separate and adjacent
+  262 tests, 0 failures. New `EditDiffTests` cover separate and adjacent
   edits across a paragraph, edits a few seconds apart folding into a phrase,
   a learned word changed again, and rewording, punctuation and deletions
   teaching nothing. With the respelling check disabled, the rewording test

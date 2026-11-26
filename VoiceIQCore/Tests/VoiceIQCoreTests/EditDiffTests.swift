@@ -111,6 +111,26 @@ final class EditDiffTests: XCTestCase {
         )
     }
 
+    func testAddingOrRemovingABreakWhileFixingPairsWordByWord() {
+        XCTAssertEqual(EditDiff.edits(original: "I met shrinny he left.", replacement: "I met Srini. He left.").corrections, [
+            fix("shrinny", "Srini", 2..<3),
+            fix("he", "He", 3..<4),
+        ])
+        XCTAssertEqual(EditDiff.edits(original: "We use whisper. He loves it.", replacement: "We use Wispr he loves it.").corrections, [
+            fix("whisper", "Wispr", 2..<3),
+            fix("He", "he", 3..<4),
+        ])
+    }
+
+    func testDeletingOrRewordingBesideALearnedNameLeavesIt() {
+        let original = "I use whisper AI on Macs so we know."
+        let first = EditDiff.edits(original: original, replacement: "I use Wispr AI on Macs so we know.")
+        for edited in ["I use Wispr in Macs so we know.", "I use Wispr AI on Macs we know."] {
+            let second = EditDiff.edits(original: original, replacement: edited)
+            XCTAssertEqual(EditDiff.steps(for: second, after: first.corrections), [], edited)
+        }
+    }
+
     func testRespellingAPhraseAsOneWordRevisesIt() {
         let original = "Deploy it on super base today."
         let first = EditDiff.edits(original: original, replacement: "Deploy it on Supa base today.")
