@@ -146,7 +146,17 @@ enum DictationLanguageSwitch {
 
 // Empty stand-ins for Hex's Metal recording scope and live preview: never shown.
 
-enum DotScopePhase: Equatable, Sendable { case hidden, idle, recording, processing, failed }
+enum DotScopePhase: Equatable, Sendable { case hidden, idle, starting, recording, processing, failed }
+
+enum DotScopeLook: Equatable { case ios, strip }
+
+struct DotScopePose: Equatable, Sendable {
+    var opacity: Float = 0
+    var live: Float = 0
+    var cool: Float = 0
+    var grid: Float = 0
+    var glow: Float = 0
+}
 
 struct DotScopeTuning: Equatable, Sendable {
     var height: Float = 0
@@ -165,6 +175,9 @@ final class DotScopeHostView: UIView {
     var reduceMotion = false
     var useDemoVoice = false
     var isDark = false
+    var look: DotScopeLook = .ios
+    var hostFades = false
+    let debugPose = DotScopePose()
 
     init(tuning: DotScopeTuning, maximumDrawableCount: Int) {
         super.init(frame: .zero)

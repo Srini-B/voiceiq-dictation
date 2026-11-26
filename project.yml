@@ -265,6 +265,10 @@ targets:
           PROVISIONING_PROFILE_SPECIFIER: "VoiceiQ Keyboard App Store"
     sources:
       - path: iOS/Keyboard/Sources
+      - path: iOS/Keyboard/Resources
+      # Hex's keyboard (MIT), synced by scripts/sync-hex-keyboard.sh.
+      - path: iOS/Keyboard/Hex
+        excludes: [MANIFEST, UPSTREAM, LICENSE, "patches/**", "**/LICENSE-*"]
     entitlements:
       path: iOS/Keyboard/VoiceIQKeyboard.entitlements
       properties:
