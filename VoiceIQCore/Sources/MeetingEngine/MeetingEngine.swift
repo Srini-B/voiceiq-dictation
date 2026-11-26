@@ -363,8 +363,9 @@ import VoiceIQSpeech
             try mark(&meta, .summarizing)
             // The meeting setting, not where this one was transcribed, decides:
             // an on-device meeting that fell back to Gemini still keeps writing Off.
-            if onDevice || SettingsStore().meetingSource == .onDevice, let notes = notesKeptOnDevice(meta: meta) {
-                // Nothing leaves the device.
+            if onDevice || SettingsStore().meetingSource == .onDevice,
+               let notes = notesKeptOnDevice(meta: meta, transcribedOnDevice: onDevice) {
+                // No notes are written, so the transcript goes nowhere else.
                 try finish(id: id, meta: &meta, transcript: transcript, notes: notes)
                 return
             }
@@ -496,10 +497,10 @@ import VoiceIQSpeech
     /// The notes of a meeting transcribed on device, when they stay on it:
     /// the transcript-only stub when writing is Off, or when no key is stored
     /// and Gemini would have to write them. Nil when Gemini writes them.
-    private func notesKeptOnDevice(meta: MeetingMeta) -> MeetingNotes? {
+    private func notesKeptOnDevice(meta: MeetingMeta, transcribedOnDevice: Bool) -> MeetingNotes? {
         switch SettingsStore().cleanupSource {
-        case .gemini: return hasKey() ? nil : Self.onDeviceNotes(meta: meta)
-        case .none: return Self.onDeviceNotes(meta: meta)
+        case .gemini: return hasKey() ? nil : Self.onDeviceNotes(meta: meta, transcribedOnDevice: transcribedOnDevice)
+        case .none: return Self.onDeviceNotes(meta: meta, transcribedOnDevice: transcribedOnDevice)
         }
     }
 
@@ -508,11 +509,14 @@ import VoiceIQSpeech
     static let minimumSummarizableWords = 8
 
     /// The notes of a meeting transcribed on device when nothing wrote them:
-    /// writing Off, or no Gemini key. The transcript is the record;
-    /// Regenerate notes writes real ones once Gemini may.
-    static func onDeviceNotes(meta: MeetingMeta) -> MeetingNotes {
+    /// writing Off, or no Gemini key. The transcript is the record; redoing
+    /// the notes writes real ones once Gemini may. A meeting whose on-device
+    /// pass failed and went to Gemini as audio does not claim it stayed on
+    /// the device.
+    static func onDeviceNotes(meta: MeetingMeta, transcribedOnDevice: Bool) -> MeetingNotes {
         let title = meta.source.map { "\(name($0)) call" } ?? "Meeting"
-        return MeetingNotes(title: title, summary: "Transcribed on device. No notes were written: choose Gemini under Writing rules and notes and save a key, then Regenerate notes.",
+        let source = transcribedOnDevice ? "Transcribed on device" : "Transcribed by Gemini, as the on-device models were unavailable"
+        return MeetingNotes(title: title, summary: "\(source). No notes were written: choose Gemini under Writing rules and notes and save a key, then redo the notes.",
                             decisions: [], actions: [], notes: [])
     }
 
