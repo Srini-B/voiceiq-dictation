@@ -73,9 +73,10 @@ def emit(stratum, items):
     for it in items:
         it["stratum"] = stratum
         rows_out.append(it)
-    with MANIFEST.open("w") as f:
-        for r in rows_out:
-            f.write(json.dumps(r, ensure_ascii=False) + "\n")
+    # Written whole, then renamed: an interrupted write leaves the old manifest.
+    part = MANIFEST.with_suffix(".part")
+    part.write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows_out))
+    part.replace(MANIFEST)
     print(stratum, len(items), flush=True)
 
 
@@ -118,7 +119,8 @@ def monsoon():
             dur = to_flac(audio_bytes(r["audio"]), cid)
             out.append(dict(id=cid, source="VoiceArena/MonsoonASR-Open-ASR-leaderboard-en-IN", licence="CC BY 4.0",
                             lang="en", accent=f"Indian English ({r['native_state']})", duration=dur,
-                            device=f"{r['device_manufacturer']} {r['device_model']}", spoken=r["text"], intended=None))
+                            device=f"{r['device_manufacturer']} {r['device_model']}", speaker_id=r["speaker_id"],
+                            spoken=r["text"], intended=None))
         res[name] = out
     return res
 

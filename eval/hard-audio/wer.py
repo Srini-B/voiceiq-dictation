@@ -56,7 +56,7 @@ def main() -> None:
         clip = clips[cid]
         ref = norm(clip.get("intended") or extra[cid])
         by[clip["stratum"]][0].append(ref)
-        by[clip["stratum"]][1].append(norm(draft) or "<empty>")
+        by[clip["stratum"]][1].append(norm(draft))
     total_e = total_n = 0
     for stratum, (refs, hyps) in sorted(by.items()):
         if stratum == "indicvoices_ta":

@@ -66,8 +66,8 @@ On a Mac, the on-device transcripts (Fluid Speech Pro or Mini, loaded the way
 `ParakeetSession` loads them, without the English tools' rescoring):
 
 ```sh
-cd eval/hard-audio/ondevice && swift build -c release
-.build/release/OnDeviceEval <model dir> <clips dir> <ids file> out/ondevice_pro.json
+(cd eval/hard-audio/ondevice && swift build -c release && mkdir -p out &&
+  .build/release/OnDeviceEval <model dir> <clips dir> <ids file> out/ondevice_pro.json)
 python3 eval/hard-audio/wer.py --ondevice eval/hard-audio/ondevice/out/ondevice_pro.json
 ```
 

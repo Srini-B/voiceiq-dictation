@@ -103,6 +103,10 @@ every clip.
   seven points toward a doubtful reference (13 of 97 that could be decided).
   One judge is noisier than Voice Arena's five; the Fable second judge
   above covers 180 of the drafts, not the whole set.
+- **Monsoon, Tamil Nadu speakers:** `monsoon_more.py` topped the stratum up
+  without checking the speakers already in it, so its 60 clips come from 51
+  speakers, and 9 of them have two clips each. The scores are unchanged; the
+  script now records `speaker_id` and checks against it.
 - **Case:** AMEND's normalisation lowercases, so a case-only fix
   ("Paybridge" to "PayBridge") counts as zero edits. That is a limit of the
   method, and it slightly flatters names.

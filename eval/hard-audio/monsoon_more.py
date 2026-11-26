@@ -17,7 +17,8 @@ for i in (1, 2, 3):
     cand += [r for r in t if 4.0 <= r["audio_length_s"] <= 30 and words(r["text"]) >= 8]
 print("candidates", len(cand))
 rng.shuffle(cand)
-speakers = set()
+# Rows written before speaker_id was recorded cannot be checked here.
+speakers = {r["speaker_id"] for r in have if "speaker_id" in r}
 new = []
 for r in cand:
     if len(have) + len(new) >= 60:
@@ -29,7 +30,8 @@ for r in cand:
     dur = to_flac(audio_bytes(r["audio"]), cid)
     new.append(dict(id=cid, source="VoiceArena/MonsoonASR-Open-ASR-leaderboard-en-IN", licence="CC BY 4.0", lang="en",
                     accent="Indian English (Tamil Nadu)", duration=dur,
-                    device=f"{r['device_manufacturer']} {r['device_model']}", spoken=r["text"], intended=None,
+                    device=f"{r['device_manufacturer']} {r['device_model']}", speaker_id=r["speaker_id"],
+                    spoken=r["text"], intended=None,
                     stratum="monsoon_ta"))
 with MANIFEST.open("a") as f:
     for r in new:

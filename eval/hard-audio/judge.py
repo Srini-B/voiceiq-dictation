@@ -259,6 +259,11 @@ def ask(model: str, prompt: str) -> dict:
     raise RuntimeError(f"{model}: {last}")
 
 
+def valid(answer: dict) -> bool:
+    """A judge answer can be scored: corrected text and a yes/no on form."""
+    return isinstance(answer.get("fixed"), str) and isinstance(answer.get("format_fix"), bool)
+
+
 class Cache:
     def __init__(self):
         self.items = {}
@@ -274,8 +279,8 @@ class Cache:
             if key in self.items:
                 return self.items[key]
         value = ask(model, prompt)
-        if not isinstance(value.get("fixed"), str):
-            raise SystemExit(f"{model} gave no \"fixed\" text; nothing cached, judge again")
+        if not valid(value):
+            raise SystemExit(f"{model} gave no \"fixed\" text or Boolean \"format_fix\"; nothing cached, judge again")
         with self.lock:
             self.items[key] = value
             with CACHE.open("a") as f:
@@ -289,6 +294,7 @@ def manifest() -> dict:
 
 def write_intended() -> None:
     have = json.loads(INTENDED.read_text()) if INTENDED.exists() else {}
+    have = {k: v for k, v in have.items() if isinstance(v, str)}
     todo = [c for c in manifest().values() if not c.get("intended") and c["id"] not in have]
     # Each answer is saved as it lands (write, then rename), so a failed or
     # interrupted run keeps every reference it already paid for.
@@ -298,7 +304,10 @@ def write_intended() -> None:
         failed = []
         for future in concurrent.futures.as_completed(futures):
             try:
-                have[futures[future]["id"]] = future.result()["intended"]
+                intended = future.result().get("intended")
+                if not isinstance(intended, str):
+                    raise ValueError("no \"intended\" text")
+                have[futures[future]["id"]] = intended
             except Exception as error:
                 failed.append(f"{futures[future]['id']}: {error}")
                 continue
@@ -333,10 +342,10 @@ def judge_run(path: Path, cache: Cache, workers: int, judges: tuple[str, ...] = 
     with concurrent.futures.ThreadPoolExecutor(workers) as pool:
         answers = list(pool.map(lambda job: cache.get(job[1], job[0]["prompt"]), jobs))
     for (row, model), answer in zip(jobs, answers):
-        if not isinstance(answer.get("fixed"), str):
-            raise SystemExit(f"{row['id']}: {model} gave no \"fixed\" text; delete its cache line and judge again")
+        if not valid(answer):
+            raise SystemExit(f"{row['id']}: {model} gave no \"fixed\" text or Boolean \"format_fix\"; delete its cache line and judge again")
         edits, chars = char_edits(row["draft"], answer["fixed"])
-        row.setdefault("judges", {})[model] = {"edits": edits, "chars": chars, "format_fix": bool(answer.get("format_fix")),
+        row.setdefault("judges", {})[model] = {"edits": edits, "chars": chars, "format_fix": answer["format_fix"],
                                                "fixed": answer["fixed"], "why": answer.get("why", "")}
     for row in rows:
         js = row["judges"].values()
@@ -355,7 +364,7 @@ def summary(rows: list[dict]) -> dict:
                "ZER": round(100 * sum(r["zero_edit"] for r in rs) / n, 1)}
         for m in rs[0]["judges"]:
             e = sum(r["judges"][m]["edits"] for r in rs); c = sum(r["judges"][m]["chars"] for r in rs)
-            out[f"ZER_{m}"] = round(100 * sum(r["judges"][m]["edits"] == 0 for r in rs) / n, 1)
+            out[f"ZER_{m}"] = round(100 * sum(bool(r["draft"].strip()) and r["judges"][m]["edits"] == 0 for r in rs) / n, 1)
             out[f"AMEND_{m}"] = round(100 * e / max(c, 1), 2)
         return out
     by = defaultdict(list)

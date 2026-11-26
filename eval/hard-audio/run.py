@@ -68,16 +68,23 @@ def main() -> None:
         clips = [c for c in clips if c["id"] in heard]
     jobs = [(c, prompt_for(c, args.promptdump, heard[c["id"]] if heard else None)) for c in clips]
 
-    def fingerprint(job):
-        clip, prompt = job
-        digest = hashlib.sha256(f"{app.MODEL}|{prompt}".encode())
-        digest.update((Path(args.clips) / f"{clip['id']}.flac").read_bytes())
+    def fingerprint(job, audio):
+        digest = hashlib.sha256(f"{app.MODEL}|{job[1]}".encode())
+        digest.update(audio)
         return digest.hexdigest()[:16]
+
+    def audio_of(clip):
+        return (Path(args.clips) / f"{clip['id']}.flac").read_bytes()
 
     out = HERE / "results" / f"{args.label}.json"
     out.parent.mkdir(exist_ok=True)
-    wanted = {job[0]["id"]: fingerprint(job) for job in jobs}
+    wanted = {job[0]["id"]: fingerprint(job, audio_of(job[0])) for job in jobs}
     saved = json.loads(out.read_text())["results"] if out.exists() else []
+    # Saving replaces the label's file, so clips outside this selection would be
+    # dropped and paid for again on the next full run.
+    outside = sorted({r["id"] for r in saved} - set(wanted))
+    if outside:
+        raise SystemExit(f"{out} holds {len(outside)} clips outside this selection; use another --label")
     results = [r for r in saved if wanted.get(r["id"]) == r["request"]]
     done = {r["id"] for r in results}
     todo = [job for job in jobs if job[0]["id"] not in done]
@@ -86,13 +93,14 @@ def main() -> None:
 
     def run(job):
         clip, prompt = job
-        flac = None if heard is not None else (Path(args.clips) / f"{clip['id']}.flac").read_bytes()
+        audio = audio_of(clip)
+        flac = None if heard is not None else audio
         text, seconds, usage = app.call(prompt, flac)
         if not text:
             text, again, retry = app.call(prompt, flac)
             seconds += again
             usage = dict(retry, secondRequests=usage["secondRequests"] + retry["secondRequests"])
-        return {"id": clip["id"], "stratum": clip["stratum"], "request": fingerprint(job), "output": text,
+        return {"id": clip["id"], "stratum": clip["stratum"], "request": fingerprint(job, audio), "output": text,
                 "seconds": round(seconds, 3), "usage": usage}
 
     def save():
