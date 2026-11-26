@@ -39,7 +39,21 @@ With the backup forced at 1.5 s on all 33 eval cases, 33 backups were sent and 1
 - A failure Gemini reports as an `error` event after the 200 headers is handled as that status (a 429 waits, a 503 retries) instead of as an unreadable answer.
 - The answer is the last `{"text": …}` object in the joined stream, so working the model sends as an earlier unflagged part no longer fails the parse and resends.
 - The pause watcher sorts the levels once per tick, not three times, copies samples only when it sends, and the FLAC encode runs inside the request task instead of on the main actor.
+- Cancelling a dictation stops a request sent at a pause at once (before the engine drains) and its answer is never used. No zero-upload guarantee on cancel (decided 2026-11-26): the audio sent early is what key-up would have sent.
 - docs/PRIVACY.md item 1 said nothing is sent while you speak. It now says audio up to a pause can be sent before key-up, including when the dictation is then cancelled.
+
+## Extra billed calls on spontaneous speech
+
+Replay of the rule on 65 AMI headset segments (spontaneous) and 73 LibriSpeech clips (read), with the 198 measured answer times, billing counted from the first chunk and the first chunk assumed up to 1 s before the whole answer (`.amp/in/orb-backup/pause/extra_calls.py`):
+
+| Per 100 dictations | AMI | LibriSpeech |
+| --- | --- | --- |
+| Early requests sent | 165 | 100 |
+| Used at key-up | 95 | 95 |
+| Sent, cancelled unused | 69 | 5 |
+| Billed and unused | 1.5–3.1 | 0 |
+
+The backup at 4–6 s adds at most about 1 billed call per 100: it was sent on 12 of 66 eval dictations and none was billed. Together that is about 4 billed extra calls per 100 dictations, under the cap of 10. Requests sent and cancelled before their first chunk are not billed but count against the per-minute request quota.
 
 ## Not measured
 

@@ -30,7 +30,8 @@ With no usable key, nothing is sent and the recording stays on your Mac.
    then paused for a second, the speech so far is sent, up to three times
    per dictation. If you speak again, that request is cancelled and its
    answer is never used, but the audio up to the pause has already left
-   your Mac, including when you then cancel the dictation. Once a
+   your Mac. If you cancel after a pause, audio up to that pause may
+   already have been sent to Gemini; nothing is inserted or kept. Once a
    recording passes two minutes, nothing more is sent before you stop.
    The prompt contains the built-in writing rules, your custom rules from
    Settings → Dictation, the regional spelling

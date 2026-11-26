@@ -243,6 +243,24 @@ final class DictationCoordinatorTests: XCTestCase {
         XCTAssertEqual(inserter.insertedText, "early")
     }
 
+    /// Cancelling stops a request sent at a pause at once, before the
+    /// recording finishes draining, and nothing is inserted.
+    func testCancelStopsTheEarlyRequestAtOnce() async throws {
+        let cloud = SpeculatingTranscription()
+        let c = makeCoordinator(transcription: cloud)
+        c.handle(.begin)
+        await pump()
+        capture.paused = 0..<16_000
+        try await Task.sleep(nanoseconds: 300_000_000)
+        XCTAssertEqual(cloud.sent.count, 1)
+
+        c.handle(.cancel)
+        XCTAssertTrue(cloud.sent[0].answer.isCancelled)
+        await settle()
+        XCTAssertTrue(cloud.handedBack.isEmpty)
+        XCTAssertNil(inserter.insertedText)
+    }
+
     /// Dictation set to On device with the model missing or busy (no local
     /// session): the recording falls back to Gemini whatever the writing
     /// choice, Off included.

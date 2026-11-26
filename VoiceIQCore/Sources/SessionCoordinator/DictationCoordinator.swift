@@ -803,6 +803,16 @@ public final class DictationCoordinator: ObservableObject {
         }
         inFlightTask?.cancel() // stop the network work too (audit L8)
         inFlightTask = nil
+        // A request sent at a pause stops now, not after the engine drains;
+        // its answer is never used.
+        pauseWatch?.cancel()
+        pauseWatch = nil
+        if let speculation {
+            self.speculation = nil
+            let billed = speculation.isBilled
+            speculation.cancel()
+            Log.transcription.notice("send-on-pause: cancelled with the dictation, billed: \(billed, privacy: .public)")
+        }
         micLevel = 0
         audioFlowing = false
         coachingHint = hint // feedback is immediate; the bookkeeping can wait
