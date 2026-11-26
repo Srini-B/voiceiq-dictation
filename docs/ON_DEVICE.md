@@ -41,7 +41,9 @@ the device writes" does not exist.
 Whatever this row says, Off included, an on-device dictation or meeting whose
 model is missing, busy, fails or loads too slowly goes to Gemini as audio when
 a key is stored, and Gemini transcribes and writes it as with the Gemini
-source. Without a key the dictation fails and stays in History for Retry, and
+source. A meeting is the exception: with Meetings On device and writing Off,
+one that fell back to Gemini still gets no notes, and its note says Gemini
+transcribed it. Without a key the dictation fails and stays in History for Retry, and
 the meeting is marked failed.
 Screen context, when on, sends its screenshots with the Gemini writing
 request as it does with a Gemini dictation.
