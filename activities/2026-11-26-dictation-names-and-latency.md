@@ -32,22 +32,37 @@ Images, not prompt length, made the model think: with four JPEGs attached almost
 
 - Hedge: the backup request's delay is capped at 6 s, and 6 s until five answers are in. With a 20 s cap, calls that thought for 15–25 s pushed the 90th percentile toward 20 s, where the second request rarely answered first (Neon).
 - `eval/dictation/run.py` now sends the app's backup request (a copy of `DictationHedge`, first answer wins), records `secondRequests` per call, and `pool_latency.py` scores D5 over pooled sessions. `--hedge-ceiling 20` measures commits before the cap.
-- Prompt, Gemini audio path: the real-name sentence goes out only when the Dictionary has entries, and says to write an entry when the speaker is saying it, in their accent or through noise, or when the screen shows it, and to keep a different real name the speaker clearly says. The old wording gave "an entry said in the speaker's accent" as an example of "not a plausible name" and guarded only "a common real name".
-- Prompt, all paths: Indian address words and particles ("yaar", "ji", "anna", "da", "na") are ordinary words, not names. The example names in `dictionaryIntro` and `transcriptSection` (Sreeni, Karen, Aaron, Nathan, Warren, Prashant) matched strings in the eval corpus and were replaced with names that appear nowhere in `eval/` or the tests. The language bullet's "Digits follow the same rules in every language" sentence repeated the numbers bullet and overreached for French "15 h"; it is gone.
+- Prompt, Gemini audio path: the real-name sentence goes out only when the Dictionary has entries. It leads with the default: a different real name the speaker clearly says stays, and an accent alone is no reason to switch; the entry is written when what was heard is not a real name there or the screen shows it. A first rewording ("write the entry when it comes out in the speaker's accent") turned a spoken "Karen and Aaron" into "Kiran and Arun" in 3 of 6 rounds on the scorecard clips and was dropped.
+- Prompt, all paths: Indian address words and particles ("yaar", "ji", "da", "na") are ordinary words, not names. The example names in `dictionaryIntro` and `transcriptSection` (Sreeni, Karen, Aaron, Nathan, Warren, Prashant) and the ordinary-word pairs (page/Paige, left/EFT) matched strings in the eval corpus; they are replaced with ones that appear nowhere in `eval/` or the tests. The language bullet's whole-hour sentence now names Hindi and other Indian languages instead of "every language" (French "15 h"); removing it outright brought back "10:00 बजे" in 5 of 6 rounds.
 
-A/B against main 83b9b23 on the #86-checked clips, Gemini audio with screen text (4 rounds; names 2 rounds):
+A/B against main 83b9b23 on the scorecard clips (the integrator's `eval/dictation/.assets`), Gemini audio with screen text:
 
 | Check | main | follow-up |
 | --- | --- | --- |
-| English names kept (ctrl_01–03), of 12 | 11 | 11 |
-| Dictionary names (name_01–10), of 20 | 20 | 20 |
+| ctrl_01 keeps "Karen and Aaron", of 18 | 17 | 18 |
+| ml_hi writes "10 बजे", of 18 | 18 | 18 |
+| ctrl_02–03, of 8 | 8 | 8 |
+| Dictionary names (name_01–10), of 40 | 40 | 40 |
 | Hinglish "Bhai" kept, of 4 | 4 | 4 |
-| Hindi whole hour without ":00", of 4 | 3 | 3 |
-| Tamil "ready" in Latin letters, of 4 | 4 | 4 |
-| Spoken "new paragraph" breaks after "ready.", of 4 | 2 | 3 |
-| Lists and screen cases, of 16 | 16 | 16 |
+| Tamil "ready" in Latin letters, of 4 | 3 | 4 |
+| clean_punct keeps "The release is ready.", of 4 | 4 | 4 |
 
-The one ctrl_01 miss on each side writes Kiran and Arun for a spoken Karen and Aaron. One follow-up clean_punct round dropped "The release is ready."; main did not drop it in these rounds. Pooled D5 is still being collected (session 1 at 12:36 UTC: main p50 2.65 s / p90 4.21 s, follow-up p50 2.81 s / p90 6.21 s, 33 calls each; one session is noise at this spread).
+Spoken "new paragraph" in clean_punct gives no break on either side (0 of 4); a sentence saying it always starts a paragraph did not change that (0 of 6). On my own clips an earlier follow-up prompt dropped "The release is ready." in 2 of 66 rounds against 0 of 66 on main; none of the single changes reproduced it in 20 rounds each.
+
+### Where the latency goes
+
+Each eval case sent twice at the same moment, 99 pairs, 13:05–13:13 UTC (`pair_probe.py` in the thread's orb backup), with 0.39 s app overhead added:
+
+| Policy | p50 | p90 | Calls per dictation |
+| --- | --- | --- | --- |
+| One request | 3.24 s | 9.04 s | 1.00 |
+| Backup at 6 s (this PR) | 3.24 s | 9.04 s | 1.19 |
+| Backup at 3 s | 3.24 s | 7.86 s | 1.44 |
+| Two requests at key-up | 3.10 s | 7.03 s | 2.00 |
+| Request sent 0.6 s before key-up | 2.64 s | 8.44 s | 1.00 |
+| Request sent 1.0 s before key-up | 2.24 s | 8.04 s | 1.00 |
+
+The two copies of a request took almost the same time (correlation 0.93): the slow tail is the API's state at that moment, not one unlucky request, so a backup request trims little of it. Only starting before key-up moves the median, by about the gap between the last word and key-up. That gap has not been measured on a real user; the backup rows assume a later copy sees the same server as an earlier one.
 
 ## Rejected
 
