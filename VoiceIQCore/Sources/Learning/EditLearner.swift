@@ -258,26 +258,48 @@ public final class EditLearner {
         return .located(located, valueHash: valueHash)
     }
 
+    private nonisolated static func isFresh(_ entry: DictionaryEntry) -> Bool {
+        entry.source == .auto && Date().timeIntervalSince(entry.updatedAt) <= reEditSeconds
+    }
+
     private func learn(_ steps: [LearningStep]) {
         var learned: [DictionaryEntry] = []
         var known = dictionary.entries()
         for step in steps {
             let correction: LearnedCorrection
+            let stale: [DictionaryEntry]
+            // The transcript wording a revised entry now records; nil keeps it.
+            var heardAs: String?
             switch step {
-            case let .learn(edit):
-                correction = edit
-            case let .revise(replacing, edit):
-                correction = edit
-                let wordings = Set(replacing.map { $0.lowercased() })
-                let stale = known.filter {
-                    $0.source == .auto
-                        && wordings.contains($0.learnedFrom?.lowercased() ?? "")
-                        && Date().timeIntervalSince($0.updatedAt) <= Self.reEditSeconds
+            case let .forget(edit):
+                let gone = known.filter {
+                    Self.isFresh($0)
+                        && $0.term.lowercased() == edit.replacement.lowercased()
+                        && $0.learnedFrom?.lowercased() == edit.original.lowercased()
                 }
-                guard let kept = stale.first else { break }
-                // The user went back to words learned moments ago, or edited
-                // the word beside one: the entry follows the edit, and entries
-                // for the parts of a phrase fold into the phrase.
+                guard !gone.isEmpty else { continue }
+                let goneIDs = Set(gone.map(\.id))
+                for entry in gone { dictionary.remove(id: entry.id) }
+                known.removeAll { goneIDs.contains($0.id) }
+                learned.removeAll { goneIDs.contains($0.id) }
+                Log.learning.info("Dropped a just-learned word the user put back")
+                continue
+            case let .learn(edit):
+                // The user changed a word learned moments ago, here or in
+                // another dictation.
+                correction = edit
+                stale = known.filter { Self.isFresh($0) && $0.term.lowercased() == edit.original.lowercased() }
+            case let .revise(replacing, edit):
+                // The user went back to words learned moments ago from this
+                // dictation, or edited the word beside one.
+                correction = edit
+                heardAs = edit.original
+                let wordings = Set(replacing.map { $0.lowercased() })
+                stale = known.filter { Self.isFresh($0) && wordings.contains($0.learnedFrom?.lowercased() ?? "") }
+            }
+            if let kept = stale.first {
+                // The entry follows the edit, and entries for the parts of a
+                // phrase fold into the phrase.
                 let staleIDs = Set(stale.map(\.id))
                 for entry in stale.dropFirst() { dictionary.remove(id: entry.id) }
                 known.removeAll { staleIDs.contains($0.id) }
@@ -288,7 +310,7 @@ public final class EditLearner {
                     dictionary.remove(id: kept.id)
                     Log.learning.info("Dropped a just-learned word the user edited again")
                 } else {
-                    dictionary.update(id: kept.id, term: correction.replacement, learnedFrom: correction.original)
+                    dictionary.update(id: kept.id, term: correction.replacement, learnedFrom: heardAs)
                     if let entry = dictionary.entries().first(where: { $0.id == kept.id }) {
                         learned.append(entry)
                         known.append(entry)

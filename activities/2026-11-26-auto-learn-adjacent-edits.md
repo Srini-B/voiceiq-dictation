@@ -35,11 +35,15 @@
   (letters-only edit distance above max(2, half the longer side)), the bound
   the Hex keyboard classifier uses.
 - `DictionaryStore.update(id:term:learnedFrom:)` can set `learnedFrom`.
+- Review follow-up: corrections carry the word positions they cover, so the
+  same word fixed at another place is a separate edit. A correction the user
+  undoes removes the fresh entry it taught, and fixing a word learned moments
+  ago in another dictation still renames that entry.
 
 ## Verification
 
 - `swift test --package-path VoiceIQCore` on a Mac satellite (Xcode 27):
-  253 tests, 0 failures. New `EditDiffTests` cover separate and adjacent
+  254 tests, 0 failures. New `EditDiffTests` cover separate and adjacent
   edits across a paragraph, edits a few seconds apart folding into a phrase,
   a learned word changed again, and rewording, punctuation and deletions
   teaching nothing. With the respelling check disabled, the rewording test

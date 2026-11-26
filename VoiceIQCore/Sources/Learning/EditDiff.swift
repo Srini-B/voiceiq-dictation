@@ -3,10 +3,14 @@ import Foundation
 public struct LearnedCorrection: Equatable, Sendable {
     public let original: String
     public let replacement: String
+    /// Which words of the original text `original` spans, by index, so two
+    /// edits of the same word at different places stay apart.
+    public let words: Range<Int>
 
-    public init(original: String, replacement: String) {
+    public init(original: String, replacement: String, words: Range<Int>) {
         self.original = original
         self.replacement = replacement
+        self.words = words
     }
 }
 
@@ -16,6 +20,8 @@ public enum LearningStep: Equatable, Sendable {
     /// The words earlier edits taught from the transcript wording in
     /// `replacing` become this correction's replacement.
     case revise(replacing: [String], with: LearnedCorrection)
+    /// The user put the original words back: what this taught goes.
+    case forget(LearnedCorrection)
 }
 
 public enum EditDiff {
@@ -83,7 +89,11 @@ public enum EditDiff {
                 let replacementText = clean(added.map(\.text).joined(separator: " "))
                 if valid(originalText), valid(replacementText), originalText != replacementText,
                    isPlausibleFix(originalText, replacementText) {
-                    output.append(LearnedCorrection(original: originalText, replacement: replacementText))
+                    output.append(LearnedCorrection(
+                        original: originalText,
+                        replacement: replacementText,
+                        words: (previousBefore + 1)..<pair.0
+                    ))
                 }
             }
             previousBefore = pair.0
@@ -94,21 +104,20 @@ public enum EditDiff {
 
     /// What learning should do with `corrections`, the edits a dictation now
     /// carries against its original text, given `earlier`, the edits it carried
-    /// at the previous harvest. Edits seen before are skipped. An edit that
-    /// overlaps earlier ones, because the user changed that word again or
+    /// at the previous harvest. Edits seen before are skipped. An edit over the
+    /// same words as earlier ones, because the user changed that word again or
     /// edited the word next to it, revises what those taught, so "Wispr" then
     /// "Flow" typed a few seconds apart ends as the one phrase "Wispr Flow".
+    /// An earlier edit the user undid is forgotten.
     public static func steps(for corrections: [LearnedCorrection], after earlier: [LearnedCorrection]) -> [LearningStep] {
-        corrections.compactMap { correction in
+        let changed: [LearningStep] = corrections.compactMap { correction in
             guard !earlier.contains(correction) else { return nil }
-            let words = keys(correction.original)
-            let overlapped = earlier.filter {
-                let other = keys($0.original)
-                return isRun(other, of: words) || isRun(words, of: other)
-            }
+            let overlapped = earlier.filter { $0.words.overlaps(correction.words) }
             guard !overlapped.isEmpty else { return .learn(correction) }
             return .revise(replacing: overlapped.map(\.original), with: correction)
         }
+        let undone = earlier.filter { edit in !corrections.contains { $0.words.overlaps(edit.words) } }
+        return changed + undone.map { .forget($0) }
     }
 
     /// Whether `replacement` could be the same words respelled rather than
@@ -127,16 +136,6 @@ public enum EditDiff {
             previous = row
         }
         return previous[b.count] <= max(2, max(a.count, b.count) / 2)
-    }
-
-    private static func keys(_ text: String) -> [String] {
-        words(in: text).map(\.key)
-    }
-
-    /// Whether `run` appears in `words` in order and without gaps.
-    private static func isRun(_ run: [String], of words: [String]) -> Bool {
-        guard !run.isEmpty, run.count <= words.count else { return false }
-        return (0...(words.count - run.count)).contains { Array(words[$0..<($0 + run.count)]) == run }
     }
 
     private struct State: Hashable {
