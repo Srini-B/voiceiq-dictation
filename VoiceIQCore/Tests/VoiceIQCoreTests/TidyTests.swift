@@ -52,7 +52,7 @@ final class TidyTests: XCTestCase {
         XCTAssertEqual(tidy("Dr. Patel called. Call her back.", .lists), "- Dr. Patel called\n- Call her back")
         XCTAssertEqual(tidy("Note: the build is green.", .lists), "Note: the build is green")
         XCTAssertEqual(tidy("bullet ship it bullet tag it", .lists), "- Ship it\n- Tag it")
-        XCTAssertEqual(tidy("Groceries new line milk new paragraph then eggs", .lists), "Groceries\nMilk\n\nEggs")
+        XCTAssertEqual(tidy("Groceries new line milk new paragraph then eggs", .lists), "Groceries\nMilk\n\nThen eggs")
         XCTAssertEqual(tidy("买牛奶。给妈妈打电话。", .lists, "zh-CN"), "- 买牛奶\n- 给妈妈打电话")
     }
 
@@ -90,13 +90,18 @@ final class TidyTests: XCTestCase {
     }
 
     func testSpokenSymbols() {
-        XCTAssertEqual(SpokenMarks.symbols(in: "hashtag release"), "#release")
-        XCTAssertEqual(SpokenMarks.symbols(in: "my underscore variable"), "my_variable")
         XCTAssertEqual(SpokenMarks.symbols(in: "Done, Comma, thanks."), "Done, thanks.")
-        XCTAssertEqual(SpokenMarks.symbols(in: "and slash or"), "and/or")
-        XCTAssertEqual(SpokenMarks.symbols(in: "mi Guión Bajo variable", language: "es-ES"), "mi_variable")
-        XCTAssertEqual(SpokenMarks.symbols(in: "la lista dos puntos manzanas", language: "es-ES"), "la lista: manzanas")
-        for kept in ["commas", "hashtags everywhere", "the colonel", "a hash browns sign"] {
+        XCTAssertEqual(SpokenMarks.symbols(in: "Dear Sam comma thanks"), "Dear Sam, thanks")
+        XCTAssertEqual(SpokenMarks.symbols(in: "Is it ready question mark"), "Is it ready?")
+        // Names that are also prose words, and Spanish marks, stay as said.
+        for kept in ["commas", "hashtag release", "my underscore variable", "and slash or", "the colonel",
+                     "Colon biopsy results", "a bigger colon", "comma separated values", "one question mark left"] {
+            XCTAssertEqual(SpokenMarks.symbols(in: kept), kept)
+        }
+        for kept in ["mi guion bajo variable", "la lista dos puntos manzanas", "Juan coma bien"] {
+            XCTAssertEqual(SpokenMarks.symbols(in: kept, language: "es-ES"), kept)
+        }
+        for kept in ["a hash browns sign"] {
             XCTAssertEqual(SpokenMarks.symbols(in: kept), kept)
         }
     }

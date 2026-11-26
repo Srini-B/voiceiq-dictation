@@ -123,10 +123,10 @@ public enum Tidy {
         let chars = Array(text)
         let address = TidyText.addressMask(chars)
         var inAddress = false
-        func flush() {
+        func flush(at index: Int) {
             let lower = word.lowercased()
             if let expansion = informalContractions.first(where: { $0.0 == lower })?.1, !inStraightQuote, curlyQuotes == 0,
-               !inAddress {
+               !inAddress, !spellsIdentifier(chars, after: index) {
                 if word == lower {
                     output += expansion
                 } else if word == TidyText.capitalizingFirst(lower), TidyText.startsSentenceOrItem(after: output) {
@@ -146,7 +146,7 @@ public enum Tidy {
                 word.append(c)
                 continue
             }
-            flush()
+            flush(at: index)
             switch c {
             case "\"": inStraightQuote.toggle()
             case "“": curlyQuotes += 1
@@ -155,8 +155,14 @@ public enum Tidy {
             }
             output.append(c)
         }
-        flush()
+        flush(at: chars.count)
         return output
+    }
+
+    /// Whether the next word is a spoken joiner: "gonna underscore server" is an identifier.
+    private static func spellsIdentifier(_ chars: [Character], after index: Int) -> Bool {
+        let next = chars[min(index, chars.count)...].drop(while: { $0 == " " }).prefix(while: \.isLetter)
+        return ["underscore", "hyphen", "slash", "dot"].contains(String(next).lowercased())
     }
 
     // MARK: Messages
@@ -201,17 +207,19 @@ public enum Tidy {
     // MARK: Lists
 
     private static let abbreviations: Set<String> = [
-        "mr", "mrs", "ms", "dr", "st", "jr", "sr", "prof", "vs", "etc", "inc", "ltd", "approx", "e.g", "i.e",
+        "mr", "mrs", "ms", "dr", "st", "jr", "sr", "prof", "vs", "etc", "inc", "ltd", "approx", "e.g", "i.e", "no",
+        "jan", "feb", "mar", "apr", "jun", "jul", "aug", "sep", "sept", "oct", "nov", "dec",
     ]
 
     /// Words that open a spoken note but add nothing to a written one, longest first.
     private static let connectives = [
-        "and then", "and also", "and", "also", "then", "plus", "so", "okay", "ok", "yeah", "oh", "well", "anyway",
-        "alright", "basically", "first", "firstly", "second", "secondly", "third", "thirdly", "next", "finally", "lastly",
+        "and then", "and also", "and", "also", "so", "okay", "ok", "yeah", "oh", "well", "anyway",
+        "alright", "basically", "first", "firstly", "second", "secondly", "third", "thirdly", "finally", "lastly",
     ]
 
     /// Of those, the ones that may open a note without a comma after them.
-    private static let bareConnectives: Set<String> = ["and then", "and also", "and", "also", "then", "plus"]
+    /// Not "then", "plus" or "next": "Then again, we could wait", "Plus members get free shipping".
+    private static let bareConnectives: Set<String> = ["and then", "and also", "and", "also"]
 
     private static func notes(_ text: String, english: Bool) -> String {
         guard !text.isEmpty else { return "" }
@@ -292,7 +300,8 @@ public enum Tidy {
                 // "Dr.", an initial ("J. K.") or an initialism ("U.S.") ends nothing.
                 let initials = word.split(separator: ".", omittingEmptySubsequences: false)
                     .allSatisfy { $0.count == 1 && $0.first?.isLetter == true }
-                if abbreviations.contains(word) || initials { continue }
+                // "1. Buy milk.": a list number ends nothing either.
+                if abbreviations.contains(word) || initials || (!word.isEmpty && word.allSatisfy(\.isNumber)) { continue }
             }
             let sentence = TidyText.trimmed(String(chars[start...index]))
             if !sentence.isEmpty { sentences.append(sentence) }
@@ -308,7 +317,7 @@ public enum Tidy {
     private static func bulletLines(_ text: String, bareBullets: Bool) -> String {
         // A standalone word only: never part of an address ("bullet@gmail.com"),
         // and never after an article ("a bullet point summary").
-        var patterns = [#"(?:^|(?<!\b(?:a|an|the))\s+)(?:bullet point|next bullet)(?![\w@.-]*@)(?=[\s:,]|-\s|$)[:,-]?\s*"#]
+        var patterns = [#"(?:^|(?<!\b(?:a|an|the|this|that|one|each|every|another))\s+)(?:bullet point|next bullet)(?![\w@.-]*@)(?=[\s:,]|-\s|$)[:,-]?\s*"#]
         // "Bullet trains are fast" opens with the word, once.
         if bareBullets { patterns.append(#"(?:^|\s+)bullet(?![\w@.-]*@)(?=[\s:,]|-\s|$)[:,-]?\s*"#) }
         var working = text

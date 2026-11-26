@@ -180,31 +180,36 @@ With writing Off, `GeminiTranscriptionService.write` tidies an on-device
 dictation with rules and no model (`Tidy`, adapted from Hex's dictation
 styles, MIT):
 
-1. `Tidy.spoken`: layout and symbols said by name become the marks
-   (`SpokenMarks`): "new line", "new paragraph", "open quote" … "close quote"
-   or "quote" … "unquote", "comma", "colon", "semicolon", "hashtag",
-   "underscore", "hyphen", "slash", "at sign", "question mark", "exclamation
-   mark", "full stop" (not "period", which ends "a trial period" too), and
-   none of them after an article or a describing word ("an Oxford comma",
-   "the hashtag") or, for slash, underscore and hyphen, as a verb ("to slash
-   costs"); a Spanish dictation
-   uses the Spanish words instead ("coma", "nueva línea"), and other
-   languages neither. In English, then:
+1. `Tidy.spoken`: layout and marks said by name become the marks
+   (`SpokenMarks`), only where the name cannot be prose: "new line", "new
+   paragraph", "open quote" … "close quote" or "quote" … "unquote" after a
+   word (not "a new line of shoes", "New line cook wanted"); "comma",
+   "colon" and "semicolon" between two words; "question mark",
+   "exclamation mark" and "full stop" after a word. None after an article,
+   a quantifier or a describing word ("an Oxford comma", "one question mark
+   left", "a bigger colon"). Not "period", "slash", "underscore", "hyphen",
+   "hashtag" or "at sign", which are prose words too ("a trial period", "to
+   slash costs", "our hashtag is trending", "look at sign language"). A
+   Spanish dictation gets only the layout words ("nueva línea"): "coma",
+   "dos puntos" and "guion" are words too. Other languages get none. In
+   English, then:
    - Spoken email addresses join (`SpokenAddresses`): "priya dot sharma at
      the rate gmail dot com" → "priya.sharma@gmail.com". "at the rate of 5%"
      stays.
-   - Hesitations ("um", "uh", "er", "hmm"; not "ah" or "err") go with their commas
+   - Hesitations ("um", "uh", "er", "hmm"; not "ah", "err", "uh huh", a
+     unit after a number such as "5 um", a name such as "Mr. Um", or one
+     spelling an identifier such as "um underscore server") go with their commas
      (`Hesitations`); a comma that only marked the pause goes too ("call
      her, uh, tomorrow" → "call her tomorrow").
-   - Spoken self-corrections keep only the correction (`SpokenRepairs`):
-     "scratch that" or "strike that" drops what came before (not "delete
-     that", often an instruction); "no wait", "I mean", "make that", "or
-     rather" replace a short restated phrase ("I want, I mean, I need"), a
-     like-for-like word (a day, a number, a name, a list item), or, after
-     "no wait", a whole new clause. "actually" repairs only a narrowing
-     ("actually just to Sarah"), and "sorry" nothing. Only "no wait" reaches
-     into the sentence before. "you know" set off by commas is dropped; "I
-     mean" that corrects nothing stays. When a rule is unsure, the words stay.
+   - A spoken self-correction keeps only the correction when it swaps like
+     for like and ends the sentence (`SpokenRepairs`): "Meet on Tuesday, no
+     wait, Wednesday." → "Meet on Wednesday."; "15,000, I mean, 50,000
+     dollars" → "50,000 dollars"; "John Smith, I mean, Jon Smyth". The cues
+     are "no wait", "wait no", "I mean", "make that" and "or rather".
+     Everything else stays as said, cue included: "scratch that", "actually",
+     a restated clause ("I want, I mean, I need"), a list item or a new
+     clause could each drop a word the speaker meant ("We met on Friday, I
+     mean, Monday works too").
    - A last sentence left without a mark that asks ("can you send it",
      "what time is it") gets a question mark; "When I get home, call me"
      does not.

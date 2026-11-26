@@ -105,8 +105,10 @@ enum TidyText {
                 var end = index
                 while end < chars.count, isSpace(chars[end]) { end += 1 }
                 // ".env", "./build.sh", ":wq" start a word of their own.
-                let startsWord = end + 1 < chars.count && ".:".contains(chars[end])
-                    && (isWordCharacter(chars[end + 1]) || chars[end + 1] == "/")
+                // "../scripts", "!important" too.
+                let startsWord = end + 1 < chars.count
+                    && ((".:".contains(chars[end]) && (isWordCharacter(chars[end + 1]) || "/.".contains(chars[end + 1])))
+                        || (chars[end] == "!" && chars[end + 1].isLetter))
                 if end < chars.count, ",.;:!?".contains(chars[end]), !isEmoticon(chars, at: end), !startsWord {
                     index = end
                     continue
@@ -139,7 +141,7 @@ enum TidyText {
     /// list's colon), is empty, or is a lone address ("john@gmail.com").
     static func endingSentence(_ line: String) -> String {
         guard let last = line.last else { return line }
-        if #".!?…"”)]:,;。！？」』）"#.contains(last) || (line.contains("@") && !line.contains(where: \.isWhitespace)) {
+        if #".!?…"”)]:,;。！？」』）।॥۔؟"#.contains(last) || (line.contains("@") && !line.contains(where: \.isWhitespace)) {
             return line
         }
         return line + (usesIdeographicFullStop(last) ? "。" : ".")
@@ -204,7 +206,8 @@ enum TidyText {
         let quoted = quoteMask(chars)
         var out = chars
         for index in chars.indices where chars[index] == from && !address[index] && !quoted[index] {
-            if index > 0, isWordCharacter(chars[index - 1]) || "@.'’_".contains(chars[index - 1]) { continue }
+            // "grep -i", "arr[i]": code, not the pronoun.
+            if index > 0, isWordCharacter(chars[index - 1]) || "@.'’_-[".contains(chars[index - 1]) { continue }
             var after = index + 1
             if after < chars.count, "'’".contains(chars[after]) {
                 let suffix = String(chars[(after + 1)...].prefix(2))
@@ -223,10 +226,12 @@ enum TidyText {
                 endsWord = true
             } else {
                 let next = chars[after]
-                endsWord = !(isWordCharacter(next) || "@'’_".contains(next))
+                endsWord = !(isWordCharacter(next) || "@'’_]".contains(next))
                     && !(next == "." && after + 1 < chars.count && chars[after + 1].isLetter)
             }
-            if endsWord { out[index] = to }
+            // "i underscore max" spells an identifier.
+            let next = chars[min(after, chars.count)...].drop(while: { $0 == " " }).prefix(while: \.isLetter)
+            if endsWord, !["underscore", "hyphen", "slash", "dot"].contains(String(next).lowercased()) { out[index] = to }
         }
         return String(out)
     }
@@ -236,13 +241,22 @@ enum TidyText {
     /// word starts nothing, and an address keeps its case.
     static func capitalizingSentenceStarts(_ text: String) -> String {
         var chars = Array(text)
+        // Quoted text keeps its case and ends no sentence: The password is "red. blue".
+        let quoted = quoteMask(chars)
         var capitalizeNext = true
         var endedSentence = false
         for index in chars.indices {
             let c = chars[index]
+            if quoted[index] {
+                capitalizeNext = false
+                endedSentence = false
+                continue
+            }
             if capitalizeNext && c.isLetter {
-                // "iPhone", "eBay" keep the spelling a Dictionary rule gave them.
-                if !isAddress(chars, at: index) && !hasInnerCapital(chars, at: index) { chars[index] = upper(c) }
+                // "iPhone", "eBay" keep the spelling a Dictionary rule gave them; a URL keeps its case.
+                if !isAddress(chars, at: index) && !hasInnerCapital(chars, at: index) && !isURL(chars, at: index) {
+                    chars[index] = upper(c)
+                }
                 capitalizeNext = false
             } else if c == "\n" {
                 capitalizeNext = true
@@ -271,7 +285,14 @@ enum TidyText {
         var start = index
         while start > 0, !chars[start - 1].isWhitespace { start -= 1 }
         let word = String(chars[start...index]).lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "(\"“"))
-        return ["i.e.", "e.g.", "vs.", "cf."].contains(word)
+        // "at 9 a.m. tomorrow", "Apple Inc. announced", "the U.S. yesterday": the model's case stays.
+        return ["i.e.", "e.g.", "vs.", "cf.", "inc.", "ltd.", "co.", "corp.", "mr.", "mrs.", "ms.", "dr.", "jr.", "sr.",
+                "st.", "no.", "approx."].contains(word)
+            || endsWithInitialism(word)
+    }
+
+    private static func isURL(_ chars: [Character], at index: Int) -> Bool {
+        chars[index...].prefix { !$0.isWhitespace }.map(String.init).joined().contains("://")
     }
 
     /// Whether `text` ends in an initialism such as "U.S." or "p.m.".
@@ -284,9 +305,15 @@ enum TidyText {
     /// ("iPhone"), list items and addresses.
     static func lowercasingSentenceStarts(_ text: String) -> String {
         var chars = Array(text)
+        let quoted = quoteMask(chars)
         var atStart = true
         var index = 0
         while index < chars.count {
+            if quoted[index] {
+                atStart = false
+                index += 1
+                continue
+            }
             if index == 0 || chars[index - 1] == "\n", let marker = listMarkerLength(chars, at: index) {
                 index += marker
                 atStart = false

@@ -37,6 +37,26 @@ wait. The on-device writer's removal shipped first, on its own (PR #90).
     costs"); English never folds accents ("Colón").
   - Spoken symbols run before layout, so "open quote … question mark close
     quote" converts the mark inside the quotation.
+- **Second review round (Neon's harness at `2d8679b`).** It ran about 60 more
+  ordinary sentences through the branch's rules and found words still lost:
+  symbol names used as verbs and nouns ("These numbers underscore why…",
+  "Our hashtag is trending"), "at sign" in "Look at sign language", Spanish
+  "coma" and "dos puntos" as words, and correction cues followed by real
+  clauses ("It's fine, I mean, it's not great" → "It's not great"). Two
+  rounds of narrower guards had each left new failures of the same kind, so
+  the rules that guess were removed instead of guarded again:
+  - Self-corrections: only a like-for-like swap (day, number, name; a number
+    may keep its unit) that ends the sentence. No "scratch that", "strike
+    that", "actually", restated clauses, list items, new clauses or "you
+    know" filler.
+  - Spoken marks: only comma, colon and semicolon between words, and
+    question mark, exclamation mark and full stop after a word. Slash,
+    underscore, hyphen, hashtag and at sign are gone; Spanish keeps only its
+    layout words.
+  - Hesitation sounds that are words stay: units after a number ("5 um"),
+    names ("Mr. Um"), "uh huh", identifiers ("um underscore server").
+  - The cost: corrections Gemini would resolve now stay as said, and spoken
+    identifiers are not joined. The 64 sentences are fixture cases.
 - Default style is Sentences: closest to what Gemini writes.
 - VoiceiQ names, not Hex's. No Hex UI was copied.
 - The tidy-up does not run on the Gemini-failure fallback or on meetings.
