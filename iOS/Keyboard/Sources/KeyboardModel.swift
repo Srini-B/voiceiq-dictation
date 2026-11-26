@@ -8,8 +8,9 @@ import VoiceIQBridge
 final class KeyboardModel: ObservableObject {
     @Published private(set) var snapshot = SessionSnapshot()
     @Published private(set) var appAlive = false
-    /// A message from the app, shown for a few seconds.
-    @Published private var appNotice: String?
+    /// A message from the app (a problem, in red) or the keyboard's own hint (in
+    /// secondary text), shown for a few seconds.
+    @Published private var appNotice: Notice?
     /// A finished dictation that may belong in another field. It is not
     /// typed here unasked; Paste last types it.
     @Published private(set) var waitingResult: Delivery?
@@ -21,7 +22,7 @@ final class KeyboardModel: ObservableObject {
     /// When the app has not acknowledged a command by then, it is asleep:
     /// open it. The app answers in well under 100 ms when it is running.
     static let acknowledgementTimeout: TimeInterval = 0.7
-    static let waitingNotice = "Dictation ready. Paste last puts it here."
+    static let waiting = Notice(text: "Dictation ready. Paste last puts it here.", isProblem: false)
 
     weak var controller: KeyboardViewController?
     /// Makes the keyboard's edits, so the edit panel can undo a dictation.
@@ -86,8 +87,8 @@ final class KeyboardModel: ObservableObject {
 
     /// The keyboard's one-line message. A waiting result is not mentioned
     /// while the next dictation is under way.
-    var notice: String? {
-        appNotice ?? (waitingResult == nil || phase.hasDictation ? nil : Self.waitingNotice)
+    var notice: Notice? {
+        appNotice ?? (waitingResult == nil || phase.hasDictation ? nil : Self.waiting)
     }
 
     // MARK: - Lifecycle
@@ -176,13 +177,31 @@ final class KeyboardModel: ObservableObject {
         send(KeyboardCommand(action: .cancel))
     }
 
+    struct Notice: Equatable {
+        let id = UUID()
+        let text: String
+        let isProblem: Bool
+    }
+
     /// Types the last result here, wherever it belonged.
     func pasteLast() {
-        guard let delivery = snapshot.delivery, insert(delivery.text) != nil else { return }
-        guard delivery.id != store.insertedDeliveryID else { return }
+        guard let delivery = snapshot.delivery else {
+            // Without Full Access the app's last dictation can't be read, not that there is none.
+            return flash(hasFullAccess ? "Nothing dictated yet" : "Allow Full Access to paste dictations", for: 3, isProblem: false)
+        }
+        guard insert(delivery.text) != nil, delivery.id != store.insertedDeliveryID else { return }
         store.markInserted(delivery)
         waitingResult = nil
         KeyboardLog.note("[\(instanceTag)] result typed with Paste last in \(Self.describe(currentField()))")
+    }
+
+    private func flash(_ text: String, for seconds: Double, isProblem: Bool) {
+        let shown = Notice(text: text, isProblem: isProblem)
+        appNotice = shown
+        UIAccessibility.post(notification: .announcement, argument: text)
+        DispatchQueue.main.asyncAfter(deadline: .now() + seconds) { [weak self] in
+            if self?.appNotice == shown { self?.appNotice = nil }
+        }
     }
 
     private func start() {
@@ -365,10 +384,7 @@ final class KeyboardModel: ObservableObject {
         guard let fresh = snapshot.notice, fresh.id != shownNoticeID,
               Date().timeIntervalSince(fresh.createdAt) < 10 else { return }
         shownNoticeID = fresh.id
-        appNotice = fresh.text
-        DispatchQueue.main.asyncAfter(deadline: .now() + 4) { [weak self] in
-            if self?.appNotice == fresh.text { self?.appNotice = nil }
-        }
+        flash(fresh.text, for: 4, isProblem: true)
     }
 
     /// Fits the new text to the text around the cursor: spaces on both

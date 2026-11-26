@@ -30,8 +30,9 @@ final class FullKeyboardView: UIView {
     var onTextEdit: (() -> Void)?
     /// Undo dictation took the last dictation back.
     var onUndoDictation: (() -> Void)?
-    /// VoiceiQ: where the suggestion row is, in this view, and whether the emoji panel covers
-    /// it, after each layout, so the host can place its shortcut buttons at the row's ends.
+    /// VoiceiQ: where the suggestion row is, in this view, between the keys' outer edges, and
+    /// whether the emoji panel covers it, after each layout, so the host can place its
+    /// shortcut buttons at the row's ends.
     var onStripRowLayout: ((CGRect, Bool) -> Void)?
     /// VoiceiQ: the words the strip is about to show, after Hex has set the strip's
     /// visibility for a selection, so the host can hide it again while it covers the row.
@@ -781,7 +782,8 @@ final class FullKeyboardView: UIView {
         callout.frame = content
         accentCallout.frame = content
         stripView.frame = layout.stripFrame.offsetBy(dx: 0, dy: lift)
-        onStripRowLayout?(CGRect(x: 0, y: lift + layout.metrics.stripTop, width: bounds.width, height: layout.metrics.stripHeight), emojiPanel != nil)
+        let keysEdge = layout.horizontalInset + layout.metrics.side
+        onStripRowLayout?(CGRect(x: keysEdge, y: lift + layout.metrics.stripTop, width: bounds.width - 2 * keysEdge, height: layout.metrics.stripHeight), emojiPanel != nil)
         selectionStrip.frame = stripView.frame
         stripView.slotFrames = layout.stripSlotFrames.map { $0.offsetBy(dx: -layout.stripFrame.minX, dy: -layout.stripFrame.minY) }
         stripView.pillInset = layout.metrics.stripInset

@@ -47,9 +47,8 @@ struct KeyboardView: View {
 
             if row.height > 0, !typing.emojiOpen {
                 suggestionRow
-                    .padding(.horizontal, typing.sideInset)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: row.height)
+                    .frame(width: row.width, height: row.height)
+                    .padding(.leading, row.minX)
                     .padding(.top, row.minY)
             }
         }
@@ -64,34 +63,29 @@ struct KeyboardView: View {
 
     @ViewBuilder private var suggestionRow: some View {
         if isLive {
-            RecordingStrip(model: model, compact: compact)
+            RecordingStrip(model: model, compact: compact, buttonHeight: buttonHeight)
                 .frame(height: buttonHeight)
                 .background(Capsule().fill(Color(.secondarySystemFill)))
                 .clipShape(Capsule())
-                .padding(.horizontal, 6)
                 .frame(maxHeight: .infinity)
         } else {
             HStack(spacing: 0) {
-                HStack(spacing: 6) {
+                HStack(spacing: TypingBridge.buttonGap) {
                     ShortcutIconButton(
-                        systemImage: showingEdit ? "keyboard" : "character.cursor.ibeam",
+                        systemImage: showingEdit ? "keyboard" : Self.cursorSymbol,
                         label: showingEdit ? "Keyboard" : "Cursor control",
                         active: showingEdit,
                         height: buttonHeight
                     ) {
                         editOpen.toggle()
                     }
-                    ShortcutIconButton(
-                        systemImage: "doc.on.clipboard",
-                        label: "Paste last dictation",
-                        enabled: model.lastText != nil,
-                        height: buttonHeight
-                    ) {
-                        model.pasteLast()
+                    if typing.pasteInRow {
+                        ShortcutIconButton(systemImage: Self.pasteLastSymbol, label: "Paste last dictation", height: buttonHeight) {
+                            model.pasteLast()
+                        }
                     }
                 }
-                .padding(.leading, 6)
-                .frame(width: TypingBridge.leadingEnd, alignment: .leading)
+                .frame(width: typing.leadingEnd, alignment: .leading)
 
                 // Clear, so touches between the ends reach Hex's suggestions underneath.
                 ZStack { Color.clear; centerSlot }
@@ -104,11 +98,15 @@ struct KeyboardView: View {
                     height: buttonHeight,
                     action: model.micTapped
                 )
-                .padding(.trailing, 6)
                 .frame(width: TypingBridge.trailingEnd, alignment: .trailing)
             }
         }
     }
+
+    /// The caret between two arrows: moving the cursor, not formatting text.
+    static let cursorSymbol = "arrowtriangle.left.and.line.vertical.and.arrowtriangle.right.fill"
+    /// Text going in at the caret: the last dictation again (the cursor page's Paste is a clipboard).
+    static let pasteLastSymbol = "text.insert"
 
     /// As tall as Hex's suggestion capsule, so the row reads as one bar.
     private var buttonHeight: CGFloat {
@@ -123,9 +121,9 @@ struct KeyboardView: View {
                 .lineLimit(1)
                 .buttonStyle(.plain)
         } else if let notice = model.notice {
-            Text(notice)
+            Text(notice.text)
                 .font(.caption.weight(.medium))
-                .foregroundStyle(KeyboardPalette.recording)
+                .foregroundStyle(notice.isProblem ? KeyboardPalette.recording : Color.secondary)
                 .lineLimit(1)
                 .truncationMode(.middle)
                 .padding(.horizontal, 6)
@@ -134,18 +132,15 @@ struct KeyboardView: View {
         }
     }
 
-    private var editRowHeight: CGFloat { compact ? 38 : 48 }
-    private var editBottomHeight: CGFloat { compact ? 34 : 42 }
-
+    /// Three rows of one height with one gap between them, over the keys' width.
     private var editSurface: some View {
-        VStack(spacing: 8) {
-            Spacer(minLength: 0)
-            EditPanel(editor: editor, rowHeight: editRowHeight)
-            Spacer(minLength: 0)
+        VStack(spacing: compact ? 8 : 12) {
+            EditPanel(editor: editor, pasteLast: model.pasteLast, pasteLastSymbol: Self.pasteLastSymbol)
             editBottomRow
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, compact ? 4 : 8)
+        .padding(.horizontal, typing.stripRow.minX)
+        .padding(.top, compact ? 4 : 8)
+        .padding(.bottom, compact ? 4 : 8)
     }
 
     private var editBottomRow: some View {
@@ -153,12 +148,13 @@ struct KeyboardView: View {
             if model.showsGlobeKey {
                 GlobeKey(controller: model.controller).frame(width: 44)
             }
-            KeyCap(title: "space") { editor.type(" ", as: .typing) }
+            // Blank, as the letter pages' space bar is.
+            KeyCap(title: "", label: "space") { editor.type(" ", as: .typing) }
             RepeatingKey(action: editor.deleteBackward).frame(width: 52)
             KeyCap(systemImage: "return", label: "Return") { editor.type("\n", as: .typing) }
                 .frame(width: 52)
         }
-        .frame(height: editBottomHeight)
+        .frame(maxHeight: .infinity)
     }
 }
 
@@ -166,29 +162,25 @@ private struct ShortcutIconButton: View {
     let systemImage: String
     let label: String
     var active = false
-    var enabled = true
     let height: CGFloat
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
             Image(systemName: systemImage)
-                .font(.system(size: 15, weight: .medium))
+                .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(active ? Color.white : Color.primary)
-                .frame(width: 36, height: height)
-                .background(
-                    Capsule().fill(active ? KeyboardPalette.accent : Color(.secondarySystemFill))
-                )
+                .frame(width: TypingBridge.buttonWidth, height: height)
+                .background(Capsule().fill(active ? KeyboardPalette.accent : KeyboardPalette.key))
+                .shadow(color: .black.opacity(active ? 0 : 0.28), radius: 0, y: 1)
         }
         .buttonStyle(MicBarButtonStyle())
-        .disabled(!enabled)
-        .opacity(enabled ? 1 : 0.38)
         .accessibilityLabel(label)
     }
 }
 
-/// VoiceiQ's blue mic: opens the app to dictate (or its setup without Full Access);
-/// a spinner while the app starts or writes the text.
+/// VoiceiQ's blue pill with its mark: opens the app to dictate (or its setup without
+/// Full Access); a spinner while the app starts or writes the text.
 private struct DictateButton: View {
     let phase: SessionSnapshot.Phase
     let waiting: Bool
@@ -207,12 +199,14 @@ private struct DictateButton: View {
                         .controlSize(.small)
                         .tint(writing ? KeyboardPalette.accent : .white)
                 } else {
-                    Image(systemName: "mic.fill")
-                        .font(.system(size: 16, weight: .semibold))
+                    Image("DictateMark")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(height: min(22, height - 10))
                 }
             }
             .foregroundStyle(.white)
-            .frame(width: 46, height: height)
+            .frame(width: TypingBridge.buttonWidth, height: height)
             .background(Capsule().fill(writing ? Color(.secondarySystemFill) : KeyboardPalette.accent))
         }
         .buttonStyle(MicBarButtonStyle())
@@ -226,19 +220,19 @@ private struct DictateButton: View {
 private struct RecordingStrip: View {
     @ObservedObject var model: KeyboardModel
     let compact: Bool
+    let buttonHeight: CGFloat
 
     private var recording: Bool { model.phase == .recording }
-    private var buttonSize: CGFloat { compact ? 26 : 30 }
 
     var body: some View {
         HStack(spacing: 8) {
             if recording {
-                CircleButton(
+                PillButton(
                     systemImage: "xmark",
                     label: "Cancel",
-                    fill: Color(.secondarySystemFill),
+                    fill: KeyboardPalette.key,
                     foreground: .primary,
-                    size: buttonSize,
+                    height: buttonHeight,
                     action: model.cancelTapped
                 )
             }
@@ -258,17 +252,16 @@ private struct RecordingStrip: View {
             }
             .frame(maxWidth: .infinity)
             if recording {
-                CircleButton(
+                PillButton(
                     systemImage: "stop.fill",
                     label: "Done",
                     fill: KeyboardPalette.recording,
                     foreground: .white,
-                    size: buttonSize,
+                    height: buttonHeight,
                     action: model.micTapped
                 )
             }
         }
-        .padding(.horizontal, 4)
         .background {
             if recording {
                 LevelGlow(color: KeyboardPalette.recording)
@@ -277,21 +270,22 @@ private struct RecordingStrip: View {
     }
 }
 
-private struct CircleButton: View {
+/// Cancel and Done: the same size as the Dictate pill they stand in for.
+private struct PillButton: View {
     let systemImage: String
     let label: String
     let fill: Color
     let foreground: Color
-    let size: CGFloat
+    let height: CGFloat
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
             Image(systemName: systemImage)
-                .font(.system(size: size * 0.42, weight: .bold))
+                .font(.system(size: 15, weight: .bold))
                 .foregroundStyle(foreground)
-                .frame(width: size, height: size)
-                .background(Circle().fill(fill))
+                .frame(width: TypingBridge.buttonWidth, height: height)
+                .background(Capsule().fill(fill))
         }
         .buttonStyle(MicBarButtonStyle())
         .accessibilityLabel(label)

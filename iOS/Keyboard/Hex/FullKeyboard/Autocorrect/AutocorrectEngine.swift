@@ -779,7 +779,8 @@ final class AutocorrectEngine {
 
         // Spatial autocorrect's other readings of your taps.
         if corrects, let decision = decoderDecision(for: token) {
-            for reading in decision.readings where pool.count < end && mayOffer(reading.text, replacing: token) {
+            for reading in decision.readings
+            where pool.count < end && mayOffer(reading.text, replacing: token) && !unfinished(token, replacedBy: reading.text) {
                 let text = cased(reading.text, typed: token)
                 if !has(text) {
                     pool.append(text)
@@ -792,7 +793,8 @@ final class AutocorrectEngine {
             if !knowsAsTyped(token) {
                 for guess in rankedGuesses(for: token) {
                     let fixed = cased(guess, typed: token)
-                    if fixed.caseInsensitiveCompare(token) != .orderedSame, mayOffer(guess, replacing: token), !has(fixed) {
+                    if fixed.caseInsensitiveCompare(token) != .orderedSame, mayOffer(guess, replacing: token), !has(fixed),
+                       !unfinished(token, replacedBy: guess) {
                         pool.append(fixed)
                     }
                     if pool.count >= end { break }
@@ -1085,7 +1087,8 @@ final class AutocorrectEngine {
 
         // Spatial autocorrect, when on, decides alone: your taps, the word before, and a margin.
         if let decision = decoderDecision(for: token) {
-            if let replacement = decision.replacement, mayOffer(replacement, replacing: token) {
+            if let replacement = decision.replacement, mayOffer(replacement, replacing: token),
+               !unfinished(token, replacedBy: replacement) {
                 var cased = self.cased(replacement, typed: token)
                 // A missed space after English "i" ("iwant") gives "I want", as "i" alone does.
                 if language.usesEnglishFixes, cased.contains(" ") {
@@ -1197,6 +1200,37 @@ final class AutocorrectEngine {
         }
         return best?.word
     }
+
+    /// VoiceiQ: a short prefix is an unfinished word, not a typo, so spatial autocorrect leaves
+    /// it as Apple's keyboard does. A three-letter start is extended only to a clear finish
+    /// ("wil" becomes "will"; "Hel" stays, not "Help" or "Held"; "th" still becomes "the"), and a 1-3 letter one is not swapped for
+    /// other letters the model ranks below the best completion of what was typed ("Hel" is not
+    /// "Gel"; "teh" is still "the"). A missed space ("iam", "I am") or a word the model lacks
+    /// (a Dictionary name) is never held back.
+    private func unfinished(_ token: String, replacedBy replacement: String) -> Bool {
+        let lower = token.lowercased(), fixed = replacement.lowercased()
+        guard (1...3).contains(lower.count), !fixed.contains(" "),
+              let model = contextModel ?? decoder?.model, model.language == language.rawValue else { return false }
+        let previous = Self.previousWord(beforeInput ?? "", token: token)
+        let completions = model.completions(of: lower, after: previous, allowing: { mayOffer($0, after: previous) })
+        // Finishing the word: a one or two letter start may be ("th", "the"); a three-letter one
+        // only when the finish is clear ("wil", "will"), not when it could go several ways
+        // ("Hel": help, hello, held) or is a word already.
+        if fixed.count > lower.count, fixed.hasPrefix(lower) {
+            guard lower.count == 3 else { return false }
+            guard completions.first == fixed, model.cost(of: lower, after: previous) == nil,
+                  let finished = model.cost(of: fixed, after: previous) else { return true }
+            guard completions.count > 1, let next = model.cost(of: completions[1], after: previous) else { return false }
+            return next - finished < Self.clearFinishMargin
+        }
+        guard let corrected = model.cost(of: fixed, after: previous), let best = completions.first,
+              best != fixed, let finished = model.cost(of: best, after: previous) else { return false }
+        return finished < corrected
+    }
+
+    /// How much likelier (in the model's cost) a three-letter start's best finish must be than
+    /// its next before space applies it.
+    private static let clearFinishMargin = 1.5
 
     /// What spatial autocorrect makes of `token`'s taps, or nil when it doesn't apply: off,
     /// another language's model, an apostrophe or one letter typed, a letter the model lacks,

@@ -7,16 +7,27 @@ import VoiceIQBridge
 @MainActor
 final class TypingBridge: ObservableObject {
     @Published var compact = false
-    /// Hex's suggestion row in the keyboard (VoiceiQ's buttons sit at its ends), the
-    /// landscape safe-area inset Hex keeps on both sides, and whether the emoji panel is up.
+    /// Hex's suggestion row in the keyboard, between the keys' outer edges (VoiceiQ's
+    /// buttons sit at its ends), and whether the emoji panel is up.
     @Published private(set) var stripRow: CGRect = .zero
-    @Published private(set) var sideInset: CGFloat = 0
     @Published private(set) var emojiOpen = false
+    /// Paste last sits beside cursor control, except while a suggestion too long for its
+    /// slot shows: then the row keeps one button at its left end (Paste last moves to the
+    /// cursor page), so the words get the room.
+    @Published private(set) var pasteInRow = true
 
-    /// Room at the suggestion row's ends for cursor control and Paste last (leading) and
-    /// Dictate (trailing); `KeyboardView` lays its buttons out in exactly this room.
-    static let leadingEnd: CGFloat = 86
-    static let trailingEnd: CGFloat = 56
+    /// Every button in the row (cursor control, Paste last, Dictate, recording's Cancel and
+    /// Done) is this wide, as tall as Hex's suggestion capsule.
+    static let buttonWidth: CGFloat = 44
+    static let buttonGap: CGFloat = 6
+
+    /// Room at the suggestion row's ends; `KeyboardView` lays its buttons out in exactly this room.
+    var leadingEnd: CGFloat { Self.leadingEnd(pasteInRow: pasteInRow) }
+    static let trailingEnd: CGFloat = buttonWidth + buttonGap
+
+    private static func leadingEnd(pasteInRow: Bool) -> CGFloat {
+        (pasteInRow ? 2 * buttonWidth + buttonGap : buttonWidth) + buttonGap
+    }
 
     weak var controller: UIInputViewController?
     weak var editor: EditController?
@@ -28,6 +39,10 @@ final class TypingBridge: ObservableObject {
     /// the emoji panel or a selection, so this is applied again each time the strip refreshes.
     private var suggestionsHidden = false
     private var lexiconEntries: [(userInput: String, documentText: String)] = []
+    /// The words Hex's strip shows now, and where Paste last is headed (applied on the next
+    /// run-loop turn, see `fitEnds`).
+    private var stripWords: [String] = []
+    private var pasteTarget = true
 
     var proxy: UITextDocumentProxy? { controller?.textDocumentProxy }
 
@@ -41,7 +56,7 @@ final class TypingBridge: ObservableObject {
 
     func makeKeyboard() -> FullKeyboardView {
         if let keyboard { return keyboard }
-        KeyboardLayout.reservedStripEnds = (Self.leadingEnd, Self.trailingEnd)
+        KeyboardLayout.reservedStripEnds = (leadingEnd, Self.trailingEnd)
         let view = FullKeyboardView(model: dictation, target: WeakTextTarget(self))
         view.hostController = controller
         view.languageOverride = .english
@@ -54,13 +69,18 @@ final class TypingBridge: ObservableObject {
         view.onPreferredHeightChange = { [weak self] in self?.onPreferredHeightChange?() }
         view.onTextEdit = { [weak self] in self?.editor?.syncSelection() }
         view.onUndoDictation = { [weak self] in self?.editor?.resetUndo() }
-        view.onStripSuggestions = { [weak self] _ in self?.applySuggestionsHidden() }
-        view.onStripRowLayout = { [weak self, weak view] row, emojiOpen in
+        view.onStripRowLayout = { [weak self] row, emojiOpen in
             guard let self else { return }
-            let inset = view?.engine.horizontalInset ?? 0
+            let widthChanged = self.stripRow.width != row.width
             if self.stripRow != row { self.stripRow = row }
-            if self.sideInset != inset { self.sideInset = inset }
             if self.emojiOpen != emojiOpen { self.emojiOpen = emojiOpen }
+            // Rotation, or the first layout: the same words may need the room now, or no longer.
+            if widthChanged { self.fitEnds(to: self.stripWords) }
+        }
+        view.onStripSuggestions = { [weak self] words in
+            self?.applySuggestionsHidden()
+            self?.stripWords = words
+            self?.fitEnds(to: words)
         }
         self.keyboard = view
         applySuggestionsHidden()
@@ -70,6 +90,8 @@ final class TypingBridge: ObservableObject {
     }
 
     func appeared() {
+        // Shared by every keyboard instance in the process: put back this one's ends.
+        KeyboardLayout.reservedStripEnds = (leadingEnd, Self.trailingEnd)
         refreshHostTraits()
         keyboard?.prepareForField()
         applyLexicon()
@@ -98,6 +120,32 @@ final class TypingBridge: ObservableObject {
     func loadLexicon(_ lexicon: UILexicon) {
         lexiconEntries = lexicon.entries.map { ($0.userInput, $0.documentText) }
         applyLexicon()
+    }
+
+    /// Paste last leaves the row once a word would need type smaller than 13 pt to fit its
+    /// slot beside both left buttons (a third of the room, less 3 pt a side): "Incomprehensible",
+    /// not "Including". It comes back only between words (after a space, punctuation, a symbol
+    /// or emoji), so the row doesn't change under the thumb at every letter.
+    private func fitEnds(to words: [String]) {
+        guard stripRow.width > 0 else { return }
+        let slot = (stripRow.width - Self.leadingEnd(pasteInRow: true) - Self.trailingEnd) / 3 - 6
+        let font = UIFont.systemFont(ofSize: 13)
+        let long = words.contains { ($0 as NSString).size(withAttributes: [.font: font]).width > slot }
+        var target = !long
+        if target, !pasteTarget {
+            let last = proxy?.documentContextBeforeInput?.last
+            target = last.map { !($0.isLetter || $0.isNumber) } ?? true
+        }
+        guard target != pasteTarget else { return }
+        pasteTarget = target
+        // Hex refreshes its strip inside SwiftUI's layout pass, where a published change is
+        // dropped: the latest target is applied on the next turn of the run loop.
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.pasteInRow != self.pasteTarget else { return }
+            self.pasteInRow = self.pasteTarget
+            KeyboardLayout.reservedStripEnds = (self.leadingEnd, Self.trailingEnd)
+            self.keyboard?.setNeedsLayout()
+        }
     }
 
     /// Hides Hex's suggestions while VoiceiQ shows something else in their row: the
