@@ -78,6 +78,7 @@ def spelled_numbers_as_digits(tokens: list[str]) -> list[str]:
 
 def words(text: str) -> list[str]:
     text = unicodedata.normalize("NFC", text.lower()).replace("%", " percent")
+    text = re.sub(r"[\u2018\u2019\u02bc\u0060\u00b4]", "'", text)
     text = re.sub(r"(?<=\d),(?=\d{3})", "", text)
     return spelled_numbers_as_digits(re.findall(r"[\w']+", text))
 
