@@ -412,21 +412,28 @@ import VoiceIQSpeech
         }
     }
 
-    /// The on-device speaker model alone, for splitting a far side the cloud
-    /// heard as fewer people than the call showed. Nil when the model is not
-    /// downloaded, or stays busy for a minute.
+    /// The on-device speaker model alone, for telling the far side's voices
+    /// apart after Gemini transcribed them. A missing model is downloaded
+    /// without asking: it is 21.6 MB, takes about a second, and nothing it
+    /// hears leaves the Mac (activities/2026-11-26-meeting-speakers-hybrid.md).
+    /// Nil when the model cannot be had, or stays busy, within two minutes.
     nonisolated static func farSideDiarizer(_ runner: @escaping LocalMeetingRunner) -> MeetingTranscriber.FarSideDiarizer {
         { audio in
             let id = UUID(), job = FarSideJob()
             var directory: URL?
-            for _ in 0..<30 {
-                directory = await MainActor.run {
+            for _ in 0..<60 {
+                let (session, waiting) = await MainActor.run { () -> (URL?, Bool) in
+                    let store = LocalModelStore.speakerDiarizer
+                    switch store.state {
                     // Deleting the model stops the pass and waits for it before the files go.
-                    LocalModelStore.speakerDiarizer.state == .ready
-                        ? LocalModelStore.speakerDiarizer.acquireSession(id: id, cancel: { await job.cancel() }) : nil
+                    case .ready: return (store.acquireSession(id: id, cancel: { await job.cancel() }), true)
+                    case .notDownloaded: store.download(); return (nil, true)
+                    case .downloading: return (nil, true)
+                    case .unsupported, .deleting, .failed: return (nil, false)
+                    }
                 }
-                if directory != nil { break }
-                guard await MainActor.run(body: { LocalModelStore.speakerDiarizer.state == .ready }) else { return nil }
+                directory = session
+                if directory != nil || !waiting { break }
                 try await Task.sleep(for: .seconds(2))
             }
             guard let directory else { return nil }
@@ -472,9 +479,7 @@ import VoiceIQSpeech
             ownerName: settings.meetingOwnerName, vocabulary: dictionary.sanitizedVocabulary(),
             spellings: dictionary.spellings(), writingRules: settings.customWritingRules,
             calendarEvent: meta.calendarEvent))
-        let text = try await client.meetingNotesJSON(prompt: prompt, model: cfg.writingModel, endpoint: cfg.endpoint,
-                                                     deadline: 300)
-        return try MeetingNotesPrompt.parse(text)
+        return try await client.meetingNotes(prompt: prompt, model: cfg.writingModel, endpoint: cfg.endpoint, deadline: 300)
     }
 
     /// The dictionary's wrong → right spellings, applied to what was heard.
@@ -545,6 +550,7 @@ import VoiceIQSpeech
     private func finish(id: MeetingID, meta: inout MeetingMeta, transcript: [TranscriptSegment], notes: MeetingNotes) throws {
         try store.save(transcript: transcript, id: id)
         try store.save(notes: notes, id: id)
+        meta.screenNames = ScreenSpeakerNames.byElimination(meta: meta, transcript: transcript, notes: notes)
         meta.title = notes.title; meta.status = .done; meta.notesSpeakerNames = meta.speakerNames
         // Names typed while the notes were written stay, and show the notes as out of date.
         if let current = store.list().first(where: { $0.id == id }) { meta.speakerNames = current.speakerNames }

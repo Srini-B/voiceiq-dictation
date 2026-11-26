@@ -20,11 +20,57 @@ word timestamps (`timestamp_granularities: ["word"]`). Without the word
 timestamps the API returned one text block with the speaker turns run
 together (2026-09-26). A request tells apart up to 8 speakers and holds at
 most 30 minutes of audio, so `MeetingTranscriber` sends only the stretches
-with speech (`CallAudio.activeRegions`), cut into windows of 10 minutes of
-speech each. Every window after the first starts with reference clips of the
-speakers already found, so a speaker keeps one id across a long call
-(`SpeakerLinker`). Finished windows are cached beside the audio, so a retry
-never pays for the same audio twice.
+with speech, cut into windows of 10 minutes of speech each. Every window
+after the first starts with reference clips of the speakers already found, so
+a speaker keeps one id across a long call (`SpeakerLinker`). Finished windows
+are cached beside the audio, so a retry never pays for the same audio twice.
+
+What a request holds depends on the mic:
+
+- **Echo-free mic on a call** (`CallAudio.micIsEchoFree`, the usual case with
+  headphones or after `EchoCanceller`): each track is sent on its own
+  (`MeetingTranscriber.transcribeTracks`). Every word from the mic is the
+  note owner's; the far side's requests hold only the system track, so Gemini
+  tells apart only the other people. Double-talk survives because each voice
+  is on its own track. Cached as `mic-N.json` and `far-N.json`.
+- **Otherwise** (speakerphone echo the canceller could not remove, or a
+  recording with no far side): both tracks as one levelled timeline
+  (`CallAudio.samples`), as before. Cached as `N.json`.
+
+Measured 2026-11-26 on AMI ES2004a as a call (one headset as the mic, the
+other three summed as the far side): the mixed request lost one of the four
+people and put 73.5% of words under the right person; the far side alone
+found all three remote voices at 83.8%. The 2026-09-27 finding that a
+far-side-only request returns a fraction of the speech held for the models of
+that time, not `gemini-3.5-transcribe`.
+
+A request the API ends with status `incomplete` (seen when a mostly silent
+track was sent with its silences) is sent again as two halves
+(`MeetingTranscriber.requestWords`). Silences are never sent, so this is a
+fallback.
+
+## Who said what on the far side
+
+On every call, the on-device speaker model (pyannote community-1, 21.6 MB,
+in Settings as Speaker Separation) runs over the whole system track and
+decides which far-side person said each word (`MeetingTranscriber.splitFarSide`,
+cached as `transcribe-far-speakers-v1.json`). Gemini's own far-side ids are
+kept only when the model is unavailable or heard nobody. Gemini takes no
+speaker count and got the count right in 16 of 36 runs in an outside test;
+the model got 31 of 33 in ours
+([activities/2026-11-06-offline-speaker-diarizer.md](../activities/2026-11-06-offline-speaker-diarizer.md)).
+When the model is missing, the first meeting that needs it downloads it
+without asking (`MeetingEngine.farSideDiarizer`); nothing it hears leaves the
+Mac. The decision is in
+[activities/2026-11-26-meeting-speakers-hybrid.md](../activities/2026-11-26-meeting-speakers-hybrid.md).
+
+A far-side voice the model hears for less than 1% of the meeting is not a
+participant: each of its words goes to the nearest word of another far-side
+voice (`MeetingTranscriber.foldingStrayVoices`). On AMI ES2004a it was 8.7 s
+of overlapping "yeah" and "okay".
+
+A speaker's turn that runs past 20 s ends at its next sentence end, so a long
+answer reads as paragraphs with their own times (`MeetingTranscriber.paragraphSeconds`).
 
 ## Call detection
 
@@ -253,7 +299,7 @@ mini has one input. The decisions are in
 
 ## The note owner
 
-The owner is the speaker heard from the mic and not from the far side
+The owner is everything on the mic when the tracks go separately, and otherwise the speaker heard from the mic and not from the far side
 (`MeetingTranscriber.markOwner`). This runs only when the recording is a call
 (`CallAudio.isOnline`): at least 5 s of far-side speech when the recording
 started on a detected call (`MeetingMeta.source`), and 20 s otherwise.
@@ -272,14 +318,6 @@ snapshots, less one). It is used three ways:
   known remote speaker only when the reference clip got no label of its own
   and the call showed at most one other person. With two or more, a new
   voice becomes a new speaker.
-- When the call showed more other people than the transcript has far-side
-  ids, the cloud path runs
-  the on-device speaker model on the system track alone (no speech model) and
-  gives the far-side words to its voices when it hears more of them
-  (`MeetingTranscriber.splitFarSide`, cached as
-  `transcribe-far-speakers-v1.json`). Without the model downloaded
-  (Speaker Separation, pyannote community-1, in Settings) nothing changes and the log says
-  so.
 - `ScreenNames.remote` keeps the count and `ScreenNames.probablyMerged` marks
   a transcript with fewer far-side ids than that. The log says "speakers
   probably merged", and the notes request tells the notes model one label may
@@ -287,13 +325,20 @@ snapshots, less one). It is used three ways:
 
 `ScreenSpeakerNames.match` also gives the one far-side speaker the one other
 name on screen when the call had at most one other person, though that name
-was always visible. Single-word names count when they stay on screen in at
+was always visible.
+
+Once the notes are written, `ScreenSpeakerNames.byElimination` names the last
+far-side speaker still unnamed with the last calendar invitee not matched to
+a voice, when the invite lists as many other people as the far side has
+voices and that speaker said at least 10 words. Wispr Flow names the last
+voice the same way. Single-word names count when they stay on screen in at
 least a quarter of the snapshots and are no UI word
 (`ScreenSpeakerNames.singleNames`, `uiWords`).
 
 ## Words follow their track
 
-`MeetingTranscriber.byTrack` runs on every call after the owner is marked: a
+When the two tracks went as one timeline, `MeetingTranscriber.byTrack` runs
+after the owner is marked: a
 word heard only on the system track is not the owner's (when the mic is
 echo-free, so mic silence means the owner was silent) and goes to the nearest
 far-side speaker within 30 s, else to one new far-side id; a word heard
@@ -337,7 +382,8 @@ meeting never raises a permission prompt (`CGPreflightScreenCaptureAccess`,
    kept, and `stopRecording` saves them as `screen-names.json` in the meeting
    folder. Snapshots with no names are kept too; they set the base rate.
 5. With Accessibility granted, `CallWindowText` also reads the call app's
-   windows through the Accessibility API at each sample: static text, image
+   windows through the Accessibility API at each sample (in a browser, only
+   the window whose front tab is a call page, by its title or document): static text, image
    and group labels (name tags, the participants list), not buttons or menus.
    The walk stops at 2,500 elements or 0.8 s, because each read waits on the
    call app. Electron and Chromium apps are woken first with
@@ -372,6 +418,13 @@ suggestion, then "Speaker N".
 Limits: a gallery view with every tile always visible gives no signal (a name
 that is always on screen has no lift); banners covering a tag lose it; the
 owner is named only when the call app marks their tile or row.
+
+In a gallery view the names come from the notes request instead. Its
+`speakers` answer names a voice that introduces itself, that others address
+by one name in two or more turns, or that answers in the very next turn after
+someone addresses a calendar invitee or on-screen name ("Sarah, you first.").
+Then `ScreenSpeakerNames.byElimination` gives the last unnamed voice the last
+unmatched invitee.
 
 ## The notes request
 

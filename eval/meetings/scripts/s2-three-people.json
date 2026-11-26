@@ -1,0 +1,40 @@
+{
+  "id": "s2-three-people",
+  "title": "Mobile release planning",
+  "app": "com.google.Chrome",
+  "owner": "Cyron Das",
+  "participants": [
+    {"name": "Cyron Das", "voice": "Aman"},
+    {"name": "Nihal", "voice": "Daniel"},
+    {"name": "Muhammed Hafeed", "voice": "Fred"}
+  ],
+  "calendar": ["Nihal", "Muhammed Hafeed"],
+  "screen": "gallery",
+  "turns": [
+    ["Cyron Das", "Okay, let's start. Nihal, can you give us the status of the iOS build?"],
+    ["Nihal", "Sure. The build passed review yesterday. We are only waiting on the new screenshots."],
+    ["Cyron Das", "Muhammed, where are we with the screenshots?"],
+    ["Muhammed Hafeed", "I have four of the six done. The dark mode ones are left. I need one more day."],
+    ["Nihal", "Then Hafeed can send them to me tomorrow and I will upload them in the evening."],
+    ["Cyron Das", "That works. What about the crash on older iPhones?"],
+    ["Nihal", "I traced it to the keyboard extension. It runs out of memory when the dictionary is large."],
+    ["Muhammed Hafeed", "Could we load the dictionary lazily instead of all at once?"],
+    ["Nihal", "That is what I was thinking. I can try it today and see if the memory drops."],
+    ["Cyron Das", "Good. Let's decide that the release waits until the crash fix is in. No release with a known crash."],
+    ["Muhammed Hafeed", "Agreed. Should we move the release date then?"],
+    ["Cyron Das", "Yes, move it from Monday to Wednesday. I will tell the support team."],
+    ["Nihal", "Wednesday is fine for me."],
+    ["Muhammed Hafeed", "Same here. I'll finish the screenshots tomorrow."],
+    ["Cyron Das", "Thanks both. Let's meet again on Tuesday to confirm."]
+  ],
+  "decisions": [
+    "The release waits for the keyboard crash fix",
+    "The release moves from Monday to Wednesday"
+  ],
+  "actions": [
+    {"owner": "Muhammed Hafeed", "text": "Finish the dark mode screenshots and send them to Nihal", "due": "tomorrow"},
+    {"owner": "Nihal", "text": "Upload the screenshots", "due": "tomorrow evening"},
+    {"owner": "Nihal", "text": "Try loading the dictionary lazily to fix the memory crash", "due": "today"},
+    {"owner": "Cyron Das", "text": "Tell the support team the release moved to Wednesday"}
+  ]
+}

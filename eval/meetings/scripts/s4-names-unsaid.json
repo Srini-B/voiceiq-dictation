@@ -1,0 +1,35 @@
+{
+  "id": "s4-names-unsaid",
+  "title": "Vendor contract renewal",
+  "app": "com.tinyspeck.slackmacgap",
+  "owner": "Jordan Blake",
+  "participants": [
+    {"name": "Jordan Blake", "voice": "Fred"},
+    {"name": "Dana Whitfield", "voice": "Moira"},
+    {"name": "Kenji Watanabe", "voice": "Daniel"}
+  ],
+  "calendar": ["Dana Whitfield", "Kenji Watanabe"],
+  "screen": null,
+  "turns": [
+    ["Jordan Blake", "Okay, I think everyone's here. Let's talk about the hosting contract, it renews at the end of the month."],
+    ["Dana Whitfield", "Hi, this is Dana from finance. The vendor sent the new quote yesterday. It's twelve percent higher than last year."],
+    ["Kenji Watanabe", "Twelve percent is a lot. Our usage actually went down after we moved the logs to cold storage."],
+    ["Jordan Blake", "So we have some room to push back."],
+    ["Kenji Watanabe", "I'd say so. I can pull the usage numbers for the last six months and send them over."],
+    ["Dana Whitfield", "That would help. If we can show lower usage, I'd ask for a flat renewal."],
+    ["Jordan Blake", "And if they won't move?"],
+    ["Dana Whitfield", "Then we sign for one year only, not three, and look at other vendors in the spring."],
+    ["Kenji Watanabe", "I'm fine with that. Moving would take about two months of engineering time, so one year gives us room."],
+    ["Jordan Blake", "Alright. We ask for a flat renewal, and if they refuse, we sign for one year. Dana, you'll run the negotiation?"],
+    ["Dana Whitfield", "Yes, I'll call their account manager on Monday."],
+    ["Jordan Blake", "Great. Usage numbers by Friday then, and Dana calls them Monday. Thanks."]
+  ],
+  "decisions": [
+    "Ask the vendor for a flat renewal",
+    "If the vendor refuses, sign for one year instead of three and review other vendors in the spring"
+  ],
+  "actions": [
+    {"owner": "Kenji Watanabe", "text": "Pull the last six months of usage numbers and send them over", "due": "Friday"},
+    {"owner": "Dana Whitfield", "text": "Call the vendor's account manager to negotiate", "due": "Monday"}
+  ]
+}

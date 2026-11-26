@@ -108,7 +108,7 @@ public final class ScreenNameSampler: @unchecked Sendable {
         let time = Date().timeIntervalSince(startedAt)
         do {
             var lines = snapshots ? try await capture().map(Self.read) ?? [] : []
-            if let pid { lines += CallWindowText.lines(pid: pid) }
+            if let pid { lines += CallWindowText.lines(pid: pid, browser: bundleID.map(CallApps.browsers.contains) ?? false) }
             let names = ScreenSpeakerNames.candidates(in: lines), me = ScreenSpeakerNames.owner(in: lines)
             let single = ScreenSpeakerNames.singleNames(in: lines), count = ScreenSpeakerNames.participantCount(in: lines)
             samples.withLock { $0.append(ScreenNameSample(time: time, names: names, me: me.isEmpty ? nil : me,
