@@ -52,7 +52,6 @@ enum SpokenMarks {
     /// "period" ("a trial period").
     private static let englishSymbols: [([String], Character, Join)] = [
         (["comma"], ",", .previous),
-        (["semicolon"], ";", .previous),
         (["colon"], ":", .previous),
         (["full", "stop"], ".", .previous),
         (["question", "mark"], "?", .previous),
@@ -99,10 +98,12 @@ enum SpokenMarks {
             }
             // "a new line of shoes", "my new paragraph"; and inside "quote …
             // unquote" the words are what is quoted.
-            if wordStart, pendingUnquote == nil, wordBefore(chars, at: index).map({ !describesLayout($0) }) ?? false,
+            // Only after a mark ("Dear Sam, new paragraph", "Hello. New line."): "Press enter
+            // for new line" and "Write new paragraph at the top" use the words as nouns.
+            if wordStart, pendingUnquote == nil,
                let (layout, end) = layouts.lazy.compactMap({ words, layout in
                 phraseEnd(words, in: chars, at: index, foldsAccents: spanish).map { (layout, $0) }
-            }).first, !nounAfterLayout(chars, after: end) {
+            }).first, !nounAfterLayout(chars, after: end), saysLayout(layout, chars, at: index) {
                 index = write(layout, into: &out, chars, after: end)
                 continue
             }
@@ -176,7 +177,9 @@ enum SpokenMarks {
                       let before = wordBefore(chars, at: index), !namesTheMark(before),
                       // A comma, colon or semicolon comes between words: "a bigger colon." is the organ.
                       !["comma", "colon", "semicolon"].contains(words[0]) || wordFollows(chars, after: end),
-                      words != ["comma"] || !beforeCompound(chars, after: end, ["separated", "delimited", "splice", "splices"]),
+                      words != ["comma"] || !beforeCompound(chars, after: end, ["separated", "separate", "delimited", "splice", "splices", "rules", "key"]),
+                      // "That's my final answer, full stop.": emphasis, said after a comma.
+                      words != ["full", "stop"] || !afterComma(chars, at: index),
                       words != ["colon"] || !beforeCompound(chars, after: end, colonCompounds) else { return nil }
                 return (symbol, join, end)
             }).first {
@@ -207,10 +210,26 @@ enum SpokenMarks {
         return compounds.contains(String(chars[start..<stop]).lowercased())
     }
 
+    private static func afterComma(_ chars: [Character], at index: Int) -> Bool {
+        var before = index
+        while before > 0, TidyText.isSpace(chars[before - 1]) { before -= 1 }
+        return before > 0 && chars[before - 1] == ","
+    }
+
     /// Whether a word follows on the same line, after spaces and commas.
     private static func wordFollows(_ chars: [Character], after end: Int) -> Bool {
         let next = skip(chars, from: end, also: ",")
         return next < chars.count && (TidyText.isWordCharacter(chars[next]) || "\"“(".contains(chars[next]))
+    }
+
+    /// A line break only after a mark ("Dear Sam, new paragraph", "Hello.
+    /// New line."): "Press enter for new line" and "Write new paragraph at the
+    /// top" use the words as nouns. A quotation mark after any word that does
+    /// not describe it.
+    private static func saysLayout(_ layout: Layout, _ chars: [Character], at index: Int) -> Bool {
+        let before = wordBefore(chars, at: index)
+        if case .lineBreak = layout { return before == "" }
+        return before.map { !describesLayout($0) } ?? false
     }
 
     /// Words before "new line" that make it a noun: "a new line of shoes",
@@ -249,6 +268,8 @@ enum SpokenMarks {
             "one", "no", "any", "some", "every", "each", "another", "single", "extra", "missing", "stray",
             "trailing", "oxford", "serial", "big", "bigger", "huge", "giant", "inverted", "un", "una", "el", "la",
             "mi", "su", "este", "esta",
+            // A preposition makes it a noun: "came to full stop", "press enter for new line".
+            "to", "for", "at", "of", "with", "in", "on", "from", "by", "about",
         ].contains(word)
     }
 
@@ -368,8 +389,8 @@ enum Hesitations {
         return clause.split(whereSeparator: \.isWhitespace).count >= 2
     }
 
-    /// "_" joins too: "um_server" is an identifier.
-    private static func joinsWord(_ c: Character) -> Bool { TidyText.isWordCharacter(c) || "-'’_".contains(c) }
+    /// "_" and "/" join too: "um_server" is an identifier, "/um/config" a path.
+    private static func joinsWord(_ c: Character) -> Bool { TidyText.isWordCharacter(c) || "-'’_/".contains(c) }
 
     /// A hesitation's letters that are a word here: after a number ("5 um",
     /// micrometres; "2 em"), capitalized mid-sentence ("Mr. Um"), or "uh"
@@ -381,11 +402,15 @@ enum Hesitations {
         var wordStart = before
         while wordStart > 0, !chars[wordStart - 1].isWhitespace { wordStart -= 1 }
         let previous = String(chars[wordStart..<before]).lowercased()
-        // "Mr. Um", and "server underscore um" spelling an identifier.
-        if ["mr.", "mrs.", "ms.", "dr.", "prof.", "underscore", "hyphen", "slash", "dot"].contains(previous) { return true }
+        // "Mr. Um", "server underscore um" spelling an identifier, and the sound
+        // named as a word: "the um key", "He said um three times".
+        if ["mr.", "mrs.", "ms.", "dr.", "prof.", "underscore", "hyphen", "slash", "dot", "the", "a", "an", "said", "say",
+            "says", "word", "type", "typed"].contains(previous) { return true }
         if chars[start].isUppercase, before > 0, !".!?\n".contains(chars[before - 1]) { return true }
         let rest = String(chars[start...].prefix(16)).lowercased()
-        if rest.hasPrefix("uh huh") || rest.hasPrefix("uh-huh") { return true }
+        if ["uh huh", "uh-huh", "uh oh", "uh-oh"].contains(where: rest.hasPrefix) { return true }
+        // "Er is a German pronoun": a capitalized sound followed by a verb is the word.
+        if chars[start].isUppercase, ["er is", "um is", "uh is"].contains(where: rest.hasPrefix) { return true }
         // "um underscore server" spells an identifier.
         let next = rest.split(separator: " ").dropFirst().first.map(String.init) ?? ""
         return ["underscore", "hyphen", "slash", "dot"].contains(next)

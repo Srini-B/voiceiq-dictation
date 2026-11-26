@@ -30,7 +30,8 @@ enum SpokenRepairs {
     ]
 
     /// `text` with each like-for-like spoken self-correction resolved: a day
-    /// for a day, a number for a number, a name for a name, where the
+    /// for a day or a number for a number (not names: "I met John, I mean,
+    /// Seriously." has a capital that is no name), where the
     /// correction is all that is left of the sentence. "Meet on Tuesday, no
     /// wait, Wednesday." → "Meet on Wednesday."; "The budget is 15,000, I
     /// mean, 50,000 dollars." → "The budget is 50,000 dollars." Anything else
@@ -92,7 +93,7 @@ enum SpokenRepairs {
     private static func swappedStart(_ tokens: [Token], cue: Int, correction: Int) -> Int? {
         let stop = tokens[correction...].firstIndex { endsSentence($0.word) } ?? tokens.count - 1
         let fixed = Array(tokens[correction...stop])
-        guard fixed.count <= 2, let kind = kind(fixed[0].word, opensClause: false) else { return nil }
+        guard fixed.count <= 2, let kind = kind(fixed[0].word, opensClause: false), kind != .name else { return nil }
         if fixed.count == 2 {
             let second = fixed[1]
             guard self.kind(second.word, opensClause: false) == kind || (kind == .number && units.contains(second.bare))

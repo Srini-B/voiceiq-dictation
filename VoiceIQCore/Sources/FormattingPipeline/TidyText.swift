@@ -144,6 +144,11 @@ enum TidyText {
         if #".!?…"”)]:,;。！？」』）।॥۔؟"#.contains(last) || (line.contains("@") && !line.contains(where: \.isWhitespace)) {
             return line
         }
+        // Devanagari and Bengali end with "।"; an Arabic-script line keeps what the model wrote.
+        if let value = last.unicodeScalars.first?.value {
+            if (0x0900...0x09FF).contains(value) { return line + "।" }
+            if (0x0600...0x06FF).contains(value) { return line }
+        }
         return line + (usesIdeographicFullStop(last) ? "。" : ".")
     }
 
@@ -207,7 +212,7 @@ enum TidyText {
         var out = chars
         for index in chars.indices where chars[index] == from && !address[index] && !quoted[index] {
             // "grep -i", "arr[i]": code, not the pronoun.
-            if index > 0, isWordCharacter(chars[index - 1]) || "@.'’_-[".contains(chars[index - 1]) { continue }
+            if index > 0, isWordCharacter(chars[index - 1]) || "@.'’_-[/".contains(chars[index - 1]) { continue }
             var after = index + 1
             if after < chars.count, "'’".contains(chars[after]) {
                 let suffix = String(chars[(after + 1)...].prefix(2))
@@ -226,7 +231,7 @@ enum TidyText {
                 endsWord = true
             } else {
                 let next = chars[after]
-                endsWord = !(isWordCharacter(next) || "@'’_]".contains(next))
+                endsWord = !(isWordCharacter(next) || "@'’_]/".contains(next))
                     && !(next == "." && after + 1 < chars.count && chars[after + 1].isLetter)
             }
             // "i underscore max" spells an identifier.
@@ -380,7 +385,7 @@ enum TidyText {
     /// stays.
     static func capitalizingFirstLetter(_ text: String) -> String {
         let chars = Array(text)
-        guard let index = chars.firstIndex(where: isWordCharacter), chars[index].isLetter,
+        guard let index = chars.firstIndex(where: isWordCharacter), chars[index].isLetter, !quoteMask(chars)[index],
               !isAddress(chars, at: index), !hasInnerCapital(chars, at: index) else { return text }
         var out = chars
         out[index] = upper(chars[index])
