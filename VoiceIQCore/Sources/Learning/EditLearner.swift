@@ -11,11 +11,20 @@ import Foundation
 public final class EditLearner {
     private struct Insertion {
         let id: UUID
+        /// The text as inserted. Each harvest diffs the field against this, so
+        /// words edited a few seconds apart still read as one phrase.
+        let original: String
+        /// Where the insertion was last found, to find it again.
         var text: String
         let insertedAt: Date
+        /// The edits it carried at the last harvest.
+        var edits: [LearnedCorrection] = []
     }
 
     private struct TrackedField {
+        /// A field forgotten and tracked again is a new one: results of
+        /// harvests that started on the old one are dropped.
+        let id = UUID()
         let snapshot: FieldSnapshot
         var insertions: [Insertion]
         var lastInsertionAt: Date
@@ -27,13 +36,20 @@ public final class EditLearner {
         var pendingSince: Date?
         var pollTask: Task<Void, Never>?
         var harvesting = false
+        /// Return captures still diffing: the field is not dropped under one.
+        var capturesInFlight = 0
+        /// Harvests are numbered when they read the field; a result older
+        /// than the last one applied (a slow poll behind a Return capture)
+        /// is dropped.
+        var nextTicket = 0
+        var appliedTicket = -1
     }
 
     /// One matched insertion after a harvest: its text now reads `window`.
     private struct Located: Sendable {
         let id: UUID
         let window: String
-        let corrections: [LearnedCorrection]
+        let edits: DictationEdits
     }
 
     private enum Harvest: Sendable {
@@ -54,15 +70,10 @@ public final class EditLearner {
     /// the user was on the way from "Paystack" to "pstack").
     nonisolated static let settleSeconds: TimeInterval = 4
 
-    /// An auto-learned word edited again within this long of being learned
-    /// (or last renamed) is treated as a fix to that word, not a new one.
+    /// An auto-learned word edited again, or extended by editing the word next
+    /// to it, within this long of being learned (or last revised) is revised
+    /// in place rather than joined by a new entry.
     nonisolated static let reEditSeconds: TimeInterval = 120
-
-    private nonisolated static func isFreshlyLearned(_ entry: DictionaryEntry, as term: String) -> Bool {
-        entry.source == .auto
-            && entry.term.lowercased() == term
-            && Date().timeIntervalSince(entry.updatedAt) <= reEditSeconds
-    }
 
     private let dictionary: DictionaryStore
     private var fields: [FieldKey: TrackedField] = [:]
@@ -110,11 +121,14 @@ public final class EditLearner {
             lastInsertionAt: now
         )
         tracked.insertions.removeAll { now.timeIntervalSince($0.insertedAt) > 7_200 }
-        tracked.insertions.append(Insertion(id: UUID(), text: text, insertedAt: now))
+        tracked.insertions.append(Insertion(id: UUID(), original: text, text: text, insertedAt: now))
         if tracked.insertions.count > 20 {
             tracked.insertions.removeFirst(tracked.insertions.count - 20)
         }
         tracked.lastInsertionAt = now
+        // A poll that read the field before this insertion is no longer the
+        // newest, so it cannot drop the field or move its pending value.
+        tracked.nextTicket += 1
         tracked.lastValueHash = nil
         tracked.pendingHash = nil
         tracked.pendingSince = nil
@@ -171,14 +185,17 @@ public final class EditLearner {
         let now = Date()
         tracked.insertions.removeAll { now.timeIntervalSince($0.insertedAt) > 7_200 }
         guard !tracked.insertions.isEmpty else {
-            forget(key)
+            if tracked.capturesInFlight == 0 { forget(key) }
             return
         }
-        if captured == nil { tracked.harvesting = true }
+        if captured == nil { tracked.harvesting = true } else { tracked.capturesInFlight += 1 }
+        let ticket = tracked.nextTicket
+        let fieldID = tracked.id
+        tracked.nextTicket += 1
         fields[key] = tracked
 
         let snapshot = tracked.snapshot
-        let insertions = tracked.insertions.map { ($0.id, $0.text) }
+        let insertions = tracked.insertions.map { ($0.id, $0.text, $0.original, $0.edits) }
         let previousHash = tracked.lastValueHash
         let settled = tracked.pendingSince.map { now.timeIntervalSince($0) >= Self.settleSeconds } == true
         let settledHash = captured?.hashValue ?? (settled ? tracked.pendingHash : nil)
@@ -191,38 +208,51 @@ public final class EditLearner {
             )
         }.value
 
-        guard var current = fields[key] else { return }
-        if captured == nil { current.harvesting = false }
+        guard var current = fields[key], current.id == fieldID else { return }
+        if captured == nil { current.harvesting = false } else { current.capturesInFlight -= 1 }
+        // Only the newest harvest may drop the field or move its pending
+        // value: an older one read the field before a newer one did.
+        let newest = ticket == current.nextTicket - 1
         switch result {
         case .fieldGone:
-            forget(key)
+            if newest, current.capturesInFlight == 0 { forget(key) } else { fields[key] = current }
         case .unchanged:
             fields[key] = current
         case let .editing(valueHash):
-            if valueHash != current.pendingHash {
+            if newest, valueHash != current.pendingHash {
                 current.pendingHash = valueHash
                 current.pendingSince = now
             }
             fields[key] = current
         case let .located(located, valueHash):
+            guard ticket > current.appliedTicket else {
+                fields[key] = current
+                return
+            }
+            current.appliedTicket = ticket
             current.lastValueHash = valueHash
             current.pendingHash = nil
             current.pendingSince = nil
             let harvested = Set(insertions.map(\.0))
             let byID = Dictionary(uniqueKeysWithValues: located.map { ($0.id, $0) })
+            var steps: [LearningStep] = []
             current.insertions = current.insertions.compactMap { insertion in
                 guard harvested.contains(insertion.id) else { return insertion }
                 guard let match = byID[insertion.id] else { return nil }
+                steps += EditDiff.steps(for: match.edits, after: insertion.edits)
                 var updated = insertion
                 updated.text = match.window
+                updated.edits = EditDiff.history(after: match.edits, earlier: insertion.edits)
                 return updated
             }
-            guard !current.insertions.isEmpty else {
+            if current.insertions.isEmpty, newest, current.capturesInFlight == 0 {
                 forget(key)
-                return
+            } else {
+                fields[key] = current
             }
-            fields[key] = current
-            learn(located.flatMap(\.corrections))
+            let taught = current.insertions.flatMap(\.edits)
+                .reduce(into: [String: Int]()) { $0[$1.replacement.lowercased(), default: 0] += 1 }
+            learn(steps, stillTaught: taught)
         }
     }
 
@@ -234,7 +264,7 @@ public final class EditLearner {
 
     private nonisolated static func compute(
         value: String?,
-        insertions: [(UUID, String)],
+        insertions: [(UUID, String, String, [LearnedCorrection])],
         previousHash: Int?,
         settledHash: Int?
     ) -> Harvest {
@@ -248,42 +278,99 @@ public final class EditLearner {
             return Located(
                 id: insertion.0,
                 window: match.window,
-                corrections: EditDiff.corrections(original: insertion.1, replacement: match.window)
+                edits: EditDiff.edits(original: insertion.2, replacement: match.window, earlier: insertion.3)
             )
         }
         return .located(located, valueHash: valueHash)
     }
 
-    private func learn(_ corrections: [LearnedCorrection]) {
+    private nonisolated static func isFresh(_ entry: DictionaryEntry) -> Bool {
+        entry.source == .auto && !entry.starred && Date().timeIntervalSince(entry.updatedAt) <= reEditSeconds
+    }
+
+    /// `stillTaught`: how many corrections in this field still teach each
+    /// spelling, so undoing or revising one copy of a fix does not drop a word
+    /// another copy keeps.
+    func learn(_ steps: [LearningStep], stillTaught: [String: Int]) {
         var learned: [DictionaryEntry] = []
         var known = dictionary.entries()
-        for correction in corrections {
-            let original = correction.original.lowercased()
-            let replacement = correction.replacement.lowercased()
-            if let index = known.firstIndex(where: { Self.isFreshlyLearned($0, as: original) }) {
-                // The user went back to a word learned moments ago: that is a
-                // correction of the correction, so the entry follows the edit.
-                let stale = known.remove(at: index)
-                let clashes = known.contains { $0.term.lowercased() == replacement }
-                if clashes || CommonWords.isOrdinary(correction.replacement) {
-                    dictionary.remove(id: stale.id)
+        for step in steps {
+            let correction: LearnedCorrection
+            let candidates: [DictionaryEntry]
+            // The transcript wording a revised entry now records; nil keeps it.
+            var heardAs: String?
+            switch step {
+            case let .forget(edit):
+                guard stillTaught[edit.replacement.lowercased(), default: 0] == 0 else { continue }
+                // By spelling alone: a rename from another dictation keeps
+                // the older wording.
+                let gone = known.filter { Self.isFresh($0) && $0.term.lowercased() == edit.replacement.lowercased() }
+                guard !gone.isEmpty else { continue }
+                let goneIDs = Set(gone.map(\.id))
+                for entry in gone { dictionary.remove(id: entry.id) }
+                known.removeAll { goneIDs.contains($0.id) }
+                learned.removeAll { goneIDs.contains($0.id) }
+                Log.learning.info("Dropped a just-learned word the user put back")
+                continue
+            case let .learn(edit):
+                // The user changed a word learned moments ago, here or in
+                // another dictation.
+                correction = edit
+                candidates = known.filter { Self.isFresh($0) && $0.term.lowercased() == edit.original.lowercased() }
+            case let .revise(replacing, edit):
+                // The user went back to words learned moments ago from this
+                // dictation, or edited the word beside one.
+                correction = edit
+                heardAs = edit.original
+                // Matched by the spelling the earlier fix taught, not by its
+                // transcript wording, which other fixes of that word share.
+                let terms = Set(replacing.map { $0.replacement.lowercased() })
+                candidates = known.filter { Self.isFresh($0) && terms.contains($0.term.lowercased()) }
+            }
+            // A spelling another fix in the field still teaches is not
+            // renamed or dropped; this correction's own spelling counts once.
+            // The correction is then learned as its own word.
+            let stale = candidates.filter {
+                let term = $0.term.lowercased()
+                let own = term == correction.replacement.lowercased() ? 1 : 0
+                return stillTaught[term, default: 0] - own == 0
+            }
+            let protected = Set(candidates.map(\.id)).subtracting(stale.map(\.id))
+            if let kept = stale.first {
+                // The entry follows the edit, and entries for the parts of a
+                // phrase fold into the phrase.
+                let staleIDs = Set(stale.map(\.id))
+                for entry in stale.dropFirst() { dictionary.remove(id: entry.id) }
+                known.removeAll { staleIDs.contains($0.id) }
+                learned.removeAll { staleIDs.contains($0.id) }
+                let replacement = correction.replacement.lowercased()
+                if known.contains(where: { $0.term.lowercased() == replacement })
+                    || CommonWords.isOrdinary(correction.replacement) {
+                    dictionary.remove(id: kept.id)
                     Log.learning.info("Dropped a just-learned word the user edited again")
                 } else {
-                    dictionary.update(id: stale.id, term: correction.replacement)
-                    if let entry = dictionary.entries().first(where: { $0.id == stale.id }) {
+                    dictionary.update(id: kept.id, term: correction.replacement, learnedFrom: heardAs)
+                    if let entry = dictionary.entries().first(where: { $0.id == kept.id }) {
                         learned.append(entry)
                         known.append(entry)
                     }
                 }
                 continue
             }
+            let original = correction.original.lowercased()
+            let replacement = correction.replacement.lowercased()
+            // A revision too late to rename its entry is a new spelling of the
+            // same transcript wording, so that wording does not block it.
+            let isRevision = heardAs != nil
             guard !known.contains(where: {
                 let term = $0.term.lowercased()
                 let misspelling = $0.misspelling?.lowercased()
                 let learnedFrom = $0.learnedFrom?.lowercased()
-                return term == original || term == replacement
+                // A protected entry spelled as the original does not block
+                // learning the new spelling beside it.
+                return (term == original && !protected.contains($0.id)) || term == replacement
                     || misspelling == original || misspelling == replacement
-                    || learnedFrom == original
+                    || (!isRevision && learnedFrom == original && !protected.contains($0.id))
             }) else { continue }
             // Only words the language does not already have: a name, a
             // product term, jargon. Changing "They" to "we" or fixing the

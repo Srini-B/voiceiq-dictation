@@ -3,11 +3,34 @@ import Foundation
 public struct LearnedCorrection: Equatable, Sendable {
     public let original: String
     public let replacement: String
+    /// Which words of the original text `original` spans, by index, so two
+    /// edits of the same word at different places stay apart.
+    public let words: Range<Int>
 
-    public init(original: String, replacement: String) {
+    public init(original: String, replacement: String, words: Range<Int>) {
         self.original = original
         self.replacement = replacement
+        self.words = words
     }
+}
+
+/// How a dictation's current text differs from what was inserted.
+public struct DictationEdits: Equatable, Sendable {
+    /// The replacements that can teach a word.
+    public var corrections: [LearnedCorrection] = []
+    /// Every span of original words that is no longer as inserted, including
+    /// spans no correction covers (too long, reworded, deleted).
+    public var changed: [Range<Int>] = []
+}
+
+public enum LearningStep: Equatable, Sendable {
+    /// A new word or phrase.
+    case learn(LearnedCorrection)
+    /// What the earlier corrections in `replacing` taught becomes this
+    /// correction's replacement.
+    case revise(replacing: [LearnedCorrection], with: LearnedCorrection)
+    /// The user put the original words back: what this taught goes.
+    case forget(LearnedCorrection)
 }
 
 public enum EditDiff {
@@ -58,29 +81,224 @@ public enum EditDiff {
         return solve(0, 0).choices
     }
 
-    public static func corrections(original: String, replacement: String) -> [LearnedCorrection] {
+    /// `earlier`: the corrections at the previous harvest. A fix to the same
+    /// words may stray further from the transcript than one edit allows, as
+    /// long as it reads as a respelling of what the earlier fix taught.
+    public static func edits(original: String, replacement: String, earlier: [LearnedCorrection] = []) -> DictationEdits {
         let before = words(in: original)
         let after = words(in: replacement)
-        guard !before.isEmpty, !after.isEmpty else { return [] }
+        guard !before.isEmpty, !after.isEmpty else { return DictationEdits() }
         let matches = lcsPairs(before.map(\.text), after.map(\.text), caseSensitive: true)
-        var output: [LearnedCorrection] = []
+        var output = DictationEdits()
         var previousBefore = -1
         var previousAfter = -1
 
         for pair in matches + [(before.count, after.count)] {
             let removed = before[(previousBefore + 1)..<pair.0]
             let added = after[(previousAfter + 1)..<pair.1]
-            if (1...3).contains(removed.count), (1...3).contains(added.count) {
-                let originalText = clean(removed.map(\.text).joined(separator: " "))
-                let replacementText = clean(added.map(\.text).joined(separator: " "))
-                if valid(originalText), valid(replacementText), originalText != replacementText {
-                    output.append(LearnedCorrection(original: originalText, replacement: replacementText))
+            if !removed.isEmpty { output.changed.append((previousBefore + 1)..<pair.0) }
+            for (removedPart, addedPart) in pieces(removed, original, added, replacement)
+            where (1...3).contains(removedPart.count) && (1...3).contains(addedPart.count) {
+                let originalText = clean(removedPart.map(\.text).joined(separator: " "))
+                let replacementText = clean(addedPart.map(\.text).joined(separator: " "))
+                let span = removedPart.startIndex..<removedPart.endIndex
+                // `valid` first: it caps both sides at 60 characters before
+                // the quadratic distance runs.
+                if valid(originalText), valid(replacementText), originalText != replacementText,
+                   isPlausibleFix(originalText, replacementText) || earlier.contains(where: {
+                       $0.words == span && isPlausibleFix($0.replacement, replacementText)
+                   }) {
+                    output.corrections.append(LearnedCorrection(
+                        original: originalText,
+                        replacement: replacementText,
+                        words: span
+                    ))
                 }
             }
             previousBefore = pair.0
             previousAfter = pair.1
         }
         return output
+    }
+
+    /// What learning should do with `edits`, how a dictation now differs from
+    /// its original text, given `earlier`, the corrections it carried at the
+    /// previous harvest. Edits seen before are skipped. An edit over the
+    /// same words as an earlier one revises what it taught, and so does one
+    /// that adds a respelled neighbour to it, so "Wispr" then "Flow" typed a
+    /// few seconds apart ends as the one phrase "Wispr Flow". An earlier edit
+    /// is forgotten only when its original words are back and no remaining
+    /// correction teaches the same spelling.
+    public static func steps(for edits: DictationEdits, after earlier: [LearnedCorrection]) -> [LearningStep] {
+        let corrections = accepted(edits, after: earlier)
+        let changed: [LearningStep] = corrections.compactMap { correction in
+            guard !earlier.contains(correction) else { return nil }
+            let overlapped = earlier.filter { $0.words.overlaps(correction.words) }
+            guard !overlapped.isEmpty else { return .learn(correction) }
+            return .revise(replacing: overlapped, with: correction)
+        }
+        let undone = earlier.filter { edit in
+            !edits.changed.contains { $0.overlaps(edit.words) }
+                && !corrections.contains { $0.replacement.lowercased() == edit.replacement.lowercased() }
+        }
+        return changed + undone.map { .forget($0) }
+    }
+
+    /// The corrections to compare the next harvest with: the ones `steps`
+    /// acted on, plus earlier ones a longer or ignored edit now covers, so
+    /// putting their words back later is still recognized.
+    public static func history(after edits: DictationEdits, earlier: [LearnedCorrection]) -> [LearnedCorrection] {
+        let corrections = accepted(edits, after: earlier)
+        return corrections + earlier.filter { edit in
+            !corrections.contains { $0.words.overlaps(edit.words) }
+                && edits.changed.contains { $0.overlaps(edit.words) }
+        }
+    }
+
+    /// The corrections that may teach or revise a word. One that grows an
+    /// earlier correction is kept only when the words it adds are capitalized
+    /// like a name and are themselves a respelling, not a case change ("Wispr the" → "Wispr The") or other
+    /// wording ("Wispr yesterday" → "Wispr today") next to a learned name.
+    private static func accepted(_ edits: DictationEdits, after earlier: [LearnedCorrection]) -> [LearnedCorrection] {
+        edits.corrections.compactMap { correction in
+            let overlapped = earlier.filter { $0.words.overlaps(correction.words) }
+            guard !overlapped.isEmpty, !overlapped.allSatisfy({ $0.words == correction.words }) else { return correction }
+            guard overlapped.count == 1 else { return nil }
+            let earlier = overlapped[0].words
+            // Inside an earlier phrase: the user put back part of it.
+            if earlier.lowerBound <= correction.words.lowerBound, correction.words.upperBound <= earlier.upperBound {
+                return correction
+            }
+            return grown(overlapped[0], to: correction)
+        }
+    }
+
+    private static let breaks = CharacterSet(charactersIn: ".!?;:,…\n\r")
+
+    /// A changed run split into the pieces that can each be one correction.
+    /// Words either side of a sentence or clause break are not one phrase
+    /// ("whisper. He" → "Wispr. She" is two edits). Where the user added or
+    /// removed a break, a run of as many words on each side is cut where the
+    /// side with more breaks has them, and a removed break joins words only
+    /// into a capitalized name
+    /// ("whisper, flowcast" → "Wispr Flow", but not "Wispr he").
+    private static func pieces(
+        _ removed: ArraySlice<Word>, _ original: String,
+        _ added: ArraySlice<Word>, _ replacement: String
+    ) -> [(ArraySlice<Word>, ArraySlice<Word>)] {
+        guard !removed.isEmpty, !added.isEmpty else { return [] }
+        let removedParts = segments(removed, in: original)
+        let addedParts = segments(added, in: replacement)
+        if removedParts.count == addedParts.count { return Array(zip(removedParts, addedParts)) }
+        if addedParts.count == 1, added.allSatisfy({ $0.text.first?.isUppercase == true }) {
+            return [(removed, added)]
+        }
+        guard removed.count == added.count else { return [] }
+        // Cut both sides where the side with more breaks has them, so a full
+        // stop added after "Wispr Flow" keeps the phrase whole.
+        let lengths = (removedParts.count > addedParts.count ? removedParts : addedParts).map(\.count)
+        var offset = 0
+        return lengths.map { length in
+            defer { offset += length }
+            let r = removed.startIndex + offset
+            let a = added.startIndex + offset
+            return (removed[r..<(r + length)], added[a..<(a + length)])
+        }
+    }
+
+    /// `run` split wherever the text between two of its words holds a break.
+    private static func segments(_ run: ArraySlice<Word>, in text: String) -> [ArraySlice<Word>] {
+        guard let first = run.indices.first else { return [] }
+        var parts: [ArraySlice<Word>] = []
+        var start = first
+        for index in run.indices.dropFirst() {
+            let gap = text[run[index - 1].range.upperBound..<run[index].range.lowerBound]
+            if gap.unicodeScalars.contains(where: breaks.contains) {
+                parts.append(run[start..<index])
+                start = index
+            }
+        }
+        parts.append(run[start..<run.endIndex])
+        return parts
+    }
+
+    /// `correction` when the words it adds to `earlier` are a respelled name,
+    /// or when it respells the wider span as no more words ("Supa base" →
+    /// "Supabase");
+    /// otherwise only its change to the words `earlier` covers, so a re-edit of
+    /// a learned name still counts beside rewording that is ignored.
+    private static func grown(_ earlier: LearnedCorrection, to correction: LearnedCorrection) -> LearnedCorrection? {
+        let wider = correction.words
+        let inner = earlier.words
+        guard wider.lowerBound <= inner.lowerBound, inner.upperBound <= wider.upperBound else { return nil }
+        let atStart = inner.lowerBound == wider.lowerBound
+        guard atStart || inner.upperBound == wider.upperBound else { return nil }
+        let original = words(in: correction.original).map(\.text)
+        let replacement = words(in: correction.replacement).map(\.text)
+        let taught = words(in: earlier.replacement).map(\.text)
+        guard replacement.count > taught.count else {
+            // One word respelling the wider span ("Supa base" → "Supabase").
+            // Not a contraction ("whisper is" → "Wispr's"), and not the
+            // learned word left alone beside a deletion.
+            guard replacement.count == 1,
+                  !correction.replacement.contains(where: { $0 == "'" || $0 == "’" }),
+                  correction.replacement.lowercased() != earlier.replacement.lowercased(),
+                  respellsAs(letters(earlier.replacement), letters(correction.replacement), atStart: atStart)
+            else { return nil }
+            // The letters added to the learned part must respell the words
+            // merged into it ("base" in "Supabase"), not something else
+            // ("Supabase with" → "SupabasePlus", "Wispr and" → "Wisprs").
+            let merged = letters(correction.replacement)
+            let learned = letters(earlier.replacement).count
+            let rest = String(atStart ? merged.dropFirst(learned) : merged.dropLast(learned))
+            let addedCount = wider.count - inner.count
+            let addedOriginal = (atStart ? original.suffix(addedCount) : original.prefix(addedCount)).joined(separator: " ")
+            guard rest.count >= 2, isPlausibleFix(addedOriginal, rest) else { return nil }
+            return correction
+        }
+        let kept = (atStart ? replacement.prefix(taught.count) : replacement.suffix(taught.count)).joined(separator: " ")
+        guard isPlausibleFix(earlier.replacement, kept) else { return nil }
+        let addedCount = wider.count - inner.count
+        let addedOriginal = (atStart ? original.suffix(addedCount) : original.prefix(addedCount)).joined(separator: " ")
+        let addedWords = atStart ? replacement.dropFirst(taught.count) : replacement.dropLast(taught.count)
+        let addedReplacement = addedWords.joined(separator: " ")
+        if addedWords.allSatisfy({ $0.first?.isUppercase == true }),
+           addedOriginal.lowercased() != addedReplacement.lowercased(),
+           isPlausibleFix(addedOriginal, addedReplacement) {
+            return correction
+        }
+        // Only when the added words line up one for one with the words they
+        // replaced, so `kept` is really the learned part.
+        guard addedWords.count == addedCount else { return nil }
+        return LearnedCorrection(original: earlier.original, replacement: kept, words: inner)
+    }
+
+    private static func letters(_ text: String) -> String {
+        text.lowercased().filter { $0.isLetter || $0.isNumber }
+    }
+
+    /// The learned part kept as the start (or end) of the merged word:
+    /// "Py" in "PyTorch", "Supa" in "Supabase".
+    private static func respellsAs(_ learned: String, _ merged: String, atStart: Bool) -> Bool {
+        !learned.isEmpty && (atStart ? merged.hasPrefix(learned) : merged.hasSuffix(learned))
+    }
+
+    /// Whether `replacement` could be the same words respelled rather than
+    /// different wording, by letters alone. The iPhone keyboard's dictation
+    /// learning uses the same bound.
+    private static func isPlausibleFix(_ original: String, _ replacement: String) -> Bool {
+        let a = Array(original.lowercased().filter { $0.isLetter || $0.isNumber })
+        let b = Array(replacement.lowercased().filter { $0.isLetter || $0.isNumber })
+        guard !a.isEmpty, !b.isEmpty else { return false }
+        var previous = Array(0...b.count)
+        for i in 1...a.count {
+            var row = [i] + Array(repeating: 0, count: b.count)
+            for j in 1...b.count {
+                row[j] = min(previous[j] + 1, row[j - 1] + 1, previous[j - 1] + (a[i - 1] == b[j - 1] ? 0 : 1))
+            }
+            previous = row
+        }
+        return previous[b.count] <= max(2, max(a.count, b.count) / 2)
     }
 
     private struct State: Hashable {
