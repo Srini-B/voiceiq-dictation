@@ -290,10 +290,22 @@ def manifest() -> dict:
 def write_intended() -> None:
     have = json.loads(INTENDED.read_text()) if INTENDED.exists() else {}
     todo = [c for c in manifest().values() if not c.get("intended") and c["id"] not in have]
+    # Each answer is saved as it lands (write, then rename), so a failed or
+    # interrupted run keeps every reference it already paid for.
+    tmp = INTENDED.with_suffix(".tmp")
     with concurrent.futures.ThreadPoolExecutor(8) as pool:
-        for clip, answer in zip(todo, pool.map(lambda c: ask("gpt-6-astra", INTENDED_PROMPT.format(spoken=c["spoken"])), todo)):
-            have[clip["id"]] = answer["intended"]
-    INTENDED.write_text(json.dumps(have, indent=1, ensure_ascii=False))
+        futures = {pool.submit(ask, "gpt-6-astra", INTENDED_PROMPT.format(spoken=c["spoken"])): c for c in todo}
+        failed = []
+        for future in concurrent.futures.as_completed(futures):
+            try:
+                have[futures[future]["id"]] = future.result()["intended"]
+            except Exception as error:
+                failed.append(f"{futures[future]['id']}: {error}")
+                continue
+            tmp.write_text(json.dumps(have, indent=1, ensure_ascii=False))
+            tmp.replace(INTENDED)
+    if failed:
+        raise SystemExit(f"{len(failed)} references failed, the rest are saved:\n" + "\n".join(failed))
     print(f"{len(todo)} written, {len(have)} cached")
 
 
