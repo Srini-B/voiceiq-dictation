@@ -178,8 +178,9 @@ public enum EditDiff {
     /// A changed run split into the pieces that can each be one correction.
     /// Words either side of a sentence or clause break are not one phrase
     /// ("whisper. He" → "Wispr. She" is two edits). Where the user added or
-    /// removed a break, a run of as many words on each side pairs word by
-    /// word, and a removed break joins words only into a capitalized name
+    /// removed a break, a run of as many words on each side is cut where the
+    /// side with more breaks has them, and a removed break joins words only
+    /// into a capitalized name
     /// ("whisper, flowcast" → "Wispr Flow", but not "Wispr he").
     private static func pieces(
         _ removed: ArraySlice<Word>, _ original: String,
@@ -244,6 +245,15 @@ public enum EditDiff {
                   correction.replacement.lowercased() != earlier.replacement.lowercased(),
                   respellsAs(letters(earlier.replacement), letters(correction.replacement), atStart: atStart)
             else { return nil }
+            // The letters added to the learned part must respell the words
+            // merged into it ("base" in "Supabase"), not something else
+            // ("Supabase with" → "SupabasePlus", "Wispr and" → "Wisprs").
+            let merged = letters(correction.replacement)
+            let learned = letters(earlier.replacement).count
+            let rest = String(atStart ? merged.dropFirst(learned) : merged.dropLast(learned))
+            let addedCount = wider.count - inner.count
+            let addedOriginal = (atStart ? original.suffix(addedCount) : original.prefix(addedCount)).joined(separator: " ")
+            guard !rest.isEmpty, isPlausibleFix(addedOriginal, rest) else { return nil }
             return correction
         }
         let kept = (atStart ? replacement.prefix(taught.count) : replacement.suffix(taught.count)).joined(separator: " ")

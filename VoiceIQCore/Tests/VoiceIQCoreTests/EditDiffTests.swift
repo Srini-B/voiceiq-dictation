@@ -156,6 +156,10 @@ final class EditDiffTests: XCTestCase {
         XCTAssertEqual(EditDiff.steps(for: merged, after: py.corrections), [
             .revise(replacing: [fix("pie", "Py", 3..<4)], with: fix("pie torch", "PyTorch", 3..<5)),
         ])
+        let wispr = "Ask whisper and me."
+        let learned = EditDiff.edits(original: wispr, replacement: "Ask Wispr and me.")
+        let plural = EditDiff.edits(original: wispr, replacement: "Ask Wisprs me.")
+        XCTAssertEqual(EditDiff.steps(for: plural, after: learned.corrections), [])
     }
 
     // EditDiff reports a second spelling of the same heard word as a new edit;

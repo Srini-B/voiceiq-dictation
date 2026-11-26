@@ -71,11 +71,19 @@
   removed break needs every word capitalized; a protected entry's
   `learnedFrom` no longer blocks the new spelling; the field is not dropped
   while a Return capture is still diffing.
+- Fourth Neon pass: the letters a one-word merge adds must respell the words
+  merged in ("Wispr and" → "Wisprs" teaches nothing); a field tracked again
+  after being forgotten ignores harvests started on the old one.
+- Known limits: runs are cut only at the breaks of the side with more of
+  them; two Returns in quick succession can drop the first capture's edits
+  until the next poll; a lowercase merge across a removed comma ("eye,
+  phone" → "iPhone") or a word-count change beside an added break teaches
+  nothing.
 
 ## Verification
 
 - `swift test --package-path VoiceIQCore` on a Mac satellite (Xcode 27):
-  262 tests, 0 failures. New `EditDiffTests` cover separate and adjacent
+  263 tests, 0 failures. New `EditDiffTests` cover separate and adjacent
   edits across a paragraph, edits a few seconds apart folding into a phrase,
   a learned word changed again, and rewording, punctuation and deletions
   teaching nothing. With the respelling check disabled, the rewording test

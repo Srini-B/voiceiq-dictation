@@ -40,5 +40,12 @@ final class EditLearnerTests: XCTestCase {
         learner.learn([.forget(srini)], stillTaught: ["qrinza": 1])
         XCTAssertEqual(store.entries().map(\.term), ["Qrinza"])
     }
+
+    func testAKeptWordHeardAsItsOwnLowercaseDoesNotBlockTheNewSpelling() {
+        let learner = EditLearner(dictionary: store)
+        learner.learn([.learn(fix("qrinzo", "Qrinzo", 1..<2))], stillTaught: ["qrinzo": 1])
+        learner.learn([.learn(fix("Qrinzo", "Qrinza", 4..<5))], stillTaught: ["qrinzo": 1, "qrinza": 1])
+        XCTAssertEqual(Set(store.entries().map(\.term)), ["Qrinzo", "Qrinza"])
+    }
 }
 #endif

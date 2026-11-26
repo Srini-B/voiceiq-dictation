@@ -22,6 +22,9 @@ public final class EditLearner {
     }
 
     private struct TrackedField {
+        /// A field forgotten and tracked again is a new one: results of
+        /// harvests that started on the old one are dropped.
+        let id = UUID()
         let snapshot: FieldSnapshot
         var insertions: [Insertion]
         var lastInsertionAt: Date
@@ -179,11 +182,12 @@ public final class EditLearner {
         let now = Date()
         tracked.insertions.removeAll { now.timeIntervalSince($0.insertedAt) > 7_200 }
         guard !tracked.insertions.isEmpty else {
-            forget(key)
+            if tracked.capturesInFlight == 0 { forget(key) }
             return
         }
         if captured == nil { tracked.harvesting = true } else { tracked.capturesInFlight += 1 }
         let ticket = tracked.nextTicket
+        let fieldID = tracked.id
         tracked.nextTicket += 1
         fields[key] = tracked
 
@@ -201,7 +205,7 @@ public final class EditLearner {
             )
         }.value
 
-        guard var current = fields[key] else { return }
+        guard var current = fields[key], current.id == fieldID else { return }
         if captured == nil { current.harvesting = false } else { current.capturesInFlight -= 1 }
         // Only the newest harvest may drop the field or move its pending
         // value: an older one read the field before a newer one did.
