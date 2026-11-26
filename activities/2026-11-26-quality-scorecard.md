@@ -72,3 +72,13 @@ Not gates, to follow soon after:
   - The 2 s backup request fires on most dictations and doubles billed calls.
   - Full-display OCR runs with no secure-field or password-manager guard.
   - Sound-alike matching changes sentence-start words ("Feel free" → "Phil").
+
+## PR #83 (dictation accuracy and speed), scores of record
+
+Run on main's clips with the branch's runner, judged by Fable: **D1 100, D2 99.2, D3 96.0, D4 94.3, D5 46.1** (main: 70.0 / 97.6 / 89.2 / 91.6 / 0).
+
+With every option on, dictation went from p50 6.2 s / p90 16.8 s to **3.0 s / 8.9 s**. The screenshots became screen text, and model thinking dropped from 62 of 66 calls to 2. The remaining tail is Gemini server time: 14–15 s with no thinking at all.
+
+Decision: merge #83 once Neon's re-review is clean. D5 becomes its own follow-up, with two parts:
+- The eval sends the app's real backup request, so D5 is measured the way the app behaves.
+- Time comes off before key-up: streaming the audio, or on-device transcription during speech followed by a text-only call.
