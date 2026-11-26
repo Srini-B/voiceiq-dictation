@@ -105,6 +105,10 @@ final class EditDiffTests: XCTestCase {
         let first = EditDiff.edits(original: original, replacement: "We use Wispr. He loves it.")
         let second = EditDiff.edits(original: original, replacement: "We use Wispr. She loves it.")
         XCTAssertEqual(EditDiff.steps(for: second, after: first.corrections), [.learn(fix("He", "She", 3..<4))])
+        XCTAssertEqual(
+            EditDiff.edits(original: "We use whisper, flowcast daily.", replacement: "We use Wispr Flow daily.").corrections,
+            [fix("whisper flowcast", "Wispr Flow", 2..<4)]
+        )
     }
 
     func testRespellingAPhraseAsOneWordRevisesIt() {

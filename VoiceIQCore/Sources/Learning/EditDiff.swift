@@ -98,9 +98,10 @@ public enum EditDiff {
             let added = after[(previousAfter + 1)..<pair.1]
             if !removed.isEmpty { output.changed.append((previousBefore + 1)..<pair.0) }
             // Words either side of a sentence or clause break are not one
-            // phrase ("whisper. He" → "Wispr. She" is two edits).
-            let removedParts = segments(removed, in: original)
+            // phrase ("whisper. He" → "Wispr. She" is two edits). The edited
+            // text decides: a break the user removed joins the words.
             let addedParts = segments(added, in: replacement)
+            let removedParts = addedParts.count == 1 ? [removed] : segments(removed, in: original)
             if removedParts.count == addedParts.count {
                 for (removedPart, addedPart) in zip(removedParts, addedParts)
                 where (1...3).contains(removedPart.count) && (1...3).contains(addedPart.count) {
