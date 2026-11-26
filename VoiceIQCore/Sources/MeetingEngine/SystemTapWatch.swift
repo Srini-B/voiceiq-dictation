@@ -43,9 +43,11 @@ public enum SystemTapWatch {
         /// that also delivers only zeros (an output still settling) is
         /// rebuilt again, after a longer wait each time, instead of leaving
         /// the rest of the meeting silent.
-        public mutating func rebuilt() {
+        /// `backingOff` is false for a rebuild after an output move, which
+        /// says nothing about whether the tap stalls.
+        public mutating func rebuilt(backingOff: Bool = true) {
             zeros = 0
-            rebuilds += 1
+            if backingOff { rebuilds += 1 }
         }
     }
 

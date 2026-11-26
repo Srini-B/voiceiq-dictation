@@ -84,10 +84,11 @@ public final class CellularModelDownloads: ObservableObject {
                 cellular: path.usesInterfaceType(.cellular),
                 expensive: path.isExpensive
             )
-            Task { @MainActor [weak self] in self?.network = network }
+            // Delivered on the main queue, in order; separate Tasks could reorder a quick handoff.
+            MainActor.assumeIsolated { self?.network = network }
         }
         // Started ahead of the first tap so its first update has usually arrived.
-        monitor.start(queue: DispatchQueue(label: "io.blue.voiceiq.model-download-network", qos: .utility))
+        monitor.start(queue: .main)
     }
 
     /// Called as `store` is asked to download. `.ask` leaves `store` pending

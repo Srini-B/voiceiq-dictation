@@ -50,6 +50,16 @@ final class MeetingCaptureTests: XCTestCase {
         XCTAssertTrue(silence.hear(seconds: 15, exactZero: true))
     }
 
+    /// Headphones flipping the output twice must not push the next stall check to 240 s.
+    func testAnOutputMoveRebuildDoesNotBackOff() {
+        var silence = SystemTapWatch.Silence()
+        _ = silence.hear(seconds: 1, exactZero: false)
+        silence.rebuilt(backingOff: false)
+        silence.rebuilt(backingOff: false)
+        XCTAssertFalse(silence.hear(seconds: 14, exactZero: true))
+        XCTAssertTrue(silence.hear(seconds: 1, exactZero: true))
+    }
+
     func testOnlyAMoveToAnotherReadableOutputRebuilds() {
         XCTAssertFalse(SystemTapWatch.outputMoved(from: 73, to: 73))
         XCTAssertTrue(SystemTapWatch.outputMoved(from: 91, to: 73))

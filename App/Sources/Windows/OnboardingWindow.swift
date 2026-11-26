@@ -736,8 +736,18 @@ private struct AccessibilityScreen: View {
     @State private var slowGrant = false
 
     /// On 27.3+ with Accessibility on, the posting grant only reads true
-    /// after a restart, so waiting would only hide the way forward.
-    private var needsRestart: Bool { !granted && AXIsProcessTrusted() && KeystrokeAccess.isSplit }
+    /// after a restart, so waiting would only hide the way forward. State,
+    /// refreshed by the poll: SwiftUI does not observe `AXIsProcessTrusted()`.
+    @State private var needsRestart = false
+
+    private static var restartNeeded: Bool {
+        !KeystrokeAccess.isReady && AXIsProcessTrusted() && KeystrokeAccess.isSplit
+    }
+
+    private func stopTimers() {
+        pollTimer?.invalidate(); pollTimer = nil
+        slowGrantTimer?.invalidate(); slowGrantTimer = nil
+    }
 
     var body: some View {
         ScreenScaffold("Let it type for you.", "\(KeystrokeAccess.listName) lets VoiceiQ place text at your cursor. Screen Recording lets VoiceiQ read names and paths on screen while you talk. It is optional.") {
@@ -769,6 +779,8 @@ private struct AccessibilityScreen: View {
             }
         }
         .onAppear {
+            stopTimers()
+            needsRestart = Self.restartNeeded
             pollTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
                 Task { @MainActor in
                     let trusted = KeystrokeAccess.isReady
@@ -782,6 +794,7 @@ private struct AccessibilityScreen: View {
                         NSApp.activate(ignoringOtherApps: true)
                     }
                     granted = trusted
+                    needsRestart = Self.restartNeeded
                     screenGranted = CGPreflightScreenCaptureAccess()
                 }
             }
@@ -789,10 +802,9 @@ private struct AccessibilityScreen: View {
                 Task { @MainActor in slowGrant = true }
             }
         }
-        .onDisappear {
-            pollTimer?.invalidate()
-            slowGrantTimer?.invalidate()
-        }
+        .onDisappear { stopTimers() }
+        // Closing the window bypasses onDisappear (audit #6).
+        .onReceive(NotificationCenter.default.publisher(for: .onboardingWindowClosed)) { _ in stopTimers() }
     }
 }
 

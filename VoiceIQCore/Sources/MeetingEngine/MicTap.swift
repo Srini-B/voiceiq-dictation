@@ -76,12 +76,18 @@ public final class MicTap: @unchecked Sendable {
     public func start() throws {
         writer = try CAFWriter(url: url, format: target); frames = 0
         lastBufferAt = ProcessInfo.processInfo.systemUptime; padFrom = nil
-        try control.sync {
-            do { try attach(to: wanted) }
-            catch {
-                guard let device = preferred else { throw error }
-                failed = (device, Date()); preferred = nil; try attach(to: wanted)
+        do {
+            try control.sync {
+                do { try attach(to: wanted) }
+                catch {
+                    guard let device = preferred else { throw error }
+                    failed = (device, Date()); preferred = nil; try attach(to: wanted)
+                }
             }
+        } catch {
+            // A mic that never started leaves no open file behind.
+            writer?.close(); writer = nil
+            throw error
         }
         _ = AudioObjectAddPropertyListenerBlock(AudioObjectID(kAudioObjectSystemObject), &defaultInputAddress, control, deviceListener)
         listening = true
