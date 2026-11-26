@@ -2285,6 +2285,21 @@
       "heard": "Bullet point notation is useful.",
       "written": "Bullet point notation is useful",
       "style": "lists"
+    },
+    {
+      "id": "kept-relative-path-case",
+      "check": "kept as said",
+      "said": "src slash main dot swift",
+      "heard": "src/main.swift",
+      "written": "src/main.swift."
+    },
+    {
+      "id": "kept-filename-case",
+      "check": "kept as said",
+      "said": "config dot json is missing",
+      "heard": "config.json is missing.",
+      "written": "config.json is missing",
+      "style": "lists"
     }
   ]
 }
