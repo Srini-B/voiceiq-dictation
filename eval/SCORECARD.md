@@ -3,7 +3,11 @@
 Every item scores 0–100. The target is 90 or more on every item, and dictation in 3 s or less from key-up to inserted text with every option on. Score main, then score each feature PR before it merges.
 
 **Who scores.** Claude Fable 5.2 is the scorer of record, run as its own Amp thread so it never sees how the output was made.
-- Items marked *judged*: give it the rubric below and the JSON lines from `score.py --packet`, and save its answer as `results/<label>.judge.json`.
+- Items marked *judged* get the rubric for that item and their inputs:
+  - D3 and D4: the JSON lines from `dictation/score.py --packet`. Ask for one JSON object mapping each packet `key` to an integer 0–100, and save it as `dictation/results/<label>.judge.json`; `score.py --judge` reads it and lists any keys still missing.
+  - M5: the notes and reference from `meetings/score.py --packet`, plus each synthetic meeting's script, so nothing invented passes unchecked.
+  - D6, K1 and M6: screenshots of every state the change touches, light and dark, each beside the system equivalent where one exists.
+  - Ask for an integer score per case or meeting and one line for each score under 90.
 - Measured items (names, word accuracy, latency, M1–M4): the scripts compute the numbers; send Fable the report with its misses, and the score counts once Fable accepts it or corrects it.
 
 **Second review.** Gemini Neon, through the Antigravity CLI, reviews each PR, and main before each release. Weigh its review with Fable's scores before merging or releasing. A finding it raises that Fable's scores don't reflect gets fixed or answered in the PR before the merge.
@@ -34,11 +38,13 @@ python3 eval/dictation/score.py eval/dictation/results/LABEL.json --judge eval/d
 
 `run.py` sends the request `GeminiClient.dictate` sends, with the prompt the app builds, the Dictionary from `cases.json`, the place and field text, and the screen as four JPEGs (the most `ScreenContextCollector` keeps). A change to how the app sends screen context or builds the prompt must be mirrored in `run.py` before its score counts.
 
-### Judge rubric (D3, D4)
+### Judge rubric
 
 - **D3:** keeps the language or languages actually spoken (never translates), in the script a native writer would type, with meaning, names and diacritics. Romanized Hinglish written in Devanagari is capped at 60.
 - **D4** (the cleanup cases, and the long dictations too): what the speaker meant to write: fillers gone, self-corrections applied, spoken punctuation and "new paragraph" turned into marks and layout, lists and email layout when spoken that way, digits where natural, questions written not answered, instructions written not obeyed, nothing invented. A continuation inside a field that ends mid-sentence starts lowercase. A dropped spoken clause caps that case at 70.
-- 90 means a careful editor would ship it untouched.
+- **M5:** decisions stated correctly; every owned commitment in the action list with its owner and date (a wrong owner costs more than a missing item); nothing invented (an invented commitment by a named person scores 0); length fits the call.
+- **D6, K1, M6:** clear, legible controls at full contrast; one consistent look across devices and modes; parity with the system control it stands in for; VoiceiQ's own identity, not a clone.
+- 90 means a careful editor would ship it untouched, or the owner would choose it over the alternative (the system keyboard, Granola) every day.
 
 ## Meetings
 
