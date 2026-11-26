@@ -65,8 +65,9 @@ every clip.
   overhead added. 3 of 451 calls thought. The backup request fired on 67
   calls (14.9%), above the 10% extra-call budget; PR #105 removes it.
 - **Cost:** a median prompt of 8.0k tokens, about ₹0.47 per dictation with
-  backups. At cyron's 160 dictations a month that is about ₹75, inside
-  ₹250.
+  backups at today's gemini-3.8-flash prices. At cyron's 160 dictations a
+  month that is about ₹75. When the price doubles on 2027-01-01, it is about
+  ₹150, still inside ₹250.
 - **Caveats:** the dictation-style strata (Voice Arena, Svarah) are close to
   cyron's use. The conversational strata (Monsoon, EdAcc, CHiME-6,
   IndicVoices) are cut from longer talk, so some clips start or end
@@ -114,13 +115,15 @@ which counts the fillers they keep:
 | EdAcc | 18.3% | 21.4% | 22.4% |
 | CHiME-6 | 26.2% | 21.3% | 25.6% |
 
-Gemini's WER includes the rewording that the Polish rules ask for, so it
-overstates Gemini's word errors. Still, on whispered, far-field and
-Tamil-accented spontaneous speech, Parakeet hears words that Gemini misses or
-drops. Raw on-device output cannot be sent without reading: it keeps fillers
-and has no layout. On-device with Gemini writing was not measured, because it
-needs paid calls. No stratum shows on-device at 90 or above, so on-device
-stays a rare fallback.
+Gemini's WER includes the rewording that the Polish rules ask for and its
+empty outputs (3 on CHiME-6, 2 on whispers), so it overstates Gemini's word
+errors, while Parakeet's raw WER counts the fillers it keeps. The
+Tamil-accented and far-field gaps are small enough that rewording alone could
+explain them. The whispered gap (24.1% vs 11.8%) is not, and Parakeet decoded
+3 of the 5 empty clips. Raw on-device output cannot be sent without reading:
+it keeps fillers and has no layout. On-device with Gemini writing was not
+measured, because it needs paid calls. No stratum shows on-device at 90 or
+above, so on-device stays a rare fallback.
 
 ## Proposed fixes (parked: no paid A/B runs while the key is empty)
 

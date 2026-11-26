@@ -16,9 +16,10 @@ normalisation (lowercase, sentence punctuation stripped).
               together): the bar for sending without reading
   AMEND       pooled character edit rate
 
-Two judges from other providers than the writer where possible: GPT-6 Astra
-(OpenAI) and Gemini 4 Argon. A clip counts as zero-edit or send-ready only
-when both judges agree; each judge's own score is reported too.
+Judges: GPT-6 Astra by default (another provider than the writer). With
+--judges a,b, a clip counts as zero-edit or send-ready only when every judge
+agrees; each judge's own score is reported too. A gemini-* judge bills
+GEMINI_API_KEY.
 
 Usage:
   judge.py --intended                 write missing INTENDED texts (cached)
@@ -31,6 +32,7 @@ import hashlib
 import json
 import os
 import re
+import time
 import unicodedata
 import urllib.request
 from collections import defaultdict
@@ -42,7 +44,7 @@ HERE = Path(__file__).parent
 DATA = Path(os.environ.get("HARD_AUDIO_DATA", HERE.parents[1] / ".amp/in/orb-backup/hard"))
 CACHE = DATA / "judge-cache.jsonl"
 INTENDED = DATA / "intended.json"
-JUDGES = ("gpt-6-astra", "gemini-4-argon")
+JUDGES = ("gpt-6-astra",)  # --judges; D7's provisional baseline used GPT-6 Astra alone
 
 # AMEND v1 judge prompt (Voice Arena, Apache-2.0), with the format question
 # and the notes for verbatim corpus references added at the end.
@@ -232,7 +234,9 @@ def post(url: str, body: dict, headers: dict) -> dict:
 def ask(model: str, prompt: str) -> dict:
     """One JSON answer from a judge model, retried on transport errors."""
     last = None
-    for _ in range(4):
+    for attempt in range(4):
+        if attempt:
+            time.sleep(2 ** attempt)
         try:
             if model.startswith("gemini"):
                 reply = post(f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
@@ -292,7 +296,7 @@ def judge_prompt(clip: dict, intended: str, draft: str) -> str:
                                                        intended=intended, draft=draft)
 
 
-def judge_run(path: Path, cache: Cache, workers: int) -> list[dict]:
+def judge_run(path: Path, cache: Cache, workers: int, judges: tuple[str, ...] = JUDGES) -> list[dict]:
     clips, extra = manifest(), (json.loads(INTENDED.read_text()) if INTENDED.exists() else {})
     run = json.loads(path.read_text())
     # As score.py: a partial run would drop its failed calls from the score.
@@ -306,17 +310,21 @@ def judge_run(path: Path, cache: Cache, workers: int) -> list[dict]:
             raise SystemExit(f"{r['id']}: no INTENDED text; run judge.py --intended first")
         rows.append({"id": r["id"], "stratum": r["stratum"], "draft": r["output"], "seconds": r["seconds"],
                      "usage": r.get("usage", {}), "prompt": judge_prompt(clip, intended, r["output"])})
-    jobs = [(row, model) for row in rows for model in JUDGES]
+    jobs = [(row, model) for row in rows for model in judges]
     with concurrent.futures.ThreadPoolExecutor(workers) as pool:
         answers = list(pool.map(lambda job: cache.get(job[1], job[0]["prompt"]), jobs))
     for (row, model), answer in zip(jobs, answers):
-        edits, chars = char_edits(row["draft"], answer.get("fixed", ""))
+        if not isinstance(answer.get("fixed"), str):
+            raise SystemExit(f"{row['id']}: {model} gave no \"fixed\" text; delete its cache line and judge again")
+        edits, chars = char_edits(row["draft"], answer["fixed"])
         row.setdefault("judges", {})[model] = {"edits": edits, "chars": chars, "format_fix": bool(answer.get("format_fix")),
-                                               "fixed": answer.get("fixed", ""), "why": answer.get("why", "")}
+                                               "fixed": answer["fixed"], "why": answer.get("why", "")}
     for row in rows:
         js = row["judges"].values()
-        row["zero_edit"] = all(j["edits"] == 0 for j in js)
-        row["send_ready"] = all(j["edits"] == 0 and not j["format_fix"] for j in js)
+        # An empty draft of real speech is never sendable, whatever a judge returns.
+        spoke = bool(row["draft"].strip())
+        row["zero_edit"] = spoke and all(j["edits"] == 0 for j in js)
+        row["send_ready"] = row["zero_edit"] and not any(j["format_fix"] for j in js)
         del row["prompt"]
     return rows
 
@@ -326,7 +334,7 @@ def summary(rows: list[dict]) -> dict:
         n = len(rs)
         out = {"n": n, "send_ready": round(100 * sum(r["send_ready"] for r in rs) / n, 1),
                "ZER": round(100 * sum(r["zero_edit"] for r in rs) / n, 1)}
-        for m in JUDGES:
+        for m in rs[0]["judges"]:
             e = sum(r["judges"][m]["edits"] for r in rs); c = sum(r["judges"][m]["chars"] for r in rs)
             out[f"ZER_{m}"] = round(100 * sum(r["judges"][m]["edits"] == 0 for r in rs) / n, 1)
             out[f"AMEND_{m}"] = round(100 * e / max(c, 1), 2)
@@ -343,12 +351,14 @@ def main() -> None:
     ap.add_argument("--intended", action="store_true")
     ap.add_argument("--misses", action="store_true")
     ap.add_argument("--workers", type=int, default=12)
+    ap.add_argument("--judges", default=",".join(JUDGES), help="comma-separated judge models")
     args = ap.parse_args()
+    judges = tuple(args.judges.split(","))
     if args.intended:
         write_intended()
     cache = Cache()
     for path in map(Path, args.runs):
-        rows = judge_run(path, cache, args.workers)
+        rows = judge_run(path, cache, args.workers, judges)
         scored = path.with_suffix(".judged.json")
         scored.write_text(json.dumps({"summary": summary(rows), "rows": rows}, indent=1, ensure_ascii=False))
         print(path.name)

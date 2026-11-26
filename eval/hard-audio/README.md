@@ -18,8 +18,8 @@ with `HARD_AUDIO_DATA`).
 | `va_dictation` | 151 | Voice Arena Dictation Dataset, public test: US English dictations with spoken and intended references | CC BY-NC 4.0 |
 | `monsoon_ta` | 60 | Monsoon en-IN (Voice Arena), speakers native to Tamil Nadu, own phones, spontaneous | CC BY 4.0 |
 | `monsoon_in` | 60 | Monsoon en-IN, speakers from other Indian states | CC BY 4.0 |
-| `indicvoices_ta` | 50 | IndicVoices Tamil (AI4Bharat), validation subset: conversational Tamil with English words | CC BY 4.0 |
-| `svarah` | 40 | Svarah (AI4Bharat), Indian English | CC BY 4.0 |
+| `indicvoices_ta` | 50 | IndicVoices Tamil (AI4Bharat), via the tinisoft validation-subset mirror: conversational Tamil with English words | CC BY 4.0 |
+| `svarah` | 40 | Svarah (AI4Bharat), Indian English, via the amrithanandini mirror | CC BY 4.0 |
 | `edacc` | 32 | EdAcc (Edinburgh): Indian, Nigerian, Kenyan, Ghanaian, Jamaican, Spanish, Vietnamese, Chinese, Italian, Irish and other English accents, conversational | CC BY-SA 4.0 |
 | `whisper` | 28 | EARS and Expresso whispered speech, some with two background talkers at 10% or 25% volume | CC BY-NC 4.0 |
 | `chime6` | 30 | CHiME-6 dev, one far-field Kinect channel in a dinner-party room | CC BY 4.0 |
@@ -28,7 +28,7 @@ The NC sets are used only for this private evaluation; VoiceiQ is free and
 non-commercial. Hindi and Hindi-English data are left out on purpose: the
 owner dictates in English and Tamil.
 
-Selection: 4–30 s and 8+ words (EdAcc 3–30 s, 10+ words; CHiME-6 3–15 s, 7+
+Selection: 4–30 s and 8+ words (IndicVoices 6+ words; EdAcc 3–30 s, 10+ words; CHiME-6 3–15 s, 7+
 words with at most 0.5 s of another talker), one clip per speaker where the
 corpus allows. Conversational corpora are cut from longer talk, so some clips
 start or end mid-sentence; read the per-stratum numbers with that in mind.

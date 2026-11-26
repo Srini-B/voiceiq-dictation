@@ -24,3 +24,4 @@ eval/promptdump/promptdump
 __pycache__/
 eval/hard-audio/results/
 eval/hard-audio/ondevice/out/
+.amp/in/
