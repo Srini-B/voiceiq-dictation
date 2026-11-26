@@ -15,8 +15,8 @@ enum PillState: Equatable {
     case error(String)
     /// A call was noticed; the pill offers to record it. The string names the app or site.
     case meetingPrompt(String)
-    /// A meeting is recording: timer, waveform, stop.
-    case meetingRecording(since: Date)
+    /// A meeting is recording: timer, waveform, stop. `micMuted`: only the far side is recorded.
+    case meetingRecording(since: Date, micMuted: Bool)
     /// The recorded call ended; the meeting stops at `until` unless kept.
     case meetingEnding(until: Date)
 }

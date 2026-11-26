@@ -52,6 +52,16 @@ import VoiceIQSpeech
         }
     }
 
+    /// The mic track records silence while set; the far side keeps
+    /// recording. Hex has the same switch (anomalyco/hex `6118eb82`).
+    @Published public private(set) var micMuted = false
+
+    public func setMicMuted(_ muted: Bool) {
+        guard isRecording, let mic else { return }
+        mic.muted = muted; micMuted = muted
+        Log.meeting.info("meeting mic \(muted ? "muted" : "unmuted", privacy: .public)")
+    }
+
     private var endWatch: Task<Void, Never>?
     /// Keep recording was chosen; asked again only after the call comes back and ends again.
     private var keepAfterCallEnd = false
@@ -72,7 +82,11 @@ import VoiceIQSpeech
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(self?.endingAt == nil ? 5 : 1))
                 guard let self, !Task.isCancelled else { return }
-                let live = await Task.detached { CallDetector.processes(for: source)?.isRunningAudio == true }.value
+                let browser: Bool
+                if case .browser = source { browser = true } else { browser = false }
+                let live = await Task.detached {
+                    CallDetector.processes(for: source)?.isLive(locked: CallDetector.screenLocked(), browser: browser) == true
+                }.value
                 // A stop during the query cancelled this watcher and cleared
                 // the countdown; don't set it again.
                 guard !Task.isCancelled else { return }
@@ -214,6 +228,7 @@ import VoiceIQSpeech
         #if os(macOS)
         following?.cancel(); following = nil
         endWatch?.cancel(); endWatch = nil
+        micMuted = false
         #endif
         endingAt = nil
         let micDuration = mic?.stop() ?? 0, systemDuration = system?.stop() ?? 0

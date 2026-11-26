@@ -96,9 +96,9 @@ struct PillView: View {
                 MeetingPromptContent(name: name)
             }
 
-        case .meetingRecording(let since):
+        case let .meetingRecording(since, micMuted):
             pillSurface(width: 300) {
-                MeetingRecordingContent(since: since)
+                MeetingRecordingContent(since: since, micMuted: micMuted)
             }
 
         case .meetingEnding(let until):
@@ -222,6 +222,7 @@ struct PillView: View {
         case .notice(let message): return message
         case .error(let message): return "Error — \(message)"
         case .meetingPrompt(let name): return "Meeting detected in \(name)"
+        case .meetingRecording(_, true): return "Recording meeting — mic muted"
         case .meetingRecording: return "Recording meeting"
         case .meetingEnding: return "Meeting ended — stopping the recording soon"
         }

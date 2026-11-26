@@ -128,7 +128,7 @@ import CoreAudio
         let appPIDs = Set(apps.map(\.processIdentifier))
         let appPaths = Set(apps.compactMap { $0.bundleURL?.standardizedFileURL.path })
         let viaDaemons = CallApps.daemonCallApps.contains(bundleID)
-        var matched: [AudioObjectID] = [], input: AudioDeviceID?, running = false
+        var matched: [AudioObjectID] = [], input: AudioDeviceID?, running = false, capturing = false
         for object in list {
             guard let pid = pid(of: object), pid != getpid() else { continue }
             let owner = responsiblePID?(pid)
@@ -139,13 +139,44 @@ import CoreAudio
                 || executablePath(pid).flatMap(containingBundle).map(appPaths.contains) == true
             guard ours else { continue }
             matched.append(object)
-            running = running || flag(object, kAudioProcessPropertyIsRunningInput) || flag(object, kAudioProcessPropertyIsRunningOutput)
-            if input == nil, flag(object, kAudioProcessPropertyIsRunningInput),
+            let objectInput = flag(object, kAudioProcessPropertyIsRunningInput)
+            capturing = capturing || objectInput
+            running = running || objectInput || flag(object, kAudioProcessPropertyIsRunningOutput)
+            // A process can list output-only devices (the built-in speakers)
+            // here; the mic track must never follow one. From Hex (`657aa0cf`).
+            if input == nil, objectInput,
                let devices = objects(object, kAudioProcessPropertyDevices, scope: kAudioObjectPropertyScopeInput) {
-                input = devices.first
+                input = firstInput(devices, inputChannels: Self.inputChannels)
             }
         }
-        return matched.isEmpty ? nil : CallProcesses(objects: matched, inputDevice: input, isRunningAudio: running)
+        return matched.isEmpty ? nil : CallProcesses(objects: matched, inputDevice: input, isRunningAudio: running,
+                                                     isRunningInput: capturing)
+    }
+
+    /// The first of `devices` that has input channels.
+    nonisolated static func firstInput(_ devices: [AudioDeviceID], inputChannels: (AudioDeviceID) -> UInt32) -> AudioDeviceID? {
+        devices.first { inputChannels($0) > 0 }
+    }
+
+    /// The input channels `device` offers; 0 for an output-only device or one Core Audio will not describe.
+    private nonisolated static func inputChannels(_ device: AudioDeviceID) -> UInt32 {
+        var address = AudioObjectPropertyAddress(mSelector: kAudioDevicePropertyStreamConfiguration,
+                                                 mScope: kAudioObjectPropertyScopeInput, mElement: kAudioObjectPropertyElementMain)
+        var size: UInt32 = 0
+        guard AudioObjectGetPropertyDataSize(device, &address, 0, nil, &size) == noErr,
+              size >= UInt32(MemoryLayout<AudioBufferList>.size) else { return 0 }
+        let storage = UnsafeMutableRawPointer.allocate(byteCount: Int(size), alignment: MemoryLayout<AudioBufferList>.alignment)
+        defer { storage.deallocate() }
+        let list = storage.bindMemory(to: AudioBufferList.self, capacity: 1)
+        guard AudioObjectGetPropertyData(device, &address, 0, nil, &size, list) == noErr else { return 0 }
+        return UnsafeMutableAudioBufferListPointer(list).reduce(0) { $0 + $1.mNumberChannels }
+    }
+
+    /// The screen is locked, or another user's session has the console.
+    /// `CGSSessionScreenIsLocked` is undocumented and absent while unlocked.
+    public nonisolated static func screenLocked() -> Bool {
+        guard let session = CGSessionCopyCurrentDictionary() as? [String: Any] else { return false }
+        return (session["CGSSessionScreenIsLocked"] as? Bool) == true || (session["kCGSSessionOnConsoleKey"] as? Bool) == false
     }
 
     private nonisolated static func pid(of process: AudioObjectID) -> pid_t? {
@@ -263,6 +294,16 @@ public struct CallProcesses: Equatable, Sendable {
     public var inputDevice: AudioDeviceID?
     /// Any of them plays or captures sound now. A call that ended lets go of both.
     public var isRunningAudio = false
+    /// Any of them captures sound now.
+    public var isRunningInput = false
+
+    /// Whether the call still counts as going. A browser can keep its output
+    /// open after its call while the Mac is locked, so then only its
+    /// microphone counts. A call app keeps its output counting: some let go
+    /// of the microphone on mute. From Hex (anomalyco/hex `092a9b33`).
+    public func isLive(locked: Bool, browser: Bool) -> Bool {
+        locked && browser ? isRunningInput : isRunningAudio
+    }
 }
 
 /// The pages a browser shows, read through the Accessibility API.

@@ -35,7 +35,7 @@ final class MeetingHUDController {
     /// The pill state that stands in for the idle dot while a meeting records.
     var restingState: PillState? {
         if let until = meetings.endingAt { return .meetingEnding(until: until) }
-        if case let .recording(_, since) = meetings.phase { return .meetingRecording(since: since) }
+        if case let .recording(_, since) = meetings.phase { return .meetingRecording(since: since, micMuted: meetings.micMuted) }
         return nil
     }
 
@@ -50,6 +50,11 @@ final class MeetingHUDController {
         meetings.$endingAt
             .receive(on: DispatchQueue.main)
             .sink { [weak self] until in self?.endingChanged(until) }
+            .store(in: &cancellables)
+        meetings.$micMuted
+            .removeDuplicates()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] muted in self?.micMutedChanged(muted) }
             .store(in: &cancellables)
 
         let center = NotificationCenter.default
@@ -112,13 +117,18 @@ final class MeetingHUDController {
     /// The recorded call ended (a countdown), or the countdown was kept or the call came back.
     private func endingChanged(_ until: Date?) {
         guard !dictationIsActive(), case let .recording(_, since) = meetings.phase else { return }
-        setPill(until.map { .meetingEnding(until: $0) } ?? .meetingRecording(since: since))
+        setPill(until.map { .meetingEnding(until: $0) } ?? .meetingRecording(since: since, micMuted: meetings.micMuted))
+    }
+
+    private func micMutedChanged(_ muted: Bool) {
+        guard !dictationIsActive(), case let .recording(_, since) = meetings.phase, meetings.endingAt == nil else { return }
+        setPill(.meetingRecording(since: since, micMuted: muted))
     }
 
     private func phaseChanged(_ phase: MeetingPhase) {
         switch phase {
         case let .recording(_, since):
-            if !dictationIsActive() { setPill(.meetingRecording(since: since)) }
+            if !dictationIsActive() { setPill(.meetingRecording(since: since, micMuted: meetings.micMuted)) }
         case .idle, .failed:
             // Notes are made in the background; the pill is free at once and
             // shows the check only when they are saved.

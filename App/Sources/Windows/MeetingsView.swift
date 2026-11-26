@@ -76,6 +76,21 @@ struct MeetingsPane: View {
             .padding(.horizontal, VoiceIQUI.Spacing.s)
             .padding(.top, nextMeeting.next == nil ? VoiceIQUI.Spacing.l : VoiceIQUI.Spacing.s)
             .padding(.bottom, VoiceIQUI.Spacing.xs)
+            if recording {
+                Button {
+                    engine.setMicMuted(!engine.micMuted)
+                } label: {
+                    Label(engine.micMuted ? "Unmute my mic" : "Mute my mic",
+                          systemImage: engine.micMuted ? "mic.slash.fill" : "mic.fill")
+                        .frame(maxWidth: .infinity)
+                }
+                .controlSize(.large)
+                .buttonStyle(.bordered)
+                .tint(engine.micMuted ? VoiceIQUI.Colors.gRed : nil)
+                .help(engine.micMuted ? "Record your voice again" : "Stop recording your voice; the other side keeps recording")
+                .padding(.horizontal, VoiceIQUI.Spacing.s)
+                .padding(.bottom, VoiceIQUI.Spacing.xs)
+            }
             folderFilter
             List(folders.shown(meetings), selection: $selection) { meeting in
                 VStack(alignment: .leading, spacing: 3) {

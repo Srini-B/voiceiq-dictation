@@ -73,6 +73,8 @@ struct MeetingEndingContent: View {
 /// The timer is a `TimelineView` over the start date, so no published tick is needed.
 struct MeetingRecordingContent: View {
     let since: Date
+    /// Mute my mic in the Meetings window: only the far side is recorded.
+    let micMuted: Bool
 
     var body: some View {
         HStack(spacing: VoiceIQUI.Spacing.s) {
@@ -85,10 +87,16 @@ struct MeetingRecordingContent: View {
                     .foregroundStyle(VoiceIQUI.Colors.onSurfaceVariant)
             }
             WaveformView(processing: true)
-            Text("Recording meeting")
-                .font(VoiceIQUI.TypeScale.label())
-                .foregroundStyle(VoiceIQUI.Colors.onSurfaceVariant)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            Group {
+                if micMuted {
+                    Label("Mic muted", systemImage: "mic.slash.fill")
+                } else {
+                    Text("Recording meeting")
+                }
+            }
+            .font(VoiceIQUI.TypeScale.label())
+            .foregroundStyle(VoiceIQUI.Colors.onSurfaceVariant)
+            .frame(maxWidth: .infinity, alignment: .leading)
             Button {
                 NotificationCenter.default.post(name: .pillMeetingStopTapped, object: nil)
             } label: {
