@@ -163,16 +163,12 @@ public enum EditDiff {
     /// is forgotten when the user took it back (`isUndone`) and no remaining
     /// correction teaches the same spelling.
     public static func steps(for edits: DictationEdits, after earlier: [LearnedCorrection]) -> [LearningStep] {
-        let corrections = accepted(edits, after: earlier)
+        let (corrections, undone) = sorted(edits, after: earlier)
         let changed: [LearningStep] = corrections.compactMap { correction in
             guard !earlier.contains(correction) else { return nil }
             let overlapped = earlier.filter { $0.words.overlaps(correction.words) }
             guard !overlapped.isEmpty else { return .learn(correction) }
             return .revise(replacing: overlapped, with: correction)
-        }
-        let undone = earlier.filter { edit in
-            isUndone(edit, in: edits)
-                && !corrections.contains { $0.replacement.lowercased() == edit.replacement.lowercased() }
         }
         return changed + undone.map { .forget($0) }
     }
@@ -181,12 +177,26 @@ public enum EditDiff {
     /// acted on, plus earlier ones a longer or ignored edit now covers, so
     /// putting their words back later is still recognized.
     public static func history(after edits: DictationEdits, earlier: [LearnedCorrection]) -> [LearnedCorrection] {
-        let corrections = accepted(edits, after: earlier)
+        let (corrections, undone) = sorted(edits, after: earlier)
         return corrections + earlier.filter { edit in
             !corrections.contains { $0.words.overlaps(edit.words) }
                 && edits.changed.contains { $0.overlaps(edit.words) }
-                && !isUndone(edit, in: edits)
+                && !undone.contains(edit)
         }
+    }
+
+    /// The corrections to act on, and the earlier ones the user took back. A
+    /// correction over words of a phrase taken back is part of that deletion
+    /// ("Wispr Flow" → "Wispr"), not a new spelling.
+    private static func sorted(
+        _ edits: DictationEdits, after earlier: [LearnedCorrection]
+    ) -> (corrections: [LearnedCorrection], undone: [LearnedCorrection]) {
+        let candidates = accepted(edits, after: earlier)
+        let undone = earlier.filter { edit in
+            isUndone(edit, in: edits)
+                && !candidates.contains { $0.replacement.lowercased() == edit.replacement.lowercased() }
+        }
+        return (candidates.filter { correction in !undone.contains { $0.words.overlaps(correction.words) } }, undone)
     }
 
     /// The user took the edit back: every change over its words since then
