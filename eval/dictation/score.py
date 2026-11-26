@@ -28,25 +28,41 @@ NUMBER_WORDS.update({w: 10 * i for i, w in enumerate("twenty thirty forty fifty 
 
 def spelled_numbers_as_digits(tokens: list[str]) -> list[str]:
     # "two thousand four hundred and fifty" -> "2450", so the written digits
-    # the cleanup rules ask for count the same as the spoken words.
-    out, total, current, inside = [], 0, 0, False
-    for t in tokens + [""]:
-        if t in NUMBER_WORDS:
-            current += NUMBER_WORDS[t]
-            inside = True
-        elif inside and t == "hundred":
-            current *= 100
-        elif inside and t in ("thousand", "million"):
-            total += current * (1000 if t == "thousand" else 1_000_000)
-            current = 0
-        elif inside and t == "and":
-            continue
+    # the cleanup rules ask for count the same as the spoken words. Only a
+    # well-formed phrase joins: "one two" stays two numbers, and "and" joins
+    # only after "hundred" or "thousand" ("one and two" keeps its "and").
+    out, number, last = [], None, None  # last: "unit", "tens", "scale", "and"
+
+    def flush():
+        nonlocal number, last
+        if number is not None:
+            total, current = number
+            out.append(str(total + current))
+        if last == "and":
+            out.append("and")
+        number, last = None, None
+
+    for t in tokens:
+        value = NUMBER_WORDS.get(t)
+        if value is not None:
+            kind = "tens" if value >= 20 else "unit"
+            joins = number is not None and (last in ("scale", "and") or (last == "tens" and kind == "unit"))
+            if not joins:
+                flush()
+                number = (0, 0)
+            total, current = number
+            number, last = (total, current + value), kind
+        elif number is not None and t == "hundred" and last in ("unit", "tens") and number[1] < 100:
+            number, last = (number[0], number[1] * 100), "scale"
+        elif number is not None and t in ("thousand", "million") and last in ("unit", "tens", "scale"):
+            total, current = number
+            number, last = (total + current * (1000 if t == "thousand" else 1_000_000), 0), "scale"
+        elif number is not None and t == "and" and last == "scale":
+            last = "and"
         else:
-            if inside:
-                out.append(str(total + current))
-                total, current, inside = 0, 0, False
-            if t:
-                out.append(t)
+            flush()
+            out.append(t)
+    flush()
     return out
 
 
@@ -139,6 +155,7 @@ def main() -> None:
 
     judged = json.loads(Path(args.judge).read_text()) if args.judge else {}
     items = {"D1": d1, "D2": d2, "D5": d5}
+    unjudged = []
     for item in ("D3", "D4"):
         # Unavailable until every case has a judge score: a hard rule can
         # only lower a judged score, never stand in for one, except a
@@ -155,13 +172,17 @@ def main() -> None:
                 s = min(s, hard[key])
             scores.append(s)
         items[item] = statistics.mean(scores) if scores and None not in scores else None
+        unjudged += [f"{r['id']}/r{r['round']}" for r in results
+                     if spec[r["id"]]["item"] == item and f"{r['id']}/r{r['round']}" not in judged
+                     and hard.get(f"{r['id']}/r{r['round']}") != 0]
 
     thoughts = [r["usage"].get("thoughtsTokenCount", 0) for r in results]
     report = {"label": run["label"], "prompt_chars": run["prompt_chars"], "calls": len(results),
               "scores": {k: (round(v, 1) if v is not None else None) for k, v in items.items()},
               "names": f"{hit}/{total}", "control_flips": flips, "mean_wer": round(statistics.mean(wers), 3),
               "e2e_p50": round(p50, 2), "e2e_p90": round(p90, 2), "e2e_max": round(max(e2e), 2),
-              "calls_with_thinking": sum(t > 0 for t in thoughts), "misses": misses}
+              "calls_with_thinking": sum(t > 0 for t in thoughts), "misses": misses,
+              "unjudged": unjudged}
     print(json.dumps(report, indent=1, ensure_ascii=False))
 
 

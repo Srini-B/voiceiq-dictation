@@ -39,7 +39,7 @@ def match_names(hyp_names, ref_names):
     # remaining person on both sides; never two speakers on one person.
     out, free = {}, list(ref_names)
     for h in hyp_names:
-        r = next((r for r in free if norm_name(r) == norm_name(h)), None)
+        r = next((r for r in free if norm_name(h) and norm_name(r) == norm_name(h)), None)
         if r:
             out[h] = r
             free.remove(r)
@@ -140,14 +140,17 @@ def attribution(ref, hyp, m):
     return right / max(1, len(rw))
 
 
-def wer(ref_text, hyp_text):
-    r, h = words(ref_text), words(hyp_text)
-    d = list(range(len(h) + 1))
-    for i in range(1, len(r) + 1):
-        prev, d[0] = d[0], i
-        for j in range(1, len(h) + 1):
-            prev, d[j] = d[j], min(d[j] + 1, d[j - 1] + 1, prev + (r[i - 1] != h[j - 1]))
-    return d[len(h)] / max(1, len(r))
+def bucket_word_error(ref, hyp, seconds=20):
+    # Words compared as counts per 20-second stretch, so overlapping speech
+    # scores the same however either side cuts it into segments; a wrong
+    # word costs one error, as a substitution does in WER.
+    from collections import Counter
+    buckets = {}
+    for side, segments, key in ((0, ref, "speaker"), (1, hyp, "speaker_name")):
+        for t, word, _ in timed_words(segments, key):
+            buckets.setdefault(int(t // seconds), (Counter(), Counter()))[side][word] += 1
+    errors = sum(max(sum((r - h).values()), sum((h - r).values())) for r, h in buckets.values())
+    return errors / max(1, sum(sum(r.values()) for r, _ in buckets.values()))
 
 
 def main():
@@ -173,8 +176,7 @@ def main():
         m1 = 100 * found / len(ref_spk) - 10 * extra
     m2 = 100 * (1 - der(refseg, hyp, m))
     m3 = 100 * attribution(refseg, hyp, m)
-    m4 = 100 * (1 - wer(" ".join(s["text"] for s in sorted(refseg, key=lambda s: s["start"])),
-                        " ".join(s["text"] for s in sorted(hyp, key=lambda s: s["start"]))))
+    m4 = 100 * (1 - bucket_word_error(refseg, hyp))
     print(json.dumps({"M1": round(max(0, m1), 1), "M2": round(max(0, m2), 1), "M3": round(m3, 1),
                       "M4": round(max(0, m4), 1), "speakers_ref": len(ref_spk), "speakers_out": len(m),
                       "mapping": m}, indent=1, ensure_ascii=False))

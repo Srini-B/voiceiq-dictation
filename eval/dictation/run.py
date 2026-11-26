@@ -15,6 +15,7 @@ import base64
 import concurrent.futures
 import json
 import os
+import re
 import subprocess
 import time
 import urllib.error
@@ -35,6 +36,17 @@ def prompt_for(case: dict, spec: dict, promptdump: str, shots: int) -> str:
     return out.stdout.decode()
 
 
+def dictation_text(raw: str) -> str | None:
+    body = raw.strip()
+    if body.startswith("```"):
+        body = re.sub(r"^```[a-z]*\s*|\s*```$", "", body)
+    try:
+        value = json.loads(body)
+    except ValueError:
+        return None
+    return value.get("text") if isinstance(value, dict) and isinstance(value.get("text"), str) else None
+
+
 def call(prompt: str, flac: bytes, screen: bytes, shots: int) -> tuple[str, float, dict]:
     parts = [{"text": prompt}]
     parts += [{"inline_data": {"mime_type": "image/jpeg", "data": base64.b64encode(screen).decode()}}] * shots
@@ -48,22 +60,27 @@ def call(prompt: str, flac: bytes, screen: bytes, shots: int) -> tuple[str, floa
         f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL}:generateContent",
         data=json.dumps(body).encode(),
         headers={"x-goog-api-key": os.environ["GEMINI_API_KEY"], "Content-Type": "application/json"})
+    # Parsed as GeminiClient.dictate and PromptV1.dictationText parse it: a
+    # fenced object is unwrapped, anything that is not {"text": ...} is a
+    # malformed answer, which the app sends once more (sendWithRetry).
     start = time.monotonic()
-    for attempt in range(3):
-        try:
-            with urllib.request.urlopen(req, timeout=120) as r:
-                reply = json.loads(r.read())
+    for answer in range(2):
+        for attempt in range(3):
+            try:
+                with urllib.request.urlopen(req, timeout=120) as r:
+                    reply = json.loads(r.read())
+                break
+            except urllib.error.HTTPError as e:
+                if e.code != 429 or attempt == 2:
+                    raise
+                time.sleep(10)
+        raw = "".join(p.get("text", "") for p in reply["candidates"][0]["content"]["parts"] if not p.get("thought"))
+        text = dictation_text(raw)
+        if text is not None:
             break
-        except urllib.error.HTTPError as e:
-            if e.code != 429 or attempt == 2:
-                raise
-            time.sleep(10)
+    else:
+        raise RuntimeError("malformed_answer twice")
     seconds = time.monotonic() - start
-    raw = "".join(p.get("text", "") for p in reply["candidates"][0]["content"]["parts"] if not p.get("thought"))
-    try:
-        text = json.loads(raw)["text"]
-    except (ValueError, KeyError):
-        text = raw
     if "<<NO_SPEECH>>" in text:
         text = ""
     return text.strip(), seconds, reply.get("usageMetadata", {})
@@ -99,11 +116,27 @@ def main() -> None:
         print(f"{case['id']:<18} r{round_} {seconds:5.2f}s thoughts={usage.get('thoughtsTokenCount', 0)}", flush=True)
         return {"id": case["id"], "round": round_, "output": text, "seconds": round(seconds, 3), "usage": usage}
 
-    # A failed call is recorded, not fatal: the paid calls that finished
-    # are kept, and the run is marked incomplete so score.py refuses it.
-    results, failed = [], []
+    # The result file is rewritten after every call, so an interrupted run
+    # keeps what it paid for. A rerun with the same label sends only the
+    # calls that have no result yet (failed or never sent). A failure is
+    # recorded, and the run stays incomplete, which score.py refuses.
+    out = HERE / "results" / f"{args.label}.json"
+    out.parent.mkdir(exist_ok=True)
+    results = json.loads(out.read_text())["results"] if out.exists() else []
+    done = {(r["id"], r["round"]) for r in results}
+    todo = [job for job in jobs if (job[1]["id"], job[0]) not in done]
+    if done:
+        print(f"{len(done)} calls already done, {len(todo)} to send")
+    failed = []
+
+    def save():
+        results.sort(key=lambda r: (r["round"], r["id"]))
+        out.write_text(json.dumps({"label": args.label, "model": MODEL, "prompt_chars": len(jobs[0][2]),
+                                   "screenshots": args.screenshots, "complete": len(results) == len(jobs),
+                                   "failed": failed, "results": results}, indent=1, ensure_ascii=False))
+
     with concurrent.futures.ThreadPoolExecutor(args.workers) as pool:
-        futures = {pool.submit(run, job): job for job in jobs}
+        futures = {pool.submit(run, job): job for job in todo}
         for future in concurrent.futures.as_completed(futures):
             round_, case, _ = futures[future]
             try:
@@ -111,14 +144,10 @@ def main() -> None:
             except Exception as error:  # noqa: BLE001 - any failure is recorded per call
                 failed.append({"id": case["id"], "round": round_, "error": str(error)})
                 print(f"{case['id']:<18} r{round_} FAILED {error}", flush=True)
-    results.sort(key=lambda r: (r["round"], r["id"]))
-    out = HERE / "results" / f"{args.label}.json"
-    out.parent.mkdir(exist_ok=True)
-    out.write_text(json.dumps({"label": args.label, "model": MODEL, "prompt_chars": len(jobs[0][2]),
-                               "screenshots": args.screenshots, "complete": not failed, "failed": failed,
-                               "results": results}, indent=1, ensure_ascii=False))
-    print("wrote", out, "" if not failed else f"({len(failed)} calls failed; run incomplete)")
-
+            save()
+    save()
+    missing = len(jobs) - len(results)
+    print("wrote", out, f"({missing} calls without a result; rerun the same command to send them)" if missing else "")
 
 if __name__ == "__main__":
     main()
