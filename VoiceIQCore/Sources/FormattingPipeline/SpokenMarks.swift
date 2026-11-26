@@ -46,13 +46,11 @@ enum SpokenMarks {
         case previous
     }
 
+    /// Only names that are rarely prose. Not "slash", "underscore", "hyphen",
+    /// "hashtag" or "at sign", which are verbs and nouns too ("to slash
+    /// costs", "our hashtag is trending", "look at sign language"), nor
+    /// "period" ("a trial period").
     private static let englishSymbols: [([String], Character, Join)] = [
-        (["hashtag"], "#", .next),
-        (["hash", "sign"], "#", .next),
-        (["at", "sign"], "@", .next),
-        (["underscore"], "_", .both),
-        (["hyphen"], "-", .both),
-        (["slash"], "/", .both),
         (["comma"], ",", .previous),
         (["semicolon"], ";", .previous),
         (["colon"], ":", .previous),
@@ -60,19 +58,11 @@ enum SpokenMarks {
         (["question", "mark"], "?", .previous),
         (["exclamation", "mark"], "!", .previous),
         (["exclamation", "point"], "!", .previous),
-        // Not "period": "We offer a trial period" ends the same way as a
-        // spoken mark would. "full stop" is the mark's name.
     ]
 
-    private static let spanishSymbols: [([String], Character, Join)] = [
-        (["hashtag"], "#", .next),
-        (["arroba"], "@", .next),
-        (["guion", "bajo"], "_", .both),
-        (["guion"], "-", .both),
-        (["punto", "y", "coma"], ";", .previous),
-        (["coma"], ",", .previous),
-        (["dos", "puntos"], ":", .previous),
-    ]
+    /// None: "coma" is also a verb and a noun ("Espero que Juan coma bien",
+    /// "Estuvo en coma"), "dos puntos" a score, "guion" a script.
+    private static let spanishSymbols: [([String], Character, Join)] = []
 
     /// The words for `language`: Spanish for Spanish, otherwise English
     /// (also while the language is unknown), none for another language, so
@@ -109,14 +99,14 @@ enum SpokenMarks {
             }
             // "a new line of shoes", "my new paragraph"; and inside "quote …
             // unquote" the words are what is quoted.
-            if wordStart, pendingUnquote == nil, !afterArticle(chars, at: index, possessive: true),
+            if wordStart, pendingUnquote == nil, wordBefore(chars, at: index).map({ !describesLayout($0) }) ?? false,
                let (layout, end) = layouts.lazy.compactMap({ words, layout in
                 phraseEnd(words, in: chars, at: index, foldsAccents: spanish).map { (layout, $0) }
-            }).first {
+            }).first, !nounAfterLayout(chars, after: end) {
                 index = write(layout, into: &out, chars, after: end)
                 continue
             }
-            if wordStart, pendingUnquote == nil, !spanish, !afterArticle(chars, at: index, possessive: true),
+            if wordStart, pendingUnquote == nil, !spanish, !(wordBefore(chars, at: index).map(namesTheMark) ?? false),
                let end = phraseEnd(["quote"], in: chars, at: index),
                let close = unquote(in: chars, after: end, outside: quoted) {
                 pendingUnquote = close
@@ -182,11 +172,12 @@ enum SpokenMarks {
             let wordStart = !address[index] && !quoted[index] && (index == 0 || !joinsIdentifier(chars[index - 1]))
             if wordStart, let (symbol, join, end) = symbolWords.lazy.compactMap({ words, symbol, join -> (Character, Join, Int)? in
                 guard let end = phraseEnd(words, in: chars, at: index, foldsAccents: spanish),
-                      !afterArticle(chars, at: index, possessive: join == .previous),
-                      join != .previous || !namesTheMark(chars, at: index),
-                      join != .both || !usedAsVerb(chars, at: index),
-                      words != ["coma"] || !beforeSpanishVerb(chars, at: index),
-                      words != ["colon"] || !beforeCompound(chars, after: end) else { return nil }
+                      // A mark follows a word: "Colon biopsy results…" opens with the organ.
+                      let before = wordBefore(chars, at: index), !namesTheMark(before),
+                      // A comma, colon or semicolon comes between words: "a bigger colon." is the organ.
+                      !["comma", "colon", "semicolon"].contains(words[0]) || wordFollows(chars, after: end),
+                      words != ["comma"] || !beforeCompound(chars, after: end, ["separated", "delimited", "splice", "splices"]),
+                      words != ["colon"] || !beforeCompound(chars, after: end, colonCompounds) else { return nil }
                 return (symbol, join, end)
             }).first {
                 if join != .next {
@@ -209,61 +200,63 @@ enum SpokenMarks {
         "cancer", "cancers", "cleanse", "cleansing", "polyp", "polyps", "health", "screening", "surgery", "wall",
     ]
 
-    private static func beforeCompound(_ chars: [Character], after end: Int) -> Bool {
+    private static func beforeCompound(_ chars: [Character], after end: Int, _ compounds: Set<String>) -> Bool {
         let start = skip(chars, from: end, also: "")
         var stop = start
         while stop < chars.count, TidyText.isWordCharacter(chars[stop]) { stop += 1 }
-        return colonCompounds.contains(String(chars[start..<stop]).lowercased())
+        return compounds.contains(String(chars[start..<stop]).lowercased())
     }
 
-    /// The word before `index`, lowercased, if a space or nothing but
-    /// spaces separates them.
+    /// Whether a word follows on the same line, after spaces and commas.
+    private static func wordFollows(_ chars: [Character], after end: Int) -> Bool {
+        let next = skip(chars, from: end, also: ",")
+        return next < chars.count && (TidyText.isWordCharacter(chars[next]) || "\"“(".contains(chars[next]))
+    }
+
+    /// Words before "new line" that make it a noun: "a new line of shoes",
+    /// "this new line", "a soft line break".
+    private static func describesLayout(_ word: String) -> Bool {
+        namesTheMark(word) || ["soft", "hard", "brand", "whole", "first", "next", "last", "product"].contains(word)
+    }
+
+    /// "new line of products", "new line cook": a noun phrase, not the command.
+    private static func nounAfterLayout(_ chars: [Character], after end: Int) -> Bool {
+        let start = skip(chars, from: end, also: "")
+        var stop = start
+        while stop < chars.count, TidyText.isWordCharacter(chars[stop]) { stop += 1 }
+        return ["of", "cook", "cooks", "item", "items", "manager", "managers", "worker", "workers", "break", "breaks"]
+            .contains(String(chars[start..<stop]).lowercased())
+    }
+
+    /// The word before `index`, lowercased; "" when a mark comes between
+    /// ("Done, comma"); nil when nothing does, at the start of a line.
     private static func wordBefore(_ chars: [Character], at index: Int) -> String? {
         var end = index
         while end > 0, TidyText.isSpace(chars[end - 1]) { end -= 1 }
+        guard end > 0, chars[end - 1] != "\n" else { return nil }
         var start = end
         while start > 0, TidyText.isWordCharacter(chars[start - 1]) || "'’".contains(chars[start - 1]) { start -= 1 }
-        guard start < end, start == 0 || !TidyText.isWordCharacter(chars[start - 1]) else { return nil }
         return String(chars[start..<end]).lowercased().replacingOccurrences(of: "’", with: "'")
     }
 
-    /// "with a full stop", "use the hashtag", "my colon": the mark's name
-    /// after an article or a possessive, not the mark.
-    private static func afterArticle(_ chars: [Character], at index: Int, possessive: Bool) -> Bool {
-        guard let word = wordBefore(chars, at: index) else { return false }
-        // "my underscore variable" joins: possessives only guard a mark that ends a clause.
-        return ["a", "an", "the", "un", "una", "el", "la"].contains(word)
-            || (possessive && ["my", "your", "his", "her", "our", "their", "its", "mi", "su"].contains(word))
-    }
-
-    /// "an Oxford comma", "a big question mark": a word that describes the
-    /// mark, so the mark is talked about.
-    private static func namesTheMark(_ chars: [Character], at index: Int) -> Bool {
-        guard let word = wordBefore(chars, at: index) else { return false }
-        return ["no", "oxford", "serial", "big", "huge", "giant", "extra", "missing", "stray", "trailing", "another", "inverted"]
-            .contains(word)
-    }
-
-    /// "to slash costs", "we underscore it": slash, underscore and hyphen
-    /// after a word that wants a verb.
-    private static func usedAsVerb(_ chars: [Character], at index: Int) -> Bool {
-        guard let word = wordBefore(chars, at: index) else { return false }
-        return [
-            "to", "will", "would", "can", "could", "should", "must", "might", "may", "you", "we", "they", "he",
-            "she", "please", "also", "just", "not", "don't", "didn't", "let's", "cannot", "can't", "won't",
+    /// A word that makes the mark's name a noun: an article, a possessive,
+    /// a demonstrative or quantifier ("one question mark left", "no comma
+    /// after"), or a word describing the mark ("an Oxford comma", "a big
+    /// question mark", "a bigger colon").
+    private static func namesTheMark(_ word: String) -> Bool {
+        [
+            "a", "an", "the", "my", "your", "his", "her", "our", "their", "its", "this", "that", "these", "those",
+            "one", "no", "any", "some", "every", "each", "another", "single", "extra", "missing", "stray",
+            "trailing", "oxford", "serial", "big", "bigger", "huge", "giant", "inverted", "un", "una", "el", "la",
+            "mi", "su", "este", "esta",
         ].contains(word)
-    }
-
-    /// Spanish "No coma tanto": "coma" after a pronoun or "no" is the verb comer.
-    private static func beforeSpanishVerb(_ chars: [Character], at index: Int) -> Bool {
-        guard let word = wordBefore(chars, at: index) else { return false }
-        return ["no", "que", "se", "lo", "la", "le", "les", "los", "me", "te", "nos", "ya", "si"].contains(word)
     }
 
     // MARK: Matching
 
     /// A word character, "_" or "-": "server_underscore_value" and "slash-command" are one word.
-    private static func joinsIdentifier(_ c: Character) -> Bool { TidyText.isWordCharacter(c) || c == "_" || c == "-" }
+    /// A word character, "_", "-" or "/": "server_comma", "/comma/value" are written text.
+    private static func joinsIdentifier(_ c: Character) -> Bool { TidyText.isWordCharacter(c) || "_-/".contains(c) }
 
     /// `c` lowercased with Spanish accents dropped: "Párrafo" reads as "parrafo".
     static func fold(_ c: Character) -> Character {
@@ -378,6 +371,26 @@ enum Hesitations {
     /// "_" joins too: "um_server" is an identifier.
     private static func joinsWord(_ c: Character) -> Bool { TidyText.isWordCharacter(c) || "-'’_".contains(c) }
 
+    /// A hesitation's letters that are a word here: after a number ("5 um",
+    /// micrometres; "2 em"), capitalized mid-sentence ("Mr. Um"), or "uh"
+    /// in "uh huh".
+    static func isWord(_ chars: [Character], at start: Int) -> Bool {
+        var before = start
+        while before > 0, TidyText.isSpace(chars[before - 1]) { before -= 1 }
+        if before > 0, chars[before - 1].isNumber { return true }
+        var wordStart = before
+        while wordStart > 0, !chars[wordStart - 1].isWhitespace { wordStart -= 1 }
+        let previous = String(chars[wordStart..<before]).lowercased()
+        // "Mr. Um", and "server underscore um" spelling an identifier.
+        if ["mr.", "mrs.", "ms.", "dr.", "prof.", "underscore", "hyphen", "slash", "dot"].contains(previous) { return true }
+        if chars[start].isUppercase, before > 0, !".!?\n".contains(chars[before - 1]) { return true }
+        let rest = String(chars[start...].prefix(16)).lowercased()
+        if rest.hasPrefix("uh huh") || rest.hasPrefix("uh-huh") { return true }
+        // "um underscore server" spells an identifier.
+        let next = rest.split(separator: " ").dropFirst().first.map(String.init) ?? ""
+        return ["underscore", "hyphen", "slash", "dot"].contains(next)
+    }
+
     /// Whether the mark at `index` holds an address or a domain together:
     /// "@", or "." between letters ("um@gmail.com", "john@er.com").
     static func joinsAddress(_ chars: [Character], at index: Int) -> Bool {
@@ -389,6 +402,7 @@ enum Hesitations {
 
     private static func englishEnd(_ chars: [Character], at start: Int) -> Int? {
         if start > 0, joinsWord(chars[start - 1]) || joinsAddress(chars, at: start - 1) { return nil }
+        if Hesitations.isWord(chars, at: start) { return nil }
         for word in english {
             let end = start + word.count
             guard end <= chars.count else { continue }
@@ -438,7 +452,7 @@ enum Hesitations {
         var out = ""
         var index = 0
         while index < chars.count {
-            if !address[index], !quoted[index], let end = language.end(chars, at: index) {
+            if !address[index], !quoted[index], !Hesitations.isWord(chars, at: index), let end = language.end(chars, at: index) {
                 let starts = index == 0 || chars[index - 1].isWhitespace || chars[index - 1] == ","
                 let ends = end >= chars.count || chars[end].isWhitespace
                     || (",.!?".contains(chars[end]) && !Hesitations.joinsAddress(chars, at: end))

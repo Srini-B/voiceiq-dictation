@@ -39,7 +39,10 @@ enum SpokenAddresses {
             // "at the rate stripe.com charges": plain English unless the domain
             // ends the sentence.
             guard let domain = domain(tokens, from: next),
-                  !marker.ambiguous || !domain.trailing.isEmpty || domain.end == tokens.count - 1 else {
+                  // A spoken domain ("company dot co dot in") is an address before a comma too;
+                  // a written one ("Amazon.com, Walmart") only at a sentence's end.
+                  !marker.ambiguous || domain.end > next || domain.trailing.first.map({ ".!?".contains($0) })
+                      ?? (domain.end == tokens.count - 1) else {
                 index = marker.end + 1
                 continue
             }
@@ -63,6 +66,11 @@ enum SpokenAddresses {
                     quote = marks
                     start -= 2
                 }
+            }
+            // No mailbox before it ("Type an at sign example.com"): a phrase, not an address.
+            guard !local.isEmpty else {
+                index = marker.end + 1
+                continue
             }
             let address = (local.joined(separator: ".") + "@" + domain.labels.joined(separator: ".")).lowercased()
             edits.append((tokens[start].range.lowerBound..<tokens[domain.end].range.upperBound, quote + address + domain.trailing))
@@ -176,7 +184,9 @@ enum SpokenAddresses {
     /// The word before "@" when it can start an address: letters, digits,
     /// "." "_" "-" "+", with no punctuation after it.
     private static func localPart(_ word: String) -> String? {
-        guard let first = word.first, let last = word.last,
+        // "Type an at sign example.com": a function word is not a mailbox.
+        guard !["a", "an", "the", "to", "at", "is", "in", "on", "of", "and", "or", "type", "use", "add"].contains(word.lowercased()),
+              let first = word.first, let last = word.last,
               first.isLetter || first.isNumber, last.isLetter || last.isNumber,
               word.allSatisfy({ ($0.isLetter || $0.isNumber || "._-+".contains($0)) && $0.isASCII }) else { return nil }
         return word

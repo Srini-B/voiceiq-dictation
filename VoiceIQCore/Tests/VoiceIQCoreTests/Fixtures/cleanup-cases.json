@@ -13,7 +13,8 @@
       "check": "self-correction",
       "said": "i want, i mean, i need the report by friday",
       "heard": "I want, I mean, I need the report by Friday.",
-      "written": "I need the report by Friday."
+      "written": "I need the report by Friday.",
+      "tidy": "I want, I mean, I need the report by Friday."
     },
     {
       "id": "correction-number",
@@ -43,7 +44,8 @@
       "check": "self-correction",
       "said": "send the budget to the whole team, actually just to sarah",
       "heard": "Send the budget to the whole team, actually just to Sarah.",
-      "written": "Send the budget just to Sarah."
+      "written": "Send the budget just to Sarah.",
+      "tidy": "Send the budget to the whole team, actually just to Sarah."
     },
     {
       "id": "correction-none",
@@ -253,7 +255,8 @@
       "language": "es-ES",
       "said": "eh, nos vemos mañana coma nueva línea gracias",
       "heard": "Eh, nos vemos mañana coma nueva línea gracias.",
-      "written": "Nos vemos mañana,\nGracias."
+      "written": "Nos vemos mañana,\nGracias.",
+      "tidy": "Nos vemos mañana coma.\nGracias."
     },
     {
       "id": "french",
@@ -312,7 +315,7 @@
       "said": "buy milk, eggs, i mean, bread",
       "heard": "Buy milk, eggs, I mean, bread.",
       "written": "Buy milk and bread.",
-      "tidy": "Buy milk, bread."
+      "tidy": "Buy milk, eggs, I mean, bread."
     },
     {
       "id": "kept-acronym-er",
@@ -382,7 +385,8 @@
       "check": "email layout",
       "said": "john at sign gmail dot com at sign yahoo dot com",
       "heard": "john at sign gmail dot com at sign yahoo dot com",
-      "written": "john@gmail.com @yahoo.com."
+      "written": "john@gmail.com @yahoo.com.",
+      "tidy": "john@gmail.com at sign yahoo dot com."
     },
     {
       "id": "kept-address-gonna",
@@ -500,7 +504,8 @@
       "check": "spoken punctuation",
       "said": "question mark",
       "heard": "question mark",
-      "written": "?"
+      "written": "?",
+      "tidy": "Question mark."
     },
     {
       "id": "email-quoted",
@@ -563,7 +568,8 @@
       "check": "question-shaped speech",
       "said": "when is sam free",
       "heard": "When is Sam free",
-      "written": "When is Sam free?"
+      "written": "When is Sam free?",
+      "tidy": "When is Sam free."
     },
     {
       "id": "kept-ellipsis-message",
@@ -680,14 +686,16 @@
       "check": "kept as said",
       "said": "use um underscore server",
       "heard": "Use um underscore server.",
-      "written": "Use um_server."
+      "written": "Use um_server.",
+      "tidy": "Use um underscore server."
     },
     {
       "id": "kept-identifier-um-end",
       "check": "kept as said",
       "said": "use server underscore um",
       "heard": "Use server underscore um.",
-      "written": "Use server_um."
+      "written": "Use server_um.",
+      "tidy": "Use server underscore um."
     },
     {
       "id": "kept-quoted-um",
@@ -743,14 +751,16 @@
       "check": "kept as said",
       "said": "use gonna underscore server",
       "heard": "Use gonna underscore server.",
-      "written": "Use gonna_server."
+      "written": "Use gonna_server.",
+      "tidy": "Use gonna underscore server."
     },
     {
       "id": "kept-identifier-i",
       "check": "kept as said",
       "said": "set i underscore max",
       "heard": "Set i underscore max.",
-      "written": "Set i_max."
+      "written": "Set i_max.",
+      "tidy": "Set i underscore max."
     },
     {
       "id": "kept-i-mean-continuation",
@@ -1170,7 +1180,8 @@
       "check": "kept as said",
       "said": "use gonna hyphen server",
       "heard": "Use gonna hyphen server.",
-      "written": "Use gonna-server."
+      "written": "Use gonna-server.",
+      "tidy": "Use gonna hyphen server."
     },
     {
       "id": "kept-to-purpose",
@@ -1200,6 +1211,467 @@
       "said": "type colon quote eggs, milk, bread unquote",
       "heard": "Type: \"eggs, milk, bread\".",
       "written": "Type: \"eggs, milk, bread\"",
+      "style": "lists"
+    },
+    {
+      "id": "kept-underscore-why",
+      "check": "kept as said",
+      "said": "these numbers underscore why we need to hire.",
+      "heard": "These numbers underscore why we need to hire.",
+      "written": "These numbers underscore why we need to hire."
+    },
+    {
+      "id": "kept-underscore-that",
+      "check": "kept as said",
+      "said": "i'll underscore that in my reply.",
+      "heard": "I'll underscore that in my reply.",
+      "written": "I'll underscore that in my reply."
+    },
+    {
+      "id": "kept-slash-overhead",
+      "check": "kept as said",
+      "said": "we plan to cut costs and slash overhead.",
+      "heard": "We plan to cut costs and slash overhead.",
+      "written": "We plan to cut costs and slash overhead."
+    },
+    {
+      "id": "kept-comma-separated",
+      "check": "kept as said",
+      "said": "export as comma separated values.",
+      "heard": "Export as comma separated values.",
+      "written": "Export as comma separated values."
+    },
+    {
+      "id": "kept-one-comma",
+      "check": "kept as said",
+      "said": "you forgot one comma in the list.",
+      "heard": "You forgot one comma in the list.",
+      "written": "You forgot one comma in the list."
+    },
+    {
+      "id": "kept-our-hashtag",
+      "check": "kept as said",
+      "said": "our hashtag is trending right now.",
+      "heard": "Our hashtag is trending right now.",
+      "written": "Our hashtag is trending right now."
+    },
+    {
+      "id": "kept-hashtag-verb",
+      "check": "kept as said",
+      "said": "they'll hashtag everything.",
+      "heard": "They'll hashtag everything.",
+      "written": "They'll hashtag everything."
+    },
+    {
+      "id": "kept-one-question-mark",
+      "check": "kept as said",
+      "said": "there's still one question mark left on the budget.",
+      "heard": "There's still one question mark left on the budget.",
+      "written": "There's still one question mark left on the budget."
+    },
+    {
+      "id": "kept-colon-biopsy",
+      "check": "kept as said",
+      "said": "colon biopsy results come back friday.",
+      "heard": "Colon biopsy results come back Friday.",
+      "written": "Colon biopsy results come back Friday."
+    },
+    {
+      "id": "kept-bigger-colon",
+      "check": "kept as said",
+      "said": "gonna need a bigger colon.",
+      "heard": "Gonna need a bigger colon.",
+      "written": "Going to need a bigger colon."
+    },
+    {
+      "id": "kept-this-new-line",
+      "check": "kept as said",
+      "said": "we're launching this new line of products next month.",
+      "heard": "We're launching this new line of products next month.",
+      "written": "We're launching this new line of products next month."
+    },
+    {
+      "id": "kept-soft-line-break",
+      "check": "kept as said",
+      "said": "press shift enter for a soft line break.",
+      "heard": "Press Shift Enter for a soft line break.",
+      "written": "Press Shift Enter for a soft line break."
+    },
+    {
+      "id": "kept-new-line-cook",
+      "check": "kept as said",
+      "said": "new line cook wanted.",
+      "heard": "New line cook wanted.",
+      "written": "New line cook wanted."
+    },
+    {
+      "id": "kept-at-sign-language",
+      "check": "kept as said",
+      "said": "look at sign language classes.",
+      "heard": "Look at sign language classes.",
+      "written": "Look at sign language classes."
+    },
+    {
+      "id": "kept-at-sign-ups",
+      "check": "kept as said",
+      "said": "i was looking at sign ups for the event.",
+      "heard": "I was looking at sign ups for the event.",
+      "written": "I was looking at sign ups for the event."
+    },
+    {
+      "id": "kept-meet-at-sign-in",
+      "check": "kept as said",
+      "said": "meet at sign in.",
+      "heard": "Meet at sign in.",
+      "written": "Meet at sign in."
+    },
+    {
+      "id": "kept-an-at-sign-domain",
+      "check": "kept as said",
+      "said": "type an at sign example.com in the field.",
+      "heard": "Type an at sign example.com in the field.",
+      "written": "Type an at sign example.com in the field."
+    },
+    {
+      "id": "kept-at-the-rate-list",
+      "check": "kept as said",
+      "said": "we were shocked at the rate amazon.com, walmart, and target raised prices.",
+      "heard": "We were shocked at the rate Amazon.com, Walmart, and Target raised prices.",
+      "written": "We were shocked at the rate Amazon.com, Walmart, and Target raised prices."
+    },
+    {
+      "id": "kept-spanish-dos-puntos",
+      "check": "kept as said",
+      "said": "tengo dos puntos para la reunión.",
+      "heard": "Tengo dos puntos para la reunión.",
+      "written": "Tengo dos puntos para la reunión.",
+      "language": "es-ES"
+    },
+    {
+      "id": "kept-spanish-score",
+      "check": "kept as said",
+      "said": "ganamos por dos puntos.",
+      "heard": "Ganamos por dos puntos.",
+      "written": "Ganamos por dos puntos.",
+      "language": "es-ES"
+    },
+    {
+      "id": "kept-spanish-coma-subjunctive",
+      "check": "kept as said",
+      "said": "espero que juan coma bien.",
+      "heard": "Espero que Juan coma bien.",
+      "written": "Espero que Juan coma bien.",
+      "language": "es-ES"
+    },
+    {
+      "id": "kept-spanish-en-coma",
+      "check": "kept as said",
+      "said": "estuvo en coma tres días.",
+      "heard": "Estuvo en coma tres días.",
+      "written": "Estuvo en coma tres días.",
+      "language": "es-ES"
+    },
+    {
+      "id": "kept-spanish-guion",
+      "check": "kept as said",
+      "said": "mi guion está listo.",
+      "heard": "Mi guion está listo.",
+      "written": "Mi guion está listo.",
+      "language": "es-ES"
+    },
+    {
+      "id": "kept-spanish-arroba",
+      "check": "kept as said",
+      "said": "arroba es un símbolo.",
+      "heard": "Arroba es un símbolo.",
+      "written": "Arroba es un símbolo.",
+      "language": "es-ES"
+    },
+    {
+      "id": "kept-i-mean-not",
+      "check": "kept as said",
+      "said": "it's not broken, i mean, not completely.",
+      "heard": "It's not broken, I mean, not completely.",
+      "written": "It's not broken, I mean, not completely."
+    },
+    {
+      "id": "kept-i-mean-the-draft",
+      "check": "kept as said",
+      "said": "the report is ready, i mean, the draft is.",
+      "heard": "The report is ready, I mean, the draft is.",
+      "written": "The report is ready, I mean, the draft is."
+    },
+    {
+      "id": "kept-i-mean-it-works",
+      "check": "kept as said",
+      "said": "try it, i mean, it really works.",
+      "heard": "Try it, I mean, it really works.",
+      "written": "Try it, I mean, it really works."
+    },
+    {
+      "id": "kept-i-mean-question",
+      "check": "kept as said",
+      "said": "the plan is solid, i mean, is there anything missing?",
+      "heard": "The plan is solid, I mean, is there anything missing?",
+      "written": "The plan is solid, I mean, is there anything missing?"
+    },
+    {
+      "id": "kept-i-mean-not-great",
+      "check": "kept as said",
+      "said": "it's fine, i mean, it's not great.",
+      "heard": "It's fine, I mean, it's not great.",
+      "written": "It's fine, I mean, it's not great."
+    },
+    {
+      "id": "kept-make-that-priority",
+      "check": "kept as said",
+      "said": "take the call, make that the priority.",
+      "heard": "Take the call, make that the priority.",
+      "written": "Take the call, make that the priority."
+    },
+    {
+      "id": "kept-actually-just-in",
+      "check": "kept as said",
+      "said": "i'll be in the office, actually just in the morning.",
+      "heard": "I'll be in the office, actually just in the morning.",
+      "written": "I'll be in the office, actually just in the morning."
+    },
+    {
+      "id": "kept-actually-also",
+      "check": "kept as said",
+      "said": "send the notes to mark, actually also to sarah.",
+      "heard": "Send the notes to Mark, actually also to Sarah.",
+      "written": "Send the notes to Mark, actually also to Sarah."
+    },
+    {
+      "id": "kept-swap-clause-day",
+      "check": "kept as said",
+      "said": "we met on friday, i mean, monday works too.",
+      "heard": "We met on Friday, I mean, Monday works too.",
+      "written": "We met on Friday, I mean, Monday works too."
+    },
+    {
+      "id": "kept-swap-clause-name",
+      "check": "kept as said",
+      "said": "i texted sarah, i mean, john knows too.",
+      "heard": "I texted Sarah, I mean, John knows too.",
+      "written": "I texted Sarah, I mean, John knows too."
+    },
+    {
+      "id": "kept-swap-range",
+      "check": "kept as said",
+      "said": "the score was 3 to 2, i mean, 4 to 2.",
+      "heard": "The score was 3 to 2, I mean, 4 to 2.",
+      "written": "The score was 3 to 2, I mean, 4 to 2."
+    },
+    {
+      "id": "kept-honestly-name",
+      "check": "kept as said",
+      "said": "honestly, sarah, i mean, thanks.",
+      "heard": "Honestly, Sarah, I mean, thanks.",
+      "written": "Honestly, Sarah, I mean, thanks."
+    },
+    {
+      "id": "kept-no-wait-sentence",
+      "check": "kept as said",
+      "said": "let's ship the release today. no wait, we haven't run the tests yet.",
+      "heard": "Let's ship the release today. No wait, we haven't run the tests yet.",
+      "written": "Let's ship the release today. No wait, we haven't run the tests yet."
+    },
+    {
+      "id": "kept-scratch-that-today",
+      "check": "kept as said",
+      "said": "i'll send it tomorrow. scratch that, today.",
+      "heard": "I'll send it tomorrow. Scratch that, today.",
+      "written": "I'll send it tomorrow. Scratch that, today."
+    },
+    {
+      "id": "kept-scratch-that-only",
+      "check": "kept as said",
+      "said": "if the wording is wrong, scratch that.",
+      "heard": "If the wording is wrong, scratch that.",
+      "written": "If the wording is wrong, scratch that."
+    },
+    {
+      "id": "kept-strike-that-legal",
+      "check": "kept as said",
+      "said": "objection, your honor. strike that, please.",
+      "heard": "Objection, Your Honor. Strike that, please.",
+      "written": "Objection, Your Honor. Strike that, please."
+    },
+    {
+      "id": "kept-um-unit",
+      "check": "kept as said",
+      "said": "the tolerance is 5 um.",
+      "heard": "The tolerance is 5 um.",
+      "written": "The tolerance is 5 um."
+    },
+    {
+      "id": "kept-mr-um",
+      "check": "kept as said",
+      "said": "please email mr. um about the contract.",
+      "heard": "Please email Mr. Um about the contract.",
+      "written": "Please email Mr. Um about the contract."
+    },
+    {
+      "id": "kept-spanish-em-unit",
+      "check": "kept as said",
+      "said": "usa un margen de 2 em.",
+      "heard": "Usa un margen de 2 em.",
+      "written": "Usa un margen de 2 em.",
+      "language": "es-ES"
+    },
+    {
+      "id": "kept-uh-huh",
+      "check": "kept as said",
+      "said": "uh huh, sounds good.",
+      "heard": "Uh huh, sounds good.",
+      "written": "Uh huh, sounds good."
+    },
+    {
+      "id": "kept-you-know-tag",
+      "check": "kept as said",
+      "said": "wait, you know, right?",
+      "heard": "Wait, you know, right?",
+      "written": "Wait, you know, right?"
+    },
+    {
+      "id": "kept-grep-flag",
+      "check": "kept as said",
+      "said": "use grep -i to ignore case.",
+      "heard": "Use grep -i to ignore case.",
+      "written": "Use grep -i to ignore case."
+    },
+    {
+      "id": "kept-array-index",
+      "check": "kept as said",
+      "said": "use arr[i] instead of arr[j].",
+      "heard": "Use arr[i] instead of arr[j].",
+      "written": "Use arr[i] instead of arr[j]."
+    },
+    {
+      "id": "kept-parent-path",
+      "check": "kept as said",
+      "said": "run cd ../scripts",
+      "heard": "Run cd ../scripts",
+      "written": "Run cd ../scripts."
+    },
+    {
+      "id": "kept-css-important",
+      "check": "kept as said",
+      "said": "use !important in css.",
+      "heard": "Use !important in CSS.",
+      "written": "Use !important in CSS."
+    },
+    {
+      "id": "kept-wanna-be",
+      "check": "kept as said",
+      "said": "he's a wanna-be actor.",
+      "heard": "He's a wanna-be actor.",
+      "written": "He's a wanna-be actor."
+    },
+    {
+      "id": "kept-hindi-danda",
+      "check": "kept as said",
+      "said": "मैं कल आऊंगा।",
+      "heard": "मैं कल आऊंगा।",
+      "written": "मैं कल आऊंगा।",
+      "language": "hi-IN"
+    },
+    {
+      "id": "kept-dont-you-worry",
+      "check": "kept as said",
+      "said": "don't you worry about it",
+      "heard": "Don't you worry about it",
+      "written": "Don't you worry about it."
+    },
+    {
+      "id": "kept-may-you",
+      "check": "kept as said",
+      "said": "may you have a great birthday",
+      "heard": "May you have a great birthday",
+      "written": "May you have a great birthday."
+    },
+    {
+      "id": "kept-what-was-promised",
+      "check": "kept as said",
+      "said": "what was promised never arrived",
+      "heard": "What was promised never arrived",
+      "written": "What was promised never arrived."
+    },
+    {
+      "id": "kept-am-tomorrow",
+      "check": "kept as said",
+      "said": "let's meet at 9 a.m. tomorrow.",
+      "heard": "Let's meet at 9 a.m. tomorrow.",
+      "written": "Let's meet at 9 a.m. tomorrow."
+    },
+    {
+      "id": "kept-inc-announced",
+      "check": "kept as said",
+      "said": "apple inc. announced it today.",
+      "heard": "Apple Inc. announced it today.",
+      "written": "Apple Inc. announced it today."
+    },
+    {
+      "id": "kept-url-start",
+      "check": "kept as said",
+      "said": "https://example.com is where we host it.",
+      "heard": "https://example.com is where we host it.",
+      "written": "https://example.com is where we host it."
+    },
+    {
+      "id": "kept-quoted-capital",
+      "check": "kept as said",
+      "said": "the password is \"red. blue\".",
+      "heard": "The password is \"red. blue\".",
+      "written": "The password is \"red. blue\"."
+    },
+    {
+      "id": "kept-written-path",
+      "check": "kept as said",
+      "said": "use ./slash/config.",
+      "heard": "Use ./slash/config.",
+      "written": "Use ./slash/config."
+    },
+    {
+      "id": "kept-plus-members",
+      "check": "kept as said",
+      "said": "plus members get free shipping.",
+      "heard": "Plus members get free shipping.",
+      "written": "Plus members get free shipping",
+      "style": "lists"
+    },
+    {
+      "id": "kept-then-again",
+      "check": "kept as said",
+      "said": "then again, we could wait.",
+      "heard": "Then again, we could wait.",
+      "written": "Then again, we could wait",
+      "style": "lists"
+    },
+    {
+      "id": "kept-numbered-list",
+      "check": "kept as said",
+      "said": "1. buy milk. 2. call mom.",
+      "heard": "1. Buy milk. 2. Call Mom.",
+      "written": "- 1. Buy milk\n- 2. Call Mom",
+      "style": "lists"
+    },
+    {
+      "id": "kept-month-abbreviation",
+      "check": "kept as said",
+      "said": "meet on nov. 5 at noon.",
+      "heard": "Meet on Nov. 5 at noon.",
+      "written": "Meet on Nov. 5 at noon",
+      "style": "lists"
+    },
+    {
+      "id": "kept-that-bullet-point",
+      "check": "kept as said",
+      "said": "delete that bullet point from the slide.",
+      "heard": "Delete that bullet point from the slide.",
+      "written": "Delete that bullet point from the slide",
       "style": "lists"
     }
   ]
