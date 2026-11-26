@@ -2232,6 +2232,14 @@
       "said": "the password is quote red new line blue unquote",
       "heard": "The password is \"red\nblue\".",
       "written": "The password is \"red\nblue\"."
+    },
+    {
+      "id": "kept-quoted-across-lines-list",
+      "check": "kept as said",
+      "said": "the password is quote red new line and then blue unquote",
+      "heard": "The password is \"red\nand then blue\".",
+      "written": "The password is \"red\nand then blue\".",
+      "style": "lists"
     }
   ]
 }
