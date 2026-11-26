@@ -95,11 +95,21 @@ def mapping(ref, hyp, ref_names):
 
 
 def der(ref, hyp, m):
-    # Frames within the collar of a reference boundary are not scored.
+    # Frames within the collar of a speaker's turn boundary are not scored.
+    # Each speaker's touching or overlapping segments merge into one turn
+    # first, so splitting a turn into pieces cannot hide missed speech.
+    turns = {}
+    for s in sorted(ref, key=lambda s: s["start"]):
+        spans = turns.setdefault(s["speaker"], [])
+        if spans and s["start"] <= spans[-1][1]:
+            spans[-1][1] = max(spans[-1][1], s["end"])
+        else:
+            spans.append([s["start"], s["end"]])
     skip = set()
-    for s in ref:
-        for edge in (s["start"], s["end"]):
-            skip.update(range(int((edge - COLLAR) / STEP), int((edge + COLLAR) / STEP)))
+    for spans in turns.values():
+        for start, end in spans:
+            for edge in (start, end):
+                skip.update(range(int((edge - COLLAR) / STEP), int((edge + COLLAR) / STEP)))
     rf, hf = frames(ref, "speaker"), frames(hyp, "speaker_name")
     total = errors = 0
     for f in set(rf) | set(hf):
