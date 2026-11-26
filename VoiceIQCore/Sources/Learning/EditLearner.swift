@@ -33,9 +33,11 @@ public final class EditLearner {
         var pendingSince: Date?
         var pollTask: Task<Void, Never>?
         var harvesting = false
-        /// Counts applied diffs, so a slow poll does not overwrite a newer
-        /// Return capture that finished while it ran.
-        var generation = 0
+        /// Harvests are numbered when they read the field; a result older
+        /// than the last one applied (a slow poll behind a Return capture)
+        /// is dropped.
+        var nextTicket = 0
+        var appliedTicket = -1
     }
 
     /// One matched insertion after a harvest: its text now reads `window`.
@@ -179,12 +181,13 @@ public final class EditLearner {
             return
         }
         if captured == nil { tracked.harvesting = true }
+        let ticket = tracked.nextTicket
+        tracked.nextTicket += 1
         fields[key] = tracked
 
         let snapshot = tracked.snapshot
         let insertions = tracked.insertions.map { ($0.id, $0.text, $0.original, $0.edits) }
         let previousHash = tracked.lastValueHash
-        let generation = tracked.generation
         let settled = tracked.pendingSince.map { now.timeIntervalSince($0) >= Self.settleSeconds } == true
         let settledHash = captured?.hashValue ?? (settled ? tracked.pendingHash : nil)
         let result = await Task.detached(priority: .utility) {
@@ -210,11 +213,11 @@ public final class EditLearner {
             }
             fields[key] = current
         case let .located(located, valueHash):
-            guard current.generation == generation else {
+            guard ticket > current.appliedTicket else {
                 fields[key] = current
                 return
             }
-            current.generation += 1
+            current.appliedTicket = ticket
             current.lastValueHash = valueHash
             current.pendingHash = nil
             current.pendingSince = nil
@@ -270,7 +273,7 @@ public final class EditLearner {
     }
 
     private nonisolated static func isFresh(_ entry: DictionaryEntry) -> Bool {
-        entry.source == .auto && Date().timeIntervalSince(entry.updatedAt) <= reEditSeconds
+        entry.source == .auto && !entry.starred && Date().timeIntervalSince(entry.updatedAt) <= reEditSeconds
     }
 
     /// `stillTaught`: how many corrections in this field still teach each
@@ -281,7 +284,7 @@ public final class EditLearner {
         var known = dictionary.entries()
         for step in steps {
             let correction: LearnedCorrection
-            let stale: [DictionaryEntry]
+            let candidates: [DictionaryEntry]
             // The transcript wording a revised entry now records; nil keeps it.
             var heardAs: String?
             switch step {
@@ -301,7 +304,7 @@ public final class EditLearner {
                 // The user changed a word learned moments ago, here or in
                 // another dictation.
                 correction = edit
-                stale = known.filter { Self.isFresh($0) && $0.term.lowercased() == edit.original.lowercased() }
+                candidates = known.filter { Self.isFresh($0) && $0.term.lowercased() == edit.original.lowercased() }
             case let .revise(replacing, edit):
                 // The user went back to words learned moments ago from this
                 // dictation, or edited the word beside one.
@@ -310,14 +313,15 @@ public final class EditLearner {
                 // Matched by the spelling the earlier fix taught, not by its
                 // transcript wording, which other fixes of that word share.
                 let terms = Set(replacing.map { $0.replacement.lowercased() })
-                // A spelling another fix in the field still teaches stays; the
-                // revision is then learned as its own word.
-                // This revision's own spelling counts once toward that.
-                stale = known.filter {
-                    let term = $0.term.lowercased()
-                    let own = term == edit.replacement.lowercased() ? 1 : 0
-                    return Self.isFresh($0) && terms.contains(term) && stillTaught[term, default: 0] - own == 0
-                }
+                candidates = known.filter { Self.isFresh($0) && terms.contains($0.term.lowercased()) }
+            }
+            // A spelling another fix in the field still teaches is not
+            // renamed or dropped; this correction's own spelling counts once.
+            // The correction is then learned as its own word.
+            let stale = candidates.filter {
+                let term = $0.term.lowercased()
+                let own = term == correction.replacement.lowercased() ? 1 : 0
+                return stillTaught[term, default: 0] - own == 0
             }
             if let kept = stale.first {
                 // The entry follows the edit, and entries for the parts of a

@@ -97,21 +97,28 @@ public enum EditDiff {
             let removed = before[(previousBefore + 1)..<pair.0]
             let added = after[(previousAfter + 1)..<pair.1]
             if !removed.isEmpty { output.changed.append((previousBefore + 1)..<pair.0) }
-            if (1...3).contains(removed.count), (1...3).contains(added.count) {
-                let originalText = clean(removed.map(\.text).joined(separator: " "))
-                let replacementText = clean(added.map(\.text).joined(separator: " "))
-                let span = (previousBefore + 1)..<pair.0
-                // `valid` first: it caps both sides at 60 characters before
-                // the quadratic distance runs.
-                if valid(originalText), valid(replacementText), originalText != replacementText,
-                   isPlausibleFix(originalText, replacementText) || earlier.contains(where: {
-                       $0.words == span && isPlausibleFix($0.replacement, replacementText)
-                   }) {
-                    output.corrections.append(LearnedCorrection(
-                        original: originalText,
-                        replacement: replacementText,
-                        words: span
-                    ))
+            // Words either side of a sentence or clause break are not one
+            // phrase ("whisper. He" → "Wispr. She" is two edits).
+            let removedParts = segments(removed, in: original)
+            let addedParts = segments(added, in: replacement)
+            if removedParts.count == addedParts.count {
+                for (removedPart, addedPart) in zip(removedParts, addedParts)
+                where (1...3).contains(removedPart.count) && (1...3).contains(addedPart.count) {
+                    let originalText = clean(removedPart.map(\.text).joined(separator: " "))
+                    let replacementText = clean(addedPart.map(\.text).joined(separator: " "))
+                    let span = removedPart.startIndex..<removedPart.endIndex
+                    // `valid` first: it caps both sides at 60 characters before
+                    // the quadratic distance runs.
+                    if valid(originalText), valid(replacementText), originalText != replacementText,
+                       isPlausibleFix(originalText, replacementText) || earlier.contains(where: {
+                           $0.words == span && isPlausibleFix($0.replacement, replacementText)
+                       }) {
+                        output.corrections.append(LearnedCorrection(
+                            original: originalText,
+                            replacement: replacementText,
+                            words: span
+                        ))
+                    }
                 }
             }
             previousBefore = pair.0
@@ -172,7 +179,27 @@ public enum EditDiff {
         }
     }
 
-    /// `correction` when the words it adds to `earlier` are a respelled name;
+    private static let breaks = CharacterSet(charactersIn: ".!?;:,…\n\r")
+
+    /// `run` split wherever the text between two of its words holds a break.
+    private static func segments(_ run: ArraySlice<Word>, in text: String) -> [ArraySlice<Word>] {
+        guard let first = run.indices.first else { return [] }
+        var parts: [ArraySlice<Word>] = []
+        var start = first
+        for index in run.indices.dropFirst() {
+            let gap = text[run[index - 1].range.upperBound..<run[index].range.lowerBound]
+            if gap.unicodeScalars.contains(where: breaks.contains) {
+                parts.append(run[start..<index])
+                start = index
+            }
+        }
+        parts.append(run[start..<run.endIndex])
+        return parts
+    }
+
+    /// `correction` when the words it adds to `earlier` are a respelled name,
+    /// or when it respells the wider span as no more words ("Supa base" →
+    /// "Supabase");
     /// otherwise only its change to the words `earlier` covers, so a re-edit of
     /// a learned name still counts beside rewording that is ignored.
     private static func grown(_ earlier: LearnedCorrection, to correction: LearnedCorrection) -> LearnedCorrection? {
@@ -184,7 +211,10 @@ public enum EditDiff {
         let original = words(in: correction.original).map(\.text)
         let replacement = words(in: correction.replacement).map(\.text)
         let taught = words(in: earlier.replacement).map(\.text)
-        guard replacement.count > taught.count else { return nil }
+        guard replacement.count > taught.count else {
+            // A contraction ("whisper is" → "Wispr's") is not a longer name.
+            return correction.replacement.contains(where: { $0 == "'" || $0 == "’" }) ? nil : correction
+        }
         let kept = (atStart ? replacement.prefix(taught.count) : replacement.suffix(taught.count)).joined(separator: " ")
         guard isPlausibleFix(earlier.replacement, kept) else { return nil }
         let addedCount = wider.count - inner.count
@@ -196,6 +226,9 @@ public enum EditDiff {
            isPlausibleFix(addedOriginal, addedReplacement) {
             return correction
         }
+        // Only when the added words line up one for one with the words they
+        // replaced, so `kept` is really the learned part.
+        guard addedWords.count == addedCount else { return nil }
         return LearnedCorrection(original: earlier.original, replacement: kept, words: inner)
     }
 

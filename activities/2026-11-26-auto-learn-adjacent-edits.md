@@ -54,11 +54,17 @@
   learned fixes ("Wispr" and "Supabase", then the word between them) is not
   merged; both words stay learned. Nor is a fix that grows a learned word on both
   sides at once.
+- Gemini Neon review follow-up: adjacent edits never merge across a sentence
+  or clause break; a re-fix of a word learned moments ago keeps it when
+  another fix in the field still teaches it; "Supa base" → "Supabase" revises
+  "Supa"; starred entries are never revised; harvests are ordered by when
+  they read the field. One auto-learned spelling per heard wording stays
+  deliberate.
 
 ## Verification
 
 - `swift test --package-path VoiceIQCore` on a Mac satellite (Xcode 27):
-  256 tests, 0 failures. New `EditDiffTests` cover separate and adjacent
+  258 tests, 0 failures. New `EditDiffTests` cover separate and adjacent
   edits across a paragraph, edits a few seconds apart folding into a phrase,
   a learned word changed again, and rewording, punctuation and deletions
   teaching nothing. With the respelling check disabled, the rewording test

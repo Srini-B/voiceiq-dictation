@@ -71,7 +71,6 @@ final class EditDiffTests: XCTestCase {
         ])
 
         for (learned, edited) in [
-            ("We use Wispr. the app is fine.", "We use Wispr. The app is fine."),
             ("We use Wispr slack daily.", "We use Wispr Slack daily."),
         ] {
             let dictated = learned.replacingOccurrences(of: "Wispr", with: "whisper")
@@ -97,6 +96,28 @@ final class EditDiffTests: XCTestCase {
         XCTAssertEqual(EditDiff.steps(for: reverted, after: second.corrections), [.forget(fix("Paystack", "pstack", 4..<5))])
     }
 
+    func testWordsAcrossASentenceBreakAreSeparateEdits() {
+        let original = "We use whisper. He loves it."
+        XCTAssertEqual(EditDiff.edits(original: original, replacement: "We use Wispr. She loves it.").corrections, [
+            fix("whisper", "Wispr", 2..<3),
+            fix("He", "She", 3..<4),
+        ])
+        let first = EditDiff.edits(original: original, replacement: "We use Wispr. He loves it.")
+        let second = EditDiff.edits(original: original, replacement: "We use Wispr. She loves it.")
+        XCTAssertEqual(EditDiff.steps(for: second, after: first.corrections), [.learn(fix("He", "She", 3..<4))])
+    }
+
+    func testRespellingAPhraseAsOneWordRevisesIt() {
+        let original = "Deploy it on super base today."
+        let first = EditDiff.edits(original: original, replacement: "Deploy it on Supa base today.")
+        let second = EditDiff.edits(original: original, replacement: "Deploy it on Supabase today.")
+        XCTAssertEqual(EditDiff.steps(for: second, after: first.corrections), [
+            .revise(replacing: [fix("super", "Supa", 3..<4)], with: fix("super base", "Supabase", 3..<5)),
+        ])
+    }
+
+    // EditDiff reports a second spelling of the same heard word as a new edit;
+    // the learner keeps one auto-learned spelling per heard wording.
     func testTheSameWordFixedAtAnotherPlaceIsANewEdit() {
         let original = "Shrinny said hi, and later Shrinny left."
         let first = EditDiff.edits(original: original, replacement: "Srini said hi, and later Shrinny left.")
