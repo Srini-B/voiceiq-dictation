@@ -24,24 +24,44 @@ main 35351ad, before this change:
 
 ## Change
 
-- `EditDiff.soundsAlike`: consonant skeletons that ignore vowels,
-  aspiration, voicing, s/sh/ch/j, v/w/b/f/ph, Tamil zh as l and doubled
-  letters, within a quarter of their length. Used only when every
-  replacement word is capitalized, in addition to the letters bound.
-- `EditLearner.teachesNothing`: an ordinary capitalized replacement is
-  still a name when the heard wording was not ordinary.
-- A learned word whose words the user deleted outright is forgotten, as when
-  the original words are put back (fresh entries only, as before).
+- `EditDiff.soundsAlike`: the same consonant skeleton (ignoring vowels,
+  aspiration, voicing of k/g and t/d, s/sh/ch/j, v/w/b/f, Tamil zh as l and
+  doubled letters) with at least three consonants. Used only for the first
+  check of what was heard against a replacement written as a name
+  (`nameLike`: every word capitalized, not only because it starts a
+  sentence). Re-edits and merges compare letters only.
+- `EditLearner.teachesNothing`: a name-like replacement that is an English
+  word in lowercase is still a name when the heard wording was not
+  ordinary. The one-time prune uses the same rule, so it cannot delete a
+  synced "Saran".
+- A learned word is forgotten when the only change over its words is a
+  deletion inside them (the word itself, or one word of a phrase). Deleting
+  the sentence around it forgets nothing (fresh entries only, as before).
 - Everything runs on device; no model calls.
 
 ## Verification
 
-- `swift test --package-path VoiceIQCore` on a Mac satellite: 318 tests, 0
-  failures. New tests cover twelve Indian, Tamil and Irish name fixes, names
-  and rewording that must not pass ("Mark" → "Mike", "Raj" → "Priya",
-  "call him tomorrow" → "call Priya Monday"), "Sharon" → "Saran" learned
-  while "Then" → "Than" is not, and deletion forgetting.
-- With the sound-alike branch disabled, the name test fails on "shivon",
-  "lucky me" and "Mootoo"; with the ordinary-name exception disabled, the
-  Saran test fails.
+- `swift test --package-path VoiceIQCore` on a Mac satellite: 320 tests, 0
+  failures. New tests cover eleven Indian, Tamil and Irish name fixes;
+  fourteen different names and words that must not sound alike ("Mark" →
+  "Mike", "please" → "Balaji", "for" → "Priya"); sentence-start capitals;
+  the sound rule staying out of merges and re-edits ("Srini Friday",
+  "Karan" → "Green"); "Sharon" → "Saran" learned while "Then" → "Than" and
+  "Sorry" are not; and deletion forgetting the word but not its sentence.
+- With the sound-alike branch disabled, the name test fails on "shivon"
+  and "tongue gum"; with the ordinary-name exception disabled, the Saran
+  test fails.
+- First Neon review (a71de92) found the sound rule leaking into merges and
+  re-edits, sentence-start capitals counting as names, a skeleton loose
+  enough for "please" → "Balaji", and sentence deletions forgetting names.
+  All fixed here.
+
+## Known limits
+
+- Different names with the same consonants still pass ("Peter" → "Pedro",
+  "Karen" → "Corinne"); only a name the user typed is learned.
+- Garbles with an extra or missing consonant ("lucky me" → "Lakshmi") or
+  only two consonants ("Mootoo" → "Muthu") need the letters bound.
+- A dictation that is only the name, or one deleted down to a few words,
+  cannot be located, as before.
 - Unsigned Mac Debug build succeeds. Not tested live on a signed build.

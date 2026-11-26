@@ -95,7 +95,14 @@ public final class EditLearner {
         guard !defaults.bool(forKey: pruneFlag) else { return }
         defaults.set(true, forKey: pruneFlag)
         let entries = dictionary.entries()
-        let kept = entries.filter { $0.source != .auto || !CommonWords.isOrdinary($0.term) }
+        let kept = entries.filter { entry in
+            entry.source != .auto || !teachesNothing(LearnedCorrection(
+                original: entry.learnedFrom ?? "",
+                replacement: entry.term,
+                words: 0..<0,
+                nameLike: EditDiff.isNameLike(entry.term)
+            ))
+        }
         guard kept.count != entries.count else { return }
         dictionary.save(kept)
         Log.learning.info("Removed \(entries.count - kept.count) auto-learned ordinary word(s)")
@@ -294,11 +301,12 @@ public final class EditLearner {
     /// Only words the language does not already have: a name, a product term,
     /// jargon. Many Indian names are English words in lowercase ("Saran",
     /// "Ram", "Raja"), so a capitalized replacement for heard wording that was
-    /// not ordinary either ("Sharon" → "Saran") is still a name. Changing
-    /// "They" to "We" or "Then" to "Than" teaches nothing.
+    /// not ordinary either ("Sharon" → "Saran") is still a name, unless the
+    /// capital only starts a sentence ("Sara, I'm late" → "Sorry, I'm late").
+    /// Changing "They" to "We" or "Then" to "Than" teaches nothing.
     private static func teachesNothing(_ correction: LearnedCorrection) -> Bool {
         guard CommonWords.isOrdinary(correction.replacement) else { return false }
-        return !(EditDiff.isNameLike(correction.replacement) && !CommonWords.isOrdinary(correction.original))
+        return !(correction.nameLike && !CommonWords.isOrdinary(correction.original))
     }
 
     func learn(_ steps: [LearningStep], stillTaught: [String: Int]) {
