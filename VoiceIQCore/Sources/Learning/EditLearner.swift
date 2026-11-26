@@ -11,8 +11,14 @@ import Foundation
 public final class EditLearner {
     private struct Insertion {
         let id: UUID
+        /// The text as inserted. Each harvest diffs the field against this, so
+        /// words edited a few seconds apart still read as one phrase.
+        let original: String
+        /// Where the insertion was last found, to find it again.
         var text: String
         let insertedAt: Date
+        /// The edits it carried at the last harvest.
+        var edits: [LearnedCorrection] = []
     }
 
     private struct TrackedField {
@@ -54,15 +60,10 @@ public final class EditLearner {
     /// the user was on the way from "Paystack" to "pstack").
     nonisolated static let settleSeconds: TimeInterval = 4
 
-    /// An auto-learned word edited again within this long of being learned
-    /// (or last renamed) is treated as a fix to that word, not a new one.
+    /// An auto-learned word edited again, or extended by editing the word next
+    /// to it, within this long of being learned (or last revised) is revised
+    /// in place rather than joined by a new entry.
     nonisolated static let reEditSeconds: TimeInterval = 120
-
-    private nonisolated static func isFreshlyLearned(_ entry: DictionaryEntry, as term: String) -> Bool {
-        entry.source == .auto
-            && entry.term.lowercased() == term
-            && Date().timeIntervalSince(entry.updatedAt) <= reEditSeconds
-    }
 
     private let dictionary: DictionaryStore
     private var fields: [FieldKey: TrackedField] = [:]
@@ -110,7 +111,7 @@ public final class EditLearner {
             lastInsertionAt: now
         )
         tracked.insertions.removeAll { now.timeIntervalSince($0.insertedAt) > 7_200 }
-        tracked.insertions.append(Insertion(id: UUID(), text: text, insertedAt: now))
+        tracked.insertions.append(Insertion(id: UUID(), original: text, text: text, insertedAt: now))
         if tracked.insertions.count > 20 {
             tracked.insertions.removeFirst(tracked.insertions.count - 20)
         }
@@ -178,7 +179,7 @@ public final class EditLearner {
         fields[key] = tracked
 
         let snapshot = tracked.snapshot
-        let insertions = tracked.insertions.map { ($0.id, $0.text) }
+        let insertions = tracked.insertions.map { ($0.id, $0.text, $0.original) }
         let previousHash = tracked.lastValueHash
         let settled = tracked.pendingSince.map { now.timeIntervalSince($0) >= Self.settleSeconds } == true
         let settledHash = captured?.hashValue ?? (settled ? tracked.pendingHash : nil)
@@ -210,19 +211,22 @@ public final class EditLearner {
             current.pendingSince = nil
             let harvested = Set(insertions.map(\.0))
             let byID = Dictionary(uniqueKeysWithValues: located.map { ($0.id, $0) })
+            var steps: [LearningStep] = []
             current.insertions = current.insertions.compactMap { insertion in
                 guard harvested.contains(insertion.id) else { return insertion }
                 guard let match = byID[insertion.id] else { return nil }
+                steps += EditDiff.steps(for: match.corrections, after: insertion.edits)
                 var updated = insertion
                 updated.text = match.window
+                updated.edits = match.corrections
                 return updated
             }
-            guard !current.insertions.isEmpty else {
+            if current.insertions.isEmpty {
                 forget(key)
-                return
+            } else {
+                fields[key] = current
             }
-            fields[key] = current
-            learn(located.flatMap(\.corrections))
+            learn(steps)
         }
     }
 
@@ -234,7 +238,7 @@ public final class EditLearner {
 
     private nonisolated static func compute(
         value: String?,
-        insertions: [(UUID, String)],
+        insertions: [(UUID, String, String)],
         previousHash: Int?,
         settledHash: Int?
     ) -> Harvest {
@@ -248,35 +252,52 @@ public final class EditLearner {
             return Located(
                 id: insertion.0,
                 window: match.window,
-                corrections: EditDiff.corrections(original: insertion.1, replacement: match.window)
+                corrections: EditDiff.corrections(original: insertion.2, replacement: match.window)
             )
         }
         return .located(located, valueHash: valueHash)
     }
 
-    private func learn(_ corrections: [LearnedCorrection]) {
+    private func learn(_ steps: [LearningStep]) {
         var learned: [DictionaryEntry] = []
         var known = dictionary.entries()
-        for correction in corrections {
-            let original = correction.original.lowercased()
-            let replacement = correction.replacement.lowercased()
-            if let index = known.firstIndex(where: { Self.isFreshlyLearned($0, as: original) }) {
-                // The user went back to a word learned moments ago: that is a
-                // correction of the correction, so the entry follows the edit.
-                let stale = known.remove(at: index)
-                let clashes = known.contains { $0.term.lowercased() == replacement }
-                if clashes || CommonWords.isOrdinary(correction.replacement) {
-                    dictionary.remove(id: stale.id)
+        for step in steps {
+            let correction: LearnedCorrection
+            switch step {
+            case let .learn(edit):
+                correction = edit
+            case let .revise(replacing, edit):
+                correction = edit
+                let wordings = Set(replacing.map { $0.lowercased() })
+                let stale = known.filter {
+                    $0.source == .auto
+                        && wordings.contains($0.learnedFrom?.lowercased() ?? "")
+                        && Date().timeIntervalSince($0.updatedAt) <= Self.reEditSeconds
+                }
+                guard let kept = stale.first else { break }
+                // The user went back to words learned moments ago, or edited
+                // the word beside one: the entry follows the edit, and entries
+                // for the parts of a phrase fold into the phrase.
+                let staleIDs = Set(stale.map(\.id))
+                for entry in stale.dropFirst() { dictionary.remove(id: entry.id) }
+                known.removeAll { staleIDs.contains($0.id) }
+                learned.removeAll { staleIDs.contains($0.id) }
+                let replacement = correction.replacement.lowercased()
+                if known.contains(where: { $0.term.lowercased() == replacement })
+                    || CommonWords.isOrdinary(correction.replacement) {
+                    dictionary.remove(id: kept.id)
                     Log.learning.info("Dropped a just-learned word the user edited again")
                 } else {
-                    dictionary.update(id: stale.id, term: correction.replacement)
-                    if let entry = dictionary.entries().first(where: { $0.id == stale.id }) {
+                    dictionary.update(id: kept.id, term: correction.replacement, learnedFrom: correction.original)
+                    if let entry = dictionary.entries().first(where: { $0.id == kept.id }) {
                         learned.append(entry)
                         known.append(entry)
                     }
                 }
                 continue
             }
+            let original = correction.original.lowercased()
+            let replacement = correction.replacement.lowercased()
             guard !known.contains(where: {
                 let term = $0.term.lowercased()
                 let misspelling = $0.misspelling?.lowercased()

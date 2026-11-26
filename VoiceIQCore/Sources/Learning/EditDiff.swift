@@ -10,6 +10,14 @@ public struct LearnedCorrection: Equatable, Sendable {
     }
 }
 
+public enum LearningStep: Equatable, Sendable {
+    /// A new word or phrase.
+    case learn(LearnedCorrection)
+    /// The words earlier edits taught from the transcript wording in
+    /// `replacing` become this correction's replacement.
+    case revise(replacing: [String], with: LearnedCorrection)
+}
+
 public enum EditDiff {
     public struct Match: Equatable, Sendable {
         public let window: String
@@ -73,7 +81,8 @@ public enum EditDiff {
             if (1...3).contains(removed.count), (1...3).contains(added.count) {
                 let originalText = clean(removed.map(\.text).joined(separator: " "))
                 let replacementText = clean(added.map(\.text).joined(separator: " "))
-                if valid(originalText), valid(replacementText), originalText != replacementText {
+                if valid(originalText), valid(replacementText), originalText != replacementText,
+                   isPlausibleFix(originalText, replacementText) {
                     output.append(LearnedCorrection(original: originalText, replacement: replacementText))
                 }
             }
@@ -81,6 +90,53 @@ public enum EditDiff {
             previousAfter = pair.1
         }
         return output
+    }
+
+    /// What learning should do with `corrections`, the edits a dictation now
+    /// carries against its original text, given `earlier`, the edits it carried
+    /// at the previous harvest. Edits seen before are skipped. An edit that
+    /// overlaps earlier ones, because the user changed that word again or
+    /// edited the word next to it, revises what those taught, so "Wispr" then
+    /// "Flow" typed a few seconds apart ends as the one phrase "Wispr Flow".
+    public static func steps(for corrections: [LearnedCorrection], after earlier: [LearnedCorrection]) -> [LearningStep] {
+        corrections.compactMap { correction in
+            guard !earlier.contains(correction) else { return nil }
+            let words = keys(correction.original)
+            let overlapped = earlier.filter {
+                let other = keys($0.original)
+                return isRun(other, of: words) || isRun(words, of: other)
+            }
+            guard !overlapped.isEmpty else { return .learn(correction) }
+            return .revise(replacing: overlapped.map(\.original), with: correction)
+        }
+    }
+
+    /// Whether `replacement` could be the same words respelled rather than
+    /// different wording, by letters alone. The iPhone keyboard's dictation
+    /// learning uses the same bound.
+    private static func isPlausibleFix(_ original: String, _ replacement: String) -> Bool {
+        let a = Array(original.lowercased().filter { $0.isLetter || $0.isNumber })
+        let b = Array(replacement.lowercased().filter { $0.isLetter || $0.isNumber })
+        guard !a.isEmpty, !b.isEmpty else { return false }
+        var previous = Array(0...b.count)
+        for i in 1...a.count {
+            var row = [i] + Array(repeating: 0, count: b.count)
+            for j in 1...b.count {
+                row[j] = min(previous[j] + 1, row[j - 1] + 1, previous[j - 1] + (a[i - 1] == b[j - 1] ? 0 : 1))
+            }
+            previous = row
+        }
+        return previous[b.count] <= max(2, max(a.count, b.count) / 2)
+    }
+
+    private static func keys(_ text: String) -> [String] {
+        words(in: text).map(\.key)
+    }
+
+    /// Whether `run` appears in `words` in order and without gaps.
+    private static func isRun(_ run: [String], of words: [String]) -> Bool {
+        guard !run.isEmpty, run.count <= words.count else { return false }
+        return (0...(words.count - run.count)).contains { Array(words[$0..<($0 + run.count)]) == run }
     }
 
     private struct State: Hashable {

@@ -165,14 +165,16 @@ public struct DictionaryStore: Sendable {
         save(entries().filter { $0.id != id })
     }
 
-    /// Renames an entry in place. The id, origin and `learnedFrom` survive
-    /// so sync treats it as an edit, not a removal plus an addition.
-    public func update(id: UUID, term: String) {
+    /// Renames an entry in place. The id and origin survive so sync treats it
+    /// as an edit, not a removal plus an addition; `learnedFrom` survives too
+    /// unless a new one is given.
+    public func update(id: UUID, term: String, learnedFrom: String? = nil) {
         let trimmed = term.trimmingCharacters(in: .whitespacesAndNewlines)
         guard (1...60).contains(trimmed.count) else { return }
         var current = entries()
         guard let index = current.firstIndex(where: { $0.id == id }) else { return }
         current[index].term = trimmed
+        if let learnedFrom { current[index].learnedFrom = learnedFrom }
         save(current)
     }
 
