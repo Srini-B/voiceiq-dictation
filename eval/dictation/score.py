@@ -94,7 +94,16 @@ def wer(ref: str, hyp: str) -> float:
 
 
 def has_word(term: str, text: str) -> bool:
+    term, text = unicodedata.normalize("NFC", term), unicodedata.normalize("NFC", text)
     return re.search(rf"(?<!\w){re.escape(term)}(?!\w)", text) is not None
+
+
+def judged_item(case: dict) -> str | None:
+    # The long dictations are judged for cleanup too: dropping a spoken
+    # clause there is a cleanup failure the word scores barely see.
+    if case["item"] in ("D3", "D4"):
+        return case["item"]
+    return "D4" if case["item"] == "D5" else None
 
 
 def percentile(values: list[float], q: float) -> float:
@@ -111,15 +120,29 @@ def main() -> None:
     spec = {c["id"]: c for c in json.loads((HERE / "cases.json").read_text())["cases"]}
     run = json.loads(Path(args.result).read_text())
     results = run["results"]
+    # A file that doesn't match the current cases one-to-one is refused,
+    # never scored on a subset.
     if not run.get("complete", True):
-        raise SystemExit(f"{args.result}: incomplete run, {len(run['failed'])} calls failed; rerun before scoring")
+        raise SystemExit(f"{args.result}: incomplete run, {len(run['failed'])} calls failed; rerun run.py with this label")
+    if not results:
+        raise SystemExit(f"{args.result}: no results")
+    keys = [(r["id"], r["round"]) for r in results]
+    unknown = sorted({i for i, _ in keys if i not in spec})
+    if unknown:
+        raise SystemExit(f"{args.result}: cases no longer in cases.json: {', '.join(unknown)}; rerun run.py")
+    if len(set(keys)) != len(keys):
+        raise SystemExit(f"{args.result}: duplicate case/round rows")
+    rounds = {n for _, n in keys}
+    missing = [f"{c}/r{n}" for c in spec for n in sorted(rounds) if (c, n) not in set(keys)]
+    if missing:
+        raise SystemExit(f"{args.result}: no result for {len(missing)} current cases ({', '.join(missing[:5])}…); rerun run.py with this label")
 
     if args.packet:
         for r in results:
             c = spec[r["id"]]
-            if c["item"] in ("D3", "D4"):
-                print(json.dumps({"key": f"{r['id']}/r{r['round']}", "item": c["item"], "spoken": c["text"],
-                                  "field_before_cursor": c.get("before"), "expected": c["expect"],
+            if judged_item(c):
+                print(json.dumps({"key": f"{r['id']}/r{r['round']}", "item": judged_item(c), "spoken": c["text"],
+                                  "field_before_cursor": c.get("before"), "expected": c.get("expect", "The spoken text, cleaned up and laid out by the rules, with every spoken clause kept."),
                                   "output": r["output"]}, ensure_ascii=False))
         return
 
@@ -165,6 +188,9 @@ def main() -> None:
             hard[key] = min(hard.get(key, 100), 50)
 
     judged = json.loads(Path(args.judge).read_text()) if args.judge else {}
+    bad = [k for k, v in judged.items() if isinstance(v, bool) or not isinstance(v, int) or not 0 <= v <= 100]
+    if bad:
+        raise SystemExit(f"{args.judge}: scores must be integers 0-100: {', '.join(bad[:5])}")
     items = {"D1": d1, "D2": d2, "D5": d5}
     unjudged = []
     for item in ("D3", "D4"):
@@ -173,7 +199,7 @@ def main() -> None:
         # hard-rule zero, which is final.
         scores = []
         for r in results:
-            if spec[r["id"]]["item"] != item:
+            if judged_item(spec[r["id"]]) != item:
                 continue
             key = f"{r['id']}/r{r['round']}"
             s = judged.get(key)
@@ -184,11 +210,11 @@ def main() -> None:
             scores.append(s)
         items[item] = statistics.mean(scores) if scores and None not in scores else None
         unjudged += [f"{r['id']}/r{r['round']}" for r in results
-                     if spec[r["id"]]["item"] == item and f"{r['id']}/r{r['round']}" not in judged
+                     if judged_item(spec[r["id"]]) == item and f"{r['id']}/r{r['round']}" not in judged
                      and hard.get(f"{r['id']}/r{r['round']}") != 0]
 
     thoughts = [r["usage"].get("thoughtsTokenCount", 0) for r in results]
-    report = {"label": run["label"], "prompt_chars": run["prompt_chars"], "calls": len(results),
+    report = {"label": run["label"], "model": run.get("model"), "screenshots": run.get("screenshots"), "prompt_chars": run["prompt_chars"], "calls": len(results),
               "scores": {k: (round(v, 1) if v is not None else None) for k, v in items.items()},
               "names": f"{hit}/{total}", "control_flips": flips, "mean_wer": round(statistics.mean(wers), 3),
               "e2e_p50": round(p50, 2), "e2e_p90": round(p90, 2), "e2e_max": round(max(e2e), 2),
