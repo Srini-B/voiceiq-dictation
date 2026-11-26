@@ -232,7 +232,7 @@ enum TidyText {
                 endsWord = true
             } else {
                 let next = chars[after]
-                endsWord = !(isWordCharacter(next) || "@'’_]/".contains(next))
+                endsWord = !(isWordCharacter(next) || "@'’_]/-".contains(next))
                     && !(next == "." && after + 1 < chars.count && chars[after + 1].isLetter)
             }
             // "i underscore max" spells an identifier.

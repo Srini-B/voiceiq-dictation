@@ -1987,6 +1987,105 @@
       "heard": "/usr/local/bin",
       "written": "/usr/local/bin",
       "style": "lists"
+    },
+    {
+      "id": "kept-replace-comma",
+      "check": "kept as said",
+      "said": "replace comma with period",
+      "heard": "Replace comma with period.",
+      "written": "Replace comma with period."
+    },
+    {
+      "id": "kept-swap-colon",
+      "check": "kept as said",
+      "said": "swap colon for dash",
+      "heard": "Swap colon for dash.",
+      "written": "Swap colon for dash."
+    },
+    {
+      "id": "kept-drop-comma",
+      "check": "kept as said",
+      "said": "drop comma here",
+      "heard": "Drop comma here.",
+      "written": "Drop comma here."
+    },
+    {
+      "id": "kept-please-fix-comma",
+      "check": "kept as said",
+      "said": "please fix comma placement",
+      "heard": "Please fix comma placement.",
+      "written": "Please fix comma placement."
+    },
+    {
+      "id": "kept-move-question-mark",
+      "check": "kept as said",
+      "said": "move question mark to the end",
+      "heard": "Move question mark to the end.",
+      "written": "Move question mark to the end."
+    },
+    {
+      "id": "kept-comma-or-period",
+      "check": "kept as said",
+      "said": "should it be comma or period",
+      "heard": "Should it be comma or period?",
+      "written": "Should it be comma or period?"
+    },
+    {
+      "id": "kept-remember-colon",
+      "check": "kept as said",
+      "said": "remember colon after dear",
+      "heard": "Remember colon after Dear.",
+      "written": "Remember colon after Dear."
+    },
+    {
+      "id": "kept-new-paragraph-styles",
+      "check": "kept as said",
+      "said": "it's official. new paragraph styles are live",
+      "heard": "It's official. New paragraph styles are live.",
+      "written": "It's official. New paragraph styles are live."
+    },
+    {
+      "id": "kept-new-line-range",
+      "check": "kept as said",
+      "said": "we sell shoes, new line, and socks",
+      "heard": "We sell shoes, new line, and socks.",
+      "written": "We sell shoes, new line, and socks."
+    },
+    {
+      "id": "kept-nueva-linea-de-credito",
+      "check": "kept as said",
+      "said": "listo. nueva línea de crédito aprobada",
+      "heard": "Listo. Nueva línea de crédito aprobada.",
+      "written": "Listo. Nueva línea de crédito aprobada.",
+      "language": "es-ES"
+    },
+    {
+      "id": "kept-number-fragment",
+      "check": "kept as said",
+      "said": "call five five five one two three four, i mean, five",
+      "heard": "Call 555 1234, I mean, 5.",
+      "written": "Call 555 1234, I mean, 5."
+    },
+    {
+      "id": "kept-number-digit",
+      "check": "kept as said",
+      "said": "the room is one oh one, i mean, two",
+      "heard": "The room is 101, I mean, 2.",
+      "written": "The room is 101, I mean, 2."
+    },
+    {
+      "id": "kept-i-hyphen",
+      "check": "kept as said",
+      "said": "select the i-th element",
+      "heard": "Select the i-th element.",
+      "written": "Select the i-th element."
+    },
+    {
+      "id": "kept-guillemet-gonna",
+      "check": "kept as said",
+      "said": "the password is gonna, in guillemets",
+      "heard": "The password is «gonna».",
+      "written": "The password is «gonna»."
     }
   ]
 }

@@ -149,8 +149,8 @@ public enum Tidy {
             flush(at: index)
             switch c {
             case "\"": inStraightQuote.toggle()
-            case "“": curlyQuotes += 1
-            case "”": curlyQuotes = max(0, curlyQuotes - 1)
+            case "“", "«": curlyQuotes += 1
+            case "”", "»": curlyQuotes = max(0, curlyQuotes - 1)
             default: break
             }
             output.append(c)
