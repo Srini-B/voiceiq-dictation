@@ -21,13 +21,26 @@ struct Input: Decodable {
     var people: [String]?
 }
 
-struct Output: Codable {
+struct Output: Encodable {
     struct Segment: Codable { var start: Double; var end: Double; var speaker_name: String; var speaker_id: String; var text: String }
     var id: String
     var segments: [Segment]
     var participants: [String]
     var notes: String
     var seconds: [String: Double]
+    /// Every Gemini call the meeting made, as `UsageMeter` recorded it, priced
+    /// by `PriceBook`. Without transcription calls when EVAL_TRANSCRIPTS was set.
+    var usage: [Call]
+    var duration_seconds: Double
+    var cost_usd: Double
+    var cost_usd_per_hour: Double
+
+    struct Call: Encodable {
+        var stage: String; var model: String
+        var text_in: Int; var audio_in: Int; var image_in: Int; var cached_in: Int
+        var text_out: Int; var audio_out: Int; var thought_out: Int
+        var estimated: Bool; var cost_usd: Double?
+    }
 }
 
 func fail(_ message: String) -> Never {
@@ -87,6 +100,9 @@ if let diarizer {
 }
 let transcriber = MeetingTranscriber(client: client, models: .init(transcribe: config.transcribeModel),
                                      endpoint: config.endpoint, diarizeFarSide: diarizeFarSide)
+let scratch = FileManager.default.temporaryDirectory.appendingPathComponent("meetings-eval-usage-\(UUID().uuidString).sqlite")
+let usageStore = try UsageStore(databaseURL: scratch)
+UsageMeter.store = usageStore
 let store = MeetingStore(root: FileManager.default.temporaryDirectory.appendingPathComponent("meetings-eval-\(UUID().uuidString)"))
 
 let meetings = try FileManager.default.contentsOfDirectory(atPath: data.path).sorted()
@@ -96,7 +112,8 @@ for name in meetings {
     let source = data.appendingPathComponent(name)
     guard let inputData = try? Data(contentsOf: source.appendingPathComponent("input.json")) else { continue }
     let input = try JSONDecoder().decode(Input.self, from: inputData)
-    do { try await evaluate(input, source: source) } catch {
+    // As MeetingEngine does, every call is metered under the meeting's id.
+    do { try await UsageMeter.$scope.withValue(UsageScope(activity: .meeting, sessionID: input.id)) { try await evaluate(input, source: source) } } catch {
         failures += 1
         print("\(input.id): FAILED \(error)")
     }
@@ -110,7 +127,9 @@ exit(failures == 0 ? 0 : 2)
     for file in ["mic.caf", "system.caf"] {
         try FileManager.default.copyItem(at: source.appendingPathComponent(file), to: folder.appendingPathComponent(file))
     }
-    meta.durationSeconds = try TrackAudio(url: folder.appendingPathComponent("system.caf")).duration
+    // The longer track: a silent far side is shorter than the meeting.
+    meta.durationSeconds = try max(TrackAudio(url: folder.appendingPathComponent("system.caf")).duration,
+                                   TrackAudio(url: folder.appendingPathComponent("mic.caf")).duration)
     let samples = input.screen == "gallery"
         ? gallerySamples(people: input.people ?? [], owner: input.owner, duration: meta.durationSeconds) : []
     try store.save(screenSamples: samples, id: meta.id)
@@ -164,14 +183,23 @@ exit(failures == 0 ? 0 : 2)
     }
     var participants: [String] = []
     for segment in segments where !participants.contains(segment.speaker_name) { participants.append(segment.speaker_name) }
+    let calls = usageStore.records(forSession: input.id).map { r in
+        Output.Call(stage: r.stage, model: r.model, text_in: r.textIn, audio_in: r.audioIn, image_in: r.imageIn,
+                    cached_in: r.cachedIn, text_out: r.textOut, audio_out: r.audioOut, thought_out: r.thoughtOut,
+                    estimated: r.isEstimated, cost_usd: r.costUSD)
+    }
+    let cost = calls.compactMap(\.cost_usd).reduce(0, +)
     let result = Output(id: input.id, segments: segments, participants: participants,
-                        notes: try store.markdown(id: meta.id, parts: .notes), seconds: seconds)
+                        notes: try store.markdown(id: meta.id, parts: .notes), seconds: seconds,
+                        usage: calls, duration_seconds: meta.durationSeconds, cost_usd: cost,
+                        cost_usd_per_hour: meta.durationSeconds > 0 ? cost * 3600 / meta.durationSeconds : 0)
     let encoder = JSONEncoder(); encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
     try encoder.encode(result).write(to: out.appendingPathComponent("\(input.id).json"))
     print("\(input.id): \(participants.joined(separator: ", "))")
 }
 
 func earlierTranscript(_ id: String, in folder: URL) throws -> [TranscriptSegment] {
-    let earlier = try JSONDecoder().decode(Output.self, from: Data(contentsOf: folder.appendingPathComponent("\(id).json")))
+    struct Earlier: Decodable { var segments: [Output.Segment] }
+    let earlier = try JSONDecoder().decode(Earlier.self, from: Data(contentsOf: folder.appendingPathComponent("\(id).json")))
     return earlier.segments.map { TranscriptSegment(speaker: $0.speaker_id, text: $0.text, chunkIndex: 0, start: $0.start, end: $0.end) }
 }

@@ -64,3 +64,13 @@ the call window shows everyone) and `reference.json`.
 (`start`, `end`, `speaker`, `text`), `summary` (AMI's abstractive summary, or
 the script's decisions and action items), and for synthetic meetings
 `decisions` and `actions` with owners.
+
+## Cost
+
+Every Gemini call a meeting makes is metered the way the app meters it
+(`UsageMeter`, priced by `PriceBook`), and written to the output as `usage`:
+stage, model, input tokens by modality (`text_in`, `audio_in`, `image_in`),
+`cached_in`, `text_out`, `audio_out`, `thought_out`, and `cost_usd`. The output
+also has `duration_seconds` (the longer of the two tracks), `cost_usd` and
+`cost_usd_per_hour`. With `EVAL_TRANSCRIPTS` set, transcription is skipped, so
+only the notes calls are counted.

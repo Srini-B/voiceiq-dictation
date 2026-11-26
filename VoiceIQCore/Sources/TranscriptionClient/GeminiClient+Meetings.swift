@@ -39,11 +39,38 @@ public extension GeminiClient {
             "contents": [["role": "user", "parts": [["text": prompt]]]],
             "generationConfig": [
                 "responseMimeType": "application/json",
+                "responseSchema": Self.notesSchema,
                 "thinkingConfig": ["thinkingLevel": "low"],
             ],
         ]
         return try await generateContent(body: body, model: model, endpoint: endpoint, deadline: deadline,
                                          stage: .meetingSummary)
+    }
+
+    /// The shape `MeetingNotesPrompt.rules` asks for, enforced by the API.
+    /// MEASURED 2026-11-26: with JSON mode alone gemini-3.8-flash wrote stray
+    /// text inside the object (`"…Wednesday." his? wait, strictly no unneeded
+    /// text]`) in 5 of about 40 replies, and each cost a second notes request.
+    /// `propertyOrdering` keeps the glossary first, so it is written before the notes use it.
+    static var notesSchema: [String: Any] {
+        let text: [String: Any] = ["type": "STRING"]
+        let maybe: [String: Any] = ["type": "STRING", "nullable": true]
+        let texts: [String: Any] = ["type": "ARRAY", "items": text]
+        func object(_ fields: [(String, [String: Any])], required: [String]) -> [String: Any] {
+            ["type": "OBJECT", "properties": Dictionary(uniqueKeysWithValues: fields),
+             "propertyOrdering": fields.map(\.0), "required": required]
+        }
+        func list(_ item: [String: Any]) -> [String: Any] { ["type": "ARRAY", "items": item] }
+        return object([
+            ("glossary", list(object([("term", text), ("heard", texts)], required: ["term", "heard"]))),
+            ("type", text), ("title", text), ("summary", text),
+            ("sections", list(object([("title", text), ("items", texts)], required: ["title", "items"]))),
+            ("decisions", texts),
+            ("actions", list(object([("text", text), ("owner", maybe), ("deadline", maybe)], required: ["text"]))),
+            ("notes", texts),
+            ("speakers", list(object([("label", text), ("name", maybe), ("evidence", maybe)], required: ["label"]))),
+            ("participants", texts),
+        ], required: ["type", "title", "summary", "decisions", "actions", "notes"])
     }
 
     /// The notes for a prompt from `MeetingNotesPrompt`, asked once more when
