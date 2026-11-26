@@ -102,7 +102,8 @@ sound above about −40 dBFS for 45 s (`SoundClock`), the pill shows "Meeting
 ended · Stopping in 30s" with Stop now and Keep recording. At zero the
 recording stops and the notes are made as usual. The call coming back
 cancels the countdown, and Keep recording holds until the call comes back
-and ends again. A recording started without a detected call is never stopped automatically. The rules
+and ends again. "Keep recording" keeps its full width beside "Stop now".
+A recording started without a detected call is never stopped automatically. The rules
 follow FluidVoice's; a browser call ends only when the browser plays no
 other sound. While the screen is locked, a browser call counts only while
 the browser captures the mic (`CallProcesses.isLive`): a browser can keep
@@ -216,6 +217,19 @@ my mic** under Stop recording. Muted, `mic.caf` records silence of the same
 length, so the timeline stays aligned, and the far side keeps recording;
 the pill reads "Mic muted". **Unmute my mic** records your voice again.
 Every recording starts unmuted. Hex has the same switch (`6118eb82`).
+
+**Discard.** A recording you don't want can be thrown away instead of
+stopped. The pill has a quiet × beside Stop; it asks "Discard this
+recording?" with Keep and Discard in the pill itself, and moving the pointer
+off the pill answers Keep. The Meetings window has a trash button beside
+Mute my mic, which asks the same in a dialog. Discard
+(`MeetingEngine.discardRecording`) stops both tracks, skips transcription
+and notes, and deletes the meeting's folder through `MeetingStore.delete`,
+not to the Trash; the pill shows "Recording discarded". Nothing was sent to
+iCloud while it recorded (only finished meetings go up), and the delete is
+sent like any other. If the folder can't be deleted, the meeting stays in
+the list as failed with its audio, so it can be deleted by hand. Nothing
+discards without that confirmation. From Hex (`01e5209b`).
 
 With no call detected (a recording started by hand), or when none of the
 call app's processes has audio open at the start, `system.caf` is a global
@@ -453,7 +467,7 @@ mirrored or AirPlay display, still shows the pill.
 
 | File | Shows |
 | --- | --- |
-| `MeetingsView.swift` | Record button (with Mute my mic under it while recording) and folder menu above the list, each row's folders, the folder line under the title ([Folders](#folders)), the detail header (title, progress while transcribing or making notes, Update notes after a speaker is renamed, Play and Download audio (`RecordingAudioButtons.swift`), Export menu, `…` menu with Redo notes / Redo transcript and notes / Retry / Delete, transcript toggle), the export message |
+| `MeetingsView.swift` | Record button (with Mute my mic and Discard under it while recording) and folder menu above the list, each row's folders, the folder line under the title ([Folders](#folders)), the detail header (title, progress while transcribing or making notes, Update notes after a speaker is renamed, Play and Download audio (`RecordingAudioButtons.swift`), Export menu, `…` menu with Redo notes / Redo transcript and notes / Retry / Delete, transcript toggle), the export message |
 | `MeetingNotesColumn.swift` | Title, Summary, the meeting type's sections, Decisions, Action items as open circles ("Owner: task"), Notes, then the meeting's questions and answers (`MeetingChatView.swift`, which also has the question box `MeetingsView.swift` puts under both columns) |
 | `MeetingTranscriptColumn.swift` | The transcript in one `NSTextView`: speaker names in their own colour (`SpeakerPalette`), time on a right tab stop, search that filters and highlights |
 | `AssignSpeakersView.swift` | One card per speaker: name, a sample line, shuffle (next line), play (that line's audio) |

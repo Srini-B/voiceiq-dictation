@@ -97,7 +97,7 @@ struct PillView: View {
             }
 
         case let .meetingRecording(since, micMuted):
-            pillSurface(width: 300) {
+            pillSurface(width: 340) {
                 MeetingRecordingContent(since: since, micMuted: micMuted)
             }
 
@@ -376,4 +376,5 @@ extension Notification.Name {
     static let pillMeetingDismissed = Notification.Name("io.blue.voiceiq.pill.meeting.dismiss")
     static let pillMeetingStopTapped = Notification.Name("io.blue.voiceiq.pill.meeting.stop")
     static let pillMeetingKeepTapped = Notification.Name("io.blue.voiceiq.pill.meeting.keep")
+    static let pillMeetingDiscardTapped = Notification.Name("io.blue.voiceiq.pill.meeting.discard")
 }

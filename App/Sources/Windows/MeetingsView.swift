@@ -14,6 +14,7 @@ struct MeetingsPane: View {
     @State private var narrowShowsTranscript = false
     @State private var assigning = false
     @State private var confirmingDelete = false
+    @State private var confirmingDiscard = false
     @State private var exported: ExportResult?
     @StateObject private var folders = MeetingFolderModel()
     /// The row under the pointer, which shows its folder button.
@@ -77,19 +78,34 @@ struct MeetingsPane: View {
             .padding(.top, nextMeeting.next == nil ? VoiceIQUI.Spacing.l : VoiceIQUI.Spacing.s)
             .padding(.bottom, VoiceIQUI.Spacing.xs)
             if recording {
-                Button {
-                    engine.setMicMuted(!engine.micMuted)
-                } label: {
-                    Label(engine.micMuted ? "Unmute my mic" : "Mute my mic",
-                          systemImage: engine.micMuted ? "mic.slash.fill" : "mic.fill")
-                        .frame(maxWidth: .infinity)
+                HStack(spacing: VoiceIQUI.Spacing.xs) {
+                    Button {
+                        engine.setMicMuted(!engine.micMuted)
+                    } label: {
+                        Label(engine.micMuted ? "Unmute my mic" : "Mute my mic",
+                              systemImage: engine.micMuted ? "mic.slash.fill" : "mic.fill")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .tint(engine.micMuted ? VoiceIQUI.Colors.gRed : nil)
+                    .help(engine.micMuted ? "Record your voice again" : "Stop recording your voice; the other side keeps recording")
+                    Button {
+                        confirmingDiscard = true
+                    } label: {
+                        Image(systemName: "trash")
+                    }
+                    .help("Discard this recording")
+                    .accessibilityLabel("Discard this recording")
                 }
                 .controlSize(.large)
                 .buttonStyle(.bordered)
-                .tint(engine.micMuted ? VoiceIQUI.Colors.gRed : nil)
-                .help(engine.micMuted ? "Record your voice again" : "Stop recording your voice; the other side keeps recording")
                 .padding(.horizontal, VoiceIQUI.Spacing.s)
                 .padding(.bottom, VoiceIQUI.Spacing.xs)
+                .confirmationDialog("Discard this recording?", isPresented: $confirmingDiscard) {
+                    Button("Discard", role: .destructive) { engine.discardRecording() }
+                    Button("Keep recording", role: .cancel) {}
+                } message: {
+                    Text("Its audio is deleted and no notes are made.")
+                }
             }
             folderFilter
             List(folders.shown(meetings), selection: $selection) { meeting in

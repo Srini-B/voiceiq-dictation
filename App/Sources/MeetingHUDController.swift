@@ -70,6 +70,10 @@ final class MeetingHUDController {
         center.addObserver(forName: .pillMeetingKeepTapped, object: nil, queue: .main) { [weak self] _ in
             Task { @MainActor in self?.meetings.keepRecordingAfterCallEnd() }
         }
+        // Posted only by the pill's confirmed Discard.
+        center.addObserver(forName: .pillMeetingDiscardTapped, object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor in self?.meetings.discardRecording() }
+        }
     }
 
     /// Option-M.

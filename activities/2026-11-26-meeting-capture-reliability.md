@@ -35,6 +35,20 @@ with them.
 - **Aside browser** (`ae1cdf71`). `at.studio.AsideBrowser` added to
   `CallApps.browsers`, so a Meet call in Aside is offered.
 
+- **Discard while recording** (`01e5209b`, the recording pill part). A
+  quiet × beside Stop in the pill asks "Discard this recording?" with Keep
+  and Discard inline; leaving the pill answers Keep. The Meetings window has
+  a trash button beside Mute my mic with a confirmation dialog.
+  `MeetingEngine.discardRecording()` stops capture, skips transcription and
+  notes, and deletes the folder through `MeetingStore.delete` (not the
+  Trash). A recording meeting never syncs, so no half-meeting reaches
+  iCloud. If the delete fails, the meeting stays listed as failed with its
+  audio. Before, Stop was the only way out, which sent the audio to Gemini.
+- **"Keep recording" no longer shrinks** beside "Stop now" in the call-ended
+  pill: both buttons are fixed-size with layout priority. The behaviour
+  comes from FluidVoice `7c744b79` (GPL-3.0); this was written from the
+  description alone, without reading its code.
+
 ## Not built
 
 - **Stop a manual recording when its call ends** (`e5f6dac8`). Already the
@@ -51,4 +65,5 @@ Pending Mac build. New tests in
 `VoiceIQCore/Tests/VoiceIQCoreTests/MeetingCaptureTests.swift` cover the
 silence watch, the output-moved check, the gap padding, the input-channel
 filter and the locked-browser rule. The rebuild has not run against a live
-output change or a live call.
+output change or a live call. Discard and the pill layout have no tests (UI
+and file deletion); they need a check on the installed app.

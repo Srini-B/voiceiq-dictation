@@ -245,6 +245,36 @@ import VoiceIQSpeech
         } }
     }
 
+    /// Ends the recording and deletes it: no transcript, no notes, no audio
+    /// kept. Only for an explicit, confirmed Discard. A meeting still
+    /// recording never goes to iCloud, so nothing half-made was sent; the
+    /// delete is sent like any other. From Hex (anomalyco/hex `01e5209b`).
+    public func discardRecording() {
+        guard case let .recording(id, _) = phase, var meta = currentMeta else { return }
+        #if os(macOS)
+        following?.cancel(); following = nil
+        endWatch?.cancel(); endWatch = nil
+        micMuted = false
+        _ = screenNames?.stop(); screenNames = nil
+        #endif
+        endingAt = nil
+        let micDuration = mic?.stop() ?? 0, systemDuration = system?.stop() ?? 0
+        mic = nil; system = nil; currentFolder = nil; currentMeta = nil
+        phase = .idle
+        do {
+            try store.delete(id: id)
+            Log.meeting.info("meeting \(id.uuid.uuidString, privacy: .public) discarded")
+            onNotice?("Recording discarded")
+        } catch {
+            // The audio stays and the meeting is listed, so nothing goes without the user knowing.
+            Log.meeting.error("discarded meeting could not be deleted: \(String(describing: error), privacy: .public)")
+            meta.endedAt = Date(); meta.durationSeconds = max(micDuration, systemDuration)
+            meta.status = .failed("This recording was discarded, but its files could not be deleted. Delete it from the list.")
+            try? store.save(meta: meta)
+            onNotice?("Couldn't delete the recording — see \(MeetingFailure.listName)")
+        }
+    }
+
     /// Transcribes again from the audio and writes new notes. A retry after a
     /// failure reuses the finished windows; `fresh` (Redo transcript) hears
     /// the whole meeting again.

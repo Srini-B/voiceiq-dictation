@@ -255,7 +255,10 @@ SOFTWARE.
   while the Mac is locked (`092a9b33`, `src/meeting/watcher/call_end.rs`) in
   `CallDetector.swift`; the meeting mic mute (`6118eb82`,
   `src/meeting/capture.rs`) in `MicTap.swift`; and the Aside browser's
-  bundle ID (`ae1cdf71`, `src/meeting/detection.rs`) in `CallApps.swift`
+  bundle ID (`ae1cdf71`, `src/meeting/detection.rs`) in `CallApps.swift`;
+  and discarding a meeting while it records, after an inline confirmation
+  (`01e5209b`, `src/rune_ui/meeting_capsules.rs` and `panel.rs`), in
+  `MeetingEngine.swift` and `App/Sources/HUD/MeetingPillContent.swift`
 - License: MIT
 
 ```
