@@ -140,9 +140,15 @@ exit(failures == 0 ? 0 : 2)
     }
     // As MeetingEngine.writeNotes does: a voice named by elimination gets the notes written again.
     var notes = try await write(meta)
-    var named = meta
-    named.screenNames = ScreenSpeakerNames.byElimination(meta: meta, transcript: transcript, notes: notes)
-    if named.screenNames != meta.screenNames { notes = (try? await write(named)) ?? notes }
+    let named = ScreenSpeakerNames.byElimination(meta: meta, transcript: transcript, notes: notes)
+    if named != meta.screenNames {
+        meta.screenNames = named
+        if var again = try? await write(meta) {
+            let renamed = Set((again.speakers ?? []).filter { $0.name != nil }.map(\.label))
+            again.speakers = (again.speakers ?? []) + (notes.speakers ?? []).filter { $0.name != nil && !renamed.contains($0.label) }
+            notes = again
+        }
+    }
     seconds["notes"] = Date().timeIntervalSince(clock)
     meta.title = notes.title
     // As MeetingEngine.finish does.
