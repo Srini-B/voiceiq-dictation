@@ -40,13 +40,17 @@ def make_audio(spec: dict) -> None:
         if flac.exists():
             continue
         wav = ASSETS / f"{case['id']}.wav"
+        # Written under a temporary name and renamed when ffmpeg succeeds, so
+        # an interrupted run never leaves a cut-off FLAC that later runs reuse.
+        part = ASSETS / f"{case['id']}.part.flac"
         tts(case["text"], spec["voices"][case["voice"]], VOICE_NAMES[case["voice"]], wav)
         if case.get("noisy"):
             ffmpeg("-i", wav.as_posix(), "-f", "lavfi", "-i", "anoisesrc=color=pink:amplitude=0.03",
                    "-filter_complex", "[0]atempo=1.12,highpass=f=200,lowpass=f=3800[v];[v][1]amix=inputs=2:duration=first",
-                   "-ar", "16000", "-ac", "1", "-c:a", "flac", flac.as_posix())
+                   "-ar", "16000", "-ac", "1", "-c:a", "flac", part.as_posix())
         else:
-            ffmpeg("-i", wav.as_posix(), "-ar", "16000", "-ac", "1", "-c:a", "flac", flac.as_posix())
+            ffmpeg("-i", wav.as_posix(), "-ar", "16000", "-ac", "1", "-c:a", "flac", part.as_posix())
+        part.rename(flac)
         wav.unlink()
         print("audio", case["id"])
 

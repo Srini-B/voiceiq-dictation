@@ -20,9 +20,40 @@ HERE = Path(__file__).parent
 APP_OVERHEAD_S = 0.39
 
 
+NUMBER_WORDS = {w: i for i, w in enumerate(
+    "zero one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen "
+    "sixteen seventeen eighteen nineteen".split())}
+NUMBER_WORDS.update({w: 10 * i for i, w in enumerate("twenty thirty forty fifty sixty seventy eighty ninety".split(), 2)})
+
+
+def spelled_numbers_as_digits(tokens: list[str]) -> list[str]:
+    # "two thousand four hundred and fifty" -> "2450", so the written digits
+    # the cleanup rules ask for count the same as the spoken words.
+    out, total, current, inside = [], 0, 0, False
+    for t in tokens + [""]:
+        if t in NUMBER_WORDS:
+            current += NUMBER_WORDS[t]
+            inside = True
+        elif inside and t == "hundred":
+            current *= 100
+        elif inside and t in ("thousand", "million"):
+            total += current * (1000 if t == "thousand" else 1_000_000)
+            current = 0
+        elif inside and t == "and":
+            continue
+        else:
+            if inside:
+                out.append(str(total + current))
+                total, current, inside = 0, 0, False
+            if t:
+                out.append(t)
+    return out
+
+
 def words(text: str) -> list[str]:
-    text = unicodedata.normalize("NFC", text.lower())
-    return re.findall(r"[\w']+", text)
+    text = unicodedata.normalize("NFC", text.lower()).replace("%", " percent")
+    text = re.sub(r"(?<=\d),(?=\d{3})", "", text)
+    return spelled_numbers_as_digits(re.findall(r"[\w']+", text))
 
 
 def wer(ref: str, hyp: str) -> float:
@@ -53,6 +84,8 @@ def main() -> None:
     spec = {c["id"]: c for c in json.loads((HERE / "cases.json").read_text())["cases"]}
     run = json.loads(Path(args.result).read_text())
     results = run["results"]
+    if not run.get("complete", True):
+        raise SystemExit(f"{args.result}: incomplete run, {len(run['failed'])} calls failed; rerun before scoring")
 
     if args.packet:
         for r in results:

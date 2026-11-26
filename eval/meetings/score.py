@@ -15,7 +15,6 @@ matched by name; without them, by the best one-to-one overlap. `--packet`
 prints the notes and summary for the judge (M5).
 """
 import argparse
-import itertools
 import json
 import re
 import unicodedata
@@ -69,13 +68,29 @@ def mapping(ref, hyp, ref_names):
     ref_spk = sorted({s["speaker"] for s in ref})
     rf, hf = frames(ref, "speaker"), frames(hyp, "speaker_name")
     overlap = {(h, r): sum(1 for f, hs in hf.items() if h in hs and r in rf.get(f, ())) for h in hyp_names for r in ref_spk}
-    best, best_score = {}, -1
-    small, large = (hyp_names, ref_spk) if len(hyp_names) <= len(ref_spk) else (ref_spk, hyp_names)
-    for perm in itertools.permutations(large, len(small)):
-        pairs = dict(zip(small, perm)) if small is hyp_names else {p: s for s, p in zip(small, perm)}
-        score = sum(overlap[(h, r)] for h, r in pairs.items())
-        if score > best_score:
-            best, best_score = pairs, score
+    # Best one-to-one assignment by overlap, as a DP over which reference
+    # speakers are taken: polynomial in the larger side, exponential only in
+    # the smaller one (12 x 12 is ~600k steps, not 12! permutations).
+    from functools import lru_cache
+    small_is_ref = len(ref_spk) <= len(hyp_names)
+    small, large = (ref_spk, hyp_names) if small_is_ref else (hyp_names, ref_spk)
+    weight = (lambda l, sm: overlap[(l, sm)]) if small_is_ref else (lambda l, sm: overlap[(sm, l)])
+
+    @lru_cache(maxsize=None)
+    def solve(i, taken):
+        if i == len(large):
+            return 0, ()
+        best_v, best_p = solve(i + 1, taken)
+        for j in range(len(small)):
+            if not taken & (1 << j):
+                v, p = solve(i + 1, taken | (1 << j))
+                v += weight(large[i], small[j])
+                if v > best_v:
+                    best_v, best_p = v, ((large[i], small[j]),) + p
+        return best_v, best_p
+
+    pairs = solve(0, 0)[1]
+    best = {sm: l for l, sm in pairs} if not small_is_ref else {l: sm for l, sm in pairs}
     return {h: best.get(h) for h in hyp_names}
 
 

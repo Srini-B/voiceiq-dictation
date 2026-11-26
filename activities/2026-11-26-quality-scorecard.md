@@ -26,7 +26,7 @@ cyron rates dictation 75/100 and meetings under 40, and wants 90+ on every item,
 - **Root cause of the 15–20 s:** any attached screenshot makes gemini-3.8-flash think on nearly every call. The backup request only starts after 14–20 s, so it can't help. The same thinking swaps English names for Dictionary names (Karen→Kiran, Aaron→Arun, page→Paige, Rowan→Rohan).
 - **The fix to test:** the screen's text in the prompt instead of images. It kept every on-screen name, removed the swaps and cut thinking to 11% of calls. Handed to the dictation accuracy and speed thread.
 
-Scores with every option on: **D1 67.9 (94/96 names, 6 swaps at 10 each), D2 96.8, D3 89.2, D4 91.3, D5 0.** D6 not scored yet.
+Scores with every option on: **D1 67.9 (94/96 names, 6 swaps at 10 each), D2 97.5, D3 89.2, D4 91.3, D5 0.** D6 not scored yet.
 - D3: Hinglish spoken in Latin script came back in Devanagari (55).
 - D4: spoken "new paragraph" and "exclamation mark" were dropped (50).
 

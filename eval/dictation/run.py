@@ -58,7 +58,6 @@ def call(prompt: str, flac: bytes, screen: bytes, shots: int) -> tuple[str, floa
             if e.code != 429 or attempt == 2:
                 raise
             time.sleep(10)
-            start = time.monotonic()
     seconds = time.monotonic() - start
     raw = "".join(p.get("text", "") for p in reply["candidates"][0]["content"]["parts"] if not p.get("thought"))
     try:
@@ -100,13 +99,25 @@ def main() -> None:
         print(f"{case['id']:<18} r{round_} {seconds:5.2f}s thoughts={usage.get('thoughtsTokenCount', 0)}", flush=True)
         return {"id": case["id"], "round": round_, "output": text, "seconds": round(seconds, 3), "usage": usage}
 
+    # A failed call is recorded, not fatal: the paid calls that finished
+    # are kept, and the run is marked incomplete so score.py refuses it.
+    results, failed = [], []
     with concurrent.futures.ThreadPoolExecutor(args.workers) as pool:
-        results = list(pool.map(run, jobs))
+        futures = {pool.submit(run, job): job for job in jobs}
+        for future in concurrent.futures.as_completed(futures):
+            round_, case, _ = futures[future]
+            try:
+                results.append(future.result())
+            except Exception as error:  # noqa: BLE001 - any failure is recorded per call
+                failed.append({"id": case["id"], "round": round_, "error": str(error)})
+                print(f"{case['id']:<18} r{round_} FAILED {error}", flush=True)
+    results.sort(key=lambda r: (r["round"], r["id"]))
     out = HERE / "results" / f"{args.label}.json"
     out.parent.mkdir(exist_ok=True)
-    out.write_text(json.dumps({"label": args.label, "model": MODEL, "prompt_chars": len(jobs[0][2]), "screenshots": args.screenshots,
+    out.write_text(json.dumps({"label": args.label, "model": MODEL, "prompt_chars": len(jobs[0][2]),
+                               "screenshots": args.screenshots, "complete": not failed, "failed": failed,
                                "results": results}, indent=1, ensure_ascii=False))
-    print("wrote", out)
+    print("wrote", out, "" if not failed else f"({len(failed)} calls failed; run incomplete)")
 
 
 if __name__ == "__main__":
