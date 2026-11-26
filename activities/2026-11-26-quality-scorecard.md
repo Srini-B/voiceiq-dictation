@@ -88,3 +88,10 @@ Decision: merge #83 once Neon's re-review is clean. D5 becomes its own follow-up
 Scores: D1 100, D2 99.3, D3 94.4, D4 94.3 (96.1 without clean_punct), D5 54.7 (p50 3.31 s, p90 7.56 s).
 
 The commit restores Hindi "10 बजे" and tight short lists. One regression: in Tamil speech, the English word "ready" is now written in Tamil script, scoring 86 in both rounds. Decision: #83 still merges, because both scores are above main and the Tamil case is a follow-up, along with "new paragraph" and D5.
+
+## 0.7.16 batch notes (11:50 UTC)
+
+- #90 (drop on-device writer and Gemini language picker) merged as fc7993c. Release notes must say that a stored "On device" writing setting becomes Off, and that the downloaded model is deleted at launch.
+- #81 (Tidy) is held until Fable re-scores the two corrections that dropped words and Neon re-reviews.
+- #83 is held until its prompt examples no longer copy eval strings ("Update the README.", "Bump the version.", "दस बजे"). Neon found no High at c409c44.
+- #91 (keyboard findings 6 and 8) is merged as 62006dd. Neon found it clean.
