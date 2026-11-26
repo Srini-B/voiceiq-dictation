@@ -241,6 +241,16 @@ final class SoundAlikeSpellingTests: XCTestCase {
         XCTAssertEqual(spell(names, "Philip is late."), "Phillip is late.")
     }
 
+    /// Parakeet's spellings of Indian names (Fluid Speech Pro on TTS clips, 2026-11-26).
+    func testWritesTheListedSpellingOfAnIndianNameRomanizedAnotherWay() {
+        let names = ["Srini", "Meera", "Pooja", "Prashanth", "Bharath", "Kirthi", "Sumanth"]
+        XCTAssertEqual(spell(names, "Ask Prashant to check with Sreeni on the release."),
+                       "Ask Prashanth to check with Srini on the release.")
+        XCTAssertEqual(spell(names, "Ananya and Mira are meeting Puja at 3."), "Ananya and Meera are meeting Pooja at 3.")
+        XCTAssertEqual(spell(names, "Bharat and Kirti are out, so ask Sumant."), "Bharath and Kirthi are out, so ask Sumanth.")
+        XCTAssertEqual(spell(["Meera", "Sumanth"], "The summit is in the meeting room."), "The summit is in the meeting room.")
+    }
+
     /// Sounding alike without the same folded spelling counts only inside a sentence, where a
     /// capital means a name, and not right after another capital (a title).
     func testSoundsAlikeOnlyInsideASentence() {

@@ -115,8 +115,9 @@ public enum SoundAlikeSpelling {
 
     /// Evens out spellings English names write interchangeably: "ph" is "f", "ck" and a hard
     /// "c" are "k", "chr" is "kr", a soft "c" is "s", "ae" is "e", a leading "ai" is "a",
-    /// a final "y", "ey", "ie", "ee" or "i" is "i", any other "y" is "i", a silent "h"
-    /// (after a vowel before a consonant or the end, or after g, k, r, d, b, j or w) goes,
+    /// a final "y", "ey", "ie", "ee" or "i" is "i", any other "ee" or "y" is "i", "oo" is "u",
+    /// a silent "h" (after a vowel before a consonant or the end, or after g, k, r, d, b, j, w
+    /// or t) goes,
     /// and doubled letters are single.
     static func folded(_ word: String) -> String {
         var s = Array(letters(word))
@@ -149,6 +150,10 @@ public enum SoundAlikeSpelling {
             s.removeLast(2)
             s.append("i")
         }
+        // VoiceiQ: Indian names are romanized with "ee" or "i" and "oo" or "u" for one sound
+        // ("Sreeni" and "Srini", "Pooja" and "Puja").
+        replace("ee", "i")
+        replace("oo", "u")
         s = s.map { $0 == "y" ? "i" : $0 }
         var kept: [Character] = []
         for (i, c) in s.enumerated() {
@@ -156,7 +161,9 @@ public enum SoundAlikeSpelling {
                 let previous = s[i - 1]
                 let next = i + 1 < s.count ? s[i + 1] : nil
                 if isVowel(previous), next.map(isVowel) != true { continue }
-                if "gkrdbjw".contains(previous) { continue }
+                // VoiceiQ: "t" too, for the aspirated "th" of Indian names ("Prashanth" and
+                // "Prashant", "Kirthi" and "Kirti").
+                if "gkrdbjwt".contains(previous) { continue }
             }
             if let last = kept.last, last == c { continue }
             kept.append(c)
