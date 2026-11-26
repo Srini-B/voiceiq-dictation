@@ -47,6 +47,10 @@ public enum ReturnAfterPaste {
     /// something else.
     static func pressIfWanted(context: DictationContext, target: AXUIElement?) async {
         guard isWanted(for: context) else { return }
+        guard KeystrokeAccess.mayPost else {
+            Log.insertion.warning("no System & App Protection Override grant — no Return")
+            return
+        }
         let ended = context.recordingEndedAt ?? Date()
         let wait = max(ended.addingTimeInterval(escapeWindow).timeIntervalSinceNow, settle)
         try? await Task.sleep(for: .seconds(wait))

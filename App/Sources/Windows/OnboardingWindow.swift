@@ -729,19 +729,20 @@ private struct MicScreen: View {
 
 private struct AccessibilityScreen: View {
     let onNext: () -> Void
-    @State private var granted = AXIsProcessTrusted()
+    @State private var granted = KeystrokeAccess.isReady
     @State private var screenGranted = CGPreflightScreenCaptureAccess()
     @State private var pollTimer: Timer?
     @State private var slowGrant = false
 
     var body: some View {
-        ScreenScaffold("Let it type for you.", "Accessibility places text at your cursor. Screen Recording lets VoiceiQ read names and paths on screen while you talk. It is optional.") {
+        ScreenScaffold("Let it type for you.", "\(KeystrokeAccess.listName) lets VoiceiQ place text at your cursor. Screen Recording lets VoiceiQ read names and paths on screen while you talk. It is optional.") {
             VStack(spacing: VoiceIQUI.Spacing.m) {
-                PermissionCard(icon: "keyboard", title: "Accessibility", granted: granted) {
+                PermissionCard(icon: "keyboard", title: KeystrokeAccess.listName, granted: granted) {
                     // kAXTrustedCheckOptionPrompt's value; the C global is mutable, so Swift 6 refuses it.
                     let options = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
                     _ = AXIsProcessTrustedWithOptions(options)
-                    NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!)
+                    KeystrokeAccess.requestPostAccess()
+                    NSWorkspace.shared.open(KeystrokeAccess.settingsURL)
                 }
                 PermissionCard(icon: "rectangle.dashed.badge.record", title: "Screen Recording", granted: screenGranted) {
                     if !CGRequestScreenCaptureAccess() {
@@ -749,9 +750,16 @@ private struct AccessibilityScreen: View {
                     }
                 }
                 if slowGrant && !granted {
-                    Text("Granted but not detected? A relaunch may be needed.")
-                        .font(VoiceIQUI.TypeScale.labelSmall())
-                        .foregroundStyle(VoiceIQUI.Colors.onSurfaceVariant)
+                    HStack(spacing: VoiceIQUI.Spacing.xs) {
+                        // On 27.3+ the posting grant never shows before a restart.
+                        Text(AXIsProcessTrusted() && KeystrokeAccess.isSplit
+                             ? "Allowed it? macOS applies it after a restart."
+                             : "Granted but not detected? A relaunch may be needed.")
+                            .font(VoiceIQUI.TypeScale.labelSmall())
+                            .foregroundStyle(VoiceIQUI.Colors.onSurfaceVariant)
+                        Button("Restart VoiceiQ") { AppRestart.now() }
+                            .controlSize(.small)
+                    }
                 }
                 PrimaryButton(title: "Continue", disabled: !granted, action: onNext)
             }
@@ -759,7 +767,7 @@ private struct AccessibilityScreen: View {
         .onAppear {
             pollTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
                 Task { @MainActor in
-                    let trusted = AXIsProcessTrusted()
+                    let trusted = KeystrokeAccess.isReady
                     if trusted, !granted {
                         // Wake the engine NOW — otherwise the Try-It screen two
                         // steps later is dead until relaunch (production pass 2).

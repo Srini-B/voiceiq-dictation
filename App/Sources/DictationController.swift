@@ -103,7 +103,7 @@ final class DictationController {
         // wizard on every launch.
         guard !SettingsStore().hasCompletedOnboarding else { return false }
         return !KeychainStore.hasModelKey
-            || !AXIsProcessTrusted()
+            || !KeystrokeAccess.isReady
             || AVCaptureDevice.authorizationStatus(for: .audio) != .authorized
     }
 
@@ -290,6 +290,11 @@ final class DictationController {
                 // New-user path: dictation can't work yet — say exactly where to go.
                 onStatusChange?("Add your API key in Settings → Advanced")
                 onStatusItemState?(.attention)
+            } else if !KeystrokeAccess.mayPost {
+                // The key and AX insertion work; ⌘V, Return and typing don't.
+                onStatusChange?(Self.postAccessStatus)
+                onStatusItemState?(.attention)
+                warmEngines.prewarmNext()
             } else {
                 onStatusChange?("Ready — press \(SettingsStore().dictationTrigger.displayName) to dictate")
                 // Clear a lingering attention icon (auth failure, missing key).
@@ -311,6 +316,10 @@ final class DictationController {
             onStatusItemState?(.attention)
         }
     }
+
+    /// macOS 27.3+ without System & App Protection Override. The grant counts
+    /// only after a restart, so the line says so.
+    private static let postAccessStatus = "To paste, allow VoiceiQ in System & App Protection Override and restart it"
 
     private func presentOnboarding() {
         guard onboardingWindow == nil else {
@@ -350,6 +359,8 @@ final class DictationController {
     private func reportSetupIncomplete() {
         if !AXIsProcessTrusted() {
             onStatusChange?("Grant Accessibility to enable the dictation key")
+        } else if !KeystrokeAccess.mayPost {
+            onStatusChange?(Self.postAccessStatus)
         } else if AVCaptureDevice.authorizationStatus(for: .audio) != .authorized {
             onStatusChange?("Allow microphone access in System Settings to dictate")
         } else {
@@ -377,7 +388,7 @@ final class DictationController {
             applyHotkeySettings()
             // The menu-bar status line names the key — keep it truthful, but
             // never overwrite an attention message ("Grant Accessibility…").
-            if engineActive, DictationRoute.isAvailable {
+            if engineActive, DictationRoute.isAvailable, KeystrokeAccess.mayPost {
                 onStatusChange?("Ready — press \(SettingsStore().dictationTrigger.displayName) to dictate")
             }
         case "meetingDetection":
@@ -690,6 +701,8 @@ final class DictationController {
             switch await InsertionCoordinator().insert(InsertionCoordinator.fitted(text, context: context), context: context) {
             case .inserted:
                 break
+            case .fellBackToClipboard where !KeystrokeAccess.mayPost:
+                self?.showNotice(KeystrokeAccess.refusedNotice, for: 6.0, sound: nil)
             case .fellBackToClipboard, .frontmostChanged:
                 self?.showNotice("Copied — press ⌘V to paste", for: 3.0, sound: nil)
             case .blockedSecureField:
@@ -862,6 +875,10 @@ final class DictationController {
         switch outcome {
         case .inserted:
             showSuccessBadge(words: coordinator.lastResult.map { $0.split(separator: " ").count })
+        case .copiedToClipboard where !KeystrokeAccess.mayPost:
+            // macOS 27.3+ refused the paste; nothing else says why.
+            showNotice(KeystrokeAccess.refusedNotice, for: 6.0, sound: .error)
+            onStatusItemState?(.attention)
         case .copiedToClipboard:
             earcons.play(.success)
             showNotice("Copied — press ⌘V to paste", for: 4.0, sound: nil)
@@ -900,6 +917,8 @@ final class DictationController {
     private func reportDetached(_ result: DictationCoordinator.DetachedResult) {
         switch result {
         case .outcome(.inserted), .outcome(.silent): break
+        case .outcome(.copiedToClipboard) where !KeystrokeAccess.mayPost:
+            showBackgroundNotice(KeystrokeAccess.refusedNotice, for: 6.0, sound: .error)
         case .outcome(.copiedToClipboard): showBackgroundNotice("Copied — press ⌘V to paste", for: 4.0, sound: .success)
         case .outcome(.awaitingChip): showBackgroundNotice("You switched apps — press ⌘V to paste", for: 5.0, sound: nil)
         case .outcome(.heldForSecureField): showBackgroundNotice("Secure input is on — saved to History", for: 4.0, sound: nil)
