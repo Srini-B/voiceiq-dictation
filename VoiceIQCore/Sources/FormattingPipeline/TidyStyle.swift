@@ -280,9 +280,11 @@ public enum Tidy {
     /// `line`'s sentences, each with its mark; one sentence or none returns `[line]`.
     private static func noteSentences(_ line: String) -> [String] {
         let chars = Array(line)
+        // A mark inside a quotation ends nothing: The password is "red. blue".
+        let quoted = TidyText.quoteMask(chars)
         var sentences: [String] = []
         var start = 0
-        for index in chars.indices where TidyText.endsSentence(chars, at: index) {
+        for index in chars.indices where !quoted[index] && TidyText.endsSentence(chars, at: index) {
             if chars[index] == "." {
                 var wordStart = index
                 while wordStart > start, !chars[wordStart - 1].isWhitespace { wordStart -= 1 }
@@ -331,7 +333,8 @@ public enum Tidy {
         guard let colon = line.range(of: ": ") else { return nil }
         let intro = TidyText.trimmed(line[..<colon.lowerBound])
         var body = TidyText.trimmed(line[colon.upperBound...])
-        guard !intro.isEmpty, !body.contains(": ") else { return nil }
+        // Quoted words are literal: Type: "eggs, milk, bread".
+        guard !intro.isEmpty, !body.contains(": "), !body.contains(where: { "\"“”«»".contains($0) }) else { return nil }
         if body.last == "." || body.last == "。" { body.removeLast() }
         var items = body.components(separatedBy: ", ").map { TidyText.trimmed($0) }
         // "milk or bread", "milk, or bread": a choice, which a list would turn into two requests.
