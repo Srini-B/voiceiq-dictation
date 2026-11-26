@@ -79,13 +79,14 @@ struct KeyboardView: View {
                     ) {
                         editOpen.toggle()
                     }
-                    if typing.pasteInRow {
+                    // The cursor page has its own Paste last key.
+                    if typing.pasteInRow, !showingEdit {
                         ShortcutIconButton(systemImage: Self.pasteLastSymbol, label: "Paste last dictation", height: buttonHeight) {
                             model.pasteLast()
                         }
                     }
                 }
-                .frame(width: typing.leadingEnd, alignment: .leading)
+                .frame(width: TypingBridge.leadingEnd(pasteInRow: typing.pasteInRow && !showingEdit), alignment: .leading)
 
                 // Clear, so touches between the ends reach Hex's suggestions underneath.
                 ZStack { Color.clear; centerSlot }
@@ -199,10 +200,22 @@ private struct DictateButton: View {
                         .controlSize(.small)
                         .tint(writing ? KeyboardPalette.accent : .white)
                 } else {
-                    Image("DictateMark")
-                        .resizable()
-                        .scaledToFit()
-                        .frame(height: min(22, height - 10))
+                    // VoiceiQ's mark listens; the waveform in front of its face says "speak".
+                    // Four 2 pt bars: SF's waveform has 1 pt strokes that blur on the pill.
+                    let mark = min(20, height - 12)
+                    HStack(spacing: 3) {
+                        HStack(alignment: .center, spacing: 1.5) {
+                            ForEach([0.4, 0.8, 0.55, 0.3], id: \.self) { share in
+                                Capsule().frame(width: 2, height: (mark * share).rounded())
+                            }
+                        }
+                        Image("DictateMark")
+                            .resizable()
+                            .scaledToFit()
+                            .frame(height: mark)
+                    }
+                    // The mark faces left in every language: the waveform stays in front of its face.
+                    .environment(\.layoutDirection, .leftToRight)
                 }
             }
             .foregroundStyle(.white)
