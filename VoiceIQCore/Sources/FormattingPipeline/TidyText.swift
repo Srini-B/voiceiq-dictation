@@ -98,10 +98,12 @@ enum TidyText {
     /// leading run of `, ; :`. The space before an emoticon such as `:-)` stays.
     static func tighteningPunctuation(_ text: String) -> String {
         let chars = Array(text)
+        // Quoted text is literal: Type "a ; b" into the field.
+        let quoted = quoteMask(chars)
         var out: [Character] = []
         var index = 0
         while index < chars.count {
-            if isSpace(chars[index]) {
+            if isSpace(chars[index]), !quoted[index] {
                 var end = index
                 while end < chars.count, isSpace(chars[end]) { end += 1 }
                 // ".env", "./build.sh", ":wq" start a word of their own.

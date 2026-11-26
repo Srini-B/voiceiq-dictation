@@ -2181,6 +2181,20 @@
       "heard": "Ask Mrs. Rao and Prof. Iyer.",
       "written": "ask Mrs. Rao and Prof. Iyer",
       "style": "messages"
+    },
+    {
+      "id": "kept-quoted-spacing",
+      "check": "kept as said",
+      "said": "type quote a semicolon b unquote into the field",
+      "heard": "Type \"a ; b\" into the field.",
+      "written": "Type \"a ; b\" into the field."
+    },
+    {
+      "id": "kept-quoted-sentence-no-question",
+      "check": "kept as said",
+      "said": "he said hello how are you and walked away",
+      "heard": "He said \"Hello. How are you\" and walked away",
+      "written": "He said \"Hello. How are you\" and walked away."
     }
   ]
 }
