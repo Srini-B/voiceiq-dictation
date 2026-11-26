@@ -2316,6 +2316,21 @@
       "heard": "The password is \"red.\nblue\".",
       "written": "The password is \"red.\nblue\".",
       "style": "lists"
+    },
+    {
+      "id": "kept-hesitation-iphone-case",
+      "check": "kept as said",
+      "said": "um, iphone sales increased",
+      "heard": "Um, iPhone sales increased.",
+      "written": "iPhone sales increased."
+    },
+    {
+      "id": "kept-hesitation-path-case",
+      "check": "kept as said",
+      "said": "um, src slash main dot swift",
+      "heard": "Um, src/main.swift",
+      "written": "src/main.swift",
+      "style": "lists"
     }
   ]
 }

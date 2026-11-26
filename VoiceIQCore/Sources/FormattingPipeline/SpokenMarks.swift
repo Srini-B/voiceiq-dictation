@@ -473,11 +473,15 @@ enum Hesitations {
                     // "call her, uh, tomorrow": the comma was the pause. "So, um, we" keeps it.
                     if out.last == ",", c.isLowercase, clauseHasWords(out) { out.removeLast() }
                     if needsSpace(out) { out.append(" ") }
-                    if capitalize {
+                    // "Um, iPhone sales", "Um, src/main.swift": a spelling or a path keeps its case.
+                    let token = String(chars[(index - 1)...].prefix { !$0.isWhitespace })
+                    if capitalize, !token.dropFirst().contains(where: \.isUppercase), !token.contains("/"),
+                       !token.contains(#/\p{L}\.\p{L}/#) {
                         capitalize = false
                         out.append(TidyText.upper(c))
                         continue
                     }
+                    capitalize = false
                 }
             }
             out.append(c)
