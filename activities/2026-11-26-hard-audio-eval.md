@@ -361,7 +361,7 @@ re-runs. OpenCode $0. Latency is not
 reported for these routes. The two prepaid keys are the authorised testing
 budget, stopped at about $1 left on each; "no paid eval credit" means no
 Gemini top-ups. No other parked prompt change is left to measure, so the
-OpenRouter balance (about $3.0) is unused.
+OpenRouter balance ($2.56 left on the account) is unused.
 
 OpenCode: 3 more calls one at a time, 40 s apart (2026-11-27), all 429
 "inference service is overloaded", $0. The model is listed with audio
