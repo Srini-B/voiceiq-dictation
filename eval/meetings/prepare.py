@@ -18,7 +18,7 @@ window's names) and reference.json (who said what, for scoring).
 Needs macOS (say, afconvert), ffmpeg and python3; no API keys.
 Usage: python3 prepare.py OUT_DIR [--ami ES2004a ...] [--no-synthetic]
 """
-import argparse, array, html, json, os, re, shutil, subprocess, sys, tempfile, urllib.request, wave, zipfile
+import argparse, array, html, json, os, re, shutil, subprocess, sys, tempfile, time, urllib.request, wave, zipfile
 
 RATE = 16000
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -33,14 +33,15 @@ def run(*cmd):
 def fetch(url, path):
     if os.path.exists(path):
         return
-    for attempt in range(5):
+    for attempt in range(8):
         try:
             urllib.request.urlretrieve(url, path + ".part")
             os.replace(path + ".part", path)
             return
-        except Exception as error:  # the AMI mirror returns 503 under load
-            if attempt == 4:
+        except Exception as error:  # the AMI mirror returns 503 under load, for seconds at a time
+            if attempt == 7:
                 raise SystemExit(f"download failed: {url}: {error}")
+            time.sleep(5)
 
 
 def read_pcm(path):
