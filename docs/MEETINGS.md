@@ -6,9 +6,9 @@ names from the call screen), and how the Meetings window shows
 and exports it. Meetings are transcribed by `gemini-3.5-transcribe` through
 the Interactions API (`v1beta/interactions`), always from the saved tracks
 after the recording stops; there is no live transcript while a meeting
-records. Notes and meeting chat come from `gemini-3.8-flash`. With
-Meetings set to On device, the tracks are transcribed and labelled by speaker
-on this device instead ([ON_DEVICE.md](ON_DEVICE.md)). What is sent,
+records. Notes and meeting chat come from `gemini-3.8-flash`. There is
+no on-device meeting transcription; a meeting that cannot reach Gemini waits
+with its audio and is sent when Gemini can be reached ([ON_DEVICE.md](ON_DEVICE.md#meetings)). What is sent,
 and the notes prompt, are covered in
 [PRIVACY.md](PRIVACY.md) and [design/meeting-prompt-rulebook.md](design/meeting-prompt-rulebook.md).
 
@@ -349,9 +349,7 @@ echo-free, so mic silence means the owner was silent) and goes to the nearest
 far-side speaker within 30 s, else to one new far-side id; a word heard
 only on the mic is the owner's. MEASURED
 2026-11-23 on a 22-minute three-person Meet call: 114 s of far-side speech had
-come back as the owner's and 49 s of mic speech as a far-side speaker's. The
-on-device path, which transcribes each track alone when the mic is
-echo-free, uses the same step when it transcribes a mix.
+come back as the owner's and 49 s of mic speech as a far-side speaker's. 
 
 ## Speaker names from the screen
 

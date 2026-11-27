@@ -303,6 +303,10 @@ public struct MeetingMeta: Codable, Equatable, Sendable, Identifiable {
     /// The title the user gave it (Rename…). It wins over the notes' title,
     /// which Redo notes writes into `title` again.
     public var userTitle: String?
+    /// The meeting failed only because Gemini could not be reached (no key,
+    /// offline, timeout, rate limit). Its audio is kept and it is transcribed
+    /// again when that changes (`MeetingEngine.transcribeWaiting`).
+    public var waitsForGemini: Bool?
 
     /// The user's title, else the notes', else the one stored with the
     /// meeting; nil when none of them has one.

@@ -1,7 +1,7 @@
 import Foundation
 import VoiceIQSpeech
 
-/// Who turns audio into text, for dictation or for meetings: Gemini (the
+/// Who turns dictation into text: Gemini (the
 /// default) or a Fluid Speech model on this device.
 public enum TranscriptionSource: String, CaseIterable, Sendable, Identifiable {
     case gemini
@@ -17,9 +17,8 @@ public enum TranscriptionSource: String, CaseIterable, Sendable, Identifiable {
     }
 }
 
-/// Who applies the writing rules to an on-device transcript and writes an
-/// on-device meeting's notes: Gemini, or nobody, so the words never leave the
-/// device. With Off, a dictation is tidied on the device (`TidyStyle`). A
+/// Who applies the writing rules to an on-device dictation: Gemini, or
+/// nobody, so the words never leave the device. With Off, a dictation is tidied on the device (`TidyStyle`). A
 /// Gemini transcript is always written by the rules in the same request.
 public enum CleanupSource: String, CaseIterable, Sendable, Identifiable {
     case gemini
@@ -45,16 +44,6 @@ public extension SettingsStore {
     }
 
     var localTranscriptionEnabled: Bool { dictationSource == .onDevice }
-
-    /// Who transcribes meetings. On device needs the selected model and the
-    /// speaker separation model downloaded; without them a meeting goes to Gemini.
-    var meetingSource: TranscriptionSource { source(forKey: "meetingTranscriptionSource") }
-
-    func setMeetingSource(_ source: TranscriptionSource) {
-        Self.set(source.rawValue, forKey: "meetingTranscriptionSource")
-    }
-
-    var localMeetingTranscriptionEnabled: Bool { meetingSource == .onDevice }
 
     /// Who applies the writing rules to an on-device dictation. Gemini unless
     /// the user chose Off. "onDevice", stored by 0.7.15 and earlier for the

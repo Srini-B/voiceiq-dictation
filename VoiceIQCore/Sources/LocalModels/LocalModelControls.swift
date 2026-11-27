@@ -6,20 +6,17 @@ import VoiceIQSpeech
 /// has a row: the leading check selects it, and the trailing action
 /// downloads, cancels, or deletes that model alone. While it is off, only
 /// models on disk or in transit keep a row, so they can still be cancelled or
-/// deleted. The selected model also transcribes meetings kept on device, so
-/// the rows stay offered and selectable while that is on.
+/// deleted.
 @MainActor
 public struct LocalModelControls: View {
     private let localEnabled: Bool
-    private let meetingsLocal: Bool
     @Binding private var selection: LocalSpeechModel
     /// The stored code, kept as is: the picker shows the selected model's
     /// reading of it, so switching models does not lose a choice.
     @State private var languageCode = SettingsStore().localSpeechLanguageCode
 
-    public init(localEnabled: Bool, meetingsLocal: Bool = false, selection: Binding<LocalSpeechModel>) {
+    public init(localEnabled: Bool, selection: Binding<LocalSpeechModel>) {
         self.localEnabled = localEnabled
-        self.meetingsLocal = meetingsLocal
         _selection = selection
     }
 
@@ -27,8 +24,8 @@ public struct LocalModelControls: View {
         ForEach(LocalSpeechModel.available, id: \.self) { model in
             LocalModelRow(
                 store: .store(for: model),
-                offered: localEnabled || meetingsLocal,
-                selection: localEnabled || meetingsLocal ? (isSelected: model == selection, select: { selection = model }) : nil,
+                offered: localEnabled,
+                selection: localEnabled ? (isSelected: model == selection, select: { selection = model }) : nil,
                 languages: model.languages,
                 language: localEnabled && model == selection ? languageBinding(for: model) : nil
             )
@@ -222,71 +219,6 @@ public struct LocalModelFooter: View {
     /// and when the model goes unused for a long time, so the slow load
     /// comes back then.
     static let firstRunNote = "The first dictation after a download, a system update or a long break takes longer while the model is prepared for this device."
-}
-
-/// Section footer while meetings are kept on device but a model is missing.
-@MainActor
-public struct LocalMeetingFooter: View {
-    private let enabled: Bool
-    @ObservedObject private var speech: LocalModelStore
-    @ObservedObject private var diarizer: LocalModelStore = .speakerDiarizer
-
-    /// `model` is the selected on-device model, which meetings use too.
-    public init(enabled: Bool, model: LocalSpeechModel) {
-        self.enabled = enabled
-        _speech = ObservedObject(wrappedValue: .store(for: model))
-    }
-
-    public var body: some View {
-        if LocalModelSupport.isAvailable, enabled, !LocalMeetingTranscriber.isReady {
-            Text("Gemini transcribes meetings until \(speech.displayName) and \(diarizer.displayName) are downloaded.")
-        }
-    }
-}
-
-/// The privacy "Meeting audio" row on both platforms. It follows the
-/// on-device meeting setting and both models' download state.
-@MainActor
-public struct LocalMeetingPrivacyRow: View {
-    private let label: String
-    private let localDescription: (String) -> String
-    private let cloudDescription: String
-    @State private var enabled = SettingsStore().localMeetingTranscriptionEnabled
-    @State private var model = SettingsStore().localSpeechModel
-
-    /// `localDescription` receives the selected model's name.
-    public init(label: String, localDescription: @escaping (String) -> String, cloudDescription: String) {
-        self.label = label
-        self.localDescription = localDescription
-        self.cloudDescription = cloudDescription
-    }
-
-    public var body: some View {
-        Content(speech: .store(for: model), enabled: enabled, label: label, localDescription: localDescription,
-                cloudDescription: cloudDescription)
-            .onReceive(NotificationCenter.default.publisher(for: .gtSettingDidChange).receive(on: RunLoop.main)) { note in
-                switch note.object as? String {
-                case "meetingTranscriptionSource": enabled = SettingsStore().localMeetingTranscriptionEnabled
-                case "onDeviceSpeechModel": model = SettingsStore().localSpeechModel
-                default: break
-                }
-            }
-    }
-
-    private struct Content: View {
-        @ObservedObject var speech: LocalModelStore
-        @ObservedObject var diarizer: LocalModelStore = .speakerDiarizer
-        let enabled: Bool
-        let label: String
-        let localDescription: (String) -> String
-        let cloudDescription: String
-
-        var body: some View {
-            LabeledContent(label) {
-                Text(enabled && LocalMeetingTranscriber.isReady ? localDescription(speech.displayName) : cloudDescription)
-            }
-        }
-    }
 }
 
 /// The privacy "Audio" row on both platforms. It follows the on-device

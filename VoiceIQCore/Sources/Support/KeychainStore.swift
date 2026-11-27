@@ -72,8 +72,13 @@ public enum KeychainStore {
         return legacyKey
     }
 
+    /// Posts `apiKeySaved` on success, so meetings waiting for Gemini go.
     @discardableResult
-    public static func saveAPIKey(_ key: String) -> Bool { save(key, for: .gemini) }
+    public static func saveAPIKey(_ key: String) -> Bool {
+        guard save(key, for: .gemini) else { return false }
+        NotificationCenter.default.post(name: .apiKeySaved, object: nil)
+        return true
+    }
 
     @discardableResult
     public static func deleteAPIKey(notify: Bool = false) -> Bool { delete(.gemini, notify: notify) }

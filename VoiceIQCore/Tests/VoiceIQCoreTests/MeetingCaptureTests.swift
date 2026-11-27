@@ -94,4 +94,17 @@ final class MeetingCaptureTests: XCTestCase {
         XCTAssertTrue(capturing.isLive(locked: true, browser: true))
     }
     #endif
+
+    /// Only Gemini being out of reach makes a meeting wait to be sent again;
+    /// a rejected key or a refusal would fail the same way on every retry.
+    func testOnlyUnreachableGeminiMakesAMeetingWait() {
+        XCTAssertTrue(MeetingFailure.waitsForGemini(MeetingFailure.noKey))
+        XCTAssertTrue(MeetingFailure.waitsForGemini(TranscriptionError.offline))
+        XCTAssertTrue(MeetingFailure.waitsForGemini(TranscriptionError.network("reset")))
+        XCTAssertTrue(MeetingFailure.waitsForGemini(TranscriptionError.rateLimitedTransient(retryAfter: 30)))
+        XCTAssertFalse(MeetingFailure.waitsForGemini(TranscriptionError.auth))
+        XCTAssertFalse(MeetingFailure.waitsForGemini(TranscriptionError.safetyBlocked))
+        XCTAssertFalse(MeetingFailure.waitsForGemini(TranscriptionError.badRequest("bad")))
+        XCTAssertFalse(MeetingFailure.waitsForGemini(CancellationError()))
+    }
 }

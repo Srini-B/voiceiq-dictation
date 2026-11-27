@@ -202,13 +202,16 @@ struct MeetingsPane: View {
             header(meeting, wide: wide, transcriptShown: transcriptShown, filedIn: filedIn)
             Divider()
             if case .failed(let reason) = meeting.status {
-                Label(reason, systemImage: "exclamationmark.triangle.fill")
+                // Waiting for Gemini is not an error: it goes again by itself.
+                let waiting = meeting.waitsForGemini == true
+                let tint = waiting ? Color.secondary : VoiceIQUI.Colors.error
+                Label(reason, systemImage: waiting ? "clock" : "exclamationmark.triangle.fill")
                     .font(VoiceIQUI.TypeScale.body())
-                    .foregroundStyle(VoiceIQUI.Colors.error)
+                    .foregroundStyle(tint)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(VoiceIQUI.Spacing.m)
-                    .background(RoundedRectangle(cornerRadius: VoiceIQUI.Radius.medium).fill(VoiceIQUI.Colors.error.opacity(0.1)))
+                    .background(RoundedRectangle(cornerRadius: VoiceIQUI.Radius.medium).fill(tint.opacity(0.1)))
                     .padding([.horizontal, .top], VoiceIQUI.Spacing.l)
             }
             if unheardCall == meeting.id { unheardWarning }
@@ -501,7 +504,7 @@ struct MeetingsPane: View {
         case .recording: return "\(length) · Recording"
         case .transcribing: return "\(length) · Transcribing"
         case .summarizing: return "\(length) · Making notes"
-        case .failed: return "\(length) · Failed"
+        case .failed: return "\(length) · " + (meeting.waitsForGemini == true ? "Waiting for Gemini" : "Failed")
         }
     }
 }

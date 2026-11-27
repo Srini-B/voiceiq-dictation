@@ -1,5 +1,6 @@
 import Combine
 import Foundation
+import Network
 import VoiceIQSpeech
 
 @MainActor public final class MeetingEngine: ObservableObject {
@@ -24,7 +25,8 @@ import VoiceIQSpeech
     private let config: () -> GeminiConfig
     /// Whether a Gemini key is stored; read when a meeting is processed.
     private let hasKey: @Sendable () -> Bool
-    /// On-device transcription, used when `LocalMeetingTranscriber` is ready.
+    /// The on-device speaker model, which splits the far side's voices
+    /// (`farSideDiarizer`). Gemini always transcribes.
     private let localMeeting: LocalMeetingRunner?
     private lazy var detector = CallDetector()
     private var mic: MicTap?, system: SystemAudioTap?
@@ -131,6 +133,39 @@ import VoiceIQSpeech
         self.hasKey = hasKey; self.localMeeting = localMeeting
         detector.onChange = { [weak self] source in self?.detected(source) }
         failInterruptedRecordings()
+        watchForGemini()
+    }
+
+    private let network = NWPathMonitor()
+    private var online = false
+
+    /// Meetings that waited for Gemini go again at launch, when the network
+    /// comes back, and when a key is saved. No on-device transcript stands
+    /// in: on six AMI meetings it scored under the 90 the scorecard asks of
+    /// on-device work (activities/2026-11-27-meetings-gemini-only.md).
+    private func watchForGemini() {
+        network.pathUpdateHandler = { [weak self] path in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                let cameOnline = path.status == .satisfied && !self.online
+                self.online = path.status == .satisfied
+                if cameOnline { self.transcribeWaiting() }
+            }
+        }
+        network.start(queue: .main)
+        NotificationCenter.default.addObserver(forName: .apiKeySaved, object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor [weak self] in self?.transcribeWaiting() }
+        }
+    }
+
+    /// Transcribes again every meeting that failed only for want of Gemini.
+    public func transcribeWaiting() {
+        guard hasKey() else { return }
+        for meta in store.list() where meta.waitsForGemini == true && !isBusy(meta.id) {
+            guard case .failed = meta.status else { continue }
+            Log.meeting.info("meeting \(meta.id.uuid.uuidString, privacy: .public) waited for Gemini; transcribing now")
+            retry(id: meta.id)
+        }
     }
 
     /// A meeting still marked `.recording` at launch belonged to a process that
@@ -286,16 +321,9 @@ import VoiceIQSpeech
     }
 
     /// New notes from the saved transcript, using the speaker names typed since.
-    /// With meetings on device and writing Off, nothing happens and the
-    /// transcript stays on the device.
     public func regenerateNotes(id: MeetingID) {
         guard !isBusy(id), var meta = store.list().first(where: { $0.id == id }),
               let transcript = try? store.loadTranscript(id: id), !transcript.isEmpty else { return }
-        let settings = SettingsStore()
-        if settings.meetingSource == .onDevice, settings.cleanupSource == .none {
-            Log.meeting.notice("notes not regenerated: writing is off for on-device meetings")
-            return
-        }
         processing[id] = .summarizing
         Task { await UsageMeter.$scope.withValue(UsageScope(activity: .meeting, sessionID: id.uuid.uuidString)) {
             do {
@@ -321,8 +349,8 @@ import VoiceIQSpeech
     }
 
     /// The words cached beside the audio by `MeetingTranscriber` (the
-    /// `transcribe-*` windows) and `LocalMeetingTranscriber` (`local-words-*`,
-    /// and `speakers-*` from builds before 0.6).
+    /// `transcribe-*` windows), and the on-device transcriber builds before
+    /// 0.7.18 had (`local-words-*`, and `speakers-*` from builds before 0.6).
     static func dropTranscriptCaches(_ folder: URL) {
         let fm = FileManager.default
         for name in (try? fm.contentsOfDirectory(atPath: folder.path)) ?? []
@@ -343,7 +371,9 @@ import VoiceIQSpeech
                 return
             }
             try mark(&meta, .transcribing)
-            let (heard, onDevice) = try await transcribe(folder: folder, config: cfg)
+            guard hasKey() else { throw MeetingFailure.noKey }
+            let heard = try await MeetingTranscriber(client: client, models: .init(transcribe: cfg.transcribeModel), endpoint: cfg.endpoint,
+                                                     diarizeFarSide: localMeeting.map(Self.farSideDiarizer)).transcribe(folder: folder)
             let transcript = Self.corrected(heard, rules: DictionaryStore().replacementRules())
             let words = transcript.reduce(0) { $0 + $1.text.split(whereSeparator: \.isWhitespace).count }
             guard words >= Self.minimumSummarizableWords else {
@@ -361,39 +391,10 @@ import VoiceIQSpeech
                 }
             }
             try mark(&meta, .summarizing)
-            // The meeting setting, not where this one was transcribed, decides:
-            // an on-device meeting that fell back to Gemini still keeps writing Off.
-            if onDevice || SettingsStore().meetingSource == .onDevice,
-               let notes = notesKeptOnDevice(meta: meta, transcribedOnDevice: onDevice) {
-                // No notes are written, so the transcript goes nowhere else.
-                try finish(id: id, meta: &meta, transcript: transcript, notes: notes)
-                return
-            }
             try Task.checkCancellation()
             let notes = try await writeNotes(transcript: transcript, meta: &meta)
             try finish(id: id, meta: &meta, transcript: transcript, notes: notes)
         } catch { saveFailure(id: id, meta: &meta, error: error) }
-    }
-
-    /// On device when the user asked for it and the models are downloaded;
-    /// otherwise, or if the on-device pass fails and a key is stored, Gemini.
-    /// This mirrors dictation. The flag says whether the words never left the device.
-    private func transcribe(folder: URL, config cfg: GeminiConfig) async throws -> ([TranscriptSegment], Bool) {
-        let cloud = MeetingTranscriber(client: client, models: .init(transcribe: cfg.transcribeModel), endpoint: cfg.endpoint,
-                                       diarizeFarSide: localMeeting.map(Self.farSideDiarizer))
-        guard let local = try await acquireLocal() else {
-            guard hasKey() else { throw MeetingFailure.noKey }
-            return (try await cloud.transcribe(folder: folder), false)
-        }
-        do {
-            let transcript = try await local.transcribe(folder: folder)
-            Log.meeting.info("transcribed on device: \(transcript.count, privacy: .public) turns")
-            return (transcript, true)
-        } catch {
-            guard hasKey(), !(error is CancellationError) else { throw error }
-            Log.meeting.error("on-device transcription failed, using Gemini: \(String(describing: error), privacy: .public)")
-            return (try await cloud.transcribe(folder: folder), false)
-        }
     }
 
     /// The on-device speaker model alone, for telling the far side's voices
@@ -428,29 +429,18 @@ import VoiceIQSpeech
         }
     }
 
-    /// Nil when the meeting should go to Gemini: on device is off or not
-    /// downloaded, or the models stayed busy and a key is stored. Without a
-    /// key the busy error is the failure.
-    private func acquireLocal() async throws -> LocalMeetingTranscriber? {
-        guard let runner = localMeeting else { return nil }
-        do {
-            return try await LocalMeetingTranscriber.acquire(runner: runner)
-        } catch {
-            guard hasKey(), !(error is CancellationError) else { throw error }
-            Log.meeting.error("on-device models unavailable, using Gemini: \(String(describing: error), privacy: .public)")
-            return nil
-        }
-    }
-
     /// The recording stays; the meeting is marked failed with a reason the
     /// Meetings list shows, and Retry runs it again with the keys stored then.
     private func saveFailure(id: MeetingID, meta: inout MeetingMeta, error: Error) {
         let reason = MeetingFailure.reason(for: error)
         Log.meeting.error("meeting \(id.uuid.uuidString, privacy: .public) failed: \(String(describing: error), privacy: .public)")
-        meta.status = .failed(reason); try? store.save(meta: meta)
+        meta.status = .failed(reason)
+        meta.waitsForGemini = MeetingFailure.waitsForGemini(error) ? true : nil
+        try? store.save(meta: meta)
         processing[id] = nil
         switch error as? MeetingFailure {
-        case .noKey: onNotice?("\(MeetingFailure.noun) saved — add a Gemini key, then Retry in \(MeetingFailure.listName)")
+        case .noKey: onNotice?("\(MeetingFailure.noun) saved — it is transcribed once you add a Gemini key")
+        case nil where meta.waitsForGemini == true: onNotice?("\(MeetingFailure.noun) saved — it is transcribed when Gemini can be reached")
         case nil: onNotice?("\(MeetingFailure.noun) transcript failed — see \(MeetingFailure.listName)")
         }
     }
@@ -494,31 +484,9 @@ import VoiceIQSpeech
         }
     }
 
-    /// The notes of a meeting transcribed on device, when they stay on it:
-    /// the transcript-only stub when writing is Off, or when no key is stored
-    /// and Gemini would have to write them. Nil when Gemini writes them.
-    private func notesKeptOnDevice(meta: MeetingMeta, transcribedOnDevice: Bool) -> MeetingNotes? {
-        switch SettingsStore().cleanupSource {
-        case .gemini: return hasKey() ? nil : Self.onDeviceNotes(meta: meta, transcribedOnDevice: transcribedOnDevice)
-        case .none: return Self.onDeviceNotes(meta: meta, transcribedOnDevice: transcribedOnDevice)
-        }
-    }
-
     /// Fewer words than this and the notes model has nothing to work with; it
     /// would write a summary saying so, in whatever language the fragment is.
     static let minimumSummarizableWords = 8
-
-    /// The notes of a meeting transcribed on device when nothing wrote them:
-    /// writing Off, or no Gemini key. The transcript is the record; redoing
-    /// the notes writes real ones once Gemini may. A meeting whose on-device
-    /// pass failed and went to Gemini as audio does not claim it stayed on
-    /// the device.
-    static func onDeviceNotes(meta: MeetingMeta, transcribedOnDevice: Bool) -> MeetingNotes {
-        let title = meta.source.map { "\(name($0)) call" } ?? "Meeting"
-        let source = transcribedOnDevice ? "Transcribed on device" : "Transcribed by Gemini, as the on-device models were unavailable"
-        return MeetingNotes(title: title, summary: "\(source). No notes were written: choose Gemini under Writing rules and notes and save a key, then redo the notes.",
-                            decisions: [], actions: [], notes: [])
-    }
 
     static func emptyNotes(reason: String) -> MeetingNotes {
         MeetingNotes(title: "No speech recorded", summary: reason, decisions: [], actions: [], notes: [])
@@ -528,7 +496,7 @@ import VoiceIQSpeech
         try store.save(transcript: transcript, id: id)
         try store.save(notes: notes, id: id)
         meta.screenNames = ScreenSpeakerNames.byElimination(meta: meta, transcript: transcript, notes: notes)
-        meta.title = notes.title; meta.status = .done; meta.notesSpeakerNames = meta.speakerNames
+        meta.title = notes.title; meta.status = .done; meta.notesSpeakerNames = meta.speakerNames; meta.waitsForGemini = nil
         // Names typed while the notes were written stay, and show the notes as out of date.
         if let current = store.list().first(where: { $0.id == id }) { meta.speakerNames = current.speakerNames }
         try store.save(meta: meta)
@@ -568,7 +536,7 @@ import VoiceIQSpeech
 /// Why a meeting has no transcript or notes, in words the Meetings list can
 /// show. The raw error goes to the log.
 public enum MeetingFailure: Error, Equatable {
-    /// No Gemini key is stored, and the on-device models are off or missing.
+    /// No Gemini key is stored.
     case noKey
 
     static let fixHint = "The recording is saved. Press Retry after fixing this."
@@ -581,10 +549,24 @@ public enum MeetingFailure: Error, Equatable {
     static let listName = "Notes", noun = "Note"
     #endif
 
+    /// Gemini was out of reach, not wrong: no key, offline, a timeout, or a
+    /// rate limit. A rejected key or a refusal needs the user instead.
+    static func waitsForGemini(_ error: Error) -> Bool {
+        switch error {
+        case MeetingFailure.noKey: return true
+        case let error as TranscriptionError:
+            switch error {
+            case .offline, .timeout, .network, .rateLimitedTransient, .rateLimitedDaily: return true
+            default: return false
+            }
+        default: return false
+        }
+    }
+
     static func reason(for error: Error) -> String {
         switch error {
         case MeetingFailure.noKey:
-            return "Add your Gemini API key in \(keysPlace), or transcribe meetings on device and download its models, to transcribe meetings. The recording is saved; press Retry once one is ready."
+            return "Add your Gemini API key in \(keysPlace) to transcribe meetings. The recording is saved and is transcribed once a key is added."
         case let error as TranscriptionError:
             switch error {
             case .auth:
@@ -596,9 +578,9 @@ public enum MeetingFailure: Error, Equatable {
             case .modelUnavailable(let model, _):
                 return "Your key can't use \(model). \(fixHint)"
             case .offline:
-                return "You were offline when the meeting was transcribed. \(fixHint)"
+                return "You were offline when the meeting was transcribed. The recording is saved and is transcribed when you're back online."
             case .timeout, .network:
-                return "Couldn't reach Gemini. \(fixHint)"
+                return "Couldn't reach Gemini. The recording is saved and is transcribed when Gemini can be reached."
             case .safetyBlocked:
                 return "Gemini declined to transcribe this meeting. \(fixHint)"
             case .badRequest, .emptyTranscript:

@@ -290,7 +290,7 @@ public struct MeetingTranscriber: Sendable {
             let track = folder.appendingPathComponent("far-side-mix.caf")
             defer { try? FileManager.default.removeItem(at: track) }
             do {
-                try LocalMeetingTranscriber.writeMix(duration: audio.system.duration, samples: audio.system.samples, to: track)
+                try FarSideSpeakers.writeMix(duration: audio.system.duration, samples: audio.system.samples, to: track)
                 segments = try await diarizeFarSide(track)
                 if let segments { try? JSONEncoder().encode(segments).write(to: cache, options: .atomic) }
             } catch is CancellationError {
@@ -317,10 +317,10 @@ public struct MeetingTranscriber: Sendable {
     static func split(_ words: [TimedWord], segments: [LocalMeetingResult.Segment]) -> [TimedWord] {
         let far = words.indices.filter { words[$0].speaker != MeetingSpeaker.you }
         let farWords = far.map { LocalMeetingResult.Word(text: words[$0].text, start: words[$0].start, end: words[$0].end) }
-        let labelled = LocalMeetingTranscriber.settled(LocalMeetingTranscriber.label(farWords, segments: segments), segments: segments)
+        let labelled = FarSideSpeakers.settled(FarSideSpeakers.label(farWords, segments: segments), segments: segments)
         var out = words
         for (offset, index) in far.enumerated() { out[index].speaker = "far " + labelled[offset].speaker }
-        return LocalMeetingTranscriber.renumber(foldingStrayVoices(out))
+        return FarSideSpeakers.renumber(foldingStrayVoices(out))
     }
 
     /// A far-side voice heard for less than this share of the meeting is not

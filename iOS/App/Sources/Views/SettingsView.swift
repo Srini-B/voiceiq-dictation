@@ -345,10 +345,7 @@ struct PrivacyView: View {
             }
             Section {
                 LocalAudioPrivacyRow(provider: "Gemini", cloudDescription: "Google's Gemini API, with your key")
-                LocalMeetingPrivacyRow(
-                    label: "Notes audio",
-                    localDescription: { "Transcribed on device by \($0); transcript to Gemini for notes, if writing is on" },
-                    cloudDescription: "Gemini, for the transcript and notes")
+                LabeledContent("Notes audio", value: "Gemini, for the transcript and notes")
                 LabeledContent("Dictionary terms", value: "With each dictation and notes")
                 LabeledContent("Dictionary", value: "Your iCloud, to sync")
                 LabeledContent("History", value: "Your iCloud, to sync final text")

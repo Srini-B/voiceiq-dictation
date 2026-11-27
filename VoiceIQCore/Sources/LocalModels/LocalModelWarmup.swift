@@ -37,9 +37,9 @@ public enum LocalModelWarmup {
             return nil
         }
         let settings = SettingsStore()
-        guard settings.localTranscriptionEnabled || settings.localMeetingTranscriptionEnabled else { return nil }
+        guard settings.localTranscriptionEnabled else { return nil }
         let model = settings.localSpeechModel
-        let language = settings.localTranscriptionEnabled ? settings.localSpeechLanguage : model.language(code: nil)
+        let language = settings.localSpeechLanguage
         let (options, toolsReady) = LocalTranscriber.sessionOptions(language: language)
         let store = LocalModelStore.store(for: model)
         let id = UUID()
