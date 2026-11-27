@@ -34,7 +34,11 @@ from score import percentile  # noqa: E402
 
 HERE = Path(__file__).parent
 DONE = ("inserted", "copiedToClipboard", "awaitingChip")
-AUDIO_TOKENS_PER_SECOND = 32  # TokenUsage.audioTokensPerSecond
+
+
+def audio_tokens_per_second(model: str) -> float:
+    # PriceBook.audioTokensPerSecond(model:)
+    return 25 if "transcribe" in model.lower() else 32
 
 
 def d5(times: list[float]) -> dict:
@@ -117,7 +121,7 @@ def main() -> None:
     gemini_dict = [r for r in dict_calls if r["model"].startswith("gemini")]
     meet_calls = [r for r in calls if r["activity"] == "meeting"]
     meet_inr, meet_booked = cost(meet_calls)
-    meet_hours = sum(r["audioSeconds"] or r["audioIn"] / AUDIO_TOKENS_PER_SECOND
+    meet_hours = sum(r["audioSeconds"] or r["audioIn"] / audio_tokens_per_second(r["model"])
                      for r in meet_calls if r["stage"] in ("meetingTranscribe", "liveTranscribe")) / 3600
 
     month_dict = dict_inr * per_month
