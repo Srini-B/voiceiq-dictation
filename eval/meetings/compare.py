@@ -49,6 +49,8 @@ def main():
     if len({p.name for p in pipelines}) < len(pipelines):
         raise SystemExit("two pipeline folders share a name; rows are labelled by folder name")
     meetings = sorted(set.intersection(*({f.stem for f in p.glob("*.json")} for p in pipelines)))
+    if not meetings:
+        raise SystemExit("the pipeline folders have no meeting in common")
     results = {}
     for pipeline in pipelines:
         for meeting in meetings:

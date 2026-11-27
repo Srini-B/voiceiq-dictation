@@ -151,6 +151,15 @@ let label = environment["EVAL_MODEL"] ?? "pro"
 guard ["pro", "mini", "unified"].contains(label) else { fail("EVAL_MODEL is pro, mini or unified") }
 /// The app's model for the speaker-model session and settings; unused for words when `unified` is set.
 let model: LocalSpeechModel = label == "mini" ? .parakeet : .fluidSpeechPro
+if let report = environment["EVAL_ECHO_REPLAY"] {
+    // Reads only the report and the two tracks, so no model is loaded or downloaded.
+    for name in try FileManager.default.contentsOfDirectory(atPath: data.path).sorted()
+    where !name.hasPrefix(".") && (only.isEmpty || only.contains(name))
+        && FileManager.default.fileExists(atPath: data.appendingPathComponent(name).appendingPathComponent("input.json").path) {
+        try replayEcho(URL(fileURLWithPath: report), source: data.appendingPathComponent(name))
+    }
+    exit(0)
+}
 let unified: UnifiedAsrManager? = label == "unified" ? UnifiedAsrManager() : nil
 try await unified?.loadModels()
 let pipelines = Set((environment["EVAL_PIPELINES"] ?? "voiceiq,hex").split(separator: ",").map(String.init))
@@ -300,7 +309,14 @@ func evaluate(_ input: Input, source: URL) async throws {
         let turns = SpeakerLinker.overlappingTurns(words).map {
             TranscriptSegment(speaker: $0.speaker, text: $0.text, chunkIndex: 0, start: $0.start, end: $0.end)
         }
-        try write(pipeline, input, named(turns, owner: input.owner), seconds: seconds, duration: call.duration, details: facts)
+        var ownSeconds = seconds, ownFacts = facts
+        if pipeline == "hex-speakers-noecho" {
+            ownSeconds["transcribe"] = seconds["transcribe"]! - seconds["echo"]!
+            ownSeconds["echo"] = nil
+            ownFacts["echo_utterances_dropped"] = 0
+            ownFacts["mic_lines_kept"] = facts["mic_lines"]
+        }
+        try write(pipeline, input, named(turns, owner: input.owner), seconds: ownSeconds, duration: call.duration, details: ownFacts)
     }
 }
 
@@ -315,6 +331,9 @@ func replayEcho(_ report: URL, source: URL) throws {
         let words = fields.dropFirst(microphone ? 5 : 4).map { HexWord(startMs: start, endMs: end, text: $0) }
         lines.append(Line(entry: HexEntry(microphone: microphone, startMs: start, endMs: end, words: words),
                           kept: fields[0] == "KEEP", signal: microphone && fields.count > 4 ? fields[4] : ""))
+    }
+    guard lines.contains(where: \.entry.microphone) else {
+        fail("\(report.path): no microphone verdicts parsed; each line must read KEEP|drop START_MS END_MS You|Them [signal] words")
     }
     let envelope = EchoEnvelope(system: try samples(source.appendingPathComponent("system.caf")),
                                 microphone: try samples(source.appendingPathComponent("mic.caf")))
@@ -346,14 +365,15 @@ var failures = 0
 for name in meetings {
     let source = data.appendingPathComponent(name)
     guard let inputData = try? Data(contentsOf: source.appendingPathComponent("input.json")) else { continue }
-    let input = try JSONDecoder().decode(Input.self, from: inputData)
-    if let report = environment["EVAL_ECHO_REPLAY"] {
-        try replayEcho(URL(fileURLWithPath: report), source: source)
-        continue
+    // An earlier run's outputs for this meeting go first, so a failed rerun leaves nothing for compare.py to score.
+    for pipeline in ["voiceiq", "hex", "hex-speakers", "hex-speakers-noecho"] {
+        try? FileManager.default.removeItem(at: out.appendingPathComponent("\(pipeline)-\(label)").appendingPathComponent("\(name).json"))
     }
-    do { try await evaluate(input, source: source) } catch {
+    try? FileManager.default.removeItem(at: out.appendingPathComponent("far-speakers").appendingPathComponent("\(name).json"))
+    // Inside the handler, so a bad input.json still reaches the scratch cleanup below.
+    do { try await evaluate(try JSONDecoder().decode(Input.self, from: inputData), source: source) } catch {
         failures += 1
-        print("\(input.id): FAILED \(error)")
+        print("\(name): FAILED \(error)")
     }
 }
 try? FileManager.default.removeItem(at: scratch)

@@ -40,14 +40,14 @@ It writes one folder of outputs per pipeline:
 | Folder | Pipeline |
 |---|---|
 | `voiceiq-pro`, `voiceiq-mini` | What the app does with Meetings set to On device (`LocalMeetingTranscriber`): each track decoded whole by Fluid Speech Pro or Mini, the far side split by pyannote community-1. |
-| `voiceiq-unified` | The same steps written out in the evaluator with the speech model swapped for the one Hex ships, Parakeet Unified English 0.6B (FluidAudio's Core ML build, `EVAL_MODEL=unified`). The app has no such model. |
+| `voiceiq-unified` | The same steps written out in the evaluator with the speech model swapped for the one Hex ships, Parakeet Unified English 0.6B (FluidAudio's Core ML build, `EVAL_MODEL=unified`). The app has no such model. It writes nothing for a meeting whose mic is not echo-free (TS3003a), where the app falls back to one mixed track, so a comparison that includes it covers five meetings. |
 | `hex-pro`, `hex-mini`, `hex-unified` | Hex's offline pass, ported in `HexStyle.swift`, with the same speech model: chunks cut at pauses (6 to 10 s), a speech detector before the model, microphone lines that echo the far side dropped. Two speakers, as Hex writes them: the owner and "Them". |
 | `hex-speakers-*` | The same words with the far side split by VoiceiQ's speaker model, which hears the far track raised as it does in the app, and joined into turns as the app does. `hex-speakers-noecho-*` drops no microphone line. |
 
 ```sh
 python3 prepare.py ~/evaldata --no-synthetic --ami ES2004a ES2004b ES2004c ES2004d IS1009a TS3003a
 swift build -c release -Xswiftc -enable-testing --product LocalMeetingsEval   # calls the app's internal steps
-.build/out/Products/Release/LocalMeetingsEval ~/evaldata ~/evalout             # EVAL_MODEL=mini or unified for the other models
+"$(swift build -c release -Xswiftc -enable-testing --show-bin-path)/LocalMeetingsEval" ~/evaldata ~/evalout   # EVAL_MODEL=mini or unified for the other models
 ```
 
 `hex_upstream.py` runs upstream Hex itself (a debug build, its own model and

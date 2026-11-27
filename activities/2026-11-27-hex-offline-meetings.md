@@ -48,11 +48,12 @@ has 90.0 / 57.7 / 79.1 / 73.1 and VoiceiQ on device has
 1. The best offline result is under cyron's bar of 90 on M2 (51.8), M3
    (73.0) and M4 (61.7). VoiceiQ's existing on-device option is under that
    bar too, so the bar does not separate the two. The next four reasons do.
-2. The gain is in Hex's own speech runtime (Rust, GGUF models), not in a rule
-   VoiceiQ can copy. The Swift port of Hex's chunking with the same model
-   family through Core ML did not reproduce Hex's words: WER 39.6 against
-   32.3 on five meetings, cause not found. Shipping the gain means bundling a
-   second speech runtime or finding that cause first.
+2. The gain comes with Hex's own build, not with a rule VoiceiQ can copy.
+   The Swift port of Hex's chunking with the same model family through Core
+   ML did not reproduce Hex's words: WER 39.6 against 32.3 on five meetings.
+   The cause is unresolved: it is in Hex's speech detector build or in its
+   runtime (Rust, GGUF models), and which one was not found. Shipping the gain
+   means finding that cause first, or bundling Hex's speech stack.
 3. Part of the gain comes from the test room. AMI headsets hear each other.
    With the leaked speaker removed, VoiceiQ as it is reads
    95.8 / 66.5 / 77.5 / 74.8 and the best Hex combination
@@ -178,7 +179,9 @@ Two full runs of the Pro and Mini pipelines gave the same pooled M1 to M4 to
 people. `leak.py` measures it while each person talks alone. The owner's mic
 hears the loudest other person 2 to 22 dB below the owner. The far side hears
 the owner as loudly as its own people in ES2004a and 5 to 26 dB below them in
-the other five. A real call's far side never carries the owner.
+the other five. On a real call the far side carries the owner only when a
+remote person's mic picks up their own loudspeakers, and then usually after
+their app's echo cancellation; how much is left was not measured.
 
 **The fifth speaker is the owner.** Five of six meetings get one speaker
 that `score.py` matches to nobody. `unmatched.py` shows who that is. In
@@ -203,8 +206,10 @@ owner, so the owner's own speech can look like echo. In IS1009a it dropped
 148 of the mic's 184 lines and left 258 words under an owner who said 1,188.
 The scorer then matched the far side's copy of the owner to the owner, which
 is why `hex-speakers-pro` shows M2 67.0 there against 13.5 for `voiceiq-pro`.
-A real call's far side does not carry the owner, so this gain should not
-appear on one. That is an inference, not a measurement. The port's echo
+On a real call the far side carries far less of the owner than AMI's room
+(only what a remote loudspeaker leaks back past echo cancellation), so this
+gain should be smaller there or absent. That is an inference, not a
+measurement. The port's echo
 decisions match Hex itself on all 300 mic lines of ES2004b (same signal
 reading, same keep or drop), so this is Hex's rule and not a porting error.
 
