@@ -10,7 +10,7 @@ cyron rates dictation 75/100 and meetings under 40, and wants 90+ on every item,
 - **The prompt comes from the app's own source.** `eval/promptdump` compiles `PromptV1.swift` with `swiftc` (macOS or Linux), so the eval cannot drift from what the app sends.
 - **Claude Fable 5.2 judges** the subjective items in its own thread. The Anthropic API key in the orb has no credit, so the judge is not called from a script.
 - **Control swaps cost 10, not 5.** The judge argued a silent wrong name in a sent message costs more than a missed one.
-- **Release cadence:** at least two full days between releases; work that merges in between is batched. Only an urgent fix for the current release may go sooner, with the reason recorded here.
+- **Release cadence (cyron, 2026-11-27, replacing the earlier two-day gap):** release once a day when something new, user-facing and green has landed on main since the last release; skip days with nothing new. At most one release a day, except an urgent fix, with the reason recorded here. A daily check at 13:30 UTC, after the day's merges, decides and ships. The integrator also watches the Hex and FluidVoice upstream report for anything worth shipping.
 
 ## Baseline: main 517c65d (0.7.15 (90) plus the Chrome extension removal)
 
