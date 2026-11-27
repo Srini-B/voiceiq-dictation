@@ -130,8 +130,13 @@ def main() -> None:
     lengths = {}
     for meta in (args.dir / "meetings").glob("*/meta.json"):
         lengths[meta.parent.name[-36:].upper()] = json.loads(meta.read_text()).get("durationSeconds", 0)
+    # A meeting counts in the window it was transcribed in. A later chat about
+    # an older meeting books its cost under that meeting's session, but adds
+    # no meeting time.
+    recorded = {r["sessionID"] for r in meet_calls
+                if r["sessionID"] and r["stage"] in ("meetingTranscribe", "liveTranscribe")}
     seconds, from_audio = 0.0, 0
-    for sid in {r["sessionID"] for r in meet_calls if r["sessionID"]}:
+    for sid in recorded:
         if sid.upper() in lengths:
             seconds += lengths[sid.upper()]
         else:
