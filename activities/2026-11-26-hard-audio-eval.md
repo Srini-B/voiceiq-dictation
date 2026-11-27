@@ -33,10 +33,13 @@ How to run it and the dataset licences are in `eval/hard-audio/README.md`.
   instead. Neither has Indian-accented whispers, so that combination is not
   covered.
 - **Spend stopped.** The Gemini key ran low the same evening (other threads
-  spent most of it). On cyron's instruction this work makes no further paid
-  calls. Everything below comes from one Gemini pass already paid for, one
+  spent most of it). On cyron's instruction no further calls went to that
+  key. The baseline and failure classes below come from one Gemini pass already paid for, one
   GPT-6 Astra judge pass, and free on-device runs. The second judge (Gemini 4
-  Argon) finished 155 of 451 clips and is not used.
+  Argon) finished 155 of 451 clips and is not used. On 2026-11-27 cyron
+  authorised two prepaid keys (OpenRouter $6, OpenCode $13) as a one-off
+  budget for measuring the parked prompt fixes; see "Prompt fixes measured
+  on a prepaid route". The no-top-up rule for the Gemini key still holds.
 
 ## Baseline: main 62835c6 (before #101), Gemini audio, every option on
 
@@ -161,7 +164,7 @@ score (Pro's 1 − WER is above 90 on Voice Arena and Svarah, but that counts
 words, not send-ready drafts). With no on-device D7 at 90 or above, on-device
 stays a rare fallback.
 
-## Proposed fixes (prompt fixes parked: no paid Gemini eval credit)
+## Proposed fixes
 
 All proposed changes go against current main (after #101). The A/B for each
 is a pass over the affected strata, with ctrl_01–03 and the names cases from
@@ -170,11 +173,11 @@ model think on a third of calls in #101's tests.
 
 ### Prompt (PromptV1.swift): parked, evidence for later
 
-Standing decision (2026-11-27): there will be no paid Gemini eval credit, so
-no prompt change merges without a measured Gemini result. Each fix below is
-recorded with its failure class, the baseline clips it targets, the proposed
-wording and why it is untested, so it can be picked up from cyron's
-real-use data instead. Clip IDs are from the eval manifest and the drafts
+Standing decision (2026-11-27): no prompt change merges without a measured
+Gemini result, and the Gemini key gets no top-ups. Each fix below is
+recorded with its failure class, the baseline clips it targets and the
+proposed wording. All six were then measured on the prepaid route (next
+section); the "untested" notes below are from before that run. Clip IDs are from the eval manifest and the drafts
 from the judged baseline (GPT-6 Astra judge, main 62835c6, before #101).
 Neither is in the repository on purpose: the manifest holds dataset
 transcripts under their own licences, some non-commercial, and the results
@@ -282,8 +285,7 @@ uncertain.
      no gain, for about 100 more tokens, and Tamil sentences in place of the
      Hindi ones gave ml_hi 1/3 and ml_ta_4 2/3, with one call thinking.
      Neither was kept. Measured again on 2026-11-27 with Tamil added next to
-     the Hindi example (see below): it holds the regression slice and fixes
-     `ivta_048`, so it merged.
+     the Hindi example (see below) and proposed in #112.
 
 ### Prompt fixes measured on a prepaid route (2026-11-27)
 
@@ -323,14 +325,39 @@ references, plus a check per fix. No judge model was used.
 | 4 Fillers (வந்து, பார்த்தீங்கன்னா, "I mean", doubled yes) | 10.0%, 11.0% | Tamil filler-free on 6–7 of 11 (control 0–1); deleted the meaningful "பார்த்தீங்க அப்படின்னா" on `ivta_005` | Dropped: regresses |
 | 4b வந்து only, "not as the verb came" | 8.6%, 7.9% | Tamil filler-free on 3–6 of 11 | Parked (integrator): thinking on 6–7 of 57 calls, control about 1%, costs latency and money, and the gain is uneven |
 | 5 Short answers carry meaning | 9.9%, 9.4% | Kept 2 of 3; answered empty on passing `chime6_S02_U02_3799` in both runs | Dropped |
-| 6 Tamil whole hour ("பதினொரு மணி" → "11 மணி") | 8.1%, 9.0% | `ivta_048` "11 மணி" in both runs (control "11:00 மணி" in all 3) | Merged as its own PR |
+| 6 Tamil whole hour, "பதினொரு மணி" → "11 மணி" (the target's own hour) | 8.1%, 9.0% | `ivta_048` "11 மணி" in 8 of 8 runs; thinking 0 of 99 calls | Replaced by 6b: the example copies the target |
+| 6b Tamil whole hour, "ஏழு மணி" → "7 மணி" (an hour no clip uses) | 8.9%, 7.8% | `ivta_048` "11 மணி" in 6 of 8 runs (control "11:00 மணி" in 9 of 9); thinking 1 of 82 calls | Proposed in #112 |
 
-Not tested: the `eval/dictation` controls (ml_hi, clean_filler and others).
-Their TTS audio is not on hand, and making it needs the OpenAI key. Fix 6
-adds Tamil next to the Hindi example rather than replacing it, which was
-the variant that cost ml_hi in `2026-11-26-prompt-cost.md`.
+**Controls for 6 and 6b.** The `eval/dictation` controls most at risk
+(ml_hi, ml_ta_3, ml_ta_4, clean_filler) were spoken with OpenRouter's
+`openai/gpt-audio-mini` (the eval's own TTS needs the OpenAI key; these
+clips are a different voice, so they are a close stand-in, not the D3
+assets). 3 runs each:
 
-**Spend:** OpenRouter $3.38 over 866 calls; OpenCode $0. Latency is not
+| Control | Main | 6 | 6b |
+| --- | --- | --- | --- |
+| ml_hi "10 बजे", Devanagari | 3 of 3 | 3 of 3 | 3 of 3 |
+| ml_ta_3 "3 மணிக்கு" | 3 of 3 | 3 of 3 | 3 of 3 |
+| ml_ta_4 Friday dropped | 3 of 3, then 6 of 7 | 2 of 3 | 2 of 3, then 6 of 7 |
+| clean_filler empty | 3 of 3 | 3 of 3 | 3 of 3 |
+
+ml_ta_4 is noisy on its own (main keeps Friday 1 time in 10); 6b and main
+both drop it 8 of 10. No control call thought.
+
+**Limits of this measurement.**
+- The route is an approximation of the app. OpenRouter's `input_audio`
+  adapter carries the same prompt, audio and settings, but it is not
+  `GeminiClient.dictate`'s SSE body, and the fingerprint hashes the model,
+  prompt and audio, not the bytes on the wire.
+- AMEND-normalised character edits drop punctuation and case, so they
+  cannot see a format regression.
+- 6b adds about 20 tokens to every dictation prompt; C1 is already over its
+  gate. The whole-hour rule now appears in both the numbers bullet and the
+  language bullet; the next edit should keep one copy.
+
+**Spend:** OpenRouter $3.81 in total: $3.38 over 866 calls for the first
+pass, then $0.43 for the controls (4 TTS clips, about $0.002) and the 6b
+re-runs. OpenCode $0. Latency is not
 reported for these routes. The two prepaid keys are the authorised testing
 budget, stopped at about $1 left on each; "no paid eval credit" means no
 Gemini top-ups. No other parked prompt change is left to measure, so the
@@ -366,9 +393,9 @@ was given up.
 
 - Fable scored 180 stratified drafts, not the whole baseline, so the
   two-judge score is a reweighted estimate.
-- No proposal is measured. There is no paid Gemini eval credit, now or
-  later, so the prompt fixes wait for evidence from cyron's real use, and D7
-  stays provisional as scored.
+- The prompt fixes were measured on a small slice through the prepaid
+  route, not on the full set; only the Tamil whole hour holds (#112). D7 is
+  not re-scored and stays provisional.
 - Voice Arena's 3-of-5 judge panel is not reproduced, and its 151 public
   clips are only part of its set, so this ZER is not directly comparable to
   the published leaderboard.
