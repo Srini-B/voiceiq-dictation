@@ -120,7 +120,7 @@ on every stratum.
 | Class | Count | Where | Examples |
 | --- | --- | --- | --- |
 | Wrong word (mishearing) | 76 | everywhere, most on Tamil-accented English, CHiME-6 and whispers | "item" for "time", "Goa" for "go", "dessert" for "dead cert", "Air Force" for "actual" |
-| Content dropped | 50 | conversational strata, CHiME-6 | a short closing "We did." or "that's the thing" removed as a throwaway; part of a far-field sentence lost |
+| Content dropped | 50 | conversational strata, CHiME-6 | a short answer ("We did.", "That's the thing.") lost at the start of a clip; part of a far-field sentence lost |
 | Filler kept | 42 | IndicVoices Tamil (12), EdAcc, Monsoon, Voice Arena (6) | Tamil வந்து kept as filler in 11 Tamil drafts; "you know", "I mean", "like" as a pause; "Yes, yes" and "Okay, okay" |
 | Name spelling | 12 | Voice Arena, CHiME-6 | Halverson/Halvorsen, Tomas/Thomas: a spelling the audio cannot settle (the Dictionary's job) |
 | Invented text | 8 | whispers with background talkers, CHiME-6 | a background talker's sentence written instead of the whisperer's |
@@ -182,7 +182,9 @@ hold model output. The manifest is rebuilt for free by the `fetch.py`,
 `monsoon_more.py` and `chime6.py` steps in `eval/hard-audio/README.md`, into
 the data folder (`HARD_AUDIO_DATA`, default `.amp/in/orb-backup/hard/`). The
 judged file, `eval/hard-audio/results/main-62835c6.gpt-only.judged.json`
-(git-ignored), needs a paid `run.py` pass at 62835c6 and then `judge.py`.
+(a local, untracked file), needs a paid `run.py` pass at 62835c6 and then
+`judge.py`. The `ivta_*` and `edacc_*` IDs are positions after a seeded
+shuffle in `fetch.py`, so re-fetching from changed mirrors can move them.
 `judge.py` reuses `judge-cache.jsonl` from the data folder when it is
 there. Every fix is untested for the same reasons: a
 measurement needs a Gemini pass over the affected strata plus the
@@ -210,11 +212,14 @@ uncertain.
      `whisper_t6_task6_p058_sentences_01_whisper_bg25`. Gemini answered
      `<<NO_SPEECH>>` twice on each. Fluid Speech Pro heard words on 3 of them,
      so the speech is audible.
-   - Wording (answer format): "If no one speaks any words at all, "text" is
+   - Wording (answer format). Change the no-speech sentence to: "If no one speaks any words at all, "text" is
      exactly <<NO_SPEECH>>. Quiet, whispered, distant or noisy speech is
-     speech: write what you can hear."
+     speech: write what you can hear." A recording of only hesitation
+     ("um, uh") must still be <<NO_SPEECH>>, as the `clean_filler` control
+     expects, so the A/B has to include it.
    - Also uncertain: the 47-clip silent key-press set (see
-     `2026-11-26-empty-answer-on-device.md`) shows the opposite risk. A
+     `2026-11-26-empty-answer-on-device.md` on the unmerged #107 branch,
+     `empty-answer-on-device`) shows the opposite risk. A
      model that writes distant speech also writes the TV and the colleague,
      so this needs the silent set measured on Gemini too, not only the 5.
 3. **Spoken question intonation.** Class: form only (8 drafts).
@@ -243,10 +248,14 @@ uncertain.
      acknowledgement said twice ("yes, yes", "okay, okay") is written once."
    - Also uncertain: வந்து is also the verb "came", and Tamil is not
      covered by `eval/dictation`'s controls, so a wrong deletion would go
-     unnoticed. The "like" drafts in Voice Arena (`va_dict_0152`, `0179`,
-     `0229`, `0231`, `0407`, `0461`) and EdAcc are a judge-strictness
+     unnoticed. The "like" drafts in Voice Arena (`va_dict_0152`,
+     `va_dict_0179`, `va_dict_0229`, `va_dict_0231`, `va_dict_0407`,
+     `va_dict_0461`) and EdAcc are a judge-strictness
      question. The current rule already removes filler "like"; this wording
-     does not change it.
+     does not change it. Main already lists "you know" under "Strip
+     unnecessary words" and "repeated words" under "Remove speech
+     artifacts", so a later edit should merge this wording into those
+     bullets rather than repeat it.
 5. **Short answers that carry meaning.** Class: content dropped (50 drafts;
    this fix covers a small part).
    - Targets: `chime6_S02_U04_5756` (dropped "We did.") and
@@ -266,11 +275,14 @@ uncertain.
 6. **Tamil whole hour.** Class: format (judge did not flag it).
    - Target: `ivta_048` wrote "11:00 மணி". The judge's own fix kept "11:00",
      so this is a style call from reading the draft, not a counted miss.
-   - Main already says "a time spoken as a whole hour as the hour alone, in
-     every language, never with ":00" added" (numbers bullet, after the
-     prompt-cost thread's rewrite). That may already fix it. The open
-     proposal is only to name Tamil ("11 மணி") next to the Hindi example in
-     the language bullet, which that thread owns.
+   - The numbers bullet's "in every language, never with ":00" added" was
+     already live at 62835c6 (it came in 137d5a9), so that rule did not fix
+     it. Naming Tamil was already tried in
+     `2026-11-26-prompt-cost.md`: a Tamil whole-hour line gave ml_ta_4 3/4,
+     no gain, for about 100 more tokens, and Tamil sentences in place of the
+     Hindi ones gave ml_hi 1/3 and ml_ta_4 2/3, with one call thinking.
+     Neither was kept, so this is a closed proposal unless real use shows
+     "11:00 மணி" often.
 
 ### Pipeline
 
