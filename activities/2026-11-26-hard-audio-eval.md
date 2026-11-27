@@ -281,8 +281,57 @@ uncertain.
      `2026-11-26-prompt-cost.md`: a Tamil whole-hour line gave ml_ta_4 3/4,
      no gain, for about 100 more tokens, and Tamil sentences in place of the
      Hindi ones gave ml_hi 1/3 and ml_ta_4 2/3, with one call thinking.
-     Neither was kept, so this is a closed proposal unless real use shows
-     "11:00 மணி" often.
+     Neither was kept. Measured again on 2026-11-27 with Tamil added next to
+     the Hindi example (see below): it holds the regression slice and fixes
+     `ivta_048`, so it merged.
+
+### Prompt fixes measured on a prepaid route (2026-11-27)
+
+cyron added two prepaid keys for testing these fixes only. Each A/B sends the
+app's exact request: the prompt from main's `PromptV1.swift` via promptdump,
+FLAC inline, temperature 0, thinking low, the `{"text"}` schema, no backup
+request, and the app's one re-send on an empty answer.
+
+**Routes.**
+- OpenCode (`/inference/google/v1beta`, native Gemini body) answered every
+  request with HTTP 429 "inference service is overloaded", so it was not
+  used and cost nothing.
+- OpenRouter (`google/gemini-3.8-flash`, pinned to Google AI Studio with no
+  fallback, audio as `input_audio` FLAC) passed the fidelity check.
+  - The request fingerprint matched the baseline's on all 5 check clips.
+  - Answers differed in small wording, about as much as two OpenRouter runs
+    differ from each other: 20 of 40 regression clips came back identical
+    across runs.
+  - On the regression slice, the control scored 7.8–9.3% character edits
+    against the references over three runs. Gemini direct scored 7.8% at
+    62835c6.
+
+**Slice (no full 451 run).**
+- The clips each fix targets, as listed above.
+- A regression slice of 40 clips that were send-ready in the baseline,
+  across all 8 strata.
+- 12 talk, TV and call clips from the silent key-press set.
+
+Scoring was free: AMEND-normalised character edits against the human
+references, plus a check per fix. No judge model was used.
+
+| Fix | Regression slice (control 7.8–9.3%) | On its targets | Verdict |
+| --- | --- | --- | --- |
+| 1 Background voices | 9.5% | No gain; 7 of 12 silent clips written, control 5–6 | Dropped |
+| 2 Quiet speech is speech | 8.5% | 2 of 4 empty clips recovered; silent inserts 7 of 12, control 5–6 | Dropped: more false inserts |
+| 3 Question intonation | 9.1% | No "?" added on any target | Dropped |
+| 4 Fillers (வந்து, பார்த்தீங்கன்னா, "I mean", doubled yes) | 10.0%, 11.0% | Tamil filler-free on 6–7 of 11 (control 0–1); deleted the meaningful "பார்த்தீங்க அப்படின்னா" on `ivta_005` | Dropped: regresses |
+| 4b வந்து only, "not as the verb came" | 8.6%, 7.9% | Tamil filler-free on 3–6 of 11 | Parked: thinking on 6–7 of 57 calls, control about 1% |
+| 5 Short answers carry meaning | 9.9%, 9.4% | Kept 2 of 3; answered empty on passing `chime6_S02_U02_3799` in both runs | Dropped |
+| 6 Tamil whole hour ("பதினொரு மணி" → "11 மணி") | 8.1%, 9.0% | `ivta_048` "11 மணி" in both runs (control "11:00 மணி" in all 3) | Merged as its own PR |
+
+Not tested: the `eval/dictation` controls (ml_hi, clean_filler and others).
+Their TTS audio is not on hand, and making it needs the OpenAI key. Fix 6
+adds Tamil next to the Hindi example rather than replacing it, which was
+the variant that cost ml_hi in `2026-11-26-prompt-cost.md`.
+
+**Spend:** OpenRouter $3.38 over 866 calls; OpenCode $0. Latency is not
+reported for these routes.
 
 ### Pipeline
 
