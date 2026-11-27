@@ -25,9 +25,9 @@ struct MeetingNotesColumn: View {
                     .padding(.bottom, -VoiceIQUI.Spacing.s)
             }
             VStack(alignment: .leading, spacing: VoiceIQUI.Spacing.xs) {
-                Text(meeting.shownTitle(notes: notes) ?? "Meeting").font(GTFont.flex(22, weight: 600))
-                Text(when).font(VoiceIQUI.TypeScale.labelSmall()).foregroundStyle(.secondary)
-                if !transcript.isEmpty { people }
+                Text(meeting.displayTitle(notes: notes) ?? "Meeting").font(GTFont.flex(22, weight: 600))
+                Text(meeting.whenText).font(VoiceIQUI.TypeScale.labelSmall()).foregroundStyle(.secondary)
+                if !speakers.isEmpty { people }
             }
             if let notes {
                 section("Summary") { Text(notes.summary) }
@@ -56,26 +56,26 @@ struct MeetingNotesColumn: View {
         .padding(.vertical, VoiceIQUI.Spacing.xl)
     }
 
-    /// "Thu, Nov 26 · 11:50 PM · 17 min"; an import has no length.
-    private var when: String {
-        let day = meeting.startedAt.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())
-        let time = meeting.startedAt.formatted(date: .omitted, time: .shortened)
-        guard meeting.importedFrom == nil, meeting.durationSeconds >= 1 else { return "\(day) · \(time)" }
-        let minutes = Int((meeting.durationSeconds / 60).rounded())
-        return "\(day) · \(time) · " + (minutes < 1 ? "\(Int(meeting.durationSeconds)) s" : "\(minutes) min")
+
+    /// The note owner first, then the others; an import without speaker labels has none.
+    private var speakers: [String] {
+        let others = MeetingSpeaker.others(in: transcript).filter { $0 != GranolaImport.unlabeledSpeaker }
+        return (transcript.contains { $0.speaker == MeetingSpeaker.you } ? [MeetingSpeaker.you] : []) + others
     }
 
     /// Everyone heard, each in their transcript colour, the note owner first.
     private var people: some View {
         let others = MeetingSpeaker.others(in: transcript)
-        let speakers = (transcript.contains { $0.speaker == MeetingSpeaker.you } ? [MeetingSpeaker.you] : []) + others
-        return speakers.enumerated().reduce(Text("")) { line, entry in
+        let names = speakers.map { meeting.displayName($0, notes: notes) }
+        // A non-breaking space keeps each dot with its name when the line wraps.
+        return zip(speakers, names).enumerated().reduce(Text("")) { line, entry in
             let dot = Text(Image(systemName: "circle.fill")).font(.system(size: 7))
-                .foregroundColor(Color(nsColor: SpeakerPalette.color(entry.element, order: others)))
-            return line + (entry.offset == 0 ? Text("") : Text("     ")) + dot + Text(" " + meeting.displayName(entry.element, notes: notes))
+                .foregroundColor(Color(nsColor: SpeakerPalette.color(entry.element.0, order: others)))
+            return line + Text(entry.offset == 0 ? "" : "     ") + dot + Text("\u{00A0}" + entry.element.1)
         }
         .font(VoiceIQUI.TypeScale.labelSmall())
         .foregroundStyle(.secondary)
+        .accessibilityLabel("With " + names.joined(separator: ", "))
     }
 
     private func section<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {

@@ -310,6 +310,24 @@ public struct MeetingMeta: Codable, Equatable, Sendable, Identifiable {
         [userTitle, notes?.title, title].compactMap { $0 }.first { !$0.isEmpty }
     }
 
+    /// The title to show: `shownTitle`, else the calendar event's.
+    public func displayTitle(notes: MeetingNotes? = nil) -> String? {
+        shownTitle(notes: notes) ?? calendarEvent.map(\.title).flatMap { $0.isEmpty ? nil : $0 }
+    }
+
+    /// "45 s" or "17 min", the same in the list and the notes.
+    public var lengthText: String {
+        durationSeconds < 60 ? "\(Int(durationSeconds)) s" : "\(Int(durationSeconds / 60)) min"
+    }
+
+    /// "Thu, Nov 26 · 11:50 PM · 17 min" under a note's title; an import has no length.
+    public var whenText: String {
+        let day = startedAt.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())
+        let time = startedAt.formatted(date: .omitted, time: .shortened)
+        guard importedFrom == nil, durationSeconds >= 1 else { return "\(day) · \(time)" }
+        return "\(day) · \(time) · \(lengthText)"
+    }
+
     /// Speakers were named, renamed or cleared since the notes were written,
     /// so the notes may credit the wrong people.
     public var namesChangedSinceNotes: Bool {

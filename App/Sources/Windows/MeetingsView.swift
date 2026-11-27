@@ -195,20 +195,14 @@ struct MeetingsPane: View {
         let transcriptShown = !transcript.isEmpty && (wide ? !hidesTranscript : narrowShowsTranscript)
         let filedIn = folders.names(of: meeting.id)
         return VStack(spacing: 0) {
-            header(meeting, wide: wide, transcriptShown: transcriptShown)
-            // The meeting's folders, and the menu that changes them, under the title.
-            Menu {
-                MeetingFolderToggles(model: folders, meeting: meeting.id)
-            } label: {
-                Label(filedIn.isEmpty ? "Add to folder" : filedIn.joined(separator: ", "), systemImage: "folder")
-                    .font(VoiceIQUI.TypeScale.labelSmall())
+            header(meeting, wide: wide, transcriptShown: transcriptShown, filedIn: filedIn)
+            if !wide && transcriptShown {
+                // The title has the header row; the folders go under it.
+                folderMenu(meeting, filedIn: filedIn)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, VoiceIQUI.Spacing.l)
+                    .padding(.bottom, VoiceIQUI.Spacing.s)
             }
-            .menuStyle(.borderlessButton)
-            .fixedSize()
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .help("Put this meeting in folders")
-            .padding(.horizontal, VoiceIQUI.Spacing.l)
-            .padding(.bottom, VoiceIQUI.Spacing.s)
             Divider()
             if case .failed(let reason) = meeting.status {
                 Label(reason, systemImage: "exclamationmark.triangle.fill")
@@ -268,7 +262,20 @@ struct MeetingsPane: View {
         transcript.isEmpty ? nil : MeetingChatModel.shared(meeting.id, store: store)
     }
 
-    private func header(_ meeting: MeetingMeta, wide: Bool, transcriptShown: Bool) -> some View {
+    /// The meeting's folders, and the menu that changes them.
+    private func folderMenu(_ meeting: MeetingMeta, filedIn: [String]) -> some View {
+        Menu {
+            MeetingFolderToggles(model: folders, meeting: meeting.id)
+        } label: {
+            Label(filedIn.isEmpty ? "Add to folder" : filedIn.joined(separator: ", "), systemImage: "folder")
+                .font(VoiceIQUI.TypeScale.labelSmall())
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .help("Put this meeting in folders")
+    }
+
+    private func header(_ meeting: MeetingMeta, wide: Bool, transcriptShown: Bool, filedIn: [String]) -> some View {
         let busy = engine.isBusy(meeting.id)
         let audio = RecordedAudio.meeting(folder: meeting.status == .recording ? nil : store.folder(for: meeting.id),
                                           name: title(meeting))
@@ -276,6 +283,8 @@ struct MeetingsPane: View {
             // The notes open with the title; only the transcript alone needs it here.
             if !wide && transcriptShown {
                 Text(title(meeting)).font(VoiceIQUI.TypeScale.title()).lineLimit(1)
+            } else {
+                folderMenu(meeting, filedIn: filedIn)
             }
             Spacer(minLength: VoiceIQUI.Spacing.s)
             if notes != nil, let step = step(meeting) {
@@ -294,7 +303,8 @@ struct MeetingsPane: View {
                 .disabled(busy)
                 .help("Write the notes again with the speaker names you set")
             }
-            RecordingAudioButtons(audio: audio) { exported = $0 }
+            // A meeting whose audio isn't on this Mac has nothing to play or save.
+            if audio.isAvailable { RecordingAudioButtons(audio: audio) { exported = $0 } }
             Menu {
                 Section("Save to Downloads") { exportItems { export(meeting, $0) } }
                 Section("Copy") { exportItems { copy(meeting, $0) } }
@@ -461,17 +471,15 @@ struct MeetingsPane: View {
     }
 
     private func title(_ meeting: MeetingMeta) -> String {
-        if let title = meeting.shownTitle() { return title }
-        if let title = meeting.calendarEvent?.title, !title.isEmpty { return title }
-        return meeting.startedAt.formatted(date: .abbreviated, time: .shortened)
+        meeting.displayTitle() ?? meeting.startedAt.formatted(date: .abbreviated, time: .shortened)
     }
-    /// The list's sections: one per day the meetings started on, newest first as listed.
+    /// The list's sections: one per day the meetings started on, in the list's newest-first order.
     private static func days(_ meetings: [MeetingMeta]) -> [(start: Date, label: String, meetings: [MeetingMeta])] {
         let calendar = Calendar.current
         var days: [(start: Date, label: String, meetings: [MeetingMeta])] = []
         for meeting in meetings {
             let start = calendar.startOfDay(for: meeting.startedAt)
-            if let index = days.firstIndex(where: { $0.start == start }) { days[index].meetings.append(meeting); continue }
+            if days.last?.start == start { days[days.count - 1].meetings.append(meeting); continue }
             let label = calendar.isDateInToday(start) ? "Today"
                 : calendar.isDateInYesterday(start) ? "Yesterday"
                 : calendar.isDate(start, equalTo: .now, toGranularity: .year)
@@ -481,16 +489,15 @@ struct MeetingsPane: View {
         }
         return days
     }
-    /// "11:50 PM · 17m": the day is the section's. An import has no length
+    /// "11:50 PM · 17 min": the day is the section's. An import has no length
     /// (Granola's export has none); anything in flight or failed says so.
     private func timeLine(_ meeting: MeetingMeta) -> String {
         let time = meeting.startedAt.formatted(date: .omitted, time: .shortened)
         return meeting.importedFrom == nil ? "\(time) · \(durationLine(meeting))" : time
     }
-    private func duration(_ seconds: Double) -> String { seconds < 60 ? "\(Int(seconds))s" : "\(Int(seconds / 60))m" }
     /// A finished meeting shows only its length; anything still in flight or failed says so.
     private func durationLine(_ meeting: MeetingMeta) -> String {
-        let length = duration(meeting.durationSeconds)
+        let length = meeting.lengthText
         switch meeting.status {
         case .done: return length
         case .recording: return "\(length) · Recording"

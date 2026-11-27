@@ -345,7 +345,10 @@ private struct MeetingDetail: View {
     @ViewBuilder private func notesContent(_ notes: MeetingNotes) -> some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.m) {
             HStack(alignment: .firstTextBaseline) {
-                Text(meta.shownTitle(notes: notes) ?? notes.title).font(Theme.Fonts.title2()).foregroundStyle(Theme.Colors.ink)
+                VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                    Text(meta.shownTitle(notes: notes) ?? notes.title).font(Theme.Fonts.title2()).foregroundStyle(Theme.Colors.ink)
+                    Text(meta.whenText).font(Theme.Fonts.footnote()).foregroundStyle(Theme.Colors.muted)
+                }
                 Spacer(minLength: Theme.Spacing.s)
                 if let kind = notes.type.flatMap(MeetingKind.init(rawValue:)) {
                     StatusChip(text: kind.displayName, tone: .off)

@@ -18,8 +18,10 @@ with four saved eval meetings, the Mac window had four problems:
 
 - **Turns.** `MeetingSpeaker.turns(in:)` (VoiceIQCore) groups lines in a row
   by the same speaker. The Mac transcript column and the iPhone Transcript
-  card show one heading per turn: the name in its colour, with the turn's
-  start time beside it. Every line keeps its own `TranscriptSegment.id`, so
+  card show one heading per turn: the name in its colour and the turn's
+  start time (beside the name on the Mac, at the right edge on iPhone).
+  While searching, turns are grouped before the filter, so two turns of
+  one speaker stay apart. Every line keeps its own `TranscriptSegment.id`, so
   Edit and Delete still work on one line (right-click on the Mac, touch and
   hold on iPhone).
 - **Notes header (Mac).** Under the title: the day, start time and length,

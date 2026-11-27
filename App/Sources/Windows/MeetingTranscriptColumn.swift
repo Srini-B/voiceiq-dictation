@@ -116,13 +116,13 @@ struct MeetingTranscriptColumn: View {
 
     private var trimmedQuery: String { query.trimmingCharacters(in: .whitespaces) }
 
-    private var shown: [TranscriptSegment] {
-        guard !trimmedQuery.isEmpty else { return transcript }
-        return transcript.filter {
-            $0.text.localizedCaseInsensitiveContains(trimmedQuery)
-                || meeting.displayName($0.speaker, notes: notes).localizedCaseInsensitiveContains(trimmedQuery)
-        }
+    private func matches(_ segment: TranscriptSegment) -> Bool {
+        trimmedQuery.isEmpty
+            || segment.text.localizedCaseInsensitiveContains(trimmedQuery)
+            || meeting.displayName(segment.speaker, notes: notes).localizedCaseInsensitiveContains(trimmedQuery)
     }
+
+    private var shown: [TranscriptSegment] { transcript.filter(matches) }
 
     private func openSearch() { searching = true; searchFocused = true }
     private func closeSearch() { searching = false; query = "" }
@@ -140,7 +140,9 @@ struct MeetingTranscriptColumn: View {
         let last = line.mutableCopy() as! NSMutableParagraphStyle
         last.paragraphSpacing = 16
         let out = NSMutableAttributedString()
-        for turn in MeetingSpeaker.turns(in: shown) {
+        // Grouped before the search filters, so turns apart stay apart.
+        let turns = MeetingSpeaker.turns(in: transcript).map { $0.filter(matches) }.filter { !$0.isEmpty }
+        for turn in turns {
             let first = turn[0]
             // The heading belongs to the turn's first line, for the right-click menu.
             out.append(NSAttributedString(string: meeting.displayName(first.speaker, notes: notes), attributes: [
@@ -149,7 +151,7 @@ struct MeetingTranscriptColumn: View {
             ]))
             if let start = first.start {
                 out.append(NSAttributedString(string: "  " + MeetingNotesPrompt.clock(start), attributes: [
-                    .font: time, .foregroundColor: NSColor.tertiaryLabelColor, .paragraphStyle: head, Self.segmentKey: first.id,
+                    .font: time, .foregroundColor: NSColor.secondaryLabelColor, .paragraphStyle: head, Self.segmentKey: first.id,
                 ]))
             }
             out.append(NSAttributedString(string: "\n", attributes: [.font: nameFont, .paragraphStyle: head, Self.segmentKey: first.id]))
