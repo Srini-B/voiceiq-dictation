@@ -792,6 +792,39 @@ the meeting folder. The menu's Copy section puts the same Markdown for Notes,
 Transcript, or Notes and transcript on the clipboard instead. iOS shares the
 same Markdown with both parts.
 
+## Save each meeting as Markdown
+
+Mac only, off by default. In Settings › Dictation, the meetings rows, turn on
+**Save each meeting as Markdown** and choose a folder (**Choose…** changes
+it; turning the switch off stops saving and leaves the files). Each
+meeting is then written there as `<title> <yyyy-MM-dd>.md`, with the same
+Markdown Export writes for Notes and transcript (notes above the transcript).
+A name already taken gets ` 2`, ` 3`, and so on.
+
+- **When.** `MeetingMarkdownFiles.follow` watches `gtMeetingsDidChange`,
+  which `MeetingStore` posts after every save. A meeting is written once it
+  is done and has notes: when its notes are first saved, and again after
+  Redo notes, Redo transcript and notes, Rename…, a renamed speaker, a
+  transcript edit, or a change synced from the iPhone. Meetings finished
+  before the switch was turned on are written on their next change only.
+  Nothing in the recording or transcription path calls it.
+- **Your edits win.** `meeting-markdown-files.json` in Application Support
+  keeps, per meeting, the file VoiceiQ wrote and the SHA-256 of what it
+  wrote. A later change rewrites the file only while it still has that
+  hash; a rename writes the new name and removes the old file under the same
+  rule. If you edited, moved or deleted the file, it is left alone and the
+  log says so (`meeting Markdown not rewritten`). Choosing a new folder starts
+  fresh files there.
+- **Never in the way.** Writing runs on its own background queue after the
+  meeting is saved. A folder that is gone or not writable logs
+  `meeting Markdown could not be saved` and changes nothing else.
+- The app is not sandboxed (see `App/VoiceIQ.entitlements`), so the folder
+  is kept as a path, without a security-scoped bookmark.
+
+The rule of rewriting only a file that still matches what the app last wrote
+comes from [Hex](https://github.com/anomalyco/hex) (MIT), `ee9b069a`
+(`src/meeting/notes_file.rs`, `src/meeting/write/markdown.rs`).
+
 ## ffmpeg
 
 The app does not use ffmpeg; audio is read and written with AVFoundation.

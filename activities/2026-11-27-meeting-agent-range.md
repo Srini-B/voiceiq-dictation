@@ -1,4 +1,4 @@
-# Agents read part of a meeting (2026-11-27)
+# Agents read part of a meeting; meetings saved as Markdown (2026-11-27)
 
 ## Why
 
@@ -10,6 +10,13 @@ Hex added `hex meetings show --from/--to` (`src/meeting/query.rs`, `OffsetRange`
 - Parsing and filtering are pure (`TranscriptRange`); `MeetingStore.markdown` takes an optional range.
 - The tool description, server instructions and `AgentAPI.meetingPrompt` tell agents to read the notes first and then only the part they need.
 
+## Save each meeting as Markdown (Mac)
+
+Hex saves each meeting's notes as Markdown in a folder the user picks and rewrites the file only while it still matches the hash of what Hex last wrote (`src/meeting/notes_file.rs`, `src/meeting/write/markdown.rs`, `ee9b069a`). VoiceiQ had only a manual Export to Downloads.
+
+- Settings › Dictation, the meetings rows: **Save each meeting as Markdown**, off by default; turning it on asks for a folder. Not sandboxed, so the folder is a path.
+- `MeetingMarkdownFiles` writes `<title> <yyyy-MM-dd>.md` with Export's Markdown (notes above the transcript) once a meeting is done with notes, and rewrites it after redo, rename or a transcript edit only while it still has the SHA-256 VoiceiQ stored for that meeting. A taken name gets " 2", " 3". It follows `MeetingStore`'s change notification on a background queue, so `MeetingEngine` is not edited and a failure is only logged.
+
 ## Verification
 
-New `AgentAPITests.testGetMeetingReadsOnlyTheTurnsInATimeRange`. Pending Mac build: written in a Linux orb without a Swift toolchain.
+New `AgentAPITests.testGetMeetingReadsOnlyTheTurnsInATimeRange` and `MeetingMarkdownFilesTests`. Pending Mac build: written in a Linux orb without a Swift toolchain.

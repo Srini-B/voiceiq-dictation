@@ -259,6 +259,11 @@ SOFTWARE.
   refusing a start that is not before the end (`OffsetRange` and
   `parse_offset` in `src/meeting/query.rs`), in
   `VoiceIQCore/Sources/MeetingEngine/TranscriptRange.swift` and `get_meeting`
+- Also, from Hex at `ee9b069a`, rewritten in Swift: rewriting a meeting's
+  Markdown file only while it still matches the hash of what the app last
+  wrote, so the user's own edits are never overwritten
+  (`src/meeting/notes_file.rs`, `src/meeting/write/markdown.rs`), in
+  `VoiceIQCore/Sources/MeetingEngine/MeetingMarkdownFiles.swift`
 - License: MIT
 
 ```
