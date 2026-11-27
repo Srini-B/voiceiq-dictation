@@ -317,8 +317,12 @@ loads it) ran on a Mac satellite over the 47 clips and the 5 empty-answer
 clips. With no gate it writes words on 35 of 47 silent clips and recovers
 3 of 3.
 
-**Gates tried.** Each feature is computed the way the app sees the
-recording, from 100 ms RMS frames (the ~10 Hz level tap):
+**Gates tried.** Each feature is computed from 100 ms RMS frames of the
+saved recording (the rate of the ~10 Hz level tap). Only `snr` uses the
+app's level curve; `peak`, `p90` and `floor` are unsaturated RMS in dBFS.
+The app's live `peakDB` saturates at −20.8 dBFS, so a `peak` gate above
+that (such as −8 dBFS) could only be built by reading the saved file, not
+from the coordinator's numbers:
 
 - `snr`: the coordinator's `measuredSNR` (peak minus 10th-percentile
   floor, on the level curve that saturates at −20.8 dBFS);
