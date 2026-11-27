@@ -264,6 +264,12 @@ SOFTWARE.
   wrote, so the user's own edits are never overwritten
   (`src/meeting/notes_file.rs`, `src/meeting/write/markdown.rs`), in
   `VoiceIQCore/Sources/MeetingEngine/MeetingMarkdownFiles.swift`
+- Also, from Hex at `b67dd262`, rewritten in Swift for the meetings
+  evaluator only (no app code): the offline meeting pass's pause-cut
+  chunks, word seams, quiet-microphone raise and echo suppression
+  (`eval/meetings/Sources/LocalMeetingsEval/HexStyle.swift`, from
+  `src/meeting/transcript.rs`, `src/meeting/chunk_level.rs`,
+  `src/meeting/echo.rs` and `src/transcription/pause_segmenter.rs`)
 - License: MIT
 
 ```
