@@ -341,8 +341,8 @@ assets). 3 runs each:
 | ml_ta_4 Friday dropped | 3 of 3, then 6 of 7 | 2 of 3 | 2 of 3, then 6 of 7 |
 | clean_filler empty | 3 of 3 | 3 of 3 | 3 of 3 |
 
-ml_ta_4 is noisy on its own (main keeps Friday 1 time in 10); 6b and main
-both drop it 8 of 10. No control call thought.
+ml_ta_4 is noisy on its own (main keeps Friday 1 time in 10); main drops it 9 of
+10 and 6b 8 of 10. No control call thought.
 
 **Limits of this measurement.**
 - The route is an approximation of the app. OpenRouter's `input_audio`
@@ -359,9 +359,10 @@ both drop it 8 of 10. No control call thought.
 pass, then $0.43 for the controls (4 TTS clips, about $0.002) and the 6b
 re-runs. OpenCode $0. Latency is not
 reported for these routes. The two prepaid keys are the authorised testing
-budget, stopped at about $1 left on each; "no paid eval credit" means no
+budget, with a stop at about $1 left on each; "no paid eval credit" means no
 Gemini top-ups. No other parked prompt change is left to measure, so the
-OpenRouter balance ($2.56 left on the account) is unused.
+OpenRouter balance is unused: the key held about $6.39 before the first
+call, so $2.56 is left after $3.81.
 
 OpenCode: 3 more calls one at a time, 40 s apart (2026-11-27), all 429
 "inference service is overloaded", $0. The model is listed with audio
