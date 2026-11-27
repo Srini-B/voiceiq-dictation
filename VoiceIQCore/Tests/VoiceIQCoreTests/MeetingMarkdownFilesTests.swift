@@ -94,5 +94,12 @@ final class MeetingMarkdownFilesTests: XCTestCase {
         XCTAssertTrue(MeetingMarkdownFiles.name(title: "Q3/Q4: plan", startedAt: startedAt).hasPrefix("Q3-Q4- plan "))
         XCTAssertTrue(MeetingMarkdownFiles.name(title: "...", startedAt: startedAt).hasPrefix("Meeting "))
     }
+    /// A long title in a script of 3-byte characters still fits a 255-byte filename.
+    func testALongNonASCIITitleFitsAFilename() {
+        let name = MeetingMarkdownFiles.name(title: String(repeating: "会", count: 110), startedAt: Date())
+        XCTAssertLessThanOrEqual((name + " 99.md").utf8.count, 255)
+        XCTAssertTrue(name.hasPrefix("会"))
+    }
+
 }
 #endif

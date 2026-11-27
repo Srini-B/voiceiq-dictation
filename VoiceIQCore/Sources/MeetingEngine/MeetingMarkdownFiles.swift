@@ -82,7 +82,10 @@ public struct MeetingMarkdownFiles: Sendable {
         // Finder shows ":" as "/", and "/" separates paths; a leading dot hides the file.
         var title = title.components(separatedBy: CharacterSet(charactersIn: "/:\\").union(.newlines)).joined(separator: "-")
             .trimmingCharacters(in: CharacterSet.whitespaces.union(CharacterSet(charactersIn: ".")))
+        // Filenames are limited to 255 bytes; leave room for " yyyy-MM-dd", " 99" and ".md".
         title = String(title.prefix(120))
+        while title.utf8.count > 200 { title.removeLast() }
+        title = title.trimmingCharacters(in: .whitespaces)
         return "\(title.isEmpty ? "Meeting" : title) \(day.string(from: startedAt))"
     }
 
