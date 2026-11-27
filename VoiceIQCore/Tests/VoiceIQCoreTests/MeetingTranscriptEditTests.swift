@@ -23,6 +23,18 @@ final class MeetingTranscriptEditTests: XCTestCase {
         TranscriptSegment(speaker: "you", text: "Then Friday it is.", chunkIndex: 0, start: 12, end: 14),
     ]
 
+    /// The views show one heading per turn; each line keeps its own id for Edit and Delete.
+    func testTurnsGroupOnlyAdjacentLinesOfOneSpeaker() {
+        let lines = [transcript[0], transcript[3], transcript[1], transcript[2], transcript[0]]
+        let turns = MeetingSpeaker.turns(in: lines)
+        XCTAssertEqual(turns.map { $0.map(\.text) }, [
+            ["Where are we on pricing?", "Then Friday it is."],
+            ["Pricing ships after the budget revue."],
+            ["Um, sorry, my dog."],
+            ["Where are we on pricing?"],
+        ])
+    }
+
     private func finishedMeeting(_ transcript: [TranscriptSegment]) throws -> MeetingID {
         var meta = MeetingMeta(id: MeetingID(), startedAt: Date(timeIntervalSinceReferenceDate: 800_000_000))
         _ = try store.create(meta: meta)

@@ -406,25 +406,29 @@ private struct MeetingDetail: View {
             GroupLabel(text: "Transcript")
             Card {
                 VStack(alignment: .leading, spacing: Theme.Spacing.l) {
-                    ForEach(transcript) { segment in
+                    ForEach(MeetingSpeaker.turns(in: transcript), id: \.[0].id) { turn in
                         VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
                             HStack(spacing: Theme.Spacing.s) {
-                                speakerMenu(segment.speaker)
+                                speakerMenu(turn[0].speaker)
                                 Spacer(minLength: 0)
-                                if let start = segment.start {
+                                if let start = turn[0].start {
                                     Text(MeetingNotesPrompt.clock(start)).font(Theme.Fonts.caption()).foregroundStyle(Theme.Colors.muted)
                                 }
                             }
-                            Text(segment.text).font(Theme.Fonts.body()).foregroundStyle(Theme.Colors.ink)
-                        }
-                        .contextMenu {
-                            // A redo running now would write over the change.
-                            if !model.meetings.isBusy(meta.id) && !gone {
-                                Button("Edit", systemImage: "pencil") { editing = segment }
-                                Button("Delete", systemImage: "trash", role: .destructive) {
-                                    try? model.meetings.store.deleteTranscriptSegment(segment.id, meeting: meta.id)
-                                    load()
-                                }
+                            ForEach(turn) { segment in
+                                Text(segment.text).font(Theme.Fonts.body()).foregroundStyle(Theme.Colors.ink)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .contentShape(Rectangle())
+                                    .contextMenu {
+                                        // A redo running now would write over the change.
+                                        if !model.meetings.isBusy(meta.id) && !gone {
+                                            Button("Edit", systemImage: "pencil") { editing = segment }
+                                            Button("Delete", systemImage: "trash", role: .destructive) {
+                                                try? model.meetings.store.deleteTranscriptSegment(segment.id, meeting: meta.id)
+                                                load()
+                                            }
+                                        }
+                                    }
                             }
                         }
                     }

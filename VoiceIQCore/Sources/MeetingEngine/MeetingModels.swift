@@ -79,6 +79,17 @@ public enum MeetingSpeaker {
         return seen
     }
 
+    /// Runs of lines by the same speaker, in order, so a transcript reads as
+    /// one heading per turn rather than one per line.
+    public static func turns(in transcript: [TranscriptSegment]) -> [[TranscriptSegment]] {
+        var turns: [[TranscriptSegment]] = []
+        for segment in transcript {
+            if turns.last?.last?.speaker == segment.speaker { turns[turns.count - 1].append(segment) }
+            else { turns.append([segment]) }
+        }
+        return turns
+    }
+
     /// A speaker's name colour as light and dark RGB: green for the note
     /// owner, then one hue per other speaker in `others` order.
     public static func colorHex(_ id: String, others: [String]) -> (light: UInt32, dark: UInt32) {
