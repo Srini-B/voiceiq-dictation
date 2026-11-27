@@ -341,7 +341,7 @@ recoveries are far-field CHiME-6 talkers, and so is the background talk.
 5077 has an SNR of 0.3 dB, so the coordinator rule rejects it. The CHiME-6
 background talk peaks at −4 to −38 dBFS, a range that spans the
 recoveries' −14 to −21 dBFS. A level rule can't tell a far-field talker the user meant
-from one the user didn't. Under the decision rule #107 stays open, and the
+from one the user didn't. #107 was closed unmerged on 2026-11-27, and the
 re-send of the audio stays the empty-answer path.
 
 The chosen threshold would have been `peak ≥ −20 dBFS` (7 of 47 false
