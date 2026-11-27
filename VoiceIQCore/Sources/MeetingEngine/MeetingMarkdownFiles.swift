@@ -67,7 +67,7 @@ public struct MeetingMarkdownFiles: Sendable {
             if written.sha256 == hash, written.name == name { return .unchanged(previous) }
             // The file is VoiceiQ's, so a rename moves it, including one that
             // changes only letter case on a case-insensitive disk.
-            let url = written.name == name ? previous : freeURL(name, sameFileAs: previous)
+            let url = written.name == name ? previous : freeURL(name, sameFileAs: previous).url
             try record(Written(folder: path, name: name, file: url.lastPathComponent, sha256: hash))
             do {
                 if url != previous { try FileManager.default.moveItem(at: previous, to: url) }
@@ -78,8 +78,12 @@ public struct MeetingMarkdownFiles: Sendable {
             return .wrote(url)
         }
         // A file that appears at the free name before the write (a sync client, another app) is kept; the next number is tried.
+        // Numbering goes on from the one that failed, so a name fileExists misses (a dangling symlink) cannot loop.
+        var number = 1
         while true {
-            let url = freeURL(name)
+            let url: URL
+            (url, number) = freeURL(name, from: number)
+            number += 1
             try record(Written(folder: path, name: name, file: url.lastPathComponent, sha256: hash))
             do {
                 try data.write(to: url, options: .withoutOverwriting)
@@ -94,14 +98,14 @@ public struct MeetingMarkdownFiles: Sendable {
     }
 
     /// "<title> <date>.md", then " 2", " 3" while the name is taken by a file other than `own`.
-    private func freeURL(_ name: String, sameFileAs own: URL? = nil) -> URL {
+    private func freeURL(_ name: String, sameFileAs own: URL? = nil, from start: Int = 1) -> (url: URL, number: Int) {
         let ownID = own.flatMap { try? $0.resourceValues(forKeys: [.fileResourceIdentifierKey]).fileResourceIdentifier }
-        var number = 1
+        var number = start
         while true {
             let url = folder.appendingPathComponent(number == 1 ? "\(name).md" : "\(name) \(number).md")
-            if !FileManager.default.fileExists(atPath: url.path) { return url }
+            if !FileManager.default.fileExists(atPath: url.path) { return (url, number) }
             if let ownID, let id = try? url.resourceValues(forKeys: [.fileResourceIdentifierKey]).fileResourceIdentifier,
-               id.isEqual(ownID) { return url }
+               id.isEqual(ownID) { return (url, number) }
             number += 1
         }
     }

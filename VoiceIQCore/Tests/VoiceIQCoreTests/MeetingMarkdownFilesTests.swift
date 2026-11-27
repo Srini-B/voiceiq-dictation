@@ -104,6 +104,14 @@ final class MeetingMarkdownFilesTests: XCTestCase {
         try "And another".write(to: folder.appendingPathComponent(expectedName("Pricing sync", " 2")), atomically: true, encoding: .utf8)
         guard case .wrote(let url) = try files.save(id) else { return XCTFail("not written") }
         XCTAssertEqual(url.lastPathComponent, expectedName("Pricing sync", " 3"))
+
+        // A dangling link "exists" to the write but not to fileExists; the next number is used, not the same one forever.
+        let other = MeetingID()
+        _ = try store.create(meta: MeetingMeta(id: other, startedAt: startedAt, durationSeconds: 60, status: .done))
+        try store.save(notes: notes("Standup", summary: "Short."), id: other)
+        try FileManager.default.createSymbolicLink(at: folder.appendingPathComponent(expectedName("Standup")),
+                                                   withDestinationURL: root.appendingPathComponent("gone"))
+        XCTAssertEqual(try files.save(other), .wrote(folder.appendingPathComponent(expectedName("Standup", " 2"))))
         XCTAssertEqual(try String(contentsOf: folder.appendingPathComponent(expectedName("Pricing sync")), encoding: .utf8), "Someone else's file")
     }
 
