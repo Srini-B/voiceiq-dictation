@@ -77,6 +77,21 @@ python3 eval/cost.py eval/dictation/results/LABEL.json   # default: 2027-01 pric
 python3 eval/cost.py eval/dictation/results/LABEL.json --backup-share 0.08
 ```
 
+### From real use (no cost)
+
+There is no paid eval credit any more, so D5 and C1 of record come from the owner's own dictations and meetings. `realuse.py` reads the app's History and usage ledger on the Mac (`~/Library/Application Support/VoiceiQ/history.sqlite` and `usage.sqlite`), read-only, and makes no network call:
+
+```sh
+python3 eval/realuse.py --days 14            # 2027-01 prices by default; --prices 2026-12
+python3 eval/realuse.py --dir /path/to/copy  # a copied VoiceiQ folder
+```
+
+- D5: the same formula over each dictation's `pipelineSeconds`, which the app measures from key-up to inserted text, with every option the owner has on. Needs at least 10 dictations in the window. It also prints each step's median.
+- C1: this window's billed dictations (every session in the ledger, including recovered ones) and meetings (each at its recorded length) scaled to 30 days, each Gemini call priced at `cost.json`; models without a price there (meeting transcription, on device) use the cost the app booked. It also prints the prompt-cache share actually hit and Gemini calls per dictation, the extra-call check.
+- It covers the Mac it runs on. iPhone dictations are metered on the iPhone.
+
+A change that only Gemini can judge (a prompt edit) stays parked until real use or a measured result shows its effect.
+
 Every release reports cost per dictation and per meeting hour beside C1, with the typical profile (600 dictations and 10 meeting hours) as a check and the heavy profile reported but not gated. Gemini is the default for dictation, writing and meetings. On device is used only in rare cases (about 5% of use at most), only where it clearly helps and scores 90 or more, and never to meet the budget: cost comes down through caching, shorter prompts and fewer extra calls. The backup request and any early send-on-pause request share a cap of about 10% extra dictation calls. `cost.py` prices only a complete run whose runner sent the app's backup request (each result records `usage.secondRequests`); for an older run, `--backup-share` gives the share measured from the app. `cost.json` records where its prices, exchange rate and profiles come from. Meetings use a per-hour figure from the cost study until the meeting pipeline records its own token usage.
 
 ## Known limits
