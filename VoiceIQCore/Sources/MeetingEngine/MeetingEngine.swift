@@ -158,13 +158,37 @@ import VoiceIQSpeech
         }
     }
 
-    /// Transcribes again every meeting that failed only for want of Gemini.
+    /// Sends again every meeting that failed only for want of Gemini: the
+    /// notes alone when its transcript is saved (a synced meeting has no
+    /// audio, and edits to the transcript stay), else the recording.
     public func transcribeWaiting() {
         guard hasKey() else { return }
         for meta in store.list() where meta.waitsForGemini == true && !isBusy(meta.id) {
             guard case .failed = meta.status else { continue }
-            Log.meeting.info("meeting \(meta.id.uuid.uuidString, privacy: .public) waited for Gemini; transcribing now")
-            retry(id: meta.id)
+            Log.meeting.info("meeting \(meta.id.uuid.uuidString, privacy: .public) waited for Gemini; sending it again")
+            if let transcript = try? store.loadTranscript(id: meta.id), !transcript.isEmpty {
+                regenerateNotes(id: meta.id)
+            } else {
+                retry(id: meta.id)
+            }
+        }
+    }
+
+    /// Gemini can come back, or a quota reset, while the network stays up,
+    /// which no path change reports. So a meeting waiting with a key and a
+    /// network goes again after 5 minutes, then 10, 20, up to an hour apart.
+    private var waitingRetry: Task<Void, Never>?
+    private var waitingDelay: Duration = .seconds(300)
+
+    private func scheduleWaitingRetry() {
+        guard waitingRetry == nil else { return }
+        let delay = waitingDelay
+        waitingDelay = min(waitingDelay * 2, .seconds(3600))
+        waitingRetry = Task { [weak self] in
+            try? await Task.sleep(for: delay)
+            guard !Task.isCancelled, let self else { return }
+            self.waitingRetry = nil
+            self.transcribeWaiting()
         }
     }
 
@@ -438,6 +462,7 @@ import VoiceIQSpeech
         meta.waitsForGemini = MeetingFailure.waitsForGemini(error) ? true : nil
         try? store.save(meta: meta)
         processing[id] = nil
+        if meta.waitsForGemini == true, hasKey() { scheduleWaitingRetry() }
         switch error as? MeetingFailure {
         case .noKey: onNotice?("\(MeetingFailure.noun) saved — it is transcribed once you add a Gemini key")
         case nil where meta.waitsForGemini == true: onNotice?("\(MeetingFailure.noun) saved — it is transcribed when Gemini can be reached")
@@ -496,7 +521,9 @@ import VoiceIQSpeech
         try store.save(transcript: transcript, id: id)
         try store.save(notes: notes, id: id)
         meta.screenNames = ScreenSpeakerNames.byElimination(meta: meta, transcript: transcript, notes: notes)
-        meta.title = notes.title; meta.status = .done; meta.notesSpeakerNames = meta.speakerNames; meta.waitsForGemini = nil
+        meta.title = notes.title; meta.status = .done; meta.notesSpeakerNames = meta.speakerNames
+        if meta.waitsForGemini == true { waitingDelay = .seconds(300) }
+        meta.waitsForGemini = nil
         // Names typed while the notes were written stay, and show the notes as out of date.
         if let current = store.list().first(where: { $0.id == id }) { meta.speakerNames = current.speakerNames }
         try store.save(meta: meta)
