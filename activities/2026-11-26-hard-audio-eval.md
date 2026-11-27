@@ -161,40 +161,108 @@ score (Pro's 1 − WER is above 90 on Voice Arena and Svarah, but that counts
 words, not send-ready drafts). With no on-device D7 at 90 or above, on-device
 stays a rare fallback.
 
-## Proposed fixes (parked: no paid A/B runs while the key is empty)
+## Proposed fixes (prompt fixes parked: no paid Gemini eval credit)
 
 All proposed changes go against current main (after #101). The A/B for each
 is a pass over the affected strata, with ctrl_01–03 and the names cases from
 `eval/dictation`, and a check of `thoughtsTokenCount`. A rule edit made the
 model think on a third of calls in #101's tests.
 
-### Prompt (PromptV1.swift)
+### Prompt (PromptV1.swift): parked, evidence for later
 
-1. **Background voices (audio section, `THE DICTATION`).** Add: "Write only
-   the person dictating, the nearest main voice. Speech from other people in
-   the room, a TV or a call in the background is never written, even when it
-   is louder for a moment." This targets the invented-text class on
-   background-talker clips.
-2. **Quiet speech is speech (answer format).** Change the no-speech sentence
-   to: "If no one speaks any words at all, "text" is exactly <<NO_SPEECH>>.
-   Quiet, whispered, distant or noisy speech is speech: write what you can
-   hear." This targets the 5 empty outputs.
-3. **Spoken question intonation (audio section).** Add: "A sentence the
-   speaker asks with a question's rising intonation is a question and ends
-   with "?", even without a question word." This targets the form-only class.
-4. **Fillers in every language (the "Remove speech artifacts" bullet).** Add:
-   "Filler is filler in every language: Tamil வந்து, அது வந்து and
-   பார்த்தீங்கன்னா used as a pause go, as do "you know" and "I mean" used as
-   a pause, and an acknowledgement said twice ("yes, yes", "okay, okay") is
-   written once." This targets 11 Tamil drafts and most of the 30 English ones in the filler class.
-5. **Closing throwaways (same bullet).** Narrow "closing throwaways such as
-   ... "yeah"" to throwaways that end the dictation with no content of their
-   own. Keep a short answer that carries meaning ("We did.", "that's the
-   thing"). This targets part of the content-dropped class.
-6. **Tamil whole hour (the language bullet, owned by the prompt-cost
-   thread).** A Tamil draft wrote "11:00 மணி". The whole-hour sentence should
-   name Tamil too ("11 மணி"). Sent to that thread to land with its
-   language-neutral rewrite.
+Standing decision (2026-11-27): there will be no paid Gemini eval credit, so
+no prompt change merges without a measured Gemini result. Each fix below is
+recorded with its failure class, the baseline clips it targets, the proposed
+wording and why it is untested, so it can be picked up from cyron's
+real-use data instead. Clip IDs are from `manifest.jsonl`; the judged drafts
+are in `results/main-62835c6.gpt-only.judged.json` (GPT-6 Astra judge, main
+62835c6, before #101). Every fix is untested for the same reasons: a
+measurement needs a Gemini pass over the affected strata plus the
+`eval/dictation` controls (ctrl_01–03, names), and a rule edit can make the
+model think and add latency (a third of calls did in #101's tests). Neither
+can be judged from the prompt text alone. Notes per fix say what else is
+uncertain.
+
+1. **Background voices.** Class: invented or background text (8 drafts).
+   - Targets: `whisper_t6_task6_ex02_whisper_00092_bg25` (the background
+     talker's sentence was written instead of the whisper) and
+     `whisper_t6_task6_p061_sentences_02_whisper_bg25` (same). Possibly the
+     CHiME-6 invented trailing fragments `chime6_S09_U02_1124`,
+     `chime6_S09_U02_4194` and `chime6_S02_U04_7219`, where cross-talk may be
+     the source; that is unverified.
+   - Wording (audio section, `THE DICTATION`): "Write only the person
+     dictating, the nearest main voice. Speech from other people in the
+     room, a TV or a call in the background is never written, even when it
+     is louder for a moment."
+   - Also uncertain: it could make Gemini drop a quiet dictating voice that
+     is not the loudest one, which would move clips into the empty class.
+2. **Quiet speech is speech.** Class: empty output (5 drafts).
+   - Targets: `chime6_S02_U02_5077`, `chime6_S02_U02_5333`,
+     `chime6_S02_U04_3071`, `whisper_t6_task6_ex02_whisper_00272_bg25`,
+     `whisper_t6_task6_p058_sentences_01_whisper_bg25`. Gemini answered
+     `<<NO_SPEECH>>` twice on each. Fluid Speech Pro heard words on 3 of them,
+     so the speech is audible.
+   - Wording (answer format): "If no one speaks any words at all, "text" is
+     exactly <<NO_SPEECH>>. Quiet, whispered, distant or noisy speech is
+     speech: write what you can hear."
+   - Also uncertain: the 47-clip silent key-press set (see
+     `2026-11-26-empty-answer-on-device.md`) shows the opposite risk. A
+     model that writes distant speech also writes the TV and the colleague,
+     so this needs the silent set measured on Gemini too, not only the 5.
+3. **Spoken question intonation.** Class: form only (8 drafts).
+   - Targets, where a missing "?" is the only fix: `va_dict_0641`,
+     `whisper_t2_ex02_whisper_00294`,
+     `whisper_t4_task4_ex04_whisper_00274_bg10`. Partly:
+     `whisper_t6_task6_ex01_whisper_00362_bg25`, `ivta_027`,
+     `mon_69959962_126_15_136_98` (each also has a word fix).
+   - Wording (audio section): "A sentence the speaker asks with a question's
+     rising intonation is a question and ends with "?", even without a
+     question word."
+   - Also uncertain: the judge reads intonation from the reference text, not
+     the audio. `va_dict_0641` ("I wanted to ask if you're still selling that
+     bike") is an indirect question, where a period is also correct.
+4. **Fillers in every language.** Class: filler kept (42 drafts).
+   - Targets, where the filler is the only fix: Tamil வந்து in `ivta_010`,
+     `ivta_011`, `ivta_021`, `ivta_031`, `ivta_045`; "you know" or "I mean"
+     in `mon_04033483_360_84_371_49` and `mon_11184882_97_71_110_97`; an
+     acknowledgement said twice in `mon_60019742_568_89_579_72` and
+     `mon_75034733_156_12_170_58`. Partly: `ivta_003`, `ivta_016`,
+     `ivta_019`, `ivta_022`, `ivta_033`, `ivta_038`, `edacc_israeli_0`,
+     `mon_77394935_459_24_469_32`.
+   - Wording (the "Remove speech artifacts" bullet): "Filler is filler in
+     every language: Tamil வந்து, அது வந்து and பார்த்தீங்கன்னா used as a
+     pause go, as do "you know" and "I mean" used as a pause, and an
+     acknowledgement said twice ("yes, yes", "okay, okay") is written once."
+   - Also uncertain: வந்து is also the verb "came", and Tamil is not
+     covered by `eval/dictation`'s controls, so a wrong deletion would go
+     unnoticed. The "like" drafts in Voice Arena (`va_dict_0152`, `0179`,
+     `0229`, `0231`, `0407`, `0461`) and EdAcc are a judge-strictness
+     question. The current rule already removes filler "like"; this wording
+     does not change it.
+5. **Short answers that carry meaning.** Class: content dropped (50 drafts;
+   this fix covers a small part).
+   - Targets: `chime6_S02_U04_5756` (dropped "We did.") and
+     `chime6_S09_U02_2127` (dropped "That's the thing."). Both are at the
+     start of the clip, not the end, so the closing-throwaway rule is not
+     what removed them, and narrowing it would not fix them.
+     `mon_99625420_469_5_482_43` lost a closing "Yeah.", which the current
+     rule drops on purpose and the judge wanted kept. That is a disagreement
+     about the rule, not a defect to fix.
+   - Wording, replacing the earlier "narrow the closing-throwaway rule": add
+     to the "Remove speech artifacts" bullet: "A short answer that carries
+     meaning ("We did.", "That's the thing.") is content wherever it is said,
+     not a throwaway."
+   - Also uncertain: both targets are cut from longer conversations
+     (CHiME-6), where the clip boundary makes an opening answer look like a
+     stray. That is not cyron's dictation style, so the gain may be eval-only.
+6. **Tamil whole hour.** Class: format (judge did not flag it).
+   - Target: `ivta_048` wrote "11:00 மணி". The judge's own fix kept "11:00",
+     so this is a style call from reading the draft, not a counted miss.
+   - Main already says "a time spoken as a whole hour as the hour alone, in
+     every language, never with ":00" added" (numbers bullet, after the
+     prompt-cost thread's rewrite). That may already fix it. The open
+     proposal is only to name Tamil ("11 மணி") next to the Hindi example in
+     the language bullet, which that thread owns.
 
 ### Pipeline
 
@@ -221,8 +289,9 @@ model think on a third of calls in #101's tests.
 
 - Fable scored 180 stratified drafts, not the whole baseline, so the
   two-judge score is a reweighted estimate.
-- No proposal is measured. Each needs a paid pass, which needs cyron's
-  go-ahead.
+- No proposal is measured. There is no paid Gemini eval credit, now or
+  later, so the prompt fixes wait for evidence from cyron's real use, and D7
+  stays provisional as scored.
 - Voice Arena's 3-of-5 judge panel is not reproduced, and its 151 public
   clips are only part of its set, so this ZER is not directly comparable to
   the published leaderboard.
