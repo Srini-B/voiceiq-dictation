@@ -109,7 +109,8 @@ public final class MeetingStore: @unchecked Sendable {
     }
 
     /// The meeting as one Markdown document: the notes, the transcript, or the notes above the transcript.
-    public func markdown(id: MeetingID, parts: ExportParts) throws -> String {
+    /// With a range, the transcript holds only the turns that overlap it and its heading names the range.
+    public func markdown(id: MeetingID, parts: ExportParts, range: TranscriptRange? = nil) throws -> String {
         let folder = try requiredFolder(id), meta = try load(MeetingMeta.self, from: folder.appendingPathComponent("meta.json"))
         let notes = try? loadNotes(id: id)
         var lines = ["# \(meta.shownTitle(notes: notes) ?? "Meeting")", "", meta.startedAt.formatted(date: .long, time: .shortened),
@@ -126,8 +127,8 @@ public final class MeetingStore: @unchecked Sendable {
             append("Notes", notes.notes, to: &lines)
         }
         if parts.contains(.transcript) {
-            let transcript = (try? loadTranscript(id: id)) ?? []
-            lines += ["", "## Transcript", ""] + transcript.map { segment in
+            let transcript = ((try? loadTranscript(id: id)) ?? []).filter { range?.includes($0) ?? true }
+            lines += ["", range.map { "## Transcript (\($0.label))" } ?? "## Transcript", ""] + transcript.map { segment in
                 let time = segment.start.map { "[\(MeetingNotesPrompt.clock($0))] " } ?? ""
                 return "\(time)**\(meta.displayName(segment.speaker, notes: notes)):** \(segment.text)\n"
             }

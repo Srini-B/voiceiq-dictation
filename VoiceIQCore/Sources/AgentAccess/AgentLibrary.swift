@@ -56,6 +56,8 @@ public struct AgentLibrary: Sendable {
     public struct Meeting: Codable, Equatable, Sendable {
         public var meeting: MeetingListing
         public var notes: MeetingNotes?
+        /// The part of the transcript shown, such as "12:00 to 20:00"; absent when it is all there.
+        public var range: String?
         public var transcript: [Turn]
         /// Questions asked about the meeting in VoiceiQ, with their answers.
         public var chat: [MeetingChatTurn]
@@ -122,14 +124,15 @@ public struct AgentLibrary: Sendable {
         return found
     }
 
-    /// `reference` is a meeting id or "latest".
-    public func meeting(_ reference: String) throws -> Meeting {
+    /// `reference` is a meeting id or "latest". With a range, only the turns that overlap it.
+    public func meeting(_ reference: String, range: TranscriptRange? = nil) throws -> Meeting {
         let meta = try self.meta(reference)
         let notes = try? meetings.loadNotes(id: meta.id)
         let transcript = (try? meetings.loadTranscript(id: meta.id)) ?? []
         return Meeting(
             meeting: listing(meta, notes: notes, transcript: transcript, folders: meetings.foldersSnapshot()), notes: notes,
-            transcript: transcript.map {
+            range: range?.label,
+            transcript: transcript.filter { range?.includes($0) ?? true }.map {
                 Turn(speaker: meta.displayName($0.speaker, notes: notes), start: $0.start, end: $0.end, text: $0.text)
             },
             chat: meetings.loadChat(id: meta.id, setAsideUnreadable: false)
@@ -138,16 +141,18 @@ public struct AgentLibrary: Sendable {
 
     /// The meeting as the app exports it (notes above the transcript, with
     /// speaker names and [mm:ss] times), then the questions asked about it.
-    public func meetingMarkdown(_ reference: String) throws -> String {
+    /// With a range, the transcript holds only the turns that overlap it.
+    public func meetingMarkdown(_ reference: String, range: TranscriptRange? = nil) throws -> String {
         let meta = try self.meta(reference)
-        var text = try meetings.markdown(id: meta.id, parts: .both)
+        var text = try meetings.markdown(id: meta.id, parts: .both, range: range)
         let chat = meetings.loadChat(id: meta.id, setAsideUnreadable: false)
         if !chat.isEmpty {
             text += "\n## Questions asked in VoiceiQ\n"
             for turn in chat { text += "\n**Q:** \(turn.question)\n\n**A:** \(turn.answer)\n" }
         }
         let folders = folderNames(of: meta.id, in: meetings.foldersSnapshot())
-        let header = folders.isEmpty ? "" : "Folders: \(folders.joined(separator: ", "))\n"
+        var header = folders.isEmpty ? "" : "Folders: \(folders.joined(separator: ", "))\n"
+        if let range { header += "Transcript shown: \(range.label) only\n" }
         return "Meeting id: \(meta.id.uuid.uuidString)\n\(header)\n" + text
     }
 

@@ -254,6 +254,11 @@ SOFTWARE.
   addresses (`SpokenAddresses.swift`, from
   `ios/HEXShared/Formatting/SpokenCleanupRules.swift`), adapted with Hex's
   test cases in `VoiceIQCore/Tests/VoiceIQCoreTests/TidyTests.swift`
+- Also, from Hex at `f1c772c9`, rewritten in Swift: reading part of a
+  meeting by time into it, keeping the turns that overlap the range whole and
+  refusing a start that is not before the end (`OffsetRange` and
+  `parse_offset` in `src/meeting/query.rs`), in
+  `VoiceIQCore/Sources/MeetingEngine/TranscriptRange.swift` and `get_meeting`
 - License: MIT
 
 ```
