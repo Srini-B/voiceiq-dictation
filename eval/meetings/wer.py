@@ -8,7 +8,9 @@ owner's reference words against the words written for the owner (`speaker_id`
 "you"), and everyone else's reference words, in the order their turns start,
 against the words written for anyone else. People talking over each other on
 the far side cannot be put in one true order, so the far-side figure has a
-floor above zero that is the same for every pipeline.
+floor above zero. The floor depends on how long the written turns are: an
+output of 6 to 10 s lines orders overlapping speech differently from one of
+word-timed turns, so far-side figures of such pipelines compare only roughly.
 
 Each figure is printed twice: as spoken, and with hesitation sounds (um, uh,
 mm-hmm) removed from both sides, since some models leave them out by design.

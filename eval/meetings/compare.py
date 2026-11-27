@@ -46,6 +46,8 @@ def main():
     args = [a for a in sys.argv[1:] if a != "--drop-unmatched"]
     drop_unmatched = len(args) < len(sys.argv) - 1
     data, pipelines = Path(args[0]), [Path(p) for p in args[1:]]
+    if len({p.name for p in pipelines}) < len(pipelines):
+        raise SystemExit("two pipeline folders share a name; rows are labelled by folder name")
     meetings = sorted(set.intersection(*({f.stem for f in p.glob("*.json")} for p in pipelines)))
     results = {}
     for pipeline in pipelines:

@@ -42,7 +42,7 @@ It writes one folder of outputs per pipeline:
 | `voiceiq-pro`, `voiceiq-mini` | What the app does with Meetings set to On device (`LocalMeetingTranscriber`): each track decoded whole by Fluid Speech Pro or Mini, the far side split by pyannote community-1. |
 | `voiceiq-unified` | The same steps written out in the evaluator with the speech model swapped for the one Hex ships, Parakeet Unified English 0.6B (FluidAudio's Core ML build, `EVAL_MODEL=unified`). The app has no such model. |
 | `hex-pro`, `hex-mini`, `hex-unified` | Hex's offline pass, ported in `HexStyle.swift`, with the same speech model: chunks cut at pauses (6 to 10 s), a speech detector before the model, microphone lines that echo the far side dropped. Two speakers, as Hex writes them: the owner and "Them". |
-| `hex-speakers-*` | The same words with the far side split by VoiceiQ's speaker model and joined into turns as the app does. `hex-speakers-noecho-*` drops no microphone line. |
+| `hex-speakers-*` | The same words with the far side split by VoiceiQ's speaker model, which hears the far track raised as it does in the app, and joined into turns as the app does. `hex-speakers-noecho-*` drops no microphone line. |
 
 ```sh
 python3 prepare.py ~/evaldata --no-synthetic --ami ES2004a ES2004b ES2004c ES2004d IS1009a TS3003a
@@ -61,7 +61,8 @@ python3 hex_upstream_speakers.py ~/evalout/hex-upstream ~/evalout/far-speakers ~
 
 `compare.py DATA_DIR PIPELINE_DIR …` prints M1–M4, plain WER and run time
 for each pipeline, pooled and per meeting; `--drop-unmatched` scores them
-again without the speakers matched to nobody. `wer.py` is the plain WER alone:
+again without the speakers matched to nobody, and `unmatched.py DATA_DIR
+PIPELINE_DIR` says who those speakers are. `wer.py` is the plain WER alone:
 words against words on each track, speakers ignored, which M4 (cpWER) cannot
 show because it also charges every word given to the wrong person.
 

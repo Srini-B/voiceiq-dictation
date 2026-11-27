@@ -45,7 +45,9 @@ def main():
                      and not any(a < t["end"] and t["start"] < b for a, b in others)]
             on_mic, seconds = level(mic, alone)
             on_far, _ = level(far, alone)
-            cells.append(f"{who}{'*' if who == owner else ''}: mic {on_mic:.0f}, far {on_far:.0f} ({seconds:.0f} s alone)")
+            star = "*" if who == owner else ""
+            cells.append(f"{who}{star}: mic {on_mic:.0f}, far {on_far:.0f} ({seconds:.0f} s alone)" if alone
+                         else f"{who}{star}: n/a (never alone)")
         print(f"{name} | " + " | ".join(cells))
 
 

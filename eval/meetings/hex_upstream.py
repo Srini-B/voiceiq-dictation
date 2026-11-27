@@ -16,14 +16,15 @@ speech detector installed:
 
 Usage: python3 hex_upstream.py HEX_BINARY HEX_SUPPORT_DIR DATA_DIR OUT_DIR [meeting-id ...]
 """
-import json, os, shutil, subprocess, sys, time, wave
+import json, os, shutil, struct, subprocess, sys, time
 
 
 def wav(source, target):
     subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", source, "-ac", "1", "-ar", "16000",
                     "-c:a", "pcm_f32le", target], check=True)
-    # ffmpeg writes float WAV as WAVE_FORMAT_EXTENSIBLE; the frame count is in the data chunk either way.
-    return os.path.getsize(target) // 4
+    # ffmpeg writes float WAV as WAVE_FORMAT_EXTENSIBLE, which the wave module refuses; the data chunk's size gives the frames.
+    header = open(target, "rb").read(4096)
+    return struct.unpack_from("<I", header, header.index(b"data") + 4)[0] // 4
 
 
 def main():

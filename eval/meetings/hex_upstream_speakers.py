@@ -5,7 +5,8 @@ Hex writes the far side as one speaker ("Them"). This gives each of Hex's
 far-side lines to the person VoiceiQ's speaker model heard for most of it
 (LocalMeetingsEval writes those stretches to OUT/far-speakers), so the two
 can be scored as one pipeline: Hex's own model and chunking for the words,
-pyannote community-1 for who said them. A line no stretch overlaps takes the
+pyannote community-1 for who said them. The run time stays Hex's alone; the
+speaker model's time is in the hex-speakers outputs (`seconds.speakers`). A line no stretch overlaps takes the
 nearest stretch's speaker. Hex gives lines, not word times, so a line that two
 people share goes to one of them.
 

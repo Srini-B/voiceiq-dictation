@@ -96,9 +96,10 @@ func samples(_ url: URL) throws -> [Float] {
 /// 16 kHz mono samples to words, with times in seconds from the first sample.
 typealias Decode = @Sendable ([Float]) async throws -> [LocalMeetingResult.Word]
 
-/// The models take a second of audio or more.
+/// Hex pads a chunk to 1.5 s before the model (`pad_for_parakeet`).
 func padded(_ samples: [Float]) -> [Float] {
-    samples.count < Hex.rate ? samples + [Float](repeating: 0, count: Hex.rate - samples.count) : samples
+    let minimum = Hex.rate * 3 / 2
+    return samples.count < minimum ? samples + [Float](repeating: 0, count: minimum - samples.count) : samples
 }
 
 /// Fluid Speech Pro or Mini, loaded as `LocalMeetingJob` loads it, with a new decoder state for each call.
@@ -267,8 +268,12 @@ func evaluate(_ input: Input, source: URL) async throws {
     }, seconds: seconds, duration: call.duration, details: facts)
 
     clock = Date()
+    // The speaker model hears the far side as it does in the app, raised by `TrackAudio.gain`.
+    let raisedFar = folder.appendingPathComponent("eval-far-speakers.caf")
+    try LocalMeetingTranscriber.writeMix(duration: call.system.duration, samples: call.system.samples, to: raisedFar)
+    facts["far_gain"] = call.system.gain
     let stretches = try await LocalSpeechInference.transcribeMeeting(
-        LocalMeetingRequest(speechDirectory: nil, diarizerDirectory: diarizerFolder, audio: folder.appendingPathComponent("system.caf"))).segments
+        LocalMeetingRequest(speechDirectory: nil, diarizerDirectory: diarizerFolder, audio: raisedFar)).segments
     seconds["speakers"] = Date().timeIntervalSince(clock)
     seconds["transcribe"] = seconds["transcribe"]! + seconds["speakers"]!
     // Who spoke when on the far side, for hex_upstream_speakers.py.
