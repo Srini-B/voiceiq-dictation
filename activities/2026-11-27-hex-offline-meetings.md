@@ -195,10 +195,12 @@ reading, same keep or drop), so this is Hex's rule and not a porting error.
 
 **TS3003a breaks every per-track pipeline.** The owner says 79% of the words.
 `hex-speakers-pro` writes 1,622 words under one far-side voice. The three
-remote people said 519 words between them. Far-side WER is 280 to 320% for every Hex variant. The
-app sees that the mic is not echo-free (10.4 dB residual), decodes one mixed
-track instead, and scores 75.0 / 74.4 / 73.3 / 69.7. The port has no such
-fallback, and TS3003a is most of its pooled M4 loss.
+remote people said 519 words between them. Far-side WER is 280 to 320% for
+every Hex variant. The app sees that the mic is not echo-free (10.4 dB
+residual), decodes one mixed track instead, and scores
+75.0 / 74.4 / 73.3 / 69.7. The port has no such fallback. TS3003a is about
+half of its pooled M4 loss: `hex-speakers-pro` is 9.2 points under
+`voiceiq-pro` on six meetings and 4.4 under on the other five.
 
 **Hex's own build writes better words on four meetings.** Its plain WER is
 lower than `voiceiq-pro` on ES2004a to d (21.4, 22.7, 32.7, 26.4 against
@@ -272,7 +274,7 @@ and what changed:
 | --- | --- |
 | The Hex speaker rows gave the speaker model the raw far track. The app gives it the track raised by `TrackAudio.gain` (0.9× to 13.4× on these meetings). | Fixed in `main.swift`. All `hex-speakers-*` rows and `hex-upstream-speakers` were run again. The Hex rows fell by 0.6 to 2.3 points. Every table here has the new numbers. |
 | "Under 90" cannot be the reason to reject Hex, because the existing on-device option is under 90 too. Hex's own words with VoiceiQ's speakers beat `voiceiq-pro` pooled. | The verdict is rewritten. It now says where Hex is better and rests on the runtime, the port, the room, the missing fallback and the run time. |
-| "Hex chunking does not beat VoiceiQ" was too strong. The pooled M4 loss is mostly TS3003a, where the port has no mixed fallback. | Reworded, with the five-meeting, same-model comparison beside the pooled one. |
+| "Hex chunking does not beat VoiceiQ" was too strong. The pooled M4 loss is mostly TS3003a, where the port has no mixed fallback. | Reworded, with the five-meeting, same-model comparison beside the pooled one. Measured: `hex-speakers-pro` is 9.2 points under `voiceiq-pro` on M4 over six meetings and 4.4 under over the other five. |
 | The port padded short chunks to 1.0 s. Hex pads to 1.5 s. | Fixed. The words did not change: the pooled WER of every port row is the same to 0.1, and `hex-pro` on ES2004b is the same text. |
 | The Gemini comparison covers one meeting, main's Gemini path has changed since (7099982), and Gemini's turns go through `foldingStrayVoices` and 20 s paragraphs while the on-device path uses neither. | Added under Limits. "Under Gemini on every item" now says "on ES2004a". |
 | The 84 to 98% overlap figure came from a script that was not committed. | `unmatched.py` is committed. The figure for `voiceiq-pro` is 89 to 96%. |
