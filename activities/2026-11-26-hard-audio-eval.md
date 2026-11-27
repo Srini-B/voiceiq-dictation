@@ -221,8 +221,7 @@ uncertain.
      ("um, uh") must still be <<NO_SPEECH>>, as the `clean_filler` control
      expects, so the A/B has to include it.
    - Also uncertain: the 47-clip silent key-press set (see
-     `2026-11-26-empty-answer-on-device.md` on the unmerged #107 branch,
-     `empty-answer-on-device`) shows the opposite risk. A
+     "Empty-answer fallback (PR #107)" below) shows the opposite risk. A
      model that writes distant speech also writes the TV and the colleague,
      so this needs the silent set measured on Gemini too, not only the 5.
 3. **Spoken question intonation.** Class: form only (8 drafts).
@@ -286,6 +285,78 @@ uncertain.
      Hindi ones gave ml_hi 1/3 and ml_ta_4 2/3, with one call thinking.
      Neither was kept. Measured again on 2026-11-27 with Tamil added next to
      the Hindi example (see below) and proposed in #112.
+
+### Empty-answer fallback (PR #107): closed
+
+Decision rule set by the integrator: merge with a level gate only if, on a
+set of at least 40 key presses with no near-field speaker, the gate lets
+through at most 1 false insert and still keeps at least 2 of Pro's 3
+recoveries. A wrong insert costs more than a missed dictation, so the
+false-insert limit wins a tie.
+
+**Silent key-press set (47 clips, 3.3–10 s, built from audio already on
+hand, no paid calls):**
+
+| Kind | Clips | Source | Pro wrote words |
+| --- | --- | --- | --- |
+| Room | 11 | CHiME-6 dev Kinect stretches with no annotated speech (4 still hold unannotated talk) | 4 |
+| Talk | 12 | CHiME-6 dev Kinect stretches of other people talking, away from the eval clips | 11 |
+| TV | 8 | An eval utterance (Voice Arena, Svarah, Monsoon) with 0.5 s reverb, 10–25 dB under the near-field dictation level, over room tone | 8 |
+| Call | 8 | The same through a 300–3400 Hz phone band | 5 |
+| Under | 8 | The same with 0.8 s reverb (a farther talker) | 7 |
+| **Total** | **47** | | **35** |
+
+The near-field level is the median loudest 100 ms frame of 40 Voice Arena
+dictations (−16 dBFS). Half of the mixed clips sit over a quiet room
+(50 dB under that level), half over a CHiME-6 room as recorded. CHiME-6
+zeroes some Kinect stretches; any stretch with a zeroed 100 ms frame was
+skipped, because a key press never records digital silence.
+
+Fluid Speech Pro (the app's pinned revision, loaded as `ParakeetSession`
+loads it) ran on a Mac satellite over the 47 clips and the 5 empty-answer
+clips. With no gate it writes words on 35 of 47 silent clips and recovers
+3 of 3.
+
+**Gates tried.** Each feature is computed from 100 ms RMS frames of the
+saved recording (the rate of the ~10 Hz level tap). Only `snr` uses the
+app's level curve; `peak`, `p90` and `floor` are unsaturated RMS in dBFS.
+The app's live `peakDB` saturates at −20.8 dBFS, so a `peak` gate above
+that (such as −8 dBFS) could only be built by reading the saved file, not
+from the coordinator's numbers:
+
+- `snr`: the coordinator's `measuredSNR` (peak minus 10th-percentile
+  floor, on the level curve that saturates at −20.8 dBFS);
+- `peak`: the loudest 100 ms frame in dBFS;
+- `p90`: the 90th-percentile frame;
+- `p90 − floor`.
+
+Each was swept on its own and in every pair:
+
+| Gate | False inserts (of 47) | Recoveries (of 3) |
+| --- | --- | --- |
+| None (control) | 35 | 3 |
+| Coordinator rule, `snr ≥ 8 dB` | 31 | 2 |
+| Best `snr` threshold keeping 2 recoveries (≥ 18 dB) | 26 | 2 |
+| Best of all, `peak ≥ −20 dBFS` (also the best pair) | 7 | 2 |
+| Strictest that keeps ≤ 1 false insert (`peak ≥ −8 dBFS`) | 1 | 0 |
+
+No threshold meets both limits. The two goals conflict: two of the three
+recoveries are far-field CHiME-6 talkers, and so is the background talk.
+5077 has an SNR of 0.3 dB, so the coordinator rule rejects it. The CHiME-6
+background talk peaks at −4 to −38 dBFS, a range that spans the
+recoveries' −14 to −21 dBFS. A level rule can't tell a far-field talker the user meant
+from one the user didn't. #107 was closed unmerged on 2026-11-27, and the
+re-send of the audio stays the empty-answer path.
+
+The chosen threshold would have been `peak ≥ −20 dBFS` (7 of 47 false
+inserts, 2 of 3 recoveries), but it fails the limit, so nothing ships.
+
+Neon's review of #107 found further blockers, recorded here for anyone who
+revives the idea: with Dictation on Gemini, Pro is rarely loaded, so its
+cold load (about 15 s on a Mac) mostly runs past the 5 s cap; Pro has no
+Tamil; and the fallback's text could skip Gemini's writing rules when an
+old writing-Off setting is stored. A revival needs Pro already warm, a
+language check, and a gate shown to hold the false-insert limit.
 
 ### Prompt fixes measured on a prepaid route (2026-11-27)
 
@@ -377,7 +448,7 @@ was given up.
    transcript to Gemini as text instead (`PromptV1.transcriptSection`). That
    is the same number of calls and a cheaper text request. Pro's raw
    transcript was right on 3 of the 5 empty clips here; the Gemini writing
-   step on it was not run. PR #107 built this and is parked: on 47 key
+   step on it was not run. PR #107 built this and was closed: on 47 key
    presses with no near-field speaker Pro wrote background speech on 35, and
    no level gate kept 2 of the 3 recoveries at 1 false insert or fewer.
 2. **On-device transcript as a hint (Mac with Fluid Speech Pro).** Pro
