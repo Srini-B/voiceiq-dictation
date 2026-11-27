@@ -66,6 +66,23 @@ final class MeetingMarkdownFilesTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: first.path))
     }
 
+    /// On a case-insensitive disk the old name still "exists" under the new
+    /// case; the file must be renamed in place, not copied to " 2".
+    func testARenameThatChangesOnlyLetterCaseKeepsOneFile() throws {
+        try finish()
+        guard case .wrote = try files.save(id) else { return XCTFail("not written") }
+        try store.renameMeeting(id: id, title: "Pricing Sync")
+        XCTAssertEqual(try files.save(id), .wrote(files.folder.appendingPathComponent(expectedName("Pricing Sync"))))
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: files.folder.path), [expectedName("Pricing Sync")])
+    }
+
+    func testAnUnreadableLedgerWritesNothing() throws {
+        try finish()
+        try Data("not json".utf8).write(to: files.ledgerURL)
+        XCTAssertThrowsError(try files.save(id))
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: files.folder.path), [])
+    }
+
     func testAFileTheUserEditedIsLeftAlone() throws {
         try finish()
         guard case .wrote(let url) = try files.save(id) else { return XCTFail("not written") }

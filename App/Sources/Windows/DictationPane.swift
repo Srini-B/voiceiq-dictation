@@ -167,13 +167,15 @@ struct DictationPane: View {
                 Toggle("Save each meeting as Markdown", isOn: Binding(
                     get: { markdownFolder != nil },
                     set: { on in
-                        if on { chooseMarkdownFolder() } else { settings.setMeetingMarkdownFolder(nil); markdownFolder = nil }
+                        // The panel opens after this change, not inside SwiftUI's update; Cancel leaves the switch off.
+                        if on { Task { @MainActor in chooseMarkdownFolder() } } else { settings.setMeetingMarkdownFolder(nil); markdownFolder = nil }
                     }
                 ))
                 if let markdownFolder {
                     LabeledContent("Folder") {
                         HStack {
                             Text(FileManager.default.displayName(atPath: markdownFolder.path))
+                                .lineLimit(1).truncationMode(.middle)
                                 .help(markdownFolder.path)
                             Button("Choose…") { chooseMarkdownFolder() }
                         }

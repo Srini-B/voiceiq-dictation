@@ -811,13 +811,19 @@ A name already taken gets ` 2`, ` 3`, and so on.
 - **Your edits win.** `meeting-markdown-files.json` in Application Support
   keeps, per meeting, the file VoiceiQ wrote and the SHA-256 of what it
   wrote. A later change rewrites the file only while it still has that
-  hash; a rename writes the new name and removes the old file under the same
-  rule. If you edited, moved or deleted the file, it is left alone and the
+  hash; a rename moves the file to the new name under the same rule (a
+  change of letter case only, too). The name and the text come from one
+  reading of the meeting. A file that appears at a new name just before the
+  write is kept, and the next number is used. If the ledger cannot be read,
+  nothing is written until it can (it is never treated as empty, which would
+  give every meeting a second copy). The ledger is written before the file. If you edited, moved or deleted the file, it is left alone and the
   log says so (`meeting Markdown not rewritten`). Choosing a new folder starts
   fresh files there.
 - **Never in the way.** Writing runs on its own background queue after the
   meeting is saved. A folder that is gone or not writable logs
-  `meeting Markdown could not be saved` and changes nothing else.
+  `meeting Markdown could not be saved` and changes nothing else. The log
+  names the meeting by its id, never its title or the folder, and the
+  folder setting is logged by length only.
 - The app is not sandboxed (see `App/VoiceIQ.entitlements`), so the folder
   is kept as a path, without a security-scoped bookmark.
 

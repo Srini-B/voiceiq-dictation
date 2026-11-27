@@ -195,7 +195,7 @@ final class AgentAPITests: XCTestCase {
         XCTAssertNil(whole["range"])
         XCTAssertEqual((whole["transcript"] as? [[String: Any]])?.count, 5)
 
-        for bad: [String: Any] in [["from": "90"], ["to": "1:75"], ["from": "ten past"], ["from": 90], ["from": "5:00", "to": "2:00"]] {
+        for bad: [String: Any] in [["from": "90"], ["to": "1:75"], ["to": "1:5"], ["from": "1:5:00"], ["from": "ten past"], ["from": 90], ["from": "5:00", "to": "2:00"]] {
             let answer = try toolText("get_meeting", bad.merging(["id": id]) { $1 })
             XCTAssertTrue(answer.isError, "\(bad)")
         }
@@ -203,6 +203,22 @@ final class AgentAPITests: XCTestCase {
         let rejected = get("/v1/meetings/\(id)", query: ["from": "-1:00", "format": "markdown"])
         XCTAssertEqual(rejected.status, 400)
         XCTAssertTrue(String(decoding: rejected.body, as: UTF8.self).contains("mm:ss or h:mm:ss"))
+
+        // Strict tool callers send null for an argument they leave out.
+        let nulls = try toolText("get_meeting", ["id": id, "from": NSNull(), "to": "0:30"])
+        XCTAssertFalse(nulls.isError, nulls.text)
+        XCTAssertTrue(nulls.text.contains("## Transcript (up to 00:30)"), nulls.text)
+
+        // A transcript without times cannot be cut; it comes whole, saying why, rather than empty.
+        let untimed = MeetingID()
+        _ = try meetings.create(meta: MeetingMeta(id: untimed, startedAt: Date(timeIntervalSinceNow: -20000), durationSeconds: 600, status: .done))
+        try meetings.save(transcript: [TranscriptSegment(speaker: "you", text: "Imported without times.", chunkIndex: 0)], id: untimed)
+        let imported = try toolText("get_meeting", ["id": untimed.uuid.uuidString, "from": "1:00"]).text
+        XCTAssertTrue(imported.contains("Imported without times."), imported)
+        XCTAssertTrue(imported.contains("this transcript has no times; leave out from and to"), imported)
+        let importedJSON = try XCTUnwrap(JSONSerialization.jsonObject(
+            with: get("/v1/meetings/\(untimed.uuid.uuidString)", query: ["to": "5:00"]).body) as? [String: Any])
+        XCTAssertEqual((importedJSON["transcript"] as? [[String: Any]])?.count, 1)
     }
 
     func testParseWaitsForTheWholeBody() {

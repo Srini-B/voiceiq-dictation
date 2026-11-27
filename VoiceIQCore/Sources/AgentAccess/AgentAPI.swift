@@ -240,8 +240,11 @@ public struct AgentAPI: Sendable {
             return json(library.meetings(query: query, since: since, limit: Self.limit(limit, default: 20), folder: folder))
         case "get_meeting":
             let reference = arguments["id"] as? String ?? "latest"
-            // A number such as 90 is not a time the transcript shows; it gets the error naming the forms.
-            func bound(_ key: String) -> String? { arguments[key].map { $0 as? String ?? "\($0)" } }
+            // A number such as 90 is not a time the transcript shows; it gets the error naming the forms. A null is left out.
+            func bound(_ key: String) -> String? {
+                guard let value = arguments[key], !(value is NSNull) else { return nil }
+                return value as? String ?? "\(value)"
+            }
             let range: TranscriptRange?
             switch TranscriptRange.parse(from: bound("from"), to: bound("to")) {
             case .success(let parsed): range = parsed

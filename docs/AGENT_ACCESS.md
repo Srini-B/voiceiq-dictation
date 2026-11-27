@@ -97,18 +97,21 @@ A meeting's title is the one the user gave it with Rename…, else the notes'.
 
 An hour of meeting is about 10,000 words. `from` and `to` are times into the
 meeting written as the transcript shows them, `mm:ss` or `h:mm:ss` (`12:30`,
-`75:00`, `1:05:00`); either can be left out. With a range:
+`75:00`, `1:05:00`), with two digits after each colon; either can be left
+out, and a JSON `null` counts as left out. With a range:
 
 - the transcript holds only the turns that overlap it, each kept whole, so a
   turn that starts before `from` and runs past it is included, and one that
-  starts at `to` is not. Turns with no time (some imported meetings) are left
-  out;
+  starts at `to` is not. A transcript with no times at all (some imported
+  or older meetings) cannot be cut, so it comes whole with `Transcript shown:
+  all of it, because this transcript has no times; leave out from and to`
+  (the same text in the JSON `range`);
 - the Markdown says `Transcript shown: 12:30 to 20:00 only` under the id and
   heads the transcript `## Transcript (12:30 to 20:00)` (`from 12:30 on`,
   `up to 20:00`); the JSON has `"range": "12:30 to 20:00"`;
 - the notes, folders and questions come whole, as without a range.
 
-Anything else, such as `90`, `1:75` or a `from` that is not earlier than
+Anything else, such as `90`, `1:75`, `1:5` or a `from` that is not earlier than
 `to`, is an error naming the accepted forms (`isError` over MCP, `400` from
 the JSON API). The server's instructions and the tool description tell agents
 to read the notes first and then only the part they need on long meetings.

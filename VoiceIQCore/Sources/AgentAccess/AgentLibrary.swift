@@ -129,9 +129,11 @@ public struct AgentLibrary: Sendable {
         let meta = try self.meta(reference)
         let notes = try? meetings.loadNotes(id: meta.id)
         let transcript = (try? meetings.loadTranscript(id: meta.id)) ?? []
+        let untimed = range != nil && !Self.hasTimes(transcript)
+        let range = untimed ? nil : range
         return Meeting(
             meeting: listing(meta, notes: notes, transcript: transcript, folders: meetings.foldersSnapshot()), notes: notes,
-            range: range?.label,
+            range: untimed ? Self.untimedNotice : range?.label,
             transcript: transcript.filter { range?.includes($0) ?? true }.map {
                 Turn(speaker: meta.displayName($0.speaker, notes: notes), start: $0.start, end: $0.end, text: $0.text)
             },
@@ -144,6 +146,8 @@ public struct AgentLibrary: Sendable {
     /// With a range, the transcript holds only the turns that overlap it.
     public func meetingMarkdown(_ reference: String, range: TranscriptRange? = nil) throws -> String {
         let meta = try self.meta(reference)
+        let untimed = range != nil && !Self.hasTimes((try? meetings.loadTranscript(id: meta.id)) ?? [])
+        let range = untimed ? nil : range
         var text = try meetings.markdown(id: meta.id, parts: .both, range: range)
         let chat = meetings.loadChat(id: meta.id, setAsideUnreadable: false)
         if !chat.isEmpty {
@@ -153,8 +157,14 @@ public struct AgentLibrary: Sendable {
         let folders = folderNames(of: meta.id, in: meetings.foldersSnapshot())
         var header = folders.isEmpty ? "" : "Folders: \(folders.joined(separator: ", "))\n"
         if let range { header += "Transcript shown: \(range.label) only\n" }
+        if untimed { header += "Transcript shown: \(Self.untimedNotice)\n" }
         return "Meeting id: \(meta.id.uuid.uuidString)\n\(header)\n" + text
     }
+
+    /// An imported or older meeting can have turns without times; a range
+    /// would leave them all out and look like nothing was said, so it shows all of them.
+    private static func hasTimes(_ transcript: [TranscriptSegment]) -> Bool { transcript.contains { $0.start != nil } }
+    static let untimedNotice = "all of it, because this transcript has no times; leave out from and to"
 
     private func meta(_ reference: String) throws -> MeetingMeta {
         let all = meetings.list()

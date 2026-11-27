@@ -40,37 +40,68 @@ public struct MeetingMarkdownFiles: Sendable {
 
     /// Writes or rewrites the meeting's file. Call from a background queue.
     public func save(_ id: MeetingID) throws -> Outcome {
-        guard let meta = store.list().first(where: { $0.id == id }), case .done = meta.status,
-              let notes = try? store.loadNotes(id: id) else { return .notReady }
-        let data = Data(try store.markdown(id: id, parts: .both).utf8)
+        guard let meta = try? store.load(MeetingMeta.self, from: store.requiredFolder(id).appendingPathComponent("meta.json")),
+              case .done = meta.status, (try? store.loadNotes(id: id)) != nil else { return .notReady }
+        let markdown = try store.markdown(id: id, parts: .both)
+        // The name comes from the document's own "# title" line, so a rename
+        // saved meanwhile cannot pair one title's name with another's body.
+        let name = Self.name(title: String(markdown.prefix { $0 != "\n" }.dropFirst(2)), startedAt: meta.startedAt)
+        let data = Data(markdown.utf8)
         let hash = Self.sha256(data)
-        let name = Self.name(title: meta.shownTitle(notes: notes) ?? "Meeting", startedAt: meta.startedAt)
-        let key = id.uuid.uuidString
-        var ledger = (try? JSONDecoder().decode([String: Written].self, from: Data(contentsOf: ledgerURL))) ?? [:]
-
-        var previous: URL?, sameName: URL?
-        if let written = ledger[key], written.folder == folder.standardizedFileURL.path {
-            let file = folder.appendingPathComponent(written.file)
-            guard let current = try? Data(contentsOf: file), Self.sha256(current) == written.sha256 else { return .leftAlone(file) }
-            if written.sha256 == hash, written.name == name { return .unchanged(file) }
-            previous = file
-            if written.name == name { sameName = file }
+        let key = id.uuid.uuidString, path = folder.standardizedFileURL.path
+        // Only a missing ledger starts empty: an unreadable one would give every meeting a " 2" copy.
+        var ledger: [String: Written] = [:]
+        if FileManager.default.fileExists(atPath: ledgerURL.path) {
+            ledger = try JSONDecoder().decode([String: Written].self, from: Data(contentsOf: ledgerURL))
         }
-        let url = sameName ?? freeURL(name)
-        try data.write(to: url, options: .atomic)
-        if let previous, previous != url { try? FileManager.default.removeItem(at: previous) }
-        ledger[key] = Written(folder: folder.standardizedFileURL.path, name: name, file: url.lastPathComponent, sha256: hash)
-        try FileManager.default.createDirectory(at: ledgerURL.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try JSONEncoder().encode(ledger).write(to: ledgerURL, options: .atomic)
-        return .wrote(url)
+        // The ledger is written before the file, so a failed ledger write changes nothing on disk.
+        func record(_ written: Written?) throws {
+            ledger[key] = written
+            try FileManager.default.createDirectory(at: ledgerURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try JSONEncoder().encode(ledger).write(to: ledgerURL, options: .atomic)
+        }
+
+        if let written = ledger[key], written.folder == path {
+            let previous = folder.appendingPathComponent(written.file)
+            guard let current = try? Data(contentsOf: previous), Self.sha256(current) == written.sha256 else { return .leftAlone(previous) }
+            if written.sha256 == hash, written.name == name { return .unchanged(previous) }
+            // The file is VoiceiQ's, so a rename moves it, including one that
+            // changes only letter case on a case-insensitive disk.
+            let url = written.name == name ? previous : freeURL(name, sameFileAs: previous)
+            try record(Written(folder: path, name: name, file: url.lastPathComponent, sha256: hash))
+            do {
+                if url != previous { try FileManager.default.moveItem(at: previous, to: url) }
+            } catch { try? record(written); throw error }
+            do {
+                try data.write(to: url, options: .atomic)
+            } catch { try? record(Written(folder: path, name: name, file: url.lastPathComponent, sha256: written.sha256)); throw error }
+            return .wrote(url)
+        }
+        // A file that appears at the free name before the write (a sync client, another app) is kept; the next number is tried.
+        while true {
+            let url = freeURL(name)
+            try record(Written(folder: path, name: name, file: url.lastPathComponent, sha256: hash))
+            do {
+                try data.write(to: url, options: .withoutOverwriting)
+                return .wrote(url)
+            } catch let error as CocoaError where error.code == .fileWriteFileExists {
+                continue
+            } catch {
+                try? record(nil)
+                throw error
+            }
+        }
     }
 
-    /// "<title> <date>.md", then " 2", " 3" while the name is taken.
-    private func freeURL(_ name: String) -> URL {
+    /// "<title> <date>.md", then " 2", " 3" while the name is taken by a file other than `own`.
+    private func freeURL(_ name: String, sameFileAs own: URL? = nil) -> URL {
+        let ownID = own.flatMap { try? $0.resourceValues(forKeys: [.fileResourceIdentifierKey]).fileResourceIdentifier }
         var number = 1
         while true {
             let url = folder.appendingPathComponent(number == 1 ? "\(name).md" : "\(name) \(number).md")
             if !FileManager.default.fileExists(atPath: url.path) { return url }
+            if let ownID, let id = try? url.resourceValues(forKeys: [.fileResourceIdentifierKey]).fileResourceIdentifier,
+               id.isEqual(ownID) { return url }
             number += 1
         }
     }
@@ -80,7 +111,7 @@ public struct MeetingMarkdownFiles: Sendable {
         day.locale = Locale(identifier: "en_US_POSIX")
         day.dateFormat = "yyyy-MM-dd"
         // Finder shows ":" as "/", and "/" separates paths; a leading dot hides the file.
-        var title = title.components(separatedBy: CharacterSet(charactersIn: "/:\\").union(.newlines)).joined(separator: "-")
+        var title = title.components(separatedBy: CharacterSet(charactersIn: "/:\\").union(.newlines).union(.controlCharacters)).joined(separator: "-")
             .trimmingCharacters(in: CharacterSet.whitespaces.union(CharacterSet(charactersIn: ".")))
         // Filenames are limited to 255 bytes; leave room for " yyyy-MM-dd", " 99" and ".md".
         title = String(title.prefix(120))
@@ -103,14 +134,16 @@ public struct MeetingMarkdownFiles: Sendable {
             MeetingMarkdownFiles.queue.async {
                 guard let folder = SettingsStore().meetingMarkdownFolder else { return }
                 do {
+                    // The meeting's id, not its title or the folder: DebugLog keeps the text of .auto values.
                     switch try MeetingMarkdownFiles(store: store, folder: folder).save(MeetingID(uuid: uuid)) {
-                    case .wrote(let url): Log.meeting.info("meeting saved as Markdown: \(url.lastPathComponent)")
-                    case .leftAlone(let url):
-                        Log.meeting.info("meeting Markdown not rewritten: \(url.lastPathComponent) was changed outside VoiceiQ")
+                    case .wrote: Log.meeting.info("meeting \(raw, privacy: .public) saved as Markdown")
+                    case .leftAlone:
+                        Log.meeting.info("meeting Markdown not rewritten: the file for \(raw, privacy: .public) was changed outside VoiceiQ")
                     case .notReady, .unchanged: break
                     }
                 } catch {
-                    Log.meeting.error("meeting Markdown could not be saved: \(error)")
+                    let error = error as NSError
+                    Log.meeting.error("meeting Markdown could not be saved for \(raw, privacy: .public): \(error.domain, privacy: .public) \(error.code)")
                 }
             }
         }

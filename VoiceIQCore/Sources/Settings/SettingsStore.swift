@@ -26,7 +26,7 @@ public struct SettingsStore: Sendable {
 
     /// Text the user wrote about themselves or their work, logged by size
     /// only however short it is.
-    private static let privateTextKeys: Set<String> = [customWritingRulesKey, "meetingOwnerName"]
+    private static let privateTextKeys: Set<String> = [customWritingRulesKey, "meetingOwnerName", "meetingMarkdownFolder"]
 
     /// Short values as they are; long text, lists and data by size only, so
     /// dictionaries stay out of the log.

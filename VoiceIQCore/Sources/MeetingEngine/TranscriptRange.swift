@@ -36,11 +36,12 @@ public struct TranscriptRange: Equatable, Sendable {
         return .success(range)
     }
 
-    /// "mm:ss" (any number of minutes) or "h:mm:ss".
+    /// "mm:ss" (any number of minutes) or "h:mm:ss"; after a colon, always two digits.
     static func seconds(_ raw: String) -> Double? {
         let parts = raw.trimmingCharacters(in: .whitespaces).split(separator: ":", omittingEmptySubsequences: false)
         guard parts.count == 2 || parts.count == 3,
-              parts.allSatisfy({ !$0.isEmpty && $0.count <= 6 && $0.allSatisfy { $0.isASCII && $0.isNumber } }) else { return nil }
+              parts.allSatisfy({ !$0.isEmpty && $0.count <= 6 && $0.allSatisfy { $0.isASCII && $0.isNumber } }),
+              parts.dropFirst().allSatisfy({ $0.count == 2 }) else { return nil }
         let values = parts.compactMap { Int($0) }
         guard values.count == parts.count, values.last! < 60, parts.count == 2 || values[1] < 60 else { return nil }
         return Double(values.reduce(0) { $0 * 60 + $1 })
