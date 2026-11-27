@@ -115,14 +115,31 @@ def main() -> None:
 
     dict_calls = [r for r in calls if r["activity"] == "dictation"]
     dict_inr, dict_booked = cost(dict_calls)
-    n = len(done)
+    # Volume and cost per dictation count every dictation the ledger billed,
+    # including recovered ones and those History has since deleted; D5 keeps
+    # only the ones inserted live.
+    n = len({r["sessionID"] for r in dict_calls if r["sessionID"]}) or len(done)
     text = sum(r["textIn"] + r["cachedIn"] for r in dict_calls)
     sessions = {r["sessionID"] for r in dict_calls if r["sessionID"]}
     gemini_dict = [r for r in dict_calls if r["model"].startswith("gemini")]
     meet_calls = [r for r in calls if r["activity"] == "meeting"]
     meet_inr, meet_booked = cost(meet_calls)
-    meet_hours = sum(r["audioSeconds"] or r["audioIn"] / audio_tokens_per_second(r["model"])
-                     for r in meet_calls if r["stage"] in ("meetingTranscribe", "liveTranscribe")) / 3600
+    # Each meeting once, at its recorded length (meetings/<date>-<id>/meta.json);
+    # billed audio is only the speech sent, so it would undercount. A meeting
+    # whose folder is gone falls back to the audio its calls carried.
+    lengths = {}
+    for meta in (args.dir / "meetings").glob("*/meta.json"):
+        lengths[meta.parent.name[-36:].upper()] = json.loads(meta.read_text()).get("durationSeconds", 0)
+    seconds, from_audio = 0.0, 0
+    for sid in {r["sessionID"] for r in meet_calls if r["sessionID"]}:
+        if sid.upper() in lengths:
+            seconds += lengths[sid.upper()]
+        else:
+            from_audio += 1
+            seconds += sum(r["audioSeconds"] or r["audioIn"] / audio_tokens_per_second(r["model"])
+                           for r in meet_calls if r["sessionID"] == sid
+                           and r["stage"] in ("meetingTranscribe", "liveTranscribe"))
+    meet_hours = seconds / 3600
 
     month_dict = dict_inr * per_month
     month_meet = meet_inr * per_month
@@ -139,7 +156,7 @@ def main() -> None:
         },
         "meetings": {"hours": round(meet_hours, 2), "per_month_hours": round(meet_hours * per_month, 1),
                      "inr_per_hour": round(meet_inr / meet_hours, 1) if meet_hours else None,
-                     "calls_at_booked_cost": meet_booked},
+                     "meetings_without_folder": from_audio, "calls_at_booked_cost": meet_booked},
         "month_inr": {"dictation": round(month_dict), "meetings": round(month_meet), "total": round(month_dict + month_meet)},
         "C1": c1(month_dict + month_meet, cfg["target_inr"], cfg["ceiling_inr"]),
     }, indent=1))

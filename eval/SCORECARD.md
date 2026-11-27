@@ -87,7 +87,7 @@ python3 eval/realuse.py --dir /path/to/copy  # a copied VoiceiQ folder
 ```
 
 - D5: the same formula over each dictation's `pipelineSeconds`, which the app measures from key-up to inserted text, with every option the owner has on. Needs at least 10 dictations in the window. It also prints each step's median.
-- C1: this window's dictations and meeting hours scaled to 30 days, each Gemini call priced at `cost.json`; models without a price there (meeting transcription, on device) use the cost the app booked. It also prints the prompt-cache share actually hit and Gemini calls per dictation, the extra-call check.
+- C1: this window's billed dictations (every session in the ledger, including recovered ones) and meetings (each at its recorded length) scaled to 30 days, each Gemini call priced at `cost.json`; models without a price there (meeting transcription, on device) use the cost the app booked. It also prints the prompt-cache share actually hit and Gemini calls per dictation, the extra-call check.
 - It covers the Mac it runs on. iPhone dictations are metered on the iPhone.
 
 A change that only Gemini can judge (a prompt edit) stays parked until real use or a measured result shows its effect.
