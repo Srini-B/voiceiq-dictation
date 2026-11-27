@@ -157,6 +157,70 @@ final class AgentAPITests: XCTestCase {
         XCTAssertEqual(get("/v1/meetings", query: ["folder": "nope"]).status, 404)
     }
 
+    func testGetMeetingReadsOnlyTheTurnsInATimeRange() throws {
+        let meetings = MeetingStore(root: root.appendingPathComponent("meetings"))
+        let long = MeetingID()
+        var meta = MeetingMeta(id: long, startedAt: Date(timeIntervalSinceNow: -9000), durationSeconds: 3730, status: .done)
+        meta.speakerNames = ["s1": "Priya"]
+        _ = try meetings.create(meta: meta)
+        try meetings.save(transcript: [
+            TranscriptSegment(speaker: "you", text: "We start with the roadmap.", chunkIndex: 0, start: 0, end: 50),
+            TranscriptSegment(speaker: "s1", text: "Budget first, then hiring.", chunkIndex: 0, start: 55, end: 130),
+            TranscriptSegment(speaker: "you", text: "Hiring waits for May.", chunkIndex: 0, start: 130, end: 200),
+            TranscriptSegment(speaker: "s1", text: "Then the launch.", chunkIndex: 0, start: 300, end: 320),
+            TranscriptSegment(speaker: "you", text: "One more thing after the hour.", chunkIndex: 1, start: 3700, end: 3720),
+        ], id: long)
+        try meetings.save(notes: MeetingNotes(title: "Planning", summary: "Budget, hiring and launch.", decisions: [],
+                                              actions: [], notes: []), id: long)
+        let id = long.uuid.uuidString
+
+        // A turn that started before from but runs past it is kept whole; one starting at to is not.
+        let middle = try toolText("get_meeting", ["id": id, "from": "2:00", "to": "05:00"])
+        XCTAssertFalse(middle.isError)
+        XCTAssertTrue(middle.text.contains("Transcript shown: 02:00 to 05:00 only\n"), middle.text)
+        XCTAssertTrue(middle.text.contains("## Transcript (02:00 to 05:00)"), middle.text)
+        XCTAssertTrue(middle.text.contains("[00:55] **Priya:** Budget first, then hiring."), middle.text)
+        XCTAssertTrue(middle.text.contains("[02:10] **You:** Hiring waits for May."), middle.text)
+        XCTAssertFalse(middle.text.contains("roadmap") || middle.text.contains("Then the launch") || middle.text.contains("after the hour"), middle.text)
+        XCTAssertTrue(middle.text.contains("## Summary\nBudget, hiring and launch."), middle.text)
+
+        let late = try toolText("get_meeting", ["id": id, "from": "1:00:00"]).text
+        XCTAssertTrue(late.contains("## Transcript (from 1:00:00 on)\n\n[1:01:40] **You:** One more thing after the hour."), late)
+        XCTAssertFalse(late.contains("Then the launch."), late)
+
+        let early = try XCTUnwrap(JSONSerialization.jsonObject(with: get("/v1/meetings/\(id)", query: ["to": "0:30"]).body) as? [String: Any])
+        XCTAssertEqual(early["range"] as? String, "up to 00:30")
+        XCTAssertEqual((early["transcript"] as? [[String: Any]])?.compactMap { $0["text"] as? String }, ["We start with the roadmap."])
+        let whole = try XCTUnwrap(JSONSerialization.jsonObject(with: get("/v1/meetings/\(id)").body) as? [String: Any])
+        XCTAssertNil(whole["range"])
+        XCTAssertEqual((whole["transcript"] as? [[String: Any]])?.count, 5)
+
+        for bad: [String: Any] in [["from": "90"], ["to": "1:75"], ["to": "1:5"], ["from": "1:5:00"], ["from": "ten past"], ["from": 90], ["from": "5:00", "to": "2:00"]] {
+            let answer = try toolText("get_meeting", bad.merging(["id": id]) { $1 })
+            XCTAssertTrue(answer.isError, "\(bad)")
+        }
+        XCTAssertTrue(try toolText("get_meeting", ["id": id, "from": "90"]).text.contains("mm:ss or h:mm:ss"))
+        let rejected = get("/v1/meetings/\(id)", query: ["from": "-1:00", "format": "markdown"])
+        XCTAssertEqual(rejected.status, 400)
+        XCTAssertTrue(String(decoding: rejected.body, as: UTF8.self).contains("mm:ss or h:mm:ss"))
+
+        // Strict tool callers send null for an argument they leave out.
+        let nulls = try toolText("get_meeting", ["id": id, "from": NSNull(), "to": "0:30"])
+        XCTAssertFalse(nulls.isError, nulls.text)
+        XCTAssertTrue(nulls.text.contains("## Transcript (up to 00:30)"), nulls.text)
+
+        // A transcript without times cannot be cut; it comes whole, saying why, rather than empty.
+        let untimed = MeetingID()
+        _ = try meetings.create(meta: MeetingMeta(id: untimed, startedAt: Date(timeIntervalSinceNow: -20000), durationSeconds: 600, status: .done))
+        try meetings.save(transcript: [TranscriptSegment(speaker: "you", text: "Imported without times.", chunkIndex: 0)], id: untimed)
+        let imported = try toolText("get_meeting", ["id": untimed.uuid.uuidString, "from": "1:00"]).text
+        XCTAssertTrue(imported.contains("Imported without times."), imported)
+        XCTAssertTrue(imported.contains("this transcript has no times; leave out from and to"), imported)
+        let importedJSON = try XCTUnwrap(JSONSerialization.jsonObject(
+            with: get("/v1/meetings/\(untimed.uuid.uuidString)", query: ["to": "5:00"]).body) as? [String: Any])
+        XCTAssertEqual((importedJSON["transcript"] as? [[String: Any]])?.count, 1)
+    }
+
     func testParseWaitsForTheWholeBody() {
         let head = "POST /mcp?x=1 HTTP/1.1\r\nHost: 127.0.0.1:47823\r\nContent-Length: 4\r\n\r\n"
         XCTAssertEqual(AgentAPI.parse(Data((head + "ab").utf8)), .incomplete)

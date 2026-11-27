@@ -254,6 +254,16 @@ SOFTWARE.
   addresses (`SpokenAddresses.swift`, from
   `ios/HEXShared/Formatting/SpokenCleanupRules.swift`), adapted with Hex's
   test cases in `VoiceIQCore/Tests/VoiceIQCoreTests/TidyTests.swift`
+- Also, from Hex at `f1c772c9`, rewritten in Swift: reading part of a
+  meeting by time into it, keeping the turns that overlap the range whole and
+  refusing a start that is not before the end (`OffsetRange` and
+  `parse_offset` in `src/meeting/query.rs`), in
+  `VoiceIQCore/Sources/MeetingEngine/TranscriptRange.swift` and `get_meeting`
+- Also, from Hex at `ee9b069a`, rewritten in Swift: rewriting a meeting's
+  Markdown file only while it still matches the hash of what the app last
+  wrote, so the user's own edits are never overwritten
+  (`src/meeting/notes_file.rs`, `src/meeting/write/markdown.rs`), in
+  `VoiceIQCore/Sources/MeetingEngine/MeetingMarkdownFiles.swift`
 - License: MIT
 
 ```

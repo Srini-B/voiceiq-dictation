@@ -21,6 +21,20 @@ struct DictationPane: View {
         pressReturnApps.append(bundleID)
     }
 
+    /// Cancelling leaves the setting as it was.
+    private func chooseMarkdownFolder() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.canCreateDirectories = true
+        panel.directoryURL = markdownFolder
+        panel.prompt = "Choose"
+        panel.message = "Each meeting's notes and transcript are saved here as Markdown."
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        settings.setMeetingMarkdownFolder(url)
+        markdownFolder = url
+    }
+
     private let settings = SettingsStore()
     @State private var sounds = SettingsStore().soundsEnabled
     @State private var soundVolume = SettingsStore().soundVolume
@@ -34,6 +48,7 @@ struct DictationPane: View {
     @State private var screenContext = SettingsStore().screenContextEnabled
     @State private var copyRecovered = SettingsStore().copyRecoveredToClipboard
     @State private var calendar = SettingsStore().calendarForMeetings && CalendarMeetings.isAuthorized
+    @State private var markdownFolder = SettingsStore().meetingMarkdownFolder
     @State private var voiceIsolation = SettingsStore().voiceIsolation
     @State private var pressReturn = SettingsStore().pressReturnAfterPaste
     @State private var pressReturnApps = SettingsStore().pressReturnApps
@@ -149,8 +164,25 @@ struct DictationPane: View {
                     .onChange(of: calendar) { _, enabled in
                         Task { calendar = await CalendarMeetings.connect(enabled) }
                     }
+                Toggle("Save each meeting as Markdown", isOn: Binding(
+                    get: { markdownFolder != nil },
+                    set: { on in
+                        // The panel opens after this change, not inside SwiftUI's update; Cancel leaves the switch off.
+                        if on { Task { @MainActor in chooseMarkdownFolder() } } else { settings.setMeetingMarkdownFolder(nil); markdownFolder = nil }
+                    }
+                ))
+                if let markdownFolder {
+                    LabeledContent("Folder") {
+                        HStack {
+                            Text(FileManager.default.displayName(atPath: markdownFolder.path))
+                                .lineLimit(1).truncationMode(.middle)
+                                .help(markdownFolder.path)
+                            Button("Choose…") { chooseMarkdownFolder() }
+                        }
+                    }
+                }
             } footer: {
-                Text("Screen context reads the text in the window you're dictating into, on this Mac, when dictation starts and when you switch apps (never a password field or a password manager), and sends that text, not an image, so names and paths on screen are spelled right. It is read while you speak, so it adds almost nothing to a dictation. When a call app or a meeting tab is using the microphone, the pill asks before recording; the Meeting recording shortcut starts and stops a recording at any time. Notes appear under Meetings. While a meeting records, VoiceiQ reads the name tags in the call window on this Mac to name its speakers; no image is kept. With the calendar on, notes take the title of the event you're in and the spelling of its invitees' names, and your next meeting shows in Meetings and the menu-bar menu\(calendar || !CalendarMeetings.isDenied ? "" : "; calendar access is off in System Settings → Privacy & Security → Calendars").")
+                Text("Screen context reads the text in the window you're dictating into, on this Mac, when dictation starts and when you switch apps (never a password field or a password manager), and sends that text, not an image, so names and paths on screen are spelled right. It is read while you speak, so it adds almost nothing to a dictation. When a call app or a meeting tab is using the microphone, the pill asks before recording; the Meeting recording shortcut starts and stops a recording at any time. Notes appear under Meetings. While a meeting records, VoiceiQ reads the name tags in the call window on this Mac to name its speakers; no image is kept. With the calendar on, notes take the title of the event you're in and the spelling of its invitees' names, and your next meeting shows in Meetings and the menu-bar menu\(calendar || !CalendarMeetings.isDenied ? "" : "; calendar access is off in System Settings → Privacy & Security → Calendars"). With Save each meeting as Markdown on, each meeting's notes and transcript are saved to that folder as \u{201C}title date.md\u{201D} when its notes are made, and updated when you redo the notes, rename it or edit the transcript. A file you've changed yourself is never overwritten.")
             }
         }
         .onAppear { microphones = AudioInputDevices.list() }
@@ -166,6 +198,7 @@ struct DictationPane: View {
             case "screenContextEnabled": screenContext = settings.screenContextEnabled
             case "copyRecoveredToClipboard": copyRecovered = settings.copyRecoveredToClipboard
             case "preferredInputDeviceUID": preferredMicrophone = settings.preferredInputDeviceUID
+            case "meetingMarkdownFolder": markdownFolder = settings.meetingMarkdownFolder
             default: break
             }
         }

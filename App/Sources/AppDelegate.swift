@@ -54,6 +54,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Meetings too: notes, transcripts and their questions; always on.
         Task { await MeetingSync.shared.start() }
         MeetingFolderSync.shared.start()
+        // Each finished meeting as Markdown in the user's folder, while Settings has one.
+        MeetingMarkdownFiles.follow(MeetingStore())
         // The local API and MCP server for coding agents, while Settings has it on.
         AgentServer.shared.followSettings()
         let controller = DictationController()

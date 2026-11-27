@@ -181,6 +181,10 @@ provider's terms. It is off by default; details in
   `.m4a` copy of a recording into its own folder (`playback/`), which goes
   when the recording is deleted or its audio is removed by retention;
   Download also saves one where you choose (Downloads on the Mac).
+- With **Save each meeting as Markdown** on (Mac, off by default), each
+  meeting's notes and transcript are also written to the folder you chose,
+  as plain Markdown. Deleting a meeting in VoiceiQ leaves that file; it is
+  yours to keep or delete ([MEETINGS.md](MEETINGS.md#save-each-meeting-as-markdown)).
 - Logs. See [DEBUG_LOG.md](DEBUG_LOG.md). The opt-in debug log (Settings ›
   Advanced) stays on the device until you export or share it. It never holds
   API keys, tokens or text the app marks private, and keeps 7 days.

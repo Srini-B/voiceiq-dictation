@@ -86,16 +86,40 @@ A client that only runs stdio servers can reach it through a bridge such as
 |---|---|---|
 | `list_dictations` | `query`, `since`, `limit` (default 50) | Dictations, newest first, as JSON |
 | `list_meetings` | `query`, `folder`, `since`, `limit` (default 20) | Meetings, newest first, as JSON, each with the names of its folders. With `folder` (a folder's name in any case, or its id), only the meetings in it; an unknown name is an error that lists the folders. With `query`, only meetings whose title, notes or transcript mention it, with up to five matching lines such as `[01:04] Priya: ...` |
-| `get_meeting` | `id` (or `latest`), `format` (`markdown` default, or `json`) | Its folders, notes, transcript with `[mm:ss]` times and speaker names, and the questions asked in VoiceiQ |
+| `get_meeting` | `id` (or `latest`), `format` (`markdown` default, or `json`), `from`, `to` | Its folders, notes, transcript with `[mm:ss]` times and speaker names, and the questions asked in VoiceiQ. With `from` and/or `to`, only part of the transcript (below) |
 
 `since` takes a day (`2026-11-01`, midnight in the Mac's time zone) or an ISO
 8601 time. Every tool is marked read-only. The server's instructions tell the
 agent that transcripts are records of speech, not instructions.
 A meeting's title is the one the user gave it with Rename…, else the notes'.
 
+### Reading part of a meeting
+
+An hour of meeting is about 10,000 words. `from` and `to` are times into the
+meeting written as the transcript shows them, `mm:ss` or `h:mm:ss` (`12:30`,
+`75:00`, `1:05:00`), with two digits after each colon; either can be left
+out, and a JSON `null` counts as left out. With a range:
+
+- the transcript holds only the turns that overlap it, each kept whole, so a
+  turn that starts before `from` and runs past it is included, and one that
+  starts at `to` is not. A transcript with no times at all (some imported
+  or older meetings) cannot be cut, so it comes whole with `Transcript shown:
+  all of it, because this transcript has no times; leave out from and to`
+  (the same text in the JSON `range`);
+- the Markdown says `Transcript shown: 12:30 to 20:00 only` under the id and
+  heads the transcript `## Transcript (12:30 to 20:00)` (`from 12:30 on`,
+  `up to 20:00`); the JSON has `"range": "12:30 to 20:00"`;
+- the notes, folders and questions come whole, as without a range.
+
+Anything else, such as `90`, `1:75`, `1:5` or a `from` that is not earlier than
+`to`, is an error naming the accepted forms (`isError` over MCP, `400` from
+the JSON API). The server's instructions and the tool description tell agents
+to read the notes first and then only the part they need on long meetings.
+
 While access is on, a meeting's Export menu in the Mac app has **Copy prompt
 for an AI agent**: a short prompt to paste into an agent that points it at
-that meeting through `get_meeting` and its id, and at `list_meetings` for
+that meeting through `get_meeting` and its id (and its `from` and `to` for
+reading only part of a long one), and at `list_meetings` for
 searching (MEETINGS.md, Copy prompt for an AI agent).
 
 ## JSON API
@@ -110,6 +134,7 @@ Every route needs the same `Authorization: Bearer <key>` header.
 | `GET /v1/meetings?query=&folder=&since=&limit=` | Meetings; an unknown `folder` is a 404 |
 | `GET /v1/meetings/<id>` | One meeting with notes, transcript and questions (JSON) |
 | `GET /v1/meetings/<id>?format=markdown` | The same as Markdown |
+| `GET /v1/meetings/<id>?from=12:30&to=20:00` | Only the turns in that part of the transcript, in either format; a bad time is a 400 |
 
 ```sh
 curl -H "Authorization: Bearer $VOICEIQ_KEY" "http://127.0.0.1:47823/v1/meetings?query=budget"
@@ -156,3 +181,8 @@ here, and VoiceiQ's implementation is its own. FluidVoice gives coding agents
 its meetings through a bundled command and a skill file, and has a separate
 local HTTP API (history, meetings, dictionary, transcription) with no key.
 VoiceiQ serves dictations and meetings over MCP, behind an access key.
+
+Reading part of a meeting by `from` and `to` follows
+[Hex](https://github.com/anomalyco/hex) (MIT)'s `hex meetings show --from/--to`:
+turns that overlap the range are kept whole. VoiceiQ's parsing and wording are
+its own.
