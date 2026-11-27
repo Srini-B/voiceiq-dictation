@@ -6,7 +6,8 @@ makes no network call.
 
     python3 eval/realuse.py [--days 14] [--prices 2027-01] [--dir PATH]
 
---dir defaults to ~/Library/Application Support/VoiceiQ. Run it on the Mac
+--dir defaults to ~/Library/Application Support/VoiceiQ, or the "Voice IQ"
+or "Jot" folder an older build used. Run it on the Mac
 that dictates (it covers that Mac's dictations and calls; iPhone rows that
 reached it through iCloud are left out, since their calls are metered on the
 iPhone).
@@ -64,8 +65,16 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--days", type=float, default=14)
     ap.add_argument("--prices", help="price period in cost.json; default its score_prices")
-    ap.add_argument("--dir", type=Path, default=Path.home() / "Library/Application Support/VoiceiQ")
+    ap.add_argument("--dir", type=Path, help="the app's data folder; default: the one FileLayout.appSupportRoot uses")
     args = ap.parse_args()
+    if args.dir is None:
+        # FileLayout.appSupportRoot: "VoiceiQ", or a folder an older build used
+        # that the app has not moved yet.
+        support = Path.home() / "Library/Application Support"
+        found = [support / n for n in ("VoiceiQ", "Voice IQ", "Jot") if (support / n / "history.sqlite").exists()]
+        if not found:
+            raise SystemExit(f"no history.sqlite under {support}/VoiceiQ, Voice IQ or Jot; pass --dir")
+        args.dir = found[0]
     cfg = json.loads((HERE / "cost.json").read_text())
     period = args.prices or cfg["score_prices"]
     prices = cfg["prices_usd_per_mtok"][period]
