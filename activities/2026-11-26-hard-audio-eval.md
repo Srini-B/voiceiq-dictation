@@ -174,9 +174,17 @@ Standing decision (2026-11-27): there will be no paid Gemini eval credit, so
 no prompt change merges without a measured Gemini result. Each fix below is
 recorded with its failure class, the baseline clips it targets, the proposed
 wording and why it is untested, so it can be picked up from cyron's
-real-use data instead. Clip IDs are from `manifest.jsonl`; the judged drafts
-are in `results/main-62835c6.gpt-only.judged.json` (GPT-6 Astra judge, main
-62835c6, before #101). Every fix is untested for the same reasons: a
+real-use data instead. Clip IDs are from the eval manifest and the drafts
+from the judged baseline (GPT-6 Astra judge, main 62835c6, before #101).
+Neither is in the repository on purpose: the manifest holds dataset
+transcripts under their own licences, some non-commercial, and the results
+hold model output. The manifest is rebuilt for free by the `fetch.py`,
+`monsoon_more.py` and `chime6.py` steps in `eval/hard-audio/README.md`, into
+the data folder (`HARD_AUDIO_DATA`, default `.amp/in/orb-backup/hard/`). The
+judged file, `eval/hard-audio/results/main-62835c6.gpt-only.judged.json`
+(git-ignored), needs a paid `run.py` pass at 62835c6 and then `judge.py`.
+`judge.py` reuses `judge-cache.jsonl` from the data folder when it is
+there. Every fix is untested for the same reasons: a
 measurement needs a Gemini pass over the affected strata plus the
 `eval/dictation` controls (ctrl_01–03, names), and a rule edit can make the
 model think and add latency (a third of calls did in #101's tests). Neither
