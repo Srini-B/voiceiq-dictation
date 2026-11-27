@@ -299,7 +299,7 @@ private struct MeetingDetail: View {
             if let chat { MeetingChatInput(chat: chat) }
         }
         .themedBackground()
-        .navigationTitle(meta.shownTitle(notes: notes) ?? "Notes")
+        .navigationTitle(meta.displayTitle(notes: notes) ?? "Notes")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             if !gone {
@@ -345,7 +345,10 @@ private struct MeetingDetail: View {
     @ViewBuilder private func notesContent(_ notes: MeetingNotes) -> some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.m) {
             HStack(alignment: .firstTextBaseline) {
-                Text(meta.shownTitle(notes: notes) ?? notes.title).font(Theme.Fonts.title2()).foregroundStyle(Theme.Colors.ink)
+                VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                    Text(meta.shownTitle(notes: notes) ?? notes.title).font(Theme.Fonts.title2()).foregroundStyle(Theme.Colors.ink)
+                    Text(meta.whenText).font(Theme.Fonts.footnote()).foregroundStyle(Theme.Colors.muted)
+                }
                 Spacer(minLength: Theme.Spacing.s)
                 if let kind = notes.type.flatMap(MeetingKind.init(rawValue:)) {
                     StatusChip(text: kind.displayName, tone: .off)
@@ -406,25 +409,29 @@ private struct MeetingDetail: View {
             GroupLabel(text: "Transcript")
             Card {
                 VStack(alignment: .leading, spacing: Theme.Spacing.l) {
-                    ForEach(transcript) { segment in
+                    ForEach(MeetingSpeaker.turns(in: transcript), id: \.[0].id) { turn in
                         VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
                             HStack(spacing: Theme.Spacing.s) {
-                                speakerMenu(segment.speaker)
+                                speakerMenu(turn[0].speaker)
                                 Spacer(minLength: 0)
-                                if let start = segment.start {
+                                if let start = turn[0].start {
                                     Text(MeetingNotesPrompt.clock(start)).font(Theme.Fonts.caption()).foregroundStyle(Theme.Colors.muted)
                                 }
                             }
-                            Text(segment.text).font(Theme.Fonts.body()).foregroundStyle(Theme.Colors.ink)
-                        }
-                        .contextMenu {
-                            // A redo running now would write over the change.
-                            if !model.meetings.isBusy(meta.id) && !gone {
-                                Button("Edit", systemImage: "pencil") { editing = segment }
-                                Button("Delete", systemImage: "trash", role: .destructive) {
-                                    try? model.meetings.store.deleteTranscriptSegment(segment.id, meeting: meta.id)
-                                    load()
-                                }
+                            ForEach(turn) { segment in
+                                Text(segment.text).font(Theme.Fonts.body()).foregroundStyle(Theme.Colors.ink)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .contentShape(Rectangle())
+                                    .contextMenu {
+                                        // A redo running now would write over the change.
+                                        if !model.meetings.isBusy(meta.id) && !gone {
+                                            Button("Edit", systemImage: "pencil") { editing = segment }
+                                            Button("Delete", systemImage: "trash", role: .destructive) {
+                                                try? model.meetings.store.deleteTranscriptSegment(segment.id, meeting: meta.id)
+                                                load()
+                                            }
+                                        }
+                                    }
                             }
                         }
                     }

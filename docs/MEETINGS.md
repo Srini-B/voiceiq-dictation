@@ -70,7 +70,8 @@ voice (`MeetingTranscriber.foldingStrayVoices`). On AMI ES2004a it was 8.7 s
 of overlapping "yeah" and "okay".
 
 A speaker's turn that runs past 20 s ends at its next sentence end, so a long
-answer reads as paragraphs with their own times (`MeetingTranscriber.paragraphSeconds`).
+answer reads as paragraphs (`MeetingTranscriber.paragraphSeconds`). The
+transcript views show them under one heading with the turn's first time.
 
 ## Call detection
 
@@ -525,12 +526,13 @@ queried.
 
 ## Editing the transcript
 
-A finished meeting's transcript can be corrected one line (one speaker's
-turn) at a time. On the Mac, right-click a line in the transcript column:
+A finished meeting's transcript can be corrected one line at a time; a
+turn under one speaker heading can hold several lines, each edited on its
+own. On the Mac, right-click a line in the transcript column:
 **Edit** opens a field above the transcript with the line's words (Return
 or Save keeps them, Escape or Cancel leaves them), and **Delete…** asks
 first, as deleting a meeting does. On iPhone, touch and hold a line in the
-note's Transcript card: **Edit** opens a sheet with the words, and
+note's Transcript card, which also shows one heading per turn: **Edit** opens a sheet with the words, and
 **Delete** removes the line at once, as a swipe deletes a note. Neither is
 offered while the meeting is recording, transcribing or writing notes,
 since a redo then would write over the change.
@@ -616,9 +618,9 @@ mirrored or AirPlay display, still shows the pill.
 
 | File | Shows |
 | --- | --- |
-| `MeetingsView.swift` | Record button (with Mute my mic and Discard under it while recording) and folder menu above the list, each row's folders, the folder line under the title ([Folders](#folders)), the detail header (title, progress while transcribing or making notes, Update notes after a speaker is renamed, Play and Download audio (`RecordingAudioButtons.swift`), Export menu with Copy prompt for an AI agent, `…` menu with Rename / Redo notes / Redo transcript and notes / Retry / Delete, transcript toggle), the warning on a call whose other side was not heard, the export message |
-| `MeetingNotesColumn.swift` | Title, Summary, the meeting type's sections, Decisions, Action items as open circles ("Owner: task"), Notes, then the meeting's questions and answers (`MeetingChatView.swift`, which also has the question box `MeetingsView.swift` puts under both columns) |
-| `MeetingTranscriptColumn.swift` | The transcript in one `NSTextView`: speaker names in their own colour (`SpeakerPalette`), time on a right tab stop, search that filters and highlights, Edit and Delete… on each line's right-click menu and the edit field above the transcript ([Editing the transcript](#editing-the-transcript)) |
+| `MeetingsView.swift` | Record button (with Mute my mic and Discard under it while recording) and folder menu above the list, the list in one section per day (Today, Yesterday, then the date) with each row's start time and length, each row's folders, the detail header (the folder menu ([Folders](#folders)), or the title while the transcript fills the pane, since the notes open with it; progress while transcribing or making notes, Update notes after a speaker is renamed, Play and Download audio (`RecordingAudioButtons.swift`), Export menu with Copy prompt for an AI agent, `…` menu with Rename / Redo notes / Redo transcript and notes / Retry / Delete, transcript toggle), the warning on a call whose other side was not heard, the export message |
+| `MeetingNotesColumn.swift` | Title, then the day, start time and length (`MeetingMeta.whenText`; the iPhone shows the same line), and everyone heard (the note owner first, each with a dot in their transcript colour), Summary, the meeting type's sections, Decisions, Action items as open circles ("Owner: task"), Notes, then the meeting's questions and answers (`MeetingChatView.swift`, which also has the question box `MeetingsView.swift` puts under both columns) |
+| `MeetingTranscriptColumn.swift` | The transcript in one `NSTextView`: one heading per turn (`MeetingSpeaker.turns`: lines in a row by the same speaker) with the name in its own colour (`SpeakerPalette`) and the turn's start time beside it, search that filters and highlights, Edit and Delete… on each line's right-click menu and the edit field above the transcript ([Editing the transcript](#editing-the-transcript)) |
 | `AssignSpeakersView.swift` | One card per speaker: name, a sample line, shuffle (next line), play (that line's audio) |
 
 In Assign speakers, clicking a name lists `knownNames`, a field for another

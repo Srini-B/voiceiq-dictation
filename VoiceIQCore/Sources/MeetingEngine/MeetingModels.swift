@@ -79,6 +79,17 @@ public enum MeetingSpeaker {
         return seen
     }
 
+    /// Runs of lines by the same speaker, in order, so a transcript reads as
+    /// one heading per turn rather than one per line.
+    public static func turns(in transcript: [TranscriptSegment]) -> [[TranscriptSegment]] {
+        var turns: [[TranscriptSegment]] = []
+        for segment in transcript {
+            if turns.last?.last?.speaker == segment.speaker { turns[turns.count - 1].append(segment) }
+            else { turns.append([segment]) }
+        }
+        return turns
+    }
+
     /// A speaker's name colour as light and dark RGB: green for the note
     /// owner, then one hue per other speaker in `others` order.
     public static func colorHex(_ id: String, others: [String]) -> (light: UInt32, dark: UInt32) {
@@ -297,6 +308,24 @@ public struct MeetingMeta: Codable, Equatable, Sendable, Identifiable {
     /// meeting; nil when none of them has one.
     public func shownTitle(notes: MeetingNotes? = nil) -> String? {
         [userTitle, notes?.title, title].compactMap { $0 }.first { !$0.isEmpty }
+    }
+
+    /// The title to show: `shownTitle`, else the calendar event's.
+    public func displayTitle(notes: MeetingNotes? = nil) -> String? {
+        shownTitle(notes: notes) ?? calendarEvent.map(\.title).flatMap { $0.isEmpty ? nil : $0 }
+    }
+
+    /// "45 s" or "17 min", the same in the list and the notes.
+    public var lengthText: String {
+        durationSeconds < 60 ? "\(Int(durationSeconds)) s" : "\(Int(durationSeconds / 60)) min"
+    }
+
+    /// "Thu, Nov 26 · 11:50 PM · 17 min" under a note's title; an import has no length.
+    public var whenText: String {
+        let day = startedAt.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())
+        let time = startedAt.formatted(date: .omitted, time: .shortened)
+        guard importedFrom == nil, durationSeconds >= 1 else { return "\(day) · \(time)" }
+        return "\(day) · \(time) · \(lengthText)"
     }
 
     /// Speakers were named, renamed or cleared since the notes were written,

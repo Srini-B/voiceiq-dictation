@@ -2,8 +2,8 @@ import AppKit
 import VoiceIQCore
 import SwiftUI
 
-/// The transcript beside the notes: each speaker's name in their own colour,
-/// the time on the right, with search, a way into Assign speakers, and
+/// The transcript beside the notes: one heading per turn with the speaker's
+/// name in their own colour and the turn's start time, with search, a way into Assign speakers, and
 /// Edit and Delete on each line's right-click menu.
 struct MeetingTranscriptColumn: View {
     static let width: CGFloat = 340
@@ -14,7 +14,6 @@ struct MeetingTranscriptColumn: View {
     let meeting: MeetingMeta
     let notes: MeetingNotes?
     let transcript: [TranscriptSegment]
-    let width: CGFloat
     /// Nil while the meeting is recording or being redone, which would overwrite the change.
     let edit: ((TranscriptSegment.ID, String) -> Void)?
     let delete: ((TranscriptSegment.ID) -> Void)?
@@ -90,7 +89,7 @@ struct MeetingTranscriptColumn: View {
                     .foregroundStyle(Color(nsColor: SpeakerPalette.color(segment.speaker, order: MeetingSpeaker.others(in: transcript))))
                 Spacer()
                 if let start = segment.start {
-                    Text(MeetingNotesPrompt.clock(start)).font(VoiceIQUI.TypeScale.numeric()).foregroundStyle(.tertiary)
+                    Text(MeetingNotesPrompt.clock(start)).font(VoiceIQUI.TypeScale.numeric()).foregroundStyle(.secondary)
                 }
             }
             TextField("Text", text: $draft, axis: .vertical)
@@ -117,13 +116,13 @@ struct MeetingTranscriptColumn: View {
 
     private var trimmedQuery: String { query.trimmingCharacters(in: .whitespaces) }
 
-    private var shown: [TranscriptSegment] {
-        guard !trimmedQuery.isEmpty else { return transcript }
-        return transcript.filter {
-            $0.text.localizedCaseInsensitiveContains(trimmedQuery)
-                || meeting.displayName($0.speaker, notes: notes).localizedCaseInsensitiveContains(trimmedQuery)
-        }
+    private func matches(_ segment: TranscriptSegment) -> Bool {
+        trimmedQuery.isEmpty
+            || segment.text.localizedCaseInsensitiveContains(trimmedQuery)
+            || meeting.displayName(segment.speaker, notes: notes).localizedCaseInsensitiveContains(trimmedQuery)
     }
+
+    private var shown: [TranscriptSegment] { transcript.filter(matches) }
 
     private func openSearch() { searching = true; searchFocused = true }
     private func closeSearch() { searching = false; query = "" }
@@ -132,31 +131,38 @@ struct MeetingTranscriptColumn: View {
         let order = MeetingSpeaker.others(in: transcript)
         let nameFont = GTFont.nsFlex(12, weight: 600), body = GTFont.nsFlex(14, weight: 400)
         let time = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .regular)
-        // The time sits on a right tab at the column's text edge.
-        let edge = width - 2 * Self.inset.width - 12
         let head = NSMutableParagraphStyle()
-        head.tabStops = [NSTextTab(textAlignment: .right, location: edge)]
         head.paragraphSpacing = 3
-        let paragraph = NSMutableParagraphStyle()
-        paragraph.lineSpacing = 2
-        paragraph.paragraphSpacing = 14
+        // Lines of one turn sit close; a new speaker starts after a gap.
+        let line = NSMutableParagraphStyle()
+        line.lineSpacing = 2
+        line.paragraphSpacing = 6
+        let last = line.mutableCopy() as! NSMutableParagraphStyle
+        last.paragraphSpacing = 16
         let out = NSMutableAttributedString()
-        for segment in shown {
-            let line = NSMutableAttributedString(string: meeting.displayName(segment.speaker, notes: notes), attributes: [
-                .font: nameFont, .foregroundColor: SpeakerPalette.color(segment.speaker, order: order), .paragraphStyle: head,
-                Self.segmentKey: segment.id,
-            ])
-            if let start = segment.start {
-                line.append(NSAttributedString(string: "\t" + MeetingNotesPrompt.clock(start), attributes: [
-                    .font: time, .foregroundColor: NSColor.tertiaryLabelColor, .paragraphStyle: head, Self.segmentKey: segment.id,
+        // Grouped before the search filters, so turns apart stay apart.
+        let turns = MeetingSpeaker.turns(in: transcript).map { $0.filter(matches) }.filter { !$0.isEmpty }
+        for turn in turns {
+            let first = turn[0]
+            // The heading belongs to the turn's first line, for the right-click menu.
+            out.append(NSAttributedString(string: meeting.displayName(first.speaker, notes: notes), attributes: [
+                .font: nameFont, .foregroundColor: SpeakerPalette.color(first.speaker, order: order), .paragraphStyle: head,
+                Self.segmentKey: first.id,
+            ]))
+            if let start = first.start {
+                out.append(NSAttributedString(string: "  " + MeetingNotesPrompt.clock(start), attributes: [
+                    .font: time, .foregroundColor: NSColor.secondaryLabelColor, .paragraphStyle: head, Self.segmentKey: first.id,
                 ]))
             }
-            line.append(NSAttributedString(string: "\n", attributes: [.font: nameFont, .paragraphStyle: head, Self.segmentKey: segment.id]))
-            let words = NSMutableAttributedString(string: segment.text + "\n", attributes: [
-                .font: body, .foregroundColor: NSColor.labelColor, .paragraphStyle: paragraph, Self.segmentKey: segment.id,
-            ])
-            highlight(words)
-            out.append(line); out.append(words)
+            out.append(NSAttributedString(string: "\n", attributes: [.font: nameFont, .paragraphStyle: head, Self.segmentKey: first.id]))
+            for segment in turn {
+                let words = NSMutableAttributedString(string: segment.text + "\n", attributes: [
+                    .font: body, .foregroundColor: NSColor.labelColor,
+                    .paragraphStyle: segment.id == turn.last?.id ? last : line, Self.segmentKey: segment.id,
+                ])
+                highlight(words)
+                out.append(words)
+            }
         }
         return out
     }

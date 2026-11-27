@@ -1,11 +1,12 @@
 import VoiceIQCore
 import SwiftUI
 
-/// The notes: title, summary, the meeting type's sections, decisions, action
+/// The notes: title, when and who, summary, the meeting type's sections, decisions, action
 /// items, notes, then the questions asked about the meeting and their answers.
 struct MeetingNotesColumn: View {
     let meeting: MeetingMeta
     let notes: MeetingNotes?
+    let transcript: [TranscriptSegment]
     /// What the meeting is doing in the background, in words; nil when idle.
     let step: String?
     /// Nil until the meeting has a transcript to ask about.
@@ -23,7 +24,11 @@ struct MeetingNotesColumn: View {
                 Text(kind.displayName).font(VoiceIQUI.TypeScale.labelSmall()).foregroundStyle(.secondary)
                     .padding(.bottom, -VoiceIQUI.Spacing.s)
             }
-            Text(meeting.shownTitle(notes: notes) ?? "Meeting").font(GTFont.flex(22, weight: 600))
+            VStack(alignment: .leading, spacing: VoiceIQUI.Spacing.xs) {
+                Text(meeting.displayTitle(notes: notes) ?? "Meeting").font(GTFont.flex(22, weight: 600))
+                Text(meeting.whenText).font(VoiceIQUI.TypeScale.labelSmall()).foregroundStyle(.secondary)
+                if !speakers.isEmpty { people }
+            }
             if let notes {
                 section("Summary") { Text(notes.summary) }
                 ForEach(Array((notes.sections ?? []).enumerated()), id: \.offset) { _, part in
@@ -49,6 +54,28 @@ struct MeetingNotesColumn: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, VoiceIQUI.Spacing.xxl)
         .padding(.vertical, VoiceIQUI.Spacing.xl)
+    }
+
+
+    /// The note owner first, then the others; an import without speaker labels has none.
+    private var speakers: [String] {
+        let others = MeetingSpeaker.others(in: transcript).filter { $0 != GranolaImport.unlabeledSpeaker }
+        return (transcript.contains { $0.speaker == MeetingSpeaker.you } ? [MeetingSpeaker.you] : []) + others
+    }
+
+    /// Everyone heard, each in their transcript colour, the note owner first.
+    private var people: some View {
+        let others = MeetingSpeaker.others(in: transcript)
+        let names = speakers.map { meeting.displayName($0, notes: notes) }
+        // A non-breaking space keeps each dot with its name when the line wraps.
+        return zip(speakers, names).enumerated().reduce(Text("")) { line, entry in
+            let dot = Text(Image(systemName: "circle.fill")).font(.system(size: 7))
+                .foregroundColor(Color(nsColor: SpeakerPalette.color(entry.element.0, order: others)))
+            return line + Text(entry.offset == 0 ? "" : "     ") + dot + Text("\u{00A0}" + entry.element.1)
+        }
+        .font(VoiceIQUI.TypeScale.labelSmall())
+        .foregroundStyle(.secondary)
+        .accessibilityLabel("With " + names.joined(separator: ", "))
     }
 
     private func section<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
