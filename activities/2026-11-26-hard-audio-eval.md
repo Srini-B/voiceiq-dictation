@@ -321,7 +321,7 @@ references, plus a check per fix. No judge model was used.
 | 2 Quiet speech is speech | 8.5% | 2 of 4 empty clips recovered; silent inserts 7 of 12, control 5–6 | Dropped: more false inserts |
 | 3 Question intonation | 9.1% | No "?" added on any target | Dropped |
 | 4 Fillers (வந்து, பார்த்தீங்கன்னா, "I mean", doubled yes) | 10.0%, 11.0% | Tamil filler-free on 6–7 of 11 (control 0–1); deleted the meaningful "பார்த்தீங்க அப்படின்னா" on `ivta_005` | Dropped: regresses |
-| 4b வந்து only, "not as the verb came" | 8.6%, 7.9% | Tamil filler-free on 3–6 of 11 | Parked: thinking on 6–7 of 57 calls, control about 1% |
+| 4b வந்து only, "not as the verb came" | 8.6%, 7.9% | Tamil filler-free on 3–6 of 11 | Parked (integrator): thinking on 6–7 of 57 calls, control about 1%, costs latency and money, and the gain is uneven |
 | 5 Short answers carry meaning | 9.9%, 9.4% | Kept 2 of 3; answered empty on passing `chime6_S02_U02_3799` in both runs | Dropped |
 | 6 Tamil whole hour ("பதினொரு மணி" → "11 மணி") | 8.1%, 9.0% | `ivta_048` "11 மணி" in both runs (control "11:00 மணி" in all 3) | Merged as its own PR |
 
@@ -331,7 +331,9 @@ adds Tamil next to the Hindi example rather than replacing it, which was
 the variant that cost ml_hi in `2026-11-26-prompt-cost.md`.
 
 **Spend:** OpenRouter $3.38 over 866 calls; OpenCode $0. Latency is not
-reported for these routes.
+reported for these routes. Afterwards the dispatcher's rule was restated:
+there are no paid Gemini eval calls through any route or key, so the rest of
+the prepaid balance is not used, and the results above are final.
 
 ### Pipeline
 
