@@ -123,7 +123,10 @@ struct MeetingsPane: View {
             List(selection: $selection) {
                 ForEach(Self.days(folders.shown(meetings)), id: \.start) { day in
                     Section(day.label) {
-                        ForEach(day.meetings) { meeting in row(meeting) }
+                        ForEach(day.meetings) { meeting in
+                            // The heading already sets the day off; no rule above its first row.
+                            row(meeting).listRowSeparator(meeting.id == day.meetings.first?.id ? .hidden : .automatic, edges: .top)
+                        }
                     }
                 }
             }
@@ -195,14 +198,8 @@ struct MeetingsPane: View {
         let transcriptShown = !transcript.isEmpty && (wide ? !hidesTranscript : narrowShowsTranscript)
         let filedIn = folders.names(of: meeting.id)
         return VStack(spacing: 0) {
+            // With the transcript alone the title takes the folder menu's place; the notes view has it.
             header(meeting, wide: wide, transcriptShown: transcriptShown, filedIn: filedIn)
-            if !wide && transcriptShown {
-                // The title has the header row; the folders go under it.
-                folderMenu(meeting, filedIn: filedIn)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, VoiceIQUI.Spacing.l)
-                    .padding(.bottom, VoiceIQUI.Spacing.s)
-            }
             Divider()
             if case .failed(let reason) = meeting.status {
                 Label(reason, systemImage: "exclamationmark.triangle.fill")
@@ -269,9 +266,11 @@ struct MeetingsPane: View {
         } label: {
             Label(filedIn.isEmpty ? "Add to folder" : filedIn.joined(separator: ", "), systemImage: "folder")
                 .font(VoiceIQUI.TypeScale.labelSmall())
+                .lineLimit(1)
         }
         .menuStyle(.borderlessButton)
-        .fixedSize()
+        // Shares the header row with the toolbar: long folder names truncate, the buttons stay.
+        .layoutPriority(-1)
         .help("Put this meeting in folders")
     }
 
@@ -303,8 +302,7 @@ struct MeetingsPane: View {
                 .disabled(busy)
                 .help("Write the notes again with the speaker names you set")
             }
-            // A meeting whose audio isn't on this Mac has nothing to play or save.
-            if audio.isAvailable { RecordingAudioButtons(audio: audio) { exported = $0 } }
+            RecordingAudioButtons(audio: audio) { exported = $0 }
             Menu {
                 Section("Save to Downloads") { exportItems { export(meeting, $0) } }
                 Section("Copy") { exportItems { copy(meeting, $0) } }

@@ -30,7 +30,7 @@ with four saved eval meetings, the Mac window had four problems:
 - **Header (Mac).** The title shows in the header only when the transcript
   fills the pane (narrow window). Otherwise the notes start with the title.
 - **List (Mac).** One section per day (Today, Yesterday, then the date). Each
-  row shows the title, then "11:50 PM · 17m", with the status after the
+  row shows the title, then "11:50 PM · 17 min", with the status after the
   length while the meeting is in flight or has failed.
 
 ## Decisions

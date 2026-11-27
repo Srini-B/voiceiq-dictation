@@ -299,7 +299,7 @@ private struct MeetingDetail: View {
             if let chat { MeetingChatInput(chat: chat) }
         }
         .themedBackground()
-        .navigationTitle(meta.shownTitle(notes: notes) ?? "Notes")
+        .navigationTitle(meta.displayTitle(notes: notes) ?? "Notes")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             if !gone {

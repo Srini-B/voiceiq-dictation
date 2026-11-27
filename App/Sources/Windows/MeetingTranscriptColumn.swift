@@ -89,7 +89,7 @@ struct MeetingTranscriptColumn: View {
                     .foregroundStyle(Color(nsColor: SpeakerPalette.color(segment.speaker, order: MeetingSpeaker.others(in: transcript))))
                 Spacer()
                 if let start = segment.start {
-                    Text(MeetingNotesPrompt.clock(start)).font(VoiceIQUI.TypeScale.numeric()).foregroundStyle(.tertiary)
+                    Text(MeetingNotesPrompt.clock(start)).font(VoiceIQUI.TypeScale.numeric()).foregroundStyle(.secondary)
                 }
             }
             TextField("Text", text: $draft, axis: .vertical)
