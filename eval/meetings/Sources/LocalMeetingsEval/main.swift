@@ -192,7 +192,10 @@ func evaluate(_ input: Input, source: URL) async throws {
     for file in ["mic.caf", "system.caf"] {
         try FileManager.default.copyItem(at: source.appendingPathComponent(file), to: folder.appendingPathComponent(file))
     }
+    // Reads both tracks and, for a call, cancels the far side's echo in the mic (`mic-aec.caf`).
+    let callStarted = Date()
     let call = try MeetingTranscriber.callAudio(folder: folder)
+    let callSeconds = Date().timeIntervalSince(callStarted)
     var facts: [String: Double] = ["is_online": call.isOnline ? 1 : 0, "mic_is_echo_free": call.micIsEchoFree ? 1 : 0,
                                    "residual_echo_db": call.residualEcho]
 
@@ -216,15 +219,19 @@ func evaluate(_ input: Input, source: URL) async throws {
         let turns = SpeakerLinker.overlappingTurns(words).map {
             TranscriptSegment(speaker: $0.speaker, text: $0.text, chunkIndex: 0, start: $0.start, end: $0.end)
         }
-        try write("voiceiq", input, named(turns, owner: input.owner), seconds: ["transcribe": Date().timeIntervalSince(clock)],
+        try write("voiceiq", input, named(turns, owner: input.owner),
+                  seconds: ["call_audio": callSeconds, "transcribe": callSeconds + Date().timeIntervalSince(clock)],
                   duration: call.duration, details: facts)
     } else if pipelines.contains("voiceiq") {
+        // Without the cancelled mic on disk the app cancels the echo again inside the timed call, as it does for a new meeting.
+        try? FileManager.default.removeItem(at: folder.appendingPathComponent("mic-aec.caf"))
         let clock = Date()
         guard let transcriber = try await LocalMeetingTranscriber.acquire(runner: { try await LocalSpeechInference.transcribeMeeting($0) }) else {
             fail("on-device meetings are not ready")
         }
         let turns = try await transcriber.transcribe(folder: folder)
-        try write("voiceiq", input, named(turns, owner: input.owner), seconds: ["transcribe": Date().timeIntervalSince(clock)],
+        try write("voiceiq", input, named(turns, owner: input.owner),
+                  seconds: ["call_audio": callSeconds, "transcribe": Date().timeIntervalSince(clock)],
                   duration: call.duration, details: facts)
     }
     guard pipelines.contains("hex") else { return }
@@ -349,4 +356,6 @@ for name in meetings {
         print("\(input.id): FAILED \(error)")
     }
 }
+try? FileManager.default.removeItem(at: scratch)
+try? FileManager.default.removeItem(at: scratch.appendingPathExtension("sqlite"))
 exit(failures == 0 ? 0 : 2)

@@ -60,6 +60,8 @@ python3 hex_upstream_speakers.py ~/evalout/hex-upstream ~/evalout/far-speakers ~
 ```
 
 `compare.py DATA_DIR PIPELINE_DIR …` prints M1–M4, plain WER and run time
+(`seconds.transcribe`; for `voiceiq-*` it includes reading the call audio and
+cancelling the mic's echo, also given alone as `seconds.call_audio`)
 for each pipeline, pooled and per meeting; `--drop-unmatched` scores them
 again without the speakers matched to nobody, and `unmatched.py DATA_DIR
 PIPELINE_DIR` says who those speakers are. `wer.py` is the plain WER alone:

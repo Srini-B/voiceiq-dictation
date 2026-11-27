@@ -29,11 +29,14 @@ depends on which part of Hex.
   91.7 / 51.8 / 73.0 / 61.7 against 87.5 / 45.7 / 69.6 / 57.3. Its plain WER
   is lower on four of the six meetings. It is much worse on TS3003a (M4 24.0
   against 69.7) and has higher WER on IS1009a.
-- Hex's chunking and echo drop rebuilt in Swift with VoiceiQ's models show no
-  clear gain. Pooled over six meetings they score 91.7 / 46.0 / 67.5 / 48.1.
-  On the five meetings where both decode each track alone, with the same
-  model family on both sides, they score 52.7 / 70.9 / 57.6 on M2 to M4
-  against 48.0 / 67.9 / 58.0, with WER 39.6 against 37.3.
+- Hex's chunking and echo drop rebuilt in Swift with VoiceiQ's models give a
+  mixed result. With Fluid Speech Pro on both sides, `hex-speakers-pro`
+  scores 91.7 / 46.0 / 67.5 / 48.1 over six meetings against
+  87.5 / 45.7 / 69.6 / 57.3 for `voiceiq-pro`. On the five meetings where
+  both decode each track alone, with Hex's model family on both sides,
+  `hex-speakers-unified` is 4.7 higher on M2 and 3.0 higher on M3 than
+  `voiceiq-unified`, 0.4 lower on M4, and 2.3 worse on WER (39.6 against
+  37.3).
 
 **Does it match Gemini?** Not on ES2004a, the one meeting with recorded
 Gemini scores. Gemini has 100.0 / 84.7 / 81.9 / 79.2. The best offline result
@@ -58,7 +61,7 @@ has 90.0 / 57.7 / 79.1 / 73.1 and VoiceiQ on device has
 4. Hex has no fallback for a mic that is not echo-free. On TS3003a every
    per-track pipeline writes the owner twice. The app decodes one mixed
    track there and scores 75.0 / 74.4 / 73.3 / 69.7.
-5. Hex's build took 2706 s for the six meetings against 317 s for VoiceiQ.
+5. Hex's build took 2706 s for the six meetings against 423 s for VoiceiQ.
    That is one run on a virtual machine whose GPU is paravirtual, so it is
    weak evidence.
 
@@ -109,8 +112,8 @@ better.
 
 | Pipeline | M1 | M2 | M3 | M4 | WER | WER mic | WER far | Run time |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| VoiceiQ on device as it is (`voiceiq-pro`) | 87.5 | 45.7 | 69.6 | 57.3 | 37.2 | 21.5 | 47.6 | 317 s, 32× real time |
-| VoiceiQ on device, Mini (`voiceiq-mini`) | 87.5 | 45.8 | 70.3 | 58.2 | 36.6 | 22.1 | 46.3 | 348 s, 30× |
+| VoiceiQ on device as it is (`voiceiq-pro`) | 87.5 | 45.7 | 69.6 | 57.3 | 37.2 | 21.5 | 47.6 | 423 s, 24× real time |
+| VoiceiQ on device, Mini (`voiceiq-mini`) | 87.5 | 45.8 | 70.3 | 58.2 | 36.6 | 22.1 | 46.3 | 441 s, 23× |
 | Hex as it ships, real build (`hex-upstream`) | 50.0 | 31.1 | 49.8 | 13.2 | 35.9 | 27.4 | 41.5 | 2706 s, 4× |
 | Hex as it ships, port with Pro (`hex-pro`) | 50.0 | 21.4 | 46.3 | 0 | 49.6 | 49.2 | 49.9 | 339 s, 30× |
 | Hex chunks and echo drop, VoiceiQ models and speakers (`hex-speakers-pro`) | 91.7 | 46.0 | 67.5 | 48.1 | 49.6 | 49.2 | 49.9 | 451 s, 23× |
@@ -146,12 +149,24 @@ echo-free):
 | `hex-speakers-unified` | 90.0 | 52.7 | 70.9 | 57.6 | 39.6 |
 | `hex-upstream-speakers` | 90.0 | 56.5 | 74.5 | 65.5 | 32.3 |
 
-Run times are for all six meetings, on a 6-core cloud virtual machine.
-`voiceiq-pro` took 343 s and 317 s in two runs and `hex-speakers-pro` 450 s,
-428 s and 451 s in three. `hex-upstream` ran once, and its Metal runtime used
-the virtual machine's paravirtual GPU, so 4× real time says little about a
-real Mac. The `voiceiq-*` clock starts after the evaluator's own read of the
-call audio. What limits each run time was not profiled.
+Run times are for all six meetings, on a 6-core cloud virtual machine. They
+are weak evidence.
+
+- `voiceiq-pro` took 423 s and `voiceiq-mini` 441 s, one run each. That
+  covers what a new meeting costs in the app: reading the call audio and
+  cancelling the far side's echo in the mic (99 s and 100 s of it), then the
+  transcription. `voiceiq-unified` took 362 s for its five meetings, 85 s of
+  it for the call audio.
+- The earlier runs left the echo cancellation out, because the evaluator had
+  already written the cancelled mic before the clock started (Codex review
+  on #117). They read 343 s and 317 s for `voiceiq-pro` and 348 s for
+  `voiceiq-mini`. The scores of the timing run are the same to 0.1.
+- `hex-speakers-pro` took 450 s, 428 s and 451 s in three runs. The Hex port
+  reads the raw tracks and cancels no echo, as Hex does.
+- `hex-upstream` ran once, and its Metal runtime used the virtual machine's
+  paravirtual GPU, so 4× real time says little about a real Mac.
+
+What limits each run time was not profiled.
 
 Two full runs of the Pro and Mini pipelines gave the same pooled M1 to M4 to
 0.1. Every pipeline wrote an output for every meeting, except
@@ -250,11 +265,13 @@ accepts or corrects them.
   built on the wrong audio for the speaker model. Those rows were corrected
   and run again. The numbers above are the corrected ones.
 - M1 91.7 for the Hex variants is not a real pass. It is over 90 only
-  because TS3003a scores 100 on M1 while scoring 7.2 on M2 there: four
-  speakers were written, and one of them is the owner's leaked voice
-  matched to a remote person.
-- With the room's leaked speaker removed the best reading is
-  95.8 / 66.5 / 77.5 / 74.8. Still under the bar on M2, M3 and M4.
+  because TS3003a scores 100 on M1 while scoring 6.8 to 17.7 on M2 there
+  (7.2 for `hex-speakers-pro`, 17.7 for the best offline row). Four speakers
+  were written, and one of them is the owner's leaked voice matched to a
+  remote person.
+- With the room's leaked speaker removed, `voiceiq-pro` reads
+  95.8 / 66.5 / 77.5 / 74.8 and the best offline row
+  100.0 / 57.3 / 75.6 / 69.0. Both are still under the bar on M2, M3 and M4.
 - M5 (notes) and M6 (UI) are not scored. The on-device path writes no notes
   without Gemini, and no screen changed.
 
@@ -263,12 +280,12 @@ pipeline.
 
 ## Neon review
 
-Gemini 4 Neon, through thread T-01a2176a-eb3e-7024-b1ae-ec9aa9d74f1b,
-reviewed f5ae210 and that thread checked Neon's findings against the code.
-Verdict: **not clean**, with the don't-ship verdict upheld. It found no
-arithmetic error in the scripts and confirmed that `voiceiq-pro` and
-`voiceiq-mini` run the app's real `LocalMeetingTranscriber`. What it found,
-and what changed:
+Thread T-01a2176a-eb3e-7024-b1ae-ec9aa9d74f1b reviewed f5ae210 twice: with
+Gemini 4 Neon, and by its own reading of the code against Hex. The findings
+below are from both. Verdict: **not clean**, with the don't-ship verdict
+upheld. The review found no arithmetic error in the scripts and confirmed
+that `voiceiq-pro` and `voiceiq-mini` run the app's real
+`LocalMeetingTranscriber`. What it found, and what changed:
 
 | Finding | What was done |
 | --- | --- |
@@ -281,9 +298,17 @@ and what changed:
 | The Gemini fifth-voice explanation had one guess. A second has equal standing. | Both are listed as guesses. |
 | Hex's speech detector model downloads in the background and might have been missing for the first meeting. | Checked. The file is dated 07:40:05 and the first meeting, 238 s long, finished at 07:45:19. |
 | Small script points: a sample count that included the WAV header, an unused import, run time without the speaker model for `hex-upstream-speakers`, rows keyed by folder name, `leak.py` printing 0 dB for a person never alone, and the far-side WER floor described as equal for all pipelines. | Fixed or documented in the scripts. |
-| The port checks for a silent chunk before the speech detector, as Hex's live worker does. | Not changed. No AMI chunk is silent. |
+| The port checks for a silent chunk before the speech detector, as Hex's live worker does. | Not changed, and its effect was not measured. The order matters only for a chunk that is under -60 dBFS throughout. |
 
-A second look at the corrected branch was requested.
+**Second look, at 49ee998: clean.** Neon and the reviewing thread both
+called it clean. The speaker-input fix matches what the app does, and the
+numbers in this entry match its tables. The small points left were wording
+(which pipeline a figure belongs to, and crediting the thread's own findings
+to Neon), a safer read of the WAV header in `hex_upstream.py`, merged owner
+turns in `unmatched.py`, and scratch files left behind. All are fixed in the
+commit after 49ee998. The review ran no eval and could not recompute the
+five-meeting rows or the rows with unmatched speakers removed, because result
+files are not committed.
 
 ## For the owner thread
 
@@ -331,8 +356,9 @@ JSON files are not committed. The per-meeting tables below are the record.
 
 ## Appendix: every pipeline, per meeting
 
-Run 2 for `voiceiq-pro`, `voiceiq-mini`, `hex-pro` and `hex-mini`, the run
-with the corrected speaker input for the `hex-speakers-*` rows and
+Run 2 for `voiceiq-pro`, `voiceiq-mini`, `hex-pro` and `hex-mini`, with the
+`voiceiq-pro` and `voiceiq-mini` run times from the timing run that includes
+echo cancellation, the run with the corrected speaker input for the `hex-speakers-*` rows and
 `hex-upstream-speakers`, and the only run for the others. "Speakers written
 (matched to nobody)" counts speakers over the meetings pooled.
 
@@ -340,8 +366,8 @@ with the corrected speaker input for the `hex-speakers-*` rows and
 
 | Pipeline | M1 | M2 | M3 | M4 | WER | WER mic | WER far | WER, no fillers | Speakers written (matched to nobody) | Run time |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| voiceiq-pro | 87.5 | 45.7 | 69.6 | 57.3 | 37.2 | 21.5 | 47.6 | 36.6 | 28 (5) | 317 s (32× real time) |
-| voiceiq-mini | 87.5 | 45.8 | 70.3 | 58.2 | 36.6 | 22.1 | 46.3 | 36.0 | 28 (5) | 348 s (30× real time) |
+| voiceiq-pro | 87.5 | 45.7 | 69.6 | 57.3 | 37.2 | 21.5 | 47.6 | 36.6 | 28 (5) | 423 s (24× real time) |
+| voiceiq-mini | 87.5 | 45.8 | 70.3 | 58.2 | 36.6 | 22.1 | 46.3 | 36.0 | 28 (5) | 441 s (23× real time) |
 | hex-pro | 50.0 | 21.4 | 46.3 | 0 | 49.6 | 49.2 | 49.9 | 49.1 | 12 (0) | 339 s (30× real time) |
 | hex-speakers-pro | 91.7 | 46.0 | 67.5 | 48.1 | 49.6 | 49.2 | 49.9 | 49.1 | 29 (5) | 451 s (23× real time) |
 | hex-speakers-noecho-pro | 91.7 | 32.6 | 63.5 | 37.5 | 55.5 | 63.8 | 49.9 | 55.2 | 29 (5) | 451 s (23× real time) |
@@ -357,8 +383,8 @@ with the corrected speaker input for the `hex-speakers-*` rows and
 
 | Pipeline | M1 | M2 | M3 | M4 | WER | WER mic | WER far | WER, no fillers | Speakers written (matched to nobody) | Run time |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| voiceiq-pro | 90.0 | 34.6 | 68.4 | 55.3 | 39.5 | 15.6 | 55.8 | 38.8 | 5 (1) | 36 s (29× real time) |
-| voiceiq-mini | 90.0 | 36.2 | 71.7 | 58.7 | 36.3 | 16.2 | 50.0 | 36.2 | 5 (1) | 33 s (32× real time) |
+| voiceiq-pro | 90.0 | 34.6 | 68.4 | 55.3 | 39.5 | 15.6 | 55.8 | 38.8 | 5 (1) | 42 s (25× real time) |
+| voiceiq-mini | 90.0 | 36.2 | 71.7 | 58.7 | 36.3 | 16.2 | 50.0 | 36.2 | 5 (1) | 42 s (25× real time) |
 | hex-pro | 50.0 | 34.3 | 57.3 | 25.0 | 32.9 | 15.5 | 44.7 | 32.0 | 2 (0) | 33 s (32× real time) |
 | hex-speakers-pro | 90.0 | 52.2 | 71.5 | 61.4 | 32.9 | 15.5 | 44.7 | 32.0 | 5 (1) | 45 s (23× real time) |
 | hex-speakers-noecho-pro | 90.0 | 51.3 | 71.0 | 60.2 | 34.1 | 18.6 | 44.7 | 33.4 | 5 (1) | 45 s (23× real time) |
@@ -374,8 +400,8 @@ with the corrected speaker input for the `hex-speakers-*` rows and
 
 | Pipeline | M1 | M2 | M3 | M4 | WER | WER mic | WER far | WER, no fillers | Speakers written (matched to nobody) | Run time |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| voiceiq-pro | 90.0 | 55.7 | 75.3 | 66.4 | 30.6 | 18.4 | 36.0 | 29.9 | 5 (1) | 78 s (30× real time) |
-| voiceiq-mini | 90.0 | 57.7 | 78.6 | 67.5 | 29.4 | 16.8 | 35.0 | 28.6 | 5 (1) | 83 s (28× real time) |
+| voiceiq-pro | 90.0 | 55.7 | 75.3 | 66.4 | 30.6 | 18.4 | 36.0 | 29.9 | 5 (1) | 102 s (23× real time) |
+| voiceiq-mini | 90.0 | 57.7 | 78.6 | 67.5 | 29.4 | 16.8 | 35.0 | 28.6 | 5 (1) | 107 s (22× real time) |
 | hex-pro | 50.0 | 13.0 | 43.4 | 0 | 48.1 | 95.9 | 27.0 | 47.7 | 2 (0) | 82 s (28× real time) |
 | hex-speakers-pro | 90.0 | 46.0 | 70.7 | 46.8 | 48.1 | 95.9 | 27.0 | 47.7 | 5 (1) | 111 s (21× real time) |
 | hex-speakers-noecho-pro | 90.0 | 35.1 | 67.1 | 37.7 | 57.2 | 125.6 | 27.0 | 57.1 | 5 (1) | 111 s (21× real time) |
@@ -391,8 +417,8 @@ with the corrected speaker input for the `hex-speakers-*` rows and
 
 | Pipeline | M1 | M2 | M3 | M4 | WER | WER mic | WER far | WER, no fillers | Speakers written (matched to nobody) | Run time |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| voiceiq-pro | 90.0 | 37.6 | 66.1 | 52.7 | 40.8 | 23.2 | 49.3 | 40.1 | 5 (1) | 73 s (32× real time) |
-| voiceiq-mini | 90.0 | 37.8 | 68.4 | 54.3 | 39.1 | 23.2 | 46.9 | 38.3 | 5 (1) | 79 s (29× real time) |
+| voiceiq-pro | 90.0 | 37.6 | 66.1 | 52.7 | 40.8 | 23.2 | 49.3 | 40.1 | 5 (1) | 96 s (24× real time) |
+| voiceiq-mini | 90.0 | 37.8 | 68.4 | 54.3 | 39.1 | 23.2 | 46.9 | 38.3 | 5 (1) | 98 s (24× real time) |
 | hex-pro | 50.0 | 12.5 | 38.3 | 0 | 48.1 | 52.5 | 45.9 | 47.4 | 2 (0) | 75 s (31× real time) |
 | hex-speakers-pro | 90.0 | 41.5 | 66.3 | 42.9 | 48.1 | 52.5 | 45.9 | 47.4 | 5 (1) | 103 s (23× real time) |
 | hex-speakers-noecho-pro | 90.0 | 39.6 | 65.5 | 41.7 | 49.3 | 56.3 | 45.9 | 48.8 | 5 (1) | 103 s (23× real time) |
@@ -408,8 +434,8 @@ with the corrected speaker input for the `hex-speakers-*` rows and
 
 | Pipeline | M1 | M2 | M3 | M4 | WER | WER mic | WER far | WER, no fillers | Speakers written (matched to nobody) | Run time |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| voiceiq-pro | 90.0 | 42.8 | 72.4 | 62.7 | 31.5 | 20.1 | 37.9 | 31.0 | 5 (1) | 64 s (35× real time) |
-| voiceiq-mini | 90.0 | 41.5 | 70.7 | 63.6 | 32.1 | 19.2 | 39.2 | 31.7 | 5 (1) | 76 s (29× real time) |
+| voiceiq-pro | 90.0 | 42.8 | 72.4 | 62.7 | 31.5 | 20.1 | 37.9 | 31.0 | 5 (1) | 87 s (26× real time) |
+| voiceiq-mini | 90.0 | 41.5 | 70.7 | 63.6 | 32.1 | 19.2 | 39.2 | 31.7 | 5 (1) | 93 s (24× real time) |
 | hex-pro | 50.0 | 37.4 | 51.4 | 14.1 | 30.2 | 26.3 | 32.4 | 29.4 | 2 (0) | 68 s (32× real time) |
 | hex-speakers-pro | 90.0 | 64.1 | 72.1 | 63.4 | 30.2 | 26.3 | 32.4 | 29.4 | 5 (1) | 89 s (25× real time) |
 | hex-speakers-noecho-pro | 90.0 | 37.1 | 61.9 | 41.2 | 52.4 | 88.7 | 32.4 | 52.1 | 5 (1) | 89 s (25× real time) |
@@ -425,8 +451,8 @@ with the corrected speaker input for the `hex-speakers-*` rows and
 
 | Pipeline | M1 | M2 | M3 | M4 | WER | WER mic | WER far | WER, no fillers | Speakers written (matched to nobody) | Run time |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| voiceiq-pro | 90.0 | 13.5 | 50.2 | 13.3 | 74.6 | 29.5 | 141.1 | 75.7 | 5 (1) | 29 s (29× real time) |
-| voiceiq-mini | 90.0 | 12.0 | 43.7 | 10.1 | 78.3 | 37.9 | 138.0 | 79.1 | 5 (1) | 35 s (24× real time) |
+| voiceiq-pro | 90.0 | 13.5 | 50.2 | 13.3 | 74.6 | 29.5 | 141.1 | 75.7 | 5 (1) | 41 s (20× real time) |
+| voiceiq-mini | 90.0 | 12.0 | 43.7 | 10.1 | 78.3 | 37.9 | 138.0 | 79.1 | 5 (1) | 46 s (18× real time) |
 | hex-pro | 50.0 | 40.2 | 39.9 | 23.7 | 100.8 | 81.8 | 128.9 | 102.9 | 2 (0) | 29 s (29× real time) |
 | hex-speakers-pro | 90.0 | 67.0 | 61.2 | 50.7 | 100.8 | 81.8 | 128.9 | 102.9 | 5 (1) | 38 s (22× real time) |
 | hex-speakers-noecho-pro | 90.0 | 6.0 | 53.2 | 11.2 | 76.3 | 40.6 | 128.9 | 78.0 | 5 (1) | 38 s (22× real time) |
@@ -442,8 +468,8 @@ with the corrected speaker input for the `hex-speakers-*` rows and
 
 | Pipeline | M1 | M2 | M3 | M4 | WER | WER mic | WER far | WER, no fillers | Speakers written (matched to nobody) | Run time |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| voiceiq-pro | 75.0 | 74.4 | 73.3 | 69.7 | 26.5 | 22.6 | 41.4 | 25.3 | 3 (0) | 38 s (40× real time) |
-| voiceiq-mini | 75.0 | 73.1 | 72.2 | 69.0 | 27.3 | 23.4 | 42.5 | 26.3 | 3 (0) | 41 s (36× real time) |
+| voiceiq-pro | 75.0 | 74.4 | 73.3 | 69.7 | 26.5 | 22.6 | 41.4 | 25.3 | 3 (0) | 54 s (28× real time) |
+| voiceiq-mini | 75.0 | 73.1 | 72.2 | 69.0 | 27.3 | 23.4 | 42.5 | 26.3 | 3 (0) | 55 s (27× real time) |
 | hex-pro | 50.0 | 9.2 | 57.5 | 8.1 | 82.2 | 20.3 | 319.5 | 82.4 | 2 (0) | 51 s (29× real time) |
 | hex-speakers-pro | 100.0 | 7.2 | 51.7 | 12.3 | 82.2 | 20.3 | 319.5 | 82.4 | 4 (0) | 65 s (23× real time) |
 | hex-speakers-noecho-pro | 100.0 | 6.8 | 52.5 | 13.4 | 81.1 | 18.9 | 319.5 | 81.1 | 4 (0) | 65 s (23× real time) |

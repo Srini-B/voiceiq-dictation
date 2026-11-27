@@ -23,8 +23,13 @@ def wav(source, target):
     subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", source, "-ac", "1", "-ar", "16000",
                     "-c:a", "pcm_f32le", target], check=True)
     # ffmpeg writes float WAV as WAVE_FORMAT_EXTENSIBLE, which the wave module refuses; the data chunk's size gives the frames.
-    header = open(target, "rb").read(4096)
-    return struct.unpack_from("<I", header, header.index(b"data") + 4)[0] // 4
+    with open(target, "rb") as file:
+        file.seek(12)
+        while True:
+            name, size = struct.unpack("<4sI", file.read(8))
+            if name == b"data":
+                return size // 4
+            file.seek(size + size % 2, os.SEEK_CUR)
 
 
 def main():

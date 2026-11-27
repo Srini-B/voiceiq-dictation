@@ -29,7 +29,12 @@ def main():
             continue
         out = json.loads(path.read_text())
         ref = json.loads((data / path.stem / "reference.json").read_text())
-        owner = [(t["start"], t["end"]) for t in ref["segments"] if t["speaker"] == ref["owner"]]
+        owner = []
+        for start, end in sorted((t["start"], t["end"]) for t in ref["segments"] if t["speaker"] == ref["owner"]):
+            if owner and start <= owner[-1][1]:
+                owner[-1] = (owner[-1][0], max(owner[-1][1], end))
+            else:
+                owner.append((start, end))
         for name, person in score.counts(out, ref)["mapping"].items():
             if person:
                 continue
