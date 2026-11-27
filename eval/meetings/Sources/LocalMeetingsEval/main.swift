@@ -365,11 +365,13 @@ var failures = 0
 for name in meetings {
     let source = data.appendingPathComponent(name)
     guard let inputData = try? Data(contentsOf: source.appendingPathComponent("input.json")) else { continue }
-    // An earlier run's outputs for this meeting go first, so a failed rerun leaves nothing for compare.py to score.
-    for pipeline in ["voiceiq", "hex", "hex-speakers", "hex-speakers-noecho"] {
-        try? FileManager.default.removeItem(at: out.appendingPathComponent("\(pipeline)-\(label)").appendingPathComponent("\(name).json"))
+    // An earlier run's outputs for this meeting from the pipelines this run redoes go first, so a failed rerun
+    // leaves nothing stale for compare.py to score; other pipelines' results stay.
+    var redone = pipelines.contains("voiceiq") ? ["voiceiq-\(label)"] : []
+    if pipelines.contains("hex") { redone += ["hex-\(label)", "hex-speakers-\(label)", "hex-speakers-noecho-\(label)", "far-speakers"] }
+    for folder in redone {
+        try? FileManager.default.removeItem(at: out.appendingPathComponent(folder).appendingPathComponent("\(name).json"))
     }
-    try? FileManager.default.removeItem(at: out.appendingPathComponent("far-speakers").appendingPathComponent("\(name).json"))
     // Inside the handler, so a bad input.json still reaches the scratch cleanup below.
     do { try await evaluate(try JSONDecoder().decode(Input.self, from: inputData), source: source) } catch {
         failures += 1

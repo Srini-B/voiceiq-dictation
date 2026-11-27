@@ -31,6 +31,10 @@ def speaker(line, stretches):
 def main():
     hex_out, speakers, out = sys.argv[1:4]
     os.makedirs(out, exist_ok=True)
+    # Earlier results go first: one whose Hex lines or speaker stretches are gone must not be scored again.
+    for name in os.listdir(out):
+        if name.endswith(".json"):
+            os.remove(os.path.join(out, name))
     for name in sorted(os.listdir(hex_out)):
         stretches_path = os.path.join(speakers, name)
         if not name.endswith(".json") or not os.path.exists(stretches_path):
