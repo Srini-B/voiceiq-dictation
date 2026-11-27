@@ -331,9 +331,15 @@ adds Tamil next to the Hindi example rather than replacing it, which was
 the variant that cost ml_hi in `2026-11-26-prompt-cost.md`.
 
 **Spend:** OpenRouter $3.38 over 866 calls; OpenCode $0. Latency is not
-reported for these routes. Afterwards the dispatcher's rule was restated:
-there are no paid Gemini eval calls through any route or key, so the rest of
-the prepaid balance is not used, and the results above are final.
+reported for these routes. The two prepaid keys are the authorised testing
+budget, stopped at about $1 left on each; "no paid eval credit" means no
+Gemini top-ups. No other parked prompt change is left to measure, so the
+OpenRouter balance (about $3.0) is unused.
+
+OpenCode: 3 more calls one at a time, 40 s apart (2026-11-27), all 429
+"inference service is overloaded", $0. The model is listed with audio
+input, so this is the service's capacity, not a missing model. OpenCode
+was given up.
 
 ### Pipeline
 
