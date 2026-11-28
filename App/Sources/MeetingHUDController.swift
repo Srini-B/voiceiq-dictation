@@ -132,6 +132,9 @@ final class MeetingHUDController {
     private func phaseChanged(_ phase: MeetingPhase) {
         switch phase {
         case let .recording(_, since):
+            // A notice posted as recording starts (the On device one) keeps its
+            // seconds; its dismissal lands on the recording pill.
+            if case .notice = hud.model.state { return }
             if !dictationIsActive() { setPill(.meetingRecording(since: since, micMuted: meetings.micMuted)) }
         case .idle, .failed:
             // Notes are made in the background; the pill is free at once and

@@ -265,9 +265,6 @@ import VoiceIQSpeech
     public func startRecording(source: CallSource? = nil, event: CalendarMeetings.Event? = nil,
                                joining: CalendarMeetings.Upcoming.Join? = nil) {
         if case .recording = phase { return }
-        if SettingsStore().takeRetiredOnDeviceMeetingChoice() {
-            onNotice?("\(MeetingFailure.listName) now go to AssemblyAI: On device was removed. Discard this recording to keep it off AssemblyAI.")
-        }
         let id = MeetingID(), now = Date()
         var meta = MeetingMeta(id: id, startedAt: now, source: source)
         if SettingsStore().calendarForMeetings { meta.calendarEvent = event ?? CalendarMeetings.event(at: now, source: source) }
@@ -302,6 +299,9 @@ import VoiceIQSpeech
             }
             #endif
             phase = .recording(id, since: now)
+            if SettingsStore().takeRetiredOnDeviceMeetingChoice() {
+                onNotice?("\(MeetingFailure.listName) now go to AssemblyAI: On device was removed. Discard this recording to keep it off AssemblyAI.")
+            }
         } catch { fail(id, error) }
     }
 
