@@ -151,13 +151,16 @@ run: a re-signed copy can't be granted Screen Recording and Accessibility
 without the admin password.
 
 ```sh
-# with VoiceiQ quit
+# with VoiceiQ quit; the Dictionary and other settings live in the defaults
+# domain, not the data folder, so save them and put them back afterwards
+defaults export io.blue.voiceiq /Users/Shared/voiceiq-pre-test.plist
 defaults write io.blue.voiceiq DebugDisableCloudSync -bool true
 defaults write io.blue.voiceiq DebugDataFolder /Users/Shared/voiceiq-probe-data
 # launch it; its menu shows "Sync off (test)" and "Data in … (test)"
 # afterwards: quit it, then
-defaults delete io.blue.voiceiq DebugDisableCloudSync
-defaults delete io.blue.voiceiq DebugDataFolder
+# import alone merges, so clear the domain first; this also drops both keys
+test -s /Users/Shared/voiceiq-pre-test.plist && defaults delete io.blue.voiceiq &&
+  defaults import io.blue.voiceiq /Users/Shared/voiceiq-pre-test.plist
 # relaunch it and check neither "(test)" line is left
 ```
 

@@ -44,6 +44,9 @@ $applock holds $lockowner && callerlock=1
 trap cleanup EXIT
 # Taken only once cleanup can release it.
 $applock acquire $lockowner
+# The lock goes stale 30 minutes after its last renewal; a run can be longer.
+{ while sleep 600; do $applock holds $lockowner && $applock acquire $lockowner; done } &
+pids+=$!
 trap "exit 1" INT TERM
 
 url() { # display-name video-parameter
