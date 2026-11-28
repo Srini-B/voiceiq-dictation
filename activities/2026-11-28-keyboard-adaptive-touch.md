@@ -1,4 +1,4 @@
-# iPhone keyboard: Adaptive touch switch (2026-11-28)
+# iPhone keyboard: Adaptive touch always on (2026-11-28)
 
 ## Why
 
@@ -9,18 +9,29 @@ you type. The keyboard is Hex's own code, synced from `f5819f4c`, and Hex
 with two gaps:
 
 - **Adaptive touch**, Hex's Labs option that moves each key's touch area toward
-  where you tap it. The code was vendored, but VoiceiQ had no switch, so it was
-  always off.
+  where you tap it. The code was vendored, but it is off by default in Hex and
+  VoiceiQ had no switch, so it never ran.
 - **Learning from fixes to dictated text** (Hex's `DictationEditInference`):
   vendored, not wired. Handled separately.
 
+cyron decided (2026-11-28): "Bring it but make it on and don't give option on
+ui to turn off and keep improving it." A first draft of this PR added an
+off-by-default switch; it was replaced before merge.
+
 ## What changed
 
-Settings › Keyboard & Permissions › Typing has an Adaptive touch switch, off
-by default as in Hex, with Reset touch learning. Erase what it learned also
-resets touch learning, as Hex's Delete what Hex learned does. The card writes
-Hex's own App Group keys (`experiments.adaptiveTouch`, `adaptiveTouch.resetAt`);
-no Hex file changed.
+- `0011-voiceiq-adaptive-touch-on.patch`: `AdaptiveTouchSettings.isEnabled`
+  is always true, so the keyboard learns tap positions in every field Hex
+  allows (never secure ones). No switch in Settings.
+- Erase what it learned (Settings › Keyboard & Permissions › Typing) also
+  resets touch learning, as Hex's Delete what Hex learned does: the recovery
+  path if bad averages ever build up.
+- The Learn how I type footnote says the keyboard always learns where you tap.
+
+## Follow-up
+
+The two-day upstream watch keeps checking Hex's Adaptive touch commits and
+tunes it from there.
 
 ## Verification
 

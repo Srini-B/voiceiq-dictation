@@ -19,7 +19,8 @@ struct AdaptiveTouchSettings {
     }
 
     var isEnabled: Bool {
-        get { defaults?.bool(forKey: Key.enabled) ?? false }
+        // VoiceiQ: Adaptive touch is always on, with no switch (cyron, 2026-11-28).
+        get { true }
         nonmutating set { defaults?.set(newValue, forKey: Key.enabled) }
     }
 

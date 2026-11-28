@@ -13,11 +13,8 @@ struct TypingSettingsCard: View {
     @AppStorage("settings.keyboardHaptics", store: defaults) private var haptics = true
     @AppStorage("settings.keyboardNumberRow", store: defaults) private var numberRow = false
     @AppStorage("experiments.typingJournal", store: defaults) private var learns = true
-    @AppStorage("experiments.adaptiveTouch", store: defaults) private var adaptiveTouch = false
     @State private var confirmErase = false
     @State private var erased = false
-    @State private var confirmTouchReset = false
-    @State private var touchReset = false
 
     var body: some View {
         Card {
@@ -27,18 +24,8 @@ struct TypingSettingsCard: View {
             Toggle("Key haptics", isOn: $haptics)
             Toggle("Number row", isOn: $numberRow)
             Divider().overlay(Theme.Colors.hairline)
-            Toggle("Adaptive touch", isOn: $adaptiveTouch)
-            Text("Moves each key's touch area toward where you tap it. It keeps what it learns between uses only with Full Access.")
-                .font(Theme.Fonts.footnote())
-                .foregroundStyle(Theme.Colors.muted)
-            if adaptiveTouch {
-                Button(touchReset ? "Reset" : "Reset touch learning", role: .destructive) { confirmTouchReset = true }
-                    .buttonStyle(.compactSecondary)
-                    .disabled(touchReset)
-            }
-            Divider().overlay(Theme.Colors.hairline)
             Toggle("Learn how I type", isOn: $learns)
-            Text("The keyboard learns the words you keep and the fixes you undo, so it corrects you less. It stays on this \(UIDevice.current.localizedModel) and is never sent anywhere.")
+            Text("The keyboard learns the words you keep and the fixes you undo, so it corrects you less. It always learns where you tap each key, too. It stays on this \(UIDevice.current.localizedModel) and is never sent anywhere.")
                 .font(Theme.Fonts.footnote())
                 .foregroundStyle(Theme.Colors.muted)
             Button(erased ? "Erased" : "Erase what it learned", role: .destructive) { confirmErase = true }
@@ -53,16 +40,10 @@ struct TypingSettingsCard: View {
                 erased = true
             }
         }
-        .confirmationDialog("Reset touch learning?", isPresented: $confirmTouchReset, titleVisibility: .visible) {
-            Button("Reset touch learning", role: .destructive) {
-                Self.resetTouchLearning()
-                touchReset = true
-            }
-        }
     }
 
     /// What Hex's `TypingJournal.delete` erases: the journal file, its switched-off
-    /// fixes and the learned words. `typingJournal.erasedAt` tells a keyboard that is
+    /// fixes and the learned words, plus Adaptive touch's tap averages. `typingJournal.erasedAt` tells a keyboard that is
     /// still running to drop what it holds in memory.
     private static func eraseLearning() {
         guard let defaults else { return }

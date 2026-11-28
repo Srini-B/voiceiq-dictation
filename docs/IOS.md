@@ -792,14 +792,15 @@ the App Group, which the keyboard reads each time it appears; Hex's other
 switches (key colours, emoji shortcodes and its other Labs experiments) keep
 Hex's defaults.
 
-**Adaptive touch** (Hex's Labs › Adaptive touch, off by default as in Hex) is
-a switch on the same card. With it on, the keyboard learns where you tap each
-letter key on each key size and moves the key's touch area toward it once it
-has enough taps; it learns nowhere a secure field or one Learn how I type skips
-would be. Without Full Access it keeps the averages in memory until the
-keyboard closes; with Full Access, in the keyboard's own container. Reset touch
-learning, and Erase what it learned, write Hex's `adaptiveTouch.resetAt`, so a
-running keyboard drops older averages the next time it reads them.
+**Adaptive touch** (Hex's Labs › Adaptive touch, off by default in Hex) is
+always on in VoiceiQ, with no switch (`0011-voiceiq-adaptive-touch-on.patch`).
+The keyboard learns where you tap each letter key on each key size and moves
+the key's touch area toward it once it has enough taps; it learns nowhere a
+secure field or one Learn how I type skips would be. Without Full Access it
+keeps the averages in memory until the keyboard closes; with Full Access, in
+the keyboard's own container. Erase what it learned also writes Hex's
+`adaptiveTouch.resetAt`, so a running keyboard drops older averages the next
+time it reads them.
 
 **Tests.** `KeyboardTests` (in the `VoiceIQiOS` scheme, hosted by the app so
 the embedded keyboard's typing model loads) compiles the keyboard's sources
