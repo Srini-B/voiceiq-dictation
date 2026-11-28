@@ -209,9 +209,12 @@ public actor AssemblyAIClient {
             } catch TranscriptionError.offline {
                 offline = true
                 continue
-            } catch TranscriptionError.network, TranscriptionError.timeout {
+            } catch TranscriptionError.network {
                 // A failed poll asks again rather than sending the audio a second time.
                 offline = false
+                continue
+            } catch TranscriptionError.timeout {
+                // No answer is no news: a stall while offline stays offline.
                 continue
             }
             guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { continue }
