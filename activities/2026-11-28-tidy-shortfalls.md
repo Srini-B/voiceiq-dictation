@@ -84,4 +84,12 @@ and passes here, except item 2's, which pins the current behaviour.
   growing at the rate amazon dot com." → "growing@amazon.com"): after a
   weak introduction, an "-ing" word of six letters or more, or a number, is
   no mailbox now. "Use growth at the rate google dot com." still joins.
+- Codex and Neon rounds after that found joins main made and #131 had
+  lost: an address after a heading line, after "email's" or "It's", after
+  "to billing" or "to 123", and an address list after "to". Each is fixed
+  with a case in `TidyTests`. A scratch harness then compared
+  `SpokenAddresses.joining` against main's over 2,100 generated
+  dictations (30 introductions × 7 mailboxes × 10 endings): the only joins
+  main makes and this branch does not are "Prices rose X…" (item 1) and
+  "It is" / "It's" before a long "-ing" word or a number, both meant.
 - CI runs `swift test --package-path VoiceIQCore` on Xcode 27.

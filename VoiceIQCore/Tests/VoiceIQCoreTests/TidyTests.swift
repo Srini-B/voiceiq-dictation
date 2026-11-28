@@ -256,6 +256,12 @@ final class TidyTests: XCTestCase {
             ("My email's priya at the rate gmail dot com, thanks.", "My email's priya@gmail.com, thanks."),
             ("It’s priya at the rate gmail dot com.", "It’s priya@gmail.com."),
             ("Send it to billing at the rate company dot com.", "Send it to billing@company.com."),
+            ("Send it to 123 at the rate gmail dot com.", "Send it to 123@gmail.com."),
+            ("Tell priya at the rate gmail dot com, thanks.", "Tell priya@gmail.com, thanks."),
+            ("Send it to priya at the rate gmail dot com or ravi at sign yahoo dot com.", "Send it to priya@gmail.com or ravi@yahoo.com."),
+            // A list of addresses ends where its last one does.
+            ("Send it to priya at the rate gmail dot com and ravi at the rate yahoo dot com.",
+             "Send it to priya@gmail.com and ravi@yahoo.com."),
             ("Send it to ming at the rate gmail dot com.", "Send it to ming@gmail.com."),
         ] {
             XCTAssertEqual(SpokenAddresses.joining(in: spoken), written)
