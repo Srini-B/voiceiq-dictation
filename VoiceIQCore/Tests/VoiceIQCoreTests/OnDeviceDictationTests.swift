@@ -123,6 +123,17 @@ final class OnDeviceDictationTests: XCTestCase {
         XCTAssertEqual(SettingsStore().cleanupSource, .gemini)
     }
 
+    /// Someone who had set meetings to On device is told once, on their first
+    /// recording, that meetings now go to Gemini; a Gemini choice says nothing.
+    func testRetiredOnDeviceMeetingChoiceIsReportedOnce() {
+        UserDefaults.standard.set("onDevice", forKey: "meetingTranscriptionSource")
+        XCTAssertTrue(SettingsStore().takeRetiredOnDeviceMeetingChoice())
+        XCTAssertFalse(SettingsStore().takeRetiredOnDeviceMeetingChoice())
+        UserDefaults.standard.set("gemini", forKey: "meetingTranscriptionSource")
+        XCTAssertFalse(SettingsStore().takeRetiredOnDeviceMeetingChoice())
+        UserDefaults.standard.removeObject(forKey: "meetingTranscriptionSource")
+    }
+
     /// Core ML's prepared copies of the models (on the Mac, about 1 GB in
     /// `~/Library/Caches/io.blue.voiceiq.localspeech`) go when a model is
     /// deleted, and a launch with no model downloaded removes copies an older

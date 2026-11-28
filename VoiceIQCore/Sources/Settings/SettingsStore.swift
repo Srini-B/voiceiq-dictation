@@ -94,6 +94,15 @@ public struct SettingsStore: Sendable {
         try? FileManager.default.removeItem(at: FileLayout.agentRunsRoot)
     }
 
+    /// True once, for someone who had set meetings to On device in 0.7.17 or
+    /// earlier: meetings now always go to Gemini, and an automatic update
+    /// shows no release notes, so their first recording says so.
+    public func takeRetiredOnDeviceMeetingChoice() -> Bool {
+        guard Self.defaults.string(forKey: "meetingTranscriptionSource") == "onDevice" else { return false }
+        Self.defaults.removeObject(forKey: "meetingTranscriptionSource")
+        return true
+    }
+
     static let retiredKeys = [
         "modelProvider", "didAdoptProviderWithKey", "openAITranscribeModelOverride", "openAIWritingModelOverride",
         "liveDictationEnabled", "elevenLabsTranscription", "elevenLabsRedaction", "skipShortDictationCleanup",
