@@ -19,10 +19,11 @@ public final class SessionSleepGuard {
     public init(dictation: DictationCoordinator, meetings: MeetingEngine, writeUpCap: TimeInterval = 60 * 60) {
         // A stopped meeting holds it until its transcript and notes are saved
         // or fail, and at most `writeUpCap`, so a step that never returns
-        // cannot keep the Mac awake until quit.
-        let writingUp = meetings.$processing.map { !$0.isEmpty }.removeDuplicates()
-            .map { busy in
-                busy ? Just(true).append(Just(false).delay(for: .seconds(writeUpCap), scheduler: DispatchQueue.main)).eraseToAnyPublisher()
+        // cannot keep the Mac awake until quit. The cap restarts whenever a
+        // meeting joins or leaves the write-up, so overlapping ones each get it.
+        let writingUp = meetings.$processing.map { Set($0.keys) }.removeDuplicates()
+            .map { ids in
+                !ids.isEmpty ? Just(true).append(Just(false).delay(for: .seconds(writeUpCap), scheduler: DispatchQueue.main)).eraseToAnyPublisher()
                      : Just(false).eraseToAnyPublisher()
             }
             .switchToLatest()
