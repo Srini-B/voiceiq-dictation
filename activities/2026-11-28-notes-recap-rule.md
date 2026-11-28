@@ -1,4 +1,4 @@
-# 2026-11-28: Meeting notes: a closing recap creates no new action
+# 2026-11-28: Meeting notes: a closing recap restates tasks
 
 ## Why
 
@@ -14,72 +14,77 @@ meeting's 3-run mean drops by more than 1 point.
 
 ## What changed
 
-`MeetingNotesPrompt.rules` has a `recaps` rule under actions. A closing
-recap restates tasks and creates no new action. Each recapped task matches
-its earlier commitment and takes the deadline the recap states. A task the
-recap gives a named person for the first time is a new action. A recapped
-phrase that names no one and matches nothing earlier is not an action.
-`docs/design/meeting-prompt-rulebook.md` has the same rule.
+`MeetingNotesPrompt.rules` has a `recaps` rule under actions, and
+`docs/design/meeting-prompt-rulebook.md` has the same rule:
 
-The first version (798b6673 in the PR) said only that a phrase matching no earlier
-commitment is not an action. On three made-up meetings ending in a recap
-(gpt-6-luna medium on the LLM Gateway, 2 runs each), it dropped "and Priya
-updates the FAQ page by Friday" in 2 of 2 runs; the old prompt kept it. The
-revision (bb4b0fe6) keeps a task first given to a named person in the
-recap. It got all four probe cases right in 2 of 2 runs: restated tasks,
-a new request, a new assignment, and the s4-echo transcript.
+- A closing recap that restates tasks creates no new action for them.
+  Each recapped task matches its earlier commitment and takes the deadline
+  the recap states, keeping its earlier deadline when the recap states none.
+- The earlier owner stays: another name in a recap is a restatement, not a
+  handover, unless that person agrees to take the task.
+- A task the recap gives a named person for the first time, or that a
+  speaker takes on there in the first person ("I'll email legal"), is a new
+  action. A concrete next step the group agrees to is an action with owner
+  null.
+- Any other recapped phrase that matches no earlier commitment is not an
+  action.
 
-Review found gaps in the revision, fixed in the final wording:
+## How the wording got here
 
-- Neon hand read: a group step agreed in the recap was dropped, and a recap
-  with no deadline could clear the earlier one.
-- Neon (agy, Gemini 4 Neon high, at 45f035fd): a first-person commitment
-  first made in the recap could be dropped; a recap that names a different
-  person read as a handover; "group action" was undefined.
+Probes ran on the LLM Gateway (gpt-6-luna medium) against made-up meetings
+that end in a recap, 2 runs each, plus the s4-echo transcript.
 
-The final wording keeps the earlier deadline when the recap states none and
-the earlier owner unless that person agrees to take the task; counts a new
-task only when it is a first-person commitment or given to a named person;
-reads "you'll …" in a recap as restating a task already taken; makes a
-concrete group step an action with owner null; and never makes scheduling
-the next call an action. An intermediate wording that keyed new tasks on
-"asked to do" brought back s4-echo's invented item ("You'll set numbers…"
-read as a request), in 2 of 2 and then 1 of 2 runs, so it was dropped.
-
-LLM Gateway probe of the final wording (gpt-6-luna medium): s4-echo right in
-6 of 6 runs; restated tasks, a new request, a new named assignment, a
-first-person new commitment, a misheard owner, a vague aside, scheduling the
-next call, a group step and a recap with no date each right in 2 of 2.
+1. First version (798b6673): a phrase matching no earlier commitment is not
+   an action. It dropped "and Priya updates the FAQ page by Friday" in 2 of
+   2 runs.
+2. Revision (c774793b): keeps a task first given to a named person.
+   Measured on 9 meetings × 3 (set C below).
+3. 45f035fd: keeps the earlier deadline when the recap states none, and a
+   group step (Neon hand read). Neon (agy, Gemini 4 Neon high) then found
+   that a first-person commitment made in the recap was dropped and that
+   another name read as a handover.
+4. 52e73a76 (set D below): added "you'll … restates a task already taken"
+   and "scheduling the next call is not an action". s4-echo fell to 83.3,
+   with the invented item back in 1 of 3 runs, and the Tuesday follow-up
+   meeting disappeared from 5 of 6 s2 notes. Fable 5.2 blocked it: the
+   "you'll" clause contradicts the actions and owner rules ("asked to do")
+   and is fitted to one mishearing. Both clauses were removed.
+5. Final wording (this PR's head): c774793b's rule plus the review fixes
+   that don't depend on those clauses. Probes, 2 runs each unless noted, all
+   right: restated tasks, a new request, a new named assignment ("Priya,
+   you'll update the FAQ"), a request first made in the recap, a
+   first-person new commitment, sending the invite for the next call, a
+   misheard owner, a vague aside, a group step, a recap with no date.
+   s4-echo: right in 17 of 18 runs; c774793b's wording, right in 12 of 12
+   on the same probe. The invented item is a rare slip of the notes model on
+   that mishearing, not something either wording removes completely.
 
 ## Measured
 
 MeetingsEval on lobsters-mac-mini, notes only (`EVAL_TRANSCRIPTS`), on the
 gate (a) transcripts, s3fix's for s3-four-people and three fresh ones for
-s3-four-people-echo. Notes on gpt-6-luna medium. M5 judged by Fable.
+s3-four-people-echo. Notes on gpt-6-luna medium. M5 judged by Fable, 3 runs
+per meeting.
 
-| Meeting | Gate (a) | First version | Revision (c774793b) |
-|---|---|---|---|
-| ami-ES2004a | 90.3 | 90.3 | 90.7 |
-| s1-one-to-one | 94.7 | 94.3 | 95.0 |
-| s1-one-to-one-echo | 95.3 | 95.7 | 95.3 |
-| s2-three-people | 93.3 | 93.3 | 92.7 |
-| s2-three-people-echo | 93.3 | 93.0 | 92.3 |
-| s3-four-people | 92.3 (after the audio fix) | 94.3 | 94.7 |
-| s3-four-people-echo | 94.0 (fresh baseline) | 94.3 | 94.7 |
-| s4-names-unsaid | 93.7 | 93.7 | 92.7 |
-| s4-names-unsaid-echo | 60.0 (78.3 in s3fix) | 94.3 | 94.7 |
+| Meeting | Gate (a) | 798b6673 (set A) | c774793b (set C) | 52e73a76 (set D) |
+|---|---|---|---|---|
+| ami-ES2004a | 90.3 | 90.3 | 90.7 | 91.0 |
+| s1-one-to-one | 94.7 | 94.3 | 95.0 | 95.0 |
+| s1-one-to-one-echo | 95.3 | 95.7 | 95.3 | 95.0 |
+| s2-three-people | 93.3 | 93.3 | 92.7 | 93.0 |
+| s2-three-people-echo | 93.3 | 93.0 | 92.3 | 93.3 |
+| s3-four-people | 92.3 (after the audio fix) | 94.3 | 94.7 | 94.0 |
+| s3-four-people-echo | 94.0 (fresh baseline) | 94.3 | 94.7 | 93.3 |
+| s4-names-unsaid | 93.7 | 93.7 | 92.7 | 94.0 |
+| s4-names-unsaid-echo | 60.0 (78.3 in s3fix) | 94.3 | 94.7 | 83.3 |
 
-- No "Set the numbers" item appeared in any run of either version. Kenji
-  keeps "by Friday" and Dana keeps "Monday".
-- s2-echo and s4-names-unsaid each moved exactly 1.0, the limit. Fable reads
-  moves of that size as one judge's noise: the single-run misses behind them
-  (Muhammed's "send them to Nihal" dropped, "other vendors in the spring"
-  dropped) have no link to recaps.
+- The invented "Set the numbers" item appeared in 0 of 3 runs in sets A and
+  C and 1 of 3 in set D.
+- The final wording's 9-meeting run is recorded in the PR once Fable has
+  judged it.
 - The rule was written for s4-names-unsaid-echo, a scored meeting, so its
   gain there is expected; the other eight meetings and the probes are the
   evidence it generalises.
-- One to watch: AMI run 3 listed Sarah's closing aside ("I get to do another
-  fantastic PowerPoint presentation") as an action. That is the kind of
-  first-time assignment the revision keeps; one run cannot show cause.
-- Cost: $0.21 of gateway and transcription calls for both versions and the
-  probes.
+- One to watch: AMI run 3 of set C listed Sarah's closing aside ("I get to
+  do another fantastic PowerPoint presentation") as an action.
+- Cost: about $0.40 of gateway calls for all versions and probes.
