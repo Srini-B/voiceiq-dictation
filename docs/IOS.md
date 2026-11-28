@@ -537,7 +537,12 @@ VoiceiQ adds no row.
   (`languageOverride`, `HexLanguageSettings.swift`), so there is no language
   list, no space-bar language swipe or label, no second autocorrect language
   and no language detection, and only English data ships (the `en.hextm`
-  word model and the English emoji search index). The globe key shows only
+  word model, its `en.spellings` and the English emoji search index). Since
+  Hex `f5819f4c` the model holds names, days and places ("Claude", "Monday",
+  "London") and newer words ("ChatGPT"), so they can be swiped and typos of
+  them are corrected; a correction to a name takes its capital, and
+  `en.spellings` gives words their own spelling ("chatgpt" becomes
+  "ChatGPT", "github" "GitHub"). English swipe no longer ranks names lower. The globe key shows only
   when iOS asks for one (`needsInputModeSwitchKey`), as on the iPhone SE.
 - The edit panel (`EditPanel`, `EditController`), in place of the keys, in
   three rows of one height: line start, previous word, left and right chevrons
