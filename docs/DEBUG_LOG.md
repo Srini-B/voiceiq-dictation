@@ -145,13 +145,25 @@ privacy-protected folder can wait on a permission prompt and hang the app at
 
 ## Test mode
 
-A test copy of the app sets two defaults, so nothing it records reaches the
-owner's iCloud or the real app's data:
+Two defaults keep what a test records out of the owner's iCloud and the real
+app's data. On a shared test Mac, set them on the installed signed app for the
+run: a re-signed copy can't be granted Screen Recording and Accessibility
+without the admin password.
 
 ```sh
-defaults write io.blue.voiceiq.probe DebugDisableCloudSync -bool true
-defaults write io.blue.voiceiq.probe DebugDataFolder /Users/Shared/voiceiq-probe-data
-# launch the copy; its menu shows "Sync off (test)" and "Data in … (test)"
+# with VoiceiQ quit; the Dictionary and other settings live in the defaults
+# domain, not the data folder, so save them and put them back afterwards
+defaults export io.blue.voiceiq /Users/Shared/voiceiq-pre-test.plist
+# Markdown export ignores test mode and may write into iCloud Drive
+defaults delete io.blue.voiceiq meetingMarkdownFolder 2>/dev/null || true
+defaults write io.blue.voiceiq DebugDisableCloudSync -bool true
+defaults write io.blue.voiceiq DebugDataFolder /Users/Shared/voiceiq-probe-data
+# launch it; its menu shows "Sync off (test)" and "Data in … (test)"
+# afterwards: quit it, then
+# import alone merges, so clear the domain first; this also drops both keys
+test -s /Users/Shared/voiceiq-pre-test.plist && defaults delete io.blue.voiceiq &&
+  defaults import io.blue.voiceiq /Users/Shared/voiceiq-pre-test.plist
+# relaunch it and check neither "(test)" line is left
 ```
 
 | Default | What it does | Platforms |

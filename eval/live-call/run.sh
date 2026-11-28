@@ -17,6 +17,12 @@ room=$1 seconds=$2 owner=${3:A}; shift 3
 guests=(${@:A})
 site=${SITE:-jitsi}
 chrome="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+# The run records with the installed app, so it holds the shared app lock
+# (scripts/app-lock.sh); LOCK_OWNER names who holds it, such as a thread ID.
+# A lock the caller already holds, for test-mode setup and teardown around
+# the run, stays held when the run ends.
+lockowner=${LOCK_OWNER:?set LOCK_OWNER to your thread ID}
+applock=${0:A:h:h:h}/scripts/app-lock.sh
 # Sparkle replaced the build under test mid-run on 2026-11-28 (0.7.17 to
 # 0.7.18); a test Mac never updates the app on its own.
 defaults write io.blue.voiceiq SUEnableAutomaticChecks -bool false
@@ -31,8 +37,16 @@ cleanup() {
   for pid in $pids; do kill $pid 2>/dev/null || true; done
   sleep 2
   rm -rf $scratch
+  (( callerlock )) || $applock release $lockowner
 }
+callerlock=0
+$applock holds $lockowner && callerlock=1
 trap cleanup EXIT
+# Taken only once cleanup can release it.
+$applock acquire $lockowner
+# The lock goes stale 30 minutes after its last renewal; a run can be longer.
+{ while sleep 600; do $applock holds $lockowner && $applock acquire $lockowner; done } &
+pids+=$!
 trap "exit 1" INT TERM
 
 url() { # display-name video-parameter

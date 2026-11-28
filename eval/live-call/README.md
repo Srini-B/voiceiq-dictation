@@ -25,8 +25,29 @@ so VoiceiQ detects the call and reads names from the screen.
 
 ## What the probe needs
 
-- A signed build of the commit under test, installed as `/Applications/VoiceiQ.app`.
-  Do not test a Debug build (AGENTS.md).
+- The signed Release build of the commit under test, installed as
+  `/Applications/VoiceiQ.app` and run in test mode (docs/DEBUG_LOG.md, Test
+  mode), so the probe's meetings stay out of the owner's data and iCloud.
+  Don't use a re-signed copy: granting it Screen Recording and Accessibility
+  needs the admin password. With the app quit, save its settings
+  (`defaults export io.blue.voiceiq <file>`), turn off Markdown export,
+  which test mode doesn't stop (`defaults delete io.blue.voiceiq
+  meetingMarkdownFolder`), then set
+  `defaults write io.blue.voiceiq DebugDisableCloudSync -bool true` and
+  `defaults write io.blue.voiceiq DebugDataFolder /absolute/path`, launch it,
+  and check its menu shows "Sync off (test)" and "Data in <path> (test)"
+  before the call. Afterwards quit it, restore the settings exactly
+  (`defaults delete io.blue.voiceiq`, then `defaults import io.blue.voiceiq
+  <file>`; import alone merges), relaunch it and
+  check neither "(test)" line is left (AGENTS.md). Do not test a Debug build.
+- The shared app lock from test-mode setup to the end of teardown:
+  `scripts/app-lock.sh acquire <thread ID>` before quitting the app, and
+  `release` after the last menu check. `run.sh` takes the lock for the run
+  (`LOCK_OWNER` set to your thread ID), renews it every 10 minutes so a long
+  run doesn't outlast it, and leaves a lock you already hold in place, so
+  nobody quits or reinstalls the real app under a probe. Setup and teardown
+  outside the script must take under 30 minutes, the lock's stale age, or
+  renew it with another `acquire`.
 - `ASSEMBLYAI_API_KEY` set in the app, so the meeting is transcribed. Notes
   need an LLM Gateway balance. Without one they fail with `noBalance`, and
   the probe scores the transcript only.
