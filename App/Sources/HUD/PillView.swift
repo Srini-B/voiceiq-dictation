@@ -56,10 +56,11 @@ struct PillView: View {
                     }
                     WaveformView(level: model.level, processing: false)
                     if locked {
-                        HStack(spacing: VoiceIQUI.Spacing.xxs) {
+                        HStack(spacing: VQ.Spacing.xs) {
                             cancelKeyCap
                             cancelButton
                         }
+                        .padding(.leading, VQ.Spacing.xxs)
                         stopButton
                     }
                 }
@@ -193,7 +194,7 @@ struct PillView: View {
             .foregroundStyle(VQ.Colors.onPillMuted)
             .padding(.horizontal, 5)
             .frame(height: 18)
-            .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(VQ.Colors.onPillMuted.opacity(0.4), lineWidth: 1))
+            .background(RoundedRectangle(cornerRadius: 4).fill(VQ.Colors.onPillMuted.opacity(0.15)))
             .fixedSize()
             .accessibilityHidden(true)
     }
