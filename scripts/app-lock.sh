@@ -20,28 +20,37 @@ action=${1:?acquire or release}
 owner=${2:?owner (thread ID)}
 
 held_by() { cat "$lock/owner" 2>/dev/null | head -1; }
-age() { echo $(( $(date +%s) - $(stat -c %Y "$lock" 2>/dev/null || stat -f %m "$lock" 2>/dev/null || date +%s) )); }
+mtime() { stat -c %Y "$1" 2>/dev/null || stat -f %m "$1" 2>/dev/null || date +%s; }
+age() { echo $(( $(date +%s) - $(mtime "$lock") )); }
+
+# Reclaiming a stale lock and releasing one both check the owner, then
+# delete. This mutex keeps the two from interleaving, so neither can delete
+# a fresh lock another owner just took. One left by a killed process is
+# cleared after 60 s.
+mutex=$lock.takeover
+take_mutex() {
+  until mkdir "$mutex" 2>/dev/null; do
+    if (( $(date +%s) - $(mtime "$mutex") > 60 )); then rmdir "$mutex" 2>/dev/null || true; else sleep 1; fi
+  done
+}
 
 case $action in
 acquire)
   while ! mkdir "$lock" 2>/dev/null; do
     if [[ $(held_by) == "$owner" ]]; then break; fi
+    [[ -d $lock ]] || continue  # released since the mkdir: try again now
     if (( $(age) >= stale )); then
-      # One owner at a time reclaims a stale lock and checks it again inside,
-      # so a contender can't delete the fresh lock another owner just took.
-      if mkdir "$lock.takeover" 2>/dev/null; then
-        if [[ -d $lock ]] && (( $(age) >= stale )); then
-          echo "app lock: taking over a stale lock from $(held_by)" >&2
-          rm -rf "$lock"
-        fi
-        rmdir "$lock.takeover"
-      elif (( $(date +%s) - $(stat -c %Y "$lock.takeover" 2>/dev/null || stat -f %m "$lock.takeover" 2>/dev/null || date +%s) > 60 )); then
-        rmdir "$lock.takeover" 2>/dev/null || true
-      else
-        sleep 1
+      take_mutex
+      if [[ -d $lock ]] && (( $(age) >= stale )); then
+        echo "app lock: taking over a stale lock from $(held_by)" >&2
+        rm -rf "$lock"
       fi
+      rmdir "$mutex"
       continue
     fi
+    # No owner yet, or being deleted: another owner is mid-acquire or
+    # mid-release, so look again in a second.
+    if [[ -z $(held_by) ]]; then sleep 1; continue; fi
     echo "app lock: held by $(held_by) for $(age)s; waiting" >&2
     sleep 30
   done
@@ -49,7 +58,9 @@ acquire)
   touch "$lock"
   ;;
 release)
+  take_mutex
   if [[ $(held_by) == "$owner" ]]; then rm -rf "$lock"; fi
+  rmdir "$mutex"
   ;;
 *)
   echo "usage: $0 acquire|release OWNER" >&2

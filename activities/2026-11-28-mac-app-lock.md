@@ -14,3 +14,16 @@ Agents on lobsters-mac-mini quit and reinstalled `/Applications/VoiceiQ.app` und
 - A lock under 30 minutes old means wait; an older one is stale and can be taken.
 - Tests that don't need the real install use their own copy, such as `~/Applications/VoiceiQ-<thread>.app`.
 - `eval/live-call/run.sh` holds the lock for its run (`LOCK_OWNER`). AGENTS.md carries the rule.
+
+## The queue
+
+The iPhone draft-swap check that gates 0.7.19 waited more than 30 minutes behind other jobs, with load at 100–900 and 2–3 simulators booted. Heavy jobs now take a turn through `scripts/mac-queue.sh`, using tickets in `/Users/lobster/.mac-mini-queue`:
+
+- `wait <thread ID> <class> "<what>"` joins and returns at your turn; `done <thread ID>` leaves; `show` lists the queue.
+- **Classes, in order:** `release` (gates the next release), `merge` (gates a PR), `other`. First come, first served within a class.
+- **Two slots.** A started job keeps its slot until `done`, so a later release job waits for a slot rather than pushing past the cap.
+- **Stale tickets** older than 3 hours are dropped. A longer job runs `wait` again to refresh its ticket.
+
+Tested on Linux with a 1 s poll: two running jobs, then a third (`other`) and a fourth (`release`, arriving later). The release job started first when a slot opened, and never more than two ran at once.
+
+The app lock's stale-lock takeover and its release both go through one mutex, so neither can delete a fresh lock another owner just took (Codex found both races). Race tests: 6 contenders on one stale lock, 30/30 rounds with exactly one winner; a release racing a takeover, 40/40 rounds with the new owner keeping its lock.
