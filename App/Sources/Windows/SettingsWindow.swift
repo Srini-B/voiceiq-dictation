@@ -135,7 +135,6 @@ private struct MainView: View {
             detail
         }
         .frame(minWidth: 880, minHeight: 580)
-        .tint(VQ.Colors.accent)
     }
 
     private var sidebar: some View {
