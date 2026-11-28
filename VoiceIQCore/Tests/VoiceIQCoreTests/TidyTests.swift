@@ -217,6 +217,9 @@ final class TidyTests: XCTestCase {
         XCTAssertEqual(SpokenMarks.symbols(in: "Great exclamation mark see you soon."), "Great! see you soon.")
         XCTAssertEqual(SpokenMarks.symbols(in: "Really question mark I doubt it."), "Really? I doubt it.")
         XCTAssertEqual(SpokenMarks.symbols(in: "Double exclamation mark please see it."), "Double exclamation mark please see it.")
+        for kept in ["What question mark? I didn't type one.", "Really question mark? I didn't type one."] {
+            XCTAssertEqual(SpokenMarks.symbols(in: kept), kept)
+        }
         // Names that are also prose words, and Spanish marks, stay as said.
         for kept in ["commas", "hashtag release", "my underscore variable", "and slash or", "the colonel",
                      "Colon biopsy results", "a bigger colon", "comma separated values", "one question mark left",
@@ -252,6 +255,7 @@ final class TidyTests: XCTestCase {
             ("Contacts\npriya at the rate gmail dot com.", "Contacts\npriya@gmail.com."),
             ("My email's priya at the rate gmail dot com, thanks.", "My email's priya@gmail.com, thanks."),
             ("It’s priya at the rate gmail dot com.", "It’s priya@gmail.com."),
+            ("Send it to billing at the rate company dot com.", "Send it to billing@company.com."),
             ("Send it to ming at the rate gmail dot com.", "Send it to ming@gmail.com."),
         ] {
             XCTAssertEqual(SpokenAddresses.joining(in: spoken), written)

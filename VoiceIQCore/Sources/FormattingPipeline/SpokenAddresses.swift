@@ -156,9 +156,10 @@ enum SpokenAddresses {
         if weakIntroductions.contains(word) || contracted != nil {
             if contracted == nil, start >= 2, strongIntroductions.contains(bare(tokens[start - 2].word)) { return .strong }
             // "It is growing at the rate…", "went from 10 at the rate…": a verb or a number, not a
-            // mailbox. Not "-ed" ("Ahmed") or a short "-ing" ("Ming").
+            // mailbox. Not "-ed" ("Ahmed"), a short "-ing" ("Ming"), or one after "to" ("to billing").
             let mailbox = bare(tokens[start].word)
-            let verbOrNumber = (mailbox.hasSuffix("ing") && mailbox.count >= 6) || mailbox.allSatisfy(\.isNumber)
+            let progressive = ["is", "was"].contains(word) || contracted != nil
+            let verbOrNumber = (progressive && mailbox.hasSuffix("ing") && mailbox.count >= 6) || mailbox.allSatisfy(\.isNumber)
             return verbOrNumber ? nil : .weak
         }
         guard ["and", "or"].contains(word), start >= 2 else { return nil }

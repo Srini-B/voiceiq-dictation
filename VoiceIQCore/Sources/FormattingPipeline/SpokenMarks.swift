@@ -213,7 +213,7 @@ enum SpokenMarks {
                           // U+003F" names the mark.
                           // A one-word clause is an exclamation said on its own ("Great exclamation
                           // mark see you soon"), never a word that describes the mark ("Double").
-                          : endsClause(wordsInSentence(chars, before: index)) && opensClause(chars, after: end),
+                          : endsClause(wordsInSentence(chars, before: index), chars, after: end) && opensClause(chars, after: end),
                       words != ["comma"] || !beforeCompound(chars, after: end, ["separated", "separate", "delimited", "splice", "splices", "rules", "key"]),
                       // "That's my final answer, full stop.": emphasis, said after a comma.
                       words != ["full", "stop"] || !afterComma(chars, at: index) else { return nil }
@@ -251,15 +251,19 @@ enum SpokenMarks {
     }
 
     /// Whether an end mark may follow `words`: a clause of two words or more,
-    /// or one word said as an exclamation or a question of its own.
-    private static func endsClause(_ words: [String]) -> Bool {
-        words.count > 1 || (words.count == 1 && exclamations.contains(words[0]))
+    /// or one word said as an exclamation or a question of its own, unless a
+    /// written mark follows: "Really question mark? I didn't type one." asks about it.
+    private static func endsClause(_ words: [String], _ chars: [Character], after end: Int) -> Bool {
+        if words.count > 1 { return true }
+        let next = skip(chars, from: end, also: "")
+        return words.count == 1 && exclamations.contains(words[0]) && !(next < chars.count && "?!".contains(chars[next]))
     }
 
     private static let exclamations: Set<String> = [
+        // Not "what" or "why": "What question mark? I didn't type one." asks about the mark.
         "great", "thanks", "wow", "yes", "yeah", "no", "ok", "okay", "sure", "hi", "hello", "hey", "congrats",
         "congratulations", "awesome", "perfect", "nice", "cool", "done", "sorry", "oops", "yay", "really", "seriously",
-        "what", "why", "how", "when", "where", "who", "right", "agreed", "absolutely", "excellent", "amazing",
+        "right", "agreed", "absolutely", "excellent", "amazing",
         "brilliant", "fantastic", "wonderful", "welcome", "cheers", "bye", "goodbye", "exactly", "indeed",
     ]
 
