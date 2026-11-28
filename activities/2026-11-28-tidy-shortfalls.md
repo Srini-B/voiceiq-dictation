@@ -62,5 +62,10 @@ and passes here, except item 2's, which pins the current behaviour.
 
 - Linux harness (Swift 6.2.1, the six Tidy sources and `TidyTests` /
   `CleanupCasesTests`): all pass, 332 cleanup cases.
-- Pending: `swift test --package-path VoiceIQCore` on the Mac mini, CI,
-  Neon review and D4.
+- D4 on the writing-Off path (Claude Fable 5.2): 96.6 over 332 cases at
+  `6b7dffc`, 0 meant words lost; the nine new cases score 100, and every
+  case below 90 is a shortfall the fixture already records (`tidy`).
+- Codex: an already-written address before "and" stopped a spoken one
+  from joining ("Mail priya@gmail.com and ravi at the rate gmail dot
+  com."); fixed in `8ae76c8`, with a case in `TidyTests`.
+- CI runs `swift test --package-path VoiceIQCore` on Xcode 27.
