@@ -426,12 +426,22 @@ meeting never raises a permission prompt (`CGPreflightScreenCaptureAccess`,
 1. `MeetingEngine.startRecording` starts a `ScreenNameSampler` with the
    detected call source. A recording started by hand with no call detected
    reads the frontmost known call app (`ScreenNameSampler.frontCallApp`).
-   With no call app, the sampler does not run.
+   With no call app, the sampler does not run. A browser running several
+   instances under one bundle ID (separate profiles) is read in the one
+   showing a joined call room (`CallApps.isCallRoom`), else one showing a
+   call site's page, the frontmost such (`ScreenNameSampler.callPID`); the
+   first instance found was read before, and on 2026-11-28 a probe with four
+   Chromes read no names in 102 samples.
 2. With Screen Recording granted, every 3 s the sampler captures one window of the call app or browser
    with ScreenCaptureKit (`SCContentFilter(desktopIndependentWindow:)`, so it
    works when the window is covered). It picks a window whose title names a
    page in `CallApps.meetingPages` first, then a window on screen, then the
-   largest. A browser with no such window gives no image, because its other
+   largest. A browser's window title is the page's own ("Owner – Audio
+   playing" on vdo.ninja), so with Accessibility the window whose address
+   (AXDocument) is a call page counts too, and one showing a joined call
+   room wins over the app's other call-site pages, which include chats
+   (`CallWindowText.callWindowFrames`, matched to the ScreenCaptureKit window by frame, since the two APIs title a Chrome window differently).
+   A browser with no such window gives no image, because its other
    windows are other pages. It never captures the whole display, because other apps' windows
    (a dictation app, a chat, a document) hold names that are not the
    meeting's. When the call app has no window to read, the sample has no
@@ -450,7 +460,25 @@ meeting never raises a permission prompt (`CGPreflightScreenCaptureAccess`,
    and group labels (name tags, the participants list), not buttons or menus.
    The walk stops at 2,500 elements or 0.8 s, because each read waits on the
    call app. Electron and Chromium apps are woken first with
-   `AccessibilityWaker`. Either permission is enough for sampling to run.
+   `AccessibilityWaker`. Chrome opens a web page's tree only while
+   `AXEnhancedUserInterface` is on (`AXManualAccessibility` opens nothing,
+   measured 2026-11-28), and that setting makes it animate window moves. So
+   in a Chromium browser the page text is read every 15 s, not every 3 s:
+   the sampler switches the setting on, reads 2.5 s later, and switches it
+   off again at once, which closes the tree and stops the animation
+   (`ScreenNameSampler.whileWebTreeOpen`). For those 2.5 s every window of
+   that browser instance animates its moves and resizes, and Chrome builds
+   the tree for all its tabs. When something already keeps the setting on
+   (VoiceOver, Voice Control, a window manager), the tree is read on every
+   tick and the setting is never touched, and a read of it that fails or
+   times out skips the pulse. If VoiceiQ quits or crashes inside a pulse, it
+   switches the setting off at its next launch (and the next meeting's
+   sampler does too). Either permission is enough for sampling to run.
+   A chat site's page (WhatsApp, Telegram, Messenger, Discord) is read as
+   the call only when the call was detected on a chat site, or not at all,
+   and no other call page is open: Accessibility lists only the windows on
+   the Space in view, so a call full screen in its own Space would otherwise
+   lose to a chat window beside the user.
    Zoom 7.2 exposes each video tile as an `AXTabGroup` described "Name,
    Computer audio unmuted", and the participants list as `AXStaticText`
    rows such as "Name (me)".
@@ -459,6 +487,16 @@ meeting never raises a permission prompt (`CGPreflightScreenCaptureAccess`,
    (`ScreenSpeakerNames.owner(in:)`).
 7. After transcription, `ScreenSpeakerNames.match(samples:transcript:)` runs
    (also on Retry, from the saved file):
+   - A lone word on screen ("Nihal") joins the names when it is in at least
+     a quarter of the samples. The first word of a full name seen twice is
+     that person and is skipped. A word at most two letters short of such a
+     first word ("May" of "Maya") is taken as a cut tag and dropped. A
+     shorter start ("Dan" beside "Daniel") stays in `seen` but is never
+     given a voice.
+   - With one far-side voice and one other name always on screen, that name
+     is the voice's, unless a word was dropped or kept as above and the
+     participant count doesn't say one other person: "Dan" may be beside
+     "Dana Smith".
    - Spellings within 0.8 Levenshtein similarity fold into the most frequent one.
    - For each speaker other than "you", it counts snapshots taken while only
      that speaker talked (1 s lag for the tile switch).
@@ -514,10 +552,20 @@ Rules added 2026-11-26 after a Fable judge scored the notes
 
 Fixes from 2026-10-29:
 
-- **Output language.** `NLLanguageRecognizer` names the transcript's main
-  language when it is at least 60 % sure, and the request says
-  `OUTPUT LANGUAGE: English`. An all-English meeting had come back in Hindi
-  once, and in English on a redo of the byte-identical request.
+- **Output language.** The request always names one
+  (`MeetingNotesPrompt.outputLanguage`): the language picked in Settings →
+  Dictation (`dictationLanguage`), English when it is English or Detect.
+  Another language is used only when the transcript has at least 150 words
+  (by word boundaries, so Chinese and Japanese count too)
+  and `NLLanguageRecognizer` is at least 90 % sure of it. The model never
+  chooses: an all-English meeting came back in Hindi once (2026-10-29), and
+  an English AMI meeting got a Portuguese title (2026-11-28), each time when
+  the recognizer was unsure and the request left the language open. The
+  setting is the one dictation uses, so picking Spanish for dictation also
+  writes a short English meeting's notes in Spanish. Detect gives English
+  notes unless the transcript is clearly another language: a romanized Hindi
+  (Hinglish) or code-mixed meeting usually scores below 90 % and gets
+  English notes; one in Devanagari or Tamil script does not.
 - **The owner by name.** Notes are shared, so the owner is never "You" in
   them. The owner's label is, in order: the name typed for that meeting, the
   owner marker on screen, **Your name in meeting notes** in Settings →
