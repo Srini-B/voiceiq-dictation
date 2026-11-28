@@ -27,6 +27,9 @@ public final class ScreenNameSampler: @unchecked Sendable {
     private var pidHoldsRoom = false
     private var tick = 0
     private var chromium: (pid: pid_t, isChromium: Bool)?
+    /// A browser this sampler switched AXEnhancedUserInterface on in, until
+    /// a read-back shows it off again. Its "on" is ours, not another tool's.
+    private var pulsedPID: pid_t?
     /// A Chromium browser's page text is read on every this-many ticks (15 s),
     /// since each read briefly makes the browser animate its window moves.
     static let browserTreeEvery = 5
@@ -129,6 +132,7 @@ public final class ScreenNameSampler: @unchecked Sendable {
     /// Everything read so far, in time order.
     public func stop() -> [ScreenNameSample] {
         task?.cancel(); task = nil
+        if let pulsedPID { _ = Self.switchOff(pulsedPID) }
         let out = samples.withLock { $0 }
         Log.meeting.info("screen names: \(out.count, privacy: .public) snapshots, \(out.filter { !$0.names.isEmpty }.count, privacy: .public) with names")
         return out
@@ -147,9 +151,13 @@ public final class ScreenNameSampler: @unchecked Sendable {
             if let pid {
                 let browser = bundleID.map(CallApps.browsers.contains) ?? false
                 if chromium?.pid != pid { chromium = (pid, Self.isChromium(pid)) }
-                if browser, chromium?.isChromium == true, !Self.webTreeIsOpen(pid) {
+                // A switch-off that timed out while Chrome built its tree is retried, not mistaken for another tool's setting.
+                if pulsedPID == pid, Self.switchOff(pid) { pulsedPID = nil }
+                if browser, chromium?.isChromium == true, pulsedPID == pid || !Self.webTreeIsOpen(pid) {
                     if tick % Self.browserTreeEvery == 0 {
+                        pulsedPID = pid
                         lines += await Self.whileWebTreeOpen(pid) { CallWindowText.lines(pid: pid, browser: true) }
+                        if Self.switchOff(pid) { pulsedPID = nil }
                         looked = true
                     }
                 } else {
@@ -180,19 +188,32 @@ public final class ScreenNameSampler: @unchecked Sendable {
     /// something else already keeps it on (VoiceOver, Voice Control, a window
     /// manager), the tree is open and is read on every tick without touching
     /// it (`webTreeIsOpen`), so their view of Chrome never changes (agy on #146).
+    /// The caller switches it off (`switchOff`) and confirms it.
     static func whileWebTreeOpen(_ pid: pid_t, read: () -> [String]) async -> [String] {
         let app = AXUIElementCreateApplication(pid)
         AXUIElementSetMessagingTimeout(app, 0.25)
         // A crash inside the pulse would leave Chrome animating; the next sampler switches it off.
         UserDefaults.standard.set(Int(pid), forKey: pulsedKey)
         AXUIElementSetAttributeValue(app, enhancedUI, kCFBooleanTrue)
-        defer {
-            AXUIElementSetAttributeValue(app, enhancedUI, kCFBooleanFalse)
-            UserDefaults.standard.removeObject(forKey: pulsedKey)
-        }
         try? await Task.sleep(for: .milliseconds(2500))
         guard !Task.isCancelled else { return [] }
         return read()
+    }
+
+    /// Sets it back to false; true once a read-back shows it off, or cannot
+    /// read it at all. Chrome returns an error code even for a write that
+    /// works (-25208), so only the read-back says, and a write can time out
+    /// while Chrome builds the tree it just opened (agy on #146).
+    static func switchOff(_ pid: pid_t) -> Bool {
+        let app = AXUIElementCreateApplication(pid)
+        AXUIElementSetMessagingTimeout(app, 1)
+        AXUIElementSetAttributeValue(app, enhancedUI, kCFBooleanFalse)
+        var value: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(app, enhancedUI, &value) == .success, (value as? Bool) == true else {
+            UserDefaults.standard.removeObject(forKey: pulsedKey)
+            return true
+        }
+        return false
     }
 
     static func webTreeIsOpen(_ pid: pid_t) -> Bool {
@@ -208,7 +229,8 @@ public final class ScreenNameSampler: @unchecked Sendable {
         let pid = pid_t(UserDefaults.standard.integer(forKey: pulsedKey))
         guard pid > 0 else { return }
         UserDefaults.standard.removeObject(forKey: pulsedKey)
-        guard NSRunningApplication(processIdentifier: pid) != nil else { return }
+        // The pid may now be another app's.
+        guard isChromium(pid) else { return }
         AXUIElementSetAttributeValue(AXUIElementCreateApplication(pid), enhancedUI, kCFBooleanFalse)
     }
 
