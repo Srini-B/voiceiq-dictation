@@ -142,12 +142,18 @@ final class ScreenSpeakerNamesTests: XCTestCase {
         // Words that sound like a surname are not addresses (Codex on #129).
         XCTAssertNil(ScreenSpeakerNames.addressed(in: "Right, let us move on.", among: ["Chris Wright"]))
         XCTAssertNil(ScreenSpeakerNames.addressed(in: "Thanks, that helps.", among: ["Tom Hanks"]))
+        // Sentence openers are not names on screen or invitees (Neon on #129).
+        XCTAssertNil(ScreenSpeakerNames.addressed(in: "Next, let's check the budget.", among: ["Next Steps"]))
+        XCTAssertNil(ScreenSpeakerNames.addressed(in: "Well, you first.", among: ["Tom Wells"]))
         let mary = [TranscriptSegment(speaker: "you", text: "Mary, where are we?", chunkIndex: 0, start: 0, end: 3), spelt[1]]
         XCTAssertNil(ScreenSpeakerNames.byAddress(nil, transcript: mary, invited: ["Mark Stone", "Lee Park"]))
         // A gallery showing the invitees too is still one person per name.
         let gallery = ScreenNames(seen: ["Muhammed Hafeed", "Nihal", "Google Meet"], speakers: [:])
         XCTAssertEqual(ScreenSpeakerNames.byAddress(gallery, transcript: short, invited: ["Nihal", "Muhammed Hafeed"])?.speakers["s1"]?.name,
                        "Muhammed Hafeed")
+        // A voice that may be two people is named by nobody's answer.
+        let merged = ScreenNames(seen: [], speakers: [:], probablyMerged: true)
+        XCTAssertNil(ScreenSpeakerNames.byAddress(merged, transcript: short, invited: ["Nihal", "Muhammed Hafeed"])?.speakers["s1"])
         let screen = ScreenNames(seen: [], speakers: ["s2": .init(name: "Muhammed Hafeed", seen: 9, of: 10)])
         XCTAssertNil(ScreenSpeakerNames.byAddress(screen, transcript: short, invited: ["Nihal", "Muhammed Hafeed"])?.speakers["s1"])
 
@@ -173,6 +179,8 @@ final class ScreenSpeakerNamesTests: XCTestCase {
         let covering = [TranscriptSegment(speaker: "you", text: "Sara, can you give the update?", chunkIndex: 0, start: 0, end: 2),
                         TranscriptSegment(speaker: "s1", text: "She is out today. I'm Rahul, covering for her.", chunkIndex: 0, start: 2, end: 5)]
         XCTAssertNil(ScreenSpeakerNames.byAddress(nil, transcript: covering, invited: ["Sara Lindqvist", "Lee Park"]))
+        let curly = [covering[0], TranscriptSegment(speaker: "s1", text: "She is out today. I’m Rahul, covering for her.", chunkIndex: 0, start: 2, end: 5)]
+        XCTAssertNil(ScreenSpeakerNames.byAddress(nil, transcript: curly, invited: ["Sara Lindqvist", "Lee Park"]))
         let mentioned = [covering[0], TranscriptSegment(speaker: "s1", text: "Sara is out, I can cover.", chunkIndex: 0, start: 2, end: 5)]
         XCTAssertNil(ScreenSpeakerNames.byAddress(nil, transcript: mentioned, invited: ["Sara Lindqvist", "Lee Park"]))
         // The addresser going on before anyone answers leaves the address unanswered.

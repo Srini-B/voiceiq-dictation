@@ -250,6 +250,8 @@ public enum ScreenSpeakerNames {
     /// answering two names keeps neither. Elimination waits for the notes,
     /// which can find a self-introduction ("I'm Rahul, covering for Sara").
     public static func byAddress(_ screen: ScreenNames?, transcript: [TranscriptSegment], invited: [String]) -> ScreenNames? {
+        // A far-side voice that may hold two people answers for both (Neon on #129).
+        guard screen?.probablyMerged != true else { return screen }
         let known = (screen?.speakers ?? [:]).values.map(\.name)
         // Known names and every invitee stay candidates, so "Sara" with Sara
         // and Sara Smith invited, or with one Sara already named, is nobody's.
@@ -283,7 +285,7 @@ public enum ScreenSpeakerNames {
         return screen == nil && out.speakers.isEmpty ? nil : out
     }
 
-    nonisolated(unsafe) private static let introduction = #/(?:I'm|I am|[Tt]his is|[Mm]y name is) (\p{Lu}[\p{L}'’-]+)/#
+    nonisolated(unsafe) private static let introduction = #/(?:I['’]m|I am|[Tt]his is|[Mm]y name is) (\p{Lu}[\p{L}'’-]+)/#
 
     /// Names a speaker gives themselves: "I'm Rahul", "this is Dana".
     static func introductions(in text: String) -> [String] {
@@ -301,13 +303,19 @@ public enum ScreenSpeakerNames {
             let head = trimmed.prefix { $0 != "," }
             guard head.count < trimmed.count else { continue }
             let words = head.split(separator: " ")
-            guard (1...3).contains(words.count), words.allSatisfy({ $0.first?.isUppercase == true }) else { continue }
+            guard (1...3).contains(words.count), words.allSatisfy({ $0.first?.isUppercase == true }),
+                  !openers.contains(words[0].lowercased()) else { continue }
             let matches = names.filter { heard(String(head), as: $0) }
             if matches.count > 1 { return nil }
             found.formUnion(matches)
         }
         return found.count == 1 ? found.first : nil
     }
+
+    /// Words that open a sentence before a comma and are not names: "Next,"
+    /// is not a slide titled "Next Steps", nor "Well," Tom Wells (Neon on #129).
+    static let openers: Set<String> = ["well", "next", "right", "sure", "great", "good", "wait", "thanks", "okay",
+                                       "so", "first", "back", "still", "also", "just", "look", "stop", "now"]
 
     /// `byElimination` once the notes are written: every name the meeting
     /// shows for a far-side speaker counts as known, and the calendar's
