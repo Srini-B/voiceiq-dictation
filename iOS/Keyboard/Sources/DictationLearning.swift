@@ -207,7 +207,10 @@ final class DictationLearning {
         guard fixed.count == 1, let range = fixed.first, dictatedSpans.count <= 1 else { return nil }
         let term = String(field[range])
         let heard = dictatedSpans.first.map { String(dictated[$0]) } ?? pair.heard
-        guard !crossesBreak(term), !crossesBreak(heard) else { return nil }
+        // "Notepad++", "C#", "@Saran": symbols next to the words fall outside them, so
+        // the term would be learned without them.
+        guard isBounded(range, in: field), dictatedSpans.first.map({ isBounded($0, in: dictated) }) ?? true,
+              !crossesBreak(term), !crossesBreak(heard) else { return nil }
         let capitalRestored = pair.meant.first?.isLowercase == true && term.first?.isUppercase == true
         return Fix(heard: heard, term: term,
                    startsSentence: capitalRestored || startsSentence(at: range.lowerBound, in: field))
@@ -232,6 +235,15 @@ final class DictationLearning {
             found.append(words[start].range.lowerBound..<words[end - 1].range.upperBound)
         }
         return found
+    }
+
+    /// Whether `range` stands alone in `text`: at its start or end, or next to whitespace or
+    /// ordinary sentence and clause punctuation, quotes and brackets, not another symbol.
+    nonisolated static func isBounded(_ range: Range<String.Index>, in text: String) -> Bool {
+        let ordinary: (Character) -> Bool = { $0.isWhitespace || ".,;:!?…—–\"“”'‘’()[]{}".contains($0) }
+        if range.lowerBound > text.startIndex, !ordinary(text[text.index(before: range.lowerBound)]) { return false }
+        if range.upperBound < text.endIndex, !ordinary(text[range.upperBound]) { return false }
+        return true
     }
 
     /// Whether a comma, a sentence or clause mark or a line break sits between two of the

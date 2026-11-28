@@ -71,6 +71,10 @@ Auto-learned section.
   window waits for a 3 s typing pause, up to 10 s past it, so "Sar…" at
   59.5 s finished as "Saran" at 61 s teaches "Saran", not "Sar". The last
   observation is dropped with the result.
+- Codex at 16727174: "Notpad" fixed to "Notepad++" taught "Notepad", since
+  symbols fall outside the word ranges. A fix with anything but whitespace,
+  sentence or clause punctuation, a quote or a bracket right before or after
+  it, in the field or in the dictation, is now skipped; "Saran." still counts.
 - `CommonWords` on iOS fails closed: with no English `UITextChecker`
   dictionary every word counts as ordinary, so nothing is learned.
 - Privacy: `docs/PRIVACY.md` describes the iPhone learning, and Settings ›

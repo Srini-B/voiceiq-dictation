@@ -169,6 +169,17 @@ final class DictationLearningTests: XCTestCase {
         XCTAssertEqual(learned, ["Sharon → Saran"])
     }
 
+    /// A symbol right against the fix falls outside its words: "Notepad++" would be
+    /// learned as "Notepad", so it is skipped. A full stop after it is ordinary.
+    func testAFixWithASymbolAgainstItIsSkipped() {
+        let learning = makeLearning()
+        dictate("I tested Notpad today.", into: learning)
+        leave(learning, as: "I tested Notepad++", " today.")
+        dictate("I had lunch with Sharon", into: learning)
+        leave(learning, as: "I had lunch with Saran.")
+        XCTAssertEqual(learned, ["Sharon → Saran"])
+    }
+
     /// UIKit named no input session for the dictation, so the next field's text could
     /// read as an edit of it: it is not followed.
     func testADictationInAnUnnamedSessionIsNotFollowed() {
