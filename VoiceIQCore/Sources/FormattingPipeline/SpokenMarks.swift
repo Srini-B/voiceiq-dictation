@@ -338,10 +338,9 @@ enum SpokenMarks {
             var mark = index
             while mark > 0, TidyText.isSpace(chars[mark - 1]) { mark -= 1 }
             if chars[mark - 1] == "\u{E000}" { return true }
-            // After a written comma, only a short opening breaks the line ("Thanks, new
-            // line, Sam", "Dear Sam, new line, …"): mid-thought, "She bought a car, new
-            // line, I think" names the car.
-            if ",;".contains(chars[mark - 1]), wordsInSentence(chars, before: index).count > 2 { return false }
+            // "She bought a car, new line, I think": a hedge after it ends the thought
+            // "new line" is part of, so the words name something.
+            if ",;".contains(chars[mark - 1]), hedgeEndsSentence(chars, after: end) { return false }
             let after = skip(chars, from: end, also: "")
             guard after == chars.count || ",.;:!?\n".contains(chars[after]) else { return false }
             let next = skip(chars, from: after, also: ",.;:!?")
@@ -350,6 +349,18 @@ enum SpokenMarks {
             return !["and", "or", "but", "y", "o", "pero"].contains(String(chars[next..<stop]).lowercased())
         }
         return before.map { !describesLayout($0) } ?? false
+    }
+
+    /// Whether all that follows on the line, to the sentence's end, is a hedge: "I think.", "I guess".
+    private static func hedgeEndsSentence(_ chars: [Character], after end: Int) -> Bool {
+        let start = skip(chars, from: end, also: ",")
+        let stop = chars[start...].firstIndex { ".!?\n".contains($0) } ?? chars.count
+        let words = String(chars[start..<stop]).lowercased().replacingOccurrences(of: "’", with: "'")
+            .split { !TidyText.isWordCharacter($0) && $0 != "'" }.joined(separator: " ")
+        return [
+            "i think", "i guess", "i believe", "i suppose", "i'd say", "i reckon", "i hope", "i heard", "i hear",
+            "maybe", "probably", "apparently", "you know", "or so",
+        ].contains(words)
     }
 
     /// Words before "new line" that make it a noun: "a new line of shoes",

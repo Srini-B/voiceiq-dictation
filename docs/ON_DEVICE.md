@@ -192,8 +192,7 @@ styles, MIT):
 1. `Tidy.spoken`: layout and marks said by name become the marks
    (`SpokenMarks`), only where the name cannot be prose: "new line" and "new
    paragraph" after a spoken mark, or set off by marks on both sides and not
-   before "and" or "or", after a comma only when one or two words come before
-   it ("Hello. New line.", "Dear Sam comma new paragraph",
+   before "and" or "or" or a closing hedge such as "I think" ("Hello. New line.", "Dear Sam comma new paragraph",
    "Thanks, new line, Sam"; not "Press enter for new line", "It's official.
    New paragraph styles are live", "shoes, new line, and socks" or "She bought
    a car, new line, I think"); "open

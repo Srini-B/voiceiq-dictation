@@ -200,9 +200,10 @@ final class TidyTests: XCTestCase {
         for kept in ["quote unquote experts", "The newline character", "renew line items", "open quotes", "Can I get a quote for this"] {
             XCTAssertEqual(SpokenMarks.layout(in: kept), kept)
         }
-        // After a written comma, only a short opening breaks the line; mid-thought the words may name something.
-        XCTAssertEqual(tidy("Hi team, new line, please review."), "Hi team.\nPlease review.")
-        for kept in ["She bought a car, new line, I think.", "I bought the milk, new line, then I left."] {
+        // Set off by commas, "new line" breaks the line unless only a hedge follows: then the words name something.
+        XCTAssertEqual(tidy("Yeah, I'll ping Sam, new line, thanks.", .messages), "yeah i'll ping Sam\nthanks.")
+        XCTAssertEqual(tidy("I bought the milk, new line, then I left."), "I bought the milk.\nThen I left.")
+        for kept in ["She bought a car, new line, I think.", "It's their new model, new line, I guess."] {
             XCTAssertEqual(tidy(kept), kept)
         }
     }

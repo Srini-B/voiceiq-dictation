@@ -16,10 +16,13 @@ guard port) changed none of the nine: each one still reproduced at
    address ("is", "to", "mail", "email", "cc", …). "Prices rose at the rate
    gmail dot com." stays as said (`SpokenAddresses.introducesAddress`).
 2. **Repeated hesitations.** Not changed. See Decisions.
-3. **Comma-set "new line" mid-thought.** After a written comma, "new line"
-   breaks the line only when one or two words come before it ("Thanks, new
-   line, Sam", "Hi team, new line, please review"). "She bought a car, new
-   line, I think." stays (`SpokenMarks.saysLayout`).
+3. **Comma-set "new line" mid-thought.** Set off by commas, "new line" no
+   longer breaks the line when all that follows to the sentence's end is a
+   hedge ("I think", "I guess", "probably", …): "She bought a car, new
+   line, I think." stays, and "Yeah, I'll ping Sam, new line, thanks." still
+   breaks (`SpokenMarks.hedgeEndsSentence`). A first version allowed the
+   break only after one or two words; CI's `OnDeviceDictationTests` showed
+   that drops a meant break after a longer clause.
 4. **Number swap before a unit.** A correction that adds a unit no longer
    replaces a number that names something ("flight", "room", "gate",
    "page", …): "Flight 101, I mean, 102 minutes." stays, and "It took 101,
