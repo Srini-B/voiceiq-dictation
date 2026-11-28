@@ -227,9 +227,12 @@ public final class FieldDraft: TextDraft {
             if placed {
                 field.ledger.replace(id, with: written, landedIn: now.value)
                 landed = written
-                // Only over the caret the write left: a caret the user moved
+                // Only over what the write left (a caret after the written
+                // text, or the written text selected): a caret the user moved
                 // since then stays where they put it.
-                if now.value == expected, now.caret == end, now.selectionLength == 0 {
+                let leftByWrite = (now.caret == end && now.selectionLength == 0)
+                    || (now.caret == span.location && now.selectionLength == written.utf16.count)
+                if now.value == expected, leftByWrite {
                     _ = await select(selection.location, selection.length)
                 }
                 return true
