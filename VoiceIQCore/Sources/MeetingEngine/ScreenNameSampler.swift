@@ -160,14 +160,23 @@ public final class ScreenNameSampler: @unchecked Sendable {
         // without Accessibility only a title naming the site can. A joined
         // room wins over the same app's call-site pages, which include chats
         // (Codex on #146).
-        let known: (joined: [CGRect], pages: [CGRect]) = pid.map { CallWindowText.callWindowFrames(pid: $0) } ?? (joined: [], pages: [])
-        let near = { (frames: [CGRect], window: SCWindow) in
-            frames.contains { abs($0.minX - window.frame.minX) < 2 && abs($0.minY - window.frame.minY) < 2
-                && abs($0.width - window.frame.width) < 2 && abs($0.height - window.frame.height) < 2 }
+        let known: (joined: [CallWindow], pages: [CallWindow]) = pid.map { CallWindowText.callWindowFrames(pid: $0) } ?? (joined: [], pages: [])
+        // Same frame within 2 pt; of two windows with one frame (both zoomed),
+        // the one whose title starts the AX title.
+        let matching = { (known: [CallWindow]) -> [SCWindow] in
+            let near = windows.filter { window in
+                known.contains { abs($0.frame.minX - window.frame.minX) < 2 && abs($0.frame.minY - window.frame.minY) < 2
+                    && abs($0.frame.width - window.frame.width) < 2 && abs($0.frame.height - window.frame.height) < 2 }
+            }
+            guard near.count > 1 else { return near }
+            let titled = near.filter { window in
+                window.title.map { title in !title.isEmpty && known.contains { $0.title.hasPrefix(title) } } == true
+            }
+            return titled.isEmpty ? near : titled
         }
-        let joined = windows.filter { near(known.joined, $0) }
-        let meeting = !joined.isEmpty ? joined : windows.filter { window in
-            near(known.pages, window) || window.title.map { title in CallApps.meetingPages.contains { title.localizedCaseInsensitiveContains($0) } } == true
+        let joined = matching(known.joined)
+        let meeting = !joined.isEmpty ? joined : matching(known.pages) + windows.filter { window in
+            window.title.map { title in CallApps.meetingPages.contains { title.localizedCaseInsensitiveContains($0) } } == true
         }
         let candidates = meeting.isEmpty && !CallApps.browsers.contains(bundleID) ? windows : meeting
         // On screen first (a window on another Space still counts), then the largest.

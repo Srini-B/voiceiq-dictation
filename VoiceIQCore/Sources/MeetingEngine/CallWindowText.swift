@@ -6,6 +6,11 @@ import Foundation
 /// API: name tags on video tiles, the participants list, the user's own
 /// "(me)" row. Exact spellings, and it works when the window is covered,
 /// where a snapshot only sees what is on top.
+struct CallWindow {
+    var frame: CGRect
+    var title: String
+}
+
 enum CallWindowText {
     /// Each read is a synchronous call into the call app, so the walk is
     /// bounded: a call app stalls while it answers.
@@ -72,15 +77,19 @@ enum CallWindowText {
     /// ScreenCaptureKit window: MEASURED 2026-11-28, Chrome on vdo.ninja,
     /// Accessibility titles the window "Owner – Audio playing - Google
     /// Chrome" and ScreenCaptureKit "Owner".
-    static func callWindowFrames(pid: pid_t) -> (joined: [CGRect], pages: [CGRect]) {
+    /// Each comes with its AX title, which breaks a tie between two windows
+    /// with one frame (both zoomed on one display): ScreenCaptureKit's title
+    /// is the start of it.
+    static func callWindowFrames(pid: pid_t) -> (joined: [CallWindow], pages: [CallWindow]) {
         guard AXIsProcessTrusted() else { return ([], []) }
         let app = AXUIElementCreateApplication(pid)
         AXUIElementSetMessagingTimeout(app, 0.25)
-        var joined: [CGRect] = [], pages: [CGRect] = []
+        var joined: [CallWindow] = [], pages: [CallWindow] = []
         for window in value(app, kAXWindowsAttribute) as? [AXUIElement] ?? [] where isMeeting(window) {
             guard let frame = frame(window) else { continue }
-            pages.append(frame)
-            if isJoinedRoom(window) { joined.append(frame) }
+            let found = CallWindow(frame: frame, title: value(window, kAXTitleAttribute) as? String ?? "")
+            pages.append(found)
+            if isJoinedRoom(window) { joined.append(found) }
         }
         return (joined, pages)
     }
