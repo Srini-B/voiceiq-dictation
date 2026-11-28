@@ -130,5 +130,13 @@ extension Theme {
             .font: Fonts.uiFlex(17, weight: 560, style: .headline),
             .foregroundColor: ink,
         ]
+        // Segmented switches: the selected option sits on the canvas, on a
+        // quiet fill track, in the brand face.
+        let segmented = UISegmentedControl.appearance()
+        segmented.backgroundColor = UIColor(Colors.porcelain)
+        segmented.selectedSegmentTintColor = UIColor(Colors.canvas)
+        let label = Fonts.uiFlex(14, weight: 500, style: .subheadline)
+        segmented.setTitleTextAttributes([.font: label, .foregroundColor: UIColor(Colors.inkSecondary)], for: .normal)
+        segmented.setTitleTextAttributes([.font: label, .foregroundColor: ink], for: .selected)
     }
 }

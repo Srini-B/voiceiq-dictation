@@ -64,8 +64,9 @@ struct HistoryDetail: View {
                         .pickerStyle(.segmented)
                     }
                     Text(shownText)
-                        .font(Theme.Fonts.flex(18, weight: 400, style: .body))
-                        .lineSpacing(5)
+                        .font(Theme.Fonts.body())
+                        .lineSpacing(8)
+                        .padding(.top, heard != nil ? Theme.Spacing.s : 0)
                         .foregroundStyle(record.displayText.isEmpty && !showsHeard ? Theme.Colors.muted : Theme.Colors.ink)
                         .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -152,38 +153,40 @@ struct HistoryDetail: View {
         }
     }
 
+    /// When, app and length are in the meta line above the text, so the
+    /// rows start with what it doesn't say.
+    private var detailRows: [DetailRow] {
+        var rows: [DetailRow] = []
+        if let origin = record.origin { rows.append(DetailRow(label: "Dictated on", value: origin)) }
+        if let pipeline = record.pipelineSeconds {
+            rows.append(DetailRow(label: "Pipeline", value: String(format: "%.2fs", pipeline)))
+        }
+        rows += (record.steps?.rows ?? []).map { DetailRow(label: $0.label, value: $0.value) }
+        if !calls.isEmpty {
+            rows.append(DetailRow(label: "Cost", value: UsageView.money(
+                calls.reduce(0) { $0 + ($1.costUSD ?? 0) },
+                approximate: calls.contains { $0.isEstimated || $0.costUSD == nil }
+            )))
+            rows += UsageLine.lines(calls).map { line in
+                let call = line.total
+                let count = line.calls > 1 ? " · \(line.calls) calls" : ""
+                return DetailRow(label: call.stageValue?.displayName ?? call.stage,
+                                 value: "\(call.model)\(count) · \(UsageView.money(call.costUSD, approximate: call.isEstimated))")
+            }
+        }
+        if let error = record.errorMessage ?? record.errorCode {
+            rows.append(DetailRow(label: "Error", value: error, wraps: true))
+        }
+        return rows
+    }
+
     private var details: some View {
-        VStack(spacing: 0) {
-            DetailRow(label: "When", value: record.startedAt.formatted(date: .abbreviated, time: .shortened))
-            if let app = AppNames.name(for: record) { divider; DetailRow(label: "App", value: app) }
-            if let origin = record.origin { divider; DetailRow(label: "Dictated on", value: origin) }
-            if let seconds = record.durationSeconds {
-                divider
-                DetailRow(label: "Length", value: Duration.seconds(seconds).formatted(.time(pattern: .minuteSecond)))
+        let rows = detailRows
+        return VStack(spacing: 0) {
+            ForEach(rows.indices, id: \.self) { index in
+                if index > 0 { divider }
+                rows[index]
             }
-            if let pipeline = record.pipelineSeconds {
-                divider
-                DetailRow(label: "Pipeline", value: String(format: "%.2fs", pipeline))
-            }
-            ForEach(record.steps?.rows ?? [], id: \.self) { step in
-                divider
-                DetailRow(label: step.label, value: step.value)
-            }
-            if !calls.isEmpty {
-                divider
-                DetailRow(label: "Cost", value: UsageView.money(
-                    calls.reduce(0) { $0 + ($1.costUSD ?? 0) },
-                    approximate: calls.contains { $0.isEstimated || $0.costUSD == nil }
-                ))
-                ForEach(UsageLine.lines(calls)) { line in
-                    let call = line.total
-                    let count = line.calls > 1 ? " · \(line.calls) calls" : ""
-                    divider
-                    DetailRow(label: call.stageValue?.displayName ?? call.stage,
-                              value: "\(call.model)\(count) · \(UsageView.money(call.costUSD, approximate: call.isEstimated))")
-                }
-            }
-            if let error = record.errorMessage ?? record.errorCode { divider; DetailRow(label: "Error", value: error) }
         }
     }
 
@@ -204,6 +207,8 @@ struct HistoryDetail: View {
 private struct DetailRow: View {
     let label: String
     let value: String
+    /// Model names stay on one line, cut in the middle; an error wraps.
+    var wraps = false
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.l) {
@@ -213,6 +218,8 @@ private struct DetailRow: View {
                 .font(Theme.Fonts.footnote())
                 .foregroundStyle(Theme.Colors.ink)
                 .multilineTextAlignment(.trailing)
+                .lineLimit(wraps ? nil : 1)
+                .truncationMode(.middle)
         }
         .padding(.vertical, Theme.Spacing.s)
     }

@@ -12,7 +12,7 @@ enum SettingsSection: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .keys: return "API Key"
+        case .keys: return "API key"
         case .keyboard: return "Keyboard & Permissions"
         case .dictation: return "Dictation"
         case .dictionary: return "Dictionary"
