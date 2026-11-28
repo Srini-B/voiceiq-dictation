@@ -111,6 +111,8 @@ With no usable key, nothing is sent and the recording stays on your Mac.
    the macOS Keychain, never in files or preferences. Requests to AssemblyAI
    also carry a User-Agent naming the app version and the OS version
    ("VoiceiQ/0.7.19 (macOS 27.0)"), nothing that identifies you or your Mac.
+   VoiceiQ's own log keeps AssemblyAI's transcript and session IDs so support
+   can find a request; they reveal nothing without your key.
 6. **Update checks.** Every six hours, and when you choose Check for Updates, the
    app downloads the update feed (`appcast.xml`) from the project's GitHub
    Releases (`github.com`, which redirects to GitHub's download host). The
