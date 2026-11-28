@@ -89,6 +89,7 @@ struct PillChip: View {
     enum Role { case primary, destructive, neutral }
     let title: String
     let role: Role
+    var minWidth: CGFloat = 0
     let action: () -> Void
 
     var body: some View {
@@ -99,6 +100,7 @@ struct PillChip: View {
                 .lineLimit(1)
                 .fixedSize()
                 .padding(.horizontal, VoiceIQUI.Spacing.s)
+                .frame(minWidth: minWidth)
                 .frame(height: 26)
                 .background(Capsule().fill(fill))
                 .contentShape(Capsule())
@@ -217,8 +219,9 @@ struct MeetingRecordingContent: View {
             NotificationCenter.default.post(name: .pillMeetingDiscardTapped, object: nil)
         }
         .accessibilityLabel("Discard the recording without notes")
-        // Keep last, where the trash can was: a double click on the trash keeps.
-        PillChip(title: "Keep", role: .neutral) { confirmingDiscard = false }
+        // Keep last and as wide as trash, Stop and their gaps, so it covers the
+        // whole trash can: a double click on the trash keeps (Neon on #143).
+        PillChip(title: "Keep", role: .neutral, minWidth: 24 + 32 + 2 * VoiceIQUI.Spacing.s) { confirmingDiscard = false }
             .accessibilityLabel("Keep recording")
     }
 
