@@ -62,31 +62,37 @@ fi
 # before, and a tap on the owner's Chrome must hear every pitch: in the first
 # runs the guests' sound never reached the owner, and the probe could not
 # tell. Every file opens 3 s after the previous one, so the same offset puts
-# the beeps 3 s apart in the call.
-# The beeps fade in and out, and an 80 Hz-wide FIR filter measures each
-# pitch: hard-gated beeps through a bandpass biquad put any loud guest
-# above −45 dBFS in every other guest's band, so a silent guest passed.
+# guest i's beep 3i + 9 s after the owner joins, plus however long Chrome took
+# to open the fake microphone.
+# guestcheck.py hears a pitch only where it stands 15 dB above the others in
+# the same 0.1 s frames, and no pitch's 2nd or 3rd harmonic lands on another:
+# a whole-file peak per band passed a silent guest on speech, a clipped
+# neighbour's harmonic or a chime (Neon on #142).
+pitches=(500 700 1100 1300 1700 1900 2300 2900 3100)
+(( ${#guests} <= ${#pitches} )) || { echo "at most ${#pitches} guests" >&2; exit 1; }
+# Two words and no digits, as people are named in a call: ScreenSpeakerNames
+# drops "Guest 1" as an interface label, so names could not be scored.
+names=("Maya Patel" "Daniel Okafor" "Lena Fischer" "Ravi Shankar" "Sofia Moreno" "Tomas Novak" "Aiko Tanaka" "Omar Haddad" "Clara Jensen")
 out=${OUT:-$PWD}
 mkdir -p $out
+: > $out/guest-check.txt
 tone_at=$(( 3 * ${#guests} + 12 ))
-# Seconds between the owner joining and everyone starting to speak: at least
-# 30, and long enough that the guest check's tap (from 8 s to lead - 2 s) hears
-# the last guest's beeps, which start 3 × (guests - 1) + 12 s after the owner
-# joins and last 2 s (Codex on #142).
-lead=$(( 3 * ${#guests} + 16 > 30 ? 3 * ${#guests} + 16 : 30 ))
-pitch() { print $(( 500 + 350 * ($1 - 1) )) }
+# Seconds between the owner joining and everyone speaking: the last beep ends
+# 3 × guests + 11 s in, the tap stops 6 s before the speech, and 6 s more
+# allow for a slow microphone open.
+lead=$(( 3 * ${#guests} + 23 > 30 ? 3 * ${#guests} + 23 : 30 ))
 swiftc -O -suppress-warnings $here/taprecord.swift -o $scratch/taprecord
 for index in {1..${#guests}}; do
   pad=$(( 3 * (${#guests} - index + 1) + lead ))
   ffmpeg -nostdin -loglevel error -i ${guests[index]} \
-    -f lavfi -i "aevalsrc='0.4*sin(2*PI*$(pitch $index)*t)*pow(sin(PI*mod(t\,0.4)/0.25)\,2)*lt(mod(t\,0.4)\,0.25)':d=2:s=48000" \
+    -f lavfi -i "aevalsrc='0.4*sin(2*PI*${pitches[index]}*t)*pow(sin(PI*mod(t\,0.4)/0.25)\,2)*lt(mod(t\,0.4)\,0.25)':d=2:s=48000" \
     -filter_complex "[0]aresample=48000,adelay=${pad}000:all=1[g];[1]adelay=${tone_at}000:all=1[t];[g][t]amix=inputs=2:duration=longest:normalize=0" \
     -ar 48000 -ac 1 -c:a pcm_s16le $scratch/guest$index.wav
 done
 # Chrome's sandboxed audio service cannot read the file and sends silence
 # instead, so the guests run it unsandboxed.
 for index in {1..${#guests}}; do
-  join $scratch/guest$index "Guest $index" webcam --mute-audio --use-fake-device-for-media-stream \
+  join $scratch/guest$index ${names[index]} webcam --mute-audio --use-fake-device-for-media-stream \
     --disable-features=AudioServiceSandbox \
     "--use-file-for-fake-audio-capture=$scratch/guest$index.wav%noloop"
   sleep 3
@@ -94,29 +100,32 @@ done
 
 # A fresh profile has had no click, so Chrome would block the call's sound.
 join $scratch/owner "Owner" "webcam&videodevice=0" --autoplay-policy=no-user-gesture-required
+speech_at=$(( EPOCHSECONDS + lead ))
 echo "$(date +%T) Owner joined. Accept VoiceiQ's offer or press Option-M within ${lead}s."
-sleep 8
-owner_pids=($(pgrep -f -- "--user-data-dir=$scratch/owner"))
-$scratch/taprecord $(( lead - 10 )) $out/guest-check.wav $owner_pids &
-sleep $(( lead - 8 ))
-wait $! || { echo "the guest check could not tap the owner's Chrome" >&2; exit 1; }
-heard=0
-for index in {1..${#guests}}; do
-  level=$(ffmpeg -nostdin -hide_banner -i $out/guest-check.wav \
-    -af "firequalizer=gain='if(between(f\,$(( $(pitch $index) - 40 ))\,$(( $(pitch $index) + 40 )))\,0\,-100)':delay=0.05,volumedetect" \
-    -f null - 2>&1 | awk '/max_volume/ {print $5}')
-  level=${level:--999}
-  if (( level > -45 )); then result=heard; heard=$(( heard + 1 )); else result="NOT HEARD"; fi
-  echo "Guest $index ($(pitch $index) Hz): peak ${level} dBFS at the owner, $result" | tee -a $out/guest-check.txt
-done
-if (( heard < ${#guests} )); then
-  echo "$(date +%T) $(( ${#guests} - heard )) guest(s) not heard by the owner's Chrome: this run does not count." | tee -a $out/guest-check.txt
+$scratch/taprecord $(( lead - 6 )) $out/guest-check.wav "--user-data-dir=$scratch/owner" &
+tap=$!
+pids+=$tap
+status=0; wait $tap || status=$?
+if (( status == 3 )); then
+  echo "the guest check recorded only zeros: give this terminal System Audio Recording permission" >&2; exit 1
+elif (( status != 0 )); then
+  echo "the guest check could not tap the owner's Chrome" >&2; exit 1
+fi
+missing=0
+python3 $here/guestcheck.py $out/guest-check.wav ${pitches[1,${#guests}]} > $scratch/check.txt || missing=$?
+tee -a $out/guest-check.txt < $scratch/check.txt
+if (( missing > 0 )); then
+  echo "$(date +%T) $missing guest(s) not heard by the owner's Chrome: this run does not count." | tee -a $out/guest-check.txt
   [[ ${CHECK:-stop} == warn ]] || exit 1
 fi
-echo "$(date +%T) Speech starts."
+# The guests' files reach their speech at speech_at on their own; the owner
+# starts on the same second, not whenever the check finished (Codex on #142).
+(( EPOCHSECONDS < speech_at )) || echo "the guest check ran $(( EPOCHSECONDS - speech_at + 1 )) s past the speech start" >&2
+echo "$(date -r $speech_at +%T) Speech starts."
 if [[ -n ${OWNER_DEVICE:-} ]]; then
-  $scratch/playto $OWNER_DEVICE $owner &
+  $scratch/playto $OWNER_DEVICE $owner $speech_at &
 else
+  sleep $(( speech_at > EPOCHSECONDS ? speech_at - EPOCHSECONDS : 0 ))
   afplay $owner &
 fi
 pids+=$!

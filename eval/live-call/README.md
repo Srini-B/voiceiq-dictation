@@ -56,25 +56,37 @@ lists the devices). `playto.swift` plays the owner's WAV into it from memory.
 The script:
 
 1. Opens one Chrome window per guest WAV in the room, 3 s apart, named
-   `Guest 1`, `Guest 2`, and so on. Each WAV is padded with silence so that
-   every guest starts speaking with the owner, and plays once.
+   with two-word names (Maya Patel, Daniel Okafor, Lena Fischer…; at most
+   nine guests). ScreenSpeakerNames drops a name like "Guest 1" as an
+   interface label. Each WAV is padded with silence so that every guest
+   starts speaking with the owner, and plays once.
 2. Opens the owner's window in the same room, using the real default
    microphone. VoiceiQ detects the call there. Accept the offer, or start
-   recording with Option-M, within 30 s.
+   recording with Option-M, within the lead the script prints (30 s, more
+   with more than two guests).
 3. Checks that the owner hears every guest. Before anyone speaks, each
-   guest beeps at its own pitch (500 Hz, 850 Hz, 1200 Hz…, 3 s apart), and
-   `taprecord.swift` records the owner's Chrome through a Core Audio process
-   tap. A guest whose pitch peaks below −45 dBFS there, through an 80 Hz-wide
-   FIR filter, was not heard. The run
-   stops, because a probe without the far side measures nothing; `CHECK=warn`
-   goes on anyway. The recording and the levels are written to
-   `$OUT/guest-check.wav` and `guest-check.txt`. The terminal or agent
-   running the script needs System Audio Recording permission for the tap.
+   guest beeps at its own pitch (500, 700, 1100, 1300, 1700, 1900, 2300,
+   2900, 3100 Hz, 3 s apart; no pitch's 2nd or 3rd harmonic is another's),
+   and `taprecord.swift` records the owner's Chrome through a Core Audio
+   process tap. It waits for an owner process that is playing sound and
+   stops 6 s before the speech, whenever it started. `guestcheck.py` hears
+   a guest only in 0.1 s frames where its pitch is above −50 dBFS and 15 dB
+   above every other pitch, in at least four frames; speech, a clipped
+   neighbour or a chime raises every pitch together and passes no one. The
+   run stops if a guest was not heard, because a probe without the far side
+   measures nothing; `CHECK=warn` goes on anyway. The recording and the
+   results are written to `$OUT/guest-check.wav` and `guest-check.txt`.
+   The terminal or agent running the script needs System Audio Recording
+   permission for the tap; without it the tap records exact zeros, and the
+   run says so instead of blaming the call.
    Until 2026-11-28 no run checked this, and in every run before then the
    guests' audio never reached the owner, because the sandboxed audio
    service sent silence (`activities/2026-11-28-silent-call-tap.md`).
 4. Plays `owner.wav` into `OWNER_DEVICE`, or through `afplay` to the
-   default output.
+   default output, at the second the guests' padding reaches their speech,
+   however long the check took.
+   Note that the beeps play while VoiceiQ already records, so they open
+   `system.caf`.
 5. Leaves the call after `SECONDS` and closes every window.
 
 When the meeting has processed, run

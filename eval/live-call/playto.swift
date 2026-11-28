@@ -1,4 +1,6 @@
-// Plays a WAV to the named output device: playto DEVICE-NAME FILE.
+// Plays a WAV to the named output device: playto DEVICE-NAME FILE [START]
+// START (Unix seconds) waits until then once the file is loaded, so the owner
+// speaks on the guests' clock whatever the load took.
 // The file is read into memory first, so a busy disk cannot starve playback,
 // and played as stereo: a mono stream lands on a multichannel device's centre
 // channel, and VoiceiQ records an input device's first channel.
@@ -20,7 +22,7 @@ func deviceID(named name: String) -> AudioDeviceID? {
     }
     return nil
 }
-guard args.count == 3, var device = deviceID(named: args[1]) else { print("usage: playto DEVICE FILE"); exit(2) }
+guard (3...4).contains(args.count), var device = deviceID(named: args[1]) else { print("usage: playto DEVICE FILE [START]"); exit(2) }
 let file = try AVAudioFile(forReading: URL(fileURLWithPath: args[2]))
 let input = AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: AVAudioFrameCount(file.length))!
 try file.read(into: input)
@@ -37,11 +39,14 @@ for frame in 0..<Int(input.frameLength) {
 }
 let engine = AVAudioEngine()
 var unit = engine.outputNode.audioUnit!
-AudioUnitSetProperty(unit, kAudioOutputUnitProperty_CurrentDevice, kAudioUnitScope_Global, 0, &device, 4)
+guard AudioUnitSetProperty(unit, kAudioOutputUnitProperty_CurrentDevice, kAudioUnitScope_Global, 0, &device, 4) == noErr else {
+    print("cannot play to \(args[1])"); exit(1)
+}
 let player = AVAudioPlayerNode()
 engine.attach(player)
 engine.connect(player, to: engine.mainMixerNode, format: stereoFormat)
 try engine.start()
+if args.count == 4, let start = Double(args[3]) { Thread.sleep(until: Date(timeIntervalSince1970: start)) }
 let done = DispatchSemaphore(value: 0)
 player.scheduleBuffer(buffer, at: nil, options: [], completionCallbackType: .dataPlayedBack) { _ in done.signal() }
 player.play()

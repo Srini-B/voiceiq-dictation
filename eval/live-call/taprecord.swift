@@ -1,9 +1,13 @@
-// Records what the given processes play, through a Core Audio process tap,
-// to a WAV: taprecord SECONDS OUT.wav PID [PID…]
+// Records what matching processes play, through a Core Audio process tap,
+// to a WAV: taprecord SECONDS OUT.wav PATTERN
 // run.sh points it at the owner's Chrome to check that each guest is heard.
-// Only processes with a Core Audio process object are tapped (a browser's
-// renderers have none); it waits up to 10 s for the first. Exits 1 if none appears.
-// The terminal or agent running it needs System Audio Recording permission.
+// It stops SECONDS after it starts, however long the wait below took, so the
+// recording ends before the call's speech. Until then it reruns
+// `pgrep -f PATTERN` (a browser starts its audio helper late) until one of
+// them is playing sound, then taps every one with a Core Audio process
+// object. Exits 1 if none plays, 3 if the recording is all exact zeros: what a
+// tap returns without System Audio Recording permission, which the terminal
+// or agent running it needs.
 import AudioToolbox
 import AVFoundation
 import CoreAudio
@@ -24,18 +28,39 @@ func check(_ status: OSStatus, _ what: String) {
 
 let args = CommandLine.arguments
 // 15, not the tap's 14.2: AVAudioFile.close() below is macOS 15.
-guard #available(macOS 15.0, *), args.count >= 4, let seconds = Double(args[1]) else {
-    print("usage: taprecord SECONDS OUT.wav PID [PID…]"); exit(2)
+guard #available(macOS 15.0, *), args.count == 4, let seconds = Double(args[1]) else {
+    print("usage: taprecord SECONDS OUT.wav PATTERN"); exit(2)
 }
-let pids = args[3...].compactMap { pid_t($0) }
+let deadline = Date(timeIntervalSinceNow: seconds)
+
+func pids(matching pattern: String) -> [pid_t] {
+    let pgrep = Process(), pipe = Pipe()
+    pgrep.executableURL = URL(fileURLWithPath: "/usr/bin/pgrep")
+    pgrep.arguments = ["-f", "--", pattern]
+    pgrep.standardOutput = pipe
+    guard (try? pgrep.run()) != nil else { return [] }
+    pgrep.waitUntilExit()
+    let out = String(decoding: pipe.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+    // Its own command line holds the pattern too.
+    return out.split(separator: "\n").compactMap { pid_t($0) }.filter { $0 != getpid() }
+}
+
+func isPlaying(_ object: AudioObjectID) -> Bool {
+    var address = AudioObjectPropertyAddress(mSelector: kAudioProcessPropertyIsRunningOutput,
+                                             mScope: kAudioObjectPropertyScopeGlobal, mElement: kAudioObjectPropertyElementMain)
+    var running: UInt32 = 0, size = UInt32(MemoryLayout<UInt32>.size)
+    return AudioObjectGetPropertyData(object, &address, 0, nil, &size, &running) == noErr && running != 0
+}
+
 var found: [AudioObjectID] = []
-for _ in 0..<20 {
-    found = pids.compactMap(processObject)
-    if !found.isEmpty { break }
-    Thread.sleep(forTimeInterval: 0.5)
+var playing = false
+while !playing, deadline.timeIntervalSinceNow > 2 {
+    found = pids(matching: args[3]).compactMap(processObject)
+    playing = found.contains(where: isPlaying)
+    if !playing { Thread.sleep(forTimeInterval: 0.5) }
 }
-guard !found.isEmpty else { FileHandle.standardError.write("no audio process for \(pids)\n".data(using: .utf8)!); exit(1) }
-print("taprecord: \(found.count) of \(pids.count) processes")
+guard playing else { FileHandle.standardError.write("no process matching \(args[3]) played sound\n".data(using: .utf8)!); exit(1) }
+print("taprecord: \(found.count) processes, recording \(String(format: "%.0f", deadline.timeIntervalSinceNow)) s")
 
 let description = CATapDescription(stereoMixdownOfProcesses: found)
 description.uuid = UUID(); description.muteBehavior = .unmuted
@@ -57,15 +82,25 @@ var device = AudioObjectID(kAudioObjectUnknown)
 check(AudioHardwareCreateAggregateDevice(aggregate as CFDictionary, &device), "create aggregate")
 var proc: AudioDeviceIOProcID?
 let queue = DispatchQueue(label: "taprecord")
+var heardSound = false
 check(AudioDeviceCreateIOProcIDWithBlock(&proc, device, queue) { _, input, _, _, _ in
+    if !heardSound {
+        heardSound = UnsafeMutableAudioBufferListPointer(UnsafeMutablePointer(mutating: input)).contains { buffer in
+            buffer.mData.map { UnsafeRawBufferPointer(start: $0, count: Int(buffer.mDataByteSize)).contains { $0 != 0 } } ?? false
+        }
+    }
     guard let buffer = AVAudioPCMBuffer(pcmFormat: format, bufferListNoCopy: input, deallocator: nil) else { return }
     try? file.write(from: buffer)
 }, "io proc")
 check(AudioDeviceStart(device, proc), "start")
-Thread.sleep(forTimeInterval: seconds)
+Thread.sleep(until: deadline)
 AudioDeviceStop(device, proc)
 AudioDeviceDestroyIOProcID(device, proc!)
 // After the last queued buffer: a global AVAudioFile is never deinitialized, so close it.
 queue.sync { file.close() }
 AudioHardwareDestroyAggregateDevice(device)
 AudioHardwareDestroyProcessTap(tap)
+if !(queue.sync { heardSound }) {
+    FileHandle.standardError.write("the tap recorded only zeros: give the terminal or agent System Audio Recording permission\n".data(using: .utf8)!)
+    exit(3)
+}
