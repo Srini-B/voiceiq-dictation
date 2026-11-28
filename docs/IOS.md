@@ -224,7 +224,9 @@ is the Mac's draft (`TextDraft`), done by the keyboard:
    selection.
 3. The app waits up to 0.6 s (`Delivery.draftWait`) for that ID, then
    withdraws the draft from the snapshot. Without the ID, the written text
-   comes alone, as before.
+   comes as a plain result that still names the draft: a keyboard whose
+   report was late swaps its draft, and any other keyboard types it as
+   before.
 4. The written text comes as a delivery with `replacesDraft` set to the
    draft's ID. The keyboard replaces the draft in place with
    `setMarkedText` and `unmarkText` when the field still reads as the

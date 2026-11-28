@@ -38,8 +38,15 @@ final class KeyboardInserter: TextInserting {
     /// Where the dictation in progress goes (`DictationTarget.destination`).
     var destination: (() -> FieldIdentity?)?
 
+    /// A draft offered for this dictation that no keyboard confirmed in
+    /// time. The written text still names it: a keyboard whose report came
+    /// late swaps it rather than typing the written text beside it, and a
+    /// keyboard that never typed it types the written text as usual.
+    fileprivate var unconfirmedDraftID: UUID?
+
     func insert(_ text: String, context: DictationContext) async -> InsertionOutcome {
-        onDeliver?(text, nil)
+        onDeliver?(text, unconfirmedDraftID)
+        unconfirmedDraftID = nil
         return .inserted
     }
 
@@ -48,6 +55,7 @@ final class KeyboardInserter: TextInserting {
     /// (`KeyboardModel.typeDraftIfNeeded`); when none does, the written text
     /// comes alone, as before.
     func draft(context: DictationContext) async -> TextDraft? {
+        unconfirmedDraftID = nil
         guard destination?()?.documentID != nil else { return nil }
         return KeyboardTextDraft(inserter: self)
     }
@@ -88,6 +96,7 @@ private final class KeyboardTextDraft: TextDraft {
         // inside the wait: one that did not say so by now never will.
         store.reloadFromDisk()
         guard store.typedDraftID == draft.id else {
+            inserter.unconfirmedDraftID = draft.id
             SessionDiagnostics.note("draft not typed by a keyboard; the written text comes alone")
             return .notInserted
         }
