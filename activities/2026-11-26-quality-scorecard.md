@@ -167,6 +167,6 @@ The dictation thread owns the prompt fixes. Hindi-specific prompt rules stay onl
 
 ## 2026-11-28: Version numbers follow semantic versioning
 
-Standing rule from cyron: the release owner picks each version by semantic versioning instead of always raising the patch number. Patch (0.7.x) is for fixes only. Minor (0.x.0) is for new features or notable changes. Major (1.0) is for when the app is stable and feature-complete, or a change breaks compatibility. Build numbers keep rising by one per release. The rule is also in AGENTS.md.
+Standing rule from cyron: the release owner picks each version by semantic versioning instead of always raising the patch number. Patch (0.7.x) is for fixes only. Minor (0.x.0) is for new features or notable changes. Major: 1.0.0 ships only when every item on this scorecard, meetings included, is at 90 or above and the release build has been checked on a real iPhone, not only the Simulator. After that, a release that breaks compatibility raises the major version. Build numbers keep rising by one per release. The rule is also in AGENTS.md.
 
 The release planned as 0.7.19 ships as **0.8.0 (94)**. It replaces Gemini with AssemblyAI and needs a new key, adds the draft-then-written paste on Mac and iPhone, and adds meeting waveforms with a playback bar. Its notice moved to release-notes/0.8.0.notice.md, and docs and code comments that said "0.7.19" now say "0.8.0". Earlier activity files keep "0.7.19", the name in use when they were written.
