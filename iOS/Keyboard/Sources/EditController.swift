@@ -98,6 +98,17 @@ final class EditController: ObservableObject {
         refresh()
     }
 
+    /// A dictation that reached the field another way than `type`: a draft
+    /// swapped for its written text (`KeyboardDraft`). It becomes one undo
+    /// step, like a dictation typed in, which takes `inserted` back out
+    /// from before the cursor.
+    func recordDictation(inserted: String) {
+        guard !inserted.isEmpty else { return }
+        checkpoint(.other)
+        record(deleted: "", inserted: inserted)
+        refresh()
+    }
+
     /// The user moved the cursor or the app changed the text: undo replays
     /// text before the cursor, which is no longer this text.
     func textChanged() {

@@ -469,7 +469,9 @@ final class KeyboardModel: ObservableObject {
         }
         switch held.replace(with: delivery.text, in: proxy, fit: Self.fitted) {
         case .replacedMarked(let fitted), .retyped(let fitted):
-            editor?.textChanged()
+            // The cursor is right after the written text: Undo takes it out,
+            // as for a dictation typed in.
+            editor?.recordDictation(inserted: fitted)
             onDidInsertDictation?(fitted, held.before, held.after)
             KeyboardLog.note("[\(instanceTag)] written text replaced its draft in \(Self.describe(currentField()))")
         case .kept:

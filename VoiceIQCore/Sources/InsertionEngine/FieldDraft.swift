@@ -96,6 +96,9 @@ public final class FieldDraft: TextDraft {
         self.field = field
         await field.acquire()
         defer { field.release() }
+        // An earlier paste may still be restoring the clipboard; wait it out
+        // before the checks, so an Esc during the wait stops this draft.
+        await inserter.finishPendingPaste()
         guard !ended, Self.focusedTarget(context: context).map({ CFEqual($0, element) }) == true,
               let before = field.sync() else {
             marks.clear()

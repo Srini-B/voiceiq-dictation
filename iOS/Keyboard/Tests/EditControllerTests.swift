@@ -126,6 +126,23 @@ final class EditControllerTests: XCTestCase {
         XCTAssertEqual(field.string, "Dear Ana, see you at no")
     }
 
+    /// A draft swapped for its written text is one undo step, like a
+    /// dictation typed in: undo leaves the field as it was before it.
+    func testUndoTakesBackADraftDictation() throws {
+        let field = Field("Dear Ana,")
+        let editor = editor(for: field)
+        let draft = try XCTUnwrap(KeyboardDraft.type("see you at noon", id: UUID(), documentID: UUID(), into: field,
+                                                     fit: { text, _, _ in " " + text }))
+        guard case .replacedMarked(let fitted) = draft.replace(with: "See you at noon.", in: field,
+                                                               fit: { text, _, _ in " " + text }) else {
+            return XCTFail("not swapped")
+        }
+        editor.recordDictation(inserted: fitted)
+        XCTAssertEqual(field.string, "Dear Ana, See you at noon.")
+        editor.undo()
+        XCTAssertEqual(field.string, "Dear Ana,")
+    }
+
     /// Typing over a selection ends it, and undo brings the selected word back.
     func testTypingOverASelectionEndsItAndUndoRestoresTheWord() {
         let field = Field("call Srini tomorrow", selecting: "Srini")
