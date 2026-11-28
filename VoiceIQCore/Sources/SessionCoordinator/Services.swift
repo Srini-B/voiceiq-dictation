@@ -161,6 +161,13 @@ public protocol TextDraft: AnyObject {
     /// Ends the draft: the spinner and the marks go, the text stays.
     /// `replace(with: "")` first takes it out instead.
     func end()
+    /// The dictation is ending without written text: a `show` that has not
+    /// put anything in the field yet puts nothing in.
+    func stopShowing()
+}
+
+public extension TextDraft {
+    func stopShowing() {}
 }
 
 public enum DraftShown: Equatable, Sendable {

@@ -59,6 +59,8 @@ public final class FieldDraft: TextDraft {
 
     private var tracking: Task<Void, Never>?
     private var ended = false
+    /// Withdrawn before it went in (`stopShowing`).
+    private var stopped = false
 
     /// How long a pasted draft may take to show in the field's value.
     static let landingWait: TimeInterval = 1.5
@@ -117,7 +119,7 @@ public final class FieldDraft: TextDraft {
         // An earlier paste may still be restoring the clipboard; wait it out
         // before the checks, so an Esc during the wait stops this draft.
         await inserter.finishPendingPaste()
-        guard !ended, Self.focusedTarget(context: context).map({ CFEqual($0, element) }) == true,
+        guard !ended, !stopped, Self.focusedTarget(context: context).map({ CFEqual($0, element) }) == true,
               let before = field.sync() else {
             marks.clear()
             return .notInserted
@@ -272,7 +274,7 @@ public final class FieldDraft: TextDraft {
             _ = await select(reading.caret, reading.selectionLength)
         }
         guard await select(span.location, span.length, holding: reading.value) else {
-            _ = await select(reading.caret, reading.selectionLength)
+            await restoreIfStillSelected()
             // Focused and unchanged, the field itself refused the selection.
             if Self.focusedTarget(context: context).map({ CFEqual($0, element) }) == true,
                PasteCheck.reading(of: element)?.value == reading.value { refusedByApp() }
@@ -325,6 +327,10 @@ public final class FieldDraft: TextDraft {
     /// The text this dictation left in the field: the written text after a
     /// swap, else the draft.
     public var text: String? { landed }
+
+    public func stopShowing() {
+        stopped = true
+    }
 
     public func end() {
         ended = true

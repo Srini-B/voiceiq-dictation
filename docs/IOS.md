@@ -209,7 +209,7 @@ the same "Keep dictations" picker as the Mac (`transcriptRetentionDays`);
 
 #### The transcript as a draft
 
-**Off for now (2026-11-28, `KeyboardInserter.offersDrafts`).** In Messages, after one dictation and typed text, the second dictation's swap left the field holding only the written text, while the keyboard's `documentContextBeforeInput` read exactly the text it expected (52 characters against the field's 27). The keyboard cannot see that from its side, so until a host-safe swap exists the iPhone types the written text once, as before. The mechanism below stays in the code and its tests.
+**Off for now (2026-11-28, `KeyboardInserter.offersDrafts`).** In Messages, after one dictation and typed text, the second dictation's swap left the field holding only the written text, while the keyboard's `documentContextBeforeInput` read exactly the text it expected (52 characters against the field's 27). The keyboard cannot see that from its side, so until a host-safe swap exists the iPhone types the written text once, as before. The steps below describe that retained, switched-off mechanism; it stays in the code and its tests.
 
 When the keyboard never left the field (the first rule above) and the
 writing model will rewrite the transcript, the keyboard shows the

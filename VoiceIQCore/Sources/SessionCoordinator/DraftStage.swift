@@ -59,6 +59,7 @@ final class DraftStage {
     /// A draft that stays is announced (`voiceIQDraftKept`).
     func withdraw() async {
         withdrawn = true
+        draft.stopShowing()
         guard let showing else { return }
         let draft = draft
         await Task { @MainActor in

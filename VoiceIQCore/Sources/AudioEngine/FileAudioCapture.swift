@@ -36,6 +36,7 @@ public final class FileAudioCapture: AudioCapturing, @unchecked Sendable {
     private var framesWritten: Int64 = 0
     private var peakLevel: Float = 0
     private var stopped = false
+    private var writeFailures = 0
 
     private init(samples: [Int16]) {
         self.samples = samples
@@ -99,13 +100,21 @@ public final class FileAudioCapture: AudioCapturing, @unchecked Sendable {
         var chunk = [Int16](repeating: 0, count: Self.chunk)
         let available = max(0, min(Self.chunk, samples.count - position))
         if available > 0 { chunk.replaceSubrange(0..<available, with: samples[position..<(position + available)]) }
-        position += available
         chunk.withUnsafeBufferPointer { out.update(from: $0.baseAddress!, count: Self.chunk) }
         buffer.frameLength = AVAudioFrameCount(Self.chunk)
         do {
             try writer.write(buffer)
+            position += available
+            writeFailures = 0
         } catch {
             Log.audio.error("debug audio: write failed: \(error)")
+            writeFailures += 1
+            // As the microphone recorder does (F22): stop and let the
+            // coordinator finish with what was written.
+            if writeFailures == 15 {
+                stopped = true
+                onWriteFailure?()
+            }
             return
         }
         let first = framesWritten == 0
