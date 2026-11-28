@@ -75,7 +75,8 @@ Numbers use tabular figures.
   inset lists use, and 24 on the Mac.
 - **Radius:**
   - Chips, search, switches and buttons are capsules.
-  - Cards are 16. Sheets are 28.
+  - Cards are 16. Sheets are 28. The iPhone's Settings lists keep the system
+    inset-grouped radius, so they scroll, swipe and select like Settings.
   - Mac list selection is 10.
   - The Talk key is 20 on a 60-point square.
 - **Elevation.** Pages are flat. Only floating things cast a shadow: the dock,
