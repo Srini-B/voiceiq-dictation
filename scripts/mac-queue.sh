@@ -56,7 +56,7 @@ ticket_of() {
   done
   return 0
 }
-ahead() { ls "$dir" 2>/dev/null | sort | grep -n -x -- "$1" | cut -d: -f1; }
+ahead() { ls "$dir" 2>/dev/null | sort | grep -n -x -F -- "$1" | cut -d: -f1; }
 
 action=${1:?wait, done or show}
 case $action in
