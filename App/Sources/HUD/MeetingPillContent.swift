@@ -112,7 +112,7 @@ struct MeetingRecordingContent: View {
         .font(VoiceIQUI.TypeScale.label())
         .foregroundStyle(VoiceIQUI.Colors.onSurfaceVariant)
         .lineLimit(1)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .fixedSize(horizontal: true, vertical: false)
         Button {
             confirmingDiscard = true
         } label: {
@@ -145,7 +145,8 @@ struct MeetingRecordingContent: View {
             .font(VoiceIQUI.TypeScale.label())
             .foregroundStyle(VoiceIQUI.Colors.onSurface)
             .lineLimit(1)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            // Sized to the text: the pill has no fixed width, so a flexible frame would stretch it to 560 pt (Neon on #137).
+            .fixedSize(horizontal: true, vertical: false)
             .accessibilityLabel("Discard this recording? Its audio is deleted and no notes are made.")
         Button("Keep") { confirmingDiscard = false }
             .controlSize(.small)

@@ -281,19 +281,23 @@ description with the same UUID onto the running tap when the set changed,
 for example when Chrome restarts its audio service mid-call. `MicTap.use(device:)`
 moves the mic track when the call moves to another input.
 
-**Output changes and silent taps.** A tap hears the output that was the
-default when it was made. When the default output changes mid-meeting
-(headphones in or out), or `system.caf` carried sound and then gets 15 s of
-exact zeros while the tapped processes (all audio: the default output) still
-play, `SystemAudioTap` starts a new tap on the same processes before it stops
+**Output changes and silent taps.** A process tap hears its processes
+whichever device they play to (checked with `tapprobe` on macOS 27,
+2026-11-28), so the rebuild on an output move is a precaution kept from Hex.
+When the default output changes mid-meeting
+(headphones in or out), or `system.caf` stays quiet (no sample above about
+−72 dBFS, `SystemTapWatch.quietPeak`) while the tapped processes (all audio:
+the default output) still play, `SystemAudioTap` starts a new tap on the same processes before it stops
 the old one, and writes into the same file. The time between the old tap's
 last buffer and the new one's first is written as silence
 (`SystemTapWatch.gapFrames`, gaps under 50 ms are ignored), so `system.caf`
 stays aligned with `mic.caf`. A new tap that fails to start leaves the old one
-running and is tried again up to five times. A rebuild restarts the
-count without waiting for sound, so a replacement that also delivers only
-zeros is rebuilt again, after 60 s and then every 240 s until the track
-carries sound, so a call that is really quiet while its app plays digital
+running and is tried again up to five times. The first wait is 15 s from the
+start of the recording, and 60 s once the track has carried sound, so the
+owner's long turn does not rebuild the tap under the far side's reply. A
+rebuild restarts the count without waiting for sound, so a replacement that
+also delivers only quiet is rebuilt again after four times the wait, then
+sixteen times, until the track carries sound, so a call that is really quiet while its app plays digital
 silence is not rebuilt over and over. A retry from an older rebuild gives up
 once a newer one has started. The mic track (`MicTap`) writes the time a
 device move took as silence too, so it stays aligned with the system track
@@ -547,14 +551,20 @@ has no VoiceiQ tools. With access off, the item is not shown.
 ## Other side not heard
 
 When macOS does not allow VoiceiQ to record system audio, the tap still
-writes `system.caf`, but every sample is zero. On the Mac, a meeting that
+writes `system.caf`, but every sample is zero; a tap that misses the call's
+sound for another reason writes noise near −84 dBFS (the live-call probe's m2
+and m3, 2026-11-28). On the Mac, a meeting that
 call detection started (it has a `source`), that lasted over a minute and
-whose `system.caf` is all zeros shows a warning under its title: "VoiceiQ
-couldn't hear the other people on this call. Check System Settings > Privacy
-& Security > Screen & System Audio Recording." with **Open System Settings**
-(`Privacy_ScreenCapture`). `SilentSystemAudio.check` reads the track off
-the main thread and stops at the first sample that is not zero, so only a
-silent track is read to its end. A recording started by hand is not checked,
+whose `system.caf` is quiet throughout (no sample above about −72 dBFS) shows
+a warning under its title. An all-zero track says "VoiceiQ couldn't hear the
+other people on this call. Check System Settings > Privacy & Security >
+Screen & System Audio Recording." with **Open System Settings**
+(`Privacy_ScreenCapture`). A track of noise was recorded with the permission,
+so it says "They may have been muted the whole time, or the call's volume was
+too low to record." instead. Not −60 dBFS: a Meet call's speech peaked near
+there (`TrackAudio.gain`). `SilentSystemAudio.check` reads the track off
+the main thread and stops at the first sample above that level, so only a
+quiet track is read to its end. A recording started by hand is not checked,
 because a tap of all system audio is silent too when nothing plays; nor is
 a meeting with no audio on this Mac (synced or imported). No permission is
 queried.
