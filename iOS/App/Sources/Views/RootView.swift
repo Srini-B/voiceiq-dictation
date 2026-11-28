@@ -6,7 +6,7 @@ struct RootView: View {
     @State private var tab = Tab.home
     @State private var showKeyboardSetup = false
 
-    enum Tab { case home, history, meetings, settings }
+    enum Tab { case home, meetings, settings }
 
     var body: some View {
         Group {
@@ -15,9 +15,6 @@ struct RootView: View {
                     HomeView(tab: $tab)
                         .tabItem { Label("Home", systemImage: "waveform") }
                         .tag(Tab.home)
-                    HistoryView()
-                        .tabItem { Label("History", systemImage: "clock.arrow.circlepath") }
-                        .tag(Tab.history)
                     MeetingsView()
                         .tabItem { Label("Notes", systemImage: "record.circle") }
                         .tag(Tab.meetings)

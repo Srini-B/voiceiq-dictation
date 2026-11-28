@@ -25,13 +25,13 @@ enum SettingsSection: String, CaseIterable, Identifiable {
 
     var icon: String {
         switch self {
-        case .keys: return "key.fill"
-        case .keyboard: return "keyboard.fill"
+        case .keys: return "key"
+        case .keyboard: return "keyboard"
         case .dictation: return "waveform"
-        case .dictionary: return "character.book.closed.fill"
+        case .dictionary: return "character.book.closed"
         case .returnApps: return "arrow.uturn.backward"
-        case .privacy: return "hand.raised.fill"
-        case .cost: return "chart.bar.fill"
+        case .privacy: return "hand.raised"
+        case .cost: return "chart.bar"
         case .advanced: return "slider.horizontal.3"
         }
     }
@@ -58,23 +58,19 @@ struct SettingsView: View {
     var body: some View {
         ListDetailNavigation {
             List(selection: $selection) {
-                Section {
-                    VStack(spacing: Theme.Spacing.s) {
-                        Wordmark(height: 36)
-                        Text(versionText)
-                            .font(Theme.Fonts.caption())
-                            .foregroundStyle(Theme.Colors.muted)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, Theme.Spacing.m)
-                    .listRowInsets(EdgeInsets())
-                    .listRowBackground(Color.clear)
-                }
                 Section { ForEach(SettingsSection.primary) { row($0) } }
-                Section { ForEach(SettingsSection.secondary) { row($0) } }
+                Section {
+                    ForEach(SettingsSection.secondary) { row($0) }
+                } footer: {
+                    Text(versionText)
+                        .font(Theme.Fonts.caption())
+                        .foregroundStyle(Theme.Colors.muted)
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, Theme.Spacing.l)
+                }
             }
             .listStyle(.insetGrouped)
-            .themedBackground()
+            .groupedBackground()
             .navigationTitle("Settings")
             .onAppear { setup.refresh() }
         } detail: {
@@ -98,14 +94,18 @@ struct SettingsView: View {
         let open = sizeClass == .regular && selection == section
         return NavigationLink(value: section) {
             HStack(spacing: Theme.Spacing.m) {
-                IconTile(systemImage: section.icon)
+                Image(systemName: section.icon)
+                    .font(.system(size: 16, weight: .regular))
+                    .foregroundStyle(open ? Theme.Colors.accent : Theme.Colors.inkSecondary)
+                    .frame(width: 24)
+                    .accessibilityHidden(true)
                 Text(section.title).font(Theme.Fonts.body())
                     .foregroundStyle(open ? Theme.Colors.accent : Theme.Colors.ink)
                 Spacer(minLength: Theme.Spacing.s)
                 chip(for: section)
             }
         }
-        .listRowBackground(open ? Theme.Colors.accent.opacity(0.14) : Theme.Colors.surface)
+        .listRowBackground(open ? Theme.Colors.accentSoft : Theme.Colors.surface)
     }
 
     @ViewBuilder private func chip(for section: SettingsSection) -> some View {
@@ -422,7 +422,7 @@ extension View {
     func settingsPage(title: String, keyboard: Bool = false) -> some View {
         self
             .listStyle(.insetGrouped)
-            .themedBackground()
+            .groupedBackground()
             .listRowBackground(Theme.Colors.surface)
             .font(Theme.Fonts.body())
             .tint(Theme.Colors.accent)
