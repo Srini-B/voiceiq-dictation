@@ -708,6 +708,7 @@ final class AppModel: ObservableObject {
             case .storage: return "Storage is full"
             case .badRequest, .validation, .safetyBlocked: return "Couldn't transcribe. It's in History."
             }
+        case .done(.inserted): return coordinator.coachingHint // "Inserted as heard" when the writer failed
         case .done(.queuedForRetry): return "Offline. It will send when you're back."
         case .done(.silent): return "Didn't catch that"
         default: return nil

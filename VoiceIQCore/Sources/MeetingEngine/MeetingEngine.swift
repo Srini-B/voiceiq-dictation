@@ -341,8 +341,9 @@ import VoiceIQSpeech
     /// the whole meeting again.
     public func retry(id: MeetingID, fresh: Bool = false) {
         guard !isBusy(id), let folder = store.folder(for: id), let meta = store.list().first(where: { $0.id == id }) else { return }
-        // Only the notes failed: the saved transcript, and any edits to it, stay.
-        if !fresh, meta.waitsForService == .notes { return regenerateNotes(id: id) }
+        // Only the notes failed (waiting, or for a reason such as no gateway
+        // balance): the saved transcript, and any edits to it, stay.
+        if !fresh, meta.waitsForService == .notes || Self.onlyNotesFailed(id, store: store) { return regenerateNotes(id: id) }
         if fresh { Self.dropTranscriptCaches(folder) }
         processing[id] = .transcribing
         Task { await UsageMeter.$scope.withValue(UsageScope(activity: .meeting, sessionID: id.uuid.uuidString)) {
@@ -376,6 +377,11 @@ import VoiceIQSpeech
         meta.status = status
         processing[meta.id] = status
         try store.save(meta: meta)
+    }
+
+    /// A transcript was saved and no notes were: the notes step failed.
+    nonisolated static func onlyNotesFailed(_ id: MeetingID, store: MeetingStore) -> Bool {
+        (try? store.loadTranscript(id: id))?.isEmpty == false && (try? store.loadNotes(id: id)) == nil
     }
 
     /// The words cached beside the audio by `MeetingTranscriber` (the
@@ -472,6 +478,7 @@ import VoiceIQSpeech
         switch error as? MeetingFailure {
         case .noKey: onNotice?("\(MeetingFailure.noun) saved — it is transcribed once you add an AssemblyAI key")
         case nil where meta.waitsForService != nil: onNotice?("\(MeetingFailure.noun) saved — it is transcribed when AssemblyAI can be reached")
+        case nil where step == .notes: onNotice?("\(MeetingFailure.noun) notes failed — see \(MeetingFailure.listName)")
         case nil: onNotice?("\(MeetingFailure.noun) transcript failed — see \(MeetingFailure.listName)")
         }
     }

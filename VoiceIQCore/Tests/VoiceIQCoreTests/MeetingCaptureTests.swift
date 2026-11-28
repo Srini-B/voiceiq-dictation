@@ -95,14 +95,14 @@ final class MeetingCaptureTests: XCTestCase {
     }
     #endif
 
-    /// Only Gemini being out of reach makes a meeting wait to be sent again;
+    /// Only AssemblyAI being out of reach makes a meeting wait to be sent again;
     /// a rejected key or a refusal would fail the same way on every retry.
-    func testOnlyUnreachableGeminiMakesAMeetingWait() {
+    func testOnlyAnUnreachableServiceMakesAMeetingWait() {
         XCTAssertTrue(MeetingFailure.waitsForService(MeetingFailure.noKey))
         XCTAssertTrue(MeetingFailure.waitsForService(TranscriptionError.offline))
         XCTAssertTrue(MeetingFailure.waitsForService(TranscriptionError.network("-1004")))
         XCTAssertTrue(MeetingFailure.waitsForService(TranscriptionError.network("http_503")))
-        XCTAssertFalse(MeetingFailure.waitsForService(TranscriptionError.network("interactions_unavailable_403")))
+        XCTAssertFalse(MeetingFailure.waitsForService(TranscriptionError.network("unparseable_response")))
         XCTAssertFalse(MeetingFailure.waitsForService(TranscriptionError.network("bad_url")))
         XCTAssertFalse(MeetingFailure.waitsForService(TranscriptionError.rateLimitedDaily))
         XCTAssertTrue(MeetingFailure.waitsForService(TranscriptionError.rateLimitedTransient(retryAfter: 30)))

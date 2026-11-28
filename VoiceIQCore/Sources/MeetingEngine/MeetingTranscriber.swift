@@ -137,10 +137,16 @@ public struct MeetingTranscriber: Sendable {
                               place: ([DiarizedWord], AssembledAudio, [TimedWord]) -> [TimedWord]) async throws -> [TimedWord] {
         let request = try build(regions, known)
         let flac = try FLACEncoder.encode(samples: request.samples)
-        let raw = try await withRetries(label: label, budget: &budget) {
-            try await client.transcribeSpeakers(audio: flac, speakerLabels: speakerLabels, deadline: 900)
+        do {
+            let raw = try await withRetries(label: label, budget: &budget) {
+                try await client.transcribeSpeakers(audio: flac, speakerLabels: speakerLabels, deadline: 900)
+            }
+            return place(raw, request, known)
+        } catch TranscriptionError.emptyTranscript {
+            // A window of coughs or keys only: the service finds no speech in it.
+            Log.meeting.info("\(label, privacy: .public): no speech")
+            return []
         }
-        return place(raw, request, known)
     }
 
     /// Both tracks, with the mic's echo cancelled when the far side talked.

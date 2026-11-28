@@ -42,8 +42,9 @@ the stream), and model IDs are booked as `assemblyai/<model>`.
 - **Speech** is billed per hour of audio, so the call is booked with its cost
   (`TokenUsage.reportedCostUSD`) and `audioSeconds`. Pre-recorded STT-3.7
   ($0.21 an hour) or Universal-2 ($0.15) is booked from the transcript's
-  `audio_duration`, plus the hourly add-ons the request used: keyterms
-  ($0.05), speaker labels ($0.02) and speaker identification ($0.02). The
+  `audio_duration`, at the rate of the model that ran (`speech_model_used`),
+  plus the hourly add-ons the request used: speaker labels ($0.02) and
+  speaker identification ($0.02). The
   Realtime stream ($0.30 an hour) is billed for the time the session is
   open, so it is booked from that time when the session closes.
 - **The LLM Gateway** answers in OpenAI's chat-completion shape for every

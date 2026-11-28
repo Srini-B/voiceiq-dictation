@@ -45,11 +45,10 @@ With no usable key, nothing is sent and the recording stays on your Mac.
    model reads intent from your speech and uses the app and window names
    only to tell what kind of text this is and how names on screen are
    spelled.
-2. **Your dictionary terms**, with the audio and in the writing request.
-   The speech model takes them as keyterms (up to 100 on the stream) to
-   bias what it hears, which is why names and jargon come out spelled right
-   as you speak rather than being corrected afterwards. The writing request
-   carries up to 100 words and up to 10 "heard as" spellings (the
+2. **Your dictionary terms**, in the writing request only. They are not
+   sent to the speech model as keyterms: on our eval that pulled
+   similar-sounding names toward Dictionary words (Karen became Karan). The
+   writing request carries up to 100 words and up to 10 "heard as" spellings (the
    misspelling and its correction).
 3. **Screen context**, while "Screen context" is on in Settings → Dictation — off
    by default since 2026-10-13. VoiceiQ captures the frontmost window (only

@@ -319,7 +319,7 @@ SOFTWARE.
 ### FluidVoice (on-device meetings design)
 
 - The on-device meeting path (`LocalMeetingJob`, and `LocalMeetingTranscriber`
-  until 0.7.18, when meetings became Gemini-only) follows FluidMeet's design: the meeting is transcribed after it ends by a
+  until 0.7.18, when meetings moved to the cloud only) follows FluidMeet's design: the meeting is transcribed after it ends by a
   Fluid Speech model, speakers are separated by a diarization model, and the
   two are joined by time.
 - Source: [altic-dev/FluidVoice](https://github.com/altic-dev/FluidVoice)

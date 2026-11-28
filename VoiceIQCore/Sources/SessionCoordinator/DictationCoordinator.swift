@@ -349,22 +349,25 @@ public final class DictationCoordinator: ObservableObject {
             Log.audio.info("engine start skipped — session moved on before the mic came up")
             return
         }
+        // The stream is connected before the mic starts, so a warm engine's
+        // first buffers reach it too.
+        if localTranscriber == nil, let session {
+            let stream = UsageMeter.$scope.withValue(UsageScope(activity: .dictation, sessionID: sessionID.uuidString)) {
+                transcription.listen(context: session.context)
+            }
+            live = stream
+            if let stream { capture.onSamples = { samples in stream.append(samples) } }
+        }
         do {
             try capture.start(writingTo: FileLayout.audioCAF(in: folder))
             apply(.engineStarted)
-            if localTranscriber == nil, let session {
-                let stream = UsageMeter.$scope.withValue(UsageScope(activity: .dictation, sessionID: sessionID.uuidString)) {
-                    transcription.listen(context: session.context)
-                }
-                live = stream
-                if let stream { capture.onSamples = { samples in stream.append(samples) } }
-            }
             if pendingLockIn {
                 pendingLockIn = false
                 apply(.lockIn)
             }
         } catch {
             Log.audio.error("audio engine failed to start: \(error)")
+            capture.onSamples = nil
             // Honest failure taxonomy: "Mic didn't start" is wrong advice on a
             // Mac with no input device at all. And zero frames were captured, so
             // there is NOTHING to store — a "Failed" History row with a dead-end
@@ -610,8 +613,10 @@ public final class DictationCoordinator: ObservableObject {
         updateMeta(sessionID) { $0.status = status; $0.pipelineSeconds = pipelineSeconds; $0.steps = stages }
         lastResult = outcome.cleanedTranscript
         if session?.id == sessionID {
+            // Set before the state changes, so observers of the state read it.
+            // The insertion's own notice (clipboard, secure field) comes first.
+            if let notice = outcome.notice, case .inserted = insertionOutcome { coachingHint = notice }
             apply(event)
-            if let notice = outcome.notice { coachingHint = notice }
             session = nil
         } else {
             endDetached(sessionID)

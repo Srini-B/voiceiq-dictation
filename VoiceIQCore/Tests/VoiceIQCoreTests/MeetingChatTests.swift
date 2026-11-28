@@ -1,8 +1,7 @@
 import XCTest
 @testable import VoiceIQCore
 
-/// Meeting chat is saved with its meeting (the request itself is covered in
-/// `GeminiRequestTests`).
+/// Meeting chat is saved with its meeting.
 final class MeetingChatTests: XCTestCase {
     private let history = [MeetingChatTurn(question: "Who owns the launch?", answer: "Rohan.",
                                            askedAt: Date(timeIntervalSinceReferenceDate: 800_000_000), model: "m")]

@@ -95,9 +95,11 @@ public struct SettingsStore: Sendable {
     /// AssemblyAI, and a Gemini model name pinned as the writing model would
     /// fail every dictation.
     private func removeGeminiSettingsOnce() {
+        // Every launch: a delete can fail while the Keychain is locked, and
+        // one that finds nothing costs nothing.
+        KeychainStore.deleteGeminiKey()
         guard !Self.defaults.bool(forKey: "didRemoveGemini") else { return }
         Self.defaults.set(true, forKey: "didRemoveGemini")
-        KeychainStore.deleteGeminiKey()
         for key in ["endpointOverride", "transcribeModelOverride", "cleanupModelOverride"] {
             Self.defaults.removeObject(forKey: key)
         }

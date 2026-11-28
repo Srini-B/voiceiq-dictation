@@ -126,13 +126,13 @@ public struct AssemblyAITranscriptionService: TranscriptionServicing {
         let model = settings.assemblyAIConfig.writingModel
         let prompt = dictationPrompt(context: context, transcript: raw)
         do {
-            // About fifteen characters a second of speech.
-            let deadline = TimeoutPolicy.overallDeadline(audioDuration: Double(raw.count) / 15)
-            // A second attempt only when the first loses its connection.
+            // Luna answers in about 1 s (p90 under 2 s on the eval). A second
+            // attempt starts after 5 s or a lost connection, and the tidied
+            // transcript goes in once both have had 15 s.
             let attempt: @Sendable () async throws -> String = { [client] in
-                try await client.write(prompt: prompt, model: model, deadline: deadline)
+                try await client.write(prompt: prompt, model: model, deadline: 15)
             }
-            let written = try await AssemblyAIClient.firstSuccess(retryAfter: deadline, first: attempt, retry: attempt)
+            let written = try await AssemblyAIClient.firstSuccess(retryAfter: 5, first: attempt, retry: attempt)
             let text = ValidationGate.stripArtifacts(written).trimmingCharacters(in: .whitespacesAndNewlines)
             guard !text.isEmpty else { throw TranscriptionError.emptyTranscript }
             return TranscriptionResult(rawTranscript: transcript.rawTranscript,
@@ -185,7 +185,7 @@ public struct AssemblyAITranscriptionService: TranscriptionServicing {
                 return try await body()
             case .rateLimitedTransient(let retryAfter):
                 let wait = retryAfter ?? TimeoutPolicy.rateLimitWait
-                guard wait <= TimeoutPolicy.rateLimitWait else { throw error }
+                guard wait >= 0, wait <= TimeoutPolicy.rateLimitWait else { throw error }
                 try await Task.sleep(nanoseconds: UInt64(wait * 1_000_000_000))
                 return try await body()
             default:

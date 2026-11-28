@@ -27,7 +27,12 @@ public final class AudioCaptureEngine: AudioCapturing, @unchecked Sendable {
     public var onDeviceChange: (@Sendable (String) -> Void)?
     public var onWriteFailure: (@Sendable () -> Void)?
     public var onEngineDied: (@Sendable (String) -> Void)?
-    public var onSamples: (@Sendable ([Int16]) -> Void)?
+    /// Guarded by `stateLock`: the coordinator sets it while the write queue reads it.
+    public var onSamples: (@Sendable ([Int16]) -> Void)? {
+        get { stateLock.withLock { samplesHandler } }
+        set { stateLock.withLock { samplesHandler = newValue } }
+    }
+    private var samplesHandler: (@Sendable ([Int16]) -> Void)?
 
     private let targetFormat = AVAudioFormat(
         commonFormat: .pcmFormatInt16, sampleRate: 16_000, channels: 1, interleaved: true

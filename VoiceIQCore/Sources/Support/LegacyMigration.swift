@@ -46,7 +46,7 @@ public enum LegacyMigration {
     private static func migrateDefaultsDomain() {
         let keys = [
             "smartFormatting", "showIdleIndicator", "soundsEnabled",
-            "hotkeyKey", "endpointOverride", "transcribeModelOverride", "cleanupModelOverride",
+            "hotkeyKey",
             "audioRetentionDays", "gateTrips", "dictionaryEntries", "hasCompletedOnboarding",
             "experimentalNoiseHandling", "smartTranscription", "smartCleanupPass",
             "shouldAnnounceSmartRestored",
@@ -67,34 +67,10 @@ public enum LegacyMigration {
         }
     }
 
-    /// The Gemini key re-homes to the new Keychain service; the old item is
-    /// removed so nothing is left behind.
+    /// The old app's key was a Gemini key, which AssemblyAI can't use, so
+    /// it is deleted rather than re-homed.
     private static func migrateKeychainKey() {
-        guard KeychainStore.loadAPIKey() == nil, let legacy = readLegacyKey() else { return }
-        if KeychainStore.saveAPIKey(legacy) {
-            deleteLegacyKey()
-            Log.permissions.info("LegacyMigration: API key re-homed to the new Keychain service")
-        }
-    }
-
-    private static func readLegacyKey() -> String? {
-        for dataProtection in [true, false] {
-            var query: [String: Any] = [
-                kSecClass as String: kSecClassGenericPassword,
-                kSecAttrService as String: legacyKeychainService,
-                kSecAttrAccount as String: "gemini-api-key",
-                kSecReturnData as String: true,
-                kSecMatchLimit as String: kSecMatchLimitOne,
-            ]
-            if dataProtection {
-                query[kSecUseDataProtectionKeychain as String] = true
-            }
-            var item: CFTypeRef?
-            if SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess, let data = item as? Data {
-                return String(data: data, encoding: .utf8)
-            }
-        }
-        return nil
+        deleteLegacyKey()
     }
 
     private static func deleteLegacyKey() {

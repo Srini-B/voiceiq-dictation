@@ -192,8 +192,16 @@ public actor AssemblyAIClient {
         while true {
             try await Task.sleep(nanoseconds: wait)
             wait = min(wait * 3 / 2, 3_000_000_000)
-            let data = try await send(url: AssemblyAIConfig.api.appendingPathComponent("v2/transcript/\(id)"), body: nil,
-                                      deadline: min(30, try remaining()), modelLabel: model, stage: stage)
+            let data: Data
+            let pollDeadline = min(30, try remaining())
+            do {
+                data = try await send(url: AssemblyAIConfig.api.appendingPathComponent("v2/transcript/\(id)"), body: nil,
+                                      deadline: pollDeadline, modelLabel: model, stage: stage)
+            } catch TranscriptionError.network, TranscriptionError.timeout, TranscriptionError.rateLimitedTransient {
+                // The job is uploaded and billed; a failed poll asks again
+                // rather than sending the audio a second time.
+                continue
+            }
             guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { continue }
             switch json["status"] as? String {
             case "completed":
@@ -249,7 +257,7 @@ public actor AssemblyAIClient {
               let http = response as? HTTPURLResponse else { return .unreachable }
         switch http.statusCode {
         case 200: return .valid
-        case 500...599: return .unreachable
+        case 429, 500...599: return .unreachable
         default: return .rejected(Self.errorMessage(from: data))
         }
     }
@@ -299,7 +307,7 @@ public actor AssemblyAIClient {
             throw TranscriptionError.noBalance
         case 429:
             let retryAfter = http.value(forHTTPHeaderField: "Retry-After").flatMap(Double.init)
-            if !isRetryAfter429, let delay = retryAfter, delay <= 8 {
+            if !isRetryAfter429, let delay = retryAfter, delay >= 0, delay <= 8 {
                 try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
                 try Task.checkCancellation()
                 return try await send(url: url, body: body, contentType: contentType, deadline: deadline,
@@ -324,7 +332,8 @@ public actor AssemblyAIClient {
     static func isNoBalance(_ message: String) -> Bool {
         let lowered = message.lowercased()
         return lowered.contains("does not have access to this llm gateway")
-            || lowered.contains("insufficient") || lowered.contains("balance")
+            || lowered.contains("insufficient funds") || lowered.contains("insufficient balance")
+            || lowered.contains("insufficient credit")
     }
 
     struct DeadlineExceeded: Error {}

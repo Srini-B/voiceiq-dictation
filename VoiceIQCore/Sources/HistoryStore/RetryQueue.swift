@@ -222,7 +222,7 @@ public final class RetryQueue {
                 switch error {
                 case .offline, .network, .timeout: return .stillOffline
                 case .rateLimitedTransient(let retryAfter): return .rateLimited(Self.rateLimitWait(retryAfter))
-                case .auth, .rateLimitedDaily: return .blocked(error)
+                case .auth, .rateLimitedDaily, .noBalance: return .blocked(error)
                 default: return .failed
                 }
             }
@@ -231,7 +231,7 @@ public final class RetryQueue {
                 return .stillOffline
             case .rateLimitedTransient(let retryAfter):
                 return .rateLimited(Self.rateLimitWait(retryAfter))
-            case .auth, .rateLimitedDaily:
+            case .auth, .rateLimitedDaily, .noBalance:
                 // Account-level wall: NOT this row's fault. Keep its queued
                 // status untouched so the promise survives to the next drain.
                 return .blocked(error)

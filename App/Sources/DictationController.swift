@@ -478,7 +478,7 @@ final class DictationController {
             if case .auth = error {
                 message = "Queued dictations are waiting — fix your API key in Settings → Advanced"
             } else {
-                message = "Daily quota reached — queued dictations will retry later"
+                message = "AssemblyAI quota or credit used up — queued dictations will retry later"
             }
             self?.showBackgroundNotice(message, for: 5.0, sound: nil)
         }

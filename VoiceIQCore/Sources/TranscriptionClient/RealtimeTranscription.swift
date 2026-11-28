@@ -27,14 +27,14 @@ public final class RealtimeTranscription: @unchecked Sendable {
     private var failure: TranscriptionError?
     private var terminated = false
     private var waiter: CheckedContinuation<Void, Never>?
+    /// Set once `finish` stops waiting, so a waiter that registers late resumes at once.
+    private var waitOver = false
     private var closed = false
 
     /// 50 ms at 16 kHz: the smallest chunk sent while recording.
     static let chunkSamples = 800
     /// 1 s, the largest chunk the API accepts.
     static let maxChunkSamples = 16_000
-    /// 20 ms, the smallest chunk the API accepts; a shorter tail is padded with silence.
-    static let minChunkSamples = 320
 
     public init(apiKey: String, languageCode: String?) {
         var components = URLComponents(url: AssemblyAIConfig.streaming, resolvingAgainstBaseURL: false)!
@@ -65,30 +65,36 @@ public final class RealtimeTranscription: @unchecked Sendable {
 
     /// Samples as they are recorded. Called from the audio write queue.
     public func append(_ samples: [Int16]) {
-        lock.lock()
-        defer { lock.unlock() }
-        guard !closed, failure == nil else { return }
-        pending.append(contentsOf: samples)
-        while pending.count >= Self.chunkSamples {
-            let count = min(pending.count, Self.maxChunkSamples)
-            sendLocked(Array(pending.prefix(count)))
-            pending.removeFirst(count)
+        // Chunks leave outside the lock: a send's completion can take it.
+        let chunks: [[Int16]] = lock.withLock {
+            guard !closed, failure == nil else { return [] }
+            pending.append(contentsOf: samples)
+            var chunks: [[Int16]] = []
+            while pending.count >= Self.chunkSamples {
+                let count = min(pending.count, Self.maxChunkSamples)
+                chunks.append(Array(pending.prefix(count)))
+                pending.removeFirst(count)
+            }
+            return chunks
         }
+        chunks.forEach(send)
     }
 
     /// Ends the stream at key-up and returns the transcript: every final turn
     /// in order. Throws when the stream failed or did not end in `timeout`.
     public func finish(timeout: TimeInterval = 4) async throws -> String {
-        let failed = lock.withLock {
-            if !pending.isEmpty {
-                var tail = pending
-                if tail.count < Self.minChunkSamples { tail += Array(repeating: 0, count: Self.minChunkSamples - tail.count) }
-                sendLocked(tail)
-                pending = []
+        let (tail, failed) = lock.withLock {
+            var tail = pending
+            pending = []
+            // Padded to a full chunk: the service refuses chunks under 20 ms
+            // (some of its docs say 50).
+            if !tail.isEmpty, tail.count < Self.chunkSamples {
+                tail += Array(repeating: 0, count: Self.chunkSamples - tail.count)
             }
-            return failure
+            return (tail, failure)
         }
         if let failed { close(); throw failed }
+        if !tail.isEmpty { send(tail) }
         task.send(.string(#"{"type":"ForceEndpoint"}"#)) { _ in }
         task.send(.string(#"{"type":"Terminate"}"#)) { _ in }
 
@@ -96,7 +102,7 @@ public final class RealtimeTranscription: @unchecked Sendable {
             group.addTask { [self] in
                 await withCheckedContinuation { continuation in
                     lock.lock()
-                    if terminated || failure != nil {
+                    if terminated || failure != nil || waitOver {
                         lock.unlock()
                         continuation.resume()
                     } else {
@@ -130,7 +136,7 @@ public final class RealtimeTranscription: @unchecked Sendable {
     /// Drops the stream: a cancelled dictation, or one that went another way.
     public func cancel() { close() }
 
-    private func sendLocked(_ samples: [Int16]) {
+    private func send(_ samples: [Int16]) {
         let data = samples.withUnsafeBufferPointer { Data(buffer: $0) }
         task.send(.data(data)) { [weak self] error in
             guard let error else { return }
@@ -174,8 +180,9 @@ public final class RealtimeTranscription: @unchecked Sendable {
             resumeWaiter()
             return false
         case "Error":
-            fail(.network("realtime_error"))
+            // The service sends why before it closes, as {"error_code", "error"}.
             Log.transcription.error("realtime: \(String(decoding: data, as: UTF8.self), privacy: .private)")
+            fail(Self.map(code: json["error_code"] as? Int ?? 0, reason: json["error"] as? String ?? "", error: nil))
             return false
         default:
             return true
@@ -195,18 +202,23 @@ public final class RealtimeTranscription: @unchecked Sendable {
         lock.lock()
         let continuation = waiter
         waiter = nil
+        waitOver = true
         lock.unlock()
         continuation?.resume()
     }
 
     private func close() {
         lock.lock()
-        let wasOpen = !closed
+        let wasOpen = !closed, ended = terminated
         closed = true
         lock.unlock()
+        resumeWaiter()
         guard wasOpen else { return }
+        // Terminate ends the session at once; the close frame alone may leave
+        // it billing until the inactivity timeout.
+        if !ended { task.send(.string(#"{"type":"Terminate"}"#)) { _ in } }
         task.cancel(with: .normalClosure, reason: nil)
-        session.invalidateAndCancel()
+        session.finishTasksAndInvalidate()
         recordUsage()
     }
 
@@ -225,8 +237,13 @@ public final class RealtimeTranscription: @unchecked Sendable {
     /// docs, "Common session errors and closures"): 1008 is a rejected key,
     /// an account without funds, or too many new sessions this minute.
     static func mapClose(_ task: URLSessionWebSocketTask, error: Error) -> TranscriptionError {
-        let code = task.closeCode.rawValue
-        let reason = task.closeReason.map { String(decoding: $0, as: UTF8.self).lowercased() } ?? ""
+        map(code: task.closeCode.rawValue, reason: task.closeReason.map { String(decoding: $0, as: UTF8.self) } ?? "",
+            error: error)
+    }
+
+    /// A close code or an Error message's code, with its reason.
+    static func map(code: Int, reason: String, error: Error?) -> TranscriptionError {
+        let reason = reason.lowercased()
         switch code {
         case 1008 where reason.contains("insufficient funds"): return .noBalance
         case 1008 where reason.contains("too many"): return .rateLimitedTransient(retryAfter: nil)
