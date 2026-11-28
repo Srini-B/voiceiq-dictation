@@ -243,11 +243,12 @@ public enum ScreenSpeakerNames {
     }
 
     /// Names a far-side voice that answers right after someone addresses an
-    /// invitee or an on-screen name ("Nihal, can you give us the status?"),
-    /// then the last voice by elimination. MEASURED 2026-11-28: the notes
-    /// model on the gateway named these voices in one run and not the next,
-    /// with the same transcript; done here, the names stay the same and the
-    /// notes are written with them. A voice answering two names keeps neither.
+    /// invitee or an on-screen name ("Nihal, can you give us the status?").
+    /// MEASURED 2026-11-28: the notes model on the gateway named these voices
+    /// in one run and not the next, with the same transcript; done here, the
+    /// names stay the same and the notes are written with them. A voice
+    /// answering two names keeps neither. Elimination waits for the notes,
+    /// which can find a self-introduction ("I'm Rahul, covering for Sara").
     public static func byAddress(_ screen: ScreenNames?, transcript: [TranscriptSegment], invited: [String]) -> ScreenNames? {
         let known = (screen?.speakers ?? [:]).values.map(\.name)
         // Known names stay candidates, so "Sara" with two Saras invited is
@@ -260,7 +261,9 @@ public enum ScreenSpeakerNames {
         for (index, turn) in transcript.enumerated() {
             guard let name = addressed(in: turn.text, among: names), !known.contains(where: { sameName($0, name) }),
                   let answer = transcript[(index + 1)...].first(where: { $0.speaker != turn.speaker }),
-                  answer.speaker != MeetingSpeaker.you, screen?.speakers[answer.speaker] == nil else { continue }
+                  answer.speaker != MeetingSpeaker.you, screen?.speakers[answer.speaker] == nil,
+                  // Speech that overlaps the address is an interjection, not the answer.
+                  (answer.start ?? .infinity) >= (turn.end ?? 0) - lag else { continue }
             votes[answer.speaker, default: []].insert(name)
         }
         var out = screen ?? ScreenNames(seen: [], speakers: [:])
@@ -269,9 +272,7 @@ public enum ScreenSpeakerNames {
             guard let name = heard.first, !votes.contains(where: { $0.key != speaker && $0.value.contains(name) }) else { continue }
             out.speakers[speaker] = .init(name: name, seen: 0, of: 0, reason: "Answered right after being addressed as \(name)")
         }
-        let named = out.speakers.filter { $0.key != MeetingSpeaker.you }.mapValues(\.name)
-        let result = byElimination(out, transcript: transcript, named: named, invited: invited)
-        return screen == nil && result?.speakers.isEmpty != false ? nil : result
+        return screen == nil && out.speakers.isEmpty ? nil : out
     }
 
     /// The listed name the turn's sentences open with, followed by a comma:

@@ -10,7 +10,7 @@ stops:
 2. `ScreenSpeakerNames.match` names speakers from the call window's names.
    `ScreenSpeakerNames.byAddress` then names a voice that answers right
    after someone addresses an invitee or on-screen name ("Nihal, can you…"),
-   and the last voice by elimination, before the notes are written.
+   before the notes are written.
 3. `MeetingNotesPrompt` writes the notes, and `ScreenSpeakerNames.byElimination`
    names the last unnamed voice from the calendar.
 4. Speakers are named as the meeting screen names them

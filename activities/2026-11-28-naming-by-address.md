@@ -21,8 +21,10 @@ prompt's single-address rule. It did so unreliably.
   Alex." and "Fair point Grace." are not.
 - The next turn by a different far-side voice is that person's answer. A voice
   answering two names, or a name answered by two voices, names nobody.
-- Then the last voice is named by elimination, so the notes are written once
-  with every name.
+- An answer that starts while the address is still being spoken is an
+  interjection, and names nobody.
+- Elimination still waits for the notes, which can find a self-introduction
+  ("I'm Rahul, covering for Sara") that elimination would get wrong.
 
 ## Verification
 
