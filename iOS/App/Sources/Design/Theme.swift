@@ -46,8 +46,9 @@ enum Theme {
         static let l: CGFloat = 16
         static let xl: CGFloat = 24
         static let xxl: CGFloat = 32
-        /// Horizontal page margin.
-        static let page: CGFloat = 20
+        /// Horizontal page margin: the system layout margin, where large
+        /// titles and inset lists already sit, so every page has one left edge.
+        static let page: CGFloat = 16
     }
 
     enum Fonts {
@@ -120,14 +121,21 @@ extension Theme {
     /// titles medium. Set once at launch.
     @MainActor static func applyAppearance() {
         let ink = UIColor(Colors.ink)
-        let appearance = UINavigationBar.appearance()
-        appearance.largeTitleTextAttributes = [
-            .font: Fonts.uiFlex(VQ.TypeScale.display.size + 2, weight: VQ.TypeScale.display.weight, style: .largeTitle),
+        // Also on the bar appearance: with the legacy title properties alone,
+        // Notes opened by the Talk key sometimes showed the system bold title.
+        // Scroll-edge and compact appearances fall back to this one.
+        let titles = UINavigationBarAppearance()
+        titles.largeTitleTextAttributes = [
+            .font: Fonts.uiFlex(VQ.TypeScale.display.size, weight: VQ.TypeScale.display.weight, style: .largeTitle),
             .foregroundColor: ink,
         ]
-        appearance.titleTextAttributes = [
+        titles.titleTextAttributes = [
             .font: Fonts.uiFlex(17, weight: 560, style: .headline),
             .foregroundColor: ink,
         ]
+        let bar = UINavigationBar.appearance()
+        bar.standardAppearance = titles
+        bar.largeTitleTextAttributes = titles.largeTitleTextAttributes
+        bar.titleTextAttributes = titles.titleTextAttributes
     }
 }

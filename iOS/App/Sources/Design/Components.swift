@@ -1,4 +1,5 @@
 import SwiftUI
+import VoiceIQCore
 
 // MARK: - Buttons
 
@@ -71,16 +72,14 @@ struct Card<Content: View>: View {
     }
 }
 
-/// Small uppercase label above a group of cards.
+/// Small sentence-case label above a group, like a list's day header.
 struct GroupLabel: View {
     let text: String
 
     var body: some View {
-        Text(text.uppercased())
+        Text(text)
             .font(Theme.Fonts.caption())
-            .tracking(0.6)
             .foregroundStyle(Theme.Colors.muted)
-            .padding(.leading, 4)
     }
 }
 
@@ -326,5 +325,84 @@ extension View {
 extension UIApplication {
     func endEditing() {
         sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+    }
+}
+
+// MARK: - Redesign components (docs/design/redesign-2026-11.md)
+
+/// A recording's length in a hairline capsule, as on a list row.
+struct DurationChip: View {
+    let seconds: Double
+
+    var body: some View {
+        Label(Duration.seconds(seconds).formatted(.time(pattern: .minuteSecond)), systemImage: "waveform")
+            .labelStyle(.titleAndIcon)
+            .font(Theme.Fonts.flex(12.5, weight: 500, style: .caption1).monospacedDigit())
+            .foregroundStyle(Theme.Colors.inkSecondary)
+            .padding(.horizontal, 10)
+            .frame(height: 26)
+            .overlay(Capsule().strokeBorder(Theme.Colors.hairline, lineWidth: 1))
+    }
+}
+
+/// The Talk key: a blue rounded square with the waveform mark. While a note
+/// records it turns red with a stop square.
+struct TalkKey: View {
+    let recording: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            ZStack {
+                RoundedRectangle(cornerRadius: VQ.Radius.talkKey, style: .continuous)
+                    .fill(recording ? Theme.Colors.recording : Theme.Colors.accent)
+                if recording {
+                    RoundedRectangle(cornerRadius: 5, style: .continuous).fill(.white).frame(width: 18, height: 18)
+                } else {
+                    Image(systemName: "waveform").font(.system(size: 24, weight: .semibold)).foregroundStyle(Theme.Colors.onAccent)
+                }
+            }
+            .frame(width: 60, height: 60)
+            .background(
+                RoundedRectangle(cornerRadius: VQ.Radius.talkKey + 6, style: .continuous)
+                    .fill(recording ? VQ.Colors.recordSoft : .clear)
+                    .padding(-6)
+            )
+            .shadow(color: .black.opacity(0.14), radius: 12, y: 6)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(PressScaleStyle())
+        .accessibilityLabel(recording ? "Stop recording" : "Record a note")
+    }
+}
+
+/// Press feedback without a tint: a slight shrink.
+struct PressScaleStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.96 : 1)
+            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
+    }
+}
+
+/// A floating capsule beside the Talk key: canvas, hairline ring, one shadow.
+struct DockCapsule<Label: View>: View {
+    let action: () -> Void
+    @ViewBuilder var label: Label
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: Theme.Spacing.s) { label }
+                .font(Theme.Fonts.callout())
+                .foregroundStyle(Theme.Colors.muted)
+                .lineLimit(1)
+                .padding(.horizontal, 18)
+                .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
+                .background(Capsule().fill(Theme.Colors.surface))
+                .overlay(Capsule().strokeBorder(Theme.Colors.hairline, lineWidth: 1))
+                .shadow(color: .black.opacity(0.10), radius: 14, y: 6)
+                .contentShape(Capsule())
+        }
+        .buttonStyle(PressScaleStyle())
     }
 }
