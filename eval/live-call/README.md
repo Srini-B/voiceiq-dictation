@@ -26,6 +26,9 @@ so VoiceiQ detects the call and reads names from the screen.
 ## What the probe needs
 
 - A signed build of the commit under test, installed as `/Applications/VoiceiQ.app`.
+  Take the shared app lock before quitting or installing it
+  (`scripts/app-lock.sh acquire <thread ID>`). `run.sh` holds the lock for the
+  run and needs `LOCK_OWNER` set to your thread ID.
   Do not test a Debug build (AGENTS.md).
 - `ASSEMBLYAI_API_KEY` set in the app, so the meeting is transcribed. Notes
   need an LLM Gateway balance. Without one they fail with `noBalance`, and

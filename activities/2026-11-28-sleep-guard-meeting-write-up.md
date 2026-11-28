@@ -52,5 +52,8 @@ on iOS. No physical iPhone was tested.
 
 Seen in passing, not changed: the Live Activity's time read "8:--" about four
 minutes in, and the Past notes row of a meeting in progress reads
-"Recording · 0:00". One ⌘Esc keystroke sent through System Events quit the
-Mac app mid-dictation; the cause was not found.
+"Recording · 0:00". A quit seen mid-dictation was first blamed on a
+⌘Esc keystroke. It was another test thread's `osascript -e 'quit app id
+"io.blue.voiceiq"'` (an ordinary quit Apple event, 13 s before the ⌘Esc), not
+a VoiceiQ bug or crash; ⌘Esc cancels and the app stays up
+(activities/2026-11-28-mac-app-lock.md).
