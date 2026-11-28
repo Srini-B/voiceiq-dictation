@@ -97,7 +97,8 @@ struct PillView: View {
             }
 
         case let .meetingRecording(since, micMuted):
-            pillSurface(width: 340) {
+            // As wide as its content: at a fixed 340 pt the label clipped to "Recording m…" (live-call probe).
+            pillSurface(width: nil) {
                 MeetingRecordingContent(since: since, micMuted: micMuted)
             }
 

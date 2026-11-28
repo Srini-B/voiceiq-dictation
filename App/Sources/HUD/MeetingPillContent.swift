@@ -112,7 +112,7 @@ struct MeetingRecordingContent: View {
         .font(VoiceIQUI.TypeScale.label())
         .foregroundStyle(VoiceIQUI.Colors.onSurfaceVariant)
         .lineLimit(1)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .fixedSize(horizontal: true, vertical: false)
         Button {
             confirmingDiscard = true
         } label: {
