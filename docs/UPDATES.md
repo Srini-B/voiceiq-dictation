@@ -30,6 +30,8 @@ plan ─▶ notes ─┬▶ ios    archive, upload to TestFlight, set What to Te
   update alert) and `ios.txt` (TestFlight's What to Test). Bullets in
   `release-notes/<version>.notice.md`, for something users must do by hand,
   go first in all three word for word (under "Before you update" on GitHub).
+  A notice covers only what that release needs; never carry one over from an
+  earlier release. The update alert already shows every missed version's notes.
 - **ios** runs `scripts/release-ios.sh`. The build number must be new on
   TestFlight; the "VoiceiQ Internal" group gets the build automatically.
 - **macos** runs `scripts/release.sh`, notarizing with the App Store Connect key.
