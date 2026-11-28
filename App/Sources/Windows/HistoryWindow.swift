@@ -16,6 +16,7 @@ struct HistoryPane: View {
     @State private var stats = HistoryStore.Stats(totalWords: 0, totalDictations: 0, averageWPM: 0)
     @AppStorage("historyStatsPeriod") private var statsPeriod = HistoryStore.StatsPeriod.allTime
     @State private var selection: String?
+    @FocusState private var listFocused: Bool
     @State private var showAllAttention = false
     @State private var confirmingDiscardAll = false
     @Environment(\.colorScheme) private var scheme
@@ -168,7 +169,8 @@ struct HistoryPane: View {
                         Button(showAllAttention ? "Show less" : "Show \(attention.count - 3) more") {
                             showAllAttention.toggle()
                         }
-                        .buttonStyle(.link)
+                        .buttonStyle(.plain)
+                        .foregroundStyle(VQ.Colors.accent)
                         .font(VoiceIQUI.TypeScale.labelSmall(grad: grad))
                     }
                 } header: {
@@ -181,7 +183,8 @@ struct HistoryPane: View {
                         Button("Discard All") {
                             confirmingDiscardAll = true
                         }
-                        .buttonStyle(.link)
+                        .buttonStyle(.plain)
+                        .foregroundStyle(VQ.Colors.accent)
                         .font(VoiceIQUI.TypeScale.labelSmall(grad: grad))
                         .confirmationDialog(
                             "Discard all \(attention.count) recordings that need attention? Their audio will be deleted.",
@@ -210,6 +213,9 @@ struct HistoryPane: View {
             }
         }
         .scrollContentBackground(.hidden)
+        .focused($listFocused)
+        // Row text lands on the page margin, under the title and search field.
+        .padding(.horizontal, 8)
         .overlay { if records.isEmpty { Text(query.isEmpty ? "No dictations" : "No matches").foregroundStyle(.secondary) } }
         // ⌘C copies the selected dictation, as FluidVoice's history does (altic-dev/FluidVoice).
         .onCopyCommand {
@@ -229,10 +235,11 @@ struct HistoryPane: View {
                     if let duration = record.durationSeconds {
                         Text(String(format: "%.0fs of audio", duration))
                     }
-                    Text(record.startedAt.formatted(date: .abbreviated, time: .shortened))
+                    Text(record.startedAt.formatted(.dateTime.month(.abbreviated).day().hour().minute()))
                 }
                 .font(VoiceIQUI.TypeScale.labelSmall(grad: grad))
                 .foregroundStyle(.secondary)
+                .lineLimit(1)
             }
             Spacer()
             // Retry needs something to retry: no audio and no transcript is a
@@ -257,6 +264,7 @@ struct HistoryPane: View {
         }
         .padding(.vertical, 3)
         .tag(record.id)
+        .listRowBackground(ListSelectionBackground(selected: selection == record.id, focused: listFocused))
     }
 
     private func audioExists(_ record: DictationRecord) -> Bool {
@@ -309,6 +317,7 @@ struct HistoryPane: View {
         }
         .padding(.vertical, 5)
         .tag(record.id)
+        .listRowBackground(ListSelectionBackground(selected: selection == record.id, focused: listFocused))
         .contextMenu {
             Button("Copy") { copy(record) }
             if !record.isFromOtherDevice {
