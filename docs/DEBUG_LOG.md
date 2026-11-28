@@ -169,7 +169,7 @@ test -s /Users/Shared/voiceiq-pre-test.plist && defaults delete io.blue.voiceiq 
 | Default | What it does | Platforms |
 | --- | --- | --- |
 | `DebugDisableCloudSync` | None of the five syncs starts: meetings and History (CloudKit), the Dictionary, writing rules and meeting folders (iCloud key-value storage). | Mac, iPhone |
-| `DebugDataFolder` | An absolute path that replaces ~/Library/Application Support/VoiceiQ for everything the app stores. | Mac |
+| `DebugDataFolder` | An absolute path that replaces ~/Library/Application Support/VoiceiQ for everything the app stores. VoiceiQ's keys go to the Keychain under the service `io.blue.voiceiq.test:<path>` instead of `io.blue.voiceiq`, so a new folder starts with no AssemblyAI or agent access key, like a fresh install, and the real keys aren't read or changed. Enter the AssemblyAI key in the test app's Settings for a run that needs one, or put it in ~/.config/voiceiq/apikey.dev before launch (the app moves it into the test service and deletes the file). | Mac |
 
 Both are read once, at launch, from the app's own defaults domain, so
 `defaults delete <domain>` turns them off too. Check the menu lines after a
@@ -203,14 +203,14 @@ default. Two things never catch up:
 
 - The debug log in ~/Library/Logs/VoiceiQ, and its on/off switch, which a copy
   reads from the real app's defaults domain.
-- The Keychain.
+- The Keychain, apart from VoiceiQ's own keys (`io.blue.voiceiq.test:<path>` in test mode). The one-time removal of the old Gemini key still deletes it from the pre-VoiceiQ service `com.ammaar.jot`.
 - The temporary folder: each app's launch cleanup removes the other's
   in-progress playback renders.
 - The prepared-model cache. With `DebugDataFolder` set the copy does not clear
   it at launch, and it does not start the agent server or touch the user's
   agent configs (~/.claude.json and the others). Its Settings still act on the
   shared state when clicked: the Coding agents buttons (Set Up, Update,
-  Remove, New Key…) change the real agent configs and Keychain key, and
+  Remove) change the real agent configs, writing the test key into them, and
   deleting a model clears the shared cache. Leave them alone in a test copy.
 
 Start the data folder empty, or copy the whole real folder. Never copy
