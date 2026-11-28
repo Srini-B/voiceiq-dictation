@@ -166,9 +166,16 @@ under the version in the iPhone's Settings, so it cannot stay on unnoticed. On
 the iPhone the default is set from Xcode or a debug build; there is no
 user-facing switch.
 
-Changes made while it is set stay on the device, and they upload once sync is
-back on. So delete a test's dictations and meetings before deleting the
-default.
+The switch defers sync; it does not isolate the run. Changes made while it is
+set stay on the device and go up once sync is back on: new and edited
+dictations and meetings, Dictionary terms (auto-learned ones too), writing
+rules and folders. So delete a test's dictations and meetings before deleting
+the default. Two things never catch up:
+- A dictation that was already in iCloud and is deleted (or cleared with
+  Clear all) while the switch is on stays in iCloud and on other devices.
+  Delete already-synced dictations with sync on.
+- Meetings written as Markdown files (Settings, off by default) still go to
+  the chosen folder, which may be in iCloud Drive.
 
 ### A separate data folder for a test copy
 
@@ -184,9 +191,22 @@ defaults write io.blue.voiceiq.probe DebugDataFolder /Users/Shared/voiceiq-probe
 defaults write io.blue.voiceiq.probe DebugDisableCloudSync -bool true
 ```
 
-Use an absolute path; other values are ignored. The app reads it once at
-launch (`FileLayout.testDataFolder`), logs `data folder (test): <path>`, and
-shows "Test data folder" in the Mac menu. Everything the app stores on disk
-moves there: dictations, meetings, folders, usage and downloaded models. The
-debug log stays in ~/Library/Logs/VoiceiQ, settings stay in the copy's own
-defaults domain, and keys stay in the Keychain.
+Use an absolute path; any other value is ignored and logged as an error. The
+app reads it once at launch (`FileLayout.testDataFolder`), logs
+`data folder (test): <path>`, and shows "Test data folder" in the Mac menu.
+Both defaults live in the copy's own domain, so `defaults delete
+io.blue.voiceiq.probe` turns them off too; check the menu lines after a reset.
+With the folder set, the copy leaves the agent server and the user's agent
+configs alone, and does not clear the prepared-model cache it shares with the
+real app. Everything the app stores on disk
+moves there: dictations, meetings, folders, usage and downloaded models.
+Still shared with the real app: the debug log in ~/Library/Logs/VoiceiQ and
+its on/off switch, which a copy reads from the real app's defaults domain; the
+Keychain; and the temporary folder, so each app's launch cleanup removes the
+other's in-progress playback renders. Settings otherwise stay in the copy's
+own domain.
+
+Start with an empty folder, or copy the whole real folder. Never copy
+history.sqlite alone: its rows hold absolute paths to recordings, and a delete,
+a retry or retention in the copy would then change the real files. The
+example path in /Users/Shared is readable by other accounts on the Mac.
