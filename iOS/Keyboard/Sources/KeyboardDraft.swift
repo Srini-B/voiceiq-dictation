@@ -124,8 +124,11 @@ final class KeyboardDraft {
         proxy.deleteBackward()
         guard let afterFirst = await Self.change(in: proxy, from: current) else {
             // The field never said what the press did: no more presses.
+            KeyboardLog.note("swap: no change seen after the first Delete (before \(current.count))")
             return .kept
         }
+        // Lengths only, never the text.
+        KeyboardLog.note("swap: before \(current.count), draft \(text.count), rest \(rest.count), after first Delete \(afterFirst.count), whole draft gone \(afterFirst == rest), after cursor \(following.count)")
         // The user may have selected text or moved on while it waited: the
         // presses and the written text go only where the draft still was.
         guard (proxy.selectedText ?? "").isEmpty, (proxy.documentContextAfterInput ?? "") == following,
@@ -136,6 +139,9 @@ final class KeyboardDraft {
             for _ in 1..<text.count { proxy.deleteBackward() }
         }
         proxy.insertText(fitted)
+        try? await Task.sleep(for: .milliseconds(400))
+        let end = proxy.documentContextBeforeInput ?? ""
+        KeyboardLog.note("swap: inserted \(fitted.count), before the cursor now \(end.count), expected \(rest.count + fitted.count), as expected \(end == rest + fitted)")
         return .retyped(fitted)
     }
 
