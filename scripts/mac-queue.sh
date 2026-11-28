@@ -48,7 +48,14 @@ prune() {
 run_locked() {
   perl -e 'use Fcntl qw(:flock); $^F = 255; open(my $f, ">>", shift) or die "lock: $!"; flock($f, LOCK_EX) or die "lock: $!"; exec @ARGV or die "exec: $!"' "$dir.lock" "$0" "$@"
 }
-ticket_of() { ls "$dir" 2>/dev/null | grep -- "-$1\$" | head -1 || true; }
+# The owner is everything after "[0-]<rank>-<sequence>-", compared literally.
+ticket_of() {
+  local f
+  for f in $(ls "$dir" 2>/dev/null); do
+    [[ $f =~ ^(0-)?[0-9]-[0-9]{9}-(.*)$ && ${BASH_REMATCH[2]} == "$1" ]] && { echo "$f"; return 0; }
+  done
+  return 0
+}
 ahead() { ls "$dir" 2>/dev/null | sort | grep -n -x -- "$1" | cut -d: -f1; }
 
 action=${1:?wait, done or show}
