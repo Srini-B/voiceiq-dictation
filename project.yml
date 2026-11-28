@@ -37,6 +37,10 @@ targets:
         ENABLE_HARDENED_RUNTIME: NO # enabled for notarized release builds (M8)
         SWIFT_VERSION: "6.0"
         MACOSX_DEPLOYMENT_TARGET: "14.0"
+        # Brand blue for selection, switches, segmented controls and links
+        # (App/Resources/Assets.xcassets). The app icon stays VoiceIQ.icns.
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        ASSETCATALOG_COMPILER_APPICON_NAME: ""
         # Sparkle appcast. Every GitHub Release carries appcast.xml, and this URL
         # always resolves to the newest one. Override on the xcodebuild command
         # line to test against a local feed (docs/UPDATES.md).
@@ -63,6 +67,7 @@ targets:
     sources:
       - path: App/Sources
       - path: App/Resources/VoiceIQ.icns
+      - path: App/Resources/Assets.xcassets
       - path: App/Resources/MenuBarIcon.png
       - path: App/Resources/MenuBarIcon@2x.png
       - path: App/Resources/SidebarLogo.png
