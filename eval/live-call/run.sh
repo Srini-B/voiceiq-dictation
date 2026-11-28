@@ -106,10 +106,10 @@ echo "$(date +%T) Owner joined. Accept VoiceiQ's offer or press Option-M within 
 $scratch/taprecord $(( lead - 6 )) $out/guest-check.wav "--user-data-dir=$scratch/owner" &
 tap=$!
 pids+=$tap
-status=0; wait $tap || status=$?
-if (( status == 3 )); then
+tap_status=0; wait $tap || tap_status=$?
+if (( tap_status == 3 )); then
   echo "the guest check recorded only zeros: this terminal lacks System Audio Recording permission, or the owner's Chrome played only silence" >&2; exit 1
-elif (( status != 0 )); then
+elif (( tap_status != 0 )); then
   echo "the guest check could not tap the owner's Chrome" >&2; exit 1
 fi
 missing=0
@@ -130,5 +130,6 @@ else
   afplay $owner &
 fi
 pids+=$!
-sleep $seconds
+# SECONDS of speech, counted from speech_at: playto may still be waiting for it.
+sleep $(( speech_at + seconds > EPOCHSECONDS ? speech_at + seconds - EPOCHSECONDS : 0 ))
 echo "$(date +%T) Leaving the call; stop the recording if it is still running."
