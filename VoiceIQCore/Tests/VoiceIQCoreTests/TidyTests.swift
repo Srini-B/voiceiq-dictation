@@ -116,7 +116,7 @@ final class TidyTests: XCTestCase {
                      "Bring a tool, like, my hammer.", "Use a tool, like, this one.",
                      "She goes, like, before you leave, call me.", "And I'm, like, no way.",
                      "Do it, like, you did last time.",
-                     "Like, this video before subscribing.", "Done. Like, the build passed.",
+                     "Like, this video before subscribing.", "Let's eat, you know, grandma and grandpa.", "Done. Like, the build passed.",
                      // A run kept whole is not judged again from its middle.
                      "You know, like, of course, that this is confidential.", "He said 'Hello', like, you know, to everyone.",
                      "She was, like, like, what are you doing?", "Like, you know, five hours.", "You know, like, five hours.",
@@ -147,7 +147,7 @@ final class TidyTests: XCTestCase {
                      // Single quotes are quotes; prefixes and "No-" are not cut-offs.
                      "He wrote 'the the' on the board.", "He wrote 'put the the book on the shelf' on the board.",
                      "He wrote ‘put the the book away’ today.", "Please re- read the draft.", "A- average work.",
-                     "No- not now."] {
+                     "No- not now.", "B- blood is needed urgently."] {
             XCTAssertEqual(tidy(kept), kept)
         }
     }

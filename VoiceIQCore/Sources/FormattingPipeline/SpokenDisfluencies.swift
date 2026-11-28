@@ -160,8 +160,13 @@ enum SpokenDisfluencies {
                 let kept = run.end - index - run.removed.reduce(0) { $0 + $1.count }
                 // "I went, like, to the store": the comma before was the pause too. "So, like, we" keeps it,
                 // and so does a run with a "like" that stays ("took, you know, like, five hours").
+                // Only where a function word sits on one side: "eat, you know, grandma" keeps the comma of
+                // the person addressed.
                 if kept == 0, index > 0, tokens[index - 1].hasComma, index < tokens.count,
-                   tokens[index].word.first?.isLowercase == true, clauseWords(tokens, before: index) >= 2 {
+                   tokens[index].word.first?.isLowercase == true, clauseWords(tokens, before: index) >= 2,
+                   [tokens[index - 1].bare, tokens[index].bare].contains(where: {
+                       functionWords.contains($0) || placeWords.contains($0) || timeWords.contains($0)
+                   }) {
                     tokens[index - 1].word.removeLast()
                 }
                 if kept > 0 {
@@ -192,7 +197,9 @@ enum SpokenDisfluencies {
     private static func repeatLength(_ tokens: [Token], at index: Int) -> Int? {
         let first = tokens[index]
         let cut = first.word.dropLast()
+        // All capitals is a name, not a stutter: "B- blood", "O- negative".
         if !first.quoted, first.word.hasSuffix("-"), (1...2).contains(cut.count), cut.allSatisfy(\.isLetter),
+           cut != cut.uppercased(),
            !notCutOffs.contains(cut.lowercased()), index + 1 < tokens.count, !tokens[index + 1].quoted,
            !capitalizedMidSentence(tokens, at: index),
            tokens[index + 1].bare.hasPrefix(first.word.dropLast().lowercased()) {
