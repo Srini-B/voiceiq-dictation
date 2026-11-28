@@ -85,6 +85,10 @@ guard let key = ProcessInfo.processInfo.environment["ASSEMBLYAI_API_KEY"], !key.
 let data = URL(fileURLWithPath: args[1]), out = URL(fileURLWithPath: args[2])
 let only = Set(args.dropFirst(3))
 try FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
+// The request log (transport.jsonl) and the speaker model go to a folder of the
+// evaluator's own, never the app's data folder, which syncs to iCloud.
+FileLayout.overrideRoot = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+    .appendingPathComponent("VoiceiQ-MeetingsEval", isDirectory: true)
 
 let config = AssemblyAIConfig()
 let client = AssemblyAIClient(apiKey: { key })
