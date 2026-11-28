@@ -13,7 +13,9 @@ extension FullKeyboardEngine {
     /// ("ofthe." -> "of the.").
     func syncDecoderKeys() {
         guard let keys = TypingDecoder.Keys(layout: layout, offsets: tapOffsets) else { return }
-        guard let adaptive = adaptiveTouch?.offsets(for: layout),
+        // VoiceiQ: Adaptive touch is always on, so until it has a profile for this layout
+        // Learn how I type's offsets keep moving the centres, as they did before.
+        guard let adaptive = adaptiveTouch?.offsets(for: layout), !adaptive.isEmpty,
               let personal = TypingDecoder.Keys(layout: layout, offsets: adaptive) else {
             autocorrect.decoderKeys = keys
             autocorrect.decoderBaselineKeys = nil

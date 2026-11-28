@@ -25,7 +25,7 @@ struct TypingSettingsCard: View {
             Toggle("Number row", isOn: $numberRow)
             Divider().overlay(Theme.Colors.hairline)
             Toggle("Learn how I type", isOn: $learns)
-            Text("The keyboard learns the words you keep and the fixes you undo, so it corrects you less. It always learns where you tap each key, too. It stays on this \(UIDevice.current.localizedModel) and is never sent anywhere.")
+            Text("The keyboard learns the words you keep and the fixes you undo, so it corrects you less. It also learns where you tap each key, even with this off. What it learns stays on this \(UIDevice.current.localizedModel) and is never sent anywhere.")
                 .font(Theme.Fonts.footnote())
                 .foregroundStyle(Theme.Colors.muted)
             Button(erased ? "Erased" : "Erase what it learned", role: .destructive) { confirmErase = true }

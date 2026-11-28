@@ -166,12 +166,13 @@ final class TypingBridge: ObservableObject {
     }
 
     /// Off screen: the emoji panel and its library go (`handleMemoryWarning` keeps them
-    /// while the panel is up), and what Learn how I type holds is written out, since iOS
-    /// may end the extension before it is shown again.
+    /// while the panel is up), and what Learn how I type and Adaptive touch hold is
+    /// written out, since iOS may end the extension before it is shown again.
     func disappeared() {
         keyboard?.closeEmojiPanel()
         keyboard?.handleMemoryWarning()
         keyboard?.engine.journal?.save()
+        AdaptiveTouch.current?.save()
     }
 
     func handleMemoryWarning() {
