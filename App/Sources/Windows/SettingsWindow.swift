@@ -29,6 +29,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate {
             defer: false
         )
         window.title = model.selection.title
+        // Each pane shows its own title, so the titlebar would only repeat it.
+        window.titleVisibility = .hidden
         window.titlebarAppearsTransparent = true
         window.center()
         super.init(window: window)
@@ -133,6 +135,7 @@ private struct MainView: View {
             detail
         }
         .frame(minWidth: 880, minHeight: 580)
+        .tint(VQ.Colors.accent)
     }
 
     private var sidebar: some View {
@@ -168,7 +171,7 @@ private struct MainView: View {
         .padding(.horizontal, 8)
         .frame(width: 210)
         .background {
-            Rectangle().fill(.thickMaterial)
+            VQ.Colors.grouped
                 .ignoresSafeArea(.container, edges: .top)
         }
     }
@@ -235,9 +238,9 @@ private struct SidebarRow: View {
             .padding(.horizontal, 8)
             .padding(.vertical, 5)
             .background(
-                RoundedRectangle(cornerRadius: 7)
-                    .fill(selected ? Color.primary.opacity(0.09)
-                          : hovering ? Color.primary.opacity(0.05)
+                RoundedRectangle(cornerRadius: VQ.Radius.control)
+                    .fill(selected ? VQ.Colors.fill
+                          : hovering ? VQ.Colors.fill.opacity(0.5)
                           : .clear)
             )
         }

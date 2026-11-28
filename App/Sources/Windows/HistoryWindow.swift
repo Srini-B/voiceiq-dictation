@@ -69,17 +69,17 @@ struct HistoryPane: View {
     private var sidebar: some View {
         VStack(spacing: 0) {
             VStack(alignment: .leading, spacing: VoiceIQUI.Spacing.s) {
-                Text("History")
-                    .font(VoiceIQUI.TypeScale.display(grad: grad))
-                    .foregroundStyle(VQ.Colors.ink)
-                HStack(spacing: VoiceIQUI.Spacing.xxs) {
-                    statsLine
+                HStack(spacing: VoiceIQUI.Spacing.xs) {
+                    Text("History")
+                        .font(VoiceIQUI.TypeScale.display(grad: grad))
+                        .foregroundStyle(VQ.Colors.ink)
                     Spacer(minLength: 0)
                     periodPicker
                 }
+                statsLine
                 searchField
             }
-            .padding(.horizontal, VoiceIQUI.Spacing.m)
+            .padding(.horizontal, VQ.Spacing.page)
             .padding(.top, VoiceIQUI.Spacing.l)
             .padding(.bottom, VoiceIQUI.Spacing.xxs)
             recordList
@@ -173,7 +173,7 @@ struct HistoryPane: View {
                     }
                 } header: {
                     HStack(spacing: VoiceIQUI.Spacing.xxs) {
-                        Circle().fill(VoiceIQUI.Colors.gYellow).frame(width: 6, height: 6)
+                        Circle().fill(VQ.Colors.warning).frame(width: 6, height: 6)
                         Text("Needs attention (\(attention.count))")
                             .font(VoiceIQUI.TypeScale.labelSmall(grad: grad))
                             .foregroundStyle(.secondary)
@@ -209,6 +209,7 @@ struct HistoryPane: View {
                 }
             }
         }
+        .scrollContentBackground(.hidden)
         .overlay { if records.isEmpty { Text(query.isEmpty ? "No dictations" : "No matches").foregroundStyle(.secondary) } }
         // ⌘C copies the selected dictation, as FluidVoice's history does (altic-dev/FluidVoice).
         .onCopyCommand {
@@ -301,7 +302,7 @@ struct HistoryPane: View {
             .font(VoiceIQUI.TypeScale.labelSmall(grad: grad))
             .foregroundStyle(.secondary)
             .monospacedDigit()
-            Text(record.displayText.isEmpty ? "—" : String(record.displayText.prefix(220)))
+            Text(record.displayText.isEmpty ? "—" : record.displayText.prefix(220).split(whereSeparator: \.isNewline).joined(separator: " "))
                 .font(VoiceIQUI.TypeScale.body(grad: grad))
                 .lineLimit(2)
             statusChip(record)
