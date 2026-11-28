@@ -362,7 +362,7 @@ public actor AssemblyAIClient {
     static func withDeadline<T: Sendable>(seconds: TimeInterval, _ operation: @escaping @Sendable () async throws -> T) async throws -> T {
         // A deadline already gone (or NaN) would trap converting to nanoseconds.
         guard seconds > 0 else { throw DeadlineExceeded() }
-        try await withThrowingTaskGroup(of: T.self) { group in
+        return try await withThrowingTaskGroup(of: T.self) { group in
             group.addTask { try await operation() }
             group.addTask {
                 try await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
