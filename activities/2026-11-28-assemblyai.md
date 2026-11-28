@@ -55,8 +55,28 @@ dictation ₹38–89, meetings about ₹111 (₹28 per hour of speech). Only the
 gateway part, about ₹15 a month, needs a paid balance; the rest comes out
 of the $50 credit.
 
+## Reviews
+
+- Codex (4 findings), Fable 5.2 (thread T-4f247f93), CodeRabbit (21
+  comments) and Gemini 4 Neon through agy on BlueLobster (T-01a2176a):
+  first pass on fe98049 (session 232cdef0-c27e-4fe5-bd68-a0bd7558aed4, 2 High
+  and 2 Medium, all fixed), re-check on 624cb3f (session
+  899750ba-d515-4603-8a39-af7209f8c740, merge-ready after the
+  `transcript_server_error` wait, fixed in 8a57115).
+- Fixed along the way: a realtime wait that could park forever, the stream
+  connecting before the mic, a no-speech meeting window failing the meeting,
+  notes-only retry (`MeetingMeta.failedStep`), the old app's Gemini key being
+  copied into the AssemblyAI slot, spent credit read as no balance, short
+  clips streaming before 0.2 s, and streams booked from the server's
+  session length.
+- Mac mini (Xcode 27.0) at 8a57115: 308 tests pass, unsigned VoiceIQ and
+  VoiceIQiOS builds succeed.
+
 ## Not done
 
-- The meetings eval (M1–M5) on AssemblyAI: needs the Mac and, for notes, a
-  gateway balance; transcripts alone score M2–M4.
+- The meetings eval (M1–M5) on AssemblyAI: runner threads don't receive the
+  project secret ASSEMBLYAI_API_KEY, so the Mac mini couldn't run it; notes
+  also need a gateway balance (transcripts alone score M2–M4).
+- The writer against the real LLM Gateway (no balance yet), D4 on the
+  no-keyterms setup, and a signed, installed app.
 - Speaker Identification is not used.
