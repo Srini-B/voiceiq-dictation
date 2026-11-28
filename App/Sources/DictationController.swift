@@ -63,7 +63,8 @@ final class DictationController {
             localMeeting: LocalMeetingHelper.run
         )
         coordinator = DictationCoordinator(
-            audioFactory: { [warmEngines] in warmEngines.take() },
+            // Debug: a listed audio file plays in as the microphone (`FileAudioCapture`).
+            audioFactory: { [warmEngines] in FileAudioCapture.fromDefaults() ?? warmEngines.take() },
             transcription: service,
             insertion: LearningInserter(learner: learner),
             contextProvider: {

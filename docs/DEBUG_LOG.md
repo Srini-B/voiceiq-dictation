@@ -119,3 +119,21 @@ goes to the unified log with the same privacy as before (`.auto` shows
 numbers and Bools and hides the rest) and to `DebugLog.write`. In the debug
 log, `.auto` values are shown after redaction, because they are mostly errors
 and counts.
+
+## Dictating from audio files (end-to-end tests)
+
+On a Mac without a usable microphone (a remote test machine), the app can take
+its dictation audio from files instead:
+
+```sh
+defaults write io.blue.voiceiq DebugDictationAudioFiles -array /path/one.wav /path/two.wav
+# restart VoiceiQ; each dictation plays the next file, in turn
+defaults delete io.blue.voiceiq DebugDictationAudioFiles
+```
+
+Each dictation (`FileAudioCapture`) plays the next listed file in real time,
+converted to the recorder's 16 kHz mono format, so the realtime transcript,
+the waveform and the silence check see it as speech; after the file ends it
+records silence until the dictation is stopped. A file that can't be read
+falls back to the microphone. The log has `debug audio: dictation from …` for
+each one. Nothing changes while the default is unset.
