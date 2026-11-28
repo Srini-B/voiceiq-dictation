@@ -1,159 +1,353 @@
 import SwiftUI
 import VoiceIQCore
 
+/// Home is the dictation history: a title, the setup checklist until it is
+/// done, a search, and every dictation grouped by day as a hairline list. The
+/// dock at the bottom tries the keyboard or records a note.
 struct HomeView: View {
     @Binding var tab: RootView.Tab
     @EnvironmentObject private var model: AppModel
     @EnvironmentObject private var session: VoiceSession
     @EnvironmentObject private var setup: SetupMonitor
     @Environment(\.scenePhase) private var scenePhase
-    @Environment(\.horizontalSizeClass) private var sizeClass
+    @State private var records: [DictationRecord] = []
+    @State private var search = ""
     @State private var stats: HistoryStore.Stats?
-    @State private var recent: [DictationRecord] = []
+    @State private var confirmDeleteAll = false
+    @State private var tryingKeyboard = false
+    @State private var setupStep: SetupStep?
+
+    private var sections: [HistoryDaySection] { HistoryDaySection.group(records) }
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: Theme.Spacing.xl) {
-                    header
-                    if sizeClass == .regular {
-                        HStack(alignment: .top, spacing: Theme.Spacing.xl) {
-                            VStack(alignment: .leading, spacing: Theme.Spacing.xl) { primary }
-                            VStack(alignment: .leading, spacing: Theme.Spacing.xl) { secondary }
+        ListDetailNavigation {
+            List {
+                if search.isEmpty { overview }
+                ForEach(sections) { section in
+                    Section {
+                        ForEach(section.records) { record in
+                            DictationRow(record: record, delete: { delete(record) })
+                                .background {
+                                    // The id gives each dictation its own detail state;
+                                    // without it the split view kept showing the first
+                                    // one opened.
+                                    NavigationLink("") { HistoryDetail(record: record, reload: reload).id(record.id) }
+                                        .opacity(0)
+                                }
+                                .homeRow()
                         }
-                    } else {
-                        primary
-                        secondary
+                        .onDelete { offsets in offsets.forEach { delete(section.records[$0]) } }
+                    } header: {
+                        Text(section.title)
+                            .font(Theme.Fonts.caption())
+                            .foregroundStyle(Theme.Colors.muted)
+                            .textCase(nil)
+                            .listRowInsets(EdgeInsets(top: Theme.Spacing.l, leading: Theme.Spacing.page, bottom: Theme.Spacing.s, trailing: Theme.Spacing.page))
                     }
                 }
-                .padding(.horizontal, Theme.Spacing.page)
-                .padding(.bottom, Theme.Spacing.xxl)
-                .readableWidth(1080)
+                if !search.isEmpty && records.isEmpty {
+                    Text("No dictations match “\(search)”.")
+                        .font(Theme.Fonts.callout())
+                        .foregroundStyle(Theme.Colors.muted)
+                        .homeRow(separator: false)
+                }
+                // Room for the dock, so the last row scrolls clear of it.
+                Color.clear.frame(height: 72).homeRow(separator: false)
             }
+            .listStyle(.plain)
+            .scrollContentBackground(.hidden)
+            .background(Theme.Colors.canvas.ignoresSafeArea())
+            // Rows end at the bar and day header instead of showing through.
+            .modifier(HardTopEdge())
             .keyboardDismissable()
-            .themedBackground()
-            .onTapGesture { UIApplication.shared.endEditing() }
-            .toolbar(.hidden, for: .navigationBar)
+            .searchable(text: $search, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search what you said")
+            .onChange(of: search) { _, _ in reload() }
+            .navigationTitle("VoiceiQ")
+            .toolbar { toolbar }
+            // Outside the List: a destination inside a lazy container is ignored.
+            .navigationDestination(item: $setupStep) { step in
+                switch step {
+                case .key: KeysView()
+                case .keyboard: KeyboardSetupView()
+                }
+            }
+            .overlay(alignment: .bottom) { dock }
+            .confirmationDialog("Delete all history?", isPresented: $confirmDeleteAll, titleVisibility: .visible) {
+                Button("Delete All", role: .destructive) {
+                    model.historyStore?.deleteAll(removeFolders: true, sparing: model.coordinator.activeSessionFolders)
+                    model.coordinator.clearLastResult()
+                    reload()
+                }
+            }
+            .sheet(isPresented: $tryingKeyboard) { TryKeyboardSheet() }
             .onAppear(perform: refresh)
             .onChange(of: scenePhase) { _, phase in if phase == .active { refresh() } }
             .onReceive(NotificationCenter.default.publisher(for: .gtHistoryDidChange).receive(on: RunLoop.main)) { _ in refresh() }
+        } placeholder: {
+            DetailPlaceholder(systemImage: "text.alignleft", title: "No dictation selected")
         }
     }
 
-    @ViewBuilder private var primary: some View {
-        SessionCard()
-        if !setup.status.isComplete { SetupCard() }
+    /// Above the days: setup until it is done, the iPad's hardware keyboard
+    /// steps, and one line of totals that opens Statistics.
+    @ViewBuilder private var overview: some View {
+        if !setup.status.isComplete {
+            SetupCard(open: { setupStep = $0 }).homeRow(separator: false)
+        }
         if UIDevice.isPad {
             VStack(alignment: .leading, spacing: Theme.Spacing.m) {
                 GroupLabel(text: "Hardware keyboard")
                 Card { HardwareKeyboardSteps() }
             }
-        }
-    }
-
-    @ViewBuilder private var secondary: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.m) {
-            GroupLabel(text: "Try it")
-            TryItCard()
+            .homeRow(separator: false)
         }
         if let stats, stats.totalDictations > 0 {
-            StatsRow(stats: stats)
-        }
-        if !recent.isEmpty {
-            RecentList(records: recent) { tab = .history }
+            // A hidden link, so the list adds no second chevron after the line's own.
+            StatsLine(stats: stats)
+                .background { NavigationLink("") { StatsView() }.opacity(0) }
+                .homeRow(separator: false)
+        } else if records.isEmpty {
+            Text("Your dictations will appear here. Tap the mic on the VoiceiQ keyboard in any app, or try it below.")
+                .font(Theme.Fonts.callout())
+                .foregroundStyle(Theme.Colors.muted)
+                .fixedSize(horizontal: false, vertical: true)
+                .homeRow(separator: false)
         }
     }
 
-    private var header: some View {
-        HStack(spacing: Theme.Spacing.m) {
-            Wordmark(height: 28)
-            Spacer()
-            StatusChip(text: session.isActive ? "On" : "Off", tone: session.isActive ? .live : .off)
+    @ToolbarContentBuilder private var toolbar: some ToolbarContent {
+        // Leading, so it reads as its own control and not part of the ⋯ button.
+        ToolbarItem(placement: .topBarLeading) {
+            if session.isActive { SessionChip() }
         }
-        .padding(.top, Theme.Spacing.m)
+        ToolbarItem(placement: .topBarTrailing) {
+            Menu {
+                NavigationLink { StatsView() } label: { Label("Statistics", systemImage: "chart.bar") }
+                if !records.isEmpty {
+                    Button("Delete All History", systemImage: "trash", role: .destructive) { confirmDeleteAll = true }
+                }
+            } label: {
+                Image(systemName: "ellipsis")
+            }
+            .tint(Theme.Colors.inkSecondary)
+            .accessibilityLabel("More")
+        }
+    }
+
+    private var dock: some View {
+        HStack(spacing: Theme.Spacing.m) {
+            DockCapsule(action: { tryingKeyboard = true }) {
+                Image(systemName: "keyboard")
+                Text("Try the VoiceiQ keyboard")
+            }
+            // The key does what it shows: record and open Notes, or stop.
+            TalkKey(recording: model.meetings.isRecording) {
+                if model.meetings.isRecording {
+                    model.stopMeeting()
+                } else {
+                    model.startMeeting()
+                    tab = .meetings
+                }
+            }
+        }
+        .padding(.horizontal, Theme.Spacing.page)
+        .padding(.bottom, Theme.Spacing.s)
+        // Rows fade out above the dock and stop behind it, so no text shows
+        // around the capsule or between it and the Talk key.
+        .background(alignment: .bottom) {
+            VStack(spacing: 0) {
+                LinearGradient(colors: [Theme.Colors.canvas.opacity(0), Theme.Colors.canvas], startPoint: .top, endPoint: .bottom)
+                    .frame(height: 28)
+                Theme.Colors.canvas
+            }
+            .padding(.top, -28)
+            .ignoresSafeArea(edges: .bottom)
+            .allowsHitTesting(false)
+        }
+    }
+
+    private func delete(_ record: DictationRecord) {
+        model.historyStore?.delete(id: record.id, removeFolder: true)
+        reload()
+    }
+
+    private func reload() {
+        records = model.historyStore?.records(matching: search.isEmpty ? nil : search) ?? []
     }
 
     private func refresh() {
         setup.refresh()
         stats = model.historyStore?.stats()
-        recent = Array((model.historyStore?.records(matching: nil) ?? []).prefix(3))
+        reload()
     }
 }
 
-/// The session: while the mic is held open, the keyboard's mic starts in
-/// place instead of switching to VoiceiQ.
-private struct SessionCard: View {
+private extension View {
+    /// A row on the canvas at the page margin, with a hairline between rows.
+    func homeRow(separator: Bool = true) -> some View {
+        listRowBackground(Theme.Colors.canvas)
+            .listRowInsets(EdgeInsets(top: 0, leading: Theme.Spacing.page, bottom: 0, trailing: Theme.Spacing.page))
+            .listRowSeparator(separator ? .visible : .hidden)
+            .listRowSeparatorTint(Theme.Colors.hairline)
+            .alignmentGuide(.listRowSeparatorLeading) { _ in 0 }
+            .alignmentGuide(.listRowSeparatorTrailing) { $0.width }
+    }
+}
+
+/// One dictation: time and app, the text, then its length and actions.
+private struct DictationRow: View {
+    let record: DictationRecord
+    let delete: () -> Void
+    @Environment(\.backgroundProminence) private var prominence
+
+    var body: some View {
+        let selected = prominence == .increased
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                Text(meta)
+                statusView
+            }
+            .font(Theme.Fonts.footnote())
+            .foregroundStyle(selected ? Theme.Colors.onAccent.opacity(0.8) : Theme.Colors.muted)
+            // One paragraph: the row's three lines show words, not the blank
+            // lines between paragraphs.
+            Text(record.displayText.isEmpty ? statusLabel : preview)
+                .font(Theme.Fonts.body())
+                .foregroundStyle(record.displayText.isEmpty ? Theme.Colors.muted : (selected ? Theme.Colors.onAccent : Theme.Colors.ink))
+                .lineLimit(3)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            HStack {
+                if let seconds = record.durationSeconds, seconds > 0 { DurationChip(seconds: seconds) }
+                Spacer()
+                Menu {
+                    if !record.displayText.isEmpty {
+                        Button("Copy", systemImage: "doc.on.doc") { UIPasteboard.general.string = record.displayText }
+                        ShareLink(item: record.displayText)
+                    }
+                    Button("Delete", systemImage: "trash", role: .destructive, action: delete)
+                } label: {
+                    Image(systemName: "ellipsis")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(Theme.Colors.muted)
+                        .frame(width: 32, height: 32)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.borderless)
+                .accessibilityLabel("Actions")
+            }
+            .padding(.top, 2)
+        }
+        .padding(.vertical, 14)
+    }
+
+    private var preview: String {
+        record.displayText.split(whereSeparator: \.isNewline).joined(separator: " ")
+    }
+
+    /// Red is only for recording; a failure is amber, and named once: in the
+    /// meta line when the row shows words, in the body when it has none.
+    @ViewBuilder private var statusView: some View {
+        if record.displayText.isEmpty {
+            EmptyView()
+        } else if record.status == "failed" {
+            Text("· Failed").foregroundStyle(Theme.Colors.pending)
+        } else if record.status == "queuedForRetry" {
+            Text("· Waiting to send").foregroundStyle(Theme.Colors.pending)
+        }
+    }
+
+    private var meta: String {
+        let time = record.startedAt.formatted(date: .omitted, time: .shortened)
+        return [time, AppNames.name(for: record)].compactMap { $0 }.joined(separator: " · ")
+    }
+
+    private var statusLabel: String {
+        switch record.status {
+        case "failed": return "Failed"
+        case "queuedForRetry": return "Waiting to send"
+        case "silent": return "No speech"
+        case "cancelled": return "Cancelled"
+        case "recording", "recorded", "transcribing": return "In progress"
+        default: return "Empty"
+        }
+    }
+}
+
+/// Totals in one muted line under the title; it opens Statistics.
+private struct StatsLine: View {
+    let stats: HistoryStore.Stats
+
+    var body: some View {
+        let parts = [
+            "\(stats.totalWords.formatted(.number.notation(.compactName))) words",
+            stats.averageWPM > 0 ? "\(stats.averageWPM) wpm" : nil,
+            stats.currentStreak > 1 ? "\(stats.currentStreak)-day streak" : nil,
+        ].compactMap { $0 }
+        HStack(spacing: 4) {
+            Text(parts.joined(separator: " · "))
+            Image(systemName: "chevron.right").font(.system(size: 11, weight: .semibold))
+        }
+        .font(Theme.Fonts.footnote())
+        .foregroundStyle(Theme.Colors.muted)
+        .padding(.vertical, Theme.Spacing.xs)
+    }
+}
+
+/// While the mic session is on: a capsule with the time left that turns it off.
+private struct SessionChip: View {
     @EnvironmentObject private var model: AppModel
     @EnvironmentObject private var session: VoiceSession
 
     var body: some View {
-        Card(padding: Theme.Spacing.xl) {
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(session.isActive ? "Skips app switching" : "Needs app switching")
-                        .font(Theme.Fonts.title2())
-                        .foregroundStyle(Theme.Colors.ink)
-                    subtitle
-                        .font(Theme.Fonts.subheadline())
-                        .foregroundStyle(Theme.Colors.muted)
-                        .fixedSize(horizontal: false, vertical: true)
+        Menu {
+            Text("The keyboard's mic starts in place while this is on.")
+            Button("Turn Off Now", systemImage: "mic.slash", action: model.endSession)
+        } label: {
+            HStack(spacing: 6) {
+                Circle().fill(Theme.Colors.success).frame(width: 7, height: 7)
+                if let until = session.warmUntil {
+                    // The warm timer can fire just after the deadline; a range
+                    // that ends before it starts traps.
+                    Text(timerInterval: Date()...max(until, Date()), countsDown: true).monospacedDigit()
+                } else {
+                    Text(session.dictationPhase == .processing ? "Writing…" : "Mic on")
                 }
-                Spacer(minLength: Theme.Spacing.m)
-                SessionGlyph(active: session.isActive)
             }
-            if session.isActive {
-                Button("Turn off now", action: model.endSession)
-                    .buttonStyle(PillButtonStyle(kind: .secondary))
-            }
+            .font(Theme.Fonts.label())
+            .foregroundStyle(Theme.Colors.ink)
         }
-    }
-
-    @ViewBuilder private var subtitle: some View {
-        if let until = session.warmUntil {
-            HStack(spacing: 4) {
-                Text("Turns off in")
-                // The warm timer can fire just after the deadline; a range
-                // that ends before it starts traps.
-                Text(timerInterval: Date()...max(until, Date()), countsDown: true).monospacedDigit()
-            }
-        } else if session.isActive {
-            // While the text is written the mic is on only to keep the app
-            // running, so name the phase rather than the mic.
-            Text(session.dictationPhase == .processing ? "Writing…" : "Mic is on")
-        } else if UIDevice.isPad {
-            if #available(iOS 18.0, *) {
-                Text("Tap the mic on the VoiceiQ keyboard, or use VoiceiQ Dictate.")
-            } else {
-                Text("Disconnect any hardware keyboard, then tap the mic on the VoiceiQ keyboard.")
-            }
-        } else {
-            Text("Tap the mic on the VoiceiQ keyboard, or press the Action button.")
-        }
+        .accessibilityLabel("Mic session on")
     }
 }
 
-/// A mic in a ring that breathes while the session is on.
-private struct SessionGlyph: View {
-    let active: Bool
-    @State private var pulse = false
+/// The keyboard tryout, as a sheet from the dock.
+private struct TryKeyboardSheet: View {
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        ZStack {
-            Circle()
-                .fill(Theme.Colors.accent.opacity(active ? 0.14 : 0.06))
-                .frame(width: 56, height: 56)
-                .scaleEffect(active && pulse ? 1.12 : 1)
-            Image(systemName: active ? "waveform" : "mic.slash")
-                .font(.system(size: 22, weight: .semibold))
-                .foregroundStyle(active ? Theme.Colors.accent : Theme.Colors.muted)
+        NavigationStack {
+            ScrollView {
+                TryItCard()
+                    .padding(Theme.Spacing.page)
+            }
+            .themedBackground()
+            .navigationTitle("Try the keyboard")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } }
+            }
         }
-        .onAppear { withAnimation(.easeInOut(duration: 1.6).repeatForever()) { pulse = true } }
-        .accessibilityHidden(true)
+        .presentationDetents([.medium, .large])
     }
 }
 
+private enum SetupStep: Hashable { case key, keyboard }
+
+/// Buttons rather than links: a link in a list row gets the list's own
+/// chevron beside the line's, and three links in one row share one tap.
 private struct SetupCard: View {
     @EnvironmentObject private var setup: SetupMonitor
+    let open: (SetupStep) -> Void
 
     var body: some View {
         let status = setup.status
@@ -161,19 +355,20 @@ private struct SetupCard: View {
             GroupLabel(text: "Finish setup")
             Card(padding: 0) {
                 VStack(spacing: 0) {
-                    NavigationLink { KeysView() } label: {
+                    Button { open(.key) } label: {
                         SetupLine(title: "API key", done: status.hasKey)
                     }
                     Divider().padding(.leading, 52)
-                    NavigationLink { KeyboardSetupView() } label: {
+                    Button { open(.keyboard) } label: {
                         SetupLine(title: "Microphone", done: status.micGranted)
                     }
                     Divider().padding(.leading, 52)
-                    NavigationLink { KeyboardSetupView() } label: {
+                    Button { open(.keyboard) } label: {
                         SetupLine(title: "Keyboard and Full Access", done: status.keyboardReady,
                                   waiting: status.keyboardAdded && !status.fullAccess)
                     }
                 }
+                .buttonStyle(.plain)
             }
         }
     }

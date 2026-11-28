@@ -6,23 +6,20 @@ struct RootView: View {
     @State private var tab = Tab.home
     @State private var showKeyboardSetup = false
 
-    enum Tab { case home, history, meetings, settings }
+    enum Tab { case home, meetings, settings }
 
     var body: some View {
         Group {
             if onboarded {
                 TabView(selection: $tab) {
                     HomeView(tab: $tab)
-                        .tabItem { Label("Home", systemImage: "waveform") }
+                        .tabItem { Label("Home", systemImage: "list.bullet").environment(\.symbolVariants, .none) }
                         .tag(Tab.home)
-                    HistoryView()
-                        .tabItem { Label("History", systemImage: "clock.arrow.circlepath") }
-                        .tag(Tab.history)
                     MeetingsView()
-                        .tabItem { Label("Notes", systemImage: "record.circle") }
+                        .tabItem { Label("Notes", systemImage: "record.circle").environment(\.symbolVariants, .none) }
                         .tag(Tab.meetings)
                     SettingsView()
-                        .tabItem { Label("Settings", systemImage: "gearshape") }
+                        .tabItem { Label("Settings", systemImage: "gearshape").environment(\.symbolVariants, .none) }
                         .tag(Tab.settings)
                 }
                 .modifier(MinimizeTabBarOnScroll())

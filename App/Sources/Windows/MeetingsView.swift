@@ -7,6 +7,7 @@ struct MeetingsPane: View {
     let store: MeetingStore
     @State private var meetings: [MeetingMeta] = []
     @State private var selection: MeetingID?
+    @FocusState private var listFocused: Bool
     @State private var notes: MeetingNotes?
     @State private var transcript: [TranscriptSegment] = []
     /// Side by side: the transcript column is shown. Narrow: the transcript replaces the notes.
@@ -91,6 +92,12 @@ struct MeetingsPane: View {
 
     private var sidebar: some View {
         VStack(spacing: 0) {
+            Text("Meetings")
+                .font(VoiceIQUI.TypeScale.display())
+                .foregroundStyle(VQ.Colors.ink)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, VQ.Spacing.page)
+                .padding(.top, VoiceIQUI.Spacing.l)
             if let next = nextMeeting.next {
                 NextMeetingCard(meeting: next, now: nextMeeting.now, engine: engine)
                     .padding(.horizontal, VoiceIQUI.Spacing.s)
@@ -101,12 +108,15 @@ struct MeetingsPane: View {
                 engine.toggleRecording()
             } label: {
                 Label(recording ? "Stop recording" : "Record", systemImage: recording ? "stop.fill" : "record.circle")
+                    // White on the pale dark-mode accent read at 2.8:1; Stop
+                    // sits on the darker error fill so white stays readable.
+                    .foregroundStyle(recording ? Color.white : VQ.Colors.onAccent)
                     .frame(maxWidth: .infinity)
             }
             .controlSize(.large)
-            .tint(recording ? VoiceIQUI.Colors.gRed : nil)
+            .tint(recording ? VoiceIQUI.Colors.errorFill : VQ.Colors.accent)
             .buttonStyle(.borderedProminent)
-            .padding(.horizontal, VoiceIQUI.Spacing.s)
+            .padding(.horizontal, VQ.Spacing.page)
             .padding(.top, nextMeeting.next == nil ? VoiceIQUI.Spacing.l : VoiceIQUI.Spacing.s)
             .padding(.bottom, VoiceIQUI.Spacing.xs)
             if recording {
@@ -124,7 +134,7 @@ struct MeetingsPane: View {
                 }
                 .controlSize(.large)
                 .buttonStyle(.bordered)
-                .padding(.horizontal, VoiceIQUI.Spacing.s)
+                .padding(.horizontal, VQ.Spacing.page)
                 .padding(.bottom, VoiceIQUI.Spacing.xs)
             }
             folderFilter
@@ -146,6 +156,10 @@ struct MeetingsPane: View {
                     }
                 }
             }
+            .scrollContentBackground(.hidden)
+            .focused($listFocused)
+            // Row text lands on the page margin, under the title and Record.
+            .padding(.horizontal, 8)
             .overlay {
                 if meetings.isEmpty {
                     Text("No meetings yet").foregroundStyle(.secondary)
@@ -159,11 +173,13 @@ struct MeetingsPane: View {
     private func row(_ meeting: MeetingMeta) -> some View {
         VStack(alignment: .leading, spacing: 3) {
             Text(title(meeting)).font(VoiceIQUI.TypeScale.body()).lineLimit(1)
+                // Room for the hover folder button, which otherwise covers the title's end.
+                .padding(.trailing, hovered == meeting.id ? 36 : 0)
             if case let .recording(id, since) = engine.phase, id == meeting.id {
                 // The length ticks while it records; the stored one is written at Stop.
                 TimelineView(.periodic(from: since, by: 1)) { context in
                     // Only the dot is red; red text on the selected row read at 3:1 (Fable).
-                    (Text(Image(systemName: "circle.fill")).foregroundColor(VoiceIQUI.Colors.gRed)
+                    (Text(Image(systemName: "circle.fill")).foregroundColor(VQ.Colors.record)
                         + Text(" \(meeting.startedAt.formatted(date: .omitted, time: .shortened)) · \(MeetingRecordingStatus.clock(context.date.timeIntervalSince(since))) · Recording"))
                         .font(VoiceIQUI.TypeScale.labelSmall().monospacedDigit())
                         // Secondary on the selection read at 4.2:1 (Fable, M6).
@@ -205,6 +221,7 @@ struct MeetingsPane: View {
             if inside { hovered = meeting.id } else if hovered == meeting.id { hovered = nil }
         }
         .tag(meeting.id)
+        .listRowBackground(ListSelectionBackground(selected: selection == meeting.id, focused: listFocused))
         .contextMenu { Menu("Folders") { MeetingFolderToggles(model: folders, meeting: meeting.id) } }
     }
 
@@ -219,7 +236,7 @@ struct MeetingsPane: View {
         .fixedSize()
         .frame(maxWidth: .infinity, alignment: .leading)
         .help("Show one folder's meetings, or make, rename and delete folders")
-        .padding(.horizontal, VoiceIQUI.Spacing.s)
+        .padding(.horizontal, VQ.Spacing.page)
         .padding(.vertical, VoiceIQUI.Spacing.xs)
     }
 
@@ -343,18 +360,21 @@ struct MeetingsPane: View {
                 .help("Write the notes again with the speaker names you set")
             }
             RecordingAudioButtons(audio: audio) { exported = $0 }
-            Menu {
-                Section("Save to Downloads") { exportItems { export(meeting, $0) } }
-                Section("Copy") { exportItems { copy(meeting, $0) } }
-                if SettingsStore().agentAccessEnabled {
-                    Divider()
-                    Button("Copy prompt for an AI agent") { copyAgentPrompt(meeting) }
-                }
-            } label: {
-                Label("Export", systemImage: "square.and.arrow.up")
+                .buttonStyle(CircleButtonStyle())
+            // Icon-only when narrow, so the folder menu keeps its words.
+            if wide {
+                exportMenu(meeting)
+                    .fixedSize()
+                    .disabled(notes == nil && transcript.isEmpty)
+            } else {
+                exportMenu(meeting)
+                    .menuStyle(.button)
+                    .buttonStyle(CircleButtonStyle())
+                    .menuIndicator(.hidden)
+                    .fixedSize()
+                    .help("Export")
+                    .disabled(notes == nil && transcript.isEmpty)
             }
-            .fixedSize()
-            .disabled(notes == nil && transcript.isEmpty)
             Menu {
                 Button("Rename…") { titleDraft = title(meeting); renaming = true }
                 Divider()
@@ -379,6 +399,8 @@ struct MeetingsPane: View {
                     Text(Image(systemName: "ellipsis")).accessibilityLabel("More")
                 }
             }
+            .menuStyle(.button)
+            .buttonStyle(CircleButtonStyle())
             .menuIndicator(.hidden)
             .fixedSize()
             .disabled(busy)
@@ -387,12 +409,26 @@ struct MeetingsPane: View {
             } label: {
                 Image(systemName: wide ? "sidebar.right" : transcriptShown ? "doc.text" : "text.bubble")
             }
+            .buttonStyle(CircleButtonStyle())
             .help(transcriptShown ? (wide ? "Hide transcript" : "Show notes") : "Show transcript")
             .disabled(transcript.isEmpty)
         }
-        .padding(.horizontal, VoiceIQUI.Spacing.l)
+        .padding(.horizontal, VQ.Spacing.page)
         .padding(.top, VoiceIQUI.Spacing.l)
         .padding(.bottom, VoiceIQUI.Spacing.s)
+    }
+
+    private func exportMenu(_ meeting: MeetingMeta) -> some View {
+        Menu {
+            Section("Save to Downloads") { exportItems { export(meeting, $0) } }
+            Section("Copy") { exportItems { copy(meeting, $0) } }
+            if SettingsStore().agentAccessEnabled {
+                Divider()
+                Button("Copy prompt for an AI agent") { copyAgentPrompt(meeting) }
+            }
+        } label: {
+            Label("Export", systemImage: "square.and.arrow.up")
+        }
     }
 
     /// What the meeting is doing in the background, in words; nil when idle.
@@ -616,7 +652,8 @@ struct ExportToast: View {
                 Text("Saved to \(url.path.replacingOccurrences(of: NSHomeDirectory(), with: "~"))")
                     .lineLimit(1).truncationMode(.middle)
                 Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([url]); dismiss() }
-                    .buttonStyle(.link)
+                    .buttonStyle(.plain)
+                    .foregroundStyle(VQ.Colors.accent)
             case .copied(let what, _):
                 Image(systemName: "checkmark.circle.fill").foregroundStyle(VoiceIQUI.Colors.success)
                 Text("Copied \(what)")

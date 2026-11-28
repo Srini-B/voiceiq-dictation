@@ -50,7 +50,9 @@ struct MeetingChatTurns: View {
                     HStack(alignment: .firstTextBaseline, spacing: VoiceIQUI.Spacing.xs) {
                         Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(VoiceIQUI.Colors.error)
                         Text(message).foregroundStyle(VoiceIQUI.Colors.error).fixedSize(horizontal: false, vertical: true)
-                        Button("Try again") { chat.ask(text) }.buttonStyle(.link)
+                        Button("Try again") { chat.ask(text) }
+                            .buttonStyle(.plain)
+                            .foregroundStyle(VQ.Colors.accent)
                     }
                 }
             }
@@ -99,7 +101,7 @@ struct MeetingChatInput: View {
         .font(VoiceIQUI.TypeScale.body())
         .padding(.horizontal, VoiceIQUI.Spacing.xxl)
         .padding(.vertical, VoiceIQUI.Spacing.s)
-        .background(.bar)
+        .background(VQ.Colors.canvas)
         .overlay(alignment: .top) { Divider() }
     }
 

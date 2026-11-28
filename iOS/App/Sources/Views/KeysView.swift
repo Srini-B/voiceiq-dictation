@@ -11,7 +11,7 @@ struct KeysView: View {
                 .readableWidth()
         }
         .keyboardDismissable()
-        .themedBackground()
+        .groupedBackground()
         .navigationTitle("API Key")
         .navigationBarTitleDisplayMode(.inline)
     }

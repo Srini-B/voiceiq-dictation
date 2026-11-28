@@ -17,42 +17,44 @@ struct MeetingsView: View {
                 NextMeetingSection()
                 Section {
                     RecorderCard(meetings: model.meetings)
-                        // The inset-grouped list already margins its rows;
-                        // zero here keeps the card flush with the rows below.
-                        .listRowInsets(EdgeInsets(top: Theme.Spacing.s, leading: 0,
-                                                  bottom: Theme.Spacing.l, trailing: 0))
+                        .listRowInsets(EdgeInsets(top: Theme.Spacing.s, leading: Theme.Spacing.page,
+                                                  bottom: Theme.Spacing.l, trailing: Theme.Spacing.page))
                         .listRowBackground(Color.clear)
                         .listRowSeparator(.hidden)
                 }
                 if !meetings.isEmpty {
-                    Section(folders.filterFolder?.name ?? "Past notes") {
-                        ForEach(shown) { meta in
-                            NavigationLink { MeetingDetail(meta: meta, folders: folders) } label: {
-                                MeetingRow(meta: meta, folders: folders.names(of: meta.id))
+                    if let folder = folders.filterFolder {
+                        Text(folder.name)
+                            .font(Theme.Fonts.caption())
+                            .foregroundStyle(Theme.Colors.muted)
+                            .noteRow(separator: false)
+                    }
+                    ForEach(sections) { section in
+                        Section {
+                            ForEach(section.meetings) { meta in
+                                row(meta)
                             }
-                            // Deleting mid-transcription would leave its AssemblyAI calls running
-                            // with nowhere to save (the Mac's More menu is disabled the same way).
-                            .deleteDisabled(model.meetings.isBusy(meta.id))
-                            .contextMenu {
-                                Button("Rename…", systemImage: "pencil") { titleDraft = rowTitle(meta); renaming = meta }
-                                    .disabled(model.meetings.isBusy(meta.id))
-                                Menu("Folders", systemImage: "folder") { MeetingFolderToggles(model: folders, meeting: meta.id) }
-                            }
-                            // The iPhone's stand-in for the Mac's hover button.
-                            .swipeActions(edge: .leading) {
-                                Button("Folders", systemImage: "folder") { filing = meta.id }.tint(Theme.Colors.accent)
-                            }
+                            .onDelete { offsets in delete(offsets.map { section.meetings[$0] }) }
+                        } header: {
+                            Text(section.title)
+                                .font(Theme.Fonts.caption())
+                                .foregroundStyle(Theme.Colors.muted)
+                                .textCase(nil)
+                                .listRowInsets(EdgeInsets(top: Theme.Spacing.l, leading: Theme.Spacing.page, bottom: Theme.Spacing.s, trailing: Theme.Spacing.page))
                         }
-                        .onDelete(perform: delete)
-                        if shown.isEmpty {
-                            Text("No notes in this folder").font(Theme.Fonts.callout()).foregroundStyle(Theme.Colors.muted)
-                        }
+                    }
+                    if shown.isEmpty {
+                        Text("No notes in this folder")
+                            .font(Theme.Fonts.callout())
+                            .foregroundStyle(Theme.Colors.muted)
+                            .noteRow(separator: false)
                     }
                 }
             }
-            .listStyle(.insetGrouped)
-            .listRowBackground(Theme.Colors.surface)
+            // A plain hairline list on the canvas, as Home (docs/design/redesign-2026-11.md).
+            .listStyle(.plain)
             .themedBackground()
+            .modifier(HardTopEdge())
             .navigationTitle("Notes")
             .toolbar {
                 // Also with no notes, as on the Mac: folders outlive their notes.
@@ -61,6 +63,7 @@ struct MeetingsView: View {
                 } label: {
                     Label("Folders", systemImage: folders.filter == nil ? "folder" : "folder.fill")
                 }
+                .tint(Theme.Colors.inkSecondary)
             }
             .onAppear(perform: reload)
             .onReceive(model.meetings.$phase) { _ in reload() }
@@ -89,10 +92,34 @@ struct MeetingsView: View {
 
     private var shown: [MeetingMeta] { folders.shown(meetings) }
 
-    private func delete(_ offsets: IndexSet) {
-        let shown = shown
-        for index in offsets where !model.meetings.isBusy(shown[index].id) {
-            try? model.meetings.store.delete(id: shown[index].id)
+    private func row(_ meta: MeetingMeta) -> some View {
+        MeetingRow(meta: meta, folders: folders.names(of: meta.id))
+            // A hidden link, so the list adds no chevron (as Home). The id
+            // gives each note its own detail state in the split view.
+            .background {
+                NavigationLink("") { MeetingDetail(meta: meta, folders: folders).id(meta.id) }
+                    .opacity(0)
+            }
+            // Deleting mid-transcription would leave its AssemblyAI calls running
+            // with nowhere to save (the Mac's More menu is disabled the same way).
+            .deleteDisabled(model.meetings.isBusy(meta.id))
+            .contextMenu {
+                Button("Rename…", systemImage: "pencil") { titleDraft = rowTitle(meta); renaming = meta }
+                    .disabled(model.meetings.isBusy(meta.id))
+                Menu("Folders", systemImage: "folder") { MeetingFolderToggles(model: folders, meeting: meta.id) }
+            }
+            // The iPhone's stand-in for the Mac's hover button.
+            .swipeActions(edge: .leading) {
+                Button("Folders", systemImage: "folder") { filing = meta.id }.tint(Theme.Colors.accent)
+            }
+            .noteRow()
+    }
+
+    private var sections: [NoteDaySection] { NoteDaySection.group(shown) }
+
+    private func delete(_ notes: [MeetingMeta]) {
+        for meta in notes where !model.meetings.isBusy(meta.id) {
+            try? model.meetings.store.delete(id: meta.id)
         }
         reload()
     }
@@ -111,7 +138,38 @@ struct MeetingsView: View {
 
 /// The title a note's row shows.
 private func rowTitle(_ meta: MeetingMeta) -> String {
-    meta.displayTitle() ?? "Notes"
+    meta.displayTitle() ?? "New note"
+}
+
+/// Notes grouped by the day they started, newest first, as Home groups dictations.
+private struct NoteDaySection: Identifiable {
+    let day: Date
+    let meetings: [MeetingMeta]
+    var id: Date { day }
+
+    var title: String {
+        let calendar = Calendar.current
+        if calendar.isDateInToday(day) { return "Today" }
+        if calendar.isDateInYesterday(day) { return "Yesterday" }
+        return day.formatted(date: .abbreviated, time: .omitted)
+    }
+
+    /// Keeps the order of `meetings` within each day.
+    static func group(_ meetings: [MeetingMeta]) -> [NoteDaySection] {
+        let grouped = Dictionary(grouping: meetings) { Calendar.current.startOfDay(for: $0.startedAt) }
+        return grouped.keys.sorted(by: >).map { NoteDaySection(day: $0, meetings: grouped[$0] ?? []) }
+    }
+}
+
+private extension View {
+    /// A row on the canvas at the page margin, with a hairline between rows, as on Home.
+    func noteRow(separator: Bool = true) -> some View {
+        listRowBackground(Theme.Colors.canvas)
+            .listRowInsets(EdgeInsets(top: 0, leading: Theme.Spacing.page, bottom: 0, trailing: Theme.Spacing.page))
+            .listRowSeparator(separator ? .visible : .hidden)
+            .listRowSeparatorTint(Theme.Colors.hairline)
+            .alignmentGuide(.listRowSeparatorLeading) { _ in 0 }
+    }
 }
 
 private struct RecorderCard: View {
@@ -121,10 +179,12 @@ private struct RecorderCard: View {
     @State private var confirmingDiscard = false
 
     var body: some View {
-        Card(padding: Theme.Spacing.xl) {
+        Group {
             switch meetings.phase {
-            case let .recording(_, since): recording(since: since)
-            default: idle
+            // On the canvas, not in a card, idle or recording: cards are for
+            // Settings (docs/design/redesign-2026-11.md).
+            case let .recording(_, since): recording(since: since).padding(.vertical, Theme.Spacing.xl)
+            default: idle.padding(.vertical, Theme.Spacing.xl)
             }
         }
         // An alert, not a confirmation dialog: on iOS 27 the dialog drew as a
@@ -143,15 +203,8 @@ private struct RecorderCard: View {
 
     private var idle: some View {
         VStack(spacing: Theme.Spacing.m) {
-            Button(action: model.startMeeting) {
-                ZStack {
-                    Circle().fill(Theme.Colors.recording).frame(width: 72, height: 72)
-                    Circle().fill(Color.white).frame(width: 24, height: 24)
-                }
-            }
-            .buttonStyle(.plain)
-            .frame(minWidth: 72, minHeight: 72)
-            .accessibilityLabel("Record notes")
+            // Brand blue until it records: red means recording only.
+            TalkKey(recording: false, action: model.startMeeting)
             Text("Record notes").font(Theme.Fonts.headline()).foregroundStyle(Theme.Colors.ink)
             Text("Records the room with your \(UIDevice.current.localizedModel)'s mic.")
                 .font(Theme.Fonts.footnote())
@@ -204,18 +257,17 @@ private struct MeetingRow: View {
 
     var body: some View {
         let selected = prominence == .increased
-        HStack(alignment: .top, spacing: Theme.Spacing.m) {
-            VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                Text(rowTitle(meta))
-                    .font(Theme.Fonts.callout())
-                    .foregroundStyle(selected ? Theme.Colors.onAccent : Theme.Colors.ink)
-                    .lineLimit(1)
-                // An import has no length to show (Granola's export has none).
-                Text(meta.importedFrom == nil
-                     ? "\(meta.startedAt.formatted(date: .abbreviated, time: .shortened)) · \(duration)"
-                     : meta.startedAt.formatted(date: .abbreviated, time: .shortened))
-                    .font(Theme.Fonts.caption())
+        // Centred, so a status beside a tall row sits level with it.
+        HStack(alignment: .center, spacing: Theme.Spacing.m) {
+            // As a Home row: the meta line, the title, then the length.
+            VStack(alignment: .leading, spacing: 6) {
+                Text(metaLine)
+                    .font(Theme.Fonts.footnote())
                     .foregroundStyle(selected ? Theme.Colors.onAccent.opacity(0.8) : Theme.Colors.muted)
+                Text(rowTitle(meta))
+                    .font(Theme.Fonts.headline())
+                    .foregroundStyle(selected ? Theme.Colors.onAccent : Theme.Colors.ink)
+                    .lineLimit(2)
                 if !folders.isEmpty {
                     // Text, not a Label: a list row gives a Label's icon a column of its own.
                     Text("\(Image(systemName: "folder")) \(folders.joined(separator: ", "))")
@@ -223,11 +275,15 @@ private struct MeetingRow: View {
                         .foregroundStyle(selected ? Theme.Colors.onAccent.opacity(0.8) : Theme.Colors.muted)
                         .lineLimit(1)
                 }
+                // An import has no length to show (Granola's export has none).
+                if meta.importedFrom == nil, meta.durationSeconds >= 1 {
+                    DurationChip(seconds: meta.durationSeconds).padding(.top, 2)
+                }
             }
             Spacer(minLength: 0)
             status
         }
-        .padding(.vertical, Theme.Spacing.xs)
+        .padding(.vertical, 14)
     }
 
     @ViewBuilder private var status: some View {
@@ -242,17 +298,29 @@ private struct MeetingRow: View {
                 .imageScale(.small)
         case .failed where meta.waitsForService != nil: StatusChip(text: "Waiting", tone: .pending)
         case .failed:
+            // Not record red: red means recording only.
             Text("Failed")
                 .font(Theme.Fonts.caption())
-                .foregroundStyle(Theme.Colors.recording)
+                .foregroundStyle(Theme.Colors.pending)
                 .padding(.horizontal, 10).padding(.vertical, 5)
-                .background(Capsule().fill(Theme.Colors.recording.opacity(0.12)))
+                .background(Capsule().fill(Theme.Colors.pending.opacity(0.12)))
         default: StatusChip(text: "Processing", tone: .pending)
         }
     }
 
-    private var duration: String {
-        Duration.seconds(meta.durationSeconds).formatted(.time(pattern: .minuteSecond))
+    /// The time (the day is the section's header), then where the note came from.
+    private var metaLine: String {
+        let time = meta.startedAt.formatted(date: .omitted, time: .shortened)
+        return [time, source].compactMap { $0 }.joined(separator: " · ")
+    }
+
+    private var source: String? {
+        if let app = meta.importedFrom { return app }
+        switch meta.source {
+        case .app(_, let name)?: return name
+        case .browser(_, let host)?: return host
+        case nil: return nil
+        }
     }
 }
 
@@ -335,10 +403,7 @@ private struct MeetingDetail: View {
                     else if failure == nil && step == nil && !gone { processingCard(.summarizing) }
                     if let chat { MeetingChatTurns(chat: chat, scroller: scroller) }
                     if !gone {
-                        VStack(alignment: .leading, spacing: Theme.Spacing.m) {
-                            GroupLabel(text: "Audio")
-                            Card { RecordingAudioControls(audio: audio) }
-                        }
+                        section("Audio") { RecordingAudioControls(audio: audio) }
                     }
                     if !transcript.isEmpty { transcriptContent }
                 }
@@ -357,7 +422,7 @@ private struct MeetingDetail: View {
         }
         .themedBackground()
         // Not twice: the bar shows the title only once the page's own has scrolled away (Fable, M6).
-        .navigationTitle(notes == nil || titleHidden ? meta.displayTitle(notes: notes) ?? "Notes" : "")
+        .navigationTitle(notes == nil || titleHidden ? meta.displayTitle(notes: notes) ?? "New note" : "")
         .navigationBarTitleDisplayMode(.inline)
         // The title has the bar to itself; folders, redo and export are one menu (Fable, M6).
         .toolbar {
@@ -387,6 +452,7 @@ private struct MeetingDetail: View {
                         } label: { Label("Export", systemImage: "square.and.arrow.up") }
                     }
                 } label: { Label("More", systemImage: "ellipsis") }
+                .tint(Theme.Colors.inkSecondary)
             }
         }
         // Text scrolled under the bar no longer shows through beside the title.
@@ -413,21 +479,19 @@ private struct MeetingDetail: View {
     }
 
     @ViewBuilder private func notesContent(_ notes: MeetingNotes) -> some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.m) {
-            VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                Text(meta.displayTitle(notes: notes) ?? notes.title).font(Theme.Fonts.title2()).foregroundStyle(Theme.Colors.ink)
-                    .onGeometryChange(for: CGFloat.self) { $0.frame(in: .named("note")).maxY } action: { titleBottom = $0 }
-                // The kind sits on the date line, so the title has the full width.
-                HStack(spacing: Theme.Spacing.s) {
-                    Text(meta.whenText).font(Theme.Fonts.footnote()).foregroundStyle(Theme.Colors.muted)
-                    if let kind = notes.type.flatMap(MeetingKind.init(rawValue:)) {
-                        StatusChip(text: kind.displayName, tone: .off)
-                    }
+        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+            Text(meta.displayTitle(notes: notes) ?? notes.title).font(Theme.Fonts.title()).foregroundStyle(Theme.Colors.ink)
+                .onGeometryChange(for: CGFloat.self) { $0.frame(in: .named("note")).maxY } action: { titleBottom = $0 }
+            // The kind sits on the date line, so the title has the full width.
+            HStack(spacing: Theme.Spacing.s) {
+                Text(meta.whenText).font(Theme.Fonts.footnote()).foregroundStyle(Theme.Colors.muted)
+                if let kind = notes.type.flatMap(MeetingKind.init(rawValue:)) {
+                    StatusChip(text: kind.displayName, tone: .off)
                 }
-                if !speakers.isEmpty { people }
             }
-            Card { Text(notes.summary).font(Theme.Fonts.body()).foregroundStyle(Theme.Colors.ink) }
+            if !speakers.isEmpty { people }
         }
+        section("Summary") { Text(notes.summary).font(Theme.Fonts.body()).foregroundStyle(Theme.Colors.ink) }
         ForEach(Array((notes.sections ?? []).enumerated()), id: \.offset) { _, section in
             if !section.items.isEmpty { bulletGroup(section.title, items: section.items) }
         }
@@ -442,32 +506,22 @@ private struct MeetingDetail: View {
         return (transcript.contains { $0.speaker == MeetingSpeaker.you } ? [MeetingSpeaker.you] : []) + others
     }
 
-    /// Everyone heard, each in their transcript colour, as on the Mac.
+    /// Everyone heard, in plain muted text; their colours stay in the transcript.
     private var people: some View {
-        let others = MeetingSpeaker.others(in: transcript)
         let names = speakers.map { meta.displayName($0, notes: notes) }
-        // A non-breaking space keeps each dot with its name when the line wraps.
-        return zip(speakers, names).enumerated().reduce(Text("")) { line, entry in
-            let hex = MeetingSpeaker.colorHex(entry.element.0, others: others)
-            let dot = Text(Image(systemName: "circle.fill")).font(.system(size: 7))
-                .foregroundColor(Theme.Colors.dynamic(light: hex.light, dark: hex.dark))
-            return line + Text(entry.offset == 0 ? "" : "    ") + dot + Text("\u{00A0}" + entry.element.1)
-        }
-        .font(Theme.Fonts.footnote())
-        .foregroundStyle(Theme.Colors.muted)
-        .accessibilityLabel("With " + names.joined(separator: ", "))
+        return Text(names.joined(separator: ", "))
+            .font(Theme.Fonts.footnote())
+            .foregroundStyle(Theme.Colors.muted)
+            .accessibilityLabel("With " + names.joined(separator: ", "))
     }
 
     private func bulletGroup(_ title: String, items: [String]) -> some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.m) {
-            GroupLabel(text: title)
-            Card {
-                VStack(alignment: .leading, spacing: Theme.Spacing.m) {
-                    ForEach(Array(items.enumerated()), id: \.offset) { _, item in
-                        HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.s) {
-                            Text("•").foregroundStyle(Theme.Colors.accent)
-                            Text(item).font(Theme.Fonts.body()).foregroundStyle(Theme.Colors.ink)
-                        }
+        section(title) {
+            VStack(alignment: .leading, spacing: Theme.Spacing.m) {
+                ForEach(Array(items.enumerated()), id: \.offset) { _, item in
+                    HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.s) {
+                        Text("•").foregroundStyle(Theme.Colors.accent)
+                        Text(item).font(Theme.Fonts.body()).foregroundStyle(Theme.Colors.ink)
                     }
                 }
             }
@@ -475,22 +529,19 @@ private struct MeetingDetail: View {
     }
 
     private func actionItems(_ actions: [ActionItem]) -> some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.m) {
-            GroupLabel(text: "Action items")
-            Card {
-                VStack(alignment: .leading, spacing: Theme.Spacing.l) {
-                    ForEach(Array(actions.enumerated()), id: \.offset) { _, action in
-                        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                            HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.s) {
-                                Image(systemName: "circle").foregroundStyle(Theme.Colors.muted)
-                                Text(action.owner.map { "\($0): " } ?? "").font(Theme.Fonts.body().weight(.semibold))
-                                    + Text(action.text).font(Theme.Fonts.body())
-                            }
-                            .foregroundStyle(Theme.Colors.ink)
-                            if let deadline = action.deadline {
-                                Text(deadline).font(Theme.Fonts.footnote()).foregroundStyle(Theme.Colors.muted)
-                                    .padding(.leading, 28)
-                            }
+        section("Action items") {
+            VStack(alignment: .leading, spacing: Theme.Spacing.l) {
+                ForEach(Array(actions.enumerated()), id: \.offset) { _, action in
+                    VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                        HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.s) {
+                            Image(systemName: "circle").foregroundStyle(Theme.Colors.muted)
+                            Text(action.owner.map { "\($0): " } ?? "").font(Theme.Fonts.body().weight(.semibold))
+                                + Text(action.text).font(Theme.Fonts.body())
+                        }
+                        .foregroundStyle(Theme.Colors.ink)
+                        if let deadline = action.deadline {
+                            Text(deadline).font(Theme.Fonts.footnote()).foregroundStyle(Theme.Colors.muted)
+                                .padding(.leading, 28)
                         }
                     }
                 }
@@ -499,45 +550,54 @@ private struct MeetingDetail: View {
     }
 
     private var transcriptContent: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.m) {
-            GroupLabel(text: "Transcript")
-            Card {
-                VStack(alignment: .leading, spacing: Theme.Spacing.l) {
-                    let others = MeetingSpeaker.others(in: transcript)
-                    ForEach(MeetingSpeaker.turns(in: transcript)) { turn in
-                        VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                            HStack(spacing: Theme.Spacing.s) {
-                                speakerMenu(turn.speaker)
-                                if let start = turn.start {
-                                    Text(MeetingNotesPrompt.clock(start)).font(Theme.Fonts.caption()).foregroundStyle(Theme.Colors.muted)
-                                }
+        section("Transcript") {
+            VStack(alignment: .leading, spacing: Theme.Spacing.l) {
+                let others = MeetingSpeaker.others(in: transcript)
+                ForEach(MeetingSpeaker.turns(in: transcript)) { turn in
+                    VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                        HStack(spacing: Theme.Spacing.s) {
+                            speakerMenu(turn.speaker)
+                            if let start = turn.start {
+                                Text(MeetingNotesPrompt.clock(start)).font(Theme.Fonts.caption()).foregroundStyle(Theme.Colors.muted)
                             }
-                            ForEach(turn.lines) { line in
-                                lineText(line, others: others)
-                                    .padding(.leading, line.aside ? 12 : 0)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                    .contentShape(Rectangle())
-                                    .contextMenu {
-                                        // A redo running now would write over the change.
-                                        if !model.meetings.isBusy(meta.id) && !gone {
-                                            // An aside has no heading to tap; its speaker is named from here.
-                                            if line.aside {
-                                                Button("Name \(meta.displayName(line.segment.speaker, notes: notes))…", systemImage: "person.crop.circle") {
-                                                    naming = line.segment.speaker
-                                                }
-                                            }
-                                            Button("Edit", systemImage: "pencil") { editing = line.segment }
-                                            Button("Delete", systemImage: "trash", role: .destructive) {
-                                                try? model.meetings.store.deleteTranscriptSegment(line.segment.id, meeting: meta.id)
-                                                load()
+                        }
+                        ForEach(turn.lines) { line in
+                            lineText(line, others: others)
+                                .padding(.leading, line.aside ? 12 : 0)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .contentShape(Rectangle())
+                                .contextMenu {
+                                    // A redo running now would write over the change.
+                                    if !model.meetings.isBusy(meta.id) && !gone {
+                                        // An aside has no heading to tap; its speaker is named from here.
+                                        if line.aside {
+                                            Button("Name \(meta.displayName(line.segment.speaker, notes: notes))…", systemImage: "person.crop.circle") {
+                                                naming = line.segment.speaker
                                             }
                                         }
+                                        Button("Edit", systemImage: "pencil") { editing = line.segment }
+                                        Button("Delete", systemImage: "trash", role: .destructive) {
+                                            try? model.meetings.store.deleteTranscriptSegment(line.segment.id, meeting: meta.id)
+                                            load()
+                                        }
                                     }
-                            }
+                                }
                         }
                     }
                 }
             }
+        }
+    }
+
+    /// A caption over hairline content, with no card around it, as on a dictation's page.
+    private func section<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+            Text(title)
+                .font(Theme.Fonts.caption())
+                .foregroundStyle(Theme.Colors.muted)
+            Divider().overlay(Theme.Colors.hairline)
+            // 16 on a 24 line, as the spec says; the font's own line is 20.
+            content().lineSpacing(4)
         }
     }
 
@@ -626,7 +686,7 @@ private struct MeetingDetail: View {
 
 /// iOS 26 fades scrolled text under a glass bar instead of drawing the bar's
 /// background; a hard edge keeps it out from under the title.
-private struct HardTopEdge: ViewModifier {
+struct HardTopEdge: ViewModifier {
     func body(content: Content) -> some View {
         if #available(iOS 26, *) { content.scrollEdgeEffectStyle(.hard, for: .top) } else { content }
     }

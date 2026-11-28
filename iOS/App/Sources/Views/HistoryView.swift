@@ -1,118 +1,8 @@
 import SwiftUI
 import VoiceIQCore
 
-struct HistoryView: View {
-    @EnvironmentObject private var model: AppModel
-    @State private var records: [DictationRecord] = []
-    @State private var search = ""
-    @State private var confirmDeleteAll = false
-    /// Stats outlive History, so Statistics stays after History is cleared.
-    @State private var hasStats = false
-
-    private var sections: [HistoryDaySection] { HistoryDaySection.group(records) }
-
-    var body: some View {
-        ListDetailNavigation {
-            List {
-                if search.isEmpty && hasStats {
-                    Section {
-                        NavigationLink { StatsView() } label: { StatsLinkRow() }
-                    }
-                }
-                ForEach(sections) { section in
-                    Section(section.title) {
-                        ForEach(section.records) { record in
-                            // The id gives each dictation its own detail state;
-                            // without it the split view kept showing the first
-                            // one opened.
-                            NavigationLink { HistoryDetail(record: record, reload: reload).id(record.id) } label: {
-                                HistoryRow(record: record)
-                            }
-                        }
-                        .onDelete { offsets in delete(offsets, from: section.records) }
-                    }
-                }
-            }
-            .listStyle(.insetGrouped)
-            .listRowBackground(Theme.Colors.surface)
-            .themedBackground()
-            .keyboardDismissable()
-            .overlay {
-                if records.isEmpty && !(search.isEmpty && hasStats) { HistoryEmptyState(isSearching: !search.isEmpty) }
-            }
-            .searchable(text: $search)
-            .onChange(of: search) { _, _ in reload() }
-            .navigationTitle("History")
-            .toolbar {
-                if !records.isEmpty {
-                    Menu {
-                        Button("Delete All", role: .destructive) { confirmDeleteAll = true }
-                    } label: {
-                        Image(systemName: "ellipsis.circle")
-                    }
-                    .accessibilityLabel("History actions")
-                }
-            }
-            .confirmationDialog("Delete all history?", isPresented: $confirmDeleteAll, titleVisibility: .visible) {
-                Button("Delete All", role: .destructive) {
-                    model.historyStore?.deleteAll(removeFolders: true, sparing: model.coordinator.activeSessionFolders)
-                    model.coordinator.clearLastResult()
-                    reload()
-                }
-            }
-            .onAppear {
-                reload()
-                reloadStats()
-            }
-            .onReceive(NotificationCenter.default.publisher(for: .gtHistoryDidChange).receive(on: RunLoop.main)) { _ in
-                reload()
-                reloadStats()
-            }
-        } placeholder: {
-            DetailPlaceholder(systemImage: "text.alignleft", title: "No dictation selected")
-        }
-    }
-
-    private func delete(_ offsets: IndexSet, from sectionRecords: [DictationRecord]) {
-        for index in offsets { model.historyStore?.delete(id: sectionRecords[index].id, removeFolder: true) }
-        reload()
-    }
-
-    private func reload() {
-        records = model.historyStore?.records(matching: search.isEmpty ? nil : search) ?? []
-    }
-
-    /// Not on each search keystroke: the query does not change the stats.
-    private func reloadStats() {
-        hasStats = (model.historyStore?.stats().activeDays ?? 0) > 0
-    }
-}
-
-/// The row above the days that opens Statistics, as the stats head the
-/// Mac's History list.
-private struct StatsLinkRow: View {
-    /// `.increased` while the row is selected in the iPad split view, on the
-    /// accent fill.
-    @Environment(\.backgroundProminence) private var prominence
-
-    var body: some View {
-        let selected = prominence == .increased
-        HStack(spacing: Theme.Spacing.m) {
-            IconTile(systemImage: "chart.bar.xaxis", tint: selected ? Theme.Colors.onAccent : Theme.Colors.accent)
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Statistics")
-                    .font(Theme.Fonts.callout())
-                    .foregroundStyle(selected ? Theme.Colors.onAccent : Theme.Colors.ink)
-                Text("Words, speed, time saved and streaks")
-                    .font(Theme.Fonts.caption())
-                    .foregroundStyle(selected ? Theme.Colors.onAccent.opacity(0.8) : Theme.Colors.muted)
-            }
-        }
-        .padding(.vertical, Theme.Spacing.xs)
-    }
-}
-
-private struct HistoryDaySection: Identifiable {
+/// Dictations grouped by the day they started, newest first.
+struct HistoryDaySection: Identifiable {
     let day: Date
     let records: [DictationRecord]
     var id: Date { day }
@@ -130,78 +20,7 @@ private struct HistoryDaySection: Identifiable {
     }
 }
 
-private struct HistoryEmptyState: View {
-    let isSearching: Bool
-
-    var body: some View {
-        VStack(spacing: Theme.Spacing.l) {
-            IconTile(systemImage: isSearching ? "magnifyingglass" : "waveform", size: 72)
-            Text(isSearching ? "No results" : "No dictations yet")
-                .font(Theme.Fonts.title2())
-                .foregroundStyle(Theme.Colors.ink)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Theme.Colors.canvas)
-    }
-}
-
-private struct HistoryRow: View {
-    let record: DictationRecord
-    /// `.increased` while the row is selected in the iPad split view, on the
-    /// accent fill.
-    @Environment(\.backgroundProminence) private var prominence
-
-    var body: some View {
-        let selected = prominence == .increased
-        let ink = selected ? Theme.Colors.onAccent : Theme.Colors.ink
-        let muted = selected ? Theme.Colors.onAccent.opacity(0.8) : Theme.Colors.muted
-        VStack(alignment: .leading, spacing: Theme.Spacing.s) {
-            HStack(alignment: .top, spacing: Theme.Spacing.s) {
-                Text(record.displayText.isEmpty ? statusLabel : record.displayText)
-                    .font(Theme.Fonts.callout())
-                    .foregroundStyle(record.displayText.isEmpty ? muted : ink)
-                    .lineLimit(3)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                statusView
-            }
-            Text(meta)
-                .font(Theme.Fonts.caption())
-                .foregroundStyle(muted)
-        }
-        .padding(.vertical, Theme.Spacing.xs)
-    }
-
-    @ViewBuilder private var statusView: some View {
-        if record.status == "failed" {
-            Text("Failed")
-                .font(Theme.Fonts.caption())
-                .foregroundStyle(Theme.Colors.recording)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 5)
-                .background(Capsule().fill(Theme.Colors.recording.opacity(0.12)))
-        } else if record.status == "queuedForRetry" {
-            StatusChip(text: "Waiting to send", tone: .pending)
-        }
-    }
-
-    private var meta: String {
-        let time = record.startedAt.formatted(date: .omitted, time: .shortened)
-        return [time, AppNames.name(for: record)].compactMap { $0 }.joined(separator: " · ")
-    }
-
-    private var statusLabel: String {
-        switch record.status {
-        case "failed": return "Failed"
-        case "queuedForRetry": return "Waiting to send"
-        case "silent": return "No speech"
-        case "cancelled": return "Cancelled"
-        case "recording", "recorded", "transcribing": return "In progress"
-        default: return "Empty"
-        }
-    }
-}
-
-private struct HistoryDetail: View {
+struct HistoryDetail: View {
     @EnvironmentObject private var model: AppModel
     @State private var record: DictationRecord
     let reload: () -> Void
@@ -220,48 +39,81 @@ private struct HistoryDetail: View {
     /// unfinished dictation (`RetryQueue.canRetry`).
     private var canRetry: Bool { RetryQueue.canRetry(record) }
 
+    /// Written text or the transcript as heard, when they differ.
+    @State private var showsHeard = false
+
+    private var heard: String? {
+        guard let raw = record.rawTranscript, raw != record.displayText, !raw.isEmpty else { return nil }
+        return raw
+    }
+
+    /// A document page, as Voicenotes reads: the meta line, the text at
+    /// reading size, then the recording and the details as hairline rows.
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: Theme.Spacing.xl) {
-                if !record.displayText.isEmpty { transcriptCard }
-                if let raw = record.rawTranscript, raw != record.displayText {
-                    cardGroup("As heard") {
-                        Text(raw)
-                            .font(Theme.Fonts.body())
-                            .foregroundStyle(Theme.Colors.muted)
-                            .textSelection(.enabled)
+                VStack(alignment: .leading, spacing: Theme.Spacing.m) {
+                    Text(meta)
+                        .font(Theme.Fonts.footnote())
+                        .foregroundStyle(Theme.Colors.muted)
+                    if heard != nil {
+                        Picker("Version", selection: $showsHeard) {
+                            Text("Written").tag(false)
+                            Text("What you said").tag(true)
+                        }
+                        .pickerStyle(.segmented)
                     }
+                    Text(shownText)
+                        .font(Theme.Fonts.body())
+                        // 16 on a 24 line, as the spec says; the font's own line is 20.
+                        .lineSpacing(4)
+                        .padding(.top, heard != nil ? Theme.Spacing.s : 0)
+                        .foregroundStyle(record.displayText.isEmpty && !showsHeard ? Theme.Colors.muted : Theme.Colors.ink)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
+                actions
                 if canRetry { retryCard }
-                cardGroup("Audio") {
+                section("Recording") {
                     RecordingAudioControls(audio: .dictation(folder: record.folderURL, startedAt: record.startedAt))
                 }
-                cardGroup("Details") { details }
+                section("Details") { details }
             }
             .padding(.horizontal, Theme.Spacing.page)
             .padding(.vertical, Theme.Spacing.l)
             .readableWidth()
         }
         .themedBackground()
-        .navigationTitle("Dictation")
+        .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear(perform: loadCalls)
         .sensoryFeedback(.success, trigger: copied) { _, new in new }
+    }
+
+    private var shownText: String {
+        if showsHeard, let heard { return heard }
+        return record.displayText.isEmpty ? "No text" : record.displayText
+    }
+
+    private var meta: String {
+        var parts = [record.startedAt.formatted(date: .abbreviated, time: .shortened)]
+        if let app = AppNames.name(for: record) { parts.append(app) }
+        if let seconds = record.durationSeconds, seconds > 0 {
+            parts.append(Duration.seconds(seconds).formatted(.time(pattern: .minuteSecond)))
+        }
+        return parts.joined(separator: " · ")
     }
 
     private func loadCalls() {
         calls = UsageMeter.store?.records(forSession: record.id) ?? []
     }
 
-    private var transcriptCard: some View {
-        Card {
-            Text(record.displayText)
-                .font(Theme.Fonts.body())
-                .foregroundStyle(Theme.Colors.ink)
-                .textSelection(.enabled)
+    /// Copy is the one dark pill; Share sits beside it.
+    @ViewBuilder private var actions: some View {
+        if !record.displayText.isEmpty {
             HStack(spacing: Theme.Spacing.s) {
                 Button {
-                    UIPasteboard.general.string = record.displayText
+                    UIPasteboard.general.string = shownText
                     copied = true
                     Task {
                         try? await Task.sleep(for: .seconds(1.5))
@@ -271,9 +123,9 @@ private struct HistoryDetail: View {
                     Label(copied ? "Copied" : "Copy", systemImage: copied ? "checkmark" : "doc.on.doc")
                         .contentTransition(.symbolEffect(.replace))
                 }
-                .buttonStyle(.compactSecondary)
+                .buttonStyle(PillButtonStyle(kind: .ink, compact: true))
                 .animation(.default, value: copied)
-                ShareLink(item: record.displayText) {
+                ShareLink(item: shownText) {
                     Label("Share", systemImage: "square.and.arrow.up")
                 }
                 .buttonStyle(.compactSecondary)
@@ -282,7 +134,7 @@ private struct HistoryDetail: View {
     }
 
     private var retryCard: some View {
-        Card {
+        VStack(alignment: .leading, spacing: Theme.Spacing.s) {
             Button(retrying ? "Transcribing again…" : "Retry transcription") {
                 retrying = true
                 message = nil
@@ -294,55 +146,68 @@ private struct HistoryDetail: View {
                     reload()
                 }
             }
-            .buttonStyle(.primaryPill)
+            .buttonStyle(.compactPrimary)
             .disabled(retrying)
-            if let message {
-                Text(message).font(Theme.Fonts.footnote()).foregroundStyle(Theme.Colors.muted)
+            // Why it failed, beside the action that fixes it; a retry's own
+            // message replaces it.
+            if let text = message ?? errorText {
+                Text(text)
+                    .font(Theme.Fonts.footnote())
+                    .foregroundStyle(message == nil ? Theme.Colors.pending : Theme.Colors.muted)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }
 
+    private var errorText: String? { record.errorMessage ?? record.errorCode }
+
+    /// When, app and length are in the meta line above the text, so the
+    /// rows start with what it doesn't say.
+    private var detailRows: [DetailRow] {
+        var rows: [DetailRow] = []
+        if let origin = record.origin { rows.append(DetailRow(label: "Dictated on", value: origin)) }
+        if let pipeline = record.pipelineSeconds {
+            rows.append(DetailRow(label: "Pipeline", value: String(format: "%.2fs", pipeline)))
+        }
+        rows += (record.steps?.rows ?? []).map { DetailRow(label: $0.label, value: $0.value) }
+        if !calls.isEmpty {
+            rows.append(DetailRow(label: "Cost", value: UsageView.money(
+                calls.reduce(0) { $0 + ($1.costUSD ?? 0) },
+                approximate: calls.contains { $0.isEstimated || $0.costUSD == nil }
+            )))
+            rows += UsageLine.lines(calls).map { line in
+                let call = line.total
+                let count = line.calls > 1 ? " · \(line.calls) calls" : ""
+                return DetailRow(label: call.stageValue?.displayName ?? call.stage,
+                                 value: "\(call.model)\(count) · \(UsageView.money(call.costUSD, approximate: call.isEstimated))")
+            }
+        }
+        if !canRetry, let error = errorText {
+            rows.append(DetailRow(label: "Error", value: error, wraps: true))
+        }
+        return rows
+    }
+
     private var details: some View {
-        VStack(spacing: 0) {
-            DetailRow(label: "When", value: record.startedAt.formatted(date: .abbreviated, time: .shortened))
-            if let app = AppNames.name(for: record) { divider; DetailRow(label: "App", value: app) }
-            if let origin = record.origin { divider; DetailRow(label: "Dictated on", value: origin) }
-            if let seconds = record.durationSeconds {
-                divider
-                DetailRow(label: "Length", value: Duration.seconds(seconds).formatted(.time(pattern: .minuteSecond)))
+        let rows = detailRows
+        return VStack(spacing: 0) {
+            ForEach(rows.indices, id: \.self) { index in
+                if index > 0 { divider }
+                rows[index]
             }
-            if let pipeline = record.pipelineSeconds {
-                divider
-                DetailRow(label: "Pipeline", value: String(format: "%.2fs", pipeline))
-            }
-            ForEach(record.steps?.rows ?? [], id: \.self) { step in
-                divider
-                DetailRow(label: step.label, value: step.value)
-            }
-            if !calls.isEmpty {
-                divider
-                DetailRow(label: "Cost", value: UsageView.money(
-                    calls.reduce(0) { $0 + ($1.costUSD ?? 0) },
-                    approximate: calls.contains { $0.isEstimated || $0.costUSD == nil }
-                ))
-                ForEach(UsageLine.lines(calls)) { line in
-                    let call = line.total
-                    let count = line.calls > 1 ? " · \(line.calls) calls" : ""
-                    divider
-                    DetailRow(label: call.stageValue?.displayName ?? call.stage,
-                              value: "\(call.model)\(count) · \(UsageView.money(call.costUSD, approximate: call.isEstimated))")
-                }
-            }
-            if let error = record.errorMessage ?? record.errorCode { divider; DetailRow(label: "Error", value: error) }
         }
     }
 
     private var divider: some View { Divider().overlay(Theme.Colors.hairline) }
 
-    private func cardGroup<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.m) {
-            GroupLabel(text: title)
-            Card { content() }
+    /// A caption over hairline content, with no card around it.
+    private func section<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+            Text(title)
+                .font(Theme.Fonts.caption())
+                .foregroundStyle(Theme.Colors.muted)
+            Divider().overlay(Theme.Colors.hairline)
+            content()
         }
     }
 }
@@ -350,6 +215,8 @@ private struct HistoryDetail: View {
 private struct DetailRow: View {
     let label: String
     let value: String
+    /// Model names stay on one line, cut in the middle; an error wraps.
+    var wraps = false
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: Theme.Spacing.l) {
@@ -359,6 +226,8 @@ private struct DetailRow: View {
                 .font(Theme.Fonts.footnote())
                 .foregroundStyle(Theme.Colors.ink)
                 .multilineTextAlignment(.trailing)
+                .lineLimit(wraps ? nil : 1)
+                .truncationMode(.middle)
         }
         .padding(.vertical, Theme.Spacing.s)
     }
