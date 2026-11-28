@@ -13,10 +13,8 @@ final class KeyboardDraft {
     typealias Fit = (_ text: String, _ before: String, _ after: String) -> String
 
     enum Swap: Equatable {
-        /// The marked draft became the written text in place.
-        case replacedMarked(String)
-        /// The draft was plain text right before the cursor: it was deleted
-        /// and the written text typed.
+        /// The draft, right before the cursor, was deleted and the written
+        /// text typed.
         case retyped(String)
         /// The draft can't be found for certain. It stays as it is.
         case kept
@@ -33,14 +31,6 @@ final class KeyboardDraft {
     let typedAt: Date
     /// Still marked text, as far as this keyboard knows.
     private(set) var isMarked = true
-    /// Something changed the field after the draft went in. The host may
-    /// have committed the marked text meanwhile, so it is no longer replaced
-    /// as marked text.
-    private(set) var touched = false
-
-    /// The host reports the keyboard's own change within this.
-    static let landingGrace: TimeInterval = 0.5
-
     private init(id: UUID, documentID: UUID, text: String, before: String, after: String, typedAt: Date) {
         self.id = id
         self.documentID = documentID
@@ -63,38 +53,20 @@ final class KeyboardDraft {
         return KeyboardDraft(id: id, documentID: documentID, text: fitted, before: before, after: after, typedAt: now)
     }
 
-    /// The controller saw the text or the selection change. Past the grace
-    /// for the draft's own landing, any change counts as the user's.
-    func fieldChanged(_ proxy: UITextDocumentProxy, now: Date = Date()) {
-        guard !touched else { return }
-        let landing = now.timeIntervalSince(typedAt) < Self.landingGrace
-        if !landing || !(readsAsTyped(proxy) || readsAsBefore(proxy)) { touched = true }
-    }
-
     /// Makes the marked draft plain text, as heard: the keyboard is going,
     /// or the user edits with it.
     func commit(_ proxy: UITextDocumentProxy) {
-        touched = true
         guard isMarked else { return }
         isMarked = false
         proxy.unmarkText()
     }
 
-    /// Swaps the draft for `written`: in place while it is still the marked
-    /// text the keyboard left; otherwise only while it is plain text right
-    /// before the cursor with nothing selected. Anything else keeps it.
+    /// Swaps the draft for `written`, only while it is right before the
+    /// cursor with nothing selected and the same text around it. A host can
+    /// commit marked text without saying so, and marked text set over it
+    /// would then go in beside it, so the draft is always committed first and
+    /// swapped as plain text. Anything else keeps it.
     func replace(with written: String, in proxy: UITextDocumentProxy, fit: Fit) -> Swap {
-        if isMarked, !touched, readsAsTyped(proxy, allowingCutWindow: true) {
-            let fitted = fit(written, before, after)
-            guard !fitted.isEmpty else {
-                commit(proxy)
-                return .kept
-            }
-            isMarked = false
-            proxy.setMarkedText(fitted, selectedRange: NSRange(location: fitted.utf16.count, length: 0))
-            proxy.unmarkText()
-            return .replacedMarked(fitted)
-        }
         commit(proxy)
         let current = proxy.documentContextBeforeInput ?? ""
         // Delete deletes one character per press, but a host may take one
@@ -111,16 +83,6 @@ final class KeyboardDraft {
         return .retyped(fitted)
     }
 
-    /// The field reads as the draft left it: the draft right before the
-    /// cursor, nothing selected, the same text after. A host that shows only
-    /// part of the field may show only the draft's end
-    /// (`allowingCutWindow`), never an empty window.
-    private func readsAsTyped(_ proxy: UITextDocumentProxy, allowingCutWindow: Bool = false) -> Bool {
-        guard (proxy.selectedText ?? "").isEmpty, (proxy.documentContextAfterInput ?? "") == after else { return false }
-        let current = proxy.documentContextBeforeInput ?? ""
-        return current.hasSuffix(text) || (allowingCutWindow && !current.isEmpty && text.hasSuffix(current))
-    }
-
     /// The text around the cursor is still the text around the draft: the
     /// same text after it, and the text before the draft ending as it did.
     /// An earlier copy of the same words, with the cursor moved to it, has
@@ -132,12 +94,5 @@ final class KeyboardDraft {
         let shared = min(rest.count, before.count, 40)
         if shared == 0 { return rest.isEmpty == before.isEmpty || rest.isEmpty }
         return rest.suffix(shared) == before.suffix(shared)
-    }
-
-    /// The field reads as it did before the draft went in: the host has not
-    /// shown it yet.
-    private func readsAsBefore(_ proxy: UITextDocumentProxy) -> Bool {
-        (proxy.selectedText ?? "").isEmpty && (proxy.documentContextBeforeInput ?? "") == before
-            && (proxy.documentContextAfterInput ?? "") == after
     }
 }

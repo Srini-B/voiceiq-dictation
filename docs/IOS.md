@@ -228,12 +228,15 @@ is the Mac's draft (`TextDraft`), done by the keyboard:
    report was late swaps its draft, and any other keyboard types it as
    before.
 4. The written text comes as a delivery with `replacesDraft` set to the
-   draft's ID. The keyboard replaces the draft in place with
-   `setMarkedText` and `unmarkText` when the field still reads as the
-   draft left it and nothing changed in it after the draft landed. If the
-   host already committed the draft, the keyboard deletes it and types the
-   written text, but only when the draft is right before the cursor and
-   nothing is selected. Otherwise the draft stays as heard, and the session
+   draft's ID. The keyboard commits the marked draft (`unmarkText`), then
+   deletes it and types the written text, but only when the draft is right
+   before the cursor, nothing is selected, and the text around it is the
+   text that was around it when it went in. It never sets marked text over
+   the draft: a host can commit marked text without telling the keyboard,
+   and the written text would then go in beside it. A draft whose
+   characters are not single code points (Tamil, Devanagari, emoji
+   sequences) is not deleted key by key, since a host may delete one code
+   point per press. Otherwise the draft stays as heard, and the session
    log says why.
 5. A written text whose draft this keyboard no longer holds (the keyboard
    was dismissed or moved to another field) is marked handled and never

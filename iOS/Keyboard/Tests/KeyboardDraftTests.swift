@@ -23,10 +23,20 @@ final class KeyboardDraftTests: XCTestCase {
         XCTAssertEqual(field.string, "Dear Ana, see you at noon")
         XCTAssertNotNil(field.marked)
 
-        draft.fieldChanged(field, now: typedAt.addingTimeInterval(0.1))
-        XCTAssertEqual(draft.replace(with: "See you at noon.", in: field, fit: fit), .replacedMarked(" See you at noon."))
+        XCTAssertEqual(draft.replace(with: "See you at noon.", in: field, fit: fit), .retyped(" See you at noon."))
         XCTAssertEqual(field.string, "Dear Ana, See you at noon.")
         XCTAssertNil(field.marked)
+    }
+
+    /// The host committed the draft without a word, right after it landed:
+    /// the written text still replaces it and never goes in beside it.
+    func testASilentHostCommitIsNotDuplicated() throws {
+        let field = Field("Dear Ana,")
+        let draft = try XCTUnwrap(type("see you at noon", into: field))
+        field.unmarkText()
+
+        XCTAssertEqual(draft.replace(with: "See you at noon.", in: field, fit: fit), .retyped(" See you at noon."))
+        XCTAssertEqual(field.string, "Dear Ana, See you at noon.")
     }
 
     /// The host committed the draft when the user tapped the field, which
@@ -36,7 +46,6 @@ final class KeyboardDraftTests: XCTestCase {
         let field = Field("Dear Ana,")
         let draft = try XCTUnwrap(type("see you at noon", into: field))
         field.unmarkText()
-        draft.fieldChanged(field, now: typedAt.addingTimeInterval(2))
 
         XCTAssertEqual(draft.replace(with: "See you at noon.", in: field, fit: fit), .retyped(" See you at noon."))
         XCTAssertEqual(field.string, "Dear Ana, See you at noon.")
@@ -49,7 +58,6 @@ final class KeyboardDraftTests: XCTestCase {
         let draft = try XCTUnwrap(type("see you at noon", into: field))
         draft.commit(field)
         field.insertText(" ok")
-        draft.fieldChanged(field, now: typedAt.addingTimeInterval(2))
 
         XCTAssertEqual(draft.replace(with: "See you at noon.", in: field, fit: fit), .kept)
         XCTAssertEqual(field.string, "Dear Ana, see you at noon ok")
@@ -60,7 +68,6 @@ final class KeyboardDraftTests: XCTestCase {
         let field = Field("Dear Ana,")
         let draft = try XCTUnwrap(type("see you at noon", into: field))
         field.adjustTextPosition(byCharacterOffset: -5)
-        draft.fieldChanged(field, now: typedAt.addingTimeInterval(2))
 
         XCTAssertEqual(draft.replace(with: "See you at noon.", in: field, fit: fit), .kept)
         XCTAssertEqual(field.string, "Dear Ana, see you at noon")
@@ -73,7 +80,6 @@ final class KeyboardDraftTests: XCTestCase {
         let draft = try XCTUnwrap(type("ok", into: field))
         draft.commit(field)
         field.adjustTextPosition(byCharacterOffset: -3)
-        draft.fieldChanged(field, now: typedAt.addingTimeInterval(2))
 
         XCTAssertEqual(draft.replace(with: "OK.", in: field, fit: fit), .kept)
         XCTAssertEqual(field.string, "ok ok ok")
@@ -85,7 +91,6 @@ final class KeyboardDraftTests: XCTestCase {
         let field = Field("")
         let draft = try XCTUnwrap(type("வணக்கம்", into: field))
         draft.commit(field)
-        draft.fieldChanged(field, now: typedAt.addingTimeInterval(2))
         XCTAssertEqual(draft.replace(with: "வணக்கம்.", in: field, fit: fit), .kept)
         XCTAssertEqual(field.string, "வணக்கம்")
     }
@@ -99,18 +104,6 @@ final class KeyboardDraftTests: XCTestCase {
         XCTAssertEqual(draft.replace(with: "See you at noon.", in: field, fit: fit), .kept)
         XCTAssertEqual(field.string, "Dear Ana, see you at noon")
         XCTAssertNil(type("see you", into: Field("call Srini tomorrow", selecting: "Srini")))
-    }
-
-    /// The draft's own landing, reported late by the host, does not count as
-    /// the user's change; a change after the grace does, and the swap then
-    /// goes through the plain-text check.
-    func testOnlyChangesAfterTheLandingCountAsTheUsers() throws {
-        let field = Field("")
-        let draft = try XCTUnwrap(type("hello", into: field))
-        draft.fieldChanged(field, now: typedAt.addingTimeInterval(0.1))
-        XCTAssertFalse(draft.touched)
-        draft.fieldChanged(field, now: typedAt.addingTimeInterval(KeyboardDraft.landingGrace + 0.1))
-        XCTAssertTrue(draft.touched)
     }
 
     /// The keyboard going away leaves the transcript as plain text.

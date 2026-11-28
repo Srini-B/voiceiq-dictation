@@ -155,17 +155,11 @@ final class KeyboardViewController: UIInputViewController {
         typing.disappeared()
     }
 
-    override func textWillChange(_ textInput: UITextInput?) {
-        super.textWillChange(textInput)
-        model.fieldChanged()
-    }
-
     override func textDidChange(_ textInput: UITextInput?) {
         super.textDidChange(textInput)
         HostAppResolver.harvest()
         Self.onScreen.moved(keyboardID, to: TypingLogTraits.documentIdentifier(of: textDocumentProxy))
         updateBackdrop()
-        model.fieldChanged()
         editor.textChanged()
         typing.textDidChange()
     }
@@ -173,7 +167,6 @@ final class KeyboardViewController: UIInputViewController {
     override func selectionDidChange(_ textInput: UITextInput?) {
         super.selectionDidChange(textInput)
         HostAppResolver.harvest()
-        model.fieldChanged()
         editor.textChanged()
         typing.textDidChange()
     }

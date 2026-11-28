@@ -133,7 +133,7 @@ final class EditControllerTests: XCTestCase {
         let editor = editor(for: field)
         let draft = try XCTUnwrap(KeyboardDraft.type("see you at noon", id: UUID(), documentID: UUID(), into: field,
                                                      fit: { text, _, _ in " " + text }))
-        guard case .replacedMarked(let fitted) = draft.replace(with: "See you at noon.", in: field,
+        guard case .retyped(let fitted) = draft.replace(with: "See you at noon.", in: field,
                                                                fit: { text, _, _ in " " + text }) else {
             return XCTFail("not swapped")
         }

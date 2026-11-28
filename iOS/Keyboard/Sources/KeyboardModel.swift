@@ -143,12 +143,6 @@ final class KeyboardModel: ObservableObject {
         KeyboardLog.note("[\(instanceTag)] draft stays as heard: the keyboard was dismissed")
     }
 
-    /// The controller saw the field's text or selection change.
-    func fieldChanged() {
-        guard let held = draft, documentID == held.documentID, let proxy = controller?.textDocumentProxy else { return }
-        held.fieldChanged(proxy)
-    }
-
     /// The user is about to edit the field with this keyboard. A marked
     /// draft is made plain text first, so the edit goes in after it instead
     /// of replacing it.
@@ -468,7 +462,7 @@ final class KeyboardModel: ObservableObject {
             return
         }
         switch held.replace(with: delivery.text, in: proxy, fit: Self.fitted) {
-        case .replacedMarked(let fitted), .retyped(let fitted):
+        case .retyped(let fitted):
             // The cursor is right after the written text: Undo takes it out,
             // as for a dictation typed in.
             editor?.recordDictation(inserted: fitted)
