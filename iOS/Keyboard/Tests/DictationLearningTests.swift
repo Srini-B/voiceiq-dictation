@@ -94,16 +94,53 @@ final class DictationLearningTests: XCTestCase {
         XCTAssertEqual(learned, [])
     }
 
-    /// A fix made in the edit window, then the whole dictation deleted by the keys after
-    /// it: the deletion is what the dictation became.
+    /// The edit window ends at 60 s on the text as it was, as Hex's poll ends it: an
+    /// untouched dictation deleted by the keys after it teaches nothing.
     func testADictationDeletedByKeysAfterTheEditWindowTeachesNothing() {
         let learning = makeLearning()
         dictate(dictated, into: learning)
-        clock = 10
-        learning.observe(Context(before: "I had lunch with Saran", after: " today.", hasText: true), in: field, fromKeys: true)
         clock = DictationEditTracker.editWindow + 1
         learning.observe(empty, in: field, fromKeys: true)
         learning.finish(empty, in: field)
+        XCTAssertEqual(learned, [])
+    }
+
+    /// One keystroke after the window is not a fix of the dictation, whether the poll
+    /// ended the window first or the keystroke is the first thing after it.
+    func testAKeystrokeAfterTheEditWindowIsNotAFix() {
+        let learning = makeLearning()
+        dictate(dictated, into: learning)
+        clock = DictationEditTracker.editWindow + 1
+        learning.tick()
+        leave(learning, as: "I had lunch with Sharo", " today.")
+
+        dictate("See you tomorrow", into: learning)
+        clock = 2 * DictationEditTracker.editWindow + 2
+        leave(learning, as: "See you tomorro")
+        XCTAssertEqual(learned, [])
+    }
+
+    /// The spelling is read from the dictation's place, not from the same words earlier
+    /// in the field.
+    func testTheSpellingComesFromTheDictationNotEarlierText() {
+        let learning = makeLearning()
+        let earlier = "I tested GPT 4 today. Earlier notes. "
+        let text = "I tested GPT4 today."
+        learning.inserted(text, before: Context(before: earlier, after: "", hasText: true),
+                          after: Context(before: earlier + text, after: "", hasText: true), in: field, learns: true)
+        leave(learning, as: earlier + "I tested GPT-4", " today.")
+        XCTAssertEqual(learned, ["GPT4 → GPT-4"])
+    }
+
+    /// UIKit named no input session for the dictation, so the next field's text could
+    /// read as an edit of it: it is not followed.
+    func testADictationInAnUnnamedSessionIsNotFollowed() {
+        let learning = makeLearning()
+        learning.inserted(dictated, before: empty, after: Context(before: dictated, after: "", hasText: true),
+                          in: nil, learns: true)
+        let elsewhere = Context(before: "I had lunch with Saran today.", after: "", hasText: true)
+        learning.observe(elsewhere, in: field, fromKeys: false)
+        learning.finish(elsewhere, in: field)
         XCTAssertEqual(learned, [])
     }
 

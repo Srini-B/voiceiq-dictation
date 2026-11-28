@@ -28,13 +28,17 @@ final class DictationLearning {
 
     private let tracker: DictationEditTracker
     /// The input session (`UITextDocumentProxy.documentIdentifier`) the followed
-    /// dictation went into; nil when UIKit didn't name it.
+    /// dictation went into. A dictation whose session UIKit didn't name is not followed.
     private var document: UUID?
-    /// The field's text as last seen with text in it, to read back how a fixed word is
-    /// spelled there (`fix(for:in:dictated:)`). A send that empties the field leaves it as it was.
-    private var fieldText = ""
-    /// The followed dictation as typed in, to read back the heard wording's punctuation.
-    private var dictatedText = ""
+    /// The followed dictation and the text around it when it went in, as Hex's tracker
+    /// remembers it, to find it again in the field (`DictationSpanLocator`).
+    private var insertion: DictationInsertion?
+    /// The text now in the dictation's place, as last found in the field with words in it
+    /// (as Hex's tracker keeps it), to read back how a fixed word is spelled there
+    /// (`fix(for:in:from:dictated:)`). A send that empties the field leaves it as it was.
+    private var spanText = ""
+    /// The last observation of the followed dictation's field: the edit window ends on it.
+    private var lastSeen: Context?
 
     init(
         now: @escaping () -> TimeInterval = { Date().timeIntervalSince1970 },
@@ -46,7 +50,11 @@ final class DictationLearning {
     ) {
         tracker = DictationEditTracker(now: now)
         tracker.onResult = { [unowned self] result in
-            for fix in Self.fixes(in: result, field: fieldText, dictated: dictatedText) { learn(fix) }
+            let found = fixes(in: result)
+            // The dictation's text is held only while it is followed.
+            insertion = nil
+            spanText = ""
+            for fix in found { learn(fix) }
         }
     }
 
@@ -55,12 +63,14 @@ final class DictationLearning {
     /// not followed.
     func inserted(_ text: String, before: Context, after: Context, in document: UUID?, learns: Bool) {
         if !isSameDocument(document) { tracker.finish(nil) }
-        guard learns else { return finish(before, in: document) }
+        // Without a named session, text from the next field could read as an edit of it.
+        guard learns, document != nil else { return finish(before, in: document) }
         self.document = document
         note(before)
         tracker.willInsert(heard: nil, inserted: text, context: before)
         // After `willInsert`, which settles the dictation before with its own text.
-        dictatedText = text
+        insertion = DictationInsertion(inserted: text, before: before.before, after: before.after)
+        spanText = text
         note(after)
         tracker.observe(after, fromKeys: true)
     }
@@ -75,11 +85,18 @@ final class DictationLearning {
             if document != nil { tracker.finish(nil) }
             return
         }
+        // A window that ended since the last poll ends on what was seen before this edit,
+        // which then belongs to no dictation.
+        tick()
         note(context)
-        // The edit first, so a delete by the keys that empties the field after the edit
-        // window reads as a deletion, not as the host clearing it.
         tracker.observe(context, fromKeys: fromKeys)
-        tracker.tick { context }
+    }
+
+    /// Called on the keyboard's poll: a dictation whose edit window ended settles on its
+    /// last observation, so a later keystroke is not an edit of it.
+    func tick() {
+        guard tracker.isTracking, let lastSeen else { return }
+        tracker.tick { lastSeen }
     }
 
     /// A dictation is about to go in through the keyboard's own edits: the one before it
@@ -103,53 +120,76 @@ final class DictationLearning {
         tracker.finish(context)
     }
 
-    /// Whether `document` is the session the dictation went into. A dictation whose
-    /// session UIKit didn't name matches any.
+    /// Whether `document` is the session the dictation went into.
     private func isSameDocument(_ document: UUID?) -> Bool {
-        self.document == nil || document == self.document
+        document != nil && document == self.document
     }
 
     private func note(_ context: Context) {
-        let text = (context.before ?? "") + (context.after ?? "")
-        if !text.isEmpty { fieldText = text }
+        lastSeen = context
+        if let insertion, let span = DictationSpanLocator.locate(insertion, before: context.before, after: context.after),
+           span.hasWords {
+            spanText = span.text
+        }
+    }
+
+    /// The fixes in `result`, read back from the followed dictation's place in the field
+    /// (after the text Hex anchored it by), never from other text.
+    private func fixes(in result: DictationEditResult) -> [Fix] {
+        guard let insertion else { return [] }
+        let text = insertion.anchorBefore + spanText
+        let start = text.index(text.startIndex, offsetBy: insertion.anchorBefore.count)
+        return Self.fixes(in: result, field: text, from: start, dictated: insertion.inserted)
     }
 
     /// The words you replaced in a dictation you kept, with what you replaced
     /// them by. Hex's classifier has already left out rewrites (more than half
     /// changed), changes too long to be one fix (over three words a side) and
     /// replacements that don't read as a respelling of what was dictated.
-    nonisolated static func fixes(in result: DictationEditResult, field: String, dictated: String) -> [Fix] {
+    nonisolated static func fixes(in result: DictationEditResult, field: String, from start: String.Index,
+                                  dictated: String) -> [Fix] {
         guard result.outcome == .edited else { return [] }
-        return result.pairs.filter { $0.kind == .substituted }.map { fix(for: $0, in: field, dictated: dictated) }
+        return result.pairs.filter { $0.kind == .substituted }.compactMap {
+            fix(for: $0, in: field, from: start, dictated: dictated)
+        }
     }
 
-    /// The fix as it reads in the field and the words it replaced as they read in the
-    /// dictation, each found between the dictated words around it. Hex's pairs are word
-    /// tokens joined by spaces, so the text is taken from the first word's start to the
-    /// last word's end, keeping what joins them ("GPT-4", not "GPT 4"). Hex lowers a
-    /// capital that only starts a sentence ("Saran went home" teaches "saran"); the
-    /// field's text keeps the capital the user left, and the fix starts a sentence. A
-    /// lowercase word the user left at the start stays lowercase. Otherwise the fix
-    /// starts a sentence when the field has `.`, `!`, `?`, `…`, `:` or a line break
-    /// before it, or nothing.
-    nonisolated static func fix(for pair: DictationEditPair, in field: String, dictated: String) -> Fix {
-        var fix = Fix(heard: pair.heard, term: pair.meant, startsSentence: false)
-        if let range = span(of: pair.heard, before: pair.before, after: pair.after, in: dictated) {
-            fix.heard = String(dictated[range])
+    /// The fix as it reads in the dictation's place in the field (`field` from `start`;
+    /// the text before is for the sentence start) and the words it replaced as they read
+    /// in the dictation, each found between the dictated words around it. Hex's pairs are
+    /// word tokens joined by spaces, so the text is taken from the first word's start to
+    /// the last word's end, keeping what joins them ("GPT-4", not "GPT 4"). Nil when the
+    /// fix isn't in the dictation's place, or either side runs across a clause or
+    /// sentence break, which the Mac splits into separate edits (`EditDiff.pieces`).
+    ///
+    /// Hex lowers a capital that only starts a sentence ("Saran went home" teaches
+    /// "saran"); the field's text keeps the capital the user left, and the fix starts a
+    /// sentence. A lowercase word the user left at the start stays lowercase. Hex takes
+    /// any capitalized first word of a dictation for a sentence start, so a fixed first
+    /// word that continues a sentence is marked as one too: the app then never takes its
+    /// capital for a name, which can only skip a word, never learn an ordinary one.
+    nonisolated static func fix(for pair: DictationEditPair, in field: String, from start: String.Index,
+                                dictated: String) -> Fix? {
+        guard let range = span(of: pair.meant, before: pair.before, after: pair.after, in: field, from: start)
+        else { return nil }
+        let term = String(field[range])
+        var heard = pair.heard
+        if let range = span(of: pair.heard, before: pair.before, after: pair.after, in: dictated,
+                            from: dictated.startIndex) {
+            heard = String(dictated[range])
         }
-        guard let range = span(of: pair.meant, before: pair.before, after: pair.after, in: field) else { return fix }
-        fix.term = String(field[range])
-        let capitalRestored = pair.meant.first?.isLowercase == true && fix.term.first?.isUppercase == true
-        fix.startsSentence = capitalRestored || startsSentence(at: range.lowerBound, in: field)
-        return fix
+        guard !crossesBreak(term), !crossesBreak(heard) else { return nil }
+        let capitalRestored = pair.meant.first?.isLowercase == true && term.first?.isUppercase == true
+        return Fix(heard: heard, term: term,
+                   startsSentence: capitalRestored || startsSentence(at: range.lowerBound, in: field))
     }
 
     /// Where the words of `phrase` are in `text`, ignoring case, with the word `before`
     /// right before them and `after` right after (when given): from the first word's
-    /// start to the last word's end.
+    /// start to the last word's end. Only words from `from` on.
     private nonisolated static func span(of phrase: String, before: String?, after: String?,
-                                         in text: String) -> Range<String.Index>? {
-        let words = DictationText.words(in: text)
+                                         in text: String, from: String.Index) -> Range<String.Index>? {
+        let words = DictationText.words(in: text).filter { $0.range.lowerBound >= from }
         let key = DictationText.phraseKey(phrase)
         let count = DictationText.words(in: phrase).count
         guard count > 0, words.count >= count else { return nil }
@@ -164,14 +204,40 @@ final class DictationLearning {
         return nil
     }
 
+    /// Whether a comma, a sentence or clause mark or a line break sits between two of the
+    /// words of `text` (the Mac's `EditDiff` breaks). A dot or comma joining two letters or
+    /// digits without spaces is part of a word ("3.5", "1,000", "voiceiq.com"), as the
+    /// Mac's word splitting reads it.
+    nonisolated static func crossesBreak(_ text: String) -> Bool {
+        let words = DictationText.words(in: text)
+        for (previous, next) in zip(words, words.dropFirst()) {
+            let gap = text[previous.range.upperBound..<next.range.lowerBound]
+            guard gap.contains(where: { ".!?;:,…".contains($0) || $0.isNewline }) else { continue }
+            let joined = gap.count == 1 && (gap == "." || (gap == "," && previous.text.last?.isNumber == true
+                && next.text.first?.isNumber == true))
+            if !joined { return true }
+        }
+        return false
+    }
+
+    /// As the Mac judges it (`EditDiff.startsSentence`): after `.`, `!`, `?`, `…`, `:` or a
+    /// line break, after a list marker (`-`, `*`, `•`) that starts a line, in a quotation
+    /// opened after a comma (`He said, "Green…`), or at the start of the text.
     private nonisolated static func startsSentence(at index: String.Index, in text: String) -> Bool {
         var index = index
+        var quoted = false
+        var marker = false
+        var spaced = false
         while index > text.startIndex {
             index = text.index(before: index)
             let character = text[index]
             if character.isNewline { return true }
-            if character.isWhitespace || "\"“”'‘’([".contains(character) { continue }
-            return ".!?…:".contains(character)
+            if character.isWhitespace { spaced = true; continue }
+            // A quote opens the word's sentence only when it touches the word.
+            if "\"“”'‘’([".contains(character) { quoted = quoted || (!spaced && "\"“'‘".contains(character)); continue }
+            if !marker, "-*•".contains(character) { marker = true; continue }
+            if marker { return false }
+            return ".!?…:".contains(character) || (quoted && character == ",")
         }
         return true
     }

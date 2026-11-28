@@ -824,48 +824,63 @@ with Learn how I type off (cyron's call, 2026-11-28). The keyboard follows
 each dictation it types in with Hex's `DictationEditTracker`, as Hex's
 keyboard does (`DictationLearning`, owned by `TypingBridge`): from the text
 around the cursor when it goes in, through every edit by the keys, the edit
-panel or the app, until the keyboard hides, Send is tapped, the next
-dictation goes in, focus moves to another field (another
-`documentIdentifier`: the dictation settles where it was last seen, so the
-other field's text never reads as an edit of it), the field stops being one
-it may read, or an edit comes more than a minute after it went in. A new
-dictation settles the one before on the field as it was just before it goes
-in (`KeyboardModel.onWillInsertDictation`), since `EditController` reports
-typing it as an edit. It
-needs Full Access, like everything the keyboard hands the app, and runs only
-in fields Hex's journal may learn from (`TypingJournal.allows`: text and web
-search fields that allow autocorrect, never a secure field, a password, code,
-username, email, URL, card or phone field). Hex's `DictationEditClassifier`
-then says what became of it. Each word or phrase of up to three words you replaced in a dictation
-you kept, by a respelling of it (`isPlausibleFix`, the bound the Mac's
-`EditDiff` uses), goes to the app as a Dictionary word with
-`DictionaryAddition.learnedFrom` set to the dictated wording, spelled as it
-is in the field: Hex drops a capital that starts a sentence, so a fix as the
-first word keeps the capital the user left, and Hex's pairs are words joined
-by spaces, so the term is the field's text from the fix's first word to its
-last and the heard wording the dictation's, keeping hyphens and dots inside
-them ("GPT4" → "GPT-4", not "GPT 4"; `DictationLearning.fix`).
-`DictionaryAddition.startsSentence` says whether the fix begins a sentence,
-so the app judges its capital as the Mac does: at a sentence start a capital
-is not a name, and an ordinary word ("Sory" → "Sorry", but also "Sharon" →
-"Saran", since the spell checker knows "saran") is not learned there. A
-dictation rewritten (more than half changed), deleted, undone with Undo dictation or
-dictated again teaches nothing. The app keeps it by the Mac's rules
-(`DictionaryStore.learn`): not a word the Dictionary has or already learned
-from that wording, and not ordinary English (`CommonWords`, `UITextChecker`
-on the iPhone) unless it is a name replacing wording that was not ordinary
-either. It becomes an auto-learned entry (`source == .auto`, Heard as …),
-syncs through iCloud and shows in the Dictionary's Auto-learned section,
-where swiping it away undoes it. Auto-learned words are spelling hints only,
-never replacement rules: later dictations get them in the writing model's
-vocabulary (`AssemblyAITranscriptionService.dictationPrompt`, through
+panel or the app, for 60 s. `KeyboardModel`'s 0.1 s poll ends that window
+on time (`onPoll` → `DictationLearning.tick`), on the text as it was, so a
+later keystroke belongs to no dictation; a fix made inside the window stands
+even if the dictation is deleted later, as in Hex. It also ends when the
+keyboard hides or reappears, Send is tapped, the next dictation or its draft
+goes in (`KeyboardModel.onWillInsertDictation`, before `EditController`
+reports the new text as an edit), focus moves to another field (another
+`documentIdentifier`; a dictation whose input session UIKit didn't name is
+not followed at all), or the field stops being one it may read. It needs
+Full Access, like everything the keyboard hands the app, and runs only in
+fields Hex's journal may learn from (`TypingJournal.allows`: text and web
+search fields that allow autocorrect, never a secure field, a password,
+code, username, email, URL, card or phone field).
+
+Hex's `DictationEditClassifier` then says what became of it. Each word or
+phrase of up to three words you replaced in a dictation you kept, by a
+respelling of it (`isPlausibleFix`, the bound the Mac's `EditDiff` uses),
+goes to the app as a Dictionary word (`DictationLearning.fix`):
+
+- Read back from the dictation's place in the field (located by Hex's
+  anchors, never from the same words elsewhere), from the fix's first word to
+  its last, so hyphens and dots inside it stay ("GPT4" → "GPT-4", not
+  "GPT 4"). `DictionaryAddition.learnedFrom` is the dictated wording, read
+  back from the dictation the same way. A fix that can't be found there is
+  skipped, and so is one with a comma, a sentence or clause mark or a line
+  break between its words on either side, which the Mac splits into separate
+  edits (`EditDiff.pieces`).
+- `DictionaryAddition.startsSentence` says whether it begins a sentence, as
+  the Mac judges it: after `.`, `!`, `?`, `…`, `:` or a line break, after a
+  list marker that starts a line, in a quotation opened after a comma. Hex
+  drops a capital that starts a sentence; the capital the user left comes
+  back. Known difference from the Mac, on the safe side: Hex takes any
+  capitalized first word of a dictation for a sentence start, so a fixed
+  first word that continues a sentence is marked as one too. That can only
+  keep a capital from counting as a name, never learn an ordinary word. At a
+  sentence start an ordinary word ("Sory" → "Sorry", but also "Sharon" →
+  "Saran", since the spell checker knows "saran") is not learned.
+
+A dictation rewritten (more than half changed), deleted, undone with Undo
+dictation or dictated again teaches nothing. The app keeps a word by the
+Mac's rules (`DictionaryStore.learn`): not a word the Dictionary has or
+already learned from that wording, and not ordinary English (`CommonWords`,
+`UITextChecker` on the iPhone; with no English dictionary every word counts
+as ordinary, so nothing is learned) unless it is a name replacing wording
+that was not ordinary either. It becomes an auto-learned entry
+(`source == .auto`, Heard as …), syncs through iCloud and shows in the
+Dictionary's Auto-learned section, where swiping it away undoes it.
+Auto-learned words are spelling hints only, never replacement rules: later
+dictations get them in the writing model's vocabulary
+(`AssemblyAITranscriptionService.dictationPrompt`, through
 `DictionaryStore.sanitizedVocabulary`, the first 100 by `ranked()`, with
 words the user added before auto-learned ones), in the sound-alike spelling
 pass when the transcript is tidied on the device
 (`AssemblyAITranscriptionService.write`, `SoundAlikeSpelling.apply`), and in
 the on-device model's vocabulary (`LocalTranscriber.sessionOptions`, first
 256). The keyboard's own suggestions and autocorrect take them too
-(`SharedStore.dictionaryWords`).
+(`SharedStore.dictionaryWords`). See [PRIVACY.md](PRIVACY.md).
 
 **Tests.** `KeyboardTests` (in the `VoiceIQiOS` scheme, hosted by the app so
 the embedded keyboard's typing model loads) compiles the keyboard's sources

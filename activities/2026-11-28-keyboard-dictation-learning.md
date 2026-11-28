@@ -37,14 +37,36 @@ Auto-learned section.
 - CodeRabbit on PR #168: a new dictation typed through `EditController`
   reached the dictation before as an edit, so one deleted and dictated again
   could teach; `KeyboardModel.onWillInsertDictation` now settles it on the
-  field as it was first. An observation applies before the edit window's
-  expiry, so a delete by the keys after the window reads as a deletion. A
-  field that stops being one Hex's journal may read (a username or password
-  field in the same session) settles the dictation and is not read.
+  field as it was first, for a delivery and for its draft. A field that
+  stops being one Hex's journal may read (a username or password field in
+  the same session) settles the dictation and is not read.
 - The tracker remembers the input session (`documentIdentifier`) its dictation
   went into. Text from another session settles it where it was last seen, so
   moving focus to a field holding "…Saran…" no longer reads as a fix of a
-  dictation typed into an empty field (PR #168 review).
+  dictation typed into an empty field (PR #168 review). A dictation whose
+  session UIKit didn't name (focus changing) is not followed at all.
+- Edit window, as in Hex: `KeyboardModel`'s 0.1 s poll (`onPoll`) ticks the
+  tracker, which ends the window at 60 s on the last observation, and every
+  observation ticks first, so an edit after the window belongs to no
+  dictation. One backspace after the window ("Sharon" → "Sharo", "tomorrow"
+  → "tomorro") was learned before (Codex, Fable review). Accepted, as in Hex:
+  a fix made inside the window stands if the dictation is deleted later.
+- Read back only from the dictation's place: the term is found after Hex's
+  anchor for the dictation in the span it last located, so earlier text with
+  the same words ("I tested GPT 4 today.") is never used (Codex). A fix not
+  found there is skipped, and so is one with a comma, sentence or clause
+  mark or line break between its words, which the Mac splits
+  (`EditDiff.pieces`). The keyboard's sentence-start test follows the Mac's
+  (list markers, a quotation opened after a comma). Known difference, on the
+  safe side: Hex takes a dictation's capitalized first word for a sentence
+  start, so a fixed first word that continues a sentence is marked as one,
+  which can only stop its capital from counting as a name. The dictation's
+  text is dropped once its result is in.
+- `CommonWords` on iOS fails closed: with no English `UITextChecker`
+  dictionary every word counts as ordinary, so nothing is learned.
+- Privacy: `docs/PRIVACY.md` describes the iPhone learning, and Settings ›
+  Dictionary › Auto-learned has a footer saying where its words come from.
+
   Rewritten, deleted, undone and redictated dictations teach nothing.
 - The app (`DictionaryBridge`) learns such an addition with
   `DictionaryStore.learn`, the Mac's rule for a new word, now shared:
@@ -78,18 +100,23 @@ Auto-learned entries are vocabulary only (no `misspelling`, so never a
   second time) hand over nothing; "Sharon went home." fixed to "Saran went
   home." hands over "Saran" with its capital, and "Sory, I'm late." fixed
   to "Sorry" is marked as a sentence start; "GPT4" fixed to "GPT-4" hands
-  over "GPT4 → GPT-4"; a dictation typed through the edit callback after a
-  deleted one, and one fixed then deleted by the keys after the window, hand
-  over nothing; text in another field after a
-  dictation into an empty field hands over nothing.
+  over "GPT4 → GPT-4", also with "GPT 4" earlier in the field; a dictation
+  typed through the edit callback after a deleted one, an untouched one
+  deleted by the keys after the window, one backspace after the window
+  (after a poll tick, and as the first event after it), text in another
+  field after a dictation into an empty field, and a dictation in an
+  unnamed session hand over nothing.
 - `EditLearnerTests.testAFixFromTheIPhoneKeyboardIsLearnedByTheMacsRules`
   (VoiceIQCore, macOS): `DictionaryStore.learn` keeps "Saran" heard as
   "Sharon" as an auto entry, skips "Then" → "Than" and "Sory" → "Sorry" at
   a sentence start, and skips a second
   spelling learned from the same wording.
-- On Linux (Swift 6.2.1, Swift 6 mode): the keyboard test's scenarios run
-  against the vendored tracker and classifier with the same results, and a
-  control shows the redictation case yields a "Sharon" → "Saran" pair that a
-  filter taking every pair would learn. `DictionaryStore.learn` and the moved
+- On Linux (Swift 6.2.1): `DictationLearningTests.swift` itself runs under
+  swift-corelibs-xctest against the vendored tracker and classifier, 10 of 10
+  passing; against the previous `DictationLearning` the window, span and
+  unnamed-session tests fail as reported ("Sharon → Sharo", "tomorrow →
+  tomorro", "GPT4 → GPT 4", "Sharon → Saran"). Clause breaks ("Wispr, Flow"
+  dropped; "GPT-3.5", "1,000" kept), list-marker and quoted sentence starts
+  and a fix missing from the field (skipped) were checked the same way. `DictionaryStore.learn` and the moved
   rules type-check and dedupe as expected. Apple compiles and the
   `UITextChecker` path are left to CI and a device.

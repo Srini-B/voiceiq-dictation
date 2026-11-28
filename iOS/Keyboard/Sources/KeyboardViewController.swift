@@ -36,6 +36,7 @@ final class KeyboardViewController: UIInputViewController {
         model.controller = self
         model.editor = editor
         model.onWillInsertDictation = { [weak typing] in typing?.willInsertDictation() }
+        model.onPoll = { [weak typing] in typing?.learning.tick() }
         model.onDidInsertDictation = { [weak typing] text, before, after in
             typing?.didInsertDictation(text, before: before, after: after)
         }

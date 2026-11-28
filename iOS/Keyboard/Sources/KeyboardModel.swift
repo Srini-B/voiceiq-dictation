@@ -32,9 +32,13 @@ final class KeyboardModel: ObservableObject {
     weak var editor: EditController?
     /// Called after a dictation delivery is typed so Hex's suggestion strip can offer Undo dictation.
     var onDidInsertDictation: ((String, String, String) -> Void)?
-    /// Called just before a dictation delivery is typed, while the field is as it was,
-    /// so the dictation before it settles on that text (`DictationLearning.willInsert`).
+    /// Called just before a dictation delivery or its draft is typed, while the field is
+    /// as it was, so the dictation before it settles on that text
+    /// (`DictationLearning.willInsert`).
     var onWillInsertDictation: (() -> Void)?
+    /// Called on every poll while on screen, so a dictation's edit window ends on time
+    /// (`DictationLearning.tick`).
+    var onPoll: (() -> Void)?
     private let store = SharedStore.shared
     private var observer: UUID?
     private var timer: Timer?
@@ -256,6 +260,7 @@ final class KeyboardModel: ObservableObject {
     /// also polls while it is on screen. Reads are local and cheap.
     private func refresh() {
         trackSession()
+        onPoll?()
         // The host applies a turn's insertions before its `unmarkText`, and
         // new marked text replaces marked text. So the turn that ends a
         // draft with `unmarkText` types no result, and a new draft is marked
@@ -540,7 +545,11 @@ final class KeyboardModel: ObservableObject {
               offered.route(in: currentField(), handledID: nil, firstReturn: false) == .type(.sameSession)
         else { return }
         resolveHostIfMissing(now: true)
-        guard fieldTakesProse, let host = session?.host, Delivery.draftHosts.contains(host),
+        let host = session?.host
+        let canType = fieldTakesProse && host.map { Delivery.draftHosts.contains($0) } == true
+        // Before the draft goes in, as for a delivery typed in.
+        if canType { onWillInsertDictation?() }
+        guard canType, let host,
               let typed = KeyboardDraft.type(offered.text, id: offered.id, documentID: documentID, into: proxy,
                                              fit: Self.fitted) else {
             skippedDraftID = offered.id

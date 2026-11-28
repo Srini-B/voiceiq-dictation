@@ -56,7 +56,10 @@ enum CommonWords {
         }
     }()
 
+    /// Without an English dictionary every word counts as known, so nothing is learned
+    /// rather than ordinary words.
     private static func isKnown(_ word: String) -> Bool {
+        guard !languages.isEmpty else { return true }
         let checker = UITextChecker()
         let range = NSRange(location: 0, length: (word as NSString).length)
         return languages.contains { language in
@@ -65,7 +68,7 @@ enum CommonWords {
         }
     }
     #else
-    private static func isKnown(_ word: String) -> Bool { false }
+    private static func isKnown(_ word: String) -> Bool { true }
     #endif
 }
 

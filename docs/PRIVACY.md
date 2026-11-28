@@ -120,7 +120,7 @@ With no usable key, nothing is sent and the recording stays on your Mac.
    ZIP comes from the same place. GitHub sees your IP address, as with any
    download. Turn the checks off in Settings › About.
 
-Learning from your edits never sends anything. It
+Learning from your edits never sends anything. On the Mac it
 re-reads the field VoiceiQ typed into, through the Accessibility API, for up to ten
 minutes after an insertion, waits until you have stopped editing for a few
 seconds, and adds the short replacements you made (one to three words) to the
@@ -128,6 +128,19 @@ Dictionary as words, skipping ordinary words (anything in the macOS spelling
 dictionary, checked on the Mac). They are sent like any other
 dictionary term and are never applied as automatic text replacements.
 Everything it reads stays on this Mac.
+
+On the iPhone the VoiceiQ keyboard learns the same way from fixes to dictations,
+always on. For up to a minute after it types a dictation, while it is on
+screen and with Full Access, it reads the text around the cursor that iOS
+shows any keyboard, to see which words of that dictation you replaced. It
+skips secure fields and password, one-time code, username, email, URL, card
+and phone fields, and any field that turns autocorrect off. Only the replaced
+word and the dictated words it replaced leave the keyboard, to the VoiceiQ
+app on the iPhone, which skips ordinary words as the Mac does (the iOS
+spelling dictionary) and adds the rest to the Dictionary as auto-learned
+words. Like every Dictionary word, they sync through iCloud to your other
+devices and are sent in the writing request (item 2 above). Remove one in
+Settings › Dictionary › Auto-learned by swiping it away.
 
 ## Coding agents (only if you turn it on)
 
