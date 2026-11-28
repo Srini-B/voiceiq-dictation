@@ -65,6 +65,15 @@ without asking (`MeetingEngine.farSideDiarizer`); nothing it hears leaves the
 Mac. The decision is in
 [activities/2026-11-26-meeting-speakers-hybrid.md](../activities/2026-11-26-meeting-speakers-hybrid.md).
 
+When Core ML fails a prediction ("Unable to compute the asynchronous
+prediction using ML Program"), the model runs again after 2 s, then after
+5 s on the CPU alone (`FarSideSpeakers.retrying`). If it still fails, the
+far side keeps AssemblyAI's labels and the meeting is marked
+(`MeetingMeta.speakersUnsplit`): the Mac and iPhone say some people may be
+shown as one speaker and offer **Split speakers again**, a Retry that reuses
+the cached transcription
+([activities/2026-11-28-speaker-model-retry.md](../activities/2026-11-28-speaker-model-retry.md)).
+
 A far-side voice the model hears for less than 1% of the meeting is not a
 participant: each of its words goes to the nearest word of another far-side
 voice (`MeetingTranscriber.foldingStrayVoices`). On AMI ES2004a it was 8.7 s
