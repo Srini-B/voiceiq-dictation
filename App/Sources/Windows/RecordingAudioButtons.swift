@@ -3,8 +3,10 @@ import VoiceIQCore
 
 /// Play and Download for a dictation's or a meeting's audio, as icon buttons
 /// for a detail header. Both are disabled when the audio is not on this Mac.
+/// A meeting leaves out Play: it plays from `MeetingPlaybackBar`.
 struct RecordingAudioButtons: View {
     let audio: RecordedAudio
+    var play = true
     /// Where Download saved the file, or why it couldn't, for the pane's export message.
     let saved: (ExportResult) -> Void
 
@@ -15,15 +17,17 @@ struct RecordingAudioButtons: View {
 
     var body: some View {
         HStack(spacing: VoiceIQUI.Spacing.xs) {
-            Button { player.toggle(audio) } label: {
-                if player.state == .preparing {
-                    ProgressView().controlSize(.small)
-                } else {
-                    Label(player.state == .playing ? "Stop" : "Play audio",
-                          systemImage: player.state == .playing ? "stop.fill" : "play.fill")
+            if play {
+                Button { player.toggle(audio) } label: {
+                    if player.state == .preparing {
+                        ProgressView().controlSize(.small)
+                    } else {
+                        Label(player.state == .playing ? "Stop" : "Play audio",
+                              systemImage: player.state == .playing ? "stop.fill" : "play.fill")
+                    }
                 }
+                .help(audio.isAvailable ? (player.state == .idle ? "Play audio" : "Stop") : Self.missing)
             }
-            .help(audio.isAvailable ? (player.state == .idle ? "Play audio" : "Stop") : Self.missing)
             Button(action: download) {
                 if saving {
                     ProgressView().controlSize(.small)

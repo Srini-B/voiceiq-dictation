@@ -1,4 +1,3 @@
-#if os(macOS)
 import AVFoundation
 import os
 
@@ -11,7 +10,7 @@ public final class SoundClock: @unchecked Sendable {
     private let latest = OSAllocatedUnfairLock<(rms: Float, at: TimeInterval)>(initialState: (0, -.infinity))
 
     public var lastSound: Date { last.withLock { $0 } }
-    /// The last buffer's RMS, 0 to 1, for the Meetings window's level meter;
+    /// The last buffer's RMS, 0 to 1, for the meeting waveform;
     /// 0 once no buffer has come for half a second (a detached tap is not hearing).
     public var level: Float {
         latest.withLock { ProcessInfo.processInfo.systemUptime - $0.at < 0.5 ? $0.rms : 0 }
@@ -32,4 +31,3 @@ public final class SoundClock: @unchecked Sendable {
         }
     }
 }
-#endif
