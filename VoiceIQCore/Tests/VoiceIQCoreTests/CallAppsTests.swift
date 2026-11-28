@@ -20,6 +20,16 @@ final class CallAppsTests: XCTestCase {
         XCTAssertEqual(CallApps.meetingName(match: "| Microsoft Teams", in: ["Weekly sync | Microsoft Teams"]), "Microsoft Teams")
     }
 
+    /// Sound alone is a call only on a call room, never on a chat site that
+    /// plays voice messages (Codex on #138), and every room is a listed page,
+    /// so `BrowserPages.read` can match it.
+    func testCallRoomsAreMeetingPagesAndChatSitesAreNot() {
+        XCTAssertTrue(CallApps.callRoomPages.isSubset(of: Set(CallApps.meetingPages)))
+        for chat in ["web.whatsapp.com", "web.telegram.org", "messenger.com", "teams.microsoft.com", "discord.com/channels"] {
+            XCTAssertFalse(CallApps.callRoomPages.contains(chat), chat)
+        }
+    }
+
     /// Granola's helper stands for Granola, so the offer never names the helper.
     func testHelperBelongsToTheOutermostApp() {
         XCTAssertEqual(CallDetector.containingBundle("/Applications/Granola.app/Contents/Frameworks/Granola Helper (MacOSMicAppsWithDevices).app"),

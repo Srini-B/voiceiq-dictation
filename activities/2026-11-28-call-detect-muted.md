@@ -3,8 +3,11 @@
 **2026-11-28.** In the live-call probe's rerun (thread T-01a22123), the owner's
 Chrome held no microphone, and `CallDetector` required every call
 app to be capturing it, so the app offered nothing. In a real call, an owner
-who joins muted can be in the same state. Rule 3 now accepts a browser on a
-listed meeting page (`CallApps.meetingPages`) that only plays sound.
+who joins muted can be in the same state. Rule 3 now accepts a browser that only
+plays sound on a call room page (`CallApps.callRoomPages`, a subset of
+`meetingPages`). Chat sites such as WhatsApp Web, Telegram Web, Messenger,
+Teams and Discord still need the mic: they play voice messages and videos
+(Codex on #138).
 
 Known native apps still need the mic. Slack, Teams and others play
 notification sounds, so output alone would raise false offers. Look-alike

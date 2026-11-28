@@ -5,8 +5,9 @@ import CoreAudio
 
 /// Polls for an active call. A call is "active" when:
 /// - a known calling app is itself capturing the microphone;
-/// - a browser shows a meeting page and captures the microphone or plays
-///   sound: an owner who joined muted can hold no microphone at all;
+/// - a browser shows a meeting page and captures the microphone, or a call
+///   room page and plays sound: an owner who joined muted can hold no
+///   microphone at all;
 /// - the system call daemons capture it (FaceTime, iPhone calls on the Mac);
 /// - a browser page both captures the microphone and plays sound: two-way
 ///   audio in a tab is what a call on a site not listed looks like.
@@ -257,9 +258,9 @@ import CoreAudio
             guard CallApps.browsers.contains(id) || name.localizedCaseInsensitiveContains("Chrome")
                     || name.localizedCaseInsensitiveContains("Chromium") else { continue }
             let page = BrowserPages.read(pid: app.processIdentifier)
-            // A meeting page that only plays counts: an owner who joined muted
+            // A call room that only plays counts: an owner who joined muted
             // can hold no mic at all (the live-call probe's owner, 2026-11-28).
-            if let match = page.meeting { return (.browser(bundleID: id, host: match), true) }
+            if let match = page.meeting, capturing || page.room { return (.browser(bundleID: id, host: match), true) }
             if capturing, playing, !page.excluded, lookalike == nil { lookalike = .browser(bundleID: id, host: page.host ?? name) }
         }
         return lookalike.map { ($0, false) }
@@ -319,6 +320,8 @@ enum BrowserPages {
         var host: String?
         /// The front page is one `CallApps.notCallPages` lists.
         var excluded = false
+        /// `meeting` matched one of `CallApps.callRoomPages`.
+        var room = false
     }
 
     /// Window titles, plus the URL of each window's web area: titles can be
@@ -343,6 +346,7 @@ enum BrowserPages {
             }
             if let match = CallApps.meetingPages.first(where: { needle in strings.contains { $0.localizedCaseInsensitiveContains(needle) } }) {
                 page.meeting = CallApps.meetingName(match: match, in: strings)
+                page.room = CallApps.callRoomPages.contains(match)
                 return page
             }
         }

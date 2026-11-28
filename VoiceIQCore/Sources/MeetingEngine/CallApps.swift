@@ -65,6 +65,16 @@ enum CallApps {
         "vc.feishu.cn", "meetings.dialpad.com", "app.dialpad.com", "8x8.vc/", "meetings.vonage.com", "app.vonage.com",
         "Meet - ", "| Microsoft Teams", "Zoom Meeting", "Huddle",
     ]
+    /// The `meetingPages` that are a call room and nothing else, so sound
+    /// alone there is a call: an owner who joined muted holds no mic. Chat
+    /// sites (WhatsApp, Telegram, Messenger, Teams, Discord) play voice
+    /// messages and videos, so they still need the mic (Codex on #138).
+    static let callRoomPages: Set<String> = [
+        "meet.google.com/", "zoom.us/j", "zoom.us/wc", "app.zoom.us/wc", "whereby.com/", "meet.jit.si/",
+        "app.slack.com/huddle", "v.ringcentral.com", "meet.goto.com", "app.chime.aws", "talky.io", "vdo.ninja",
+        "pop.com/j/", "vc.larksuite.com", "vc.feishu.cn", "meetings.dialpad.com", "8x8.vc/", "meetings.vonage.com",
+        "Meet - ", "Zoom Meeting",
+    ]
     /// What the offer calls a meeting found only by its window title.
     static let meetingTitles = [
         "Meet - ": "Google Meet", "| Microsoft Teams": "Microsoft Teams", "Zoom Meeting": "Zoom", "Huddle": "Slack huddle",
