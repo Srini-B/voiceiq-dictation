@@ -81,12 +81,18 @@ enum SpokenDisfluencies {
         "am", "is", "are", "was", "were", "be", "been", "being", "feel", "feels", "felt", "look", "looks",
         "looked", "sound", "sounds", "sounded",
     ]
-    /// So does "like" after these, unless a place or time follows: "he goes, like, no way" but "I went, like,
-    /// to the store". Before a place or time "like" is never "such as" either ("left, like, after lunch").
+    /// So does "like" after these, unless a place follows: "he goes, like, no way" but "I went, like, to the
+    /// store". Before a place or a time "like" is never "such as" either ("left, like, after lunch").
     private static let goVerbs: Set<String> = ["go", "goes", "going", "went"]
     private static let placeWords: Set<String> = [
-        "to", "into", "in", "at", "on", "out", "home", "back", "there", "up", "down", "after", "before", "during",
-        "around", "since", "until", "over", "under", "near", "through", "across",
+        "to", "into", "in", "at", "on", "out", "home", "back", "there", "up", "down", "over", "under", "near",
+        "through", "across",
+    ]
+    private static let timeWords: Set<String> = ["after", "before", "during", "around", "since", "until"]
+    /// Words that open an example after "like": "a tool, like, my hammer", "like, this one".
+    private static let exampleStarts: Set<String> = [
+        "a", "an", "the", "some", "this", "that", "these", "those", "my", "your", "his", "her", "our", "their",
+        "its", "me", "him", "them", "us",
     ]
     /// "like" before these, or "a" or "an" and one of these, means "about": "it took, like, five
     /// hours", "like, a hundred".
@@ -143,14 +149,11 @@ enum SpokenDisfluencies {
             let capital = tokens[index].word.first?.isUppercase == true
             if let count = repeatLength(tokens, at: index) ?? falseStartLength(tokens, at: index) {
                 tokens.removeSubrange(index..<(index + count))
-            } else if let count = fillerLength(tokens, at: index) {
-                tokens.removeSubrange(index..<(index + count))
-                // "I went, like, you know, to the store": a run of fillers goes as one.
-                while let more = fillerLength(tokens, at: index) { tokens.removeSubrange(index..<(index + more)) }
+            } else if let run = fillerRemovals(tokens, at: index) {
+                for range in run.removed.reversed() { tokens.removeSubrange(range) }
                 // "I went, like, to the store": the comma before was the pause too. "So, like, we" keeps it,
-                // and so does "I told Sam, like, Priya said no".
-                // A comma-set word that stays keeps the comma before it: "took, you know, like, five hours".
-                if index > 0, tokens[index - 1].hasComma, index < tokens.count, !tokens[index].hasComma,
+                // and so does a run with a "like" that stays ("took, you know, like, five hours").
+                if !run.keepsOne, index > 0, tokens[index - 1].hasComma, index < tokens.count,
                    tokens[index].word.first?.isLowercase == true, clauseWords(tokens, before: index) >= 2 {
                     tokens[index - 1].word.removeLast()
                 }
@@ -220,55 +223,67 @@ enum SpokenDisfluencies {
         return 2
     }
 
-    /// How many words of a comma-set "like" or "you know" start at `index`:
-    /// between commas mid-sentence, or opening a sentence with its comma. Not
-    /// before "and" or "or" ("share, like, and comment"), and not before a
+    /// The comma-set "like" and "you know" of the run starting at `index` ("like, you know,") that
+    /// go, and whether one stays. The run goes between commas mid-sentence, or opening a sentence
+    /// with its comma, judged by the words on either side of the whole run. Not before "and" or
+    /// "or" ("share, like, and comment"), a list item ("follow, like, subscribe, and share") or a
     /// sentence's last word ("Wait, you know, right?").
-    private static func fillerLength(_ tokens: [Token], at index: Int) -> Int? {
-        let filler: [String]
-        if tokens[index].spoken.map(bare) == "like" {
-            filler = ["like"]
-        } else if tokens[index].spoken.map(bare) == "you", index + 1 < tokens.count, tokens[index + 1].spoken.map(bare) == "know",
-                  !tokens[index].hasComma {
-            filler = ["you", "know"]
-        } else {
-            return nil
+    private static func fillerRemovals(_ tokens: [Token], at index: Int) -> (removed: [Range<Int>], keepsOne: Bool)? {
+        var fillers: [Range<Int>] = []
+        var after = index
+        while after < tokens.count, let count = fillerWords(tokens, at: after), tokens[after + count - 1].hasComma {
+            fillers.append(after..<(after + count))
+            after += count
         }
-        let last = index + filler.count - 1
-        let after = last + 1
-        // The next word with its own comma is a list item, and "like" the verb: "follow, like, subscribe, and share".
-        guard tokens[last].hasComma, after < tokens.count, !tokens[after].quoted, !tokens[after].bare.isEmpty,
-              // Another filler may follow with its own comma: "you know, like, after lunch".
-              !tokens[after].hasComma || tokens[after].spoken.map(bare) == "like",
-              !["and", "or"].contains(tokens[after].bare), !endsSentence(tokens[after].word),
+        guard !fillers.isEmpty, after < tokens.count, !tokens[after].quoted, !tokens[after].bare.isEmpty,
+              !tokens[after].hasComma, !["and", "or"].contains(tokens[after].bare), !endsSentence(tokens[after].word),
               !capitalizedMidSentence(tokens, at: index) else { return nil }
         let next = tokens[after]
-        if filler == ["like"] {
-            // Quoting, about a number, or "such as" before a name: "cities, like, Paris".
-            let before = index > 0 ? tokens[index - 1].bare : ""
-            if quotativeVerbs.contains(before) || before.hasSuffix("'s") || before.hasSuffix("’s")
-                || goVerbs.contains(before) && !placeWords.contains(next.bare)
-                || next.word.drop(while: { "$€£¥₹~".contains($0) }).first?.isNumber == true
-                || numberWords.contains(next.bare)
-                || ["a", "an"].contains(next.bare) && after + 1 < tokens.count && numberWords.contains(tokens[after + 1].bare)
-                || next.word.first?.isUppercase == true && !isPronounI(next.bare)
-                // "such as" between a thing and an example: "a tool, like, a hammer"; "supplies, like, paper".
-                || index > 0 && !before.isEmpty && !functionWords.contains(before)
-                    && (["a", "an", "the", "some"].contains(next.bare)
-                        || !functionWords.contains(next.bare) && !placeWords.contains(next.bare)) {
-                return nil
-            }
-        } else if auxiliaries.contains(next.bare) || next.bare.hasSuffix("n't") || next.bare.hasSuffix("n’t") {
-            // "Wait, you know, don't you?": the words are the question.
-            return nil
-        }
         if startsSentence(tokens, at: index) {
-            // "You know, like, I think": the word after the whole run decides.
-            var look = after
-            while look + 1 < tokens.count, tokens[look].hasComma, tokens[look].spoken.map(bare) == "like" { look += 1 }
-            return nounStarts.contains(tokens[look].bare) ? filler.count : nil
+            guard nounStarts.contains(next.bare) else { return nil }
+        } else {
+            guard tokens[index - 1].hasComma, !tokens[index - 1].quoted else { return nil }
         }
-        return tokens[index - 1].hasComma && !tokens[index - 1].quoted ? filler.count : nil
+        let before = index > 0 ? tokens[index - 1].bare : ""
+        let removed = fillers.filter { filler in
+            if tokens[filler.lowerBound].bare == "like" {
+                return !likeMeansSomething(before: before, next: next, then: after + 1 < tokens.count ? tokens[after + 1] : nil)
+            }
+            // "Wait, you know, don't you?": the words are the question.
+            return !(auxiliaries.contains(next.bare) || next.bare.hasSuffix("n't") || next.bare.hasSuffix("n’t"))
+        }
+        return removed.isEmpty ? nil : (removed, removed.count < fillers.count)
+    }
+
+    /// 1 for a "like", 2 for a "you know", at `index`; nil for anything else.
+    private static func fillerWords(_ tokens: [Token], at index: Int) -> Int? {
+        if tokens[index].spoken.map(bare) == "like" { return 1 }
+        if tokens[index].spoken.map(bare) == "you", !tokens[index].hasComma, index + 1 < tokens.count,
+           tokens[index + 1].spoken.map(bare) == "know" {
+            return 2
+        }
+        return nil
+    }
+
+    /// Whether a comma-set "like" between `before` and `next` (then `then`) quotes, approximates
+    /// or means "such as", so it stays.
+    private static func likeMeansSomething(before: String, next: Token, then: Token?) -> Bool {
+        // Quoting: "he was, like, I'm not going"; "I'm, like, no way"; "she goes, like, no".
+        if quotativeVerbs.contains(before) || ["'s", "'m", "'re"].contains(where: { before.hasSuffix($0) })
+            || goVerbs.contains(before) && !placeWords.contains(next.bare) {
+            return true
+        }
+        // About: "like, five hours", "like, $50", "like, a hundred".
+        if next.word.drop(while: { "$€£¥₹~".contains($0) }).first?.isNumber == true || numberWords.contains(next.bare)
+            || ["a", "an"].contains(next.bare) && then.map({ numberWords.contains($0.bare) }) == true {
+            return true
+        }
+        // Such as: before a name ("cities, like, Paris"), or between a thing and an example ("a tool, like,
+        // a hammer"; "supplies, like, paper"; "a tool, like, my hammer").
+        if next.word.first?.isUppercase == true && !isPronounI(next.bare) { return true }
+        return !before.isEmpty && !functionWords.contains(before)
+            && (exampleStarts.contains(next.bare)
+                || !functionWords.contains(next.bare) && !placeWords.contains(next.bare) && !timeWords.contains(next.bare))
     }
 
     private static func startsSentence(_ tokens: [Token], at index: Int) -> Bool {

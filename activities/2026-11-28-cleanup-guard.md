@@ -101,3 +101,12 @@ Fixed in the next commit, each with a kept case in `TidyTests`:
 
 Left as they are: commas after "By the way", no capital after ":", "Mr." read
 as a sentence's end; each leaves the words as said.
+
+## Neon review (agy, 31cc1c1)
+
+A comma-set run of fillers ("like, you know,") is now judged as one: the word
+before the run and the word after all of it decide each filler, and a run with
+a "like" that stays keeps its commas ("took, like, you know, five hours" →
+"took, like, five hours"). "like" before a determiner or object pronoun is an
+example ("a tool, like, my hammer"); after 'm and 're it quotes ("I'm, like, no
+way"); time words count against "such as" but not against quoting after go.

@@ -94,6 +94,10 @@ final class TidyTests: XCTestCase {
             ("We left, you know, like, after lunch.", "We left after lunch."),
             ("You know, like, I think it works.", "I think it works."),
             ("It took, you know, like, five hours.", "It took, like, five hours."),
+            // A run is judged by the words around all of it.
+            ("It took, like, you know, five hours.", "It took, like, five hours."),
+            ("Use a tool, like, you know, a hammer.", "Use a tool, like, a hammer."),
+            ("I went, like, you know, to the store.", "I went to the store."),
         ] {
             XCTAssertEqual(tidy(said), written, said)
         }
@@ -106,7 +110,9 @@ final class TidyTests: XCTestCase {
                      "And he was, like, I'm not going.", "She was, like, what are you doing?",
                      "It took, like, five hours.", "It took, like, 5 hours.", "It cost, like, thirteen dollars.", "It cost, like, $50 yesterday.",
                      "It took, like, a hundred hours.", "Use a tool, like, a hammer.",
-                     "We need supplies, like, paper and pens.", "We saw cities, like, Paris and Rome.",
+                     "We need supplies, like, paper and pens.",
+                     "Bring a tool, like, my hammer.", "Use a tool, like, this one.",
+                     "She goes, like, before you leave, call me.", "And I'm, like, no way.", "We saw cities, like, Paris and Rome.",
                      "I told Sam, like, Priya said no.", "Wait, you know, don't you?"] {
             XCTAssertEqual(tidy(kept), kept)
         }
