@@ -261,7 +261,8 @@ public final class ScreenNameSampler: @unchecked Sendable {
         AXUIElementSetAttributeValue(AXUIElementCreateApplication(pid), enhancedUI, kCFBooleanFalse)
     }
 
-    private static let enhancedUI = "AXEnhancedUserInterface" as CFString
+    // Computed: a stored static CFString is not Sendable under Swift 6.
+    private static var enhancedUI: CFString { "AXEnhancedUserInterface" as CFString }
     private static let pulsedKey = "screenNamesPulsedBrowserPID"
 
     static func isChromium(_ pid: pid_t) -> Bool {
