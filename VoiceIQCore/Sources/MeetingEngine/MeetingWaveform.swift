@@ -107,7 +107,6 @@ public struct LiveMeetingWaveform: View {
     /// iPhone hears the room on one track, so its waveform has no call side.
     let hearsCall: Bool
     @State private var history: [WaveBar] = []
-    @Environment(\.scenePhase) private var scenePhase
 
     public init(engine: MeetingEngine, style: WaveformStyle, hearsCall: Bool) {
         self.engine = engine; self.style = style; self.hearsCall = hearsCall
@@ -136,8 +135,7 @@ public struct LiveMeetingWaveform: View {
         .frame(height: 56)
         .task {
             while !Task.isCancelled {
-                // Nobody sees it in the background or a minimised window.
-                if scenePhase == .active { sample() }
+                sample()
                 try? await Task.sleep(for: .milliseconds(100))
             }
         }
@@ -207,10 +205,12 @@ public struct MeetingPlaybackBar: View {
     /// Apple's minimum touch target.
     static let target: CGFloat = 44
     /// A drag must travel this far before it scrubs, so a scroll that starts on the waveform still scrolls.
-    static let dragStart: CGFloat = 10
+    static let dragStart: CGFloat = 20
+    static let spacing: CGFloat = 0
     #else
     static let target: CGFloat = 30
     static let dragStart: CGFloat = 2
+    static let spacing: CGFloat = 6
     #endif
 
     /// Most recently read meetings' waveforms, so selecting one again doesn't read both tracks again.
@@ -226,7 +226,9 @@ public struct MeetingPlaybackBar: View {
             // The player knows the length as soon as it plays, before a long meeting's waveform is read.
             let duration = loudness?.duration ?? player.duration ?? 0
             let position = scrub.map { $0 * duration } ?? min(player.position, duration)
-            HStack(spacing: 6) {
+            // On iPhone the 44 pt targets already space the controls; an hour-long
+            // meeting's two times still fit a 375 pt phone.
+            HStack(spacing: Self.spacing) {
                 playButton
                 Button { player.seek(to: player.position - 15) } label: {
                     Image(systemName: "gobackward.15")
@@ -238,9 +240,11 @@ public struct MeetingPlaybackBar: View {
                 .accessibilityLabel("Back 15 seconds")
                 .help("Back 15 seconds")
                 // The waveform's value reads the same times.
-                Text(Self.clock(position)).font(style.time).foregroundStyle(style.you).accessibilityHidden(true)
+                Text(Self.clock(position)).font(style.time).foregroundStyle(style.you)
+                    .lineLimit(1).fixedSize().padding(.horizontal, 3).accessibilityHidden(true)
                 waveform(progress: duration > 0 ? position / duration : 0, duration: duration)
-                Text(Self.clock(duration)).font(style.time).foregroundStyle(style.call).accessibilityHidden(true)
+                Text(Self.clock(duration)).font(style.time).foregroundStyle(style.call)
+                    .lineLimit(1).fixedSize().padding(.horizontal, 3).accessibilityHidden(true)
                 speedButton
             }
         }
@@ -296,12 +300,16 @@ public struct MeetingPlaybackBar: View {
             // Sideways only, and alongside the scroll view, so a vertical swipe still scrolls the note.
             let drag = DragGesture(minimumDistance: Self.dragStart)
                 .updating($scrub) { value, scrub, _ in
-                    if scrub != nil || abs(value.translation.width) > abs(value.translation.height) {
-                        scrub = Self.fraction(value.location.x, of: width)
-                    }
+                    #if os(iOS)
+                    guard scrub != nil || abs(value.translation.width) > abs(value.translation.height) else { return }
+                    #endif
+                    scrub = Self.fraction(value.location.x, of: width)
                 }
                 .onEnded { value in
+                    #if os(iOS)
+                    // A mostly vertical swipe was the note scrolling.
                     guard abs(value.translation.width) > abs(value.translation.height) else { return }
+                    #endif
                     seek(to: Self.fraction(value.location.x, of: width) * duration, of: duration)
                 }
             WaveBars(bars: bars(count), style: style, played: Int((progress * Double(count)).rounded()))
