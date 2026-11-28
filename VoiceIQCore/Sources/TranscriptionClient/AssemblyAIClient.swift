@@ -193,6 +193,8 @@ public actor AssemblyAIClient {
                                      modelLabel: model, stage: stage)
         guard let id = (try? JSONSerialization.jsonObject(with: created) as? [String: Any])?["id"] as? String
         else { throw TranscriptionError.network("transcript_unparseable") }
+        // The ID AssemblyAI's support looks a transcript up by.
+        Log.transcription.notice("pre-recorded: transcript \(id, privacy: .public) (\(model, privacy: .public))")
         // A 5-minute file completes in about 9 s at p50 (AssemblyAI's planning figure).
         var wait: UInt64 = 700_000_000
         var offline = false
@@ -288,10 +290,18 @@ public actor AssemblyAIClient {
         defer { session.finishTasksAndInvalidate() }
         guard let (data, response) = try? await session.data(for: request),
               let http = response as? HTTPURLResponse else { return .unreachable }
-        switch http.statusCode {
-        case 200: return .valid
-        case 429, 500...599: return .unreachable
-        default: return .rejected(Self.errorMessage(from: data))
+        return Self.keyCheck(status: http.statusCode, body: data)
+    }
+
+    /// Only the statuses that mean "this key is wrong" reject it; anything
+    /// else (a moved endpoint's 404 or 410, a captive portal's 451, a proxy's
+    /// 407, a 429 or 5xx) says nothing about the key, so onboarding goes on.
+    /// The same split as AssemblyAI's Blurt (`APIKeyValidator`, MIT).
+    static func keyCheck(status: Int, body: Data) -> KeyCheck {
+        switch status {
+        case 200: .valid
+        case 400, 401, 403, 422: .rejected(errorMessage(from: body))
+        default: .unreachable
         }
     }
 
@@ -394,7 +404,27 @@ public actor AssemblyAIClient {
 
     func applyAuth(_ request: inout URLRequest) {
         if let key = apiKey() { request.setValue(key, forHTTPHeaderField: "Authorization") }
+        request.setValue(Self.userAgent, forHTTPHeaderField: "User-Agent")
     }
+
+    /// "VoiceiQ/0.7.19 (macOS 27.0)", with "; dev" on a debug build: lets
+    /// AssemblyAI tie an error or a slowdown to a release. URLSession's
+    /// default names only the opaque build counter. Nothing per install.
+    static let userAgent: String = {
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "dev"
+        let os = ProcessInfo.processInfo.operatingSystemVersion
+        #if os(iOS)
+        let platform = "iOS"
+        #else
+        let platform = "macOS"
+        #endif
+        #if DEBUG
+        let channel = "; dev"
+        #else
+        let channel = ""
+        #endif
+        return "VoiceiQ/\(version) (\(platform) \(os.majorVersion).\(os.minorVersion)\(channel))"
+    }()
 
     /// The message of an error body: `{"error": "..."}` on the speech API,
     /// `{"message": ..., "metadata": {"errors": [...]}}` on the gateway.

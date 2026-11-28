@@ -63,6 +63,7 @@ public final class RealtimeTranscription: @unchecked Sendable {
         components.queryItems = query
         var request = URLRequest(url: components.url!)
         request.setValue(apiKey, forHTTPHeaderField: "Authorization")
+        request.setValue(AssemblyAIClient.userAgent, forHTTPHeaderField: "User-Agent")
         session = URLSession(configuration: .ephemeral)
         task = session.webSocketTask(with: request)
         task.resume()
@@ -188,6 +189,8 @@ public final class RealtimeTranscription: @unchecked Sendable {
             return true
         case "Begin":
             lock.withLock { began = true }
+            // The session ID AssemblyAI's support looks a stream up by.
+            Log.transcription.notice("realtime: session \(json["id"] as? String ?? "?", privacy: .public)")
             return true
         case "Termination":
             lock.lock()
