@@ -83,7 +83,9 @@ final class AppModel: ObservableObject {
             }
         )
         sleepGuard = SessionSleepGuard(dictation: coordinator, meetings: meetings)
-        inserter.onDeliver = { [weak self] text in self?.deliver(text) }
+        inserter.onDeliver = { [weak self] text, draftID in self?.deliver(text, replacing: draftID) }
+        inserter.onDraft = { [weak self] draft in self?.session.showDraft(draft) }
+        inserter.destination = { [target] in target.destination }
         // The load overlaps the recording; a load longer than the recording
         // is what the user waits for in "processing".
         LocalTranscriber.onLoadEvent = { event in
@@ -604,9 +606,11 @@ final class AppModel: ObservableObject {
     /// (`Delivery.route`), however long the user is away looking something
     /// up; it is never copied unasked, because the clipboard may hold what
     /// they went to fetch. A result no keyboard took part in has nowhere to
-    /// wait for, so it keeps the clipboard fallback.
-    private func deliver(_ text: String) {
-        let delivery = Delivery(text: text, destination: target.destination, stoppedAt: target.fields.stoppedAt)
+    /// wait for, so it keeps the clipboard fallback. `draftID` names the
+    /// draft a keyboard typed, which this text replaces (`KeyboardInserter`).
+    private func deliver(_ text: String, replacing draftID: UUID? = nil) {
+        let delivery = Delivery(text: text, destination: target.destination, stoppedAt: target.fields.stoppedAt,
+                                replacesDraft: draftID)
         // The snapshot holds one result. One that still waited for its field
         // is now only in History, so the keyboard says so.
         if let waiting = store.snapshot.delivery, waiting.destination != nil,

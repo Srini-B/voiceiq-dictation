@@ -15,6 +15,59 @@ final class ValidationGateTests: XCTestCase {
         XCTAssertEqual(ValidationGate.stripArtifacts("\"Hello there.\""), "Hello there.")
     }
 
+    /// The writer repeated the line's marker or greeting that the field
+    /// already holds; the field would show it twice.
+    func testDropsTextTheFieldAlreadyEndsWith() {
+        XCTAssertEqual(ValidationGate.droppingEcho("[2] The caterer needs a head count.", before: "[1] Venue booked.\n[2] ",
+                                                   transcript: "okay so the caterer needs a head count"),
+                       "The caterer needs a head count.")
+        XCTAssertEqual(ValidationGate.droppingEcho("- Phone charger\n- Adapter", before: "Packing\n- Passport\n- ",
+                                                   transcript: "phone charger and the adapter"),
+                       "Phone charger\n- Adapter")
+        XCTAssertEqual(ValidationGate.droppingEcho("Hi Omar, it looks better.", before: "Hi Omar, ",
+                                                   transcript: "it looks better"),
+                       "it looks better.")
+        XCTAssertEqual(ValidationGate.droppingEcho("[1] Okay, one more thing.", before: "[1] ", transcript: "okay one more thing"),
+                       "Okay, one more thing.")
+        XCTAssertEqual(ValidationGate.droppingEcho("we should push the launch", before: "Thanks. I think we should ",
+                                                   transcript: "push the launch to next week"),
+                       "push the launch")
+        XCTAssertEqual(ValidationGate.droppingEcho("Notes: Rahul wants to move teams, per my notes.", before: "1:1\nNotes: ",
+                                                   transcript: "rahul wants to move teams per my notes"),
+                       "Rahul wants to move teams, per my notes.")
+    }
+
+    /// Words the speaker said, or that only look like the field's end, stay.
+    func testKeepsASpokenRepeatAndLookalikes() {
+        XCTAssertEqual(ValidationGate.droppingEcho("Hi Omar, it looks better.", before: "Hi Omar, ",
+                                                   transcript: "hi omar it looks better"),
+                       "Hi Omar, it looks better.")
+        XCTAssertEqual(ValidationGate.droppingEcho("The report is ready.", before: "I sent the", transcript: "report is ready"),
+                       "The report is ready.")
+        XCTAssertEqual(ValidationGate.droppingEcho("3.5 million signed up.", before: "Totals 3.", transcript: "three point five million"),
+                       "3.5 million signed up.")
+        XCTAssertEqual(ValidationGate.droppingEcho("[1]", before: "[1] ", transcript: "one"), "[1]")
+        XCTAssertEqual(ValidationGate.droppingEcho("Hi Priya, the deck looks good.", before: "Hi Priya,",
+                                                   transcript: "so um hi priya the deck looks good"),
+                       "Hi Priya, the deck looks good.")
+        XCTAssertEqual(ValidationGate.droppingEcho("2024 was our best year.", before: "Revenue grew every year since 2024",
+                                                   transcript: "twenty twenty four was our best year"),
+                       "2024 was our best year.")
+        XCTAssertEqual(ValidationGate.droppingEcho("Okay, let's go.", before: "Notes\nOkay", transcript: "um okay let's go"),
+                       "Okay, let's go.")
+        XCTAssertEqual(ValidationGate.droppingEcho("3. Buy milk.", before: "1. Eggs\n2. Bread\n3. ", transcript: "three buy milk"),
+                       "3. Buy milk.")
+        XCTAssertEqual(ValidationGate.droppingEcho("-5 degrees this morning.", before: "Temps\n- ",
+                                                   transcript: "minus five degrees this morning"),
+                       "-5 degrees this morning.")
+        XCTAssertEqual(ValidationGate.droppingEcho("3.5 million signed up.", before: "Totals 3.",
+                                                   transcript: "about three point five million signed up"),
+                       "3.5 million signed up.")
+        XCTAssertEqual(ValidationGate.droppingEcho("2. Call the venue.", before: "That makes 12.", transcript: "call the venue"),
+                       "2. Call the venue.")
+        XCTAssertEqual(ValidationGate.droppingEcho("[1]", before: "[1] ", transcript: "okay"), "[1]")
+    }
+
     func testLeavesInternalQuotesAlone() {
         XCTAssertEqual(ValidationGate.stripArtifacts("She said \"hi\" to me."), "She said \"hi\" to me.")
     }

@@ -207,6 +207,77 @@ Settings › Privacy has
 the same "Keep dictations" picker as the Mac (`transcriptRetentionDays`);
 `AppModel` runs `RetentionPolicy.purge()` on launch.
 
+#### The transcript as a draft
+
+**Off for now (2026-11-28, `KeyboardInserter.offersDrafts`).** In Messages, after one dictation and typed text, the second dictation's swap left the field holding only the written text, while the keyboard's `documentContextBeforeInput` read exactly the text it expected (52 characters against the field's 27). The keyboard cannot see that from its side, so until a host-safe swap exists the iPhone types the written text once, as before. The steps below describe that retained, switched-off mechanism; it stays in the code and its tests.
+
+When the keyboard never left the field (the first rule above) and the
+writing model will rewrite the transcript, the keyboard shows the
+transcript first and swaps in the written text about a second later. This
+is the Mac's draft (`TextDraft`), done by the keyboard:
+
+1. The moment the transcript is heard, the app publishes it as
+   `SessionSnapshot.draft`, a `Delivery` with the same destination.
+2. A keyboard on screen in the destination's input session types it with
+   `setMarkedText`, fitted like any result. iOS hosts underline marked
+   text. The keyboard then writes the draft's ID to
+   `SharedStore.typedDraftID` (writer: keyboard). It types a draft only
+   within 0.45 s of its creation (`Delivery.draftWindow`), never over a
+   selection, and never into a field that reports text (`hasText`) but
+   shows none around the cursor, since the swap could not check it there.
+   Undo history is cleared when a draft goes in.
+3. The app waits up to 0.6 s (`Delivery.draftWait`) for that ID, then
+   withdraws the draft from the snapshot. Without the ID, the written text
+   comes as a plain result that still names the draft, in the dictation's
+   insert turn (`DraftShown.pending`): a keyboard whose report was late
+   swaps its draft, and any other keyboard types it as before.
+4. The written text comes as a delivery with `replacesDraft` set to the
+   draft's ID. The keyboard commits the marked draft (`unmarkText`), then
+   deletes it and types the written text, but only when the draft is right
+   before the cursor, nothing is selected, and the text around it is the
+   text that was around it when it went in. It never sets marked text over
+   the draft: a host can commit marked text without telling the keyboard,
+   and the written text would then go in beside it. A host can also ignore
+   the commit and take the still-marked draft out whole on the first Delete
+   (Messages does), so the keyboard reads the field after that first press
+   and presses Delete again only when it took one character. Otherwise the draft
+   stays as heard, and the session log says why.
+
+   A transcript the keyboard could not swap later is never typed as a
+   draft (`KeyboardDraft.canSwap`): one with characters of more than one
+   code point (Tamil, Devanagari, emoji sequences, which a host may delete
+   one code point per press), a line break, or more than 200 characters
+   (hosts show only about the last sentence before the cursor). Its written
+   text goes in once, as before.
+5. A written text whose draft this keyboard no longer holds (the keyboard
+   was dismissed or moved to another field) is marked handled and never
+   typed beside the draft.
+6. A dictation that ends without written text (Cancel, no speech, a
+   failure) leaves its draft in the field as heard: the keyboard does not
+   take text back out of a field. The Mac does (`DraftStage.withdraw`).
+
+While the keyboard holds a draft, the strip shows a writing animation (one
+crest sweeping across five bars) instead of the spinner. A key, a cursor
+move, Paste last or Undo while the keyboard holds the draft commits it
+first (`EditController.willEdit`), so the edit cannot replace it, and the
+draft then stays as heard: after an edit, the text around the cursor can
+match the draft's without being it (a deleted draft after an earlier copy
+of its words). The keyboard also reads the field every 0.1 s while it holds
+a draft: once the draft has been seen before the cursor, any change to the
+text around it (a host edit, a menu's Cut, a cursor move) leaves it as heard
+(`KeyboardDraft.follow`, first right after the keyboard types it). The
+swap needs the text before the draft to read exactly as when it went in,
+all of it still shown: a host that shows only a few characters before the
+cursor could show the same window after an unseen edit over repeated words,
+so there the draft stays as heard. A dismissed keyboard commits it too. Paste last and History always have the written
+text.
+
+The keyboard does not show a spinner in the field before the draft
+lands. It would be marked text too, and a host commits marked text as
+plain text when focus moves or iOS ends the keyboard, which would leave a
+spinner glyph in the user's text. The strip's spinner shows the wait
+instead.
+
 ### Returning to the app
 
 The keyboard learns the host's bundle ID from two private UIKit surfaces
@@ -246,8 +317,8 @@ meaningful bundle ID segment (`com.acme.notes.ios` → "Notes", not "Ios").
 ### The background session
 
 Dictation and meeting recording use the shared [sleep guard](POWER_MANAGEMENT.md).
-It disables Auto-Lock while VoiceiQ is in front, and restores it when no active
-dictation or meeting recording remains. It cannot control Auto-Lock in the
+It disables Auto-Lock while VoiceiQ is in front, and restores it when no
+dictation, meeting recording, or meeting write-up (transcript and notes) remains. It cannot control Auto-Lock in the
 keyboard's host app. A warm microphone alone does not hold the sleep lock.
 
 iOS lets a backgrounded app start a *mixable* recording only while it is

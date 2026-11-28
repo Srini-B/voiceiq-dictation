@@ -227,6 +227,7 @@ extension TypingBridge: @MainActor KeyboardTextTarget {
     }
 
     func adjustTextPosition(byCharacterOffset offset: Int) {
+        editor?.willEdit?()
         proxy?.adjustTextPosition(byCharacterOffset: offset)
         editor?.cursorMovedExternally()
     }

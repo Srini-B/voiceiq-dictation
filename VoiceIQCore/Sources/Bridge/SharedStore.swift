@@ -39,6 +39,7 @@ public final class SharedStore: @unchecked Sendable {
         static let heartbeat = "bridge.heartbeat"
         static let levelBars = "bridge.levelBars"
         static let insertedDeliveryID = "bridge.insertedDeliveryID"
+        static let typedDraftID = "bridge.typedDraftID"
         static let fieldVisits = "bridge.fieldVisits"
         static let keyboardSeenAt = "bridge.keyboardSeenAt"
         static let activityRequest = "bridge.activityRequest"
@@ -96,6 +97,14 @@ public final class SharedStore: @unchecked Sendable {
     public var insertedDeliveryID: UUID? {
         get { defaults.string(forKey: Key.insertedDeliveryID).flatMap(UUID.init(uuidString:)) }
         set { defaults.set(newValue?.uuidString, forKey: Key.insertedDeliveryID) }
+    }
+
+    /// The last draft (`SessionSnapshot.draft`) a keyboard typed, so the
+    /// app knows the transcript is in the field and sends the written text
+    /// to replace it. Writer: keyboard.
+    public var typedDraftID: UUID? {
+        get { defaults.string(forKey: Key.typedDraftID).flatMap(UUID.init(uuidString:)) }
+        set { defaults.set(newValue?.uuidString, forKey: Key.typedDraftID) }
     }
 
     /// The input sessions the keyboard was last shown in, oldest first, so

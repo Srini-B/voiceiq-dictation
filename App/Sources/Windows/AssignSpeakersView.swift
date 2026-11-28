@@ -54,11 +54,15 @@ struct AssignSpeakersView: View {
                                   known: meeting.knownNames(notes), color: color) { rename(speaker, $0) }
                 Spacer()
                 Button { sample[speaker] = (sample[speaker] ?? 0) + 1; player.stop() } label: {
-                    Image(systemName: "shuffle")
+                    Label("Another line", systemImage: "shuffle")
                 }
+                .labelStyle(.titleAndIcon)
+                .lineLimit(1)
+                .fixedSize()
+                .font(VoiceIQUI.TypeScale.labelSmall())
                 .foregroundStyle(.secondary)
                 .disabled(turns.count < 2)
-                .help("Another line")
+                .help("Hear another line from this speaker")
                 Button {
                     if let audio = audio(speaker), let start = turn.start, let end = turn.end {
                         player.toggle(key, url: audio, from: start, to: end)

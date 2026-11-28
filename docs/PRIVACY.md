@@ -108,7 +108,10 @@ With no usable key, nothing is sent and the recording stays on your Mac.
    and answers. The questions and answers are kept in `chat.json` in the
    meeting's folder and deleted with the meeting.
 5. **Your API key**, only in the request header to AssemblyAI. It is stored in
-   the macOS Keychain, never in files or preferences.
+   the macOS Keychain, never in files or preferences. Requests to AssemblyAI
+   also carry a User-Agent naming the app version, the platform and its
+   version, and "dev" on development builds ("VoiceiQ/0.7.19 (macOS 27.0)",
+   "VoiceiQ/0.7.19 (iOS 27.1)"), nothing that identifies you or your device.
 6. **Update checks.** Every six hours, and when you choose Check for Updates, the
    app downloads the update feed (`appcast.xml`) from the project's GitHub
    Releases (`github.com`, which redirects to GitHub's download host). The
@@ -188,7 +191,10 @@ provider's terms. It is off by default; details in
   yours to keep or delete ([MEETINGS.md](MEETINGS.md#save-each-meeting-as-markdown)).
 - Logs. See [DEBUG_LOG.md](DEBUG_LOG.md). The opt-in debug log (Settings ›
   Advanced) stays on the device until you export or share it. It never holds
-  API keys, tokens or text the app marks private, and keeps 7 days.
+  API keys, tokens or text the app marks private, and keeps 7 days. The
+  log, and the system log, record AssemblyAI's transcript and session IDs so
+  its support can find a request; no one can fetch a transcript with an ID
+  alone, without your key.
 - On the iPhone, the keyboard learns how you type, as Hex's keyboard does:
   where your finger lands on each key and word-level fixes (a word you
   erased and retyped, auto-corrections you undid, suggestions you picked),

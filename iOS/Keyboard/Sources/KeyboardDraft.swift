@@ -1,0 +1,174 @@
+import UIKit
+
+/// A dictation's transcript in the field as marked text while the writing
+/// model rewrites it (`SessionSnapshot.draft`), then swapped for the
+/// written text. Hosts draw marked text underlined, which is the draft's
+/// underline. Only the draft's own text is ever replaced: once the field
+/// changed around it, or it is no longer right before the cursor, it stays
+/// as heard.
+@MainActor
+final class KeyboardDraft {
+    /// Fits a text to the text before and after the cursor
+    /// (`SurroundingText.fitted`), the same for the draft and the written text.
+    typealias Fit = (_ text: String, _ before: String, _ after: String) -> String
+
+    enum Swap: Equatable {
+        /// The draft, right before the cursor, was deleted and the written
+        /// text typed.
+        case retyped(String)
+        /// The draft can't be found for certain. It stays as it is.
+        case kept
+    }
+
+    let id: UUID
+    /// The input session it was typed in.
+    let documentID: UUID
+    /// The transcript as it went in, fitted to the text around it.
+    let text: String
+    /// The text before and after the cursor when it went in.
+    let before: String
+    let after: String
+    let typedAt: Date
+    /// Still marked text, as far as this keyboard knows.
+    private(set) var isMarked = true
+    /// The text before the cursor once the draft was first seen there
+    /// (`follow`). Any change after that is someone's edit.
+    private var landedBefore: String?
+    private init(id: UUID, documentID: UUID, text: String, before: String, after: String, typedAt: Date) {
+        self.id = id
+        self.documentID = documentID
+        self.text = text
+        self.before = before
+        self.after = after
+        self.typedAt = typedAt
+    }
+
+    /// Types `transcript` at the cursor as marked text. Nil over a selection,
+    /// and for a draft that could not be swapped (`canSwap`): the written
+    /// text then goes in alone.
+    static func type(_ transcript: String, id: UUID, documentID: UUID, into proxy: UITextDocumentProxy,
+                     fit: Fit, now: Date = Date()) -> KeyboardDraft? {
+        guard (proxy.selectedText ?? "").isEmpty else { return nil }
+        let before = proxy.documentContextBeforeInput ?? ""
+        let after = proxy.documentContextAfterInput ?? ""
+        // A field with text it doesn't show can't be checked at the swap.
+        guard !(before.isEmpty && after.isEmpty && proxy.hasText) else { return nil }
+        let fitted = fit(transcript, before, after)
+        guard canSwap(fitted) else { return nil }
+        proxy.setMarkedText(fitted, selectedRange: NSRange(location: fitted.utf16.count, length: 0))
+        let draft = KeyboardDraft(id: id, documentID: documentID, text: fitted, before: before, after: after,
+                                  typedAt: now)
+        // Read right after this keyboard's own write: a host that shows the
+        // draft at once, with all the text it showed before, has it recorded.
+        _ = draft.follow(proxy)
+        return draft
+    }
+
+    /// Whether a draft of `text` could be swapped later. The swap deletes
+    /// it one key at a time and must see all of it before the cursor, so a
+    /// draft is typed only when its characters are single code points (a
+    /// host may delete a Tamil or Devanagari vowel sign, or part of an
+    /// emoji, on its own), it has no line break and it is short enough for
+    /// hosts that show only the last sentence or so before the cursor.
+    /// Otherwise the written text goes in once, as before drafts.
+    static func canSwap(_ text: String) -> Bool {
+        !text.isEmpty && text.count <= maxLength && text.unicodeScalars.count == text.count
+            && !text.contains(where: \.isNewline)
+    }
+
+    static let maxLength = 200
+
+    /// Makes the marked draft plain text, as heard: the keyboard is going,
+    /// or the user edits with it.
+    func commit(_ proxy: UITextDocumentProxy) {
+        guard isMarked else { return }
+        isMarked = false
+        proxy.unmarkText()
+    }
+
+    /// Watches the field while the writer runs. False once the field changed
+    /// after the draft was seen in it: the host or the user edited it
+    /// without this keyboard (a menu's Cut, the host's own undo), and the
+    /// text around the cursor could match an earlier copy of its words.
+    func follow(_ proxy: UITextDocumentProxy) -> Bool {
+        let current = proxy.documentContextBeforeInput ?? ""
+        if let landedBefore {
+            return current == landedBefore && (proxy.documentContextAfterInput ?? "") == after
+                && (proxy.selectedText ?? "").isEmpty
+        }
+        if current.hasSuffix(text), isStillAround(proxy, before: current) { landedBefore = current }
+        return true
+    }
+
+    /// Swaps the draft for `written`, only while it is right before the
+    /// cursor with nothing selected and the same text around it. A host can
+    /// commit marked text without saying so, and marked text set over it
+    /// would then go in beside it, so the draft is always committed first and
+    /// swapped as plain text. Anything else keeps it.
+    ///
+    /// A host can also ignore the commit and take a still-marked draft out
+    /// whole on the first Delete (Messages does): the rest of the presses
+    /// would then delete the user's text. So the first press is checked
+    /// before any other: when it took the whole draft, that is the end of it.
+    func replace(with written: String, in proxy: UITextDocumentProxy, fit: Fit) async -> Swap {
+        commit(proxy)
+        let current = proxy.documentContextBeforeInput ?? ""
+        guard (proxy.selectedText ?? "").isEmpty, current.hasSuffix(text), isStillAround(proxy, before: current),
+              Self.canSwap(text)
+        else { return .kept }
+        let rest = String(current.dropLast(text.count))
+        let fitted = fit(written, rest, proxy.documentContextAfterInput ?? "")
+        guard !fitted.isEmpty else { return .kept }
+        let following = proxy.documentContextAfterInput ?? ""
+        let document = proxy.documentIdentifier
+        proxy.deleteBackward()
+        guard let afterFirst = await Self.change(in: proxy, from: current) else {
+            // The field never said what the press did: no more presses.
+            KeyboardLog.note("swap: no change seen after the first Delete (before \(current.count))")
+            return .kept
+        }
+        // Lengths only, never the text.
+        KeyboardLog.note("swap: before \(current.count), draft \(text.count), rest \(rest.count), after first Delete \(afterFirst.count), whole draft gone \(afterFirst == rest), after cursor \(following.count)")
+        // The user may have selected text or moved on while it waited: the
+        // presses and the written text go only where the draft still was.
+        guard (proxy.selectedText ?? "").isEmpty, (proxy.documentContextAfterInput ?? "") == following,
+              proxy.documentIdentifier == document else { return .kept }
+        if afterFirst != rest {
+            // One character went: the draft was plain text.
+            guard afterFirst == String(current.dropLast()) else { return .kept }
+            for _ in 1..<text.count { proxy.deleteBackward() }
+        }
+        proxy.insertText(fitted)
+        // Read back for the log only, after the swap has returned.
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(400))
+            let end = proxy.documentContextBeforeInput ?? ""
+            KeyboardLog.note("swap: inserted \(fitted.count), before the cursor now \(end.count), expected \(rest.count + fitted.count), as expected \(end == rest + fitted)")
+        }
+        return .retyped(fitted)
+    }
+
+    /// The text before the cursor once it differs from `old`, read for up to
+    /// half a second: the host applies a key press after this call returns.
+    private static func change(in proxy: UITextDocumentProxy, from old: String) async -> String? {
+        for attempt in 0..<25 {
+            if attempt > 0 { try? await Task.sleep(for: .milliseconds(20)) }
+            let now = proxy.documentContextBeforeInput ?? ""
+            if now != old { return now }
+        }
+        return nil
+    }
+
+    /// The text around the cursor is still the text around the draft: the
+    /// same text after it, and the text before the draft ending as it did.
+    /// An earlier copy of the same words, with the cursor moved to it, has
+    /// other text around it and is never taken for the draft.
+    private func isStillAround(_ proxy: UITextDocumentProxy, before current: String) -> Bool {
+        guard (proxy.documentContextAfterInput ?? "") == after else { return false }
+        // Exactly the text that was before it, all of it still shown: in a
+        // host that shows less, a repeated stretch of text could look the
+        // same after an edit nobody saw, so there the draft stays as heard.
+        if let landedBefore { return current == landedBefore }
+        return String(current.dropLast(text.count)) == before
+    }
+}

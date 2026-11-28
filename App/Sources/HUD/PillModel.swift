@@ -19,6 +19,8 @@ enum PillState: Equatable {
     case meetingRecording(since: Date, micMuted: Bool)
     /// The recorded call ended; the meeting stops at `until` unless kept.
     case meetingEnding(until: Date)
+    /// A stopped meeting's notes are being made; ends in the success check.
+    case meetingNotes
 }
 
 /// Microphone level for the waveform. A plain reference, not published: the
@@ -38,6 +40,9 @@ final class PillModel: ObservableObject {
     @Published var elapsed: TimeInterval = 0
     /// Still-working slow state (>3s in processing — TimeoutPolicy.slowStateUI).
     @Published var slow = false
+    /// The transcript is in the field as a draft and the writing model is
+    /// rewriting it (`DictationCoordinator.writingDraft`).
+    @Published var writing = false
     /// `SettingsStore.pillAnchor`, mirrored so the pill hugs the panel edge
     /// the anchor points at instead of floating in the panel's middle.
     @Published var anchor: Double = SettingsStore().pillAnchor

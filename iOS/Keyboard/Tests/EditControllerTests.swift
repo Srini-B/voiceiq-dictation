@@ -1,11 +1,14 @@
 import UIKit
 import XCTest
 
-/// A text field as a keyboard sees it: text with a cursor or a selection.
-private final class Field: NSObject, UITextDocumentProxy {
+/// A text field as a keyboard sees it: text with a cursor or a selection,
+/// and the keyboard's marked text, which the context includes, as UIKit's does.
+final class ProxyField: NSObject, UITextDocumentProxy {
     var text: [Character]
     private var start: Int
     private var length: Int
+    /// Where the marked text is, in characters.
+    private(set) var marked: Range<Int>?
 
     init(_ text: String, cursorAt offset: Int? = nil, selecting word: String? = nil) {
         self.text = Array(text)
@@ -21,20 +24,62 @@ private final class Field: NSObject, UITextDocumentProxy {
     var string: String { String(text) }
     var cursor: Int { start }
 
-    var documentContextBeforeInput: String? { String(text[..<start]) }
+    /// The user selects the last occurrence of `word`; the host commits marked text.
+    func select(_ word: String) {
+        guard let range = string.range(of: word, options: .backwards) else { return }
+        start = string.distance(from: string.startIndex, to: range.lowerBound)
+        length = word.count
+        marked = nil
+    }
+
+    /// A host that leaves marked text out of the context until it is committed.
+    var hidesMarkedText = false
+
+    /// A host that shows only this many characters before the cursor.
+    var window: Int?
+
+    var documentContextBeforeInput: String? {
+        let full = fullContextBefore
+        guard let window else { return full }
+        return String(full.suffix(window))
+    }
+
+    private var fullContextBefore: String {
+        guard hidesMarkedText, let marked, marked.upperBound <= start else { return String(text[..<start]) }
+        return String(text[..<marked.lowerBound]) + String(text[marked.upperBound..<start])
+    }
     var documentContextAfterInput: String? { String(text[(start + length)...]) }
     var selectedText: String? { length > 0 ? String(text[start..<(start + length)]) : nil }
     var documentInputMode: UITextInputMode? { nil }
-    var documentIdentifier: UUID { UUID() }
+    let documentIdentifier = UUID()
     var hasText: Bool { !text.isEmpty }
 
     func insertText(_ string: String) {
-        text.replaceSubrange(start..<(start + length), with: string)
-        start += string.count
+        let range = marked ?? start..<(start + length)
+        text.replaceSubrange(range, with: string)
+        start = range.lowerBound + string.count
         length = 0
+        marked = nil
     }
 
+    /// A host that ignores `unmarkText` and deletes marked text whole (Messages).
+    var keepsMarkedText = false
+    /// Runs once after the next Delete: the user acting while the host applies it.
+    var afterNextDelete: (() -> Void)?
+
     func deleteBackward() {
+        defer {
+            let action = afterNextDelete
+            afterNextDelete = nil
+            action?()
+        }
+        if keepsMarkedText, let range = marked, range.upperBound == start, length == 0 {
+            text.removeSubrange(range)
+            start = range.lowerBound
+            marked = nil
+            return
+        }
+        marked = nil
         if length > 0 {
             text.removeSubrange(start..<(start + length))
         } else if start > 0 {
@@ -45,18 +90,29 @@ private final class Field: NSObject, UITextDocumentProxy {
     }
 
     func adjustTextPosition(byCharacterOffset offset: Int) {
+        marked = nil
         start = min(max((offset < 0 ? start : start + length) + offset, 0), text.count)
         length = 0
     }
 
-    func setMarkedText(_ markedText: String, selectedRange: NSRange) {}
-    func unmarkText() {}
+    /// The cursor goes to the end of the marked text: the keyboard always asks for that.
+    func setMarkedText(_ markedText: String, selectedRange: NSRange) {
+        let range = marked ?? start..<(start + length)
+        text.replaceSubrange(range, with: markedText)
+        marked = markedText.isEmpty ? nil : range.lowerBound..<(range.lowerBound + markedText.count)
+        start = range.lowerBound + markedText.count
+        length = 0
+    }
+
+    func unmarkText() {
+        if !keepsMarkedText { marked = nil }
+    }
 }
 
-private final class FieldController: UIInputViewController {
-    let field: Field
+final class FieldController: UIInputViewController {
+    let field: ProxyField
 
-    init(_ field: Field) {
+    init(_ field: ProxyField) {
         self.field = field
         super.init(nibName: nil, bundle: nil)
     }
@@ -70,7 +126,7 @@ private final class FieldController: UIInputViewController {
 final class EditControllerTests: XCTestCase {
     private var controller: FieldController!
 
-    private func editor(for field: Field) -> EditController {
+    private func editor(for field: ProxyField) -> EditController {
         controller = FieldController(field)
         let editor = EditController()
         editor.controller = controller
@@ -81,7 +137,7 @@ final class EditControllerTests: XCTestCase {
     /// Undo takes back a whole dictation, then the deletes after it as one
     /// step, and redo puts them back in order.
     func testUndoAndRedoReplayDictationAndDeletes() {
-        let field = Field("Dear Ana, ")
+        let field = ProxyField("Dear Ana, ")
         let editor = editor(for: field)
 
         editor.type("see you at noon.")
@@ -101,9 +157,26 @@ final class EditControllerTests: XCTestCase {
         XCTAssertEqual(field.string, "Dear Ana, see you at no")
     }
 
+    /// A draft swapped for its written text is one undo step, like a
+    /// dictation typed in: undo leaves the field as it was before it.
+    func testUndoTakesBackADraftDictation() async throws {
+        let field = ProxyField("Dear Ana,")
+        let editor = editor(for: field)
+        let draft = try XCTUnwrap(KeyboardDraft.type("see you at noon", id: UUID(), documentID: UUID(), into: field,
+                                                     fit: { text, _, _ in " " + text }))
+        let swap = await draft.replace(with: "See you at noon.", in: field, fit: { text, _, _ in " " + text })
+        guard case .retyped(let fitted) = swap else {
+            return XCTFail("not swapped")
+        }
+        editor.recordDictation(inserted: fitted)
+        XCTAssertEqual(field.string, "Dear Ana, See you at noon.")
+        editor.undo()
+        XCTAssertEqual(field.string, "Dear Ana,")
+    }
+
     /// Typing over a selection ends it, and undo brings the selected word back.
     func testTypingOverASelectionEndsItAndUndoRestoresTheWord() {
-        let field = Field("call Srini tomorrow", selecting: "Srini")
+        let field = ProxyField("call Srini tomorrow", selecting: "Srini")
         let editor = editor(for: field)
         XCTAssertEqual(editor.selection, "Srini")
 
@@ -118,7 +191,7 @@ final class EditControllerTests: XCTestCase {
     /// Word steps stop at the near edge of the next word; line steps stop at
     /// a line break.
     func testWordAndLineSteps() {
-        let field = Field("one two\nthree four", cursorAt: 11)
+        let field = ProxyField("one two\nthree four", cursorAt: 11)
         let editor = editor(for: field)
 
         editor.moveCursor(.lineStart)
@@ -135,7 +208,7 @@ final class EditControllerTests: XCTestCase {
     /// When the app itself changes the text, the keyboard's undo would
     /// replay at the wrong place, so it is dropped.
     func testAnEditByTheAppDropsUndo() {
-        let field = Field("Hi")
+        let field = ProxyField("Hi")
         let editor = editor(for: field)
         editor.type(" there")
         field.insertText("!")
@@ -146,7 +219,7 @@ final class EditControllerTests: XCTestCase {
     /// Undo replays at the cursor, so moving it from the edit panel drops
     /// undo instead of deleting text at the new place.
     func testMovingTheCursorDropsUndo() {
-        let field = Field("hello ")
+        let field = ProxyField("hello ")
         let editor = editor(for: field)
         editor.type("world")
         editor.moveCursor(.lineStart)
@@ -159,7 +232,7 @@ final class EditControllerTests: XCTestCase {
     /// turn: undo takes back the fix alone, then the typing. Backspaces on a
     /// later turn are their own step.
     func testAutocorrectionFromTheKeysIsOneUndoStep() {
-        let field = Field("I said ")
+        let field = ProxyField("I said ")
         let editor = editor(for: field)
         for letter in "teh" { editor.typeFromKeyboard(String(letter)) }
         for _ in 0..<3 { editor.deleteFromKeyboard() }

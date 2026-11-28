@@ -32,11 +32,12 @@ public struct AssemblyAITranscriptionService: TranscriptionServicing {
     }
 
     public func transcribe(audioURL: URL, durationSeconds: Double, context: DictationContext) async throws -> TranscriptionResult {
-        try await transcribe(audioURL: audioURL, durationSeconds: durationSeconds, context: context, live: nil)
+        try await transcribe(audioURL: audioURL, durationSeconds: durationSeconds, context: context, live: nil, onHeard: nil)
     }
 
     public func transcribe(audioURL: URL, durationSeconds: Double, context: DictationContext,
-                           live: RealtimeTranscription?) async throws -> TranscriptionResult {
+                           live: RealtimeTranscription?,
+                           onHeard: (@Sendable (String) -> Void)?) async throws -> TranscriptionResult {
         let clock = ContinuousClock()
         let started = clock.now
         var heard: (text: String, model: String)?
@@ -65,6 +66,12 @@ public struct AssemblyAITranscriptionService: TranscriptionServicing {
         func ms(_ duration: Duration) -> Int { Int(duration / .milliseconds(1)) }
         Log.transcription.notice("timing: transcript \(ms(clock.now - started))ms (\(heard.model, privacy: .public)), \(String(format: "%.1f", durationSeconds), privacy: .public)s audio")
         let transcript = TranscriptionResult(rawTranscript: heard.text, cleanedTranscript: heard.text, modelID: heard.model)
+        // The field shows the transcript while the writing model rewrites it
+        // (`write` below: with a key, a transcript heard in the cloud always
+        // goes to the writer).
+        if let onHeard, KeychainStore.loadAPIKey() != nil {
+            onHeard(ReplacementEngine.apply(DictionaryStore().replacementRules(), to: heard.text))
+        }
         let written = try await write(transcript, context: context)
         Log.transcription.notice("timing: key-up to text \(ms(clock.now - started))ms")
         return written
@@ -138,7 +145,9 @@ public struct AssemblyAITranscriptionService: TranscriptionServicing {
                 try await client.write(prompt: prompt, model: model, deadline: 15)
             }
             let written = try await AssemblyAIClient.firstSuccess(retryAfter: 5, first: attempt, retry: attempt)
-            let text = EmailLayout.apply(ValidationGate.stripArtifacts(written).trimmingCharacters(in: .whitespacesAndNewlines),
+            let unechoed = ValidationGate.droppingEcho(ValidationGate.stripArtifacts(written),
+                                                       before: context.focusedField?.surroundingText?.before ?? "", transcript: raw)
+            let text = EmailLayout.apply(unechoed.trimmingCharacters(in: .whitespacesAndNewlines),
                                          customRules: settings.customWritingRules)
             // "" is the writer's no-speech answer; an answer that was only
             // artifacts ("CLEAN:") is a writer failure, tidied below.

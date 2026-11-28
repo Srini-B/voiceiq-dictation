@@ -115,14 +115,19 @@ public struct Delivery: Codable, Equatable, Sendable, Identifiable {
     /// Activity's, or the Action button. Nil when it ended another way (a
     /// call, the launch recovery).
     public let stoppedAt: Date?
+    /// The draft (`SessionSnapshot.draft`) a keyboard typed for this
+    /// dictation, which this written text replaces. Nil when the text comes
+    /// alone.
+    public let replacesDraft: UUID?
 
     public init(id: UUID = UUID(), text: String, createdAt: Date = Date(), destination: FieldIdentity?,
-                stoppedAt: Date? = nil) {
+                stoppedAt: Date? = nil, replacesDraft: UUID? = nil) {
         self.id = id
         self.text = text
         self.createdAt = createdAt
         self.destination = destination
         self.stoppedAt = stoppedAt
+        self.replacesDraft = replacesDraft
     }
 
     /// The same result without the fingerprint of the destination's text,
@@ -130,7 +135,21 @@ public struct Delivery: Codable, Equatable, Sendable, Identifiable {
     public func forgettingDraft() -> Delivery {
         guard var destination, destination.draft != nil else { return self }
         destination.draft = nil
-        return Delivery(id: id, text: text, createdAt: createdAt, destination: destination, stoppedAt: stoppedAt)
+        return Delivery(id: id, text: text, createdAt: createdAt, destination: destination, stoppedAt: stoppedAt,
+                        replacesDraft: replacesDraft)
+    }
+
+    /// A keyboard types a draft only while it is younger than this. The app
+    /// waits `draftWait` for a keyboard to say it typed one, so a draft is
+    /// never typed after the app gave up on it and sent the written text
+    /// alone.
+    public static let draftWindow: TimeInterval = 0.45
+    public static let draftWait: TimeInterval = 0.6
+
+    /// Whether a keyboard may still type this draft.
+    public func isFreshDraft(now: Date = Date()) -> Bool {
+        let age = now.timeIntervalSince(createdAt)
+        return age >= 0 && age < Self.draftWindow
     }
 
     /// Why the keyboard on screen may type a result unasked.
@@ -256,6 +275,13 @@ public struct SessionSnapshot: Codable, Equatable, Sendable {
     /// mid-dictation reads it at the next launch, so the recovered text
     /// still reaches its field.
     public var field: FieldIdentity?
+    /// The transcript of the dictation in progress, offered while the
+    /// writing model rewrites it. Only a keyboard still in the input session
+    /// Stop was tapped in types it, underlined, and says so in
+    /// `SharedStore.typedDraftID`; the written text then comes as a delivery
+    /// that names it (`Delivery.replacesDraft`). The app withdraws it once
+    /// a keyboard took it or `Delivery.draftWait` passed.
+    public var draft: Delivery?
 
     public init(
         phase: Phase = .off,
@@ -263,7 +289,8 @@ public struct SessionSnapshot: Codable, Equatable, Sendable {
         delivery: Delivery? = nil,
         notice: Notice? = nil,
         meetingActive: Bool = false,
-        field: FieldIdentity? = nil
+        field: FieldIdentity? = nil,
+        draft: Delivery? = nil
     ) {
         self.phase = phase
         self.recordingStartedAt = recordingStartedAt
@@ -271,6 +298,7 @@ public struct SessionSnapshot: Codable, Equatable, Sendable {
         self.notice = notice
         self.meetingActive = meetingActive
         self.field = field
+        self.draft = draft
     }
 }
 

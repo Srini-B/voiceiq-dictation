@@ -63,7 +63,11 @@ final class DictationController {
             localMeeting: LocalMeetingHelper.run
         )
         coordinator = DictationCoordinator(
-            audioFactory: { [warmEngines] in warmEngines.take() },
+            // Debug: a listed audio file plays in as the microphone (`FileAudioCapture`).
+            audioFactory: { [warmEngines] () -> AudioCapturing in
+                if let file = FileAudioCapture.fromDefaults() { return file }
+                return warmEngines.take()
+            },
             transcription: service,
             insertion: LearningInserter(learner: learner),
             contextProvider: {
@@ -158,6 +162,13 @@ final class DictationController {
         NotificationCenter.default.addObserver(forName: .voiceIQPasteMissed, object: nil, queue: .main) { [weak self] _ in
             Task { @MainActor in
                 self?.showBackgroundNotice("The text didn't go in — copied, press ⌘V to paste", for: 5.0, sound: nil)
+            }
+        }
+
+        NotificationCenter.default.addObserver(forName: .voiceIQDraftKept, object: nil, queue: .main) { [weak self] note in
+            let message = note.object as? String ?? DictationCoordinator.withdrawKeptNotice
+            Task { @MainActor in
+                self?.showBackgroundNotice(message, for: 4.0, sound: nil)
             }
         }
 
@@ -743,6 +754,12 @@ final class DictationController {
             .sink { [weak self] level in
                 self?.hud.model.level.value = level
             }
+            .store(in: &cancellables)
+
+        coordinator.$writingDraft
+            .removeDuplicates()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] writing in self?.hud.model.writing = writing }
             .store(in: &cancellables)
 
         coordinator.$coachingHint

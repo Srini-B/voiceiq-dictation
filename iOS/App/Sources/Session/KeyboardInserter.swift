@@ -29,10 +29,103 @@ final class DictationTarget {
 /// Hands results to the keyboard. The keyboard does the actual typing.
 @MainActor
 final class KeyboardInserter: TextInserting {
-    var onDeliver: ((String) -> Void)?
+    /// Publishes the written text; the second value names the draft it
+    /// replaces, when a keyboard typed one.
+    var onDeliver: ((String, UUID?) -> Void)?
+    /// Publishes a draft for the keyboard (`SessionSnapshot.draft`), or
+    /// withdraws it with nil.
+    var onDraft: ((Delivery?) -> Void)?
+    /// Where the dictation in progress goes (`DictationTarget.destination`).
+    var destination: (() -> FieldIdentity?)?
 
     func insert(_ text: String, context: DictationContext) async -> InsertionOutcome {
-        onDeliver?(text)
+        onDeliver?(text, nil)
         return .inserted
+    }
+
+    /// Off until the swap is safe in every host: in Messages the keyboard's
+    /// view of the field (`documentContextBeforeInput`) read the expected
+    /// text after a swap while the field itself held only the written text,
+    /// with the earlier dictation and typed text gone (2026-11-28, simulator).
+    /// No read-back the keyboard can do catches that, so the iPhone types the
+    /// written text once, as before drafts.
+    static let offersDrafts = false
+
+    /// A draft when the dictation goes back to a keyboard's input session.
+    /// Whether a keyboard is still there to type it is the keyboard's call
+    /// (`KeyboardModel.typeDraftIfNeeded`); when none does, the written text
+    /// is typed as a plain result, as before.
+    func draft(context: DictationContext) async -> TextDraft? {
+        guard Self.offersDrafts, destination?()?.documentID != nil else { return nil }
+        return KeyboardTextDraft(inserter: self)
+    }
+}
+
+/// The app's half of a draft: it offers the transcript in the snapshot,
+/// waits a moment for the keyboard to say it typed it, then withdraws it,
+/// so it is never typed late. The keyboard swaps it for the written text,
+/// or leaves it as heard when it can't find it for certain.
+@MainActor
+private final class KeyboardTextDraft: TextDraft {
+    private let inserter: KeyboardInserter
+    private let store = SharedStore.shared
+    /// The draft in the snapshot, until it is withdrawn.
+    private var offered: Delivery?
+    /// The draft this dictation offered, which its written text names.
+    private var draftID: UUID?
+    private var ended = false
+
+    init(inserter: KeyboardInserter) {
+        self.inserter = inserter
+    }
+
+    func show(_ text: String) async -> DraftShown {
+        guard !ended, offered == nil, draftID == nil, let destination = inserter.destination?() else {
+            return .notInserted
+        }
+        let draft = Delivery(text: text, destination: destination)
+        offered = draft
+        inserter.onDraft?(draft)
+        let deadline = draft.createdAt.addingTimeInterval(Delivery.draftWait)
+        while !ended, Date() < deadline, store.typedDraftID != draft.id {
+            try? await Task.sleep(for: .milliseconds(50))
+            store.reloadFromDisk()
+        }
+        withdraw()
+        guard !ended else { return .notInserted }
+        // Whether or not a keyboard said it typed the draft, the written
+        // text comes naming it, from this dictation alone: a keyboard holding
+        // it swaps it (also one whose report came late), and any other types
+        // the written text as a plain result. So it is never typed beside
+        // the draft, and no other dictation's text can carry its name.
+        draftID = draft.id
+        store.reloadFromDisk()
+        let confirmed = store.typedDraftID == draft.id
+        SessionDiagnostics.note(confirmed ? "draft typed by the keyboard" : "draft not confirmed by a keyboard in time")
+        // Unconfirmed, the written text takes the dictation's insert turn.
+        return confirmed ? .shown : .pending
+    }
+
+    func replace(with text: String) async -> Bool {
+        // The keyboard can't take a draft back out; it stays as heard.
+        guard let draftID, !text.isEmpty else { return false }
+        // The keyboard does the swap, leaves the draft as heard, or types
+        // the text as a plain result where no draft went in.
+        inserter.onDeliver?(text, draftID)
+        return true
+    }
+
+    /// The keyboard types a draft on its own once offered; nothing to stop here.
+    func stopShowing() {}
+
+    func end() {
+        ended = true
+        withdraw()
+    }
+
+    private func withdraw() {
+        guard offered != nil else { return }
+        offered = nil
+        inserter.onDraft?(nil)
     }
 }
