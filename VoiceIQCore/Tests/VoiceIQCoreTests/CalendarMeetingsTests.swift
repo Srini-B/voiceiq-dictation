@@ -17,6 +17,32 @@ final class CalendarMeetingsTests: XCTestCase {
         XCTAssertNil(CalendarMeetings.joinLink(in: "https://acme.slack.com/huddle https://notzoom.us/j/1"))
     }
 
+    /// Two overlapping meetings: the call's own service decides, else the one
+    /// under way, else none rather than the later one.
+    func testOverlappingMeetingsMatchByCallServiceOrNotAtAll() {
+        typealias E = (name: String, start: Date, text: String)
+        let now = Date(timeIntervalSinceReferenceDate: 800_000_000)
+        let standup: E = ("standup", now.addingTimeInterval(-1800), "https://meet.google.com/abc-defg-hij")
+        let vendor: E = ("vendor", now.addingTimeInterval(-120), "Join https://acme.zoom.us/j/1")
+        let soon: E = ("soon", now.addingTimeInterval(300), "Room 4")
+        func pick(_ events: [E], _ source: CallSource?) -> String? {
+            CalendarMeetings.pick(events, at: now, services: source.map(CalendarMeetings.services(of:)) ?? [], start: \.start, text: \.text)?.name
+        }
+        let meet = CallSource.browser(bundleID: "com.google.Chrome", host: "meet.google.com")
+        let zoom = CallSource.app(bundleID: "us.zoom.xos", name: "Zoom")
+        XCTAssertEqual(pick([standup, vendor], meet), "standup")
+        XCTAssertEqual(pick([standup, vendor], zoom), "vendor")
+        XCTAssertNil(pick([standup, vendor], nil))
+        XCTAssertNil(pick([standup, vendor], .app(bundleID: "com.tinyspeck.slackmacgap", name: "Slack")))
+        XCTAssertEqual(pick([standup, soon], nil), "standup")
+        XCTAssertEqual(pick([soon], zoom), "soon")
+        let teamsLive: E = ("teams", now.addingTimeInterval(-600), "https://teams.live.com/meet/123")
+        XCTAssertEqual(pick([vendor, teamsLive], .app(bundleID: "com.microsoft.teams2", name: "Microsoft Teams")), "teams")
+        // Two under way and one about to start: none, not the one about to start (Neon).
+        XCTAssertNil(pick([standup, vendor, soon], nil))
+        XCTAssertNil(pick([(name: "fake", start: now, text: "https://notzoom.us/j/1"), standup], zoom))
+    }
+
     func testWhenCountsMinutesForTheFirstHour() {
         let now = Date(timeIntervalSinceReferenceDate: 800_000_000)
         XCTAssertEqual(CalendarMeetings.when(now.addingTimeInterval(-120), now: now), "Now")

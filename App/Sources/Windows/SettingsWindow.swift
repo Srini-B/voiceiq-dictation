@@ -243,14 +243,14 @@ private struct SidebarRow: View {
                     .background(RoundedRectangle(cornerRadius: 6).fill(section.tileColor))
                 Text(section.title)
                     .font(VoiceIQUI.TypeScale.body())
-                    .foregroundStyle(selected ? VoiceIQUI.Colors.onPrimary : .primary)
+                    .foregroundStyle(selected ? VoiceIQUI.Colors.onSelection : .primary)
                 Spacer(minLength: 0)
             }
             .padding(.horizontal, 8)
             .padding(.vertical, 5)
             .background(
                 RoundedRectangle(cornerRadius: VoiceIQUI.Radius.small)
-                    .fill(selected ? VoiceIQUI.Colors.primary
+                    .fill(selected ? VoiceIQUI.Colors.selection
                           : hovering ? Color.primary.opacity(VoiceIQUI.StateLayer.hover)
                           : .clear)
             )

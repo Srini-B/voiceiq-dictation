@@ -160,7 +160,11 @@ it stops the same way.
 the calendar event it falls in: an event that started before it or starts
 within 10 minutes, not all-day, cancelled, free or declined, with other
 people invited or a Zoom, Meet, Teams, Webex or Slack link
-(`CalendarMeetings.event(at:)`). Its title shows in the list until the notes
+(`CalendarMeetings.event(at:source:)`). When several events fit, it takes
+the one whose call link names the detected call's service, else the only
+one under way, else the only one about to start; events that nothing tells
+apart give none, so a wrong title and invitee list never reach the notes or
+the speaker names. Its title shows in the list until the notes
 have one, and the notes request gets the title and up to 30 invitees' names
 for the title and name spellings (`MeetingMeta.calendarEvent`). Hex reads
 the calendar the same way.
