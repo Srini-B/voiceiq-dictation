@@ -324,22 +324,22 @@ struct PrivacyPane: View {
             }
 
             Section {
-                LocalAudioPrivacyRow(provider: "Gemini", cloudDescription: "Sent to Google's Gemini API with your key, transcribed every time")
+                LocalAudioPrivacyRow(provider: "AssemblyAI", cloudDescription: "Sent to AssemblyAI with your key, transcribed every time")
                 LabeledContent("Text around the cursor") { Text("Sent with each dictation, so it fits the text already there") }
                 LabeledContent("Where you are typing") { Text("App name, window title and browser page address, with each dictation") }
-                LabeledContent("Meeting audio") { Text("Only if call recording is on; transcribed and turned into notes by Gemini") }
+                LabeledContent("Meeting audio") { Text("Only if call recording is on; transcribed and turned into notes by AssemblyAI") }
                 LabeledContent("Dictionary terms") { Text("Sent with each dictation and meeting notes, so names are spelled right") }
                 LabeledContent("Dictionary") { Text("Synced to your iPhone through your iCloud account") }
                 LabeledContent("History") { Text("Final text synced to your iPhone through your iCloud account") }
                 LabeledContent("Meetings") { Text("Notes, transcripts and questions synced to your iPhone through your iCloud account; recordings stay on this Mac") }
                 LabeledContent("Coding agents") { Text("Only if you let them read History and meetings; what they read goes to their AI provider") }
                 LabeledContent("Screen snapshots") { Text("Only if screen context is on; never stored") }
-                LabeledContent("Names on a call screen") { Text("Read on this Mac while a meeting records; only the names go to Gemini for notes") }
+                LabeledContent("Names on a call screen") { Text("Read on this Mac while a meeting records; only the names go to AssemblyAI for notes") }
                 LabeledContent("Everything else") { Text("Never leaves this Mac") }
             } header: {
                 Text("What leaves your Mac")
             } footer: {
-                Text("No middleman server, no account, no analytics, no keystroke logging. Only Google, plus the AI providers of any coding agents you let read History and meetings.")
+                Text("No middleman server, no account, no analytics, no keystroke logging. Only AssemblyAI, plus the AI providers of any coding agents you let read History and meetings.")
             }
 
             GranolaImportSection { Text("Import meetings") }
@@ -371,29 +371,20 @@ struct AdvancedPane: View {
     private let settings = SettingsStore()
     /// Placeholders derive from the REAL defaults — a hardcoded string went
     /// stale the day the preview model was retired (dogfood).
-    private static let defaultConfig = GeminiConfig()
+    private static let defaultConfig = AssemblyAIConfig()
     @State private var apiKey = ""
     @State private var keyStatus: KeyStatus = KeychainStore.loadAPIKey() == nil ? .missing : .stored
-    @State private var endpoint = SettingsStore().endpointOverride ?? ""
-    @State private var transcribeModel = SettingsStore().transcribeModelOverride ?? ""
-    @State private var cleanupModel = SettingsStore().cleanupModelOverride ?? ""
+    @State private var writingModel = SettingsStore().writingModelOverride ?? ""
 
     enum KeyStatus { case missing, stored, validating, valid, invalid, saveFailed, savedOffline }
 
     private var hasStoredKey: Bool { keyStatus == .stored || keyStatus == .valid || keyStatus == .savedOffline }
 
-    private var endpointLooksBroken: Bool {
-        // Same predicate the effective config uses — the warning and reality
-        // can never drift apart (SettingsStore.usableEndpointURL).
-        let trimmed = endpoint.trimmingCharacters(in: .whitespacesAndNewlines)
-        return !trimmed.isEmpty && SettingsStore.usableEndpointURL(trimmed) == nil
-    }
-
     var body: some View {
         Form {
-            geminiKeySection
+            assemblyAIKeySection
 
-            geminiModelSections
+            assemblyAIModelSection
 
             AgentAccessSection()
 
@@ -408,7 +399,7 @@ struct AdvancedPane: View {
         }
     }
 
-    private var geminiKeySection: some View {
+    private var assemblyAIKeySection: some View {
             Section {
                 HStack {
                     LabeledContent("API key") {
@@ -441,58 +432,32 @@ struct AdvancedPane: View {
                         Button("Remove Key…", role: .destructive) { removeKey() }
                     }
                     Spacer()
-                    Link("Get a key in Google AI Studio", destination: URL(string: "https://aistudio.google.com/apikey")!)
+                    Link("Get a key from AssemblyAI", destination: URL(string: "https://www.assemblyai.com/dashboard/api-keys")!)
                         .font(VoiceIQUI.TypeScale.labelSmall())
                 }
             } header: {
-                Text("Gemini API key")
+                Text("AssemblyAI API key")
             } footer: {
-                Text("Stored in your Mac's Keychain and only ever sent to Google.")
+                Text("Stored in your Mac's Keychain and only ever sent to AssemblyAI. A new account gets $50 of free credit; the writing step needs a small balance on top, since the free credit doesn't cover the LLM Gateway.")
             }
     }
 
-    @ViewBuilder
-    private var geminiModelSections: some View {
+    private var assemblyAIModelSection: some View {
             Section {
-                LabeledContent("Endpoint") {
-                    TextField("", text: $endpoint, prompt: Text(Self.defaultConfig.endpoint.absoluteString))
+                LabeledContent("Writing model") {
+                    TextField("", text: $writingModel, prompt: Text(Self.defaultConfig.writingModel))
                         .labelsHidden()
                         .font(VoiceIQUI.TypeScale.code)
                         .multilineTextAlignment(.trailing)
                 }
-                .onChange(of: endpoint) { _, value in
+                .onChange(of: writingModel) { _, value in
                     let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-                    settings.setEndpointOverride(trimmed.isEmpty ? nil : trimmed)
-                }
-                if endpointLooksBroken {
-                    Text("Not a valid http(s) URL — the default endpoint is being used.")
-                        .font(VoiceIQUI.TypeScale.labelSmall())
-                        .foregroundStyle(VoiceIQUI.Colors.error)
-                }
-                LabeledContent("Meeting model") {
-                    TextField("", text: $transcribeModel, prompt: Text(Self.defaultConfig.transcribeModel))
-                        .labelsHidden()
-                        .font(VoiceIQUI.TypeScale.code)
-                        .multilineTextAlignment(.trailing)
-                }
-                .onChange(of: transcribeModel) { _, value in
-                    let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-                    settings.setTranscribeModelOverride(trimmed.isEmpty ? nil : trimmed)
-                }
-                LabeledContent("Dictation model") {
-                    TextField("", text: $cleanupModel, prompt: Text(Self.defaultConfig.writingModel))
-                        .labelsHidden()
-                        .font(VoiceIQUI.TypeScale.code)
-                        .multilineTextAlignment(.trailing)
-                }
-                .onChange(of: cleanupModel) { _, value in
-                    let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-                    settings.setCleanupModelOverride(trimmed.isEmpty ? nil : trimmed)
+                    settings.setWritingModelOverride(trimmed.isEmpty ? nil : trimmed)
                 }
             } header: {
-                Text("Gemini models")
+                Text("AssemblyAI")
             } footer: {
-                Text("The dictation model hears each dictation and writes its text in one call; it also writes meeting notes and answers meeting questions. The meeting model transcribes meetings with speakers and word times. Preview models get renamed — override here if a model 404s. Leave blank for defaults — every edit saves as you type.")
+                Text("The writing model on AssemblyAI's LLM Gateway writes each dictation's transcript by the writing rules; it also writes meeting notes and answers meeting questions. Models get renamed — override here if one stops answering. Leave blank for the default — every edit saves as you type.")
             }
     }
 
@@ -517,8 +482,7 @@ struct AdvancedPane: View {
         guard !key.isEmpty else { return }
         keyStatus = .validating
         Task {
-            let client = GeminiClient(apiKey: { key })
-            let check = await client.validateKey(endpoint: settings.geminiConfig.endpoint)
+            let check = await AssemblyAIClient(apiKey: { key }).validateKey()
             // Same rule as onboarding: a key the server REJECTED never gets
             // saved, but a check we simply could not perform must not wall the
             // user out. The distinction now comes from the response itself

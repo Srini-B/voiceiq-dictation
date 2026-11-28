@@ -15,22 +15,16 @@ import VoiceIQSpeech
 /// Finished windows are cached beside the audio, so a retry after a rate
 /// limit or a crash never pays for the same audio twice.
 ///
+/// Each request goes to AssemblyAI's pre-recorded STT-3.7 (Universal-2 for
+/// languages it lacks); far-side and mixed requests ask for speaker labels.
+///
 /// MEASURED 2026-11-26 on AMI ES2004a as a call (one headset as the mic, the
-/// other three summed as the far side), gemini-3.5-transcribe: the mixed
-/// request merged one of four people away and put 73.5% of words under the
-/// right person; the far side alone, silences cut, found all three remote
-/// voices at 83.8%, with the same words recalled (77% against 79% sent
-/// whole). The 2026-09-27 finding that a far-side-only request loses most of
-/// its speech held for the models of that time, not this one.
+/// other three summed as the far side), with Gemini as the provider: the
+/// mixed request merged one of four people away and put 73.5% of words under
+/// the right person; the far side alone, silences cut, found all three remote
+/// voices at 83.8%.
 public struct MeetingTranscriber: Sendable {
-    public struct Models: Sendable {
-        public var transcribe: String
-        public init(transcribe: String) { self.transcribe = transcribe }
-    }
-
-    private let client: GeminiClient
-    private let models: Models
-    private let endpoint: URL
+    private let client: AssemblyAIClient
     private let sleep: @Sendable (TimeInterval) async throws -> Void
     private let diarizeFarSide: FarSideDiarizer?
 
@@ -38,32 +32,29 @@ public struct MeetingTranscriber: Sendable {
     /// the on-device speaker model. Nil when that model is not downloaded.
     public typealias FarSideDiarizer = @Sendable (URL) async throws -> [LocalMeetingResult.Segment]?
 
-    public init(client: GeminiClient, models: Models, endpoint: URL, diarizeFarSide: FarSideDiarizer? = nil,
+    public init(client: AssemblyAIClient, diarizeFarSide: FarSideDiarizer? = nil,
                 sleep: @escaping @Sendable (TimeInterval) async throws -> Void = { try await Task.sleep(nanoseconds: UInt64($0 * 1_000_000_000)) }) {
-        self.client = client; self.models = models; self.endpoint = endpoint
+        self.client = client
         self.diarizeFarSide = diarizeFarSide
         self.sleep = sleep
     }
 
-    /// Seconds of speech per request. Diarized requests are capped at 30
-    /// minutes of audio; ten keeps a Tier 1 Gemini key (10,000 audio tokens a
-    /// minute, 25 tokens a second) to about one minute of waiting per window.
-    /// MEASURED 2026-09-27 on a 30-minute call: Gemini at 600 s gave 907 words.
-    static let windowSpeech: Double = 600
-    /// A Tier 1 key needs about one minute of waiting per window; a two-hour
-    /// call has twenty windows.
-    static let rateLimitBudget: TimeInterval = 45 * 60
-    static let cacheVersion = "v7"
+    /// Seconds of speech per request. AssemblyAI takes files of up to 10
+    /// hours and tells voices apart better with more of each, so an hour of
+    /// speech goes as one request; a longer meeting is linked across windows
+    /// by reference clips.
+    static let windowSpeech: Double = 3600
+    /// How long a meeting may wait out rate limits in all.
+    static let rateLimitBudget: TimeInterval = 15 * 60
+    static let cacheVersion = "v8"
     /// A turn longer than this ends at its next sentence end: a two-minute
     /// answer reads as paragraphs, each with its own time.
     static let paragraphSeconds: Double = 20
 
     public func transcribe(folder: URL) async throws -> [TranscriptSegment] {
         let audio = try Self.callAudio(folder: folder)
-        // The name matches the Gemini windows earlier versions cached, so a
-        // redo of an older meeting reuses them.
         let cache = folder.appendingPathComponent(
-            "transcribe-\(Self.cacheVersion)-gemini-\(Int(Self.windowSpeech))", isDirectory: true)
+            "transcribe-\(Self.cacheVersion)-assemblyai-\(Int(Self.windowSpeech))", isDirectory: true)
         try FileManager.default.createDirectory(at: cache, withIntermediateDirectories: true)
         var budget = Self.rateLimitBudget
         let remote = ScreenSpeakerNames.expectedRemote(folder: folder)
@@ -86,18 +77,13 @@ public struct MeetingTranscriber: Sendable {
                                   budget: inout TimeInterval) async throws -> [TimedWord] {
         let micWindows = Self.windows(audio.mic.activeRegions(), speech: Self.windowSpeech)
         let owner = try await cachedWindows(micWindows, cache: cache, prefix: "mic-") { index, regions, _ in
-            try await requestWords(regions, known: [], label: "mic \(index + 1)/\(micWindows.count)", budget: &budget) { (part: [ClosedRange<Double>], _: [TimedWord]) throws -> AssembledAudio in
+            try await requestWords(regions, known: [], speakerLabels: false, label: "mic \(index + 1)/\(micWindows.count)", budget: &budget) { (part: [ClosedRange<Double>], _: [TimedWord]) throws -> AssembledAudio in
                 var request = AssembledAudio()
                 try request.appendBody(part, source: audio.mic.samples)
                 return request
             } place: { (raw: [DiarizedWord], request: AssembledAudio, _: [TimedWord]) -> [TimedWord] in
                 raw.compactMap { word -> TimedWord? in
-                    guard let start = word.start else {
-                        // Untimed text (the API's no-annotation fallback) is kept as one turn, as `place` does.
-                        return TimedWord(text: word.text, speaker: MeetingSpeaker.you,
-                                         start: request.trackTime(request.bodyStart) ?? 0, end: request.trackTime(request.duration) ?? 0)
-                    }
-                    guard let span = request.trackSpan(start, word.end ?? start) else { return nil }
+                    guard let start = word.start, let span = request.trackSpan(start, word.end ?? start) else { return nil }
                     return TimedWord(text: word.text, speaker: MeetingSpeaker.you, start: span.lowerBound, end: span.upperBound)
                 }
             }
@@ -116,7 +102,6 @@ public struct MeetingTranscriber: Sendable {
     private func transcribeMixed(audio: CallAudio, cache: URL, remote: Int?,
                                  budget: inout TimeInterval) async throws -> [TimedWord] {
         let windows = Self.windows(audio.activeRegions(), speech: Self.windowSpeech)
-        // The name matches the windows earlier versions cached, so a redo of an older meeting reuses them.
         var words = try await cachedWindows(windows, cache: cache, prefix: "") { index, regions, known in
             try await transcribe(window: regions, track: .mixed, audio: audio, known: known, remote: remote, budget: &budget,
                                  label: "window \(index + 1)/\(windows.count)")
@@ -145,41 +130,17 @@ public struct MeetingTranscriber: Sendable {
         return words
     }
 
-    /// One request for `regions`. A request the API ends `incomplete` is sent
-    /// again as two halves, the second knowing the first's speakers.
-    /// MEASURED 2026-11-26: one voice that spoke a fifth of a 17-minute
-    /// track, sent whole with its silences, came back `incomplete` and stopped
-    /// at 863 s, twice; the same speech with the silences cut came back whole.
-    private func requestWords(_ regions: [ClosedRange<Double>], known: [TimedWord], label: String, budget: inout TimeInterval,
+    /// One request for `regions`.
+    private func requestWords(_ regions: [ClosedRange<Double>], known: [TimedWord], speakerLabels: Bool = true, label: String,
+                              budget: inout TimeInterval,
                               build: ([ClosedRange<Double>], [TimedWord]) throws -> AssembledAudio,
                               place: ([DiarizedWord], AssembledAudio, [TimedWord]) -> [TimedWord]) async throws -> [TimedWord] {
         let request = try build(regions, known)
         let flac = try FLACEncoder.encode(samples: request.samples)
-        do {
-            let raw = try await withRetries(label: label, budget: &budget) { try await transcribeSpeakers(flac) }
-            return place(raw, request, known)
-        } catch TranscriptionError.network(let code) where code == Self.incomplete {
-            guard let (first, second) = Self.halves(regions) else { throw TranscriptionError.network(code) }
-            Log.meeting.info("\(label, privacy: .public): incomplete, sending as two halves")
-            let before = try await requestWords(first, known: known, label: label, budget: &budget, build: build, place: place)
-            let after = try await requestWords(second, known: known + before, label: label, budget: &budget, build: build, place: place)
-            return before + after
+        let raw = try await withRetries(label: label, budget: &budget) {
+            try await client.transcribeSpeakers(audio: flac, speakerLabels: speakerLabels, deadline: 900)
         }
-    }
-
-    /// `GeminiClient.mapInteractionStatus` for a request the API stopped early.
-    static let incomplete = "interaction_status_incomplete"
-
-    /// Regions split in two: by count, or one long region at its middle. Nil
-    /// when there is nothing worth splitting.
-    static func halves(_ regions: [ClosedRange<Double>]) -> ([ClosedRange<Double>], [ClosedRange<Double>])? {
-        if regions.count > 1 {
-            let half = regions.count / 2
-            return (Array(regions[..<half]), Array(regions[half...]))
-        }
-        guard let only = regions.first, only.upperBound - only.lowerBound >= 10 else { return nil }
-        let middle = (only.lowerBound + only.upperBound) / 2
-        return ([only.lowerBound...middle], [middle...only.upperBound])
+        return place(raw, request, known)
     }
 
     /// Both tracks, with the mic's echo cancelled when the far side talked.
@@ -276,11 +237,9 @@ public struct MeetingTranscriber: Sendable {
 
     /// On a call, who on the far side said each word comes from the on-device
     /// speaker model run over the whole far-side track, whenever it heard
-    /// anyone. Gemini takes no speaker count: on 2026-11-23 it gave two
-    /// remote people one id, and an outside test had it get the count right
-    /// in 16 of 36 runs (carlosrymer/gemini-3-5-transcribe-diarization-limits);
-    /// the model got 31 of 33 in ours (activities/2026-11-06-offline-speaker-diarizer.md).
-    /// Without the model the words keep Gemini's ids.
+    /// anyone: it got the speaker count right in 31 of 33 runs in ours
+    /// (activities/2026-11-06-offline-speaker-diarizer.md). Without the model
+    /// the words keep AssemblyAI's speaker labels.
     private func splitFarSide(_ words: [TimedWord], audio: CallAudio, folder: URL) async throws -> [TimedWord] {
         let ids = Set(words.map(\.speaker)).subtracting([MeetingSpeaker.you])
         guard !ids.isEmpty else { return words }
@@ -300,12 +259,12 @@ public struct MeetingTranscriber: Sendable {
             }
         }
         guard let segments, !segments.isEmpty else {
-            Log.meeting.info("far side: \(ids.count, privacy: .public) speakers from Gemini; the speaker model is not downloaded or heard nobody")
+            Log.meeting.info("far side: \(ids.count, privacy: .public) speakers from AssemblyAI; the speaker model is not downloaded or heard nobody")
             return words
         }
         let split = Self.split(words, segments: segments)
         let found = Set(split.map(\.speaker)).subtracting([MeetingSpeaker.you]).count
-        Log.meeting.info("far side: \(ids.count, privacy: .public) speakers from Gemini, \(found, privacy: .public) voices from the speaker model")
+        Log.meeting.info("far side: \(ids.count, privacy: .public) speakers from AssemblyAI, \(found, privacy: .public) voices from the speaker model")
         return split
     }
 
@@ -390,12 +349,7 @@ public struct MeetingTranscriber: Sendable {
         var previous = ""
         var placed: [Placed] = raw.compactMap { word in
             let label = word.speaker ?? previous
-            guard let start = word.start else {
-                // Untimed text (the API's no-annotation fallback) is kept as one turn.
-                previous = label
-                return (word.text, label, request.trackTime(request.bodyStart) ?? 0, request.trackTime(request.duration) ?? 0)
-            }
-            guard let span = request.trackSpan(start, word.end ?? start) else { return nil }
+            guard let start = word.start, let span = request.trackSpan(start, word.end ?? start) else { return nil }
             previous = label
             return (word.text, label, span.lowerBound, span.upperBound)
         }
@@ -459,33 +413,18 @@ public struct MeetingTranscriber: Sendable {
         }
     }
 
-    /// Runs `body`, trying a safety block once more and waiting out a
-    /// per-minute rate limit while `budget` lasts.
+    /// Runs `body`, waiting out a rate limit while `budget` lasts.
     private func withRetries<T>(label: String, budget: inout TimeInterval, _ body: () async throws -> T) async throws -> T {
         while true {
             do {
-                do { return try await body() } catch TranscriptionError.safetyBlocked {
-                    // MEASURED 2026-09-27: the flash model blocked one window of a
-                    // call as `content_filter` and passed the same window on the
-                    // next run. One more try before giving up.
-                    Log.meeting.info("\(label, privacy: .public): safety block, retrying")
-                    return try await body()
-                }
+                return try await body()
             } catch TranscriptionError.rateLimitedTransient(let retryAfter) {
                 let wait = (retryAfter ?? 60) + 2
                 guard wait <= budget else { throw TranscriptionError.rateLimitedTransient(retryAfter: retryAfter) }
                 budget -= wait
                 Log.meeting.info("\(label, privacy: .public): waiting \(Int(wait), privacy: .public)s for the rate limit")
                 try await sleep(wait)
-            } catch is DecodingError {
-                Log.meeting.error("\(label, privacy: .public): returned unreadable segments")
-                throw TranscriptionError.network("unreadable_segments")
             }
         }
-    }
-
-    /// Speaker-labelled, word-timed words from gemini-3.5-transcribe.
-    private func transcribeSpeakers(_ flac: Data) async throws -> [DiarizedWord] {
-        try await client.transcribeSpeakers(audio: flac, model: models.transcribe, endpoint: endpoint, deadline: 600)
     }
 }

@@ -342,9 +342,6 @@ private struct APIKeyScreen: View {
     @State private var validating = false
     @State private var failed = false
     @State private var saveFailed = false
-    /// The key authenticates but reaches no transcription model — say so here
-    /// rather than letting them discover it on their first dictation.
-    @State private var noModelAccess = false
     /// Set when the server actively rejected the key, so we can say so instead of
     /// the generic "didn't work".
     @State private var rejection: String?
@@ -358,7 +355,7 @@ private struct APIKeyScreen: View {
     private var showingField: Bool { !storedKeyExists || replacing }
 
     var body: some View {
-        ScreenScaffold("Bring your own key.", "VoiceiQ uses your Gemini API key. It's stored in your Mac's Keychain and only ever sent to Google.") {
+        ScreenScaffold("Bring your own key.", "VoiceiQ uses your AssemblyAI API key. It's stored in your Mac's Keychain and only ever sent to AssemblyAI.") {
             VStack(spacing: VoiceIQUI.Spacing.s) {
                 if !showingField {
                     Label("Key already in your Keychain", systemImage: "checkmark.circle.fill")
@@ -371,7 +368,6 @@ private struct APIKeyScreen: View {
                         key = ""
                         rejection = nil
                         unverified = false
-                        noModelAccess = false
                     }
                     .buttonStyle(.plain)
                     .font(VoiceIQUI.TypeScale.labelSmall())
@@ -383,7 +379,7 @@ private struct APIKeyScreen: View {
                         .frame(width: 320)
                     if failed {
                         Text(rejection.map { "That key was rejected: \($0)" }
-                             ?? "That key didn't work — check it in AI Studio.")
+                             ?? "That key didn't work — check it in your AssemblyAI dashboard.")
                             .font(VoiceIQUI.TypeScale.labelSmall())
                             .foregroundStyle(VoiceIQUI.Colors.error)
                             .multilineTextAlignment(.center)
@@ -391,7 +387,7 @@ private struct APIKeyScreen: View {
                             .frame(maxWidth: 320)
                     }
                     if unverified {
-                        Text("Couldn't reach Google to check this key — saved it anyway. Your first dictation will tell you for sure.")
+                        Text("Couldn't reach AssemblyAI to check this key — saved it anyway. Your first dictation will tell you for sure.")
                             .font(VoiceIQUI.TypeScale.labelSmall())
                             .foregroundStyle(VoiceIQUI.Colors.onSurfaceVariant)
                             .multilineTextAlignment(.center)
@@ -403,14 +399,9 @@ private struct APIKeyScreen: View {
                             .font(VoiceIQUI.TypeScale.labelSmall())
                             .foregroundStyle(VoiceIQUI.Colors.error)
                     }
-                    if noModelAccess {
-                        Text("That key works, but it can't reach VoiceiQ's dictation model yet. Setup continues — ask for access, then try a dictation.")
-                            .font(VoiceIQUI.TypeScale.labelSmall())
-                            .foregroundStyle(VoiceIQUI.Colors.error)
-                            .multilineTextAlignment(.center)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    Link("Get a key in Google AI Studio", destination: URL(string: "https://aistudio.google.com/apikey")!)
+                    Link("Sign up at AssemblyAI ($50 free credit)", destination: URL(string: "https://www.assemblyai.com/dashboard/signup")!)
+                        .font(VoiceIQUI.TypeScale.labelSmall())
+                    Link("Copy your key from the AssemblyAI dashboard", destination: URL(string: "https://www.assemblyai.com/dashboard/api-keys")!)
                         .font(VoiceIQUI.TypeScale.labelSmall())
                 }
                 if validating {
@@ -444,8 +435,7 @@ private struct APIKeyScreen: View {
         rejection = nil
         unverified = false
         Task {
-            let client = GeminiClient(apiKey: { candidate })
-            let check = await client.validateKey(endpoint: SettingsStore().geminiConfig.endpoint)
+            let check = await AssemblyAIClient(apiKey: { candidate }).validateKey()
 
             if case .rejected(let detail) = check {
                 // The server answered and said no. This is the case that used to
@@ -459,14 +449,6 @@ private struct APIKeyScreen: View {
                 return
             }
 
-            if check == .valid {
-                // "Your key works" must mean dictation works. Check the model
-                // VoiceiQ actually ships on — and only report, never substitute.
-                let config = SettingsStore().geminiConfig
-                noModelAccess = await client.resolveAvailableModel(
-                    from: [config.writingModel], endpoint: config.endpoint
-                ) == nil
-            }
             unverified = (check == .unreachable)
 
             guard KeychainStore.saveAPIKey(candidate) else {

@@ -23,7 +23,7 @@ public struct TranscriptionSourcePicker: View {
     }
 
     private var options: [TranscriptionSource] {
-        TranscriptionSource.allCases.filter { $0 == .gemini || LocalModelSupport.isAvailable }
+        TranscriptionSource.allCases.filter { $0 == .assemblyAI || LocalModelSupport.isAvailable }
     }
 }
 

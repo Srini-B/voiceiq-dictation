@@ -4,16 +4,16 @@ import VoiceIQSpeech
 
 /// History's Retry and launch recovery: the saved recording goes to the
 /// on-device model when the settings pick it and it is downloaded, then to
-/// Gemini's writing step; otherwise, or if the model fails, Gemini
+/// AssemblyAI's writing step; otherwise, or if the model fails, AssemblyAI
 /// transcribes it. A live dictation
 /// takes the same route through `DictationCoordinator`, which loads the model
 /// while the user speaks.
 public struct OnDeviceFirstTranscription: TranscriptionServicing {
-    private let gemini: TranscriptionServicing
+    private let cloud: TranscriptionServicing
     private let makeSession: LocalSpeechSessionFactory
 
-    public init(gemini: TranscriptionServicing, makeSession: @escaping LocalSpeechSessionFactory) {
-        self.gemini = gemini
+    public init(cloud: TranscriptionServicing, makeSession: @escaping LocalSpeechSessionFactory) {
+        self.cloud = cloud
         self.makeSession = makeSession
     }
 
@@ -25,20 +25,20 @@ public struct OnDeviceFirstTranscription: TranscriptionServicing {
                LocalTranscriber.makeFromSettings(audioURL: audioURL, cloudOnColdLoad: false, makeSession: makeSession)
            }) {
             if let decoded = await local.finish(framesWritten: frames) {
-                return try await gemini.write(decoded, context: context)
+                return try await cloud.write(decoded, context: context)
             }
         }
         try Task.checkCancellation()
-        return try await gemini.transcribe(audioURL: audioURL, durationSeconds: durationSeconds, context: context)
+        return try await cloud.transcribe(audioURL: audioURL, durationSeconds: durationSeconds, context: context)
     }
 
     public func write(_ transcript: TranscriptionResult, context: DictationContext) async throws -> TranscriptionResult {
-        try await gemini.write(transcript, context: context)
+        try await cloud.write(transcript, context: context)
     }
 }
 
 public enum DictationRoute {
-    /// Something can transcribe a dictation: a Gemini key, or the on-device
+    /// Something can transcribe a dictation: an AssemblyAI key, or the on-device
     /// model the settings pick, downloaded. Fully offline dictation needs no key.
     @MainActor public static var isAvailable: Bool {
         let settings = SettingsStore()

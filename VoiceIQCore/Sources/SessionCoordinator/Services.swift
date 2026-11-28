@@ -5,7 +5,7 @@ import Foundation
 import os
 import VoiceIQBridge
 
-/// Transcription seam. `GeminiTranscriptionService` in the app; tests use fakes.
+/// Transcription seam. `AssemblyAITranscriptionService` in the app; tests use fakes.
 public protocol TranscriptionServicing: Sendable {
     /// Throws TranscriptionError.
     func transcribe(audioURL: URL, durationSeconds: Double, context: DictationContext) async throws -> TranscriptionResult
@@ -13,68 +13,25 @@ public protocol TranscriptionServicing: Sendable {
     /// by the writing rules, or as transcribed. Never throws for a failed
     /// writing request; the transcript is the fallback.
     func write(_ transcript: TranscriptionResult, context: DictationContext) async throws -> TranscriptionResult
-    /// Sends the request for speech that ended in a pause before the
-    /// recording ends; nil when this service does not.
-    func speculate(_ speech: PausedSpeech, context: DictationContext) -> SpeculativeDictation?
-    /// `transcribe`, answered by `speculation` when it covers the same speech
-    /// and prompt.
+    /// Opens a stream that transcribes the dictation while it is recorded;
+    /// nil when this service does not.
+    func listen(context: DictationContext) -> RealtimeTranscription?
+    /// `transcribe`, with the transcript `live` streamed when it finished;
+    /// the recording on disk otherwise.
     func transcribe(audioURL: URL, durationSeconds: Double, context: DictationContext,
-                    speculation: SpeculativeDictation?) async throws -> TranscriptionResult
+                    live: RealtimeTranscription?) async throws -> TranscriptionResult
 }
 
 public extension TranscriptionServicing {
     func write(_ transcript: TranscriptionResult, context: DictationContext) async throws -> TranscriptionResult {
         transcript
     }
-    func speculate(_ speech: PausedSpeech, context: DictationContext) -> SpeculativeDictation? { nil }
+    func listen(context: DictationContext) -> RealtimeTranscription? { nil }
     func transcribe(audioURL: URL, durationSeconds: Double, context: DictationContext,
-                    speculation: SpeculativeDictation?) async throws -> TranscriptionResult {
-        speculation?.cancel()
+                    live: RealtimeTranscription?) async throws -> TranscriptionResult {
+        live?.cancel()
         return try await transcribe(audioURL: audioURL, durationSeconds: durationSeconds, context: context)
     }
-}
-
-/// Send-on-pause: the dictation request for speech that ended in a pause,
-/// sent while the recording goes on. At key-up it stands in for the request
-/// only when the recording's speech and the prompt are unchanged; otherwise
-/// it is cancelled. Requests stream, so one cancelled before the first chunk
-/// of its answer is not billed.
-public final class SpeculativeDictation: Sendable {
-    public let range: Range<Int64>
-    public let prompt: String
-    public let sentAt: ContinuousClock.Instant
-    public let answer: Task<String, Error>
-    private let progress: OSAllocatedUnfairLock<Progress>
-
-    private struct Progress {
-        var streamed = false
-        var answeredAt: ContinuousClock.Instant?
-    }
-
-    /// `answer` sends the request off the main actor and calls the closure
-    /// it is given when the first chunk of the answer arrives.
-    public init(range: Range<Int64>, prompt: String, sentAt: ContinuousClock.Instant,
-                answer: @escaping @Sendable (_ onFirstChunk: @escaping @Sendable () -> Void) async throws -> String) {
-        let progress = OSAllocatedUnfairLock(initialState: Progress())
-        self.range = range
-        self.prompt = prompt
-        self.sentAt = sentAt
-        self.progress = progress
-        self.answer = Task {
-            let text = try await answer { progress.withLock { $0.streamed = true } }
-            progress.withLock { $0.streamed = true; $0.answeredAt = ContinuousClock().now }
-            return text
-        }
-    }
-
-    /// Part of the answer arrived, so Gemini bills the request whether or
-    /// not it is used.
-    public var isBilled: Bool { progress.withLock { $0.streamed } }
-
-    /// When the whole answer arrived; nil until then.
-    public var answeredAt: ContinuousClock.Instant? { progress.withLock { $0.answeredAt } }
-
-    public func cancel() { answer.cancel() }
 }
 
 public struct TranscriptionResult: Equatable, Sendable {
@@ -83,11 +40,15 @@ public struct TranscriptionResult: Equatable, Sendable {
     /// The text that is inserted.
     public var cleanedTranscript: String
     public var modelID: String
+    /// A short note for the pill when the text went in without the writing
+    /// rules, such as when the writing model refused for lack of balance.
+    public var notice: String?
 
-    public init(rawTranscript: String, cleanedTranscript: String, modelID: String) {
+    public init(rawTranscript: String, cleanedTranscript: String, modelID: String, notice: String? = nil) {
         self.rawTranscript = rawTranscript
         self.cleanedTranscript = cleanedTranscript
         self.modelID = modelID
+        self.notice = notice
     }
 }
 
@@ -103,6 +64,9 @@ public enum TranscriptionError: Error, Equatable, Sendable {
     case modelUnavailable(model: String, detail: String?)
     /// 429 that is a real daily/hard quota.
     case rateLimitedDaily
+    /// The AssemblyAI account has no balance for this call (the LLM Gateway
+    /// is not covered by the free credit).
+    case noBalance
     /// 429 per-minute throttle — clears on its own; retryable. Carries the
     /// server's Retry-After so the retry can wait exactly that long.
     case rateLimitedTransient(retryAfter: TimeInterval?)
@@ -180,7 +144,7 @@ public enum InsertionOutcome: Equatable, Sendable {
 
 // MARK: - M2 stubs (replaced in M3/M4)
 
-/// Until the Gemini client lands, "transcription" echoes a stub instantly.
+/// Before the transcription client existed, "transcription" echoes a stub instantly.
 public struct StubTranscriptionService: TranscriptionServicing {
     public init() {}
     public func transcribe(audioURL: URL, durationSeconds: Double, context: DictationContext) async throws -> TranscriptionResult {

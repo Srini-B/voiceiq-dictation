@@ -4,7 +4,7 @@ import XCTest
 /// The shared cleanup cases (Fixtures/cleanup-cases.json) through the
 /// writing-Off tidy-up: each on-device transcript (`heard`) must come out as
 /// the expected text, or as its recorded shortfall (`tidy`). The same cases
-/// score the Gemini path by hand or by a judge, from `said`.
+/// score the AssemblyAI path by hand or by a judge, from `said`.
 final class CleanupCasesTests: XCTestCase {
     private struct Cases: Decodable {
         let cases: [Case]

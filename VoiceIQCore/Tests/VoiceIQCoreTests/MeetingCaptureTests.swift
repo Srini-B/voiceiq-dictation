@@ -98,17 +98,17 @@ final class MeetingCaptureTests: XCTestCase {
     /// Only Gemini being out of reach makes a meeting wait to be sent again;
     /// a rejected key or a refusal would fail the same way on every retry.
     func testOnlyUnreachableGeminiMakesAMeetingWait() {
-        XCTAssertTrue(MeetingFailure.waitsForGemini(MeetingFailure.noKey))
-        XCTAssertTrue(MeetingFailure.waitsForGemini(TranscriptionError.offline))
-        XCTAssertTrue(MeetingFailure.waitsForGemini(TranscriptionError.network("-1004")))
-        XCTAssertTrue(MeetingFailure.waitsForGemini(TranscriptionError.network("http_503")))
-        XCTAssertFalse(MeetingFailure.waitsForGemini(TranscriptionError.network("interactions_unavailable_403")))
-        XCTAssertFalse(MeetingFailure.waitsForGemini(TranscriptionError.network("bad_url")))
-        XCTAssertFalse(MeetingFailure.waitsForGemini(TranscriptionError.rateLimitedDaily))
-        XCTAssertTrue(MeetingFailure.waitsForGemini(TranscriptionError.rateLimitedTransient(retryAfter: 30)))
-        XCTAssertFalse(MeetingFailure.waitsForGemini(TranscriptionError.auth))
-        XCTAssertFalse(MeetingFailure.waitsForGemini(TranscriptionError.safetyBlocked))
-        XCTAssertFalse(MeetingFailure.waitsForGemini(TranscriptionError.badRequest("bad")))
-        XCTAssertFalse(MeetingFailure.waitsForGemini(CancellationError()))
+        XCTAssertTrue(MeetingFailure.waitsForService(MeetingFailure.noKey))
+        XCTAssertTrue(MeetingFailure.waitsForService(TranscriptionError.offline))
+        XCTAssertTrue(MeetingFailure.waitsForService(TranscriptionError.network("-1004")))
+        XCTAssertTrue(MeetingFailure.waitsForService(TranscriptionError.network("http_503")))
+        XCTAssertFalse(MeetingFailure.waitsForService(TranscriptionError.network("interactions_unavailable_403")))
+        XCTAssertFalse(MeetingFailure.waitsForService(TranscriptionError.network("bad_url")))
+        XCTAssertFalse(MeetingFailure.waitsForService(TranscriptionError.rateLimitedDaily))
+        XCTAssertTrue(MeetingFailure.waitsForService(TranscriptionError.rateLimitedTransient(retryAfter: 30)))
+        XCTAssertFalse(MeetingFailure.waitsForService(TranscriptionError.auth))
+        XCTAssertFalse(MeetingFailure.waitsForService(TranscriptionError.safetyBlocked))
+        XCTAssertFalse(MeetingFailure.waitsForService(TranscriptionError.badRequest("bad")))
+        XCTAssertFalse(MeetingFailure.waitsForService(CancellationError()))
     }
 }

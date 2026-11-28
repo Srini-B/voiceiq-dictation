@@ -1,6 +1,6 @@
 # Cost tracking
 
-VoiceiQ meters every Gemini model call and shows the result under
+VoiceiQ meters every AssemblyAI call and shows the result under
 Settings → Cost Analysis (`voiceiq://settings/cost`) and per dictation in
 History. Costs are in US dollars.
 
@@ -19,48 +19,49 @@ Sarvam integration. The migrations stay registered so existing databases keep
 a known history, but nothing reads or writes those columns.
 
 `audioSeconds` is the audio a call was billed for, on models priced by audio
-length. No model VoiceiQ calls now is priced that way; the column holds the
-length for rows that older builds booked from OpenAI's transcription models
-and ElevenLabs Scribe. It was added in migration `v2-audioSeconds`;
-per-minute calls booked before it have no length.
+length: AssemblyAI's speech models (and, in rows older builds booked,
+OpenAI's transcription models and ElevenLabs Scribe). It was added in
+migration `v2-audioSeconds`; per-minute calls booked before it have no length.
 
-Activities: `dictation`, `meeting`, `other`. Stages: `transcribe` (one per
-dictation, or per chunk of a dictation over ten minutes), `meetingTranscribe`,
-`meetingSummary`, `meetingChat`. The activities `askAnything`, `translate`
-and `agent` and the stages `liveTranscribe`, `cleanup`, `answer`,
-`translate`, `webQuery` and `agentStep` are no longer booked; they stay so
-rows from older builds still read.
+Activities: `dictation`, `meeting`, `other`. Stages: `liveTranscribe` (the
+STT-3.7 Realtime stream of a dictation), `transcribe` (pre-recorded
+transcription, when the stream failed or for a Universal-2 language),
+`cleanup` (the writing model), `meetingTranscribe`, `meetingSummary`,
+`meetingChat`. The activities `askAnything`, `translate` and `agent` and the
+stages `answer`, `translate`, `webQuery` and `agentStep` are no longer
+booked; they stay so rows from older builds still read.
 
 The ledger is separate from `history.sqlite` so deleting a dictation or its
 audio never changes what it cost.
 
 ## Where the counts come from
 
-`GeminiClient.post` is the only REST transport, so it is the one place that
-reads usage on a 200. Two envelopes are handled by `TokenUsage`:
+Every call goes through `AssemblyAIClient` (and `RealtimeTranscription` for
+the stream), and model IDs are booked as `assemblyai/<model>`.
 
-- `:generateContent` → `usageMetadata` (`promptTokensDetails`,
-  `candidatesTokensDetails`, `thoughtsTokenCount`, `cachedContentTokenCount`).
-  Meeting notes and meeting chat use it. Dictation uses
-  `:streamGenerateContent?alt=sse`; `GeminiClient.joinedEventStream` joins
-  the events into the same envelope with the last event's usage, so it is
-  metered the same way.
-- A dictation request that is cancelled is not recorded: the slower of two
-  raced attempts (`DictationHedge`), or a send-on-pause request the speaker
-  talked over. Gemini bills nothing for a stream cancelled before its first
-  chunk. A request that finished streaming before it was cancelled is
-  metered as usual. One cancelled mid-stream may be billed but is not in the
-  ledger; the `send-on-pause: ... billed: true` log lines count those.
-- `v1beta/interactions` → `usage`. `total_output_tokens` came back 0 while
-  `model_invocation_token_counts` carried the real output count (probed
-  2026-09-26), so the per-invocation list is authoritative. Meeting
-  transcription uses it.
+- **Speech** is billed per hour of audio, so the call is booked with its cost
+  (`TokenUsage.reportedCostUSD`) and `audioSeconds`. Pre-recorded STT-3.7
+  ($0.21 an hour) or Universal-2 ($0.15) is booked from the transcript's
+  `audio_duration`, plus the hourly add-ons the request used: keyterms
+  ($0.05), speaker labels ($0.02) and speaker identification ($0.02). The
+  Realtime stream ($0.30 an hour) is billed for the time the session is
+  open, so it is booked from that time when the session closes.
+- **The LLM Gateway** answers in OpenAI's chat-completion shape for every
+  model; `TokenUsage.fromChatCompletion` reads `usage` (`prompt_tokens` with
+  `prompt_tokens_details.cached_tokens`, `completion_tokens` with
+  `completion_tokens_details.reasoning_tokens`) and `PriceBook` prices it.
+  The dictation writer, meeting notes and meeting chat use it.
+
+`AssemblyAIPrices` in `AssemblyAIClient.swift` holds the speech list prices
+from assemblyai.com/pricing. At those prices a 20-second dictation costs
+about ₹0.24 with GPT-6 Luna writing it, and a meeting about ₹28 per hour of
+speech. AssemblyAI's free credit is not subtracted.
 
 ## Retired providers
 
-OpenAI and ElevenLabs were providers until 0.7.12, and Claude until
-2026-11-10. Their rows keep their stored cost, and `PriceBook` keeps their
-prices so rows without one still price: OpenAI's token prices and per-minute
+Gemini was the provider until 0.7.18, OpenAI and ElevenLabs until 0.7.12,
+and Claude until 2026-11-10. Their rows keep their stored cost, and `PriceBook` keeps their
+prices so rows without one still price: Gemini's token prices, OpenAI's token prices and per-minute
 transcription prices (`gpt-transcribe`, `gpt-live-transcribe`,
 `gpt-4o-transcribe`, `whisper-1`), ElevenLabs' per-hour Scribe prices
 (`scribe_v3`, `scribe_v3_live`, `scribe_v2`, `scribe_v2_realtime`), and
@@ -78,25 +79,23 @@ Calls without a scope are booked as `other`.
 
 ## Pricing
 
-`PriceBook` holds paid-tier Standard prices per million tokens from
-ai.google.dev/gemini-api/docs/pricing (copied 2026-09-26), matched by the
-longest model-ID prefix. A `google/` or `openai/` prefix, found on rows booked
-through the gateways older builds supported, is removed first. Gemini 3.8
-Flash doubles on 2027-01-01 and the book switches on that date. Models
-without an entry are stored with `costUSD = nil` and shown as unpriced;
-totals that include an unpriced or estimated call show a ≈ prefix.
-
-The app cannot tell whether a Gemini key is on the free tier, so it always
-shows the paid-tier figure.
+`PriceBook` holds prices per million tokens, matched by the longest model-ID
+prefix. The LLM Gateway charges the model providers' list prices (GPT-6 Luna:
+$0.10 in, $0.01 cached, $0.50 out, read 2026-11-28). An `assemblyai/`,
+`google/` or `openai/` prefix is removed first. Speech rows carry their cost
+and need no entry. Models without an entry are stored with `costUSD = nil`
+and shown as unpriced; totals that include an unpriced or estimated call
+show a ≈ prefix.
 
 ## UI
 
-`CostPane` shows Gemini. Every read filters `usage` rows by model ID
-(`CostSource.modelPrefixes`: `gemini` and `google/` for Gemini). OpenAI
+`CostPane` shows AssemblyAI. Every read filters `usage` rows by model ID
+(`CostSource.modelPrefixes`: `assemblyai/` for AssemblyAI). Gemini
+(`gemini`, `google/`), OpenAI
 (`gpt`, `whisper`, `openai/`), ElevenLabs (`scribe`) and Claude get a segment
 in a source toggle only while the ledger still has calls booked to them
 (`CostSource.isCurrent` is false for them; each reload counts their rows).
-With Gemini alone there is no toggle. Rows from services older builds
+With AssemblyAI alone there is no toggle. Rows from services older builds
 supported (MAI Transcribe 2, Sarvam) match no source. It shows
 today, this week, this month, and all time totals; a period picker drives the by-action
 and by-model tables and the recent-calls list. The footer names the price

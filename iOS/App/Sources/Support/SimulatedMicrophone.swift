@@ -15,6 +15,8 @@ final class SimulatedMicrophone: AudioCapturing, @unchecked Sendable {
     var onDeviceChange: (@Sendable (String) -> Void)?
     var onWriteFailure: (@Sendable () -> Void)?
     var onEngineDied: (@Sendable (String) -> Void)?
+    /// The whole file at once, at `stop`, when it is written.
+    var onSamples: (@Sendable ([Int16]) -> Void)?
 
     private let source: URL
     private var target: URL?
@@ -74,6 +76,9 @@ final class SimulatedMicrophone: AudioCapturing, @unchecked Sendable {
         try? FileManager.default.removeItem(at: output)
         let out = try AVAudioFile(forWriting: output, settings: buffer.format.settings, commonFormat: .pcmFormatInt16, interleaved: true)
         try out.write(from: buffer)
+        if let samples = buffer.int16ChannelData?[0] {
+            onSamples?(Array(UnsafeBufferPointer(start: samples, count: Int(buffer.frameLength))))
+        }
         return Int64(buffer.frameLength)
     }
 

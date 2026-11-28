@@ -1,26 +1,26 @@
 # Meetings on the Mac
 
 How VoiceiQ notices a call, what audio it records, how each line goes to the
-right person (Gemini's speaker labels, on-device speaker separation, and
+right person (AssemblyAI's speaker labels, on-device speaker separation, and
 names from the call screen), and how the Meetings window shows
-and exports it. Meetings are transcribed by `gemini-3.5-transcribe` through
-the Interactions API (`v1beta/interactions`), always from the saved tracks
+and exports it. Meetings are transcribed by AssemblyAI's pre-recorded STT-3.7
+(Universal-2 for languages it lacks), always from the saved tracks
 after the recording stops; there is no live transcript while a meeting
-records. Notes and meeting chat come from `gemini-3.8-flash`. There is
-no on-device meeting transcription; a meeting that cannot reach Gemini waits
-with its audio and is sent when Gemini can be reached ([ON_DEVICE.md](ON_DEVICE.md#meetings)). What is sent,
+records. Notes and meeting chat come from the writing model (`gpt-6-luna`)
+on AssemblyAI's LLM Gateway, which needs a balance on the account. There is
+no on-device meeting transcription; a meeting that cannot reach AssemblyAI waits
+with its audio and is sent when AssemblyAI can be reached ([ON_DEVICE.md](ON_DEVICE.md#meetings)). What is sent,
 and the notes prompt, are covered in
 [PRIVACY.md](PRIVACY.md) and [design/meeting-prompt-rulebook.md](design/meeting-prompt-rulebook.md).
 
 ## The transcription request
 
-`GeminiClient.transcribeSpeakers` sends FLAC audio with a
-`transcription_config` of `verbatim` mode, `diarization_mode: speaker` and
-word timestamps (`timestamp_granularities: ["word"]`). Without the word
-timestamps the API returned one text block with the speaker turns run
-together (2026-09-26). A request tells apart up to 8 speakers and holds at
-most 30 minutes of audio, so `MeetingTranscriber` sends only the stretches
-with speech, cut into windows of 10 minutes of speech each. Every window
+`AssemblyAIClient.transcribeSpeakers` uploads FLAC audio and starts a
+transcript with `speaker_labels` where the request should tell voices
+apart; the words come back with their times and speaker labels.
+`MeetingTranscriber` sends only the stretches with speech, cut into windows
+of an hour of speech each (AssemblyAI takes files of up to 10 hours and
+tells voices apart better with more of each). Every window
 after the first starts with reference clips of the speakers already found, so
 a speaker keeps one id across a long call (`SpeakerLinker`). Finished windows
 are cached beside the audio, so a retry never pays for the same audio twice.
@@ -30,7 +30,7 @@ What a request holds depends on the mic:
 - **Echo-free mic on a call** (`CallAudio.micIsEchoFree`, the usual case with
   headphones or after `EchoCanceller`): each track is sent on its own
   (`MeetingTranscriber.transcribeTracks`). Every word from the mic is the
-  note owner's; the far side's requests hold only the system track, so Gemini
+  note owner's; the far side's requests hold only the system track, so AssemblyAI
   tells apart only the other people. Double-talk survives because each voice
   is on its own track. Cached as `mic-N.json` and `far-N.json`.
 - **Otherwise** (speakerphone echo the canceller could not remove, or a
@@ -38,26 +38,21 @@ What a request holds depends on the mic:
   (`CallAudio.samples`), as before. Cached as `N.json`.
 
 Measured 2026-11-26 on AMI ES2004a as a call (one headset as the mic, the
-other three summed as the far side): the mixed request lost one of the four
-people and put 73.5% of words under the right person; the far side alone
+other three summed as the far side), with Gemini as the provider: the mixed
+request lost one of the four people and put 73.5% of words under the right person; the far side alone
 found all three remote voices at 83.8%. The 2026-09-27 finding that a
 far-side-only request returns a fraction of the speech held for the models of
 that time, not `gemini-3.5-transcribe`.
-
-A request the API ends with status `incomplete` (seen when a mostly silent
-track was sent with its silences) is sent again as two halves
-(`MeetingTranscriber.requestWords`). Silences are never sent, so this is a
-fallback.
 
 ## Who said what on the far side
 
 On every call, the on-device speaker model (pyannote community-1, 21.6 MB,
 in Settings as Speaker Separation) runs over the whole system track and
 decides which far-side person said each word (`MeetingTranscriber.splitFarSide`,
-cached as `transcribe-far-speakers-v1.json`). Gemini's own far-side ids are
-kept only when the model is unavailable or heard nobody. Gemini takes no
-speaker count and got the count right in 16 of 36 runs in an outside test;
-the model got 31 of 33 in ours
+cached as `transcribe-far-speakers-v1.json`). AssemblyAI's own far-side labels are
+kept only when the model is unavailable or heard nobody. In an outside test
+Gemini, the provider before 0.7.18, got the speaker count right in 16 of 36
+runs; the model got 31 of 33 in ours
 ([activities/2026-11-06-offline-speaker-diarizer.md](../activities/2026-11-06-offline-speaker-diarizer.md)).
 When the model is missing, the first meeting that needs it downloads it
 without asking (`MeetingEngine.farSideDiarizer`); nothing it hears leaves the
@@ -470,8 +465,8 @@ Fixes from 2026-10-29:
   person, product and term, with every transcript spelling that means it
   (`"Nitin": ["Nithin", "Lithin", "Nathan"]`). Every other field uses those
   spellings. `MeetingNotes` ignores the field when decoding.
-- **Dictionary spellings in the transcript.** Google takes no custom
-  vocabulary together with diarization, so the transcript is heard verbatim.
+- **Dictionary spellings in the transcript.** The meeting request carries no
+  Dictionary keyterms, so the transcript is heard verbatim.
   The Dictionary's wrong → right spellings (`ReplacementEngine`) are then
   applied to every segment before it is saved
   (`MeetingEngine.corrected`), as they are to a dictation, so the saved
@@ -479,7 +474,7 @@ Fixes from 2026-10-29:
   and timestamps are unchanged.
 - **No delete while busy.** A meeting that is recording, transcribing or
   writing notes can't be deleted, on the Mac (the More menu is disabled)
-  or on iPhone (no swipe to delete), so its Gemini calls never run on with
+  or on iPhone (no swipe to delete), so its AssemblyAI calls never run on with
   nowhere to save.
 
 ## Renaming a meeting
@@ -683,8 +678,8 @@ Once a meeting has a transcript, a question box sits along its bottom
 narrow window, sending switches back to the notes, where the answers are
 listed after the Notes section. iOS: pinned to the bottom of the note, with
 the answers after the notes). A question
-goes to Gemini's dictation model (`gemini-3.8-flash` unless Settings →
-Advanced → Dictation model names another).
+goes to the writing model on AssemblyAI's LLM Gateway (`gpt-6-luna` unless
+Settings → Advanced → Writing model names another).
 `MeetingChat` builds the request:
 
 - **System prompt.** Short answering rules, then the meeting as
@@ -694,9 +689,8 @@ Advanced → Dictation model names another).
 - **Turns.** Every earlier question and answer, in order, then the new
   question. The model sees its own earlier answers, so follow-ups work.
 
-It is sent with `GeminiClient.chat` (`generateContent`). Gemini caches the
-repeated prefix implicitly; nothing extra is sent. Gemini 3.x caches only
-from 4,096 tokens, so a short meeting is not cached.
+It is sent with `AssemblyAIClient.chat` (`v1/chat/completions`). A model
+with prompt caching reuses the repeated prefix; nothing extra is sent.
 
 Each answered question is saved with its answer, time and model in
 `chat.json` in the meeting's folder (`MeetingStore.loadChat` /

@@ -6,7 +6,7 @@ import VoiceIQBridge
 import VoiceIQCore
 
 struct SetupStatus: Equatable {
-    /// A Gemini key, or the on-device model the settings pick, downloaded.
+    /// An AssemblyAI key, or the on-device model the settings pick, downloaded.
     var hasKey: Bool
     var micGranted: Bool
     var micDenied: Bool

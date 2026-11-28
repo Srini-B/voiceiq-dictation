@@ -136,7 +136,7 @@ public enum MeetingNotesPrompt {
 
     /// Decodes the model's JSON; an unknown type falls back to general.
     public static func parse(_ text: String) throws -> MeetingNotes {
-        let json = firstObject(GeminiClient.stripFences(text))
+        let json = firstObject(AssemblyAIClient.stripFences(text))
         var notes = try JSONDecoder().decode(MeetingNotes.self, from: flattened(Data(json.utf8)))
         if let type = notes.type, MeetingKind(rawValue: type) == nil { notes.type = MeetingKind.general.rawValue }
         notes.sections = notes.sections?.filter { !$0.items.isEmpty }

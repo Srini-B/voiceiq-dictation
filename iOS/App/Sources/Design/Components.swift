@@ -181,14 +181,14 @@ struct IconTile: View {
     }
 }
 
-/// A service's own mark from the asset catalog on a neutral tile. Monochrome
-/// marks are template images and take the ink colour, so they read in dark mode.
+/// A service's symbol on a neutral tile, in the ink colour, so it reads in
+/// dark mode.
 struct BrandTile: View {
-    let image: String
+    let systemImage: String
     var size: CGFloat = 30
 
     var body: some View {
-        Image(image)
+        Image(systemName: systemImage)
             .resizable()
             .scaledToFit()
             .foregroundStyle(Theme.Colors.ink)

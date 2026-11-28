@@ -17,7 +17,7 @@ final class DictationController {
     private let earcons = EarconPlayer()
     private let outputMute = AudioOutputMute()
     private let mediaPause = MediaPause()
-    private let transcriptionService: GeminiTranscriptionService
+    private let transcriptionService: AssemblyAITranscriptionService
     private let historyStore: HistoryStore?
     private let learner = EditLearner()
     private let meetings: MeetingEngine
@@ -52,14 +52,14 @@ final class DictationController {
         KeychainStore.migrateDevKeyFileIfPresent()
         FileLayout.removeStaleFiles()
         SettingsStore().removeRetiredSettingsOnce()
-        let client = GeminiClient(apiKey: { KeychainStore.loadAPIKey() })
-        let service = GeminiTranscriptionService(client: client)
+        let client = AssemblyAIClient(apiKey: { KeychainStore.loadAPIKey() })
+        let service = AssemblyAITranscriptionService(client: client)
         transcriptionService = service
         historyStore = try? HistoryStore.standard()
         UsageMeter.store = try? UsageStore.standard()
         meetings = MeetingEngine(
             client: client,
-            config: { SettingsStore().geminiConfig },
+            config: { SettingsStore().assemblyAIConfig },
             localMeeting: LocalMeetingHelper.run
         )
         coordinator = DictationCoordinator(
@@ -459,7 +459,7 @@ final class DictationController {
             }
         }
 
-        let retry = OnDeviceFirstTranscription(gemini: transcriptionService, makeSession: LocalSpeechHelper.makeSession)
+        let retry = OnDeviceFirstTranscription(cloud: transcriptionService, makeSession: LocalSpeechHelper.makeSession)
         let scanner = RecoveryScanner(store: historyStore, transcription: retry)
         scanner.onRecovered = { [weak self] text in
             let copied = Self.copyRecovered([text])
@@ -545,7 +545,7 @@ final class DictationController {
                         case .stillOffline:
                             self.showNotice("Still offline — will retry automatically when you're back", for: 4.0, sound: nil)
                         case .rateLimited(let retryIn):
-                            self.showNotice("Gemini is rate limited — retrying in \(Int(retryIn.rounded()))s", for: 4.0, sound: nil)
+                            self.showNotice("AssemblyAI is rate limited — retrying in \(Int(retryIn.rounded()))s", for: 4.0, sound: nil)
                         case .busy:
                             self.showNotice("Already retrying your queued dictations…", for: 2.5, sound: nil)
                         case .failed:
@@ -1077,7 +1077,7 @@ final class DictationController {
 
     // MARK: - Copy
 
-    private static let providerName = "Gemini"
+    private static let providerName = "AssemblyAI"
 
     private static func copy(for failure: DictationFailure) -> String {
         switch failure {
@@ -1086,14 +1086,14 @@ final class DictationController {
             if !KeychainStore.hasModelKey { return "Add your API key in Settings — recording saved to History" }
             return "API key isn't working — saved to History"
         case .modelAccess:
-            return SettingsStore().cleanupModelOverride != nil
+            return SettingsStore().writingModelOverride != nil
                 ? "That model isn't available to your key — check Settings → Advanced. Saved to History"
                 : "Your key can't use the dictation model yet — recording saved to History"
         case .badRequest: return "\(providerName) rejected the request — saved to History"
         case .rateLimited: return "Rate limited — History will retry it shortly"
         case .noMicrophone: return "No microphone found — connect one to dictate"
         case .quotaExhausted:
-            return "Daily quota reached for your \(providerName) key. Saved to History"
+            return "\(providerName) credit or quota used up — saved to History"
         case .timeout: return "Timed out — saved to History"
         case .validation: return "Couldn't transcribe — saved to History"
         case .safetyBlocked: return "The API declined this one — saved to History"

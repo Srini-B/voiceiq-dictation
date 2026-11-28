@@ -10,7 +10,7 @@ public extension Notification.Name {
 }
 
 /// UserDefaults-backed settings (M3 minimal; the Settings UI lands at M7).
-/// Endpoint + model IDs are overridable because preview models get renamed.
+/// The writing model is overridable because models get renamed.
 public struct SettingsStore: Sendable {
     static var defaults: UserDefaults { .standard }
 
@@ -41,18 +41,6 @@ public struct SettingsStore: Sendable {
         }
     }
 
-    /// Single source of truth for endpoint-override validity — the Settings UI
-    /// warning and the effective config MUST use the same predicate, or one of
-    /// them lies about which endpoint is in use.
-    public static func usableEndpointURL(_ raw: String?) -> URL? {
-        guard let raw = raw?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty,
-              let url = URL(string: raw),
-              let scheme = url.scheme?.lowercased(), ["http", "https"].contains(scheme) else {
-            return nil
-        }
-        return url
-    }
-
     /// True once the user finished onboarding — a deliberate "I'll add it later"
     /// must not re-trap them in the wizard every launch.
     public var hasCompletedOnboarding: Bool {
@@ -63,15 +51,9 @@ public struct SettingsStore: Sendable {
         Self.set(done, forKey: "hasCompletedOnboarding")
     }
 
-    public var geminiConfig: GeminiConfig {
-        var config = GeminiConfig()
-        if let url = Self.usableEndpointURL(Self.defaults.string(forKey: "endpointOverride")) {
-            config.endpoint = url
-        }
-        if let model = Self.defaults.string(forKey: "transcribeModelOverride"), !model.isEmpty {
-            config.transcribeModel = model
-        }
-        if let model = Self.defaults.string(forKey: "cleanupModelOverride"), !model.isEmpty {
+    public var assemblyAIConfig: AssemblyAIConfig {
+        var config = AssemblyAIConfig()
+        if let model = Self.defaults.string(forKey: "writingModelOverride"), !model.isEmpty {
             config.writingModel = model
         }
         return config
@@ -85,8 +67,10 @@ public struct SettingsStore: Sendable {
     /// 0.7.12 made permanent (smart transcription, writing rules, spelling,
     /// learning from edits, fitting to existing text, reading names from the
     /// screen, better hearing in loud rooms): each is now always on, and
-    /// spelling follows the system region (`SpellingVariant.system`).
+    /// spelling follows the system region (`SpellingVariant.system`). Also
+    /// runs the one-time Gemini cleanup of the first AssemblyAI build.
     public func removeRetiredSettingsOnce() {
+        removeGeminiSettingsOnce()
         guard !Self.defaults.bool(forKey: "didRemoveRetiredProviders") else { return }
         Self.defaults.set(true, forKey: "didRemoveRetiredProviders")
         KeychainStore.deleteRetiredKeys()
@@ -105,6 +89,19 @@ public struct SettingsStore: Sendable {
         "meetingScreenNames", "experimentalNoiseHandling", "smartFormatting", "gateTrips", "shouldAnnounceSmartRestored",
         "didMigrateSmartFormattingKeys", "didEnableWritingRules", "didRestoreAutoDegradedWritingRules",
     ]
+
+    /// Runs once, on the first AssemblyAI build. Deletes the Gemini key and
+    /// the Gemini endpoint and model overrides: none of them works with
+    /// AssemblyAI, and a Gemini model name pinned as the writing model would
+    /// fail every dictation.
+    private func removeGeminiSettingsOnce() {
+        guard !Self.defaults.bool(forKey: "didRemoveGemini") else { return }
+        Self.defaults.set(true, forKey: "didRemoveGemini")
+        KeychainStore.deleteGeminiKey()
+        for key in ["endpointOverride", "transcribeModelOverride", "cleanupModelOverride"] {
+            Self.defaults.removeObject(forKey: key)
+        }
+    }
 
     /// Show the resting dot at the bottom of the screen when idle. Off = the pill
     /// only appears while dictating. Off by default since 2026-11-12, the
@@ -327,22 +324,12 @@ public struct SettingsStore: Sendable {
         Self.set(try? JSONEncoder().encode(trigger), forKey: "dictationTrigger")
     }
 
-    // Raw override values for the Settings UI — panes must not duplicate the
-    // defaults keys (a rename would silently desync display from effect).
-    public var endpointOverride: String? { Self.defaults.string(forKey: "endpointOverride") }
-    public var transcribeModelOverride: String? { Self.defaults.string(forKey: "transcribeModelOverride") }
-    public var cleanupModelOverride: String? { Self.defaults.string(forKey: "cleanupModelOverride") }
+    // The raw override for the Settings UI — panes must not duplicate the
+    // defaults key (a rename would silently desync display from effect).
+    public var writingModelOverride: String? { Self.defaults.string(forKey: "writingModelOverride") }
 
-    public func setEndpointOverride(_ raw: String?) {
-        Self.set(raw, forKey: "endpointOverride")
-    }
-
-    public func setTranscribeModelOverride(_ raw: String?) {
-        Self.set(raw, forKey: "transcribeModelOverride")
-    }
-
-    public func setCleanupModelOverride(_ raw: String?) {
-        Self.set(raw, forKey: "cleanupModelOverride")
+    public func setWritingModelOverride(_ raw: String?) {
+        Self.set(raw, forKey: "writingModelOverride")
     }
 
     /// Days to keep audio files (transcripts are kept until deleted). 0 = forever.

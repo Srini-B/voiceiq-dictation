@@ -352,12 +352,10 @@ countdown once the call ends (`MeetingEngine.watchForCallEnd`).
 
 ## Trademarks
 
-"Google", the Google logo, the Gemini spark, and related marks are trademarks of
-Google LLC. "OpenAI" is a trademark of OpenAI, "ElevenLabs" of ElevenLabs,
-and "Claude" of Anthropic, PBC; Cost Analysis names them only to label spend
-from when they were providers. The iOS app bundles the Gemini favicon
-(`iOS/App/Resources/Assets.xcassets/ProviderGemini.imageset`) only to label
-the key field; no endorsement is implied. The app icon and menu bar glyph are
+"AssemblyAI" is a trademark of AssemblyAI, Inc. "Google" and "Gemini" are
+trademarks of Google LLC, "OpenAI" of OpenAI, "ElevenLabs" of ElevenLabs,
+and "Claude" of Anthropic, PBC; Cost Analysis names the last four only to
+label spend from when they were providers. No endorsement is implied. The app icon and menu bar glyph are
 original works. "NVIDIA" and "Parakeet" are trademarks of NVIDIA Corporation, and
 "FluidVoice" and "Fluid Speech" are Altic's product names; the model credits above are
 attribution, not endorsement.

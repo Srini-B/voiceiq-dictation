@@ -21,12 +21,12 @@ import VoiceIQSpeech
     public var autoDetect: Bool = false { didSet { autoDetect ? detector.start() : detector.stop() } }
 
     public let store: MeetingStore
-    private let client: GeminiClient
-    private let config: () -> GeminiConfig
-    /// Whether a Gemini key is stored; read when a meeting is processed.
+    private let client: AssemblyAIClient
+    private let config: () -> AssemblyAIConfig
+    /// Whether an AssemblyAI key is stored; read when a meeting is processed.
     private let hasKey: @Sendable () -> Bool
     /// The on-device speaker model, which splits the far side's voices
-    /// (`farSideDiarizer`). Gemini always transcribes.
+    /// (`farSideDiarizer`). AssemblyAI always transcribes.
     private let localMeeting: LocalMeetingRunner?
     private lazy var detector = CallDetector()
     private var mic: MicTap?, system: SystemAudioTap?
@@ -126,24 +126,24 @@ import VoiceIQSpeech
     /// The call the detector currently sees, whether or not it was accepted.
     public private(set) var detectedSource: CallSource?
 
-    public init(client: GeminiClient, store: MeetingStore = MeetingStore(), config: @escaping () -> GeminiConfig,
+    public init(client: AssemblyAIClient, store: MeetingStore = MeetingStore(), config: @escaping () -> AssemblyAIConfig,
                 hasKey: @escaping @Sendable () -> Bool = { KeychainStore.loadAPIKey() != nil },
                 localMeeting: LocalMeetingRunner? = nil) {
         self.client = client; self.store = store; self.config = config
         self.hasKey = hasKey; self.localMeeting = localMeeting
         detector.onChange = { [weak self] source in self?.detected(source) }
         failInterruptedRecordings()
-        watchForGemini()
+        watchForService()
     }
 
     private let network = NWPathMonitor()
     private var online = false
 
-    /// Meetings that waited for Gemini go again at launch, when the network
+    /// Meetings that waited for AssemblyAI go again at launch, when the network
     /// comes back, and when a key is saved. No on-device transcript stands
     /// in: on six AMI meetings it scored under the 90 the scorecard asks of
     /// on-device work (activities/2026-11-27-meetings-gemini-only.md).
-    private func watchForGemini() {
+    private func watchForService() {
         network.pathUpdateHandler = { [weak self] path in
             Task { @MainActor [weak self] in
                 guard let self else { return }
@@ -158,16 +158,16 @@ import VoiceIQSpeech
         }
     }
 
-    /// Sends again every meeting that failed only for want of Gemini, from
+    /// Sends again every meeting that failed only for want of AssemblyAI, from
     /// the step that failed: the notes alone keep transcript edits and work
     /// for a synced meeting without audio; a transcript step (also Redo
     /// transcript and notes) transcribes the recording again.
     public func transcribeWaiting() {
         guard hasKey() else { return }
         for meta in store.list() where !isBusy(meta.id) {
-            guard let step = meta.waitsForGemini else { continue }
+            guard let step = meta.waitsForService else { continue }
             guard case .failed = meta.status else { continue }
-            Log.meeting.info("meeting \(meta.id.uuid.uuidString, privacy: .public) waited for Gemini; sending it again")
+            Log.meeting.info("meeting \(meta.id.uuid.uuidString, privacy: .public) waited for AssemblyAI; sending it again")
             switch step {
             case .notes: regenerateNotes(id: meta.id)
             case .transcript: retry(id: meta.id)
@@ -175,7 +175,7 @@ import VoiceIQSpeech
         }
     }
 
-    /// Gemini can come back, or a quota reset, while the network stays up,
+    /// AssemblyAI can come back, or a quota reset, while the network stays up,
     /// which no path change reports. So a meeting waiting with a key and a
     /// network goes again after 5 minutes, then 10, 20, up to an hour apart.
     private var waitingRetry: Task<Void, Never>?
@@ -199,7 +199,7 @@ import VoiceIQSpeech
     private func failInterruptedRecordings() {
         for var meta in store.list() {
             // A waiting meeting the app quit on while it went again waits on.
-            let resumable = meta.waitsForGemini != nil && (meta.status == .transcribing || meta.status == .summarizing)
+            let resumable = meta.waitsForService != nil && (meta.status == .transcribing || meta.status == .summarizing)
             guard meta.status == .recording || resumable else { continue }
             meta.status = .failed("interrupted")
             meta.endedAt = meta.endedAt ?? meta.startedAt.addingTimeInterval(meta.durationSeconds)
@@ -342,7 +342,7 @@ import VoiceIQSpeech
     public func retry(id: MeetingID, fresh: Bool = false) {
         guard !isBusy(id), let folder = store.folder(for: id), let meta = store.list().first(where: { $0.id == id }) else { return }
         // Only the notes failed: the saved transcript, and any edits to it, stay.
-        if !fresh, meta.waitsForGemini == .notes { return regenerateNotes(id: id) }
+        if !fresh, meta.waitsForService == .notes { return regenerateNotes(id: id) }
         if fresh { Self.dropTranscriptCaches(folder) }
         processing[id] = .transcribing
         Task { await UsageMeter.$scope.withValue(UsageScope(activity: .meeting, sessionID: id.uuid.uuidString)) {
@@ -392,7 +392,6 @@ import VoiceIQSpeech
     private func process(id: MeetingID, folder: URL, meta original: MeetingMeta) async {
         var meta = original
         do {
-            let cfg = config()
             let mic = try AudioMixer.speechStats(url: folder.appendingPathComponent("mic.caf"))
             let system = try AudioMixer.speechStats(url: folder.appendingPathComponent("system.caf"))
             guard mic.hasSpeech || system.hasSpeech else {
@@ -402,8 +401,7 @@ import VoiceIQSpeech
             }
             try mark(&meta, .transcribing)
             guard hasKey() else { throw MeetingFailure.noKey }
-            let heard = try await MeetingTranscriber(client: client, models: .init(transcribe: cfg.transcribeModel), endpoint: cfg.endpoint,
-                                                     diarizeFarSide: localMeeting.map(Self.farSideDiarizer)).transcribe(folder: folder)
+            let heard = try await MeetingTranscriber(client: client, diarizeFarSide: localMeeting.map(Self.farSideDiarizer)).transcribe(folder: folder)
             let transcript = Self.corrected(heard, rules: DictionaryStore().replacementRules())
             let words = transcript.reduce(0) { $0 + $1.text.split(whereSeparator: \.isWhitespace).count }
             guard words >= Self.minimumSummarizableWords else {
@@ -428,7 +426,7 @@ import VoiceIQSpeech
     }
 
     /// The on-device speaker model alone, for telling the far side's voices
-    /// apart after Gemini transcribed them. A missing model is downloaded
+    /// apart after AssemblyAI transcribed them. A missing model is downloaded
     /// without asking: it is 21.6 MB, takes about a second, and nothing it
     /// hears leaves the Mac (activities/2026-11-26-meeting-speakers-hybrid.md).
     /// Nil when the model cannot be had, or stays busy, within two minutes.
@@ -465,15 +463,15 @@ import VoiceIQSpeech
         let reason = MeetingFailure.reason(for: error)
         Log.meeting.error("meeting \(id.uuid.uuidString, privacy: .public) failed: \(String(describing: error), privacy: .public)")
         // `mark` saved the step that was running when it failed.
-        let step: GeminiStep = meta.status == .summarizing ? .notes : .transcript
+        let step: ServiceStep = meta.status == .summarizing ? .notes : .transcript
         meta.status = .failed(reason)
-        meta.waitsForGemini = MeetingFailure.waitsForGemini(error) ? step : nil
+        meta.waitsForService = MeetingFailure.waitsForService(error) ? step : nil
         try? store.save(meta: meta)
         processing[id] = nil
-        if meta.waitsForGemini != nil, hasKey() { scheduleWaitingRetry() }
+        if meta.waitsForService != nil, hasKey() { scheduleWaitingRetry() }
         switch error as? MeetingFailure {
-        case .noKey: onNotice?("\(MeetingFailure.noun) saved — it is transcribed once you add a Gemini key")
-        case nil where meta.waitsForGemini != nil: onNotice?("\(MeetingFailure.noun) saved — it is transcribed when Gemini can be reached")
+        case .noKey: onNotice?("\(MeetingFailure.noun) saved — it is transcribed once you add an AssemblyAI key")
+        case nil where meta.waitsForService != nil: onNotice?("\(MeetingFailure.noun) saved — it is transcribed when AssemblyAI can be reached")
         case nil: onNotice?("\(MeetingFailure.noun) transcript failed — see \(MeetingFailure.listName)")
         }
     }
@@ -492,7 +490,7 @@ import VoiceIQSpeech
                 app: meta.source.map(Self.name), names: meta.speakerNames, screenNames: meta.screenNames,
                 ownerName: settings.meetingOwnerName, vocabulary: dictionary.sanitizedVocabulary(),
                 spellings: dictionary.spellings(), writingRules: settings.customWritingRules,
-                calendarEvent: meta.calendarEvent)), transcript: transcript, model: cfg.writingModel, endpoint: cfg.endpoint, deadline: 300)
+                calendarEvent: meta.calendarEvent)), transcript: transcript, model: cfg.writingModel, deadline: 300)
         }
         let notes = try await write(meta)
         let named = ScreenSpeakerNames.byElimination(meta: meta, transcript: transcript, notes: notes)
@@ -506,8 +504,9 @@ import VoiceIQSpeech
     }
 
     /// The dictionary's wrong → right spellings, applied to what was heard.
-    /// Google takes no custom vocabulary with diarization, so a meeting is
-    /// transcribed verbatim and fixed here, as dictation is. FluidVoice applies
+    /// A meeting is transcribed without keyterms, which pull similar-sounding
+    /// names toward the dictionary's (Karen became Karan on 2026-11-28), and
+    /// fixed here, as dictation is. FluidVoice applies
     /// its replacements to meetings the same way (altic-dev/FluidVoice).
     nonisolated static func corrected(_ transcript: [TranscriptSegment], rules: [ReplacementEngine.Rule]) -> [TranscriptSegment] {
         transcript.map { segment in
@@ -530,8 +529,8 @@ import VoiceIQSpeech
         try store.save(notes: notes, id: id)
         meta.screenNames = ScreenSpeakerNames.byElimination(meta: meta, transcript: transcript, notes: notes)
         meta.title = notes.title; meta.status = .done; meta.notesSpeakerNames = meta.speakerNames
-        if meta.waitsForGemini != nil { waitingDelay = .seconds(300) }
-        meta.waitsForGemini = nil
+        if meta.waitsForService != nil { waitingDelay = .seconds(300) }
+        meta.waitsForService = nil
         // Names typed while the notes were written stay, and show the notes as out of date.
         if let current = store.list().first(where: { $0.id == id }) { meta.speakerNames = current.speakerNames }
         try store.save(meta: meta)
@@ -571,7 +570,7 @@ import VoiceIQSpeech
 /// Why a meeting has no transcript or notes, in words the Meetings list can
 /// show. The raw error goes to the log.
 public enum MeetingFailure: Error, Equatable {
-    /// No Gemini key is stored.
+    /// No AssemblyAI key is stored.
     case noKey
 
     static let fixHint = "The recording is saved. Press Retry after fixing this."
@@ -584,17 +583,17 @@ public enum MeetingFailure: Error, Equatable {
     static let listName = "Notes", noun = "Note"
     #endif
 
-    /// Gemini was out of reach, not wrong: no key, offline, a timeout, a
+    /// AssemblyAI was out of reach, not wrong: no key, offline, a timeout, a
     /// transport error, a 5xx or a per-minute rate limit. A rejected key, a
     /// 4xx, an unreadable answer or the daily quota fails the same way on
     /// every retry, so it needs the user instead.
-    static func waitsForGemini(_ error: Error) -> Bool {
+    static func waitsForService(_ error: Error) -> Bool {
         switch error {
         case MeetingFailure.noKey: return true
         case let error as TranscriptionError:
             switch error {
             case .offline, .timeout, .rateLimitedTransient: return true
-            // GeminiClient sends a URLError code as its number, a 5xx as "http_5xx".
+            // AssemblyAIClient sends a URLError code as its number, a 5xx as "http_5xx".
             case .network(let code): return Int(code) != nil || code.hasPrefix("http_5")
             default: return false
             }
@@ -605,25 +604,27 @@ public enum MeetingFailure: Error, Equatable {
     static func reason(for error: Error) -> String {
         switch error {
         case MeetingFailure.noKey:
-            return "Add your Gemini API key in \(keysPlace) to transcribe meetings. The recording is saved and is transcribed once a key is added."
+            return "Add your AssemblyAI API key in \(keysPlace) to transcribe meetings. The recording is saved and is transcribed once a key is added."
         case let error as TranscriptionError:
             switch error {
             case .auth:
-                return "Gemini rejected the API key. Check it in \(keysPlace). \(fixHint)"
+                return "AssemblyAI rejected the API key. Check it in \(keysPlace). \(fixHint)"
             case .rateLimitedDaily:
-                return "The daily Gemini quota is used up. \(fixHint)"
+                return "The daily AssemblyAI quota is used up. \(fixHint)"
+            case .noBalance:
+                return "Your AssemblyAI account has no balance for this step. Notes are written on the LLM Gateway, which the free credit doesn't cover. \(fixHint)"
             case .rateLimitedTransient:
                 return "Rate limited for too long. Try again in a few minutes. \(fixHint)"
             case .modelUnavailable(let model, _):
                 return "Your key can't use \(model). \(fixHint)"
             case .offline:
                 return "You were offline when the meeting was transcribed. The recording is saved and is transcribed when you're back online."
-            case .timeout, .network where waitsForGemini(error):
-                return "Couldn't reach Gemini. The recording is saved and is transcribed when Gemini can be reached."
+            case .timeout, .network where waitsForService(error):
+                return "Couldn't reach AssemblyAI. The recording is saved and is transcribed when AssemblyAI can be reached."
             case .network:
                 return "Transcription failed. \(fixHint)"
             case .safetyBlocked:
-                return "Gemini declined to transcribe this meeting. \(fixHint)"
+                return "The model declined to write notes for this meeting. \(fixHint)"
             case .badRequest, .emptyTranscript:
                 return "Transcription failed. \(fixHint)"
             }

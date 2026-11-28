@@ -1,6 +1,6 @@
 import Foundation
 
-/// The transport under `GeminiClient.post`: one URLSession per request,
+/// The transport under `AssemblyAIClient.send`: one URLSession per request,
 /// client request IDs, per-attempt metrics, and the one retry a lost
 /// connection gets.
 ///
@@ -13,13 +13,12 @@ import Foundation
 /// - There is no public API to turn HTTP/3 off for a session or request
 ///   (Apple DTS: "There's not a good way to disable QUIC for a specific
 ///   URLSession"; `assumesHTTP3Capable` only opts in). URLSession learns
-///   HTTP/3 from DNS HTTPS records or `Alt-Svc`. Neither api.openai.com nor
-///   generativelanguage.googleapis.com publishes an HTTPS record advertising
-///   h3, and an ephemeral session's `Alt-Svc` memory is its own.
+///   HTTP/3 from DNS HTTPS records or `Alt-Svc`, and an ephemeral session's
+///   `Alt-Svc` memory is its own.
 /// - So a new ephemeral session per request always starts on TCP + HTTP/2
 ///   and never reuses an idle connection. Each call pays one TCP + TLS
 ///   handshake, measured at 30–150 ms against calls of 1–5 s.
-extension GeminiClient {
+extension AssemblyAIClient {
     static func makeSession(delegate: URLSessionDelegate? = nil) -> URLSession {
         let config = URLSessionConfiguration.ephemeral
         config.waitsForConnectivity = false // fail fast into the retry/queue path
@@ -30,11 +29,6 @@ extension GeminiClient {
     }
 
     static let requestIDHeader = "X-Client-Request-Id"
-
-    /// Called when the first byte of a successful response body arrives.
-    /// Send-on-pause sets it: Gemini bills a stream from its first chunk, so
-    /// this tells a cancelled request that cost something from one that did not.
-    @TaskLocal static var onFirstBodyByte: (@Sendable () -> Void)?
 
     /// The response of one call. A connection lost before any response
     /// (`-1005`: a reset, a dead pooled connection, a Wi-Fi blip) gets one
@@ -64,15 +58,7 @@ extension GeminiClient {
                 // URLRequest.timeoutInterval is an IDLE timer; enforce the true
                 // overall deadline ourselves (audit L5).
                 let result = try await withDeadline(seconds: remaining) { [session, request] in
-                    guard let onFirstBodyByte = Self.onFirstBodyByte else { return try await session.data(for: request) }
-                    let (bytes, response) = try await session.bytes(for: request)
-                    let succeeded = (response as? HTTPURLResponse)?.statusCode == 200
-                    var data = Data()
-                    for try await byte in bytes {
-                        if data.isEmpty, succeeded { onFirstBodyByte() }
-                        data.append(byte)
-                    }
-                    return (data, response)
+                    try await session.data(for: request)
                 }
                 let status = (result.1 as? HTTPURLResponse)?.statusCode
                 record(collector, requestID: requestID, attempt: attempt, stage: stage, model: modelLabel,

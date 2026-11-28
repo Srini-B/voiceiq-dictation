@@ -6,7 +6,7 @@
 
 **Press a key. Speak. It types.**
 
-Smart dictation and meeting notes for macOS and iPhone, on Google Gemini with your own key.
+Smart dictation and meeting notes for macOS and iPhone, on AssemblyAI with your own key.
 
 </div>
 
@@ -47,8 +47,8 @@ Every failure is retryable from History, and Retry transcribes any dictation aga
 listening until you actually stop.
 
 **It is private by architecture.** Your voice goes from your Mac straight to
-Google's Gemini API with *your* key. No middleman server, no account, no
-analytics, no keystroke logging — one network host, and you can read every
+AssemblyAI with *your* key. No middleman server, no account, no
+analytics, no keystroke logging — one provider, and you can read every
 line of the code that talks to it. Each dictation also sends the app, window
 and page you are in and the text around the cursor, so the dictation fits
 what is already in the field. Screen context (the text in the window you dictate into, read
@@ -58,20 +58,25 @@ Settings → Dictation.
 See [PRIVACY.md](docs/PRIVACY.md).
 
 **Your jargon, spelled right.** Names and product terms go in the Dictionary and
-ride along with the audio, so the model hears "Kubernetes" instead of guessing
+are sent as keyterms with the audio, so the speech model hears "Kubernetes" instead of guessing
 "cooper netties" — corrected at the source, not patched afterwards. Fix a word
 after VoiceiQ types it and the correction is learned into the Dictionary on its own. The
 Dictionary syncs between the Mac and iPhone through your iCloud account, and the
 iPhone keyboard adds a selected or copied word in one tap.
 
-**It writes the way you meant it.** One Gemini call hears the recording and
-writes the text by the built-in writing rules: "scratch that", "change the
+**It writes the way you meant it.** AssemblyAI's STT-3.7 transcribes the
+dictation while you speak, then GPT-6 Luna on AssemblyAI's LLM Gateway writes
+the text by the built-in writing rules: "scratch that", "change the
 first point to…" and other mid-dictation instructions become edits, grammar is
 fixed, run-on speech gets sentence breaks, and your own rules from Settings →
 Dictation are applied. Spelling follows your Mac's region (en-GB, en-IN or
 en-US, for example). Dictate for as long as you like; there is no time limit.
-Plain dictation is language-agnostic: speak in any language, or mix them
-mid-sentence, and the text stays in the language you used.
+English is the default language; Settings → Dictation → Language picks
+another of STT-3.7's 32 languages (or detects among them, mixing included),
+or a language such as Tamil that only Universal-2 has, which is transcribed
+after you stop and takes a few seconds longer. If the writing step fails, or
+the account has no balance for the LLM Gateway, the transcript goes in tidied
+on the device and the pill says so.
 
 **Stays out of your way.** Other audio is muted while you dictate and restored
 after (switch it off in Settings → Dictation). Pick a preferred microphone or
@@ -87,9 +92,9 @@ transcript while it records; the transcript is written when you stop.
 With no usable key the recording is kept and marked failed with the reason,
 ready to Retry once a key is added.
 
-**Cost Analysis.** Every model call is metered: tokens from the API response,
-priced at Google's list prices. Settings → Cost Analysis shows today, this week, this month, and all
-time, broken down by action and by model, for Gemini (OpenAI, ElevenLabs and
+**Cost Analysis.** Every model call is metered: audio hours and tokens,
+priced at AssemblyAI's list prices. Settings → Cost Analysis shows today, this week, this month, and all
+time, broken down by action and by model, for AssemblyAI (Gemini, OpenAI, ElevenLabs and
 Claude get a row only while History still holds calls booked to them from
 when they were providers); each dictation in History shows what it cost. Details in
 [docs/COST_TRACKING.md](docs/COST_TRACKING.md).
@@ -100,9 +105,10 @@ Build the app (see Development below), move `VoiceiQ.app` into
 **Applications**, and launch it. Setup takes about two minutes and the app walks
 you through it:
 
-1. **Paste a Gemini API key** — get one at
-   [Google AI Studio](https://aistudio.google.com/apikey). The key is stored
-   in your macOS Keychain and only ever sent to Google. You can change it
+1. **Paste an AssemblyAI API key** — [sign up](https://www.assemblyai.com/dashboard/signup)
+   (no card; $50 of free credit) and copy the key from
+   [the dashboard](https://www.assemblyai.com/dashboard/api-keys). The key is stored
+   in your macOS Keychain and only ever sent to AssemblyAI. You can change it
    later in Settings → Advanced.
 2. **Allow the microphone** — say hello and it advances by itself.
 3. **Allow Accessibility** — macOS requires this for any app that types into
@@ -111,34 +117,37 @@ you through it:
    screen while you dictate so on-screen names and paths are spelled right.
 5. **Press the dictation key and talk.**
 
-**Cost:** you pay Google for what you dictate, at
-[Gemini API pricing](https://ai.google.dev/pricing) (a free tier exists); a
-typical dictation is a few seconds of audio. VoiceiQ itself is free and has no account.
+**Cost:** you pay AssemblyAI, at [AssemblyAI pricing](https://www.assemblyai.com/pricing).
+A 20-second dictation costs about ₹0.24 with GPT-6 Luna writing it; a meeting
+about ₹28 per hour of speech. The free credit covers speech-to-text but not
+the LLM Gateway, so the writing step, meeting notes and meeting chat need a
+small balance on the account; without it dictations go in as heard, tidied.
+VoiceiQ itself is free and has no account.
 
 **Models:**
 
 | | Model |
 | --- | --- |
-| Dictation | `gemini-3.8-flash` |
-| Meeting transcript and speakers | `gemini-3.5-transcribe` |
-| Meeting notes and meeting chat | `gemini-3.8-flash` |
+| Dictation transcript | STT-3.7 Realtime, streamed while you speak (pre-recorded STT-3.7, or Universal-2, when the stream fails or for languages STT-3.7 lacks) |
+| Dictation writing | `gpt-6-luna` on the LLM Gateway |
+| Meeting transcript and speakers | STT-3.7 per track, with speaker labels |
+| Meeting notes and meeting chat | `gpt-6-luna` on the LLM Gateway |
 
-Every dictation is one call: the model hears the recording and writes the
-text, with any screen text in the same request.
+The writing model never hears the audio: it gets the transcript, with any
+screen text, and writes the text.
 Dictation and meetings can also be transcribed on device with Fluid Speech
-Pro or Mini by FluidVoice. Their transcripts are then written by Gemini, or,
+Pro or Mini by FluidVoice. Their transcripts are then written by AssemblyAI, or,
 with writing Off, tidied on the device by rules with no model; see
 [docs/ON_DEVICE.md](docs/ON_DEVICE.md).
-Settings → Advanced can pin other model names ("Dictation model" and
-"Meeting model").
+Settings → Advanced can pin another writing model ("Writing model").
 
 ## How it works
 
 ```
-key ─▶ capture (CAF on disk from t=0) ─▶ key ─▶ FLAC ─▶ gemini-3.8-flash
-                                                          (hears + writes, one call;
-                                                           screen text, chunked past 10 min)
-                                                                │
+key ─▶ capture (CAF on disk from t=0) ─▶ key ─▶ transcript ─▶ gpt-6-luna
+          │                                        ▲      (LLM Gateway: writes;
+          └─▶ STT-3.7 Realtime, while you speak ───┘       screen text)
+              (stream failed: FLAC ─▶ pre-recorded STT-3.7)     │
    cursor ◀─ insert (AX → paste → clipboard) ◀─ dictionary replacements
       │                                                         │
       ▼                                                         ▼
@@ -190,7 +199,7 @@ where you were typing.
 - **One trip to the app, once.** The first tap starts a background session and
   sends you back to the app you were in. After that the mic starts in place,
   and the session shows in the Dynamic Island until you end it.
-- **Same settings as the Mac.** Gemini with your own key (stored in the iOS
+- **Same settings as the Mac.** AssemblyAI with your own key (stored in the iOS
   Keychain, under Settings › API Key), dictionary, writing rules, History and
   Cost.
 - **Meetings are a recorder (Notes on iPhone).** Record in the app, stop, and the notes are
@@ -237,7 +246,7 @@ iOS/            iPhone app, voice keyboard extension, Live Activity
 VoiceIQCore/        all engine logic, headless and testable
   HotkeyEngine/     CGEventTap + the pure hold/lock/cancel grammar
   AudioEngine/      crash-safe CAF capture, device changes, prewarming
-  TranscriptionClient/  Gemini calls, retries, FLAC
+  TranscriptionClient/  AssemblyAI calls, realtime stream, retries, FLAC
   FormattingPipeline/   dictation prompt, writing rules, dictionary replacements
   InsertionEngine/      the AX → paste → clipboard ladder
   HistoryStore/         GRDB index, recovery, retry queue, retention

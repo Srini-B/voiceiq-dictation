@@ -3,7 +3,7 @@ import Foundation
 import VoiceIQSpeech
 
 /// The on-device speaker model's stretches (pyannote community-1) laid over
-/// the far side's words from Gemini: who said each word, and the far-side
+/// the far side's words from AssemblyAI: who said each word, and the far-side
 /// track written to one file for the model to read (`MeetingTranscriber.splitFarSide`).
 enum FarSideSpeakers {
     /// The track is written a minute at a time.

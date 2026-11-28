@@ -209,7 +209,7 @@ public struct LocalModelFooter: View {
             if store.state == .ready {
                 Text(Self.firstRunNote)
             } else {
-                Text("Gemini transcribes until \(store.displayName) is downloaded.")
+                Text("AssemblyAI transcribes until \(store.displayName) is downloaded.")
             }
         }
     }

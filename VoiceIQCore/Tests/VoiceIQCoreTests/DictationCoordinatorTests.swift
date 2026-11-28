@@ -21,15 +21,11 @@ final class DictationCoordinatorTests: XCTestCase {
         var onDeviceChange: (@Sendable (String) -> Void)?
         var onWriteFailure: (@Sendable () -> Void)?
         var onEngineDied: (@Sendable (String) -> Void)?
+        var onSamples: (@Sendable ([Int16]) -> Void)?
         var startError: Error?
         var result = AudioCaptureResult(framesWritten: 16_000, durationSeconds: 1.0)
         private(set) var started = false
         private(set) var stopCount = 0
-        /// What `pausedSpeech` reports: the speaker has paused.
-        var paused: Range<Int64>?
-
-        func pausedSpeech(after pause: Double, minimumSpeech: Double) -> Range<Int64>? { paused }
-        func recordedSamples(in range: Range<Int64>) -> [Int16]? { [] }
 
         func start(writingTo url: URL) throws {
             if let startError { throw startError }
@@ -57,26 +53,6 @@ final class DictationCoordinatorTests: XCTestCase {
             case .success(let r): return r
             case .failure(let e): throw e
             }
-        }
-    }
-
-    /// Sends early on request and reports what key-up handed back.
-    final class SpeculatingTranscription: TranscriptionServicing, @unchecked Sendable {
-        private(set) var sent: [SpeculativeDictation] = []
-        private(set) var handedBack: [SpeculativeDictation?] = []
-        func speculate(_ speech: PausedSpeech, context: DictationContext) -> SpeculativeDictation? {
-            let early = SpeculativeDictation(range: speech.range, prompt: "p", sentAt: ContinuousClock().now) { _ in "early" }
-            sent.append(early)
-            return early
-        }
-        func transcribe(audioURL: URL, durationSeconds: Double, context: DictationContext,
-                        speculation: SpeculativeDictation?) async throws -> TranscriptionResult {
-            handedBack.append(speculation)
-            let text = try await speculation?.answer.value ?? "late"
-            return TranscriptionResult(rawTranscript: text, cleanedTranscript: text, modelID: "test")
-        }
-        func transcribe(audioURL: URL, durationSeconds: Double, context: DictationContext) async throws -> TranscriptionResult {
-            try await transcribe(audioURL: audioURL, durationSeconds: durationSeconds, context: context, speculation: nil)
         }
     }
 
@@ -214,57 +190,10 @@ final class DictationCoordinatorTests: XCTestCase {
         XCTAssertEqual(c.lastResult, "clean")
     }
 
-    /// A pause sends the request once, however long it lasts; speech after
-    /// it cancels that request and the next pause sends again; key-up hands
-    /// the last one to the transcriber.
-    func testAPauseSendsTheRequestSpeechCancelsItAndKeyUpUsesTheLast() async throws {
-        let cloud = SpeculatingTranscription()
-        let c = makeCoordinator(transcription: cloud)
-        c.handle(.begin)
-        await pump()
-        try await Task.sleep(nanoseconds: 300_000_000)
-        XCTAssertTrue(cloud.sent.isEmpty, "no pause yet")
-
-        capture.paused = 0..<16_000
-        try await Task.sleep(nanoseconds: 500_000_000)
-        XCTAssertEqual(cloud.sent.count, 1)
-
-        capture.paused = nil
-        try await Task.sleep(nanoseconds: 300_000_000)
-        XCTAssertTrue(cloud.sent[0].answer.isCancelled)
-        capture.paused = 0..<40_000
-        try await Task.sleep(nanoseconds: 300_000_000)
-        XCTAssertEqual(cloud.sent.count, 2)
-
-        c.handle(.finalize)
-        await settle()
-        XCTAssertEqual(cloud.handedBack.count, 1)
-        XCTAssertTrue(cloud.handedBack[0] === cloud.sent[1])
-        XCTAssertEqual(inserter.insertedText, "early")
-    }
-
-    /// Cancelling stops a request sent at a pause at once, before the
-    /// recording finishes draining, and nothing is inserted.
-    func testCancelStopsTheEarlyRequestAtOnce() async throws {
-        let cloud = SpeculatingTranscription()
-        let c = makeCoordinator(transcription: cloud)
-        c.handle(.begin)
-        await pump()
-        capture.paused = 0..<16_000
-        try await Task.sleep(nanoseconds: 300_000_000)
-        XCTAssertEqual(cloud.sent.count, 1)
-
-        c.handle(.cancel)
-        XCTAssertTrue(cloud.sent[0].answer.isCancelled)
-        await settle()
-        XCTAssertTrue(cloud.handedBack.isEmpty)
-        XCTAssertNil(inserter.insertedText)
-    }
-
     /// Dictation set to On device with the model missing or busy (no local
-    /// session): the recording falls back to Gemini whatever the writing
+    /// session): the recording falls back to AssemblyAI whatever the writing
     /// choice, Off included.
-    func testOnDeviceDictationWithoutItsModelFallsBackToGemini() async {
+    func testOnDeviceDictationWithoutItsModelFallsBackToAssemblyAI() async {
         let settings = SettingsStore()
         settings.setDictationSource(.onDevice)
         defer {

@@ -1,10 +1,10 @@
 # On-device speech
 
 VoiceiQ can transcribe dictations on the Mac, iPhone or iPad instead of
-sending audio to Gemini. Gemini stays the default. The models are Fluid
+sending audio to AssemblyAI. AssemblyAI stays the default. The models are Fluid
 Speech Pro and Fluid Speech Mini by FluidVoice (Parakeet TDT models converted
 to Core ML), run through the FluidAudio package. Meetings are always
-transcribed by Gemini; on the Mac, pyannote community-1 tells the far side's
+transcribed by AssemblyAI; on the Mac, pyannote community-1 tells the far side's
 speakers apart ([Meetings](#meetings)). With writing Off, an on-device
 dictation is tidied by rules on the device, with no model, so no model
 service sees the words. Finished text still syncs to your own iCloud like any
@@ -16,34 +16,36 @@ Settings → Dictation → Speech has these choices, each saved on its own:
 
 | Row | Values | Key | Default |
 | --- | --- | --- | --- |
-| Dictation | Gemini, On device | `transcriptionSource` | Gemini |
-| Writing rules | Gemini, Off | `cleanupSource` | Gemini |
+| Dictation | AssemblyAI, On device | `transcriptionSource` | AssemblyAI |
+| Writing rules | AssemblyAI, Off | `cleanupSource` | AssemblyAI |
 | Tidy dictation | Sentences, Messages, Lists, As spoken | `tidyStyle` | Sentences |
 
 The second row shows only when Dictation is On device; the third only when
 writing is also Off. The second decides who writes an on-device transcript:
 
-- **Gemini**: the transcript goes to Gemini as text, never as audio, with the
+- **AssemblyAI**: the transcript goes to the writing model on AssemblyAI's
+  LLM Gateway as text, never as audio, with the
   built-in writing rules, your custom rules, dictionary and regional spelling
-  (`PromptV1.transcriptSection`). If Gemini fails or there
-  is no key, the dictation goes in as transcribed.
+  (`PromptV1.transcriptSection`). If the writing model fails, the account has
+  no gateway balance, or there is no key, the dictation is tidied on the
+  device as with Off; when the writing model failed, the pill says so.
 - **Off**: no writing step for an on-device transcript; it never goes to
-  Gemini as text. Dictations are tidied on the device (see
+  AssemblyAI as text. Dictations are tidied on the device (see
   [Tidy dictation](#tidy-dictation)), with the Dictionary's replacements.
-  A recording the on-device model could not transcribe still goes to Gemini
+  A recording the on-device model could not transcribe still goes to AssemblyAI
   (see below). As with every dictation, the finished text syncs to
   your own iCloud when History sync is on (see PRIVACY.md).
 
-These choices cover what was transcribed on device. A Gemini transcription always
-applies the writing rules in the same request, so "Gemini transcribes,
-the device writes" does not exist.
+These choices cover what was transcribed on device. An AssemblyAI
+transcription always goes to the writing model, so "AssemblyAI transcribes,
+the device writes" exists only as the fallback when the writing step fails.
 
 Whatever this row says, Off included, an on-device dictation whose model is
-missing, busy, fails or loads too slowly goes to Gemini as audio when a key
-is stored, and Gemini transcribes and writes it as with the Gemini source.
+missing, busy, fails or loads too slowly goes to AssemblyAI as audio when a key
+is stored, and AssemblyAI transcribes and writes it as with the AssemblyAI source.
 Without a key the dictation fails and stays in History for Retry.
-Screen context, when on, sends the screen's text with the Gemini writing
-request as it does with a Gemini dictation.
+Screen context, when on, sends the screen's text with the writing
+request as it does with an AssemblyAI dictation.
 
 Below the three choices, the models are grouped by their job, each group
 under its own header (`SpeechSourceSection`, the same on Mac, iPhone and
@@ -59,13 +61,14 @@ A group whose choice is not On device still shows while one of its models is
 on disk or downloading, with a note that it is not used, so the model can be
 deleted or the download cancelled.
 
-**Languages.** A Gemini dictation has no language setting: Gemini works out
-the language, or several languages and each switch between them, by itself,
-and the writing rules keep each language in its own script. With Dictation On
-device, the transcription group's Language picker applies, and neither the
-Gemini writing step nor a Gemini fallback is told a language. Meetings never
-get one either: Gemini and the on-device models work out each language in a
-meeting by themselves.
+**Languages.** An AssemblyAI dictation uses Settings → Dictation →
+Language (`DictationLanguage`): English by default, one of STT-3.7's 32
+languages, Detect (STT-3.7 works out the language and each switch among its
+languages), or a language only Universal-2 has, transcribed after you stop.
+The writing rules keep each language in its own script. With Dictation On
+device, the transcription group's Language picker applies; the writing step
+is told no language, and an AssemblyAI fallback uses the Dictation language.
+Meetings get no language setting: AssemblyAI detects each track's language.
 
 ## Models
 
@@ -120,9 +123,9 @@ after a delete, and deletes the retired on-device writer's folder
    the recording starts. The model loads while you speak.
 2. At stop, `LocalTranscriber.finish` decodes the saved CAF.
 3. The coordinator passes the result to `TranscriptionServicing.write`
-   (Gemini writing, or the tidy-up when Off).
+   (AssemblyAI writing, or the tidy-up when Off).
 4. If the model is still loading `TimeoutPolicy.localColdLoad` after the
-   recording and a Gemini key exists, the dictation goes to Gemini and the
+   recording and an AssemblyAI key exists, the dictation goes to AssemblyAI and the
    load finishes as a warm-up.
 
 Two fixes from Hex (MIT) apply to the on-device transcript:
@@ -130,7 +133,7 @@ Two fixes from Hex (MIT) apply to the on-device transcript:
 - **Numbers as digits** (English, Fluid Speech Mini and Pro, Mac and iPhone).
   The model's `EnglishText` writes numbers with `SpokenNumbers`, for every
   dictation: the text inserted with writing Off and the transcript the
-  Gemini writing step receives. "Ten to fifteen percent" → "10 to
+  AssemblyAI writing step receives. "Ten to fifteen percent" → "10 to
   15%", "five dollars" → "$5", while "No one came", "I work nine to five" and
   "four ninety nine" stay as said. Text that already has digits keeps them.
   It replaced FluidAudio's NeMo inverse normalization, which got 32 of Hex's
@@ -145,11 +148,11 @@ Two fixes from Hex (MIT) apply to the on-device transcript:
   same: "ee" and "i", "oo" and "u", "th" and "t", so Parakeet's "Sreeni",
   "Puja", "Prashant" and "Kirti" take the Dictionary's "Srini", "Pooja",
   "Prashanth" and "Kirthi". English only. It runs on the text inserted as
-  transcribed or tidied (writing Off, no key, or Gemini failing).
+  transcribed or tidied (writing Off, no key, or the writing step failing).
 
 History's Retry and launch recovery use `OnDeviceFirstTranscription`: the
-saved recording goes to the on-device model first, then Gemini when a key is
-stored. With no key nothing is sent (`GeminiClient` refuses to send).
+saved recording goes to the on-device model first, then AssemblyAI when a key is
+stored. With no key nothing is sent (`AssemblyAIClient` refuses to send).
 `DictationRoute.isAvailable` (a key, or the selected model downloaded) decides
 whether VoiceiQ asks for an API key, so fully offline use needs no key.
 
@@ -160,20 +163,20 @@ update.
 
 ## Meetings
 
-Meetings are always transcribed by Gemini. On-device meeting transcription
+Meetings are always transcribed by AssemblyAI. On-device meeting transcription
 (Fluid Speech plus pyannote, `LocalMeetingTranscriber`) was removed in
 0.7.18: on six AMI meetings it scored M1–M4 87.5 / 45.7 / 69.6 / 57.3, under
 the 90 the scorecard asks of on-device work
 ([activity](../activities/2026-11-27-meetings-gemini-only.md)). The speaker
 model stays: `MeetingTranscriber.splitFarSide` runs pyannote community-1 on
-the far-side track and lays its stretches over Gemini's words
+the far-side track and lays its stretches over AssemblyAI's words
 (`FarSideSpeakers`). Nothing passes `LocalMeetingJob` a speech model any more.
 
-A meeting that cannot reach Gemini (no key, offline, a timeout, a transport
-error or 5xx, a per-minute rate limit) keeps its audio and is marked as waiting (`MeetingMeta.waitsForGemini`).
+A meeting that cannot reach AssemblyAI (no key, offline, a timeout, a transport
+error or 5xx, a per-minute rate limit) keeps its audio and is marked as waiting (`MeetingMeta.waitsForService`).
 `MeetingEngine.transcribeWaiting` sends it again at launch, when the network
 comes back, when a key is saved, and on a timer (5 minutes, doubling to an
-hour) while it waits with a key, since Gemini recovering or a quota reset
+hour) while it waits with a key, since AssemblyAI recovering or a quota reset
 raises no other signal. The step that failed runs again: a meeting
 that failed while writing notes gets only its notes, so transcript edits stay
 and a synced meeting without audio recovers; one that failed while
@@ -181,8 +184,8 @@ transcribing (also Redo transcript and notes) is transcribed again.
 
 ## Tidy dictation
 
-With writing Off, `GeminiTranscriptionService.write` tidies an on-device
-dictation with rules and no model (`Tidy`, adapted from Hex's dictation
+With writing Off, `AssemblyAITranscriptionService.write` tidies a
+dictation (and, when the writing step fails, an AssemblyAI one) with rules and no model (`Tidy`, adapted from Hex's dictation
 styles, MIT):
 
 1. `Tidy.spoken`: layout and marks said by name become the marks
@@ -250,7 +253,7 @@ styles, MIT):
 Each language drops only its own hesitation sounds: English "er" is a word in
 Norwegian and German and "um" in Portuguese, so those keep them. The rules for
 "I", "gonna", "yeah" and list connectives are English only. A dictation left
-with no words (only "um" and "uh") is an empty dictation, as Gemini would
+with no words (only "um" and "uh") is an empty dictation, as the writing model would
 make it. Numbers are already digits before step 1 (`SpokenNumbers`). French
 drops "euh" and "heu".
 
@@ -261,7 +264,7 @@ must stay) are in
 `VoiceIQCore/Tests/VoiceIQCoreTests/Fixtures/cleanup-cases.json`;
 `CleanupCasesTests` runs each through the tidy-up. Where the tidy-up knowingly
 writes less than the ideal (`written`), the case records what it writes
-(`tidy`), for example "Send it to Sarah." where Gemini resolves "it" to "the
+(`tidy`), for example "Send it to Sarah." where the writing model resolves "it" to "the
 invoice".
 
 ## Measured (cloud Mac, M4 Pro VM, 2026-11-22)

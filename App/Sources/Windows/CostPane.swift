@@ -2,7 +2,7 @@ import SwiftUI
 import VoiceIQCore
 
 /// Cost Analysis: what the model calls behind each action cost, for one
-/// provider at a time. It opens on Gemini; older providers appear only while
+/// provider at a time. It opens on AssemblyAI; older providers appear only while
 /// History still has their calls.
 /// Period totals up top, then a breakdown by action and by model for the
 /// chosen period, then the most recent calls. Costs are shown in dollars.
@@ -33,8 +33,8 @@ struct CostPane: View {
     }
 
     @State private var period: Period = .month
-    @State private var source = CostSource.gemini
-    /// Gemini, plus each retired provider while it has rows (`reload`).
+    @State private var source = CostSource.assemblyAI
+    /// AssemblyAI, plus each retired provider while it has rows (`reload`).
     @State private var sources = CostSource.allCases.filter(\.isCurrent)
     /// Simple view: period totals and cost per action. Detailed adds tokens,
     /// the per-model table, and the recent-call list.
@@ -50,7 +50,7 @@ struct CostPane: View {
         ScrollView {
             VStack(alignment: .leading, spacing: VoiceIQUI.Spacing.l) {
                 // Its own row: beside the totals, four sources squeezed them
-                // into "$0.01…". Hidden when Gemini is the only one.
+                // into "$0.01…". Hidden when AssemblyAI is the only one.
                 if sources.count > 1 { HStack {
                     Picker("Source", selection: $source) {
                         ForEach(sources) { Text($0.displayName).tag($0) }
@@ -198,7 +198,7 @@ struct CostPane: View {
 
     private func reload() {
         sources = CostSource.allCases.filter { $0.isCurrent || store.total(source: $0).calls > 0 }
-        if !sources.contains(source) { source = .gemini }
+        if !sources.contains(source) { source = .assemblyAI }
         var next: [Period: UsageStore.Total] = [:]
         for p in Period.allCases { next[p] = store.total(since: p.start, source: source) }
         totals = next

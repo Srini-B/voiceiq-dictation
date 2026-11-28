@@ -281,8 +281,8 @@ public enum MeetingStatus: Codable, Equatable, Sendable {
     case failed(String)
 }
 
-/// What a meeting waiting for Gemini still needs (`MeetingMeta.waitsForGemini`).
-public enum GeminiStep: String, Codable, Sendable {
+/// What a meeting waiting for AssemblyAI still needs (`MeetingMeta.waitsForService`).
+public enum ServiceStep: String, Codable, Sendable {
     /// Transcribe the recording, then write the notes.
     case transcript
     /// Write the notes from the saved transcript.
@@ -311,11 +311,11 @@ public struct MeetingMeta: Codable, Equatable, Sendable, Identifiable {
     /// The title the user gave it (Rename…). It wins over the notes' title,
     /// which Redo notes writes into `title` again.
     public var userTitle: String?
-    /// The step that failed only because Gemini could not be reached (no
+    /// The step that failed only because AssemblyAI could not be reached (no
     /// key, offline, timeout, a 5xx, a per-minute rate limit). It runs again when that changes
     /// (`MeetingEngine.transcribeWaiting`): the whole recording, or the notes
     /// alone from the saved transcript.
-    public var waitsForGemini: GeminiStep?
+    public var waitsForService: ServiceStep?
 
     /// The user's title, else the notes', else the one stored with the
     /// meeting; nil when none of them has one.

@@ -30,7 +30,7 @@ struct MeetingsView: View {
                             NavigationLink { MeetingDetail(meta: meta, folders: folders) } label: {
                                 MeetingRow(meta: meta, folders: folders.names(of: meta.id))
                             }
-                            // Deleting mid-transcription would leave its Gemini calls running
+                            // Deleting mid-transcription would leave its AssemblyAI calls running
                             // with nowhere to save (the Mac's More menu is disabled the same way).
                             .deleteDisabled(model.meetings.isBusy(meta.id))
                             .contextMenu {
@@ -215,7 +215,7 @@ private struct MeetingRow: View {
     @ViewBuilder private var status: some View {
         switch meta.status {
         case .done: EmptyView()
-        case .failed where meta.waitsForGemini != nil: StatusChip(text: "Waiting", tone: .pending)
+        case .failed where meta.waitsForService != nil: StatusChip(text: "Waiting", tone: .pending)
         case .failed:
             Text("Failed")
                 .font(Theme.Fonts.caption())

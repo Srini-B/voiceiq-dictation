@@ -1,8 +1,8 @@
 import SwiftUI
 import VoiceIQSpeech
 
-/// Gemini or this device for dictation (meetings always use Gemini), then
-/// Gemini or Off for the writing step of an on-device dictation, with how an
+/// AssemblyAI or this device for dictation (meetings always use AssemblyAI), then
+/// AssemblyAI or Off for the writing step of an on-device dictation, with how an
 /// unwritten dictation is tidied, then the on-device models grouped by their
 /// job: transcription, meeting speakers, and the English add-on. Shared by
 /// the macOS and iOS settings.
@@ -85,7 +85,7 @@ public struct SpeechSourceSection<Header: View>: View {
                 } footer: {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(dictationLocal ? "Dictation uses the checked model, in the language picked under it."
-                                            : "Not used while Dictation is set to Gemini.")
+                                            : "Not used while Dictation is set to AssemblyAI.")
                         LocalModelFooter(localEnabled: dictationLocal, selection: localModel)
                     }
                 }
@@ -96,7 +96,7 @@ public struct SpeechSourceSection<Header: View>: View {
                 } header: {
                     header("Meeting speakers")
                 } footer: {
-                    Text("Tells the other people on a call apart, on this \(device). Gemini transcribes every meeting; this model is downloaded for it without asking.")
+                    Text("Tells the other people on a call apart, on this \(device). AssemblyAI transcribes every meeting; this model is downloaded for it without asking.")
                 }
             }
             if shows([englishTools], offered: dictationLocal) {
@@ -106,7 +106,7 @@ public struct SpeechSourceSection<Header: View>: View {
                     header("Add-on for English dictation")
                 } footer: {
                     Text(dictationLocal ? "Dictionary correction for English on-device dictation. Without it, on-device transcription still works."
-                                       : "Not used while Dictation is set to Gemini.")
+                                       : "Not used while Dictation is set to AssemblyAI.")
                 }
             }
         }
@@ -127,17 +127,17 @@ public struct SpeechSourceSection<Header: View>: View {
 
     private var cleanupNote: String {
         switch cleanupSource {
-        case .gemini: return Self.geminiWrites
+        case .assemblyAI: return Self.assemblyAIWrites
         case .none:
             let marks = tidyStyle == .asSpoken ? "" : " Say \"new line\" or \"comma\" for the mark."
             let dictation = dictationLocal
                 ? " Dictations are tidied on this \(device) with your Dictionary's replacements. \(tidyStyle.summary)\(marks)"
                 : ""
-            return "No writing step.\(dictation) If the on-device model is missing or fails, Gemini transcribes the recording."
+            return "No writing step.\(dictation) If the on-device model is missing or fails, AssemblyAI transcribes the recording."
         }
     }
 
-    static var geminiWrites: String {
-        "On-device transcripts go to Gemini as text, never as audio, to be written by your writing rules. If Gemini can't be reached, a dictation goes in as transcribed."
+    static var assemblyAIWrites: String {
+        "On-device transcripts go to AssemblyAI as text, never as audio, to be written by your writing rules. If AssemblyAI can't be reached, a dictation goes in as transcribed."
     }
 }

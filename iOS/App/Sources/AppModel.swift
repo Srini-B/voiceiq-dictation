@@ -16,7 +16,7 @@ final class AppModel: ObservableObject {
     let hostReturn = HostReturn()
     let setup = SetupMonitor()
     let historyStore: HistoryStore?
-    let transcription: GeminiTranscriptionService
+    let transcription: AssemblyAITranscriptionService
     private let sleepGuard: SessionSleepGuard
 
     /// Shown after the one-time bounce when the app could not send the user
@@ -49,13 +49,13 @@ final class AppModel: ObservableObject {
         FormattingSettingsMigration.removeLiveTranscriptionSettings()
         FileLayout.removeStaleFiles()
         SettingsStore().removeRetiredSettingsOnce()
-        let client = GeminiClient(apiKey: { KeychainStore.loadAPIKey() })
-        transcription = GeminiTranscriptionService(client: client)
+        let client = AssemblyAIClient(apiKey: { KeychainStore.loadAPIKey() })
+        transcription = AssemblyAITranscriptionService(client: client)
         historyStore = try? HistoryStore.standard()
         UsageMeter.store = try? UsageStore.standard()
         meetings = MeetingEngine(
             client: client,
-            config: { SettingsStore().geminiConfig },
+            config: { SettingsStore().assemblyAIConfig },
             localMeeting: LocalSpeechInference.transcribeMeeting
         )
         let inserter = self.inserter
@@ -100,7 +100,7 @@ final class AppModel: ObservableObject {
                                                   age, await PreparedModelCache.describe()))
                 }
             case .stillLoading(let model, let waited):
-                SessionDiagnostics.note(String(format: "%@ still loading %.0fs after the recording; sent to Gemini, load goes on",
+                SessionDiagnostics.note(String(format: "%@ still loading %.0fs after the recording; sent to AssemblyAI, load goes on",
                                               model.displayName, waited))
             }
         }
@@ -191,7 +191,7 @@ final class AppModel: ObservableObject {
 
     private func startHistoryServices() {
         guard let historyStore else { return }
-        let retry = OnDeviceFirstTranscription(gemini: transcription, makeSession: LocalSpeechInference.makeSession)
+        let retry = OnDeviceFirstTranscription(cloud: transcription, makeSession: LocalSpeechInference.makeSession)
         let scanner = RecoveryScanner(store: historyStore, transcription: retry)
         scanner.onRecovered = { [weak self] text in
             self?.banner = RecoveryNotice.message(for: .relaunch, copied: false)
@@ -702,7 +702,7 @@ final class AppModel: ObservableObject {
             case .modelAccess: return "Model unavailable. Check Settings › Advanced."
             case .network: return "Couldn't reach the model. It's saved in History."
             case .rateLimited: return "Rate limited. Retry from History."
-            case .quotaExhausted: return "Daily quota reached"
+            case .quotaExhausted: return "AssemblyAI credit or quota used up. It's in History."
             case .timeout: return "Timed out. Retry from History."
             case .audio, .noMicrophone, .noAudio: return "Microphone unavailable"
             case .storage: return "Storage is full"

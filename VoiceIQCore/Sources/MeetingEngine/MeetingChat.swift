@@ -15,15 +15,16 @@ public struct MeetingChatTurn: Codable, Equatable, Sendable, Identifiable {
     }
 }
 
-/// Questions about one meeting, answered by Gemini's writing model. The
+/// Questions about one meeting, answered by the writing model on AssemblyAI's
+/// LLM Gateway. The
 /// meeting (notes above the transcript, as exported) is the system prompt and
 /// every earlier question and answer is replayed as conversation turns, so the
 /// model sees what it said before. The system prompt is the same bytes for
 /// every question until the meeting changes and each question only appends,
-/// so Gemini's implicit caching covers the repeated prefix.
+/// so a model with prompt caching reuses the repeated prefix.
 public enum MeetingChat {
     public enum Failure: Error, Equatable {
-        /// No Gemini key is stored.
+        /// No AssemblyAI key is stored.
         case noKey
         case noTranscript
         case emptyAnswer
@@ -34,12 +35,11 @@ public enum MeetingChat {
         guard let key = KeychainStore.loadAPIKey() else { throw Failure.noKey }
         guard let transcript = try? store.loadTranscript(id: id), !transcript.isEmpty else { throw Failure.noTranscript }
         let meeting = try store.markdown(id: id, parts: .both)
-        let config = settings.geminiConfig
-        let client = GeminiClient(apiKey: { key })
+        let config = settings.assemblyAIConfig
+        let client = AssemblyAIClient(apiKey: { key })
         let reply = try await UsageMeter.$scope.withValue(UsageScope(activity: .meeting, sessionID: id.uuid.uuidString)) {
             try await client.chat(system: system(meeting: meeting), turns: history.map { ($0.question, $0.answer) },
-                                  question: question, model: config.writingModel, endpoint: config.endpoint,
-                                  deadline: 120, stage: .meetingChat)
+                                  question: question, model: config.writingModel, deadline: 120, stage: .meetingChat)
         }
         let answer = reply.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !answer.isEmpty else { throw Failure.emptyAnswer }
@@ -75,17 +75,18 @@ public enum MeetingChat {
     public static func message(for error: Error) -> String {
         switch error {
         case Failure.noKey:
-            return "Add your Gemini API key in \(MeetingFailure.keysPlace) to ask about meetings."
+            return "Add your AssemblyAI API key in \(MeetingFailure.keysPlace) to ask about meetings."
         case Failure.noTranscript: return "This meeting has no transcript to ask about."
         case Failure.emptyAnswer: return "The model sent back an empty answer. Try again."
-        case TranscriptionError.auth: return "Gemini rejected the API key. Check it in \(MeetingFailure.keysPlace)."
+        case TranscriptionError.auth: return "AssemblyAI rejected the API key. Check it in \(MeetingFailure.keysPlace)."
+        case TranscriptionError.noBalance: return "Asking about meetings needs a balance on your AssemblyAI account; the free credit doesn't cover the LLM Gateway."
         case TranscriptionError.offline: return "You're offline. Try again when you're connected."
-        case TranscriptionError.timeout: return "Gemini took too long to answer. Try again."
-        case TranscriptionError.rateLimitedDaily: return "The daily Gemini quota is used up."
-        case TranscriptionError.rateLimitedTransient: return "Gemini is rate limiting requests. Try again in a minute."
+        case TranscriptionError.timeout: return "AssemblyAI took too long to answer. Try again."
+        case TranscriptionError.rateLimitedDaily: return "The daily AssemblyAI quota is used up."
+        case TranscriptionError.rateLimitedTransient: return "AssemblyAI is rate limiting requests. Try again in a minute."
         case TranscriptionError.modelUnavailable(let model, _): return "Your key can't use \(model)."
-        case TranscriptionError.safetyBlocked: return "Gemini declined to answer this question."
-        default: return "Couldn't reach Gemini. Try again."
+        case TranscriptionError.safetyBlocked: return "The model declined to answer this question."
+        default: return "Couldn't reach AssemblyAI. Try again."
         }
     }
 }

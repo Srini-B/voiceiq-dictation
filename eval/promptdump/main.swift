@@ -33,6 +33,6 @@ let prompt = PromptV1.dictationPrompt(
     screenText: spec.screenText ?? [],
     surroundingText: surrounding,
     place: place,
-    transcript: spec.transcript
+    transcript: spec.transcript ?? ""
 )
 print(prompt, terminator: "")

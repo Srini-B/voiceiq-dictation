@@ -13,16 +13,14 @@ public enum TimeoutPolicy {
     public static let slowStateUI: TimeInterval = 3
 
     /// Longest a transcription waits out a per-minute throttle before giving
-    /// the row back to History. Tier 1 meters gemini-3.5-transcribe at 10 000
-    /// input tokens per minute (~400 s of audio), so a second chunk right after
-    /// a ten-minute one is refused with Retry-After up to 60 s.
+    /// the row back to History.
     public static let rateLimitWait: TimeInterval = 65
 
     /// On-device session load, including the first-use Core ML compile of a
     /// model and the English tools.
     public static let localLoad: TimeInterval = 120
     /// How long a stopped dictation waits for a model that is still loading
-    /// before it goes to Gemini, when a key is saved. A cold Core ML load
+    /// before it goes to AssemblyAI, when a key is saved. A cold Core ML load
     /// takes about a minute on iPhone and 15 s on an M2 Mac; a warm one
     /// finishes during the recording. The load goes on as a warm-up for the
     /// next dictation.
@@ -42,5 +40,11 @@ public enum TimeoutPolicy {
     /// 5s clip → 31s; 10min clip → 2.5min. Never the unbounded 2×duration formula.
     public static func overallDeadline(audioDuration: TimeInterval) -> TimeInterval {
         30 + audioDuration / 4
+    }
+
+    /// Pre-recorded transcription: upload, queue and processing. AssemblyAI
+    /// plans STT-3.7 at about 9 s p50 and 60 s p95 for a 5-minute file.
+    public static func transcriptDeadline(audioDuration: TimeInterval) -> TimeInterval {
+        90 + audioDuration / 2
     }
 }
