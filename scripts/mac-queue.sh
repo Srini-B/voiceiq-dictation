@@ -71,9 +71,11 @@ _join)  # under the lock: prints the ticket; exits 3 if it is already running
 _turn)  # under the lock: starts the ticket if it is in a slot, else prints its position
   t=$2 class=$3 note=${4:-}
   prune
-  [[ -e $dir/$t ]] || printf '%s\n%s\n' "$class" "$note" > "$dir/$t"
+  # A live waiter keeps its ticket fresh, and a job that starts gets a full
+  # 3-hour lease from its start, not from when it joined.
+  if [[ -e $dir/$t ]]; then touch "$dir/$t"; else printf '%s\n%s\n' "$class" "$note" > "$dir/$t"; fi
   pos=$(ahead "$t")
-  if (( pos <= slots )); then mv "$dir/$t" "$dir/0-$t"; exit 0; fi
+  if (( pos <= slots )); then mv "$dir/$t" "$dir/0-$t"; touch "$dir/0-$t"; exit 0; fi
   echo "$pos"
   exit 1
   ;;
