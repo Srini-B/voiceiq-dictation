@@ -85,6 +85,10 @@ public struct InsertionCoordinator: TextInserting {
                                        startField: context.focusedField?.element) {
         case .landed:
             Log.insertion.info("inserted via AX")
+            // The write doesn't scroll the field to the new text as typing does.
+            if let focused = PasteCheck.focusedReading()?.element {
+                await ScrollToCaret.ensureVisible(focused, context: context)
+            }
             await ReturnAfterPaste.pressIfWanted(context: context, target: returnTarget)
             return (.inserted, true)
         case .focusElsewhere:

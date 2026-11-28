@@ -4,9 +4,14 @@ import ApplicationServices
 import Foundation
 import VoiceIQBridge
 
+/// The spinner's size in points, shared with the app's overlay.
+public enum DraftOverlaySize {
+    public static let spinner: CGFloat = 16
+}
+
 /// What the app draws over the target field while a draft is in it: a
 /// spinner at the cursor until the transcript lands, then a line under it.
-/// Rects are in AppKit screen coordinates.
+/// Rects are in AppKit screen coordinates, already kept inside the field.
 @MainActor
 public protocol DraftMarking: AnyObject {
     func showSpinner(at caret: CGRect)
@@ -96,7 +101,10 @@ public final class FieldDraft: TextDraft {
         let draft = FieldDraft(element: element, context: context, inserter: inserter, marks: marks,
                                usesPasteOnly: isChromiumOrElectron(bundleID: bundleID, bundleURL: bundleURL)
                                    || bundleID?.hasPrefix("com.apple.Safari") == true || isInWebArea(element))
-        if let caret = caretRect(in: element, at: reading.caret, of: reading.value) { marks.showSpinner(at: caret) }
+        if let caret = caretRect(in: element, at: reading.caret, of: reading.value),
+           let clip = visibleFrame(of: element), let spot = spinnerSpot(for: caret, in: clip) {
+            marks.showSpinner(at: spot)
+        }
         return draft
     }
 
@@ -171,6 +179,9 @@ public final class FieldDraft: TextDraft {
             field.forget(id)
             return .shown
         }
+        // An Accessibility insert doesn't scroll the field: a single-line
+        // field would hide the draft past its right edge.
+        await ScrollToCaret.ensureVisible(element, context: context)
         drawUnderline()
         tracking = Task { [weak self] in
             while !Task.isCancelled {
@@ -236,6 +247,7 @@ public final class FieldDraft: TextDraft {
                 if now.value == expected, leftByWrite {
                     _ = await select(selection.location, selection.length)
                 }
+                await ScrollToCaret.ensureVisible(element, context: context)
                 return true
             }
             // Still the draft, selected: the write has not shown yet.
@@ -329,7 +341,9 @@ public final class FieldDraft: TextDraft {
 
     private func drawUnderline() {
         guard let span = field?.ledger.draft(id) else { return marks.underline([]) }
-        marks.underline(Self.lineRects(in: element, location: span.location, length: span.length))
+        guard let clip = Self.visibleFrame(of: element) else { return marks.underline([]) }
+        marks.underline(Self.lineRects(in: element, location: span.location, length: span.length)
+            .compactMap { Self.clipped($0, to: clip) })
     }
 
     /// Sets the selection and reads it back. With `holding`, the field must
@@ -353,7 +367,7 @@ public final class FieldDraft: TextDraft {
 
     /// The focused element when it belongs to the frontmost target app and
     /// is the field the dictation started in.
-    private static func focusedTarget(context: DictationContext) -> AXUIElement? {
+    static func focusedTarget(context: DictationContext) -> AXUIElement? {
         guard let pid = context.targetPID, NSWorkspace.shared.frontmostApplication?.processIdentifier == pid else {
             return nil
         }
@@ -412,6 +426,64 @@ public final class FieldDraft: TextDraft {
             return CGRect(x: rect.minX, y: rect.minY, width: 0, height: rect.height)
         }
         return nil
+    }
+
+    /// The part of the screen where the field shows text, in AppKit
+    /// coordinates: its own frame, cut to every scroll area, web area and
+    /// window it sits in. Text scrolled out of a single-line field or out of
+    /// a scroll view lies outside it.
+    static func visibleFrame(of element: AXUIElement) -> CGRect? {
+        guard var visible = frame(of: element) else { return nil }
+        var current = element
+        for _ in 0..<40 {
+            var parent: CFTypeRef?
+            guard AXUIElementCopyAttributeValue(current, kAXParentAttribute as CFString, &parent) == .success,
+                  let parent, CFGetTypeID(parent) == AXUIElementGetTypeID() else { break }
+            current = unsafeDowncast(parent as AnyObject, to: AXUIElement.self)
+            AXUIElementSetMessagingTimeout(current, 0.25)
+            var role: CFTypeRef?
+            guard AXUIElementCopyAttributeValue(current, kAXRoleAttribute as CFString, &role) == .success,
+                  let role = role as? String else { continue }
+            if ["AXScrollArea", "AXWebArea", "AXWindow"].contains(role), let outer = frame(of: current) {
+                visible = visible.intersection(outer)
+            }
+            if role == "AXWindow" { break }
+        }
+        return visible.isNull || visible.width < 1 || visible.height < 1 ? nil : visible
+    }
+
+    /// An element's AXPosition and AXSize, flipped to AppKit coordinates.
+    private static func frame(of element: AXUIElement) -> CGRect? {
+        var positionRef: CFTypeRef?, sizeRef: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, kAXPositionAttribute as CFString, &positionRef) == .success,
+              AXUIElementCopyAttributeValue(element, kAXSizeAttribute as CFString, &sizeRef) == .success,
+              let positionRef, let sizeRef,
+              CFGetTypeID(positionRef) == AXValueGetTypeID(), CFGetTypeID(sizeRef) == AXValueGetTypeID() else { return nil }
+        var position = CGPoint.zero, size = CGSize.zero
+        guard AXValueGetValue(positionRef as! AXValue, .cgPoint, &position),
+              AXValueGetValue(sizeRef as! AXValue, .cgSize, &size) else { return nil }
+        let primaryHeight = NSScreen.screens.first?.frame.height ?? 0
+        return CGRect(x: position.x, y: primaryHeight - position.y - size.height, width: size.width, height: size.height)
+    }
+
+    /// The visible part of one underlined line: nil when its line is
+    /// outside the field, or only a sliver of it shows.
+    static func clipped(_ line: CGRect, to visible: CGRect) -> CGRect? {
+        guard line.midY >= visible.minY, line.midY <= visible.maxY else { return nil }
+        let minX = max(line.minX, visible.minX), maxX = min(line.maxX, visible.maxX)
+        guard maxX - minX >= 4 else { return nil }
+        return CGRect(x: minX, y: line.minY, width: maxX - minX, height: line.height)
+    }
+
+    /// Where the spinner goes for a caret: on its line, kept inside the
+    /// field; nil when the caret's line is not in view.
+    static func spinnerSpot(for caret: CGRect, in visible: CGRect) -> CGRect? {
+        guard caret.midY >= visible.minY, caret.midY <= visible.maxY else { return nil }
+        // The spinner is drawn from 3 pt right of this x (`DraftOverlay`).
+        let room = DraftOverlaySize.spinner + 5
+        let x = min(max(caret.minX, visible.minX), visible.maxX - room)
+        guard x >= visible.minX else { return nil }
+        return CGRect(x: x, y: caret.minY, width: 0, height: caret.height)
     }
 
     /// WebKit and Chromium page fields report a selected-text write as

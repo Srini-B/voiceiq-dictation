@@ -11,7 +11,7 @@ final class DraftOverlay: DraftMarking {
     private var spinner: NSPanel?
     private var lines: [NSPanel] = []
 
-    static let spinnerSize: CGFloat = 16
+    static let spinnerSize = DraftOverlaySize.spinner
     static let lineHeight: CGFloat = 2.5
 
     func showSpinner(at caret: CGRect) {

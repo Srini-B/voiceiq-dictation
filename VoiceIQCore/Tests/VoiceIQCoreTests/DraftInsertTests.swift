@@ -300,4 +300,22 @@ final class DraftInsertTests: XCTestCase {
         await waitUntil { !coordinator.hasBackgroundJobs && coordinator.state.isTerminal && field.value.contains("First") }
         XCTAssertEqual(field.value, "Notes: First one. Second one.")
     }
+
+    #if os(macOS)
+    /// A single-line field 200 pt wide whose draft runs past its right edge:
+    /// the underline stops at the edge, a line out of view gets none, and the
+    /// spinner stays inside the field.
+    func testMarksStayInsideTheField() {
+        let field = CGRect(x: 100, y: 500, width: 200, height: 22)
+        XCTAssertEqual(FieldDraft.clipped(CGRect(x: 250, y: 503, width: 180, height: 16), to: field),
+                       CGRect(x: 250, y: 503, width: 50, height: 16))
+        XCTAssertNil(FieldDraft.clipped(CGRect(x: 320, y: 503, width: 100, height: 16), to: field))
+        XCTAssertNil(FieldDraft.clipped(CGRect(x: 120, y: 540, width: 100, height: 16), to: field))
+
+        let pastEdge = FieldDraft.spinnerSpot(for: CGRect(x: 430, y: 503, width: 0, height: 16), in: field)
+        XCTAssertEqual(pastEdge?.minX, 300 - DraftOverlaySize.spinner - 5)
+        XCTAssertEqual(FieldDraft.spinnerSpot(for: CGRect(x: 150, y: 503, width: 0, height: 16), in: field)?.minX, 150)
+        XCTAssertNil(FieldDraft.spinnerSpot(for: CGRect(x: 150, y: 560, width: 0, height: 16), in: field))
+    }
+    #endif
 }
