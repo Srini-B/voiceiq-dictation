@@ -49,6 +49,8 @@ public final class FieldDraft: TextDraft {
     /// Apps whose field showed nothing of a posted draft: they get no more
     /// drafts until VoiceiQ restarts.
     private static var noDraftApps: Set<String> = []
+    /// Apps where a draft went in but didn't read as one exact insert.
+    private static var misreadApps: Set<String> = []
     private let id = UUID()
     private var field: DraftField?
     /// The text this dictation left in the field, once shown.
@@ -177,6 +179,13 @@ public final class FieldDraft: TextDraft {
         guard landed != nil else {
             marks.clear()
             if changed {
+                // A field whose value doesn't read as the draft at the caret
+                // (Chromium counts line breaks one way in its value and
+                // another in its offsets) does it every time: a second time
+                // in an app, it gets no more drafts.
+                if let app = Self.appKey(context), !Self.misreadApps.insert(app).inserted {
+                    Self.noDraftApps.insert(app)
+                }
                 Log.insertion.info("draft: went in but not as one exact insert — it stays")
                 return .lost
             }
@@ -189,7 +198,14 @@ public final class FieldDraft: TextDraft {
             await inserter.finishPendingPaste()
             if let now = PasteCheck.reading(of: element), now.value == before.value {
                 if let app = Self.appKey(context) { Self.noDraftApps.insert(app) }
-                Log.insertion.info("draft: the field never showed the paste — no more drafts in this app")
+                // A field can take a paste and still read as before (a
+                // terminal clears its input box once it passes the text on):
+                // after a ⌘V the written text never goes in beside it.
+                guard insert.byAccessibility else {
+                    Log.insertion.info("draft: the field never showed the paste — it may be there; no more drafts in this app")
+                    return .lost
+                }
+                Log.insertion.info("draft: the field never showed the write — no more drafts in this app")
                 return .notInserted
             }
             Log.insertion.info("draft: not seen in the field in time — the written text is in Paste last")
@@ -335,9 +351,10 @@ public final class FieldDraft: TextDraft {
         // still exactly what is selected.
         guard !SecureInput.isActive, Self.focusedTarget(context: context).map({ CFEqual($0, element) }) == true,
               let selected = PasteCheck.reading(of: element), selected.value == reading.value,
-              selected.caret == span.location, selected.selectionLength == span.length else {
+              selected.caret == span.location, selected.selectionLength == span.length,
+              Self.selectedText(of: element).map({ $0 == span.text }) ?? true else {
             await restoreIfStillSelected()
-            Log.insertion.info("draft: not focused or the selection moved — kept as it was")
+            Log.insertion.info("draft: not focused, or the selection is not the draft — kept as it was")
             return false
         }
         guard await inserter.paste(written) else {
@@ -354,6 +371,17 @@ public final class FieldDraft: TextDraft {
         if PasteCheck.reading(of: element)?.value == reading.value { refusedByApp() }
         Log.insertion.info("draft: the paste over it never showed — kept as it was")
         return false
+    }
+
+    /// The field's own answer for what is selected: an Electron field can
+    /// select a line break past the range it was asked for. Nil from a
+    /// field that doesn't say, where the range read-back stands alone.
+    private static func selectedText(of element: AXUIElement) -> String? {
+        var out: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, kAXSelectedTextAttribute as CFString, &out) == .success else {
+            return nil
+        }
+        return out as? String
     }
 
     /// No key pressed for `typingPause`, waited for up to `typingWait`.
