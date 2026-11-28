@@ -1,6 +1,7 @@
-# Sleep prevention during recording
+# Sleep prevention during recording and write-up
 
-`SessionSleepGuard` observes the dictation state and meeting phase together.
+`SessionSleepGuard` observes the dictation state, the meeting phase, and the
+meetings being written up (`MeetingEngine.processing`) together.
 Each platform's app controller owns one guard.
 
 - Dictation holds the lock from microphone startup through transcription and
@@ -10,7 +11,11 @@ Each platform's app controller owns one guard.
   releases the claim. A meeting waiting to retry AssemblyAI does not hold it,
   and a write-up holds it for at most an hour after the latest meeting joined
   it, so a step that never returns cannot keep the device awake until quit.
-  A meeting leaving the write-up does not extend that hour.
+  A meeting leaving the write-up does not extend that hour. The hour is
+  counted in uptime, so time the device spends asleep does not count. A very
+  long meeting on a slow AssemblyAI day can need more than an hour; the Mac
+  may then idle-sleep before the notes are written, and the meeting waits
+  for its retry after wake. Nothing recorded is lost.
 - If both are active, finishing one leaves the other's lock intact.
 - A detected call, an idle app, or an iOS microphone warm window does not
   prevent sleep. App termination explicitly releases the lock.

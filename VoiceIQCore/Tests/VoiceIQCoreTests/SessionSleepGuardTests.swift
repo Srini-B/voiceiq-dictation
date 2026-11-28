@@ -93,7 +93,7 @@ final class SessionSleepGuardTests: XCTestCase {
 
     /// The write-up's hold: on at once, off after the cap while a meeting is
     /// still stuck, off at once when the write-up empties, and a meeting
-    /// leaving does not restart the cap.
+    /// leaving does not restart the cap, while a later join does.
     func testTheWriteUpHoldEndsAtTheCapAndALeaveDoesNotExtendIt() async throws {
         let a = MeetingID(), b = MeetingID()
         let ids = CurrentValueSubject<Set<MeetingID>, Never>([])
@@ -116,6 +116,18 @@ final class SessionSleepGuardTests: XCTestCase {
         // 1.25 s after both joined: past the 1 s cap, before the 1.5 s a restart on b leaving would give.
         XCTAssertEqual(held.last, false)
         XCTAssertEqual(held, [false, true, false, true, false])
+
+        // A meeting that joins later gets its own full hour from its join.
+        ids.send([])
+        let c = MeetingID()
+        ids.send([c])
+        try await Task.sleep(nanoseconds: 500_000_000)
+        ids.send([c, a])
+        try await Task.sleep(nanoseconds: 750_000_000)
+        // 1.25 s after c joined, 0.75 s after a joined: an hour counted from the first join would be over.
+        XCTAssertEqual(held.last, true)
+        try await Task.sleep(nanoseconds: 500_000_000)
+        XCTAssertEqual(held.last, false)
     }
 }
 #endif
