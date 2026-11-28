@@ -247,6 +247,8 @@ final class DeliveryRouteTests: XCTestCase {
         XCTAssertEqual(SurroundingText(before: "Noted.", after: "").fitted("And I'll ship it."), " And I'll ship it.")
         XCTAssertEqual(SurroundingText(before: "Noted\n", after: "").fitted("And I'll ship it."), "And I'll ship it.")
         XCTAssertEqual(SurroundingText(before: "", after: "").fitted("And I'll ship it."), "And I'll ship it.")
+        XCTAssertEqual(noted.fitted("A/B test it."), " A/B test it.")
+        XCTAssertEqual(noted.fitted("A test, then."), " a test, then.")
         XCTAssertEqual(SurroundingText(before: "# Project status", after: "").fitted("The build is green."),
                        "\nThe build is green.")
         XCTAssertEqual(SurroundingText(before: "> Previous quote", after: "").fitted("This is a separate paragraph."),

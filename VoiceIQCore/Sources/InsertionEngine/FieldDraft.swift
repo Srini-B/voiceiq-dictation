@@ -190,11 +190,11 @@ public final class FieldDraft: TextDraft {
                 return .lost
             }
             // Nothing showed. Let the paste's own read-back finish (quiet for
-            // a draft, so the raw text is never offered): a field still exactly as before
-            // never took the paste, so the written text goes in by the usual
-            // ladder, which copies it on a miss too, and the app gets no
-            // more drafts. Anything else may be a late paste: the written text
-            // never goes in beside it.
+            // a draft, so the raw text is never offered). Either way the app
+            // gets no more drafts. A field still exactly as before after an
+            // Accessibility write never took it, so the written text goes in
+            // by the usual ladder; after a ⌘V, or a field that changed, the
+            // paste may be there, so the written text never goes in beside it.
             await inserter.finishPendingPaste()
             if let now = PasteCheck.reading(of: element), now.value == before.value {
                 if let app = Self.appKey(context) { Self.noDraftApps.insert(app) }

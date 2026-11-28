@@ -117,7 +117,10 @@ public struct SurroundingText: Codable, Equatable, Sendable {
     /// ("IT") or "I" is left as it is.
     static func lowercasingFirstWord(_ text: String) -> String {
         let word = text.prefix { $0.isLetter || $0 == "'" || $0 == "’" }
+        // The whole word only: "A/B", "A4" and "In-N-Out" are spellings.
+        let next = text.dropFirst(word.count).first
         guard let first = word.first, first.isUppercase, !word.dropFirst().contains(where: \.isUppercase),
+              next.map({ $0.isWhitespace || ",.;:!?".contains($0) }) ?? true,
               midSentenceWords.contains(word.lowercased()) else { return text }
         return word.lowercased() + text.dropFirst(word.count)
     }

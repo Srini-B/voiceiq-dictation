@@ -123,8 +123,11 @@ field reports a new identifier after the keyboard was dismissed, after another
 field had focus, and after the app was left and reopened. So the keyboard
 describes a field (`FieldIdentity`) by three things: the host app, the
 session identifier, and a fingerprint of the text around the cursor
-(`Draft.fingerprint`, an FNV-1a hash, nil for an empty field). The text itself
-never enters the App Group.
+(`Draft.fingerprint`, an FNV-1a hash, nil for an empty field). For the
+writing model, Dictate and Stop also carry the text around the cursor in a
+prose field (`KeyboardCommand.surroundingText`: up to 300 characters before
+and 100 after, nothing from code, number or address fields); it stays in the
+App Group's command list until the next command replaces it.
 
 `Delivery.route` decides what the keyboard on screen does with a pending
 result. It checks these rules in order:
@@ -209,7 +212,7 @@ the same "Keep dictations" picker as the Mac (`transcriptRetentionDays`);
 
 #### The transcript as a draft
 
-**On in Messages and VoiceiQ's own fields only (`KeyboardDraft.verifiedHosts`, 2026-11-28).** In every other app the keyboard types the written text once, as before drafts. The first swap committed the draft, deleted it key by key and typed the written text. In Messages, after one dictation and typed text, the second dictation's swap left the field holding only the written text, while the keyboard's `documentContextBeforeInput` read exactly the text it expected (52 characters against the field's 27). The swap is now one insert over the marked draft, described below. It was tried in the Simulator, not on a device (`activities/2026-11-28-iphone-draft-swap-by-insert.md`).
+**On in Messages' prose fields only (`KeyboardDraft.verifiedHosts`, 2026-11-28).** In every other app the keyboard types the written text once, as before drafts. The first swap committed the draft, deleted it key by key and typed the written text. In Messages, after one dictation and typed text, the second dictation's swap left the field holding only the written text, while the keyboard's `documentContextBeforeInput` read exactly the text it expected (52 characters against the field's 27). The swap is now one insert over the marked draft, described below. It was tried in the Simulator, not on a device (`activities/2026-11-28-iphone-draft-swap-by-insert.md`).
 
 What a keyboard can rely on, measured in the iOS 27.0 Simulator in Messages, its search field, the app's Try it field and a Safari textarea:
 
@@ -252,7 +255,7 @@ is the Mac's draft (`TextDraft`), done by the keyboard:
    Where a host made the draft plain text without telling the keyboard,
    the insert lands beside it: the dictation is there twice, and no text is
    lost. So the keyboard types drafts only in apps this was tried in
-   (`KeyboardDraft.verifiedHosts`: Messages and VoiceiQ), and never a
+   (`KeyboardDraft.verifiedHosts`: Messages; VoiceiQ's own Try it field waits for a run of the keyboard's draft code there), and never a
    transcript with a line break (`KeyboardDraft.canType`). Elsewhere the
    written text goes in once, as before.
 5. A written text whose draft this keyboard no longer holds (the keyboard
@@ -932,7 +935,7 @@ runs. Everything needs Full Access.
 | Advanced: Writing model | Same, plus the session log |
 | Language picker in Settings › Dictation | Same, in Settings › Dictation |
 | Screen context | Not on iOS: an app cannot capture other apps' screens (`PlatformStubs+iOS.swift`) |
-| Text around the cursor sent with each dictation | Not yet: the keyboard reads it to fit spaces and capitals, but does not hand it to the app |
+| Text around the cursor sent with each dictation | Same, from prose fields: the keyboard sends it with Dictate and Stop (`KeyboardCommand.surroundingText`) |
 | Learning from your edits | Not yet: needs the keyboard to read the field again after the text lands |
 | Call detection, names read from the call screen | Not on iOS: an app cannot see other apps' microphone use, screen or windows |
 | Mute other audio, pause Music and Spotify, sounds, resting indicator, hide pill from screen sharing, copy recovered dictations | Not on iOS |

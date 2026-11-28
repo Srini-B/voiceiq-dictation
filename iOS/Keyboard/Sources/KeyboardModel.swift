@@ -276,7 +276,7 @@ final class KeyboardModel: ObservableObject {
             // The text goes where Stop was tapped.
             let field = fieldForCommand()
             KeyboardLog.note("[\(instanceTag)] stop in \(Self.describe(field))")
-            send(KeyboardCommand(action: .stop, field: field, surroundingText: surroundingText()))
+            send(KeyboardCommand(action: .stop, field: field, surroundingText: textForWriter()))
         case .processing:
             if needsAppToFinish { controller?.openURL(BridgeURL.app) }
         case .warm, .off:
@@ -321,7 +321,7 @@ final class KeyboardModel: ObservableObject {
         keepDraft(.alone, because: "another dictation started")
         let field = fieldForCommand()
         KeyboardLog.note("[\(instanceTag)] start in \(Self.describe(field))")
-        let command = KeyboardCommand(action: .start, field: field, surroundingText: surroundingText())
+        let command = KeyboardCommand(action: .start, field: field, surroundingText: textForWriter())
         let alive = appAlive
         send(command)
         waitingForApp = true
@@ -514,7 +514,7 @@ final class KeyboardModel: ObservableObject {
               offered.route(in: currentField(), handledID: nil, firstReturn: false) == .type(.sameSession)
         else { return }
         resolveHostIfMissing(now: true)
-        guard let host = session?.host, KeyboardDraft.verifiedHosts.contains(host),
+        guard fieldTakesProse, let host = session?.host, KeyboardDraft.verifiedHosts.contains(host),
               let typed = KeyboardDraft.type(offered.text, id: offered.id, documentID: documentID, into: proxy,
                                              fit: Self.fitted) else {
             skippedDraftID = offered.id
@@ -605,6 +605,12 @@ final class KeyboardModel: ObservableObject {
         let fitted = surrounding?.fitted(text) ?? text
         editor?.type(fitted)
         return (fitted, surrounding?.before ?? "", surrounding?.after ?? "")
+    }
+
+    /// The text around the cursor for the writing model: from prose fields
+    /// only, never a code, number or address field.
+    private func textForWriter() -> SurroundingText? {
+        fieldTakesProse ? surroundingText() : nil
     }
 
     /// The text around the cursor (`SurroundingText(keyboardBefore:)`).

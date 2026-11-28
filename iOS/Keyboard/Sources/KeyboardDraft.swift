@@ -52,7 +52,7 @@ final class KeyboardDraft {
     /// before drafts: one that makes marked text plain on its own (a field
     /// that rewrites its text on every change) would show every dictation
     /// twice.
-    static let verifiedHosts: Set<String> = ["com.apple.MobileSMS", "io.blue.voiceiq.ios"]
+    static let verifiedHosts: Set<String> = ["com.apple.MobileSMS"]
 
     let id: UUID
     /// The input session it was typed in.

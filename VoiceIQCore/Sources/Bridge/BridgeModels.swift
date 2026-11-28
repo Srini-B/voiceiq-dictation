@@ -91,7 +91,7 @@ public struct FieldVisit: Codable, Equatable, Sendable {
 }
 
 /// The text a keyboard reads around the cursor, reduced to a fingerprint so
-/// two readings can be compared without the App Group keeping the text.
+/// two readings can be compared without keeping the text with the field.
 public enum Draft {
     public static func fingerprint(before: String?, after: String?) -> String? {
         let text = (before ?? "") + (after ?? "")
