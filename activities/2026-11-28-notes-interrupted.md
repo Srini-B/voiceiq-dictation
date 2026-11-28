@@ -14,9 +14,10 @@ instead of about 7 s, so this became likely.
 
 - `MeetingEngine.failInterruptedRecordings` fails every meeting left in
   `.recording`, `.transcribing` or `.summarizing` at launch as
-  `failed("interrupted")`. One that was writing notes gets
-  `failedStep = .notes`, so Retry writes only the notes from the saved
-  transcript. Only finished meetings sync, so a meeting another device is
+  `failed("interrupted")`, with the step that was cut off as its retry step
+  (`.notes` while writing notes, so Retry writes only the notes from the
+  saved transcript; `.transcript` otherwise), replacing any step an earlier
+  failure left (Codex review). Only finished meetings sync, so a meeting another device is
   still writing up is never in this store.
 - From the same review: a reply cut off at max_tokens
   (`output_truncated`) is not a connection failure, so dictation doesn't send

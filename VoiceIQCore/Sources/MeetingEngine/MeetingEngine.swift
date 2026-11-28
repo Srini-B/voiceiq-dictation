@@ -207,7 +207,10 @@ import VoiceIQSpeech
     private func failInterruptedRecordings() {
         for var meta in store.list() {
             guard meta.status == .recording || meta.status == .transcribing || meta.status == .summarizing else { continue }
-            if meta.status == .summarizing { meta.failedStep = meta.failedStep ?? .notes }
+            // Retry resumes the step that was cut off, not one an earlier failure left marked.
+            let step: ServiceStep = meta.status == .summarizing ? .notes : .transcript
+            meta.failedStep = step
+            if meta.waitsForService != nil { meta.waitsForService = step }
             meta.status = .failed("interrupted")
             meta.endedAt = meta.endedAt ?? meta.startedAt.addingTimeInterval(meta.durationSeconds)
             try? store.save(meta: meta)
