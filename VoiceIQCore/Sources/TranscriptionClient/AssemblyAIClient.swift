@@ -182,18 +182,31 @@ public actor AssemblyAIClient {
         else { throw TranscriptionError.network("transcript_unparseable") }
         // A 5-minute file completes in about 9 s at p50 (AssemblyAI's planning figure).
         var wait: UInt64 = 700_000_000
+        var offline = false
         while true {
             try await Task.sleep(nanoseconds: wait)
             wait = min(wait * 3 / 2, 3_000_000_000)
             let data: Data
-            let pollDeadline = min(30, try remaining())
+            let pollDeadline: TimeInterval
+            do { pollDeadline = min(30, try remaining()) } catch {
+                // Polls that ran out of time offline are offline, so the recording queues for the reconnect.
+                throw offline ? TranscriptionError.offline : error
+            }
             do {
                 data = try await send(url: AssemblyAIConfig.api.appendingPathComponent("v2/transcript/\(id)"), body: nil,
                                       deadline: pollDeadline, modelLabel: model, stage: stage)
-            } catch TranscriptionError.network, TranscriptionError.timeout, TranscriptionError.offline,
-                    TranscriptionError.rateLimitedTransient {
-                // The job is uploaded and billed; a failed poll asks again
-                // rather than sending the audio a second time.
+                offline = false
+            } catch TranscriptionError.rateLimitedTransient(let retryAfter) {
+                // The job is uploaded and billed; a throttled poll waits as
+                // long as the server asks (up to 30 s) and asks again.
+                if let retryAfter { wait = max(wait, UInt64(min(retryAfter, 30) * 1_000_000_000)) }
+                continue
+            } catch TranscriptionError.offline {
+                offline = true
+                continue
+            } catch TranscriptionError.network, TranscriptionError.timeout {
+                // A failed poll asks again rather than sending the audio a second time.
+                offline = false
                 continue
             }
             guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { continue }

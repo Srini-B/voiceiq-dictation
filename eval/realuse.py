@@ -57,7 +57,8 @@ def open_ro(path: Path) -> sqlite3.Connection:
 
 def priced(row: sqlite3.Row, prices: dict) -> float | None:
     """USD for one call at cost.json's prices; None when the model has none."""
-    p = prices.get(row["model"])
+    # Rows are labelled assemblyai/<model> since the move to AssemblyAI.
+    p = prices.get(row["model"].split("/")[-1])
     if p is None:
         return None
     m = 1e-6
@@ -121,7 +122,8 @@ def main() -> None:
     n = len({r["sessionID"] for r in dict_calls if r["sessionID"]}) or len(done)
     text = sum(r["textIn"] + r["cachedIn"] for r in dict_calls)
     sessions = {r["sessionID"] for r in dict_calls if r["sessionID"]}
-    gemini_dict = [r for r in dict_calls if r["model"].startswith("gemini")]
+    # The writing model's calls (Gemini before 0.7.19, the gateway writer after).
+    writer_dict = [r for r in dict_calls if r["stage"] == "cleanup"]
     meet_calls = [r for r in calls if r["activity"] == "meeting"]
     meet_inr, meet_booked = cost(meet_calls)
     # Each meeting once, at its recorded length (meetings/<date>-<id>/meta.json);
@@ -151,11 +153,11 @@ def main() -> None:
     print(json.dumps({
         "window_days": args.days, "prices": period,
         "dictation": {
-            "dictations": n, "per_month": round(n * per_month), "gemini_calls": len(gemini_dict),
-            "calls_per_dictation": round(len(gemini_dict) / max(1, len(sessions)), 3),
+            "dictations": n, "per_month": round(n * per_month), "writer_calls": len(writer_dict),
+            "calls_per_dictation": round(len(writer_dict) / max(1, len(sessions)), 3),
             "inr_per_dictation": round(dict_inr / max(1, n), 3),
             "cache_hit_share": round(sum(r["cachedIn"] for r in dict_calls) / max(1, text), 3),
-            "thinking_tokens_per_call": round(statistics.mean([r["thoughtOut"] for r in gemini_dict]), 1) if gemini_dict else None,
+            "thinking_tokens_per_call": round(statistics.mean([r["thoughtOut"] for r in writer_dict]), 1) if writer_dict else None,
             "calls_at_booked_cost": dict_booked,
             **latency,
         },

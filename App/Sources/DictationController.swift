@@ -936,6 +936,7 @@ final class DictationController {
     private func reportDetached(_ result: DictationCoordinator.DetachedResult) {
         switch result {
         case .outcome(.inserted), .outcome(.silent): break
+        case .insertedWithNotice(let notice): showBackgroundNotice(notice, for: 4.0, sound: .success)
         case .outcome(.copiedToClipboard) where !KeystrokeAccess.mayPost:
             showBackgroundNotice(KeystrokeAccess.refusedNotice, for: 6.0, sound: .error)
         case .outcome(.copiedToClipboard): showBackgroundNotice("Copied — press ⌘V to paste", for: 4.0, sound: .success)

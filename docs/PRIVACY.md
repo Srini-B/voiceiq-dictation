@@ -201,7 +201,7 @@ provider's terms. It is off by default; details in
   Settings. Core ML's prepared copies of them (on the Mac,
   `~/Library/Caches/io.blue.voiceiq.localspeech`) are deleted with any model,
   and at launch when no model is downloaded. See [ON_DEVICE.md](ON_DEVICE.md).
-- The first launch of 0.7.18 deletes the Gemini key that earlier versions
+- The first launch of 0.7.19 deletes the Gemini key that earlier versions
   stored in the Keychain and the Gemini endpoint and model overrides
   (`SettingsStore.removeRetiredSettingsOnce`). Nothing is sent to Google.
 - The first launch of 0.7.12 deletes the OpenAI, ElevenLabs, TinyFish and
