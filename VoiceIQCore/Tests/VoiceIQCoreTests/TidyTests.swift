@@ -44,6 +44,8 @@ final class TidyTests: XCTestCase {
         XCTAssertEqual(tidy("I think I can, i.e. maybe.", .messages), "i think i can, i.e. maybe")
         // A title's full stop ends no sentence, so this is one short message.
         XCTAssertEqual(tidy("Ask Prof. Iyer and Sgt. Lee and Capt. Rao.", .messages), "ask Prof. Iyer and Sgt. Lee and Capt. Rao")
+        // "No." is a title only before a number ("No. 5"); here it is one of four sentences.
+        XCTAssertEqual(tidy("Is it ok? No. Call me later. See you.", .messages), "is it ok? no. call me later. see you.")
     }
 
     func testLists() {
@@ -203,7 +205,7 @@ final class TidyTests: XCTestCase {
         // Set off by commas, "new line" breaks the line unless only a hedge follows: then the words name something.
         XCTAssertEqual(tidy("Yeah, I'll ping Sam, new line, thanks.", .messages), "yeah i'll ping Sam\nthanks.")
         XCTAssertEqual(tidy("I bought the milk, new line, then I left."), "I bought the milk.\nThen I left.")
-        for kept in ["She bought a car, new line, I think.", "It's their new model, new line, I guess."] {
+        for kept in ["She bought a car, new line, I think.", "It's their new model, new line, I guess.", "It's the blue one, new line, I think so."] {
             XCTAssertEqual(tidy(kept), kept)
         }
     }
@@ -246,6 +248,8 @@ final class TidyTests: XCTestCase {
             ("Mail priya@gmail.com and ravi at the rate gmail dot com.", "Mail priya@gmail.com and ravi@gmail.com."),
             ("priya at the rate gmail dot com, please.", "priya@gmail.com, please."),
             ("Mail john at the rate gmail dot com, thanks.", "Mail john@gmail.com, thanks."),
+            ("Send it to ahmed at the rate gmail dot com.", "Send it to ahmed@gmail.com."),
+            ("Send it to ming at the rate gmail dot com.", "Send it to ming@gmail.com."),
         ] {
             XCTAssertEqual(SpokenAddresses.joining(in: spoken), written)
         }
@@ -255,7 +259,11 @@ final class TidyTests: XCTestCase {
                      // With "at the rate", a verb is no mailbox, and a comma ends no address before more words.
                      "Prices rose at the rate gmail dot com.",
                      "Mail priya at the rate gmail dot com and ravi at the rate gmail dot com predicted it.",
-                     "priya at the rate gmail dot com, Walmart and Target agreed."] {
+                     "priya at the rate gmail dot com, Walmart and Target agreed.",
+                     // Before ", thanks" or another address, "is" or a written address is too weak an introduction.
+                     "The market is moving at the rate google dot com, thanks.",
+                     "I wrote to priya@gmail.com and growth at the rate google dot com, thanks.",
+                     "It is growing at the rate amazon dot com.", "Revenue went from 10 at the rate amazon dot com."] {
             XCTAssertEqual(SpokenAddresses.joining(in: kept), kept)
         }
     }

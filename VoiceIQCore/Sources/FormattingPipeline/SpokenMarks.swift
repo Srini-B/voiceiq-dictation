@@ -358,7 +358,8 @@ enum SpokenMarks {
         let words = String(chars[start..<stop]).lowercased().replacingOccurrences(of: "’", with: "'")
             .split { !TidyText.isWordCharacter($0) && $0 != "'" }.joined(separator: " ")
         return [
-            "i think", "i guess", "i believe", "i suppose", "i'd say", "i reckon", "i hope", "i heard", "i hear",
+            "i think", "i guess", "i believe", "i suppose", "i think so", "i guess so", "i believe so", "i'd say",
+            "i reckon", "i hope", "i heard", "i hear",
             "maybe", "probably", "apparently", "you know", "or so",
         ].contains(words)
     }

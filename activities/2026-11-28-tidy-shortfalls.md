@@ -71,4 +71,17 @@ and passes here, except item 2's, which pins the current behaviour.
 - Codex: an already-written address before "and" stopped a spoken one
   from joining ("Mail priya@gmail.com and ravi at the rate gmail dot
   com."); fixed in `8ae76c8`, with a case in `TidyTests`.
+- Neon probes (52 inputs, Mac mini, 8ae76c8 against main): every fix
+  shows; one Medium, "The market is moving at the rate google dot com,
+  thanks." → "moving@google.com". The new endings (", thanks", "and"
+  another address) now need a strong introduction (the clause's start,
+  "email", "mail", "cc", …, or "is"/"to" after one); "is", "to" or a
+  written address alone join only where the address ends the sentence, as
+  on main. A Low: "No." read as the "No. 5" abbreviation made "Is it ok?
+  No. Call me later. See you." count as three sentences; "No." is an
+  abbreviation only before a number now. Neon also listed false joins
+  main already made at a sentence's end, the same class as item 1 ("It is
+  growing at the rate amazon dot com." → "growing@amazon.com"): after a
+  weak introduction, an "-ing" word of six letters or more, or a number, is
+  no mailbox now. "Use growth at the rate google dot com." still joins.
 - CI runs `swift test --package-path VoiceIQCore` on Xcode 27.

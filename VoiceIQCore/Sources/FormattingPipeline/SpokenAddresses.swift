@@ -44,7 +44,7 @@ enum SpokenAddresses {
                 continue
             }
             guard let domain = domain(tokens, from: next),
-                  !marker.ambiguous || endsAmbiguousAddress(tokens, next: next, domain: domain) else {
+                  let ending = marker.ambiguous ? ambiguousEnding(tokens, next: next, domain: domain) : .sentence else {
                 index = marker.end + 1
                 continue
             }
@@ -71,8 +71,10 @@ enum SpokenAddresses {
             }
             // No mailbox before it ("Type an at sign example.com"): a phrase, not an address.
             // "Prices rose at the rate gmail dot com": with "at the rate", the mailbox
-            // opens the sentence or a clause, or follows a word that introduces an address.
-            guard !local.isEmpty, !marker.ambiguous || introducesAddress(tokens, before: start, after: lastAddress) else {
+            // opens the sentence or a clause, or follows a word that introduces an address;
+            // before ", thanks" or "and" another address, only a strong one ("is moving" stays).
+            let introduced = marker.ambiguous ? introduction(tokens, before: start, after: lastAddress) : .strong
+            guard !local.isEmpty, let introduced, introduced == .strong || ending == .sentence else {
                 index = marker.end + 1
                 continue
             }
@@ -92,22 +94,28 @@ enum SpokenAddresses {
         return result + text[cursor...]
     }
 
-    /// Whether the domain after "at the rate" (from `next`) ends an address.
+    /// How an address after "at the rate" ends: where the sentence does, or
+    /// where it goes on, at a courtesy after a comma ("…, please.") or before
+    /// "and" or "or" and another address.
+    private enum Ending { case sentence, continued }
+
+    /// How the domain after "at the rate" (from `next`) ends an address, or nil.
     /// "at the rate" is plain English before a written domain ("grew at the rate
     /// Amazon.com"): only a spoken one ("company dot co dot in") or one the model
-    /// glued to "rate" ("rategmail.com") is an address, and only where the
-    /// sentence ends, at a courtesy after a comma ("…, please."), or before "and"
-    /// and another address. "grew at the rate Amazon dot com predicted" stays.
-    private static func endsAmbiguousAddress(_ tokens: [Token], next: Int,
-                                             domain: (labels: [String], end: Int, trailing: String)) -> Bool {
-        guard domain.end > next || tokens[next].glued else { return false }
-        if domain.end == tokens.count - 1 || domain.trailing.contains(where: { ".!?".contains($0) }) { return true }
+    /// glued to "rate" ("rategmail.com") is an address, and only at one of those
+    /// endings. "grew at the rate Amazon dot com predicted" stays.
+    private static func ambiguousEnding(_ tokens: [Token], next: Int,
+                                        domain: (labels: [String], end: Int, trailing: String)) -> Ending? {
+        guard domain.end > next || tokens[next].glued else { return nil }
+        if domain.end == tokens.count - 1 || domain.trailing.contains(where: { ".!?".contains($0) }) { return .sentence }
         let rest = domain.end + 1
         if domain.trailing == "," {
             let end = tokens[rest...].firstIndex { $0.word.last.map { ".!?".contains($0) } ?? false } ?? tokens.count - 1
             return [["please"], ["thanks"], ["thank", "you"], ["cheers"]].contains(tokens[rest...end].map { bare($0.word) })
+                ? .continued : nil
         }
         return domain.trailing.isEmpty && ["and", "or"].contains(tokens[rest].word.lowercased()) && addressFollows(tokens, at: rest + 1)
+            ? .continued : nil
     }
 
     /// Whether an address said with a marker starts at `index`: "ravi at the rate gmail dot com".
@@ -117,27 +125,41 @@ enum SpokenAddresses {
         while end + 2 < tokens.count, tokens[end + 1].word.lowercased() == "dot", localPart(tokens[end + 2].word) != nil { end += 2 }
         guard end + 1 < tokens.count, let marker = marker(tokens, at: end + 1),
               let domain = domain(tokens, from: marker.end + 1) else { return false }
-        return !marker.ambiguous || endsAmbiguousAddress(tokens, next: marker.end + 1, domain: domain)
+        return !marker.ambiguous || ambiguousEnding(tokens, next: marker.end + 1, domain: domain) != nil
     }
 
-    /// Words after which "at the rate" may close a mailbox: "My email is priya at
-    /// the rate…", "Mail priya at the rate…", "Send it to priya at the rate…".
-    private static let addressIntroductions: Set<String> = [
-        "is", "was", "email", "e-mail", "mail", "to", "me", "cc", "bcc", "contact", "reach", "write", "ping", "from",
-        "address", "id", "at", "on", "try", "use",
-    ]
+    private enum Introduction { case strong, weak }
 
-    /// Whether the mailbox starting at `start` may join "at the rate": it opens
-    /// the sentence or a clause, follows a word from `addressIntroductions`, or
-    /// follows "and" or "or" right after another address, joined here
-    /// (`after`) or already written ("priya@gmail.com and ravi at the rate…").
-    private static func introducesAddress(_ tokens: [Token], before start: Int, after lastAddress: Int?) -> Bool {
-        guard start > 0 else { return true }
+    /// Words that introduce an address: "Mail priya at the rate…", "cc priya…".
+    private static let strongIntroductions: Set<String> = [
+        "email", "e-mail", "mail", "cc", "bcc", "contact", "reach", "write", "ping", "address", "id", "me",
+    ]
+    /// Words that introduce an address only after one of those ("My email is
+    /// priya…", "Write to priya…") or where the address ends the sentence:
+    /// "The market is moving at the rate google dot com, thanks." stays.
+    private static let weakIntroductions: Set<String> = ["is", "was", "to", "from", "at", "on", "try", "use"]
+
+    /// How the mailbox starting at `start` is introduced for "at the rate", or
+    /// nil: strongly when it opens the sentence or a clause, follows a strong
+    /// word, or follows "and" or "or" after an address joined here (`after`);
+    /// weakly after a weak word, or after "and" or "or" and a written address.
+    private static func introduction(_ tokens: [Token], before start: Int, after lastAddress: Int?) -> Introduction? {
+        guard start > 0 else { return .strong }
         let previous = tokens[start - 1].word
-        if let last = previous.last, ".!?,:;".contains(last) { return true }
+        if let last = previous.last, ".!?,:;".contains(last) { return .strong }
         let word = bare(previous)
-        if addressIntroductions.contains(word) { return true }
-        return ["and", "or"].contains(word) && start >= 2 && (lastAddress == start - 2 || tokens[start - 2].word.contains("@"))
+        if strongIntroductions.contains(word) { return .strong }
+        if weakIntroductions.contains(word) {
+            if start >= 2, strongIntroductions.contains(bare(tokens[start - 2].word)) { return .strong }
+            // "It is growing at the rate…", "went from 10 at the rate…": a verb or a number, not a
+            // mailbox. Not "-ed" ("Ahmed") or a short "-ing" ("Ming").
+            let mailbox = bare(tokens[start].word)
+            let verbOrNumber = (mailbox.hasSuffix("ing") && mailbox.count >= 6) || mailbox.allSatisfy(\.isNumber)
+            return verbOrNumber ? nil : .weak
+        }
+        guard ["and", "or"].contains(word), start >= 2 else { return nil }
+        if lastAddress == start - 2 { return .strong }
+        return tokens[start - 2].word.contains("@") ? .weak : nil
     }
 
     private static func words(in text: String) -> [Token] {
