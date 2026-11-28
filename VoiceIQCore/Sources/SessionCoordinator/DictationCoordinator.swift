@@ -30,7 +30,7 @@ public final class DictationCoordinator: ObservableObject {
     nonisolated static let keptDraftNotice = "Kept as heard. Paste last has the written text"
     /// The note when a dictation without written text couldn't take its
     /// draft back out (`DraftStage.withdraw`).
-    nonisolated static let withdrawKeptNotice = "The transcript stayed in the field as heard"
+    public nonisolated static let withdrawKeptNotice = "The transcript stayed in the field as heard"
 
     @Published public private(set) var coachingHint: String?
     /// The last inserted dictation's note, such as "Inserted as heard" when
