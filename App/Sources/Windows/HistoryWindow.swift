@@ -16,6 +16,7 @@ struct HistoryPane: View {
     @State private var stats = HistoryStore.Stats(totalWords: 0, totalDictations: 0, averageWPM: 0)
     @AppStorage("historyStatsPeriod") private var statsPeriod = HistoryStore.StatsPeriod.allTime
     @State private var selection: String?
+    @FocusState private var listFocused: Bool
     @State private var showAllAttention = false
     @State private var confirmingDiscardAll = false
     @Environment(\.colorScheme) private var scheme
@@ -28,7 +29,7 @@ struct HistoryPane: View {
                 emptyState
             } else {
                 HStack(spacing: 0) {
-                    sidebar.frame(width: 280)
+                    sidebar.frame(width: 300)
                     // Same as Meetings: a rectangle reaches the top edge under the transparent titlebar.
                     Rectangle()
                         .fill(Color(nsColor: .separatorColor))
@@ -68,12 +69,18 @@ struct HistoryPane: View {
 
     private var sidebar: some View {
         VStack(spacing: 0) {
-            VStack(spacing: VoiceIQUI.Spacing.s) {
-                periodPicker
-                statsGrid
+            VStack(alignment: .leading, spacing: VoiceIQUI.Spacing.s) {
+                HStack(spacing: VoiceIQUI.Spacing.xs) {
+                    Text("History")
+                        .font(VoiceIQUI.TypeScale.display(grad: grad))
+                        .foregroundStyle(VQ.Colors.ink)
+                    Spacer(minLength: 0)
+                    periodPicker
+                }
+                statsLine
                 searchField
             }
-            .padding(.horizontal, VoiceIQUI.Spacing.s)
+            .padding(.horizontal, VQ.Spacing.page)
             .padding(.top, VoiceIQUI.Spacing.l)
             .padding(.bottom, VoiceIQUI.Spacing.xxs)
             recordList
@@ -84,26 +91,23 @@ struct HistoryPane: View {
         SearchablePicker("", selection: $statsPeriod,
                          options: HistoryStore.StatsPeriod.allCases.map { SearchOption(value: $0, name: $0.title) })
         .font(VoiceIQUI.TypeScale.labelSmall(grad: grad))
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .fixedSize()
         .onChange(of: statsPeriod) { _, _ in reload() }
     }
 
-    private var statsGrid: some View {
-        Grid(alignment: .leading, horizontalSpacing: VoiceIQUI.Spacing.s, verticalSpacing: VoiceIQUI.Spacing.xs) {
-            GridRow {
-                stat(value: "\(stats.totalWords)", label: "words")
-                stat(value: "\(stats.totalDictations)", label: "dictations")
-                stat(value: stats.averageWPM > 0 ? "\(stats.averageWPM)" : "—", label: "avg WPM")
-            }
-            GridRow {
-                stat(value: stats.totalAudioSeconds > 0 ? stats.audioLabel : "—", label: "of audio")
-                stat(value: stats.minutesSaved > 0 ? stats.savedLabel : "—", label: "saved")
-                stat(value: stats.currentStreak > 0 ? "\(stats.currentStreak)" : "—", label: "day streak")
-                    .help("Longest: \(stats.longestStreak) days, active on \(stats.activeDays) days")
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, VoiceIQUI.Spacing.xxs)
+    /// The totals in one muted line under the title; streaks and audio in its tooltip.
+    private var statsLine: some View {
+        let parts = [
+            "\(stats.totalWords.formatted(.number.notation(.compactName))) words",
+            stats.averageWPM > 0 ? "\(stats.averageWPM) wpm" : nil,
+            stats.minutesSaved > 0 ? "\(stats.savedLabel) saved" : nil,
+        ].compactMap { $0 }
+        return Text(parts.joined(separator: " · "))
+            .font(VoiceIQUI.TypeScale.label(grad: grad))
+            .foregroundStyle(VQ.Colors.muted)
+            .lineLimit(1)
+            .monospacedDigit()
+            .help("\(stats.totalDictations) dictations, \(stats.audioLabel) of audio. Streak: \(stats.currentStreak) days, longest \(stats.longestStreak), active on \(stats.activeDays) days")
     }
 
     private var searchField: some View {
@@ -116,20 +120,8 @@ struct HistoryPane: View {
                 .onChange(of: query) { _, _ in reloadRecords() }
         }
         .padding(.horizontal, VoiceIQUI.Spacing.s)
-        .padding(.vertical, 7)
-        .background(RoundedRectangle(cornerRadius: VoiceIQUI.Radius.small).fill(.quaternary.opacity(0.5)))
-    }
-
-    private func stat(value: String, label: String) -> some View {
-        VStack(alignment: .leading, spacing: 1) {
-            Text(value)
-                .font(VoiceIQUI.TypeScale.title(grad: grad))
-                .monospacedDigit()
-            Text(label)
-                .font(VoiceIQUI.TypeScale.labelSmall(grad: grad))
-                .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(height: 32)
+        .background(Capsule().fill(VQ.Colors.fill))
     }
 
     // MARK: - List
@@ -177,12 +169,13 @@ struct HistoryPane: View {
                         Button(showAllAttention ? "Show less" : "Show \(attention.count - 3) more") {
                             showAllAttention.toggle()
                         }
-                        .buttonStyle(.link)
+                        .buttonStyle(.plain)
+                        .foregroundStyle(VQ.Colors.accent)
                         .font(VoiceIQUI.TypeScale.labelSmall(grad: grad))
                     }
                 } header: {
                     HStack(spacing: VoiceIQUI.Spacing.xxs) {
-                        Circle().fill(VoiceIQUI.Colors.gYellow).frame(width: 6, height: 6)
+                        Circle().fill(VQ.Colors.warning).frame(width: 6, height: 6)
                         Text("Needs attention (\(attention.count))")
                             .font(VoiceIQUI.TypeScale.labelSmall(grad: grad))
                             .foregroundStyle(.secondary)
@@ -190,7 +183,8 @@ struct HistoryPane: View {
                         Button("Discard All") {
                             confirmingDiscardAll = true
                         }
-                        .buttonStyle(.link)
+                        .buttonStyle(.plain)
+                        .foregroundStyle(VQ.Colors.accent)
                         .font(VoiceIQUI.TypeScale.labelSmall(grad: grad))
                         .confirmationDialog(
                             "Discard all \(attention.count) recordings that need attention? Their audio will be deleted.",
@@ -218,6 +212,10 @@ struct HistoryPane: View {
                 }
             }
         }
+        .scrollContentBackground(.hidden)
+        .focused($listFocused)
+        // Row text lands on the page margin, under the title and search field.
+        .padding(.horizontal, 8)
         .overlay { if records.isEmpty { Text(query.isEmpty ? "No dictations" : "No matches").foregroundStyle(.secondary) } }
         // ⌘C copies the selected dictation, as FluidVoice's history does (altic-dev/FluidVoice).
         .onCopyCommand {
@@ -232,15 +230,15 @@ struct HistoryPane: View {
                 Text(attentionTitle(record))
                     .font(VoiceIQUI.TypeScale.body(grad: grad))
                     .foregroundStyle(.primary)
-                HStack(spacing: VoiceIQUI.Spacing.xs) {
-                    if let app = record.targetAppName { Text(app) }
-                    if let duration = record.durationSeconds {
-                        Text(String(format: "%.0fs of audio", duration))
-                    }
-                    Text(record.startedAt.formatted(date: .abbreviated, time: .shortened))
-                }
+                // One line joined with dots, as on the rows below; it fits beside Retry.
+                Text([
+                    record.targetAppName,
+                    record.durationSeconds.map { String(format: "%.0fs", $0) },
+                    record.startedAt.formatted(.dateTime.month(.abbreviated).day().hour().minute()),
+                ].compactMap { $0 }.joined(separator: " · "))
                 .font(VoiceIQUI.TypeScale.labelSmall(grad: grad))
                 .foregroundStyle(.secondary)
+                .lineLimit(1)
             }
             Spacer()
             // Retry needs something to retry: no audio and no transcript is a
@@ -265,6 +263,7 @@ struct HistoryPane: View {
         }
         .padding(.vertical, 3)
         .tag(record.id)
+        .listRowBackground(ListSelectionBackground(selected: selection == record.id, focused: listFocused))
     }
 
     private func audioExists(_ record: DictationRecord) -> Bool {
@@ -291,28 +290,33 @@ struct HistoryPane: View {
     }
 
     private func row(_ record: DictationRecord) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(record.displayText.isEmpty ? "—" : String(record.displayText.prefix(220)))
-                .font(VoiceIQUI.TypeScale.body(grad: grad))
-                .lineLimit(2)
-            HStack(spacing: VoiceIQUI.Spacing.xs) {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: VoiceIQUI.Spacing.xxs) {
                 Text(record.startedAt.formatted(date: .omitted, time: .shortened))
                 if let app = record.targetAppName {
+                    Text("·")
                     Text(app).lineLimit(1)
                 }
                 if let duration = record.durationSeconds {
-                    Text(String(format: "%.0fs", duration))
+                    Text("·")
+                    Text(Duration.seconds(duration).formatted(.time(pattern: .minuteSecond)))
                 }
                 if let cost = costs[record.id] {
+                    Text("·")
                     Text(CostPane.money(cost))
                 }
             }
             .font(VoiceIQUI.TypeScale.labelSmall(grad: grad))
             .foregroundStyle(.secondary)
+            .monospacedDigit()
+            Text(record.displayText.isEmpty ? "—" : record.displayText.prefix(220).split(whereSeparator: \.isNewline).joined(separator: " "))
+                .font(VoiceIQUI.TypeScale.body(grad: grad))
+                .lineLimit(2)
             statusChip(record)
         }
-        .padding(.vertical, 2)
+        .padding(.vertical, 5)
         .tag(record.id)
+        .listRowBackground(ListSelectionBackground(selected: selection == record.id, focused: listFocused))
         .contextMenu {
             Button("Copy") { copy(record) }
             if !record.isFromOtherDevice {
@@ -375,15 +379,8 @@ struct HistoryPane: View {
     private var emptyState: some View {
         VStack(spacing: VoiceIQUI.Spacing.m) {
             Spacer()
-            HStack(spacing: 5) {
-                ForEach(0..<4, id: \.self) { index in
-                    RoundedRectangle(cornerRadius: 3)
-                        .fill(VoiceIQUI.Colors.brandQuad[index])
-                        .frame(width: 6, height: [18, 30, 24, 14][index])
-                }
-            }
             Text("Nothing here yet")
-                .font(VoiceIQUI.TypeScale.title(grad: grad))
+                .font(VoiceIQUI.TypeScale.display(grad: grad))
             Text("Press \(SettingsStore().dictationTrigger.displayName) and say hello.")
                 .font(VoiceIQUI.TypeScale.body(grad: grad))
                 .foregroundStyle(.secondary)

@@ -16,15 +16,6 @@ enum VoiceIQUI {
         static let onPrimary = VQ.Colors.onAccent
         static let primaryContainer = VQ.Colors.accentSoft
         static let onPrimaryContainer = VQ.Colors.accent
-        /// A selected sidebar row: the brand blue in light mode; in dark mode
-        /// the system's selection, as the lists beside it show, not the pale
-        /// `primary` (Fable, M6).
-        static let selection = Color(nsColor: NSColor(name: nil) { appearance in
-            appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? .selectedContentBackgroundColor : NSColor(hex: 0x2252BC)
-        })
-        static let onSelection = Color(nsColor: NSColor(name: nil) { appearance in
-            appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? .alternateSelectedControlTextColor : .white
-        })
 
         // Surfaces (never pure black)
         static let surface = VQ.Colors.surface
