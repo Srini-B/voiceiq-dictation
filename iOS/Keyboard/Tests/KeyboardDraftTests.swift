@@ -19,10 +19,18 @@ final class KeyboardDraftTests: XCTestCase {
         return KeyboardDraft.type(transcript, id: UUID(), documentID: UUID(), into: field, fit: fit, now: typedAt)
     }
 
-    /// Swaps in the written text and ends the turn.
-    private func swap(_ draft: KeyboardDraft, for written: String, in field: HostField) -> KeyboardDraft.Swap {
+    /// Swaps in the written text of the draft's first dictation, or of
+    /// `part`, and ends the turn.
+    private func swap(_ draft: KeyboardDraft, part: Int = 0, for written: String,
+                      in field: HostField) -> KeyboardDraft.Swap {
         defer { field.endTurn() }
-        return draft.replace(with: written, in: field, fit: fit)
+        return draft.replace(draft.parts[part].id, with: written, in: field, fit: fit)
+    }
+
+    /// Adds a later dictation's transcript to the held draft and ends the turn.
+    private func add(_ transcript: String, to draft: KeyboardDraft, in field: HostField) -> Bool {
+        defer { field.endTurn() }
+        return draft.add(transcript, id: UUID(), to: field, fit: fit, now: typedAt)
     }
 
     /// The transcript goes in marked and fitted; the written text takes its
@@ -58,6 +66,46 @@ final class KeyboardDraftTests: XCTestCase {
                        .replaced(" And I'll ship it tomorrow."))
         XCTAssertEqual(field.string, "The build is green. Noted And I'll ship it tomorrow.")
         XCTAssertNil(field.marked)
+    }
+
+    /// A dictation stopped while the one before it is still being written:
+    /// its transcript joins the marked draft, after the first. Each written
+    /// text takes its place as it comes, in either order, and the whole goes
+    /// in once both have come. The earlier text stays as it was.
+    func testADictationStoppedWhileTheOneBeforeIsWrittenJoinsItsDraft() throws {
+        for secondWrittenFirst in [false, true] {
+            let field = HostField("Earlier line.")
+            let draft = try XCTUnwrap(type("the build is green", into: field))
+            XCTAssertTrue(add("ship it today", to: draft, in: field))
+            XCTAssertEqual(field.string, "Earlier line. the build is green ship it today")
+            XCTAssertEqual(field.marked, " the build is green ship it today")
+            XCTAssertEqual(draft.textBefore(field), "Earlier line. the build is green ship it today")
+
+            if secondWrittenFirst {
+                XCTAssertEqual(swap(draft, part: 1, for: "Ship it today.", in: field), .waiting)
+                XCTAssertEqual(field.marked, " the build is green Ship it today.")
+                XCTAssertEqual(swap(draft, part: 0, for: "The build is green.", in: field),
+                               .replaced(" The build is green. Ship it today."))
+            } else {
+                XCTAssertEqual(swap(draft, part: 0, for: "The build is green.", in: field), .waiting)
+                XCTAssertEqual(field.marked, " The build is green. ship it today")
+                XCTAssertEqual(swap(draft, part: 1, for: "Ship it today.", in: field),
+                               .replaced(" The build is green. Ship it today."))
+            }
+            XCTAssertEqual(field.string, "Earlier line. The build is green. Ship it today.")
+            XCTAssertNil(field.marked)
+        }
+    }
+
+    /// A draft the field changed around takes no later dictation: that one's
+    /// written text comes alone, and the draft stays as it is.
+    func testADraftTheFieldChangedAroundTakesNoLaterDictation() throws {
+        let field = HostField("Dear Ana,")
+        let draft = try XCTUnwrap(type("see you at noon", into: field))
+        field.hostDid { $0.select("Ana") }
+        XCTAssertFalse(add("bring the deck", to: draft, in: field))
+        XCTAssertEqual(field.string, "Dear Ana, see you at noon")
+        XCTAssertEqual(draft.parts.count, 1)
     }
 
     /// `HostField` is the host that lost that text. The swap as it was

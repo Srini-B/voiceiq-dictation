@@ -32,6 +32,10 @@ final class KeyboardModel: ObservableObject {
     weak var editor: EditController?
     /// Called after a dictation delivery is typed so Hex's suggestion strip can offer Undo dictation.
     var onDidInsertDictation: ((String, String, String) -> Void)?
+    /// Called after this keyboard marked a draft or changed it. The host
+    /// tells a keyboard only of changes made elsewhere, so without this the
+    /// keys keep the Shift they had before the draft went in.
+    var onDraftChange: (() -> Void)?
     private let store = SharedStore.shared
     private var observer: UUID?
     private var timer: Timer?
@@ -43,8 +47,8 @@ final class KeyboardModel: ObservableObject {
     private var loggedWaitingID: UUID?
     /// The result this keyboard held back while it was in no field, logged once.
     private var loggedHeldID: UUID?
-    /// The draft this keyboard typed, until its written text comes or it
-    /// stays as heard.
+    /// The draft this keyboard typed, one part per dictation, until their
+    /// written text comes or it stays as heard.
     private var draft: KeyboardDraft? {
         didSet { if holdsDraft != (draft != nil) { holdsDraft = draft != nil } }
     }
@@ -260,6 +264,7 @@ final class KeyboardModel: ObservableObject {
         // that makes a left draft plain, and for `unmarkQuiet` after either.
         let heldDraft = draft != nil || settleLeftDraft() || Date().timeIntervalSince(lastUnmark) < Self.unmarkQuiet
         keepDraftIfDisturbed()
+        let held = draft
         let fresh = store.snapshot
         if fresh != snapshot { snapshot = fresh }
         let alive = store.appIsAlive()
@@ -274,7 +279,9 @@ final class KeyboardModel: ObservableObject {
         }
         if draft != nil || !heldDraft { deliverIfNeeded() }
         dropDraftIfOver()
-        if !heldDraft { typeDraftIfNeeded() }
+        // A later dictation's draft joins one still held, unless this turn
+        // already changed it.
+        if !heldDraft || (draft != nil && draft === held && !markedTextThisTurn) { typeDraftIfNeeded() }
         showNoticeIfNeeded()
     }
 
@@ -471,7 +478,7 @@ final class KeyboardModel: ObservableObject {
             if waitingResult != nil { waitingResult = nil }
             return
         }
-        if let named = delivery.replacesDraft, named == draft?.id || named == store.typedDraftID {
+        if let named = delivery.replacesDraft, draft?.holds(named) == true || named == store.typedDraftID {
             return finishDraft(with: delivery)
         }
         // A dismissed keyboard can keep polling with its view in a window.
@@ -525,11 +532,12 @@ final class KeyboardModel: ObservableObject {
     /// rewrites it (`SessionSnapshot.draft`), only in the input session Stop
     /// was tapped in, in a prose field of an app drafts were tried in
     /// (`Delivery.draftHosts`), and says so
-    /// (`SharedStore.typedDraftID`). The written text then replaces it
-    /// (`finishDraft`). Anywhere else, and over a selection, the written text
-    /// comes alone as before.
+    /// (`SharedStore.typedDraftID`). A draft still held from an earlier
+    /// dictation takes it as its next part (`KeyboardDraft.add`). The written
+    /// text then replaces it (`finishDraft`). Anywhere else, and over a
+    /// selection, the written text comes alone as before.
     private func typeDraftIfNeeded() {
-        guard draft == nil, let offered = snapshot.draft, offered.id != store.typedDraftID,
+        guard let offered = snapshot.draft, offered.id != store.typedDraftID,
               offered.id != skippedDraftID, offered.isFreshDraft(), appAlive, snapshot.phase == .processing,
               Self.onScreen === self, controller?.viewIfLoaded?.window != nil,
               let proxy = controller?.textDocumentProxy, let documentID,
@@ -537,50 +545,68 @@ final class KeyboardModel: ObservableObject {
         else { return }
         resolveHostIfMissing(now: true)
         guard fieldTakesProse, let host = session?.host, Delivery.draftHosts.contains(host),
-              let typed = KeyboardDraft.type(offered.text, id: offered.id, documentID: documentID, into: proxy,
-                                             fit: Self.fitted) else {
+              let typed = typeOrAdd(offered, documentID: documentID, into: proxy) else {
             skippedDraftID = offered.id
             KeyboardLog.note("[\(instanceTag)] draft not typed: not a prose field, drafts were not tried in this app, text is selected, or the transcript has a line break; the written text comes alone")
             return
         }
+        let joined = draft != nil
         draft = typed
         noteMarkedTextCall()
         Self.lastDraftPlace = (host, documentID)
         // Undo replays edits before the cursor, which the draft has moved.
         editor?.resetUndo()
+        onDraftChange?()
         // Only once it is in: the app then sends the written text to replace it.
         store.typedDraftID = offered.id
-        KeyboardLog.note("[\(instanceTag)] draft typed in \(Self.describe(currentField()))")
+        KeyboardLog.note("[\(instanceTag)] draft typed in \(Self.describe(currentField()))\(joined ? ", after the earlier one still being written" : "")")
     }
 
-    /// The written text for a draft (`Delivery.replacesDraft`). It replaces
-    /// the draft only in the input session this keyboard typed it in, and
-    /// only while the field looks as the draft left it
+    /// A new draft, or the held one with `offered` added. Never a second
+    /// draft beside a held one, whose marked text it would replace.
+    private func typeOrAdd(_ offered: Delivery, documentID: UUID, into proxy: UITextDocumentProxy) -> KeyboardDraft? {
+        guard let held = draft else {
+            return KeyboardDraft.type(offered.text, id: offered.id, documentID: documentID, into: proxy,
+                                      fit: Self.fitted)
+        }
+        return held.documentID == documentID
+            && held.add(offered.text, id: offered.id, to: proxy, fit: Self.fitted) ? held : nil
+    }
+
+    /// The written text for a part of the draft (`Delivery.replacesDraft`).
+    /// It replaces that part only in the input session this keyboard typed
+    /// it in, and only while the field looks as the draft left it
     /// (`KeyboardDraft.replace`). Otherwise the draft stays as heard and the
     /// written text is in Paste last and History.
     private func finishDraft(with delivery: Delivery) {
         if waitingResult != nil { waitingResult = nil }
-        guard let held = draft, held.id == delivery.replacesDraft else {
+        guard let held = draft, let id = delivery.replacesDraft, held.holds(id) else {
             store.markInserted(delivery)
             KeyboardLog.note("[\(instanceTag)] written text not typed: its draft went in where this keyboard no longer is, and stays as heard")
             return
         }
         // Focus moving between fields reads as no field for one poll.
         guard let documentID else { return }
-        draft = nil
         store.markInserted(delivery)
         guard documentID == held.documentID, let proxy = controller?.textDocumentProxy else {
+            draft = nil
             KeyboardLog.note("[\(instanceTag)] written text not typed: the keyboard moved to another field; the draft stays as heard")
             return
         }
-        switch held.replace(with: delivery.text, in: proxy, fit: Self.fitted) {
+        switch held.replace(id, with: delivery.text, in: proxy, fit: Self.fitted) {
         case .replaced(let fitted):
+            draft = nil
             // The cursor is right after the written text: Undo takes it
             // out, as for a dictation typed in.
             editor?.recordDictation(inserted: fitted)
             onDidInsertDictation?(fitted, held.before, held.after)
             KeyboardLog.note("[\(instanceTag)] written text replaced its draft in \(Self.describe(currentField()))")
+        case .waiting:
+            noteMarkedTextCall()
+            onDraftChange?()
+            KeyboardLog.note("[\(instanceTag)] written text in its draft, which waits for an earlier dictation's written text")
         case .kept:
+            draft = nil
             lastUnmark = Date()
             noteMarkedTextCall()
             KeyboardLog.note("[\(instanceTag)] written text not typed: the field changed around its draft, which stays as heard")
@@ -597,9 +623,13 @@ final class KeyboardModel: ObservableObject {
         let expired = Date().timeIntervalSince(held.typedAt) > Self.draftLimit
         // Published and waiting for this keyboard to be in a field again.
         let writtenWaits = snapshot.delivery.map {
-            $0.replacesDraft == held.id && $0.isPending(handledID: store.insertedDeliveryID)
+            held.holds($0.replacesDraft) && $0.isPending(handledID: store.insertedDeliveryID)
         } ?? false
-        guard moved || expired || (!writtenWaits && (!appAlive || snapshot.phase != .processing)) else { return }
+        // The last part is the dictation in progress. Once it is written,
+        // an earlier one still being written goes on in the background,
+        // while the app shows no dictation.
+        let ended = snapshot.phase != .processing && held.parts.last?.written == nil
+        guard moved || expired || (!writtenWaits && (!appAlive || ended)) else { return }
         keepDraft(.alone, because: moved ? "the keyboard moved to another field" : "no written text came")
     }
 

@@ -24,6 +24,12 @@ import UIKit
 /// - `keep(_:.alone)` calls `unmarkText`, when the keyboard writes nothing
 ///   else in that turn.
 ///
+/// A dictation stopped while an earlier one's draft is still marked adds its
+/// transcript to the same marked text (`add`): new marked text replaces the
+/// old, so a second, separate draft would take the first one's place. Each
+/// part's written text takes its place in the marked text as it comes, and
+/// the whole goes in with one insert once every part has its written text.
+///
 /// Where a host made the draft plain text without telling the keyboard, an
 /// insert lands beside it: its text is there twice, and no text is lost.
 @MainActor
@@ -35,6 +41,9 @@ final class KeyboardDraft {
     enum Swap: Equatable {
         /// One insert of the written text went in over the marked draft.
         case replaced(String)
+        /// The written text took its part's place in the marked draft, which
+        /// waits for the written text of a part before it.
+        case waiting
         /// The field is no longer as the draft left it. It stays as heard.
         case kept
     }
@@ -47,25 +56,41 @@ final class KeyboardDraft {
         case beforeEdit
     }
 
-    let id: UUID
+    /// One dictation's transcript in the draft, and its written text once
+    /// it came.
+    struct Part {
+        let id: UUID
+        let heard: String
+        var written: String?
+    }
+
+    /// The dictations in the draft, in the order they were spoken.
+    private(set) var parts: [Part]
     /// The input session it was typed in.
     let documentID: UUID
-    /// The transcript as it went in, fitted to the text around it.
-    let text: String
-    /// The text before and after the cursor when it went in.
+    /// The marked text in the field: each part, heard or written, fitted to
+    /// the text before it.
+    private(set) var text: String
+    /// The text before and after the cursor when the first part went in.
     let before: String
     let after: String
-    let typedAt: Date
+    /// When the last part went in.
+    private(set) var typedAt: Date
     /// Marked text this keyboard has not yet replaced or made plain.
     private(set) var isMarked = true
 
-    private init(id: UUID, documentID: UUID, text: String, before: String, after: String, typedAt: Date) {
-        self.id = id
+    private init(part: Part, documentID: UUID, text: String, before: String, after: String, typedAt: Date) {
+        parts = [part]
         self.documentID = documentID
         self.text = text
         self.before = before
         self.after = after
         self.typedAt = typedAt
+    }
+
+    /// Whether the dictation `id` has a part in this draft.
+    func holds(_ id: UUID?) -> Bool {
+        parts.contains { $0.id == id }
     }
 
     /// Types `transcript` at the cursor as marked text. Nil over a selection,
@@ -81,7 +106,22 @@ final class KeyboardDraft {
         let fitted = fit(transcript, before, after)
         guard canType(fitted) else { return nil }
         proxy.setMarkedText(fitted, selectedRange: NSRange(location: fitted.utf16.count, length: 0))
-        return KeyboardDraft(id: id, documentID: documentID, text: fitted, before: before, after: after, typedAt: now)
+        return KeyboardDraft(part: Part(id: id, heard: transcript), documentID: documentID, text: fitted,
+                             before: before, after: after, typedAt: now)
+    }
+
+    /// Adds the next dictation's transcript to the end of the marked draft.
+    /// False, and nothing typed, where `type` would type nothing, and in a
+    /// field that is no longer as the draft left it.
+    func add(_ transcript: String, id: UUID, to proxy: UITextDocumentProxy, fit: Fit, now: Date = Date()) -> Bool {
+        guard isMarked, !holds(id), isInPlace(proxy) else { return false }
+        let added = parts + [Part(id: id, heard: transcript)]
+        let marked = Self.fitted(added, before: before, after: after, fit: fit)
+        guard Self.canType(marked) else { return false }
+        parts = added
+        mark(marked, in: proxy)
+        typedAt = now
+        return true
     }
 
     /// A line break in marked text is the one shape not tried in any host (a
@@ -114,33 +154,42 @@ final class KeyboardDraft {
     /// The text before the cursor as the field has it: the proxy's, with the
     /// marked draft it leaves out. The keys plan an edit from this text
     /// before they make it (autocorrect counts its Deletes, a word-wise move
-    /// its offset); planned from the proxy's text alone, they would count
-    /// from the word before the draft and, once the draft is plain, delete
-    /// into it and into that word.
+    /// its offset), and set Shift from it; planned from the proxy's text
+    /// alone, they would count from the word before the draft and, once the
+    /// draft is plain, delete into it and into that word.
     func textBefore(_ proxy: UITextDocumentProxy) -> String {
         let current = proxy.documentContextBeforeInput ?? ""
         return isMarked && current == before ? current + text : current
     }
 
-    /// Replaces the draft with `written`, fitted to the text that was around
-    /// the draft: one insert, the only write of this turn. A field that has
-    /// changed keeps the draft as heard.
-    func replace(with written: String, in proxy: UITextDocumentProxy, fit: Fit) -> Swap {
-        guard isMarked else { return .kept }
-        let fitted = fit(written, before, after)
-        guard !fitted.isEmpty, isInPlace(proxy) else {
+    /// Puts the written text of dictation `id` in its part's place. Once
+    /// every part has its written text, the whole is one insert, the only
+    /// write of this turn; until then the marked text shows the written
+    /// parts in place of their transcripts. A field that has changed keeps
+    /// the draft as heard.
+    func replace(_ id: UUID, with written: String, in proxy: UITextDocumentProxy, fit: Fit) -> Swap {
+        guard isMarked, let index = parts.firstIndex(where: { $0.id == id }) else { return .kept }
+        var updated = parts
+        updated[index].written = written
+        let fitted = Self.fitted(updated, before: before, after: after, fit: fit)
+        guard !written.isEmpty, !fitted.isEmpty, isInPlace(proxy) else {
             keep(proxy, .alone)
             return .kept
+        }
+        parts = updated
+        guard parts.allSatisfy({ $0.written != nil }) else {
+            mark(fitted, in: proxy)
+            return .waiting
         }
         isMarked = false
         proxy.insertText(fitted)
         return .replaced(fitted)
     }
 
-    /// Makes the draft plain text, as heard. Before the keyboard's own edit
-    /// that is an insert of its own text; in a field that has changed it is
-    /// `unmarkText` even then, since a second copy of the draft could land
-    /// anywhere. True when it called `unmarkText`.
+    /// Makes the draft plain text, as it is in the field. Before the
+    /// keyboard's own edit that is an insert of its own text; in a field that
+    /// has changed it is `unmarkText` even then, since a second copy of the
+    /// draft could land anywhere. True when it called `unmarkText`.
     @discardableResult
     func keep(_ proxy: UITextDocumentProxy, _ commit: Commit) -> Bool {
         guard isMarked else { return false }
@@ -151,5 +200,22 @@ final class KeyboardDraft {
         }
         proxy.unmarkText()
         return true
+    }
+
+    /// New marked text in place of the old (a host replaces marked text with
+    /// marked text), the cursor at its end.
+    private func mark(_ marked: String, in proxy: UITextDocumentProxy) {
+        proxy.setMarkedText(marked, selectedRange: NSRange(location: marked.utf16.count, length: 0))
+        text = marked
+    }
+
+    /// The parts, each fitted to the text before it; only the last is fitted
+    /// to the text after the draft.
+    private static func fitted(_ parts: [Part], before: String, after: String, fit: Fit) -> String {
+        var text = ""
+        for (index, part) in parts.enumerated() {
+            text += fit(part.written ?? part.heard, before + text, index == parts.count - 1 ? after : "")
+        }
+        return text
     }
 }
