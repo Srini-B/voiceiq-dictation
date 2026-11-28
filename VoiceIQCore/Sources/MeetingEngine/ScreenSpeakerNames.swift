@@ -262,7 +262,8 @@ public enum ScreenSpeakerNames {
         var votes: [String: Set<String>] = [:]
         for (index, turn) in transcript.enumerated() {
             guard let name = addressed(in: turn.text, among: names), !known.contains(where: { sameName($0, name) }),
-                  let answer = transcript[(index + 1)...].first(where: { $0.speaker != turn.speaker }),
+                  // The very next segment: one where the addresser goes on means no answer came.
+                  index + 1 < transcript.count, case let answer = transcript[index + 1], answer.speaker != turn.speaker,
                   answer.speaker != MeetingSpeaker.you, screen?.speakers[answer.speaker] == nil,
                   // Speech that overlaps the address is an interjection, not the answer.
                   (answer.start ?? .infinity) >= (turn.end ?? 0) - lag,
