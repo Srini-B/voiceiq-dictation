@@ -14,6 +14,7 @@ public enum FileLayout {
 
     public static var appSupportRoot: URL {
         if let overrideRoot { return overrideRoot }
+        if let testDataFolder { return testDataFolder }
         let fileManager = FileManager.default
         let base = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         let new = base.appendingPathComponent("VoiceiQ", isDirectory: true)
@@ -27,6 +28,17 @@ public enum FileLayout {
         }
         return new
     }
+
+    /// The `DebugDataFolder` default: an absolute path a test copy of the app
+    /// keeps all its data in instead of ~/Library/Application Support/VoiceiQ.
+    /// The app is not sandboxed, so a copy under another bundle ID
+    /// (io.blue.voiceiq.probe) otherwise writes into the real app's folder,
+    /// and the real app uploads those meetings at its next launch. Read once.
+    public static let testDataFolder: URL? = {
+        guard let path = UserDefaults.standard.string(forKey: "DebugDataFolder"), path.hasPrefix("/") else { return nil }
+        Log.session.notice("data folder (test): \(path, privacy: .public)")
+        return URL(fileURLWithPath: path, isDirectory: true)
+    }()
 
     public static var recordingsRoot: URL {
         appSupportRoot.appendingPathComponent("recordings", isDirectory: true)

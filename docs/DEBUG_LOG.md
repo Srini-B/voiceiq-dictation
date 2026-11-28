@@ -169,3 +169,24 @@ user-facing switch.
 Changes made while it is set stay on the device, and they upload once sync is
 back on. So delete a test's dictations and meetings before deleting the
 default.
+
+### A separate data folder for a test copy
+
+VoiceiQ is not sandboxed, so a copy of the app under another bundle ID, such
+as the live-call probe's ~/Applications/VoiceiQ-probe.app
+(io.blue.voiceiq.probe), still keeps its data in
+~/Library/Application Support/VoiceiQ. The real app would then upload that
+copy's meetings at its next launch, even when the copy has sync off. Give the
+copy a folder of its own:
+
+```sh
+defaults write io.blue.voiceiq.probe DebugDataFolder /Users/Shared/voiceiq-probe-data
+defaults write io.blue.voiceiq.probe DebugDisableCloudSync -bool true
+```
+
+Use an absolute path; other values are ignored. The app reads it once at
+launch (`FileLayout.testDataFolder`), logs `data folder (test): <path>`, and
+shows "Test data folder" in the Mac menu. Everything the app stores on disk
+moves there: dictations, meetings, folders, usage and downloaded models. The
+debug log stays in ~/Library/Logs/VoiceiQ, settings stay in the copy's own
+defaults domain, and keys stay in the Keychain.
