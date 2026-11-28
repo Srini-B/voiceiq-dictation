@@ -140,9 +140,10 @@ public actor AssemblyAIClient {
             return body
         }
 
-        /// USD an hour of audio costs with these options.
-        var pricePerHour: Double {
-            var rate = speechModels.first == AssemblyAIConfig.fallbackModel
+        /// USD an hour of audio costs on `model`, the one the service used,
+        /// with these options.
+        func pricePerHour(model: String) -> Double {
+            var rate = model.hasPrefix("universal")
                 ? AssemblyAIPrices.universal2PerHour : AssemblyAIPrices.stt37PerHour
             if speakerLabels { rate += AssemblyAIPrices.diarizationPerHour }
             if speakerLabels, !speakerNames.isEmpty { rate += AssemblyAIPrices.speakerIdentificationPerHour }
@@ -198,7 +199,7 @@ public actor AssemblyAIClient {
             case "completed":
                 let transcript = Self.transcript(from: json, model: model)
                 UsageMeter.record(stage: stage, model: Self.label(transcript.model), usage: TokenUsage(
-                    reportedCostUSD: transcript.audioSeconds / 3600 * request.pricePerHour,
+                    reportedCostUSD: transcript.audioSeconds / 3600 * request.pricePerHour(model: transcript.model),
                     audioSeconds: transcript.audioSeconds))
                 return transcript
             case "error":
