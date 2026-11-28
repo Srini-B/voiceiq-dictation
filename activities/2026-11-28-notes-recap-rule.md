@@ -21,7 +21,7 @@ recap gives a named person for the first time is a new action. A recapped
 phrase that names no one and matches nothing earlier is not an action.
 `docs/design/meeting-prompt-rulebook.md` has the same rule.
 
-The first version (8a8f4ab6) said only that a phrase matching no earlier
+The first version (798b6673 in the PR) said only that a phrase matching no earlier
 commitment is not an action. On three made-up meetings ending in a recap
 (gpt-6-luna medium on the LLM Gateway, 2 runs each), it dropped "and Priya
 updates the FAQ page by Friday" in 2 of 2 runs; the old prompt kept it. The
@@ -29,15 +29,27 @@ revision (bb4b0fe6) keeps a task first given to a named person in the
 recap. It got all four probe cases right in 2 of 2 runs: restated tasks,
 a new request, a new assignment, and the s4-echo transcript.
 
-Review (Neon hand read via agy) found two gaps, fixed in the last commit:
-a group step first agreed in the recap would have been dropped, and a recap
-that states no deadline could read as clearing the earlier one. The rule
-now keeps the earlier deadline and owner when the recap states none, and
-keeps a group step agreed in the recap. On the LLM Gateway probe (2 runs
-each) all six cases come out right: s4-echo, restated tasks, a new request,
-a new assignment, a group step and a recap with no date. The 9-meeting
-measurement below was on the wording before this fix, which only adds
-those two exceptions.
+Review found gaps in the revision, fixed in the final wording:
+
+- Neon hand read: a group step agreed in the recap was dropped, and a recap
+  with no deadline could clear the earlier one.
+- Neon (agy, Gemini 4 Neon high, at 45f035fd): a first-person commitment
+  first made in the recap could be dropped; a recap that names a different
+  person read as a handover; "group action" was undefined.
+
+The final wording keeps the earlier deadline when the recap states none and
+the earlier owner unless that person agrees to take the task; counts a new
+task only when it is a first-person commitment or given to a named person;
+reads "you'll …" in a recap as restating a task already taken; makes a
+concrete group step an action with owner null; and never makes scheduling
+the next call an action. An intermediate wording that keyed new tasks on
+"asked to do" brought back s4-echo's invented item ("You'll set numbers…"
+read as a request), in 2 of 2 and then 1 of 2 runs, so it was dropped.
+
+LLM Gateway probe of the final wording (gpt-6-luna medium): s4-echo right in
+6 of 6 runs; restated tasks, a new request, a new named assignment, a
+first-person new commitment, a misheard owner, a vague aside, scheduling the
+next call, a group step and a recap with no date each right in 2 of 2.
 
 ## Measured
 
@@ -45,7 +57,7 @@ MeetingsEval on lobsters-mac-mini, notes only (`EVAL_TRANSCRIPTS`), on the
 gate (a) transcripts, s3fix's for s3-four-people and three fresh ones for
 s3-four-people-echo. Notes on gpt-6-luna medium. M5 judged by Fable.
 
-| Meeting | Gate (a) | First version | Revision (shipped) |
+| Meeting | Gate (a) | First version | Revision (c774793b) |
 |---|---|---|---|
 | ami-ES2004a | 90.3 | 90.3 | 90.7 |
 | s1-one-to-one | 94.7 | 94.3 | 95.0 |
