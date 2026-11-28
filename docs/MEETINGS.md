@@ -509,6 +509,7 @@ Fixes from 2026-10-29:
   (`MeetingNotesPrompt.outputLanguage`): the language picked in Settings →
   Dictation (`dictationLanguage`), English when it is English or Detect.
   Another language is used only when the transcript has at least 150 words
+  (by word boundaries, so Chinese and Japanese count too)
   and `NLLanguageRecognizer` is at least 90 % sure of it. The model never
   chooses: an all-English meeting came back in Hindi once (2026-10-29), and
   an English AMI meeting got a Portuguese title (2026-11-28), each time when

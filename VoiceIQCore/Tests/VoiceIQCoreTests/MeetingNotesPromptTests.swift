@@ -38,5 +38,7 @@ final class MeetingNotesPromptTests: XCTestCase {
         XCTAssertEqual(MeetingNotesPrompt.outputLanguage(shortForeign, preferred: "hi"), "Hindi")
         XCTAssertEqual(MeetingNotesPrompt.outputLanguage(spanish, preferred: "en"), "Spanish")
         XCTAssertEqual(MeetingNotesPrompt.outputLanguage(english, preferred: "pt"), "English")
+        let japanese = say(Array(repeating: "今日はプロジェクトの予算を確認して、金曜日の会議までに誰が報告書を準備するかを決めましょう。", count: 12).joined())
+        XCTAssertEqual(MeetingNotesPrompt.outputLanguage(japanese, preferred: nil), "Japanese")
     }
 }

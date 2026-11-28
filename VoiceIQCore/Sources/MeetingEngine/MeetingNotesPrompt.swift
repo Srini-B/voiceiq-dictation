@@ -135,7 +135,13 @@ public enum MeetingNotesPrompt {
         let name = { (code: String) in Locale(identifier: "en").localizedString(forLanguageCode: code) }
         let preferred = code.flatMap(name) ?? "English"
         let text = transcript.map(\.text).joined(separator: " ")
-        guard text.split(whereSeparator: \.isWhitespace).count >= minWordsToOverride else { return preferred }
+        // By word boundaries, not spaces: Chinese and Japanese put none between words (Codex on #146).
+        var words = 0
+        text.enumerateSubstrings(in: text.startIndex..., options: [.byWords, .substringNotRequired]) { _, _, _, stop in
+            words += 1
+            if words >= minWordsToOverride { stop = true }
+        }
+        guard words >= minWordsToOverride else { return preferred }
         let recognizer = NLLanguageRecognizer()
         recognizer.processString(text)
         guard let (language, confidence) = recognizer.languageHypotheses(withMaximum: 1).first,
