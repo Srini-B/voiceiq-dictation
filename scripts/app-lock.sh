@@ -38,8 +38,11 @@ run_locked() {
 
 case $action in
 acquire)
+  [[ -d $(dirname "$lock") ]] || { echo "app lock: $(dirname "$lock") does not exist" >&2; exit 1; }
   while ! mkdir "$lock" 2>/dev/null; do
-    if [[ $(held_by) == "$owner" ]]; then break; fi
+    # Renewing your own lock runs under the file lock, so a stale-lock
+    # reclaim can't delete it between the check and the touch.
+    if [[ $(held_by) == "$owner" ]] && run_locked _renew "$owner"; then exit 0; fi
     [[ -d $lock ]] || continue  # released since the mkdir: try again now
     if (( $(age) >= stale )); then
       run_locked _reclaim "$owner"
@@ -62,6 +65,11 @@ _reclaim)  # under the file lock
     echo "app lock: taking over a stale lock from $(held_by)" >&2
     rm -rf "$lock"
   fi
+  ;;
+_renew)  # under the file lock: refreshes the lock if OWNER still holds it
+  [[ $(held_by) == "$owner" ]] || exit 1
+  printf '%s\n%s\n' "$owner" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$lock/owner"
+  touch "$lock"
   ;;
 _release)  # under the file lock
   if [[ $(held_by) == "$owner" ]]; then rm -rf "$lock"; fi

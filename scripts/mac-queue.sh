@@ -29,7 +29,8 @@ else
 fi
 rank() { case $1 in release) echo 1;; merge) echo 2;; other) echo 3;; *) echo "class must be release, merge or other" >&2; exit 2;; esac; }
 
-# Tickets are named <rank>-<epoch>-<owner>, so a plain sort is the queue order.
+# Tickets are named <rank>-<sequence>-<owner>, with a sequence number handed
+# out under the lock, so a plain sort is the queue order.
 # A job that has started is renamed 0-…, so it keeps its slot until `done`.
 prune() {
   local now t
@@ -57,7 +58,8 @@ _join)  # under the lock: prints the ticket; exits 3 if it is already running
   prune
   t=$(ticket_of "$owner")
   if [[ -z $t ]]; then
-    t="$(rank "$class")-$(date +%s)-$owner"
+    n=$(( $(cat "$dir.seq" 2>/dev/null || echo 0) + 1 )); echo $n > "$dir.seq"
+    t="$(rank "$class")-$(printf %09d $n)-$owner"
     printf '%s\n%s\n' "$class" "$note" > "$dir/$t"
   else
     touch "$dir/$t"
@@ -96,8 +98,11 @@ done)
   [[ -n $t ]] && rm -f "$dir/$t"
   exit 0
   ;;
-show)
+_prune)  # under the lock
   prune
+  ;;
+show)
+  run_locked _prune
   ls "$dir" | sort | nl
   ;;
 *)

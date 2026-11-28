@@ -27,6 +27,8 @@ The iPhone draft-swap check that gates 0.7.19 waited more than 30 minutes behind
 Joining the queue and the check-then-start step run under one kernel file lock (perl `flock`, held by the step's own process, so a killed process can't leave it behind), so a later, higher-priority arrival can't slip in between another waiter's check and its start (Codex found that race). Tested on Linux:
 - Two running jobs, then an `other` job and a later `release` job: the release job started first when a slot opened.
 - 12 jobs of mixed classes joining at once: never more than two running, in 10 of 10 runs.
+- Tickets carry a sequence number handed out under the lock, so two jobs of one class that join in the same second keep their arrival order. `show` prunes under the lock too.
+- Renewing your own app lock runs under the file lock, so a stale-lock reclaim can't delete it mid-renewal.
 - A process holding the file lock was killed with SIGKILL, and the next waiter started right after.
 
 The app lock's stale-lock takeover and its release both run under one kernel file lock, so neither can delete a fresh lock another owner just took (Codex found both races). Race tests: 6 contenders on one stale lock, 30/30 rounds with exactly one winner; a release racing a takeover, 40/40 rounds with the new owner keeping its lock.
@@ -37,5 +39,5 @@ At 20:03 IST a gate run launched the iCloud-enabled `/Applications/VoiceiQ.app` 
 
 New rules, in AGENTS.md:
 - Before launching or installing the real app, take the app lock, check the installed build, and check that the data folder holds no seed or test data.
-- Test runs that create dictations, meetings or Dictionary terms use an isolated copy with its own bundle ID, or turn iCloud sync off for the run and back on afterwards.
+- Test runs that create dictations, meetings or Dictionary terms use an isolated copy: the signed Release build with its own bundle ID, re-signed ad hoc without the iCloud entitlement. The app has no setting that stops meeting or Dictionary sync, and a new bundle ID alone doesn't stop it. PR #161 adds a test-only override for this.
 - After the cleanup, check that the 10 seed Dictionary terms are gone from iCloud: Priya Raman, Kubernetes, Indiranagar, Northwind, Okafor, SwiftUI, PostgreSQL, Aiko Tanaka, metformin, Sentry. They would bias the owner's dictation.
