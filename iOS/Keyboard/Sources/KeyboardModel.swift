@@ -167,6 +167,12 @@ final class KeyboardModel: ObservableObject {
     /// also polls while it is on screen. Reads are local and cheap.
     private func refresh() {
         trackSession()
+        if let held = draft, documentID == held.documentID, let proxy = controller?.textDocumentProxy,
+           !held.follow(proxy) {
+            draft = nil
+            held.commit(proxy)
+            KeyboardLog.note("[\(instanceTag)] draft stays as heard: the field changed around it")
+        }
         let fresh = store.snapshot
         if fresh != snapshot { snapshot = fresh }
         let alive = store.appIsAlive()

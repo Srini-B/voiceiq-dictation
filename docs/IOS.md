@@ -257,7 +257,10 @@ move, Paste last or Undo while the keyboard holds the draft commits it
 first (`EditController.willEdit`), so the edit cannot replace it, and the
 draft then stays as heard: after an edit, the text around the cursor can
 match the draft's without being it (a deleted draft after an earlier copy
-of its words). A dismissed keyboard commits it too. Paste last and History always have the written
+of its words). The keyboard also reads the field every 0.1 s while it holds
+a draft: once the draft has been seen before the cursor, any change to the
+text around it (a host edit, a menu's Cut, a cursor move) leaves it as heard
+(`KeyboardDraft.follow`). A dismissed keyboard commits it too. Paste last and History always have the written
 text.
 
 The keyboard does not show a spinner in the field before the draft

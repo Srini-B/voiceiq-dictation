@@ -31,6 +31,9 @@ final class KeyboardDraft {
     let typedAt: Date
     /// Still marked text, as far as this keyboard knows.
     private(set) var isMarked = true
+    /// The text before the cursor once the draft was first seen there
+    /// (`follow`). Any change after that is someone's edit.
+    private var landedBefore: String?
     private init(id: UUID, documentID: UUID, text: String, before: String, after: String, typedAt: Date) {
         self.id = id
         self.documentID = documentID
@@ -78,6 +81,20 @@ final class KeyboardDraft {
         proxy.unmarkText()
     }
 
+    /// Watches the field while the writer runs. False once the field changed
+    /// after the draft was seen in it: the host or the user edited it
+    /// without this keyboard (a menu's Cut, the host's own undo), and the
+    /// text around the cursor could match an earlier copy of its words.
+    func follow(_ proxy: UITextDocumentProxy) -> Bool {
+        let current = proxy.documentContextBeforeInput ?? ""
+        if let landedBefore {
+            return current == landedBefore && (proxy.documentContextAfterInput ?? "") == after
+                && (proxy.selectedText ?? "").isEmpty
+        }
+        if current.hasSuffix(text), isStillAround(proxy, before: current) { landedBefore = current }
+        return true
+    }
+
     /// Swaps the draft for `written`, only while it is right before the
     /// cursor with nothing selected and the same text around it. A host can
     /// commit marked text without saying so, and marked text set over it
@@ -87,7 +104,7 @@ final class KeyboardDraft {
         commit(proxy)
         let current = proxy.documentContextBeforeInput ?? ""
         guard (proxy.selectedText ?? "").isEmpty, current.hasSuffix(text), isStillAround(proxy, before: current),
-              Self.canSwap(text)
+              landedBefore.map({ $0 == current }) ?? true, Self.canSwap(text)
         else { return .kept }
         let fitted = fit(written, String(current.dropLast(text.count)), proxy.documentContextAfterInput ?? "")
         guard !fitted.isEmpty else { return .kept }

@@ -98,6 +98,22 @@ final class KeyboardDraftTests: XCTestCase {
         XCTAssertEqual(field.string, "ok")
     }
 
+    /// The host deleted the draft and its space without this keyboard, after
+    /// the draft was seen: what is before the cursor still ends like the
+    /// draft's surroundings, and is still never deleted.
+    func testADraftTheHostDeletedAfterItLandedLeavesTheSameWordsAlone() throws {
+        let field = Field("ok ok ")
+        let draft = try XCTUnwrap(type("ok", into: field))
+        XCTAssertTrue(draft.follow(field))
+        draft.commit(field)
+        for _ in 0..<3 { field.deleteBackward() }
+        XCTAssertEqual(field.string, "ok ok")
+
+        XCTAssertFalse(draft.follow(field))
+        XCTAssertEqual(draft.replace(with: "OK.", in: field, fit: fit), .kept)
+        XCTAssertEqual(field.string, "ok ok")
+    }
+
     /// A draft the swap could not take back out is never typed: Tamil,
     /// whose vowel signs a host may delete on their own, a line break, and
     /// a draft longer than hosts show before the cursor. The written text
