@@ -98,6 +98,8 @@ final class TidyTests: XCTestCase {
             ("It took, like, you know, five hours.", "It took, like, five hours."),
             ("Use a tool, like, you know, a hammer.", "Use a tool, like, a hammer."),
             ("I went, like, you know, to the store.", "I went to the store."),
+            // A double space hides nothing from the run's judgment (Tidy closes it up).
+            ("Do it, like, you  did last time.", "Do it, like, you did last time."),
         ] {
             XCTAssertEqual(tidy(said), written, said)
         }
@@ -113,7 +115,7 @@ final class TidyTests: XCTestCase {
                      "We need supplies, like, paper and pens.",
                      "Bring a tool, like, my hammer.", "Use a tool, like, this one.",
                      "She goes, like, before you leave, call me.", "And I'm, like, no way.",
-                     "Do it, like, you did last time.", "Do it, like, you  did last time.",
+                     "Do it, like, you did last time.",
                      "Like, this video before subscribing.", "Done. Like, the build passed.",
                      // A run kept whole is not judged again from its middle.
                      "You know, like, of course, that this is confidential.", "He said 'Hello', like, you know, to everyone.",
