@@ -138,7 +138,8 @@ public struct AssemblyAITranscriptionService: TranscriptionServicing {
                 try await client.write(prompt: prompt, model: model, deadline: 15)
             }
             let written = try await AssemblyAIClient.firstSuccess(retryAfter: 5, first: attempt, retry: attempt)
-            let text = ValidationGate.stripArtifacts(written).trimmingCharacters(in: .whitespacesAndNewlines)
+            let text = EmailLayout.apply(ValidationGate.stripArtifacts(written).trimmingCharacters(in: .whitespacesAndNewlines),
+                                         customRules: settings.customWritingRules)
             // "" is the writer's no-speech answer; an answer that was only
             // artifacts ("CLEAN:") is a writer failure, tidied below.
             if text.isEmpty {
