@@ -30,7 +30,11 @@ so VoiceiQ detects the call and reads names from the screen.
   owner's iCloud, and nothing in it turns meeting sync off. Copy the signed
   Release build to `~/Applications/VoiceiQ-probe.app`, give it its own bundle
   ID (`io.blue.voiceiq.probe`), and re-sign it ad hoc without the iCloud
-  entitlement, so its meetings stay on the Mac (AGENTS.md). Grant the copy
+  entitlement. That alone doesn't isolate it: every build writes to the same
+  `~/Library/Application Support/VoiceiQ`, and the real app later uploads
+  the probe's meetings from there. Until the test-mode data-root override
+  (PR #161) is merged, run the probe under a separate macOS user account.
+  After that, the copy must also set the override (AGENTS.md). Grant the copy
   its own Microphone, Screen Recording and Accessibility permission before
   the first run. Do not test a Debug build.
 - `run.sh` also holds the shared app lock for the run (`LOCK_OWNER` set to

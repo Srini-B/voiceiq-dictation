@@ -39,5 +39,5 @@ At 20:03 IST a gate run launched the iCloud-enabled `/Applications/VoiceiQ.app` 
 
 New rules, in AGENTS.md:
 - Before launching or installing the real app, take the app lock, check the installed build, and check that the data folder holds no seed or test data.
-- Test runs that create dictations, meetings or Dictionary terms use an isolated copy: the signed Release build with its own bundle ID, re-signed ad hoc without the iCloud entitlement. The app has no setting that stops meeting or Dictionary sync, and a new bundle ID alone doesn't stop it. PR #161 adds a test-only override for this.
+- Test runs that create dictations, meetings or Dictionary terms must stay out of the real data folder and out of iCloud. A copy with its own bundle ID, re-signed without the iCloud entitlement, still writes to `~/Library/Application Support/VoiceiQ` (FileLayout hard-codes it), and the real app's MeetingSync later uploads any finished meeting it finds there. Codex found this. Until PR #161 adds a test-mode data-root override, alongside its sync override, such tests run under a separate macOS user account.
 - After the cleanup, check that the 10 seed Dictionary terms are gone from iCloud: Priya Raman, Kubernetes, Indiranagar, Northwind, Okafor, SwiftUI, PostgreSQL, Aiko Tanaka, metformin, Sentry. They would bias the owner's dictation.
