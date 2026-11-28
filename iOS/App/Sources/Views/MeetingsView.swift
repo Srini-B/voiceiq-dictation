@@ -176,7 +176,9 @@ private struct RecorderCard: View {
                 .frame(minHeight: 44)
         }
         .frame(maxWidth: .infinity)
-        .confirmationDialog("Discard this recording?", isPresented: $confirmingDiscard, titleVisibility: .visible) {
+        // An alert, not a confirmation dialog: on iOS 27 the dialog drew as a
+        // popover with no background over the Past notes rows.
+        .alert("Discard this recording?", isPresented: $confirmingDiscard) {
             Button("Discard", role: .destructive) { meetings.discardRecording() }
             Button("Keep recording", role: .cancel) {}
         } message: {
