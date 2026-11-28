@@ -164,3 +164,9 @@ The dictation thread owns the prompt fixes. Hindi-specific prompt rules stay onl
   - **Merge:** #97 merges when CI is green and no review threads are open.
 - **#101 (prompt −436 tokens):** dictation cost at January prices goes from ₹1.131 to ₹1.070, and C1 from 52.5 to 56.4. Fable is scoring it. Cut 1 was rejected because it made gemini-3.8-flash think on about a third of calls.
 - **Lever 4 (screen-text cap)** is not shipped. The eval's screen text is only 367 characters, so it can't measure either the saving or the risk. Real screen-text sizes come first.
+
+## 2026-11-28: Version numbers follow semantic versioning
+
+Standing rule from cyron: the release owner picks each version by semantic versioning instead of always raising the patch number. Patch (0.7.x) is for fixes only. Minor (0.x.0) is for new features or notable changes. Major (1.0) is for when the app is stable and feature-complete, or a change breaks compatibility. Build numbers keep rising by one per release. The rule is also in AGENTS.md.
+
+The release planned as 0.7.19 ships as **0.8.0 (94)**. It replaces Gemini with AssemblyAI and needs a new key, adds the draft-then-written paste on Mac and iPhone, and adds meeting waveforms with a playback bar. Its notice moved to release-notes/0.8.0.notice.md, and docs and code comments that said "0.7.19" now say "0.8.0". Earlier activity files keep "0.7.19", the name in use when they were written.

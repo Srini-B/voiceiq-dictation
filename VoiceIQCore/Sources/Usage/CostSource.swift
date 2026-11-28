@@ -1,7 +1,7 @@
 import Foundation
 
 /// Whose bill a usage record lands on, for the Cost pane. AssemblyAI is the
-/// only provider since 0.7.19. Gemini (removed in 0.7.19), OpenAI and
+/// only provider since 0.8.0. Gemini (removed in 0.8.0), OpenAI and
 /// ElevenLabs (removed in 0.7.12) and Claude (removed 2026-11-10) stay so rows
 /// booked under them still show and price. Records store only the model ID,
 /// so the source is read off its prefix; AssemblyAI rows carry "assemblyai/".

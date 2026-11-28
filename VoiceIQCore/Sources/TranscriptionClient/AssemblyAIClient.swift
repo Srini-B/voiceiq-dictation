@@ -407,7 +407,7 @@ public actor AssemblyAIClient {
         request.setValue(Self.userAgent, forHTTPHeaderField: "User-Agent")
     }
 
-    /// "VoiceiQ/0.7.19 (macOS 27.0)", with "; dev" on a debug build: lets
+    /// "VoiceiQ/0.8.0 (macOS 27.0)", with "; dev" on a debug build: lets
     /// AssemblyAI tie an error or a slowdown to a release. URLSession's
     /// default names only the opaque build counter. Nothing per install.
     static let userAgent: String = {
