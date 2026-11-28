@@ -1,4 +1,5 @@
 # Agent rules
 
 - Whenever the macOS application needs to be tested, test a signed and notarized build: produce it with the release flow (`scripts/release.sh`), install it, and test the installed app. Never test on a Debug build.
+- Before installing a build to test on a shared test Mac, turn off Sparkle's automatic updates so the app under test is not replaced mid-run: `defaults write io.blue.voiceiq SUEnableAutomaticChecks -bool false; defaults write io.blue.voiceiq SUAutomaticallyUpdate -bool false`. On 2026-11-28 Sparkle replaced a probe's 0.7.17 build with 0.7.18 during the run.
 - Never turn off Wi-Fi or any other network interface on a test machine (the Mac mini runner, the MacBook, or any remote Mac), not even briefly to test offline behaviour. These machines are remote; one lost its only network link for hours until someone rebooted it by hand. Test offline paths by blocking only the app's requests, or skip the test and say so.

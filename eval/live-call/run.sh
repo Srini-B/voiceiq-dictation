@@ -15,8 +15,11 @@ set -euo pipefail
 room=$1 seconds=$2 owner=${3:A}; shift 3
 guests=(${@:A})
 site=${SITE:-jitsi}
-lead=30 # seconds between the owner joining and everyone starting to speak
 chrome="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+# Sparkle replaced the build under test mid-run on 2026-11-28 (0.7.17 to
+# 0.7.18); a test Mac never updates the app on its own.
+defaults write io.blue.voiceiq SUEnableAutomaticChecks -bool false
+defaults write io.blue.voiceiq SUAutomaticallyUpdate -bool false
 [[ -x $chrome ]] || { echo "Google Chrome is not installed" >&2; exit 1; }
 command -v ffmpeg >/dev/null || { echo "ffmpeg is not installed" >&2; exit 1; }
 scratch=$(mktemp -d /tmp/live-call.XXXXXX)
@@ -66,6 +69,11 @@ fi
 out=${OUT:-$PWD}
 mkdir -p $out
 tone_at=$(( 3 * ${#guests} + 12 ))
+# Seconds between the owner joining and everyone starting to speak: at least
+# 30, and long enough that the guest check's tap (from 8 s to lead - 2 s) hears
+# the last guest's beeps, which start 3 × (guests - 1) + 12 s after the owner
+# joins and last 2 s (Codex on #142).
+lead=$(( 3 * ${#guests} + 16 > 30 ? 3 * ${#guests} + 16 : 30 ))
 pitch() { print $(( 500 + 350 * ($1 - 1) )) }
 swiftc -O -suppress-warnings $here/taprecord.swift -o $scratch/taprecord
 for index in {1..${#guests}}; do
