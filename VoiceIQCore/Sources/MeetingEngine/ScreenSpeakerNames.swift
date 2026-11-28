@@ -242,6 +242,51 @@ public enum ScreenSpeakerNames {
         return out
     }
 
+    /// Names a far-side voice that answers right after someone addresses an
+    /// invitee or an on-screen name ("Nihal, can you give us the status?"),
+    /// then the last voice by elimination. MEASURED 2026-11-28: the notes
+    /// model on the gateway named these voices in one run and not the next,
+    /// with the same transcript; done here, the names stay the same and the
+    /// notes are written with them. A voice answering two names keeps neither.
+    public static func byAddress(_ screen: ScreenNames?, transcript: [TranscriptSegment], invited: [String]) -> ScreenNames? {
+        let known = (screen?.speakers ?? [:]).values.map(\.name)
+        // The invite's spelling first; a gallery tile repeating it is one person.
+        var names: [String] = []
+        for name in invited + (screen?.seen ?? []).filter({ !isUIText($0) })
+        where !(known + names).contains(where: { sameName($0, name) }) { names.append(name) }
+        var votes: [String: [String: Int]] = [:]
+        for (index, turn) in transcript.enumerated() {
+            guard let name = addressed(in: turn.text, among: names),
+                  let answer = transcript[(index + 1)...].first(where: { $0.speaker != turn.speaker }),
+                  answer.speaker != MeetingSpeaker.you, screen?.speakers[answer.speaker] == nil else { continue }
+            votes[answer.speaker, default: [:]][name, default: 0] += 1
+        }
+        var out = screen ?? ScreenNames(seen: [], speakers: [:])
+        var given: [String: String] = [:]
+        for (speaker, heard) in votes where heard.count == 1 { given[speaker] = heard.keys.first }
+        for (speaker, name) in given where given.values.filter({ sameName($0, name) }).count == 1 {
+            out.speakers[speaker] = .init(name: name, seen: 0, of: 0, reason: "Answered right after being addressed as \(name)")
+        }
+        let named = out.speakers.filter { $0.key != MeetingSpeaker.you }.mapValues(\.name)
+        let result = byElimination(out, transcript: transcript, named: named, invited: invited)
+        return screen == nil && result?.speakers.isEmpty != false ? nil : result
+    }
+
+    /// The listed name a sentence opens with, followed by a comma: "Sara, you
+    /// first." and "Muhammed, where are we?" ("Muhammed Hafeed"), not
+    /// "Thanks Alex," or "Fair point Grace." A head matching two names is nobody's.
+    static func addressed(in text: String, among names: [String]) -> String? {
+        for sentence in text.split(whereSeparator: { ".?!".contains($0) }) {
+            let head = sentence.trimmingCharacters(in: .whitespaces).prefix { $0 != "," }
+            guard head.count < sentence.trimmingCharacters(in: .whitespaces).count else { continue }
+            let words = head.split(separator: " ")
+            guard (1...3).contains(words.count), words.allSatisfy({ $0.first?.isUppercase == true }) else { continue }
+            let matches = names.filter { sameName(String(head), $0) }
+            if matches.count == 1 { return matches[0] }
+        }
+        return nil
+    }
+
     /// `byElimination` once the notes are written: every name the meeting
     /// shows for a far-side speaker counts as known, and the calendar's
     /// invitees are the people expected.

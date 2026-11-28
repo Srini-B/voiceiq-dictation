@@ -419,7 +419,9 @@ import VoiceIQSpeech
                 return
             }
             try store.save(transcript: transcript, id: id)
-            meta.screenNames = ScreenSpeakerNames.match(samples: store.loadScreenSamples(id: id) ?? [], transcript: transcript)
+            meta.screenNames = ScreenSpeakerNames.byAddress(
+                ScreenSpeakerNames.match(samples: store.loadScreenSamples(id: id) ?? [], transcript: transcript),
+                transcript: transcript, invited: meta.calendarEvent?.attendees ?? [])
             if let screen = meta.screenNames {
                 Log.meeting.info("screen names: \(screen.speakers.count, privacy: .public) speakers named, \(screen.seen.count, privacy: .public) names seen")
                 if screen.probablyMerged == true {

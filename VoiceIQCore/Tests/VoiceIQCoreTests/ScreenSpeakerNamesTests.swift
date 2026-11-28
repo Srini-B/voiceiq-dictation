@@ -93,4 +93,44 @@ final class ScreenSpeakerNamesTests: XCTestCase {
         let room = Array(call.dropFirst())
         XCTAssertNil(ScreenSpeakerNames.byElimination(nil, transcript: room, named: ["s1": "Dana"], invited: invited)?.speakers["s2"])
     }
+
+    /// s3-four-people's opening: Sara and Rahul answer when addressed, Grace
+    /// is the invitee left. "Thanks Alex." and "Fair point Grace." address
+    /// the speaker before, so they name nobody.
+    func testAVoiceAnsweringItsNameIsNamedAndTheLastByElimination() {
+        let turns: [(String, String)] = [
+            ("you", "Morning everyone. Let's go round. Sara, you first."),
+            ("s1", "Thanks Alex. Signups were up eight percent last week."),
+            ("you", "Nice. Rahul, how did the onboarding email test go?"),
+            ("s2", "The shorter email won. Activation went from thirty one to thirty six percent."),
+            ("s3", "Before we do, can we check it with the Spanish users first?"),
+            ("s2", "Fair point Grace. I can run it on the Spanish segment for one more week."),
+        ]
+        let call = turns.enumerated().map { index, turn in
+            TranscriptSegment(speaker: turn.0, text: turn.1, chunkIndex: 0, start: Double(index * 5), end: Double(index * 5 + 4))
+        }
+        let invited = ["Sara Lindqvist", "Rahul Mehta", "Grace O'Neill"]
+        let named = ScreenSpeakerNames.byAddress(nil, transcript: call, invited: invited)
+        XCTAssertEqual(named?.speakers["s1"]?.name, "Sara Lindqvist")
+        XCTAssertEqual(named?.speakers["s2"]?.name, "Rahul Mehta")
+        XCTAssertEqual(named?.speakers["s3"]?.name, "Grace O'Neill")
+
+        // Addressed by first name only, against a two-word invitee; a name on
+        // screen already given to another voice is not given again.
+        let short = [TranscriptSegment(speaker: "you", text: "Muhammed, where are we with the screenshots?", chunkIndex: 0, start: 0, end: 3),
+                     TranscriptSegment(speaker: "s1", text: "I have four of the six done.", chunkIndex: 0, start: 3, end: 6)]
+        XCTAssertEqual(ScreenSpeakerNames.byAddress(nil, transcript: short, invited: ["Nihal", "Muhammed Hafeed"])?.speakers["s1"]?.name,
+                       "Muhammed Hafeed")
+        // A gallery showing the invitees too is still one person per name.
+        let gallery = ScreenNames(seen: ["Muhammed Hafeed", "Nihal", "Google Meet"], speakers: [:])
+        XCTAssertEqual(ScreenSpeakerNames.byAddress(gallery, transcript: short, invited: ["Nihal", "Muhammed Hafeed"])?.speakers["s1"]?.name,
+                       "Muhammed Hafeed")
+        let screen = ScreenNames(seen: [], speakers: ["s2": .init(name: "Muhammed Hafeed", seen: 9, of: 10)])
+        XCTAssertNil(ScreenSpeakerNames.byAddress(screen, transcript: short, invited: ["Nihal", "Muhammed Hafeed"])?.speakers["s1"])
+
+        // One voice answering two names keeps neither.
+        let both = short + [TranscriptSegment(speaker: "you", text: "Nihal, anything else?", chunkIndex: 0, start: 6, end: 8),
+                            TranscriptSegment(speaker: "s1", text: "No, that is all from me.", chunkIndex: 0, start: 8, end: 10)]
+        XCTAssertNil(ScreenSpeakerNames.byAddress(nil, transcript: both, invited: ["Nihal", "Muhammed Hafeed", "Lee Park"])?.speakers["s1"])
+    }
 }
