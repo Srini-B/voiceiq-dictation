@@ -17,15 +17,13 @@ struct MeetingsView: View {
                 NextMeetingSection()
                 Section {
                     RecorderCard(meetings: model.meetings)
-                        // The inset-grouped list already margins its rows;
-                        // zero here keeps the card flush with the rows below.
-                        .listRowInsets(EdgeInsets(top: Theme.Spacing.s, leading: 0,
-                                                  bottom: Theme.Spacing.l, trailing: 0))
+                        .listRowInsets(EdgeInsets(top: Theme.Spacing.s, leading: Theme.Spacing.page,
+                                                  bottom: Theme.Spacing.l, trailing: Theme.Spacing.page))
                         .listRowBackground(Color.clear)
                         .listRowSeparator(.hidden)
                 }
                 if !meetings.isEmpty {
-                    Section(folders.filterFolder?.name ?? "Past notes") {
+                    Section {
                         ForEach(shown) { meta in
                             NavigationLink { MeetingDetail(meta: meta, folders: folders) } label: {
                                 MeetingRow(meta: meta, folders: folders.names(of: meta.id))
@@ -47,11 +45,18 @@ struct MeetingsView: View {
                         if shown.isEmpty {
                             Text("No notes in this folder").font(Theme.Fonts.callout()).foregroundStyle(Theme.Colors.muted)
                         }
+                    } header: {
+                        Text(folders.filterFolder?.name ?? "Past notes")
+                            .font(Theme.Fonts.caption())
+                            .foregroundStyle(Theme.Colors.muted)
+                            .textCase(nil)
                     }
+                    .listRowBackground(Theme.Colors.canvas)
+                    .listRowSeparatorTint(Theme.Colors.hairline)
                 }
             }
-            .listStyle(.insetGrouped)
-            .listRowBackground(Theme.Colors.surface)
+            // A plain hairline list on the canvas, as Home (docs/design/redesign-2026-11.md).
+            .listStyle(.plain)
             .themedBackground()
             .navigationTitle("Notes")
             .toolbar {
