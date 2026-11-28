@@ -91,7 +91,7 @@ final class MeetingRenameTests: XCTestCase {
         XCTAssertTrue(prompt.contains("\"\(id.uuid.uuidString)\""))
     }
 
-    private func writeSystemTrack(seconds: Double, soundAt: Int? = nil) throws -> URL {
+    private func writeSystemTrack(seconds: Double, soundAt: Int? = nil, level: Int16 = 1_000) throws -> URL {
         let folder = root.appendingPathComponent("call", isDirectory: true)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let format = AVAudioFormat(commonFormat: .pcmFormatInt16, sampleRate: TrackAudio.sampleRate, channels: 1, interleaved: true)!
@@ -102,12 +102,12 @@ final class MeetingRenameTests: XCTestCase {
         buffer.frameLength = frames
         let samples = try XCTUnwrap(buffer.int16ChannelData?[0])
         samples.update(repeating: 0, count: Int(frames))
-        if let soundAt { samples[soundAt] = 3 }
+        if let soundAt { samples[soundAt] = level }
         try file.write(from: buffer)
         return folder
     }
 
-    func testOnlyALongCallWithAnAllZeroSystemTrackIsUnheard() throws {
+    func testOnlyALongCallWithAQuietSystemTrackIsUnheard() throws {
         let call = MeetingMeta(id: MeetingID(), startedAt: Date(), source: .app(bundleID: "us.zoom.xos", name: "zoom.us"),
                                durationSeconds: 90, status: .done)
         let silent = try writeSystemTrack(seconds: 90)
@@ -121,7 +121,10 @@ final class MeetingRenameTests: XCTestCase {
         XCTAssertFalse(SilentSystemAudio.check(short, folder: silent))
         XCTAssertFalse(SilentSystemAudio.check(call, folder: root.appendingPathComponent("no-audio")))
 
-        let heard = try writeSystemTrack(seconds: 90, soundAt: 80 * 16_000)
+        // Noise near −84 dBFS, as m2 and m3 of the live-call probe wrote, heard nobody.
+        let noise = try writeSystemTrack(seconds: 90, soundAt: 80 * 16_000, level: 3)
+        XCTAssertTrue(SilentSystemAudio.check(call, folder: noise))
+        let heard = try writeSystemTrack(seconds: 90, soundAt: 80 * 16_000, level: 1_000)
         XCTAssertFalse(SilentSystemAudio.check(call, folder: heard))
     }
 }

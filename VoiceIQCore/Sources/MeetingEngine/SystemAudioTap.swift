@@ -10,8 +10,8 @@ import Foundation
 /// them (a recording started by hand with no call found) it taps everything.
 ///
 /// A tap hears the output that was default when it was made. When the
-/// default output changes (headphones in or out) or the track goes to exact
-/// zeros while sound plays, a new tap is started before the old one stops,
+/// default output changes (headphones in or out) or the track stays quiet
+/// (`SystemTapWatch.quietPeak`) while the call plays, a new tap is started before the old one stops,
 /// into the same file, with the time between them written as silence.
 /// Adapted from Hex (anomalyco/hex `5704885d`, `4a3e9d49`).
 public final class SystemAudioTap: @unchecked Sendable {
@@ -188,7 +188,7 @@ public final class SystemAudioTap: @unchecked Sendable {
         guard running else { return }
         // Nothing playing: the silence is real. The watch asks again after another stretch of it.
         guard outputPlaying() else { return }
-        rebuild("system track went to exact zeros while sound plays", forSilence: true)
+        rebuild("system track quiet while the call plays", forSilence: true)
     }
 
     /// Starts a new tap before stopping the old one, so a rebuild that fails,
@@ -251,8 +251,8 @@ public final class SystemAudioTap: @unchecked Sendable {
         sound.hear(output)
         do { try writer.write(output); frames += Int64(output.frameLength) }
         catch { Log.meeting.error("system write failed: \(String(describing: error), privacy: .public)") }
-        // The tap's own samples: quiet sound can round to zero at 16 bits.
-        if silence.hear(seconds: seconds, exactZero: Self.allZero(list)) {
+        let quiet = output.int16ChannelData.map { SystemTapWatch.isQuiet(UnsafeBufferPointer(start: $0[0], count: Int(output.frameLength))) } ?? false
+        if silence.hear(seconds: seconds, quiet: quiet) {
             control.async { [weak self] in self?.silenceStalled() }
         }
     }
@@ -266,13 +266,6 @@ public final class SystemAudioTap: @unchecked Sendable {
         do { try writer.write(gap); frames += Int64(count) }
         catch { Log.meeting.error("system gap write failed: \(String(describing: error), privacy: .public)") }
         Log.meeting.notice("system track padded \(count) frames across the tap rebuild")
-    }
-
-    private static func allZero(_ list: UnsafePointer<AudioBufferList>) -> Bool {
-        UnsafeMutableAudioBufferListPointer(UnsafeMutablePointer(mutating: list)).allSatisfy { buffer in
-            guard let data = buffer.mData else { return true }
-            return UnsafeRawBufferPointer(start: data, count: Int(buffer.mDataByteSize)).allSatisfy { $0 == 0 }
-        }
     }
 
     private static func defaultOutputDevice() -> AudioDeviceID {

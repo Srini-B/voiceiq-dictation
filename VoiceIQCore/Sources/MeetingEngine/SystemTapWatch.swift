@@ -9,11 +9,21 @@ public enum SystemTapWatch {
     /// idle call is legitimately silent.
     public static let silenceLimit: TimeInterval = 15
 
-    /// Exact zeros on the system track, counted only after it carried sound,
-    /// so a recording of nothing, or a call before anyone talks, is not a
-    /// stalled tap.
+    /// The loudest 16-bit sample of a track that carries nothing: −60 dBFS.
+    /// MEASURED 2026-11-28: the live-call probe's m2 and m3 system tracks
+    /// heard none of the call and peaked near −84 dBFS, not exact zeros, so
+    /// a watch for zeros alone never fired. Speech on a call peaks far above.
+    public static let quietPeak: Int16 = 32
+
+    public static func isQuiet(_ samples: UnsafeBufferPointer<Int16>) -> Bool {
+        !samples.contains { $0 > quietPeak || $0 < -quietPeak }
+    }
+
+    /// A quiet system track, counted from the start: a call that was never
+    /// heard is the stall to catch. A recording of nothing, or a call before
+    /// anyone talks, is let through by the caller, which rebuilds only while
+    /// the tapped processes play.
     public struct Silence: Equatable, Sendable {
-        public private(set) var armed = false
         private var zeros: TimeInterval = 0
         /// Rebuilds since the track last carried sound. Each one waits four
         /// times longer (15, 60, then 240 s), so a far side that went quiet
@@ -27,20 +37,19 @@ public enum SystemTapWatch {
 
         public init() {}
 
-        /// One buffer of `seconds`. True each time the track, after carrying
-        /// sound, has been exact zeros for another `silenceLimit`, so the
-        /// caller can check again later when the output was idle the first time.
-        public mutating func hear(seconds: TimeInterval, exactZero: Bool) -> Bool {
-            guard exactZero else { armed = true; zeros = 0; rebuilds = 0; return false }
-            guard armed else { return false }
+        /// One buffer of `seconds`. True each time the track has been quiet
+        /// for another `limit`, so the caller can check again later when the
+        /// output was idle the first time.
+        public mutating func hear(seconds: TimeInterval, quiet: Bool) -> Bool {
+            guard quiet else { zeros = 0; rebuilds = 0; return false }
             zeros += seconds
             guard zeros >= limit else { return false }
             zeros = 0
             return true
         }
 
-        /// A rebuilt tap restarts the count but stays armed: a replacement
-        /// that also delivers only zeros (an output still settling) is
+        /// A rebuilt tap restarts the count: a replacement
+        /// that also delivers only quiet (an output still settling) is
         /// rebuilt again, after a longer wait each time, instead of leaving
         /// the rest of the meeting silent.
         /// `backingOff` is false for a rebuild after an output move, which

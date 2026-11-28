@@ -5,59 +5,68 @@ import CoreAudio
 @testable import VoiceIQCore
 
 final class MeetingCaptureTests: XCTestCase {
-    /// A recording of nothing, or a call before anyone talks, is exact zeros and no stalled tap.
-    func testSilenceNeverFiresBeforeTheTrackCarriedSound() {
+    /// A call never heard from the start is caught too: m2 and m3 of the live-call probe.
+    func testSilenceFiresOnATrackThatWasQuietFromTheStart() {
         var silence = SystemTapWatch.Silence()
-        XCTAssertFalse(silence.hear(seconds: 60, exactZero: true))
-        XCTAssertFalse(silence.armed)
+        XCTAssertFalse(silence.hear(seconds: 14.5, quiet: true))
+        XCTAssertTrue(silence.hear(seconds: 0.5, quiet: true))
+    }
+
+    /// Noise near −84 dBFS is quiet; speech-level samples are not.
+    func testQuietIsBelowSixtyDecibelsUnderFullScale() {
+        let noise: [Int16] = [2, -3, 1, 32, -32]
+        let speech: [Int16] = [2, -3, 1, 33]
+        XCTAssertTrue(noise.withUnsafeBufferPointer(SystemTapWatch.isQuiet))
+        XCTAssertFalse(speech.withUnsafeBufferPointer(SystemTapWatch.isQuiet))
+        XCTAssertFalse([Int16(-33)].withUnsafeBufferPointer(SystemTapWatch.isQuiet))
     }
 
     func testSilenceFiresAfterFifteenSecondsOfExactZerosAndAgainAfterAnother() {
         var silence = SystemTapWatch.Silence()
-        XCTAssertFalse(silence.hear(seconds: 1, exactZero: false))
-        XCTAssertFalse(silence.hear(seconds: 14.5, exactZero: true))
-        XCTAssertTrue(silence.hear(seconds: 0.5, exactZero: true))
+        XCTAssertFalse(silence.hear(seconds: 1, quiet: false))
+        XCTAssertFalse(silence.hear(seconds: 14.5, quiet: true))
+        XCTAssertTrue(silence.hear(seconds: 0.5, quiet: true))
         // Output was idle the first time: the watch asks again after another stretch.
-        XCTAssertFalse(silence.hear(seconds: 14.5, exactZero: true))
-        XCTAssertTrue(silence.hear(seconds: 0.5, exactZero: true))
+        XCTAssertFalse(silence.hear(seconds: 14.5, quiet: true))
+        XCTAssertTrue(silence.hear(seconds: 0.5, quiet: true))
     }
 
     func testSoundRestartsTheZeroCount() {
         var silence = SystemTapWatch.Silence()
-        _ = silence.hear(seconds: 1, exactZero: false)
-        XCTAssertFalse(silence.hear(seconds: 14, exactZero: true))
-        XCTAssertFalse(silence.hear(seconds: 0.01, exactZero: false))
-        XCTAssertFalse(silence.hear(seconds: 14, exactZero: true))
-        XCTAssertTrue(silence.hear(seconds: 1, exactZero: true))
+        _ = silence.hear(seconds: 1, quiet: false)
+        XCTAssertFalse(silence.hear(seconds: 14, quiet: true))
+        XCTAssertFalse(silence.hear(seconds: 0.01, quiet: false))
+        XCTAssertFalse(silence.hear(seconds: 14, quiet: true))
+        XCTAssertTrue(silence.hear(seconds: 1, quiet: true))
     }
 
     /// A replacement tap that also delivers only zeros is caught again, each
     /// time after a longer wait (15, 60, 240 s), and sound resets the wait.
     func testRebuildsBackOffUntilSoundReturns() {
         var silence = SystemTapWatch.Silence()
-        _ = silence.hear(seconds: 1, exactZero: false)
-        XCTAssertTrue(silence.hear(seconds: 15, exactZero: true))
+        _ = silence.hear(seconds: 1, quiet: false)
+        XCTAssertTrue(silence.hear(seconds: 15, quiet: true))
         silence.rebuilt()
-        XCTAssertFalse(silence.hear(seconds: 59, exactZero: true))
-        XCTAssertTrue(silence.hear(seconds: 1, exactZero: true))
+        XCTAssertFalse(silence.hear(seconds: 59, quiet: true))
+        XCTAssertTrue(silence.hear(seconds: 1, quiet: true))
         silence.rebuilt()
-        XCTAssertFalse(silence.hear(seconds: 239, exactZero: true))
-        XCTAssertTrue(silence.hear(seconds: 1, exactZero: true))
+        XCTAssertFalse(silence.hear(seconds: 239, quiet: true))
+        XCTAssertTrue(silence.hear(seconds: 1, quiet: true))
         silence.rebuilt()
-        XCTAssertFalse(silence.hear(seconds: 239, exactZero: true))
-        XCTAssertTrue(silence.hear(seconds: 1, exactZero: true))
-        XCTAssertFalse(silence.hear(seconds: 0.01, exactZero: false))
-        XCTAssertTrue(silence.hear(seconds: 15, exactZero: true))
+        XCTAssertFalse(silence.hear(seconds: 239, quiet: true))
+        XCTAssertTrue(silence.hear(seconds: 1, quiet: true))
+        XCTAssertFalse(silence.hear(seconds: 0.01, quiet: false))
+        XCTAssertTrue(silence.hear(seconds: 15, quiet: true))
     }
 
     /// Headphones flipping the output twice must not push the next stall check to 240 s.
     func testAnOutputMoveRebuildDoesNotBackOff() {
         var silence = SystemTapWatch.Silence()
-        _ = silence.hear(seconds: 1, exactZero: false)
+        _ = silence.hear(seconds: 1, quiet: false)
         silence.rebuilt(backingOff: false)
         silence.rebuilt(backingOff: false)
-        XCTAssertFalse(silence.hear(seconds: 14, exactZero: true))
-        XCTAssertTrue(silence.hear(seconds: 1, exactZero: true))
+        XCTAssertFalse(silence.hear(seconds: 14, quiet: true))
+        XCTAssertTrue(silence.hear(seconds: 1, quiet: true))
     }
 
     func testOnlyAMoveToAnotherReadableOutputRebuilds() {
