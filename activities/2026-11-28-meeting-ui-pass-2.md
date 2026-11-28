@@ -51,6 +51,16 @@ takes the deductions that were left.
 - **Short replies, further:** two short replies in a row from different people stay asides. Text without spaces counts as short only up to 6 characters.
 - **iPhone title,** further: the bar takes the title once the page title passes the bar's measured bottom, not a fixed 100 pt (Neon). The ask field's noun uses the same test as the badge.
 
+- **Neon review of d9833ed (agy):**
+  - The look-ahead stops at the replying speaker's own next line, so someone who goes on in short lines keeps the floor.
+  - Short text counts as unspaced (6-character cap) by script: Han, kana, Hangul or Thai. A short Russian reply stays an aside.
+  - A recording that starts is selected, and stays listed under a folder filter.
+  - The Discard dialog lives on the pane and closes when recording stops.
+  - The live card is passed as a view, no longer found by matching the text "Recording".
+  - A level expires after 0.5 s without buffers, so a detached tap reads as quiet.
+  - The recording row's text is in the secondary colour; only its dot is red.
+  - The iPhone title test runs only when the threshold is crossed.
+
 ## Not done
 
 - **Divider under the first day heading.** Neither `.listSectionSeparator(.hidden)`

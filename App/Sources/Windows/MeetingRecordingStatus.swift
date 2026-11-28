@@ -37,7 +37,8 @@ struct MeetingRecordingStatus: View {
         let db = 20 * log10(max(level, 0.000_001))
         let fill = CGFloat(min(max((db + 60) / 60, 0), 1))
         return HStack(spacing: VoiceIQUI.Spacing.s) {
-            Text(label).font(VoiceIQUI.TypeScale.labelSmall()).foregroundStyle(.secondary).frame(width: 72, alignment: .leading)
+            Text(label).font(VoiceIQUI.TypeScale.labelSmall()).foregroundStyle(.secondary).lineLimit(1).fixedSize()
+                .frame(minWidth: 72, alignment: .leading)
             GeometryReader { geometry in
                 ZStack(alignment: .leading) {
                     Capsule().fill(Color.secondary.opacity(0.2))

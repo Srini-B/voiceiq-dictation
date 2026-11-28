@@ -112,7 +112,7 @@ public enum MeetingSpeaker {
                 turns[turns.count - 1].lines.append(.init(segment: segment, aside: false))
             } else if let last = turns.last, isShortReply(segment.text),
                       // Who speaks next past other short replies ("Okay." then "Yes." from two people).
-                      lines[(index + 1)...].first(where: { $0.speaker == last.speaker || !isShortReply($0.text) })
+                      lines[(index + 1)...].first(where: { $0.speaker == last.speaker || $0.speaker == segment.speaker || !isShortReply($0.text) })
                           .map({ $0.speaker == last.speaker }) ?? true {
                 turns[turns.count - 1].lines.append(.init(segment: segment, aside: true))
             } else {
@@ -126,7 +126,19 @@ public enum MeetingSpeaker {
     /// spaces, so a whole turn there is one "word" (Codex review).
     static func isShortReply(_ text: String) -> Bool {
         let words = text.split(whereSeparator: \.isWhitespace).count
-        return words <= 2 && text.count <= (words == 1 && text.count > 1 && !text.contains { $0.isASCII && $0.isLetter } ? 6 : 20)
+        return words <= 2 && text.count <= (isUnspaced(text) ? 6 : 20)
+    }
+
+    /// Mostly Chinese, Japanese, Korean or Thai, written without spaces between words.
+    static func isUnspaced(_ text: String) -> Bool {
+        let letters = text.unicodeScalars.filter(\.properties.isAlphabetic)
+        let unspaced = letters.filter { scalar in
+            switch scalar.value {
+            case 0x0E00...0x0E7F, 0x1100...0x11FF, 0x3040...0x30FF, 0x3400...0x4DBF, 0x4E00...0x9FFF, 0xAC00...0xD7AF: return true
+            default: return false
+            }
+        }
+        return unspaced.count * 2 > letters.count
     }
 
     /// A single Latin letter and nothing else. "B." (an answer), "I.", a

@@ -49,7 +49,17 @@ struct MeetingsPane: View {
         .animation(.easeOut(duration: 0.2), value: exported)
         .onAppear { reload() }
         .onChange(of: selection) { _, _ in assigning = false; loadSelection() }
-        .onChange(of: engine.phase) { _, _ in reload() }
+        .onChange(of: engine.phase) { _, phase in
+            reload()
+            // A new recording opens, so its live card and Discard are in view.
+            if case let .recording(id, _) = phase { selection = id } else { confirmingDiscard = false }
+        }
+        .confirmationDialog("Discard this recording?", isPresented: $confirmingDiscard) {
+            Button("Discard", role: .destructive) { engine.discardRecording() }
+            Button("Keep recording", role: .cancel) {}
+        } message: {
+            Text("Its audio is deleted and no notes are made.")
+        }
         .onChange(of: engine.processing) { _, _ in reload() }
         .onReceive(NotificationCenter.default.publisher(for: .gtMeetingsDidChange).receive(on: RunLoop.main)) { note in
             if note.object as? String == "sync" { reload() }
@@ -105,16 +115,10 @@ struct MeetingsPane: View {
                 .buttonStyle(.bordered)
                 .padding(.horizontal, VoiceIQUI.Spacing.s)
                 .padding(.bottom, VoiceIQUI.Spacing.xs)
-                .confirmationDialog("Discard this recording?", isPresented: $confirmingDiscard) {
-                    Button("Discard", role: .destructive) { engine.discardRecording() }
-                    Button("Keep recording", role: .cancel) {}
-                } message: {
-                    Text("Its audio is deleted and no notes are made.")
-                }
             }
             folderFilter
             List(selection: $selection) {
-                ForEach(Self.days(folders.shown(meetings)), id: \.start) { day in
+                ForEach(Self.days(listed), id: \.start) { day in
                     Section(day.label) {
                         ForEach(day.meetings) { meeting in
                             // The heading already sets the day off; no rule above its first row.
@@ -126,7 +130,7 @@ struct MeetingsPane: View {
             .overlay {
                 if meetings.isEmpty {
                     Text("No meetings yet").foregroundStyle(.secondary)
-                } else if folders.shown(meetings).isEmpty {
+                } else if listed.isEmpty {
                     Text("No meetings in this folder").foregroundStyle(.secondary)
                 }
             }
@@ -139,8 +143,10 @@ struct MeetingsPane: View {
             if case let .recording(id, since) = engine.phase, id == meeting.id {
                 // The length ticks while it records; the stored one is written at Stop.
                 TimelineView(.periodic(from: since, by: 1)) { context in
-                    Text("\(Image(systemName: "circle.fill")) \(meeting.startedAt.formatted(date: .omitted, time: .shortened)) · \(MeetingRecordingStatus.clock(context.date.timeIntervalSince(since))) · Recording")
-                        .font(VoiceIQUI.TypeScale.labelSmall().monospacedDigit()).foregroundStyle(VoiceIQUI.Colors.gRed)
+                    // Only the dot is red; red text on the selected row read at 3:1 (Fable).
+                    (Text(Image(systemName: "circle.fill")).foregroundColor(VoiceIQUI.Colors.gRed)
+                        + Text(" \(meeting.startedAt.formatted(date: .omitted, time: .shortened)) · \(MeetingRecordingStatus.clock(context.date.timeIntervalSince(since))) · Recording"))
+                        .font(VoiceIQUI.TypeScale.labelSmall().monospacedDigit()).foregroundStyle(.secondary).lineLimit(1)
                 }
             } else {
                 Text(timeLine(meeting)).font(VoiceIQUI.TypeScale.labelSmall()).foregroundStyle(.secondary)
@@ -218,11 +224,10 @@ struct MeetingsPane: View {
             if unheardCall == meeting.id { unheardWarning }
             HStack(spacing: 0) {
                 if wide || !transcriptShown {
-                    MeetingNotesColumn(meeting: meeting, notes: notes, transcript: transcript, step: step(meeting), chat: chat(meeting)) {
-                        if case let .recording(id, since) = engine.phase, id == meeting.id {
-                            MeetingRecordingStatus(engine: engine, since: since) { confirmingDiscard = true }
-                        }
-                    }
+                    MeetingNotesColumn(meeting: meeting, notes: notes, transcript: transcript, step: step(meeting), chat: chat(meeting),
+                                       live: recordingSince(meeting).map { since in
+                                           MeetingRecordingStatus(engine: engine, since: since) { confirmingDiscard = true }
+                                       })
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .id(meeting.id)
                 }
@@ -373,6 +378,12 @@ struct MeetingsPane: View {
         }
     }
 
+    /// When this meeting started recording, while it records.
+    private func recordingSince(_ meeting: MeetingMeta) -> Date? {
+        if case let .recording(id, since) = engine.phase, id == meeting.id { return since }
+        return nil
+    }
+
     private var selected: MeetingMeta? { meetings.first { $0.id == selection } }
     private var recording: Bool { if case .recording = engine.phase { return true }; return false }
     private func reload() {
@@ -382,8 +393,15 @@ struct MeetingsPane: View {
         showFirstIfHidden()
         loadSelection()
     }
-    private func showFirstIfHidden() {
+    /// The folder filter's meetings, and the one recording now whatever its folders.
+    private var listed: [MeetingMeta] {
         let shown = folders.shown(meetings)
+        guard case let .recording(id, _) = engine.phase, !shown.contains(where: { $0.id == id }),
+              let live = meetings.first(where: { $0.id == id }) else { return shown }
+        return [live] + shown
+    }
+    private func showFirstIfHidden() {
+        let shown = listed
         if !shown.contains(where: { $0.id == selection }) { selection = shown.first?.id }
     }
     private func loadSelection() {
