@@ -25,7 +25,7 @@ enum LocalMeetingJob {
             Log.transcription.notice("Local meeting: \(words.count) words in \(spoken.timeIntervalSince(started), format: .fixed(precision: 1))s, no diarizer")
             return LocalMeetingResult(words: words, segments: [])
         }
-        let segments = try await diarize(request.audio, models: diarizerDirectory)
+        let segments = try await diarize(request.audio, models: diarizerDirectory, cpuOnly: request.cpuOnly == true)
         Log.transcription.notice("Local meeting: \(words.count) words in \(spoken.timeIntervalSince(started), format: .fixed(precision: 1))s, \(segments.count) speaker stretches in \(Date().timeIntervalSince(spoken), format: .fixed(precision: 1))s")
         return LocalMeetingResult(words: words, segments: segments)
     }
@@ -83,8 +83,8 @@ enum LocalMeetingJob {
     /// count on 31 by leave-one-out, against 28 at the defaults; no
     /// single-voice file split; one person recorded in two sessions split in
     /// two. See `activities/2026-11-06-offline-speaker-diarizer.md`.
-    private static func diarize(_ audio: URL, models directory: URL) async throws -> [LocalMeetingResult.Segment] {
-        let models = try loadDiarizer(from: directory)
+    private static func diarize(_ audio: URL, models directory: URL, cpuOnly: Bool) async throws -> [LocalMeetingResult.Segment] {
+        let models = try loadDiarizer(from: directory, cpuOnly: cpuOnly)
         func manager(speakers: Int?) -> OfflineDiarizerManager {
             var config = OfflineDiarizerConfig.default
             config.exposeChunkEmbeddings = true
@@ -159,11 +159,11 @@ enum LocalMeetingJob {
     /// That loader and `prepareModels` download, or purge the folder and
     /// download again, whenever FluidAudio's own revision marker is missing,
     /// which it always is in a verified install.
-    private static func loadDiarizer(from directory: URL) throws -> OfflineDiarizerModels {
+    private static func loadDiarizer(from directory: URL, cpuOnly: Bool) throws -> OfflineDiarizerModels {
         let started = Date()
         func model(_ name: String, _ units: MLComputeUnits) throws -> MLModel {
             let configuration = MLModelConfiguration()
-            configuration.computeUnits = units
+            configuration.computeUnits = cpuOnly ? .cpuOnly : units
             configuration.allowLowPrecisionAccumulationOnGPU = true
             return try MLModel(contentsOf: directory.appendingPathComponent(name), configuration: configuration)
         }

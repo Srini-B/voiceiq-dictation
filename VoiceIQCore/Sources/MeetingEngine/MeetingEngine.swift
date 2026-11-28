@@ -444,6 +444,7 @@ import VoiceIQSpeech
             try mark(&meta, .transcribing)
             guard hasKey() else { throw MeetingFailure.noKey }
             let heard = try await MeetingTranscriber(client: client, diarizeFarSide: localMeeting.map(Self.farSideDiarizer)).transcribe(folder: folder)
+            meta.speakersUnsplit = MeetingTranscriber.farSideFailed(folder: folder) ? true : nil
             let transcript = Self.corrected(heard, rules: DictionaryStore().replacementRules())
             let words = transcript.reduce(0) { $0 + $1.text.split(whereSeparator: \.isWhitespace).count }
             guard words >= Self.minimumSummarizableWords else {
@@ -495,8 +496,10 @@ import VoiceIQSpeech
             }
             guard let directory else { return nil }
             defer { Task { @MainActor in LocalModelStore.speakerDiarizer.releaseSession(id: id) } }
-            return try await job.run {
-                try await runner(LocalMeetingRequest(speechDirectory: nil, diarizerDirectory: directory, audio: audio)).segments
+            return try await MeetingTranscriber.retryingSpeakerModel { cpuOnly in
+                try await job.run {
+                    try await runner(LocalMeetingRequest(speechDirectory: nil, diarizerDirectory: directory, audio: audio, cpuOnly: cpuOnly)).segments
+                }
             }
         }
     }

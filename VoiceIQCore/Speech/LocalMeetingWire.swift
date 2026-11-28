@@ -10,10 +10,14 @@ public struct LocalMeetingRequest: Codable, Sendable {
     public var diarizerDirectory: URL?
     /// 16 kHz mono, the whole meeting on one timeline.
     public var audio: URL
-    public init(speechDirectory: URL?, diarizerDirectory: URL?, audio: URL) {
+    /// Run the speaker model on the CPU alone: the retry after Core ML failed
+    /// a prediction on the Neural Engine or GPU (`FarSideSpeakers.retrying`).
+    public var cpuOnly: Bool?
+    public init(speechDirectory: URL?, diarizerDirectory: URL?, audio: URL, cpuOnly: Bool? = nil) {
         self.speechDirectory = speechDirectory
         self.diarizerDirectory = diarizerDirectory
         self.audio = audio
+        self.cpuOnly = cpuOnly
     }
 }
 

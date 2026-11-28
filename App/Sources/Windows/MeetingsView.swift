@@ -15,6 +15,7 @@ struct MeetingsPane: View {
     @State private var assigning = false
     @State private var confirmingDelete = false
     @State private var confirmingDiscard = false
+    @State private var confirmingSplit = false
     @State private var renaming = false
     @State private var titleDraft = ""
     /// The selected meeting is a call whose other side was never heard (`SilentSystemAudio`).
@@ -223,6 +224,7 @@ struct MeetingsPane: View {
                     .padding([.horizontal, .top], VoiceIQUI.Spacing.l)
             }
             if unheardCall == meeting.id { unheardWarning }
+            if meeting.speakersUnsplit == true, meeting.status == .done, !engine.isBusy(meeting.id) { unsplitWarning(meeting) }
             HStack(spacing: 0) {
                 if wide || !transcriptShown {
                     MeetingNotesColumn(meeting: meeting, notes: notes, transcript: transcript, step: step(meeting), chat: chat(meeting),
@@ -440,6 +442,31 @@ struct MeetingsPane: View {
             return
         }
         exported = .copied("prompt for an AI agent", UUID())
+    }
+
+    /// The speaker model failed, so two people on the call may share a voice.
+    private func unsplitWarning(_ meeting: MeetingMeta) -> some View {
+        let audio = RecordedAudio.meeting(folder: store.folder(for: meeting.id), name: title(meeting))
+        return HStack(spacing: VoiceIQUI.Spacing.s) {
+            Label("The speaker model failed on this meeting, so some people on the call may be shown as one speaker.",
+                  systemImage: "person.2.slash")
+                .font(VoiceIQUI.TypeScale.body())
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
+            Button("Split Speakers Again") { confirmingSplit = true }
+                // A meeting synced from the iPhone has no recording here (Codex on #133).
+                .disabled(!audio.isAvailable)
+                .help("Tells the voices apart again and rewrites the notes. Edits to the transcript are replaced.")
+                // Asks first, as the iPhone does: the run replaces transcript edits (Neon on #133).
+                .confirmationDialog("Split speakers again?", isPresented: $confirmingSplit) {
+                    Button("Split") { assigning = false; engine.retry(id: meeting.id) }
+                } message: {
+                    Text("The notes are written again, and edits to the transcript are replaced.")
+                }
+        }
+        .padding(VoiceIQUI.Spacing.m)
+        .background(RoundedRectangle(cornerRadius: VoiceIQUI.Radius.medium).fill(VoiceIQUI.Colors.surfaceContainer))
+        .padding([.horizontal, .top], VoiceIQUI.Spacing.l)
     }
 
     private var unheardWarning: some View {

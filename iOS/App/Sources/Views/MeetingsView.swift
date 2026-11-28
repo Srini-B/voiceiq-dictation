@@ -263,6 +263,7 @@ private struct MeetingDetail: View {
     @State private var gone = false
     /// The large title has scrolled under the bar, which then shows it instead.
     @State private var titleHidden = false
+    @State private var confirmingSplit = false
     /// The page title's bottom in the scroll content.
     @State private var titleBottom: CGFloat = .infinity
     @State private var meta: MeetingMeta
@@ -311,6 +312,25 @@ private struct MeetingDetail: View {
                     // Above the notes too: a failed redo keeps the old notes (Neon).
                     // Not during a Retry: its spinner replaces the old error.
                     if step == nil, let failure { failureCard(failure) }
+                    if meta.speakersUnsplit == true, meta.status == .done, step == nil, !gone {
+                        Card {
+                            Text("The speaker model failed on this note, so some people may be shown as one speaker.")
+                                .font(Theme.Fonts.body()).foregroundStyle(Theme.Colors.muted)
+                            // A synced note has no recording to split; sync never carries audio (Neon on #133).
+                            if audio.isAvailable {
+                                Button("Split speakers again") { confirmingSplit = true }.buttonStyle(.primaryPill)
+                                    .alert("Split speakers again?", isPresented: $confirmingSplit) {
+                                        Button("Split") { model.meetings.retry(id: meta.id) }
+                                        Button("Cancel", role: .cancel) {}
+                                    } message: {
+                                        Text("The notes are written again, and edits to the transcript are replaced.")
+                                    }
+                            } else {
+                                Text("Open this note on the Mac that recorded it to split speakers again.")
+                                    .font(Theme.Fonts.footnote()).foregroundStyle(Theme.Colors.muted)
+                            }
+                        }
+                    }
                     if let notes { notesContent(notes) }
                     else if failure == nil && step == nil && !gone { processingCard(.summarizing) }
                     if let chat { MeetingChatTurns(chat: chat, scroller: scroller) }

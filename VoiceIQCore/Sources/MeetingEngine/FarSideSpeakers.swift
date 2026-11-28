@@ -6,6 +6,38 @@ import VoiceIQSpeech
 /// the far side's words from AssemblyAI: who said each word, and the far-side
 /// track written to one file for the model to read (`MeetingTranscriber.splitFarSide`).
 enum FarSideSpeakers {
+    /// Runs the speaker model, and again when Core ML failed a prediction:
+    /// after 2 s, then after 5 s on the CPU alone. Any other error, and the
+    /// third failure, is thrown. MEASURED 2026-11-28: on a loaded Mac mini the
+    /// model failed 4 of 9 eval meetings with "Unable to compute the
+    /// asynchronous prediction using ML Program", and the far side kept
+    /// AssemblyAI's clusters, which put two people under one voice.
+    static func retrying<T: Sendable>(delays: [Double] = [2, 5],
+                                      sleep: @Sendable (Double) async throws -> Void = { try await Task.sleep(for: .seconds($0)) },
+                                      _ attempt: (_ cpuOnly: Bool) async throws -> T) async throws -> T {
+        var tries = 0
+        while true {
+            do { return try await attempt(tries == delays.count) } catch {
+                guard tries < delays.count, failedPrediction(error) else { throw error }
+                Log.meeting.notice("speaker model failed a prediction (try \(tries + 1, privacy: .public)); trying again\(tries + 1 == delays.count ? " on the CPU" : "", privacy: .public)")
+                try await sleep(delays[tries])
+                tries += 1
+            }
+        }
+    }
+
+    /// Core ML's failed prediction, as thrown in this process or as the
+    /// helper's message about it. On the Mac any model failure the helper
+    /// reports counts: each try is a fresh helper, and its message may not
+    /// carry Core ML's words. A helper that ran out of time does not.
+    static func failedPrediction(_ error: Error) -> Bool {
+        #if os(macOS)
+        if case LocalMeetingHelper.Failure.helper = error { return true }
+        #endif
+        let text = "\(String(describing: error)) \(error.localizedDescription)"
+        return (error as NSError).domain == "com.apple.CoreML" || text.contains("Unable to compute the") || text.contains("prediction using ML Program")
+    }
+
     /// The track is written a minute at a time.
     static let piece = 60.0
 

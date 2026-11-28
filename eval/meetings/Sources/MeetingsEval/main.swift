@@ -98,9 +98,12 @@ let useSpeakerModel = ProcessInfo.processInfo.environment["EVAL_NO_SPEAKER_MODEL
 let diarizer = useSpeakerModel ? await diarizerDirectory() : nil
 var diarizeFarSide: MeetingTranscriber.FarSideDiarizer?
 if let diarizer {
+    // Retried as the app retries it (MeetingEngine.farSideDiarizer).
     diarizeFarSide = { audio in
-        try await LocalSpeechInference.transcribeMeeting(
-            LocalMeetingRequest(speechDirectory: nil, diarizerDirectory: diarizer, audio: audio)).segments
+        try await MeetingTranscriber.retryingSpeakerModel { cpuOnly in
+            try await LocalSpeechInference.transcribeMeeting(
+                LocalMeetingRequest(speechDirectory: nil, diarizerDirectory: diarizer, audio: audio, cpuOnly: cpuOnly)).segments
+        }
     }
 }
 let transcriber = MeetingTranscriber(client: client, diarizeFarSide: diarizeFarSide)
@@ -150,6 +153,9 @@ exit(failures == 0 ? 0 : 2)
         transcript = try earlierTranscript(input.id, in: earlierTranscripts)
     } else {
         transcript = try await transcriber.transcribe(folder: folder)
+        if MeetingTranscriber.farSideFailed(folder: folder) {
+            print("\(input.id): WARNING the speaker model failed after retries; the far side kept AssemblyAI's voices")
+        }
     }
     seconds["transcribe"] = Date().timeIntervalSince(clock)
     meta.screenNames = ScreenSpeakerNames.byAddress(ScreenSpeakerNames.match(samples: samples, transcript: transcript),

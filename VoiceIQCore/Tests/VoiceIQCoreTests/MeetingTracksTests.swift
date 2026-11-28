@@ -139,4 +139,49 @@ final class MeetingTracksTests: XCTestCase {
         hour += (0..<30).map { TimedWord(text: "e", speaker: "far e", start: 1800 + Double($0), end: 1801 + Double($0)) }
         XCTAssertTrue(MeetingTranscriber.foldingStrayVoices(hour).contains { $0.speaker == "far e" })
     }
+
+    /// Core ML's failed prediction is tried again, the last time on the CPU;
+    /// any other error is not. A model that still fails marks the meeting and
+    /// keeps AssemblyAI's voices.
+    func testAFailedSpeakerModelPredictionIsRetriedThenMarked() async throws {
+        let audio = try call(mic: [0...0.5], system: [0.5...8])
+        let words = [word("hi", "you", 0.2), word("we", "s1", 1), word("shipped", "s1", 2), word("then", "s1", 6), word("Hafeez", "s1", 7)]
+        let segments = [LocalMeetingResult.Segment(speaker: 0, start: 0.5, end: 3), LocalMeetingResult.Segment(speaker: 1, start: 5, end: 8)]
+        let prediction = NSError(domain: "com.apple.CoreML", code: 0, userInfo: [
+            NSLocalizedDescriptionKey: "Unable to compute the asynchronous prediction using ML Program."])
+        final class Calls: @unchecked Sendable { var cpuOnly: [Bool] = [] }
+
+        func transcriber(failures: Int, error: Error, calls: Calls) -> MeetingTranscriber {
+            MeetingTranscriber(client: AssemblyAIClient(apiKey: { "test" }), diarizeFarSide: { _ in
+                try await FarSideSpeakers.retrying(delays: [0, 0], sleep: { _ in }) { cpuOnly in
+                    calls.cpuOnly.append(cpuOnly)
+                    if calls.cpuOnly.count <= failures { throw error }
+                    return segments
+                }
+            })
+        }
+
+        let recovered = Calls()
+        let split = try await transcriber(failures: 2, error: prediction, calls: recovered).splitFarSide(words, audio: audio, folder: root)
+        XCTAssertEqual(recovered.cpuOnly, [false, false, true])
+        XCTAssertEqual(split.map(\.speaker), ["you", "s1", "s1", "s2", "s2"])
+        XCTAssertFalse(MeetingTranscriber.farSideFailed(folder: root))
+
+        try FileManager.default.removeItem(at: root.appendingPathComponent(MeetingTranscriber.farSpeakersCacheName))
+        let failing = Calls()
+        let kept = try await transcriber(failures: 3, error: prediction, calls: failing).splitFarSide(words, audio: audio, folder: root)
+        XCTAssertEqual(failing.cpuOnly.count, 3)
+        XCTAssertEqual(kept.map(\.speaker), words.map(\.speaker))
+        XCTAssertTrue(MeetingTranscriber.farSideFailed(folder: root))
+
+        #if os(macOS)
+        // On the Mac the helper reports the failure as text, whatever wraps Core ML's error.
+        XCTAssertTrue(FarSideSpeakers.failedPrediction(LocalMeetingHelper.Failure.helper("processingFailed(\"segmentation\")")))
+        XCTAssertFalse(FarSideSpeakers.failedPrediction(LocalMeetingHelper.Failure.timedOut))
+        #endif
+        let other = Calls()
+        _ = try await transcriber(failures: 1, error: CocoaError(.fileReadCorruptFile), calls: other).splitFarSide(words, audio: audio, folder: root)
+        XCTAssertEqual(other.cpuOnly, [false])
+        XCTAssertTrue(MeetingTranscriber.farSideFailed(folder: root))
+    }
 }
