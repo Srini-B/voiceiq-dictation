@@ -39,48 +39,79 @@ struct HistoryDetail: View {
     /// unfinished dictation (`RetryQueue.canRetry`).
     private var canRetry: Bool { RetryQueue.canRetry(record) }
 
+    /// Written text or the transcript as heard, when they differ.
+    @State private var showsHeard = false
+
+    private var heard: String? {
+        guard let raw = record.rawTranscript, raw != record.displayText, !raw.isEmpty else { return nil }
+        return raw
+    }
+
+    /// A document page, as Voicenotes reads: the meta line, the text at
+    /// reading size, then the recording and the details as hairline rows.
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: Theme.Spacing.xl) {
-                if !record.displayText.isEmpty { transcriptCard }
-                if let raw = record.rawTranscript, raw != record.displayText {
-                    cardGroup("As heard") {
-                        Text(raw)
-                            .font(Theme.Fonts.body())
-                            .foregroundStyle(Theme.Colors.muted)
-                            .textSelection(.enabled)
+                VStack(alignment: .leading, spacing: Theme.Spacing.m) {
+                    Text(meta)
+                        .font(Theme.Fonts.footnote())
+                        .foregroundStyle(Theme.Colors.muted)
+                    if heard != nil {
+                        Picker("Version", selection: $showsHeard) {
+                            Text("Written").tag(false)
+                            Text("What you said").tag(true)
+                        }
+                        .pickerStyle(.segmented)
                     }
+                    Text(shownText)
+                        .font(Theme.Fonts.flex(18, weight: 400, style: .body))
+                        .lineSpacing(5)
+                        .foregroundStyle(record.displayText.isEmpty && !showsHeard ? Theme.Colors.muted : Theme.Colors.ink)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
+                actions
                 if canRetry { retryCard }
-                cardGroup("Audio") {
+                section("Recording") {
                     RecordingAudioControls(audio: .dictation(folder: record.folderURL, startedAt: record.startedAt))
                 }
-                cardGroup("Details") { details }
+                section("Details") { details }
             }
             .padding(.horizontal, Theme.Spacing.page)
             .padding(.vertical, Theme.Spacing.l)
             .readableWidth()
         }
         .themedBackground()
-        .navigationTitle("Dictation")
+        .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear(perform: loadCalls)
         .sensoryFeedback(.success, trigger: copied) { _, new in new }
+    }
+
+    private var shownText: String {
+        if showsHeard, let heard { return heard }
+        return record.displayText.isEmpty ? "No text" : record.displayText
+    }
+
+    private var meta: String {
+        var parts = [record.startedAt.formatted(date: .abbreviated, time: .shortened)]
+        if let app = AppNames.name(for: record) { parts.append(app) }
+        if let seconds = record.durationSeconds, seconds > 0 {
+            parts.append(Duration.seconds(seconds).formatted(.time(pattern: .minuteSecond)))
+        }
+        return parts.joined(separator: " · ")
     }
 
     private func loadCalls() {
         calls = UsageMeter.store?.records(forSession: record.id) ?? []
     }
 
-    private var transcriptCard: some View {
-        Card {
-            Text(record.displayText)
-                .font(Theme.Fonts.body())
-                .foregroundStyle(Theme.Colors.ink)
-                .textSelection(.enabled)
+    /// Copy is the one dark pill; Share sits beside it.
+    @ViewBuilder private var actions: some View {
+        if !record.displayText.isEmpty {
             HStack(spacing: Theme.Spacing.s) {
                 Button {
-                    UIPasteboard.general.string = record.displayText
+                    UIPasteboard.general.string = shownText
                     copied = true
                     Task {
                         try? await Task.sleep(for: .seconds(1.5))
@@ -90,9 +121,9 @@ struct HistoryDetail: View {
                     Label(copied ? "Copied" : "Copy", systemImage: copied ? "checkmark" : "doc.on.doc")
                         .contentTransition(.symbolEffect(.replace))
                 }
-                .buttonStyle(.compactSecondary)
+                .buttonStyle(PillButtonStyle(kind: .ink, compact: true))
                 .animation(.default, value: copied)
-                ShareLink(item: record.displayText) {
+                ShareLink(item: shownText) {
                     Label("Share", systemImage: "square.and.arrow.up")
                 }
                 .buttonStyle(.compactSecondary)
@@ -101,7 +132,7 @@ struct HistoryDetail: View {
     }
 
     private var retryCard: some View {
-        Card {
+        VStack(alignment: .leading, spacing: Theme.Spacing.s) {
             Button(retrying ? "Transcribing again…" : "Retry transcription") {
                 retrying = true
                 message = nil
@@ -113,7 +144,7 @@ struct HistoryDetail: View {
                     reload()
                 }
             }
-            .buttonStyle(.primaryPill)
+            .buttonStyle(.compactPrimary)
             .disabled(retrying)
             if let message {
                 Text(message).font(Theme.Fonts.footnote()).foregroundStyle(Theme.Colors.muted)
@@ -158,10 +189,14 @@ struct HistoryDetail: View {
 
     private var divider: some View { Divider().overlay(Theme.Colors.hairline) }
 
-    private func cardGroup<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.m) {
-            GroupLabel(text: title)
-            Card { content() }
+    /// A caption over hairline content, with no card around it.
+    private func section<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+            Text(title)
+                .font(Theme.Fonts.caption())
+                .foregroundStyle(Theme.Colors.muted)
+            Divider().overlay(Theme.Colors.hairline)
+            content()
         }
     }
 }

@@ -6,7 +6,7 @@ import VoiceIQCore
 /// Every call to action is a pill. Primary is filled brand blue; secondary is a
 /// quiet porcelain pill. Never a bare text link for a step's action.
 struct PillButtonStyle: ButtonStyle {
-    enum Kind { case primary, secondary, destructive }
+    enum Kind { case primary, secondary, destructive, ink }
     var kind: Kind = .primary
     var compact = false
     @Environment(\.isEnabled) private var isEnabled
@@ -31,6 +31,7 @@ struct PillButtonStyle: ButtonStyle {
         case .primary: return Theme.Colors.accent
         case .secondary: return Theme.Colors.porcelain
         case .destructive: return Theme.Colors.recording.opacity(0.12)
+        case .ink: return Theme.Colors.ink
         }
     }
 
@@ -39,6 +40,7 @@ struct PillButtonStyle: ButtonStyle {
         case .primary: return Theme.Colors.onAccent
         case .secondary: return Theme.Colors.ink
         case .destructive: return Theme.Colors.recording
+        case .ink: return Theme.Colors.canvas
         }
     }
 }
@@ -302,6 +304,12 @@ extension View {
     /// iPad windows don't stretch cards and lines edge to edge.
     func readableWidth(_ width: CGFloat = 720) -> some View {
         frame(maxWidth: width).frame(maxWidth: .infinity)
+    }
+
+    /// The light grey page behind grouped settings cards.
+    func groupedBackground() -> some View {
+        scrollContentBackground(.hidden)
+            .background(Theme.Colors.grouped.ignoresSafeArea())
     }
 
     /// The canvas behind every page, lists included.
