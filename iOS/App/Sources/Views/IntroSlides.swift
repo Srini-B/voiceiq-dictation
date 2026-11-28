@@ -150,7 +150,9 @@ private struct DictateAnywhereScene: View {
                     }
                     .font(Theme.Fonts.callout())
                     .frame(maxWidth: .infinity, minHeight: 22, alignment: .leading)
-                    .transition(.opacity)
+                    // Only fade in: the outgoing text leaves at once, so two
+                    // never show on top of each other.
+                    .transition(.asymmetric(insertion: .opacity, removal: .identity))
                     TalkKeyGlyph(size: 32, recording: phase == .listening)
                 }
                 .padding(10)
@@ -219,7 +221,7 @@ private struct MeetingScene: View {
                                 .frame(width: 44, alignment: .leading)
                             Text(lines[index].1).font(Theme.Fonts.callout()).foregroundStyle(Theme.Colors.ink)
                         }
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                        .transition(.opacity.combined(with: .offset(y: 6)))
                     }
                 }
             }

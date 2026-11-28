@@ -37,7 +37,7 @@ struct KeyboardSettingsWalkthrough: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.l) {
             screen
-                .frame(height: 216)
+                .frame(height: 176)
                 .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
                 .overlay(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous).strokeBorder(Theme.Colors.hairline, lineWidth: 1))
                 .accessibilityHidden(true)
@@ -117,10 +117,17 @@ struct GlobeSwitchDemo: View {
 
     var body: some View {
         let pressed = phase == .holding || phase == .menu || phase == .pickVoiceIQ
-        VStack(alignment: .leading, spacing: Theme.Spacing.s) {
-            KeyboardMenu(voiceIQSelected: phase == .pickVoiceIQ)
-                .opacity(phase == .menu || phase == .pickVoiceIQ ? 1 : 0)
-                .scaleEffect(phase == .menu || phase == .pickVoiceIQ ? 1 : 0.7, anchor: .bottomLeading)
+        let menuShown = phase == .menu || phase == .pickVoiceIQ
+        VStack(spacing: 6) {
+            // Blank keys, so the menu opens over the keyboard as it does in iOS.
+            ForEach([10, 9], id: \.self) { count in
+                HStack(spacing: 5) {
+                    ForEach(0..<count, id: \.self) { _ in
+                        RoundedRectangle(cornerRadius: 6, style: .continuous).fill(Theme.Colors.surface).frame(height: 34)
+                    }
+                }
+                .padding(.horizontal, count == 9 ? 16 : 0)
+            }
             HStack(spacing: Theme.Spacing.s) {
                 KeyCapShape(width: 56) {
                     Image(systemName: "globe").font(.system(size: 20, weight: .regular)).foregroundStyle(Theme.Colors.inkSecondary)
@@ -131,7 +138,7 @@ struct GlobeSwitchDemo: View {
                         .stroke(Theme.Colors.accent, style: StrokeStyle(lineWidth: 2, lineCap: .round))
                         .animation(phase == .holding ? .linear(duration: 0.7) : .default, value: pressed)
                 )
-                .overlay(TouchDot(visible: pressed, size: 52))
+                .overlay(TouchDot(visible: pressed && !menuShown, size: 52))
                 KeyCapShape(width: nil) {
                     Text(phase == .switched ? "VoiceiQ" : "space")
                         .font(Theme.Fonts.footnote())
@@ -146,9 +153,16 @@ struct GlobeSwitchDemo: View {
                     }
                 }
             }
-            .padding(Theme.Spacing.s)
-            .background(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous).fill(Theme.Colors.grouped))
-            .overlay(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous).strokeBorder(Theme.Colors.hairline, lineWidth: 1))
+        }
+        .padding(Theme.Spacing.s)
+        .background(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous).fill(Theme.Colors.grouped))
+        .overlay(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous).strokeBorder(Theme.Colors.hairline, lineWidth: 1))
+        .overlay(alignment: .bottomLeading) {
+            KeyboardMenu(voiceIQSelected: phase == .pickVoiceIQ)
+                .padding(.leading, Theme.Spacing.s)
+                .padding(.bottom, 44 + Theme.Spacing.s + 6)
+                .opacity(menuShown ? 1 : 0)
+                .scaleEffect(menuShown ? 1 : 0.7, anchor: .bottomLeading)
         }
         .loopingPhases($phase, still: .pickVoiceIQ)
         .accessibilityElement(children: .ignore)

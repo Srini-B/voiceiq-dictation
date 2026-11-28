@@ -56,7 +56,7 @@ struct OnboardingView: View {
         .task(id: AutoAdvance(step: step, done: step.isDone(setup.status), forward: forward)) {
             guard step.isDone(setup.status), forward else { return }
             completions += 1
-            try? await Task.sleep(for: .seconds(1.1))
+            try? await Task.sleep(for: .seconds(1.4))
             guard !Task.isCancelled else { return }
             advance()
         }
@@ -316,14 +316,6 @@ private struct SwitchKeyboardPage: View {
             StepTitle(title: Text("Hold \(Image(systemName: "globe")) to switch"),
                       detail: Text("Then pick VoiceiQ. Or tap \(Image(systemName: "globe")) until it comes up."))
             GlobeSwitchDemo()
-            TextField("Tap here, then hold the globe key", text: $text, axis: .vertical)
-                .font(Theme.Fonts.body())
-                .lineLimit(1...3)
-                .focused($focused)
-                .padding(Theme.Spacing.m)
-                .background(RoundedRectangle(cornerRadius: Theme.Radius.field, style: .continuous).fill(Theme.Colors.surface))
-                .overlay(RoundedRectangle(cornerRadius: Theme.Radius.field, style: .continuous)
-                    .strokeBorder(focused ? Theme.Colors.accent : Theme.Colors.hairline, lineWidth: focused ? 1.5 : 1))
             Card {
                 SetupCheckRow(symbol: "character.cursor.ibeam",
                               title: "Dictate where you type",
@@ -342,6 +334,15 @@ private struct SwitchKeyboardPage: View {
                     }
                 }
             }
+            // Last, so the checks above stay in view while the keyboard is up.
+            TextField("Tap here, then hold the globe key", text: $text, axis: .vertical)
+                .font(Theme.Fonts.body())
+                .lineLimit(1...3)
+                .focused($focused)
+                .padding(Theme.Spacing.m)
+                .background(RoundedRectangle(cornerRadius: Theme.Radius.field, style: .continuous).fill(Theme.Colors.surface))
+                .overlay(RoundedRectangle(cornerRadius: Theme.Radius.field, style: .continuous)
+                    .strokeBorder(focused ? Theme.Colors.accent : Theme.Colors.hairline, lineWidth: focused ? 1.5 : 1))
         }
         .onReceive(NotificationCenter.default.publisher(for: UITextInputMode.currentInputModeDidChangeNotification)) { _ in
             switchedAt = Date()
