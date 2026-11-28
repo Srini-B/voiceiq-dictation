@@ -13,6 +13,7 @@ sources, only the behaviour may be described and rebuilt in our own words
 |---|---|---|---|
 | [Hex](https://github.com/anomalyco/hex) | MIT | Mac dictation, meetings on two tracks, speaker names from the call window, iPhone keyboard, offline cleanup | `6e50ad92` (2026-11-28) |
 | [FluidVoice](https://github.com/altic-dev/FluidVoice) | GPL-3.0, clean room | Mac dictation and meeting notes on device | `413fafde` (2026-11-28) |
+| [Blurt](https://github.com/AssemblyAI/blurt) | MIT | AssemblyAI's own Mac dictation app: how it uses STT-3.7, streaming, keyterms and prompts, the LLM Gateway, latency and errors. Items touching the transcription request, the realtime session or the writer prompt go to the AssemblyAI owner thread | `264d0ccb` (2026-11-28) |
 | [Superwhisper changelog](https://superwhisper.com/changelog) | Closed, clean room | Mac and iPhone dictation, meetings, keyboard | macOS 3.4.0, iOS 3.5.1 (2026-11-28) |
 | [Wispr Flow what's new](https://wisprflow.ai/whats-new) | Closed, clean room | Dictation accuracy, Notetaker | 2026-11-24 entry (2026-11-28) |
 | [Aqua Voice changelog](https://aquavoice.com/changelog) | Closed, clean room | Dictation, Notetaker, MCP | 0.21.51, 2026-11-14 (2026-11-28) |

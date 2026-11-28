@@ -13,6 +13,7 @@ final class AssemblyAIClientTests: XCTestCase {
         let error = try await refusal(from: server)
         XCTAssertEqual(error, .noBalance)
         XCTAssertEqual(server.requests.first?.headers["authorization"], "test")
+        XCTAssertTrue(server.requests.first?.headers["user-agent"]?.hasPrefix("VoiceiQ/") == true)
     }
 
     /// The speech API's 400 once the free credit is spent reads as no
@@ -23,6 +24,19 @@ final class AssemblyAIClientTests: XCTestCase {
         defer { server.stop() }
         let error = try await refusal(from: server)
         XCTAssertEqual(error, .noBalance)
+    }
+
+    /// Only a status that means the key is wrong blocks onboarding; a moved
+    /// endpoint, a captive portal or a proxy lets it continue.
+    func testOnlyKeyErrorsRejectAKey() {
+        for status in [400, 401, 403, 422] {
+            XCTAssertEqual(AssemblyAIClient.keyCheck(status: status, body: Data(#"{"error":"Invalid API key"}"#.utf8)),
+                           .rejected("Invalid API key"), "\(status)")
+        }
+        for status in [404, 405, 407, 410, 429, 451, 500, 503] {
+            XCTAssertEqual(AssemblyAIClient.keyCheck(status: status, body: Data()), .unreachable, "\(status)")
+        }
+        XCTAssertEqual(AssemblyAIClient.keyCheck(status: 200, body: Data()), .valid)
     }
 
     private func refusal(from server: ScriptedServer) async throws -> TranscriptionError? {

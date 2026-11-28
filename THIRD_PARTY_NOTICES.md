@@ -349,6 +349,14 @@ SOFTWARE.
 - Source: [VoiceArenaAI/AMEND](https://github.com/VoiceArenaAI/AMEND),
   Apache-2.0.
 
+### Blurt (AssemblyAI key check, User-Agent)
+
+- `AssemblyAIClient.keyCheck` adapts which statuses reject an API key
+  (`Sources/AssemblyAI/APIKeyValidator.swift`), and `AssemblyAIClient.userAgent`
+  follows its User-Agent (`Sources/BlurtAssemblyAI/UserAgent.swift`).
+- Source: [AssemblyAI/blurt](https://github.com/AssemblyAI/blurt) at
+  `264d0ccb`, MIT License, Copyright (c) 2026 Alex Kroman.
+
 ## Behaviour studied, no code used
 
 ### FluidVoice (dictation and meetings behaviours)
