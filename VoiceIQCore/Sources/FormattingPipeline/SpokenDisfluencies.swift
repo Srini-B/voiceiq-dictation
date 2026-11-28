@@ -239,7 +239,11 @@ enum SpokenDisfluencies {
                 || goVerbs.contains(before) && !placeWords.contains(next.bare)
                 || next.word.first?.isNumber == true || numberWords.contains(next.bare)
                 || ["a", "an"].contains(next.bare) && after + 1 < tokens.count && numberWords.contains(tokens[after + 1].bare)
-                || next.word.first?.isUppercase == true && !isPronounI(next.bare) {
+                || next.word.first?.isUppercase == true && !isPronounI(next.bare)
+                // "such as" between a thing and an example: "a tool, like, a hammer"; "supplies, like, paper".
+                || index > 0 && !before.isEmpty && !functionWords.contains(before)
+                    && (["a", "an", "the", "some"].contains(next.bare)
+                        || !functionWords.contains(next.bare) && !placeWords.contains(next.bare)) {
                 return nil
             }
         } else if auxiliaries.contains(next.bare) || next.bare.hasSuffix("n't") || next.bare.hasSuffix("n’t") {

@@ -87,7 +87,8 @@ Fixed in the next commit, each with a kept case in `TidyTests`:
 - A comma-set "like" stays where it means something: quoting after a form of
   be, feel, look or sound, or after go when no place follows ("he was, like,
   I'm not going"); "about" before a number ("took, like, five hours"); "such
-  as" before a capitalized word ("cities, like, Paris").
+  as" before a capitalized word ("cities, like, Paris") or between a content
+  word and a noun phrase ("a tool, like, a hammer"; Codex).
 - "You know" stays before an auxiliary or a negation ("Wait, you know, don't
   you?"), and a sentence-opening "You know," only goes before a subject word
   (Codex: "You know, of course, that ...").

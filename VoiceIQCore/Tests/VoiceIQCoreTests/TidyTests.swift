@@ -102,7 +102,8 @@ final class TidyTests: XCTestCase {
                      // Quoting, "about", "such as", and a "you know" that is the question.
                      "And he was, like, I'm not going.", "She was, like, what are you doing?",
                      "It took, like, five hours.", "It took, like, 5 hours.", "It cost, like, thirteen dollars.",
-                     "It took, like, a hundred hours.", "We saw cities, like, Paris and Rome.",
+                     "It took, like, a hundred hours.", "Use a tool, like, a hammer.",
+                     "We need supplies, like, paper and pens.", "We saw cities, like, Paris and Rome.",
                      "I told Sam, like, Priya said no.", "Wait, you know, don't you?"] {
             XCTAssertEqual(tidy(kept), kept)
         }
