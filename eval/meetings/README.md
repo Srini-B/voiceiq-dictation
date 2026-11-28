@@ -34,7 +34,9 @@ ASSEMBLYAI_API_KEY=… swift run -c release MeetingsEval ~/evaldata ~/evalout
 `EVAL_NO_SPEAKER_MODEL=1` runs without the on-device speaker model.
 An account without an LLM Gateway balance gets transcripts but no notes,
 so M2–M4 score and M1 counts only names from the call window.
-The first run downloads the speaker model (21.6 MB) into the app's model folder.
+MeetingsEval keeps its own files in `~/Library/Application Support/VoiceiQ-MeetingsEval`,
+never in the app's data folder: the speaker model (21.6 MB, downloaded on the first run)
+and `transport.jsonl`, the log of every request attempt.
 
 ## On device, and Hex's offline pass
 
