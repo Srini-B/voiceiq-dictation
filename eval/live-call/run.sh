@@ -6,6 +6,10 @@
 #   OWNER_DEVICE="Device name" plays owner.wav into that output device, such as
 #   a loopback the owner's default input hears. Without it, afplay plays it to
 #   the default output.
+#   OUT=dir keeps the guest check's recording and results (default: the
+#   current directory). CHECK=warn goes on when a guest is not heard; by
+#   default the run stops there, since a probe without the far side measures
+#   nothing.
 set -euo pipefail
 
 room=$1 seconds=$2 owner=${3:A}; shift 3
@@ -51,9 +55,22 @@ join() { # profile-dir display-name video-parameter [extra chrome flags…]
 if [[ -n ${OWNER_DEVICE:-} ]]; then
   swiftc -O -suppress-warnings $here/playto.swift -o $scratch/playto
 fi
+# Before anyone speaks, each guest beeps at its own pitch, 3 s after the one
+# before, and a tap on the owner's Chrome must hear every pitch: in the first
+# runs the guests' sound never reached the owner, and the probe could not
+# tell. Every file opens 3 s after the previous one, so the same offset puts
+# the beeps 3 s apart in the call.
+out=${OUT:-$PWD}
+mkdir -p $out
+tone_at=$(( 3 * ${#guests} + 12 ))
+pitch() { print $(( 500 + 350 * ($1 - 1) )) }
+swiftc -O -suppress-warnings $here/taprecord.swift -o $scratch/taprecord
 for index in {1..${#guests}}; do
   pad=$(( 3 * (${#guests} - index + 1) + lead ))
-  ffmpeg -nostdin -loglevel error -i ${guests[index]} -af "adelay=${pad}000:all=1" -ar 48000 -ac 1 -c:a pcm_s16le $scratch/guest$index.wav
+  ffmpeg -nostdin -loglevel error -i ${guests[index]} \
+    -f lavfi -i "aevalsrc='0.4*sin(2*PI*$(pitch $index)*t)*lt(mod(t\,0.4)\,0.25)':d=2:s=48000" \
+    -filter_complex "[0]aresample=48000,adelay=${pad}000:all=1[g];[1]adelay=${tone_at}000:all=1[t];[g][t]amix=inputs=2:duration=longest:normalize=0" \
+    -ar 48000 -ac 1 -c:a pcm_s16le $scratch/guest$index.wav
 done
 for index in {1..${#guests}}; do
   join $scratch/guest$index "Guest $index" webcam --mute-audio --use-fake-device-for-media-stream \
@@ -64,7 +81,23 @@ done
 # A fresh profile has had no click, so Chrome would block the call's sound.
 join $scratch/owner "Owner" "webcam&videodevice=0" --autoplay-policy=no-user-gesture-required
 echo "$(date +%T) Owner joined. Accept VoiceiQ's offer or press Option-M within ${lead}s."
-sleep $lead
+sleep 8
+owner_pids=($(pgrep -f -- "--user-data-dir=$scratch/owner"))
+$scratch/taprecord $(( lead - 10 )) $out/guest-check.wav $owner_pids &
+sleep $(( lead - 8 ))
+wait $! || { echo "the guest check could not tap the owner's Chrome" >&2; exit 1; }
+heard=0
+for index in {1..${#guests}}; do
+  level=$(ffmpeg -nostdin -hide_banner -i $out/guest-check.wav \
+    -af "bandpass=f=$(pitch $index):width_type=h:w=60,volumedetect" -f null - 2>&1 | awk '/max_volume/ {print $5}')
+  level=${level:--999}
+  if (( level > -45 )); then result=heard; heard=$(( heard + 1 )); else result="NOT HEARD"; fi
+  echo "Guest $index ($(pitch $index) Hz): peak ${level} dBFS at the owner, $result" | tee -a $out/guest-check.txt
+done
+if (( heard < ${#guests} )); then
+  echo "$(date +%T) $(( ${#guests} - heard )) guest(s) not heard by the owner's Chrome: this run does not count." | tee -a $out/guest-check.txt
+  [[ ${CHECK:-stop} == warn ]] || exit 1
+fi
 echo "$(date +%T) Speech starts."
 if [[ -n ${OWNER_DEVICE:-} ]]; then
   $scratch/playto $OWNER_DEVICE $owner &

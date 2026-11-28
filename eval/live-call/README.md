@@ -58,9 +58,20 @@ The script:
 2. Opens the owner's window in the same room, using the real default
    microphone. VoiceiQ detects the call there. Accept the offer, or start
    recording with Option-M, within 30 s.
-3. Plays `owner.wav` into `OWNER_DEVICE`, or through `afplay` to the
+3. Checks that the owner hears every guest. Before anyone speaks, each
+   guest beeps at its own pitch (500 Hz, 850 Hz, 1200 Hz…, 3 s apart), and
+   `taprecord.swift` records the owner's Chrome through a Core Audio process
+   tap. A guest whose pitch peaks below −45 dBFS there was not heard. The run
+   stops, because a probe without the far side measures nothing; `CHECK=warn`
+   goes on anyway. The recording and the levels are written to
+   `$OUT/guest-check.wav` and `guest-check.txt`. The terminal or agent
+   running the script needs System Audio Recording permission for the tap.
+   Until 2026-11-28 no run checked this, and in every run so far the
+   guests' audio never reached the owner
+   (`activities/2026-11-28-silent-call-tap.md`).
+4. Plays `owner.wav` into `OWNER_DEVICE`, or through `afplay` to the
    default output.
-4. Leaves the call after `SECONDS` and closes every window.
+5. Leaves the call after `SECONDS` and closes every window.
 
 When the meeting has processed, run
 `eval/live-call/collect.sh <meeting-folder> <out-dir>`. It copies `mic.caf`,
