@@ -20,13 +20,17 @@ final class CallAppsTests: XCTestCase {
         XCTAssertEqual(CallApps.meetingName(match: "| Microsoft Teams", in: ["Weekly sync | Microsoft Teams"]), "Microsoft Teams")
     }
 
-    /// Sound alone is a call only on a call room, never on a chat site that
-    /// plays voice messages (Codex on #138), and every room is a listed page,
-    /// so `BrowserPages.read` can match it.
-    func testCallRoomsAreMeetingPagesAndChatSitesAreNot() {
-        XCTAssertTrue(CallApps.callRoomPages.isSubset(of: Set(CallApps.meetingPages)))
-        for chat in ["web.whatsapp.com", "web.telegram.org", "messenger.com", "teams.microsoft.com", "discord.com/channels"] {
-            XCTAssertFalse(CallApps.callRoomPages.contains(chat), chat)
+    /// Sound alone is a call only in a joined room: not on a site's home
+    /// page, nor on a chat site that plays voice messages (Codex on #138).
+    func testOnlyAJoinedCallRoomCountsOnSoundAlone() {
+        for room in ["https://meet.google.com/abc-defg-hij", "Meet - abc-defg-hij", "https://app.zoom.us/wc/81234567890/join",
+                     "https://vdo.ninja/?room=probe42&label=Owner", "https://meet.jit.si/WeeklySync"] {
+            XCTAssertTrue(CallApps.isCallRoom([room]), room)
+        }
+        for page in ["https://meet.google.com/", "https://meet.google.com/landing", "https://vdo.ninja/", "https://meet.jit.si/",
+                     "https://web.whatsapp.com/", "https://web.telegram.org/k/", "https://www.messenger.com/t/123",
+                     "https://teams.microsoft.com/v2/", "https://discord.com/channels/1/2", "Google Meet"] {
+            XCTAssertFalse(CallApps.isCallRoom([page]), page)
         }
     }
 

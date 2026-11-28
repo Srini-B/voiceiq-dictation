@@ -65,16 +65,21 @@ enum CallApps {
         "vc.feishu.cn", "meetings.dialpad.com", "app.dialpad.com", "8x8.vc/", "meetings.vonage.com", "app.vonage.com",
         "Meet - ", "| Microsoft Teams", "Zoom Meeting", "Huddle",
     ]
-    /// The `meetingPages` that are a call room and nothing else, so sound
-    /// alone there is a call: an owner who joined muted holds no mic. Chat
-    /// sites (WhatsApp, Telegram, Messenger, Teams, Discord) play voice
-    /// messages and videos, so they still need the mic (Codex on #138).
-    static let callRoomPages: Set<String> = [
-        "meet.google.com/", "zoom.us/j", "zoom.us/wc", "app.zoom.us/wc", "whereby.com/", "meet.jit.si/",
-        "app.slack.com/huddle", "v.ringcentral.com", "meet.goto.com", "app.chime.aws", "talky.io", "vdo.ninja",
-        "pop.com/j/", "vc.larksuite.com", "vc.feishu.cn", "meetings.dialpad.com", "8x8.vc/", "meetings.vonage.com",
-        "Meet - ", "Zoom Meeting",
+    /// Addresses and titles of a joined call room, where sound alone is a
+    /// call: an owner who joined muted holds no mic. Not a site's home page
+    /// ("meet.google.com/" with no code), and not chat sites (WhatsApp,
+    /// Telegram, Messenger, Teams, Discord) that play voice messages and
+    /// videos (Codex on #138).
+    nonisolated(unsafe) static let callRooms: [Regex<Substring>] = [
+        #/meet\.google\.com/[a-z]{3}-[a-z]{4}-[a-z]{3}/#, #/^Meet - [a-z]{3}-[a-z]{4}-[a-z]{3}/#,
+        #/zoom\.us/(?:j|wc)/\d/#, #/^Zoom Meeting/#, #/app\.slack\.com/huddle/#,
+        #/(?:whereby\.com|meet\.jit\.si|talky\.io|8x8\.vc)/[A-Za-z0-9_-]+/#, #/vdo\.ninja/.*[?&](?:room|view|push)=/#,
     ]
+
+    /// One of the window's title, document and web-area address is a joined call room.
+    static func isCallRoom(_ strings: [String]) -> Bool {
+        strings.contains { string in callRooms.contains { string.contains($0) } }
+    }
     /// What the offer calls a meeting found only by its window title.
     static let meetingTitles = [
         "Meet - ": "Google Meet", "| Microsoft Teams": "Microsoft Teams", "Zoom Meeting": "Zoom", "Huddle": "Slack huddle",

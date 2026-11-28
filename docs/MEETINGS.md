@@ -105,9 +105,11 @@ matches. Rules 1 to 3 win over rule 4, whatever order the apps come in:
 3. a browser (`CallApps.browsers`, which includes Dia, Comet, Orion, Aside,
    Safari Technology Preview and Edge Beta, Dev and Canary, or any app named
    Chrome or Chromium) captures the mic on a page in `CallApps.meetingPages`,
-   or plays sound on one of its call rooms (`CallApps.callRoomPages`: Meet,
-   Zoom, Whereby, Jitsi, Slack huddles, vdo.ninja and others, not chat sites
-   such as WhatsApp Web that play voice messages). Playing alone counts since
+   or plays sound while its front window shows a joined call room
+   (`CallApps.callRooms`: a Meet code, a Zoom meeting, a Whereby, Jitsi,
+   Talky or 8x8 room, a Slack huddle, a vdo.ninja room; not a home page, and
+   not chat sites such as WhatsApp Web that play voice messages). The sound is
+   the whole browser's, so a room in a back window does not count. Playing alone counts since
    2026-11-28: the live-call probe's owner joined vdo.ninja holding no mic, as
    a muted owner can, and got no offer. Pages are matched
    against window titles and the URL of each window's `AXWebArea` (searched 9

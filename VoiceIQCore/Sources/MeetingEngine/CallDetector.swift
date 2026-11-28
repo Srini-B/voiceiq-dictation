@@ -5,9 +5,9 @@ import CoreAudio
 
 /// Polls for an active call. A call is "active" when:
 /// - a known calling app is itself capturing the microphone;
-/// - a browser shows a meeting page and captures the microphone, or a call
-///   room page and plays sound: an owner who joined muted can hold no
-///   microphone at all;
+/// - a browser shows a meeting page and captures the microphone, or shows a
+///   joined call room in front and plays sound: an owner who joined muted
+///   can hold no microphone at all;
 /// - the system call daemons capture it (FaceTime, iPhone calls on the Mac);
 /// - a browser page both captures the microphone and plays sound: two-way
 ///   audio in a tab is what a call on a site not listed looks like.
@@ -258,8 +258,10 @@ import CoreAudio
             guard CallApps.browsers.contains(id) || name.localizedCaseInsensitiveContains("Chrome")
                     || name.localizedCaseInsensitiveContains("Chromium") else { continue }
             let page = BrowserPages.read(pid: app.processIdentifier)
-            // A call room that only plays counts: an owner who joined muted
-            // can hold no mic at all (the live-call probe's owner, 2026-11-28).
+            // A joined call room in front that only plays counts: an owner who
+            // joined muted can hold no mic at all (the live-call probe's owner,
+            // 2026-11-28). The sound is the whole browser's, so a room in a back
+            // window does not count (Codex on #138).
             if let match = page.meeting, capturing || page.room { return (.browser(bundleID: id, host: match), true) }
             if capturing, playing, !page.excluded, lookalike == nil { lookalike = .browser(bundleID: id, host: page.host ?? name) }
         }
@@ -320,7 +322,7 @@ enum BrowserPages {
         var host: String?
         /// The front page is one `CallApps.notCallPages` lists.
         var excluded = false
-        /// `meeting` matched one of `CallApps.callRoomPages`.
+        /// The front window shows a joined call room (`CallApps.isCallRoom`).
         var room = false
     }
 
@@ -332,13 +334,14 @@ enum BrowserPages {
         AXUIElementSetMessagingTimeout(app, 0.5)
         guard let windows = value(app, kAXWindowsAttribute) as? [AXUIElement] else { return Page() }
         var page = Page()
-        for window in windows {
+        for (index, window) in windows.enumerated() {
             var strings: [String] = []
             for key in [kAXTitleAttribute as String, kAXDocumentAttribute as String, "AXURL"] {
                 if let string = value(window, key) as? String { strings.append(string) }
             }
             let url = webAreaURL(window)
             if let url { strings.append(url.absoluteString) }
+            if index == 0 { page.room = CallApps.isCallRoom(strings) }
             // Windows come front to back: the first page with an address is the one in front.
             if page.host == nil, let host = url?.host() {
                 page.host = host.replacingOccurrences(of: "www.", with: "")
@@ -346,7 +349,6 @@ enum BrowserPages {
             }
             if let match = CallApps.meetingPages.first(where: { needle in strings.contains { $0.localizedCaseInsensitiveContains(needle) } }) {
                 page.meeting = CallApps.meetingName(match: match, in: strings)
-                page.room = CallApps.callRoomPages.contains(match)
                 return page
             }
         }
