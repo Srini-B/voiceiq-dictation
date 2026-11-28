@@ -65,7 +65,8 @@ struct HistoryDetail: View {
                     }
                     Text(shownText)
                         .font(Theme.Fonts.body())
-                        .lineSpacing(8)
+                        // 16 on a 24 line, as the spec says; the font's own line is 20.
+                        .lineSpacing(4)
                         .padding(.top, heard != nil ? Theme.Spacing.s : 0)
                         .foregroundStyle(record.displayText.isEmpty && !showsHeard ? Theme.Colors.muted : Theme.Colors.ink)
                         .textSelection(.enabled)
@@ -147,11 +148,18 @@ struct HistoryDetail: View {
             }
             .buttonStyle(.compactPrimary)
             .disabled(retrying)
-            if let message {
-                Text(message).font(Theme.Fonts.footnote()).foregroundStyle(Theme.Colors.muted)
+            // Why it failed, beside the action that fixes it; a retry's own
+            // message replaces it.
+            if let text = message ?? errorText {
+                Text(text)
+                    .font(Theme.Fonts.footnote())
+                    .foregroundStyle(message == nil ? Theme.Colors.pending : Theme.Colors.muted)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }
+
+    private var errorText: String? { record.errorMessage ?? record.errorCode }
 
     /// When, app and length are in the meta line above the text, so the
     /// rows start with what it doesn't say.
@@ -174,7 +182,7 @@ struct HistoryDetail: View {
                                  value: "\(call.model)\(count) · \(UsageView.money(call.costUSD, approximate: call.isEstimated))")
             }
         }
-        if let error = record.errorMessage ?? record.errorCode {
+        if !canRetry, let error = errorText {
             rows.append(DetailRow(label: "Error", value: error, wraps: true))
         }
         return rows

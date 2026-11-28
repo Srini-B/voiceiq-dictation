@@ -40,7 +40,7 @@ struct MeetingsView: View {
                                 .font(Theme.Fonts.caption())
                                 .foregroundStyle(Theme.Colors.muted)
                                 .textCase(nil)
-                                .listRowInsets(EdgeInsets(top: 0, leading: Theme.Spacing.page, bottom: 0, trailing: Theme.Spacing.page))
+                                .listRowInsets(EdgeInsets(top: Theme.Spacing.l, leading: Theme.Spacing.page, bottom: Theme.Spacing.s, trailing: Theme.Spacing.page))
                         }
                     }
                     if shown.isEmpty {
@@ -54,6 +54,7 @@ struct MeetingsView: View {
             // A plain hairline list on the canvas, as Home (docs/design/redesign-2026-11.md).
             .listStyle(.plain)
             .themedBackground()
+            .modifier(HardTopEdge())
             .navigationTitle("Notes")
             .toolbar {
                 // Also with no notes, as on the Mac: folders outlive their notes.
@@ -180,8 +181,9 @@ private struct RecorderCard: View {
     var body: some View {
         Group {
             switch meetings.phase {
-            case let .recording(_, since): Card(padding: Theme.Spacing.xl) { recording(since: since) }
-            // On the canvas, not in a card: cards are for Settings (docs/design/redesign-2026-11.md).
+            // On the canvas, not in a card, idle or recording: cards are for
+            // Settings (docs/design/redesign-2026-11.md).
+            case let .recording(_, since): recording(since: since).padding(.vertical, Theme.Spacing.xl)
             default: idle.padding(.vertical, Theme.Spacing.xl)
             }
         }
@@ -450,6 +452,7 @@ private struct MeetingDetail: View {
                         } label: { Label("Export", systemImage: "square.and.arrow.up") }
                     }
                 } label: { Label("More", systemImage: "ellipsis") }
+                .tint(Theme.Colors.inkSecondary)
             }
         }
         // Text scrolled under the bar no longer shows through beside the title.
@@ -593,7 +596,8 @@ private struct MeetingDetail: View {
                 .font(Theme.Fonts.caption())
                 .foregroundStyle(Theme.Colors.muted)
             Divider().overlay(Theme.Colors.hairline)
-            content()
+            // 16 on a 24 line, as the spec says; the font's own line is 20.
+            content().lineSpacing(4)
         }
     }
 
@@ -682,7 +686,7 @@ private struct MeetingDetail: View {
 
 /// iOS 26 fades scrolled text under a glass bar instead of drawing the bar's
 /// background; a hard edge keeps it out from under the title.
-private struct HardTopEdge: ViewModifier {
+struct HardTopEdge: ViewModifier {
     func body(content: Content) -> some View {
         if #available(iOS 26, *) { content.scrollEdgeEffectStyle(.hard, for: .top) } else { content }
     }
