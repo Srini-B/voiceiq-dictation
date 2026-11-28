@@ -531,7 +531,7 @@ final class KeyboardModel: ObservableObject {
     /// Types the transcript as an underlined draft while the writing model
     /// rewrites it (`SessionSnapshot.draft`), only in the input session Stop
     /// was tapped in, in a prose field of an app drafts were tried in
-    /// (`Delivery.draftHosts`), and says so
+    /// (`Delivery.takesDrafts`), and says so
     /// (`SharedStore.typedDraftID`). A draft still held from an earlier
     /// dictation takes it as its next part (`KeyboardDraft.add`). The written
     /// text then replaces it (`finishDraft`). Anywhere else, and over a
@@ -544,7 +544,7 @@ final class KeyboardModel: ObservableObject {
               offered.route(in: currentField(), handledID: nil, firstReturn: false) == .type(.sameSession)
         else { return }
         resolveHostIfMissing(now: true)
-        guard fieldTakesProse, let host = session?.host, Delivery.draftHosts.contains(host),
+        guard fieldTakesProse, let host = session?.host, Delivery.takesDrafts(host, trying: store.triesMoreDraftHosts),
               let typed = typeOrAdd(offered, documentID: documentID, into: proxy) else {
             skippedDraftID = offered.id
             KeyboardLog.note("[\(instanceTag)] draft not typed: not a prose field, drafts were not tried in this app, text is selected, or the transcript has a line break; the written text comes alone")

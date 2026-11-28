@@ -40,6 +40,7 @@ public final class SharedStore: @unchecked Sendable {
         static let levelBars = "bridge.levelBars"
         static let insertedDeliveryID = "bridge.insertedDeliveryID"
         static let typedDraftID = "bridge.typedDraftID"
+        static let triesMoreDraftHosts = "bridge.triesMoreDraftHosts"
         static let fieldVisits = "bridge.fieldVisits"
         static let keyboardSeenAt = "bridge.keyboardSeenAt"
         static let activityRequest = "bridge.activityRequest"
@@ -205,6 +206,13 @@ public final class SharedStore: @unchecked Sendable {
     }
 
     // MARK: - App writes
+
+    /// Settings › Advanced › Try drafts in Notes, Mail and WhatsApp
+    /// (`Delivery.trialDraftHosts`). Off by default. Writer: app.
+    public var triesMoreDraftHosts: Bool {
+        get { defaults.bool(forKey: Key.triesMoreDraftHosts) }
+        set { defaults.set(newValue, forKey: Key.triesMoreDraftHosts) }
+    }
 
     /// The newest command the app has acted on. Writer: app.
     public var handledCommandID: UUID? {

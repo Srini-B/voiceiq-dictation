@@ -166,6 +166,20 @@ public struct Delivery: Codable, Equatable, Sendable, Identifiable {
         "com.apple.MobileSMS", "com.apple.reminders", "com.apple.MobileAddressBook", "com.apple.mobilecal",
     ]
 
+    /// Apps that can't run in the Simulator, so their fields were never
+    /// measured: Notes, Mail and WhatsApp. They get drafts only while
+    /// Settings › Advanced › Try drafts in Notes, Mail and WhatsApp is on
+    /// (`SharedStore.triesMoreDraftHosts`), for a run on a device.
+    public static let trialDraftHosts: Set<String> = [
+        "com.apple.mobilenotes", "com.apple.mobilemail", "net.whatsapp.WhatsApp",
+    ]
+
+    /// Whether drafts go into `host`'s fields: `draftHosts`, and
+    /// `trialDraftHosts` while `trying`.
+    public static func takesDrafts(_ host: String, trying: Bool) -> Bool {
+        draftHosts.contains(host) || (trying && trialDraftHosts.contains(host))
+    }
+
     /// Whether a keyboard may still type this draft.
     public func isFreshDraft(now: Date = Date()) -> Bool {
         let age = now.timeIntervalSince(createdAt)

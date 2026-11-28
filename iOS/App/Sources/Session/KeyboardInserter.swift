@@ -54,7 +54,7 @@ final class KeyboardInserter: TextInserting {
     static let offersDrafts = true
 
     /// A draft when the dictation goes back to a keyboard's input session in
-    /// an app the swap was tried in (`Delivery.draftHosts`). Elsewhere no
+    /// an app the swap was tried in (`Delivery.takesDrafts`). Elsewhere no
     /// draft is offered, so the written text is not held back by the wait
     /// for one, and is typed once, as before drafts. Whether a keyboard is
     /// still there to type it is the keyboard's call
@@ -62,7 +62,8 @@ final class KeyboardInserter: TextInserting {
     /// is typed as a plain result, as before.
     func draft(context: DictationContext) async -> TextDraft? {
         guard Self.offersDrafts, let destination = destination?(), destination.documentID != nil,
-              let host = destination.hostBundleID, Delivery.draftHosts.contains(host) else { return nil }
+              let host = destination.hostBundleID,
+              Delivery.takesDrafts(host, trying: SharedStore.shared.triesMoreDraftHosts) else { return nil }
         return KeyboardTextDraft(inserter: self)
     }
 }
