@@ -89,13 +89,13 @@ public final class DictionarySync {
     /// Key-value storage allows 1 MB per value; stay under it.
     static let maxBytes = 900_000
 
-    private var started = false
+    private(set) var started = false
     private var reconciling = false
 
     private init() {}
 
     public func start() {
-        guard !started else { return }
+        guard !started, !CloudSync.isDisabledForTests else { return }
         started = true
         let store = NSUbiquitousKeyValueStore.default
         NotificationCenter.default.addObserver(

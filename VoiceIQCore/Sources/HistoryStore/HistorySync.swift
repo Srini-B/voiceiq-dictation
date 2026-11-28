@@ -38,7 +38,7 @@ public actor HistorySync {
 
     /// `deviceName` labels this device's dictations on the other one.
     public func start(deviceName: String) {
-        guard engine == nil else { return }
+        guard engine == nil, !CloudSync.isDisabledForTests else { return }
         guard Self.hasContainerEntitlement else {
             Log.history.info("history sync: no iCloud container entitlement, History stays on this device")
             return

@@ -142,3 +142,30 @@ Keep the files outside ~/Documents, ~/Desktop and ~/Downloads, for example in
 /Users/Shared. The files are opened on the main thread, and opening one in a
 privacy-protected folder can wait on a permission prompt and hang the app at
 "warming".
+
+## Turning iCloud sync off for tests
+
+A test run that creates dictations, meetings or Dictionary terms on a
+signed build would otherwise send them to the owner's iCloud: meeting and
+History sync have no setting. Set this default before the run:
+
+```sh
+defaults write io.blue.voiceiq DebugDisableCloudSync -bool true
+# restart VoiceiQ; nothing syncs
+defaults delete io.blue.voiceiq DebugDisableCloudSync
+# restart VoiceiQ; sync is back
+```
+
+While it is set, none of the five syncs starts: meetings and History
+(CloudKit), and the Dictionary, writing rules and meeting folders (iCloud
+key-value storage). Nothing is uploaded or downloaded, so other devices' changes
+do not arrive either. The app reads the default once, at launch
+(`CloudSync.isDisabledForTests`), logs `iCloud sync off: DebugDisableCloudSync
+is set` and shows "Sync off (test)" under the status line of the Mac menu and
+under the version in the iPhone's Settings, so it cannot stay on unnoticed. On
+the iPhone the default is set from Xcode or a debug build; there is no
+user-facing switch.
+
+Changes made while it is set stay on the device, and they upload once sync is
+back on. So delete a test's dictations and meetings before deleting the
+default.

@@ -18,12 +18,12 @@ public final class MeetingFolderSync {
     static let maxBytes = 64_000
 
     private let store = MeetingStore()
-    private var started = false
+    private(set) var started = false
 
     private init() {}
 
     public func start() {
-        guard !started else { return }
+        guard !started, !CloudSync.isDisabledForTests else { return }
         started = true
         let cloud = NSUbiquitousKeyValueStore.default
         NotificationCenter.default.addObserver(
