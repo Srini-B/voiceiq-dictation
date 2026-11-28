@@ -111,20 +111,21 @@ final class MeetingRenameTests: XCTestCase {
         let call = MeetingMeta(id: MeetingID(), startedAt: Date(), source: .app(bundleID: "us.zoom.xos", name: "zoom.us"),
                                durationSeconds: 90, status: .done)
         let silent = try writeSystemTrack(seconds: 90)
-        XCTAssertTrue(SilentSystemAudio.check(call, folder: silent))
+        XCTAssertEqual(SilentSystemAudio.check(call, folder: silent), .zeros)
 
         var byHand = call
         byHand.source = nil
-        XCTAssertFalse(SilentSystemAudio.check(byHand, folder: silent))
+        XCTAssertNil(SilentSystemAudio.check(byHand, folder: silent))
         var short = call
         short.durationSeconds = 45
-        XCTAssertFalse(SilentSystemAudio.check(short, folder: silent))
-        XCTAssertFalse(SilentSystemAudio.check(call, folder: root.appendingPathComponent("no-audio")))
+        XCTAssertNil(SilentSystemAudio.check(short, folder: silent))
+        XCTAssertNil(SilentSystemAudio.check(call, folder: root.appendingPathComponent("no-audio")))
 
-        // Noise near −84 dBFS, as m2 and m3 of the live-call probe wrote, heard nobody.
+        // Noise near −80 dBFS, as m2 and m3 of the live-call probe wrote, heard nobody, with the permission granted.
         let noise = try writeSystemTrack(seconds: 90, soundAt: 80 * 16_000, level: 3)
-        XCTAssertTrue(SilentSystemAudio.check(call, folder: noise))
-        let heard = try writeSystemTrack(seconds: 90, soundAt: 80 * 16_000, level: 1_000)
-        XCTAssertFalse(SilentSystemAudio.check(call, folder: heard))
+        XCTAssertEqual(SilentSystemAudio.check(call, folder: noise), .quiet)
+        // A Meet call's speech peaked near −60 dBFS (TrackAudio.gain): heard.
+        let meet = try writeSystemTrack(seconds: 90, soundAt: 80 * 16_000, level: 32)
+        XCTAssertNil(SilentSystemAudio.check(call, folder: meet))
     }
 }

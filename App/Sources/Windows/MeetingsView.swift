@@ -19,7 +19,7 @@ struct MeetingsPane: View {
     @State private var renaming = false
     @State private var titleDraft = ""
     /// The selected meeting is a call whose other side was never heard (`SilentSystemAudio`).
-    @State private var unheardCall: MeetingID?
+    @State private var unheardCall: (id: MeetingID, why: SilentSystemAudio.Unheard)?
     @State private var exported: ExportResult?
     @StateObject private var folders = MeetingFolderModel()
     /// The row under the pointer, which shows its folder button.
@@ -223,7 +223,7 @@ struct MeetingsPane: View {
                     .background(RoundedRectangle(cornerRadius: VoiceIQUI.Radius.medium).fill(tint.opacity(0.1)))
                     .padding([.horizontal, .top], VoiceIQUI.Spacing.l)
             }
-            if unheardCall == meeting.id { unheardWarning }
+            if let unheardCall, unheardCall.id == meeting.id { unheardWarning(unheardCall.why) }
             if meeting.speakersUnsplit == true, meeting.status == .done, !engine.isBusy(meeting.id) { unsplitWarning(meeting) }
             HStack(spacing: 0) {
                 if wide || !transcriptShown {
@@ -469,15 +469,21 @@ struct MeetingsPane: View {
         .padding([.horizontal, .top], VoiceIQUI.Spacing.l)
     }
 
-    private var unheardWarning: some View {
+    /// Only an all-zero track points to the permission: a quiet one was
+    /// recorded with it (the live-call probe's m2 and m3).
+    private func unheardWarning(_ why: SilentSystemAudio.Unheard) -> some View {
         HStack(spacing: VoiceIQUI.Spacing.s) {
-            Label("VoiceiQ couldn't hear the other people on this call. Check System Settings > Privacy & Security > Screen & System Audio Recording.",
+            Label(why == .zeros
+                  ? "VoiceiQ couldn't hear the other people on this call. Check System Settings > Privacy & Security > Screen & System Audio Recording."
+                  : "VoiceiQ couldn't hear the other people on this call. They may have been muted the whole time, or the call's volume was too low to record.",
                   systemImage: "speaker.slash")
                 .font(VoiceIQUI.TypeScale.body())
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .fixedSize(horizontal: false, vertical: true)
-            Button("Open System Settings") {
-                NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")!)
+            if why == .zeros {
+                Button("Open System Settings") {
+                    NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")!)
+                }
             }
         }
         .padding(VoiceIQUI.Spacing.m)
@@ -490,7 +496,7 @@ struct MeetingsPane: View {
         unheardCall = nil
         guard let meeting = selected, let folder = store.folder(for: meeting.id) else { return }
         let unheard = await Task.detached(priority: .utility) { SilentSystemAudio.check(meeting, folder: folder) }.value
-        if !Task.isCancelled, unheard { unheardCall = meeting.id }
+        if !Task.isCancelled, let unheard { unheardCall = (meeting.id, unheard) }
     }
 
     /// The same Markdown as the saved file, on the clipboard.

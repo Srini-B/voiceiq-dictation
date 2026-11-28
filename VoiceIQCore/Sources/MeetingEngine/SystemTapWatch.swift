@@ -9,11 +9,12 @@ public enum SystemTapWatch {
     /// idle call is legitimately silent.
     public static let silenceLimit: TimeInterval = 15
 
-    /// The loudest 16-bit sample of a track that carries nothing: −60 dBFS.
+    /// The loudest 16-bit sample of a track that carries nothing: about −72 dBFS.
     /// MEASURED 2026-11-28: the live-call probe's m2 and m3 system tracks
     /// heard none of the call and peaked near −84 dBFS, not exact zeros, so
-    /// a watch for zeros alone never fired. Speech on a call peaks far above.
-    public static let quietPeak: Int16 = 32
+    /// a watch for zeros alone never fired. Not −60 dBFS: a Meet call's speech
+    /// peaked near there (`TrackAudio.gain`, 2026-09-27).
+    public static let quietPeak: Int16 = 8
 
     public static func isQuiet(_ samples: UnsafeBufferPointer<Int16>) -> Bool {
         !samples.contains { $0 > quietPeak || $0 < -quietPeak }
@@ -27,12 +28,16 @@ public enum SystemTapWatch {
         private var zeros: TimeInterval = 0
         /// Rebuilds since the track last carried sound. Each one waits four
         /// times longer (15, 60, then 240 s), so a far side that went quiet
-        /// while its call app plays exact zeros is not rebuilt every 15 s.
+        /// while its call app plays silence is not rebuilt every 15 s.
         private var rebuilds = 0
+        /// The track has carried sound: from then on a quiet stretch is more
+        /// likely the owner's long turn than a lost tap, so the wait starts
+        /// at 60 s, and a rebuild seldom lands on the far side's reply (Neon on #137).
+        private var heard = false
 
-        /// How long the zeros must last before the next check.
+        /// How long the quiet must last before the next check.
         public var limit: TimeInterval {
-            SystemTapWatch.silenceLimit * Double(1 << (2 * min(rebuilds, 2)))
+            SystemTapWatch.silenceLimit * (heard ? 4 : 1) * Double(1 << (2 * min(rebuilds, 2)))
         }
 
         public init() {}
@@ -41,7 +46,7 @@ public enum SystemTapWatch {
         /// for another `limit`, so the caller can check again later when the
         /// output was idle the first time.
         public mutating func hear(seconds: TimeInterval, quiet: Bool) -> Bool {
-            guard quiet else { zeros = 0; rebuilds = 0; return false }
+            guard quiet else { zeros = 0; rebuilds = 0; heard = true; return false }
             zeros += seconds
             guard zeros >= limit else { return false }
             zeros = 0

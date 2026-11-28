@@ -9,8 +9,7 @@ import Foundation
 /// so music, other apps, and notifications stay out of the meeting. Without
 /// them (a recording started by hand with no call found) it taps everything.
 ///
-/// A tap hears the output that was default when it was made. When the
-/// default output changes (headphones in or out) or the track stays quiet
+/// When the default output changes (headphones in or out) or the track stays quiet
 /// (`SystemTapWatch.quietPeak`) while the call plays, a new tap is started before the old one stops,
 /// into the same file, with the time between them written as silence.
 /// Adapted from Hex (anomalyco/hex `5704885d`, `4a3e9d49`).
