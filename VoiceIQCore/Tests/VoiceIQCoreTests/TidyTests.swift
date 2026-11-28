@@ -258,6 +258,8 @@ final class TidyTests: XCTestCase {
             ("Send it to billing at the rate company dot com.", "Send it to billing@company.com."),
             ("Send it to 123 at the rate gmail dot com.", "Send it to 123@gmail.com."),
             ("Tell priya at the rate gmail dot com, thanks.", "Tell priya@gmail.com, thanks."),
+            ("My email will be priya at the rate gmail dot com.", "My email will be priya@gmail.com."),
+            ("Contact me via priya at the rate gmail dot com.", "Contact me via priya@gmail.com."),
             ("Send it to priya at the rate gmail dot com or ravi at sign yahoo dot com.", "Send it to priya@gmail.com or ravi@yahoo.com."),
             // A list of addresses ends where its last one does.
             ("Send it to priya at the rate gmail dot com and ravi at the rate yahoo dot com.",

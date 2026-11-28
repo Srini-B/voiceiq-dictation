@@ -140,7 +140,9 @@ enum SpokenAddresses {
     /// Words that introduce an address only after one of those ("My email is
     /// priya…", "Write to priya…") or where the address ends the sentence:
     /// "The market is moving at the rate google dot com, thanks." stays.
-    private static let weakIntroductions: Set<String> = ["is", "was", "to", "from", "at", "on", "in", "try", "use", "add"]
+    private static let weakIntroductions: Set<String> = [
+        "is", "was", "are", "be", "to", "from", "at", "on", "in", "via", "as", "with", "for", "try", "use", "add",
+    ]
 
     /// How the mailbox starting at `start` is introduced for "at the rate", or
     /// nil: strongly when it opens the sentence or a clause, follows a strong
@@ -161,7 +163,7 @@ enum SpokenAddresses {
             // "It is growing at the rate…", "went from 10 at the rate…": a verb or a number, not a
             // mailbox. Not "-ed" ("Ahmed"), a short "-ing" ("Ming"), or after "to" ("to billing", "to 123").
             let mailbox = bare(tokens[start].word)
-            let progressive = ["is", "was"].contains(word) || contracted != nil
+            let progressive = ["is", "was", "are"].contains(word) || contracted != nil
             let verbOrNumber = (progressive && mailbox.hasSuffix("ing") && mailbox.count >= 6)
                 || ((progressive || word == "from") && mailbox.allSatisfy(\.isNumber))
             return verbOrNumber ? nil : .weak
