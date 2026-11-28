@@ -99,3 +99,36 @@ Numbers use tabular figures.
 | Permission row | An icon, a title named for the benefit, and the reason it is needed. On the right is Allow, then Waiting…, then ✓ Allowed. |
 | Key cap | A small fill rectangle for a shortcut. |
 | Empty state | One line of muted text, with no illustration. |
+
+## Mac first-run permissions
+
+The Mac setup asks for every permission on one screen, a checklist card
+(surface, radius 16, hairline ring, hairline rules between rows). It replaces
+the separate microphone and Accessibility screens.
+
+| Row | Required | Why VoiceiQ needs it |
+|---|---|---|
+| Microphone | Yes | Hears you while you dictate. |
+| Accessibility (the list's name on newer macOS) | Yes | Watches for the dictation key and types where the cursor is. |
+| Screen Recording | No | Reads names and words on screen so they are spelled right. |
+
+- **Row.** A 34-point fill tile with an outline symbol in ink, the
+  permission's name (headline), and a one-line benefit in muted.
+- **States, on the right.** Allow (an accent capsule; a fill capsule for an
+  optional row), then a small spinner with Waiting… once asked, then
+  ✓ Allowed in success. Clicking Waiting… opens the pane again.
+- **Detection.** Every grant is read twice a second while the screen is up
+  and again whenever VoiceiQ comes to the front, so rows turn green without
+  a click. After 10 seconds of waiting, or when macOS applies a grant only
+  after a restart, a line offers Restart VoiceiQ.
+- **Guide.** Opening a System Settings pane also shows a small floating card
+  at the right edge of the screen that never takes focus. It says what to
+  do there ("Turn on VoiceiQ" for the microphone, "Drag VoiceiQ into the
+  list, then turn it on" for the others), and its app icon can be dragged
+  into the list. It closes once that permission is granted.
+- **Microphone check.** Once the microphone is allowed, a line under its row
+  says whether sound is arriving and offers the input picker.
+- **Footer.** "The first two are required" in muted, then
+  Continue, which stays disabled until both are granted.
+- **Not asked.** Input Monitoring. The key is read through active event
+  taps, which macOS grants under Accessibility.

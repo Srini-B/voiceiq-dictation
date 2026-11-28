@@ -4,7 +4,7 @@ import AVFoundation
 import SwiftUI
 import VoiceIQCore
 
-/// First-launch onboarding: welcome → key → mic → accessibility → Globe key →
+/// First-launch onboarding: welcome → key → permissions → Globe key → how to →
 /// try it → done. Warm, plain-spoken, one screen at a time (experience spec §5).
 @MainActor
 final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
@@ -32,8 +32,8 @@ final class OnboardingWindowController: NSWindowController, NSWindowDelegate {
         )
         window.setContentSize(NSSize(width: 640, height: 560))
         window.center()
-        // Setup sends people into System Settings twice (microphone, then
-        // accessibility), and every trip steals focus. VoiceiQ is an accessory app,
+        // Setup sends people into System Settings for each permission, and
+        // every trip steals focus. VoiceiQ is an accessory app,
         // so it has no Dock icon and no Cmd-Tab entry — once this window fell
         // behind System Settings there was NO way back to it except finding the
         // menu bar icon, and users reported exactly that. Floating keeps it in
@@ -62,8 +62,10 @@ private struct OnboardingFlow: View {
     let onFinished: () -> Void
     var latestRecord: () -> DictationRecord? = { nil }
 
+    /// The raw value is the index in voiceiq://onboarding/<n>: 0 welcome,
+    /// 1 key, 2 permissions, 3 Globe key, 4 how to, 5 try it, 6 done.
     enum Screen: Int, CaseIterable {
-        case welcome, apiKey, microphone, accessibility, globeKey, howTo, tryIt, done
+        case welcome, apiKey, permissions, globeKey, howTo, tryIt, done
     }
 
     @State private var screen: Screen = .welcome
@@ -89,7 +91,7 @@ private struct OnboardingFlow: View {
                 .padding(.bottom, VoiceIQUI.Spacing.l)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(VoiceIQUI.Colors.windowBackground)
+        .background(VQ.Colors.canvas)
         .overlay(alignment: .topLeading) {
             if !backStack.isEmpty {
                 Button(action: goBack) {
@@ -122,8 +124,7 @@ private struct OnboardingFlow: View {
         switch screen {
         case .welcome: WelcomeScreen(onNext: { advance() })
         case .apiKey: APIKeyScreen(onNext: { advance() })
-        case .microphone: MicScreen(onNext: { advance() })
-        case .accessibility: AccessibilityScreen(onNext: { advance() })
+        case .permissions: PermissionsScreen(onNext: { advance() })
         case .globeKey: GlobeKeyScreen(onNext: { advance() })
         case .howTo: HowToScreen(onNext: { advance() })
         case .tryIt: TryItScreen(onNext: { advance() }, latestRecord: latestRecord)
@@ -181,7 +182,7 @@ private struct ScreenScaffold<Content: View>: View {
                 .multilineTextAlignment(.center)
             Text(body_)
                 .font(VoiceIQUI.TypeScale.body(grad: scheme == .dark ? 25 : 0))
-                .foregroundStyle(VoiceIQUI.Colors.onSurfaceVariant)
+                .foregroundStyle(VQ.Colors.muted)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
             content
@@ -214,39 +215,6 @@ private struct PrimaryButton: View {
         }
         .buttonStyle(.plain)
         .disabled(disabled)
-    }
-}
-
-private struct PermissionCard: View {
-    let icon: String
-    let title: String
-    let granted: Bool
-    var actionTitle = "Grant"
-    let action: () -> Void
-
-    var body: some View {
-        HStack(spacing: VoiceIQUI.Spacing.s) {
-            Image(systemName: icon)
-                .font(.system(size: 18))
-                .foregroundStyle(granted ? VoiceIQUI.Colors.success : VoiceIQUI.Colors.primary)
-                .frame(width: 28)
-            Text(title)
-                .font(VoiceIQUI.TypeScale.body())
-                .foregroundStyle(VoiceIQUI.Colors.onSurface)
-            Spacer()
-            if granted {
-                Image(systemName: "checkmark.circle.fill")
-                    .foregroundStyle(VoiceIQUI.Colors.success)
-                    .transition(.scale.combined(with: .opacity))
-            } else {
-                Button(actionTitle, action: action)
-                    .buttonStyle(.bordered)
-            }
-        }
-        .padding(VoiceIQUI.Spacing.m)
-        .background(RoundedRectangle(cornerRadius: VoiceIQUI.Radius.large).fill(VoiceIQUI.Colors.surface))
-        .overlay(RoundedRectangle(cornerRadius: VoiceIQUI.Radius.large).strokeBorder(VoiceIQUI.Colors.outlineVariant.opacity(0.3), lineWidth: 1))
-        .animation(VoiceIQMotion.expressiveFastSpatial, value: granted)
     }
 }
 
@@ -471,15 +439,288 @@ private struct APIKeyScreen: View {
     }
 }
 
-private struct MicScreen: View {
+/// Every permission dictation uses, on one checklist. Each row asks, opens the
+/// right System Settings pane with a floating guide beside it, and flips to
+/// Allowed by itself: read twice a second while the screen is up and again
+/// whenever VoiceiQ comes back to the front.
+///
+/// Input Monitoring is deliberately not on the list. The dictation key and the
+/// shortcuts are read through active event taps (`CGEvent.tapCreate` with
+/// `.defaultTap`), which macOS gates on Accessibility; nothing in VoiceiQ uses
+/// a listen-only tap or IOHID, the APIs that need Input Monitoring.
+private struct PermissionsScreen: View {
     let onNext: () -> Void
-    @State private var granted = AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
+    @State private var microphone = AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
+    @State private var accessibility = KeystrokeAccess.isReady
+    @State private var screenRecording = CGPreflightScreenCaptureAccess()
+    /// Asked for and not granted yet: the row shows a spinner.
+    @State private var waiting: Set<SetupPermission> = []
+    @State private var pollTimer: Timer?
+    @State private var slowGrantTimer: Timer?
+    @State private var slowGrant = false
+
+    /// On 27.3+ with Accessibility on, the posting grant only reads true
+    /// after a restart, so waiting would only hide the way forward. State,
+    /// refreshed by the poll: SwiftUI does not observe `AXIsProcessTrusted()`.
+    @State private var needsRestart = Self.restartNeeded
+
+    private static var restartNeeded: Bool {
+        !KeystrokeAccess.isReady && AXIsProcessTrusted() && KeystrokeAccess.isSplit
+    }
+
+    var body: some View {
+        ScreenScaffold("Give VoiceiQ access.", "Each switch lives in System Settings. Rows turn green by themselves as you allow them.") {
+            VStack(spacing: VoiceIQUI.Spacing.m) {
+                VStack(spacing: 0) {
+                    PermissionRow(icon: "mic", title: "Microphone",
+                                  benefit: "Hears you while you dictate",
+                                  state: state(of: .microphone)) { allow(.microphone) }
+                    if microphone {
+                        // The old microphone screen's check: is sound actually
+                        // arriving from the selected input?
+                        MicCheck()
+                            .padding(.leading, PermissionRow.textInset)
+                            .padding(.trailing, VQ.Spacing.m)
+                            .padding(.bottom, VQ.Spacing.s)
+                    }
+                    hairline
+                    PermissionRow(icon: "keyboard", title: KeystrokeAccess.listName,
+                                  benefit: "Watches for your key and types where your cursor is",
+                                  state: state(of: .accessibility)) { allow(.accessibility) }
+                    hairline
+                    PermissionRow(icon: "rectangle.dashed.badge.record", title: "Screen Recording",
+                                  benefit: "Optional. Reads names on screen for spelling",
+                                  state: state(of: .screenRecording), optional: true) { allow(.screenRecording) }
+                }
+                .background(RoundedRectangle(cornerRadius: VQ.Radius.card).fill(VQ.Colors.surface))
+                .overlay(RoundedRectangle(cornerRadius: VQ.Radius.card).strokeBorder(VQ.Colors.hairline, lineWidth: 1))
+                .animation(VoiceIQMotion.expressiveFastSpatial, value: waiting)
+                .animation(VoiceIQMotion.expressiveFastSpatial, value: [microphone, accessibility, screenRecording])
+
+                if needsRestart || (slowGrant && (waiting.contains(.accessibility) || waiting.contains(.screenRecording))) {
+                    HStack(spacing: VoiceIQUI.Spacing.xs) {
+                        Text(needsRestart
+                             ? "Allowed it? macOS applies it after a restart."
+                             : "Allowed it and it doesn't turn green? Quit and reopen VoiceiQ.")
+                            .font(VoiceIQUI.TypeScale.labelSmall())
+                            .foregroundStyle(VQ.Colors.muted)
+                        Button("Restart VoiceiQ") { AppRestart.now() }
+                            .controlSize(.small)
+                    }
+                }
+
+                HStack(spacing: VoiceIQUI.Spacing.s) {
+                    Text("The first two are required")
+                        .font(GTFont.flex(VQ.TypeScale.meta.size, weight: VQ.TypeScale.meta.weight))
+                        .foregroundStyle(VQ.Colors.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: VoiceIQUI.Spacing.s)
+                    // The microphone was always skippable (the menu bar keeps
+                    // saying what is missing); typing at the cursor was not.
+                    if accessibility && !microphone {
+                        Button("Set up later", action: onNext)
+                            .buttonStyle(.plain)
+                            .font(VoiceIQUI.TypeScale.labelSmall())
+                            .foregroundStyle(VQ.Colors.muted)
+                    }
+                    PrimaryButton(title: "Continue", disabled: !(microphone && accessibility), action: onNext)
+                }
+            }
+        }
+        .onAppear {
+            stopTimers()
+            refresh()
+            pollTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { _ in
+                Task { @MainActor in refresh() }
+            }
+        }
+        .onDisappear { stopAll() }
+        // Closing the window bypasses onDisappear (audit #6).
+        .onReceive(NotificationCenter.default.publisher(for: .onboardingWindowClosed)) { _ in stopAll() }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in refresh() }
+    }
+
+    private var hairline: some View {
+        Rectangle().fill(VQ.Colors.hairline).frame(height: 1)
+    }
+
+    private func isGranted(_ permission: SetupPermission) -> Bool {
+        switch permission {
+        case .microphone: return microphone
+        case .accessibility: return accessibility
+        case .screenRecording: return screenRecording
+        }
+    }
+
+    private func state(of permission: SetupPermission) -> PermissionRow.Status {
+        if isGranted(permission) { return .allowed }
+        return waiting.contains(permission) ? .waiting : .needed
+    }
+
+    private func allow(_ permission: SetupPermission) {
+        switch permission {
+        case .microphone:
+            // macOS asks ONCE per install. After a denial the prompt never
+            // reappears, so the second click goes to System Settings instead.
+            if AVCaptureDevice.authorizationStatus(for: .audio) == .notDetermined {
+                waiting.insert(.microphone)
+                Task {
+                    let ok = await AVCaptureDevice.requestAccess(for: .audio)
+                    microphone = ok
+                    waiting.remove(.microphone)
+                }
+                return
+            }
+            NSWorkspace.shared.open(URL(string:
+                "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone")!)
+            PermissionGuidePanel.shared.show(.microphone)
+        case .accessibility:
+            // kAXTrustedCheckOptionPrompt's value; the C global is mutable, so Swift 6 refuses it.
+            let options = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
+            _ = AXIsProcessTrustedWithOptions(options)
+            KeystrokeAccess.requestPostAccess()
+            NSWorkspace.shared.open(KeystrokeAccess.settingsURL)
+            PermissionGuidePanel.shared.show(.accessibility)
+            startSlowGrantTimer()
+        case .screenRecording:
+            if !CGRequestScreenCaptureAccess() {
+                NSWorkspace.shared.open(URL(string:
+                    "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")!)
+                PermissionGuidePanel.shared.show(.screenRecording)
+            }
+            startSlowGrantTimer()
+        }
+        waiting.insert(permission)
+        refresh()
+    }
+
+    private func refresh() {
+        let trusted = KeystrokeAccess.isReady
+        if trusted, !accessibility {
+            // Wake the engine NOW — otherwise the Try-It screen two steps
+            // later is dead until relaunch (production pass 2).
+            NotificationCenter.default.post(name: .gtSettingDidChange, object: "accessibility")
+        }
+        accessibility = trusted
+        microphone = AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
+        screenRecording = CGPreflightScreenCaptureAccess()
+        needsRestart = Self.restartNeeded
+
+        let landed = waiting.filter { isGranted($0) }
+        if !landed.isEmpty {
+            waiting.subtract(landed)
+            // They are standing in System Settings right now. Bring the flow
+            // back so the next row is in front of them.
+            NSApp.activate(ignoringOtherApps: true)
+        }
+        if let shown = PermissionGuidePanel.shared.permission, isGranted(shown) {
+            PermissionGuidePanel.shared.close()
+        }
+    }
+
+    private func startSlowGrantTimer() {
+        slowGrantTimer?.invalidate()
+        slowGrant = false
+        slowGrantTimer = Timer.scheduledTimer(withTimeInterval: 10, repeats: false) { _ in
+            Task { @MainActor in slowGrant = true }
+        }
+    }
+
+    private func stopTimers() {
+        pollTimer?.invalidate(); pollTimer = nil
+        slowGrantTimer?.invalidate(); slowGrantTimer = nil
+    }
+
+    private func stopAll() {
+        stopTimers()
+        PermissionGuidePanel.shared.close()
+    }
+}
+
+/// One checklist row: an icon tile, the permission's name and what it buys,
+/// and Allow → Waiting… → ✓ Allowed on the right.
+private struct PermissionRow: View {
+    enum Status { case needed, waiting, allowed }
+
+    /// Where the title starts, for content placed under it.
+    static let textInset: CGFloat = VQ.Spacing.m + 34 + VQ.Spacing.s
+
+    let icon: String
+    let title: String
+    let benefit: String
+    let state: Status
+    var optional = false
+    let action: () -> Void
+
+    var body: some View {
+        HStack(spacing: VQ.Spacing.s) {
+            RoundedRectangle(cornerRadius: 9)
+                .fill(VQ.Colors.fill)
+                .frame(width: 34, height: 34)
+                .overlay(
+                    Image(systemName: icon)
+                        .font(.system(size: 15))
+                        .foregroundStyle(VQ.Colors.ink)
+                )
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(GTFont.flex(VQ.TypeScale.headline.size, weight: VQ.TypeScale.headline.weight))
+                    .foregroundStyle(VQ.Colors.ink)
+                Text(benefit)
+                    .font(GTFont.flex(VQ.TypeScale.meta.size, weight: VQ.TypeScale.meta.weight))
+                    .foregroundStyle(VQ.Colors.muted)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: VQ.Spacing.xs)
+            trailing
+        }
+        .padding(.horizontal, VQ.Spacing.m)
+        .padding(.vertical, VQ.Spacing.s)
+    }
+
+    @ViewBuilder
+    private var trailing: some View {
+        let label = GTFont.flex(12.5, weight: 600)
+        switch state {
+        case .needed:
+            Button(action: action) {
+                Text("Allow")
+                    .font(label)
+                    .foregroundStyle(optional ? VQ.Colors.ink : VQ.Colors.onAccent)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 5)
+                    .background(Capsule().fill(optional ? VQ.Colors.fill : VQ.Colors.accent))
+                    .contentShape(Capsule())
+            }
+            .buttonStyle(.plain)
+        case .waiting:
+            // Clicking it again re-opens the pane, for someone who closed
+            // System Settings before finishing.
+            Button(action: action) {
+                HStack(spacing: 6) {
+                    ProgressView().controlSize(.small)
+                    Text("Waiting…")
+                        .font(label)
+                        .foregroundStyle(VQ.Colors.muted)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help("Open System Settings again")
+        case .allowed:
+            Text("✓ Allowed")
+                .font(label)
+                .foregroundStyle(VQ.Colors.success)
+                .transition(.scale.combined(with: .opacity))
+        }
+    }
+}
+
+/// Once the microphone is allowed: is sound actually reaching VoiceiQ? The
+/// meter used to have a screen of its own; it now sits under the Microphone row.
+private struct MicCheck: View {
     @State private var level: Float = 0
-    @State private var meterLevel = LevelSource()
     @State private var meter: AudioCaptureEngine?
-    @State private var heard = false
-    @State private var advancing = false
-    @State private var speechFrames = 0
     /// Users reported setup picking the wrong input with no way to change it —
     /// the menu bar has had a Microphone submenu all along, but onboarding, the
     /// one place you are actually watching a level meter, did not.
@@ -492,172 +733,79 @@ private struct MicScreen: View {
     @State private var deadDevice = false
     @State private var deadCheck: Timer?
     /// Loudest thing heard since this device was selected. A Bluetooth headset on
-    /// the HFP path can be live but so quiet it never reaches the "heard you"
-    /// threshold — indistinguishable, from the user's side, from a dead mic,
-    /// because the waveform idles either way.
+    /// the HFP path can be live but so quiet it never reaches speech level —
+    /// indistinguishable, from the user's side, from a dead mic.
     @State private var maxLevel: Float = 0
     @State private var settled = false
-    /// macOS asks ONCE per install. After a denial the prompt never reappears,
-    /// so the button must stop pretending and send the user to System Settings.
-    @State private var denied = AVCaptureDevice.authorizationStatus(for: .audio) == .denied
-        || AVCaptureDevice.authorizationStatus(for: .audio) == .restricted
-
-    // "Can we listen?" read as surveillance (dogfood). This screen is a mic
-    // CHECK, so it behaves like one: say hello, VoiceiQ hears you, it moves on.
-    private var headline: String {
-        if granted { return "Say hello." }
-        return denied ? "The mic is switched off." : "Turn on the mic."
-    }
-    private var sub: String {
-        if heard { return "Heard you loud and clear." }
-        if granted { return "VoiceiQ is listening — this just checks your mic." }
-        return denied
-            ? "macOS only asks once. Turn VoiceiQ on under Privacy & Security → Microphone, then come back."
-            : "macOS asks once. VoiceiQ only ever records while you're dictating."
-    }
 
     var body: some View {
-        ScreenScaffold(headline, sub) {
-            VStack(spacing: VoiceIQUI.Spacing.m) {
-                if granted {
-                    ZStack {
-                        WaveformView(level: meterLevel, processing: false)
-                            .opacity(heard ? 0 : 1)
-                        if heard {
-                            Image(systemName: "checkmark.circle.fill")
-                                .font(.system(size: 26))
-                                .foregroundStyle(VoiceIQUI.Colors.success)
-                                .transition(.scale.combined(with: .opacity))
-                        }
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: VQ.Spacing.xs) {
+                Capsule()
+                    .fill(VQ.Colors.fill)
+                    .frame(width: 36, height: 4)
+                    .overlay(alignment: .leading) {
+                        Capsule()
+                            .fill(VQ.Colors.accent)
+                            .frame(width: 36 * CGFloat(min(1, level * 2.5)), height: 4)
                     }
-                    .frame(width: 200, height: 48)
-                    .background(Capsule().fill(VoiceIQUI.Colors.surface).shadow(color: .black.opacity(0.15), radius: 10, y: 2))
-                    .animation(VoiceIQMotion.expressiveDefaultSpatial, value: heard)
-        .animation(VoiceIQMotion.defaultEffects, value: maxLevel >= 0.06)
-                    .onAppear(perform: startMeter)
-                    .onDisappear(perform: stopMeter)
-                    .onReceive(NotificationCenter.default.publisher(for: .onboardingWindowClosed)) { _ in
-                        stopMeter() // window close bypasses onDisappear (audit #6)
+                Text(status.text)
+                    .font(VoiceIQUI.TypeScale.labelSmall())
+                    .foregroundStyle(status.bad ? VQ.Colors.record : VQ.Colors.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if inputs.count > 1 {
+                SearchablePicker("", selection: Binding(
+                    get: { selectedInput ?? AudioInputDevices.currentDefaultID() },
+                    set: { newValue in
+                        guard let newValue, newValue != selectedInput else { return }
+                        selectedInput = newValue
+                        // Moves the SYSTEM default, exactly like the menu
+                        // bar picker and Control Center — VoiceiQ always
+                        // records from the default rather than pinning a
+                        // device, which kills the tap on macOS 26.
+                        AudioInputDevices.setDefault(id: newValue)
+                        // Re-arm: the level meter is bound to whatever was
+                        // open when it started, so a switch has to restart
+                        // it or the user watches the OLD mic.
+                        stopMeter()
+                        startMeter()
                     }
-                    // Always say what the mic is doing. The waveform breathes
-                    // whether or not anything is arriving, so on its own it can
-                    // never answer "is this working?".
-                    if let status = micStatus {
-                        Text(status.text)
-                            .font(VoiceIQUI.TypeScale.labelSmall())
-                            .foregroundStyle(status.bad ? VoiceIQUI.Colors.error : VoiceIQUI.Colors.onSurfaceVariant)
-                            .multilineTextAlignment(.center)
-                            .fixedSize(horizontal: false, vertical: true)
-                            .frame(maxWidth: 340)
-                            .transition(.opacity)
-                    }
-                    if inputs.count > 1 {
-                        SearchablePicker("", selection: Binding(
-                            get: { selectedInput ?? AudioInputDevices.currentDefaultID() },
-                            set: { newValue in
-                                guard let newValue, newValue != selectedInput else { return }
-                                selectedInput = newValue
-                                // Moves the SYSTEM default, exactly like the menu
-                                // bar picker and Control Center — VoiceiQ always
-                                // records from the default rather than pinning a
-                                // device, which kills the tap on macOS 26.
-                                AudioInputDevices.setDefault(id: newValue)
-                                // Re-arm: the level meter is bound to whatever was
-                                // open when it started, so a switch has to restart
-                                // it or the user watches the OLD mic.
-                                heard = false
-                                speechFrames = 0
-                                stopMeter()
-                                startMeter()
-                            }
-                        ), options: inputs.map { SearchOption(value: Optional($0.id), name: $0.name) })
-                        .frame(maxWidth: 260)
-                        .font(VoiceIQUI.TypeScale.labelSmall())
-                    }
-
-                    // Speaking IS the continue gesture; the quiet link remains for
-                    // silent environments and users who can't speak.
-                    Button("Continue without speaking") { advance() }
-                        .buttonStyle(.plain)
-                        .font(VoiceIQUI.TypeScale.labelSmall())
-                        .foregroundStyle(VoiceIQUI.Colors.onSurfaceVariant)
-                } else {
-                    PermissionCard(
-                        icon: "mic.fill",
-                        title: "Microphone",
-                        granted: granted,
-                        actionTitle: denied ? "Open Settings" : "Grant"
-                    ) {
-                        if denied {
-                            NSWorkspace.shared.open(URL(string:
-                                "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone")!)
-                        } else {
-                            Task {
-                                let ok = await AVCaptureDevice.requestAccess(for: .audio)
-                                granted = ok
-                                denied = !ok
-                            }
-                        }
-                    }
-                    // Never a dead end: setup continues, and the menu bar keeps
-                    // saying what is still missing.
-                    Button("Skip for now", action: { advance() })
-                        .buttonStyle(.plain)
-                        .font(VoiceIQUI.TypeScale.labelSmall())
-                        .foregroundStyle(VoiceIQUI.Colors.onSurfaceVariant)
-                }
+                ), options: inputs.map { SearchOption(value: Optional($0.id), name: $0.name) })
+                .frame(maxWidth: 240)
+                .font(VoiceIQUI.TypeScale.labelSmall())
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .onAppear {
             inputs = AudioInputDevices.list()
             selectedInput = AudioInputDevices.currentDefaultID()
+            startMeter()
+        }
+        .onDisappear(perform: stopMeter)
+        .onReceive(NotificationCenter.default.publisher(for: .onboardingWindowClosed)) { _ in
+            stopMeter() // window close bypasses onDisappear (audit #6)
         }
         .onReceive(NotificationCenter.default.publisher(for: .voiceIQDefaultInputChanged).receive(on: RunLoop.main)) { _ in
             inputs = AudioInputDevices.list()
             selectedInput = AudioInputDevices.currentDefaultID()
         }
-        .onChange(of: level) { _, value in
-            // Sustained speech energy, not a door slam or chair scrape: ~150ms
-            // above the speech threshold before it counts as "hello".
-            guard !heard else { return }
-            if value > 0.18 {
-                speechFrames += 1
-                if speechFrames >= 7 {
-                    heard = true
-                    advance(after: 0.9)
-                }
-            } else {
-                speechFrames = max(0, speechFrames - 1)
-            }
-        }
     }
 
-    private func advance(after delay: TimeInterval = 0) {
-        guard !advancing else { return }
-        advancing = true
-        Task { @MainActor in
-            try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
-            stopMeter()
-            onNext()
-        }
-    }
-
-    /// What to tell the user about the input, in plain terms.
-    private var micStatus: (text: String, bad: Bool)? {
-        guard !heard else { return nil }
+    /// What to tell the user about the input, in plain terms. The bar moves
+    /// whether or not anything useful arrives, so the words carry the answer.
+    private var status: (text: String, bad: Bool) {
         let name = currentInputName ?? "this input"
         if deadDevice {
-            return ("No sound is reaching VoiceiQ from \(name). Pick a different input below.", true)
+            return ("No sound is reaching VoiceiQ from \(name). Pick a different input.", true)
         }
         if maxLevel >= 0.06 {
-            // Something is definitely arriving — say so, even before it is loud
-            // enough to count as "hello".
-            return ("Picking up sound from \(name) — keep going.", false)
+            return ("Hearing you on \(name).", false)
         }
         if settled {
-            return ("Barely hearing anything from \(name). Speak up, or pick a different input below.", true)
+            return ("Barely hearing anything from \(name). Speak up, or pick a different input.", true)
         }
-        return ("Listening on \(name)…", false)
+        return ("Listening on \(name). Say something.", false)
     }
 
     private var currentInputName: String? {
@@ -686,7 +834,6 @@ private struct MicScreen: View {
         engine.onLevel = { value in
             Task { @MainActor in
                 level = value
-                meterLevel.value = value
                 meterTicks += 1
                 maxLevel = max(maxLevel, value)
             }
@@ -709,87 +856,6 @@ private struct MicScreen: View {
     }
 }
 
-private struct AccessibilityScreen: View {
-    let onNext: () -> Void
-    @State private var granted = KeystrokeAccess.isReady
-    @State private var screenGranted = CGPreflightScreenCaptureAccess()
-    @State private var pollTimer: Timer?
-    @State private var slowGrantTimer: Timer?
-    @State private var slowGrant = false
-
-    /// On 27.3+ with Accessibility on, the posting grant only reads true
-    /// after a restart, so waiting would only hide the way forward. State,
-    /// refreshed by the poll: SwiftUI does not observe `AXIsProcessTrusted()`.
-    @State private var needsRestart = Self.restartNeeded
-
-    private static var restartNeeded: Bool {
-        !KeystrokeAccess.isReady && AXIsProcessTrusted() && KeystrokeAccess.isSplit
-    }
-
-    private func stopTimers() {
-        pollTimer?.invalidate(); pollTimer = nil
-        slowGrantTimer?.invalidate(); slowGrantTimer = nil
-    }
-
-    var body: some View {
-        ScreenScaffold("Let it type for you.", "\(KeystrokeAccess.listName) lets VoiceiQ place text at your cursor. Screen Recording lets VoiceiQ read names and paths on screen while you talk. It is optional.") {
-            VStack(spacing: VoiceIQUI.Spacing.m) {
-                PermissionCard(icon: "keyboard", title: KeystrokeAccess.listName, granted: granted) {
-                    // kAXTrustedCheckOptionPrompt's value; the C global is mutable, so Swift 6 refuses it.
-                    let options = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
-                    _ = AXIsProcessTrustedWithOptions(options)
-                    KeystrokeAccess.requestPostAccess()
-                    NSWorkspace.shared.open(KeystrokeAccess.settingsURL)
-                }
-                PermissionCard(icon: "rectangle.dashed.badge.record", title: "Screen Recording", granted: screenGranted) {
-                    if !CGRequestScreenCaptureAccess() {
-                        NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")!)
-                    }
-                }
-                if (slowGrant && !granted) || needsRestart {
-                    HStack(spacing: VoiceIQUI.Spacing.xs) {
-                        Text(needsRestart
-                             ? "Allowed it? macOS applies it after a restart."
-                             : "Granted but not detected? A relaunch may be needed.")
-                            .font(VoiceIQUI.TypeScale.labelSmall())
-                            .foregroundStyle(VoiceIQUI.Colors.onSurfaceVariant)
-                        Button("Restart VoiceiQ") { AppRestart.now() }
-                            .controlSize(.small)
-                    }
-                }
-                PrimaryButton(title: "Continue", disabled: !granted, action: onNext)
-            }
-        }
-        .onAppear {
-            stopTimers()
-            needsRestart = Self.restartNeeded
-            pollTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
-                Task { @MainActor in
-                    let trusted = KeystrokeAccess.isReady
-                    if trusted, !granted {
-                        // Wake the engine NOW — otherwise the Try-It screen two
-                        // steps later is dead until relaunch (production pass 2).
-                        NotificationCenter.default.post(name: .gtSettingDidChange, object: "accessibility")
-                        // They are standing in System Settings right now. Bring
-                        // the flow back so the next step is in front of them
-                        // rather than behind whatever they were just using.
-                        NSApp.activate(ignoringOtherApps: true)
-                    }
-                    granted = trusted
-                    needsRestart = Self.restartNeeded
-                    screenGranted = CGPreflightScreenCaptureAccess()
-                }
-            }
-            slowGrantTimer = Timer.scheduledTimer(withTimeInterval: 10, repeats: false) { _ in
-                Task { @MainActor in slowGrant = true }
-            }
-        }
-        .onDisappear { stopTimers() }
-        // Closing the window bypasses onDisappear (audit #6).
-        .onReceive(NotificationCenter.default.publisher(for: .onboardingWindowClosed)) { _ in stopTimers() }
-    }
-}
-
 private struct GlobeKeyScreen: View {
     let onNext: () -> Void
     @State private var fixed = !FnUsageAdvisor.currentGlobeKeyAction().conflictsWithFnHotkey
@@ -808,6 +874,8 @@ private struct GlobeKeyScreen: View {
                 }
                 .padding(VoiceIQUI.Spacing.m)
                 .background(RoundedRectangle(cornerRadius: VoiceIQUI.Radius.large).fill(VoiceIQUI.Colors.surface))
+                // A white card on the white canvas needs its ring to show.
+                .overlay(RoundedRectangle(cornerRadius: VoiceIQUI.Radius.large).strokeBorder(VQ.Colors.hairline, lineWidth: 1))
 
                 if fixed {
                     Label("Done — the Globe key is yours", systemImage: "checkmark.circle.fill")
