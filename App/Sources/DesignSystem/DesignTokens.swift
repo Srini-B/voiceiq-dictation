@@ -1,47 +1,49 @@
 import SwiftUI
 import AppKit
+import VoiceIQCore
 
 /// VoiceIQUI — the VoiceiQ design tokens. Every color, type style, radius,
 /// spacing and state-layer value in the app comes from here; views contain no
-/// magic values. Contract: docs/design/experience.md §3 (GM3 production values).
+/// magic values. Colours and the display sizes come from the shared `VQ`
+/// tokens in VoiceIQCore; contract: docs/design/redesign-2026-11.md.
 enum VoiceIQUI {
 
     // MARK: - Color
 
     enum Colors {
-        // Accent
-        static let primary = dyn(light: 0x0B57D0, dark: 0xA8C7FA)
-        static let onPrimary = dyn(light: 0xFFFFFF, dark: 0x062E6F)
-        static let primaryContainer = dyn(light: 0xD3E3FD, dark: 0x0842A0)
-        static let onPrimaryContainer = dyn(light: 0x041E49, dark: 0xD3E3FD)
+        // Accent — the shared VQ tokens (docs/design/redesign-2026-11.md).
+        static let primary = VQ.Colors.accent
+        static let onPrimary = VQ.Colors.onAccent
+        static let primaryContainer = VQ.Colors.accentSoft
+        static let onPrimaryContainer = VQ.Colors.accent
         /// A selected sidebar row: the brand blue in light mode; in dark mode
         /// the system's selection, as the lists beside it show, not the pale
         /// `primary` (Fable, M6).
         static let selection = Color(nsColor: NSColor(name: nil) { appearance in
-            appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? .selectedContentBackgroundColor : NSColor(hex: 0x0B57D0)
+            appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? .selectedContentBackgroundColor : NSColor(hex: 0x2252BC)
         })
         static let onSelection = Color(nsColor: NSColor(name: nil) { appearance in
             appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? .alternateSelectedControlTextColor : .white
         })
 
         // Surfaces (never pure black)
-        static let surface = dyn(light: 0xFFFFFF, dark: 0x1E1F20)
-        static let surfaceContainer = dyn(light: 0xF0F4F9, dark: 0x28292A)
-        static let windowBackground = dyn(light: 0xF8FAFD, dark: 0x131314)
-        static let onSurface = dyn(light: 0x1F1F1F, dark: 0xE3E3E3)
-        static let onSurfaceVariant = dyn(light: 0x444746, dark: 0xC4C7C5)
-        static let outline = dyn(light: 0x747775, dark: 0x8E918F)
-        static let outlineVariant = dyn(light: 0xC4C7C5, dark: 0x444746)
+        static let surface = VQ.Colors.surface
+        static let surfaceContainer = VQ.Colors.fill
+        static let windowBackground = VQ.Colors.grouped
+        static let onSurface = VQ.Colors.ink
+        static let onSurfaceVariant = VQ.Colors.ink2
+        static let outline = VQ.Colors.muted
+        static let outlineVariant = VQ.Colors.hairline
 
         // Status
-        static let error = dyn(light: 0xB3261E, dark: 0xF2B8B5)
-        static let errorContainer = dyn(light: 0xF9DEDC, dark: 0x8C1D18)
-        static let onErrorContainer = dyn(light: 0x410E0B, dark: 0xF9DEDC)
+        static let error = VQ.Colors.record
+        static let errorContainer = VQ.Colors.recordSoft
+        static let onErrorContainer = VQ.Colors.record
         /// Fills under white text in both modes: `primary` and `error` turn
-        /// pale in dark mode, and white on `gRed` reads at 3.9:1.
-        static let primaryFill = Color(hex: 0x0B57D0)
-        static let errorFill = Color(hex: 0xB3261E)
-        static let success = dyn(light: 0x146C2E, dark: 0x6DD58C)
+        /// pale in dark mode, and white on the brand red reads under 4.5:1.
+        static let primaryFill = Color(hex: 0x2252BC)
+        static let errorFill = Color(hex: 0xC4343A)
+        static let success = VQ.Colors.success
 
         // Brand quad — waveform, processing sweep, and celebration ONLY.
         static let gBlue = Color(hex: 0x4285F4)
@@ -51,13 +53,6 @@ enum VoiceIQUI {
         static let brandQuad: [Color] = [gBlue, gRed, gYellow, gGreen]
         /// The classic "AI shimmer" — appears exclusively in the processing state.
         static let aiShimmer: [Color] = [Color(hex: 0x4285F4), Color(hex: 0x9B72CB), Color(hex: 0xD96570)]
-
-        private static func dyn(light: UInt32, dark: UInt32) -> Color {
-            Color(nsColor: NSColor(name: nil) { appearance in
-                let isDark = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-                return NSColor(hex: isDark ? dark : light)
-            })
-        }
     }
 
     // MARK: - State layers (opacity of the on-color)
@@ -99,8 +94,8 @@ enum VoiceIQUI {
     enum TypeScale {
         // ROND stays 0 everywhere (the font's straight default) — dogfood verdict:
         // the rounded terminals read too soft; straight is the look.
-        static func display(grad: CGFloat = 0) -> Font { GTFont.flex(32, weight: 400, grad: grad) }
-        static func headline(grad: CGFloat = 0) -> Font { GTFont.flex(24, weight: 400, grad: grad) }
+        static func display(grad: CGFloat = 0) -> Font { GTFont.flex(VQ.TypeScale.display.size, weight: VQ.TypeScale.display.weight, grad: grad) }
+        static func headline(grad: CGFloat = 0) -> Font { GTFont.flex(VQ.TypeScale.title.size, weight: VQ.TypeScale.title.weight, grad: grad) }
         static func title(grad: CGFloat = 0) -> Font { GTFont.flex(16, weight: 500, grad: grad) }
         /// History transcripts (16/24).
         static func bodyLarge(grad: CGFloat = 0) -> Font { GTFont.flex(16, weight: 400, grad: grad) }

@@ -63,12 +63,10 @@ struct Card<Content: View>: View {
             .background(
                 RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
                     .fill(Theme.Colors.surface)
-                    .shadow(color: .black.opacity(0.04), radius: 1, y: 1)
-                    .shadow(color: .black.opacity(0.05), radius: 12, y: 6)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
-                    .strokeBorder(Theme.Colors.hairline, lineWidth: 0.5)
+                    .strokeBorder(Theme.Colors.hairline, lineWidth: 1)
             )
     }
 }
