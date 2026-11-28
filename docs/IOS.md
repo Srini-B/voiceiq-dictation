@@ -127,7 +127,8 @@ session identifier, and a fingerprint of the text around the cursor
 writing model, Dictate and Stop also carry the text around the cursor in a
 prose field (`KeyboardCommand.surroundingText`: up to 300 characters before
 and 100 after, nothing from code, number or address fields); it stays in the
-App Group's command list until the next command replaces it.
+App Group's command list until a later command drops it (commands older than
+30 s go when the next one is sent; at most 8 are kept).
 
 `Delivery.route` decides what the keyboard on screen does with a pending
 result. It checks these rules in order:

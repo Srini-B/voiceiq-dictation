@@ -123,7 +123,7 @@ Filled in below as each check finishes.
   earlier dictation and the typed text, while the keyboard's own view of the
   field read the expected result. iPhone drafts are switched off
   (`KeyboardInserter.offersDrafts`) until a host-safe swap exists. That
-  swap, and drafts back on in Messages and VoiceiQ:
+  swap, and drafts back on in Messages:
   `2026-11-28-iphone-draft-swap-by-insert.md`.
 - cyron's report: in a full single-line field the marks drew outside the
   field and the inserted text stayed hidden past its edge. Marks are now cut

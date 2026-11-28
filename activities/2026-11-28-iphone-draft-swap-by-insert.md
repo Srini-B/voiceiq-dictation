@@ -74,7 +74,7 @@ followed took the 25 characters before it.
   `isInPlace` replaces `follow`: it only ever stops a write. No
   `deleteBackward`, no read-back, no `async`.
 - `KeyboardDraft.canType`: any script and length, no line break (not tried).
-- `KeyboardDraft.verifiedHosts`: drafts only in Messages and VoiceiQ.
+- `KeyboardDraft.verifiedHosts`: drafts only in Messages (VoiceiQ's own Try it field was dropped at review until the keyboard's draft code runs there), and only in a prose field.
 - `KeyboardModel`: `textDidChange` and `selectionDidChange` check the draft
   at once; Dictate ends a held draft; a poll that ends a draft with
   `unmarkText` types no result and marks no new draft; a keyboard that has
@@ -207,8 +207,9 @@ nothing run) and said not to push. What it found and what was done:
 
 ## Same PR: context-aware insertion on iPhone, and #130's Mac fixes
 
-- The keyboard sends the text around the cursor (cut to the 300 characters before and 100 after that the writing model reads) with Dictate and Stop, so the iPhone writing model fits a dictation mid-sentence as the Mac's does. A host that shows the keyboard none of a field that has text gets the text as written.
+- The keyboard sends the text around the cursor in a prose field (cut to the 300 characters before and 100 after that the writing model reads) with Dictate and Stop, so the iPhone writing model fits a dictation mid-sentence as the Mac's does. A host that shows the keyboard none of a field that has text gets the text as written.
 - `SurroundingText.fitted` (shared by the Mac and the keyboard) now lowercases an ordinary first word ("And", "The") when the text before the cursor doesn't end a sentence; names, "I" and acronyms keep their capitals. Found in the simulator: "Noted And I'll ship it tomorrow."
 - Mac draft underline: a bounds answer that is the field's frame, taller than a line, or zero-sized gets no underline, only the spinner and the swap. Measured on the Mac mini: VS Code's search box and a Chrome textarea report a wrapped draft as one 126 pt / 84 pt block, which drew the line on the box's border; one-line drafts are unchanged.
 - From the Neon review of #130 and the Fable rescore (81 at 4b3276f): a missed draft is no longer copied over the user's clipboard; password fields are found by subrole and the swap writes nothing under secure input; pastes run one at a time; a swap waits for a 0.4 s pause in typing; a ⌘V draft in a field that still reads as before (an xterm terminal) counts as lost, never followed by the written text; an app whose drafts twice land misread gets no more; a ⌘V swap needs the field's selected text to equal the draft.
 - Verified at 26120b3 on the Mac mini: `swift test` 353 run, 0 failed, 1 skipped (layout test needs a US layout); both schemes build; KeyboardTests 27/27. Cursor and Slack are not installed there and were not checked.
+- Review follow-ups (Fable 5.2, 90 at b2cc489a, 91 at e8a6a371; Neon was at its weekly limit): field text goes to the writing model only from prose fields; drafts need a prose field and are on in Messages only; the first word is lowercased only when it is a whole word ("A/B" keeps its capital). Not run: one Simulator dictation in Messages after the prose-field gate; if Messages' compose field reported a non-default keyboard, drafts would be off there and the written text typed once.

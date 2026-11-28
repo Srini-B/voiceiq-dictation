@@ -19,7 +19,7 @@ public struct KeyboardCommand: Codable, Equatable, Sendable, Identifiable {
     public var draft: String?
     /// The text around the cursor then, for the writing model to fit the
     /// dictation to (`SurroundingText.excerpt`). Nil when the keyboard
-    /// could not read it.
+    /// could not read it or the field is not a prose field.
     public var surroundingText: SurroundingText?
 
     public init(

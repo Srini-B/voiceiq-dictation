@@ -501,7 +501,7 @@ final class KeyboardModel: ObservableObject {
 
     /// Types the transcript as an underlined draft while the writing model
     /// rewrites it (`SessionSnapshot.draft`), only in the input session Stop
-    /// was tapped in, in an app drafts were tried in
+    /// was tapped in, in a prose field of an app drafts were tried in
     /// (`KeyboardDraft.verifiedHosts`), and says so
     /// (`SharedStore.typedDraftID`). The written text then replaces it
     /// (`finishDraft`). Anywhere else, and over a selection, the written text
@@ -518,7 +518,7 @@ final class KeyboardModel: ObservableObject {
               let typed = KeyboardDraft.type(offered.text, id: offered.id, documentID: documentID, into: proxy,
                                              fit: Self.fitted) else {
             skippedDraftID = offered.id
-            KeyboardLog.note("[\(instanceTag)] draft not typed: drafts were not tried in this app, text is selected, or the transcript has a line break; the written text comes alone")
+            KeyboardLog.note("[\(instanceTag)] draft not typed: not a prose field, drafts were not tried in this app, text is selected, or the transcript has a line break; the written text comes alone")
             return
         }
         draft = typed
