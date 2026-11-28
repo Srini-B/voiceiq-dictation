@@ -305,7 +305,7 @@ enum TidyText {
     }
 
     /// Whether the full stop at `index` ends "i.e.", "e.g.", "vs." or a title ("Prof.").
-    private static func endsAbbreviation(_ chars: [Character], at index: Int) -> Bool {
+    static func endsAbbreviation(_ chars: [Character], at index: Int) -> Bool {
         var start = index
         while start > 0, !chars[start - 1].isWhitespace { start -= 1 }
         let word = String(chars[start...index]).lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "(\"“"))

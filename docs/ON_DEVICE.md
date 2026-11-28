@@ -192,15 +192,19 @@ styles, MIT):
 1. `Tidy.spoken`: layout and marks said by name become the marks
    (`SpokenMarks`), only where the name cannot be prose: "new line" and "new
    paragraph" after a spoken mark, or set off by marks on both sides and not
-   before "and" or "or" ("Hello. New line.", "Dear Sam comma new paragraph",
+   before "and" or "or", after a comma only when one or two words come before
+   it ("Hello. New line.", "Dear Sam comma new paragraph",
    "Thanks, new line, Sam"; not "Press enter for new line", "It's official.
-   New paragraph styles are live" or "shoes, new line, and socks"); "open
+   New paragraph styles are live", "shoes, new line, and socks" or "She bought
+   a car, new line, I think"); "open
    quote" … "close quote" or "quote" … "unquote" after a word; a lowercase
    "comma" after a greeting and who it greets ("Dear Sam comma", "Hi team
    comma please review"; not "Hi comma club members", "Hey Comma", a name,
    or "Note, comma, goes inside the quotes"); "question mark", "exclamation mark" and "full stop" after a
-   clause of two words or more, at the end of a line or before a word that
-   opens a new clause ("ready exclamation mark please test it"; not "The
+   clause of two words or more, or one word said on its own such as "great"
+   or "really", at the end of a line or before a word that
+   opens a new clause ("ready exclamation mark please test it", "Great
+   exclamation mark see you soon"; not "Double exclamation mark" or "The
    Unicode question mark is U+003F"). None after an article, a quantifier, a
    preposition, a title, a describing word or an instruction about the mark
    ("an Oxford comma", "one question mark left", "came to full stop"), before
@@ -215,8 +219,12 @@ styles, MIT):
    - Spoken email addresses join (`SpokenAddresses`): "priya dot sharma at
      the rate gmail dot com" → "priya.sharma@gmail.com", only with a
      spoken domain or one the model glued to "rate" ("rategmail.com"), at
-     the end of a sentence. "at the rate of 5%", "grew at the rate
-     Amazon.com" and "grew at the rate Amazon dot com predicted" stay, and so
+     the end of a sentence, before "and" or "or" and another address, or
+     before a comma and "please" or "thanks". The mailbox opens the sentence
+     or a clause, or follows a word that introduces an address ("is", "to",
+     "mail", "email", "cc"…). "at the rate of 5%", "grew at the rate
+     Amazon.com", "grew at the rate Amazon dot com predicted" and "Prices
+     rose at the rate gmail dot com" stay, and so
      does an address in quotation marks, which may be a literal password.
    - Hesitations ("um", "uh", "er", "hmm"; not "ah", "err", "uh huh", a
      unit after a number such as "5 um", a name such as "Mr. Um", or one
@@ -227,7 +235,9 @@ styles, MIT):
      for like and ends the sentence (`SpokenRepairs`): a day, or one number
      for one with as many digits ("Meet on Tuesday, no wait, Wednesday." →
      "Meet on Wednesday."; "15,000, I mean, 50,000 dollars" → "50,000
-     dollars"; not "Call 555 1234, I mean, 5" or "Room 101, I mean, 2"). Not names: "I met John, I
+     dollars"; not "Call 555 1234, I mean, 5", "Room 101, I mean, 2", or a
+     unit after a number that names something, "Flight 101, I mean, 102
+     minutes", which may say how long flight 101 is). Not names: "I met John, I
      mean, Seriously." has a capital that is no name. The cues
      are "no wait", "wait no", "I mean", "make that" and "or rather".
      Everything else stays as said, cue included: "scratch that", "actually",
@@ -259,11 +269,11 @@ styles, MIT):
    - **Messages**: lowercase sentence starts (acronyms and names with inner
      capitals keep theirs), English "i", no comma after an opening "yeah" or
      "ok", and no final full stop on a message of one line and up to three
-     sentences.
+     sentences (a title's full stop, as in "Capt. Rao", ends none).
    - **Lists**: spoken "bullet point" or "next bullet" and line breaks make lines; otherwise several
      sentences become a bulleted list, and three or more short items after a
      colon too. Opening "so", "and then" and "first" go, and no line ends
-     with a full stop.
+     with a full stop, a comma or a semicolon.
    - **As spoken**: steps 1 and 3 are skipped; only extra spaces go.
 
 Each language drops only its own hesitation sounds: English "er" is a word in

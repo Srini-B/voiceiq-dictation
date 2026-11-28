@@ -27,6 +27,8 @@ enum SpokenAddresses {
         var edits: [(range: Range<String.Index>, text: String)] = []
         // The first word an address may take: none already in an earlier one.
         var free = 0
+        // The last word of the last address joined.
+        var lastAddress: Int?
         // Quoted words are literal: The password is "john at sign gmail dot com".
         let literal = TidyText.quoteMask(Array(text))
         var index = 0
@@ -42,12 +44,7 @@ enum SpokenAddresses {
                 continue
             }
             guard let domain = domain(tokens, from: next),
-                  // "at the rate" is plain English before a written domain ("grew at the
-                  // rate Amazon.com"): only a spoken one ("company dot co dot in") or one
-                  // the model glued to "rate" ("rategmail.com") is an address, and only
-                  // when it ends the sentence ("grew at the rate Amazon dot com predicted").
-                  !marker.ambiguous || ((domain.end > next || tokens[next].glued)
-                      && (domain.end == tokens.count - 1 || domain.trailing.contains(where: { ".!?".contains($0) }))) else {
+                  !marker.ambiguous || endsAmbiguousAddress(tokens, next: next, domain: domain) else {
                 index = marker.end + 1
                 continue
             }
@@ -73,7 +70,9 @@ enum SpokenAddresses {
                 }
             }
             // No mailbox before it ("Type an at sign example.com"): a phrase, not an address.
-            guard !local.isEmpty else {
+            // "Prices rose at the rate gmail dot com": with "at the rate", the mailbox
+            // opens the sentence or a clause, or follows a word that introduces an address.
+            guard !local.isEmpty, !marker.ambiguous || introducesAddress(tokens, before: start, after: lastAddress) else {
                 index = marker.end + 1
                 continue
             }
@@ -81,6 +80,7 @@ enum SpokenAddresses {
             edits.append((tokens[start].range.lowerBound..<tokens[domain.end].range.upperBound, quote + address + domain.trailing))
             index = domain.end + 1
             free = index
+            lastAddress = domain.end
         }
         guard !edits.isEmpty else { return text }
         var result = ""
@@ -90,6 +90,53 @@ enum SpokenAddresses {
             cursor = edit.range.upperBound
         }
         return result + text[cursor...]
+    }
+
+    /// Whether the domain after "at the rate" (from `next`) ends an address.
+    /// "at the rate" is plain English before a written domain ("grew at the rate
+    /// Amazon.com"): only a spoken one ("company dot co dot in") or one the model
+    /// glued to "rate" ("rategmail.com") is an address, and only where the
+    /// sentence ends, at a courtesy after a comma ("…, please."), or before "and"
+    /// and another address. "grew at the rate Amazon dot com predicted" stays.
+    private static func endsAmbiguousAddress(_ tokens: [Token], next: Int,
+                                             domain: (labels: [String], end: Int, trailing: String)) -> Bool {
+        guard domain.end > next || tokens[next].glued else { return false }
+        if domain.end == tokens.count - 1 || domain.trailing.contains(where: { ".!?".contains($0) }) { return true }
+        let rest = domain.end + 1
+        if domain.trailing == "," {
+            let end = tokens[rest...].firstIndex { $0.word.last.map { ".!?".contains($0) } ?? false } ?? tokens.count - 1
+            return [["please"], ["thanks"], ["thank", "you"], ["cheers"]].contains(tokens[rest...end].map { bare($0.word) })
+        }
+        return domain.trailing.isEmpty && ["and", "or"].contains(tokens[rest].word.lowercased()) && addressFollows(tokens, at: rest + 1)
+    }
+
+    /// Whether an address said with a marker starts at `index`: "ravi at the rate gmail dot com".
+    private static func addressFollows(_ tokens: [Token], at index: Int) -> Bool {
+        var end = index
+        guard tokens.indices.contains(end), localPart(tokens[end].word) != nil else { return false }
+        while end + 2 < tokens.count, tokens[end + 1].word.lowercased() == "dot", localPart(tokens[end + 2].word) != nil { end += 2 }
+        guard end + 1 < tokens.count, let marker = marker(tokens, at: end + 1),
+              let domain = domain(tokens, from: marker.end + 1) else { return false }
+        return !marker.ambiguous || endsAmbiguousAddress(tokens, next: marker.end + 1, domain: domain)
+    }
+
+    /// Words after which "at the rate" may close a mailbox: "My email is priya at
+    /// the rate…", "Mail priya at the rate…", "Send it to priya at the rate…".
+    private static let addressIntroductions: Set<String> = [
+        "is", "was", "email", "e-mail", "mail", "to", "me", "cc", "bcc", "contact", "reach", "write", "ping", "from",
+        "address", "id", "at", "on", "try", "use",
+    ]
+
+    /// Whether the mailbox starting at `start` may join "at the rate": it opens
+    /// the sentence or a clause, follows a word from `addressIntroductions`, or
+    /// follows "and" or "or" right after another address (`after`).
+    private static func introducesAddress(_ tokens: [Token], before start: Int, after lastAddress: Int?) -> Bool {
+        guard start > 0 else { return true }
+        let previous = tokens[start - 1].word
+        if let last = previous.last, ".!?,:;".contains(last) { return true }
+        let word = bare(previous)
+        if addressIntroductions.contains(word) { return true }
+        return ["and", "or"].contains(word) && lastAddress == start - 2
     }
 
     private static func words(in text: String) -> [Token] {
