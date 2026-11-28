@@ -22,6 +22,9 @@ low, then agreed to apply that rule once low's M5 came in under the bar.
   reasoning counts against the limit, and a reply with
   `finish_reason: length` fails as `output_truncated` instead of failing to
   parse and being asked again into the same limit (review finding).
+- The notes deadline is 15 minutes (was 5): AMI ES2004a (17 min) took
+  33–59 s at medium, so a 2-hour call can need about 7 minutes (review
+  finding). A cut-off reply shows its own message, without the Retry hint.
 
 ## Variants measured
 

@@ -501,7 +501,7 @@ import VoiceIQSpeech
                 app: meta.source.map(Self.name), names: meta.speakerNames, screenNames: meta.screenNames,
                 ownerName: settings.meetingOwnerName, vocabulary: dictionary.sanitizedVocabulary(),
                 spellings: dictionary.spellings(), writingRules: settings.customWritingRules,
-                calendarEvent: meta.calendarEvent)), transcript: transcript, model: cfg.writingModel, deadline: 300)
+                calendarEvent: meta.calendarEvent)), transcript: transcript, model: cfg.writingModel, deadline: notesDeadline)
         }
         let notes = try await write(meta)
         let named = ScreenSpeakerNames.byElimination(meta: meta, transcript: transcript, notes: notes)
@@ -586,6 +586,11 @@ public enum MeetingFailure: Error, Equatable {
     case noKey
 
     static let fixHint = "The recording is saved. Press Retry after fixing this."
+
+    /// Notes reason at effort medium, and reasoning grows with the meeting.
+    /// MEASURED 2026-11-28: AMI ES2004a (17 min) took 33–59 s, so a 2-hour
+    /// call can need about 7 minutes; the notes run in the background.
+    static let notesDeadline: TimeInterval = 900
     /// Where keys live and what the list is called on each platform.
     #if os(macOS)
     static let keysPlace = "Settings → Advanced"
@@ -633,6 +638,8 @@ public enum MeetingFailure: Error, Equatable {
                 return "You were offline when the meeting was transcribed. The recording is saved and is transcribed when you're back online."
             case .timeout, .network where waitsForService(error):
                 return "Couldn't reach AssemblyAI. The recording is saved and is transcribed when AssemblyAI can be reached."
+            case .network("output_truncated"):
+                return "The notes for this meeting ran past the model's length limit. The transcript is saved."
             case .network:
                 return "Transcription failed. \(fixHint)"
             case .safetyBlocked:

@@ -161,7 +161,7 @@ exit(failures == 0 ? 0 : 2)
         try await client.meetingNotes(prompt: MeetingNotesPrompt.build(transcript: transcript, context: .init(
             startedAt: meta.startedAt, durationSeconds: meta.durationSeconds, app: input.app, names: [:],
             screenNames: meta.screenNames, ownerName: input.owner, calendarEvent: meta.calendarEvent)),
-            transcript: transcript, model: config.writingModel, deadline: 300)
+            transcript: transcript, model: config.writingModel, deadline: 900)
     }
     // As MeetingEngine.writeNotes does: a voice named by elimination gets the notes written again.
     // An account without a gateway balance still scores the transcript (M2–M4).
