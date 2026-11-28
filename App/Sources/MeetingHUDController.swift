@@ -126,12 +126,19 @@ final class MeetingHUDController {
 
     private func micMutedChanged(_ muted: Bool) {
         guard !dictationIsActive(), case let .recording(_, since) = meetings.phase, meetings.endingAt == nil else { return }
+        if case .notice = hud.model.state { return }
         setPill(.meetingRecording(since: since, micMuted: muted))
     }
 
     private func phaseChanged(_ phase: MeetingPhase) {
         switch phase {
         case let .recording(_, since):
+            // Recording from the Meetings window or a calendar card never
+            // showed the pill without Accessibility; it needs its Stop.
+            hud.show()
+            // A notice posted as recording starts (the On device one) keeps its
+            // seconds; its dismissal lands on the recording pill.
+            if case .notice = hud.model.state { return }
             if !dictationIsActive() { setPill(.meetingRecording(since: since, micMuted: meetings.micMuted)) }
         case .idle, .failed:
             // Notes are made in the background; the pill is free at once and

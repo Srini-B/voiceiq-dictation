@@ -154,7 +154,13 @@ import VoiceIQSpeech
                 guard let self else { return }
                 let cameOnline = path.status == .satisfied && !self.online
                 self.online = path.status == .satisfied
-                if cameOnline { self.transcribeWaiting() }
+                // A timer armed before the change would fire offline, or hold
+                // a long backoff past the reset below.
+                if !self.online || cameOnline { self.waitingRetry?.cancel(); self.waitingRetry = nil }
+                if cameOnline {
+                    self.waitingDelay = .seconds(300)
+                    self.transcribeWaiting()
+                }
             }
         }
         network.start(queue: .main)
@@ -187,14 +193,16 @@ import VoiceIQSpeech
     private var waitingDelay: Duration = .seconds(300)
 
     private func scheduleWaitingRetry() {
-        guard waitingRetry == nil else { return }
+        // Offline, the path change brings the meeting back; a timer would
+        // only re-encode the audio and repeat the notice.
+        guard waitingRetry == nil, online else { return }
         let delay = waitingDelay
         waitingDelay = min(waitingDelay * 2, .seconds(3600))
         waitingRetry = Task { [weak self] in
             try? await Task.sleep(for: delay)
             guard !Task.isCancelled, let self else { return }
             self.waitingRetry = nil
-            self.transcribeWaiting()
+            if self.online { self.transcribeWaiting() }
         }
     }
 
@@ -294,6 +302,9 @@ import VoiceIQSpeech
             }
             #endif
             phase = .recording(id, since: now)
+            if SettingsStore().takeRetiredOnDeviceMeetingChoice() {
+                onNotice?("\(MeetingFailure.listName) now use AssemblyAI (On device removed). Discard to cancel.")
+            }
         } catch { fail(id, error) }
     }
 
@@ -334,7 +345,9 @@ import VoiceIQSpeech
         endingAt = nil
         let micDuration = mic?.stop() ?? 0, systemDuration = system?.stop() ?? 0
         mic = nil; system = nil; currentFolder = nil; currentMeta = nil
-        phase = .idle
+        // Lists reload on the phase change, so the folder goes first: deleted
+        // after it, the iPhone list kept a "Processing" row for it.
+        defer { phase = .idle }
         do {
             try store.delete(id: id)
             Log.meeting.info("meeting \(id.uuid.uuidString, privacy: .public) discarded")
@@ -476,10 +489,10 @@ import VoiceIQSpeech
     /// The recording stays; the meeting is marked failed with a reason the
     /// Meetings list shows, and Retry runs it again with the keys stored then.
     private func saveFailure(id: MeetingID, meta: inout MeetingMeta, error: Error) {
-        let reason = MeetingFailure.reason(for: error)
         Log.meeting.error("meeting \(id.uuid.uuidString, privacy: .public) failed: \(String(describing: error), privacy: .public)")
         // `mark` saved the step that was running when it failed.
         let step: ServiceStep = meta.status == .summarizing ? .notes : .transcript
+        let reason = MeetingFailure.reason(for: error, step: step)
         meta.status = .failed(reason)
         meta.waitsForService = MeetingFailure.waitsForService(error) ? step : nil
         meta.failedStep = step
@@ -487,8 +500,8 @@ import VoiceIQSpeech
         processing[id] = nil
         if meta.waitsForService != nil, hasKey() { scheduleWaitingRetry() }
         switch error as? MeetingFailure {
-        case .noKey: onNotice?("\(MeetingFailure.noun) saved — it is transcribed once you add an AssemblyAI key")
-        case nil where meta.waitsForService != nil: onNotice?("\(MeetingFailure.noun) saved — it is transcribed when AssemblyAI can be reached")
+        case .noKey: onNotice?("\(MeetingFailure.noun) saved — \(step == .notes ? "its notes are written" : "it is transcribed") once you add an AssemblyAI key")
+        case nil where meta.waitsForService != nil: onNotice?("\(MeetingFailure.noun) saved — \(step == .notes ? "its notes are written" : "it is transcribed") when AssemblyAI can be reached")
         case nil where step == .notes: onNotice?("\(MeetingFailure.noun) notes failed — see \(MeetingFailure.listName)")
         case nil: onNotice?("\(MeetingFailure.noun) transcript failed — see \(MeetingFailure.listName)")
         }
@@ -620,10 +633,14 @@ public enum MeetingFailure: Error, Equatable {
         }
     }
 
-    static func reason(for error: Error) -> String {
+    /// `step` words it: a notes step keeps the transcript and writes notes again.
+    static func reason(for error: Error, step: ServiceStep) -> String {
+        let notes = step == .notes
+        let saved = notes ? "The transcript is saved and the notes are written" : "The recording is saved and is transcribed"
+        let failed = notes ? "Writing notes failed" : "Transcription failed"
         switch error {
         case MeetingFailure.noKey:
-            return "Add your AssemblyAI API key in \(keysPlace) to transcribe meetings. The recording is saved and is transcribed once a key is added."
+            return "Add your AssemblyAI API key in \(keysPlace) to \(notes ? "write notes" : "transcribe meetings"). \(saved) once a key is added."
         case let error as TranscriptionError:
             switch error {
             case .auth:
@@ -637,20 +654,20 @@ public enum MeetingFailure: Error, Equatable {
             case .modelUnavailable(let model, _):
                 return "Your key can't use \(model). \(fixHint)"
             case .offline:
-                return "You were offline when the meeting was transcribed. The recording is saved and is transcribed when you're back online."
+                return "You were offline when the \(notes ? "notes were being written" : "meeting was transcribed"). \(saved) when you're back online."
             case .timeout, .network where waitsForService(error):
-                return "Couldn't reach AssemblyAI. The recording is saved and is transcribed when AssemblyAI can be reached."
+                return "Couldn't reach AssemblyAI. \(saved) when AssemblyAI can be reached."
             case .network("output_truncated"):
                 return "The notes for this meeting ran past the model's length limit. The transcript is saved."
             case .network:
-                return "Transcription failed. \(fixHint)"
+                return "\(failed). \(fixHint)"
             case .safetyBlocked:
                 return "The model declined to write notes for this meeting. \(fixHint)"
             case .badRequest, .emptyTranscript:
-                return "Transcription failed. \(fixHint)"
+                return "\(failed). \(fixHint)"
             }
         default:
-            return "Transcription failed: \(error.localizedDescription). \(fixHint)"
+            return "\(failed): \(error.localizedDescription). \(fixHint)"
         }
     }
 }
