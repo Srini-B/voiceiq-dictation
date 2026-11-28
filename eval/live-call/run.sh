@@ -129,7 +129,13 @@ else
   sleep $(( speech_at > EPOCHSECONDS ? speech_at - EPOCHSECONDS : 0 ))
   afplay $owner &
 fi
-pids+=$!
+player=$!
+pids+=$player
 # SECONDS of speech, counted from speech_at: playto may still be waiting for it.
 sleep $(( speech_at + seconds > EPOCHSECONDS ? speech_at + seconds - EPOCHSECONDS : 0 ))
+# Still playing is fine (cleanup stops it); one that ended must have ended
+# well, or the owner's track was never played (Codex on #142).
+if ! kill -0 $player 2>/dev/null; then
+  wait $player || { echo "owner playback failed: this run does not count" >&2; exit 1; }
+fi
 echo "$(date +%T) Leaving the call; stop the recording if it is still running."
