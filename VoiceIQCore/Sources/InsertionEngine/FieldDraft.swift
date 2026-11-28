@@ -116,6 +116,12 @@ public final class FieldDraft: TextDraft {
         }
         let fitted = InsertionCoordinator.fitted(text, context: context)
         replaced = Self.slice(before.value, before.caret, before.selectionLength)
+        // Over a selection of the same text the paste would change nothing,
+        // so it could not be told from a miss: the written text goes in alone.
+        guard replaced != fitted else {
+            marks.clear()
+            return .notInserted
+        }
         let insert = await inserter.insertReportingTier(fitted, context: context, announcesMiss: false)
         guard insert.outcome == .inserted else {
             marks.clear()
@@ -226,6 +232,12 @@ public final class FieldDraft: TextDraft {
         guard await select(span.location, span.length, holding: reading.value) else {
             _ = await select(reading.caret, reading.selectionLength)
             Log.insertion.info("draft: the field didn't take the selection — kept as it was")
+            return false
+        }
+        // The draft is written only while its field is the focused one.
+        guard Self.focusedTarget(context: context).map({ CFEqual($0, element) }) == true else {
+            _ = await select(reading.caret, reading.selectionLength)
+            Log.insertion.info("draft: its field is no longer focused — kept as it was")
             return false
         }
         if !usesPasteOnly,
@@ -480,7 +492,10 @@ final class DraftField {
     }
 
     func release() {
-        if waiters.isEmpty { locked = false } else { waiters.removeFirst().resume() }
+        guard waiters.isEmpty else { return waiters.removeFirst().resume() }
+        locked = false
+        // A dictation that ended while another held the field.
+        if ledger.drafts.isEmpty { Self.fields.removeAll { $0 === self } }
     }
 
     /// A dictation is done with its draft; a field with none left is closed.

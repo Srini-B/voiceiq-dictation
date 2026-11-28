@@ -143,13 +143,16 @@ final class KeyboardModel: ObservableObject {
         KeyboardLog.note("[\(instanceTag)] draft stays as heard: the keyboard was dismissed")
     }
 
-    /// The user is about to edit the field with this keyboard. A marked
-    /// draft is made plain text first, so the edit goes in after it instead
-    /// of replacing it.
+    /// The user is about to edit the field with this keyboard. The draft
+    /// is made plain text first, so the edit goes in after it instead of
+    /// replacing it, and stays as heard: after an edit the text around the
+    /// cursor can match the draft's without being it (a deleted draft after
+    /// an earlier copy of its words).
     func userWillEdit() {
-        guard let held = draft, held.isMarked, documentID == held.documentID,
-              let proxy = controller?.textDocumentProxy else { return }
-        held.commit(proxy)
+        guard let held = draft else { return }
+        draft = nil
+        if documentID == held.documentID, let proxy = controller?.textDocumentProxy { held.commit(proxy) }
+        KeyboardLog.note("[\(instanceTag)] draft stays as heard: the user edited the field")
     }
 
     func disappeared() {
@@ -436,6 +439,8 @@ final class KeyboardModel: ObservableObject {
             return
         }
         draft = typed
+        // Undo replays edits before the cursor, which the draft has moved.
+        editor?.resetUndo()
         // Only once it is in: the app then sends the written text to replace it.
         store.typedDraftID = offered.id
         KeyboardLog.note("[\(instanceTag)] draft typed in \(Self.describe(currentField()))")

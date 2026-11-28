@@ -48,6 +48,8 @@ final class KeyboardDraft {
         guard (proxy.selectedText ?? "").isEmpty else { return nil }
         let before = proxy.documentContextBeforeInput ?? ""
         let after = proxy.documentContextAfterInput ?? ""
+        // A field with text it doesn't show can't be checked at the swap.
+        guard !(before.isEmpty && after.isEmpty && proxy.hasText) else { return nil }
         let fitted = fit(transcript, before, after)
         guard canSwap(fitted) else { return nil }
         proxy.setMarkedText(fitted, selectedRange: NSRange(location: fitted.utf16.count, length: 0))
@@ -103,7 +105,7 @@ final class KeyboardDraft {
         let rest = current.dropLast(text.count)
         // A host may show only part of the text before the cursor.
         let shared = min(rest.count, before.count, 40)
-        if shared == 0 { return rest.isEmpty == before.isEmpty || rest.isEmpty }
+        if shared == 0 { return rest.isEmpty == before.isEmpty }
         return rest.suffix(shared) == before.suffix(shared)
     }
 }

@@ -161,9 +161,10 @@ final class DictationController {
             }
         }
 
-        NotificationCenter.default.addObserver(forName: .voiceIQDraftKept, object: nil, queue: .main) { [weak self] _ in
+        NotificationCenter.default.addObserver(forName: .voiceIQDraftKept, object: nil, queue: .main) { [weak self] note in
+            let message = note.object as? String ?? DictationCoordinator.withdrawKeptNotice
             Task { @MainActor in
-                self?.showBackgroundNotice("The transcript stayed in the field as heard", for: 4.0, sound: nil)
+                self?.showBackgroundNotice(message, for: 4.0, sound: nil)
             }
         }
 

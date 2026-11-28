@@ -1,8 +1,7 @@
 import Foundation
 
 public extension Notification.Name {
-    /// A dictation ended without written text and its draft could not be
-    /// taken back out: the transcript stays in the field as heard.
+    /// A draft stayed in the field as heard; the object is the pill's note.
     static let voiceIQDraftKept = Notification.Name("io.blue.voiceiq.draft-kept")
 }
 
@@ -66,7 +65,7 @@ final class DraftStage {
             let shown = await showing.value
             guard shown == .shown || shown == .pending else { return }
             if await draft.replace(with: "") != true {
-                NotificationCenter.default.post(name: .voiceIQDraftKept, object: nil)
+                NotificationCenter.default.post(name: .voiceIQDraftKept, object: DictationCoordinator.withdrawKeptNotice)
             }
         }.value
     }

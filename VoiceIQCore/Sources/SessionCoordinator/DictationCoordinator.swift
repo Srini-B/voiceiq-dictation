@@ -28,6 +28,9 @@ public final class DictationCoordinator: ObservableObject {
     /// The pill's note when the draft stayed (edited, or not found for
     /// certain); the written text is in History and Paste last.
     nonisolated static let keptDraftNotice = "Kept as heard. Paste last has the written text"
+    /// The note when a dictation without written text couldn't take its
+    /// draft back out (`DraftStage.withdraw`).
+    nonisolated static let withdrawKeptNotice = "The transcript stayed in the field as heard"
 
     @Published public private(set) var coachingHint: String?
     /// The last inserted dictation's note, such as "Inserted as heard" when
@@ -679,6 +682,8 @@ public final class DictationCoordinator: ObservableObject {
         } else {
             endDetached(sessionID)
             onDetachedResult?(.outcome(result))
+            // A detached job has no pill: its kept draft is told like a withdraw's.
+            if keptDraft { NotificationCenter.default.post(name: .voiceIQDraftKept, object: Self.keptDraftNotice) }
         }
         reportStageTimes(stages, sessionID: sessionID, requestedAt: startedAt)
     }

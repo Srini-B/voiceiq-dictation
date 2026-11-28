@@ -220,8 +220,10 @@ is the Mac's draft (`TextDraft`), done by the keyboard:
    `setMarkedText`, fitted like any result. iOS hosts underline marked
    text. The keyboard then writes the draft's ID to
    `SharedStore.typedDraftID` (writer: keyboard). It types a draft only
-   within 0.45 s of its creation (`Delivery.draftWindow`), and never over a
-   selection.
+   within 0.45 s of its creation (`Delivery.draftWindow`), never over a
+   selection, and never into a field that reports text (`hasText`) but
+   shows none around the cursor, since the swap could not check it there.
+   Undo history is cleared when a draft goes in.
 3. The app waits up to 0.6 s (`Delivery.draftWait`) for that ID, then
    withdraws the draft from the snapshot. Without the ID, the written text
    comes as a plain result that still names the draft, in the dictation's
@@ -251,9 +253,11 @@ is the Mac's draft (`TextDraft`), done by the keyboard:
 
 While the keyboard holds a draft, the strip shows a writing animation (one
 crest sweeping across five bars) instead of the spinner. A key, a cursor
-move, Paste last or Undo while the draft is marked commits it first
-(`EditController.willEdit`), so the edit cannot replace it. A dismissed
-keyboard commits it too. Paste last and History always have the written
+move, Paste last or Undo while the keyboard holds the draft commits it
+first (`EditController.willEdit`), so the edit cannot replace it, and the
+draft then stays as heard: after an edit, the text around the cursor can
+match the draft's without being it (a deleted draft after an earlier copy
+of its words). A dismissed keyboard commits it too. Paste last and History always have the written
 text.
 
 The keyboard does not show a spinner in the field before the draft
