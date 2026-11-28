@@ -249,7 +249,7 @@ import VoiceIQSpeech
         if case .recording = phase { return }
         let id = MeetingID(), now = Date()
         var meta = MeetingMeta(id: id, startedAt: now, source: source)
-        if SettingsStore().calendarForMeetings { meta.calendarEvent = event ?? CalendarMeetings.event(at: now) }
+        if SettingsStore().calendarForMeetings { meta.calendarEvent = event ?? CalendarMeetings.event(at: now, source: source) }
         do {
             let folder = try store.create(meta: meta)
             #if os(macOS)

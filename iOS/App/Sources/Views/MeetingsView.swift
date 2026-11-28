@@ -302,28 +302,37 @@ private struct MeetingDetail: View {
         .themedBackground()
         .navigationTitle(meta.displayTitle(notes: notes) ?? "Notes")
         .navigationBarTitleDisplayMode(.inline)
+        // The title has the bar to itself; folders, redo and export are one menu (Fable, M6).
         .toolbar {
-            if !gone {
+            if !gone || !exports.isEmpty {
                 Menu {
-                    MeetingFolderToggles(model: folders, meeting: meta.id)
-                } label: {
-                    Label("Folders", systemImage: folders.names(of: meta.id).isEmpty ? "folder" : "folder.fill")
-                }
-            }
-            if meta.status == .done && !gone {
-                Menu {
-                    Button("Notes") { model.meetings.regenerateNotes(id: meta.id) }.disabled(transcript.isEmpty)
-                    Button("Transcript and notes") { model.meetings.retry(id: meta.id, fresh: true) }
-                        .disabled(!audio.isAvailable)
-                } label: { Label("Redo", systemImage: "arrow.clockwise") }
-                    .disabled(model.meetings.isBusy(meta.id))
-            }
-            if !exports.isEmpty {
-                Menu {
-                    ForEach(exports, id: \.label) { export in ShareLink(export.label, item: export.url) }
-                } label: { Label("Export", systemImage: "square.and.arrow.up") }
+                    if !gone {
+                        Menu {
+                            MeetingFolderToggles(model: folders, meeting: meta.id)
+                        } label: {
+                            Label("Folders", systemImage: folders.names(of: meta.id).isEmpty ? "folder" : "folder.fill")
+                        }
+                    }
+                    if meta.status == .done && !gone {
+                        Menu {
+                            Button("Notes") { model.meetings.regenerateNotes(id: meta.id) }.disabled(transcript.isEmpty)
+                            Button("Transcript and notes") { model.meetings.retry(id: meta.id, fresh: true) }
+                                .disabled(!audio.isAvailable)
+                        } label: { Label("Redo", systemImage: "arrow.clockwise") }
+                            .disabled(model.meetings.isBusy(meta.id))
+                    }
+                    if !exports.isEmpty {
+                        Menu {
+                            ForEach(exports, id: \.label) { export in ShareLink(export.label, item: export.url) }
+                        } label: { Label("Export", systemImage: "square.and.arrow.up") }
+                    }
+                } label: { Label("More", systemImage: "ellipsis") }
             }
         }
+        // Text scrolled under the bar no longer shows through beside the title.
+        .toolbarBackground(Theme.Colors.canvas, for: .navigationBar)
+        .toolbarBackground(.visible, for: .navigationBar)
+        .modifier(HardTopEdge())
         .sheet(isPresented: Binding(get: { naming != nil }, set: { if !$0 { naming = nil } })) {
             if let speaker = naming { speakerNames(speaker) }
         }
@@ -349,6 +358,7 @@ private struct MeetingDetail: View {
                 VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
                     Text(meta.shownTitle(notes: notes) ?? notes.title).font(Theme.Fonts.title2()).foregroundStyle(Theme.Colors.ink)
                     Text(meta.whenText).font(Theme.Fonts.footnote()).foregroundStyle(Theme.Colors.muted)
+                    if !speakers.isEmpty { people }
                 }
                 Spacer(minLength: Theme.Spacing.s)
                 if let kind = notes.type.flatMap(MeetingKind.init(rawValue:)) {
@@ -363,6 +373,28 @@ private struct MeetingDetail: View {
         if !notes.decisions.isEmpty { bulletGroup("Decisions", items: notes.decisions) }
         if !notes.actions.isEmpty { actionItems(notes.actions) }
         if !notes.notes.isEmpty { bulletGroup("Notes", items: notes.notes) }
+    }
+
+    /// The note owner first, then the others; an import without speaker labels has none.
+    private var speakers: [String] {
+        let others = MeetingSpeaker.others(in: transcript).filter { $0 != GranolaImport.unlabeledSpeaker }
+        return (transcript.contains { $0.speaker == MeetingSpeaker.you } ? [MeetingSpeaker.you] : []) + others
+    }
+
+    /// Everyone heard, each in their transcript colour, as on the Mac.
+    private var people: some View {
+        let others = MeetingSpeaker.others(in: transcript)
+        let names = speakers.map { meta.displayName($0, notes: notes) }
+        // A non-breaking space keeps each dot with its name when the line wraps.
+        return zip(speakers, names).enumerated().reduce(Text("")) { line, entry in
+            let hex = MeetingSpeaker.colorHex(entry.element.0, others: others)
+            let dot = Text(Image(systemName: "circle.fill")).font(.system(size: 7))
+                .foregroundColor(Theme.Colors.dynamic(light: hex.light, dark: hex.dark))
+            return line + Text(entry.offset == 0 ? "" : "    ") + dot + Text("\u{00A0}" + entry.element.1)
+        }
+        .font(Theme.Fonts.footnote())
+        .foregroundStyle(Theme.Colors.muted)
+        .accessibilityLabel("With " + names.joined(separator: ", "))
     }
 
     private func bulletGroup(_ title: String, items: [String]) -> some View {
@@ -410,25 +442,25 @@ private struct MeetingDetail: View {
             GroupLabel(text: "Transcript")
             Card {
                 VStack(alignment: .leading, spacing: Theme.Spacing.l) {
-                    ForEach(MeetingSpeaker.turns(in: transcript), id: \.[0].id) { turn in
+                    ForEach(MeetingSpeaker.turns(in: transcript)) { turn in
                         VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
                             HStack(spacing: Theme.Spacing.s) {
-                                speakerMenu(turn[0].speaker)
-                                Spacer(minLength: 0)
-                                if let start = turn[0].start {
+                                speakerMenu(turn.speaker)
+                                if let start = turn.start {
                                     Text(MeetingNotesPrompt.clock(start)).font(Theme.Fonts.caption()).foregroundStyle(Theme.Colors.muted)
                                 }
                             }
-                            ForEach(turn) { segment in
-                                Text(segment.text).font(Theme.Fonts.body()).foregroundStyle(Theme.Colors.ink)
+                            ForEach(turn.lines) { line in
+                                lineText(line)
+                                    .padding(.leading, line.aside ? 12 : 0)
                                     .frame(maxWidth: .infinity, alignment: .leading)
                                     .contentShape(Rectangle())
                                     .contextMenu {
                                         // A redo running now would write over the change.
                                         if !model.meetings.isBusy(meta.id) && !gone {
-                                            Button("Edit", systemImage: "pencil") { editing = segment }
+                                            Button("Edit", systemImage: "pencil") { editing = line.segment }
                                             Button("Delete", systemImage: "trash", role: .destructive) {
-                                                try? model.meetings.store.deleteTranscriptSegment(segment.id, meeting: meta.id)
+                                                try? model.meetings.store.deleteTranscriptSegment(line.segment.id, meeting: meta.id)
                                                 load()
                                             }
                                         }
@@ -439,6 +471,15 @@ private struct MeetingDetail: View {
                 }
             }
         }
+    }
+
+    /// A line of the turn; someone else's short reply shows under their name in their colour.
+    private func lineText(_ line: TranscriptTurn.Line) -> Text {
+        guard line.aside else { return Text(line.segment.text).font(Theme.Fonts.body()).foregroundColor(Theme.Colors.ink) }
+        let hex = MeetingSpeaker.colorHex(line.segment.speaker, others: MeetingSpeaker.others(in: transcript))
+        return Text(meta.displayName(line.segment.speaker, notes: notes) + "  ")
+            .font(Theme.Fonts.label()).foregroundColor(Theme.Colors.dynamic(light: hex.light, dark: hex.dark))
+            + Text(line.segment.text).font(Theme.Fonts.body()).foregroundColor(Theme.Colors.muted)
     }
 
     /// The speaker's name in their colour; tapping it offers the names this
@@ -508,5 +549,13 @@ private struct MeetingDetail: View {
                   (try? text.write(to: url, atomically: true, encoding: .utf8)) != nil else { return nil }
             return (label, url)
         }
+    }
+}
+
+/// iOS 26 fades scrolled text under a glass bar instead of drawing the bar's
+/// background; a hard edge keeps it out from under the title.
+private struct HardTopEdge: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(iOS 26, *) { content.scrollEdgeEffectStyle(.hard, for: .top) } else { content }
     }
 }

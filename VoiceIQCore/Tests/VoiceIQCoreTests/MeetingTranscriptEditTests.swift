@@ -23,16 +23,30 @@ final class MeetingTranscriptEditTests: XCTestCase {
         TranscriptSegment(speaker: "you", text: "Then Friday it is.", chunkIndex: 0, start: 12, end: 14),
     ]
 
-    /// The views show one heading per turn; each line keeps its own id for Edit and Delete.
-    func testTurnsGroupOnlyAdjacentLinesOfOneSpeaker() {
-        let lines = [transcript[0], transcript[3], transcript[1], transcript[2], transcript[0]]
+    /// The views show one heading per run of one speaker; a one- or two-word
+    /// reply sits inside the run without breaking it, and a lone letter is
+    /// dropped. Each line keeps its own id for Edit and Delete.
+    func testTurnsKeepShortRepliesInsideTheRun() {
+        func line(_ speaker: String, _ text: String) -> TranscriptSegment {
+            TranscriptSegment(speaker: speaker, text: text, chunkIndex: 0)
+        }
+        let lines = [
+            line("you", "Okay."),
+            line("s1", "So we've got both of these clipped on."),
+            line("you", "Okay."),
+            line("s1", "Is she going to answer me or not?"),
+            line("you", "a"),
+            line("s2", "Yes."),
+            line("s1", "Right, then."),
+            line("you", "Then Friday it is, everyone."),
+        ]
         let turns = MeetingSpeaker.turns(in: lines)
-        XCTAssertEqual(turns.map { $0.map(\.text) }, [
-            ["Where are we on pricing?", "Then Friday it is."],
-            ["Pricing ships after the budget revue."],
-            ["Um, sorry, my dog."],
-            ["Where are we on pricing?"],
+        XCTAssertEqual(turns.map(\.speaker), ["you", "s1", "you"])
+        XCTAssertEqual(turns[1].lines.map(\.segment.text), [
+            "So we've got both of these clipped on.", "Okay.", "Is she going to answer me or not?", "Yes.", "Right, then.",
         ])
+        XCTAssertEqual(turns[1].lines.map(\.aside), [false, true, false, true, false])
+        XCTAssertEqual(turns[1].lines.map(\.id), [lines[1].id, lines[2].id, lines[3].id, lines[5].id, lines[6].id])
     }
 
     private func finishedMeeting(_ transcript: [TranscriptSegment]) throws -> MeetingID {

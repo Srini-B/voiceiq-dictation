@@ -45,16 +45,38 @@ public enum CalendarMeetings {
 
     /// The meeting the user is in at `date`: not all-day, cancelled, free or
     /// declined, with other people invited or a call link. When several
-    /// overlap, the one that started nearest `date`.
-    public static func event(at date: Date) -> Event? {
+    /// overlap, see `pick`.
+    public static func event(at date: Date, source: CallSource?) -> Event? {
         guard isAuthorized else { return nil }
         let predicate = store.predicateForEvents(withStart: date.addingTimeInterval(-24 * 3600),
                                                  end: date.addingTimeInterval(earlyStart), calendars: nil)
-        let best = store.events(matching: predicate)
+        let candidates = store.events(matching: predicate)
             .filter { $0.startDate.addingTimeInterval(-earlyStart) <= date && date < $0.endDate && isMeeting($0) }
-            .min { abs($0.startDate.timeIntervalSince(date)) < abs($1.startDate.timeIntervalSince(date)) }
+        let best = pick(candidates, at: date, service: source.flatMap(service(of:)), start: \.startDate) {
+            [$0.url?.absoluteString, $0.location, $0.notes].compactMap { $0 }.joined(separator: " ")
+        }
         guard let best, let title = best.title?.trimmingCharacters(in: .whitespacesAndNewlines), !title.isEmpty else { return nil }
         return Event(title: title, attendees: attendees(of: best))
+    }
+
+    /// Of the meetings that could be the call, the one whose call link names
+    /// the call's own service, else the only one under way, else the only one
+    /// about to start. Two that nothing tells apart give none: the wrong
+    /// title and invitees would name the speakers wrongly. Hex matches the
+    /// same way (anomalyco/hex 566c99fc); the nearest start used before took
+    /// whichever of two overlapping meetings began later.
+    static func pick<E>(_ events: [E], at date: Date, service: String?, start: (E) -> Date, text: (E) -> String) -> E? {
+        func only(_ list: [E]) -> E? { list.count == 1 ? list[0] : nil }
+        if let service, let match = only(events.filter { text($0).lowercased().contains(service) }) { return match }
+        return only(events.filter { start($0) <= date }) ?? only(events.filter { start($0) > date })
+    }
+
+    /// The call service a detected call runs on, as call links name it.
+    static func service(of source: CallSource) -> String? {
+        switch source {
+        case let .browser(_, host): return callHosts.first { host == $0 || host.hasSuffix("." + $0) }
+        case let .app(bundleID, _): return joinApps.first { $0.bundleIDs.contains(bundleID) }?.service
+        }
     }
 
     /// Invitees other than the user, by name or address, at most 30.

@@ -75,7 +75,8 @@ struct MeetingChatInput: View {
     var body: some View {
         HStack(spacing: Theme.Spacing.s) {
             // One line: a vertical field on iOS takes Return as a new line, not Send.
-            TextField("Ask about this note", text: $draft)
+            // The system placeholder was 1.7:1 on the field; muted ink reads (Fable, M6).
+            TextField("Ask about this note", text: $draft, prompt: Text("Ask about this note").foregroundStyle(Theme.Colors.muted))
                 .font(Theme.Fonts.body())
                 .submitLabel(.send)
                 .onSubmit(send)

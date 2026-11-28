@@ -62,6 +62,21 @@ public struct TranscriptSegment: Codable, Equatable, Sendable, Identifiable {
     }
 }
 
+/// One heading in the transcript: a speaker and their lines, with other
+/// people's one- or two-word replies as asides (`MeetingSpeaker.turns`).
+public struct TranscriptTurn: Equatable, Sendable, Identifiable {
+    public struct Line: Equatable, Sendable, Identifiable {
+        public var segment: TranscriptSegment
+        /// Someone else's short reply inside this speaker's run.
+        public var aside: Bool
+        public var id: String { segment.id }
+    }
+    public var speaker: String
+    public var lines: [Line]
+    public var id: String { lines[0].id }
+    public var start: Double? { lines[0].segment.start }
+}
+
 public enum MeetingSpeaker {
     public static let you = "you"
 
@@ -79,15 +94,28 @@ public enum MeetingSpeaker {
         return seen
     }
 
-    /// Runs of lines by the same speaker, in order, so a transcript reads as
-    /// one heading per turn rather than one per line.
-    public static func turns(in transcript: [TranscriptSegment]) -> [[TranscriptSegment]] {
-        var turns: [[TranscriptSegment]] = []
-        for segment in transcript {
-            if turns.last?.last?.speaker == segment.speaker { turns[turns.count - 1].append(segment) }
-            else { turns.append([segment]) }
+    /// The transcript as it reads: one heading per run of one speaker's lines.
+    /// A reply of one or two words from someone else ("Okay.", "Yes.") is an
+    /// aside inside the run instead of a heading of its own, and the run goes
+    /// on after it. A lone letter ("a") is a transcription fragment and is
+    /// left out. MEASURED 2026-11-27 on AMI ES2004a: seven headings for ten
+    /// lines before asides, as "Okay." and "Yes." alternated speakers.
+    public static func turns(in transcript: [TranscriptSegment]) -> [TranscriptTurn] {
+        var turns: [TranscriptTurn] = []
+        for segment in transcript where !isFragment(segment.text) {
+            if let last = turns.last, last.speaker == segment.speaker {
+                turns[turns.count - 1].lines.append(.init(segment: segment, aside: false))
+            } else if !turns.isEmpty, segment.text.split(whereSeparator: \.isWhitespace).count <= 2 {
+                turns[turns.count - 1].lines.append(.init(segment: segment, aside: true))
+            } else {
+                turns.append(TranscriptTurn(speaker: segment.speaker, lines: [.init(segment: segment, aside: false)]))
+            }
         }
         return turns
+    }
+
+    static func isFragment(_ text: String) -> Bool {
+        text.filter { $0.isLetter || $0.isNumber }.count <= 1 && !text.contains { $0.isNumber }
     }
 
     /// A speaker's name colour as light and dark RGB: green for the note
