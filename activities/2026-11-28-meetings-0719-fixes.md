@@ -9,12 +9,18 @@ Neon's release-gate pass on the 0.7.18 branch (agy session b80ee9db, at
 - **Waiting meetings while offline.** The retry timer kept going offline,
   re-encoding the audio and repeating the notice every 5 to 60 minutes. It is
   no longer scheduled while offline; coming back online sends the meeting and
-  resets the backoff to 5 minutes. Port of 8a49c58.
+  resets the backoff to 5 minutes; a timer armed before a network change is
+  cancelled. Ports of 8a49c58 and 8d21588.
 - **Former On device users.** An automatic update shows no release notes, so a
   0.7.17 user who had set Meetings to On device
   (`meetingTranscriptionSource == "onDevice"`) gets one notice on their first
   recording: meetings now go to AssemblyAI, and discarding the recording keeps
-  it off AssemblyAI. The key is then removed. Port of 8a49c58.
+  it off AssemblyAI. The key is then removed. The notice stays on the pill as
+  recording starts and is short enough to fit it; the iPhone recorder gets the
+  Discard it names. Ports of 8a49c58, 0300d86 and 8d21588.
+- **Pill and banners.** A recording started from the Meetings window shows the
+  pill, Mute leaves a notice up, and an iPhone banner's timer restarts with its
+  text. Port of 8d21588.
 - **iPhone, failed redo of a finished note.** The old notes hid the failure
   card, and Redo needed `.done`, so nothing could retry it. The failure card now
   shows above the notes, and More offers Retry while the note is failed, as the

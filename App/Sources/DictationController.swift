@@ -190,7 +190,8 @@ final class DictationController {
             self?.showBackgroundNotice("Learned \(terms) — see Dictionary", for: 4.0, sound: nil)
         }
         meetings.onNotice = { [weak self] message in
-            self?.showBackgroundNotice(message, for: 4.0, sound: nil)
+            // Long enough to read: the On device notice is twice the usual length.
+            self?.showBackgroundNotice(message, for: max(4.0, Double(message.count) / 8), sound: nil)
         }
         meetings.onNotesReady = { [weak self] in
             guard let self else { return }

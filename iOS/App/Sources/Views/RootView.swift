@@ -125,8 +125,11 @@ struct BannerView: View {
         .padding(Theme.Spacing.m)
         .background(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous).fill(Theme.Colors.surface)
             .shadow(color: .black.opacity(0.12), radius: 16, y: 6))
-        .task {
+        // Keyed by the text, so a new banner restarts the timer instead of
+        // inheriting an earlier banner's.
+        .task(id: text) {
             try? await Task.sleep(for: .seconds(5))
+            guard !Task.isCancelled else { return }
             dismiss()
         }
     }

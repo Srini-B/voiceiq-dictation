@@ -154,6 +154,9 @@ import VoiceIQSpeech
                 guard let self else { return }
                 let cameOnline = path.status == .satisfied && !self.online
                 self.online = path.status == .satisfied
+                // A timer armed before the change would fire offline, or hold
+                // a long backoff past the reset below.
+                if !self.online || cameOnline { self.waitingRetry?.cancel(); self.waitingRetry = nil }
                 if cameOnline {
                     self.waitingDelay = .seconds(300)
                     self.transcribeWaiting()
@@ -199,7 +202,7 @@ import VoiceIQSpeech
             try? await Task.sleep(for: delay)
             guard !Task.isCancelled, let self else { return }
             self.waitingRetry = nil
-            self.transcribeWaiting()
+            if self.online { self.transcribeWaiting() }
         }
     }
 
@@ -300,7 +303,7 @@ import VoiceIQSpeech
             #endif
             phase = .recording(id, since: now)
             if SettingsStore().takeRetiredOnDeviceMeetingChoice() {
-                onNotice?("\(MeetingFailure.listName) now go to AssemblyAI: On device was removed. Discard this recording to keep it off AssemblyAI.")
+                onNotice?("\(MeetingFailure.listName) now use AssemblyAI (On device removed). Discard to cancel.")
             }
         } catch { fail(id, error) }
     }
