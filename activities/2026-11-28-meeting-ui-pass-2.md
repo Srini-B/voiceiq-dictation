@@ -34,6 +34,13 @@ takes the deductions that were left.
   - A reply is an aside only if it is at most 20 characters, so a Chinese or Japanese turn without spaces keeps its own heading.
   - The Teams app matches both teams.microsoft.com and teams.live.com links.
   - On the iPhone the note title shows once. The bar takes the title only after the page's large title has scrolled away. The kind badge sits on the date line, and the ask field says "meeting" when the badge does.
+- **Neon review of da97b09:**
+  - A short line becomes an aside only when the run's speaker goes on after it, or when it is the transcript's last line. "Good point." before the same speaker's longer line keeps its heading.
+  - Only a lone Latin letter is a fragment: "B.", "I.", digits and one-character words in other scripts stay, and Mac search stops matching what the turns hide.
+  - The calendar no longer falls back to an upcoming event while two are under way. Service links are matched by host, so notzoom.us does not count as zoom.us. Slack is never the matched service, as in `joinApps`.
+  - On iPhone, an aside's context menu can name its speaker.
+  - In dark mode the selected text colour follows the system.
+- **Focus ring on "History":** the satellite has full keyboard navigation on (`AppleKeyboardUIMode` = 2), so the first sidebar button takes focus. With the default setting it does not show.
 - **Play and Download stay visible but disabled** when a meeting has no audio, as decided on 2026-11-12 (9d7dd3e). The UI fixtures have no audio, so those buttons show disabled in the captures.
 
 ## Not done

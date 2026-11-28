@@ -122,7 +122,8 @@ struct MeetingTranscriptColumn: View {
             || meeting.displayName(segment.speaker, notes: notes).localizedCaseInsensitiveContains(trimmedQuery)
     }
 
-    private var shown: [TranscriptSegment] { transcript.filter(matches) }
+    // As the turns show them: a lone-letter fragment is not a match on its own.
+    private var shown: [TranscriptSegment] { transcript.filter { matches($0) && !MeetingSpeaker.isFragment($0.text) } }
 
     private func openSearch() { searching = true; searchFocused = true }
     private func closeSearch() { searching = false; query = "" }
@@ -146,16 +147,19 @@ struct MeetingTranscriptColumn: View {
         asideLast.firstLineHeadIndent = 12; asideLast.headIndent = 12
         let out = NSMutableAttributedString()
         // Grouped before the search filters, so turns apart stay apart.
-        let turns = MeetingSpeaker.turns(in: transcript).compactMap { turn -> TranscriptTurn? in
+        let turns = MeetingSpeaker.turns(in: transcript).flatMap { turn -> [TranscriptTurn] in
             var turn = turn
             turn.lines = turn.lines.filter { matches($0.segment) }
-            guard let first = turn.lines.first else { return nil }
-            // Only asides matched: they read as their speaker's own lines, not under someone silent.
-            if turn.lines.allSatisfy(\.aside) {
-                turn.speaker = first.segment.speaker
-                turn.lines = turn.lines.map { var line = $0; line.aside = false; return line }
+            guard !turn.lines.isEmpty else { return [] }
+            guard turn.lines.allSatisfy(\.aside) else { return [turn] }
+            // Only asides matched: each reads under its own speaker, not under someone silent (Codex).
+            var own: [TranscriptTurn] = []
+            for line in turn.lines {
+                let plain = TranscriptTurn.Line(segment: line.segment, aside: false)
+                if own.last?.speaker == line.segment.speaker { own[own.count - 1].lines.append(plain) }
+                else { own.append(TranscriptTurn(speaker: line.segment.speaker, lines: [plain])) }
             }
-            return turn
+            return own
         }
         for turn in turns {
             // The heading is the run's speaker even when search hid their first line (Codex);

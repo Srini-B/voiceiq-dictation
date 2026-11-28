@@ -446,6 +446,7 @@ private struct MeetingDetail: View {
             GroupLabel(text: "Transcript")
             Card {
                 VStack(alignment: .leading, spacing: Theme.Spacing.l) {
+                    let others = MeetingSpeaker.others(in: transcript)
                     ForEach(MeetingSpeaker.turns(in: transcript)) { turn in
                         VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
                             HStack(spacing: Theme.Spacing.s) {
@@ -455,13 +456,19 @@ private struct MeetingDetail: View {
                                 }
                             }
                             ForEach(turn.lines) { line in
-                                lineText(line)
+                                lineText(line, others: others)
                                     .padding(.leading, line.aside ? 12 : 0)
                                     .frame(maxWidth: .infinity, alignment: .leading)
                                     .contentShape(Rectangle())
                                     .contextMenu {
                                         // A redo running now would write over the change.
                                         if !model.meetings.isBusy(meta.id) && !gone {
+                                            // An aside has no heading to tap; its speaker is named from here.
+                                            if line.aside {
+                                                Button("Name \(meta.displayName(line.segment.speaker, notes: notes))…", systemImage: "person.crop.circle") {
+                                                    naming = line.segment.speaker
+                                                }
+                                            }
                                             Button("Edit", systemImage: "pencil") { editing = line.segment }
                                             Button("Delete", systemImage: "trash", role: .destructive) {
                                                 try? model.meetings.store.deleteTranscriptSegment(line.segment.id, meeting: meta.id)
@@ -478,9 +485,9 @@ private struct MeetingDetail: View {
     }
 
     /// A line of the turn; someone else's short reply shows under their name in their colour.
-    private func lineText(_ line: TranscriptTurn.Line) -> Text {
+    private func lineText(_ line: TranscriptTurn.Line, others: [String]) -> Text {
         guard line.aside else { return Text(line.segment.text).font(Theme.Fonts.body()).foregroundColor(Theme.Colors.ink) }
-        let hex = MeetingSpeaker.colorHex(line.segment.speaker, others: MeetingSpeaker.others(in: transcript))
+        let hex = MeetingSpeaker.colorHex(line.segment.speaker, others: others)
         return Text(meta.displayName(line.segment.speaker, notes: notes) + "  ")
             .font(Theme.Fonts.label()).foregroundColor(Theme.Colors.dynamic(light: hex.light, dark: hex.dark))
             + Text(line.segment.text).font(Theme.Fonts.body()).foregroundColor(Theme.Colors.muted)

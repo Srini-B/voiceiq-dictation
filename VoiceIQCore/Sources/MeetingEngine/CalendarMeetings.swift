@@ -59,24 +59,39 @@ public enum CalendarMeetings {
         return Event(title: title, attendees: attendees(of: best))
     }
 
-    /// Of the meetings that could be the call, the one whose call link names
-    /// the call's own service, else the only one under way, else the only one
-    /// about to start. Two that nothing tells apart give none: the wrong
-    /// title and invitees would name the speakers wrongly. Hex matches the
-    /// same way (anomalyco/hex 566c99fc); the nearest start used before took
-    /// whichever of two overlapping meetings began later.
+    /// Of the meetings that could be the call, those whose call link names the
+    /// call's own service when any does; of those, the only one under way, or
+    /// when none is under way, the only one about to start. Two that nothing
+    /// tells apart give none: the wrong title and invitees would name the
+    /// speakers wrongly. Hex matches the same way (anomalyco/hex 566c99fc); the
+    /// nearest start used before took whichever of two overlapping meetings
+    /// began later.
     static func pick<E>(_ events: [E], at date: Date, services: [String], start: (E) -> Date, text: (E) -> String) -> E? {
         func only(_ list: [E]) -> E? { list.count == 1 ? list[0] : nil }
-        let byService = events.filter { event in services.contains { text(event).lowercased().contains($0) } }
-        if let match = only(byService) { return match }
-        return only(events.filter { start($0) <= date }) ?? only(events.filter { start($0) > date })
+        let byService = events.filter { event in
+            linkHosts(in: text(event)).contains { host in services.contains { host == $0 || host.hasSuffix("." + $0) } }
+        }
+        let pool = byService.isEmpty ? events : byService
+        let underway = pool.filter { start($0) <= date }
+        return underway.isEmpty ? only(pool) : only(underway)
+    }
+
+    /// The hosts of the https links in `text`, lowercased.
+    static func linkHosts(in text: String) -> [String] {
+        guard let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue) else { return [] }
+        return detector.matches(in: text, range: NSRange(text.startIndex..., in: text)).compactMap { match in
+            match.url?.scheme == "https" ? match.url?.host?.lowercased() : nil
+        }
     }
 
     /// The call service a detected call runs on, as call links name it; the
     /// Teams app serves both teams.microsoft.com and teams.live.com links.
+    /// Slack is left out, as in `joinApps`: a slack.com link in an invite is
+    /// rarely the call itself.
     static func services(of source: CallSource) -> [String] {
         switch source {
-        case let .browser(_, host): return callHosts.filter { host == $0 || host.hasSuffix("." + $0) }
+        case let .browser(_, host):
+            return joinApps.map(\.service).filter { host == $0 || host.hasSuffix("." + $0) }
         case let .app(bundleID, _): return joinApps.filter { $0.bundleIDs.contains(bundleID) }.map(\.service)
         }
     }

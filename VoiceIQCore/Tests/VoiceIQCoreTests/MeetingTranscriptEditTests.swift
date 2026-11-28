@@ -51,6 +51,12 @@ final class MeetingTranscriptEditTests: XCTestCase {
         let chinese = MeetingSpeaker.turns(in: [line("you", "我们先看一下上周的数据。"),
                                                 line("s1", "注册量上周增长了百分之八，主要来自新的推荐链接。")])
         XCTAssertEqual(chinese.map(\.speaker), ["you", "s1"])
+        // A short line that opens its speaker's next turn keeps its heading; an answer "B." stays.
+        let opening = MeetingSpeaker.turns(in: [line("you", "Should we ship Friday?"), line("s1", "Good point."),
+                                                line("s1", "We should move the launch to Friday."), line("you", "A or B?"), line("s2", "B.")])
+        XCTAssertEqual(opening.map(\.speaker), ["you", "s1", "you"])
+        XCTAssertEqual(opening[1].lines.map(\.segment.text), ["Good point.", "We should move the launch to Friday."])
+        XCTAssertEqual(opening[2].lines.map(\.aside), [false, true])
     }
 
     private func finishedMeeting(_ transcript: [TranscriptSegment]) throws -> MeetingID {

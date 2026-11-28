@@ -70,11 +70,13 @@ public struct TranscriptTurn: Equatable, Sendable, Identifiable {
         /// Someone else's short reply inside this speaker's run.
         public var aside: Bool
         public var id: String { segment.id }
+        public init(segment: TranscriptSegment, aside: Bool) { self.segment = segment; self.aside = aside }
     }
     public var speaker: String
     public var lines: [Line]
-    public var id: String { lines[0].id }
-    public var start: Double? { lines[0].segment.start }
+    public init(speaker: String, lines: [Line]) { self.speaker = speaker; self.lines = lines }
+    public var id: String { lines.first?.id ?? speaker }
+    public var start: Double? { lines.first?.segment.start }
 }
 
 public enum MeetingSpeaker {
@@ -96,16 +98,20 @@ public enum MeetingSpeaker {
 
     /// The transcript as it reads: one heading per run of one speaker's lines.
     /// A reply of one or two words from someone else ("Okay.", "Yes.") is an
-    /// aside inside the run instead of a heading of its own, and the run goes
-    /// on after it. A lone letter ("a") is a transcription fragment and is
+    /// aside inside the run when the run's speaker goes on after it (or the
+    /// transcript ends), instead of a heading of its own; a short line that
+    /// opens its speaker's next turn ("Good point." then more) keeps its
+    /// heading. A lone Latin letter ("a") is a transcription fragment and is
     /// left out. MEASURED 2026-11-27 on AMI ES2004a: seven headings for ten
     /// lines before asides, as "Okay." and "Yes." alternated speakers.
     public static func turns(in transcript: [TranscriptSegment]) -> [TranscriptTurn] {
+        let lines = transcript.filter { !isFragment($0.text) }
         var turns: [TranscriptTurn] = []
-        for segment in transcript where !isFragment(segment.text) {
+        for (index, segment) in lines.enumerated() {
+            let next = index + 1 < lines.count ? lines[index + 1].speaker : nil
             if let last = turns.last, last.speaker == segment.speaker {
                 turns[turns.count - 1].lines.append(.init(segment: segment, aside: false))
-            } else if !turns.isEmpty, isShortReply(segment.text) {
+            } else if let last = turns.last, next == nil || next == last.speaker, isShortReply(segment.text) {
                 turns[turns.count - 1].lines.append(.init(segment: segment, aside: true))
             } else {
                 turns.append(TranscriptTurn(speaker: segment.speaker, lines: [.init(segment: segment, aside: false)]))
@@ -120,8 +126,11 @@ public enum MeetingSpeaker {
         text.split(whereSeparator: \.isWhitespace).count <= 2 && text.count <= 20
     }
 
-    static func isFragment(_ text: String) -> Bool {
-        text.filter { $0.isLetter || $0.isNumber }.count <= 1 && !text.contains { $0.isNumber }
+    /// A single Latin letter and nothing else. "B." (an answer), "I.", a
+    /// digit or a one-character word in another script stays.
+    public static func isFragment(_ text: String) -> Bool {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.count == 1 && trimmed.first.map { $0.isASCII && $0.isLetter } == true
     }
 
     /// A speaker's name colour as light and dark RGB: green for the note

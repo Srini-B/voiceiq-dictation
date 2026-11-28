@@ -38,6 +38,9 @@ final class CalendarMeetingsTests: XCTestCase {
         XCTAssertEqual(pick([soon], zoom), "soon")
         let teamsLive: E = ("teams", now.addingTimeInterval(-600), "https://teams.live.com/meet/123")
         XCTAssertEqual(pick([vendor, teamsLive], .app(bundleID: "com.microsoft.teams2", name: "Microsoft Teams")), "teams")
+        // Two under way and one about to start: none, not the one about to start (Neon).
+        XCTAssertNil(pick([standup, vendor, soon], nil))
+        XCTAssertNil(pick([(name: "fake", start: now, text: "https://notzoom.us/j/1"), standup], zoom))
     }
 
     func testWhenCountsMinutesForTheFirstHour() {

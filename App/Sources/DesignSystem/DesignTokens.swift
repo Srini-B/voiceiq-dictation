@@ -20,7 +20,9 @@ enum VoiceIQUI {
         static let selection = Color(nsColor: NSColor(name: nil) { appearance in
             appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? .selectedContentBackgroundColor : NSColor(hex: 0x0B57D0)
         })
-        static let onSelection = Color.white
+        static let onSelection = Color(nsColor: NSColor(name: nil) { appearance in
+            appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? .alternateSelectedControlTextColor : .white
+        })
 
         // Surfaces (never pure black)
         static let surface = dyn(light: 0xFFFFFF, dark: 0x1E1F20)
