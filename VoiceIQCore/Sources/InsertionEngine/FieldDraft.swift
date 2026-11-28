@@ -116,9 +116,10 @@ public final class FieldDraft: TextDraft {
         }
         let fitted = InsertionCoordinator.fitted(text, context: context)
         replaced = Self.slice(before.value, before.caret, before.selectionLength)
-        // Over a selection of the same text the paste would change nothing,
-        // so it could not be told from a miss: the written text goes in alone.
-        guard replaced != fitted else {
+        // Nothing to show (a lone mark fitted away), or a selection of the
+        // same text, which a paste would leave as it is and so can't be told
+        // from a miss: the written text goes in alone.
+        guard !fitted.isEmpty, replaced != fitted else {
             marks.clear()
             return .notInserted
         }
