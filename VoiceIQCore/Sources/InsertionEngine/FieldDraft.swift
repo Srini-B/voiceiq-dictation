@@ -94,8 +94,9 @@ public final class FieldDraft: TextDraft {
             return nil
         }
         let draft = FieldDraft(element: element, context: context, inserter: inserter, marks: marks,
-                               usesPasteOnly: isChromiumOrElectron(bundleID: bundleID, bundleURL: bundleURL))
-        if let caret = caretRect(in: element, at: reading.caret) { marks.showSpinner(at: caret) }
+                               usesPasteOnly: isChromiumOrElectron(bundleID: bundleID, bundleURL: bundleURL)
+                                   || isInWebArea(element))
+        if let caret = caretRect(in: element, at: reading.caret, of: reading.value) { marks.showSpinner(at: caret) }
         return draft
     }
 
@@ -191,6 +192,12 @@ public final class FieldDraft: TextDraft {
         let withdrawing = text.isEmpty
         let written = withdrawing ? replaced : span.surrounding(in: reading.value)?.fitted(text) ?? text
         guard written != span.text else { return true }
+        // A field written only by ⌘V can't take the draft out: a Delete
+        // posted over it would also delete a key the user typed meanwhile.
+        if written.isEmpty, usesPasteOnly {
+            Log.insertion.info("draft: no Accessibility write to take it out — kept as it was")
+            return false
+        }
         guard let expected = span.replacing(in: reading.value, with: written) else { return false }
         let selection = withdrawing && !replaced.isEmpty
             ? (location: span.location, length: replaced.utf16.count)
@@ -244,9 +251,7 @@ public final class FieldDraft: TextDraft {
             Log.insertion.info("draft: not focused or the selection moved — kept as it was")
             return false
         }
-        // An empty written text takes the draft out: Delete over the
-        // selection, never a paste of nothing.
-        guard await (written.isEmpty ? inserter.pressDelete() : inserter.paste(written)) else {
+        guard await inserter.paste(written) else {
             _ = await select(reading.caret, reading.selectionLength)
             return false
         }
@@ -339,14 +344,35 @@ public final class FieldDraft: TextDraft {
             || bundleURL.map { !TypingInserter.chromiumMajorVersions(in: $0).isEmpty } == true
     }
 
-    static func caretRect(in element: AXUIElement, at caret: Int) -> CGRect? {
+    /// The cursor's rect, from the character before it when that is on
+    /// the same line: an empty range at the end of an NSTextView reports
+    /// the line below.
+    static func caretRect(in element: AXUIElement, at caret: Int, of value: String) -> CGRect? {
+        let units = Array(value.utf16)
+        let afterBreak = caret == 0 || caret > units.count || [0x0A, 0x0D, 0x2028, 0x2029].contains(units[caret - 1])
+        if !afterBreak, let rect = bounds(in: element, location: caret - 1, length: 1), rect.height > 1 {
+            return CGRect(x: rect.maxX, y: rect.minY, width: 0, height: rect.height)
+        }
         if let rect = bounds(in: element, location: caret, length: 0), rect.height > 1 {
             return CGRect(x: rect.minX, y: rect.minY, width: 0, height: rect.height)
         }
-        if caret > 0, let rect = bounds(in: element, location: caret - 1, length: 1), rect.height > 1 {
-            return CGRect(x: rect.maxX, y: rect.minY, width: 0, height: rect.height)
-        }
         return nil
+    }
+
+    /// WebKit and Chromium page fields report a selected-text write as
+    /// done and ignore it, so they are written by ⌘V.
+    static func isInWebArea(_ element: AXUIElement) -> Bool {
+        var current = element
+        for _ in 0..<40 {
+            var role: CFTypeRef?
+            if AXUIElementCopyAttributeValue(current, kAXRoleAttribute as CFString, &role) == .success,
+               role as? String == "AXWebArea" { return true }
+            var parent: CFTypeRef?
+            guard AXUIElementCopyAttributeValue(current, kAXParentAttribute as CFString, &parent) == .success,
+                  let parent, CFGetTypeID(parent) == AXUIElementGetTypeID() else { return false }
+            current = unsafeDowncast(parent as AnyObject, to: AXUIElement.self)
+        }
+        return false
     }
 
     /// One rect per line the range covers, from the field's line ranges;
@@ -367,7 +393,8 @@ public final class FieldDraft: TextDraft {
             if !rects.isEmpty { return rects }
         }
         guard let whole = bounds(in: element, location: location, length: length), whole.width >= 1,
-              let oneLine = caretRect(in: element, at: location), whole.height < oneLine.height * 1.6 else { return [] }
+              let oneLine = bounds(in: element, location: location, length: 1), whole.height < oneLine.height * 1.6
+        else { return [] }
         return [whole]
     }
 

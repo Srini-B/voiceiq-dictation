@@ -80,8 +80,20 @@ polled; a posted draft is never followed by the written text beside it; an
 accepted Accessibility write never falls back to ⌘V; the swap method follows
 how the draft went in; a draft beside an identical copy of its text is
 dropped on an ambiguous edit (`FieldEdit.earliest`); Esc or a failure takes
-the Mac draft back out; iPhone never sets marked text over a draft.
+the Mac draft back out (by Accessibility only: a posted Delete could eat a
+key typed meanwhile, so a ⌘V-only field keeps the draft); iPhone never sets
+marked text over a draft.
 
 ## Verification
 
 Filled in below as each check finishes.
+
+- Mac mini harness (the real `FieldDraft` against an NSTextView and a
+  Safari textarea, e1e0a67–23b2177): show, swap, overlap and edit
+  scenarios correct in NSTextView. Safari took the selection, answered the
+  `kAXSelectedText` write with success and never changed the text in
+  1.4 s, so the swap kept the raw text. Fields under an `AXWebArea` now
+  swap by ⌘V. The overlay panels exist on screen (floating level) but are
+  left out of screen captures while "Hide from screen sharing" is on, the
+  default. The spinner sat one line high at the end of an NSTextView, from
+  the empty-range bounds; it now uses the character before the caret.

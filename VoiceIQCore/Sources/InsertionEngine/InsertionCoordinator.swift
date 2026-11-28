@@ -1,6 +1,5 @@
 #if os(macOS)
 import AppKit
-import Carbon.HIToolbox
 import Foundation
 import VoiceIQBridge
 
@@ -38,25 +37,6 @@ public struct InsertionCoordinator: TextInserting {
     @MainActor
     public func paste(_ text: String) async -> Bool {
         await paster.paste(text)
-    }
-
-    /// Presses Delete once, for taking a selected draft out of a field
-    /// whose Accessibility writes don't count (`FieldDraft`). False when
-    /// keystrokes can't be posted.
-    @MainActor
-    public func pressDelete() async -> Bool {
-        guard KeystrokeAccess.mayPost, let source = CGEventSource(stateID: .privateState),
-              let down = CGEvent(keyboardEventSource: source, virtualKey: CGKeyCode(kVK_Delete), keyDown: true),
-              let up = CGEvent(keyboardEventSource: source, virtualKey: CGKeyCode(kVK_Delete), keyDown: false)
-        else { return false }
-        for event in [down, up] {
-            event.flags = []
-            event.setIntegerValueField(.eventSourceUserData, value: SyntheticEventTag.magic)
-        }
-        down.post(tap: .cghidEventTap)
-        try? await Task.sleep(nanoseconds: 10_000_000)
-        up.post(tap: .cghidEventTap)
-        return true
     }
 
     /// Waits out the last paste's read-back and clipboard restore (up to
