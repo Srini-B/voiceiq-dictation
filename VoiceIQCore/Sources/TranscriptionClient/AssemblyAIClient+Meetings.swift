@@ -30,15 +30,20 @@ public extension AssemblyAIClient {
     /// own retry would come only minutes later. MEASURED 2026-11-28: a new
     /// gateway account answered 429 with Retry-After 21–35 s to notes for two
     /// meetings transcribed back to back.
+    /// `deadline` covers every ask and wait together.
     func meetingNotesJSON(prompt: String, model: String, deadline: TimeInterval) async throws -> String {
+        let end = Date().addingTimeInterval(deadline)
         var tries = 0
         while true {
             do {
                 return try await complete(messages: [["role": "user", "content": prompt]], model: model,
-                                          schema: ("meeting_notes", Self.notesSchema), deadline: deadline, stage: .meetingSummary)
+                                          schema: ("meeting_notes", Self.notesSchema),
+                                          deadline: end.timeIntervalSinceNow, stage: .meetingSummary)
             } catch TranscriptionError.rateLimitedTransient(let retryAfter) where tries + 1 < Self.notesRateLimitTries {
                 tries += 1
                 let wait = min(retryAfter ?? 20, 60)
+                // No time left to ask again after the wait.
+                guard wait + 5 < end.timeIntervalSinceNow else { throw TranscriptionError.rateLimitedTransient(retryAfter: retryAfter) }
                 Log.transcription.notice("notes rate limited; asking again in \(Int(wait), privacy: .public) s")
                 try await Task.sleep(nanoseconds: UInt64(wait * 1_000_000_000))
             }

@@ -93,7 +93,11 @@ public struct MeetingTranscriber: Sendable {
             try await transcribe(window: regions, track: .far, audio: audio, known: known, remote: remote, budget: &budget,
                                  label: "far side \(index + 1)/\(farWindows.count)")
         }
-        return (owner + Self.droppingOwnerEcho(far, owner: owner)).sorted { $0.start < $1.start }
+        let farSide = Self.droppingOwnerEcho(far, owner: owner)
+        if farSide.count < far.count {
+            Log.meeting.info("owner echo: dropped \(far.count - farSide.count, privacy: .public) of \(far.count, privacy: .public) far-side words")
+        }
+        return (owner + farSide).sorted { $0.start < $1.start }
     }
 
     /// The far side without the owner's own voice. When the owner's speech
