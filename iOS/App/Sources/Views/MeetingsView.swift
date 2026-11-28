@@ -118,6 +118,7 @@ private struct RecorderCard: View {
     @EnvironmentObject private var model: AppModel
     @ObservedObject var meetings: MeetingEngine
     @State private var pulse = false
+    @State private var confirmingDiscard = false
 
     var body: some View {
         Card(padding: Theme.Spacing.xl) {
@@ -170,8 +171,17 @@ private struct RecorderCard: View {
                     .background(Capsule().fill(Theme.Colors.recording))
             }
             .buttonStyle(.plain)
+            Button("Discard", role: .destructive) { confirmingDiscard = true }
+                .font(Theme.Fonts.label())
+                .frame(minHeight: 44)
         }
         .frame(maxWidth: .infinity)
+        .confirmationDialog("Discard this recording?", isPresented: $confirmingDiscard, titleVisibility: .visible) {
+            Button("Discard", role: .destructive) { meetings.discardRecording() }
+            Button("Keep recording", role: .cancel) {}
+        } message: {
+            Text("Its audio is deleted and no notes are made.")
+        }
         .onAppear {
             withAnimation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true)) { pulse = true }
         }
