@@ -99,8 +99,8 @@ public struct MeetingTranscriber: Sendable {
     /// The far side without the owner's own voice. When the owner's speech
     /// leaks into the far track (a remote speaker's mic picks it up, or a
     /// headset bleeds into the others), the far side repeats the owner's words
-    /// as another speaker. A run of far-side words, split at a speaker change
-    /// or a pause, is that echo when it has at least `echoRunWords` words and
+    /// as another speaker. A run of one far-side speaker's words, split at a
+    /// pause, is that echo when it has at least `echoRunWords` words and
     /// at least `echoShare` of them match an owner word starting within
     /// `echoSlack` seconds; the whole run goes. A short overlapping "yeah" or
     /// "okay" stays: the far side really says those over the owner.
@@ -126,19 +126,22 @@ public struct MeetingTranscriber: Sendable {
             }
             return false
         }
-        let sorted = far.sorted { $0.start < $1.start }
-        var kept: [TimedWord] = [], run: [TimedWord] = []
-        func flush() {
-            let matched = run.filter(echoes).count
-            if run.count < echoRunWords || Double(matched) < echoShare * Double(run.count) { kept += run }
-            run = []
+        // Runs are per speaker, so another voice talking over the echo can't cut it into short runs.
+        var kept: [TimedWord] = []
+        for words in Dictionary(grouping: far, by: \.speaker).values {
+            var run: [TimedWord] = []
+            func flush() {
+                let matched = run.filter(echoes).count
+                if run.count < echoRunWords || Double(matched) < echoShare * Double(run.count) { kept += run }
+                run = []
+            }
+            for word in words.sorted(by: { $0.start < $1.start }) {
+                if let last = run.last, word.start - last.end > echoRunGap { flush() }
+                run.append(word)
+            }
+            flush()
         }
-        for word in sorted {
-            if let last = run.last, last.speaker != word.speaker || word.start - last.end > echoRunGap { flush() }
-            run.append(word)
-        }
-        flush()
-        return kept
+        return kept.sorted { $0.start < $1.start }
     }
 
     static let echoSlack: Double = 0.5

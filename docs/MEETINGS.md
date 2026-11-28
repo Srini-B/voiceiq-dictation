@@ -36,7 +36,7 @@ What a request holds depends on the mic:
   voice can still leak into the far track (a remote mic picks it up, or one
   headset bleeds into the others) and come back as a far-side speaker
   repeating the owner. `MeetingTranscriber.droppingOwnerEcho` drops a run of
-  three or more far-side words, split at a speaker change or a 1 s pause,
+  three or more words from one far-side speaker, split at a 1 s pause,
   when at least 60% of them match an owner word starting within 0.5 s. A
   short "yeah" or "okay" over the owner stays. On AMI ES2004a the leak was a
   fifth speaker of 120 s.
