@@ -36,10 +36,12 @@ Ideas only; the visuals use VoiceiQ's own theme.
 
 ## Verification
 
-- `VoiceIQiOS` Debug simulator build (unsigned) succeeds; `swift test
-  --package-path VoiceIQCore` passes (349 tests, 0 failures).
+- `VoiceIQiOS` Debug simulator build (unsigned, iPhone 18 Pro, iOS 27)
+  succeeds at 25acc7dc with no errors or warnings; `swift test
+  --package-path VoiceIQCore` passed at 76055a24 (349 tests, 0 failures).
+  Later commits touch only iOS views and docs.
 - On an erased iPhone 18 Pro simulator (iOS 27), a UI test drove the light
-  flow end to end: slides, mic prompt, Settings › Apps › VoiceiQ ›
+  flow end to end at 2fd5e232: slides, mic prompt, Settings › Apps › VoiceiQ ›
   Keyboards with both switches and Allow, back to the app, the globe menu,
   both checks ticking, and the automatic move to Try it.
 - Runs found and fixed: a timed Full Access hint that showed after any
