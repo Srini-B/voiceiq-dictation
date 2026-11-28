@@ -305,17 +305,13 @@ private struct SwitchKeyboardPage: View {
     @EnvironmentObject private var setup: SetupMonitor
     @State private var text = ""
     @FocusState private var focused: Bool
-    /// When the user last changed keyboards in the field. A switch with no
-    /// word from the VoiceiQ keyboard after it means Full Access is off, or
-    /// another keyboard was picked.
-    @State private var switchedAt: Date?
 
     var body: some View {
         let status = setup.status
         VStack(alignment: .leading, spacing: Theme.Spacing.xl) {
             StepTitle(title: Text("Hold \(Image(systemName: "globe")) to switch"),
                       detail: Text("Then pick VoiceiQ. Or tap \(Image(systemName: "globe")) until it comes up."))
-            GlobeSwitchDemo()
+            // The checks come first so they stay in view with the keyboard up.
             Card {
                 SetupCheckRow(symbol: "character.cursor.ibeam",
                               title: "Dictate where you type",
@@ -326,15 +322,25 @@ private struct SwitchKeyboardPage: View {
                               title: "Dictation from the keyboard",
                               detail: "Allow Full Access.",
                               state: status.fullAccess ? .done("Allowed") : .waiting)
-            }
-            if !status.fullAccess, let switchedAt {
-                TimelineView(.periodic(from: switchedAt, by: 1)) { context in
-                    if context.date.timeIntervalSince(switchedAt) > 4 {
-                        noCheckHint
+                if !status.fullAccess {
+                    // iOS gives no sign of which keyboard is up, so this is
+                    // always here rather than timed after a switch.
+                    HStack(spacing: Theme.Spacing.s) {
+                        Text("On VoiceiQ and nothing ticks? Allow Full Access.")
+                            .font(Theme.Fonts.footnote())
+                            .foregroundStyle(Theme.Colors.muted)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Spacer(minLength: 0)
+                        Button("Settings", action: openAppSettings).buttonStyle(.compactSecondary)
                     }
+                    .padding(.top, Theme.Spacing.xs)
                 }
             }
-            // Last, so the checks above stay in view while the keyboard is up.
+            // With the keyboard up the real globe key is on screen, so the
+            // drawing steps aside and the checks and field fit above it.
+            if !focused {
+                GlobeSwitchDemo().transition(.opacity)
+            }
             TextField("Tap here, then hold the globe key", text: $text, axis: .vertical)
                 .font(Theme.Fonts.body())
                 .lineLimit(1...3)
@@ -344,24 +350,7 @@ private struct SwitchKeyboardPage: View {
                 .overlay(RoundedRectangle(cornerRadius: Theme.Radius.field, style: .continuous)
                     .strokeBorder(focused ? Theme.Colors.accent : Theme.Colors.hairline, lineWidth: focused ? 1.5 : 1))
         }
-        .onReceive(NotificationCenter.default.publisher(for: UITextInputMode.currentInputModeDidChangeNotification)) { _ in
-            switchedAt = Date()
-        }
-    }
-
-    private var noCheckHint: some View {
-        Card {
-            Label {
-                Text("On the VoiceiQ keyboard but nothing ticked? Turn on **Allow Full Access** in VoiceiQ › Keyboards in Settings.")
-            } icon: {
-                Image(systemName: "exclamationmark.circle").foregroundStyle(Theme.Colors.pending)
-            }
-            .font(Theme.Fonts.callout())
-            .foregroundStyle(Theme.Colors.ink)
-            .fixedSize(horizontal: false, vertical: true)
-            Button("Open VoiceiQ Settings", action: openAppSettings).buttonStyle(.compactSecondary)
-        }
-        .transition(.opacity)
+        .animation(.easeInOut(duration: 0.25), value: focused)
     }
 }
 

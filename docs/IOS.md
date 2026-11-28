@@ -536,18 +536,18 @@ switching to it with the globe key, and a Try it field. Each page's
 (`keyboardSeenAt`), so the switch page's "in use" and "Full Access" checks
 tick together. When a page's step becomes done while it shows, or is
 already done when the user moves forward onto it, the page shows its check,
-plays the success haptic and moves on after about a second; going Back to
-a done page stays there. The switch page also watches
-`UITextInputMode.currentInputModeDidChangeNotification`: a keyboard change
-with no word from the VoiceiQ keyboard within four seconds shows a hint to
-turn on Allow Full Access.
+plays the success haptic and moves on after about a second and a half;
+going Back to a done page stays there. Until Full Access is confirmed, the
+switch page's checklist carries a line pointing to Allow Full Access: iOS
+gives the app no reliable sign of which keyboard is up, so it is not timed.
 
 The keyboard guides live in `KeyboardGuides.swift`.
 `KeyboardSettingsWalkthrough` animates VoiceiQ's page in Settings
-(Keyboards, the VoiceiQ switch, Allow Full Access and its alert) in system
-colours, and Open VoiceiQ Settings opens that page
+(Keyboards, the VoiceiQ switch, Allow Full Access and its alert) in the
+app's own tokens, and Open VoiceiQ Settings opens that page
 (`UIApplication.openSettingsURLString`). `GlobeSwitchDemo` animates holding
-the globe key and picking VoiceiQ. Both loop while on screen and hold one
+the globe key and picking VoiceiQ; it hides while the practice field has
+focus, since the real keyboard is then on screen. Both loop while on screen and hold one
 frame with Reduce Motion. Settings › Keyboard & Permissions and the Try it
 card reuse them.
 
