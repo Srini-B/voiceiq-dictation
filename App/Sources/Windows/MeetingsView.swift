@@ -48,8 +48,19 @@ struct MeetingsPane: View {
         }
         .animation(.easeOut(duration: 0.2), value: exported)
         .onAppear { reload() }
-        .onChange(of: selection) { _, _ in assigning = false; loadSelection() }
-        .onChange(of: engine.phase) { _, _ in reload() }
+        // A dialog about one meeting never acts on another (a recording that starts selects itself).
+        .onChange(of: selection) { _, _ in assigning = false; confirmingDelete = false; renaming = false; loadSelection() }
+        .onChange(of: engine.phase) { _, phase in
+            // A new recording opens, so its live card and Discard are in view.
+            if case let .recording(id, _) = phase { selection = id } else { confirmingDiscard = false }
+            reload()
+        }
+        .confirmationDialog("Discard this recording?", isPresented: $confirmingDiscard) {
+            Button("Discard", role: .destructive) { engine.discardRecording() }
+            Button("Keep recording", role: .cancel) {}
+        } message: {
+            Text("Its audio is deleted and no notes are made.")
+        }
         .onChange(of: engine.processing) { _, _ in reload() }
         .onReceive(NotificationCenter.default.publisher(for: .gtMeetingsDidChange).receive(on: RunLoop.main)) { note in
             if note.object as? String == "sync" { reload() }
@@ -100,28 +111,15 @@ struct MeetingsPane: View {
                     }
                     .tint(engine.micMuted ? VoiceIQUI.Colors.gRed : nil)
                     .help(engine.micMuted ? "Record your voice again" : "Stop recording your voice; the other side keeps recording")
-                    Button {
-                        confirmingDiscard = true
-                    } label: {
-                        Image(systemName: "trash")
-                    }
-                    .help("Discard this recording")
-                    .accessibilityLabel("Discard this recording")
                 }
                 .controlSize(.large)
                 .buttonStyle(.bordered)
                 .padding(.horizontal, VoiceIQUI.Spacing.s)
                 .padding(.bottom, VoiceIQUI.Spacing.xs)
-                .confirmationDialog("Discard this recording?", isPresented: $confirmingDiscard) {
-                    Button("Discard", role: .destructive) { engine.discardRecording() }
-                    Button("Keep recording", role: .cancel) {}
-                } message: {
-                    Text("Its audio is deleted and no notes are made.")
-                }
             }
             folderFilter
             List(selection: $selection) {
-                ForEach(Self.days(folders.shown(meetings)), id: \.start) { day in
+                ForEach(Self.days(listed), id: \.start) { day in
                     Section(day.label) {
                         ForEach(day.meetings) { meeting in
                             // The heading already sets the day off; no rule above its first row.
@@ -133,7 +131,7 @@ struct MeetingsPane: View {
             .overlay {
                 if meetings.isEmpty {
                     Text("No meetings yet").foregroundStyle(.secondary)
-                } else if folders.shown(meetings).isEmpty {
+                } else if listed.isEmpty {
                     Text("No meetings in this folder").foregroundStyle(.secondary)
                 }
             }
@@ -143,7 +141,17 @@ struct MeetingsPane: View {
     private func row(_ meeting: MeetingMeta) -> some View {
         VStack(alignment: .leading, spacing: 3) {
             Text(title(meeting)).font(VoiceIQUI.TypeScale.body()).lineLimit(1)
-            Text(timeLine(meeting)).font(VoiceIQUI.TypeScale.labelSmall()).foregroundStyle(.secondary)
+            if case let .recording(id, since) = engine.phase, id == meeting.id {
+                // The length ticks while it records; the stored one is written at Stop.
+                TimelineView(.periodic(from: since, by: 1)) { context in
+                    // Only the dot is red; red text on the selected row read at 3:1 (Fable).
+                    (Text(Image(systemName: "circle.fill")).foregroundColor(VoiceIQUI.Colors.gRed)
+                        + Text(" \(meeting.startedAt.formatted(date: .omitted, time: .shortened)) · \(MeetingRecordingStatus.clock(context.date.timeIntervalSince(since))) · Recording"))
+                        .font(VoiceIQUI.TypeScale.labelSmall().monospacedDigit()).foregroundStyle(.secondary).lineLimit(1)
+                }
+            } else {
+                Text(timeLine(meeting)).font(VoiceIQUI.TypeScale.labelSmall()).foregroundStyle(.secondary)
+            }
             let names = folders.names(of: meeting.id)
             if !names.isEmpty {
                 // Text, not a Label: a list row gives a Label's icon a column of its own.
@@ -217,7 +225,10 @@ struct MeetingsPane: View {
             if unheardCall == meeting.id { unheardWarning }
             HStack(spacing: 0) {
                 if wide || !transcriptShown {
-                    MeetingNotesColumn(meeting: meeting, notes: notes, transcript: transcript, step: step(meeting), chat: chat(meeting))
+                    MeetingNotesColumn(meeting: meeting, notes: notes, transcript: transcript, step: step(meeting), chat: chat(meeting),
+                                       live: recordingSince(meeting).map { since in
+                                           MeetingRecordingStatus(engine: engine, since: since) { confirmingDiscard = true }
+                                       })
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .id(meeting.id)
                 }
@@ -368,6 +379,12 @@ struct MeetingsPane: View {
         }
     }
 
+    /// When this meeting started recording, while it records.
+    private func recordingSince(_ meeting: MeetingMeta) -> Date? {
+        if case let .recording(id, since) = engine.phase, id == meeting.id { return since }
+        return nil
+    }
+
     private var selected: MeetingMeta? { meetings.first { $0.id == selection } }
     private var recording: Bool { if case .recording = engine.phase { return true }; return false }
     private func reload() {
@@ -377,15 +394,26 @@ struct MeetingsPane: View {
         showFirstIfHidden()
         loadSelection()
     }
+    /// The folder filter's meetings, plus the one recording or being processed
+    /// and the one open, whatever their folders, in the list's order.
+    private var listed: [MeetingMeta] {
+        var keep = Set(folders.shown(meetings).map(\.id)).union(engine.processing.keys)
+        if case let .recording(id, _) = engine.phase { keep.insert(id) }
+        if let selection, engine.isBusy(selection) { keep.insert(selection) }
+        return meetings.filter { keep.contains($0.id) }
+    }
     private func showFirstIfHidden() {
-        let shown = folders.shown(meetings)
+        let shown = listed
         if !shown.contains(where: { $0.id == selection }) { selection = shown.first?.id }
     }
     private func loadSelection() {
         guard let id = selection else { notes = nil; transcript = []; return }
         notes = try? store.loadNotes(id: id); transcript = (try? store.loadTranscript(id: id)) ?? []
     }
-    private func remove() { guard let id = selection else { return }; try? store.delete(id: id); selection = nil; reload() }
+    private func remove() {
+        guard let id = selection, !engine.isBusy(id) else { return }
+        try? store.delete(id: id); selection = nil; reload()
+    }
     private func renameMeeting() {
         guard let meeting = selected,
               titleDraft.trimmingCharacters(in: .whitespacesAndNewlines) != title(meeting) else { return }
@@ -472,7 +500,8 @@ struct MeetingsPane: View {
     }
 
     private func title(_ meeting: MeetingMeta) -> String {
-        meeting.displayTitle() ?? meeting.startedAt.formatted(date: .abbreviated, time: .shortened)
+        // As the notes pane names it; the time is on the row's second line.
+        meeting.displayTitle() ?? "Meeting"
     }
     /// The list's sections: one per day the meetings started on, in the list's newest-first order.
     private static func days(_ meetings: [MeetingMeta]) -> [(start: Date, label: String, meetings: [MeetingMeta])] {

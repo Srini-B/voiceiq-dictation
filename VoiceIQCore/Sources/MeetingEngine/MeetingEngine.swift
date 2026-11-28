@@ -209,6 +209,14 @@ import VoiceIQSpeech
 
     public var isRecording: Bool { if case .recording = phase { return true }; return false }
 
+    #if os(macOS)
+    /// How loud the mic and the call are right now, 0 to 1; nil when not recording.
+    public var liveLevels: (mic: Float, call: Float)? {
+        guard let mic, let system else { return nil }
+        return (mic.sound.level, system.sound.level)
+    }
+    #endif
+
     /// Option-M: start when nothing is recording, stop when something is.
     public func toggleRecording() {
         switch phase {
@@ -249,7 +257,7 @@ import VoiceIQSpeech
         if case .recording = phase { return }
         let id = MeetingID(), now = Date()
         var meta = MeetingMeta(id: id, startedAt: now, source: source)
-        if SettingsStore().calendarForMeetings { meta.calendarEvent = event ?? CalendarMeetings.event(at: now) }
+        if SettingsStore().calendarForMeetings { meta.calendarEvent = event ?? CalendarMeetings.event(at: now, source: source) }
         do {
             let folder = try store.create(meta: meta)
             #if os(macOS)

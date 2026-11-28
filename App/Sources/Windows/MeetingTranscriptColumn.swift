@@ -122,7 +122,8 @@ struct MeetingTranscriptColumn: View {
             || meeting.displayName(segment.speaker, notes: notes).localizedCaseInsensitiveContains(trimmedQuery)
     }
 
-    private var shown: [TranscriptSegment] { transcript.filter(matches) }
+    // As the turns show them: a lone-letter fragment is not a match on its own.
+    private var shown: [TranscriptSegment] { transcript.filter { matches($0) && !MeetingSpeaker.isFragment($0.text) } }
 
     private func openSearch() { searching = true; searchFocused = true }
     private func closeSearch() { searching = false; query = "" }
@@ -139,14 +140,33 @@ struct MeetingTranscriptColumn: View {
         line.paragraphSpacing = 6
         let last = line.mutableCopy() as! NSMutableParagraphStyle
         last.paragraphSpacing = 16
+        // An aside is set in a little, so the run's own lines read on around it.
+        let aside = line.mutableCopy() as! NSMutableParagraphStyle
+        aside.firstLineHeadIndent = 12; aside.headIndent = 12
+        let asideLast = last.mutableCopy() as! NSMutableParagraphStyle
+        asideLast.firstLineHeadIndent = 12; asideLast.headIndent = 12
         let out = NSMutableAttributedString()
         // Grouped before the search filters, so turns apart stay apart.
-        let turns = MeetingSpeaker.turns(in: transcript).map { $0.filter(matches) }.filter { !$0.isEmpty }
+        let turns = MeetingSpeaker.turns(in: transcript).flatMap { turn -> [TranscriptTurn] in
+            var turn = turn
+            turn.lines = turn.lines.filter { matches($0.segment) }
+            guard !turn.lines.isEmpty else { return [] }
+            guard turn.lines.allSatisfy(\.aside) else { return [turn] }
+            // Only asides matched: each reads under its own speaker, not under someone silent (Codex).
+            var own: [TranscriptTurn] = []
+            for line in turn.lines {
+                let plain = TranscriptTurn.Line(segment: line.segment, aside: false)
+                if own.last?.speaker == line.segment.speaker { own[own.count - 1].lines.append(plain) }
+                else { own.append(TranscriptTurn(speaker: line.segment.speaker, lines: [plain])) }
+            }
+            return own
+        }
         for turn in turns {
-            let first = turn[0]
-            // The heading belongs to the turn's first line, for the right-click menu.
-            out.append(NSAttributedString(string: meeting.displayName(first.speaker, notes: notes), attributes: [
-                .font: nameFont, .foregroundColor: SpeakerPalette.color(first.speaker, order: order), .paragraphStyle: head,
+            // The heading is the run's speaker even when search hid their first line (Codex);
+            // it belongs to their first shown line, for the right-click menu and the time.
+            let first = (turn.lines.first { !$0.aside } ?? turn.lines[0]).segment
+            out.append(NSAttributedString(string: meeting.displayName(turn.speaker, notes: notes), attributes: [
+                .font: nameFont, .foregroundColor: SpeakerPalette.color(turn.speaker, order: order), .paragraphStyle: head,
                 Self.segmentKey: first.id,
             ]))
             if let start = first.start {
@@ -155,11 +175,22 @@ struct MeetingTranscriptColumn: View {
                 ]))
             }
             out.append(NSAttributedString(string: "\n", attributes: [.font: nameFont, .paragraphStyle: head, Self.segmentKey: first.id]))
-            for segment in turn {
-                let words = NSMutableAttributedString(string: segment.text + "\n", attributes: [
-                    .font: body, .foregroundColor: NSColor.labelColor,
-                    .paragraphStyle: segment.id == turn.last?.id ? last : line, Self.segmentKey: segment.id,
-                ])
+            for entry in turn.lines {
+                let segment = entry.segment
+                let isLast = entry.id == turn.lines.last?.id
+                let style = entry.aside ? (isLast ? asideLast : aside) : (isLast ? last : line)
+                let words = NSMutableAttributedString()
+                // Someone else's short reply stays in the run, under their name in their colour.
+                if entry.aside {
+                    words.append(NSAttributedString(string: meeting.displayName(segment.speaker, notes: notes) + "  ", attributes: [
+                        .font: nameFont, .foregroundColor: SpeakerPalette.color(segment.speaker, order: order),
+                        .paragraphStyle: style, Self.segmentKey: segment.id,
+                    ]))
+                }
+                words.append(NSAttributedString(string: segment.text + "\n", attributes: [
+                    .font: body, .foregroundColor: entry.aside ? NSColor.secondaryLabelColor : NSColor.labelColor,
+                    .paragraphStyle: style, Self.segmentKey: segment.id,
+                ]))
                 highlight(words)
                 out.append(words)
             }

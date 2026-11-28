@@ -14,6 +14,15 @@ enum VoiceIQUI {
         static let onPrimary = dyn(light: 0xFFFFFF, dark: 0x062E6F)
         static let primaryContainer = dyn(light: 0xD3E3FD, dark: 0x0842A0)
         static let onPrimaryContainer = dyn(light: 0x041E49, dark: 0xD3E3FD)
+        /// A selected sidebar row: the brand blue in light mode; in dark mode
+        /// the system's selection, as the lists beside it show, not the pale
+        /// `primary` (Fable, M6).
+        static let selection = Color(nsColor: NSColor(name: nil) { appearance in
+            appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? .selectedContentBackgroundColor : NSColor(hex: 0x0B57D0)
+        })
+        static let onSelection = Color(nsColor: NSColor(name: nil) { appearance in
+            appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? .alternateSelectedControlTextColor : .white
+        })
 
         // Surfaces (never pure black)
         static let surface = dyn(light: 0xFFFFFF, dark: 0x1E1F20)

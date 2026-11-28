@@ -23,16 +23,51 @@ final class MeetingTranscriptEditTests: XCTestCase {
         TranscriptSegment(speaker: "you", text: "Then Friday it is.", chunkIndex: 0, start: 12, end: 14),
     ]
 
-    /// The views show one heading per turn; each line keeps its own id for Edit and Delete.
-    func testTurnsGroupOnlyAdjacentLinesOfOneSpeaker() {
-        let lines = [transcript[0], transcript[3], transcript[1], transcript[2], transcript[0]]
+    /// The views show one heading per run of one speaker; a one- or two-word
+    /// reply sits inside the run without breaking it, and a lone letter is
+    /// dropped. Each line keeps its own id for Edit and Delete.
+    func testTurnsKeepShortRepliesInsideTheRun() {
+        func line(_ speaker: String, _ text: String) -> TranscriptSegment {
+            TranscriptSegment(speaker: speaker, text: text, chunkIndex: 0)
+        }
+        let lines = [
+            line("you", "Okay."),
+            line("s1", "So we've got both of these clipped on."),
+            line("you", "Okay."),
+            line("s1", "Is she going to answer me or not?"),
+            line("you", "a"),
+            line("s2", "Yes."),
+            line("s1", "Right, then."),
+            line("you", "Then Friday it is, everyone."),
+        ]
         let turns = MeetingSpeaker.turns(in: lines)
-        XCTAssertEqual(turns.map { $0.map(\.text) }, [
-            ["Where are we on pricing?", "Then Friday it is."],
-            ["Pricing ships after the budget revue."],
-            ["Um, sorry, my dog."],
-            ["Where are we on pricing?"],
+        XCTAssertEqual(turns.map(\.speaker), ["you", "s1", "you"])
+        XCTAssertEqual(turns[1].lines.map(\.segment.text), [
+            "So we've got both of these clipped on.", "Okay.", "Is she going to answer me or not?", "Yes.", "Right, then.",
         ])
+        XCTAssertEqual(turns[1].lines.map(\.aside), [false, true, false, true, false])
+        XCTAssertEqual(turns[1].lines.map(\.id), [lines[1].id, lines[2].id, lines[3].id, lines[5].id, lines[6].id])
+        // Written without spaces, a whole turn is one "word"; it still gets its own heading.
+        let chinese = MeetingSpeaker.turns(in: [line("you", "我们先看一下上周的数据。"),
+                                                line("s1", "注册量上周增长了百分之八，主要来自新的推荐链接。")])
+        XCTAssertEqual(chinese.map(\.speaker), ["you", "s1"])
+        // A short line that opens its speaker's next turn keeps its heading; an answer "B." stays.
+        let opening = MeetingSpeaker.turns(in: [line("you", "Should we ship Friday?"), line("s1", "Good point."),
+                                                line("s1", "We should move the launch to Friday."), line("you", "A or B?"), line("s2", "B.")])
+        XCTAssertEqual(opening.map(\.speaker), ["you", "s1", "you"])
+        XCTAssertEqual(opening[1].lines.map(\.segment.text), ["Good point.", "We should move the launch to Friday."])
+        XCTAssertEqual(opening[2].lines.map(\.aside), [false, true])
+        // Two short replies from two people inside one run stay asides; a Chinese sentence does not.
+        let chorus = MeetingSpeaker.turns(in: [line("s1", "Let's ship it Friday then."), line("s2", "Okay."), line("s3", "Yes."),
+                                               line("s1", "Great."), line("you", "我们先看一下上周的数据。"), line("s1", "Done, see you all Friday.")])
+        XCTAssertEqual(chorus.map(\.speaker), ["s1", "you", "s1"])
+        XCTAssertEqual(chorus[0].lines.map(\.aside), [false, true, true, false])
+        // A speaker who goes on in short lines holds the floor (Neon); short Russian and Korean replies stay asides.
+        let floor = MeetingSpeaker.turns(in: [line("s1", "Should we ship Friday?"), line("s2", "Good point."),
+                                              line("s2", "Maybe Monday."), line("s2", "Let's check."), line("s1", "Okay."),
+                                              line("s1", "Monday works for me then."), line("s3", "Спасибо, понятно."), line("s1", "Good."), line("s2", "네, 알겠습니다."), line("s1", "Then Monday.")])
+        XCTAssertEqual(floor.map(\.speaker), ["s1", "s2", "s1"])
+        XCTAssertEqual(floor[2].lines.map(\.aside), [false, false, true, false, true, false])
     }
 
     private func finishedMeeting(_ transcript: [TranscriptSegment]) throws -> MeetingID {

@@ -62,6 +62,23 @@ public struct TranscriptSegment: Codable, Equatable, Sendable, Identifiable {
     }
 }
 
+/// One heading in the transcript: a speaker and their lines, with other
+/// people's one- or two-word replies as asides (`MeetingSpeaker.turns`).
+public struct TranscriptTurn: Equatable, Sendable, Identifiable {
+    public struct Line: Equatable, Sendable, Identifiable {
+        public var segment: TranscriptSegment
+        /// Someone else's short reply inside this speaker's run.
+        public var aside: Bool
+        public var id: String { segment.id }
+        public init(segment: TranscriptSegment, aside: Bool) { self.segment = segment; self.aside = aside }
+    }
+    public var speaker: String
+    public var lines: [Line]
+    public init(speaker: String, lines: [Line]) { self.speaker = speaker; self.lines = lines }
+    public var id: String { lines.first?.id ?? speaker }
+    public var start: Double? { lines.first?.segment.start }
+}
+
 public enum MeetingSpeaker {
     public static let you = "you"
 
@@ -79,15 +96,58 @@ public enum MeetingSpeaker {
         return seen
     }
 
-    /// Runs of lines by the same speaker, in order, so a transcript reads as
-    /// one heading per turn rather than one per line.
-    public static func turns(in transcript: [TranscriptSegment]) -> [[TranscriptSegment]] {
-        var turns: [[TranscriptSegment]] = []
-        for segment in transcript {
-            if turns.last?.last?.speaker == segment.speaker { turns[turns.count - 1].append(segment) }
-            else { turns.append([segment]) }
+    /// The transcript as it reads: one heading per run of one speaker's lines.
+    /// A reply of one or two words from someone else ("Okay.", "Yes.") is an
+    /// aside inside the run when the run's speaker goes on after it (or the
+    /// transcript ends), instead of a heading of its own; a short line that
+    /// opens its speaker's next turn ("Good point." then more) keeps its
+    /// heading. A lone Latin letter ("a") is a transcription fragment and is
+    /// left out. MEASURED 2026-11-27 on AMI ES2004a: seven headings for ten
+    /// lines before asides, as "Okay." and "Yes." alternated speakers.
+    public static func turns(in transcript: [TranscriptSegment]) -> [TranscriptTurn] {
+        let lines = transcript.filter { !isFragment($0.text) }
+        var turns: [TranscriptTurn] = []
+        for (index, segment) in lines.enumerated() {
+            if let last = turns.last, last.speaker == segment.speaker {
+                turns[turns.count - 1].lines.append(.init(segment: segment, aside: false))
+            } else if let last = turns.last, isShortReply(segment.text),
+                      // Who speaks next past other short replies ("Okay." then "Yes." from two people).
+                      lines[(index + 1)...].first(where: { $0.speaker == last.speaker || $0.speaker == segment.speaker || !isShortReply($0.text) })
+                          .map({ $0.speaker == last.speaker }) ?? true {
+                turns[turns.count - 1].lines.append(.init(segment: segment, aside: true))
+            } else {
+                turns.append(TranscriptTurn(speaker: segment.speaker, lines: [.init(segment: segment, aside: false)]))
+            }
         }
         return turns
+    }
+
+    /// One or two words, and short: Chinese or Japanese is written without
+    /// spaces, so a whole turn there is one "word" (Codex review).
+    static func isShortReply(_ text: String) -> Bool {
+        let words = text.split(whereSeparator: \.isWhitespace).count
+        return words <= 2 && text.count <= (isUnspaced(text) ? 6 : 20)
+    }
+
+    /// Chinese, Japanese or Thai, written without spaces between words. Korean
+    /// spaces its words, so it counts words as Latin does (Neon).
+    static func isUnspaced(_ text: String) -> Bool {
+        let letters = text.unicodeScalars.filter(\.properties.isAlphabetic)
+        let unspaced = letters.filter { scalar in
+            switch scalar.value {
+            case 0x0E00...0x0EFF, 0x1000...0x109F, 0x1780...0x17FF, 0x3040...0x30FF, 0x3400...0x4DBF, 0x4E00...0x9FFF: return true
+            default: return false
+            }
+        }
+        // Two such letters are enough: "SlackとZoomを確認します。" has more Latin letters.
+        return unspaced.count >= 2
+    }
+
+    /// A single Latin letter and nothing else. "B." (an answer), "I.", a
+    /// digit or a one-character word in another script stays.
+    public static func isFragment(_ text: String) -> Bool {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.count == 1 && trimmed.first.map { $0.isASCII && $0.isLetter } == true
     }
 
     /// A speaker's name colour as light and dark RGB: green for the note
