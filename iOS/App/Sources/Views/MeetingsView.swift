@@ -311,6 +311,13 @@ private struct MeetingDetail: View {
                     // Above the notes too: a failed redo keeps the old notes (Neon).
                     // Not during a Retry: its spinner replaces the old error.
                     if step == nil, let failure { failureCard(failure) }
+                    if meta.speakersUnsplit == true, meta.status == .done, step == nil, !gone {
+                        Card {
+                            Text("The speaker model failed on this note, so some people may be shown as one speaker.")
+                                .font(Theme.Fonts.body()).foregroundStyle(Theme.Colors.muted)
+                            Button("Split speakers again") { model.meetings.retry(id: meta.id) }.buttonStyle(.primaryPill)
+                        }
+                    }
                     if let notes { notesContent(notes) }
                     else if failure == nil && step == nil && !gone { processingCard(.summarizing) }
                     if let chat { MeetingChatTurns(chat: chat, scroller: scroller) }

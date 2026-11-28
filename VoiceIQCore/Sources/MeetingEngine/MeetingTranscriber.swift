@@ -246,8 +246,13 @@ public struct MeetingTranscriber: Sendable {
     /// anyone: it got the speaker count right in 31 of 33 runs in ours
     /// (activities/2026-11-06-offline-speaker-diarizer.md). Without the model
     /// the words keep AssemblyAI's speaker labels.
-    private func splitFarSide(_ words: [TimedWord], audio: CallAudio, folder: URL) async throws -> [TimedWord] {
+    /// A model that failed even after `FarSideSpeakers.retrying` leaves a
+    /// marker, so the meeting says its voices may be merged and offers the
+    /// split again (`MeetingMeta.speakersUnsplit`).
+    func splitFarSide(_ words: [TimedWord], audio: CallAudio, folder: URL) async throws -> [TimedWord] {
         let ids = Set(words.map(\.speaker)).subtracting([MeetingSpeaker.you])
+        let failed = folder.appendingPathComponent(Self.farSpeakersFailedName)
+        try? FileManager.default.removeItem(at: failed)
         guard !ids.isEmpty else { return words }
         let cache = folder.appendingPathComponent(Self.farSpeakersCacheName)
         var segments = (try? Data(contentsOf: cache)).flatMap { try? JSONDecoder().decode([LocalMeetingResult.Segment].self, from: $0) }
@@ -262,6 +267,7 @@ public struct MeetingTranscriber: Sendable {
                 throw CancellationError()
             } catch {
                 Log.meeting.error("far side not split: \(String(describing: error), privacy: .public)")
+                try? Data().write(to: failed)
             }
         }
         guard let segments, !segments.isEmpty else {
@@ -276,6 +282,17 @@ public struct MeetingTranscriber: Sendable {
 
     /// Cached beside the audio; a fresh redo removes it with the windows.
     static let farSpeakersCacheName = "transcribe-far-speakers-v1.json"
+    static let farSpeakersFailedName = "transcribe-far-speakers-failed"
+
+    /// The speaker model, run again when Core ML fails a prediction (`FarSideSpeakers.retrying`).
+    public static func retryingSpeakerModel<T: Sendable>(_ attempt: (_ cpuOnly: Bool) async throws -> T) async throws -> T {
+        try await FarSideSpeakers.retrying(attempt)
+    }
+
+    /// The last transcription kept AssemblyAI's far-side voices because the speaker model failed.
+    public static func farSideFailed(folder: URL) -> Bool {
+        FileManager.default.fileExists(atPath: folder.appendingPathComponent(farSpeakersFailedName).path)
+    }
 
     /// Far-side words relabelled by the diarizer's stretches on the system
     /// track; the owner's keep theirs. Ids are renumbered from s1.

@@ -379,6 +379,9 @@ public struct MeetingMeta: Codable, Equatable, Sendable, Identifiable {
     /// The step the last failure stopped at, waiting or not, so Retry after
     /// a notes failure (no gateway balance, a refusal) rewrites only the notes.
     public var failedStep: ServiceStep?
+    /// The on-device speaker model failed, so the far side kept AssemblyAI's
+    /// voices, which can put two people under one. Retry runs it again.
+    public var speakersUnsplit: Bool?
 
     /// The user's title, else the notes', else the one stored with the
     /// meeting; nil when none of them has one.

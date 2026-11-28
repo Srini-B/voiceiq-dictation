@@ -223,6 +223,7 @@ struct MeetingsPane: View {
                     .padding([.horizontal, .top], VoiceIQUI.Spacing.l)
             }
             if unheardCall == meeting.id { unheardWarning }
+            if meeting.speakersUnsplit == true, meeting.status == .done, !engine.isBusy(meeting.id) { unsplitWarning(meeting) }
             HStack(spacing: 0) {
                 if wide || !transcriptShown {
                     MeetingNotesColumn(meeting: meeting, notes: notes, transcript: transcript, step: step(meeting), chat: chat(meeting),
@@ -440,6 +441,22 @@ struct MeetingsPane: View {
             return
         }
         exported = .copied("prompt for an AI agent", UUID())
+    }
+
+    /// The speaker model failed, so two people on the call may share a voice.
+    private func unsplitWarning(_ meeting: MeetingMeta) -> some View {
+        HStack(spacing: VoiceIQUI.Spacing.s) {
+            Label("The speaker model failed on this meeting, so some people on the call may be shown as one speaker.",
+                  systemImage: "person.2.slash")
+                .font(VoiceIQUI.TypeScale.body())
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
+            Button("Split Speakers Again") { engine.retry(id: meeting.id) }
+                .help("Tells the voices apart again and rewrites the notes. Edits to the transcript are replaced.")
+        }
+        .padding(VoiceIQUI.Spacing.m)
+        .background(RoundedRectangle(cornerRadius: VoiceIQUI.Radius.medium).fill(VoiceIQUI.Colors.surfaceContainer))
+        .padding([.horizontal, .top], VoiceIQUI.Spacing.l)
     }
 
     private var unheardWarning: some View {
