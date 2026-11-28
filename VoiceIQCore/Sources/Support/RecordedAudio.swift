@@ -165,7 +165,31 @@ extension RecordedAudio: Transferable {
     /// Where play starts when nothing is loaded: a seek made before Play.
     private var parked: TimeInterval = 0
 
-    public override init() { super.init() }
+    public override init() {
+        super.init()
+        #if os(iOS)
+        // Selector-based, so the centre drops it when the player goes away.
+        NotificationCenter.default.addObserver(self, selector: #selector(audioInterrupted(_:)),
+                                               name: AVAudioSession.interruptionNotification, object: nil)
+        #endif
+    }
+
+    #if os(iOS)
+    /// A phone call, Siri or another app's audio paused the player; without
+    /// this the bar showed Pause on a player that had stopped.
+    @objc nonisolated private func audioInterrupted(_ note: Notification) {
+        let type = (note.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt).flatMap(AVAudioSession.InterruptionType.init)
+        guard type == .began else { return }
+        Task { @MainActor [weak self] in self?.interruptionBegan() }
+    }
+    #endif
+
+    /// Shows the player as paused, so Play resumes where the interruption stopped it.
+    func interruptionBegan() {
+        guard state == .playing else { return }
+        player?.pause()
+        state = .paused
+    }
 
     /// Seconds into the recording; read it on a timeline, it is not published.
     public var position: TimeInterval { player?.currentTime ?? parked }
