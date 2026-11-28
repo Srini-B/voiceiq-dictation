@@ -188,8 +188,11 @@ public actor AssemblyAIClient {
             do { return try remaining() } catch { throw offline ? TranscriptionError.offline : error }
         }
         while true {
-            // Never sleeps past the deadline, however long a 429 asked for.
-            try await Task.sleep(nanoseconds: min(wait, UInt64(try timeLeft() * 1_000_000_000)))
+            // No poll could follow a sleep that long: give up now, as offline
+            // or as a timeout, rather than idle to the deadline.
+            let left = try timeLeft()
+            if Double(wait) / 1_000_000_000 + 0.25 >= left { throw offline ? TranscriptionError.offline : TranscriptionError.timeout }
+            try await Task.sleep(nanoseconds: wait)
             wait = min(wait * 3 / 2, 3_000_000_000)
             let data: Data
             let pollDeadline = min(30, try timeLeft())
@@ -357,6 +360,8 @@ public actor AssemblyAIClient {
 
     /// Races an operation against a hard wall-clock deadline.
     static func withDeadline<T: Sendable>(seconds: TimeInterval, _ operation: @escaping @Sendable () async throws -> T) async throws -> T {
+        // A deadline already gone (or NaN) would trap converting to nanoseconds.
+        guard seconds > 0 else { throw DeadlineExceeded() }
         try await withThrowingTaskGroup(of: T.self) { group in
             group.addTask { try await operation() }
             group.addTask {

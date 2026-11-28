@@ -125,7 +125,7 @@ def main() -> None:
     # The writing model's calls: before 0.7.19 every Gemini dictation call
     # (one call heard and wrote, booked as transcribe); since, the gateway
     # writer's (cleanup), not AssemblyAI's speech calls.
-    writer_dict = [r for r in dict_calls if r["stage"] == "cleanup" or "gemini" in r["model"]]
+    writer_dict = [r for r in dict_calls if r["stage"] == "cleanup" or "gemini" in r["model"].lower()]
     meet_calls = [r for r in calls if r["activity"] == "meeting"]
     meet_inr, meet_booked = cost(meet_calls)
     # Each meeting once, at its recorded length (meetings/<date>-<id>/meta.json);

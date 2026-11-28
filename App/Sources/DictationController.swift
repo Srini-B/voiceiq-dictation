@@ -998,6 +998,8 @@ final class DictationController {
         Task { @MainActor [weak self] in
             try? await Task.sleep(nanoseconds: 1_800_000_000)
             guard let self else { return }
+            // A later dictation may have shown the same note in the meantime.
+            if notice.message == self.coordinator.insertedNotice { return }
             switch self.coordinator.state {
             case .idle, .done, .cancelled, .failed:
                 self.showNotice(notice.message, for: notice.seconds, sound: notice.sound)
