@@ -43,12 +43,20 @@ final class KeyboardInserter: TextInserting {
         return .inserted
     }
 
+    /// Off until the swap is safe in every host: in Messages the keyboard's
+    /// view of the field (`documentContextBeforeInput`) read the expected
+    /// text after a swap while the field itself held only the written text,
+    /// with the earlier dictation and typed text gone (2026-11-28, simulator).
+    /// No read-back the keyboard can do catches that, so the iPhone types the
+    /// written text once, as before drafts.
+    static let offersDrafts = false
+
     /// A draft when the dictation goes back to a keyboard's input session.
     /// Whether a keyboard is still there to type it is the keyboard's call
     /// (`KeyboardModel.typeDraftIfNeeded`); when none does, the written text
     /// is typed as a plain result, as before.
     func draft(context: DictationContext) async -> TextDraft? {
-        guard destination?()?.documentID != nil else { return nil }
+        guard Self.offersDrafts, destination?()?.documentID != nil else { return nil }
         return KeyboardTextDraft(inserter: self)
     }
 }

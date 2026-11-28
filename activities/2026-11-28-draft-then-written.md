@@ -115,3 +115,15 @@ Filled in below as each check finishes.
   was not readable by Accessibility from the harness), Electron, and the
   iPhone keyboard flow, which KeyboardTests cover with a fake proxy. The demo
   recordings on the signed build cover the TextEdit and iPhone flows.
+- Mac video at 0c95320 (signed, installed, speech from WAV files through
+  `DebugDictationAudioFiles`): the spinner, the underlined raw text with the
+  writing waveform, the swap, then typed text and a second dictation where
+  only the newest is replaced. The real writer answered both.
+- iPhone, Messages in the simulator: the second dictation's swap wiped the
+  earlier dictation and the typed text, while the keyboard's own view of the
+  field read the expected result. iPhone drafts are switched off
+  (`KeyboardInserter.offersDrafts`) until a host-safe swap exists.
+- cyron's report: in a full single-line field the marks drew outside the
+  field and the inserted text stayed hidden past its edge. Marks are now cut
+  to the field's visible frame, and `ScrollToCaret` brings the caret into
+  view after an Accessibility insert.
