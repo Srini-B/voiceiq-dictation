@@ -36,7 +36,7 @@ struct SectionCaption: View {
 /// A selectable list row's highlight, passed to `.listRowBackground`: accent
 /// while the list has focus, the soft fill when it doesn't, so an unfocused
 /// selection is not the system grey. The opaque backing hides the system
-/// highlight at the rounded corners; it matches the panes' window background.
+/// highlight at the rounded corners; it matches the data panes' canvas.
 struct ListSelectionBackground: View {
     let selected: Bool
     let focused: Bool
@@ -44,7 +44,7 @@ struct ListSelectionBackground: View {
     var body: some View {
         if selected {
             ZStack {
-                Color(nsColor: .windowBackgroundColor)
+                VQ.Colors.canvas
                 RoundedRectangle(cornerRadius: VQ.Radius.control, style: .continuous)
                     .fill(focused ? VQ.Colors.accent : VQ.Colors.fill)
             }
