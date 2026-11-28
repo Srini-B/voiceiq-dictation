@@ -171,9 +171,12 @@ private struct RecorderCard: View {
                     .background(Capsule().fill(Theme.Colors.recording))
             }
             .buttonStyle(.plain)
+            // Borderless: in a List row a default-styled button takes taps on
+            // the whole row, so the timer or card would open Discard.
             Button("Discard", role: .destructive) { confirmingDiscard = true }
                 .font(Theme.Fonts.label())
                 .frame(minHeight: 44)
+                .buttonStyle(.borderless)
         }
         .frame(maxWidth: .infinity)
         // An alert, not a confirmation dialog: on iOS 27 the dialog drew as a
