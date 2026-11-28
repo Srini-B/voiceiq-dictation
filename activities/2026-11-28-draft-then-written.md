@@ -100,3 +100,18 @@ Filled in below as each check finishes.
   left out of screen captures while "Hide from screen sharing" is on, the
   default. The spinner sat one line high at the end of an NSTextView, from
   the empty-range bounds; it now uses the character before the caret.
+- Mac mini at 183c620: KeyboardTests 21/21 (including the five deleted- and
+  repeated-context cases), `swift test` 334 passed (1 skipped), VoiceIQ and
+  VoiceIQiOS xcodebuild exit 0. b34b757's app build failed on an internal
+  `withdrawKeptNotice`; 183c620 made it public.
+- Harness at b34b757 (the Mac code of 183c620 bar that one keyword): in
+  NSTextView, plain, multi-line, typed-before, caret-moved and two
+  overlapping dictations swap correctly; an edited or deleted draft is kept.
+  Safari textarea: the ⌘V swap now lands ("…See you at three" → "…See you at
+  3."). TextEdit: swap lands with the spinner on the caret's line; Esc takes
+  the draft out and leaves the field as before.
+- Not verified on device: typing or a focus change while the writer runs
+  (the harness's posted events didn't reach the app), Chrome (its textarea
+  was not readable by Accessibility from the harness), Electron, and the
+  iPhone keyboard flow, which KeyboardTests cover with a fake proxy. The demo
+  recordings on the signed build cover the TextEdit and iPhone flows.
