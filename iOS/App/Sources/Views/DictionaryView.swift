@@ -3,8 +3,9 @@ import UniformTypeIdentifiers
 import VoiceIQCore
 
 /// Settings › Dictionary, as on the Mac: search, add with "Heard as", the
-/// user's words and the auto-learned ones (learned on the Mac, synced through
-/// iCloud), stars, and CSV import and export.
+/// user's words and the auto-learned ones (learned from fixes to dictations on
+/// the Mac and in the iPhone keyboard, synced through iCloud), stars, and CSV
+/// import and export.
 struct DictionaryView: View {
     private let store = DictionaryStore()
     @State private var entries: [DictionaryEntry] = []
@@ -46,7 +47,9 @@ struct DictionaryView: View {
             if !auto.isEmpty {
                 Section {
                     ForEach(auto) { row($0) }.onDelete { remove(auto, at: $0) }
-                } header: { SettingsSectionHeader("Auto-learned") }
+                } header: { SettingsSectionHeader("Auto-learned") } footer: {
+                    Text("Learned from your fixes to dictations on the Mac and iPhone. Swipe to remove one.")
+                }
             }
             Section {
                 Text("\(entries.count) \(entries.count == 1 ? "word" : "words")")
