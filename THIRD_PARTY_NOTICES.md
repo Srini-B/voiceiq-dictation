@@ -254,6 +254,12 @@ SOFTWARE.
   addresses (`SpokenAddresses.swift`, from
   `ios/HEXShared/Formatting/SpokenCleanupRules.swift`), adapted with Hex's
   test cases in `VoiceIQCore/Tests/VoiceIQCoreTests/TidyTests.swift`
+- Also, from Hex at `a0f0a858` and `e27726790`, rewritten in Swift as rules
+  with no model: the disfluencies the tidy-up removes and the words it keeps
+  (`VoiceIQCore/Sources/FormattingPipeline/SpokenDisfluencies.swift`, from
+  `ios/HEXShared/Formatting/CleanupGuard.swift` and its port
+  `src/dictation/cleanup/guard.rs`, with `guard/context.rs` and the cases in
+  `guard_tests.rs`)
 - Also, from Hex at `f1c772c9`, rewritten in Swift: reading part of a
   meeting by time into it, keeping the turns that overlap the range whole and
   refusing a start that is not before the end (`OffsetRange` and
@@ -300,16 +306,25 @@ SOFTWARE.
 
 - Files: everything under `iOS/Keyboard/Hex` (letters and number layers,
   suggestion bar, auto-correction, slide to type, emoji panel, trackpad
-  cursor, the English typing model `en.hextm`), copied unchanged by
+  cursor, the English typing model `en.hextm` and its spellings
+  `en.spellings`), copied unchanged by
   `scripts/sync-hex-keyboard.sh` except for the patches in
   `iOS/Keyboard/Hex/patches`. The commit is in `iOS/Keyboard/Hex/UPSTREAM`
-  (`012bdbbe`, 2026-11-25).
+  (`f5819f4c`, 2026-11-27).
 - Source: [anomalyco/hex](https://github.com/anomalyco/hex)
   (`ios/HEXShared/FullKeyboard`, `ios/HEXKeyboard`), MIT, the licence above;
   its text is also in `iOS/Keyboard/Hex/LICENSE`.
 - Data inside it, per Hex's `ios/docs/acknowledgements.md`: `en.hextm` is
-  built from Google Books Ngram (CC BY 3.0), SCOWL and WordNet (permissive
-  licences) and Hex's own word list (MIT); `never-suggest.tsv` is curated
+  built from Google Books Ngram (CC BY 3.0), SCOWL (including its names,
+  days and places lists) and WordNet (permissive licences) and Hex's own word
+  list (MIT). Words newer than the books and their spellings in `en.hextm` and
+  `en.spellings` ("ChatGPT", "TikTok") come from the Leipzig Corpora
+  Collection's English news downloads for 2023 to 2025
+  (https://wortschatz.uni-leipzig.de/en/download/English), Leipzig University and
+  the Saxon Academy of Sciences and Humanities in Leipzig (D. Goldhahn,
+  T. Eckart and U. Quasthoff, LREC 2012), CC BY 4.0
+  (https://creativecommons.org/licenses/by/4.0/); only word counts, how many
+  sites use each word, and spellings are kept. `never-suggest.tsv` is curated
   from LDNOOBW (CC BY 4.0); `Emoji/emoji-index-en.txt` is built from
   Unicode's emoji-test.txt and CLDR (Unicode License v3, text in
   `iOS/Keyboard/Hex/FullKeyboard/Emoji/LICENSE-Unicode.txt`).

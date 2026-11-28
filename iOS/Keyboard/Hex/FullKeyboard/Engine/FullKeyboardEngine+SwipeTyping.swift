@@ -157,7 +157,8 @@ extension FullKeyboardEngine {
     }
 
     /// A reading as it's typed: all capitals with caps lock, a capital first letter with
-    /// `capital`, else a name the dictionary only knows capitalised ("monday" -> "Monday").
+    /// `capital`, else the model's own spelling ("chatgpt" -> "ChatGPT") or a name the
+    /// dictionary only knows capitalised ("monday" -> "Monday").
     /// One of your own words with a capital that is also a common word (a Contacts name such
     /// as "Bell" or "Will") is written as the sentence needs it, as Apple's keyboard swipes
     /// "the bell rang" beside a contact Kate Bell (`AutocorrectEngine.withoutStrayCapital`).
@@ -166,10 +167,16 @@ extension FullKeyboardEngine {
     func swipeCased(_ word: String, capital: Bool) -> String {
         if shift.state == .locked { return word.uppercased() }
         guard let first = word.first else { return word }
-        if capital { return first.uppercased() + word.dropFirst() }
+        if capital {
+            // A spelling with inner capitals keeps them: the model's ("ChatGPT") or your own ("iPhone").
+            if word.dropFirst().contains(where: \.isUppercase) { return word }
+            if let spelled = autocorrect.modelSpelling(of: word), spelled != spelled.lowercased() { return spelled }
+            return first.uppercased() + word.dropFirst()
+        }
         if !autoCapitalizes {
             return autocorrect.isOwnSpelling(word) ? word : word.lowercased()
         }
+        if let spelled = autocorrect.modelSpelling(of: word) { return spelled }
         if swipeReadsAsName(word) { return first.uppercased() + word.dropFirst() }
         return autocorrect.withoutStrayCapital(word, typed: "")
     }

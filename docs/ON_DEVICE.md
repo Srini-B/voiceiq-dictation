@@ -234,6 +234,21 @@ styles, MIT):
      a restated clause ("I want, I mean, I need"), a list item or a new
      clause could each drop a word the speaker meant ("We met on Friday, I
      mean, Monday works too").
+   - Disfluencies go where the words leave no doubt (`SpokenDisfluencies`,
+     the cases Hex's cleanup guard admits without its tagger model): a
+     repeat of function words that cannot end a clause ("I I think", "the,
+     the office", "in the, in the morning", "w- we"); a false start of an
+     auxiliary and a pronoun restarted the same way ("Did you, have you seen
+     it?" → "Have you seen it?"); and "like" or "you know" set off by commas
+     ("I went, like, to the store." → "I went to the store."). Kept: "I had
+     had enough", "I know that that works", "Whatever you do, do it",
+     "really, really", "Priya, Priya", "a bag of tea, a bag of tea", "If you
+     can, call me", "it was like a dream", "Like, comment and share", "Wait,
+     you know, right?" and quoted words. "I mean" always stays: only
+     `SpokenRepairs` resolves it, like for like, and it also emphasizes
+     ("It's good. I mean, really good."). No name, number, hyphenated word,
+     negation or "maybe", "actually", "really" is ever in the words these
+     rules remove.
    - A last sentence left without a mark that asks ("can you send it",
      "what time is it") gets a question mark; "When I get home, call me"
      does not.

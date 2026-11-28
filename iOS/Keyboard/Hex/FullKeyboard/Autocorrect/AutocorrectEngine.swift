@@ -627,7 +627,9 @@ final class AutocorrectEngine {
         var out: [KeyboardSuggestion] = []
         for word in words where out.count < 3 {
             guard previous.map({ word.lowercased() != $0 }) ?? true, mayOffer(word, after: previous) else { continue }
-            let text = capitalized && addsCapitals ? word.prefix(1).uppercased() + word.dropFirst() : word
+            let spelled = modelSpelling(of: word) ?? word
+            let text = capitalized && addsCapitals && spelled == spelled.lowercased()
+                ? spelled.prefix(1).uppercased() + spelled.dropFirst() : spelled
             guard !out.contains(where: { $0.replacement.caseInsensitiveCompare(text) == .orderedSame }) else { continue }
             out.append(KeyboardSuggestion(displayText: text, replacement: text, kind: .nextWord))
         }
@@ -773,7 +775,7 @@ final class AutocorrectEngine {
         if pool.count < end, token.count <= 3, let model, model.language == language.rawValue {
             let previous = Self.previousWord(beforeInput ?? "", token: token)
             predictions = model.completions(of: lower, after: previous, allowing: { mayOffer($0, after: previous) })
-                .map { Self.matchCase(of: token, onto: $0) }
+                .map { Self.matchCase(of: token, onto: stripSpelling(of: $0)) }
             if autoFix == nil, let first = predictions.first(where: { !has($0) }) { pool.append(first) }
         }
 
@@ -781,7 +783,7 @@ final class AutocorrectEngine {
         if corrects, let decision = decoderDecision(for: token) {
             for reading in decision.readings
             where pool.count < end && mayOffer(reading.text, replacing: token) && !unfinished(token, replacedBy: reading.text) {
-                let text = cased(reading.text, typed: token)
+                let text = cased(stripSpelling(of: reading.text), typed: token)
                 if !has(text) {
                     pool.append(text)
                 }
@@ -1094,12 +1096,12 @@ final class AutocorrectEngine {
                 if language.usesEnglishFixes, cased.contains(" ") {
                     cased = cased.split(separator: " ").map { $0 == "i" ? "I" : String($0) }.joined(separator: " ")
                 }
-                // German spells every noun with a capital, and the German model is lowercase
-                // throughout like the English one: a corrected word the dictionary knows only
-                // capitalised, or `de.capitals` calls a noun, takes its capital ("hsus" -> "haus"
-                // -> "Haus"), as the no-replacement path does below. One word only: a split
-                // reading keeps its second word as read.
-                if addsCapitals, !cased.contains(" "), decoder?.model.language == KeyboardLanguage.german.rawValue {
+                // The German and English models are lowercase throughout: a corrected word the
+                // dictionary knows only capitalised ("mray" -> "Mary"), `de.capitals` calls a noun
+                // ("hsus" -> "Haus") or the model spells its own way ("chatgtp" -> "ChatGPT") takes
+                // it, as the no-replacement path does below. One word only: a split reading keeps
+                // its second word as read.
+                if addsCapitals, !cased.contains(" "), language == .german || language == .english {
                     cased = nounCapitalised(for: cased, typed: token) ?? cased
                 }
                 return withoutAddedCapitals(cased, typed: token)
@@ -1108,7 +1110,10 @@ final class AutocorrectEngine {
             // (a name, day or place), or that German's `de.capitals` calls a noun, typed in
             // lowercase, is capitalised as the dictionary path does ("mary" -> "Mary",
             // "haus" -> "Haus"), unless Auto-capitalization is off.
-            return addsCapitals ? nounCapitalised(for: token, typed: token) : nil
+            // Nothing when that is what you typed ("Airbnb" after Shift): no auto-replace to undo.
+            guard addsCapitals, let capitalised = nounCapitalised(for: token, typed: token), capitalised != token
+            else { return nil }
+            return capitalised
         }
 
         // 3. A two-letter non-word one neighbouring key from a very common two-letter word
@@ -1294,7 +1299,7 @@ final class AutocorrectEngine {
         guard language == .german, let capitals = germanNouns,
               let capitalise = capitals.capitalises(word, after: Self.previousWord(beforeInput ?? "", token: token)),
               capitalise, let first = word.first
-        else { return properNoun(for: word) }
+        else { return modelSpelling(of: word) ?? properNoun(for: word) }
         return first.uppercased() + word.dropFirst()
     }
 

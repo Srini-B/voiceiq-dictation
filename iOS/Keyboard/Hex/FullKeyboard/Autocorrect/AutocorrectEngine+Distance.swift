@@ -13,13 +13,9 @@ extension AutocorrectEngine {
         if typed.count >= 2 && typed == typed.uppercased() && typed != typed.lowercased() {
             return target.uppercased()
         }
-        // Preserve intentional casing in `I`, `I'm`, `iPhone`, etc. unless `typed` started capitalized.
-        if target != target.lowercased() {
-            if typed.first?.isUppercase == true, let first = target.first, first.isLowercase {
-                return first.uppercased() + target.dropFirst()
-            }
-            return target
-        }
+        // Preserve intentional casing in `I`, `I'm`, `iPhone`, etc., even at a sentence's
+        // start: a capital for the start of a sentence only goes on an all-lowercase word.
+        if target != target.lowercased() { return target }
         if typed.first?.isUppercase == true, let first = target.first {
             return first.uppercased() + target.dropFirst()
         }

@@ -1,5 +1,5 @@
 diff --git a/iOS/Keyboard/Hex/FullKeyboard/Autocorrect/AutocorrectEngine.swift b/iOS/Keyboard/Hex/FullKeyboard/Autocorrect/AutocorrectEngine.swift
-index ec0f24e..1c20360 100644
+index cb1aaba..46e586c 100644
 --- a/iOS/Keyboard/Hex/FullKeyboard/Autocorrect/AutocorrectEngine.swift
 +++ b/iOS/Keyboard/Hex/FullKeyboard/Autocorrect/AutocorrectEngine.swift
 @@ -779,7 +779,8 @@ final class AutocorrectEngine {
@@ -9,7 +9,7 @@ index ec0f24e..1c20360 100644
 -            for reading in decision.readings where pool.count < end && mayOffer(reading.text, replacing: token) {
 +            for reading in decision.readings
 +            where pool.count < end && mayOffer(reading.text, replacing: token) && !unfinished(token, replacedBy: reading.text) {
-                 let text = cased(reading.text, typed: token)
+                 let text = cased(stripSpelling(of: reading.text), typed: token)
                  if !has(text) {
                      pool.append(text)
 @@ -792,7 +793,8 @@ final class AutocorrectEngine {

@@ -1,0 +1,107 @@
+diff --git a/iOS/Keyboard/Hex/FullKeyboard/Autocorrect/AutocorrectEngine+Distance.swift b/iOS/Keyboard/Hex/FullKeyboard/Autocorrect/AutocorrectEngine+Distance.swift
+index 897ad52..5a5ea17 100644
+--- a/iOS/Keyboard/Hex/FullKeyboard/Autocorrect/AutocorrectEngine+Distance.swift
++++ b/iOS/Keyboard/Hex/FullKeyboard/Autocorrect/AutocorrectEngine+Distance.swift
+@@ -13,13 +13,9 @@ extension AutocorrectEngine {
+         if typed.count >= 2 && typed == typed.uppercased() && typed != typed.lowercased() {
+             return target.uppercased()
+         }
+-        // Preserve intentional casing in `I`, `I'm`, `iPhone`, etc. unless `typed` started capitalized.
+-        if target != target.lowercased() {
+-            if typed.first?.isUppercase == true, let first = target.first, first.isLowercase {
+-                return first.uppercased() + target.dropFirst()
+-            }
+-            return target
+-        }
++        // Preserve intentional casing in `I`, `I'm`, `iPhone`, etc., even at a sentence's
++        // start: a capital for the start of a sentence only goes on an all-lowercase word.
++        if target != target.lowercased() { return target }
+         if typed.first?.isUppercase == true, let first = target.first {
+             return first.uppercased() + target.dropFirst()
+         }
+diff --git a/iOS/Keyboard/Hex/FullKeyboard/Autocorrect/AutocorrectEngine+Spellings.swift b/iOS/Keyboard/Hex/FullKeyboard/Autocorrect/AutocorrectEngine+Spellings.swift
+index 653235e..464129d 100644
+--- a/iOS/Keyboard/Hex/FullKeyboard/Autocorrect/AutocorrectEngine+Spellings.swift
++++ b/iOS/Keyboard/Hex/FullKeyboard/Autocorrect/AutocorrectEngine+Spellings.swift
+@@ -6,20 +6,29 @@ import Foundation
+ /// "GitHub", "figma" -> "Figma"), whatever the phone's dictionary knows.
+ @MainActor
+ extension AutocorrectEngine {
+-    /// `word`, all lowercase, as the layout language's model spells it; nil when it has no
+-    /// spelling of its own.
++    /// `word`, all lowercase or with only a capital first letter (a sentence's start: "Chatgpt"),
++    /// as the layout language's model spells it, or as you spell the same letters with capitals
++    /// ("Fitzgerald" from Contacts over the model's "FitzGerald"); nil when the model has no
++    /// spelling of its own, or with Auto-capitalization off.
+     func modelSpelling(of word: String) -> String? {
+-        guard word == word.lowercased(), let model = contextModel ?? decoder?.model,
+-              model.language == language.rawValue else { return nil }
+-        return HexWordList.bundled(model.language, "spellings")?.text(of: word)
++        let lower = word.lowercased()
++        guard addsCapitals, word == lower || word.dropFirst() == lower.dropFirst(),
++              let model = contextModel ?? decoder?.model, model.language == language.rawValue,
++              let spelled = HexWordList.bundled(model.language, "spellings")?.text(of: lower) else { return nil }
++        // Contacts and Dictionary spell names on purpose; learned words and fixes may carry a sentence's
++        // capital. An all-caps contact ("UBER") is shouting, unless it is your Dictionary's spelling.
++        return lexiconTerms.first { term in
++            term != lower && term.caseInsensitiveCompare(lower) == .orderedSame
++                && (term != term.uppercased() || isVocabularySpelling(term))
++        } ?? spelled
+     }
+ 
+     /// A model word (lowercase) as the strip offers it before it is cased like what you typed:
+     /// its own spelling, or the capital of a name the dictionary knows only capitalised ("mary"
+-    /// -> "Mary"), as space and Swipe typing put them in.
++    /// -> "Mary"), as space and Swipe typing put them in. Neither with Auto-capitalization off.
+     func stripSpelling(of word: String) -> String {
+         if let spelled = modelSpelling(of: word) { return spelled }
+-        guard word.count >= 2, word == word.lowercased(), let first = word.first else { return word }
++        guard addsCapitals, word.count >= 2, word == word.lowercased(), let first = word.first else { return word }
+         let capitalised = first.uppercased() + word.dropFirst()
+         return checker.isWordValid(capitalised) && !checker.isWordValid(word) ? capitalised : word
+     }
+diff --git a/iOS/Keyboard/Hex/FullKeyboard/Autocorrect/AutocorrectEngine.swift b/iOS/Keyboard/Hex/FullKeyboard/Autocorrect/AutocorrectEngine.swift
+index 46e586c..7841b39 100644
+--- a/iOS/Keyboard/Hex/FullKeyboard/Autocorrect/AutocorrectEngine.swift
++++ b/iOS/Keyboard/Hex/FullKeyboard/Autocorrect/AutocorrectEngine.swift
+@@ -627,7 +627,9 @@ final class AutocorrectEngine {
+         var out: [KeyboardSuggestion] = []
+         for word in words where out.count < 3 {
+             guard previous.map({ word.lowercased() != $0 }) ?? true, mayOffer(word, after: previous) else { continue }
+-            let text = capitalized && addsCapitals ? word.prefix(1).uppercased() + word.dropFirst() : word
++            let spelled = modelSpelling(of: word) ?? word
++            let text = capitalized && addsCapitals && spelled == spelled.lowercased()
++                ? spelled.prefix(1).uppercased() + spelled.dropFirst() : spelled
+             guard !out.contains(where: { $0.replacement.caseInsensitiveCompare(text) == .orderedSame }) else { continue }
+             out.append(KeyboardSuggestion(displayText: text, replacement: text, kind: .nextWord))
+         }
+@@ -1108,7 +1110,10 @@ final class AutocorrectEngine {
+             // (a name, day or place), or that German's `de.capitals` calls a noun, typed in
+             // lowercase, is capitalised as the dictionary path does ("mary" -> "Mary",
+             // "haus" -> "Haus"), unless Auto-capitalization is off.
+-            return addsCapitals ? nounCapitalised(for: token, typed: token) : nil
++            // Nothing when that is what you typed ("Airbnb" after Shift): no auto-replace to undo.
++            guard addsCapitals, let capitalised = nounCapitalised(for: token, typed: token), capitalised != token
++            else { return nil }
++            return capitalised
+         }
+ 
+         // 3. A two-letter non-word one neighbouring key from a very common two-letter word
+diff --git a/iOS/Keyboard/Hex/FullKeyboard/Engine/FullKeyboardEngine+SwipeTyping.swift b/iOS/Keyboard/Hex/FullKeyboard/Engine/FullKeyboardEngine+SwipeTyping.swift
+index e9cca3c..a61a2c3 100644
+--- a/iOS/Keyboard/Hex/FullKeyboard/Engine/FullKeyboardEngine+SwipeTyping.swift
++++ b/iOS/Keyboard/Hex/FullKeyboard/Engine/FullKeyboardEngine+SwipeTyping.swift
+@@ -167,7 +167,12 @@ extension FullKeyboardEngine {
+     func swipeCased(_ word: String, capital: Bool) -> String {
+         if shift.state == .locked { return word.uppercased() }
+         guard let first = word.first else { return word }
+-        if capital { return first.uppercased() + word.dropFirst() }
++        if capital {
++            // A spelling with inner capitals keeps them: the model's ("ChatGPT") or your own ("iPhone").
++            if word.dropFirst().contains(where: \.isUppercase) { return word }
++            if let spelled = autocorrect.modelSpelling(of: word), spelled != spelled.lowercased() { return spelled }
++            return first.uppercased() + word.dropFirst()
++        }
+         if !autoCapitalizes {
+             return autocorrect.isOwnSpelling(word) ? word : word.lowercased()
+         }

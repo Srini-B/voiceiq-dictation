@@ -10,6 +10,7 @@ LICENSE                                    iOS/Keyboard/Hex/LICENSE
 # Keyboard, slide to type, autocorrect, predictions and emoji (keyboard extension).
 ios/HEXShared/FullKeyboard                 iOS/Keyboard/Hex/FullKeyboard
 ios/HEXKeyboard/TypingModel/en.hextm       iOS/Keyboard/Hex/TypingModel/en.hextm
+ios/HEXKeyboard/TypingModel/en.spellings   iOS/Keyboard/Hex/TypingModel/en.spellings
 ios/HEXKeyboard/KeyboardInputView.swift    iOS/Keyboard/Hex/KeyboardInputView.swift
 exclude ios/HEXShared/FullKeyboard/Emoji/emoji-index-de.txt
 exclude ios/HEXShared/FullKeyboard/Emoji/emoji-index-es.txt
