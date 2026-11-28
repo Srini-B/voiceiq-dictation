@@ -19,6 +19,8 @@ site=${SITE:-jitsi}
 chrome="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 # The run records with the installed app, so it holds the shared app lock
 # (scripts/app-lock.sh); LOCK_OWNER names who holds it, such as a thread ID.
+# A lock the caller already holds, for test-mode setup and teardown around
+# the run, stays held when the run ends.
 lockowner=${LOCK_OWNER:?set LOCK_OWNER to your thread ID}
 applock=${0:A:h:h:h}/scripts/app-lock.sh
 # Sparkle replaced the build under test mid-run on 2026-11-28 (0.7.17 to
@@ -35,8 +37,10 @@ cleanup() {
   for pid in $pids; do kill $pid 2>/dev/null || true; done
   sleep 2
   rm -rf $scratch
-  $applock release $lockowner
+  (( callerlock )) || $applock release $lockowner
 }
+callerlock=0
+$applock holds $lockowner && callerlock=1
 trap cleanup EXIT
 # Taken only once cleanup can release it.
 $applock acquire $lockowner

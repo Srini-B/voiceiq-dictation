@@ -8,6 +8,7 @@
 #                                       under 30 minutes old; a lock that old
 #                                       is stale and taken over
 #   scripts/app-lock.sh release OWNER   removes the lock if OWNER holds it
+#   scripts/app-lock.sh holds OWNER     exits 0 if OWNER holds the lock
 #
 # OWNER is the thread ID or another name a person can trace. Tests that don't
 # need the real install should use their own copy, such as
@@ -67,6 +68,9 @@ acquire)
 release)
   run_locked _release "$owner"
   ;;
+holds)
+  [[ -d $lock && $(held_by) == "$owner" ]]
+  ;;
 _reclaim)  # under the file lock
   if [[ -d $lock ]] && (( $(age) >= stale )); then
     echo "app lock: taking over a stale lock from $(held_by)" >&2
@@ -82,7 +86,7 @@ _release)  # under the file lock
   if [[ $(held_by) == "$owner" ]]; then rm -rf "$lock"; fi
   ;;
 *)
-  echo "usage: $0 acquire|release OWNER" >&2
+  echo "usage: $0 acquire|release|holds OWNER" >&2
   exit 2
   ;;
 esac

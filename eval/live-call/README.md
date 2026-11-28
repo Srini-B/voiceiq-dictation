@@ -35,9 +35,11 @@ so VoiceiQ detects the call and reads names from the screen.
   and check its menu shows "Sync off (test)" and "Data in <path> (test)"
   before the call. Afterwards quit it, delete both defaults, relaunch it and
   check neither "(test)" line is left (AGENTS.md). Do not test a Debug build.
-- `run.sh` also holds the shared app lock for the run (`LOCK_OWNER` set to
-  your thread ID), so nobody quits or reinstalls the real app under a
-  probe.
+- The shared app lock from test-mode setup to the end of teardown:
+  `scripts/app-lock.sh acquire <thread ID>` before quitting the app, and
+  `release` after the last menu check. `run.sh` takes the lock for the run
+  (`LOCK_OWNER` set to your thread ID) and leaves a lock you already hold in
+  place, so nobody quits or reinstalls the real app under a probe.
 - `ASSEMBLYAI_API_KEY` set in the app, so the meeting is transcribed. Notes
   need an LLM Gateway balance. Without one they fail with `noBalance`, and
   the probe scores the transcript only.
