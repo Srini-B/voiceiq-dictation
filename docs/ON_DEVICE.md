@@ -167,8 +167,7 @@ the 90 the scorecard asks of on-device work
 ([activity](../activities/2026-11-27-meetings-gemini-only.md)). The speaker
 model stays: `MeetingTranscriber.splitFarSide` runs pyannote community-1 on
 the far-side track and lays its stretches over Gemini's words
-(`FarSideSpeakers`). `LocalMeetingJob` keeps its speech step only for the
-offline meeting eval.
+(`FarSideSpeakers`). Nothing passes `LocalMeetingJob` a speech model any more.
 
 A meeting that cannot reach Gemini (no key, offline, a timeout, a transport
 error or 5xx, a per-minute rate limit) keeps its audio and is marked as waiting (`MeetingMeta.waitsForGemini`).

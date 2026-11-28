@@ -20,8 +20,9 @@ the on-device speaker model, which only splits the far side's voices.
   rules", for on-device dictation only.
 - **`LocalMeetingTranscriber` removed.** Its word and speaker joins, which
   `MeetingTranscriber.splitFarSide` uses, live on as `FarSideSpeakers`.
-  `LocalMeetingJob` keeps its speech step because the offline meeting eval
-  (#117) still measures it.
+  The offline meeting eval (#117) loses its `voiceiq-pro`/`voiceiq-mini`
+  runs, which measured this path; `voiceiq-unified` keeps the per-track
+  join, written out in the eval.
 - **Waiting for Gemini.** A meeting that fails because Gemini is out of
   reach (no key, offline, a timeout, a transport error or 5xx, a per-minute
   rate limit; Neon review) is saved with

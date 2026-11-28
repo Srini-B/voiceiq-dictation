@@ -10,8 +10,8 @@ import VoiceIQSpeech
 // Transcribes each meeting prepare.py wrote fully on device, two ways, and
 // writes OUT_DIR/<pipeline>-<model>/<id>.json for score.py:
 //
-//   voiceiq                 what the app does with Meetings set to On device
-//                           (`LocalMeetingTranscriber`): each track decoded
+//   voiceiq                 the on-device meeting path the app had until #118,
+//                           with EVAL_MODEL=unified only: each track decoded
 //                           whole, the far side split by the speaker model.
 //   hex                     Hex's offline pass (HexStyle.swift) with the same
 //                           speech model: pause-cut chunks, a speech detector
@@ -164,7 +164,6 @@ let unified: UnifiedAsrManager? = label == "unified" ? UnifiedAsrManager() : nil
 try await unified?.loadModels()
 let pipelines = Set((environment["EVAL_PIPELINES"] ?? "voiceiq,hex").split(separator: ",").map(String.init))
 
-SettingsStore().setMeetingSource(.onDevice)
 SettingsStore().setLocalSpeechModel(model)
 let scratch = FileManager.default.temporaryDirectory.appendingPathComponent("local-meetings-eval-\(UUID().uuidString)")
 UsageMeter.store = try UsageStore(databaseURL: scratch.appendingPathExtension("sqlite"))
@@ -183,6 +182,15 @@ func write(_ pipeline: String, _ input: Input, _ segments: [Output.Segment], sec
                               duration_seconds: duration, details: details))
         .write(to: folder.appendingPathComponent("\(input.id).json"))
     print("\(input.id): \(pipeline)-\(label) \(participants.count) speakers, \(segments.count) turns, \(seconds)")
+}
+
+/// The removed on-device path's join of a call decoded one track at a
+/// time: every mic word is the owner's, the far side's words take the
+/// diarizer's speakers.
+func byTrack(owner: [LocalMeetingResult.Word], far: LocalMeetingResult) -> [TimedWord] {
+    let mine = owner.map { TimedWord(text: $0.text, speaker: MeetingSpeaker.you, start: $0.start, end: $0.end) }
+    let others = FarSideSpeakers.settled(FarSideSpeakers.label(far.words, segments: far.segments), segments: far.segments)
+    return (mine + others).sorted { $0.start < $1.start }
 }
 
 /// As the meeting screen names them: the owner by name, everyone else "Speaker N".
@@ -211,20 +219,20 @@ func evaluate(_ input: Input, source: URL) async throws {
     if pipelines.contains("voiceiq"), unified != nil, !(call.isOnline && call.micIsEchoFree) {
         print("\(input.id): voiceiq-unified skipped, the app would mix the tracks and only its per-track path is written here")
     } else if pipelines.contains("voiceiq"), let unified {
-        // `LocalMeetingTranscriber.transcribe` for a call with an echo-free mic, with the speech model swapped.
+        // The removed on-device meeting path for a call with an echo-free mic, with the speech model swapped.
         let clock = Date()
         let id = UUID()
         let diarizerFolder = await session(LocalModelStore.speakerDiarizer, id: id)
         defer { LocalModelStore.speakerDiarizer.releaseSession(id: id) }
         let micURL = folder.appendingPathComponent("eval-mic.caf"), farURL = folder.appendingPathComponent("eval-far.caf")
-        try LocalMeetingTranscriber.writeMix(duration: call.mic.duration, samples: call.mic.samples, to: micURL)
-        try LocalMeetingTranscriber.writeMix(duration: call.system.duration, samples: call.system.samples, to: farURL)
+        try FarSideSpeakers.writeMix(duration: call.mic.duration, samples: call.mic.samples, to: micURL)
+        try FarSideSpeakers.writeMix(duration: call.system.duration, samples: call.system.samples, to: farURL)
         let owner = LocalMeetingJob.words(try await unified.transcribeWithTimings(try samples(micURL)).tokenTimings)
         let farWords = LocalMeetingJob.words(try await unified.transcribeWithTimings(try samples(farURL)).tokenTimings)
         let stretches = try await LocalSpeechInference.transcribeMeeting(
             LocalMeetingRequest(speechDirectory: nil, diarizerDirectory: diarizerFolder, audio: farURL)).segments
-        let words = LocalMeetingTranscriber.renumber(
-            LocalMeetingTranscriber.byTrack(owner: owner, far: LocalMeetingResult(words: farWords, segments: stretches)))
+        let words = FarSideSpeakers.renumber(
+            byTrack(owner: owner, far: LocalMeetingResult(words: farWords, segments: stretches)))
         let turns = SpeakerLinker.overlappingTurns(words).map {
             TranscriptSegment(speaker: $0.speaker, text: $0.text, chunkIndex: 0, start: $0.start, end: $0.end)
         }
@@ -232,16 +240,8 @@ func evaluate(_ input: Input, source: URL) async throws {
                   seconds: ["call_audio": callSeconds, "transcribe": callSeconds + Date().timeIntervalSince(clock)],
                   duration: call.duration, details: facts)
     } else if pipelines.contains("voiceiq") {
-        // Without the cancelled mic on disk the app cancels the echo again inside the timed call, as it does for a new meeting.
-        try? FileManager.default.removeItem(at: folder.appendingPathComponent("mic-aec.caf"))
-        let clock = Date()
-        guard let transcriber = try await LocalMeetingTranscriber.acquire(runner: { try await LocalSpeechInference.transcribeMeeting($0) }) else {
-            fail("on-device meetings are not ready")
-        }
-        let turns = try await transcriber.transcribe(folder: folder)
-        try write("voiceiq", input, named(turns, owner: input.owner),
-                  seconds: ["call_audio": callSeconds, "transcribe": Date().timeIntervalSince(clock)],
-                  duration: call.duration, details: facts)
+        // The app no longer transcribes meetings on device (#118); only its per-track join is measured, with Unified.
+        print("\(input.id): voiceiq-\(label) skipped, set EVAL_MODEL=unified for the per-track path")
     }
     guard pipelines.contains("hex") else { return }
 
@@ -286,7 +286,7 @@ func evaluate(_ input: Input, source: URL) async throws {
     clock = Date()
     // The speaker model hears the far side as it does in the app, raised by `TrackAudio.gain`.
     let raisedFar = folder.appendingPathComponent("eval-far-speakers.caf")
-    try LocalMeetingTranscriber.writeMix(duration: call.system.duration, samples: call.system.samples, to: raisedFar)
+    try FarSideSpeakers.writeMix(duration: call.system.duration, samples: call.system.samples, to: raisedFar)
     facts["far_gain"] = call.system.gain
     let stretches = try await LocalSpeechInference.transcribeMeeting(
         LocalMeetingRequest(speechDirectory: nil, diarizerDirectory: diarizerFolder, audio: raisedFar)).segments
@@ -304,8 +304,8 @@ func evaluate(_ input: Input, source: URL) async throws {
             LocalMeetingResult.Word(text: $0.text, start: Double($0.startMs) / 1_000, end: Double($0.endMs) / 1_000)
         }
         // The app's own join of a call decoded one track at a time.
-        let words = LocalMeetingTranscriber.renumber(
-            LocalMeetingTranscriber.byTrack(owner: ownerWords, far: LocalMeetingResult(words: farWords, segments: stretches)))
+        let words = FarSideSpeakers.renumber(
+            byTrack(owner: ownerWords, far: LocalMeetingResult(words: farWords, segments: stretches)))
         let turns = SpeakerLinker.overlappingTurns(words).map {
             TranscriptSegment(speaker: $0.speaker, text: $0.text, chunkIndex: 0, start: $0.start, end: $0.end)
         }
