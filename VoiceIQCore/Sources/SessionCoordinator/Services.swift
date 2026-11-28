@@ -17,9 +17,13 @@ public protocol TranscriptionServicing: Sendable {
     /// nil when this service does not.
     func listen(context: DictationContext) -> RealtimeTranscription?
     /// `transcribe`, with the transcript `live` streamed when it finished;
-    /// the recording on disk otherwise.
+    /// the recording on disk otherwise. `onHeard` gets the transcript, with
+    /// the Dictionary's replacements, the moment it is known and only when
+    /// the writing model is about to rewrite it, so the field can show it
+    /// as a draft meanwhile.
     func transcribe(audioURL: URL, durationSeconds: Double, context: DictationContext,
-                    live: RealtimeTranscription?) async throws -> TranscriptionResult
+                    live: RealtimeTranscription?,
+                    onHeard: (@Sendable (String) -> Void)?) async throws -> TranscriptionResult
 }
 
 public extension TranscriptionServicing {
@@ -28,7 +32,8 @@ public extension TranscriptionServicing {
     }
     func listen(context: DictationContext) -> RealtimeTranscription? { nil }
     func transcribe(audioURL: URL, durationSeconds: Double, context: DictationContext,
-                    live: RealtimeTranscription?) async throws -> TranscriptionResult {
+                    live: RealtimeTranscription?,
+                    onHeard: (@Sendable (String) -> Void)?) async throws -> TranscriptionResult {
         live?.cancel()
         return try await transcribe(audioURL: audioURL, durationSeconds: durationSeconds, context: context)
     }
@@ -132,6 +137,39 @@ public struct DictationContext: Equatable, Sendable {
 /// Insertion seam. M4 provides the AX/paste ladder; tests use fakes.
 public protocol TextInserting {
     @MainActor func insert(_ text: String, context: DictationContext) async -> InsertionOutcome
+    /// A draft for the field the dictation goes to, which shows a spinner at
+    /// the cursor from now on; nil when the field can't hold a draft that is
+    /// replaced later, and the written text then goes in once by `insert`.
+    @MainActor func draft(context: DictationContext) async -> TextDraft?
+}
+
+public extension TextInserting {
+    @MainActor func draft(context: DictationContext) async -> TextDraft? { nil }
+}
+
+/// The transcript shown in the field while the writing model rewrites it,
+/// then swapped for the written text. Only the draft's own text is ever
+/// replaced: once the user edited it, or it can't be found for certain, it
+/// stays as it is.
+@MainActor
+public protocol TextDraft: AnyObject {
+    /// Puts the transcript in the field, marked as a draft.
+    func show(_ text: String) async -> DraftShown
+    /// Swaps the draft for the written text. False when the draft was
+    /// edited, is gone, or can't be told apart; it then stays.
+    func replace(with text: String) async -> Bool
+    /// Ends the draft: the spinner and the marks go, the text stays.
+    func end()
+}
+
+public enum DraftShown: Equatable, Sendable {
+    /// In the field, and found again for the replace.
+    case shown
+    /// Nothing went in: the written text goes in by `insert`.
+    case notInserted
+    /// It went in, or may have, but can't be found again; it stays, and the
+    /// written text is not inserted a second time.
+    case lost
 }
 
 public enum InsertionOutcome: Equatable, Sendable {

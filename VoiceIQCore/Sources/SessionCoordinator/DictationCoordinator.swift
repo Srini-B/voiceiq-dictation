@@ -18,6 +18,13 @@ public final class DictationCoordinator: ObservableObject {
     /// arrived; the iPhone says "Starting…" rather than that it is listening.
     @Published public private(set) var audioFlowing = false
     @Published public private(set) var lastResult: String?
+    /// The transcript is in the field as a draft and the writing model is
+    /// rewriting it; the pill shows the writing animation.
+    @Published public private(set) var writingDraft = false
+    /// The pill's note when the draft stayed because the field changed
+    /// around it; the written text is in History and Paste last.
+    nonisolated static let keptDraftNotice = "Kept as heard: the field changed meanwhile"
+
     @Published public private(set) var coachingHint: String?
     /// The last inserted dictation's note, such as "Inserted as heard" when
     /// the writing step failed; shown in place of the success mark.
@@ -539,12 +546,24 @@ public final class DictationCoordinator: ObservableObject {
         localTranscriber = nil
         let stream = live
         live = nil
+        // A draft only while no earlier dictation still has text to put in:
+        // two drafts in one field could not be told apart.
+        let mayDraft = local == nil && detached.isEmpty
         inFlightTask = Task { [weak self] in
-          // Every way out of the job frees the next one's turn, and closes a
-          // stream nothing used.
-          defer { ticket.finish(); stream?.cancel() }
+          var stage: DraftStage?
+          // Every way out of the job frees the next one's turn, closes a
+          // stream nothing used, and ends a draft (its text stays).
+          defer { ticket.finish(); stream?.cancel(); stage?.end(); self?.writingDraft = false }
           await UsageMeter.$scope.withValue(usageScope) {
             guard let self else { return }
+            if mayDraft, let draft = await self.insertion.draft(context: session.context) {
+                stage = DraftStage(draft: draft, turn: ticket) { [weak self] in
+                    if self?.session?.id == sessionID { self?.writingDraft = true }
+                }
+            }
+            let heard: (@Sendable (String) -> Void)? = stage.map { stage in
+                { text in Task { @MainActor in stage.show(text) } }
+            }
             do {
                 let audioURL = FileLayout.audioCAF(in: session.folder)
                 let outcome: TranscriptionResult
@@ -565,7 +584,7 @@ public final class DictationCoordinator: ObservableObject {
                     try Task.checkCancellation()
                     outcome = try await self.transcription.transcribe(
                         audioURL: audioURL, durationSeconds: result.durationSeconds, context: session.context,
-                        live: stream
+                        live: stream, onHeard: heard
                     )
                     stages = DictationSteps(finishRecording: finalizeSeconds,
                                             transcription: Date().timeIntervalSince(finalizeStartedAt))
@@ -574,7 +593,7 @@ public final class DictationCoordinator: ObservableObject {
                 guard !Task.isCancelled else { return }
                 await self.completeTranscription(
                     sessionID: sessionID, outcome: outcome,
-                    startedAt: requestedAt, readyAt: readyAt, stages: stages
+                    startedAt: requestedAt, readyAt: readyAt, stages: stages, draft: stage
                 )
             } catch {
                 guard !Task.isCancelled else { return }
@@ -585,7 +604,8 @@ public final class DictationCoordinator: ObservableObject {
     }
 
     private func completeTranscription(
-        sessionID: UUID, outcome: TranscriptionResult, startedAt: Date, readyAt: Date, stages: DictationSteps
+        sessionID: UUID, outcome: TranscriptionResult, startedAt: Date, readyAt: Date, stages: DictationSteps,
+        draft: DraftStage? = nil
     ) async {
         guard let waiting = job(sessionID) else { return } // stale completion
         var stages = stages
@@ -602,7 +622,23 @@ public final class DictationCoordinator: ObservableObject {
         let isForeground = session?.id == sessionID
         if isForeground { apply(.transcriptReady) }
 
-        let insertionOutcome = await insertion.insert(outcome.cleanedTranscript, context: job.context)
+        // The transcript already in the field as a draft is swapped for the
+        // written text; only a draft that never went in leaves the insert to
+        // the ladder.
+        let insertionOutcome: InsertionOutcome
+        var keptDraft = false
+        switch await draft?.shown() ?? .notInserted {
+        case .shown:
+            keptDraft = await draft?.draft.replace(with: outcome.cleanedTranscript) != true
+            insertionOutcome = .inserted
+        case .lost:
+            keptDraft = true
+            insertionOutcome = .inserted
+        case .notInserted:
+            draft?.end()
+            insertionOutcome = await insertion.insert(outcome.cleanedTranscript, context: job.context)
+        }
+        if keptDraft { Log.insertion.info("draft kept as it was: the written text has no safe place to go") }
         let insertedAt = Date()
         let pipelineSeconds = insertedAt.timeIntervalSince(startedAt)
         // From the text being ready, so saving it to History counts here too.
@@ -619,7 +655,9 @@ public final class DictationCoordinator: ObservableObject {
         if session?.id == sessionID {
             // Set before the state changes, so observers of the state read it.
             // The insertion's own notice (clipboard, secure field) comes first.
-            if case .inserted = insertionOutcome { insertedNotice = outcome.notice }
+            if case .inserted = insertionOutcome {
+                insertedNotice = outcome.notice ?? (keptDraft ? Self.keptDraftNotice : nil)
+            }
             apply(event)
             session = nil
         } else {

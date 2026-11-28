@@ -744,6 +744,12 @@ final class DictationController {
             }
             .store(in: &cancellables)
 
+        coordinator.$writingDraft
+            .removeDuplicates()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] writing in self?.hud.model.writing = writing }
+            .store(in: &cancellables)
+
         coordinator.$coachingHint
             .compactMap { $0 }
             .receive(on: DispatchQueue.main)

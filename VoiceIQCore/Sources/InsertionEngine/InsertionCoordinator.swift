@@ -32,6 +32,13 @@ public struct InsertionCoordinator: TextInserting {
         return surrounding.fitted(text)
     }
 
+    /// A plain guarded ⌘V, for writing over a selection the caller set
+    /// and checked (`FieldDraft`).
+    @MainActor
+    public func paste(_ text: String) async -> Bool {
+        await paster.paste(text)
+    }
+
     @MainActor
     public func insert(_ text: String, context: DictationContext) async -> InsertionOutcome {
         // Before the guards, so the frontmost app and the field they check
