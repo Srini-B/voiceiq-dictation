@@ -71,10 +71,12 @@ Numbers use tabular figures.
 ## Spacing, radius, elevation
 
 - **Spacing** is on a 4-point grid: 4, 8, 12, 16, 20, 24, 32 and 48. The page
-  margin is 20 on the iPhone and 24 on the Mac.
+  margin is 16 on the iPhone, the system layout margin that large titles and
+  inset lists use, and 24 on the Mac.
 - **Radius:**
   - Chips, search, switches and buttons are capsules.
-  - Cards are 16. Sheets are 28.
+  - Cards are 16. Sheets are 28. The iPhone's Settings lists keep the system
+    inset-grouped radius, so they scroll, swipe and select like Settings.
   - Mac list selection is 10.
   - The Talk key is 20 on a 60-point square.
 - **Elevation.** Pages are flat. Only floating things cast a shadow: the dock,

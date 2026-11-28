@@ -46,8 +46,9 @@ enum Theme {
         static let l: CGFloat = 16
         static let xl: CGFloat = 24
         static let xxl: CGFloat = 32
-        /// Horizontal page margin.
-        static let page: CGFloat = 20
+        /// Horizontal page margin: the system layout margin, where large
+        /// titles and inset lists already sit, so every page has one left edge.
+        static let page: CGFloat = 16
     }
 
     enum Fonts {
@@ -122,12 +123,20 @@ extension Theme {
         let ink = UIColor(Colors.ink)
         let appearance = UINavigationBar.appearance()
         appearance.largeTitleTextAttributes = [
-            .font: Fonts.uiFlex(VQ.TypeScale.display.size + 2, weight: VQ.TypeScale.display.weight, style: .largeTitle),
+            .font: Fonts.uiFlex(VQ.TypeScale.display.size, weight: VQ.TypeScale.display.weight, style: .largeTitle),
             .foregroundColor: ink,
         ]
         appearance.titleTextAttributes = [
             .font: Fonts.uiFlex(17, weight: 560, style: .headline),
             .foregroundColor: ink,
         ]
+        // Segmented switches: the selected option sits on the canvas, on a
+        // quiet fill track, in the brand face.
+        let segmented = UISegmentedControl.appearance()
+        segmented.backgroundColor = UIColor(Colors.porcelain)
+        segmented.selectedSegmentTintColor = UIColor(Colors.canvas)
+        let label = Fonts.uiFlex(14, weight: 500, style: .subheadline)
+        segmented.setTitleTextAttributes([.font: label, .foregroundColor: UIColor(Colors.inkSecondary)], for: .normal)
+        segmented.setTitleTextAttributes([.font: label, .foregroundColor: ink], for: .selected)
     }
 }

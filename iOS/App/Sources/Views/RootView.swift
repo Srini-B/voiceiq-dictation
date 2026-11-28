@@ -13,13 +13,13 @@ struct RootView: View {
             if onboarded {
                 TabView(selection: $tab) {
                     HomeView(tab: $tab)
-                        .tabItem { Label("Home", systemImage: "waveform") }
+                        .tabItem { Label("Home", systemImage: "waveform").environment(\.symbolVariants, .none) }
                         .tag(Tab.home)
                     MeetingsView()
-                        .tabItem { Label("Notes", systemImage: "record.circle") }
+                        .tabItem { Label("Notes", systemImage: "record.circle").environment(\.symbolVariants, .none) }
                         .tag(Tab.meetings)
                     SettingsView()
-                        .tabItem { Label("Settings", systemImage: "gearshape") }
+                        .tabItem { Label("Settings", systemImage: "gearshape").environment(\.symbolVariants, .none) }
                         .tag(Tab.settings)
                 }
                 .modifier(MinimizeTabBarOnScroll())
