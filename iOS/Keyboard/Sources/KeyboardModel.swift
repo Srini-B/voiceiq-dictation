@@ -50,8 +50,21 @@ final class KeyboardModel: ObservableObject {
     /// The draft this keyboard typed, one part per dictation, until their
     /// written text comes or it stays as heard.
     private var draft: KeyboardDraft? {
-        didSet { if holdsDraft != (draft != nil) { holdsDraft = draft != nil } }
+        didSet {
+            if holdsDraft != (draft != nil) { holdsDraft = draft != nil }
+            if let ended = oldValue, ended !== draft { Self.endedDraftIDs += ended.parts.map(\.id) }
+        }
     }
+    /// The dictations of drafts this keyboard no longer holds, newest last.
+    /// `SharedStore.typedDraftID` names only the last one typed; the written
+    /// text of an earlier part of a joined draft must not be typed beside
+    /// its transcript either. In the keyboard's own `UserDefaults`, since a
+    /// written text can reach a later keyboard process.
+    private static var endedDraftIDs: [UUID] {
+        get { (UserDefaults.standard.stringArray(forKey: endedDraftIDsKey) ?? []).compactMap(UUID.init(uuidString:)) }
+        set { UserDefaults.standard.set(newValue.suffix(8).map(\.uuidString), forKey: endedDraftIDsKey) }
+    }
+    private static let endedDraftIDsKey = "keyboard.endedDraftIDs"
     /// A draft this keyboard could not type, logged once.
     private var skippedDraftID: UUID?
     /// How long a typed draft waits for its written text.
@@ -478,7 +491,8 @@ final class KeyboardModel: ObservableObject {
             if waitingResult != nil { waitingResult = nil }
             return
         }
-        if let named = delivery.replacesDraft, draft?.holds(named) == true || named == store.typedDraftID {
+        if let named = delivery.replacesDraft,
+           draft?.holds(named) == true || named == store.typedDraftID || Self.endedDraftIDs.contains(named) {
             return finishDraft(with: delivery)
         }
         // A dismissed keyboard can keep polling with its view in a window.
