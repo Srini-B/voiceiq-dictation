@@ -8,7 +8,11 @@ import Foundation
 /// email in 2 of 3 rounds with the rule and an example in the prompt, and
 /// unseen one-paragraph emails in 1 of 12.
 enum EmailLayout {
-    static func apply(_ text: String) -> String {
+    /// The user's own writing rules decide layout when they speak of it
+    /// ("Keep messages in a single paragraph"); the writer has followed them.
+    static func apply(_ text: String, customRules: String = "") -> String {
+        guard customRules.range(of: #"\b(paragraphs?|lines?|layout|format|formatting)\b"#, options: [.regularExpression, .caseInsensitive]) == nil
+        else { return text }
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         let range = NSRange(trimmed.startIndex..., in: trimmed)
         guard let match = pattern.firstMatch(in: trimmed, range: range),

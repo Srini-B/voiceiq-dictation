@@ -28,6 +28,10 @@ final class ValidationGateTests: XCTestCase {
                        "Hi Sam,\n\niOS 18 is required.\n\nBest,\nDana")
         XCTAssertEqual(EmailLayout.apply("Hi Sam, She replied, “Approved.” Thanks, Dana."),
                        "Hi Sam,\n\nShe replied, “Approved.”\n\nThanks,\nDana")
+        let oneLine = "Hi Sam, The release is ready. Thanks, Dana"
+        XCTAssertEqual(EmailLayout.apply(oneLine, customRules: "Keep messages in a single paragraph."), oneLine)
+        XCTAssertEqual(EmailLayout.apply(oneLine, customRules: "Spell it VoiceiQ."),
+                       "Hi Sam,\n\nThe release is ready.\n\nThanks,\nDana")
         let laidOut = "Hi Priya,\n\nCan we move it to net 30?\n\nThanks,\nSrini"
         XCTAssertEqual(EmailLayout.apply(laidOut), laidOut)
         for prose in ["Hey, can you check the logs? Thanks, Ana.", "Thanks, Sam. I'll look at it tomorrow.",
