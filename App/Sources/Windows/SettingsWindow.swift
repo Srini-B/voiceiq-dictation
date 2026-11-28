@@ -92,27 +92,14 @@ enum MainSection: String, CaseIterable, Identifiable {
 
     var icon: String {
         switch self {
-        case .history: return "clock.arrow.circlepath"
-        case .meetings: return "person.2.wave.2.fill"
-        case .dictionary: return "character.book.closed.fill"
-        case .cost: return "dollarsign.circle.fill"
+        case .history: return "clock"
+        case .meetings: return "person.2"
+        case .dictionary: return "character.book.closed"
+        case .cost: return "chart.bar"
         case .dictation: return "waveform"
-        case .privacy: return "hand.raised.fill"
-        case .advanced: return "wrench.and.screwdriver.fill"
-        case .about: return "info.circle.fill"
-        }
-    }
-
-    var tileColor: Color {
-        switch self {
-        case .history: return VoiceIQUI.Colors.gBlue
-        case .meetings: return Color(nsColor: .systemPurple)
-        case .dictionary: return Color(nsColor: .systemOrange)
-        case .cost: return Color(nsColor: .systemMint)
-        case .dictation: return Color(nsColor: .systemTeal)
-        case .privacy: return Color(nsColor: .systemGreen)
-        case .advanced: return Color(nsColor: .systemIndigo)
-        case .about: return Color(nsColor: .systemPink)
+        case .privacy: return "hand.raised"
+        case .advanced: return "slider.horizontal.3"
+        case .about: return "info.circle"
         }
     }
 
@@ -237,21 +224,20 @@ private struct SidebarRow: View {
         Button(action: action) {
             HStack(spacing: 8) {
                 Image(systemName: section.icon)
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .frame(width: 22, height: 22)
-                    .background(RoundedRectangle(cornerRadius: 6).fill(section.tileColor))
+                    .font(.system(size: 13, weight: .regular))
+                    .foregroundStyle(selected ? VQ.Colors.ink : VQ.Colors.ink2)
+                    .frame(width: 20)
                 Text(section.title)
-                    .font(VoiceIQUI.TypeScale.body())
-                    .foregroundStyle(selected ? VoiceIQUI.Colors.onSelection : .primary)
+                    .font(GTFont.flex(13, weight: selected ? 560 : 400))
+                    .foregroundStyle(selected ? VQ.Colors.ink : VQ.Colors.ink2)
                 Spacer(minLength: 0)
             }
             .padding(.horizontal, 8)
             .padding(.vertical, 5)
             .background(
-                RoundedRectangle(cornerRadius: VoiceIQUI.Radius.small)
-                    .fill(selected ? VoiceIQUI.Colors.selection
-                          : hovering ? Color.primary.opacity(VoiceIQUI.StateLayer.hover)
+                RoundedRectangle(cornerRadius: 7)
+                    .fill(selected ? Color.primary.opacity(0.09)
+                          : hovering ? Color.primary.opacity(0.05)
                           : .clear)
             )
         }
