@@ -2,7 +2,7 @@ import SwiftUI
 
 /// Colours and type for the meeting waveforms. Each app passes its own, so
 /// the Mac and iPhone draw the same waveform in their own look.
-public struct WaveformStyle {
+public struct WaveformStyle: Sendable {
     /// Your side, above the line, and the text.
     public var you: Color
     /// The call's side, below the line, and the quieter text.

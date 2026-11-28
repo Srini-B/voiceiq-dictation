@@ -15,7 +15,7 @@ struct RecordingAudioControls: View {
                     switch player.state {
                     case .idle: Label("Play", systemImage: "play.fill")
                     case .preparing: Label("Preparing…", systemImage: "hourglass")
-                    case .playing: Label("Stop", systemImage: "stop.fill")
+                    case .playing, .paused: Label("Stop", systemImage: "stop.fill")
                     }
                 }
                 .buttonStyle(.compactSecondary)
