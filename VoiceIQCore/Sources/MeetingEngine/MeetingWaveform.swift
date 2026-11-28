@@ -41,6 +41,24 @@ public struct MeetingLoudness: Sendable, Equatable {
         return track.levels.map { height(dB: $0 + boost, floor: -50, full: -10) }
     }
 
+    /// `count` bars across the meeting, each the root mean square of its
+    /// stretch. The loudest moment would draw steady talk as a solid block, and
+    /// the mean would hide someone who speaks a tenth of a long call. The RMS
+    /// keeps steady talk below full height and still shows a short turn.
+    func bars(_ count: Int) -> [WaveBar] {
+        let length = max(you.count, call?.count ?? 0)
+        guard length > 0 else { return Array(repeating: WaveBar(you: 0, call: call == nil ? nil : 0), count: count) }
+        func level(_ values: [Float], _ index: Int) -> Float {
+            let start = index * length / count, end = max(start + 1, (index + 1) * length / count)
+            guard start < values.count else { return 0 }
+            let stretch = values[start..<min(end, values.count)]
+            return (stretch.reduce(0) { $0 + $1 * $1 } / Float(stretch.count)).squareRoot()
+        }
+        return (0..<count).map { index in
+            WaveBar(you: level(you, index), call: call.map { level($0, index) })
+        }
+    }
+
     /// `floor` and quieter is flat; `full` and louder fills the side.
     static func height(dB: Double, floor: Double, full: Double) -> Float {
         Float(min(max((dB - floor) / (full - floor), 0), 1))
@@ -359,23 +377,8 @@ public struct MeetingPlaybackBar: View {
         .help("Playback speed")
     }
 
-    /// Each bar the average loudness of its stretch of the meeting. The loudest
-    /// moment would draw steady talk as a solid block: a few seconds of speech
-    /// always holds one near-full 100 ms window.
     private func bars(_ count: Int) -> [WaveBar] {
-        guard let loudness, !loudness.you.isEmpty || !(loudness.call ?? []).isEmpty else {
-            return Array(repeating: WaveBar(you: 0, call: loudness?.call == nil ? nil : 0), count: count)
-        }
-        let length = max(loudness.you.count, loudness.call?.count ?? 0)
-        func level(_ values: [Float], _ index: Int) -> Float {
-            let start = index * length / count, end = max(start + 1, (index + 1) * length / count)
-            guard start < values.count else { return 0 }
-            let stretch = values[start..<min(end, values.count)]
-            return stretch.reduce(0, +) / Float(stretch.count)
-        }
-        return (0..<count).map { index in
-            WaveBar(you: level(loudness.you, index), call: loudness.call.map { level($0, index) })
-        }
+        loudness?.bars(count) ?? Array(repeating: WaveBar(you: 0, call: nil), count: count)
     }
 
     /// "0:07", "12:40", "1:02:05".
