@@ -7,6 +7,7 @@ struct MeetingsPane: View {
     let store: MeetingStore
     @State private var meetings: [MeetingMeta] = []
     @State private var selection: MeetingID?
+    @FocusState private var listFocused: Bool
     @State private var notes: MeetingNotes?
     @State private var transcript: [TranscriptSegment] = []
     /// Side by side: the transcript column is shown. Narrow: the transcript replaces the notes.
@@ -115,7 +116,7 @@ struct MeetingsPane: View {
             .controlSize(.large)
             .tint(recording ? VoiceIQUI.Colors.errorFill : VQ.Colors.accent)
             .buttonStyle(.borderedProminent)
-            .padding(.horizontal, VoiceIQUI.Spacing.s)
+            .padding(.horizontal, VQ.Spacing.page)
             .padding(.top, nextMeeting.next == nil ? VoiceIQUI.Spacing.l : VoiceIQUI.Spacing.s)
             .padding(.bottom, VoiceIQUI.Spacing.xs)
             if recording {
@@ -133,7 +134,7 @@ struct MeetingsPane: View {
                 }
                 .controlSize(.large)
                 .buttonStyle(.bordered)
-                .padding(.horizontal, VoiceIQUI.Spacing.s)
+                .padding(.horizontal, VQ.Spacing.page)
                 .padding(.bottom, VoiceIQUI.Spacing.xs)
             }
             folderFilter
@@ -156,6 +157,9 @@ struct MeetingsPane: View {
                 }
             }
             .scrollContentBackground(.hidden)
+            .focused($listFocused)
+            // Row text lands on the page margin, under the title and Record.
+            .padding(.horizontal, 8)
             .overlay {
                 if meetings.isEmpty {
                     Text("No meetings yet").foregroundStyle(.secondary)
@@ -215,6 +219,7 @@ struct MeetingsPane: View {
             if inside { hovered = meeting.id } else if hovered == meeting.id { hovered = nil }
         }
         .tag(meeting.id)
+        .listRowBackground(ListSelectionBackground(selected: selection == meeting.id, focused: listFocused))
         .contextMenu { Menu("Folders") { MeetingFolderToggles(model: folders, meeting: meeting.id) } }
     }
 
@@ -229,7 +234,7 @@ struct MeetingsPane: View {
         .fixedSize()
         .frame(maxWidth: .infinity, alignment: .leading)
         .help("Show one folder's meetings, or make, rename and delete folders")
-        .padding(.horizontal, VoiceIQUI.Spacing.s)
+        .padding(.horizontal, VQ.Spacing.page)
         .padding(.vertical, VoiceIQUI.Spacing.xs)
     }
 
@@ -406,7 +411,7 @@ struct MeetingsPane: View {
             .help(transcriptShown ? (wide ? "Hide transcript" : "Show notes") : "Show transcript")
             .disabled(transcript.isEmpty)
         }
-        .padding(.horizontal, VoiceIQUI.Spacing.l)
+        .padding(.horizontal, VQ.Spacing.page)
         .padding(.top, VoiceIQUI.Spacing.l)
         .padding(.bottom, VoiceIQUI.Spacing.s)
     }
@@ -645,7 +650,8 @@ struct ExportToast: View {
                 Text("Saved to \(url.path.replacingOccurrences(of: NSHomeDirectory(), with: "~"))")
                     .lineLimit(1).truncationMode(.middle)
                 Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([url]); dismiss() }
-                    .buttonStyle(.link)
+                    .buttonStyle(.plain)
+                    .foregroundStyle(VQ.Colors.accent)
             case .copied(let what, _):
                 Image(systemName: "checkmark.circle.fill").foregroundStyle(VoiceIQUI.Colors.success)
                 Text("Copied \(what)")

@@ -76,7 +76,9 @@ Numbers use tabular figures.
 - **Radius:**
   - Chips, search, switches and buttons are capsules.
   - Cards are 16. Sheets are 28. The iPhone's Settings lists keep the system
-    inset-grouped radius, so they scroll, swipe and select like Settings.
+    inset-grouped radius, so they scroll, swipe and select like Settings. The
+    Mac Settings forms also keep the system grouped form, with its card
+    colours and radius, so their controls behave like System Settings.
   - Mac list selection is 10.
   - The Talk key is 20 on a 60-point square.
 - **Elevation.** Pages are flat. Only floating things cast a shadow: the dock,
@@ -130,7 +132,7 @@ the separate microphone and Accessibility screens.
   into the list. It closes once that permission is granted.
 - **Microphone check.** Once the microphone is allowed, a line under its row
   says whether sound is arriving and offers the input picker.
-- **Footer.** "Microphone and Accessibility are required" in muted, then
+- **Footer.** "The first two are required" in muted, then
   Continue, which stays disabled until both are granted.
 - **Not asked.** Input Monitoring. The key is read through active event
   taps, which macOS grants under Accessibility.

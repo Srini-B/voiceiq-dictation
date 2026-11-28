@@ -22,7 +22,7 @@ struct DictationKeySection: View {
     @State private var pendingModifier: HotkeyKey?
 
     var body: some View {
-        Section("Dictation key") {
+        Section {
             LabeledContent("Press to start and stop") {
                 HStack(spacing: 8) {
                     Button(isRecording ? "Press a key or middle-click…" : trigger.displayName) {
@@ -62,14 +62,17 @@ struct DictationKeySection: View {
             }
             if trigger == .middleMouse {
                 Text("Hold the middle button for half a second to start or stop. Clicks still reach the app.")
-                    .font(.caption)
+                    .font(GTFont.flex(VQ.TypeScale.meta.size, weight: VQ.TypeScale.meta.weight))
                     .foregroundStyle(.secondary)
             }
             if let conflict {
                 Text(conflict)
-                    .font(.caption)
+                    .font(GTFont.flex(VQ.TypeScale.meta.size, weight: VQ.TypeScale.meta.weight))
                     .foregroundStyle(VoiceIQUI.Colors.error)
             }
+        } header: {
+            Text("Dictation key")
+                .font(VoiceIQUI.TypeScale.labelSmall())
         }
         .onAppear { trigger = settings.dictationTrigger }
         .onDisappear { stopRecording() }
@@ -181,11 +184,14 @@ struct PermissionsSection: View {
     private let poll = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
     var body: some View {
-        Section("Permissions") {
+        Section {
             PermissionRow(title: KeystrokeAccess.listName, granted: accessibility, settingsAnchor: "Privacy_Accessibility",
                           offersRestart: postAccessPending, onOpen: KeystrokeAccess.requestPostAccess)
             PermissionRow(title: "Screen Recording", granted: screenRecording, settingsAnchor: "Privacy_ScreenCapture")
             PermissionRow(title: "Microphone", granted: microphone, settingsAnchor: "Privacy_Microphone")
+        } header: {
+            Text("Permissions")
+                .font(VoiceIQUI.TypeScale.labelSmall())
         }
         .onReceive(poll) { _ in refresh() }
         .onAppear { refresh() }
