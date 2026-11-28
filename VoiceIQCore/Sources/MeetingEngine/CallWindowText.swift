@@ -31,7 +31,12 @@ enum CallWindowText {
         let app = AXUIElementCreateApplication(pid)
         AXUIElementSetMessagingTimeout(app, 0.25)
         guard var windows = value(app, kAXWindowsAttribute) as? [AXUIElement] else { return [] }
-        if browser { windows = windows.filter(isMeeting) }
+        if browser {
+            windows = windows.filter(isMeeting)
+            // A joined room wins over the browser's other call-site pages, which include chats (Codex on #146).
+            let rooms = windows.filter(isJoinedRoom)
+            if !rooms.isEmpty { windows = rooms }
+        }
         let deadline = Date().addingTimeInterval(timeBudget)
         var budget = elementBudget
         var out: [String] = [], seen = Set<String>()
@@ -59,28 +64,22 @@ enum CallWindowText {
         return out
     }
 
-    /// Titles of the app's windows whose front tab is a call page. A
-    /// browser's window title is the page's title ("Owner – Audio playing"),
-    /// so only its address (AXDocument) may say it is the call.
-    static func meetingWindowTitles(pid: pid_t) -> [String] {
-        guard AXIsProcessTrusted() else { return [] }
+    /// Titles of the app's windows whose front tab is a call: `joined`, a
+    /// joined call room (`CallApps.isCallRoom`); `pages`, any call site's
+    /// page, which includes a Teams or WhatsApp chat (Codex on #146). A
+    /// browser's window title is the page's own ("Owner – Audio playing"), so
+    /// its address (AXDocument) says which.
+    static func callWindowTitles(pid: pid_t) -> (joined: [String], pages: [String]) {
+        guard AXIsProcessTrusted() else { return ([], []) }
         let app = AXUIElementCreateApplication(pid)
         AXUIElementSetMessagingTimeout(app, 0.25)
-        let windows = value(app, kAXWindowsAttribute) as? [AXUIElement] ?? []
-        return windows.filter(isMeeting).compactMap { value($0, kAXTitleAttribute) as? String }
-    }
-
-    /// One of the app's windows shows a joined call room (`CallApps.isCallRoom`),
-    /// not only a call site: a Teams or WhatsApp chat is a meeting page too.
-    static func showsJoinedRoom(pid: pid_t) -> Bool {
-        guard AXIsProcessTrusted() else { return false }
-        let app = AXUIElementCreateApplication(pid)
-        AXUIElementSetMessagingTimeout(app, 0.25)
-        return (value(app, kAXWindowsAttribute) as? [AXUIElement] ?? []).contains { window in
-            let address = value(window, kAXDocumentAttribute) as? String
-            return address.map { CallApps.isCallRoom(addresses: [$0]) }
-                ?? (value(window, kAXTitleAttribute) as? String).map { CallApps.isCallRoom(titles: [$0]) } ?? false
+        var joined: [String] = [], pages: [String] = []
+        for window in value(app, kAXWindowsAttribute) as? [AXUIElement] ?? [] where isMeeting(window) {
+            guard let title = value(window, kAXTitleAttribute) as? String else { continue }
+            pages.append(title)
+            if isJoinedRoom(window) { joined.append(title) }
         }
+        return (joined, pages)
     }
 
     /// A button's label with the text inside it, such as "People 3".
@@ -97,6 +96,13 @@ enum CallWindowText {
         }
         let line = parts.joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
         return line.isEmpty || line.count > 80 ? nil : line
+    }
+
+    /// The window's front tab is a joined call room, by its address, or by its
+    /// title only when it has none (`CallApps.isCallRoom`).
+    private static func isJoinedRoom(_ window: AXUIElement) -> Bool {
+        if let address = value(window, kAXDocumentAttribute) as? String { return CallApps.isCallRoom(addresses: [address]) }
+        return (value(window, kAXTitleAttribute) as? String).map { CallApps.isCallRoom(titles: [$0]) } ?? false
     }
 
     /// The window's front tab is a call page, by its title or address.
