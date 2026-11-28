@@ -9,6 +9,9 @@ import SwiftUI
 /// Access and its alert, with a caption for each step under the drawing.
 struct KeyboardSettingsWalkthrough: View {
     @State private var phase = Phase.appPage
+    /// With Reduce Motion the drawing holds its last frame, so every caption
+    /// reads as current.
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     enum Phase: Int, CaseIterable, LoopPhase {
         case appPage, tapKeyboards, keyboardsPage, voiceIQOn, tapFullAccess, alert, tapAllow, done
@@ -38,13 +41,14 @@ struct KeyboardSettingsWalkthrough: View {
         VStack(alignment: .leading, spacing: Theme.Spacing.l) {
             screen
                 .frame(height: 176)
+                .dynamicTypeSize(...DynamicTypeSize.xLarge)
                 .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
                 .overlay(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous).strokeBorder(Theme.Colors.hairline, lineWidth: 1))
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: Theme.Spacing.s) {
-                GuideInstruction(number: 1, text: Text("Tap **Keyboards**"), current: phase.instruction == 0)
-                GuideInstruction(number: 2, text: Text("Turn on **VoiceiQ**"), current: phase.instruction == 1)
-                GuideInstruction(number: 3, text: Text("Turn on **Allow Full Access**, then tap **Allow**"), current: phase.instruction == 2)
+                GuideInstruction(number: 1, text: Text("Tap **Keyboards**"), current: reduceMotion || phase.instruction == 0)
+                GuideInstruction(number: 2, text: Text("Turn on **VoiceiQ**"), current: reduceMotion || phase.instruction == 1)
+                GuideInstruction(number: 3, text: Text("Turn on **Allow Full Access**, then tap **Allow**"), current: reduceMotion || phase.instruction == 2)
             }
         }
         .loopingPhases($phase, still: .done)
@@ -164,6 +168,7 @@ struct GlobeSwitchDemo: View {
                 .opacity(menuShown ? 1 : 0)
                 .scaleEffect(menuShown ? 1 : 0.7, anchor: .bottomLeading)
         }
+        .dynamicTypeSize(...DynamicTypeSize.xLarge)
         .loopingPhases($phase, still: .pickVoiceIQ)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Touch and hold the globe key below the keyboard, then choose VoiceiQ.")
@@ -372,7 +377,7 @@ struct TouchDot: View {
 // MARK: - Looping
 
 /// One frame of a looping animation and how long it stays on screen.
-protocol LoopPhase: CaseIterable, Equatable, Sendable {
+protocol LoopPhase: CaseIterable, Sendable {
     var hold: Double { get }
 }
 
@@ -391,18 +396,20 @@ private struct LoopingPhases<Phase: LoopPhase>: ViewModifier {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     func body(content: Content) -> some View {
-        content.task(id: reduceMotion) {
-            guard !reduceMotion else {
-                phase = still
-                return
-            }
-            while !Task.isCancelled {
-                for next in Phase.allCases {
-                    withAnimation(.spring(response: 0.45, dampingFraction: 0.86)) { phase = next }
-                    try? await Task.sleep(for: .seconds(next.hold))
-                    if Task.isCancelled { return }
+        content
+            .onAppear { if reduceMotion { phase = still } }
+            .task(id: reduceMotion) {
+                guard !reduceMotion else {
+                    phase = still
+                    return
+                }
+                while !Task.isCancelled {
+                    for next in Phase.allCases {
+                        withAnimation(.spring(response: 0.45, dampingFraction: 0.86)) { phase = next }
+                        try? await Task.sleep(for: .seconds(next.hold))
+                        if Task.isCancelled { return }
+                    }
                 }
             }
-        }
     }
 }

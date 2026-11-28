@@ -11,6 +11,9 @@ step iOS makes them do by hand.
 
 ## What changed
 
+- The page's design follows the shared redesign tokens (white canvas,
+  display titles, outline symbols, a checklist named for what the user
+  gets).
 - Three intro slides (dictation in any app, the keyboard, meeting notes),
   each with a small looping scene drawn in SwiftUI.
 - Setup is one page per step: key, microphone, add the keyboard, switch
@@ -33,4 +36,17 @@ Ideas only; the visuals use VoiceiQ's own theme.
 
 ## Verification
 
-Pending: Simulator build and recorded run on the Mac mini.
+- `VoiceIQiOS` Debug simulator build (unsigned) succeeds; `swift test
+  --package-path VoiceIQCore` passes (349 tests, 0 failures).
+- On an erased iPhone 18 Pro simulator (iOS 27), a UI test drove the light
+  flow end to end: slides, mic prompt, Settings › Apps › VoiceiQ ›
+  Keyboards with both switches and Allow, back to the app, the globe menu,
+  both checks ticking, and the automatic move to Try it.
+- Runs found and fixed: a timed Full Access hint that showed after any
+  focus change, the switch page's checks hidden by the keyboard, and the
+  globe drawing flashing back after the ticks.
+- In the cold simulator, Open VoiceiQ Settings opened the Settings home
+  page rather than VoiceiQ's page. Not checked on a device.
+- Not run: dark mode end to end, iPad, iPhone SE size, VoiceOver, and
+  large text.
+- Review: Claude Fable 5.2 (Neon's weekly limit was used up).

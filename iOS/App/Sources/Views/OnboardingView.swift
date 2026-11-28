@@ -10,6 +10,13 @@ struct OnboardingView: View {
     @EnvironmentObject private var setup: SetupMonitor
     @State private var step = Step(rawValue: MobileSettings.onboardingStep) ?? .intro
     @State private var forward = true
+    /// Set when Back lands on a page that is already done, so it stays put
+    /// instead of moving on again. Cleared by any forward move.
+    @State private var stayPut = false
+    /// Set by an automatic advance: the footer ignores taps for a moment, so a
+    /// tap meant for the last page's button can't press the new page's.
+    @State private var footerLocked = false
+    @Environment(\.accessibilityVoiceOverEnabled) private var voiceOver
     /// Bumped each time a page's setup completes, for the success haptic.
     @State private var completions = 0
     /// The CTAs hide while typing: with the keyboard's Done bar above them they
@@ -23,7 +30,9 @@ struct OnboardingView: View {
         /// tapping Continue are never done on their own.
         func isDone(_ status: SetupStatus) -> Bool {
             switch self {
-            case .microphone: return status.micGranted
+            // The Live Activities card shares the page; while it shows, the
+            // page waits for Continue so the card can be read.
+            case .microphone: return status.micGranted && status.liveActivitiesEnabled
             case .addKeyboard: return status.keyboardAdded
             // The keyboard reports in only once it has run with Full Access,
             // so one signal proves both.
@@ -50,15 +59,29 @@ struct OnboardingView: View {
             keyboardShown = false
         }
         .onAppear { setup.refresh() }
-        // A page whose setup is already done when the user moves forward onto
-        // it, or that gets done while it shows, checks off and moves on. Going
-        // back to it stays put, so Back is never undone.
-        .task(id: AutoAdvance(step: step, done: step.isDone(setup.status), forward: forward)) {
-            guard step.isDone(setup.status), forward else { return }
+        // A page whose setup is done when the user moves forward onto it, or
+        // that gets done while it shows, checks off and moves on. Back onto a
+        // done page stays put, so Back is never undone. With VoiceOver the
+        // page announces the check and waits for Continue instead.
+        .task(id: AutoAdvance(step: step, done: step.isDone(setup.status), stayPut: stayPut)) {
+            let started = step
+            guard started.isDone(setup.status), !stayPut else { return }
             completions += 1
+            if voiceOver {
+                UIAccessibility.post(notification: .announcement, argument: "Done. Continue when you’re ready.")
+                return
+            }
             try? await Task.sleep(for: .seconds(1.4))
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled, step == started else { return }
             advance()
+            footerLocked = true
+        }
+        // Its own task: the advance above changes the step, which cancels the
+        // task that set the lock.
+        .task(id: footerLocked) {
+            guard footerLocked else { return }
+            try? await Task.sleep(for: .seconds(0.6))
+            footerLocked = false
         }
         .sensoryFeedback(.success, trigger: completions)
         .animation(.easeInOut(duration: 0.25), value: step)
@@ -67,7 +90,22 @@ struct OnboardingView: View {
     private struct AutoAdvance: Equatable {
         let step: Step
         let done: Bool
-        let forward: Bool
+        let stayPut: Bool
+    }
+
+    /// Whether the page will move on by itself, so it offers no Continue.
+    private var autoAdvancing: Bool {
+        step.isDone(setup.status) && !stayPut && !voiceOver
+    }
+
+    /// Continue for a done page. While the page is about to move on by itself
+    /// it keeps its place in the layout but can't be seen or pressed.
+    private var continueButton: some View {
+        Button("Continue", action: advance)
+            .buttonStyle(.primaryPill)
+            .opacity(autoAdvancing ? 0 : 1)
+            .disabled(autoAdvancing)
+            .accessibilityHidden(autoAdvancing)
     }
 
     private var setupPages: some View {
@@ -87,6 +125,7 @@ struct OnboardingView: View {
             .keyboardDismissable()
             if !keyboardShown {
                 footer
+                    .allowsHitTesting(!footerLocked)
                     .padding(.horizontal, Theme.Spacing.page)
                     .padding(.top, Theme.Spacing.m)
                     .padding(.bottom, Theme.Spacing.s)
@@ -128,7 +167,7 @@ struct OnboardingView: View {
                 }
             case .microphone:
                 if status.micGranted {
-                    Button("Continue", action: advance).buttonStyle(.primaryPill)
+                    continueButton
                 } else if status.micDenied {
                     Button("Open Settings", action: openAppSettings).buttonStyle(.primaryPill)
                     Button("Set up later", action: advance).buttonStyle(.secondaryPill)
@@ -138,16 +177,19 @@ struct OnboardingView: View {
                 }
             case .addKeyboard:
                 if status.keyboardAdded {
-                    Button("Continue", action: advance).buttonStyle(.primaryPill)
+                    continueButton
                 } else {
                     Button("Open VoiceiQ Settings", action: openAppSettings).buttonStyle(.primaryPill)
                     // Without the keyboard the last two pages have nothing to
                     // show; Home's Finish setup card picks it up later.
-                    Button("Set up later", action: finish).buttonStyle(.secondaryPill)
+                    Button("Finish later", action: finish).buttonStyle(.secondaryPill)
                 }
             case .switchKeyboard:
-                Button(status.fullAccess ? "Continue" : "Skip for now", action: advance)
-                    .buttonStyle(PillButtonStyle(kind: status.fullAccess ? .primary : .secondary))
+                if status.fullAccess {
+                    continueButton
+                } else {
+                    Button("Skip for now", action: advance).buttonStyle(.secondaryPill)
+                }
             case .tryIt:
                 Button("Start using VoiceiQ", action: finish).buttonStyle(.primaryPill)
             }
@@ -158,6 +200,7 @@ struct OnboardingView: View {
         UIApplication.shared.endEditing()
         guard let next = Step(rawValue: step.rawValue + 1) else { return finish() }
         forward = true
+        stayPut = false
         step = next
         MobileSettings.onboardingStep = next.rawValue
     }
@@ -166,6 +209,7 @@ struct OnboardingView: View {
         UIApplication.shared.endEditing()
         guard let previous = Step(rawValue: step.rawValue - 1) else { return }
         forward = false
+        stayPut = previous.isDone(setup.status)
         step = previous
         MobileSettings.onboardingStep = previous.rawValue
     }
@@ -196,7 +240,8 @@ private struct OnboardingHeader: View {
                     .foregroundStyle(Theme.Colors.ink)
                     .frame(width: 38, height: 38)
                     .overlay(Circle().strokeBorder(Theme.Colors.hairline, lineWidth: 1))
-                    .contentShape(Circle())
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
             }
             .accessibilityLabel("Back")
             Capsule()
@@ -212,7 +257,7 @@ private struct OnboardingHeader: View {
                 .animation(.easeInOut(duration: 0.35), value: step)
                 .accessibilityElement()
                 .accessibilityLabel("Step \(step) of \(total)")
-            Color.clear.frame(width: 38, height: 38)
+            Color.clear.frame(width: 44, height: 44)
         }
     }
 }

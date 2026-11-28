@@ -29,6 +29,7 @@ struct IntroSlides: View {
                     .buttonStyle(.compactSecondary)
                     .opacity(page < slides.count - 1 ? 1 : 0)
                     .disabled(page == slides.count - 1)
+                    .accessibilityHidden(page == slides.count - 1)
             }
             .padding(.horizontal, Theme.Spacing.page)
             .padding(.top, Theme.Spacing.s)
@@ -58,32 +59,38 @@ struct IntroSlides: View {
     }
 
     private func slide(_ index: Int) -> some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.xxl) {
-            VStack(alignment: .leading, spacing: Theme.Spacing.s) {
-                Text(slides[index].title)
-                    .font(Theme.Fonts.display())
-                    .foregroundStyle(Theme.Colors.ink)
-                    .fixedSize(horizontal: false, vertical: true)
-                Text(slides[index].detail)
-                    .font(Theme.Fonts.callout())
-                    .foregroundStyle(Theme.Colors.muted)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .accessibilityElement(children: .combine)
-
-            Group {
-                switch index {
-                case 0: DictateAnywhereScene()
-                case 1: KeyboardScene()
-                default: MeetingScene()
+        ScrollView {
+            VStack(alignment: .leading, spacing: Theme.Spacing.xxl) {
+                VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+                    Text(slides[index].title)
+                        .font(Theme.Fonts.display())
+                        .foregroundStyle(Theme.Colors.ink)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text(slides[index].detail)
+                        .font(Theme.Fonts.callout())
+                        .foregroundStyle(Theme.Colors.muted)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .accessibilityElement(children: .combine)
+                .accessibilityAddTraits(.isHeader)
+
+                Group {
+                    switch index {
+                    case 0: DictateAnywhereScene()
+                    case 1: KeyboardScene()
+                    default: MeetingScene()
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .top)
+                .dynamicTypeSize(...DynamicTypeSize.xLarge)
+                .accessibilityHidden(true)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-            .accessibilityHidden(true)
+            .padding(.horizontal, Theme.Spacing.page)
+            .padding(.top, Theme.Spacing.xxl)
         }
-        .padding(.horizontal, Theme.Spacing.page)
-        .padding(.top, Theme.Spacing.xxl)
+        // Scrolls only when large text doesn't fit.
+        .scrollBounceBehavior(.basedOnSize)
     }
 }
 

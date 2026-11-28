@@ -83,28 +83,6 @@ struct GroupLabel: View {
     }
 }
 
-/// A title with optional supporting copy, for the top of a page.
-struct PageTitle: View {
-    let title: String
-    var detail: String?
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: Theme.Spacing.s) {
-            Text(title)
-                .font(Theme.Fonts.title())
-                .foregroundStyle(Theme.Colors.ink)
-                .fixedSize(horizontal: false, vertical: true)
-            if let detail {
-                Text(detail)
-                    .font(Theme.Fonts.callout())
-                    .foregroundStyle(Theme.Colors.muted)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-}
-
 // MARK: - Brand
 
 /// The app icon, rounded like the Home Screen shows it.
