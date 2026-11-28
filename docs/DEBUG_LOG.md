@@ -154,6 +154,8 @@ without the admin password.
 # with VoiceiQ quit; the Dictionary and other settings live in the defaults
 # domain, not the data folder, so save them and put them back afterwards
 defaults export io.blue.voiceiq /Users/Shared/voiceiq-pre-test.plist
+# Markdown export ignores test mode and may write into iCloud Drive
+defaults delete io.blue.voiceiq meetingMarkdownFolder 2>/dev/null || true
 defaults write io.blue.voiceiq DebugDisableCloudSync -bool true
 defaults write io.blue.voiceiq DebugDataFolder /Users/Shared/voiceiq-probe-data
 # launch it; its menu shows "Sync off (test)" and "Data in … (test)"

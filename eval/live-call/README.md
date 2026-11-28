@@ -30,7 +30,9 @@ so VoiceiQ detects the call and reads names from the screen.
   mode), so the probe's meetings stay out of the owner's data and iCloud.
   Don't use a re-signed copy: granting it Screen Recording and Accessibility
   needs the admin password. With the app quit, save its settings
-  (`defaults export io.blue.voiceiq <file>`), then set
+  (`defaults export io.blue.voiceiq <file>`), turn off Markdown export,
+  which test mode doesn't stop (`defaults delete io.blue.voiceiq
+  meetingMarkdownFolder`), then set
   `defaults write io.blue.voiceiq DebugDisableCloudSync -bool true` and
   `defaults write io.blue.voiceiq DebugDataFolder /absolute/path`, launch it,
   and check its menu shows "Sync off (test)" and "Data in <path> (test)"
