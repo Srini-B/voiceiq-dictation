@@ -156,8 +156,8 @@ final class TypingBridge: ObservableObject {
     }
 
     private var editContext: DictationLearning.Context {
-        .init(before: proxy?.documentContextBeforeInput, after: proxy?.documentContextAfterInput,
-              hasText: proxy?.hasText ?? false)
+        DictationLearning.context(before: proxy?.documentContextBeforeInput, selected: proxy?.selectedText,
+                                  after: proxy?.documentContextAfterInput, hasText: proxy?.hasText ?? false)
     }
 
     /// The field's text for the tracker; nil once the field is one it may not read

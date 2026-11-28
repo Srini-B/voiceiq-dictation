@@ -64,6 +64,13 @@ Auto-learned section.
   start, so a fixed first word that continues a sentence is marked as one,
   which can only stop its capital from counting as a name. The dictation's
   text is dropped once its result is in.
+- Fable re-review and Codex at 66f67a5: a selection inside a dictation read
+  as deleting it (the proxy's text before and after the cursor both leave it
+  out; selecting the "n" of "Sharon" taught "Sharo"), so the selected text
+  goes back after the text before. Hex's keyboard has the same gap. The edit
+  window waits for a 3 s typing pause, up to 10 s past it, so "Sar…" at
+  59.5 s finished as "Saran" at 61 s teaches "Saran", not "Sar". The last
+  observation is dropped with the result.
 - `CommonWords` on iOS fails closed: with no English `UITextChecker`
   dictionary every word counts as ordinary, so nothing is learned.
 - Privacy: `docs/PRIVACY.md` describes the iPhone learning, and Settings ›
@@ -114,8 +121,9 @@ Auto-learned entries are vocabulary only (no `misspelling`, so never a
   a sentence start, and skips a second
   spelling learned from the same wording.
 - On Linux (Swift 6.2.1): `DictationLearningTests.swift` itself runs under
-  swift-corelibs-xctest against the vendored tracker and classifier, 11 of 11
-  passing (the dictation holding the fixed words twice hands over nothing;
+  swift-corelibs-xctest against the vendored tracker and classifier, 13 of 13
+  passing (with a selection inside a dictation, and a word retyped across the
+  window's end, both failing without their fix) (the dictation holding the fixed words twice hands over nothing;
   before, "GPT4 → GPT 4"); against the previous `DictationLearning` the window, span and
   unnamed-session tests fail as reported ("Sharon → Sharo", "tomorrow →
   tomorro", "GPT4 → GPT 4", "Sharon → Saran"). Clause breaks ("Wispr, Flow"

@@ -824,9 +824,13 @@ with Learn how I type off (cyron's call, 2026-11-28). The keyboard follows
 each dictation it types in with Hex's `DictationEditTracker`, as Hex's
 keyboard does (`DictationLearning`, owned by `TypingBridge`): from the text
 around the cursor when it goes in, through every edit by the keys, the edit
-panel or the app, for 60 s. `KeyboardModel`'s 0.1 s poll ends that window
-on time (`onPoll` → `DictationLearning.tick`), on the text as it was, so a
-later keystroke belongs to no dictation; a fix made inside the window stands
+panel or the app, for 60 s. A selection counts as text in place, not
+deleted (`DictationLearning.context` puts `selectedText` back between the
+text before and after the cursor, which both leave it out; Hex's keyboard
+doesn't). `KeyboardModel`'s 0.1 s poll ends that window (`onPoll` →
+`DictationLearning.tick`) on the text as it was, once typing has paused for
+3 s (at most 10 s past the window), so a word being retyped at 60 s settles
+whole and a later keystroke belongs to no dictation; a fix made inside the window stands
 even if the dictation is deleted later, as in Hex. It also ends when the
 keyboard hides or reappears, Send is tapped, the next dictation or its draft
 goes in (`KeyboardModel.onWillInsertDictation`, before `EditController`

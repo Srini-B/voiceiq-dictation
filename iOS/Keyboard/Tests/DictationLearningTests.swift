@@ -141,6 +141,34 @@ final class DictationLearningTests: XCTestCase {
         XCTAssertEqual(learned, [])
     }
 
+    /// Selecting part of a dictation edits nothing: the proxy leaves the selection out of
+    /// the text before and after the cursor, and it goes back in.
+    func testASelectionInsideADictationIsNotAnEdit() {
+        let learning = makeLearning()
+        dictate(dictated, into: learning)
+        let selecting = DictationLearning.context(before: "I had lunch with Sharo", selected: "n",
+                                                  after: " today.", hasText: true)
+        learning.observe(selecting, in: field, fromKeys: false)
+        learning.finish(selecting, in: field)
+        XCTAssertEqual(learned, [])
+    }
+
+    /// A word being retyped as the edit window ends settles once typing pauses, not half done.
+    func testAWordRetypedAsTheWindowEndsIsLearnedWhole() {
+        let learning = makeLearning()
+        dictate(dictated, into: learning)
+        clock = 59.5
+        learning.observe(Context(before: "I had lunch with Sar", after: " today.", hasText: true), in: field, fromKeys: true)
+        clock = 61
+        learning.tick()
+        learning.observe(Context(before: "I had lunch with Saran", after: " today.", hasText: true), in: field, fromKeys: true)
+        clock = 62
+        learning.tick()
+        clock = 65
+        learning.tick()
+        XCTAssertEqual(learned, ["Sharon → Saran"])
+    }
+
     /// UIKit named no input session for the dictation, so the next field's text could
     /// read as an edit of it: it is not followed.
     func testADictationInAnUnnamedSessionIsNotFollowed() {

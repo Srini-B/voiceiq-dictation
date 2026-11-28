@@ -37,8 +37,19 @@ final class DictationLearning {
     /// (as Hex's tracker keeps it), to read back how a fixed word is spelled there
     /// (`fix(for:in:from:dictated:)`). A send that empties the field leaves it as it was.
     private var spanText = ""
-    /// The last observation of the followed dictation's field: the edit window ends on it.
+    /// The last observation of the followed dictation's field, and when: the edit window
+    /// ends on it.
     private var lastSeen: Context?
+    private var lastSeenAt: TimeInterval = 0
+    /// When the followed dictation went in.
+    private var insertedAt: TimeInterval = 0
+    private let now: () -> TimeInterval
+
+    /// The edit window waits this long after the last edit, so a word being retyped as it
+    /// ends settles once typing pauses, not half done.
+    static let typingPause: TimeInterval = 3
+    /// But not past this long after the window, so steady typing can't keep it open.
+    static let longestWait: TimeInterval = 10
 
     init(
         now: @escaping () -> TimeInterval = { Date().timeIntervalSince1970 },
@@ -48,12 +59,14 @@ final class DictationLearning {
             KeyboardLog.note("dictation fix queued for the Dictionary")
         }
     ) {
+        self.now = now
         tracker = DictationEditTracker(now: now)
         tracker.onResult = { [unowned self] result in
             let found = fixes(in: result)
             // The dictation's text is held only while it is followed.
             insertion = nil
             spanText = ""
+            lastSeen = nil
             for fix in found { learn(fix) }
         }
     }
@@ -71,6 +84,7 @@ final class DictationLearning {
         // After `willInsert`, which settles the dictation before with its own text.
         insertion = DictationInsertion(inserted: text, before: before.before, after: before.after)
         spanText = text
+        insertedAt = now()
         note(after)
         tracker.observe(after, fromKeys: true)
     }
@@ -93,9 +107,13 @@ final class DictationLearning {
     }
 
     /// Called on the keyboard's poll: a dictation whose edit window ended settles on its
-    /// last observation, so a later keystroke is not an edit of it.
+    /// last observation, so a later keystroke is not an edit of it. Not while the user is
+    /// still typing (`typingPause`), up to `longestWait` past the window.
     func tick() {
         guard tracker.isTracking, let lastSeen else { return }
+        let time = now()
+        if time - lastSeenAt < Self.typingPause,
+           time - insertedAt < DictationEditTracker.editWindow + Self.longestWait { return }
         tracker.tick { lastSeen }
     }
 
@@ -120,6 +138,16 @@ final class DictationLearning {
         tracker.finish(context)
     }
 
+    /// The field as the tracker reads it. The proxy's text before and after the cursor
+    /// both leave out a selection, so the selected text goes back after the text before
+    /// it; without it, selecting the "n" of "Sharon" read as fixing it to "Sharo". Hex's
+    /// keyboard joins only the two.
+    nonisolated static func context(before: String?, selected: String?, after: String?,
+                                    hasText: Bool) -> Context {
+        guard let selected, !selected.isEmpty else { return Context(before: before, after: after, hasText: hasText) }
+        return Context(before: (before ?? "") + selected, after: after, hasText: hasText)
+    }
+
     /// Whether `document` is the session the dictation went into.
     private func isSameDocument(_ document: UUID?) -> Bool {
         document != nil && document == self.document
@@ -127,6 +155,7 @@ final class DictationLearning {
 
     private func note(_ context: Context) {
         lastSeen = context
+        lastSeenAt = now()
         if let insertion, let span = DictationSpanLocator.locate(insertion, before: context.before, after: context.after),
            span.hasWords {
             spanText = span.text
