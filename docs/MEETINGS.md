@@ -426,12 +426,22 @@ meeting never raises a permission prompt (`CGPreflightScreenCaptureAccess`,
 1. `MeetingEngine.startRecording` starts a `ScreenNameSampler` with the
    detected call source. A recording started by hand with no call detected
    reads the frontmost known call app (`ScreenNameSampler.frontCallApp`).
-   With no call app, the sampler does not run.
+   With no call app, the sampler does not run. A browser running several
+   instances under one bundle ID (separate profiles) is read in the one
+   showing a joined call room (`CallApps.isCallRoom`), else one showing a
+   call site's page, the frontmost such (`ScreenNameSampler.callPID`); the
+   first instance found was read before, and on 2026-11-28 a probe with four
+   Chromes read no names in 102 samples.
 2. With Screen Recording granted, every 3 s the sampler captures one window of the call app or browser
    with ScreenCaptureKit (`SCContentFilter(desktopIndependentWindow:)`, so it
    works when the window is covered). It picks a window whose title names a
    page in `CallApps.meetingPages` first, then a window on screen, then the
-   largest. A browser with no such window gives no image, because its other
+   largest. A browser's window title is the page's own ("Owner – Audio
+   playing" on vdo.ninja), so with Accessibility the window whose address
+   (AXDocument) is a call page counts too, and one showing a joined call
+   room wins over the app's other call-site pages, which include chats
+   (`CallWindowText.callWindowFrames`, matched to the ScreenCaptureKit window by frame, since the two APIs title a Chrome window differently).
+   A browser with no such window gives no image, because its other
    windows are other pages. It never captures the whole display, because other apps' windows
    (a dictation app, a chat, a document) hold names that are not the
    meeting's. When the call app has no window to read, the sample has no
@@ -450,7 +460,25 @@ meeting never raises a permission prompt (`CGPreflightScreenCaptureAccess`,
    and group labels (name tags, the participants list), not buttons or menus.
    The walk stops at 2,500 elements or 0.8 s, because each read waits on the
    call app. Electron and Chromium apps are woken first with
-   `AccessibilityWaker`. Either permission is enough for sampling to run.
+   `AccessibilityWaker`. Chrome opens a web page's tree only while
+   `AXEnhancedUserInterface` is on (`AXManualAccessibility` opens nothing,
+   measured 2026-11-28), and that setting makes it animate window moves. So
+   in a Chromium browser the page text is read every 15 s, not every 3 s:
+   the sampler switches the setting on, reads 2.5 s later, and switches it
+   off again at once, which closes the tree and stops the animation
+   (`ScreenNameSampler.whileWebTreeOpen`). For those 2.5 s every window of
+   that browser instance animates its moves and resizes, and Chrome builds
+   the tree for all its tabs. When something already keeps the setting on
+   (VoiceOver, Voice Control, a window manager), the tree is read on every
+   tick and the setting is never touched, and a read of it that fails or
+   times out skips the pulse. If VoiceiQ quits or crashes inside a pulse, it
+   switches the setting off at its next launch (and the next meeting's
+   sampler does too). Either permission is enough for sampling to run.
+   A chat site's page (WhatsApp, Telegram, Messenger, Discord) is read as
+   the call only when the call was detected on a chat site, or not at all,
+   and no other call page is open: Accessibility lists only the windows on
+   the Space in view, so a call full screen in its own Space would otherwise
+   lose to a chat window beside the user.
    Zoom 7.2 exposes each video tile as an `AXTabGroup` described "Name,
    Computer audio unmuted", and the participants list as `AXStaticText`
    rows such as "Name (me)".
@@ -459,6 +487,16 @@ meeting never raises a permission prompt (`CGPreflightScreenCaptureAccess`,
    (`ScreenSpeakerNames.owner(in:)`).
 7. After transcription, `ScreenSpeakerNames.match(samples:transcript:)` runs
    (also on Retry, from the saved file):
+   - A lone word on screen ("Nihal") joins the names when it is in at least
+     a quarter of the samples. The first word of a full name seen twice is
+     that person and is skipped. A word at most two letters short of such a
+     first word ("May" of "Maya") is taken as a cut tag and dropped. A
+     shorter start ("Dan" beside "Daniel") stays in `seen` but is never
+     given a voice.
+   - With one far-side voice and one other name always on screen, that name
+     is the voice's, unless a word was dropped or kept as above and the
+     participant count doesn't say one other person: "Dan" may be beside
+     "Dana Smith".
    - Spellings within 0.8 Levenshtein similarity fold into the most frequent one.
    - For each speaker other than "you", it counts snapshots taken while only
      that speaker talked (1 s lag for the tile switch).
@@ -514,10 +552,20 @@ Rules added 2026-11-26 after a Fable judge scored the notes
 
 Fixes from 2026-10-29:
 
-- **Output language.** `NLLanguageRecognizer` names the transcript's main
-  language when it is at least 60 % sure, and the request says
-  `OUTPUT LANGUAGE: English`. An all-English meeting had come back in Hindi
-  once, and in English on a redo of the byte-identical request.
+- **Output language.** The request always names one
+  (`MeetingNotesPrompt.outputLanguage`): the language picked in Settings →
+  Dictation (`dictationLanguage`), English when it is English or Detect.
+  Another language is used only when the transcript has at least 150 words
+  (by word boundaries, so Chinese and Japanese count too)
+  and `NLLanguageRecognizer` is at least 90 % sure of it. The model never
+  chooses: an all-English meeting came back in Hindi once (2026-10-29), and
+  an English AMI meeting got a Portuguese title (2026-11-28), each time when
+  the recognizer was unsure and the request left the language open. The
+  setting is the one dictation uses, so picking Spanish for dictation also
+  writes a short English meeting's notes in Spanish. Detect gives English
+  notes unless the transcript is clearly another language: a romanized Hindi
+  (Hinglish) or code-mixed meeting usually scores below 90 % and gets
+  English notes; one in Devanagari or Tamil script does not.
 - **The owner by name.** Notes are shared, so the owner is never "You" in
   them. The owner's label is, in order: the name typed for that meeting, the
   owner marker on screen, **Your name in meeting notes** in Settings →
@@ -639,11 +687,14 @@ since a redo then would write over the change.
 
 ## Play and Download
 
-Every meeting and dictation detail has Play and Download for its audio, on
-the Mac (icon buttons in the header) and on iPhone (an Audio card). Both are
-disabled when the audio is not on the device: a dictation synced from the
-other device or removed by audio retention, or a meeting still recording.
-Redo transcript and notes is disabled the same way.
+Every meeting and dictation detail has Play and Download for its audio.
+A dictation has a Play icon in the Mac header and a Play button on iPhone. A
+meeting plays from its playback bar (below): on the Mac it sits under the header,
+above both the notes and the transcript, so it keeps playing in any layout. On
+iPhone it is in the Audio card. Download is in the Mac header and under the bar
+on iPhone. Both are unavailable when the audio is not on the device: a dictation
+synced from the other device or removed by audio retention, or a meeting still
+recording. Redo transcript and notes is disabled the same way.
 
 `RecordedAudio` (VoiceIQCore, `Support/RecordedAudio.swift`) makes one AAC
 `.m4a` per recording in its folder's `playback/` folder and both buttons use
@@ -658,6 +709,36 @@ the raw mic ducked while the far side talks. It never reads or writes
 a `.playback` session so the silent switch does not mute it. Download on the
 Mac copies the file to Downloads and shows the export message; on iPhone it
 is a share sheet, so Save to Files keeps it.
+
+## Meeting waveforms
+
+`MeetingWaveform.swift` (VoiceIQCore) draws both waveforms. Each app passes a
+`WaveformStyle` for its own colours and type: `.voiceIQ` on the Mac
+(`MeetingRecordingStatus.swift`) and `.theme` on iPhone (`MeetingsView.swift`).
+Bars above the centre line are you and bars below are the call, in the same
+colours on both platforms: ink for you, grey for the call.
+
+- **While recording**, `LiveMeetingWaveform` reads `MeetingEngine.liveLevels`
+  (each track's last buffer RMS, from `SoundClock`) ten times a second. It keeps
+  the last 400 readings, with the newest at the right edge next to a red dot,
+  and older ones scroll off to the left. RMS maps from −60 dBFS (flat) to
+  −15 dBFS (full). On the Mac, Mute my mic draws your side as dots on the line,
+  and the legend reads Muted. iPhone records the room on its mic alone, so its
+  waveform has no call side and draws the room both ways from the line.
+- **After recording**, `MeetingPlaybackBar` shows, in order: play and pause,
+  back 15 seconds, the time, the waveform, the length, and the speed (1×, 1.5×,
+  2×, kept across meetings and launches; dictations always play at 1×). Click or drag on the waveform to seek. Bars to
+  the left of the playhead are solid and the rest are faded. The waveform comes
+  from `MeetingLoudness.read`, which takes each track's 100 ms levels
+  (`TrackAudio`) with its transcription gain, so a quiet call side draws as tall
+  as the mic, and maps them from −50 dBFS (flat) to −10 dBFS (full). Each bar is
+  the loudest moment in its stretch. An empty `system.caf`, as on iPhone, means
+  no call side. The last eight waveforms read are kept, so reopening a meeting
+  doesn't read its tracks again, and choosing another meeting stops a read in
+  progress. Seeking waits until the length is known. On iPhone, a drag scrubs
+  only once it has moved sideways, so a vertical swipe over the waveform still
+  scrolls the note. `RecordingPlayer` pauses, resumes, seeks and sets the rate.
+  Dictations still use its `toggle` (play or stop).
 
 ## The pill in screen shares
 
@@ -682,8 +763,8 @@ mirrored or AirPlay display, still shows the pill.
 
 | File | Shows |
 | --- | --- |
-| `MeetingsView.swift` | Record button (with Mute my mic and Discard under it while recording) and folder menu above the list, the list with a heading row per day (Today, Yesterday, then the date; rows, not Sections, because macOS pins the top Section's header with a rule under it) with each row's start time, length and call app (or the app it was imported from), the empty pane's Record button, each row's folders, the detail header (the folder menu ([Folders](#folders)), or the title while the transcript fills the pane, since the notes open with it; progress while transcribing or making notes, Update notes after a speaker is renamed, Play and Download audio (`RecordingAudioButtons.swift`), Export menu with Copy prompt for an AI agent, `…` menu with Rename / Redo notes / Redo transcript and notes / Retry / Delete, transcript toggle), the warning on a call whose other side was not heard, the export message |
-| `MeetingNotesColumn.swift` | Title, then the day, start time and length (`MeetingMeta.whenText`; the iPhone shows the same line), and everyone heard (the note owner first, each with a dot in their transcript colour), Summary, the meeting type's sections, Decisions, Action items as open circles ("Owner: task"), Notes, then the meeting's questions and answers (`MeetingChatView.swift`, which also has the question box `MeetingsView.swift` puts under both columns) |
+| `MeetingsView.swift` | Record button (with Mute my mic and Discard under it while recording) and folder menu above the list, the list with a heading row per day (Today, Yesterday, then the date; rows, not Sections, because macOS pins the top Section's header with a rule under it) with each row's start time, length and call app (or the app it was imported from), the empty pane's Record button, each row's folders, the detail header (the folder menu ([Folders](#folders)), or the title while the transcript fills the pane, since the notes open with it; progress while transcribing or making notes, Update notes after a speaker is renamed, Download audio (`RecordingAudioButtons.swift`), Export menu with Copy prompt for an AI agent, `…` menu with Rename / Redo notes / Redo transcript and notes / Retry / Delete, transcript toggle), the playback bar under it ([Meeting waveforms](#meeting-waveforms)), the warning on a call whose other side was not heard, the export message |
+| `MeetingNotesColumn.swift` | Title, then the day, start time and length (`MeetingMeta.whenText`; the iPhone shows the same line), and everyone heard (the note owner first, each with a dot in their transcript colour), the live waveform card while it records (`MeetingRecordingStatus.swift`), Summary, the meeting type's sections, Decisions, Action items as open circles ("Owner: task"), Notes, then the meeting's questions and answers (`MeetingChatView.swift`, which also has the question box `MeetingsView.swift` puts under both columns) |
 | `MeetingTranscriptColumn.swift` | The transcript in one `NSTextView`: one heading per turn (`MeetingSpeaker.turns`: lines in a row by the same speaker) with the name in its own colour (`SpeakerPalette`) and the turn's start time beside it, search that filters and highlights, Edit and Delete… on each line's right-click menu and the edit field above the transcript ([Editing the transcript](#editing-the-transcript)) |
 | `AssignSpeakersView.swift` | One card per speaker: name, a sample line, shuffle (next line), play (that line's audio) |
 

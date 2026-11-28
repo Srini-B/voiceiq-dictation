@@ -230,9 +230,10 @@ struct MeetingsPane: View {
         let wide = paneWidth >= Self.wideWidth
         let transcriptShown = !transcript.isEmpty && (wide ? !hidesTranscript : narrowShowsTranscript)
         let filedIn = folders.names(of: meeting.id)
+        let audio = meetingAudio(meeting)
         return VStack(spacing: 0) {
             // With the transcript alone the title takes the folder menu's place; the notes view has it.
-            header(meeting, wide: wide, transcriptShown: transcriptShown, filedIn: filedIn)
+            header(meeting, audio: audio, wide: wide, transcriptShown: transcriptShown, filedIn: filedIn)
             Divider()
             if case .failed(let reason) = meeting.status {
                 // Waiting for AssemblyAI is not an error: it goes again by itself.
@@ -249,6 +250,12 @@ struct MeetingsPane: View {
             }
             if let unheardCall, unheardCall.id == meeting.id { unheardWarning(unheardCall.why) }
             if meeting.speakersUnsplit == true, meeting.status == .done, !engine.isBusy(meeting.id) { unsplitWarning(meeting) }
+            // Above both columns, so it keeps playing whichever of notes and transcript is shown.
+            if audio.isAvailable {
+                MeetingPlaybackBar(audio: audio, style: .voiceIQ)
+                    .padding(.horizontal, VoiceIQUI.Spacing.xxl)
+                    .padding(.top, VoiceIQUI.Spacing.m)
+            }
             HStack(spacing: 0) {
                 if wide || !transcriptShown {
                     MeetingNotesColumn(meeting: meeting, notes: notes, transcript: transcript, step: step(meeting), chat: chat(meeting),
@@ -314,10 +321,13 @@ struct MeetingsPane: View {
         .help("Put this meeting in folders")
     }
 
-    private func header(_ meeting: MeetingMeta, wide: Bool, transcriptShown: Bool, filedIn: [String]) -> some View {
+    /// Nothing to play while it records: its tracks are still being written.
+    private func meetingAudio(_ meeting: MeetingMeta) -> RecordedAudio {
+        RecordedAudio.meeting(folder: meeting.status == .recording ? nil : store.folder(for: meeting.id), name: title(meeting))
+    }
+
+    private func header(_ meeting: MeetingMeta, audio: RecordedAudio, wide: Bool, transcriptShown: Bool, filedIn: [String]) -> some View {
         let busy = engine.isBusy(meeting.id)
-        let audio = RecordedAudio.meeting(folder: meeting.status == .recording ? nil : store.folder(for: meeting.id),
-                                          name: title(meeting))
         return HStack(spacing: VoiceIQUI.Spacing.xs) {
             // The notes open with the title; only the transcript alone needs it here.
             if !wide && transcriptShown {
@@ -342,7 +352,8 @@ struct MeetingsPane: View {
                 .disabled(busy)
                 .help("Write the notes again with the speaker names you set")
             }
-            RecordingAudioButtons(audio: audio) { exported = $0 }
+            // Play is the bar under the header.
+            RecordingAudioButtons(audio: audio, play: false) { exported = $0 }
             Menu {
                 Section("Save to Downloads") { exportItems { export(meeting, $0) } }
                 Section("Copy") { exportItems { copy(meeting, $0) } }
@@ -589,7 +600,8 @@ struct MeetingsPane: View {
         let length = meeting.lengthText
         switch meeting.status {
         case .done: return length
-        case .recording: return "\(length) · Recording"
+        // Its stored length is 0 until it stops.
+        case .recording: return "Recording"
         case .transcribing: return "\(length) · Transcribing"
         case .summarizing: return "\(length) · Making notes"
         case .failed: return "\(length) · " + (meeting.waitsForService != nil ? "Waiting for AssemblyAI" : "Failed")

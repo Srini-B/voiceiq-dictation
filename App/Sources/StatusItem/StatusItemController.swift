@@ -122,6 +122,14 @@ final class StatusItemController: NSObject {
         status.isEnabled = false
         statusLine = status
         menu.addItem(status)
+        // So a test run's switches cannot stay on unnoticed.
+        let testLines = [CloudSync.isDisabledForTests ? "Sync off (test)" : nil,
+                         FileLayout.testDataFolder.map { "Data in \($0.path) (test)" }]
+        for title in testLines.compactMap({ $0 }) {
+            let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+            item.isEnabled = false
+            menu.addItem(item)
+        }
 
         let nextTitle = NSMenuItem(title: "", action: nil, keyEquivalent: "")
         nextTitle.isEnabled = false

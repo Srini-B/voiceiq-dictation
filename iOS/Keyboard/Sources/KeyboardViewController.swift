@@ -43,6 +43,7 @@ final class KeyboardViewController: UIInputViewController {
         editor.willEdit = { [weak model] in model?.userWillEdit() }
         typing.controller = self
         typing.editor = editor
+        typing.textBeforeWithDraft = { [weak model] in model?.textBeforeWithDraft }
         typing.onPreferredHeightChange = { [weak self] in self?.updateHeight() }
         typing.dictation.onDictateTap = { [weak model] in model?.micTapped() }
         typing.dictation.onOpenURL = { [weak self] url in self?.openURL(url) }
@@ -160,6 +161,7 @@ final class KeyboardViewController: UIInputViewController {
         HostAppResolver.harvest()
         Self.onScreen.moved(keyboardID, to: TypingLogTraits.documentIdentifier(of: textDocumentProxy))
         updateBackdrop()
+        model.hostChanged()
         editor.textChanged()
         typing.textDidChange()
     }
@@ -167,6 +169,7 @@ final class KeyboardViewController: UIInputViewController {
     override func selectionDidChange(_ textInput: UITextInput?) {
         super.selectionDidChange(textInput)
         HostAppResolver.harvest()
+        model.hostChanged()
         editor.textChanged()
         typing.textDidChange()
     }

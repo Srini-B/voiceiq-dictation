@@ -43,6 +43,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Log.ui.error("app icon NOT set — url: \(Bundle.main.url(forResource: "VoiceIQ", withExtension: "icns")?.path ?? "nil", privacy: .public)")
         }
         FontLoader.registerBundledFonts()
+        // A meeting that crashed or quit mid-read can leave Chrome's page tree open.
+        Task.detached(priority: .utility) { if AXIsProcessTrusted() { ScreenNameSampler.endLeftoverPulse() } }
         // Before sync starts, so the cleanup goes up with the first merge.
         EditLearner.pruneOrdinaryAutoLearnedOnce()
         // Dictionary and writing rules shared with the iPhone through iCloud; always on.
@@ -56,8 +58,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         MeetingFolderSync.shared.start()
         // Each finished meeting as Markdown in the user's folder, while Settings has one.
         MeetingMarkdownFiles.follow(MeetingStore())
-        // The local API and MCP server for coding agents, while Settings has it on.
-        AgentServer.shared.followSettings()
+        // The local API and MCP server for coding agents, while Settings has it
+        // on. Not in a test copy: with its fresh settings it would remove the
+        // real app's entry from the user's agent configs (Fable on #161).
+        if FileLayout.testDataFolder == nil { AgentServer.shared.followSettings() }
         let controller = DictationController()
         statusItemController = StatusItemController(
             onOpenHistory: { [weak controller] in controller?.openHistory() },

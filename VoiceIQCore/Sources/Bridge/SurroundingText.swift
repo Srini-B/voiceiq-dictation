@@ -2,13 +2,32 @@ import Foundation
 
 /// The text around the cursor of the field a dictation is inserted into.
 /// Selected text is in neither half: the insert replaces it.
-public struct SurroundingText: Equatable, Sendable {
+public struct SurroundingText: Codable, Equatable, Sendable {
     public var before: String
     public var after: String
 
     public init(before: String, after: String) {
         self.before = before
         self.after = after
+    }
+
+    /// What an iPhone keyboard reads around the cursor
+    /// (`documentContextBeforeInput`, `documentContextAfterInput`). Hosts
+    /// show a keyboard only part of the field, often the last sentence or
+    /// so; the ends next to the cursor are exact, which is all the fitting
+    /// reads. Nil when the field has text the host shows none of (a web
+    /// view, a secure field): its text could need anything, so the text
+    /// goes in as written.
+    public init?(keyboardBefore before: String?, after: String?, fieldHasText: Bool) {
+        let before = before ?? "", after = after ?? ""
+        guard !(before.isEmpty && after.isEmpty && fieldHasText) else { return nil }
+        self.init(before: before, after: after)
+    }
+
+    /// The part the writing model reads (`PromptV1.fieldContext`), and all
+    /// a keyboard hands the app: the App Group keeps no more of the field.
+    public var excerpt: SurroundingText {
+        SurroundingText(before: String(before.suffix(300)), after: String(after.prefix(100)))
     }
 
     /// Splits a field's value at a UTF-16 selection, the unit Accessibility
@@ -34,8 +53,9 @@ public struct SurroundingText: Equatable, Sendable {
     /// capital first letter at the start of a sentence,
     /// punctuation the field already has dropped from the front of the
     /// result, and the gap after it that the text after the cursor needs.
-    /// Whether a result continues the sentence before it is left to the
-    /// writing model, which can tell a name from an ordinary word.
+    /// Mid-sentence, a first word that is only an ordinary word ("And",
+    /// "The", `midSentenceWords`) is lowercased, as the writing model is
+    /// asked to; any other capital (a name, "I", "iPhone") stays.
     public func fitted(_ text: String) -> String {
         var text = text
         let lastMark = before.last { !$0.isWhitespace }
@@ -49,7 +69,13 @@ public struct SurroundingText: Equatable, Sendable {
         // The gap reads the writing model's casing: a capital it wrote can
         // start a new paragraph, one added here only starts a sentence.
         let gap = FieldLayout.leadingGap(before: before, text: text)
-        if startsSentence { text = Self.capitalizingFirstWord(text) }
+        if startsSentence {
+            text = Self.capitalizingFirstWord(text)
+        } else if before.contains(where: { !$0.isWhitespace }), !gap.contains(where: \.isNewline) {
+            // On the same line only: after a heading, quote or table row
+            // the layout starts a new line, and the model's capital stays.
+            text = Self.lowercasingFirstWord(text)
+        }
         text = gap + text
         return text + FieldLayout.trailingGap(before: before, text: text, after: after)
     }
@@ -85,6 +111,33 @@ public struct SurroundingText: Equatable, Sendable {
         guard !word.dropFirst().contains(where: \.isUppercase) else { return text }
         return first.uppercased() + text.dropFirst()
     }
+
+    /// "And I'll" → "and I'll" after "Noted". Only a word from
+    /// `midSentenceWords` written with one capital: a name, an acronym
+    /// ("IT") or "I" is left as it is.
+    static func lowercasingFirstWord(_ text: String) -> String {
+        let word = text.prefix { $0.isLetter || $0 == "'" || $0 == "’" }
+        // The whole word only: "A/B", "A4" and "In-N-Out" are spellings.
+        let next = text.dropFirst(word.count).first
+        guard let first = word.first, first.isUppercase, !word.dropFirst().contains(where: \.isUppercase),
+              next.map({ $0.isWhitespace || ",.;:!?".contains($0) }) ?? true,
+              midSentenceWords.contains(word.lowercased()) else { return text }
+        return word.lowercased() + text.dropFirst(word.count)
+    }
+
+    /// Words that are never a name, so a capital on them mid-sentence is
+    /// only a sentence start. Names that are also words ("Will", "May",
+    /// "Grace") are left out.
+    static let midSentenceWords: Set<String> = [
+        "a", "an", "the", "and", "but", "or", "nor", "so", "yet", "then", "also", "because", "if", "when",
+        "while", "though", "although", "unless", "until", "since", "as", "than", "that", "which", "who",
+        "whom", "whose", "where", "what", "how", "why", "this", "these", "those", "it", "it's", "its", "we",
+        "we'll", "we're", "they", "they'll", "they're", "he", "she", "you", "you'll", "you're", "me", "us",
+        "them", "my", "our", "your", "their", "his", "her", "to", "of", "in", "on", "at", "for", "with",
+        "from", "by", "about", "into", "after", "before", "is", "are", "was", "were", "be", "been", "has",
+        "have", "had", "do", "does", "did", "can", "could", "would", "should", "might", "must", "not",
+        "just", "maybe", "please", "plus", "there", "here", "too", "very", "still", "even", "only",
+    ]
 
     static let terminators: Set<Character> = [".", "!", "?", "…"]
     static let joiners: Set<Character> = [",", ";", ":"]

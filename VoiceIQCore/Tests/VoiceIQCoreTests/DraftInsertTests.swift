@@ -1,4 +1,7 @@
 import XCTest
+#if os(macOS)
+import AppKit
+#endif
 import VoiceIQBridge
 @testable import VoiceIQCore
 
@@ -318,6 +321,50 @@ final class DraftInsertTests: XCTestCase {
         XCTAssertEqual(pastEdge?.minX, 300 - DraftOverlaySize.spinner - 5)
         XCTAssertEqual(FieldDraft.spinnerSpot(for: CGRect(x: 150, y: 503, width: 0, height: 16), in: field)?.minX, 150)
         XCTAssertNil(FieldDraft.spinnerSpot(for: CGRect(x: 150, y: 560, width: 0, height: 16), in: field))
+    }
+
+    /// A draft whose app is no longer in front goes nowhere, and leaves the
+    /// user's clipboard as it was: its written text comes next.
+    func testADraftForAnAppNoLongerInFrontLeavesTheClipboard() async throws {
+        guard let front = NSWorkspace.shared.frontmostApplication else { throw XCTSkip("no frontmost app") }
+        let pasteboard = NSPasteboard.general
+        let saved = pasteboard.string(forType: .string)
+        defer {
+            pasteboard.clearContents()
+            if let saved { pasteboard.setString(saved, forType: .string) }
+        }
+        pasteboard.clearContents()
+        pasteboard.setString("the user's clipboard", forType: .string)
+        let elsewhere = DictationContext(targetPID: front.processIdentifier + 100_000)
+
+        let draft = await InsertionCoordinator().insertReportingTier("raw words", context: elsewhere,
+                                                                     announcesMiss: false)
+        XCTAssertEqual(draft.outcome, .frontmostChanged)
+        XCTAssertEqual(pasteboard.string(forType: .string), "the user's clipboard")
+
+        let written = await InsertionCoordinator().insertReportingTier("Written words.", context: elsewhere)
+        XCTAssertEqual(written.outcome, .frontmostChanged)
+        XCTAssertEqual(pasteboard.string(forType: .string), "Written words.")
+    }
+
+    /// A field that answers a range with its own frame (VS Code's search
+    /// box) or with a block taller than a line gets no underline; a real
+    /// wrapped draft keeps one per line, minus a line with no width.
+    func testUnderlineOnlyOnTheText() {
+        let field = CGRect(x: 50, y: 400, width: 270, height: 130)
+        let character = CGRect(x: 58, y: 506, width: 8, height: 17)
+        let lines = [CGRect(x: 58, y: 506, width: 240, height: 17), CGRect(x: 58, y: 488, width: 120, height: 17)]
+        XCTAssertEqual(FieldDraft.onText(lines, character: character, field: field), lines)
+        XCTAssertEqual(FieldDraft.onText(lines + [CGRect(x: 58, y: 470, width: 0, height: 17)],
+                                         character: character, field: field), lines)
+
+        XCTAssertEqual(FieldDraft.onText([field], character: character, field: field), [])
+        XCTAssertEqual(FieldDraft.onText(lines, character: field, field: field), [])
+        XCTAssertEqual(FieldDraft.onText(lines, character: field.insetBy(dx: 6, dy: 6), field: field), [])
+        XCTAssertEqual(FieldDraft.onText([CGRect(x: 58, y: 470, width: 240, height: 53)],
+                                         character: character, field: field), [])
+        XCTAssertEqual(FieldDraft.onText(lines + [field.insetBy(dx: 1, dy: 1)], character: character, field: field), [])
+        XCTAssertEqual(FieldDraft.onText(lines, character: CGRect(x: 58, y: 506, width: 0, height: 17), field: field), [])
     }
     #endif
 }

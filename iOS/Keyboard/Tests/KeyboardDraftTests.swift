@@ -1,6 +1,8 @@
 import UIKit
 import XCTest
 
+/// The draft against `HostField`, where the field and the keyboard's view of
+/// it are two texts. Every expectation is on the field (`string`).
 @MainActor
 final class KeyboardDraftTests: XCTestCase {
     private let typedAt = Date(timeIntervalSince1970: 1_000_000)
@@ -11,256 +13,240 @@ final class KeyboardDraftTests: XCTestCase {
         before.isEmpty || before.last?.isWhitespace == true ? text : " " + text
     }
 
-    private func type(_ transcript: String, into field: ProxyField) -> KeyboardDraft? {
-        KeyboardDraft.type(transcript, id: UUID(), documentID: UUID(), into: field, fit: fit, now: typedAt)
+    /// Types a draft and ends the turn, as the keyboard's poll does.
+    private func type(_ transcript: String, into field: HostField) -> KeyboardDraft? {
+        defer { field.endTurn() }
+        return KeyboardDraft.type(transcript, id: UUID(), documentID: UUID(), into: field, fit: fit, now: typedAt)
+    }
+
+    /// Swaps in the written text and ends the turn.
+    private func swap(_ draft: KeyboardDraft, for written: String, in field: HostField) -> KeyboardDraft.Swap {
+        defer { field.endTurn() }
+        return draft.replace(with: written, in: field, fit: fit)
     }
 
     /// The transcript goes in marked and fitted; the written text takes its
     /// place, fitted the same way, and nothing stays marked.
-    func testTheWrittenTextReplacesTheMarkedDraft() async throws {
-        let field = ProxyField("Dear Ana,")
+    func testTheWrittenTextReplacesTheMarkedDraft() throws {
+        let field = HostField("Dear Ana,")
         let draft = try XCTUnwrap(type("see you at noon", into: field))
         XCTAssertEqual(field.string, "Dear Ana, see you at noon")
-        XCTAssertNotNil(field.marked)
+        XCTAssertEqual(field.marked, " see you at noon")
+        // The keyboard's view leaves the marked draft out.
+        XCTAssertEqual(field.documentContextBeforeInput, "Dear Ana,")
 
-        let swap1 = await draft.replace(with: "See you at noon.", in: field, fit: fit)
-        XCTAssertEqual(swap1, .retyped(" See you at noon."))
+        XCTAssertEqual(swap(draft, for: "See you at noon.", in: field), .replaced(" See you at noon."))
         XCTAssertEqual(field.string, "Dear Ana, See you at noon.")
-        XCTAssertNil(field.marked)
-    }
-
-    /// Messages ignores the commit and takes the still-marked draft out
-    /// whole on the first Delete: the rest of the field, a written dictation
-    /// and typed text, stays, and the written text goes in once.
-    func testADraftTheHostDeletesWholeLeavesTheTextBeforeIt() async throws {
-        let field = ProxyField("The build is green. Noted")
-        field.keepsMarkedText = true
-        let draft = try XCTUnwrap(type("And I'll ship it tomorrow.", into: field))
-        XCTAssertEqual(field.string, "The build is green. Noted And I'll ship it tomorrow.")
-
-        let swap = await draft.replace(with: "And I'll ship it tomorrow.", in: field, fit: fit)
-        XCTAssertEqual(swap, .retyped(" And I'll ship it tomorrow."))
-        XCTAssertEqual(field.string, "The build is green. Noted And I'll ship it tomorrow.")
-    }
-
-    /// The user selects the text after the cursor while the first Delete
-    /// lands: no more presses, and the selected text stays.
-    func testASelectionMadeDuringTheSwapIsNeverDeleted() async throws {
-        let field = ProxyField("hello KEEP", cursorAt: 5)
-        let draft = try XCTUnwrap(type("world", into: field))
-        XCTAssertEqual(field.string, "hello world KEEP")
-        field.afterNextDelete = { field.select(" KEEP") }
-
-        let swap = await draft.replace(with: "World.", in: field, fit: fit)
-        XCTAssertEqual(swap, .kept)
-        XCTAssertTrue(field.string.hasSuffix(" KEEP"))
-    }
-
-    /// The host committed the draft without a word, right after it landed:
-    /// the written text still replaces it and never goes in beside it.
-    func testASilentHostCommitIsNotDuplicated() async throws {
-        let field = ProxyField("Dear Ana,")
-        let draft = try XCTUnwrap(type("see you at noon", into: field))
-        field.unmarkText()
-
-        let swap2 = await draft.replace(with: "See you at noon.", in: field, fit: fit)
-        XCTAssertEqual(swap2, .retyped(" See you at noon."))
-        XCTAssertEqual(field.string, "Dear Ana, See you at noon.")
-    }
-
-    /// The host committed the draft when the user tapped the field, which
-    /// left it right before the cursor: it is deleted and the written text
-    /// typed, never typed beside it.
-    func testAPlainDraftStillBeforeTheCursorIsRetyped() async throws {
-        let field = ProxyField("Dear Ana,")
-        let draft = try XCTUnwrap(type("see you at noon", into: field))
-        field.unmarkText()
-
-        let swap3 = await draft.replace(with: "See you at noon.", in: field, fit: fit)
-        XCTAssertEqual(swap3, .retyped(" See you at noon."))
-        XCTAssertEqual(field.string, "Dear Ana, See you at noon.")
-    }
-
-    /// Once the user typed after the draft, it is no longer at the end of the
-    /// text before the cursor: it stays as heard and their text is untouched.
-    func testAnEditedDraftIsLeftAlone() async throws {
-        let field = ProxyField("Dear Ana,")
-        let draft = try XCTUnwrap(type("see you at noon", into: field))
-        draft.commit(field)
-        field.insertText(" ok")
-
-        let swap4 = await draft.replace(with: "See you at noon.", in: field, fit: fit)
-        XCTAssertEqual(swap4, .kept)
-        XCTAssertEqual(field.string, "Dear Ana, see you at noon ok")
-    }
-
-    /// The cursor moved into the draft: it stays, and nothing is deleted.
-    func testADraftNoLongerBeforeTheCursorIsLeftAlone() async throws {
-        let field = ProxyField("Dear Ana,")
-        let draft = try XCTUnwrap(type("see you at noon", into: field))
-        field.adjustTextPosition(byCharacterOffset: -5)
-
-        let swap5 = await draft.replace(with: "See you at noon.", in: field, fit: fit)
-        XCTAssertEqual(swap5, .kept)
-        XCTAssertEqual(field.string, "Dear Ana, see you at noon")
-    }
-
-    /// The cursor moved back to an earlier copy of the same words: that copy
-    /// is the user's text and stays, and so does the draft.
-    func testAnEarlierCopyOfTheSameWordsIsNeverTakenForTheDraft() async throws {
-        let field = ProxyField("ok ok")
-        let draft = try XCTUnwrap(type("ok", into: field))
-        draft.commit(field)
-        field.adjustTextPosition(byCharacterOffset: -3)
-
-        let swap6 = await draft.replace(with: "OK.", in: field, fit: fit)
-        XCTAssertEqual(swap6, .kept)
-        XCTAssertEqual(field.string, "ok ok ok")
-    }
-
-    /// The user deleted the draft and the space before it: the earlier copy
-    /// now before the cursor is theirs, and is never deleted.
-    func testADeletedDraftAfterTheSameWordsLeavesThemAlone() async throws {
-        let field = ProxyField("ok ")
-        let draft = try XCTUnwrap(type("ok", into: field))
-        draft.commit(field)
-        for _ in 0..<3 { field.deleteBackward() }
-        XCTAssertEqual(field.string, "ok")
-
-        let swap7 = await draft.replace(with: "OK.", in: field, fit: fit)
-        XCTAssertEqual(swap7, .kept)
-        XCTAssertEqual(field.string, "ok")
-    }
-
-    /// The host deleted the draft and its space without this keyboard, after
-    /// the draft was seen: what is before the cursor still ends like the
-    /// draft's surroundings, and is still never deleted.
-    func testADraftTheHostDeletedAfterItLandedLeavesTheSameWordsAlone() async throws {
-        let field = ProxyField("ok ok ")
-        let draft = try XCTUnwrap(type("ok", into: field))
-        XCTAssertTrue(draft.follow(field))
-        draft.commit(field)
-        for _ in 0..<3 { field.deleteBackward() }
-        XCTAssertEqual(field.string, "ok ok")
-
-        XCTAssertFalse(draft.follow(field))
-        let swap8 = await draft.replace(with: "OK.", in: field, fit: fit)
-        XCTAssertEqual(swap8, .kept)
-        XCTAssertEqual(field.string, "ok ok")
-    }
-
-    /// The same deletion before the draft was ever seen, in a host that
-    /// leaves marked text out of the context: the few characters still
-    /// before the cursor are not enough to take an earlier copy for it.
-    func testADraftDeletedBeforeItWasSeenLeavesTheSameWordsAlone() async throws {
-        let field = ProxyField("ok ok ")
-        field.hidesMarkedText = true
-        let draft = try XCTUnwrap(type("ok", into: field))
-        XCTAssertEqual(field.documentContextBeforeInput, "ok ok ")
-        for _ in 0..<3 { field.deleteBackward() }
-        XCTAssertEqual(field.string, "ok ok")
-
-        let swap9 = await draft.replace(with: "OK.", in: field, fit: fit)
-        XCTAssertEqual(swap9, .kept)
-        XCTAssertEqual(field.string, "ok ok")
-    }
-
-    /// Also with a long run of the same words before it, in a host that
-    /// leaves marked text out of the context; an untouched draft there is
-    /// still swapped.
-    func testOnlyTheExactContextSwapsADraftTheHostShowedLate() async throws {
-        let repeated = String(repeating: "ok ", count: 8)
-        let field = ProxyField(repeated)
-        field.hidesMarkedText = true
-        let deleted = try XCTUnwrap(type("ok", into: field))
-        for _ in 0..<3 { field.deleteBackward() }
-        let swap10 = await deleted.replace(with: "OK.", in: field, fit: fit)
-        XCTAssertEqual(swap10, .kept)
-        XCTAssertEqual(field.string, String(repeating: "ok ", count: 7) + "ok")
-
-        let untouched = ProxyField("Dear Ana,")
-        untouched.hidesMarkedText = true
-        let draft = try XCTUnwrap(type("see you at noon", into: untouched))
-        let swap11 = await draft.replace(with: "See you at noon.", in: untouched, fit: fit)
-        XCTAssertEqual(swap11, .retyped(" See you at noon."))
-        XCTAssertEqual(untouched.string, "Dear Ana, See you at noon.")
-    }
-
-    /// The text before the cursor already ends like the draft, in a host
-    /// that leaves marked text out: that text is not taken for the draft.
-    /// Deleted, the draft leaves the user's words alone; untouched, it is
-    /// swapped once committed.
-    func testTextEndingLikeTheDraftIsNotTakenForIt() async throws {
-        let deletedField = ProxyField("ok ok")
-        deletedField.hidesMarkedText = true
-        let deleted = try XCTUnwrap(type("ok", into: deletedField))
-        XCTAssertEqual(deleted.text, " ok")
-        for _ in 0..<3 { deletedField.deleteBackward() }
-        let swap12 = await deleted.replace(with: "OK.", in: deletedField, fit: fit)
-        XCTAssertEqual(swap12, .kept)
-        XCTAssertEqual(deletedField.string, "ok ok")
-
-        let untouchedField = ProxyField("ok ok")
-        untouchedField.hidesMarkedText = true
-        let untouched = try XCTUnwrap(type("ok", into: untouchedField))
-        let swap13 = await untouched.replace(with: "OK.", in: untouchedField, fit: fit)
-        XCTAssertEqual(swap13, .retyped(" OK."))
-        XCTAssertEqual(untouchedField.string, "ok ok OK.")
-    }
-
-    /// A host that shows only the last few characters before the cursor,
-    /// with repeated words: deleting the draft leaves the same window, so
-    /// a draft there is never swapped and the user's words stay.
-    func testAShortWindowOverRepeatedWordsNeverSwaps() async throws {
-        let field = ProxyField("ok ok ok ")
-        field.window = 4
-        let draft = try XCTUnwrap(type("ok", into: field))
-        XCTAssertEqual(field.documentContextBeforeInput, "k ok")
-        XCTAssertTrue(draft.follow(field))
-        draft.commit(field)
-        for _ in 0..<3 { field.deleteBackward() }
-        XCTAssertEqual(field.string, "ok ok ok")
-        XCTAssertEqual(field.documentContextBeforeInput, "k ok")
-
-        XCTAssertTrue(draft.follow(field))
-        let swap14 = await draft.replace(with: "OK.", in: field, fit: fit)
-        XCTAssertEqual(swap14, .kept)
-        XCTAssertEqual(field.string, "ok ok ok")
-    }
-
-    /// A draft the swap could not take back out is never typed: Tamil,
-    /// whose vowel signs a host may delete on their own, a line break, and
-    /// a draft longer than hosts show before the cursor. The written text
-    /// then goes in alone, as before drafts.
-    func testADraftThatCouldNotBeSwappedIsNotTyped() async {
-        let field = ProxyField("")
-        XCTAssertNil(type("வணக்கம்", into: field))
-        XCTAssertNil(type("first line\nsecond line", into: field))
-        XCTAssertNil(type(String(repeating: "word ", count: 41), into: field))
-        XCTAssertEqual(field.string, "")
-        XCTAssertNil(field.marked)
-        XCTAssertNotNil(type(String(repeating: "word ", count: 39), into: field))
-    }
-
-    /// A selection is the user's: the written text never replaces it.
-    func testASelectionIsNeverReplaced() async throws {
-        let field = ProxyField("Dear Ana,")
-        let draft = try XCTUnwrap(type("see you at noon", into: field))
-        field.select("noon")
-
-        let swap15 = await draft.replace(with: "See you at noon.", in: field, fit: fit)
-        XCTAssertEqual(swap15, .kept)
-        XCTAssertEqual(field.string, "Dear Ana, see you at noon")
-        XCTAssertNil(type("see you", into: ProxyField("call Srini tomorrow", selecting: "Srini")))
-    }
-
-    /// The keyboard going away leaves the transcript as plain text.
-    func testCommitLeavesTheTranscript() async throws {
-        let field = ProxyField("")
-        let draft = try XCTUnwrap(type("hello", into: field))
-        draft.commit(field)
-        XCTAssertEqual(field.string, "hello")
         XCTAssertNil(field.marked)
         XCTAssertFalse(draft.isMarked)
+    }
+
+    /// The case that lost text in Messages: a dictation, typed text, then a
+    /// second dictation. The second swap replaces its own draft and leaves
+    /// the first dictation and the typed text as they are.
+    func testASecondDictationLeavesEarlierTextAlone() throws {
+        let field = HostField("")
+        let first = try XCTUnwrap(type("the build is green", into: field))
+        XCTAssertEqual(swap(first, for: "The build is green.", in: field), .replaced("The build is green."))
+        field.insertText(" Noted")
+        field.endTurn()
+        XCTAssertEqual(field.string, "The build is green. Noted")
+
+        let second = try XCTUnwrap(type("and i'll ship it tomorrow", into: field))
+        XCTAssertEqual(field.string, "The build is green. Noted and i'll ship it tomorrow")
+        XCTAssertEqual(swap(second, for: "And I'll ship it tomorrow.", in: field),
+                       .replaced(" And I'll ship it tomorrow."))
+        XCTAssertEqual(field.string, "The build is green. Noted And I'll ship it tomorrow.")
+        XCTAssertNil(field.marked)
+    }
+
+    /// `HostField` is the host that lost that text. The swap as it was
+    /// (`unmarkText`, then a Delete per character of the draft, then the
+    /// insert, all in one turn) leaves only the written text in it, while the
+    /// keyboard's view reads the whole expected text: 27 against 52
+    /// characters, as measured.
+    func testTheHostTakesAMarkedDraftWholeOnDeleteAndTheKeyboardCannotSeeIt() {
+        let field = HostField("The build is green. Noted")
+        let draft = " And I'll ship it tomorrow."
+        field.setMarkedText(draft, selectedRange: NSRange(location: draft.utf16.count, length: 0))
+        field.endTurn()
+
+        field.unmarkText()
+        for _ in 0..<draft.count { field.deleteBackward() }
+        field.insertText(draft)
+        field.endTurn()
+        XCTAssertEqual(field.string, " And I'll ship it tomorrow.")
+        XCTAssertEqual(field.documentContextBeforeInput, "The build is green. Noted And I'll ship it tomorrow.")
+    }
+
+    /// A key right after `unmarkText` reaches the host first and would
+    /// replace the draft. So before the keyboard's own edit the draft is
+    /// committed by an insert of its own text, and the key goes in after it.
+    func testAKeyTypedWhileTheDraftIsMarkedGoesInAfterIt() throws {
+        let field = HostField("Dear Ana,")
+        let draft = try XCTUnwrap(type("see you at noon", into: field))
+        draft.keep(field, .beforeEdit)
+        field.insertText("!")
+        field.endTurn()
+        XCTAssertEqual(field.string, "Dear Ana, see you at noon!")
+        XCTAssertNil(field.marked)
+
+        // The same two calls with `unmarkText` lose the draft in this host.
+        let lost = HostField("Dear Ana,")
+        _ = try XCTUnwrap(type("see you at noon", into: lost))
+        lost.unmarkText()
+        lost.insertText("!")
+        lost.endTurn()
+        XCTAssertEqual(lost.string, "Dear Ana,!")
+    }
+
+    /// Delete while the draft is marked takes one character, not the draft,
+    /// and a cursor move leaves it whole.
+    func testDeleteAndACursorMoveWhileTheDraftIsMarkedLeaveItsText() throws {
+        let deleted = HostField("Dear Ana,")
+        let first = try XCTUnwrap(type("see you at noon", into: deleted))
+        first.keep(deleted, .beforeEdit)
+        deleted.deleteBackward()
+        deleted.endTurn()
+        XCTAssertEqual(deleted.string, "Dear Ana, see you at noo")
+
+        let moved = HostField("Dear Ana,")
+        let second = try XCTUnwrap(type("see you at noon", into: moved))
+        second.keep(moved, .beforeEdit)
+        moved.adjustTextPosition(byCharacterOffset: -4)
+        moved.endTurn()
+        moved.insertText("12 ")
+        moved.endTurn()
+        XCTAssertEqual(moved.string, "Dear Ana, see you at 12 noon")
+    }
+
+    /// Autocorrect on the keys counts its Deletes from the text before the
+    /// cursor, read before its first edit. With the draft in that text it
+    /// corrects the draft's last word, and the word before the draft is not
+    /// touched. The proxy alone answers "Lets meet tomorow".
+    func testAnEditPlannedFromTheTextBeforeTheCursorStaysInsideTheDraft() throws {
+        let field = HostField("Lets meet tomorow")
+        let draft = try XCTUnwrap(type("see you thier", into: field))
+        let read = draft.textBefore(field)
+        XCTAssertEqual(read, "Lets meet tomorow see you thier")
+        let word = read.split(separator: " ").last.map(String.init) ?? ""
+
+        draft.keep(field, .beforeEdit)
+        for _ in word { field.deleteBackward() }
+        field.insertText("there ")
+        field.endTurn()
+        XCTAssertEqual(field.string, "Lets meet tomorow see you there ")
+        XCTAssertNil(field.marked)
+        XCTAssertEqual(draft.textBefore(field), "Lets meet tomorow see you there ")
+    }
+
+    /// The keyboard going away, or a dictation that ends with no written
+    /// text, leaves the transcript as plain text; what is typed next goes in
+    /// after it.
+    func testADraftKeptAloneBecomesPlainText() throws {
+        let field = HostField("Dear Ana,")
+        let draft = try XCTUnwrap(type("see you at noon", into: field))
+        draft.keep(field, .alone)
+        field.endTurn()
+        XCTAssertEqual(field.string, "Dear Ana, see you at noon")
+        XCTAssertNil(field.marked)
+
+        field.insertText("!")
+        field.endTurn()
+        XCTAssertEqual(field.string, "Dear Ana, see you at noon!")
+        // Kept once: a written text that comes late changes nothing.
+        XCTAssertEqual(swap(draft, for: "See you at noon.", in: field), .kept)
+        XCTAssertEqual(field.string, "Dear Ana, see you at noon!")
+    }
+
+    /// A host that made the draft plain text without telling the keyboard
+    /// gets the written text beside it. The draft's text is there twice; the
+    /// text before it is whole.
+    func testAHostThatCommittedTheDraftKeepsAllTextAndGetsTheWrittenTextBesideIt() throws {
+        let field = HostField("The build is green. Noted")
+        field.commitsMarkedText = true
+        let draft = try XCTUnwrap(type("and i'll ship it tomorrow", into: field))
+        XCTAssertNil(field.marked)
+
+        XCTAssertEqual(swap(draft, for: "And I'll ship it tomorrow.", in: field),
+                       .replaced(" And I'll ship it tomorrow."))
+        XCTAssertEqual(field.string, "The build is green. Noted and i'll ship it tomorrow And I'll ship it tomorrow.")
+    }
+
+    /// The host reports its own text, with the marked draft in it, after a
+    /// change on its side that left the draft where it was. The draft is
+    /// still swapped.
+    func testADraftTheHostReportsInItsTextIsStillSwapped() throws {
+        let field = HostField("Dear Ana,")
+        let draft = try XCTUnwrap(type("see you at noon", into: field))
+        field.hostDid { _ in }
+        XCTAssertEqual(field.documentContextBeforeInput, "Dear Ana, see you at noon")
+        XCTAssertTrue(draft.isInPlace(field))
+
+        XCTAssertEqual(swap(draft, for: "See you at noon.", in: field), .replaced(" See you at noon."))
+        XCTAssertEqual(field.string, "Dear Ana, See you at noon.")
+    }
+
+    /// The user selected text while the writer ran: an insert would replace
+    /// the selection, so the draft stays as heard and nothing is typed.
+    func testASelectionMadeMeanwhileIsNeverReplaced() throws {
+        let field = HostField("Dear Ana,")
+        let draft = try XCTUnwrap(type("see you at noon", into: field))
+        field.hostDid { $0.select("Ana") }
+        XCTAssertFalse(draft.isInPlace(field))
+
+        XCTAssertEqual(swap(draft, for: "See you at noon.", in: field), .kept)
+        XCTAssertEqual(field.string, "Dear Ana, see you at noon")
+        XCTAssertEqual(field.selectedText, "Ana")
+    }
+
+    /// Send took the message, draft and all: the written text is not typed
+    /// into the empty field, also when the draft was all the field held.
+    func testAMessageSentWithItsDraftGetsNoWrittenText() throws {
+        let field = HostField("")
+        let draft = try XCTUnwrap(type("see you at noon", into: field))
+        field.hostDid { $0.send() }
+
+        XCTAssertEqual(swap(draft, for: "See you at noon.", in: field), .kept)
+        XCTAssertEqual(field.string, "")
+    }
+
+    /// A key typed after the field changed: the draft's text is not inserted
+    /// a second time somewhere else.
+    func testAnEditAfterTheFieldChangedDoesNotTypeTheDraftAgain() throws {
+        let field = HostField("Dear Ana,")
+        let draft = try XCTUnwrap(type("see you at noon", into: field))
+        field.hostDid { $0.select("Dear") }
+        draft.keep(field, .beforeEdit)
+        field.insertText("Hi")
+        field.endTurn()
+        XCTAssertEqual(field.string, "Hi Ana, see you at noon")
+    }
+
+    /// The swap is one insert, so a draft of any script and length is typed
+    /// and replaced whole: Tamil, whose vowel signs a host may delete on
+    /// their own, an emoji of several code points, and 400 characters.
+    func testADraftOfAnyScriptAndLengthIsReplacedWhole() throws {
+        let field = HostField("Note:")
+        let heard = "வணக்கம் நண்பரே 👨‍👩‍👧 " + String(repeating: "word ", count: 80) + "end"
+        let draft = try XCTUnwrap(type(heard, into: field))
+        XCTAssertEqual(field.string, "Note: " + heard)
+
+        XCTAssertEqual(swap(draft, for: "வணக்கம், நண்பரே.", in: field), .replaced(" வணக்கம், நண்பரே."))
+        XCTAssertEqual(field.string, "Note: வணக்கம், நண்பரே.")
+    }
+
+    /// No draft over a selection, which it would replace, and none with a
+    /// line break. The written text then goes in alone, as before drafts.
+    func testNoDraftOverASelectionOrWithALineBreak() {
+        let field = HostField("call Srini tomorrow")
+        field.hostDid { $0.select("Srini") }
+        XCTAssertNil(type("see you", into: field))
+        XCTAssertEqual(field.string, "call Srini tomorrow")
+
+        let empty = HostField("")
+        XCTAssertNil(type("first line\nsecond line", into: empty))
+        XCTAssertEqual(empty.string, "")
+        XCTAssertNil(empty.marked)
     }
 }

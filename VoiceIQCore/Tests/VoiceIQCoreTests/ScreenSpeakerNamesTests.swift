@@ -36,6 +36,18 @@ final class ScreenSpeakerNamesTests: XCTestCase {
         XCTAssertFalse(names?.seen.contains("Muhammed") == true)
         // Two people on screen, one far-side speaker: neither name is given.
         XCTAssertNil(names?.speakers["s1"])
+
+        // A tag cut short ("May" of "Maya Patel") is not another person, nor is Chrome's own bar;
+        // but it could be one ("Dan" beside "Dana Smith"), so the one voice gets neither name.
+        let cut = ScreenSpeakerNames.match(samples: samples(["Maya Patel", "Infobar Container"], single: ["May", "Relaunch"]), transcript: twoPeople)
+        XCTAssertEqual(cut?.seen, ["Maya Patel"])
+        XCTAssertNil(cut?.speakers["s1"])
+        let counted = ScreenSpeakerNames.match(samples: samples(["Maya Patel"], single: ["May"], count: 2), transcript: twoPeople)
+        XCTAssertEqual(counted?.speakers["s1"]?.name, "Maya Patel")
+
+        // A name that only starts someone else's first name is a person of its own.
+        let dan = ScreenSpeakerNames.match(samples: samples(["Daniel Okafor"], single: ["Dan"]), transcript: twoPeople)
+        XCTAssertEqual(dan?.seen, ["Dan", "Daniel Okafor"])
     }
 
     func testTheParticipantCountIsReadFromItsButton() {

@@ -30,7 +30,8 @@ public enum LegacyMigration {
     /// folder name, so this must run before anything touches the store.
     private static func migrateAppSupportFolder() {
         let fm = FileManager.default
-        guard let base = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else { return }
+        // A test copy's folder never takes the real app's old one.
+        guard FileLayout.testDataFolder == nil, let base = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else { return }
         let old = base.appendingPathComponent(legacyAppSupportFolder, isDirectory: true)
         let new = FileLayout.appSupportRoot
         guard fm.fileExists(atPath: old.path), !fm.fileExists(atPath: new.path) else { return }

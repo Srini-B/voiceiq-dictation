@@ -65,6 +65,11 @@ public struct InsertionCoordinator: TextInserting {
         // Before the guards, so the frontmost app and the field they check
         // are still the target after waiting out an earlier paste.
         await paster.finishPendingRestore()
+        // A draft's text that misses stays off the clipboard: its written
+        // text comes next, and the user's clipboard is theirs.
+        func copy(_ text: String) {
+            if announcesMiss { paster.copyOnly(text) }
+        }
         // Guard 2: secure input — the transcript stays in History only.
         if SecureInput.isActive {
             Log.insertion.warning("secure input active at insert time — refusing (text in History only)")
@@ -75,7 +80,7 @@ public struct InsertionCoordinator: TextInserting {
         let frontmost = NSWorkspace.shared.frontmostApplication
         if let expectedPID = context.targetPID, let frontmost, frontmost.processIdentifier != expectedPID {
             Log.insertion.info("frontmost changed (\(context.targetAppName ?? "?", privacy: .private) → \(frontmost.localizedName ?? "?", privacy: .private)) — no blind paste")
-            paster.copyOnly(text)
+            copy(text)
             return (.frontmostChanged, false)
         }
 
@@ -97,10 +102,10 @@ public struct InsertionCoordinator: TextInserting {
         case .focusElsewhere:
             // PROVEN focus theft — a blind ⌘V would paste into the thief.
             // Same treatment as the frontmost-changed guard: chip, never blind.
-            paster.copyOnly(text)
+            copy(text)
             return (.frontmostChanged, false)
         case .notATextField:
-            paster.copyOnly(text)
+            copy(text)
             return (.fellBackToClipboard, false)
         case .notPossible:
             break
@@ -117,7 +122,7 @@ public struct InsertionCoordinator: TextInserting {
            let nowFront = NSWorkspace.shared.frontmostApplication,
            nowFront.processIdentifier != expectedPID {
             Log.insertion.info("frontmost changed during AX attempt — no blind paste")
-            paster.copyOnly(text)
+            copy(text)
             return (.frontmostChanged, false)
         }
 
@@ -132,11 +137,11 @@ public struct InsertionCoordinator: TextInserting {
             case .stopped(let rest):
                 // The user switched apps part way: the rest must not land
                 // there, and the part already typed must not be pasted twice.
-                paster.copyOnly(rest)
+                copy(rest)
                 return (.frontmostChanged, false)
             case .unsupported:
                 // A real ⌘V in the remote session still pastes it.
-                paster.copyOnly(text)
+                copy(text)
                 return (.fellBackToClipboard, false)
             }
         }
@@ -156,7 +161,7 @@ public struct InsertionCoordinator: TextInserting {
                 await PasteCheck.watch(element: before.element, before: before.reading, text: text, postedAt: postedAt) {
                     guard announcesMiss else { return }
                     Log.insertion.info("paste missed — text copied instead")
-                    paster.copyOnly(text)
+                    copy(text)
                     NotificationCenter.default.post(name: .voiceIQPasteMissed, object: text)
                 }
             }
@@ -175,7 +180,7 @@ public struct InsertionCoordinator: TextInserting {
         }
 
         // Tier 3: clipboard floor.
-        paster.copyOnly(text)
+        copy(text)
         return (.fellBackToClipboard, false)
     }
 }

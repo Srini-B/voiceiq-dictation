@@ -38,6 +38,23 @@ public final class PasteInserter {
     /// Returns false without touching the clipboard when macOS 27.3+ would
     /// drop the ⌘V silently (`KeystrokeAccess`).
     public func paste(_ text: String) async -> Bool {
+        // One paste at a time, in call order: a second paste taking its
+        // clipboard snapshot during the first one's ⌘V would see only the
+        // first one's text, which it leaves out, and restore an empty
+        // clipboard.
+        let previous = lastPaste
+        let turn = Task { @MainActor [weak self] () -> Bool in
+            _ = await previous?.value
+            guard let self else { return false }
+            return await self.pasteNow(text)
+        }
+        lastPaste = turn
+        return await turn.value
+    }
+
+    private var lastPaste: Task<Bool, Never>?
+
+    private func pasteNow(_ text: String) async -> Bool {
         guard KeystrokeAccess.mayPost else {
             Log.insertion.warning("no System & App Protection Override grant — ⌘V not posted")
             return false

@@ -42,7 +42,7 @@ public actor MeetingSync {
     }
 
     public func start() {
-        guard observers.isEmpty else { return }
+        guard observers.isEmpty, !CloudSync.isDisabledForTests else { return }
         guard HistorySync.hasContainerEntitlement else {
             Log.meeting.info("meeting sync: no iCloud container entitlement, meetings stay on this device")
             return

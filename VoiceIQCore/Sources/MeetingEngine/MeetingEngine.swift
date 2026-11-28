@@ -237,13 +237,12 @@ import VoiceIQSpeech
 
     public var isRecording: Bool { if case .recording = phase { return true }; return false }
 
-    #if os(macOS)
-    /// How loud the mic and the call are right now, 0 to 1; nil when not recording.
+    /// How loud the mic and the call are right now, 0 to 1; nil when not
+    /// recording. iPhone's call level is always 0: it hears the room only.
     public var liveLevels: (mic: Float, call: Float)? {
         guard let mic, let system else { return nil }
         return (mic.sound.level, system.sound.level)
     }
-    #endif
 
     /// Option-M: start when nothing is recording, stop when something is.
     public func toggleRecording() {
@@ -539,7 +538,7 @@ import VoiceIQSpeech
                 app: meta.source.map(Self.name), names: meta.speakerNames, screenNames: meta.screenNames,
                 ownerName: settings.meetingOwnerName, vocabulary: dictionary.sanitizedVocabulary(),
                 spellings: dictionary.spellings(), writingRules: settings.customWritingRules,
-                calendarEvent: meta.calendarEvent)), transcript: transcript, model: cfg.writingModel, deadline: MeetingEngine.notesDeadline)
+                calendarEvent: meta.calendarEvent, languageCode: settings.dictationLanguage.code)), transcript: transcript, model: cfg.writingModel, deadline: MeetingEngine.notesDeadline)
         }
         let notes = try await write(meta)
         let named = ScreenSpeakerNames.byElimination(meta: meta, transcript: transcript, notes: notes)

@@ -113,8 +113,7 @@ public enum PromptV1 {
     /// prefix stays the same. Nil when the field holds only whitespace.
     static func fieldContext(_ surrounding: SurroundingText) -> String? {
         guard surrounding.hasText else { return nil }
-        let before = String(surrounding.before.suffix(300))
-        let after = String(surrounding.after.prefix(100))
+        let before = surrounding.excerpt.before, after = surrounding.excerpt.after
         return "\(fieldBeforeLabel)<field>\(before)</field>\nFIELD AFTER CURSOR: <field>\(after)</field>\n\n"
     }
 

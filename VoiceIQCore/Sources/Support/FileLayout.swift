@@ -14,6 +14,7 @@ public enum FileLayout {
 
     public static var appSupportRoot: URL {
         if let overrideRoot { return overrideRoot }
+        if let testDataFolder { return testDataFolder }
         let fileManager = FileManager.default
         let base = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         let new = base.appendingPathComponent("VoiceiQ", isDirectory: true)
@@ -26,6 +27,30 @@ public enum FileLayout {
             }
         }
         return new
+    }
+
+    /// The `DebugDataFolder` default: an absolute path a test copy of the app
+    /// keeps all its data in instead of ~/Library/Application Support/VoiceiQ.
+    /// The app is not sandboxed, so a copy under another bundle ID
+    /// (io.blue.voiceiq.probe) otherwise writes into the real app's folder,
+    /// and the real app uploads those meetings at its next launch (Codex on
+    /// #140). Read once, at launch. Mac only: on iOS the app, its keyboard and
+    /// its Live Activity share an App Group, so a folder of the app's own
+    /// would split them. Never derived from the bundle ID, for the same reason.
+    nonisolated(unsafe) public internal(set) static var testDataFolder: URL? = testDataFolder(in: .standard)
+
+    static func testDataFolder(in defaults: UserDefaults) -> URL? {
+        #if os(macOS)
+        guard let path = defaults.string(forKey: "DebugDataFolder") else { return nil }
+        guard path.hasPrefix("/") else {
+            Log.session.error("DebugDataFolder ignored, not an absolute path: \(path, privacy: .public)")
+            return nil
+        }
+        Log.session.notice("data folder (test): \(path, privacy: .public)")
+        return URL(fileURLWithPath: path, isDirectory: true)
+        #else
+        return nil
+        #endif
     }
 
     public static var recordingsRoot: URL {
@@ -53,7 +78,8 @@ public enum FileLayout {
     /// models (`Models`) are kept; Settings deletes them.
     public static func removeStaleFiles() {
         Task.detached(priority: .utility) {
-            LocalModelInstaller.removeUnusedPreparedModels()
+            // Not in a test copy: the prepared-model cache is the real app's (Fable on #161).
+            if FileLayout.testDataFolder == nil { LocalModelInstaller.removeUnusedPreparedModels() }
             try? FileManager.default.removeItem(at: FileLayout.appSupportRoot
                 .appendingPathComponent("Models/lfm3-omni-2b", isDirectory: true))
             #if os(macOS)
