@@ -107,11 +107,14 @@ public struct AssemblyAITranscriptionService: TranscriptionServicing {
         let raw = transcript.cleanedTranscript
         guard !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw TranscriptionError.emptyTranscript }
         func tidied(notice: String?) throws -> TranscriptionResult {
-            let language = settings.dictationLanguage.code ?? "en"
+            // The language the transcript was heard in: AssemblyAI's setting,
+            // or the on-device model's ("um" is a word in Portuguese).
+            let heardInCloud = transcript.modelID.hasPrefix("assemblyai") || transcript.modelID.hasPrefix("universal")
+            let language = heardInCloud ? settings.dictationLanguage.code : settings.localSpeechLanguage.code
             let terms = DictionaryStore().entries().map(\.term)
             // Dictionary names spelled another way ("Stacy" for "Stacey") take the Dictionary's spelling.
             let corrected = { (text: String) in
-                SoundAlikeSpelling.apply(terms, to: ReplacementEngine.apply(rules, to: text), language: language)
+                SoundAlikeSpelling.apply(terms, to: ReplacementEngine.apply(rules, to: text), language: language ?? "en")
             }
             let style = settings.tidyStyle
             var result = transcript
