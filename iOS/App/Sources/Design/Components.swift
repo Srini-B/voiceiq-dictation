@@ -72,16 +72,14 @@ struct Card<Content: View>: View {
     }
 }
 
-/// Small uppercase label above a group of cards.
+/// Small sentence-case label above a group, like a list's day header.
 struct GroupLabel: View {
     let text: String
 
     var body: some View {
-        Text(text.uppercased())
+        Text(text)
             .font(Theme.Fonts.caption())
-            .tracking(0.6)
             .foregroundStyle(Theme.Colors.muted)
-            .padding(.leading, 4)
     }
 }
 
@@ -400,7 +398,7 @@ struct DockCapsule<Label: View>: View {
                 .lineLimit(1)
                 .padding(.horizontal, 18)
                 .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
-                .background(Capsule().fill(Theme.Colors.canvas))
+                .background(Capsule().fill(Theme.Colors.surface))
                 .overlay(Capsule().strokeBorder(Theme.Colors.hairline, lineWidth: 1))
                 .shadow(color: .black.opacity(0.10), radius: 14, y: 6)
                 .contentShape(Capsule())
