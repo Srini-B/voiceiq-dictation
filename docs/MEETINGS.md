@@ -447,7 +447,12 @@ meeting never raises a permission prompt (`CGPreflightScreenCaptureAccess`,
    in a Chromium browser the page text is read every 15 s, not every 3 s:
    the sampler switches the setting on, reads 2.5 s later, and switches it
    off again at once, which closes the tree and stops the animation
-   (`ScreenNameSampler.whileWebTreeOpen`). Under VoiceOver it is left alone. Either permission is enough for sampling to run.
+   (`ScreenNameSampler.whileWebTreeOpen`). For those 2.5 s every window of
+   that browser instance animates its moves and resizes, and Chrome builds
+   the tree for all its tabs. When something already keeps the setting on
+   (VoiceOver, Voice Control, a window manager), the tree is read on every
+   tick and the setting is never touched. If VoiceiQ quits inside a pulse,
+   the next meeting's sampler switches it off. Either permission is enough for sampling to run.
    Zoom 7.2 exposes each video tile as an `AXTabGroup` described "Name,
    Computer audio unmuted", and the participants list as `AXStaticText`
    rows such as "Name (me)".

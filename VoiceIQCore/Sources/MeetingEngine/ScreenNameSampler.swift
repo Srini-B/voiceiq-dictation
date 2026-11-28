@@ -26,6 +26,7 @@ public final class ScreenNameSampler: @unchecked Sendable {
     /// site's page; until then it is picked again on every tick.
     private var pidHoldsRoom = false
     private var tick = 0
+    private var chromium: (pid: pid_t, isChromium: Bool)?
     /// A Chromium browser's page text is read on every this-many ticks (15 s),
     /// since each read briefly makes the browser animate its window moves.
     static let browserTreeEvery = 5
@@ -53,6 +54,7 @@ public final class ScreenNameSampler: @unchecked Sendable {
         // asks for Screen Recording and Accessibility. Either one is enough.
         snapshots = CGPreflightScreenCaptureAccess()
         let accessibility = AXIsProcessTrusted()
+        if accessibility { Self.endLeftoverPulse() }
         guard snapshots || accessibility else {
             Log.meeting.info("screen names off: no Screen Recording or Accessibility access")
             return
@@ -138,7 +140,8 @@ public final class ScreenNameSampler: @unchecked Sendable {
             var lines = snapshots ? try await capture().map(Self.read) ?? [] : []
             if let pid {
                 let browser = bundleID.map(CallApps.browsers.contains) ?? false
-                if browser, Self.isChromium(pid), !NSWorkspace.shared.isVoiceOverEnabled {
+                if chromium?.pid != pid { chromium = (pid, Self.isChromium(pid)) }
+                if browser, chromium?.isChromium == true, !Self.webTreeIsOpen(pid) {
                     if tick % Self.browserTreeEvery == 0 { lines += await Self.whileWebTreeOpen(pid) { CallWindowText.lines(pid: pid, browser: true) } }
                 } else {
                     lines += CallWindowText.lines(pid: pid, browser: browser)
@@ -162,16 +165,44 @@ public final class ScreenNameSampler: @unchecked Sendable {
     /// 55 elements and no names until it is set; 161 with the three name
     /// tags 2 s after; 55 again the moment it is set back to false, which
     /// also stops the window-move animation it causes. So the read happens
-    /// with it on, and it is always switched off after, even on cancel.
-    /// Skipped under VoiceOver, which keeps it on for its own use.
-    static func whileWebTreeOpen<T>(_ pid: pid_t, read: () -> T) async -> T {
+    /// with it on, and it is always switched off after, even on cancel. When
+    /// something else already keeps it on (VoiceOver, Voice Control, a window
+    /// manager), the tree is open and is read on every tick without touching
+    /// it (`webTreeIsOpen`), so their view of Chrome never changes (agy on #146).
+    static func whileWebTreeOpen(_ pid: pid_t, read: () -> [String]) async -> [String] {
         let app = AXUIElementCreateApplication(pid)
         AXUIElementSetMessagingTimeout(app, 0.25)
-        AXUIElementSetAttributeValue(app, "AXEnhancedUserInterface" as CFString, kCFBooleanTrue)
-        defer { AXUIElementSetAttributeValue(app, "AXEnhancedUserInterface" as CFString, kCFBooleanFalse) }
+        // A crash inside the pulse would leave Chrome animating; the next sampler switches it off.
+        UserDefaults.standard.set(Int(pid), forKey: pulsedKey)
+        AXUIElementSetAttributeValue(app, enhancedUI, kCFBooleanTrue)
+        defer {
+            AXUIElementSetAttributeValue(app, enhancedUI, kCFBooleanFalse)
+            UserDefaults.standard.removeObject(forKey: pulsedKey)
+        }
         try? await Task.sleep(for: .milliseconds(2500))
+        guard !Task.isCancelled else { return [] }
         return read()
     }
+
+    static func webTreeIsOpen(_ pid: pid_t) -> Bool {
+        if NSWorkspace.shared.isVoiceOverEnabled { return true }
+        let app = AXUIElementCreateApplication(pid)
+        AXUIElementSetMessagingTimeout(app, 0.25)
+        var value: CFTypeRef?
+        return AXUIElementCopyAttributeValue(app, enhancedUI, &value) == .success && (value as? Bool) == true
+    }
+
+    /// Switches off a pulse a crashed sampler left on, if that browser still runs.
+    static func endLeftoverPulse() {
+        let pid = pid_t(UserDefaults.standard.integer(forKey: pulsedKey))
+        guard pid > 0 else { return }
+        UserDefaults.standard.removeObject(forKey: pulsedKey)
+        guard NSRunningApplication(processIdentifier: pid) != nil else { return }
+        AXUIElementSetAttributeValue(AXUIElementCreateApplication(pid), enhancedUI, kCFBooleanFalse)
+    }
+
+    private static let enhancedUI = "AXEnhancedUserInterface" as CFString
+    private static let pulsedKey = "screenNamesPulsedBrowserPID"
 
     static func isChromium(_ pid: pid_t) -> Bool {
         NSRunningApplication(processIdentifier: pid)?.bundleURL.map { !TypingInserter.chromiumMajorVersions(in: $0).isEmpty } == true
