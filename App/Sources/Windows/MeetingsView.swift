@@ -129,15 +129,21 @@ struct MeetingsPane: View {
             }
             folderFilter
             List(selection: $selection) {
+                // Day headings are rows, not Sections: macOS pins the top
+                // Section's header and draws a rule under it, so only "Today"
+                // had one (Fable, M6), whatever `listSectionSeparator` said.
                 ForEach(Self.days(listed), id: \.start) { day in
-                    Section(day.label) {
-                        ForEach(day.meetings) { meeting in
-                            // The heading already sets the day off; no rule above its first row.
-                            row(meeting).listRowSeparator(meeting.id == day.meetings.first?.id ? .hidden : .automatic, edges: .top)
-                        }
+                    Text(day.label)
+                        .font(GTFont.flex(11, weight: 600))
+                        .foregroundStyle(.secondary)
+                        .padding(.top, VoiceIQUI.Spacing.xs)
+                        .selectionDisabled()
+                        .listRowSeparator(.hidden)
+                        .accessibilityAddTraits(.isHeader)
+                    ForEach(day.meetings) { meeting in
+                        // The heading already sets the day off; no rule above its first row.
+                        row(meeting).listRowSeparator(meeting.id == day.meetings.first?.id ? .hidden : .automatic, edges: .top)
                     }
-                    // Only "Today" drew a rule under its heading (Fable, M6).
-                    .listSectionSeparator(.hidden)
                 }
             }
             .overlay {
