@@ -231,6 +231,8 @@ public final class FieldDraft: TextDraft {
         }
         guard await select(span.location, span.length, holding: reading.value) else {
             _ = await select(reading.caret, reading.selectionLength)
+            // Unchanged, the field itself refused the selection: not the user.
+            if PasteCheck.reading(of: element)?.value == reading.value { refusedByApp() }
             Log.insertion.info("draft: the field didn't take the selection — kept as it was")
             return false
         }
@@ -251,6 +253,7 @@ public final class FieldDraft: TextDraft {
                 try? await Task.sleep(for: .milliseconds(40))
             }
             _ = await select(reading.caret, reading.selectionLength)
+            refusedByApp()
             Log.insertion.info("draft: the field took the write but never showed it — kept as it was")
             return false
         }
@@ -274,6 +277,7 @@ public final class FieldDraft: TextDraft {
             try? await Task.sleep(for: .milliseconds(50))
         }
         _ = await select(reading.caret, reading.selectionLength)
+        refusedByApp()
         Log.insertion.info("draft: the paste over it never showed — kept as it was")
         return false
     }
@@ -348,6 +352,13 @@ public final class FieldDraft: TextDraft {
         let units = Array(value.utf16)
         guard location >= 0, length > 0, location + length <= units.count else { return "" }
         return String(decoding: units[location..<(location + length)], as: UTF16.self)
+    }
+
+    /// The app's field refused a swap for a reason that isn't the user's:
+    /// it gets no more drafts until VoiceiQ restarts, so the cost is one
+    /// dictation kept as heard.
+    private func refusedByApp() {
+        if let app = Self.appKey(context) { Self.noDraftApps.insert(app) }
     }
 
     /// The app a field that never shows a draft belongs to, by bundle ID
