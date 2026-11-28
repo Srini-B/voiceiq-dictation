@@ -43,6 +43,8 @@
 	<string>VoiceiQ pauses Music and Spotify while you dictate, when you turn that on, and plays them again after.</string>
 	<key>NSAudioCaptureUsageDescription</key>
 	<string>VoiceiQ records the other side of your calls, so meeting notes include what everyone said.</string>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>When you turn it on, VoiceiQ reads the title and invitees of the calendar event you&apos;re in, so meeting notes get the right title and names, and shows your next meeting in Meetings and the menu bar.</string>
 	<key>NSHumanReadableCopyright</key>
 	<string>Copyright 2026 Google LLC. Apache License 2.0. This is not an officially supported Google product.</string>
 	<key>NSMicrophoneUsageDescription</key>
