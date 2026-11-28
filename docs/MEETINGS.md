@@ -104,7 +104,10 @@ matches. Rules 1 to 3 win over rule 4, whatever order the apps come in:
    browser-only;
 3. a browser (`CallApps.browsers`, which includes Dia, Comet, Orion, Aside,
    Safari Technology Preview and Edge Beta, Dev and Canary, or any app named
-   Chrome or Chromium) captures the mic on a page in `CallApps.meetingPages`, matched
+   Chrome or Chromium) captures the mic or plays sound on a page in
+   `CallApps.meetingPages` (playing alone counts since 2026-11-28: the
+   live-call probe's owner joined vdo.ninja holding no mic, as a muted owner
+   can, and got no offer), matched
    against window titles and the URL of each window's `AXWebArea` (searched 9
    levels deep, 300 elements at most, as FluidVoice does for Safari). The
    offer names the page's host ("meet.google.com"); a page found only by its

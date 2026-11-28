@@ -4,8 +4,9 @@ import ApplicationServices
 import CoreAudio
 
 /// Polls for an active call. A call is "active" when:
-/// - a known calling app, or a browser showing a meeting page, is itself
-///   capturing the microphone;
+/// - a known calling app is itself capturing the microphone;
+/// - a browser shows a meeting page and captures the microphone or plays
+///   sound: an owner who joined muted can hold no microphone at all;
 /// - the system call daemons capture it (FaceTime, iPhone calls on the Mac);
 /// - a browser page both captures the microphone and plays sound: two-way
 ///   audio in a tab is what a call on a site not listed looks like.
@@ -245,9 +246,10 @@ import CoreAudio
                   seen.insert(app.processIdentifier).inserted else { continue }
             let pids = [process.processIdentifier, app.processIdentifier]
             let capturing = audio.map { a in pids.contains(where: a.inputPIDs.contains) || a.inputBundleIDs.contains { $0.hasPrefix(id) } } ?? true
-            guard capturing else { continue }
             let playing = audio.map { a in pids.contains(where: a.outputPIDs.contains) || a.outputBundleIDs.contains { $0.hasPrefix(id) } } ?? false
+            guard capturing || playing else { continue }
             if let name = CallApps.known[id] {
+                guard capturing else { continue }
                 if audio == nil || playing || !CallApps.voiceNoteApps.contains(id) { return (.app(bundleID: id, name: name), true) }
                 continue
             }
@@ -255,8 +257,10 @@ import CoreAudio
             guard CallApps.browsers.contains(id) || name.localizedCaseInsensitiveContains("Chrome")
                     || name.localizedCaseInsensitiveContains("Chromium") else { continue }
             let page = BrowserPages.read(pid: app.processIdentifier)
+            // A meeting page that only plays counts: an owner who joined muted
+            // can hold no mic at all (the live-call probe's owner, 2026-11-28).
             if let match = page.meeting { return (.browser(bundleID: id, host: match), true) }
-            if playing, !page.excluded, lookalike == nil { lookalike = .browser(bundleID: id, host: page.host ?? name) }
+            if capturing, playing, !page.excluded, lookalike == nil { lookalike = .browser(bundleID: id, host: page.host ?? name) }
         }
         return lookalike.map { ($0, false) }
     }
