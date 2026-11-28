@@ -197,7 +197,10 @@ import VoiceIQSpeech
     /// died; nothing will ever stop it, so the list would show "Recording"
     /// forever.
     private func failInterruptedRecordings() {
-        for var meta in store.list() where meta.status == .recording {
+        for var meta in store.list() {
+            // A waiting meeting the app quit on while it went again waits on.
+            let resumable = meta.waitsForGemini != nil && (meta.status == .transcribing || meta.status == .summarizing)
+            guard meta.status == .recording || resumable else { continue }
             meta.status = .failed("interrupted")
             meta.endedAt = meta.endedAt ?? meta.startedAt.addingTimeInterval(meta.durationSeconds)
             try? store.save(meta: meta)
@@ -338,6 +341,8 @@ import VoiceIQSpeech
     /// the whole meeting again.
     public func retry(id: MeetingID, fresh: Bool = false) {
         guard !isBusy(id), let folder = store.folder(for: id), let meta = store.list().first(where: { $0.id == id }) else { return }
+        // Only the notes failed: the saved transcript, and any edits to it, stay.
+        if !fresh, meta.waitsForGemini == .notes { return regenerateNotes(id: id) }
         if fresh { Self.dropTranscriptCaches(folder) }
         processing[id] = .transcribing
         Task { await UsageMeter.$scope.withValue(UsageScope(activity: .meeting, sessionID: id.uuid.uuidString)) {
@@ -613,8 +618,10 @@ public enum MeetingFailure: Error, Equatable {
                 return "Your key can't use \(model). \(fixHint)"
             case .offline:
                 return "You were offline when the meeting was transcribed. The recording is saved and is transcribed when you're back online."
-            case .timeout, .network:
+            case .timeout, .network where waitsForGemini(error):
                 return "Couldn't reach Gemini. The recording is saved and is transcribed when Gemini can be reached."
+            case .network:
+                return "Transcription failed. \(fixHint)"
             case .safetyBlocked:
                 return "Gemini declined to transcribe this meeting. \(fixHint)"
             case .badRequest, .emptyTranscript:
