@@ -35,12 +35,14 @@ final class KeyboardViewController: UIInputViewController {
         super.viewDidLoad()
         model.controller = self
         model.editor = editor
+        model.onWillInsertDictation = { [weak typing] in typing?.willInsertDictation() }
+        model.onPoll = { [weak typing] in typing?.learning.tick() }
         model.onDidInsertDictation = { [weak typing] text, before, after in
             typing?.didInsertDictation(text, before: before, after: after)
         }
-        model.onDraftChange = { [weak typing] in typing?.textDidChange() }
+        model.onDraftChange = { [weak typing] in typing?.draftChanged() }
         editor.controller = self
-        editor.onExternalEdit = { [weak typing] in typing?.textDidChange() }
+        editor.onExternalEdit = { [weak typing] in typing?.textDidChange(fromKeys: true) }
         editor.willEdit = { [weak model] in model?.userWillEdit() }
         editor.markedTextThisTurn = { [weak model] in model?.markedTextThisTurn ?? false }
         typing.controller = self
@@ -102,6 +104,9 @@ final class KeyboardViewController: UIInputViewController {
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
         HostAppResolver.keyboardWillAppear()
+        // The keyboard may come back for another field: an earlier dictation settles on
+        // where it was last seen, before the model types a result while appearing.
+        typing.learning.finish(nil)
         // Before the model: a result it types while appearing keeps its undo step.
         editor.appeared()
         model.appeared()
@@ -147,6 +152,7 @@ final class KeyboardViewController: UIInputViewController {
         super.viewWillDisappear(animated)
         // While the text connection still reaches the field.
         model.willDisappear()
+        typing.willDisappear()
     }
 
     override func viewDidDisappear(_ animated: Bool) {

@@ -34,6 +34,7 @@ final class TypingBridge: ObservableObject {
     var onPreferredHeightChange: (() -> Void)?
 
     let dictation = KeyboardViewModel()
+    let learning = DictationLearning()
     private(set) var keyboard: FullKeyboardView?
     /// VoiceiQ shows its own content in the suggestion row; Hex shows its strip again after
     /// the emoji panel or a selection, so this is applied again each time the strip refreshes.
@@ -70,8 +71,19 @@ final class TypingBridge: ObservableObject {
             self?.controller?.hasFullAccess == true && FullKeyboardSettings().haptics
         }
         view.onPreferredHeightChange = { [weak self] in self?.onPreferredHeightChange?() }
-        view.onTextEdit = { [weak self] in self?.editor?.syncSelection() }
-        view.onUndoDictation = { [weak self] in self?.editor?.resetUndo() }
+        view.onTextEdit = { [weak self] in
+            self?.editor?.syncSelection()
+            self?.observeDictation(fromKeys: true)
+        }
+        view.onUndoDictation = { [weak self] in
+            self?.editor?.resetUndo()
+            self?.learning.undone()
+        }
+        // A return key labelled Send ends the dictation's edit window: what is there is sent.
+        view.onReturnKey = { [weak self] in
+            guard let self, self.proxy?.returnKeyType == .send else { return }
+            self.learning.finish(self.learningContext, in: self.documentIdentifier)
+        }
         view.onStripRowLayout = { [weak self] row, emojiOpen in
             guard let self else { return }
             let widthChanged = self.stripRow.width != row.width
@@ -112,12 +124,58 @@ final class TypingBridge: ObservableObject {
         dictation.hasFullAccess = controller?.hasFullAccess ?? false
     }
 
-    func textDidChange() {
+    /// `fromKeys`: this keyboard made the change, not the app.
+    func textDidChange(fromKeys: Bool = false) {
         keyboard?.textDidChange()
+        observeDictation(fromKeys: fromKeys)
+    }
+
+    /// The keyboard marked or changed a draft itself, which the host doesn't
+    /// report: the keys read the text again (Shift, suggestions). Not an edit
+    /// to the dictation before it.
+    func draftChanged() {
+        keyboard?.textDidChange()
+    }
+
+    /// A dictation is about to be typed through `EditController`, whose edit callback
+    /// would otherwise show its text to the dictation before it as an edit.
+    func willInsertDictation() {
+        learning.willInsert(learningContext, in: documentIdentifier)
     }
 
     func didInsertDictation(_ text: String, before: String, after: String) {
         keyboard?.didInsertDictation(text, before: before, after: after)
+        learning.inserted(text, before: .init(before: before, after: after, hasText: !(before + after).isEmpty),
+                          after: editContext, in: documentIdentifier, learns: learnsFromDictation)
+    }
+
+    /// While the text connection still reaches the field.
+    func willDisappear() {
+        learning.finish(learningContext, in: documentIdentifier)
+    }
+
+    // MARK: - Learning from fixes to dictations
+
+    /// Dictations are followed, as in Hex, only in fields its journal may learn from: text
+    /// and web search fields that allow autocorrect, never a secure or credential field.
+    private var learnsFromDictation: Bool {
+        TypingJournal.allows(field: KeyboardFieldRouting.route(for: keyboardType).field, target: self)
+    }
+
+    private var editContext: DictationLearning.Context {
+        DictationLearning.context(before: proxy?.documentContextBeforeInput, selected: proxy?.selectedText,
+                                  after: proxy?.documentContextAfterInput, hasText: proxy?.hasText ?? false)
+    }
+
+    /// The field's text for the tracker; nil once the field is one it may not read
+    /// (it turned into a username or password field in the same input session).
+    private var learningContext: DictationLearning.Context? {
+        learnsFromDictation ? editContext : nil
+    }
+
+    private func observeDictation(fromKeys: Bool) {
+        guard let context = learningContext else { return learning.finish(nil) }
+        learning.observe(context, in: documentIdentifier, fromKeys: fromKeys)
     }
 
     func loadLexicon(_ lexicon: UILexicon) {

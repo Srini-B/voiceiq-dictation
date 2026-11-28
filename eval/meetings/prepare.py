@@ -24,6 +24,7 @@ RATE = 16000
 HERE = os.path.dirname(os.path.abspath(__file__))
 AMI_AUDIO = "https://groups.inf.ed.ac.uk/ami/AMICorpusMirror/amicorpus/{m}/audio/{m}.Headset-{c}.wav"
 AMI_NOTES = "https://groups.inf.ed.ac.uk/ami/AMICorpusAnnotations/ami_public_manual_1.6.2.zip"
+AMI_ROLES = {"PM": "Project Manager", "ID": "Industrial Designer", "UI": "User Interface Designer", "ME": "Marketing Expert"}
 
 
 def run(*cmd):
@@ -89,11 +90,12 @@ def ami(meeting, out, cache):
     notes = os.path.join(cache, "ami_public_manual_1.6.2.zip")
     fetch(AMI_NOTES, notes)
     with zipfile.ZipFile(notes) as z:
-        agents = {}
+        agents, roles = {}, {}
         for line in z.read("corpusResources/meetings.xml").decode().splitlines():
-            m = re.search(rf'nite:id="{meeting}_\d+" channel="(\d)" nxt_agent="([A-D])"', line)
+            m = re.search(rf'nite:id="{meeting}_\d+" channel="(\d)" nxt_agent="([A-D])".* role="([A-Z]+)"', line)
             if m:
                 agents[m.group(2)] = int(m.group(1))
+                roles[m.group(2)] = m.group(3)
         words = {}
         for agent in agents:
             xml = z.read(f"words/{meeting}.{agent}.words.xml").decode()
@@ -120,7 +122,8 @@ def ami(meeting, out, cache):
     os.makedirs(folder, exist_ok=True)
     write_caf(tracks[owner], os.path.join(folder, "mic.caf"))
     write_caf(mix([tracks[a] for a in sorted(tracks) if a != owner]), os.path.join(folder, "system.caf"))
-    names = {a: f"Speaker {a}" for a in agents}
+    # AMI's abstractive summaries, M5's reference, call people by role.
+    names = {a: AMI_ROLES[roles[a]] for a in agents}
     write_json(os.path.join(folder, "input.json"), {
         "id": f"ami-{meeting}", "title": None, "app": "us.zoom.xos", "owner": names[owner],
         "calendar": [], "screen": None, "mic_is": names[owner]})
@@ -198,9 +201,9 @@ def main():
             raise SystemExit(f"{tool} not found")
     os.makedirs(args.out, exist_ok=True)
     cache = os.path.join(args.out, ".cache")
+    # AMI is rebuilt every run from the cached downloads, so a change to its
+    # names or mix reaches folders prepared before it.
     for meeting in args.ami:
-        if os.path.exists(os.path.join(args.out, f"ami-{meeting}", "reference.json")):
-            continue
         print("AMI", meeting, flush=True)
         ami(meeting, args.out, cache)
     if not args.no_synthetic:

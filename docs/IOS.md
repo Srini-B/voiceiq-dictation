@@ -850,12 +850,85 @@ keyboard writes them to its own container each time it goes off screen
 `adaptiveTouch.resetAt`, so a running keyboard drops older averages the next
 time it reads them.
 
+**Learning from fixes to dictations.** Always on, with no switch, and also
+with Learn how I type off (cyron's call, 2026-11-28). The keyboard follows
+each dictation it types in with Hex's `DictationEditTracker`, as Hex's
+keyboard does (`DictationLearning`, owned by `TypingBridge`): from the text
+around the cursor when it goes in, through every edit by the keys, the edit
+panel or the app, for 60 s. A selection counts as text in place, not
+deleted (`DictationLearning.context` puts `selectedText` back between the
+text before and after the cursor, which both leave it out; Hex's keyboard
+doesn't). `KeyboardModel`'s 0.1 s poll ends that window (`onPoll` →
+`DictationLearning.tick`) on the text as it was, once typing has paused for
+3 s (at most 10 s past the window), so a word being retyped at 60 s settles
+whole and a later keystroke belongs to no dictation; a fix made inside the window stands
+even if the dictation is deleted later, as in Hex. It also ends when the
+keyboard hides or reappears, Send is tapped, the next dictation, its draft or Paste last
+goes in (`KeyboardModel.onWillInsertDictation`, before `EditController`
+reports the new text as an edit), focus moves to another field (another
+`documentIdentifier`; a dictation whose input session UIKit didn't name is
+not followed at all), or the field stops being one it may read. A result
+typed over a selection, or with Paste last, is not followed: over a selection
+there is no clean span to compare with, and Paste last re-types a result that
+may already have been followed where it first went in. It needs
+Full Access, like everything the keyboard hands the app, and runs only in
+fields Hex's journal may learn from (`TypingJournal.allows`: text and web
+search fields that allow autocorrect, never a secure field, a password,
+code, username, email, URL, card or phone field).
+
+Hex's `DictationEditClassifier` then says what became of it. Each word or
+phrase of up to three words you replaced in a dictation you kept, by a
+respelling of it (`isPlausibleFix`, the bound the Mac's `EditDiff` uses),
+goes to the app as a Dictionary word (`DictationLearning.fix`):
+
+- Read back from the dictation's place in the field (located by Hex's
+  anchors, never from the same words elsewhere), from the fix's first word to
+  its last, so hyphens and dots inside it stay ("GPT4" → "GPT-4", not
+  "GPT 4"). `DictionaryAddition.learnedFrom` is the dictated wording, read
+  back from the dictation the same way. A fix that can't be found there, is
+  there more than once with the same words around it, or has a symbol right
+  against it on either side ("Notepad++", "C#", "@Saran", whose symbols fall
+  outside its words), is skipped, and so is one with a comma, a sentence or clause mark or a line
+  break between its words on either side, which the Mac splits into separate
+  edits (`EditDiff.pieces`).
+- `DictionaryAddition.startsSentence` says whether it begins a sentence, as
+  the Mac judges it: after `.`, `!`, `?`, `…`, `:` or a line break, after a
+  list marker that starts a line, in a quotation opened after a comma. Hex
+  drops a capital that starts a sentence; the capital the user left comes
+  back. Known difference from the Mac, on the safe side: Hex takes any
+  capitalized first word of a dictation for a sentence start, so a fixed
+  first word that continues a sentence is marked as one too. That can only
+  keep a capital from counting as a name, never learn an ordinary word. At a
+  sentence start an ordinary word ("Sory" → "Sorry", but also "Sharon" →
+  "Saran", since the spell checker knows "saran") is not learned.
+
+A dictation rewritten (more than half changed), deleted, undone with Undo
+dictation or dictated again teaches nothing. The app keeps a word by the
+Mac's rules (`DictionaryStore.learn`): not a word the Dictionary has or
+already learned from that wording, and not ordinary English (`CommonWords`,
+`UITextChecker` on the iPhone; with no English dictionary every word counts
+as ordinary, so nothing is learned) unless it is a name replacing wording
+that was not ordinary either. It becomes an auto-learned entry
+(`source == .auto`, Heard as …), syncs through iCloud and shows in the
+Dictionary's Auto-learned section, where swiping it away undoes it.
+Auto-learned words are spelling hints only, never replacement rules: later
+dictations get them in the writing model's vocabulary
+(`AssemblyAITranscriptionService.dictationPrompt`, through
+`DictionaryStore.sanitizedVocabulary`, the first 100 by `ranked()`, with
+words the user added before auto-learned ones), in the sound-alike spelling
+pass when the transcript is tidied on the device
+(`AssemblyAITranscriptionService.write`, `SoundAlikeSpelling.apply`), and in
+the on-device model's vocabulary (`LocalTranscriber.sessionOptions`, first
+256). The keyboard's own suggestions and autocorrect take them too
+(`SharedStore.dictionaryWords`). See [PRIVACY.md](PRIVACY.md).
+
 **Tests.** `KeyboardTests` (in the `VoiceIQiOS` scheme, hosted by the app so
 the embedded keyboard's typing model loads) compiles the keyboard's sources
 and Hex's against fake text fields: undo and redo of a dictation and deletes,
 typing over a selection, word and line steps, an edit by the app dropping
 undo, and spellings with inner capitals at a sentence's start, typed and
-swiped through the real keys (`SpellingCaseTests`).
+swiped through the real keys (`SpellingCaseTests`), and which fixes to a
+dictation are handed over to learn (`DictationLearningTests`).
 
 The earlier typing keyboard and the keyboard's Ask and Translate modes were
 removed on 2026-11-22 (`activities/2026-11-22-mini-keyboard.md`); Hex's
@@ -866,8 +939,8 @@ keyboard came back in its place on 2026-11-26
 
 Settings › Dictionary matches the Mac: search, add with "Write it as" and
 "Heard as" labels that stay beside the fields, separate
-Dictionary and Auto-learned sections (auto-learned words come from the Mac's
-edits),
+Dictionary and Auto-learned sections (auto-learned words come from edits to
+dictations on the Mac and in the keyboard),
 stars, swipe to delete, and CSV import and export from the ⋯ menu.
 
 **iCloud sync.** The dictionary is the same on the Mac and the iPhone, with no
@@ -985,7 +1058,7 @@ runs. Everything needs Full Access.
 | Paste last | Paste last |
 | AssemblyAI API key | Same, in Settings › API Key and the iOS Keychain. The key card shows an SF Symbol tile (`BrandTile`) |
 | History stats: words, dictations, WPM, audio time, time saved, day streak, with a period menu | Statistics (`StatsView`), opened from the row above History's days or from Home's stats grid. Same `HistoryStore.stats(period:)` and the same remembered period (`historyStatsPeriod`); the Mac's streak tooltip (longest streak, active days) is a line under the tiles. Home's grid shows all time |
-| Dictionary with search, CSV and Auto-learned | Same, synced through iCloud, plus adding a selection or a copied word from the keyboard |
+| Dictionary with search, CSV and Auto-learned | Same, synced through iCloud, plus adding a selection or a copied word from the keyboard, and words learned from fixes to dictations in the keyboard |
 | Custom rules; spelling from the region | Same: custom rules in Settings › Dictation, spelling from the iPhone's region |
 | `[transcription] timing:` and `[session] timing` debug log lines | Same lines, in the app's debug log file |
 | Microphone picker | Microphone: Automatic, iPhone or Bluetooth (see the voice session section) |
@@ -995,7 +1068,7 @@ runs. Everything needs Full Access.
 | Language picker in Settings › Dictation | Same, in Settings › Dictation |
 | Screen context | Not on iOS: an app cannot capture other apps' screens (`PlatformStubs+iOS.swift`) |
 | Text around the cursor sent with each dictation | Same, from prose fields: the keyboard sends it with Dictate and Stop (`KeyboardCommand.surroundingText`) |
-| Learning from your edits | Not yet: needs the keyboard to read the field again after the text lands |
+| Learning from your edits | Same rules, from the keyboard: a misheard word you fix in a dictation becomes an auto-learned Dictionary word (`DictationLearning`), always on |
 | Call detection, names read from the call screen | Not on iOS: an app cannot see other apps' microphone use, screen or windows |
 | Mute other audio, pause Music and Spotify, sounds, resting indicator, hide pill from screen sharing, copy recovered dictations | Not on iOS |
 | Shortcuts (Paste last transcript, Meeting recording) | Paste last in the keyboard; Record in Notes |

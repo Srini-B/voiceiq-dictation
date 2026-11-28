@@ -93,7 +93,7 @@ time printed after its start time (a one-line change to Hex's report).
 
 | Folder | What it tests |
 |---|---|
-| `ami-ES2004a` | AMI ES2004a (CC BY 4.0), 17.5 min, four people. The speaker who talks most is the mic; the other three headsets summed are the far side. No names, no calendar. |
+| `ami-ES2004a` | AMI ES2004a (CC BY 4.0), 17.5 min, four people. The speaker who talks most is the mic; the other three headsets summed are the far side. People are named by their AMI role ("Project Manager"), as the abstractive summary names them, and the owner's role is passed as the owner's name. No calendar. |
 | `s1-one-to-one` | Two people on Zoom, gallery view, one invitee. |
 | `s2-three-people` | Three people on Meet in Chrome: one single-word name (Nihal), two male voices, as on 2026-11-23. |
 | `s3-four-people` | Four people on Teams, names said in passing. |

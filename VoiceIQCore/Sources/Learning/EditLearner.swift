@@ -96,11 +96,11 @@ public final class EditLearner {
         defaults.set(true, forKey: pruneFlag)
         let entries = dictionary.entries()
         let kept = entries.filter { entry in
-            entry.source != .auto || !teachesNothing(LearnedCorrection(
+            entry.source != .auto || !LearnedCorrection(
                 original: entry.learnedFrom ?? "",
                 replacement: entry.term,
                 words: 0..<0
-            ))
+            ).teachesNothing
         }
         guard kept.count != entries.count else { return }
         dictionary.save(kept)
@@ -299,18 +299,8 @@ public final class EditLearner {
 
     /// `stillTaught`: how many corrections in this field still teach each
     /// spelling, so undoing or revising one copy of a fix does not drop a word
-    /// another copy keeps.
-    /// Only words the language does not already have: a name, a product term,
-    /// jargon. Many Indian names are English words in lowercase ("Saran",
-    /// "Ram", "Raja"), so a capitalized replacement for heard wording that was
-    /// not ordinary either ("Sharon" → "Saran") is still a name, unless the
-    /// capital only starts a sentence ("Sara, I'm late" → "Sorry, I'm late").
-    /// Changing "They" to "We" or "Then" to "Than" teaches nothing.
-    private static func teachesNothing(_ correction: LearnedCorrection) -> Bool {
-        guard CommonWords.isOrdinary(correction.replacement) else { return false }
-        return !(correction.nameLike && !CommonWords.isOrdinary(correction.original))
-    }
-
+    /// another copy keeps. Only words the language does not already have are
+    /// learned (`LearnedCorrection.teachesNothing`).
     func learn(_ steps: [LearningStep], stillTaught: [String: Int]) {
         var learned: [DictionaryEntry] = []
         var known = dictionary.entries()
@@ -365,7 +355,7 @@ public final class EditLearner {
                 learned.removeAll { staleIDs.contains($0.id) }
                 let replacement = correction.replacement.lowercased()
                 if known.contains(where: { $0.term.lowercased() == replacement })
-                    || Self.teachesNothing(correction) {
+                    || correction.teachesNothing {
                     dictionary.remove(id: kept.id)
                     Log.learning.info("Dropped a just-learned word the user edited again")
                 } else {
@@ -377,22 +367,12 @@ public final class EditLearner {
                 }
                 continue
             }
-            let original = correction.original.lowercased()
-            let replacement = correction.replacement.lowercased()
             // A revision too late to rename its entry is a new spelling of the
-            // same transcript wording, so that wording does not block it.
-            let isRevision = heardAs != nil
-            guard !known.contains(where: {
-                let term = $0.term.lowercased()
-                let misspelling = $0.misspelling?.lowercased()
-                let learnedFrom = $0.learnedFrom?.lowercased()
-                // A protected entry spelled as the original does not block
-                // learning the new spelling beside it.
-                return (term == original && !protected.contains($0.id)) || term == replacement
-                    || misspelling == original || misspelling == replacement
-                    || (!isRevision && learnedFrom == original && !protected.contains($0.id))
-            }) else { continue }
-            guard !Self.teachesNothing(correction) else {
+            // same transcript wording, so that wording does not block it. A
+            // protected entry spelled as the original does not block learning
+            // the new spelling beside it.
+            guard !correction.isKnown(in: known, protected: protected, isRevision: heardAs != nil) else { continue }
+            guard !correction.teachesNothing else {
                 Log.learning.info("Skipped an edit to ordinary words")
                 continue
             }

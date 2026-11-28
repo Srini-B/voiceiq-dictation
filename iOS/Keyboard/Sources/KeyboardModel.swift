@@ -36,6 +36,13 @@ final class KeyboardModel: ObservableObject {
     /// tells a keyboard only of changes made elsewhere, so without this the
     /// keys keep the Shift they had before the draft went in.
     var onDraftChange: (() -> Void)?
+    /// Called just before a dictation delivery or its draft is typed, while the field is
+    /// as it was, so the dictation before it settles on that text
+    /// (`DictationLearning.willInsert`).
+    var onWillInsertDictation: (() -> Void)?
+    /// Called on every poll while on screen, so a dictation's edit window ends on time
+    /// (`DictationLearning.tick`).
+    var onPoll: (() -> Void)?
     private let store = SharedStore.shared
     private var observer: UUID?
     private var timer: Timer?
@@ -267,6 +274,7 @@ final class KeyboardModel: ObservableObject {
     /// also polls while it is on screen. Reads are local and cheap.
     private func refresh() {
         trackSession()
+        onPoll?()
         // The host applies a turn's insertions before its `unmarkText`, and
         // new marked text replaces marked text. So the turn that ends a
         // draft with `unmarkText` types no result, and a new draft is marked
@@ -555,8 +563,11 @@ final class KeyboardModel: ObservableObject {
               offered.route(in: currentField(), handledID: nil, firstReturn: false) == .type(.sameSession)
         else { return }
         resolveHostIfMissing(now: true)
-        guard fieldTakesProse, let host = session?.host, Delivery.takesDrafts(host, trying: store.triesMoreDraftHosts),
-              let typed = typeOrAdd(offered, documentID: documentID, into: proxy) else {
+        let host = session?.host
+        let canType = fieldTakesProse && host.map { Delivery.takesDrafts($0, trying: store.triesMoreDraftHosts) } == true
+        // Before the draft goes in, as for a delivery typed in.
+        if canType { onWillInsertDictation?() }
+        guard canType, let host, let typed = typeOrAdd(offered, documentID: documentID, into: proxy) else {
             skippedDraftID = offered.id
             KeyboardLog.note("[\(instanceTag)] draft not typed: not a prose field, drafts were not tried in this app, text is selected, or the transcript has a line break; the written text comes alone")
             return
@@ -665,6 +676,9 @@ final class KeyboardModel: ObservableObject {
     @discardableResult
     private func insert(_ text: String) -> (fitted: String, before: String, after: String)? {
         guard controller?.textDocumentProxy != nil, !text.isEmpty else { return nil }
+        // Every typed result (a delivery or Paste last) settles the dictation before
+        // it first, so the new text never reads as an edit of the old one.
+        onWillInsertDictation?()
         // Before the text around the cursor is read, which then has the draft in it.
         keepDraft(.beforeEdit, because: "this keyboard typed other text")
         let surrounding = surroundingText()
