@@ -41,8 +41,11 @@ public enum MeetingNotesPrompt {
             return out
         }
 
+        /// A speaker label is no name: given as the owner's (the AMI eval's
+        /// "Speaker B"), the notes model wrote it into the notes as one.
         static func clean(_ name: String?) -> String? {
-            guard let name = name?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty else { return nil }
+            guard let name = name?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty,
+                  name.wholeMatch(of: MeetingNotesPrompt.speakerLabel) == nil else { return nil }
             return name
         }
     }
@@ -153,13 +156,66 @@ public enum MeetingNotesPrompt {
     static let overrideConfidence = 0.9
 
     /// Decodes the model's JSON; an unknown type falls back to general.
-    public static func parse(_ text: String) throws -> MeetingNotes {
+    /// `labels`: the speaker labels the prompt showed ("Speaker 2"); any of
+    /// them left in the notes text is replaced (`withoutLabels`).
+    public static func parse(_ text: String, labels: Set<String> = []) throws -> MeetingNotes {
         let json = firstObject(AssemblyAIClient.stripFences(text))
         var notes = try JSONDecoder().decode(MeetingNotes.self, from: flattened(Data(json.utf8)))
         if let type = notes.type, MeetingKind(rawValue: type) == nil { notes.type = MeetingKind.general.rawValue }
         notes.sections = notes.sections?.filter { !$0.items.isEmpty }
-        notes.speakers = notes.speakers?.filter { !($0.name ?? "").isEmpty }
-        return notes
+        // A label "named" as itself is no name (Fable on #165).
+        notes.speakers = notes.speakers?.filter { speaker in
+            guard let name = speaker.name, !name.isEmpty else { return false }
+            return name.wholeMatch(of: speakerLabel) == nil
+        }
+        return withoutLabels(notes, labels: labels)
+    }
+
+    /// The shape of a speaker label, for names: AMI's "Speaker B", the app's "Speaker 2".
+    nonisolated(unsafe) static let speakerLabel = #/Speaker [A-Z0-9]{1,3}/#
+
+    /// The prompt forbids labels outside "speakers", but the model still wrote
+    /// one in 1 of 6 AMI runs on 2026-11-28 ("Speaker 4 noted that…"). Only
+    /// the labels this prompt showed are replaced, never other "Speaker …"
+    /// text ("Speaker Q&A", "Speaker 1 slot" in a meeting with no Speaker 1)
+    /// (Fable on #165). Each becomes the name the model gave that label, else
+    /// "another participant"; an action owner that is a label becomes that
+    /// name or nil, as the prompt asks. Logged, so the eval still sees how
+    /// often the model breaks the rule.
+    static func withoutLabels(_ notes: MeetingNotes, labels: Set<String>) -> MeetingNotes {
+        guard !labels.isEmpty else { return notes }
+        var names: [String: String] = [:]
+        for speaker in notes.speakers ?? [] { if let name = speaker.name { names[speaker.label] = name } }
+        let pattern = try! Regex("\\b(" + labels.sorted { $0.count > $1.count }.map(NSRegularExpression.escapedPattern(for:)).joined(separator: "|") + ")\\b")
+        // Notes in another language keep an unnamed label rather than get
+        // English words in them (Codex on #165).
+        let recognizer = NLLanguageRecognizer()
+        recognizer.processString(notes.summary + " " + notes.notes.joined(separator: " "))
+        let english = recognizer.dominantLanguage.map { $0 == .english } ?? true
+        var replaced = 0
+        func fix(_ text: String) -> String {
+            var out = text.replacing(pattern) { match -> String in
+                let label = String(text[match.range])
+                guard let name = names[label] ?? (english ? "another participant" : nil) else { return label }
+                replaced += 1
+                return name
+            }
+            // At the start of a sentence.
+            out = out.replacing(#/(^|[.!?]\s+|\n\s*)another participant/#) { $0.output.1 + "Another participant" }
+            return out
+        }
+        var out = notes
+        out.title = fix(notes.title); out.summary = fix(notes.summary)
+        out.sections = notes.sections?.map { NoteSection(title: fix($0.title), items: $0.items.map(fix)) }
+        out.decisions = notes.decisions.map(fix); out.notes = notes.notes.map(fix)
+        out.actions = notes.actions.map { action in
+            var action = action
+            action.text = fix(action.text)
+            if let owner = action.owner, labels.contains(owner) { action.owner = names[owner]; replaced += 1 }
+            return action
+        }
+        if replaced > 0 { Log.transcription.notice("notes named \(replaced) speaker label(s); replaced") }
+        return out
     }
 
     /// The first whole JSON object in `text`. MEASURED 2026-11-26: on a
