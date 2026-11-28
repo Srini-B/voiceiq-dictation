@@ -201,9 +201,10 @@ import VoiceIQSpeech
     /// A meeting still marked `.recording`, `.transcribing` or `.summarizing`
     /// at launch belonged to a process that died (quit, or iOS ended it in the
     /// background); nothing will ever finish it, so the list would show
-    /// "Recording" or "Making notes" forever. It fails as interrupted, with
-    /// Retry; one that was writing its notes keeps its transcript and Retry
-    /// writes only the notes. A waiting meeting waits on.
+    /// "Recording" or "Making notes" forever. It fails with Retry and a reason
+    /// that says which step was cut off; one that was writing its notes keeps
+    /// its transcript and Retry writes only the notes. A waiting meeting also
+    /// keeps waiting (`waitsForService`) and goes again on its own.
     private func failInterruptedRecordings() {
         for var meta in store.list() {
             guard meta.status == .recording || meta.status == .transcribing || meta.status == .summarizing else { continue }
@@ -211,9 +212,18 @@ import VoiceIQSpeech
             let step: ServiceStep = meta.status == .summarizing ? .notes : .transcript
             meta.failedStep = step
             if meta.waitsForService != nil { meta.waitsForService = step }
-            meta.status = .failed("interrupted")
+            meta.status = .failed(Self.interruptedReason(meta.status))
             meta.endedAt = meta.endedAt ?? meta.startedAt.addingTimeInterval(meta.durationSeconds)
             try? store.save(meta: meta)
+        }
+    }
+
+    /// What the meeting shows after the app closed on it, by the step it was on.
+    static func interruptedReason(_ status: MeetingStatus) -> String {
+        switch status {
+        case .recording: return "VoiceiQ closed while recording. What was recorded is saved. Press Retry to transcribe it."
+        case .summarizing: return "VoiceiQ closed while writing the notes. The transcript is saved. Press Retry to write them."
+        default: return "VoiceiQ closed while transcribing. The recording is saved. Press Retry to transcribe it."
         }
     }
 

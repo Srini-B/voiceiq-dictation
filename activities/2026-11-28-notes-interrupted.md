@@ -14,7 +14,8 @@ instead of about 7 s, so this became likely.
 
 - `MeetingEngine.failInterruptedRecordings` fails every meeting left in
   `.recording`, `.transcribing` or `.summarizing` at launch as
-  `failed("interrupted")`, with the step that was cut off as its retry step
+  failed, with a reason that names the step ("VoiceiQ closed while writing
+  the notes. The transcript is saved. Press Retry to write them."), and the step that was cut off as its retry step
   (`.notes` while writing notes, so Retry writes only the notes from the
   saved transcript; `.transcript` otherwise), replacing any step an earlier
   failure left (Codex review). Only finished meetings sync, so a meeting another device is

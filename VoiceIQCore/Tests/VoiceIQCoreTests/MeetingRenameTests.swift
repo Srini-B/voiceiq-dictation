@@ -39,9 +39,9 @@ final class MeetingRenameTests: XCTestCase {
         _ = try store.create(meta: notes); _ = try store.create(meta: transcribing)
         _ = MeetingEngine(client: AssemblyAIClient(apiKey: { nil }), store: store, config: { AssemblyAIConfig() }, hasKey: { false })
         notes = try meta(notes.id); transcribing = try meta(transcribing.id)
-        XCTAssertEqual(notes.status, .failed("interrupted"))
+        XCTAssertEqual(notes.status, .failed("VoiceiQ closed while writing the notes. The transcript is saved. Press Retry to write them."))
         XCTAssertEqual(notes.failedStep, .notes)
-        XCTAssertEqual(transcribing.status, .failed("interrupted"))
+        XCTAssertEqual(transcribing.status, .failed("VoiceiQ closed while transcribing. The recording is saved. Press Retry to transcribe it."))
         XCTAssertEqual(transcribing.failedStep, .transcript)
     }
 
