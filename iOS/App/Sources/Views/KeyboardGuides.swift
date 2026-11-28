@@ -317,7 +317,7 @@ private struct MockSwitch: View {
 
     var body: some View {
         Capsule()
-            .fill(on ? Theme.Colors.success : Theme.Colors.porcelain)
+            .fill(on ? Theme.Colors.success : Theme.Colors.faint.opacity(0.5))
             .frame(width: 44, height: 26)
             .overlay(alignment: on ? .trailing : .leading) {
                 Circle().fill(.white).frame(width: 22, height: 22).padding(2)
