@@ -337,8 +337,8 @@ enum BrowserPages {
     /// Window titles, plus the URL of each window's web area: titles can be
     /// anything a page sets, the URL is where the tab is. Chrome and Safari put
     /// the web area several levels below the window, so the search is bounded.
-    /// `frontOnly` stops after the front page; `seeking` takes only the
-    /// meeting page of that name, in any window.
+    /// `frontOnly` stops after the front page; `seeking` takes only a joined
+    /// call room of that name, in any window.
     static func read(pid: pid_t, frontOnly: Bool = false, seeking: String? = nil) -> Page {
         let app = AXUIElementCreateApplication(pid)
         AXUIElementSetMessagingTimeout(app, 0.5)
@@ -362,7 +362,9 @@ enum BrowserPages {
             }
             if let match = CallApps.meetingPages.first(where: { needle in strings.contains { $0.localizedCaseInsensitiveContains(needle) } }) {
                 let name = CallApps.meetingName(match: match, in: strings)
-                if seeking == nil || name == seeking { page.meeting = name; break }
+                // The held call needs its room still open, not the site's home page (Codex on #138).
+                let room = CallApps.isCallRoom(addresses: addresses) || CallApps.isCallRoom(titles: titles)
+                if seeking == nil || (name == seeking && room) { page.meeting = name; break }
             }
             if frontOnly, addressed { break }
         }
