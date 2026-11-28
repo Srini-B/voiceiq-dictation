@@ -61,9 +61,10 @@ enum SpokenDisfluencies {
         "can", "could", "would", "will", "should", "do", "does", "did", "is", "are", "was", "were", "have", "has",
     ]
     private static let pronouns: Set<String> = ["i", "we", "you", "he", "she", "they", "it"]
-    /// The guard's `nounStarts`: a sentence's opening "Like," is a filler
-    /// before these, and may be the verb before anything else ("Like,
-    /// comment and share").
+    /// The guard's `nounStarts`: a sentence's opening "Like," or "You know,"
+    /// is a filler before these, and may be the verb or the sentence's own
+    /// subject before anything else ("Like, comment and share", "You know,
+    /// of course, that this is confidential").
     private static let nounStarts: Set<String> = [
         "a", "an", "the", "this", "that", "my", "your", "his", "her", "our", "their", "its", "i", "you", "he",
         "she", "we", "they", "it", "me", "him", "them", "us",
@@ -183,7 +184,7 @@ enum SpokenDisfluencies {
               !["and", "or"].contains(tokens[after].bare), !endsSentence(tokens[after].word),
               !capitalizedMidSentence(tokens, at: index) else { return nil }
         if startsSentence(tokens, at: index) {
-            return filler == ["like"] && !nounStarts.contains(tokens[after].bare) ? nil : filler.count
+            return nounStarts.contains(tokens[after].bare) ? filler.count : nil
         }
         return tokens[index - 1].hasComma && !tokens[index - 1].quoted ? filler.count : nil
     }

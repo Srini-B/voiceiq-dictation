@@ -87,6 +87,7 @@ final class TidyTests: XCTestCase {
             ("I went, like, to the store.", "I went to the store."),
             ("It was, you know, pretty late.", "It was pretty late."),
             ("Like, I don't know.", "I don't know."),
+            ("You know, I think it works.", "I think it works."),
             // A clause of one word keeps its comma, and so does one before a name.
             ("So, like, we should go.", "So, we should go."),
             ("I told Sam, like, Priya said no.", "I told Sam, Priya said no."),
@@ -96,7 +97,8 @@ final class TidyTests: XCTestCase {
         // "like" as the verb or "such as", a list, a question tag.
         for kept in ["It was like a dream.", "Arrange the folders like we did yesterday.", "Like, comment and share.",
                      "Please share, like, and comment.", "Please follow, like, subscribe, and share.",
-                     "Wait, you know, right?"] {
+                     "Wait, you know, right?", "You know, don't you, that the meeting is tomorrow?",
+                     "You know, of course, that this is confidential."] {
             XCTAssertEqual(tidy(kept), kept)
         }
     }
