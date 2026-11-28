@@ -58,9 +58,14 @@ final class KeyboardDraft {
         proxy.setMarkedText(fitted, selectedRange: NSRange(location: fitted.utf16.count, length: 0))
         let draft = KeyboardDraft(id: id, documentID: documentID, text: fitted, before: before, after: after,
                                   typedAt: now)
-        // Seen at once when the host shows it right away, so no edit slips
-        // in before the first `follow`.
-        _ = draft.follow(proxy)
+        // Read right after this keyboard's own write, so nothing else can
+        // have changed the field: a host that shows the draft at once, also
+        // with less of the text before it, has it recorded here.
+        let current = proxy.documentContextBeforeInput ?? ""
+        if current.hasSuffix(fitted), (proxy.documentContextAfterInput ?? "") == after,
+           before.hasSuffix(current.dropLast(fitted.count)) {
+            draft.landedBefore = current
+        }
         return draft
     }
 
@@ -77,9 +82,6 @@ final class KeyboardDraft {
     }
 
     static let maxLength = 200
-    /// The least text before the draft that must still match when the host
-    /// shows less of it than when the draft went in.
-    static let minimumSharedContext = 20
 
     /// Makes the marked draft plain text, as heard: the keyboard is going,
     /// or the user edits with it.
@@ -112,7 +114,7 @@ final class KeyboardDraft {
         commit(proxy)
         let current = proxy.documentContextBeforeInput ?? ""
         guard (proxy.selectedText ?? "").isEmpty, current.hasSuffix(text), isStillAround(proxy, before: current),
-              landedBefore.map({ $0 == current }) ?? true, Self.canSwap(text)
+              Self.canSwap(text)
         else { return .kept }
         let fitted = fit(written, String(current.dropLast(text.count)), proxy.documentContextAfterInput ?? "")
         guard !fitted.isEmpty else { return .kept }
@@ -127,12 +129,11 @@ final class KeyboardDraft {
     /// other text around it and is never taken for the draft.
     private func isStillAround(_ proxy: UITextDocumentProxy, before current: String) -> Bool {
         guard (proxy.documentContextAfterInput ?? "") == after else { return false }
-        let rest = String(current.dropLast(text.count))
-        if rest == before { return true }
-        // A host may show only part of the text before the cursor, so with
-        // the draft in it shows less of what came before. Only a long enough
-        // stretch of that text counts: a short one could be an earlier copy
-        // of the draft's words left by an edit nobody saw.
-        return rest.count >= Self.minimumSharedContext && before.hasSuffix(rest)
+        // Exactly the text that was before it: a host that shows less of it
+        // now could be showing an earlier copy of the draft's words left by
+        // an edit nobody saw. Such hosts swap only a draft seen as it was
+        // typed (`landedBefore`).
+        if let landedBefore { return current == landedBefore }
+        return String(current.dropLast(text.count)) == before
     }
 }

@@ -260,10 +260,10 @@ match the draft's without being it (a deleted draft after an earlier copy
 of its words). The keyboard also reads the field every 0.1 s while it holds
 a draft: once the draft has been seen before the cursor, any change to the
 text around it (a host edit, a menu's Cut, a cursor move) leaves it as heard
-(`KeyboardDraft.follow`, first called as the draft is typed). Before the
-draft is seen, the swap needs the text before it to read exactly as when it
-went in, or, in a host that shows less of it now, at least the last 20
-characters of it (`minimumSharedContext`). A dismissed keyboard commits it too. Paste last and History always have the written
+(`KeyboardDraft.follow`). The draft is looked for right after the keyboard
+types it, when nothing else can have changed the field; a host that shows it
+only later (or with the text before it shifted) gets the swap only when the
+text before the draft reads exactly as when it went in. A dismissed keyboard commits it too. Paste last and History always have the written
 text.
 
 The keyboard does not show a spinner in the field before the draft

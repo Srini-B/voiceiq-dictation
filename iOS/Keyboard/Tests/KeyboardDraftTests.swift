@@ -129,6 +129,25 @@ final class KeyboardDraftTests: XCTestCase {
         XCTAssertEqual(field.string, "ok ok")
     }
 
+    /// Also with a long run of the same words before it, in a host that
+    /// leaves marked text out of the context; an untouched draft there is
+    /// still swapped.
+    func testOnlyTheExactContextSwapsADraftTheHostShowedLate() throws {
+        let repeated = String(repeating: "ok ", count: 8)
+        let field = Field(repeated)
+        field.hidesMarkedText = true
+        let deleted = try XCTUnwrap(type("ok", into: field))
+        for _ in 0..<3 { field.deleteBackward() }
+        XCTAssertEqual(deleted.replace(with: "OK.", in: field, fit: fit), .kept)
+        XCTAssertEqual(field.string, String(repeating: "ok ", count: 7) + "ok")
+
+        let untouched = Field("Dear Ana,")
+        untouched.hidesMarkedText = true
+        let draft = try XCTUnwrap(type("see you at noon", into: untouched))
+        XCTAssertEqual(draft.replace(with: "See you at noon.", in: untouched, fit: fit), .retyped(" See you at noon."))
+        XCTAssertEqual(untouched.string, "Dear Ana, See you at noon.")
+    }
+
     /// A draft the swap could not take back out is never typed: Tamil,
     /// whose vowel signs a host may delete on their own, a line break, and
     /// a draft longer than hosts show before the cursor. The written text
