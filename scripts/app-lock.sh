@@ -27,8 +27,19 @@ acquire)
   while ! mkdir "$lock" 2>/dev/null; do
     if [[ $(held_by) == "$owner" ]]; then break; fi
     if (( $(age) >= stale )); then
-      echo "app lock: taking over a stale lock from $(held_by)" >&2
-      rm -rf "$lock"
+      # One owner at a time reclaims a stale lock and checks it again inside,
+      # so a contender can't delete the fresh lock another owner just took.
+      if mkdir "$lock.takeover" 2>/dev/null; then
+        if [[ -d $lock ]] && (( $(age) >= stale )); then
+          echo "app lock: taking over a stale lock from $(held_by)" >&2
+          rm -rf "$lock"
+        fi
+        rmdir "$lock.takeover"
+      elif (( $(date +%s) - $(stat -c %Y "$lock.takeover" 2>/dev/null || stat -f %m "$lock.takeover" 2>/dev/null || date +%s) > 60 )); then
+        rmdir "$lock.takeover" 2>/dev/null || true
+      else
+        sleep 1
+      fi
       continue
     fi
     echo "app lock: held by $(held_by) for $(age)s; waiting" >&2
