@@ -48,11 +48,12 @@ struct MeetingsPane: View {
         }
         .animation(.easeOut(duration: 0.2), value: exported)
         .onAppear { reload() }
-        .onChange(of: selection) { _, _ in assigning = false; loadSelection() }
+        // A dialog about one meeting never acts on another (a recording that starts selects itself).
+        .onChange(of: selection) { _, _ in assigning = false; confirmingDelete = false; renaming = false; loadSelection() }
         .onChange(of: engine.phase) { _, phase in
-            reload()
             // A new recording opens, so its live card and Discard are in view.
             if case let .recording(id, _) = phase { selection = id } else { confirmingDiscard = false }
+            reload()
         }
         .confirmationDialog("Discard this recording?", isPresented: $confirmingDiscard) {
             Button("Discard", role: .destructive) { engine.discardRecording() }
@@ -393,12 +394,13 @@ struct MeetingsPane: View {
         showFirstIfHidden()
         loadSelection()
     }
-    /// The folder filter's meetings, and the one recording now whatever its folders.
+    /// The folder filter's meetings, plus the one recording or being processed
+    /// and the one open, whatever their folders, in the list's order.
     private var listed: [MeetingMeta] {
-        let shown = folders.shown(meetings)
-        guard case let .recording(id, _) = engine.phase, !shown.contains(where: { $0.id == id }),
-              let live = meetings.first(where: { $0.id == id }) else { return shown }
-        return [live] + shown
+        var keep = Set(folders.shown(meetings).map(\.id)).union(engine.processing.keys)
+        if case let .recording(id, _) = engine.phase { keep.insert(id) }
+        if let selection, engine.isBusy(selection) { keep.insert(selection) }
+        return meetings.filter { keep.contains($0.id) }
     }
     private func showFirstIfHidden() {
         let shown = listed
@@ -408,7 +410,10 @@ struct MeetingsPane: View {
         guard let id = selection else { notes = nil; transcript = []; return }
         notes = try? store.loadNotes(id: id); transcript = (try? store.loadTranscript(id: id)) ?? []
     }
-    private func remove() { guard let id = selection else { return }; try? store.delete(id: id); selection = nil; reload() }
+    private func remove() {
+        guard let id = selection, !engine.isBusy(id) else { return }
+        try? store.delete(id: id); selection = nil; reload()
+    }
     private func renameMeeting() {
         guard let meeting = selected,
               titleDraft.trimmingCharacters(in: .whitespacesAndNewlines) != title(meeting) else { return }

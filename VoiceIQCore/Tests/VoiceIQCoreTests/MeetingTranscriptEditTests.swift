@@ -62,12 +62,12 @@ final class MeetingTranscriptEditTests: XCTestCase {
                                                line("s1", "Great."), line("you", "我们先看一下上周的数据。"), line("s1", "Done, see you all Friday.")])
         XCTAssertEqual(chorus.map(\.speaker), ["s1", "you", "s1"])
         XCTAssertEqual(chorus[0].lines.map(\.aside), [false, true, true, false])
-        // A speaker who goes on in short lines holds the floor (Neon); a short Russian reply stays an aside.
+        // A speaker who goes on in short lines holds the floor (Neon); short Russian and Korean replies stay asides.
         let floor = MeetingSpeaker.turns(in: [line("s1", "Should we ship Friday?"), line("s2", "Good point."),
                                               line("s2", "Maybe Monday."), line("s2", "Let's check."), line("s1", "Okay."),
-                                              line("s1", "Monday works for me then."), line("s3", "Спасибо, понятно."), line("s1", "Good.")])
+                                              line("s1", "Monday works for me then."), line("s3", "Спасибо, понятно."), line("s1", "Good."), line("s2", "네, 알겠습니다."), line("s1", "Then Monday.")])
         XCTAssertEqual(floor.map(\.speaker), ["s1", "s2", "s1"])
-        XCTAssertEqual(floor[2].lines.map(\.aside), [false, false, true, false])
+        XCTAssertEqual(floor[2].lines.map(\.aside), [false, false, true, false, true, false])
     }
 
     private func finishedMeeting(_ transcript: [TranscriptSegment]) throws -> MeetingID {

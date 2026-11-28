@@ -60,6 +60,12 @@ takes the deductions that were left.
   - A level expires after 0.5 s without buffers, so a detached tap reads as quiet.
   - The recording row's text is in the secondary colour; only its dot is red.
   - The iPhone title test runs only when the threshold is crossed.
+- **Neon review of 05b6c00 (agy session 2a22ab10):**
+  - Selecting another meeting, including a recording that starts and selects itself, closes an open Delete or Rename dialog, and Delete refuses a meeting that is busy.
+  - Korean is no longer treated as unspaced, because it spaces its words.
+  - Two Han, kana, Thai, Lao, Myanmar or Khmer letters are enough to count text as unspaced.
+  - The list keeps a meeting that is being processed, and keeps the order.
+  - The level clock uses system uptime.
 
 ## Not done
 

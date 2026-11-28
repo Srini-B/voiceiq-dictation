@@ -129,16 +129,18 @@ public enum MeetingSpeaker {
         return words <= 2 && text.count <= (isUnspaced(text) ? 6 : 20)
     }
 
-    /// Mostly Chinese, Japanese, Korean or Thai, written without spaces between words.
+    /// Chinese, Japanese or Thai, written without spaces between words. Korean
+    /// spaces its words, so it counts words as Latin does (Neon).
     static func isUnspaced(_ text: String) -> Bool {
         let letters = text.unicodeScalars.filter(\.properties.isAlphabetic)
         let unspaced = letters.filter { scalar in
             switch scalar.value {
-            case 0x0E00...0x0E7F, 0x1100...0x11FF, 0x3040...0x30FF, 0x3400...0x4DBF, 0x4E00...0x9FFF, 0xAC00...0xD7AF: return true
+            case 0x0E00...0x0EFF, 0x1000...0x109F, 0x1780...0x17FF, 0x3040...0x30FF, 0x3400...0x4DBF, 0x4E00...0x9FFF: return true
             default: return false
             }
         }
-        return unspaced.count * 2 > letters.count
+        // Two such letters are enough: "SlackとZoomを確認します。" has more Latin letters.
+        return unspaced.count >= 2
     }
 
     /// A single Latin letter and nothing else. "B." (an answer), "I.", a

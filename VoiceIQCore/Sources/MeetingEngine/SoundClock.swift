@@ -8,13 +8,13 @@ public final class SoundClock: @unchecked Sendable {
     /// About −40 dBFS RMS: below speech at a laptop mic, above a quiet room.
     static let threshold: Float = 0.01
     private let last = OSAllocatedUnfairLock(initialState: Date())
-    private let latest = OSAllocatedUnfairLock<(rms: Float, at: Date)>(initialState: (0, .distantPast))
+    private let latest = OSAllocatedUnfairLock<(rms: Float, at: TimeInterval)>(initialState: (0, -.infinity))
 
     public var lastSound: Date { last.withLock { $0 } }
     /// The last buffer's RMS, 0 to 1, for the Meetings window's level meter;
     /// 0 once no buffer has come for half a second (a detached tap is not hearing).
     public var level: Float {
-        latest.withLock { Date().timeIntervalSince($0.at) < 0.5 ? $0.rms : 0 }
+        latest.withLock { ProcessInfo.processInfo.systemUptime - $0.at < 0.5 ? $0.rms : 0 }
     }
 
     /// From the tap's I/O queue, with 16-bit mono audio.
@@ -26,7 +26,7 @@ public final class SoundClock: @unchecked Sendable {
             sum += sample * sample
         }
         let rms = (sum / Float(buffer.frameLength)).squareRoot()
-        latest.withLock { $0 = (rms, Date()) }
+        latest.withLock { $0 = (rms, ProcessInfo.processInfo.systemUptime) }
         if rms >= Self.threshold {
             last.withLock { $0 = Date() }
         }
