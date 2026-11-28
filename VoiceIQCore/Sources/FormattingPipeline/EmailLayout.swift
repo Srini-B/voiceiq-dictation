@@ -11,7 +11,7 @@ enum EmailLayout {
     /// The user's own writing rules decide layout when they speak of it
     /// ("Keep messages in a single paragraph"); the writer has followed them.
     static func apply(_ text: String, customRules: String = "") -> String {
-        guard customRules.range(of: #"\b(paragraphs?|lines?|layout|format|formatting)\b"#, options: [.regularExpression, .caseInsensitive]) == nil
+        guard customRules.range(of: #"\b(paragraphs?|line ?breaks?|new ?lines?|single line|one line|one block|layout)\b"#, options: [.regularExpression, .caseInsensitive]) == nil
         else { return text }
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         let range = NSRange(trimmed.startIndex..., in: trimmed)
@@ -37,5 +37,6 @@ enum EmailLayout {
         #"^((?:Hi|Hey|Hello|Dear|Good morning|Good afternoon|Good evening) (?:"# + name + #"|team|all|everyone|folks|there),)"#
         + #"\s*([\s\S]+?[.!?]["”’)]*)\s*"#
         + #"(Thanks|Thank you|Thanks again|Many thanks|Cheers|Best|Best regards|Regards|Kind regards|Warm regards|Sincerely|Talk soon|Take care)"#
-        + #",?\s+("# + name + #")\.?$"#)
+        // "Best Regards." and "Thanks Again." are unsigned closings, not "Best," signed "Regards".
+        + #",?\s+(?!(?i:regards|again|you|thanks|soon|care)\b)("# + name + #")\.?$"#)
 }

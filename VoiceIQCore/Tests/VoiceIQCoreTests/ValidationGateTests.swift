@@ -34,7 +34,8 @@ final class ValidationGateTests: XCTestCase {
                        "Hi Sam,\n\nThe release is ready.\n\nThanks,\nDana")
         let laidOut = "Hi Priya,\n\nCan we move it to net 30?\n\nThanks,\nSrini"
         XCTAssertEqual(EmailLayout.apply(laidOut), laidOut)
-        for prose in ["Hey, can you check the logs? Thanks, Ana.", "Thanks, Sam. I'll look at it tomorrow.",
+        for prose in ["Hey, can you check the logs? Thanks, Ana.", "Hi Sam, Please review the report. Best Regards.",
+                      "Hi Sam, Please review the report. Thanks Again.", "Thanks, Sam. I'll look at it tomorrow.",
                       "Dear team,\n\nThe release is ready."] {
             XCTAssertEqual(EmailLayout.apply(prose), prose)
         }
