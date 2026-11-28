@@ -8,7 +8,10 @@ import VoiceIQBridge
 /// lack it (errSecMissingEntitlement, -34018). Never UserDefaults/JSON
 /// (Superwhisper's documented failure).
 public enum KeychainStore {
-    private static let service = "io.blue.voiceiq"
+    /// In test mode (`DebugDataFolder`, docs/DEBUG_LOG.md) the app keeps its
+    /// keys apart from the real ones, so a test starts with an empty keychain
+    /// and never changes the owner's keys.
+    private static let service = FileLayout.testDataFolder == nil ? "io.blue.voiceiq" : "io.blue.voiceiq.test"
     private static let legacyService = "com.ammaar.jot"
 
     /// One keychain item per secret. `rawValue` is the `kSecAttrAccount`.

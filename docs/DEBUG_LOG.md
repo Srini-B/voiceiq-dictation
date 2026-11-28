@@ -169,7 +169,7 @@ test -s /Users/Shared/voiceiq-pre-test.plist && defaults delete io.blue.voiceiq 
 | Default | What it does | Platforms |
 | --- | --- | --- |
 | `DebugDisableCloudSync` | None of the five syncs starts: meetings and History (CloudKit), the Dictionary, writing rules and meeting folders (iCloud key-value storage). | Mac, iPhone |
-| `DebugDataFolder` | An absolute path that replaces ~/Library/Application Support/VoiceiQ for everything the app stores. | Mac |
+| `DebugDataFolder` | An absolute path that replaces ~/Library/Application Support/VoiceiQ for everything the app stores. Keys go to the Keychain under the service `io.blue.voiceiq.test` instead of `io.blue.voiceiq`, so the run starts with no AssemblyAI or agent access key and never changes the real ones; enter a key in Settings for a run that needs one. | Mac |
 
 Both are read once, at launch, from the app's own defaults domain, so
 `defaults delete <domain>` turns them off too. Check the menu lines after a
@@ -203,14 +203,15 @@ default. Two things never catch up:
 
 - The debug log in ~/Library/Logs/VoiceiQ, and its on/off switch, which a copy
   reads from the real app's defaults domain.
-- The Keychain.
+- The Keychain, apart from VoiceiQ's own keys (`io.blue.voiceiq.test` in test mode).
 - The temporary folder: each app's launch cleanup removes the other's
   in-progress playback renders.
 - The prepared-model cache. With `DebugDataFolder` set the copy does not clear
   it at launch, and it does not start the agent server or touch the user's
   agent configs (~/.claude.json and the others). Its Settings still act on the
   shared state when clicked: the Coding agents buttons (Set Up, Update,
-  Remove, New Key…) change the real agent configs and Keychain key, and
+  Remove, New Key…) change the real agent configs, writing the test key into
+  them, and
   deleting a model clears the shared cache. Leave them alone in a test copy.
 
 Start the data folder empty, or copy the whole real folder. Never copy
