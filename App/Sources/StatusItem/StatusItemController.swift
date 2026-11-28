@@ -122,11 +122,11 @@ final class StatusItemController: NSObject {
         status.isEnabled = false
         statusLine = status
         menu.addItem(status)
-        if CloudSync.isDisabledForTests {
-            // So a test run's switch cannot stay on unnoticed.
-            let syncOff = NSMenuItem(title: "Sync off (test)", action: nil, keyEquivalent: "")
-            syncOff.isEnabled = false
-            menu.addItem(syncOff)
+        // So a test run's switches cannot stay on unnoticed.
+        for (on, title) in [(CloudSync.isDisabledForTests, "Sync off (test)"), (FileLayout.testDataFolder != nil, "Test data folder")] where on {
+            let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+            item.isEnabled = false
+            menu.addItem(item)
         }
 
         let nextTitle = NSMenuItem(title: "", action: nil, keyEquivalent: "")
