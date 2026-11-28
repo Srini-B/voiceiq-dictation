@@ -204,7 +204,7 @@ final class KeyboardModel: ObservableObject {
             // The text goes where Stop was tapped.
             let field = fieldForCommand()
             KeyboardLog.note("[\(instanceTag)] stop in \(Self.describe(field))")
-            send(KeyboardCommand(action: .stop, field: field))
+            send(KeyboardCommand(action: .stop, field: field, surroundingText: surroundingText()))
         case .processing:
             if needsAppToFinish { controller?.openURL(BridgeURL.app) }
         case .warm, .off:
@@ -248,7 +248,7 @@ final class KeyboardModel: ObservableObject {
     private func start() {
         let field = fieldForCommand()
         KeyboardLog.note("[\(instanceTag)] start in \(Self.describe(field))")
-        let command = KeyboardCommand(action: .start, field: field)
+        let command = KeyboardCommand(action: .start, field: field, surroundingText: surroundingText())
         let alive = appAlive
         send(command)
         waitingForApp = true
@@ -517,17 +517,25 @@ final class KeyboardModel: ObservableObject {
         flash(fresh.text, for: 4, isProblem: true)
     }
 
-    /// Fits the new text to the text around the cursor: spaces on both
-    /// sides and a capital at the start of a sentence.
+    /// Fits the new text to the text around the cursor, as the Mac does
+    /// (`SurroundingText.fitted`): the space or line break before it, a
+    /// capital at the start of a sentence, punctuation the field already has
+    /// dropped, and the gap after it. As written when the host shows none of
+    /// a field that has text.
     @discardableResult
     private func insert(_ text: String) -> (fitted: String, before: String, after: String)? {
         guard let proxy = controller?.textDocumentProxy, !text.isEmpty else { return nil }
-        let before = proxy.documentContextBeforeInput ?? ""
-        let after = proxy.documentContextAfterInput ?? ""
-        let surrounding = SurroundingText(before: before, after: after)
-        let fitted = surrounding.fitted(text)
+        let surrounding = surroundingText()
+        let fitted = surrounding?.fitted(text) ?? text
         editor?.type(fitted)
-        return (fitted, before, after)
+        return (fitted, surrounding?.before ?? "", surrounding?.after ?? "")
+    }
+
+    /// The text around the cursor (`SurroundingText(keyboardBefore:)`).
+    private func surroundingText() -> SurroundingText? {
+        guard let proxy = controller?.textDocumentProxy else { return nil }
+        return SurroundingText(keyboardBefore: proxy.documentContextBeforeInput,
+                               after: proxy.documentContextAfterInput, fieldHasText: proxy.hasText)
     }
 }
 

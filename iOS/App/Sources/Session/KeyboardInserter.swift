@@ -14,6 +14,10 @@ final class DictationTarget {
         var stoppedIn: FieldIdentity?
         /// When the user stopped it, from a keyboard or from outside one.
         var stoppedAt: Date?
+        /// The text around the cursor where the text goes, for the writing
+        /// model (`DictationContext.focusedField`): read at Dictate, then
+        /// at Stop when a keyboard stopped it.
+        var text = FocusedFieldCapture()
     }
 
     var fields = Fields()

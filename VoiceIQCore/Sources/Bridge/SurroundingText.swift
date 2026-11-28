@@ -2,13 +2,32 @@ import Foundation
 
 /// The text around the cursor of the field a dictation is inserted into.
 /// Selected text is in neither half: the insert replaces it.
-public struct SurroundingText: Equatable, Sendable {
+public struct SurroundingText: Codable, Equatable, Sendable {
     public var before: String
     public var after: String
 
     public init(before: String, after: String) {
         self.before = before
         self.after = after
+    }
+
+    /// What an iPhone keyboard reads around the cursor
+    /// (`documentContextBeforeInput`, `documentContextAfterInput`). Hosts
+    /// show a keyboard only part of the field, often the last sentence or
+    /// so; the ends next to the cursor are exact, which is all the fitting
+    /// reads. Nil when the field has text the host shows none of (a web
+    /// view, a secure field): its text could need anything, so the text
+    /// goes in as written.
+    public init?(keyboardBefore before: String?, after: String?, fieldHasText: Bool) {
+        let before = before ?? "", after = after ?? ""
+        guard !(before.isEmpty && after.isEmpty && fieldHasText) else { return nil }
+        self.init(before: before, after: after)
+    }
+
+    /// The part the writing model reads (`PromptV1.fieldContext`), and all
+    /// a keyboard hands the app: the App Group keeps no more of the field.
+    public var excerpt: SurroundingText {
+        SurroundingText(before: String(before.suffix(300)), after: String(after.prefix(100)))
     }
 
     /// Splits a field's value at a UTF-16 selection, the unit Accessibility

@@ -535,23 +535,46 @@ public final class FieldDraft: TextDraft {
     /// a single rect when the field has no line attributes and the range
     /// fits on one line; none otherwise.
     static func lineRects(in element: AXUIElement, location: Int, length: Int) -> [CGRect] {
-        guard length > 0 else { return [] }
+        guard length > 0, let oneLine = bounds(in: element, location: location, length: 1) else { return [] }
+        let field = frame(of: element)
         let end = location + length
         if let first = line(in: element, at: location), let last = line(in: element, at: end - 1), last >= first {
             var rects: [CGRect] = []
             for number in first...min(last, first + maxLines - 1) {
                 guard let lineRange = range(in: element, line: number) else { continue }
                 let start = max(location, lineRange.location), stop = min(end, lineRange.location + lineRange.length)
-                guard stop > start, let rect = bounds(in: element, location: start, length: stop - start),
-                      rect.width >= 1 else { continue }
+                guard stop > start, let rect = bounds(in: element, location: start, length: stop - start) else { continue }
                 rects.append(rect)
             }
-            if !rects.isEmpty { return rects }
+            if !rects.isEmpty { return onText(rects, character: oneLine, field: field) }
         }
-        guard let whole = bounds(in: element, location: location, length: length), whole.width >= 1,
-              let oneLine = bounds(in: element, location: location, length: 1), whole.height < oneLine.height * 1.6
-        else { return [] }
-        return [whole]
+        guard let whole = bounds(in: element, location: location, length: length) else { return [] }
+        return onText([whole], character: oneLine, field: field)
+    }
+
+    /// The rects when every one of them lies on a line of text, else none:
+    /// an underline is never drawn off the text. Chromium and Electron
+    /// fields (VS Code's search box) can answer a range with the whole
+    /// field's frame, whose bottom is the field's border, and the draft
+    /// then keeps only its spinner and the swap. `character` is the draft's
+    /// first character, the measure of one line.
+    static let tallestLine: CGFloat = 48
+
+    static func onText(_ rects: [CGRect], character: CGRect, field: CGRect?) -> [CGRect] {
+        func isField(_ rect: CGRect) -> Bool {
+            guard let field else { return false }
+            return abs(rect.minX - field.minX) <= 2 && abs(rect.minY - field.minY) <= 2
+                && abs(rect.width - field.width) <= 2 && abs(rect.height - field.height) <= 2
+        }
+        // No dictated line of text is taller than `tallestLine`: a taller
+        // character is a box around more than one line.
+        guard character.width >= 1, character.height <= tallestLine, !isField(character) else { return [] }
+        // A line with no width (only a space where it wraps) has nothing to mark.
+        let lines = rects.filter { $0.width >= 1 }
+        // One line taller than a line, or the field itself, and the field's
+        // other answers can't be trusted either.
+        guard lines.allSatisfy({ $0.height <= character.height * 1.6 && !isField($0) }) else { return [] }
+        return lines
     }
 
     /// `kAXBoundsForRangeParameterizedAttribute`, flipped from the top-left

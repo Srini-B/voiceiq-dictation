@@ -200,6 +200,35 @@ final class DeliveryRouteTests: XCTestCase {
                                             from: JSONEncoder().encode(KeyboardCommand(action: .stop, field: here)))
         XCTAssertEqual(sent.field, here)
         XCTAssertEqual(sent.hostBundleID, "com.apple.reminders")
+        XCTAssertNil(sent.surroundingText)
+    }
+
+    /// The writing model gets the text a keyboard read around the cursor,
+    /// cut to what it reads, so the App Group holds no more of the field.
+    func testACommandCarriesTheTextAroundTheCursor() throws {
+        let long = String(repeating: "a", count: 290) + " we need to "
+        let around = SurroundingText(keyboardBefore: long, after: "by Friday. " + String(repeating: "b", count: 200),
+                                     fieldHasText: true)
+        let sent = try JSONDecoder().decode(KeyboardCommand.self, from: JSONEncoder().encode(
+            KeyboardCommand(action: .stop, field: field(messages, draft: hello), surroundingText: around)))
+        XCTAssertEqual(sent.surroundingText?.before.count, 300)
+        XCTAssertTrue(sent.surroundingText?.before.hasSuffix(" we need to ") == true)
+        XCTAssertEqual(sent.surroundingText?.after.count, 100)
+        XCTAssertTrue(sent.surroundingText?.after.hasPrefix("by Friday.") == true)
+    }
+
+    /// A host that shows a keyboard none of a field with text (a web view)
+    /// gets the text as written; an empty field, or part of one, is fitted.
+    func testAKeyboardFitsOnlyToTextItCanSee() {
+        XCTAssertNil(SurroundingText(keyboardBefore: nil, after: nil, fieldHasText: true))
+        XCTAssertNil(SurroundingText(keyboardBefore: "", after: "", fieldHasText: true))
+        XCTAssertEqual(SurroundingText(keyboardBefore: nil, after: nil, fieldHasText: false)?.fitted("hello there"),
+                       "Hello there")
+        // Only the last sentence shown: its end, next to the cursor, decides.
+        XCTAssertEqual(SurroundingText(keyboardBefore: "and then we", after: nil, fieldHasText: true)?
+            .fitted("ship it"), " ship it")
+        XCTAssertEqual(SurroundingText(keyboardBefore: "Done.", after: "Thanks", fieldHasText: true)?
+            .fitted("see you then."), " See you then. ")
     }
 
     func testAHandledResultForgetsWhatItsFieldHeld() {
