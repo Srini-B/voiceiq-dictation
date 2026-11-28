@@ -350,9 +350,12 @@ enum BrowserPages {
             let url = webAreaURL(window)
             if let url { addresses.append(url.absoluteString) }
             let strings = titles + addresses
-            // Windows come front to back: the first page with an address is the
-            // one in front; a picture-in-picture or popup window has none.
-            if !addressed, !addresses.isEmpty { addressed = true; page.room = CallApps.isCallRoom(addresses: addresses) }
+            // Windows come front to back: the first page with a web address is
+            // the one in front; a picture-in-picture or DevTools window has none
+            // or shows about:blank (agy on #138).
+            if !addressed, addresses.contains(where: { URL(string: $0)?.host() != nil }) {
+                addressed = true; page.room = CallApps.isCallRoom(addresses: addresses)
+            }
             if page.host == nil, let host = url?.host() {
                 page.host = host.replacingOccurrences(of: "www.", with: "")
                 page.excluded = CallApps.notCallPages.contains { host.hasSuffix($0) }
