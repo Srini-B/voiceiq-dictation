@@ -91,6 +91,7 @@ final class TidyTests: XCTestCase {
             // A clause of one word keeps its comma.
             ("So, like, we should go.", "So, we should go."),
             ("We left, like, you know, after lunch.", "We left after lunch."),
+            ("We left, you know, like, after lunch.", "We left after lunch."),
         ] {
             XCTAssertEqual(tidy(said), written, said)
         }
@@ -101,7 +102,7 @@ final class TidyTests: XCTestCase {
                      "You know, of course, that this is confidential.",
                      // Quoting, "about", "such as", and a "you know" that is the question.
                      "And he was, like, I'm not going.", "She was, like, what are you doing?",
-                     "It took, like, five hours.", "It took, like, 5 hours.", "It cost, like, thirteen dollars.",
+                     "It took, like, five hours.", "It took, like, 5 hours.", "It cost, like, thirteen dollars.", "It cost, like, $50 yesterday.",
                      "It took, like, a hundred hours.", "Use a tool, like, a hammer.",
                      "We need supplies, like, paper and pens.", "We saw cities, like, Paris and Rome.",
                      "I told Sam, like, Priya said no.", "Wait, you know, don't you?"] {
@@ -145,7 +146,8 @@ final class TidyTests: XCTestCase {
         ] {
             XCTAssertEqual(tidy(said), written, said)
         }
-        for kept in ["If you can, call me.", "When you can, can you call me?", "Should we, could we, would we?"] {
+        for kept in ["If you can, call me.", "When you can, can you call me?", "Should we, could we, would we?",
+                     "Should we, could we, would we go?"] {
             XCTAssertEqual(tidy(kept), kept)
         }
     }

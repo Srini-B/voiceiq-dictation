@@ -81,9 +81,13 @@ enum SpokenDisfluencies {
         "am", "is", "are", "was", "were", "be", "been", "being", "feel", "feels", "felt", "look", "looks",
         "looked", "sound", "sounds", "sounded",
     ]
-    /// So does "like" after these, unless a place follows: "he goes, like, no way" but "I went, like, to the store".
+    /// So does "like" after these, unless a place or time follows: "he goes, like, no way" but "I went, like,
+    /// to the store". Before a place or time "like" is never "such as" either ("left, like, after lunch").
     private static let goVerbs: Set<String> = ["go", "goes", "going", "went"]
-    private static let placeWords: Set<String> = ["to", "into", "in", "at", "on", "out", "home", "back", "there", "up", "down"]
+    private static let placeWords: Set<String> = [
+        "to", "into", "in", "at", "on", "out", "home", "back", "there", "up", "down", "after", "before", "during",
+        "around", "since", "until", "over", "under", "near", "through", "across",
+    ]
     /// "like" before these, or "a" or "an" and one of these, means "about": "it took, like, five
     /// hours", "like, a hundred".
     private static let numberWords: Set<String> = [
@@ -204,6 +208,11 @@ enum SpokenDisfluencies {
         let words = tokens[index..<(index + 4)]
         guard words.allSatisfy({ $0.spoken != nil }), tokens[index + 1].hasComma,
               !tokens[index].hasComma, !tokens[index + 2].hasComma, !tokens[index + 3].hasComma else { return nil }
+        // Inside a chain ("Should we, could we, would we go?") nothing is a false start.
+        if index >= 2, tokens[index - 1].hasComma, auxiliaries.contains(tokens[index - 2].bare),
+           pronouns.contains(tokens[index - 1].bare) {
+            return nil
+        }
         let (aux, pronoun) = (tokens[index].bare, tokens[index + 1].bare)
         guard auxiliaries.contains(aux), pronouns.contains(pronoun), auxiliaries.contains(tokens[index + 2].bare),
               tokens[index + 3].bare == pronoun else { return nil }
@@ -228,7 +237,8 @@ enum SpokenDisfluencies {
         let after = last + 1
         // The next word with its own comma is a list item, and "like" the verb: "follow, like, subscribe, and share".
         guard tokens[last].hasComma, after < tokens.count, !tokens[after].quoted, !tokens[after].bare.isEmpty,
-              !tokens[after].hasComma,
+              // Another filler may follow with its own comma: "you know, like, after lunch".
+              !tokens[after].hasComma || tokens[after].spoken.map(bare) == "like",
               !["and", "or"].contains(tokens[after].bare), !endsSentence(tokens[after].word),
               !capitalizedMidSentence(tokens, at: index) else { return nil }
         let next = tokens[after]
@@ -237,7 +247,8 @@ enum SpokenDisfluencies {
             let before = index > 0 ? tokens[index - 1].bare : ""
             if quotativeVerbs.contains(before) || before.hasSuffix("'s") || before.hasSuffix("’s")
                 || goVerbs.contains(before) && !placeWords.contains(next.bare)
-                || next.word.first?.isNumber == true || numberWords.contains(next.bare)
+                || next.word.drop(while: { "$€£¥₹~".contains($0) }).first?.isNumber == true
+                || numberWords.contains(next.bare)
                 || ["a", "an"].contains(next.bare) && after + 1 < tokens.count && numberWords.contains(tokens[after + 1].bare)
                 || next.word.first?.isUppercase == true && !isPronounI(next.bare)
                 // "such as" between a thing and an example: "a tool, like, a hammer"; "supplies, like, paper".
