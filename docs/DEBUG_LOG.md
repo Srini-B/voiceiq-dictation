@@ -137,3 +137,8 @@ the waveform and the silence check see it as speech; after the file ends it
 records silence until the dictation is stopped. A file that can't be read
 falls back to the microphone. The log has `debug audio: dictation from …` for
 each one. Nothing changes while the default is unset.
+
+Keep the files outside ~/Documents, ~/Desktop and ~/Downloads, for example in
+/Users/Shared. The files are opened on the main thread, and opening one in a
+privacy-protected folder can wait on a permission prompt and hang the app at
+"warming".

@@ -127,3 +127,26 @@ Filled in below as each check finishes.
   field and the inserted text stayed hidden past its edge. Marks are now cut
   to the field's visible frame, and `ScrollToCaret` brings the caret into
   view after an Accessibility insert.
+- Field cases on the signed build of 596c6cf (Mac code as at 54724e7;
+  `swift test` 340 passed, 1 skipped), speech from a WAV through the real
+  writer, which removed the "um" each time:
+  - TextEdit Save As field with 65 characters already in it: the spinner
+    showed at the caret inside the field, the field scrolled to the end of
+    the raw text, the underline stayed inside it, and the swap kept the prefix
+    (log: "caret brought into view by setting it again").
+  - 60-line TextEdit document, caret at the bottom edge: the view scrolled 2
+    lines, all three wrapped raw lines were underlined inside the view, and
+    the swap was correct.
+  - Chrome single-line `<input>` filled past its width: no draft (it is
+    under an `AXWebArea`), one ⌘V paste of the written text, and Chrome
+    scrolled the input itself.
+  - VS Code search box (a wrapping textarea): the Accessibility write was
+    ignored, so the draft went in by ⌘V. The box grew, the draft was
+    underlined, and the swap kept the prefix. The underline lies on the
+    box's bottom border, a little past the last word, within the box.
+  - Empty TextEdit document: no spinner shows (before, it appeared at the
+    window corner), then the underline and swap as usual.
+  - Typing benchmark, TextEdit: 1,000 characters with quotes and "...",
+    posted in 100 events, landed exactly in 125 ms. In a plain-text
+    document no autocorrect or smart quotes were applied. Chrome was not
+    measured.
