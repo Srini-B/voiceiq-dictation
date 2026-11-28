@@ -85,7 +85,7 @@ public actor AssemblyAIClient {
             body["response_format"] = ["type": "json_schema",
                                        "json_schema": ["name": schema.name, "strict": true, "schema": schema.schema]]
         }
-        if let effort = Self.reasoningEffort(model: model) { body["reasoning_effort"] = effort }
+        if let effort = Self.reasoningEffort(model: model, stage: stage) { body["reasoning_effort"] = effort }
         let data = try await send(
             url: AssemblyAIConfig.gateway.appendingPathComponent("v1/chat/completions"),
             body: try JSONSerialization.data(withJSONObject: body), deadline: deadline,
@@ -103,9 +103,15 @@ public actor AssemblyAIClient {
     }
 
     /// No reasoning for the writers that support switching it off: the
-    /// writing rules need none, and reasoning is billed as output.
-    static func reasoningEffort(model: String) -> String? {
-        if model.hasPrefix("gpt-6") { return "none" }
+    /// writing rules need none, and reasoning is billed as output. Meeting
+    /// notes reason a little: they name far-side voices from who answers
+    /// whom, once per meeting.
+    /// MEASURED 2026-11-28, 9 meetings on the LLM Gateway: GPT-6 Luna at
+    /// effort none left the echo meetings' voices unnamed in some runs
+    /// (pooled M1 89.3 and 81.5 over two runs); at low every voice was named
+    /// (M1 98.9), for $0.0123 against $0.0084 in notes.
+    static func reasoningEffort(model: String, stage: UsageStage) -> String? {
+        if model.hasPrefix("gpt-6") { return stage == .meetingSummary ? "low" : "none" }
         if model.hasPrefix("gemini-3") { return "low" }
         return nil
     }
