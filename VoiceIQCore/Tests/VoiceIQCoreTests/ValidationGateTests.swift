@@ -29,6 +29,12 @@ final class ValidationGateTests: XCTestCase {
                        "it looks better.")
         XCTAssertEqual(ValidationGate.droppingEcho("[1] Okay, one more thing.", before: "[1] ", transcript: "okay one more thing"),
                        "Okay, one more thing.")
+        XCTAssertEqual(ValidationGate.droppingEcho("we should push the launch", before: "Thanks. I think we should ",
+                                                   transcript: "push the launch to next week"),
+                       "push the launch")
+        XCTAssertEqual(ValidationGate.droppingEcho("Notes: Rahul wants to move teams, per my notes.", before: "1:1\nNotes: ",
+                                                   transcript: "rahul wants to move teams per my notes"),
+                       "Rahul wants to move teams, per my notes.")
     }
 
     /// Words the speaker said, or that only look like the field's end, stay.
@@ -51,6 +57,15 @@ final class ValidationGateTests: XCTestCase {
                        "Okay, let's go.")
         XCTAssertEqual(ValidationGate.droppingEcho("3. Buy milk.", before: "1. Eggs\n2. Bread\n3. ", transcript: "three buy milk"),
                        "3. Buy milk.")
+        XCTAssertEqual(ValidationGate.droppingEcho("-5 degrees this morning.", before: "Temps\n- ",
+                                                   transcript: "minus five degrees this morning"),
+                       "-5 degrees this morning.")
+        XCTAssertEqual(ValidationGate.droppingEcho("3.5 million signed up.", before: "Totals 3.",
+                                                   transcript: "about three point five million signed up"),
+                       "3.5 million signed up.")
+        XCTAssertEqual(ValidationGate.droppingEcho("2. Call the venue.", before: "That makes 12.", transcript: "call the venue"),
+                       "2. Call the venue.")
+        XCTAssertEqual(ValidationGate.droppingEcho("[1]", before: "[1] ", transcript: "okay"), "[1]")
     }
 
     func testLeavesInternalQuotesAlone() {
