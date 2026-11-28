@@ -227,6 +227,13 @@ private struct MeetingRow: View {
     @ViewBuilder private var status: some View {
         switch meta.status {
         case .done: EmptyView()
+        // The note being recorded now, as the Mac's list marks it; not "Processing".
+        case .recording:
+            Label("Recording", systemImage: "circle.fill")
+                .labelStyle(.titleAndIcon)
+                .font(Theme.Fonts.caption())
+                .foregroundStyle(Theme.Colors.recording)
+                .imageScale(.small)
         case .failed where meta.waitsForService != nil: StatusChip(text: "Waiting", tone: .pending)
         case .failed:
             Text("Failed")
