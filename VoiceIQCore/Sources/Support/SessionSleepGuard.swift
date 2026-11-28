@@ -16,17 +16,8 @@ public final class SessionSleepGuard {
     private var previousIdleTimerDisabled: Bool?
     #endif
 
-    public init(dictation: DictationCoordinator, meetings: MeetingEngine, writeUpCap: TimeInterval = 60 * 60) {
-        // A stopped meeting holds it until its transcript and notes are saved
-        // or fail, and at most `writeUpCap`, so a step that never returns
-        // cannot keep the Mac awake until quit. The cap restarts whenever a
-        // meeting joins or leaves the write-up, so overlapping ones each get it.
-        let writingUp = meetings.$processing.map { Set($0.keys) }.removeDuplicates()
-            .map { ids in
-                !ids.isEmpty ? Just(true).append(Just(false).delay(for: .seconds(writeUpCap), scheduler: DispatchQueue.main)).eraseToAnyPublisher()
-                     : Just(false).eraseToAnyPublisher()
-            }
-            .switchToLatest()
+    public init(dictation: DictationCoordinator, meetings: MeetingEngine) {
+        let writingUp = Self.writingUp(meetings.$processing.map { Set($0.keys) }, cap: 60 * 60)
         observation = dictation.$state.combineLatest(meetings.$phase, dictation.$hasBackgroundJobs, writingUp)
             .map { state, phase, background, writingUp in
                 if case .recording = phase { return true }
@@ -38,6 +29,29 @@ public final class SessionSleepGuard {
             }
             .removeDuplicates()
             .sink { [weak self] active in self?.setActive(active) }
+    }
+
+    /// True while a stopped meeting's transcript and notes are being written,
+    /// for at most `cap` after the latest meeting joined, so a step that never
+    /// returns cannot keep the device awake until quit. A meeting leaving
+    /// never extends it.
+    nonisolated static func writingUp<P: Publisher<Set<MeetingID>, Never>>(
+        _ ids: P, cap: TimeInterval, now: @escaping @Sendable () -> Date = Date.init
+    ) -> AnyPublisher<Bool, Never> {
+        ids.removeDuplicates()
+            .scan([MeetingID: Date]()) { joined, ids in
+                var next = joined.filter { ids.contains($0.key) }
+                for id in ids where next[id] == nil { next[id] = now() }
+                return next
+            }
+            .map { joined -> AnyPublisher<Bool, Never> in
+                let left = joined.values.max().map { $0.addingTimeInterval(cap).timeIntervalSince(now()) } ?? 0
+                guard left > 0 else { return Just(false).eraseToAnyPublisher() }
+                return Just(true).append(Just(false).delay(for: .seconds(left), scheduler: DispatchQueue.main)).eraseToAnyPublisher()
+            }
+            .switchToLatest()
+            .removeDuplicates()
+            .eraseToAnyPublisher()
     }
 
     /// The name `pmset -g assertions` shows for the lock.

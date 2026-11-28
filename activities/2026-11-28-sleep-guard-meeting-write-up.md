@@ -28,5 +28,8 @@ are written in the foreground.
 `SessionSleepGuardTests` read the process's power assertions from IOKit: a
 meeting being written up holds PreventUserIdleSystemSleep and
 PreventUserIdleDisplaySleep and lets go when the write-up fails; cancelling a
-dictation and app shutdown let go. Runtime results from the Mac mini and the
-iOS simulator are in the pull request.
+dictation and app shutdown let go. A third test drives the write-up hold with
+a 0.5 s cap: on at once, off at the cap while a meeting stays stuck, off at
+once when the write-up empties, and not extended by a meeting leaving.
+
+Mac mini and iOS simulator runtime checks: pending.

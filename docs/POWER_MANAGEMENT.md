@@ -8,8 +8,9 @@ Each platform's app controller owns one guard.
 - Meetings hold the lock while recording, then while their transcript and
   notes are written (`MeetingEngine.processing`). Saving the notes or failing
   releases the claim. A meeting waiting to retry AssemblyAI does not hold it,
-  and a write-up holds it for at most an hour, so a step that never returns
-  cannot keep the device awake until quit.
+  and a write-up holds it for at most an hour after the latest meeting joined
+  it, so a step that never returns cannot keep the device awake until quit.
+  A meeting leaving the write-up does not extend that hour.
 - If both are active, finishing one leaves the other's lock intact.
 - A detected call, an idle app, or an iOS microphone warm window does not
   prevent sleep. App termination explicitly releases the lock.

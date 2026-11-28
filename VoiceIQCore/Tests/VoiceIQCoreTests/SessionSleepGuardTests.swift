@@ -1,4 +1,5 @@
 #if os(macOS)
+import Combine
 import IOKit.pwr_mgt
 import XCTest
 @testable import VoiceIQCore
@@ -88,6 +89,33 @@ final class SessionSleepGuardTests: XCTestCase {
         XCTAssertEqual(heldAssertionTypes(), awake)
         sleepGuard.stop()
         XCTAssertTrue(heldAssertionTypes().isEmpty)
+    }
+
+    /// The write-up's hold: on at once, off after the cap while a meeting is
+    /// still stuck, off at once when the write-up empties, and a meeting
+    /// leaving does not restart the cap.
+    func testTheWriteUpHoldEndsAtTheCapAndALeaveDoesNotExtendIt() async throws {
+        let a = MeetingID(), b = MeetingID()
+        let ids = CurrentValueSubject<Set<MeetingID>, Never>([])
+        var held: [Bool] = []
+        let watch = SessionSleepGuard.writingUp(ids, cap: 0.5).sink { held.append($0) }
+        defer { watch.cancel() }
+        XCTAssertEqual(held, [false])
+
+        ids.send([a])
+        XCTAssertEqual(held.last, true)
+        ids.send([])
+        XCTAssertEqual(held.last, false, "an emptied write-up lets go at once")
+
+        ids.send([a, b])
+        XCTAssertEqual(held.last, true)
+        try await Task.sleep(nanoseconds: 250_000_000)
+        ids.send([a])  // b finished; a is stuck
+        XCTAssertEqual(held.last, true)
+        try await Task.sleep(nanoseconds: 400_000_000)
+        // 0.65 s after both joined: past the 0.5 s cap, before the 0.75 s a restart on b leaving would give.
+        XCTAssertEqual(held.last, false)
+        XCTAssertEqual(held, [false, true, false, true, false])
     }
 }
 #endif
