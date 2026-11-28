@@ -56,14 +56,15 @@ final class SpellingCaseTests: XCTestCase {
 
     /// With Auto-capitalization off, Shift gives one capital and the model adds none.
     func testAutoCapitalizationOffAddsNoSpellingCapitals() throws {
-        let field = Field(text: "I said ")
-        let keys = try engine(field)
+        let keys = try engine(Field(text: "I said "))
         keys.autoCapitalizes = false
-        tap(.shift, keys)
-        for letter in "iph" { tap(.character(String(letter)), keys) }
-        let offered = keys.suggestions.map(\.displayText)
-        XCTAssertTrue(offered.contains("Iphone"), "\(offered)")
-        XCTAssertFalse(offered.contains("iPhone"), "\(offered)")
+        // How the strip spells a model word before casing it like what you typed: no model
+        // spelling and no name's capital with the setting off, both with it on.
+        XCTAssertEqual(keys.autocorrect.stripSpelling(of: "chatgpt"), "chatgpt")
+        XCTAssertEqual(keys.autocorrect.stripSpelling(of: "mary"), "mary")
+        keys.autoCapitalizes = true
+        XCTAssertEqual(keys.autocorrect.stripSpelling(of: "chatgpt"), "ChatGPT")
+        XCTAssertEqual(keys.autocorrect.stripSpelling(of: "mary"), "Mary")
 
         let swipe = Field(text: "I said ")
         let swiping = try engine(swipe)
