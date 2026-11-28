@@ -24,11 +24,12 @@ The iPhone draft-swap check that gates 0.7.19 waited more than 30 minutes behind
 - **Two slots.** A started job keeps its slot until `done`, so a later release job waits for a slot rather than pushing past the cap.
 - **Stale tickets** older than 3 hours are dropped. A longer job runs `wait` again to refresh its ticket.
 
-Joining the queue and the check-then-start step run under one mutex, so a later, higher-priority arrival can't slip in between another waiter's check and its start (Codex found that race). Tested on Linux:
+Joining the queue and the check-then-start step run under one kernel file lock (perl `flock`, held by the step's own process, so a killed process can't leave it behind), so a later, higher-priority arrival can't slip in between another waiter's check and its start (Codex found that race). Tested on Linux:
 - Two running jobs, then an `other` job and a later `release` job: the release job started first when a slot opened.
-- 12 jobs of mixed classes joining at once: never more than two running, 6 of 6 runs.
+- 12 jobs of mixed classes joining at once: never more than two running, in 10 of 10 runs.
+- A process holding the file lock was killed with SIGKILL, and the next waiter started right after.
 
-The app lock's stale-lock takeover and its release both go through one mutex, so neither can delete a fresh lock another owner just took (Codex found both races). Race tests: 6 contenders on one stale lock, 30/30 rounds with exactly one winner; a release racing a takeover, 40/40 rounds with the new owner keeping its lock.
+The app lock's stale-lock takeover and its release both run under one kernel file lock, so neither can delete a fresh lock another owner just took (Codex found both races). Race tests: 6 contenders on one stale lock, 30/30 rounds with exactly one winner; a release racing a takeover, 40/40 rounds with the new owner keeping its lock.
 
 ## Seed data reached iCloud
 

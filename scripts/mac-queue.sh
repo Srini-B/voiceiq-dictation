@@ -40,47 +40,52 @@ prune() {
   done
   return 0
 }
-# Adding a ticket and the position check with its promotion run under one
-# mutex, so a later arrival can't change the order between another waiter's
-# check and its promotion. One left by a killed process is cleared after 60 s.
-mutex=$dir.mutex
-lock() {
-  until mkdir "$mutex" 2>/dev/null; do
-    if (( $(date +%s) - $(mtime "$mutex") > 60 )); then rmdir "$mutex" 2>/dev/null || true; else sleep 0.2; fi
-  done
+# Joining the queue and the check-then-start step run under one lock, so a
+# later arrival can't change the order between another waiter's check and
+# its start. The lock is a kernel file lock (flock) held by the step's own
+# process, so a killed process can't leave it behind.
+run_locked() {
+  perl -e 'use Fcntl qw(:flock); $^F = 255; open(my $f, ">>", shift) or die "lock: $!"; flock($f, LOCK_EX) or die "lock: $!"; exec @ARGV or die "exec: $!"' "$dir.lock" "$0" "$@"
 }
-unlock() { rmdir "$mutex" 2>/dev/null || true; }
 ticket_of() { ls "$dir" 2>/dev/null | grep -- "-$1\$" | head -1 || true; }
 ahead() { ls "$dir" 2>/dev/null | sort | grep -n -x -- "$1" | cut -d: -f1; }
 
 action=${1:?wait, done or show}
 case $action in
-wait)
-  owner=${2:?owner (thread ID)}; class=${3:?release, merge or other}; note=${4:-}
-  r=$(rank "$class")
-  lock
+_join)  # under the lock: prints the ticket; exits 3 if it is already running
+  owner=$2 class=$3 note=${4:-}
   prune
   t=$(ticket_of "$owner")
   if [[ -z $t ]]; then
-    t="$r-$(date +%s)-$owner"
+    t="$(rank "$class")-$(date +%s)-$owner"
     printf '%s\n%s\n' "$class" "$note" > "$dir/$t"
   else
     touch "$dir/$t"
-    [[ $t == 0-* ]] && { unlock; exit 0; }  # already running: refreshed
   fi
-  unlock
+  echo "$t"
+  [[ $t == 0-* ]] && exit 3
+  exit 0
+  ;;
+_turn)  # under the lock: starts the ticket if it is in a slot, else prints its position
+  t=$2 class=$3 note=${4:-}
+  prune
+  [[ -e $dir/$t ]] || printf '%s\n%s\n' "$class" "$note" > "$dir/$t"
+  pos=$(ahead "$t")
+  if (( pos <= slots )); then mv "$dir/$t" "$dir/0-$t"; exit 0; fi
+  echo "$pos"
+  exit 1
+  ;;
+wait)
+  owner=${2:?owner (thread ID)}; class=${3:?release, merge or other}; note=${4:-}
+  rank "$class" >/dev/null
+  rc=0; t=$(run_locked _join "$owner" "$class" "$note") || rc=$?
+  (( rc == 3 )) && exit 0  # already running: refreshed
+  (( rc == 0 )) || exit $rc
   while :; do
-    lock
-    prune
-    [[ -e $dir/$t ]] || { printf '%s\n%s\n' "$class" "$note" > "$dir/$t"; }
-    pos=$(ahead "$t")
-    if (( pos <= slots )); then
-      mv "$dir/$t" "$dir/0-$t"
-      unlock
+    if pos=$(run_locked _turn "$t" "$class" "$note"); then
       echo "mac queue: your turn ($class)" >&2
       exit 0
     fi
-    unlock
     echo "mac queue: position $pos ($((pos - slots)) ahead of a free slot); waiting" >&2
     sleep "$poll"
   done

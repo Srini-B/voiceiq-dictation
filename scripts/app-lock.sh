@@ -29,14 +29,11 @@ fi
 age() { echo $(( $(date +%s) - $(mtime "$lock") )); }
 
 # Reclaiming a stale lock and releasing one both check the owner, then
-# delete. This mutex keeps the two from interleaving, so neither can delete
-# a fresh lock another owner just took. One left by a killed process is
-# cleared after 60 s.
-mutex=$lock.takeover
-take_mutex() {
-  until mkdir "$mutex" 2>/dev/null; do
-    if (( $(date +%s) - $(mtime "$mutex") > 60 )); then rmdir "$mutex" 2>/dev/null || true; else sleep 1; fi
-  done
+# delete. They run under one kernel file lock (flock), held by the step's own
+# process, so neither can delete a fresh lock another owner just took and a
+# killed process can't leave the file lock behind.
+run_locked() {
+  perl -e 'use Fcntl qw(:flock); $^F = 255; open(my $f, ">>", shift) or die "lock: $!"; flock($f, LOCK_EX) or die "lock: $!"; exec @ARGV or die "exec: $!"' "$lock.flock" "$0" "$@"
 }
 
 case $action in
@@ -45,12 +42,7 @@ acquire)
     if [[ $(held_by) == "$owner" ]]; then break; fi
     [[ -d $lock ]] || continue  # released since the mkdir: try again now
     if (( $(age) >= stale )); then
-      take_mutex
-      if [[ -d $lock ]] && (( $(age) >= stale )); then
-        echo "app lock: taking over a stale lock from $(held_by)" >&2
-        rm -rf "$lock"
-      fi
-      rmdir "$mutex"
+      run_locked _reclaim "$owner"
       continue
     fi
     # No owner yet, or being deleted: another owner is mid-acquire or
@@ -63,9 +55,16 @@ acquire)
   touch "$lock"
   ;;
 release)
-  take_mutex
+  run_locked _release "$owner"
+  ;;
+_reclaim)  # under the file lock
+  if [[ -d $lock ]] && (( $(age) >= stale )); then
+    echo "app lock: taking over a stale lock from $(held_by)" >&2
+    rm -rf "$lock"
+  fi
+  ;;
+_release)  # under the file lock
   if [[ $(held_by) == "$owner" ]]; then rm -rf "$lock"; fi
-  rmdir "$mutex"
   ;;
 *)
   echo "usage: $0 acquire|release OWNER" >&2
