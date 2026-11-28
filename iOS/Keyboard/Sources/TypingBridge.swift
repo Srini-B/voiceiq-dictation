@@ -45,6 +45,9 @@ final class TypingBridge: ObservableObject {
     private var pasteTarget = true
 
     var proxy: UITextDocumentProxy? { controller?.textDocumentProxy }
+    /// The text before the cursor with a held draft in it, nil without one
+    /// (`KeyboardModel.textBeforeWithDraft`).
+    var textBeforeWithDraft: (() -> String?)?
 
     /// The whole keyboard's height: Hex's suggestion row and keys (and the emoji search lift).
     var keysHeight: CGFloat {
@@ -189,7 +192,8 @@ extension TypingBridge: @MainActor KeyboardTextTarget {
         .oneTimeCode, .password, .newPassword, .creditCardNumber, .telephoneNumber, .postalCode,
     ]
 
-    var documentContextBeforeInput: String? { proxy?.documentContextBeforeInput }
+    /// Hex plans its edits from this, so it has a held draft in it.
+    var documentContextBeforeInput: String? { textBeforeWithDraft?() ?? proxy?.documentContextBeforeInput }
     var hasText: Bool { proxy?.hasText ?? false }
     var autocapitalizationType: UITextAutocapitalizationType? { proxy?.autocapitalizationType }
     /// `.no` also turns off Hex's typing journal (`TypingJournal.allows`).

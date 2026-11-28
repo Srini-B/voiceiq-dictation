@@ -49,6 +49,8 @@ public final class FieldDraft: TextDraft {
     /// Apps whose field showed nothing of a posted draft: they get no more
     /// drafts until VoiceiQ restarts.
     private static var noDraftApps: Set<String> = []
+    /// Apps where a draft went in but didn't read as one exact insert.
+    private static var misreadApps: Set<String> = []
     private let id = UUID()
     private var field: DraftField?
     /// The text this dictation left in the field, once shown.
@@ -95,9 +97,14 @@ public final class FieldDraft: TextDraft {
               reading.value.utf16.count <= maxFieldLength else {
             return nil
         }
-        var role: CFTypeRef?
+        var role: CFTypeRef?, subrole: CFTypeRef?
         if AXUIElementCopyAttributeValue(element, kAXRoleAttribute as CFString, &role) == .success,
            let role = role as? String, role == "AXSecureTextField" || AXInserter.rolesWithoutText.contains(role) {
+            return nil
+        }
+        // A password field is a text field whose subrole says so.
+        if AXUIElementCopyAttributeValue(element, kAXSubroleAttribute as CFString, &subrole) == .success,
+           subrole as? String == "AXSecureTextField" {
             return nil
         }
         let draft = FieldDraft(element: element, context: context, inserter: inserter, marks: marks,
@@ -172,19 +179,33 @@ public final class FieldDraft: TextDraft {
         guard landed != nil else {
             marks.clear()
             if changed {
+                // A field whose value doesn't read as the draft at the caret
+                // (Chromium counts line breaks one way in its value and
+                // another in its offsets) does it every time: a second time
+                // in an app, it gets no more drafts.
+                if let app = Self.appKey(context), !Self.misreadApps.insert(app).inserted {
+                    Self.noDraftApps.insert(app)
+                }
                 Log.insertion.info("draft: went in but not as one exact insert — it stays")
                 return .lost
             }
             // Nothing showed. Let the paste's own read-back finish (quiet for
-            // a draft, so the raw text is never offered): a field still exactly as before
-            // never took the paste, so the written text goes in by the usual
-            // ladder, which copies it on a miss too, and the app gets no
-            // more drafts. Anything else may be a late paste: the written text
-            // never goes in beside it.
+            // a draft, so the raw text is never offered). Either way the app
+            // gets no more drafts. A field still exactly as before after an
+            // Accessibility write never took it, so the written text goes in
+            // by the usual ladder; after a ⌘V, or a field that changed, the
+            // paste may be there, so the written text never goes in beside it.
             await inserter.finishPendingPaste()
             if let now = PasteCheck.reading(of: element), now.value == before.value {
                 if let app = Self.appKey(context) { Self.noDraftApps.insert(app) }
-                Log.insertion.info("draft: the field never showed the paste — no more drafts in this app")
+                // A field can take a paste and still read as before (a
+                // terminal clears its input box once it passes the text on):
+                // after a ⌘V the written text never goes in beside it.
+                guard insert.byAccessibility else {
+                    Log.insertion.info("draft: the field never showed the paste — it may be there; no more drafts in this app")
+                    return .lost
+                }
+                Log.insertion.info("draft: the field never showed the write — no more drafts in this app")
                 return .notInserted
             }
             Log.insertion.info("draft: not seen in the field in time — the written text is in Paste last")
@@ -217,6 +238,13 @@ public final class FieldDraft: TextDraft {
         // The draft's own paste may still be restoring the clipboard. Wait it
         // out now, so every check below holds when the ⌘V is posted.
         await inserter.finishPendingPaste()
+        // The draft is selected for the swap: a key the user is typing
+        // would replace it. Wait for a pause in typing, then read the field
+        // as it is; through steady typing the draft stays as heard.
+        guard await Self.typingPaused() else {
+            Log.insertion.info("draft: the user is typing — kept as it was")
+            return false
+        }
         guard let reading = field.sync(), let span = field.ledger.draft(id) else {
             Log.insertion.info("draft: edited or gone — kept as it was")
             return false
@@ -287,6 +315,12 @@ public final class FieldDraft: TextDraft {
                   now.caret == span.location, now.selectionLength == span.length else { return }
             _ = await select(reading.caret, reading.selectionLength)
         }
+        // A password field took focus meanwhile: nothing is selected or
+        // written while secure input is on.
+        guard !SecureInput.isActive else {
+            Log.insertion.info("draft: secure input is on — kept as it was")
+            return false
+        }
         guard await select(span.location, span.length, holding: reading.value) else {
             await restoreIfStillSelected()
             // Focused and unchanged, the field itself refused the selection.
@@ -315,11 +349,12 @@ public final class FieldDraft: TextDraft {
         await inserter.finishPendingPaste()
         // ⌘V goes to the focused field only, and only while the draft is
         // still exactly what is selected.
-        guard Self.focusedTarget(context: context).map({ CFEqual($0, element) }) == true,
+        guard !SecureInput.isActive, Self.focusedTarget(context: context).map({ CFEqual($0, element) }) == true,
               let selected = PasteCheck.reading(of: element), selected.value == reading.value,
-              selected.caret == span.location, selected.selectionLength == span.length else {
+              selected.caret == span.location, selected.selectionLength == span.length,
+              Self.selectedText(of: element).map({ $0 == span.text }) ?? true else {
             await restoreIfStillSelected()
-            Log.insertion.info("draft: not focused or the selection moved — kept as it was")
+            Log.insertion.info("draft: not focused, or the selection is not the draft — kept as it was")
             return false
         }
         guard await inserter.paste(written) else {
@@ -337,6 +372,31 @@ public final class FieldDraft: TextDraft {
         Log.insertion.info("draft: the paste over it never showed — kept as it was")
         return false
     }
+
+    /// The field's own answer for what is selected: an Electron field can
+    /// select a line break past the range it was asked for. Nil from a
+    /// field that doesn't say, where the range read-back stands alone.
+    private static func selectedText(of element: AXUIElement) -> String? {
+        var out: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, kAXSelectedTextAttribute as CFString, &out) == .success else {
+            return nil
+        }
+        return out as? String
+    }
+
+    /// No key pressed for `typingPause`, waited for up to `typingWait`.
+    /// Hardware keys only: VoiceiQ's own ⌘V doesn't count.
+    private static func typingPaused() async -> Bool {
+        let deadline = Date().addingTimeInterval(typingWait)
+        while CGEventSource.secondsSinceLastEventType(.hidSystemState, eventType: .keyDown) < typingPause {
+            guard Date() < deadline else { return false }
+            try? await Task.sleep(for: .milliseconds(50))
+        }
+        return true
+    }
+
+    static let typingPause: TimeInterval = 0.4
+    static let typingWait: TimeInterval = 2
 
     /// The text this dictation left in the field: the written text after a
     /// swap, else the draft.
@@ -535,23 +595,46 @@ public final class FieldDraft: TextDraft {
     /// a single rect when the field has no line attributes and the range
     /// fits on one line; none otherwise.
     static func lineRects(in element: AXUIElement, location: Int, length: Int) -> [CGRect] {
-        guard length > 0 else { return [] }
+        guard length > 0, let oneLine = bounds(in: element, location: location, length: 1) else { return [] }
+        let field = frame(of: element)
         let end = location + length
         if let first = line(in: element, at: location), let last = line(in: element, at: end - 1), last >= first {
             var rects: [CGRect] = []
             for number in first...min(last, first + maxLines - 1) {
                 guard let lineRange = range(in: element, line: number) else { continue }
                 let start = max(location, lineRange.location), stop = min(end, lineRange.location + lineRange.length)
-                guard stop > start, let rect = bounds(in: element, location: start, length: stop - start),
-                      rect.width >= 1 else { continue }
+                guard stop > start, let rect = bounds(in: element, location: start, length: stop - start) else { continue }
                 rects.append(rect)
             }
-            if !rects.isEmpty { return rects }
+            if !rects.isEmpty { return onText(rects, character: oneLine, field: field) }
         }
-        guard let whole = bounds(in: element, location: location, length: length), whole.width >= 1,
-              let oneLine = bounds(in: element, location: location, length: 1), whole.height < oneLine.height * 1.6
-        else { return [] }
-        return [whole]
+        guard let whole = bounds(in: element, location: location, length: length) else { return [] }
+        return onText([whole], character: oneLine, field: field)
+    }
+
+    /// The rects when every one of them lies on a line of text, else none:
+    /// an underline is never drawn off the text. Chromium and Electron
+    /// fields (VS Code's search box) can answer a range with the whole
+    /// field's frame, whose bottom is the field's border, and the draft
+    /// then keeps only its spinner and the swap. `character` is the draft's
+    /// first character, the measure of one line.
+    static let tallestLine: CGFloat = 48
+
+    static func onText(_ rects: [CGRect], character: CGRect, field: CGRect?) -> [CGRect] {
+        func isField(_ rect: CGRect) -> Bool {
+            guard let field else { return false }
+            return abs(rect.minX - field.minX) <= 2 && abs(rect.minY - field.minY) <= 2
+                && abs(rect.width - field.width) <= 2 && abs(rect.height - field.height) <= 2
+        }
+        // No dictated line of text is taller than `tallestLine`: a taller
+        // character is a box around more than one line.
+        guard character.width >= 1, character.height <= tallestLine, !isField(character) else { return [] }
+        // A line with no width (only a space where it wraps) has nothing to mark.
+        let lines = rects.filter { $0.width >= 1 }
+        // One line taller than a line, or the field itself, and the field's
+        // other answers can't be trusted either.
+        guard lines.allSatisfy({ $0.height <= character.height * 1.6 && !isField($0) }) else { return [] }
+        return lines
     }
 
     /// `kAXBoundsForRangeParameterizedAttribute`, flipped from the top-left
