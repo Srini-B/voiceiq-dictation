@@ -226,8 +226,9 @@ public struct MeetingPlaybackBar: View {
             // The player knows the length as soon as it plays, before a long meeting's waveform is read.
             let duration = loudness?.duration ?? player.duration ?? 0
             let position = scrub.map { $0 * duration } ?? min(player.position, duration)
-            // On iPhone the 44 pt targets already space the controls; an hour-long
-            // meeting's two times still fit a 375 pt phone.
+            // On iPhone the 44 pt targets already space the controls. The times
+            // win space from the waveform first, then shrink, so they never
+            // spill out of the capsule on a narrow phone or at large type.
             HStack(spacing: Self.spacing) {
                 playButton
                 Button { player.seek(to: player.position - 15) } label: {
@@ -241,10 +242,12 @@ public struct MeetingPlaybackBar: View {
                 .help("Back 15 seconds")
                 // The waveform's value reads the same times.
                 Text(Self.clock(position)).font(style.time).foregroundStyle(style.you)
-                    .lineLimit(1).fixedSize().padding(.horizontal, 3).accessibilityHidden(true)
+                    .lineLimit(1).minimumScaleFactor(0.7).layoutPriority(1)
+                    .padding(.horizontal, 3).accessibilityHidden(true)
                 waveform(progress: duration > 0 ? position / duration : 0, duration: duration)
                 Text(Self.clock(duration)).font(style.time).foregroundStyle(style.call)
-                    .lineLimit(1).fixedSize().padding(.horizontal, 3).accessibilityHidden(true)
+                    .lineLimit(1).minimumScaleFactor(0.7).layoutPriority(1)
+                    .padding(.horizontal, 3).accessibilityHidden(true)
                 speedButton
             }
         }
@@ -319,7 +322,7 @@ public struct MeetingPlaybackBar: View {
                 // Nothing to seek in until the length is known.
                 .allowsHitTesting(duration > 0)
         }
-        .frame(minWidth: 60)
+        .frame(minWidth: 44)
         .frame(height: Self.target)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Playback position")

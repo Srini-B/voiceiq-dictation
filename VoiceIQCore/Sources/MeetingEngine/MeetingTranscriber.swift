@@ -234,6 +234,9 @@ public struct MeetingTranscriber: Sendable {
                                       detectedCall: detectedCall)
             Log.meeting.info("echo left in mic: \(String(format: "%.1f", raw.residualEcho), privacy: .public) dB before, \(String(format: "%.1f", cancelled.residualEcho), privacy: .public) dB after")
             return cancelled.residualEcho <= maximumResidualEcho ? cancelled : raw
+        } catch is CancellationError {
+            // The transcription was stopped; echo cancellation didn't fail.
+            throw CancellationError()
         } catch {
             Log.meeting.error("echo cancellation failed: \(String(describing: error), privacy: .public)")
             return raw
