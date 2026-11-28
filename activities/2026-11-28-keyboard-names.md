@@ -30,3 +30,21 @@ On the lobsters-mac-mini runner (Xcode 27.0, iOS 27.0 Simulator, iPhone 17 Pro),
   - Typed then space, after "I said ": 12/14 on both. claude, mondya, mray, github are right on both; lindon and chatgpt miss on both. Mid-sentence, "ask chatgpt " now becomes "ask ChatGPT" (main leaves it lowercase).
 - Size, Debug: VoiceiQ.app +152 KB, VoiceIQKeyboard.appex +12 KB (en.hextm 3,599,997 bytes, en.spellings 4,588 bytes, new).
 - Keyboard memory (`footprint`, same steps in Reminders): this branch 33 MB at open, 37 to 39 MB after typing and swipes, peak 50.4 MB; main 30 MB, 37 to 41 MB, peak 49.0 MB. en.hextm stays clean mapped memory (3.5 MB, 0 dirty). Both peaks are above the 44 MB docs/IOS.md gives for iOS 27.2; that is the same on main, so not from this change.
+
+## Review follow-ups (Fable K1 95, agy Neon, Codex)
+
+- Sentence-start casing (patch `0010-voiceiq-spelling-case`): "chatgpt" at a
+  sentence's start gave "Chatgpt", because auto-shift's capital hid the word from
+  `en.spellings` and Hex's `matchCase` put a capital on "iPhone". A spelling
+  with capitals now keeps them in every position, typed, swiped or in the strip;
+  with Auto-capitalization off, predictions add none (Codex). `KeyboardTests` is
+  now hosted by the app and compiles the keyboard; `SpellingCaseTests` covers
+  chatgpt, iphone and hello at and after a sentence's start, with the model
+  attached as `FullKeyboardView` attaches it.
+- The strip after "Monday " shows three emoji and no words. This is Hex's
+  `withStripEmoji`, which gives every slot to a finished word's emoji when it
+  has three, and is the same on main. On lobsters-mac-mini, a scratch
+  `FullKeyboardView` (393 pt, English QWERTY) showed 😩 ☕ 🙄 after "See you on
+  Monday " and 🌤️ ☀️ 🌧️ after "I like the weather " on both main and this
+  branch; only the engine's hidden next words differ (main "the, to, and",
+  branch "morning, through, to"). Left as Hex ships it.

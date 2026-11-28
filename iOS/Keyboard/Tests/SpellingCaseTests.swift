@@ -12,16 +12,16 @@ final class SpellingCaseTests: XCTestCase {
             ("I said ", "chatgpt", "ChatGPT"), ("I said ", "iphone", "iPhone"), ("I said ", "hello", "hello"),
         ] {
             let field = Field(text: before)
-            let keys = engine(field)
+            let keys = try engine(field)
             for letter in typed { tap(.character(String(letter)), keys) }
             tap(.space, keys)
             XCTAssertEqual(field.text, before + want + " ", "typed \(typed) after \"\(before)\"")
         }
 
         let field = Field()
-        let keys = engine(field)
+        let keys = try engine(field)
         let plane = KeyboardKeyPlaneView(engine: keys)
-        plane.swipe = SwipeTyping(engine: keys, model: try XCTUnwrap(TypingDecoderModel.bundled("en")))
+        plane.swipe = SwipeTyping(engine: keys, model: try XCTUnwrap(keys.letterOdds))
         let points = swipePath("chatgpt", keys: keys.swipeKeys)
         plane.began(id: 50, sample: TypingLogTouchSample(point: points[0], timestamp: 0))
         for point in points.dropFirst() { plane.moved(id: 50, sample: TypingLogTouchSample(point: point, timestamp: 0)) }
@@ -29,11 +29,16 @@ final class SpellingCaseTests: XCTestCase {
         XCTAssertEqual(field.text.trimmingCharacters(in: .whitespaces), "ChatGPT", "swiped chatgpt")
     }
 
-    private func engine(_ field: Field) -> FullKeyboardEngine {
+    /// The engine with the English model attached as `FullKeyboardView.syncSpatialAutocorrect`
+    /// attaches it with Spatial autocorrect on (the default).
+    private func engine(_ field: Field) throws -> FullKeyboardEngine {
         let defaults = UserDefaults(suiteName: "spelling-case-\(UUID().uuidString)")!
         let keys = FullKeyboardEngine(target: field, autocorrect: AutocorrectEngine(learnedWords: LearnedWordsStore(defaults: defaults)))
         keys.width = 393
         keys.language = .english
+        let model = try XCTUnwrap(TypingDecoderModel.bundled("en"))
+        keys.letterOdds = model
+        keys.autocorrect.decoder = TypingDecoder(model: model)
         keys.configureForField()
         return keys
     }
