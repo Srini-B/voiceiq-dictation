@@ -121,15 +121,22 @@ extension Theme {
     /// titles medium. Set once at launch.
     @MainActor static func applyAppearance() {
         let ink = UIColor(Colors.ink)
-        let appearance = UINavigationBar.appearance()
-        appearance.largeTitleTextAttributes = [
+        // Also on the bar appearance: with the legacy title properties alone,
+        // Notes opened by the Talk key sometimes showed the system bold title.
+        // Scroll-edge and compact appearances fall back to this one.
+        let titles = UINavigationBarAppearance()
+        titles.largeTitleTextAttributes = [
             .font: Fonts.uiFlex(VQ.TypeScale.display.size, weight: VQ.TypeScale.display.weight, style: .largeTitle),
             .foregroundColor: ink,
         ]
-        appearance.titleTextAttributes = [
+        titles.titleTextAttributes = [
             .font: Fonts.uiFlex(17, weight: 560, style: .headline),
             .foregroundColor: ink,
         ]
+        let bar = UINavigationBar.appearance()
+        bar.standardAppearance = titles
+        bar.largeTitleTextAttributes = titles.largeTitleTextAttributes
+        bar.titleTextAttributes = titles.titleTextAttributes
         // Segmented switches: the selected option sits on the canvas, on a
         // quiet fill track, in the brand face.
         let segmented = UISegmentedControl.appearance()
