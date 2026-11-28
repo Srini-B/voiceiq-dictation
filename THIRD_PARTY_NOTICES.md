@@ -254,6 +254,12 @@ SOFTWARE.
   addresses (`SpokenAddresses.swift`, from
   `ios/HEXShared/Formatting/SpokenCleanupRules.swift`), adapted with Hex's
   test cases in `VoiceIQCore/Tests/VoiceIQCoreTests/TidyTests.swift`
+- Also, from Hex at `a0f0a858` and `e27726790`, rewritten in Swift as rules
+  with no model: the disfluencies the tidy-up removes and the words it keeps
+  (`VoiceIQCore/Sources/FormattingPipeline/SpokenDisfluencies.swift`, from
+  `ios/HEXShared/Formatting/CleanupGuard.swift` and its port
+  `src/dictation/cleanup/guard.rs`, with `guard/context.rs` and the cases in
+  `guard_tests.rs`)
 - Also, from Hex at `f1c772c9`, rewritten in Swift: reading part of a
   meeting by time into it, keeping the turns that overlap the range whole and
   refusing a start that is not before the end (`OffsetRange` and

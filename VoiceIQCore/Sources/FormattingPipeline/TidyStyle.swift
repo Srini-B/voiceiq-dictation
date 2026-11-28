@@ -47,8 +47,9 @@ public enum TidyStyle: String, CaseIterable, Sendable, Identifiable {
 public enum Tidy {
     /// Spoken layout and symbols ("new line", "comma") become the marks. In
     /// English, spoken email addresses join, hesitations go, a spoken
-    /// self-correction keeps only the correction, and an unpunctuated
-    /// question gets its mark. "As spoken" keeps every word.
+    /// self-correction keeps only the correction, repeats, false starts and
+    /// comma-set "like" and "you know" go, and an unpunctuated question gets
+    /// its mark. "As spoken" keeps every word.
     public static func spoken(_ text: String, style: TidyStyle, language: String?) -> String {
         guard style != .asSpoken else { return text }
         let english = isEnglish(language)
@@ -63,7 +64,10 @@ public enum Tidy {
         let marked = SpokenMarks.layout(in: symbols, language: language)
             .replacingOccurrences(of: String(placeholder), with: ",")
         guard english else { return marked }
-        return SpokenRepairs.askingQuestions(SpokenRepairs.correcting(Hesitations.removing(from: marked)))
+        // Disfluencies after the self-corrections, which read the cues and commas as said;
+        // questions last, so "did you, have you seen it" is asked by what is left.
+        let fluent = SpokenDisfluencies.removing(from: SpokenRepairs.correcting(Hesitations.removing(from: marked)))
+        return SpokenRepairs.askingQuestions(fluent)
     }
 
     /// `text` in `style`. Trimmed first; an empty dictation stays empty.
