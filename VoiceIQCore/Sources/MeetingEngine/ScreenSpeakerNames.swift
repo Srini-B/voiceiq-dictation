@@ -250,21 +250,23 @@ public enum ScreenSpeakerNames {
     /// notes are written with them. A voice answering two names keeps neither.
     public static func byAddress(_ screen: ScreenNames?, transcript: [TranscriptSegment], invited: [String]) -> ScreenNames? {
         let known = (screen?.speakers ?? [:]).values.map(\.name)
-        // The invite's spelling first; a gallery tile repeating it is one person.
+        // Known names stay candidates, so "Sara" with two Saras invited is
+        // nobody's even when one is named; the invite's spelling comes first,
+        // and a gallery tile repeating it is the same person.
         var names: [String] = []
-        for name in invited + (screen?.seen ?? []).filter({ !isUIText($0) })
-        where !(known + names).contains(where: { sameName($0, name) }) { names.append(name) }
-        var votes: [String: [String: Int]] = [:]
+        for name in known + invited + (screen?.seen ?? []).filter({ !isUIText($0) })
+        where !names.contains(where: { sameName($0, name) }) { names.append(name) }
+        var votes: [String: Set<String>] = [:]
         for (index, turn) in transcript.enumerated() {
-            guard let name = addressed(in: turn.text, among: names),
+            guard let name = addressed(in: turn.text, among: names), !known.contains(where: { sameName($0, name) }),
                   let answer = transcript[(index + 1)...].first(where: { $0.speaker != turn.speaker }),
                   answer.speaker != MeetingSpeaker.you, screen?.speakers[answer.speaker] == nil else { continue }
-            votes[answer.speaker, default: [:]][name, default: 0] += 1
+            votes[answer.speaker, default: []].insert(name)
         }
         var out = screen ?? ScreenNames(seen: [], speakers: [:])
-        var given: [String: String] = [:]
-        for (speaker, heard) in votes where heard.count == 1 { given[speaker] = heard.keys.first }
-        for (speaker, name) in given where given.values.filter({ sameName($0, name) }).count == 1 {
+        for (speaker, heard) in votes where heard.count == 1 {
+            // Every vote counts, a voice that answered two names included.
+            guard let name = heard.first, !votes.contains(where: { $0.key != speaker && $0.value.contains(name) }) else { continue }
             out.speakers[speaker] = .init(name: name, seen: 0, of: 0, reason: "Answered right after being addressed as \(name)")
         }
         let named = out.speakers.filter { $0.key != MeetingSpeaker.you }.mapValues(\.name)
@@ -272,19 +274,23 @@ public enum ScreenSpeakerNames {
         return screen == nil && result?.speakers.isEmpty != false ? nil : result
     }
 
-    /// The listed name a sentence opens with, followed by a comma: "Sara, you
-    /// first." and "Muhammed, where are we?" ("Muhammed Hafeed"), not
-    /// "Thanks Alex," or "Fair point Grace." A head matching two names is nobody's.
+    /// The listed name the turn's sentences open with, followed by a comma:
+    /// "Sara, you first." and "Muhammed, where are we?" ("Muhammed Hafeed"),
+    /// not "Thanks Alex," or "Fair point Grace." A head matching two names,
+    /// or a turn addressing two people, is nobody's.
     static func addressed(in text: String, among names: [String]) -> String? {
+        var found: Set<String> = []
         for sentence in text.split(whereSeparator: { ".?!".contains($0) }) {
-            let head = sentence.trimmingCharacters(in: .whitespaces).prefix { $0 != "," }
-            guard head.count < sentence.trimmingCharacters(in: .whitespaces).count else { continue }
+            let trimmed = sentence.trimmingCharacters(in: .whitespaces)
+            let head = trimmed.prefix { $0 != "," }
+            guard head.count < trimmed.count else { continue }
             let words = head.split(separator: " ")
             guard (1...3).contains(words.count), words.allSatisfy({ $0.first?.isUppercase == true }) else { continue }
             let matches = names.filter { sameName(String(head), $0) }
-            if matches.count == 1 { return matches[0] }
+            if matches.count > 1 { return nil }
+            found.formUnion(matches)
         }
-        return nil
+        return found.count == 1 ? found.first : nil
     }
 
     /// `byElimination` once the notes are written: every name the meeting

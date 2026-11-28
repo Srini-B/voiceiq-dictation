@@ -132,5 +132,19 @@ final class ScreenSpeakerNamesTests: XCTestCase {
         let both = short + [TranscriptSegment(speaker: "you", text: "Nihal, anything else?", chunkIndex: 0, start: 6, end: 8),
                             TranscriptSegment(speaker: "s1", text: "No, that is all from me.", chunkIndex: 0, start: 8, end: 10)]
         XCTAssertNil(ScreenSpeakerNames.byAddress(nil, transcript: both, invited: ["Nihal", "Muhammed Hafeed", "Lee Park"])?.speakers["s1"])
+        // A name another voice also answered is nobody's, even when the first
+        // voice answered two names (Codex on #129).
+        let crossed = both + [TranscriptSegment(speaker: "you", text: "Nihal, and you?", chunkIndex: 0, start: 10, end: 12),
+                              TranscriptSegment(speaker: "s2", text: "Fine here.", chunkIndex: 0, start: 12, end: 14)]
+        XCTAssertNil(ScreenSpeakerNames.byAddress(nil, transcript: crossed, invited: ["Nihal", "Muhammed Hafeed", "Lee Park"])?.speakers["s2"])
+        // A turn addressing two people hands over to neither.
+        let handover = [TranscriptSegment(speaker: "you", text: "Sara, thanks for yesterday. Rahul, can you give the update?", chunkIndex: 0, start: 0, end: 4),
+                        TranscriptSegment(speaker: "s1", text: "The shorter email won.", chunkIndex: 0, start: 4, end: 6)]
+        XCTAssertNil(ScreenSpeakerNames.byAddress(nil, transcript: handover, invited: ["Sara Lindqvist", "Rahul Mehta", "Lee Park"])?.speakers["s1"])
+        // Two Saras invited and one already on screen: "Sara," is still ambiguous.
+        let saras = ScreenNames(seen: [], speakers: ["s2": .init(name: "Sara Jones", seen: 9, of: 10)])
+        let ask = [TranscriptSegment(speaker: "you", text: "Sara, status?", chunkIndex: 0, start: 0, end: 2),
+                   TranscriptSegment(speaker: "s1", text: "All green.", chunkIndex: 0, start: 2, end: 4)]
+        XCTAssertNil(ScreenSpeakerNames.byAddress(saras, transcript: ask, invited: ["Sara Jones", "Sara Smith", "Lee Park"])?.speakers["s1"])
     }
 }
