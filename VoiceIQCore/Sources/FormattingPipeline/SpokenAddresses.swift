@@ -155,10 +155,11 @@ enum SpokenAddresses {
         guard start > 0, !text[tokens[start - 1].range.upperBound..<tokens[start].range.lowerBound].contains("\n") else { return .strong }
         let previous = tokens[start - 1].word
         let mailbox = bare(tokens[start].word)
-        // A verb or a number, not a mailbox: "growing at the rate…", "went from 10 at the rate…".
-        // Not "-ed" ("Ahmed") or a short "-ing" ("Ming").
-        let verb = mailbox.hasSuffix("ing") && mailbox.count >= 6
-        let number = mailbox.allSatisfy(\.isNumber)
+        // A one-word verb or number, not a mailbox: "growing at the rate…", "went from 10 at the rate…".
+        // Not "-ed" ("Ahmed"), a short "-ing" ("Ming"), or a mailbox of parts ("123 dot support").
+        let single = start + 1 >= tokens.count || tokens[start + 1].word.lowercased() != "dot"
+        let verb = single && mailbox.hasSuffix("ing") && mailbox.count >= 6
+        let number = single && mailbox.allSatisfy(\.isNumber)
         // After a comma, only a mailbox that is no verb or number: "Prices kept rising, growing at the rate…".
         if previous.last == ",", verb || number { return nil }
         if let last = previous.last, ".!?,:;".contains(last) { return .strong }

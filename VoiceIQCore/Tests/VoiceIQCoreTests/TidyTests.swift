@@ -48,6 +48,7 @@ final class TidyTests: XCTestCase {
         XCTAssertEqual(tidy("Thanks. Ask Martin Luther King Jr.", .messages), "thanks. ask Martin Luther King Jr.")
         XCTAssertEqual(tidy("Sounds good. The invoice is from Acme Inc.", .messages), "sounds good. the invoice is from Acme Inc.")
         XCTAssertEqual(tidy("Ask Martin Luther King Jr.", .messages), "ask Martin Luther King Jr")
+        XCTAssertEqual(tidy("Ask Dr. Smith Jr.", .messages), "ask Dr. Smith Jr.")
         // "No." is a title only before a number ("No. 5"); here it is one of four sentences.
         XCTAssertEqual(tidy("Is it ok? No. Call me later. See you.", .messages), "is it ok? no. call me later. see you.")
     }
@@ -271,6 +272,8 @@ final class TidyTests: XCTestCase {
             ("Send it to priya at the rate gmail dot com and ravi at the rate yahoo dot com.",
              "Send it to priya@gmail.com and ravi@yahoo.com."),
             ("Send it to ming at the rate gmail dot com.", "Send it to ming@gmail.com."),
+            ("Send it from 123 dot support at the rate gmail dot com.", "Send it from 123.support@gmail.com."),
+            ("My email's billing at the rate gmail dot com.", "My email's billing@gmail.com."),
         ] {
             XCTAssertEqual(SpokenAddresses.joining(in: spoken), written)
         }

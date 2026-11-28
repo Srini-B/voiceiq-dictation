@@ -194,11 +194,11 @@ public enum Tidy {
         }.count
         // "Well..." keeps its ellipsis.
         // "U.S." and "p.m." keep their last full stop.
-        // A title word's full stop ("Jr.", "Inc.") goes only when it is the message's one full stop to drop:
-        // "Thanks. Ask Smith Jr." keeps it.
+        // A title word's full stop ("Jr.", "Inc.") goes only when it is the message's one full stop:
+        // "Thanks. Ask Smith Jr." and "Ask Dr. Smith Jr." keep it.
         let endsWithTitle = chars.last == "." && TidyText.endsAbbreviation(chars, at: chars.count - 1)
         if !message.contains("\n"), sentences <= 3, message.last == "." || message.last == "。", !message.hasSuffix(".."),
-           !TidyText.endsWithInitialism(message), !(endsWithTitle && sentences > 0) {
+           !TidyText.endsWithInitialism(message), !(endsWithTitle && message.dropLast().contains(".")) {
             message.removeLast()
         }
         return TidyText.trimmed(message)
