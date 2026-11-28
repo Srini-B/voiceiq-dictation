@@ -84,6 +84,7 @@ public final class ScreenNameSampler: @unchecked Sendable {
         if bundleID == nil { bundleID = Self.frontCallApp(among: joining) }
         guard let bundleID else { return false }
         if !pidHoldsRoom, accessibility, let found = Self.callPID(bundleID: bundleID) {
+            if pid != found.pid { pageLines = nil; switchOffTries = 0 }
             pid = found.pid; pidHoldsRoom = found.joined
             AccessibilityWaker.wakeIfNeeded(bundleID: bundleID, pid: found.pid)
         }
@@ -164,6 +165,7 @@ public final class ScreenNameSampler: @unchecked Sendable {
                     switchOffTries += 1
                     if Self.switchOff(pid) || switchOffTries >= 3 || NSWorkspace.shared.isVoiceOverEnabled {
                         pulsedPID.withLock { $0 = nil }
+                        UserDefaults.standard.removeObject(forKey: Self.pulsedKey)
                     }
                 }
                 let ours = pulsedPID.withLock { $0 } == pid
@@ -176,6 +178,8 @@ public final class ScreenNameSampler: @unchecked Sendable {
                     // Nil until the first page read: those ticks looked at nothing.
                     if let pageLines { lines += pageLines; looked = true }
                 } else {
+                    // Read live here; a page read from before must not come back later.
+                    pageLines = nil
                     lines += CallWindowText.lines(pid: pid, browser: browser)
                     looked = true
                 }
