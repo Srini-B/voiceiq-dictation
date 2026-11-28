@@ -408,8 +408,9 @@ meeting never raises a permission prompt (`CGPreflightScreenCaptureAccess`,
    detected call source. A recording started by hand with no call detected
    reads the frontmost known call app (`ScreenNameSampler.frontCallApp`).
    With no call app, the sampler does not run. A browser running several
-   instances under one bundle ID (separate profiles) is read in the one with
-   a call-room window, the frontmost such (`ScreenNameSampler.callPID`); the
+   instances under one bundle ID (separate profiles) is read in the one
+   showing a joined call room (`CallApps.isCallRoom`), else one showing a
+   call site's page, the frontmost such (`ScreenNameSampler.callPID`); the
    first instance found was read before, and on 2026-11-28 a probe with four
    Chromes read no names in 102 samples.
 2. With Screen Recording granted, every 3 s the sampler captures one window of the call app or browser
@@ -509,7 +510,12 @@ Fixes from 2026-10-29:
   and `NLLanguageRecognizer` is at least 90 % sure of it. The model never
   chooses: an all-English meeting came back in Hindi once (2026-10-29), and
   an English AMI meeting got a Portuguese title (2026-11-28), each time when
-  the recognizer was unsure and the request left the language open.
+  the recognizer was unsure and the request left the language open. The
+  setting is the one dictation uses, so picking Spanish for dictation also
+  writes a short English meeting's notes in Spanish. Detect gives English
+  notes unless the transcript is clearly another language: a romanized Hindi
+  (Hinglish) or code-mixed meeting usually scores below 90 % and gets
+  English notes; one in Devanagari or Tamil script does not.
 - **The owner by name.** Notes are shared, so the owner is never "You" in
   them. The owner's label is, in order: the name typed for that meeting, the
   owner marker on screen, **Your name in meeting notes** in Settings →

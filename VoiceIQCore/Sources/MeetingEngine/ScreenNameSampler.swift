@@ -76,12 +76,15 @@ public final class ScreenNameSampler: @unchecked Sendable {
     /// The process that holds the call. A browser can run several instances
     /// under one bundle ID (separate profiles, the live-call probe's four
     /// Chromes), and Core Audio's tap takes all of them, so the call is the
-    /// one with a call-room window, the frontmost such, not whichever
-    /// instance the system lists first.
+    /// one showing a joined call room, the frontmost such, not whichever
+    /// instance the system lists first. A call site's page alone (a Teams or
+    /// WhatsApp chat) counts only when no instance shows a joined room, since
+    /// not every site's room address is known (Codex on #146).
     static func callPID(bundleID: String) -> pid_t? {
         let pids = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).map(\.processIdentifier)
         guard pids.count > 1, CallApps.browsers.contains(bundleID) else { return pids.first }
-        let rooms = Set(pids.filter { !CallWindowText.meetingWindowTitles(pid: $0).isEmpty })
+        let joined = Set(pids.filter(CallWindowText.showsJoinedRoom))
+        let rooms = joined.isEmpty ? Set(pids.filter { !CallWindowText.meetingWindowTitles(pid: $0).isEmpty }) : joined
         guard !rooms.isEmpty else { return nil }
         // Front to back, as `frontCallApp` reads them.
         let windows = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] ?? []

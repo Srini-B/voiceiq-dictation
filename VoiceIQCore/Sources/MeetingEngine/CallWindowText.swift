@@ -70,6 +70,19 @@ enum CallWindowText {
         return windows.filter(isMeeting).compactMap { value($0, kAXTitleAttribute) as? String }
     }
 
+    /// One of the app's windows shows a joined call room (`CallApps.isCallRoom`),
+    /// not only a call site: a Teams or WhatsApp chat is a meeting page too.
+    static func showsJoinedRoom(pid: pid_t) -> Bool {
+        guard AXIsProcessTrusted() else { return false }
+        let app = AXUIElementCreateApplication(pid)
+        AXUIElementSetMessagingTimeout(app, 0.25)
+        return (value(app, kAXWindowsAttribute) as? [AXUIElement] ?? []).contains { window in
+            let address = value(window, kAXDocumentAttribute) as? String
+            return address.map { CallApps.isCallRoom(addresses: [$0]) }
+                ?? (value(window, kAXTitleAttribute) as? String).map { CallApps.isCallRoom(titles: [$0]) } ?? false
+        }
+    }
+
     /// A button's label with the text inside it, such as "People 3".
     private static func buttonText(_ element: AXUIElement) -> String? {
         var parts: [String] = []
