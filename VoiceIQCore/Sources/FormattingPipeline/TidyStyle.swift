@@ -2,7 +2,7 @@
 // 012bdbbe). MIT licence, Copyright (c) 2026 Christopher Langton; see THIRD_PARTY_NOTICES.md.
 import Foundation
 
-/// How an on-device dictation is tidied when Writing rules and notes is
+/// How an on-device dictation is tidied when Writing rules is
 /// Off: punctuation, capitals and word lists only, with no model, so the
 /// words never leave the device and nothing waits on a network.
 public enum TidyStyle: String, CaseIterable, Sendable, Identifiable {

@@ -16,7 +16,7 @@ final class MeetingTracksTests: XCTestCase {
     /// A 16 kHz track: a 300 Hz tone where `loud`, faint noise elsewhere.
     private func track(_ name: String, duration: Double, loud: [ClosedRange<Double>]) throws -> TrackAudio {
         let url = root.appendingPathComponent(name)
-        try LocalMeetingTranscriber.writeMix(duration: duration, samples: { range in
+        try FarSideSpeakers.writeMix(duration: duration, samples: { range in
             let first = Int(range.lowerBound * TrackAudio.sampleRate), last = Int(range.upperBound * TrackAudio.sampleRate)
             return (first..<last).map { index in
                 let time = Double(index) / TrackAudio.sampleRate

@@ -1,11 +1,11 @@
 import SwiftUI
 import VoiceIQSpeech
 
-/// Gemini or this device, chosen apart for dictation and for meetings, then
-/// Gemini or Off for the writing step of an on-device dictation (and a
-/// meeting's notes), with how an unwritten dictation is tidied, then the
-/// on-device models grouped by their job: transcription and the English
-/// add-on. Shared by the macOS and iOS settings.
+/// Gemini or this device for dictation (meetings always use Gemini), then
+/// Gemini or Off for the writing step of an on-device dictation, with how an
+/// unwritten dictation is tidied, then the on-device models grouped by their
+/// job: transcription, meeting speakers, and the English add-on. Shared by
+/// the macOS and iOS settings.
 ///
 /// A group shows while its choice is On device. Otherwise it shows only while
 /// one of its models is on disk or downloading, so it can still be deleted
@@ -18,7 +18,6 @@ public struct SpeechSourceSection<Header: View>: View {
     @State private var dictationSource = SettingsStore().dictationSource
     @State private var cleanupSource = SettingsStore().cleanupSource
     @State private var tidyStyle = SettingsStore().tidyStyle
-    @State private var meetingSource = SettingsStore().meetingSource
     @State private var localModel = SettingsStore().localSpeechModel
     @ObservedObject private var mini = LocalModelStore.store(for: .parakeet)
     @ObservedObject private var pro = LocalModelStore.store(for: .fluidSpeechPro)
@@ -39,12 +38,8 @@ public struct SpeechSourceSection<Header: View>: View {
                 dictationSource = $0
                 settings.setDictationSource($0)
             }))
-            TranscriptionSourcePicker("Meetings", selection: Binding(get: { meetingSource }, set: {
-                meetingSource = $0
-                settings.setMeetingSource($0)
-            }))
             if anyOnDevice {
-                Picker("Writing rules and notes", selection: Binding(get: { cleanupSource }, set: {
+                Picker("Writing rules", selection: Binding(get: { cleanupSource }, set: {
                     cleanupSource = $0
                     settings.setCleanupSource($0)
                 })) {
@@ -74,7 +69,6 @@ public struct SpeechSourceSection<Header: View>: View {
         .onReceive(NotificationCenter.default.publisher(for: .gtSettingDidChange).receive(on: RunLoop.main)) { note in
             switch note.object as? String {
             case "transcriptionSource": dictationSource = settings.dictationSource
-            case "meetingTranscriptionSource": meetingSource = settings.meetingSource
             case "cleanupSource": cleanupSource = settings.cleanupSource
             case "tidyStyle": tidyStyle = settings.tidyStyle
             case "onDeviceSpeechModel": localModel = settings.localSpeechModel
@@ -83,18 +77,26 @@ public struct SpeechSourceSection<Header: View>: View {
         }
 
         if LocalModelSupport.isAvailable {
-            if shows(speechModels, offered: anyOnDevice) || shows([diarizer], offered: meetingsLocal) {
+            if shows(speechModels, offered: anyOnDevice) {
                 Section {
-                    LocalModelControls(localEnabled: dictationLocal, meetingsLocal: meetingsLocal, selection: $localModel)
-                    LocalModelRow(store: diarizer, offered: meetingsLocal, selection: nil)
+                    LocalModelControls(localEnabled: dictationLocal, selection: $localModel)
                 } header: {
                     header("On-device transcription")
                 } footer: {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(transcriptionNote)
+                        Text(dictationLocal ? "Dictation uses the checked model, in the language picked under it."
+                                            : "Not used while Dictation is set to Gemini.")
                         LocalModelFooter(localEnabled: dictationLocal, selection: localModel)
-                        LocalMeetingFooter(enabled: meetingsLocal, model: localModel)
                     }
+                }
+            }
+            if shows([diarizer], offered: false) {
+                Section {
+                    LocalModelRow(store: diarizer, offered: false, selection: nil)
+                } header: {
+                    header("Meeting speakers")
+                } footer: {
+                    Text("Tells the other people on a call apart, on this \(device). Gemini transcribes every meeting; this model is downloaded for it without asking.")
                 }
             }
             if shows([englishTools], offered: dictationLocal) {
@@ -111,8 +113,7 @@ public struct SpeechSourceSection<Header: View>: View {
     }
 
     private var dictationLocal: Bool { dictationSource == .onDevice }
-    private var meetingsLocal: Bool { meetingSource == .onDevice }
-    private var anyOnDevice: Bool { dictationLocal || meetingsLocal }
+    private var anyOnDevice: Bool { dictationLocal }
     /// An on-device dictation goes in without a writing step, so it is tidied.
     private var tidies: Bool { dictationLocal && cleanupSource == .none }
 
@@ -124,15 +125,6 @@ public struct SpeechSourceSection<Header: View>: View {
         stores.contains { LocalModelRow.isVisible($0.state, offered: offered) }
     }
 
-    private var transcriptionNote: String {
-        switch (dictationLocal, meetingsLocal) {
-        case (true, true): return "Dictation and meetings use the checked model. Speaker Separation tells meeting speakers apart."
-        case (true, false): return "Dictation uses the checked model, in the language picked under it."
-        case (false, true): return "Meetings use the checked model, and Speaker Separation tells speakers apart."
-        case (false, false): return "Not used while Dictation and Meetings are set to Gemini."
-        }
-    }
-
     private var cleanupNote: String {
         switch cleanupSource {
         case .gemini: return Self.geminiWrites
@@ -141,11 +133,11 @@ public struct SpeechSourceSection<Header: View>: View {
             let dictation = dictationLocal
                 ? " Dictations are tidied on this \(device) with your Dictionary's replacements. \(tidyStyle.summary)\(marks)"
                 : ""
-            return "No writing step.\(dictation) Meetings keep their transcript with speaker labels but no notes. If an on-device model is missing or fails, Gemini transcribes the recording when a key is saved."
+            return "No writing step.\(dictation) If the on-device model is missing or fails, Gemini transcribes the recording."
         }
     }
 
     static var geminiWrites: String {
-        "On-device transcripts go to Gemini as text, never as audio, to be written by your writing rules, and meetings get notes. If Gemini can't be reached, a dictation goes in as transcribed."
+        "On-device transcripts go to Gemini as text, never as audio, to be written by your writing rules. If Gemini can't be reached, a dictation goes in as transcribed."
     }
 }

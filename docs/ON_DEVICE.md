@@ -1,10 +1,11 @@
 # On-device speech
 
-VoiceiQ can transcribe dictations and meetings on the Mac, iPhone or iPad
-instead of sending audio to Gemini. Gemini stays the default. The models are
-Fluid Speech Pro and Fluid Speech Mini by FluidVoice (Parakeet TDT models
-converted to Core ML), run through the FluidAudio package, plus pyannote
-community-1 to tell meeting speakers apart. With writing Off, an on-device
+VoiceiQ can transcribe dictations on the Mac, iPhone or iPad instead of
+sending audio to Gemini. Gemini stays the default. The models are Fluid
+Speech Pro and Fluid Speech Mini by FluidVoice (Parakeet TDT models converted
+to Core ML), run through the FluidAudio package. Meetings are always
+transcribed by Gemini; on the Mac, pyannote community-1 tells the far side's
+speakers apart ([Meetings](#meetings)). With writing Off, an on-device
 dictation is tidied by rules on the device, with no model, so no model
 service sees the words. Finished text still syncs to your own iCloud like any
 dictation.
@@ -16,39 +17,31 @@ Settings → Dictation → Speech has these choices, each saved on its own:
 | Row | Values | Key | Default |
 | --- | --- | --- | --- |
 | Dictation | Gemini, On device | `transcriptionSource` | Gemini |
-| Meetings | Gemini, On device | `meetingTranscriptionSource` | Gemini |
-| Writing rules and notes | Gemini, Off | `cleanupSource` | Gemini |
+| Writing rules | Gemini, Off | `cleanupSource` | Gemini |
 | Tidy dictation | Sentences, Messages, Lists, As spoken | `tidyStyle` | Sentences |
 
-The third row shows only when dictation or meetings run on device; the fourth
-only when Dictation is On device and writing is Off. The third decides who
-writes an on-device transcript:
+The second row shows only when Dictation is On device; the third only when
+writing is also Off. The second decides who writes an on-device transcript:
 
 - **Gemini**: the transcript goes to Gemini as text, never as audio, with the
   built-in writing rules, your custom rules, dictionary and regional spelling
-  (`PromptV1.transcriptSection`). Meetings get notes. If Gemini fails or there
+  (`PromptV1.transcriptSection`). If Gemini fails or there
   is no key, the dictation goes in as transcribed.
 - **Off**: no writing step for an on-device transcript; it never goes to
   Gemini as text. Dictations are tidied on the device (see
   [Tidy dictation](#tidy-dictation)), with the Dictionary's replacements.
-  Meetings keep their transcript with speaker labels and a short
-  note that no summary was written. A recording the on-device models could not
-  transcribe still goes to Gemini (see below). As with every dictation and meeting, the finished text syncs to
+  A recording the on-device model could not transcribe still goes to Gemini
+  (see below). As with every dictation, the finished text syncs to
   your own iCloud when History sync is on (see PRIVACY.md).
 
-These choices cover what was transcribed on device. A row set to Gemini still
-sends its audio to Gemini: with Meetings On device and Dictation Gemini,
-dictations go to Gemini whatever this row says. A Gemini transcription always
+These choices cover what was transcribed on device. A Gemini transcription always
 applies the writing rules in the same request, so "Gemini transcribes,
 the device writes" does not exist.
 
-Whatever this row says, Off included, an on-device dictation or meeting whose
-model is missing, busy, fails or loads too slowly goes to Gemini as audio when
-a key is stored, and Gemini transcribes and writes it as with the Gemini
-source. A meeting is the exception: with Meetings On device and writing Off,
-one that fell back to Gemini still gets no notes, and its note says Gemini
-transcribed it. Without a key the dictation fails and stays in History for Retry, and
-the meeting is marked failed.
+Whatever this row says, Off included, an on-device dictation whose model is
+missing, busy, fails or loads too slowly goes to Gemini as audio when a key
+is stored, and Gemini transcribes and writes it as with the Gemini source.
+Without a key the dictation fails and stays in History for Retry.
 Screen context, when on, sends the screen's text with the Gemini writing
 request as it does with a Gemini dictation.
 
@@ -58,7 +51,8 @@ iPad):
 
 | Group | Rows | Shown while |
 | --- | --- | --- |
-| On-device transcription | Fluid Speech Mini and Pro (the checked one is used, with its Language picker while Dictation is On device), Speaker Separation | Dictation or Meetings is On device; Speaker Separation only for Meetings |
+| On-device transcription | Fluid Speech Mini and Pro (the checked one is used, with its Language picker while Dictation is On device) | Dictation is On device |
+| Meeting speakers | Speaker Separation | It is on disk or downloading (it downloads without asking for the first meeting) |
 | Add-on for English dictation | English tools | Dictation is On device |
 
 A group whose choice is not On device still shows while one of its models is
@@ -80,7 +74,7 @@ meeting by themselves.
 | Fluid Speech Pro (8-bit Core ML, `FluidVoice-Labs/fluid-speech-pro-coreml@3b9d38a`) | 652.3 MB | 25 European languages | Mac; iPhone/iPad with 6 GB of RAM or more |
 | Fluid Speech Mini (`d81c316`) | 252.7 MB | English | Mac; iPhone/iPad with less than 6 GB |
 | English tools (Silero VAD, Parakeet CTC vocabulary) | 103.9 MB | English | optional, adds dictionary correction |
-| Speaker separation (pyannote community-1) | 21.6 MB | any | needed for on-device meetings |
+| Speaker separation (pyannote community-1) | 21.6 MB | any | Mac, for meeting speakers |
 
 `LocalSpeechModel.available` gives the Mac both models. iOS offers one:
 `suggested(physicalMemory:)` picks Pro at 5 GiB of `physicalMemory` or more.
@@ -166,13 +160,24 @@ update.
 
 ## Meetings
 
-With Meetings set to On device, `MeetingEngine.transcribe` sends the saved
-tracks to `LocalMeetingTranscriber`: speech stretches are transcribed with the
-selected model and labelled by speaker with pyannote. Nothing is shown while
-recording, and the work runs after you stop. If it fails and a key exists,
-the meeting falls back to Gemini. With Writing rules and notes set to Gemini
-and a key stored, Gemini writes the notes from the transcript; with Off, the
-meeting keeps its transcript and no notes.
+Meetings are always transcribed by Gemini. On-device meeting transcription
+(Fluid Speech plus pyannote, `LocalMeetingTranscriber`) was removed in
+0.7.18: on six AMI meetings it scored M1–M4 87.5 / 45.7 / 69.6 / 57.3, under
+the 90 the scorecard asks of on-device work
+([activity](../activities/2026-11-27-meetings-gemini-only.md)). The speaker
+model stays: `MeetingTranscriber.splitFarSide` runs pyannote community-1 on
+the far-side track and lays its stretches over Gemini's words
+(`FarSideSpeakers`). Nothing passes `LocalMeetingJob` a speech model any more.
+
+A meeting that cannot reach Gemini (no key, offline, a timeout, a transport
+error or 5xx, a per-minute rate limit) keeps its audio and is marked as waiting (`MeetingMeta.waitsForGemini`).
+`MeetingEngine.transcribeWaiting` sends it again at launch, when the network
+comes back, when a key is saved, and on a timer (5 minutes, doubling to an
+hour) while it waits with a key, since Gemini recovering or a quota reset
+raises no other signal. The step that failed runs again: a meeting
+that failed while writing notes gets only its notes, so transcript edits stay
+and a synced meeting without audio recovers; one that failed while
+transcribing (also Redo transcript and notes) is transcribed again.
 
 ## Tidy dictation
 
