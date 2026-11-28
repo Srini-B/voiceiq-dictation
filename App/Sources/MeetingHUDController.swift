@@ -36,6 +36,7 @@ final class MeetingHUDController {
     var restingState: PillState? {
         if let until = meetings.endingAt { return .meetingEnding(until: until) }
         if case let .recording(_, since) = meetings.phase { return .meetingRecording(since: since, micMuted: meetings.micMuted) }
+        if !meetings.processing.isEmpty { return .meetingNotes }
         return nil
     }
 
@@ -56,6 +57,12 @@ final class MeetingHUDController {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] muted in self?.micMutedChanged(muted) }
             .store(in: &cancellables)
+        meetings.$processing
+            .map(\.isEmpty)
+            .removeDuplicates()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.processingChanged() }
+            .store(in: &cancellables)
 
         let center = NotificationCenter.default
         center.addObserver(forName: .pillMeetingAccepted, object: nil, queue: .main) { [weak self] _ in
@@ -66,6 +73,9 @@ final class MeetingHUDController {
         }
         center.addObserver(forName: .pillMeetingStopTapped, object: nil, queue: .main) { [weak self] _ in
             Task { @MainActor in self?.meetings.stopRecording() }
+        }
+        center.addObserver(forName: .pillMeetingMuteTapped, object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor in self.map { $0.meetings.setMicMuted(!$0.meetings.micMuted) } }
         }
         center.addObserver(forName: .pillMeetingKeepTapped, object: nil, queue: .main) { [weak self] _ in
             Task { @MainActor in self?.meetings.keepRecordingAfterCallEnd() }
@@ -128,6 +138,17 @@ final class MeetingHUDController {
         guard !dictationIsActive(), case let .recording(_, since) = meetings.phase, meetings.endingAt == nil else { return }
         if case .notice = hud.model.state { return }
         setPill(.meetingRecording(since: since, micMuted: muted))
+    }
+
+    /// Notes started or finished. Saved notes replace "Making notes…" with the
+    /// success check (`onNotesReady`), which this leaves alone; failed ones
+    /// fold back to the resting pill.
+    private func processingChanged() {
+        guard !dictationIsActive() else { return }
+        switch hud.model.state {
+        case .idleDot, .hidden, .meetingNotes: setPill(restingPill())
+        default: break
+        }
     }
 
     private func phaseChanged(_ phase: MeetingPhase) {

@@ -106,6 +106,11 @@ struct PillView: View {
             pillSurface(width: nil) {
                 MeetingEndingContent(until: until)
             }
+
+        case .meetingNotes:
+            pillSurface(width: nil) {
+                MeetingNotesContent()
+            }
         }
     }
 
@@ -127,6 +132,10 @@ struct PillView: View {
             .padding(.trailing, VoiceIQUI.Spacing.m)
             .frame(width: width, height: 48)
             .frame(maxWidth: width == nil ? 560 : nil)
+            // A width-less pill hugs its content: without this, the cap above
+            // took the panel's full proposal and centred the content in a
+            // 560 pt pill (live-call probe, 2026-11-28).
+            .fixedSize(horizontal: true, vertical: false)
             // Content is clipped to the capsule, not merely framed by it. A frame
             // constrains layout but does not stop a child drawing outside it, so
             // a line of text wider than the pill painted straight across the
@@ -226,6 +235,7 @@ struct PillView: View {
         case .meetingRecording(_, true): return "Recording meeting — mic muted"
         case .meetingRecording: return "Recording meeting"
         case .meetingEnding: return "Meeting ended — stopping the recording soon"
+        case .meetingNotes: return "Making meeting notes"
         }
     }
 }
@@ -378,4 +388,5 @@ extension Notification.Name {
     static let pillMeetingStopTapped = Notification.Name("io.blue.voiceiq.pill.meeting.stop")
     static let pillMeetingKeepTapped = Notification.Name("io.blue.voiceiq.pill.meeting.keep")
     static let pillMeetingDiscardTapped = Notification.Name("io.blue.voiceiq.pill.meeting.discard")
+    static let pillMeetingMuteTapped = Notification.Name("io.blue.voiceiq.pill.meeting.mute")
 }

@@ -19,6 +19,8 @@ enum PillState: Equatable {
     case meetingRecording(since: Date, micMuted: Bool)
     /// The recorded call ended; the meeting stops at `until` unless kept.
     case meetingEnding(until: Date)
+    /// A stopped meeting's notes are being made; ends in the success check.
+    case meetingNotes
 }
 
 /// Microphone level for the waveform. A plain reference, not published: the
