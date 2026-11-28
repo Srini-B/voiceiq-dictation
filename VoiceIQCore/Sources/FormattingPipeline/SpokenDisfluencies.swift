@@ -254,7 +254,11 @@ enum SpokenDisfluencies {
               !tokens[after].hasComma, !["and", "or"].contains(tokens[after].bare), !endsSentence(tokens[after].word),
               // A capital mid-sentence may be a name: "We met, you know, Like, to discuss it".
               !fillers.contains(where: { capitalizedMidSentence(tokens, at: $0.lowerBound) }),
-              opensSentence ? nounStarts.contains(tokens[after].bare) : tokens[index - 1].hasComma && !tokens[index - 1].quoted
+              // A sentence's opening "Like," may be the verb before its object ("Like, this video"): a filler
+              // only before a subject ("Like, I don't know").
+              opensSentence
+                ? (tokens[index].bare == "like" ? pronouns.contains(tokens[after].bare) : nounStarts.contains(tokens[after].bare))
+                : tokens[index - 1].hasComma && !tokens[index - 1].quoted
         else { return ([], after) }
         let next = tokens[after]
         // The word after `next`, past the empty words of a double space.
