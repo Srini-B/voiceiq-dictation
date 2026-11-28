@@ -24,6 +24,11 @@ final class MeetingNotesPromptTests: XCTestCase {
         XCTAssertEqual(notes.actions.map(\.text), ["Ask Sarah for costs", "Draw"])
         XCTAssertEqual(notes.actions.map(\.owner), [nil, "Sarah"])
 
+        // Spanish notes keep an unnamed label rather than get English words; a name still goes in.
+        let spanish = try MeetingNotesPrompt.parse(#"{"title":"Presupuesto","summary":"Speaker 2 confirmó el presupuesto con Speaker 1 para el próximo trimestre.","decisions":[],"actions":[],"notes":[],"speakers":[{"label":"Speaker 1","name":"Sarah"}]}"#,
+                                                   labels: ["Speaker 1", "Speaker 2"])
+        XCTAssertEqual(spanish.summary, "Speaker 2 confirmó el presupuesto con Sarah para el próximo trimestre.")
+
         let prompt = MeetingNotesPrompt.build(transcript: [TranscriptSegment(speaker: "you", text: "Hi.", chunkIndex: 0, start: 1)],
                                               context: .init(startedAt: Date(), durationSeconds: 60, app: nil, names: [:], ownerName: "Speaker B"))
         XCTAssertFalse(prompt.contains("Speaker B"))

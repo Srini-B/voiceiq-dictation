@@ -187,11 +187,18 @@ public enum MeetingNotesPrompt {
         var names: [String: String] = [:]
         for speaker in notes.speakers ?? [] { if let name = speaker.name { names[speaker.label] = name } }
         let pattern = try! Regex("\\b(" + labels.sorted { $0.count > $1.count }.map(NSRegularExpression.escapedPattern(for:)).joined(separator: "|") + ")\\b")
+        // Notes in another language keep an unnamed label rather than get
+        // English words in them (Codex on #165).
+        let recognizer = NLLanguageRecognizer()
+        recognizer.processString(notes.summary + " " + notes.notes.joined(separator: " "))
+        let english = recognizer.dominantLanguage.map { $0 == .english } ?? true
         var replaced = 0
         func fix(_ text: String) -> String {
             var out = text.replacing(pattern) { match -> String in
+                let label = String(text[match.range])
+                guard let name = names[label] ?? (english ? "another participant" : nil) else { return label }
                 replaced += 1
-                return names[String(text[match.range])] ?? "another participant"
+                return name
             }
             // At the start of a sentence.
             out = out.replacing(#/(^|[.!?]\s+|\n\s*)another participant/#) { $0.output.1 + "Another participant" }
