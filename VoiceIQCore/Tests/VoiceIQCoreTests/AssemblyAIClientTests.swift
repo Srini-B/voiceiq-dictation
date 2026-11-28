@@ -10,7 +10,8 @@ final class AssemblyAIClientTests: XCTestCase {
         let body = #"{"metadata":{"errors":["Your account does not have access to this LLM Gateway model"]},"message":"invalid request body","code":400}"#
         let server = try ScriptedServer(status: 400, reply: body)
         defer { server.stop() }
-        XCTAssertEqual(try await refusal(from: server), .noBalance)
+        let error = try await refusal(from: server)
+        XCTAssertEqual(error, .noBalance)
         XCTAssertEqual(server.requests.first?.headers["authorization"], "test")
     }
 
@@ -20,7 +21,8 @@ final class AssemblyAIClientTests: XCTestCase {
         let body = #"{"error": "Your current account balance is negative. Please top up to continue using the API."}"#
         let server = try ScriptedServer(status: 400, reply: body)
         defer { server.stop() }
-        XCTAssertEqual(try await refusal(from: server), .noBalance)
+        let error = try await refusal(from: server)
+        XCTAssertEqual(error, .noBalance)
     }
 
     private func refusal(from server: ScriptedServer) async throws -> TranscriptionError? {
