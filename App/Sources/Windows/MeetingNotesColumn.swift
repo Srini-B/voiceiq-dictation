@@ -27,7 +27,7 @@ struct MeetingNotesColumn<Live: View>: View {
                     .padding(.bottom, -VoiceIQUI.Spacing.s)
             }
             VStack(alignment: .leading, spacing: VoiceIQUI.Spacing.xs) {
-                Text(meeting.displayTitle(notes: notes) ?? "Meeting").font(GTFont.flex(22, weight: 600))
+                Text(meeting.displayTitle(notes: notes) ?? "Meeting").font(VoiceIQUI.TypeScale.headline())
                 Text(meeting.whenText).font(VoiceIQUI.TypeScale.labelSmall()).foregroundStyle(.secondary)
                 if !speakers.isEmpty { people }
             }
@@ -84,7 +84,7 @@ struct MeetingNotesColumn<Live: View>: View {
 
     private func section<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: VoiceIQUI.Spacing.xs) {
-            Text(title).font(GTFont.flex(15, weight: 600))
+            Text(title).font(GTFont.flex(VQ.TypeScale.title2.size, weight: VQ.TypeScale.title2.weight))
             content()
         }
     }
