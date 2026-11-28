@@ -428,7 +428,7 @@ struct TouchDot: View {
 // MARK: - Looping
 
 /// One frame of a looping animation and how long it stays on screen.
-protocol LoopPhase: CaseIterable, Equatable {
+protocol LoopPhase: CaseIterable, Equatable, Sendable {
     var hold: Double { get }
 }
 
