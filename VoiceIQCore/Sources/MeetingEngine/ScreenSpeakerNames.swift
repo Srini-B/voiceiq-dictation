@@ -272,9 +272,9 @@ public enum ScreenSpeakerNames {
             votes[answer.speaker, default: []].insert(name)
         }
         var out = screen ?? ScreenNames(seen: [], speakers: [:])
-        for (speaker, heard) in votes where heard.count == 1 {
+        for (speaker, answered) in votes where answered.count == 1 {
             // Every vote counts, a voice that answered two names included.
-            guard let name = heard.first, !votes.contains(where: { $0.key != speaker && $0.value.contains(name) }) else { continue }
+            guard let name = answered.first, !votes.contains(where: { $0.key != speaker && $0.value.contains(name) }) else { continue }
             // A voice that introduced itself by another name is left to the notes.
             let introduced = transcript.filter { $0.speaker == speaker }.flatMap { introductions(in: $0.text) }
             guard introduced.allSatisfy({ heard($0, as: name) }) else { continue }
