@@ -35,7 +35,11 @@ public enum FileLayout {
     /// (io.blue.voiceiq.probe) otherwise writes into the real app's folder,
     /// and the real app uploads those meetings at its next launch. Read once.
     public static let testDataFolder: URL? = {
-        guard let path = UserDefaults.standard.string(forKey: "DebugDataFolder"), path.hasPrefix("/") else { return nil }
+        guard let path = UserDefaults.standard.string(forKey: "DebugDataFolder") else { return nil }
+        guard path.hasPrefix("/") else {
+            Log.session.error("DebugDataFolder ignored, not an absolute path: \(path, privacy: .public)")
+            return nil
+        }
         Log.session.notice("data folder (test): \(path, privacy: .public)")
         return URL(fileURLWithPath: path, isDirectory: true)
     }()
@@ -65,7 +69,8 @@ public enum FileLayout {
     /// models (`Models`) are kept; Settings deletes them.
     public static func removeStaleFiles() {
         Task.detached(priority: .utility) {
-            LocalModelInstaller.removeUnusedPreparedModels()
+            // Not in a test copy: the prepared-model cache is the real app's (Fable on #161).
+            if FileLayout.testDataFolder == nil { LocalModelInstaller.removeUnusedPreparedModels() }
             try? FileManager.default.removeItem(at: FileLayout.appSupportRoot
                 .appendingPathComponent("Models/lfm3-omni-2b", isDirectory: true))
             #if os(macOS)
