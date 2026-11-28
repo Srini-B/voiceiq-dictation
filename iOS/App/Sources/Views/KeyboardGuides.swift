@@ -49,11 +49,16 @@ struct KeyboardSettingsWalkthrough: View {
                 GuideInstruction(number: 1, text: Text("Tap **Keyboards**"), current: reduceMotion || phase.instruction == 0)
                 GuideInstruction(number: 2, text: Text("Turn on **VoiceiQ**"), current: reduceMotion || phase.instruction == 1)
                 GuideInstruction(number: 3, text: Text("Turn on **Allow Full Access**, then tap **Allow**"), current: reduceMotion || phase.instruction == 2)
+                // iOS sometimes opens Settings at its home page instead.
+                Text("In Settings: Apps › VoiceiQ › Keyboards")
+                    .font(Theme.Fonts.footnote())
+                    .foregroundStyle(Theme.Colors.muted)
+                    .padding(.top, Theme.Spacing.xs)
             }
         }
         .loopingPhases($phase, still: .done)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("In VoiceiQ's page in Settings, tap Keyboards, turn on VoiceiQ, then turn on Allow Full Access and tap Allow.")
+        .accessibilityLabel("In Settings, Apps, VoiceiQ: tap Keyboards, turn on VoiceiQ, then turn on Allow Full Access and tap Allow.")
     }
 
     private var screen: some View {

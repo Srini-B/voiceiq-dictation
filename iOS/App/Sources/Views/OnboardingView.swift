@@ -63,11 +63,14 @@ struct OnboardingView: View {
         // that gets done while it shows, checks off and moves on. Back onto a
         // done page stays put, so Back is never undone. With VoiceOver the
         // page announces the check and waits for Continue instead.
-        .task(id: AutoAdvance(step: step, done: step.isDone(setup.status), stayPut: stayPut)) {
+        .task(id: AutoAdvance(step: step, done: step.isDone(setup.status), stayPut: stayPut, voiceOver: voiceOver)) {
             let started = step
             guard started.isDone(setup.status), !stayPut else { return }
-            completions += 1
+            if !voiceOver { completions += 1 }
             if voiceOver {
+                // After VoiceOver has read the alert closing or the new page.
+                try? await Task.sleep(for: .seconds(0.6))
+                guard !Task.isCancelled else { return }
                 UIAccessibility.post(notification: .announcement, argument: "Done. Continue when you’re ready.")
                 return
             }
@@ -91,6 +94,7 @@ struct OnboardingView: View {
         let step: Step
         let done: Bool
         let stayPut: Bool
+        let voiceOver: Bool
     }
 
     /// Whether the page will move on by itself, so it offers no Continue.
