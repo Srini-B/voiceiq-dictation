@@ -626,7 +626,7 @@ private struct MeetingDetail: View {
 
 /// iOS 26 fades scrolled text under a glass bar instead of drawing the bar's
 /// background; a hard edge keeps it out from under the title.
-private struct HardTopEdge: ViewModifier {
+struct HardTopEdge: ViewModifier {
     func body(content: Content) -> some View {
         if #available(iOS 26, *) { content.scrollEdgeEffectStyle(.hard, for: .top) } else { content }
     }
