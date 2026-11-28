@@ -194,11 +194,11 @@ private struct MainView: View {
                     ContentUnavailableView("Cost tracking unavailable", systemImage: "dollarsign.circle")
                 }
             case .dictation:
-                DictationPane().formStyle(.grouped)
+                DictationPane().formStyle(.grouped).scrollContentBackground(.hidden)
             case .privacy:
-                PrivacyPane(onDeleteAllHistory: onDeleteAllHistory).formStyle(.grouped)
+                PrivacyPane(onDeleteAllHistory: onDeleteAllHistory).formStyle(.grouped).scrollContentBackground(.hidden)
             case .advanced:
-                AdvancedPane().formStyle(.grouped)
+                AdvancedPane().formStyle(.grouped).scrollContentBackground(.hidden)
             case .about:
                 AboutPane()
             }
@@ -207,8 +207,10 @@ private struct MainView: View {
         // top edge with its own padding instead of below an empty titlebar strip.
         .ignoresSafeArea(.container, edges: .top)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        // Data panes read on the white canvas; settings sit on the grey
+        // grouped page under their white cards (docs/design/redesign-2026-11.md).
         .background {
-            Color(nsColor: .windowBackgroundColor)
+            (MainSection.settingsSections.contains(model.selection) ? VQ.Colors.grouped : VQ.Colors.canvas)
                 .ignoresSafeArea(.container, edges: .top)
         }
     }

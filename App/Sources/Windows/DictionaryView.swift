@@ -26,6 +26,7 @@ struct DictionaryView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            header
             searchRow
             addRow
             if entries.isEmpty {
@@ -49,19 +50,33 @@ struct DictionaryView: View {
     // Same field as History's header, so the two data panes share one header
     // shape and the window titlebar stays a plain title (a toolbar search field
     // restyled the titlebar and pushed the sidebar down on this pane only).
+    private var header: some View {
+        VStack(alignment: .leading, spacing: VoiceIQUI.Spacing.xxs) {
+            Text("Dictionary")
+                .font(VoiceIQUI.TypeScale.display(grad: grad))
+                .foregroundStyle(VQ.Colors.ink)
+            Text("Names and terms VoiceiQ should always spell your way.")
+                .font(VoiceIQUI.TypeScale.body(grad: grad))
+                .foregroundStyle(VQ.Colors.muted)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, VQ.Spacing.page)
+        .padding(.top, VoiceIQUI.Spacing.l)
+        .padding(.bottom, VoiceIQUI.Spacing.s)
+    }
+
     private var searchRow: some View {
         HStack(spacing: VoiceIQUI.Spacing.xs) {
             Image(systemName: "magnifyingglass")
-                .foregroundStyle(.secondary)
+                .foregroundStyle(VQ.Colors.muted)
             TextField("Search your dictionary", text: $search)
                 .textFieldStyle(.plain)
                 .font(VoiceIQUI.TypeScale.body(grad: grad))
         }
         .padding(.horizontal, VoiceIQUI.Spacing.s)
-        .padding(.vertical, 7)
-        .background(RoundedRectangle(cornerRadius: VoiceIQUI.Radius.small).fill(.quaternary.opacity(0.5)))
-        .padding(.horizontal, VoiceIQUI.Spacing.l)
-        .padding(.top, VoiceIQUI.Spacing.l)
+        .frame(height: 32)
+        .background(Capsule().fill(VQ.Colors.fill))
+        .padding(.horizontal, VQ.Spacing.page)
     }
 
     /// The labels stay above the fields once they are filled in, so the right
@@ -78,9 +93,11 @@ struct DictionaryView: View {
             .buttonStyle(.plain)
             .disabled(newTerm.isEmpty)
         }
-        .padding(VoiceIQUI.Spacing.s)
-        .background(RoundedRectangle(cornerRadius: VoiceIQUI.Radius.medium).fill(VoiceIQUI.Colors.surfaceContainer))
-        .padding(.horizontal, VoiceIQUI.Spacing.l)
+        .padding(.horizontal, VoiceIQUI.Spacing.m)
+        .padding(.vertical, VoiceIQUI.Spacing.s)
+        .background(RoundedRectangle(cornerRadius: VQ.Radius.card, style: .continuous).fill(VQ.Colors.surface))
+        .overlay(RoundedRectangle(cornerRadius: VQ.Radius.card, style: .continuous).strokeBorder(VQ.Colors.hairline, lineWidth: 1))
+        .padding(.horizontal, VQ.Spacing.page)
         .padding(.vertical, VoiceIQUI.Spacing.s)
     }
 
@@ -111,52 +128,56 @@ struct DictionaryView: View {
 
     private var entryList: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: VoiceIQUI.Spacing.l) {
-                section("Dictionary", filtered.filter { $0.source == .manual })
-                section("Auto-learned", filtered.filter { $0.source == .auto })
+            VStack(alignment: .leading, spacing: VoiceIQUI.Spacing.xl) {
+                section("Your words", filtered.filter { $0.source == .manual })
+                section("Learned from your corrections", filtered.filter { $0.source == .auto })
             }
-            .padding(.horizontal, VoiceIQUI.Spacing.l)
+            .frame(maxWidth: 720, alignment: .leading)
+            .padding(.horizontal, VQ.Spacing.page)
             .padding(.vertical, VoiceIQUI.Spacing.s)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
     @ViewBuilder
     private func section(_ title: String, _ items: [DictionaryEntry]) -> some View {
         if !items.isEmpty {
-            VStack(alignment: .leading, spacing: VoiceIQUI.Spacing.xs) {
-                Text(title)
-                    .font(VoiceIQUI.TypeScale.labelSmall(grad: grad))
-                    .foregroundStyle(.secondary)
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 200), spacing: VoiceIQUI.Spacing.s)],
-                          spacing: VoiceIQUI.Spacing.s) {
-                    ForEach(items) { entry in entryCard(entry) }
+            VStack(alignment: .leading, spacing: 0) {
+                SectionCaption(text: "\(title) · \(items.count)")
+                LazyVStack(alignment: .leading, spacing: 0) {
+                    ForEach(items) { entry in
+                        entryRow(entry)
+                        Rectangle().fill(VQ.Colors.hairline).frame(height: 1)
+                    }
                 }
             }
         }
     }
 
-    private func entryCard(_ entry: DictionaryEntry) -> some View {
-        HStack(alignment: .top, spacing: VoiceIQUI.Spacing.s) {
+    /// One word on a hairline row: star, the spelling, what it is heard as.
+    private func entryRow(_ entry: DictionaryEntry) -> some View {
+        HStack(alignment: .center, spacing: VoiceIQUI.Spacing.s) {
             Button {
                 store.toggleStar(id: entry.id)
                 reload()
             } label: {
                 Image(systemName: entry.starred ? "star.fill" : "star")
-                    .foregroundStyle(entry.starred ? VoiceIQUI.Colors.gYellow : VoiceIQUI.Colors.onSurfaceVariant.opacity(0.5))
+                    .foregroundStyle(entry.starred ? VQ.Colors.warning : VQ.Colors.faint)
             }
             .buttonStyle(.plain)
             .help("Starred words are prioritized")
 
-            VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: VoiceIQUI.Spacing.xs) {
                 Text(entry.term)
-                    .font(VoiceIQUI.TypeScale.body(grad: grad))
-                    .foregroundStyle(VoiceIQUI.Colors.onSurface)
+                    .font(VoiceIQUI.TypeScale.bodyLarge(grad: grad))
+                    .foregroundStyle(VQ.Colors.ink)
                     .lineLimit(1)
-                // A blank second line keeps cards without one the same height.
-                Text(subtitle(entry) ?? " ")
-                    .font(VoiceIQUI.TypeScale.labelSmall(grad: grad))
-                    .foregroundStyle(VoiceIQUI.Colors.onSurfaceVariant)
-                    .lineLimit(1)
+                if let subtitle = subtitle(entry) {
+                    Text(subtitle)
+                        .font(VoiceIQUI.TypeScale.body(grad: grad))
+                        .foregroundStyle(VQ.Colors.muted)
+                        .lineLimit(1)
+                }
             }
             .help([entry.term, subtitle(entry)].compactMap { $0 }.joined(separator: "\n"))
             Spacer(minLength: 0)
@@ -165,45 +186,38 @@ struct DictionaryView: View {
                 reload()
             } label: {
                 Image(systemName: "xmark")
-                    .font(.system(size: 10))
-                    .foregroundStyle(VoiceIQUI.Colors.onSurfaceVariant)
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(VQ.Colors.muted)
+                    .frame(width: 20, height: 20)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .help("Remove")
         }
-        .padding(VoiceIQUI.Spacing.s)
+        .frame(minHeight: 40)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: VoiceIQUI.Radius.medium).fill(VoiceIQUI.Colors.surfaceContainer))
     }
 
     private func subtitle(_ entry: DictionaryEntry) -> String? {
-        if let misspelling = entry.misspelling, !misspelling.isEmpty { return "Heard as \"\(misspelling)\"" }
-        if let learnedFrom = entry.learnedFrom, !learnedFrom.isEmpty { return "Heard as \"\(learnedFrom)\"" }
+        if let misspelling = entry.misspelling, !misspelling.isEmpty { return "heard as “\(misspelling)”" }
+        if let learnedFrom = entry.learnedFrom, !learnedFrom.isEmpty { return "heard as “\(learnedFrom)”" }
         return nil
     }
 
     private var emptyState: some View {
-        VStack(spacing: VoiceIQUI.Spacing.s) {
-            Spacer()
-            Image(systemName: "character.book.closed")
-                .font(.system(size: 28))
-                .foregroundStyle(VoiceIQUI.Colors.onSurfaceVariant)
-            Text("Teach it your words")
-                .font(VoiceIQUI.TypeScale.title(grad: grad))
-                .foregroundStyle(VoiceIQUI.Colors.onSurface)
-            Text("Names, jargon, product terms — add them once,\nthey're spelled right in every dictation.")
-                .font(VoiceIQUI.TypeScale.body(grad: grad))
-                .foregroundStyle(VoiceIQUI.Colors.onSurfaceVariant)
-                .multilineTextAlignment(.center)
-            Spacer()
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        Text("No words yet. Add a name or a term above, and it's spelled right in every dictation.")
+            .font(VoiceIQUI.TypeScale.body(grad: grad))
+            .foregroundStyle(VQ.Colors.muted)
+            .padding(.horizontal, VQ.Spacing.page)
+            .padding(.top, VoiceIQUI.Spacing.s)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
     private var footer: some View {
         HStack {
             Text(feedback ?? "\(entries.count) \(entries.count == 1 ? "word" : "words")")
                 .font(VoiceIQUI.TypeScale.labelSmall(grad: grad))
-                .foregroundStyle(feedback == nil ? VoiceIQUI.Colors.onSurfaceVariant : VoiceIQUI.Colors.primary)
+                .foregroundStyle(feedback == nil ? VQ.Colors.muted : VoiceIQUI.Colors.primary)
             Spacer()
             Button("Import CSV…", action: importCSV)
                 .font(VoiceIQUI.TypeScale.labelSmall(grad: grad))
@@ -212,7 +226,7 @@ struct DictionaryView: View {
                 .disabled(entries.isEmpty)
         }
         .buttonStyle(.link)
-        .padding(.horizontal, VoiceIQUI.Spacing.l)
+        .padding(.horizontal, VQ.Spacing.page)
         .padding(.vertical, VoiceIQUI.Spacing.s)
     }
 
