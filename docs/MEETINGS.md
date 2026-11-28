@@ -557,8 +557,8 @@ since a redo then would write over the change.
   builds before 2026-11-10) and hears
   the whole meeting again. **Retry** after a
   failure keeps the finished windows.
-- Redo and Retry transcribe from the saved tracks with the meeting model set
-  at that moment (Settings → Advanced → Meeting model). `mic.caf` and
+- Redo and Retry transcribe from the saved tracks with AssemblyAI STT-3.7.
+  A Retry after a notes-only failure rewrites only the notes (`MeetingMeta.failedStep`). `mic.caf` and
   `system.caf` stay until the meeting is deleted; the audio retention setting
   applies to dictations only.
 - `MeetingEngine.processing` maps each meeting being processed to its step

@@ -197,7 +197,7 @@ exit(failures == 0 ? 0 : 2)
     let calls = usageStore.records(forSession: input.id).map { r in
         Output.Call(stage: r.stage, model: r.model, text_in: r.textIn, audio_in: r.audioIn, image_in: r.imageIn,
                     cached_in: r.cachedIn, text_out: r.textOut, audio_out: r.audioOut, thought_out: r.thoughtOut,
-                    estimated: r.isEstimated, cost_usd: PriceBook.cost(model: r.model, usage: r.usage, at: pricedAt))
+                    estimated: r.isEstimated, cost_usd: PriceBook.cost(model: r.model, usage: r.usage, at: pricedAt) ?? r.costUSD)
     }
     let total = { (calls: [Output.Call]) -> Double? in
         calls.allSatisfy { $0.cost_usd != nil } ? calls.compactMap(\.cost_usd).reduce(0, +) : nil

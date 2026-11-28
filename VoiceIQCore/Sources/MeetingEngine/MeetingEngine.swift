@@ -342,8 +342,8 @@ import VoiceIQSpeech
     public func retry(id: MeetingID, fresh: Bool = false) {
         guard !isBusy(id), let folder = store.folder(for: id), let meta = store.list().first(where: { $0.id == id }) else { return }
         // Only the notes failed (waiting, or for a reason such as no gateway
-        // balance): the saved transcript, and any edits to it, stay.
-        if !fresh, meta.waitsForService == .notes || Self.onlyNotesFailed(id, store: store) { return regenerateNotes(id: id) }
+        // balance, also on Redo notes): the saved transcript, and any edits to it, stay.
+        if !fresh, (meta.waitsForService ?? meta.failedStep) == .notes { return regenerateNotes(id: id) }
         if fresh { Self.dropTranscriptCaches(folder) }
         processing[id] = .transcribing
         Task { await UsageMeter.$scope.withValue(UsageScope(activity: .meeting, sessionID: id.uuid.uuidString)) {
@@ -377,11 +377,6 @@ import VoiceIQSpeech
         meta.status = status
         processing[meta.id] = status
         try store.save(meta: meta)
-    }
-
-    /// A transcript was saved and no notes were: the notes step failed.
-    nonisolated static func onlyNotesFailed(_ id: MeetingID, store: MeetingStore) -> Bool {
-        (try? store.loadTranscript(id: id))?.isEmpty == false && (try? store.loadNotes(id: id)) == nil
     }
 
     /// The words cached beside the audio by `MeetingTranscriber` (the
@@ -472,6 +467,7 @@ import VoiceIQSpeech
         let step: ServiceStep = meta.status == .summarizing ? .notes : .transcript
         meta.status = .failed(reason)
         meta.waitsForService = MeetingFailure.waitsForService(error) ? step : nil
+        meta.failedStep = step
         try? store.save(meta: meta)
         processing[id] = nil
         if meta.waitsForService != nil, hasKey() { scheduleWaitingRetry() }
@@ -538,6 +534,7 @@ import VoiceIQSpeech
         meta.title = notes.title; meta.status = .done; meta.notesSpeakerNames = meta.speakerNames
         if meta.waitsForService != nil { waitingDelay = .seconds(300) }
         meta.waitsForService = nil
+        meta.failedStep = nil
         // Names typed while the notes were written stay, and show the notes as out of date.
         if let current = store.list().first(where: { $0.id == id }) { meta.speakerNames = current.speakerNames }
         try store.save(meta: meta)
@@ -583,7 +580,7 @@ public enum MeetingFailure: Error, Equatable {
     static let fixHint = "The recording is saved. Press Retry after fixing this."
     /// Where keys live and what the list is called on each platform.
     #if os(macOS)
-    static let keysPlace = "Settings → API Key"
+    static let keysPlace = "Settings → Advanced"
     static let listName = "Meetings", noun = "Meeting"
     #else
     static let keysPlace = "API Key"

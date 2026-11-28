@@ -10,15 +10,28 @@ final class AssemblyAIClientTests: XCTestCase {
         let body = #"{"metadata":{"errors":["Your account does not have access to this LLM Gateway model"]},"message":"invalid request body","code":400}"#
         let server = try ScriptedServer(status: 400, reply: body)
         defer { server.stop() }
-        let client = AssemblyAIClient(apiKey: { "test" })
-
-        do {
-            _ = try await client.send(url: server.url.appendingPathComponent("v1/chat/completions"), body: Data("{}".utf8),
-                                      deadline: 10, modelLabel: "gpt-6-luna", stage: .cleanup)
-            XCTFail("expected a failure")
-        } catch {
-            XCTAssertEqual(error as? TranscriptionError, .noBalance)
-        }
+        XCTAssertEqual(try await refusal(from: server), .noBalance)
         XCTAssertEqual(server.requests.first?.headers["authorization"], "test")
+    }
+
+    /// The speech API's 400 once the free credit is spent reads as no
+    /// balance too, not as a bad request.
+    func testSpentCreditIsNoBalance() async throws {
+        let body = #"{"error": "Your current account balance is negative. Please top up to continue using the API."}"#
+        let server = try ScriptedServer(status: 400, reply: body)
+        defer { server.stop() }
+        XCTAssertEqual(try await refusal(from: server), .noBalance)
+    }
+
+    private func refusal(from server: ScriptedServer) async throws -> TranscriptionError? {
+        let client = AssemblyAIClient(apiKey: { "test" })
+        do {
+            _ = try await client.send(url: server.url.appendingPathComponent("v2/transcript"), body: Data("{}".utf8),
+                                      deadline: 10, modelLabel: "assemblyai-stt-3-7", stage: .cleanup)
+            XCTFail("expected a failure")
+            return nil
+        } catch {
+            return error as? TranscriptionError
+        }
     }
 }

@@ -57,9 +57,9 @@ paths are spelled right; no image is sent) can be switched off in
 Settings → Dictation.
 See [PRIVACY.md](docs/PRIVACY.md).
 
-**Your jargon, spelled right.** Names and product terms go in the Dictionary and
-are sent as keyterms with the audio, so the speech model hears "Kubernetes" instead of guessing
-"cooper netties" — corrected at the source, not patched afterwards. Fix a word
+**Your jargon, spelled right.** Names and product terms go in the Dictionary,
+and the writing model spells them as you wrote them there, so "cooper netties"
+comes out as "Kubernetes". Fix a word
 after VoiceiQ types it and the correction is learned into the Dictionary on its own. The
 Dictionary syncs between the Mac and iPhone through your iCloud account, and the
 iPhone keyboard adds a selected or copied word in one tap.
@@ -135,7 +135,7 @@ VoiceiQ itself is free and has no account.
 
 The writing model never hears the audio: it gets the transcript, with any
 screen text, and writes the text.
-Dictation and meetings can also be transcribed on device with Fluid Speech
+Dictation can also be transcribed on device with Fluid Speech
 Pro or Mini by FluidVoice. Their transcripts are then written by AssemblyAI, or,
 with writing Off, tidied on the device by rules with no model; see
 [docs/ON_DEVICE.md](docs/ON_DEVICE.md).

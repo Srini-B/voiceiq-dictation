@@ -215,9 +215,15 @@ public final class RealtimeTranscription: @unchecked Sendable {
         resumeWaiter()
         guard wasOpen else { return }
         // Terminate ends the session at once; the close frame alone may leave
-        // it billing until the inactivity timeout.
-        if !ended { task.send(.string(#"{"type":"Terminate"}"#)) { _ in } }
-        task.cancel(with: .normalClosure, reason: nil)
+        // it billing until the inactivity timeout. The socket closes once
+        // Terminate is out, or after a second if the send never completes.
+        let task = task
+        if ended {
+            task.cancel(with: .normalClosure, reason: nil)
+        } else {
+            task.send(.string(#"{"type":"Terminate"}"#)) { _ in task.cancel(with: .normalClosure, reason: nil) }
+            DispatchQueue.global().asyncAfter(deadline: .now() + 1) { task.cancel(with: .normalClosure, reason: nil) }
+        }
         session.finishTasksAndInvalidate()
         recordUsage()
     }

@@ -19,6 +19,9 @@ public final class DictationCoordinator: ObservableObject {
     @Published public private(set) var audioFlowing = false
     @Published public private(set) var lastResult: String?
     @Published public private(set) var coachingHint: String?
+    /// The last inserted dictation's note, such as "Inserted as heard" when
+    /// the writing step failed; shown in place of the success mark.
+    public private(set) var insertedNotice: String?
 
     /// "Delete All History" should also forget the paste-last buffer — a user
     /// wiping their words expects them gone from everywhere we hold them.
@@ -249,6 +252,7 @@ public final class DictationCoordinator: ObservableObject {
         }
         state = .idle
         coachingHint = nil
+        insertedNotice = nil
         pendingLockIn = false // never inherit a stale latch from a dead session
         audioFlowing = false
         apply(.hotkeyBegin)
@@ -615,7 +619,7 @@ public final class DictationCoordinator: ObservableObject {
         if session?.id == sessionID {
             // Set before the state changes, so observers of the state read it.
             // The insertion's own notice (clipboard, secure field) comes first.
-            if let notice = outcome.notice, case .inserted = insertionOutcome { coachingHint = notice }
+            if case .inserted = insertionOutcome { insertedNotice = outcome.notice }
             apply(event)
             session = nil
         } else {

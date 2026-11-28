@@ -106,10 +106,10 @@ public struct AssemblyAITranscriptionService: TranscriptionServicing {
         let rules = DictionaryStore().replacementRules()
         let raw = transcript.cleanedTranscript
         guard !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw TranscriptionError.emptyTranscript }
+        let heardInCloud = transcript.modelID.hasPrefix("assemblyai") || transcript.modelID.hasPrefix("universal")
         func tidied(notice: String?) throws -> TranscriptionResult {
             // The language the transcript was heard in: AssemblyAI's setting,
             // or the on-device model's ("um" is a word in Portuguese).
-            let heardInCloud = transcript.modelID.hasPrefix("assemblyai") || transcript.modelID.hasPrefix("universal")
             let language = heardInCloud ? settings.dictationLanguage.code : settings.localSpeechLanguage.code
             let terms = DictionaryStore().entries().map(\.term)
             // Dictionary names spelled another way ("Stacy" for "Stacey") take the Dictionary's spelling.
@@ -124,7 +124,9 @@ public struct AssemblyAITranscriptionService: TranscriptionServicing {
             guard !result.cleanedTranscript.isEmpty else { throw TranscriptionError.emptyTranscript }
             return result
         }
-        guard settings.cleanupSource != .none else { return try tidied(notice: nil) }
+        // Writing Off is an on-device choice: the picker shows only with On
+        // device dictation, so it never skips the writer for AssemblyAI's transcripts.
+        guard heardInCloud || settings.cleanupSource != .none else { return try tidied(notice: nil) }
         guard KeychainStore.loadAPIKey() != nil else { return try tidied(notice: nil) }
         let model = settings.assemblyAIConfig.writingModel
         let prompt = dictationPrompt(context: context, transcript: raw)

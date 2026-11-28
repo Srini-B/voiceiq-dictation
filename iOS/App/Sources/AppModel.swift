@@ -221,7 +221,7 @@ final class AppModel: ObservableObject {
         case .alreadyDone: return "Couldn't find this recording"
         case .stillOffline: return "Still offline. It will retry when you're back online."
         case .rateLimited(let wait): return "Rate limited. Retrying in \(Int(wait.rounded()))s."
-        case .blocked: return "Check your API key in Settings"
+        case .blocked: return "Check your API key and AssemblyAI credit in Settings"
         case .failed: return record.rawTranscript != nil ? "Couldn't transcribe it again. The earlier text is kept." : "Retry failed"
         case .busy: return "Already retrying"
         }
@@ -708,7 +708,7 @@ final class AppModel: ObservableObject {
             case .storage: return "Storage is full"
             case .badRequest, .validation, .safetyBlocked: return "Couldn't transcribe. It's in History."
             }
-        case .done(.inserted): return coordinator.coachingHint // "Inserted as heard" when the writer failed
+        case .done(.inserted): return coordinator.insertedNotice // "Inserted as heard" when the writer failed
         case .done(.queuedForRetry): return "Offline. It will send when you're back."
         case .done(.silent): return "Didn't catch that"
         default: return nil

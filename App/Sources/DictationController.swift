@@ -889,7 +889,11 @@ final class DictationController {
     private func handleOutcome(_ outcome: DictationOutcome) {
         switch outcome {
         case .inserted:
-            showSuccessBadge(words: coordinator.lastResult.map { $0.split(separator: " ").count })
+            if let notice = coordinator.insertedNotice {
+                showNotice(notice, for: 4.0, sound: .success)
+            } else {
+                showSuccessBadge(words: coordinator.lastResult.map { $0.split(separator: " ").count })
+            }
         case .copiedToClipboard where !KeystrokeAccess.mayPost:
             // macOS 27.3+ refused the paste; nothing else says why.
             showNotice(KeystrokeAccess.refusedNotice, for: 6.0, sound: .error)

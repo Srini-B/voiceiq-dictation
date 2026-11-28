@@ -29,7 +29,6 @@ public enum AssemblyAIPrices {
     public static let stt37PerHour = 0.21
     public static let universal2PerHour = 0.15
     public static let diarizationPerHour = 0.02
-    public static let speakerIdentificationPerHour = 0.02
 }
 
 /// The AssemblyAI API: pre-recorded transcription, the LLM Gateway, and key
@@ -114,29 +113,18 @@ public actor AssemblyAIClient {
         public var speechModels: [String]
         public var languageCode: String?
         public var speakerLabels: Bool
-        /// Names for Speaker Identification; needs `speakerLabels`.
-        public var speakerNames: [String]
 
         public init(speechModels: [String] = [AssemblyAIConfig.transcribeModel, AssemblyAIConfig.fallbackModel],
-                    languageCode: String? = nil, speakerLabels: Bool = false,
-                    speakerNames: [String] = []) {
+                    languageCode: String? = nil, speakerLabels: Bool = false) {
             self.speechModels = speechModels
             self.languageCode = languageCode
             self.speakerLabels = speakerLabels
-            self.speakerNames = speakerNames
         }
 
         var body: [String: Any] {
             var body: [String: Any] = ["speech_models": speechModels]
             if let languageCode { body["language_code"] = languageCode } else { body["language_detection"] = true }
-            if speakerLabels {
-                body["speaker_labels"] = true
-                if !speakerNames.isEmpty {
-                    body["speech_understanding"] = ["request": ["speaker_identification": [
-                        "speaker_type": "name", "speakers": speakerNames.map { ["name": $0] },
-                    ]]]
-                }
-            }
+            if speakerLabels { body["speaker_labels"] = true }
             return body
         }
 
@@ -146,7 +134,6 @@ public actor AssemblyAIClient {
             var rate = model.hasPrefix("universal")
                 ? AssemblyAIPrices.universal2PerHour : AssemblyAIPrices.stt37PerHour
             if speakerLabels { rate += AssemblyAIPrices.diarizationPerHour }
-            if speakerLabels, !speakerNames.isEmpty { rate += AssemblyAIPrices.speakerIdentificationPerHour }
             return rate
         }
     }
@@ -197,7 +184,8 @@ public actor AssemblyAIClient {
             do {
                 data = try await send(url: AssemblyAIConfig.api.appendingPathComponent("v2/transcript/\(id)"), body: nil,
                                       deadline: pollDeadline, modelLabel: model, stage: stage)
-            } catch TranscriptionError.network, TranscriptionError.timeout, TranscriptionError.rateLimitedTransient {
+            } catch TranscriptionError.network, TranscriptionError.timeout, TranscriptionError.offline,
+                    TranscriptionError.rateLimitedTransient {
                 // The job is uploaded and billed; a failed poll asks again
                 // rather than sending the audio a second time.
                 continue
@@ -306,7 +294,7 @@ public actor AssemblyAIClient {
         case 402:
             throw TranscriptionError.noBalance
         case 429:
-            let retryAfter = http.value(forHTTPHeaderField: "Retry-After").flatMap(Double.init)
+            let retryAfter = http.value(forHTTPHeaderField: "Retry-After").flatMap(Double.init).flatMap { $0.isFinite && $0 >= 0 ? $0 : nil }
             if !isRetryAfter429, let delay = retryAfter, delay >= 0, delay <= 8 {
                 try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
                 try Task.checkCancellation()
@@ -321,6 +309,8 @@ public actor AssemblyAIClient {
             // access to this LLM Gateway model" (measured 2026-11-28).
             if Self.isNoBalance(message) { throw TranscriptionError.noBalance }
             if status == 400 { throw TranscriptionError.badRequest(message) }
+            // The gateway answers a bad key with 403 "Authentication error".
+            if status == 403, message.lowercased().contains("authentication") { throw TranscriptionError.auth }
             throw TranscriptionError.modelUnavailable(model: modelLabel, detail: message)
         case 500...599:
             throw TranscriptionError.network("http_\(status)")
@@ -334,6 +324,8 @@ public actor AssemblyAIClient {
         return lowered.contains("does not have access to this llm gateway")
             || lowered.contains("insufficient funds") || lowered.contains("insufficient balance")
             || lowered.contains("insufficient credit")
+            // The speech API's 400 once the credit is spent (common errors guide).
+            || lowered.contains("balance is negative")
     }
 
     struct DeadlineExceeded: Error {}

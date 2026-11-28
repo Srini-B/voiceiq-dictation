@@ -59,4 +59,4 @@ of the $50 credit.
 
 - The meetings eval (M1–M5) on AssemblyAI: needs the Mac and, for notes, a
   gateway balance; transcripts alone score M2–M4.
-- Speaker Identification is supported by the client but not sent.
+- Speaker Identification is not used.
