@@ -55,6 +55,10 @@ final class EditController: ObservableObject {
     weak var controller: UIInputViewController?
     /// Notifies Hex's keyboard when EditPanel or KeyboardModel edits the field directly.
     var onExternalEdit: (() -> Void)?
+    /// Called before every edit, so a dictation's draft marked in the field
+    /// (`KeyboardDraft`) becomes plain text first and the edit cannot
+    /// replace it.
+    var willEdit: (() -> Void)?
     private var proxy: UITextDocumentProxy? { controller?.textDocumentProxy }
     private var lastKind: Kind?
     /// The text around the cursor after the keyboard's last edit, to tell
@@ -94,6 +98,17 @@ final class EditController: ObservableObject {
         refresh()
     }
 
+    /// A dictation that reached the field another way than `type`: a draft
+    /// swapped for its written text (`KeyboardDraft`). It becomes one undo
+    /// step, like a dictation typed in, which takes `inserted` back out
+    /// from before the cursor.
+    func recordDictation(inserted: String) {
+        guard !inserted.isEmpty else { return }
+        checkpoint(.other)
+        record(deleted: "", inserted: inserted)
+        refresh()
+    }
+
     /// The user moved the cursor or the app changed the text: undo replays
     /// text before the cursor, which is no longer this text.
     func textChanged() {
@@ -108,6 +123,7 @@ final class EditController: ObservableObject {
     /// Types `text` over the selection, if any, as one undo step of `kind`.
     func type(_ text: String, as kind: Kind = .other) {
         guard !text.isEmpty else { return }
+        willEdit?()
         checkpoint(kind)
         insert(text)
         refresh()
@@ -115,6 +131,7 @@ final class EditController: ObservableObject {
     }
 
     func deleteBackward() {
+        willEdit?()
         checkpoint(.deleting)
         deleteBack()
         refresh()
@@ -124,6 +141,7 @@ final class EditController: ObservableObject {
     /// Insert driven by Hex's `FullKeyboardEngine` (already owns keyboard state).
     func typeFromKeyboard(_ text: String) {
         guard !text.isEmpty else { return }
+        willEdit?()
         let wordCharacter = text.count == 1 && (text.first?.isLetter == true || text.first?.isNumber == true)
         if deletedThisTurn {
             groupTurnDeletes()
@@ -137,6 +155,7 @@ final class EditController: ObservableObject {
 
     /// Delete driven by Hex's `FullKeyboardEngine`.
     func deleteFromKeyboard() {
+        willEdit?()
         if !deletedThisTurn {
             deletedThisTurn = true
             undoBeforeTurn = undoStack
@@ -183,6 +202,7 @@ final class EditController: ObservableObject {
         case .lineEnd: offset = after.firstIndex(of: "\n") ?? after.count
         }
         guard offset != 0 else { return }
+        willEdit?()
         proxy.adjustTextPosition(byCharacterOffset: offset)
         // Undo replays at the cursor, so a moved cursor drops it.
         resetUndo()
@@ -194,6 +214,7 @@ final class EditController: ObservableObject {
         guard canUsePasteboard, let text = proxy?.selectedText, !text.isEmpty else { return }
         UIPasteboard.general.string = text
         guard cut else { return }
+        willEdit?()
         checkpoint(.other)
         deleteBack()
         refresh()
@@ -221,6 +242,7 @@ final class EditController: ObservableObject {
 
     private func replay(_ edit: TextEdit) {
         guard let proxy else { return }
+        willEdit?()
         for _ in 0..<edit.remove { proxy.deleteBackward() }
         if !edit.append.isEmpty { proxy.insertText(edit.append) }
         lastKind = nil

@@ -58,6 +58,9 @@ final class VoiceSession: ObservableObject {
     /// Waits for a model load that is finishing as a warm-up before ending.
     private var warmHold: Task<Void, Never>?
     private var delivery: Delivery?
+    /// The transcript offered as a draft while the writing model works
+    /// (`SessionSnapshot.draft`). Never carried over from an earlier process.
+    private var draft: Delivery?
     private var notice: Notice?
     private var lastPublished: SessionSnapshot?
     private var bars = LevelBars()
@@ -246,6 +249,13 @@ final class VoiceSession: ObservableObject {
         publish(force: true)
     }
 
+    /// Offers the transcript as a draft (`KeyboardInserter`), or withdraws it with nil.
+    func showDraft(_ draft: Delivery?) {
+        guard draft != self.draft else { return }
+        self.draft = draft
+        publish(force: true)
+    }
+
     /// A keyboard typed the result, or the app copied it.
     func resultSettled() {
         forgetDraftIfSettled()
@@ -315,7 +325,8 @@ final class VoiceSession: ObservableObject {
             delivery: delivery,
             notice: notice,
             meetingActive: meetingStartedAt != nil,
-            field: dictationPhase.hasDictation ? dictationField : nil
+            field: dictationPhase.hasDictation ? dictationField : nil,
+            draft: isActive ? draft : nil
         )
     }
 

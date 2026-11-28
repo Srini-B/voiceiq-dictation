@@ -236,7 +236,7 @@ Bar: Wispr markets <700 ms p99 but users report 1–2 s real-world; ≤0.9 s p50
 1. **Encode while speaking:** stream PCM → CAF (crash-safe master) and FLAC + base64 incrementally during the hold. At key-up the request body is ready in ~10 ms.
 2. **Pre-warm the connection at hotkey-down:** URLSession to `generativelanguage.googleapis.com` kept alive; if cold, fire the TCP+TLS handshake the moment the key goes down — the handshake (~100–250 ms) completes while the user is still speaking. Re-warm after sleep/network change.
 3. **Stream into the HUD:** SSE text renders in the pill as it arrives (append-only). Motion + earcon at release masks TTFT; text visibly "arriving" reads as fast even when insert lands at ~1 s.
-4. **Insert once, at the end** — never retro-edit the target app (industry consensus; retro-replacement is clipboard-racy).
+4. **Insert once, at the end** — never retro-edit the target app (industry consensus; retro-replacement is clipboard-racy). *Superseded 2026-11-28: with a streamed transcript the field shows it as a draft and the written text replaces exactly that range, found by Accessibility, never through a blind clipboard edit (architecture.md, "Draft, then the written text").*
 5. **Sound + shape-morph choreography:** release earcon → pill morphs to processing (M3E shape loop) → resolve-down earcon exactly on insertion; perceived latency is bounded by the choreography, not the spinner.
 6. Slow-state at 3 s ("Still working…") so the silence never feels like a hang.
 7. v1.x experiment: pseudo-streaming for long holds — every ~20 s of hold, send a draft request for audio-so-far, show draft in HUD, final authoritative request at release.

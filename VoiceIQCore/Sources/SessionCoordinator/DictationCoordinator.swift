@@ -18,6 +18,20 @@ public final class DictationCoordinator: ObservableObject {
     /// arrived; the iPhone says "Starting…" rather than that it is listening.
     @Published public private(set) var audioFlowing = false
     @Published public private(set) var lastResult: String?
+    /// The transcript is in the field as a draft and the writing model is
+    /// rewriting it; the pill shows the writing animation.
+    @Published public private(set) var writingDraft = false
+    /// Dictations whose draft is in the field while their writer runs.
+    private var drafting: Set<UUID> = [] {
+        didSet { if writingDraft != !drafting.isEmpty { writingDraft = !drafting.isEmpty } }
+    }
+    /// The pill's note when the draft stayed (edited, or not found for
+    /// certain); the written text is in History and Paste last.
+    nonisolated static let keptDraftNotice = "Kept as heard. Paste last has the written text"
+    /// The note when a dictation without written text couldn't take its
+    /// draft back out (`DraftStage.withdraw`).
+    public nonisolated static let withdrawKeptNotice = "The transcript stayed in the field as heard"
+
     @Published public private(set) var coachingHint: String?
     /// The last inserted dictation's note, such as "Inserted as heard" when
     /// the writing step failed; shown in place of the success mark.
@@ -542,12 +556,26 @@ public final class DictationCoordinator: ObservableObject {
         localTranscriber = nil
         let stream = live
         live = nil
+        // Every dictation transcribed in the cloud may draft, also while an
+        // earlier one's writer still runs: each swaps only its own text.
+        let mayDraft = local == nil
         inFlightTask = Task { [weak self] in
-          // Every way out of the job frees the next one's turn, and closes a
-          // stream nothing used.
-          defer { ticket.finish(); stream?.cancel() }
+          var stage: DraftStage?
+          // Every way out of the job frees the next one's turn, closes a
+          // stream nothing used, and ends a draft. A job that ends without
+          // written text first takes its draft back out (`withdraw`).
+          defer { ticket.finish(); stream?.cancel(); stage?.end(); self?.drafting.remove(sessionID) }
           await UsageMeter.$scope.withValue(usageScope) {
             guard let self else { return }
+            if mayDraft, let draft = await self.insertion.draft(context: session.context) {
+                stage = DraftStage(draft: draft, turn: ticket) { [weak self] in
+                    self?.drafting.insert(sessionID)
+                }
+            }
+            var heard: (@Sendable (String) -> Void)?
+            if let stage {
+                heard = { text in Task { @MainActor in stage.show(text) } }
+            }
             do {
                 let audioURL = FileLayout.audioCAF(in: session.folder)
                 let outcome: TranscriptionResult
@@ -568,18 +596,22 @@ public final class DictationCoordinator: ObservableObject {
                     try Task.checkCancellation()
                     outcome = try await self.transcription.transcribe(
                         audioURL: audioURL, durationSeconds: result.durationSeconds, context: session.context,
-                        live: stream
+                        live: stream, onHeard: heard
                     )
                     stages = DictationSteps(finishRecording: finalizeSeconds,
                                             transcription: Date().timeIntervalSince(finalizeStartedAt))
                 }
                 let readyAt = Date()
-                guard !Task.isCancelled else { return }
+                guard !Task.isCancelled else {
+                    await stage?.withdraw()
+                    return
+                }
                 await self.completeTranscription(
                     sessionID: sessionID, outcome: outcome,
-                    startedAt: requestedAt, readyAt: readyAt, stages: stages
+                    startedAt: requestedAt, readyAt: readyAt, stages: stages, draft: stage
                 )
             } catch {
+                await stage?.withdraw()
                 guard !Task.isCancelled else { return }
                 await self.failTranscription(sessionID: sessionID, error: error)
             }
@@ -588,7 +620,8 @@ public final class DictationCoordinator: ObservableObject {
     }
 
     private func completeTranscription(
-        sessionID: UUID, outcome: TranscriptionResult, startedAt: Date, readyAt: Date, stages: DictationSteps
+        sessionID: UUID, outcome: TranscriptionResult, startedAt: Date, readyAt: Date, stages: DictationSteps,
+        draft: DraftStage? = nil
     ) async {
         guard let waiting = job(sessionID) else { return } // stale completion
         var stages = stages
@@ -598,14 +631,36 @@ public final class DictationCoordinator: ObservableObject {
             $0.modelID = outcome.modelID
             $0.status = .transcribing
         }
-        // Still .transcribing while an earlier job inserts, so a press now
+        // A draft in the field is swapped on its own, whatever earlier
+        // dictations are still doing. Text with no draft waits its turn,
+        // still .transcribing while an earlier job inserts, so a press now
         // can detach this one too.
-        await waiting.turn?.waitForPrevious()
-        guard !Task.isCancelled, let job = self.job(sessionID) else { return } // cancelled while waiting
+        let shown = await draft?.shown() ?? .notInserted
+        if shown == .notInserted || shown == .pending { await waiting.turn?.waitForPrevious() }
+        guard !Task.isCancelled, let job = self.job(sessionID) else { // cancelled while waiting
+            await draft?.withdraw()
+            return
+        }
         let isForeground = session?.id == sessionID
         if isForeground { apply(.transcriptReady) }
 
-        let insertionOutcome = await insertion.insert(outcome.cleanedTranscript, context: job.context)
+        // The transcript already in the field as a draft is swapped for the
+        // written text; only a draft that never went in leaves the insert to
+        // the ladder.
+        let insertionOutcome: InsertionOutcome
+        var keptDraft = false
+        switch shown {
+        case .shown, .pending:
+            keptDraft = await draft?.draft.replace(with: outcome.cleanedTranscript) != true
+            insertionOutcome = .inserted
+        case .lost:
+            keptDraft = true
+            insertionOutcome = .inserted
+        case .notInserted:
+            draft?.end()
+            insertionOutcome = await insertion.insert(outcome.cleanedTranscript, context: job.context)
+        }
+        if keptDraft { Log.insertion.info("draft kept as it was: the written text has no safe place to go") }
         let insertedAt = Date()
         let pipelineSeconds = insertedAt.timeIntervalSince(startedAt)
         // From the text being ready, so saving it to History counts here too.
@@ -622,12 +677,17 @@ public final class DictationCoordinator: ObservableObject {
         if session?.id == sessionID {
             // Set before the state changes, so observers of the state read it.
             // The insertion's own notice (clipboard, secure field) comes first.
-            if case .inserted = insertionOutcome { insertedNotice = outcome.notice }
+            if case .inserted = insertionOutcome {
+                insertedNotice = outcome.notice ?? (keptDraft ? Self.keptDraftNotice : nil)
+            }
             apply(event)
             session = nil
         } else {
             endDetached(sessionID)
-            if case .inserted = insertionOutcome, let notice = outcome.notice {
+            // A detached job has no pill: its notice, or its kept draft's, is
+            // shown in the background.
+            if case .inserted = insertionOutcome,
+               let notice = outcome.notice ?? (keptDraft ? Self.keptDraftNotice : nil) {
                 onDetachedResult?(.insertedWithNotice(notice))
             } else {
                 onDetachedResult?(.outcome(result))

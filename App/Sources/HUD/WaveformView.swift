@@ -3,12 +3,16 @@ import SwiftUI
 /// The 5-bar amplitude-reactive waveform (Gemini Live "condensed into a tiny pill").
 /// Both states run the four-color traveling sweep. Live state: bars follow the
 /// voice with fast-attack/slow-release smoothing and a calm idle undulation.
-/// Processing state: bars freeze into a gentle chase.
+/// Processing state: bars freeze into a gentle chase. Writing state (the
+/// transcript is in the field as a draft and the writing model rewrites it):
+/// one crest sweeps left to right in the processing shimmer's colors, like a
+/// pen passing over the line.
 struct WaveformView: View {
     /// Read inside the Canvas at each timeline tick, so level changes never
     /// invalidate the SwiftUI view tree.
     var level: LevelSource = .silent
     var processing: Bool
+    var writing = false
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -71,11 +75,18 @@ struct WaveformView: View {
             )
             let path = Path(roundedRect: rect, cornerRadius: Self.barWidth / 2)
             let hue = (Double(index) / 5.0 + sweep).truncatingRemainder(dividingBy: 1.0)
-            context.fill(path, with: .color(quadColor(at: hue)))
+            context.fill(path, with: .color(writing ? shimmerColor(at: hue) : quadColor(at: hue)))
         }
     }
 
     private func barHeight(index: Int, time: Double) -> CGFloat {
+        if processing && writing {
+            // One crest travels across the bars every 0.9 s, with a beat of
+            // rest before the next.
+            let crest = (time / 0.9).truncatingRemainder(dividingBy: 1.0) * 7 - 1
+            let distance = Double(index) - crest
+            return 8 + 26 * CGFloat(exp(-distance * distance / 0.9))
+        }
         if processing {
             // Gentle 4-phase chase between 10 and 22pt, staggered — "thinking".
             let phase = sin(time * 2 * .pi / 1.4 + Self.phases[index])
@@ -91,6 +102,11 @@ struct WaveformView: View {
         let idle = sin(time * 2 * .pi * 0.8 + Self.phases[index]) * 2
         let height = Self.minHeight + idle + smoothed * (Self.maxHeight - Self.minHeight)
         return min(Self.maxHeight, max(Self.minHeight, height))
+    }
+
+    private func shimmerColor(at position: Double) -> Color {
+        let colors = VoiceIQUI.Colors.aiShimmer
+        return colors[Int(position * Double(colors.count)) % colors.count]
     }
 
     private func quadColor(at position: Double) -> Color {

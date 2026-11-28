@@ -40,6 +40,7 @@ final class KeyboardViewController: UIInputViewController {
         }
         editor.controller = self
         editor.onExternalEdit = { [weak typing] in typing?.textDidChange() }
+        editor.willEdit = { [weak model] in model?.userWillEdit() }
         typing.controller = self
         typing.editor = editor
         typing.onPreferredHeightChange = { [weak self] in self?.updateHeight() }
@@ -137,6 +138,12 @@ final class KeyboardViewController: UIInputViewController {
         // screen edges, so outer keys respond late (azooKey, giellakbd-ios).
         view.window?.gestureRecognizers?.forEach { $0.delaysTouchesBegan = false }
         editor.textChanged()
+    }
+
+    override func viewWillDisappear(_ animated: Bool) {
+        super.viewWillDisappear(animated)
+        // While the text connection still reaches the field.
+        model.willDisappear()
     }
 
     override func viewDidDisappear(_ animated: Bool) {

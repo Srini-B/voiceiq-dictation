@@ -107,7 +107,7 @@ extension PasteCheck {
             let verdict = PasteCheck.verdict(before: before, after: sameField ? current?.reading : nil, text: text)
             guard verdict == .missed else { return verdict }
         }
-        Log.insertion.warning("⌘V posted but the field never changed — text copied instead")
+        Log.insertion.warning("⌘V posted but the field never changed")
         missed()
         return .missed
     }

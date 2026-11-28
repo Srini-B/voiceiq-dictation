@@ -65,7 +65,7 @@ struct PillView: View {
         case .processing:
             pillSurface(width: model.slow ? 220 : 132) {
                 HStack(spacing: VoiceIQUI.Spacing.s) {
-                    WaveformView(processing: true)
+                    WaveformView(processing: true, writing: model.writing)
                     if model.slow {
                         Text("Still working…")
                             .font(VoiceIQUI.TypeScale.label())

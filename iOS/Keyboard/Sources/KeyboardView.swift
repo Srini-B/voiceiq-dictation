@@ -1,3 +1,4 @@
+import Combine
 import SwiftUI
 import UIKit
 import VoiceIQBridge
@@ -229,7 +230,8 @@ private struct DictateButton: View {
 
 /// Stands in for the suggestion row while a dictation runs: Cancel, elapsed
 /// time over VoiceiQ's LevelGlow waveform that rises with the voice, Done.
-/// While the text is written: a spinner and "Writing…".
+/// While the text is written: a spinner and "Writing…", or the writing crest
+/// when the transcript is already in the field as a draft.
 private struct RecordingStrip: View {
     @ObservedObject var model: KeyboardModel
     let compact: Bool
@@ -252,8 +254,12 @@ private struct RecordingStrip: View {
             Group {
                 if !recording {
                     HStack(spacing: 8) {
-                        ProgressView()
-                            .controlSize(.small)
+                        if model.holdsDraft {
+                            WritingCrest()
+                        } else {
+                            ProgressView()
+                                .controlSize(.small)
+                        }
                         Text("Writing…")
                             .font(.subheadline.weight(.medium))
                             .foregroundStyle(.secondary)
@@ -280,6 +286,40 @@ private struct RecordingStrip: View {
                 LevelGlow(color: KeyboardPalette.recording)
             }
         }
+    }
+}
+
+/// The transcript is in the field as a draft and the writing model rewrites
+/// it: one crest sweeps across five bars, left to right, like a pen passing
+/// over the line (the Mac pill's writing state), in the keyboard's accent.
+/// A timer, not a `TimelineView`, for the reason `LevelGlow` gives.
+private struct WritingCrest: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var started = Date()
+    @State private var now = Date()
+    private let clock = Timer.publish(every: 1.0 / 30, on: .main, in: .common).autoconnect()
+
+    var body: some View {
+        let time = now.timeIntervalSince(started)
+        HStack(alignment: .center, spacing: 2) {
+            ForEach(0..<5, id: \.self) { index in
+                let lift = reduceMotion ? 0.3 : crest(index: index, time: time)
+                Capsule()
+                    .fill(KeyboardPalette.accent.opacity(0.45 + 0.55 * lift))
+                    .frame(width: 3, height: 5 + 13 * lift)
+            }
+        }
+        .frame(height: 18)
+        .onReceive(clock) { date in if !reduceMotion { now = date } }
+        .accessibilityHidden(true)
+    }
+
+    /// 0…1: the crest travels across the bars every 0.9 s, with a beat of
+    /// rest before the next.
+    private func crest(index: Int, time: TimeInterval) -> Double {
+        let position = (time / 0.9).truncatingRemainder(dividingBy: 1) * 7 - 1
+        let distance = Double(index) - position
+        return exp(-distance * distance / 0.9)
     }
 }
 
