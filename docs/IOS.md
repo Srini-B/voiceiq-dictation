@@ -783,14 +783,28 @@ layer, cursor control, rotation and the recording strip on the iPhone SE and
 17 Pro, peaking at 44 MB with the emoji panel and a slide-to-type word. iOS ends keyboards near 60 to 70 MB.
 
 **Learning.** Hex's "Learn how I type" is on, as in Hex: per-key tap offsets
-(`AdaptiveTouch`) and word-level fixes (`TypingJournal`) stay on the iPhone,
+and word-level fixes (`TypingJournal`) stay on the iPhone,
 in the App Group and the keyboard's own container. Nothing is sent anywhere.
-Settings › Keyboard & Permissions › Typing turns it off and erases what it
-learned (`TypingSettingsCard`), beside Auto-correction, Auto-capitalization,
+Settings › Keyboard & Permissions › Typing turns it off (Adaptive touch stays
+on with it off) and erases what it learned (`TypingSettingsCard`), beside Auto-correction, Auto-capitalization,
 Slide to type, Key haptics and Number row. The card writes Hex's own keys in
 the App Group, which the keyboard reads each time it appears; Hex's other
-switches (key colours, emoji shortcodes and its Labs experiments) keep Hex's
-defaults.
+switches (key colours, emoji shortcodes and its other Labs experiments) keep
+Hex's defaults.
+
+**Adaptive touch** (Hex's Labs › Adaptive touch, off by default in Hex) is
+always on in VoiceiQ, with no switch (`0011-voiceiq-adaptive-touch-on.patch`).
+The keyboard reads your taps against where you actually land on each letter
+key, per key size, for auto-correction and suggestions; the keys and their
+touch areas don't move. A profile takes 400 labelled taps over 3 sessions;
+until then Learn how I type's own per-key offsets keep moving the centres, as
+before (`FullKeyboardEngine+Keys.swift`, same patch). It learns nowhere a
+secure field or one Learn how I type skips would be. Without Full Access it
+keeps the averages in memory until the keyboard closes; with Full Access the
+keyboard writes them to its own container each time it goes off screen
+(`TypingBridge.disappeared`). Erase what it learned also writes Hex's
+`adaptiveTouch.resetAt`, so a running keyboard drops older averages the next
+time it reads them.
 
 **Tests.** `KeyboardTests` (in the `VoiceIQiOS` scheme, hosted by the app so
 the embedded keyboard's typing model loads) compiles the keyboard's sources
