@@ -117,3 +117,12 @@ No High. Fixed on branch `tidy-followups`:
 - Left as intended: "Order 12, I mean, $15." and the one-word "Nice exclamation mark." → "Nice!".
 
 Each case is in `TidyTests`, and each fails on main's sources and passes here (Linux harness, Swift 6.2.1, 15 tests including the 334 cleanup cases).
+
+D4 writing-Off at the follow-up PR's head (Claude Fable 5.2,
+T-01a2218d-e69c-724f-a8b2-916f4a675e7f), number of record for Tidy after #131:
+**97.05 over 334 cases at `752876e`, 0 meant words lost**. All 334 outputs are
+byte-identical at `ab6b516`, so the score holds there. There are 310 exact matches
+and 23 cases below 90, all of them under-cleaning that the fixture already records as `tidy`:
+unresolved self-corrections, a kept "I mean", leftover spoken marks and
+quoted addresses, and "When is Sam free." without a question mark. #131's 96.6
+was scored at `6b7dffc`, 10 commits before its head, over 332 cases.
