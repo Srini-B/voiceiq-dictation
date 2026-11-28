@@ -1,35 +1,350 @@
 {
-  "about": "Dictations into a field whose text before the cursor ends with a prefix the speaker did not say. echo.py checks whether the written text repeats it. Each case's screen is the document as the app's screen context would read it, with the current line included.",
-  "cases": [
-    {"id": "bracket_1", "app": "TextEdit", "window": "Untitled", "lines": ["[5] Ship the beta on Monday.", "[6] Ask legal about the logo."], "before": "[5] Ship the beta on Monday.\n[6] Ask legal about the logo.\n[7] ", "transcript": "Let's meet at two PM on Thursday to go over the numbers."},
-    {"id": "bracket_2", "app": "TextEdit", "window": "notes.txt", "lines": ["[1] Okay so the venue is booked."], "before": "[1] Okay so the venue is booked.\n[2] ", "transcript": "okay so the caterer needs a final head count by Friday"},
-    {"id": "bracket_3", "app": "TextEdit", "window": "Untitled", "lines": [], "before": "[1] ", "transcript": "Okay, so this is a quick test of the dictation, um, to see how fast the text shows up."},
-    {"id": "list_1", "app": "Notes", "window": "Groceries", "lines": ["1. Milk", "2. Eggs"], "before": "1. Milk\n2. Eggs\n3. ", "transcript": "a loaf of sourdough bread"},
-    {"id": "list_2", "app": "TextEdit", "window": "Agenda", "lines": ["Agenda", "1. Budget review", "2. Hiring update"], "before": "Agenda\n1. Budget review\n2. Hiring update\n3. ", "transcript": "um the office move timeline and who's coordinating it"},
-    {"id": "list_3", "app": "Notion", "window": "Sprint 14", "lines": ["Sprint 14 goals", "1. Fix the login bug"], "before": "Sprint 14 goals\n1. Fix the login bug\n2. ", "transcript": "Get the export feature to beta users."},
-    {"id": "greet_1", "app": "Mail", "window": "New Message", "lines": ["To: Priya Raman", "Subject: Deck notes"], "before": "Hi Priya,\n\n", "transcript": "thanks for sending the deck I went through it and the timeline slide still says March it should be April"},
-    {"id": "greet_2", "app": "Gmail", "window": "Re: Venue - Gmail", "lines": ["Re: Venue", "Omar Haddad: Two options attached."], "before": "Hi Omar, ", "transcript": "the second option looks better can you check if they have parking"},
-    {"id": "greet_3", "app": "Slack", "window": "Direct message with Sam", "lines": ["Sam  9:14  are we still on for lunch?"], "before": "Hey Sam, ", "transcript": "yes still on, see you at noon at the usual place"},
-    {"id": "sent_1", "app": "Slack", "window": "#launch", "lines": ["#launch", "Dana  10:02  where are we on the demo?"], "before": "We moved the demo to Thursday. ", "transcript": "The client asked for a dry run on Wednesday afternoon."},
-    {"id": "sent_2", "app": "Mail", "window": "Weekly update", "lines": ["Weekly update"], "before": "Signups were up eight percent last week. ", "transcript": "most of that came from the new referral link"},
-    {"id": "sent_3", "app": "TextEdit", "window": "Draft", "lines": ["The migration finished overnight."], "before": "The migration finished overnight. ", "transcript": "So the migration finished overnight and nothing broke, we can turn off the old cluster tomorrow."},
-    {"id": "mid_1", "app": "Slack", "window": "#ops", "lines": ["#ops"], "before": "Thanks for the update. I think we should ", "transcript": "push the launch to next week"},
-    {"id": "mid_2", "app": "Mail", "window": "Re: Contract", "lines": ["Re: Contract"], "before": "Before we sign, we need to ", "transcript": "Check the renewal clause with legal."},
-    {"id": "mid_3", "app": "Notes", "window": "Ideas", "lines": ["Ideas"], "before": "For the offsite I'd like to ", "transcript": "book a place near the lake with a big meeting room"},
-    {"id": "label_1", "app": "TextEdit", "window": "Standup", "lines": ["Standup", "Yesterday: fixed the crash"], "before": "Standup\nYesterday: fixed the crash\nToday: ", "transcript": "today I'm working on the export feature and reviewing Kenji's PR"},
-    {"id": "label_2", "app": "Notion", "window": "1:1 notes", "lines": ["1:1 notes", "Notes:"], "before": "1:1 notes\nNotes: ", "transcript": "Rahul wants to move to the platform team next quarter."},
-    {"id": "label_3", "app": "Linear", "window": "New issue", "lines": ["New issue", "Steps to reproduce:"], "before": "Steps to reproduce: ", "transcript": "open settings, turn on screen context, then dictate into Safari and the pill freezes"},
-    {"id": "time_1", "app": "TextEdit", "window": "Log", "lines": ["10:15 Call with vendor", "10:42"], "before": "10:15 Call with vendor\n10:42 ", "transcript": "sent the signed contract back to Dana"},
-    {"id": "time_2", "app": "Notes", "window": "Interview log", "lines": ["09:00 Intro"], "before": "09:00 Intro\n09:20 ", "transcript": "Candidate walked through the caching project in detail."},
-    {"id": "time_3", "app": "TextEdit", "window": "Minutes", "lines": ["Minutes"], "before": "Minutes\n14:05 ", "transcript": "um so Grace raised the app store rating drop after the update"},
-    {"id": "bullet_1", "app": "Notes", "window": "Packing", "lines": ["Packing", "- Passport"], "before": "Packing\n- Passport\n- ", "transcript": "phone charger and the travel adapter"},
-    {"id": "bullet_2", "app": "Notion", "window": "Risks", "lines": ["Risks", "- Vendor delay"], "before": "Risks\n- Vendor delay\n- ", "transcript": "The QA team is out the week of the twentieth."},
-    {"id": "bullet_3", "app": "TextEdit", "window": "Todo", "lines": ["Todo"], "before": "Todo\n- ", "transcript": "renew the domain before it expires"},
-    {"id": "chat_1", "app": "Slack", "window": "#design", "lines": ["#design", "Rahul: can someone review the icons?"], "before": "Rahul: can someone review the icons?\nMe: ", "transcript": "I can take a look after lunch"},
-    {"id": "chat_2", "app": "TextEdit", "window": "Transcript", "lines": ["Interviewer: Tell me about a hard bug."], "before": "Interviewer: Tell me about a hard bug.\nCandidate: ", "transcript": "We had a race condition in the upload queue that only showed up on slow networks."},
-    {"id": "chat_3", "app": "TextEdit", "window": "Script", "lines": ["ALEX: Where were you?"], "before": "ALEX: Where were you?\nSAM: ", "transcript": "I was at the station waiting for you for an hour"},
-    {"id": "head_1", "app": "Notion", "window": "Q3 plan", "lines": ["Q3 plan"], "before": "Q3 plan — ", "transcript": "focus on retention and the onboarding email test"},
-    {"id": "head_2", "app": "Mail", "window": "Re: Invoice", "lines": ["Re: Invoice"], "before": "Re: Invoice 4471\n\n", "transcript": "Hi Dana, the invoice is approved and will be paid on Friday. Thanks, Jordan"},
-    {"id": "head_3", "app": "TextEdit", "window": "Release notes", "lines": ["Release notes", "0.7.19"], "before": "Release notes\n0.7.19\nFixed: ", "transcript": "the meeting pill no longer shows recording m when the name is long"}
-  ]
+ "about": "Dictations into a field whose text before the cursor ends with a prefix the speaker did not say. echo.py checks whether the written text repeats it. Each case's screen is the document as the app's screen context would read it, with the current line included.",
+ "cases": [
+  {
+   "id": "bracket_1",
+   "app": "TextEdit",
+   "window": "Untitled",
+   "lines": [
+    "[5] Ship the beta on Monday.",
+    "[6] Ask legal about the logo."
+   ],
+   "before": "[5] Ship the beta on Monday.\n[6] Ask legal about the logo.\n[7] ",
+   "transcript": "Let's meet at two PM on Thursday to go over the numbers."
+  },
+  {
+   "id": "bracket_2",
+   "app": "TextEdit",
+   "window": "notes.txt",
+   "lines": [
+    "[1] Okay so the venue is booked."
+   ],
+   "before": "[1] Okay so the venue is booked.\n[2] ",
+   "transcript": "okay so the caterer needs a final head count by Friday"
+  },
+  {
+   "id": "bracket_3",
+   "app": "TextEdit",
+   "window": "Untitled",
+   "lines": [],
+   "before": "[1] ",
+   "transcript": "Okay, so this is a quick test of the dictation, um, to see how fast the text shows up."
+  },
+  {
+   "id": "list_1",
+   "app": "Notes",
+   "window": "Groceries",
+   "lines": [
+    "1. Milk",
+    "2. Eggs"
+   ],
+   "before": "1. Milk\n2. Eggs\n3. ",
+   "transcript": "a loaf of sourdough bread"
+  },
+  {
+   "id": "list_2",
+   "app": "TextEdit",
+   "window": "Agenda",
+   "lines": [
+    "Agenda",
+    "1. Budget review",
+    "2. Hiring update"
+   ],
+   "before": "Agenda\n1. Budget review\n2. Hiring update\n3. ",
+   "transcript": "um the office move timeline and who's coordinating it"
+  },
+  {
+   "id": "list_3",
+   "app": "Notion",
+   "window": "Sprint 14",
+   "lines": [
+    "Sprint 14 goals",
+    "1. Fix the login bug"
+   ],
+   "before": "Sprint 14 goals\n1. Fix the login bug\n2. ",
+   "transcript": "Get the export feature to beta users."
+  },
+  {
+   "id": "greet_1",
+   "app": "Mail",
+   "window": "New Message",
+   "lines": [
+    "To: Priya Raman",
+    "Subject: Deck notes"
+   ],
+   "before": "Hi Priya,\n\n",
+   "transcript": "thanks for sending the deck I went through it and the timeline slide still says March it should be April"
+  },
+  {
+   "id": "greet_2",
+   "app": "Gmail",
+   "window": "Re: Venue - Gmail",
+   "lines": [
+    "Re: Venue",
+    "Omar Haddad: Two options attached."
+   ],
+   "before": "Hi Omar, ",
+   "transcript": "the second option looks better can you check if they have parking"
+  },
+  {
+   "id": "greet_3",
+   "app": "Slack",
+   "window": "Direct message with Sam",
+   "lines": [
+    "Sam  9:14  are we still on for lunch?"
+   ],
+   "before": "Hey Sam, ",
+   "transcript": "yes still on, see you at noon at the usual place"
+  },
+  {
+   "id": "sent_1",
+   "app": "Slack",
+   "window": "#launch",
+   "lines": [
+    "#launch",
+    "Dana  10:02  where are we on the demo?"
+   ],
+   "before": "We moved the demo to Thursday. ",
+   "transcript": "The client asked for a dry run on Wednesday afternoon."
+  },
+  {
+   "id": "sent_2",
+   "app": "Mail",
+   "window": "Weekly update",
+   "lines": [
+    "Weekly update"
+   ],
+   "before": "Signups were up eight percent last week. ",
+   "transcript": "most of that came from the new referral link"
+  },
+  {
+   "id": "sent_3",
+   "app": "TextEdit",
+   "window": "Draft",
+   "lines": [
+    "The migration finished overnight."
+   ],
+   "before": "The migration finished overnight. ",
+   "transcript": "So the migration finished overnight and nothing broke, we can turn off the old cluster tomorrow."
+  },
+  {
+   "id": "mid_1",
+   "app": "Slack",
+   "window": "#ops",
+   "lines": [
+    "#ops"
+   ],
+   "before": "Thanks for the update. I think we should ",
+   "transcript": "push the launch to next week"
+  },
+  {
+   "id": "mid_2",
+   "app": "Mail",
+   "window": "Re: Contract",
+   "lines": [
+    "Re: Contract"
+   ],
+   "before": "Before we sign, we need to ",
+   "transcript": "Check the renewal clause with legal."
+  },
+  {
+   "id": "mid_3",
+   "app": "Notes",
+   "window": "Ideas",
+   "lines": [
+    "Ideas"
+   ],
+   "before": "For the offsite I'd like to ",
+   "transcript": "book a place near the lake with a big meeting room"
+  },
+  {
+   "id": "label_1",
+   "app": "TextEdit",
+   "window": "Standup",
+   "lines": [
+    "Standup",
+    "Yesterday: fixed the crash"
+   ],
+   "before": "Standup\nYesterday: fixed the crash\nToday: ",
+   "transcript": "today I'm working on the export feature and reviewing Kenji's PR"
+  },
+  {
+   "id": "label_2",
+   "app": "Notion",
+   "window": "1:1 notes",
+   "lines": [
+    "1:1 notes",
+    "Notes:"
+   ],
+   "before": "1:1 notes\nNotes: ",
+   "transcript": "Rahul wants to move to the platform team next quarter."
+  },
+  {
+   "id": "label_3",
+   "app": "Linear",
+   "window": "New issue",
+   "lines": [
+    "New issue",
+    "Steps to reproduce:"
+   ],
+   "before": "Steps to reproduce: ",
+   "transcript": "open settings, turn on screen context, then dictate into Safari and the pill freezes"
+  },
+  {
+   "id": "time_1",
+   "app": "TextEdit",
+   "window": "Log",
+   "lines": [
+    "10:15 Call with vendor",
+    "10:42"
+   ],
+   "before": "10:15 Call with vendor\n10:42 ",
+   "transcript": "sent the signed contract back to Dana"
+  },
+  {
+   "id": "time_2",
+   "app": "Notes",
+   "window": "Interview log",
+   "lines": [
+    "09:00 Intro"
+   ],
+   "before": "09:00 Intro\n09:20 ",
+   "transcript": "Candidate walked through the caching project in detail."
+  },
+  {
+   "id": "time_3",
+   "app": "TextEdit",
+   "window": "Minutes",
+   "lines": [
+    "Minutes"
+   ],
+   "before": "Minutes\n14:05 ",
+   "transcript": "um so Grace raised the app store rating drop after the update"
+  },
+  {
+   "id": "bullet_1",
+   "app": "Notes",
+   "window": "Packing",
+   "lines": [
+    "Packing",
+    "- Passport"
+   ],
+   "before": "Packing\n- Passport\n- ",
+   "transcript": "phone charger and the travel adapter"
+  },
+  {
+   "id": "bullet_2",
+   "app": "Notion",
+   "window": "Risks",
+   "lines": [
+    "Risks",
+    "- Vendor delay"
+   ],
+   "before": "Risks\n- Vendor delay\n- ",
+   "transcript": "The QA team is out the week of the twentieth."
+  },
+  {
+   "id": "bullet_3",
+   "app": "TextEdit",
+   "window": "Todo",
+   "lines": [
+    "Todo"
+   ],
+   "before": "Todo\n- ",
+   "transcript": "renew the domain before it expires"
+  },
+  {
+   "id": "chat_1",
+   "app": "Slack",
+   "window": "#design",
+   "lines": [
+    "#design",
+    "Rahul: can someone review the icons?"
+   ],
+   "before": "Rahul: can someone review the icons?\nMe: ",
+   "transcript": "I can take a look after lunch"
+  },
+  {
+   "id": "chat_2",
+   "app": "TextEdit",
+   "window": "Transcript",
+   "lines": [
+    "Interviewer: Tell me about a hard bug."
+   ],
+   "before": "Interviewer: Tell me about a hard bug.\nCandidate: ",
+   "transcript": "We had a race condition in the upload queue that only showed up on slow networks."
+  },
+  {
+   "id": "chat_3",
+   "app": "TextEdit",
+   "window": "Script",
+   "lines": [
+    "ALEX: Where were you?"
+   ],
+   "before": "ALEX: Where were you?\nSAM: ",
+   "transcript": "I was at the station waiting for you for an hour"
+  },
+  {
+   "id": "head_1",
+   "app": "Notion",
+   "window": "Q3 plan",
+   "lines": [
+    "Q3 plan"
+   ],
+   "before": "Q3 plan — ",
+   "transcript": "focus on retention and the onboarding email test"
+  },
+  {
+   "id": "head_2",
+   "app": "Mail",
+   "window": "Re: Invoice",
+   "lines": [
+    "Re: Invoice"
+   ],
+   "before": "Re: Invoice 4471\n\n",
+   "transcript": "Hi Dana, the invoice is approved and will be paid on Friday. Thanks, Jordan"
+  },
+  {
+   "id": "head_3",
+   "app": "TextEdit",
+   "window": "Release notes",
+   "lines": [
+    "Release notes",
+    "0.7.19"
+   ],
+   "before": "Release notes\n0.7.19\nFixed: ",
+   "transcript": "the meeting pill no longer shows recording m when the name is long"
+  },
+  {
+   "id": "said_filler",
+   "app": "Mail",
+   "window": "New Message",
+   "lines": [
+    "To: Priya Raman"
+   ],
+   "before": "Hi Priya,",
+   "transcript": "so um hi Priya the deck looks good, can you send the final version tonight"
+  },
+  {
+   "id": "said_year",
+   "app": "Notes",
+   "window": "Review",
+   "lines": [
+    "Review"
+   ],
+   "before": "Revenue grew every year since 2024. ",
+   "transcript": "twenty twenty four was our best year by far"
+  },
+  {
+   "id": "said_word",
+   "app": "TextEdit",
+   "window": "Notes",
+   "lines": [
+    "Notes",
+    "Okay"
+   ],
+   "before": "Notes\nOkay",
+   "transcript": "um okay let's go with the second venue"
+  }
+ ]
 }

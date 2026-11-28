@@ -39,6 +39,16 @@ final class ValidationGateTests: XCTestCase {
         XCTAssertEqual(ValidationGate.droppingEcho("3.5 million signed up.", before: "Totals 3.", transcript: "three point five million"),
                        "3.5 million signed up.")
         XCTAssertEqual(ValidationGate.droppingEcho("[1]", before: "[1] ", transcript: "one"), "[1]")
+        XCTAssertEqual(ValidationGate.droppingEcho("Hi Priya, the deck looks good.", before: "Hi Priya,",
+                                                   transcript: "so um hi priya the deck looks good"),
+                       "Hi Priya, the deck looks good.")
+        XCTAssertEqual(ValidationGate.droppingEcho("2024 was our best year.", before: "Revenue grew every year since 2024",
+                                                   transcript: "twenty twenty four was our best year"),
+                       "2024 was our best year.")
+        XCTAssertEqual(ValidationGate.droppingEcho("Okay, let's go.", before: "Notes\nOkay", transcript: "um okay let's go"),
+                       "Okay, let's go.")
+        XCTAssertEqual(ValidationGate.droppingEcho("3. Buy milk.", before: "1. Eggs\n2. Bread\n3. ", transcript: "three buy milk"),
+                       "3. Buy milk.")
     }
 
     func testLeavesInternalQuotesAlone() {

@@ -23,7 +23,13 @@ spoken repeats that must stay.
 | first FIELD rule | 7 of 90 | 0 of 90 |
 | shipped FIELD rule | 1 of 90 | 0 of 90 |
 
-The guard changed no other output across the 270 answers.
+The guard changed no other output across the 270 answers. After review,
+three spoken-repeat cases were added (a greeting said after "so um", a year
+after a year, a one-word last line). On the final prompt and guard, 33 cases
+× 3: the writer echoed 2 of 99 and 0 of 99 reached the field. The guard kept
+all three spoken starts; the writer itself left out the re-said greeting and
+"Okay" when the field already ended with them, which avoids "Hi Priya, Hi
+Priya," and is accepted.
 
 ## What changed
 
@@ -36,8 +42,11 @@ The guard changed no other output across the 270 answers.
   `AssemblyAITranscriptionService` (and in eval/promptdump): a start that
   repeats the end of the text before the cursor is dropped when the
   transcript does not start with the same words. It drops only a line
-  marker, a label, a name with its comma, a whole last line, or several
-  words; a lone word, or a start the speaker said, stays.
+  marker or label (punctuation or a symbol, not a plain number), a name with
+  its comma, or several words; a lone word stays, and so does a start the
+  speaker said within the first few words after fillers, or any number when
+  the transcript opens with one ("three" written "3."). Review findings
+  (Neon hand read via agy, Codex) led to those last three conditions.
 - `eval/dictation/writer.py` passes the field text and transcript to the
   same post-processing, so the eval matches the app.
 
