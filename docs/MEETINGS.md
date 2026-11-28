@@ -737,7 +737,7 @@ colours on both platforms: ink for you, grey for the call.
   doesn't read its tracks again, and choosing another meeting stops a read in
   progress. Seeking waits until the length is known. On iPhone, a drag scrubs
   only once it has moved sideways, so a vertical swipe over the waveform still
-  scrolls the note. `RecordingPlayer` pauses, resumes, seeks and sets the rate.
+  scrolls the note. `RecordingPlayer` pauses, resumes, seeks and sets the rate. On iPhone, an audio interruption (a call, Siri) leaves it paused, so Play resumes from the same place; pressed while the call still holds the audio, it stays paused.
   Dictations still use its `toggle` (play or stop).
 
 ## The pill in screen shares

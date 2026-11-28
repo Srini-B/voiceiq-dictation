@@ -156,7 +156,7 @@ extension RecordedAudio: Transferable {
 /// The meeting player pauses, seeks and changes speed; a dictation's Play only
 /// starts and stops (`toggle`).
 @MainActor public final class RecordingPlayer: NSObject, ObservableObject, AVAudioPlayerDelegate {
-    public enum State: Equatable { case idle, preparing, playing, paused }
+    public enum State: Equatable, Sendable { case idle, preparing, playing, paused }
     @Published public private(set) var state: State = .idle
     /// Playback speed; the meeting playback bar sets it.
     @Published public var rate: Float = 1 { didSet { player?.rate = rate } }
@@ -165,7 +165,31 @@ extension RecordedAudio: Transferable {
     /// Where play starts when nothing is loaded: a seek made before Play.
     private var parked: TimeInterval = 0
 
-    public override init() { super.init() }
+    public override init() {
+        super.init()
+        #if os(iOS)
+        // Selector-based, so the centre drops it when the player goes away.
+        NotificationCenter.default.addObserver(self, selector: #selector(audioInterrupted(_:)),
+                                               name: AVAudioSession.interruptionNotification, object: nil)
+        #endif
+    }
+
+    #if os(iOS)
+    /// A phone call, Siri or another app's audio paused the player; without
+    /// this the bar showed Pause on a player that had stopped.
+    @objc nonisolated private func audioInterrupted(_ note: Notification) {
+        let type = (note.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt).flatMap(AVAudioSession.InterruptionType.init)
+        guard type == .began else { return }
+        Task { @MainActor [weak self] in self?.interruptionBegan() }
+    }
+    #endif
+
+    /// Shows the player as paused, so Play resumes where the interruption stopped it.
+    func interruptionBegan() {
+        guard state == .playing else { return }
+        player?.pause()
+        state = .paused
+    }
 
     /// Seconds into the recording; read it on a timeline, it is not published.
     public var position: TimeInterval { player?.currentTime ?? parked }
@@ -188,7 +212,8 @@ extension RecordedAudio: Transferable {
         case .paused:
             // A voice session that held the audio session may have ended while paused.
             Self.activateSession()
-            if player?.play() == true { state = .playing } else { stop() }
+            // Refused while a call still holds the audio: stay paused at the same place.
+            if player?.play() == true { state = .playing }
         }
     }
 
