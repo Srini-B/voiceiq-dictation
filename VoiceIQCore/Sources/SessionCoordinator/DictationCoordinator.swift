@@ -565,8 +565,9 @@ public final class DictationCoordinator: ObservableObject {
                     self?.drafting.insert(sessionID)
                 }
             }
-            let heard: (@Sendable (String) -> Void)? = stage.map { stage in
-                { text in Task { @MainActor in stage.show(text) } }
+            var heard: (@Sendable (String) -> Void)?
+            if let stage {
+                heard = { text in Task { @MainActor in stage.show(text) } }
             }
             do {
                 let audioURL = FileLayout.audioCAF(in: session.folder)
