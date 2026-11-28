@@ -41,12 +41,17 @@ final class SpellingCaseTests: XCTestCase {
         let keys = try engine(learned) { $0.learn("chatgpt") }
         XCTAssertEqual(try swiped("chatgpt", into: learned, keys: keys), "I said ChatGPT")
 
+        // A contact, as UILexicon gives it (not the Dictionary, which space handles first).
         let contact = Field(text: "I said ")
         let typing = try engine(contact)
-        typing.autocorrect.setVocabulary(["Fitzgerald"])
+        typing.autocorrect.loadLexiconEntries([(userInput: "Fitzgerald", documentText: "Fitzgerald")])
         for letter in "fitzgerald" { tap(.character(String(letter)), typing) }
         tap(.space, typing)
         XCTAssertEqual(contact.text, "I said Fitzgerald ")
+        let swipe = Field(text: "I said ")
+        let swiping = try engine(swipe)
+        swiping.autocorrect.loadLexiconEntries([(userInput: "Fitzgerald", documentText: "Fitzgerald")])
+        XCTAssertEqual(try swiped("fitzgerald", into: swipe, keys: swiping), "I said Fitzgerald")
     }
 
     /// With Auto-capitalization off, Shift gives one capital and the model adds none.
@@ -55,8 +60,10 @@ final class SpellingCaseTests: XCTestCase {
         let keys = try engine(field)
         keys.autoCapitalizes = false
         tap(.shift, keys)
-        for letter in "cha" { tap(.character(String(letter)), keys) }
-        XCTAssertFalse(keys.suggestions.contains { $0.displayText == "ChatGPT" }, "\(keys.suggestions.map(\.displayText))")
+        for letter in "iph" { tap(.character(String(letter)), keys) }
+        let offered = keys.suggestions.map(\.displayText)
+        XCTAssertTrue(offered.contains("Iphone"), "\(offered)")
+        XCTAssertFalse(offered.contains("iPhone"), "\(offered)")
 
         let swipe = Field(text: "I said ")
         let swiping = try engine(swipe)
