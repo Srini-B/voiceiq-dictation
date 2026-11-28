@@ -30,11 +30,20 @@ public final class RealtimeTranscription: @unchecked Sendable {
     /// Set once `finish` stops waiting, so a waiter that registers late resumes at once.
     private var waitOver = false
     private var closed = false
+    /// Whether any audio has gone out; none does before `minimumSamples`.
+    private var sending = false
+    /// The server opened the session (`Begin`); only then is it billed.
+    private var began = false
+    /// The billed length the server reports in `Termination`.
+    private var sessionSeconds: Double?
 
     /// 50 ms at 16 kHz: the smallest chunk sent while recording.
     static let chunkSamples = 800
     /// 1 s, the largest chunk the API accepts.
     static let maxChunkSamples = 16_000
+    /// 0.2 s: a shorter clip is discarded at key-up and never reaches the
+    /// API (`DictationCoordinator`), so none of it is streamed either.
+    static let minimumSamples = 3_200
 
     public init(apiKey: String, languageCode: String?) {
         var components = URLComponents(url: AssemblyAIConfig.streaming, resolvingAgainstBaseURL: false)!
@@ -69,6 +78,10 @@ public final class RealtimeTranscription: @unchecked Sendable {
         let chunks: [[Int16]] = lock.withLock {
             guard !closed, failure == nil else { return [] }
             pending.append(contentsOf: samples)
+            if !sending {
+                guard pending.count >= Self.minimumSamples else { return [] }
+                sending = true
+            }
             var chunks: [[Int16]] = []
             while pending.count >= Self.chunkSamples {
                 let count = min(pending.count, Self.maxChunkSamples)
@@ -173,9 +186,13 @@ public final class RealtimeTranscription: @unchecked Sendable {
                 lock.unlock()
             }
             return true
+        case "Begin":
+            lock.withLock { began = true }
+            return true
         case "Termination":
             lock.lock()
             terminated = true
+            sessionSeconds = json["session_duration_seconds"] as? Double
             lock.unlock()
             resumeWaiter()
             return false
@@ -231,7 +248,10 @@ public final class RealtimeTranscription: @unchecked Sendable {
     /// Billed for the session's open time, in whole seconds, whether it was
     /// used or cancelled.
     private func recordUsage() {
-        let seconds = Date().timeIntervalSince(openedAt).rounded(.up)
+        let (began, reported) = lock.withLock { (self.began, self.sessionSeconds) }
+        // A session the server never opened (offline, a refused key) costs nothing.
+        guard began else { return }
+        let seconds = (reported ?? Date().timeIntervalSince(openedAt)).rounded(.up)
         UsageMeter.$scope.withValue(scope) {
             UsageMeter.record(stage: .liveTranscribe, model: AssemblyAIClient.label(AssemblyAIConfig.realtimeModel),
                               usage: TokenUsage(reportedCostUSD: seconds / 3600 * AssemblyAIPrices.realtimePerHour,

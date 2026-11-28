@@ -42,7 +42,8 @@ the device writes" exists only as the fallback when the writing step fails.
 
 Whatever this row says, Off included, an on-device dictation whose model is
 missing, busy, fails or loads too slowly goes to AssemblyAI as audio when a key
-is stored, and AssemblyAI transcribes and writes it as with the AssemblyAI source.
+is stored and AssemblyAI transcribes it. AssemblyAI's transcripts always go to
+the writing model, whatever this row says.
 Without a key the dictation fails and stays in History for Retry.
 Screen context, when on, sends the screen's text with the writing
 request as it does with an AssemblyAI dictation.

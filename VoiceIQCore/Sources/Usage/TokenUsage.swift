@@ -71,8 +71,10 @@ public struct TokenUsage: Equatable, Sendable, Codable {
               let meta = root["usage"] as? [String: Any] else { return nil }
         let cached = int(meta["prompt_tokens_details"] as? [String: Any] ?? [:], "cachedTokens", "cached_tokens")
         let reasoning = int(meta["completion_tokens_details"] as? [String: Any] ?? [:], "reasoningTokens", "reasoning_tokens")
-        let completion = int(meta, "completionTokens", "completion_tokens")
-        return TokenUsage(textIn: max(0, int(meta, "promptTokens", "prompt_tokens") - cached), cachedIn: cached,
+        // The gateway's guide shows prompt/completion_tokens, its API reference input/output_tokens.
+        let completion = max(int(meta, "completionTokens", "completion_tokens"), int(meta, "outputTokens", "output_tokens"))
+        let prompt = max(int(meta, "promptTokens", "prompt_tokens"), int(meta, "inputTokens", "input_tokens"))
+        return TokenUsage(textIn: max(0, prompt - cached), cachedIn: cached,
                           textOut: max(0, completion - reasoning), thoughtOut: reasoning)
     }
 

@@ -53,7 +53,13 @@ public actor AssemblyAIClient {
             Log.transcription.warning("dictation reply was not the JSON answer")
             throw TranscriptionError.network("malformed_answer")
         }
-        return text.contains(PromptV1.noSpeechToken) ? "" : text
+        if text.contains(PromptV1.noSpeechToken) { return "" }
+        // A blank answer without the no-speech token is a writer failure, not
+        // silence: the transcript goes in tidied instead.
+        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw TranscriptionError.network("blank_answer")
+        }
+        return text
     }
 
     /// A conversation: `system`, then alternating user and assistant turns,
@@ -201,9 +207,12 @@ public actor AssemblyAIClient {
             case "error":
                 let message = json["error"] as? String ?? "transcript_error"
                 Log.transcription.error("AssemblyAI transcript failed: \(message, privacy: .private)")
-                // Audio the service could not read fails the same way again.
-                throw message.lowercased().contains("no spoken audio")
-                    ? TranscriptionError.emptyTranscript : TranscriptionError.badRequest(message)
+                // Audio the service could not read fails the same way again;
+                // a server error is worth another job.
+                let lowered = message.lowercased()
+                if lowered.contains("no spoken audio") { throw TranscriptionError.emptyTranscript }
+                if lowered.contains("server error") { throw TranscriptionError.network("transcript_server_error") }
+                throw TranscriptionError.badRequest(message)
             default:
                 continue
             }
@@ -295,10 +304,11 @@ public actor AssemblyAIClient {
             throw TranscriptionError.noBalance
         case 429:
             let retryAfter = http.value(forHTTPHeaderField: "Retry-After").flatMap(Double.init).flatMap { $0.isFinite && $0 >= 0 ? $0 : nil }
-            if !isRetryAfter429, let delay = retryAfter, delay >= 0, delay <= 8 {
+            // One wait, inside the caller's deadline.
+            if !isRetryAfter429, let delay = retryAfter, delay <= 8, delay + 1 < deadline {
                 try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
                 try Task.checkCancellation()
-                return try await send(url: url, body: body, contentType: contentType, deadline: deadline,
+                return try await send(url: url, body: body, contentType: contentType, deadline: deadline - delay,
                                       modelLabel: modelLabel, stage: stage, isRetryAfter429: true)
             }
             throw TranscriptionError.rateLimitedTransient(retryAfter: retryAfter)

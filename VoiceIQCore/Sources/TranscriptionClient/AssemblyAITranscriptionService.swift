@@ -184,9 +184,10 @@ public struct AssemblyAITranscriptionService: TranscriptionServicing {
             return try await body()
         } catch let error as TranscriptionError {
             switch error {
-            case .network, .timeout:
+            // Not a timeout: the job may still finish, and another would bill again.
+            case .network:
                 Log.transcription.notice("retrying after \(String(describing: error), privacy: .public)")
-                if case .network = error { try await Task.sleep(nanoseconds: 500_000_000) }
+                try await Task.sleep(nanoseconds: 500_000_000)
                 return try await body()
             case .rateLimitedTransient(let retryAfter):
                 let wait = retryAfter ?? TimeoutPolicy.rateLimitWait
