@@ -313,7 +313,8 @@ SOFTWARE.
   days and places lists) and WordNet (permissive licences) and Hex's own word
   list (MIT). Words newer than the books and their spellings in `en.hextm` and
   `en.spellings` ("ChatGPT", "TikTok") come from the Leipzig Corpora
-  Collection's English news downloads for 2023 to 2025, Leipzig University and
+  Collection's English news downloads for 2023 to 2025
+  (https://wortschatz.uni-leipzig.de/en/download/English), Leipzig University and
   the Saxon Academy of Sciences and Humanities in Leipzig (D. Goldhahn,
   T. Eckart and U. Quasthoff, LREC 2012), CC BY 4.0
   (https://creativecommons.org/licenses/by/4.0/); only word counts, how many
