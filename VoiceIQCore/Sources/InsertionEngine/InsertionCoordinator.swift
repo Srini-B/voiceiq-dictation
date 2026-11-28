@@ -39,6 +39,13 @@ public struct InsertionCoordinator: TextInserting {
         await paster.paste(text)
     }
 
+    /// Waits out the last paste's read-back and clipboard restore (up to
+    /// about 1.5 s), so a paste after it posts without waiting.
+    @MainActor
+    public func finishPendingPaste() async {
+        await paster.finishPendingRestore()
+    }
+
     @MainActor
     public func insert(_ text: String, context: DictationContext) async -> InsertionOutcome {
         // Before the guards, so the frontmost app and the field they check

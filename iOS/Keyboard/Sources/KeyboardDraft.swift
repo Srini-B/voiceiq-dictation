@@ -97,7 +97,8 @@ final class KeyboardDraft {
         }
         commit(proxy)
         let current = proxy.documentContextBeforeInput ?? ""
-        guard (proxy.selectedText ?? "").isEmpty, current.hasSuffix(text) else { return .kept }
+        guard (proxy.selectedText ?? "").isEmpty, current.hasSuffix(text), isStillAround(proxy, before: current)
+        else { return .kept }
         let fitted = fit(written, String(current.dropLast(text.count)), proxy.documentContextAfterInput ?? "")
         guard !fitted.isEmpty else { return .kept }
         for _ in 0..<text.count { proxy.deleteBackward() }
@@ -113,6 +114,19 @@ final class KeyboardDraft {
         guard (proxy.selectedText ?? "").isEmpty, (proxy.documentContextAfterInput ?? "") == after else { return false }
         let current = proxy.documentContextBeforeInput ?? ""
         return current.hasSuffix(text) || (allowingCutWindow && !current.isEmpty && text.hasSuffix(current))
+    }
+
+    /// The text around the cursor is still the text around the draft: the
+    /// same text after it, and the text before the draft ending as it did.
+    /// An earlier copy of the same words, with the cursor moved to it, has
+    /// other text around it and is never taken for the draft.
+    private func isStillAround(_ proxy: UITextDocumentProxy, before current: String) -> Bool {
+        guard (proxy.documentContextAfterInput ?? "") == after else { return false }
+        let rest = current.dropLast(text.count)
+        // A host may show only part of the text before the cursor.
+        let shared = min(rest.count, before.count, 40)
+        if shared == 0 { return rest.isEmpty == before.isEmpty || rest.isEmpty }
+        return rest.suffix(shared) == before.suffix(shared)
     }
 
     /// The field reads as it did before the draft went in: the host has not

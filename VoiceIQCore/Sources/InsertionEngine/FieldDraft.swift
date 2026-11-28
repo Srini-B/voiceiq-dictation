@@ -142,6 +142,9 @@ public final class FieldDraft: TextDraft {
         guard let field, landed != nil else { return false }
         await field.acquire()
         defer { field.release() }
+        // The draft's own paste may still be restoring the clipboard. Wait it
+        // out now, so every check below holds when the ⌘V is posted.
+        await inserter.finishPendingPaste()
         guard let reading = field.sync(), let span = field.ledger.draft(id) else {
             Log.insertion.info("draft: edited or gone — kept as it was")
             return false

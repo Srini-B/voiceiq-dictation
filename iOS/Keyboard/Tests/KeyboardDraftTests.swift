@@ -66,6 +66,19 @@ final class KeyboardDraftTests: XCTestCase {
         XCTAssertEqual(field.string, "Dear Ana, see you at noon")
     }
 
+    /// The cursor moved back to an earlier copy of the same words: that copy
+    /// is the user's text and stays, and so does the draft.
+    func testAnEarlierCopyOfTheSameWordsIsNeverTakenForTheDraft() throws {
+        let field = Field("ok ok")
+        let draft = try XCTUnwrap(type("ok", into: field))
+        draft.commit(field)
+        field.adjustTextPosition(byCharacterOffset: -3)
+        draft.fieldChanged(field, now: typedAt.addingTimeInterval(2))
+
+        XCTAssertEqual(draft.replace(with: "OK.", in: field, fit: fit), .kept)
+        XCTAssertEqual(field.string, "ok ok ok")
+    }
+
     /// A selection is the user's: the written text never replaces it.
     func testASelectionIsNeverReplaced() throws {
         let field = Field("Dear Ana,")
