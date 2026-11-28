@@ -20,6 +20,8 @@ public final class RealtimeTranscription: @unchecked Sendable {
     private let session: URLSession
     private let task: URLSessionWebSocketTask
     private let openedAt = Date()
+    /// The dictation this stream belongs to; the socket's callbacks don't inherit it.
+    private let scope = UsageMeter.scope
     private var pending: [Int16] = []
     private var finals: [Int: String] = [:]
     private var failure: TranscriptionError?
@@ -169,7 +171,6 @@ public final class RealtimeTranscription: @unchecked Sendable {
             lock.lock()
             terminated = true
             lock.unlock()
-            recordUsage()
             resumeWaiter()
             return false
         case "Error":
@@ -206,14 +207,18 @@ public final class RealtimeTranscription: @unchecked Sendable {
         guard wasOpen else { return }
         task.cancel(with: .normalClosure, reason: nil)
         session.invalidateAndCancel()
+        recordUsage()
     }
 
-    /// Billed for the session's open time, in whole seconds.
+    /// Billed for the session's open time, in whole seconds, whether it was
+    /// used or cancelled.
     private func recordUsage() {
         let seconds = Date().timeIntervalSince(openedAt).rounded(.up)
-        UsageMeter.record(stage: .liveTranscribe, model: AssemblyAIClient.label(AssemblyAIConfig.realtimeModel),
-                          usage: TokenUsage(reportedCostUSD: seconds / 3600 * AssemblyAIPrices.realtimePerHour,
-                                            audioSeconds: seconds))
+        UsageMeter.$scope.withValue(scope) {
+            UsageMeter.record(stage: .liveTranscribe, model: AssemblyAIClient.label(AssemblyAIConfig.realtimeModel),
+                              usage: TokenUsage(reportedCostUSD: seconds / 3600 * AssemblyAIPrices.realtimePerHour,
+                                                audioSeconds: seconds))
+        }
     }
 
     /// The server's close code and reason say why a stream ended (streaming
