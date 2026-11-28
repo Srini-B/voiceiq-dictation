@@ -537,7 +537,12 @@ VoiceiQ adds no row.
   (`languageOverride`, `HexLanguageSettings.swift`), so there is no language
   list, no space-bar language swipe or label, no second autocorrect language
   and no language detection, and only English data ships (the `en.hextm`
-  word model and the English emoji search index). The globe key shows only
+  word model, its `en.spellings` and the English emoji search index). Since
+  Hex `f5819f4c` the model holds names, days and places ("Claude", "Monday",
+  "London") and newer words ("ChatGPT"), so they can be swiped and typos of
+  them are corrected; a correction to a name takes its capital, and
+  `en.spellings` gives words their own spelling ("chatgpt" becomes
+  "ChatGPT", "github" "GitHub"). English swipe no longer ranks names lower. The globe key shows only
   when iOS asks for one (`needsInputModeSwitchKey`), as on the iPhone SE.
 - The edit panel (`EditPanel`, `EditController`), in place of the keys, in
   three rows of one height: line start, previous word, left and right chevrons
@@ -583,6 +588,12 @@ VoiceiQ adds no row.
   such words out of the strip's other candidates. A missed space ("iam" to
   "I am") and words the model lacks, such as Dictionary names, are never held
   back. What the strip highlights is what space applies.
+- A word the typing model spells with capitals inside it (`en.spellings`:
+  ChatGPT, GitHub, iPhone, eBay) keeps that spelling at a
+  sentence's start, typed, swiped or offered in the strip: the start-of-sentence
+  capital goes only on an all-lowercase word, so "chatgpt" becomes "ChatGPT"
+  and "iphone" "iPhone", never "Chatgpt" or "IPhone"
+  (`0010-voiceiq-spelling-case.patch`).
 - A secure field (`isSecureTextEntry`, including custom and web ones without a
   password content type) gets no auto-correction and nothing goes into the
   typing journal (`TypingBridge.autocorrectionType`,
@@ -673,10 +684,12 @@ the App Group, which the keyboard reads each time it appears; Hex's other
 switches (key colours, emoji shortcodes and its Labs experiments) keep Hex's
 defaults.
 
-**Tests.** `KeyboardTests` (in the `VoiceIQiOS` scheme) compiles
-`EditController.swift` on its own against a fake text field: undo and redo of
-a dictation and deletes, typing over a selection, word and line steps, and an
-edit by the app dropping undo.
+**Tests.** `KeyboardTests` (in the `VoiceIQiOS` scheme, hosted by the app so
+the embedded keyboard's typing model loads) compiles the keyboard's sources
+and Hex's against fake text fields: undo and redo of a dictation and deletes,
+typing over a selection, word and line steps, an edit by the app dropping
+undo, and spellings with inner capitals at a sentence's start, typed and
+swiped through the real keys (`SpellingCaseTests`).
 
 The earlier typing keyboard and the keyboard's Ask and Translate modes were
 removed on 2026-11-22 (`activities/2026-11-22-mini-keyboard.md`); Hex's
