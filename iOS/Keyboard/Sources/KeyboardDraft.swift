@@ -139,9 +139,12 @@ final class KeyboardDraft {
             for _ in 1..<text.count { proxy.deleteBackward() }
         }
         proxy.insertText(fitted)
-        try? await Task.sleep(for: .milliseconds(400))
-        let end = proxy.documentContextBeforeInput ?? ""
-        KeyboardLog.note("swap: inserted \(fitted.count), before the cursor now \(end.count), expected \(rest.count + fitted.count), as expected \(end == rest + fitted)")
+        // Read back for the log only, after the swap has returned.
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(400))
+            let end = proxy.documentContextBeforeInput ?? ""
+            KeyboardLog.note("swap: inserted \(fitted.count), before the cursor now \(end.count), expected \(rest.count + fitted.count), as expected \(end == rest + fitted)")
+        }
         return .retyped(fitted)
     }
 
