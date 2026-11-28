@@ -1,7 +1,8 @@
 import SwiftUI
 import VoiceIQCore
 
-/// Play and Download for a dictation's or a note's audio. Download shares the
+/// Play and Download for a dictation's audio (a note plays from its
+/// `MeetingPlaybackBar`). Download shares the
 /// `.m4a`, so Save to Files keeps it. Both are disabled when the audio is not
 /// on this device.
 struct RecordingAudioControls: View {

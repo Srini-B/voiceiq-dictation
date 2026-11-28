@@ -158,7 +158,7 @@ extension RecordedAudio: Transferable {
 @MainActor public final class RecordingPlayer: NSObject, ObservableObject, AVAudioPlayerDelegate {
     public enum State: Equatable { case idle, preparing, playing, paused }
     @Published public private(set) var state: State = .idle
-    /// Playback speed, kept across recordings and stops.
+    /// Playback speed; the meeting playback bar sets it.
     @Published public var rate: Float = 1 { didSet { player?.rate = rate } }
     private var player: AVAudioPlayer?
     private var preparing: Task<Void, Never>?
@@ -169,6 +169,8 @@ extension RecordedAudio: Transferable {
 
     /// Seconds into the recording; read it on a timeline, it is not published.
     public var position: TimeInterval { player?.currentTime ?? parked }
+    /// The recording's length once it is loaded; nil before the first Play.
+    public var duration: TimeInterval? { player?.duration }
 
     /// Plays `audio`, or stops whatever is preparing, playing or paused.
     public func toggle(_ audio: RecordedAudio) {
@@ -183,7 +185,10 @@ extension RecordedAudio: Transferable {
         case .idle: start(audio)
         case .preparing: stop()
         case .playing: player?.pause(); state = .paused
-        case .paused: if player?.play() == true { state = .playing } else { stop() }
+        case .paused:
+            // A voice session that held the audio session may have ended while paused.
+            Self.activateSession()
+            if player?.play() == true { state = .playing } else { stop() }
         }
     }
 
@@ -192,7 +197,8 @@ extension RecordedAudio: Transferable {
         let seconds = max(0, seconds)
         // `position` is not published; a seek while paused still redraws.
         objectWillChange.send()
-        if let player { player.currentTime = min(seconds, player.duration) } else { parked = seconds }
+        // Just short of the end: AVAudioPlayer doesn't say what a seek to exactly its end does.
+        if let player { player.currentTime = min(seconds, max(0, player.duration - 0.05)) } else { parked = seconds }
     }
 
     private func start(_ audio: RecordedAudio) {

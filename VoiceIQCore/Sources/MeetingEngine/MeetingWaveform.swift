@@ -107,6 +107,7 @@ public struct LiveMeetingWaveform: View {
     /// iPhone hears the room on one track, so its waveform has no call side.
     let hearsCall: Bool
     @State private var history: [WaveBar] = []
+    @Environment(\.scenePhase) private var scenePhase
 
     public init(engine: MeetingEngine, style: WaveformStyle, hearsCall: Bool) {
         self.engine = engine; self.style = style; self.hearsCall = hearsCall
@@ -135,13 +136,15 @@ public struct LiveMeetingWaveform: View {
         .frame(height: 56)
         .task {
             while !Task.isCancelled {
-                sample()
+                // Nobody sees it in the background or a minimised window.
+                if scenePhase == .active { sample() }
                 try? await Task.sleep(for: .milliseconds(100))
             }
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Live sound")
         .accessibilityValue(accessibilityValue)
+        .accessibilityAddTraits(.updatesFrequently)
     }
 
     /// Only the Mac can mute the mic mid-meeting.
@@ -193,10 +196,26 @@ public struct MeetingPlaybackBar: View {
     let style: WaveformStyle
     @StateObject private var player = RecordingPlayer()
     @State private var loudness: MeetingLoudness?
-    /// Where the pointer is while dragging along the waveform, 0 to 1.
-    @State private var scrub: Double?
+    /// Where the finger or pointer is while dragging along the waveform, 0 to 1.
+    /// Gesture state, so a drag the system cancels never leaves it set.
+    @GestureState private var scrub: Double?
+    /// Kept across meetings and launches; dictations always play at 1×.
+    @AppStorage("meetingPlaybackRate") private var rate: Double = 1
 
-    static let rates: [Float] = [1, 1.5, 2]
+    static let rates: [Double] = [1, 1.5, 2]
+    #if os(iOS)
+    /// Apple's minimum touch target.
+    static let target: CGFloat = 44
+    /// A drag must travel this far before it scrubs, so a scroll that starts on the waveform still scrolls.
+    static let dragStart: CGFloat = 10
+    #else
+    static let target: CGFloat = 30
+    static let dragStart: CGFloat = 2
+    #endif
+
+    /// Most recently read meetings' waveforms, so selecting one again doesn't read both tracks again.
+    @MainActor private static var cache: [URL: MeetingLoudness] = [:]
+    @MainActor private static var cacheOrder: [URL] = []
 
     public init(audio: RecordedAudio, style: WaveformStyle) {
         self.audio = audio; self.style = style
@@ -204,23 +223,28 @@ public struct MeetingPlaybackBar: View {
 
     public var body: some View {
         TimelineView(.periodic(from: .now, by: player.state == .playing ? 0.1 : 60)) { _ in
-            let duration = loudness?.duration ?? 0
+            // The player knows the length as soon as it plays, before a long meeting's waveform is read.
+            let duration = loudness?.duration ?? player.duration ?? 0
             let position = scrub.map { $0 * duration } ?? min(player.position, duration)
-            HStack(spacing: 10) {
+            HStack(spacing: 6) {
                 playButton
                 Button { player.seek(to: player.position - 15) } label: {
                     Image(systemName: "gobackward.15")
+                        .frame(minWidth: Self.target, minHeight: Self.target)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(style.you)
                 .accessibilityLabel("Back 15 seconds")
                 .help("Back 15 seconds")
-                Text(Self.clock(position)).font(style.time).foregroundStyle(style.you)
+                // The waveform's value reads the same times.
+                Text(Self.clock(position)).font(style.time).foregroundStyle(style.you).accessibilityHidden(true)
                 waveform(progress: duration > 0 ? position / duration : 0, duration: duration)
-                Text(Self.clock(duration)).font(style.time).foregroundStyle(style.call)
+                Text(Self.clock(duration)).font(style.time).foregroundStyle(style.call).accessibilityHidden(true)
                 speedButton
             }
         }
+        .dynamicTypeSize(...DynamicTypeSize.xxLarge)
         .padding(.leading, 12)
         .padding(.trailing, 8)
         .frame(height: 48)
@@ -228,11 +252,18 @@ public struct MeetingPlaybackBar: View {
         .task(id: audio.source) {
             loudness = nil
             guard case .meeting(let folder) = audio.source else { return }
-            let read = try? await Task.detached(priority: .userInitiated) { try MeetingLoudness.read(folder: folder) }.value
-            // Another meeting was chosen while this one read: its own task sets the waveform.
-            guard !Task.isCancelled else { return }
+            if let cached = Self.cache[folder] { loudness = cached; return }
+            let reader = Task.detached(priority: .utility) { try MeetingLoudness.read(folder: folder) }
+            // Choosing another meeting stops this read, not only its result.
+            let read = await withTaskCancellationHandler { try? await reader.value } onCancel: { reader.cancel() }
+            guard !Task.isCancelled, let read else { return }
+            Self.cache[folder] = read
+            Self.cacheOrder.removeAll { $0 == folder }
+            Self.cacheOrder.append(folder)
+            if Self.cacheOrder.count > 8 { Self.cache[Self.cacheOrder.removeFirst()] = nil }
             loudness = read
         }
+        .onAppear { player.rate = Float(rate) }
         .onChange(of: audio.source) { _, _ in player.stop() }
         .onDisappear { player.stop() }
     }
@@ -250,7 +281,8 @@ public struct MeetingPlaybackBar: View {
             }
             .frame(width: 30, height: 30)
             .background(Circle().fill(style.you))
-            .contentShape(Circle())
+            .frame(minWidth: Self.target, minHeight: Self.target)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityLabel(player.state == .playing ? "Pause" : player.state == .preparing ? "Cancel" : "Play")
@@ -260,38 +292,57 @@ public struct MeetingPlaybackBar: View {
     private func waveform(progress: Double, duration: TimeInterval) -> some View {
         GeometryReader { geometry in
             let count = max(1, Int(geometry.size.width / 5))
+            let width = geometry.size.width
+            func at(_ x: CGFloat) -> Double { min(max(x / width, 0), 1) }
+            // Sideways only, and alongside the scroll view, so a vertical swipe still scrolls the note.
+            let drag = DragGesture(minimumDistance: Self.dragStart)
+                .updating($scrub) { value, scrub, _ in
+                    if scrub != nil || abs(value.translation.width) > abs(value.translation.height) {
+                        scrub = at(value.location.x)
+                    }
+                }
+                .onEnded { value in
+                    guard abs(value.translation.width) > abs(value.translation.height) else { return }
+                    seek(to: at(value.location.x) * duration, of: duration)
+                }
             WaveBars(bars: bars(count), style: style, played: Int((progress * Double(count)).rounded()))
                 .contentShape(Rectangle())
-                .gesture(DragGesture(minimumDistance: 0)
-                    .onChanged { scrub = min(max($0.location.x / geometry.size.width, 0), 1) }
-                    .onEnded { _ in
-                        if let scrub { player.seek(to: scrub * duration) }
-                        scrub = nil
-                    })
+                .onTapGesture(coordinateSpace: .local) { seek(to: at($0.x) * duration, of: duration) }
+                .simultaneousGesture(drag)
+                // Nothing to seek in until the length is known.
+                .allowsHitTesting(duration > 0)
         }
-        .frame(height: 32)
+        .frame(minWidth: 60)
+        .frame(height: Self.target)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Playback position")
         .accessibilityValue("\(Self.clock(progress * duration)) of \(Self.clock(duration))")
         .accessibilityAdjustableAction { direction in
-            player.seek(to: player.position + (direction == .increment ? 15 : -15))
+            seek(to: player.position + (direction == .increment ? 15 : -15), of: duration)
         }
+    }
+
+    /// Within the recording: past the end would start the next Play from 0:00.
+    private func seek(to seconds: TimeInterval, of duration: TimeInterval) {
+        guard duration > 0 else { return }
+        player.seek(to: min(seconds, duration))
     }
 
     private var speedButton: some View {
         Button {
-            let next = (Self.rates.firstIndex(of: player.rate) ?? 0) + 1
-            player.rate = Self.rates[next % Self.rates.count]
+            let next = (Self.rates.firstIndex(of: rate) ?? 0) + 1
+            rate = Self.rates[next % Self.rates.count]
+            player.rate = Float(rate)
         } label: {
-            Text(player.rate.formatted(.number.precision(.fractionLength(0...1))) + "×")
+            Text(rate.formatted(.number.precision(.fractionLength(0...1))) + "×")
                 .font(style.time)
                 .foregroundStyle(style.you)
-                .frame(minWidth: 36, minHeight: 26)
+                .frame(minWidth: Self.target, minHeight: Self.target)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Speed")
-        .accessibilityValue("\(player.rate.formatted()) times")
+        .accessibilityValue("\(rate.formatted()) times")
         .help("Playback speed")
     }
 

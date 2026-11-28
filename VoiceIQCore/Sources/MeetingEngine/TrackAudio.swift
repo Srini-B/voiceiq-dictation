@@ -28,6 +28,8 @@ public struct TrackAudio: Sendable {
         let buffer = AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: AVAudioFrameCount(Self.window * 40))!
         var carry: [Int16] = []
         while file.framePosition < file.length {
+            // A cancelled waveform read stops here instead of reading the rest of a long track.
+            try Task.checkCancellation()
             try file.read(into: buffer)
             guard buffer.frameLength > 0, let channel = buffer.int16ChannelData?[0] else { break }
             carry.append(contentsOf: UnsafeBufferPointer(start: channel, count: Int(buffer.frameLength)))

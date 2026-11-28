@@ -679,13 +679,17 @@ colours on both platforms: ink for you, grey for the call.
   waveform has no call side and draws the room both ways from the line.
 - **After recording**, `MeetingPlaybackBar` shows, in order: play and pause,
   back 15 seconds, the time, the waveform, the length, and the speed (1×, 1.5×,
-  2×, kept across recordings). Click or drag on the waveform to seek. Bars to
+  2×, kept across meetings and launches; dictations always play at 1×). Click or drag on the waveform to seek. Bars to
   the left of the playhead are solid and the rest are faded. The waveform comes
   from `MeetingLoudness.read`, which takes each track's 100 ms levels
   (`TrackAudio`) with its transcription gain, so a quiet call side draws as tall
   as the mic, and maps them from −50 dBFS (flat) to −10 dBFS (full). Each bar is
   the loudest moment in its stretch. An empty `system.caf`, as on iPhone, means
-  no call side. `RecordingPlayer` pauses, resumes, seeks and sets the rate.
+  no call side. The last eight waveforms read are kept, so reopening a meeting
+  doesn't read its tracks again, and choosing another meeting stops a read in
+  progress. Seeking waits until the length is known. On iPhone, a drag scrubs
+  only once it has moved sideways, so a vertical swipe over the waveform still
+  scrolls the note. `RecordingPlayer` pauses, resumes, seeks and sets the rate.
   Dictations still use its `toggle` (play or stop).
 
 ## The pill in screen shares
