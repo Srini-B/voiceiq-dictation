@@ -114,6 +114,21 @@ final class KeyboardDraftTests: XCTestCase {
         XCTAssertEqual(field.string, "ok ok")
     }
 
+    /// The same deletion before the draft was ever seen, in a host that
+    /// leaves marked text out of the context: the few characters still
+    /// before the cursor are not enough to take an earlier copy for it.
+    func testADraftDeletedBeforeItWasSeenLeavesTheSameWordsAlone() throws {
+        let field = Field("ok ok ")
+        field.hidesMarkedText = true
+        let draft = try XCTUnwrap(type("ok", into: field))
+        XCTAssertEqual(field.documentContextBeforeInput, "ok ok ")
+        for _ in 0..<3 { field.deleteBackward() }
+        XCTAssertEqual(field.string, "ok ok")
+
+        XCTAssertEqual(draft.replace(with: "OK.", in: field, fit: fit), .kept)
+        XCTAssertEqual(field.string, "ok ok")
+    }
+
     /// A draft the swap could not take back out is never typed: Tamil,
     /// whose vowel signs a host may delete on their own, a line break, and
     /// a draft longer than hosts show before the cursor. The written text

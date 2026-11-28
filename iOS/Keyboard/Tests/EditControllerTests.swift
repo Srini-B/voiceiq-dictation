@@ -32,7 +32,13 @@ final class Field: NSObject, UITextDocumentProxy {
         marked = nil
     }
 
-    var documentContextBeforeInput: String? { String(text[..<start]) }
+    /// A host that leaves marked text out of the context until it is committed.
+    var hidesMarkedText = false
+
+    var documentContextBeforeInput: String? {
+        guard hidesMarkedText, let marked, marked.upperBound <= start else { return String(text[..<start]) }
+        return String(text[..<marked.lowerBound]) + String(text[marked.upperBound..<start])
+    }
     var documentContextAfterInput: String? { String(text[(start + length)...]) }
     var selectedText: String? { length > 0 ? String(text[start..<(start + length)]) : nil }
     var documentInputMode: UITextInputMode? { nil }

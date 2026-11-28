@@ -56,7 +56,12 @@ final class KeyboardDraft {
         let fitted = fit(transcript, before, after)
         guard canSwap(fitted) else { return nil }
         proxy.setMarkedText(fitted, selectedRange: NSRange(location: fitted.utf16.count, length: 0))
-        return KeyboardDraft(id: id, documentID: documentID, text: fitted, before: before, after: after, typedAt: now)
+        let draft = KeyboardDraft(id: id, documentID: documentID, text: fitted, before: before, after: after,
+                                  typedAt: now)
+        // Seen at once when the host shows it right away, so no edit slips
+        // in before the first `follow`.
+        _ = draft.follow(proxy)
+        return draft
     }
 
     /// Whether a draft of `text` could be swapped later. The swap deletes
@@ -72,6 +77,9 @@ final class KeyboardDraft {
     }
 
     static let maxLength = 200
+    /// The least text before the draft that must still match when the host
+    /// shows less of it than when the draft went in.
+    static let minimumSharedContext = 20
 
     /// Makes the marked draft plain text, as heard: the keyboard is going,
     /// or the user edits with it.
@@ -119,10 +127,12 @@ final class KeyboardDraft {
     /// other text around it and is never taken for the draft.
     private func isStillAround(_ proxy: UITextDocumentProxy, before current: String) -> Bool {
         guard (proxy.documentContextAfterInput ?? "") == after else { return false }
-        let rest = current.dropLast(text.count)
-        // A host may show only part of the text before the cursor.
-        let shared = min(rest.count, before.count, 40)
-        if shared == 0 { return rest.isEmpty == before.isEmpty }
-        return rest.suffix(shared) == before.suffix(shared)
+        let rest = String(current.dropLast(text.count))
+        if rest == before { return true }
+        // A host may show only part of the text before the cursor, so with
+        // the draft in it shows less of what came before. Only a long enough
+        // stretch of that text counts: a short one could be an earlier copy
+        // of the draft's words left by an edit nobody saw.
+        return rest.count >= Self.minimumSharedContext && before.hasSuffix(rest)
     }
 }
