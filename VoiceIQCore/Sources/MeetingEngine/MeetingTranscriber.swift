@@ -105,8 +105,8 @@ public struct MeetingTranscriber: Sendable {
     /// headset bleeds into the others), the far side repeats the owner's words
     /// as another speaker. In a run of one far-side speaker's words, split at
     /// a pause, the stretch from its first word that matches an owner word
-    /// starting within `echoSlack` seconds to its last is that echo when it
-    /// has at least `echoRunWords` words and at least `echoShare` of them
+    /// starting within `echoSlack` seconds to its last is that echo when at
+    /// least `echoRunWords` of its words, and at least `echoShare` of them,
     /// match; that stretch goes, and the run's words before and after it stay
     /// (a remote reply under the same label right after the leak). A short
     /// overlapping "yeah" or "okay" stays: the far side really says those
@@ -143,7 +143,7 @@ public struct MeetingTranscriber: Sendable {
                 guard let first = matched.firstIndex(of: true), let last = matched.lastIndex(of: true) else { kept += run; return }
                 let core = last - first + 1
                 let echoed = matched[first...last].filter { $0 }.count
-                guard core >= echoRunWords, Double(echoed) >= echoShare * Double(core) else { kept += run; return }
+                guard echoed >= echoRunWords, Double(echoed) >= echoShare * Double(core) else { kept += run; return }
                 kept += run[..<first] + run[(last + 1)...]
             }
             for word in words.sorted(by: { $0.start < $1.start }) {

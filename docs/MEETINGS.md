@@ -38,8 +38,8 @@ What a request holds depends on the mic:
   repeating the owner. `MeetingTranscriber.droppingOwnerEcho` looks at each
   far-side speaker's words split at a 1 s pause, and in each run at the
   stretch from the first word that matches an owner word starting within
-  0.5 s to the last. That stretch goes when it has three or more words and
-  at least 60% of them match; the run's words before and after it stay, so a
+  0.5 s to the last. That stretch goes when three or more of its words, and
+  at least 60% of them, match; the run's words before and after it stay, so a
   reply the same voice starts right after the leak is kept. A short "yeah"
   or "okay" over the owner stays. On AMI ES2004a the leak was a fifth
   speaker of 120 s.

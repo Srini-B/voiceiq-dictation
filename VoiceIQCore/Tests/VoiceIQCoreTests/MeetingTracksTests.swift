@@ -71,6 +71,14 @@ final class MeetingTracksTests: XCTestCase {
         let kept = MeetingTranscriber.droppingOwnerEcho(leak + reply + backchannel + own, owner: owner)
         XCTAssertEqual(kept.map(\.text), ["Yeah,", "okay.", "I'll", "send", "the", "deck", "Friday.",
                                           "the", "budget", "is", "twelve", "euros"])
+
+        // Crosstalk: two of the owner's words land on the same words of a far
+        // sentence. Two stray matches are not an echo; the sentence stays whole.
+        let crosstalk = [word("the", you, 31.2), word("to", you, 32.4)]
+        let sentence = ["we", "should", "not", "cut", "the", "budget", "to", "zero"].enumerated()
+            .map { word($0.element, "spk:1", 29 + Double($0.offset) * 0.6) }
+        XCTAssertEqual(MeetingTranscriber.droppingOwnerEcho(sentence, owner: crosstalk).map(\.text),
+                       sentence.map(\.text))
     }
 
     func testWordsGoToTheTrackTheyWereHeardOn() throws {
