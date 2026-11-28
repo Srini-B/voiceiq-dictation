@@ -25,10 +25,27 @@ public extension AssemblyAIClient {
     }
 
     /// Notes JSON for a prompt built by `MeetingNotesPrompt`.
+    /// A gateway 429 is waited out here, up to `notesRateLimitTries` asks a
+    /// minute or less apart: notes run in the background, and the meeting's
+    /// own retry would come only minutes later. MEASURED 2026-11-28: a new
+    /// gateway account answered 429 with Retry-After 21–35 s to notes for two
+    /// meetings transcribed back to back.
     func meetingNotesJSON(prompt: String, model: String, deadline: TimeInterval) async throws -> String {
-        try await complete(messages: [["role": "user", "content": prompt]], model: model,
-                           schema: ("meeting_notes", Self.notesSchema), deadline: deadline, stage: .meetingSummary)
+        var tries = 0
+        while true {
+            do {
+                return try await complete(messages: [["role": "user", "content": prompt]], model: model,
+                                          schema: ("meeting_notes", Self.notesSchema), deadline: deadline, stage: .meetingSummary)
+            } catch TranscriptionError.rateLimitedTransient(let retryAfter) where tries + 1 < Self.notesRateLimitTries {
+                tries += 1
+                let wait = min(retryAfter ?? 20, 60)
+                Log.transcription.notice("notes rate limited; asking again in \(Int(wait), privacy: .public) s")
+                try await Task.sleep(nanoseconds: UInt64(wait * 1_000_000_000))
+            }
+        }
     }
+
+    static let notesRateLimitTries = 4
 
     /// The shape `MeetingNotesPrompt.rules` asks for, enforced by the API.
     /// MEASURED 2026-11-26: with JSON mode alone gemini-3.8-flash wrote stray

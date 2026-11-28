@@ -32,7 +32,14 @@ What a request holds depends on the mic:
   (`MeetingTranscriber.transcribeTracks`). Every word from the mic is the
   note owner's; the far side's requests hold only the system track, so AssemblyAI
   tells apart only the other people. Double-talk survives because each voice
-  is on its own track. Cached as `mic-N.json` and `far-N.json`.
+  is on its own track. Cached as `mic-N.json` and `far-N.json`. The owner's
+  voice can still leak into the far track (a remote mic picks it up, or one
+  headset bleeds into the others) and come back as a far-side speaker
+  repeating the owner. `MeetingTranscriber.droppingOwnerEcho` drops a run of
+  three or more far-side words, split at a speaker change or a 1 s pause,
+  when at least 60% of them match an owner word starting within 0.5 s. A
+  short "yeah" or "okay" over the owner stays. On AMI ES2004a the leak was a
+  fifth speaker of 120 s.
 - **Otherwise** (speakerphone echo the canceller could not remove, or a
   recording with no far side): both tracks as one levelled timeline
   (`CallAudio.samples`), as before. Cached as `N.json`.

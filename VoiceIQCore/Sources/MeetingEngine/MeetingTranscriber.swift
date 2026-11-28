@@ -93,8 +93,58 @@ public struct MeetingTranscriber: Sendable {
             try await transcribe(window: regions, track: .far, audio: audio, known: known, remote: remote, budget: &budget,
                                  label: "far side \(index + 1)/\(farWindows.count)")
         }
-        return (owner + far).sorted { $0.start < $1.start }
+        return (owner + Self.droppingOwnerEcho(far, owner: owner)).sorted { $0.start < $1.start }
     }
+
+    /// The far side without the owner's own voice. When the owner's speech
+    /// leaks into the far track (a remote speaker's mic picks it up, or a
+    /// headset bleeds into the others), the far side repeats the owner's words
+    /// as another speaker. A run of far-side words, split at a speaker change
+    /// or a pause, is that echo when it has at least `echoRunWords` words and
+    /// at least `echoShare` of them match an owner word starting within
+    /// `echoSlack` seconds; the whole run goes. A short overlapping "yeah" or
+    /// "okay" stays: the far side really says those over the owner.
+    /// MEASURED 2026-11-28 on AMI ES2004a: the leak was a fifth speaker with
+    /// 120 s and 362 words, 93% of its time inside the owner's turns.
+    static func droppingOwnerEcho(_ far: [TimedWord], owner: [TimedWord]) -> [TimedWord] {
+        func key(_ text: String) -> String { text.lowercased().filter { $0.isLetter || $0.isNumber } }
+        let ownerWords = owner.map { (key: key($0.text), start: $0.start) }.sorted { $0.start < $1.start }
+        let starts = ownerWords.map(\.start)
+        func echoes(_ word: TimedWord) -> Bool {
+            let k = key(word.text)
+            guard !k.isEmpty else { return false }
+            // The first owner word that starts no earlier than the slack allows.
+            var low = 0, high = starts.count
+            while low < high {
+                let mid = (low + high) / 2
+                if starts[mid] < word.start - echoSlack { low = mid + 1 } else { high = mid }
+            }
+            var i = low
+            while i < ownerWords.count, ownerWords[i].start <= word.start + echoSlack {
+                if ownerWords[i].key == k { return true }
+                i += 1
+            }
+            return false
+        }
+        let sorted = far.sorted { $0.start < $1.start }
+        var kept: [TimedWord] = [], run: [TimedWord] = []
+        func flush() {
+            let matched = run.filter(echoes).count
+            if run.count < echoRunWords || Double(matched) < echoShare * Double(run.count) { kept += run }
+            run = []
+        }
+        for word in sorted {
+            if let last = run.last, last.speaker != word.speaker || word.start - last.end > echoRunGap { flush() }
+            run.append(word)
+        }
+        flush()
+        return kept
+    }
+
+    static let echoSlack: Double = 0.5
+    static let echoShare = 0.6
+    static let echoRunWords = 3
+    static let echoRunGap: Double = 1.0
 
     /// Both tracks as one timeline, for a mic that still carries the far
     /// side's echo or a recording with no far side: the owner is whoever is
