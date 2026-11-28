@@ -213,6 +213,8 @@ struct PillView: View {
         .padding(.horizontal, VoiceIQUI.Spacing.m)
         .frame(height: 48)
         .frame(maxWidth: 560)
+        // Hugs a short error, as pillSurface does (Neon on #143).
+        .fixedSize(horizontal: true, vertical: false)
         .gtGlassCapsule(tint: VoiceIQUI.Colors.errorContainer)
         .modifier(ShakeEffect(shakes: reduceMotion ? 0 : 3))
     }

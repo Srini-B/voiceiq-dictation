@@ -146,7 +146,11 @@ final class MeetingHUDController {
     private func processingChanged() {
         guard !dictationIsActive() else { return }
         switch hud.model.state {
-        case .idleDot, .hidden, .meetingNotes: setPill(restingPill())
+        case .idleDot, .hidden, .meetingNotes:
+            let next = restingPill()
+            // As a recording: without Accessibility the pill may be hidden (a Redo notes with the window closed).
+            if next == .meetingNotes { hud.show() }
+            setPill(next)
         default: break
         }
     }

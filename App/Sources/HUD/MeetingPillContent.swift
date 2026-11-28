@@ -108,10 +108,8 @@ struct PillChip: View {
 
     private var fill: Color {
         switch role {
-        // Not `Colors.primary`: its dark value is a pale blue that white text can't sit on.
-        case .primary: return Color(hex: 0x0B57D0)
-        // Not gRed: white text on it reads at 3.9:1.
-        case .destructive: return Color(hex: 0xB3261E)
+        case .primary: return VoiceIQUI.Colors.primaryFill
+        case .destructive: return VoiceIQUI.Colors.errorFill
         case .neutral: return VoiceIQUI.Colors.onSurfaceVariant.opacity(0.16)
         }
     }
@@ -120,6 +118,9 @@ struct PillChip: View {
 /// Recording: elapsed time, working bars, mute, Discard and Stop.
 /// The timer is a `TimelineView` over the start date, so no published tick is needed.
 /// Discard asks first, in the pill; moving the pointer off the pill answers Keep.
+/// The question is laid over the recording row, which keeps its width: the
+/// pill hugs its content, and a narrower question shrank it out from under
+/// the pointer, which read as leaving and answered Keep (Neon on #143).
 struct MeetingRecordingContent: View {
     let since: Date
     /// Mute my mic in the Meetings window: only the far side is recorded.
@@ -127,8 +128,14 @@ struct MeetingRecordingContent: View {
     @State private var confirmingDiscard = false
 
     var body: some View {
-        HStack(spacing: VoiceIQUI.Spacing.s) {
-            if confirmingDiscard { discardQuestion } else { recording }
+        ZStack(alignment: .trailing) {
+            HStack(spacing: VoiceIQUI.Spacing.s) { recording }
+                .opacity(confirmingDiscard ? 0 : 1)
+                .allowsHitTesting(!confirmingDiscard)
+                .accessibilityHidden(confirmingDiscard)
+            if confirmingDiscard {
+                HStack(spacing: VoiceIQUI.Spacing.s) { discardQuestion }
+            }
         }
         .onHover { inside in if !inside { confirmingDiscard = false } }
     }
@@ -145,12 +152,10 @@ struct MeetingRecordingContent: View {
         }
         // One colour, the window meter's green: red bars beside the record mark read as a warning (Fable, M6).
         WaveformView(processing: true, tint: VoiceIQUI.Colors.gGreen)
-        Group {
-            if micMuted {
-                Text("Mic muted")
-            } else {
-                Text("Recording meeting")
-            }
+        // The longer label always holds its place, so muting doesn't move the buttons.
+        ZStack(alignment: .leading) {
+            Text("Recording meeting").opacity(micMuted ? 0 : 1).accessibilityHidden(micMuted)
+            if micMuted { Text("Mic muted") }
         }
         .font(VoiceIQUI.TypeScale.label())
         .foregroundStyle(VoiceIQUI.Colors.onSurfaceVariant)
@@ -161,7 +166,7 @@ struct MeetingRecordingContent: View {
         } label: {
             Image(systemName: micMuted ? "mic.slash.fill" : "mic.fill")
                 .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(micMuted ? VoiceIQUI.Colors.gRed : VoiceIQUI.Colors.onSurfaceVariant)
+                .foregroundStyle(micMuted ? VoiceIQUI.Colors.error : VoiceIQUI.Colors.onSurfaceVariant)
                 .frame(width: 24, height: 24)
                 .contentShape(Rectangle())
         }
@@ -207,13 +212,14 @@ struct MeetingRecordingContent: View {
             // Sized to the text: the pill has no fixed width, so a flexible frame would stretch it to 560 pt (Neon on #137).
             .fixedSize(horizontal: true, vertical: false)
             .accessibilityLabel("Discard this recording? Its audio is deleted and no notes are made.")
-        PillChip(title: "Keep", role: .neutral) { confirmingDiscard = false }
-            .accessibilityLabel("Keep recording")
         PillChip(title: "Discard", role: .destructive) {
             confirmingDiscard = false
             NotificationCenter.default.post(name: .pillMeetingDiscardTapped, object: nil)
         }
         .accessibilityLabel("Discard the recording without notes")
+        // Keep last, where the trash can was: a double click on the trash keeps.
+        PillChip(title: "Keep", role: .neutral) { confirmingDiscard = false }
+            .accessibilityLabel("Keep recording")
     }
 
     private static func clock(_ seconds: TimeInterval) -> String {

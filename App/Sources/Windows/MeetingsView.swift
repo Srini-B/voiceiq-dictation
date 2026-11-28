@@ -165,13 +165,17 @@ struct MeetingsPane: View {
                         .lineLimit(1)
                 }
             } else {
-                Text(timeLine(meeting)).font(VoiceIQUI.TypeScale.labelSmall()).foregroundStyle(.secondary)
+                Text(timeLine(meeting)).font(VoiceIQUI.TypeScale.labelSmall())
+                    .foregroundStyle(selection == meeting.id ? HierarchicalShapeStyle.primary : .secondary)
+                    .lineLimit(1)
             }
             let names = folders.names(of: meeting.id)
             if !names.isEmpty {
                 // Text, not a Label: a list row gives a Label's icon a column of its own.
                 Text("\(Image(systemName: "folder")) \(names.joined(separator: ", "))")
-                    .font(VoiceIQUI.TypeScale.labelSmall()).foregroundStyle(.secondary).lineLimit(1)
+                    .font(VoiceIQUI.TypeScale.labelSmall())
+                    .foregroundStyle(selection == meeting.id ? HierarchicalShapeStyle.primary : .secondary)
+                    .lineLimit(1)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)

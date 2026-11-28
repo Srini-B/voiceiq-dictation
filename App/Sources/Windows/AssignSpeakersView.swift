@@ -57,6 +57,8 @@ struct AssignSpeakersView: View {
                     Label("Another line", systemImage: "shuffle")
                 }
                 .labelStyle(.titleAndIcon)
+                .lineLimit(1)
+                .fixedSize()
                 .font(VoiceIQUI.TypeScale.labelSmall())
                 .foregroundStyle(.secondary)
                 .disabled(turns.count < 2)

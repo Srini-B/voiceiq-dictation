@@ -314,7 +314,9 @@ Every recording starts unmuted. Hex has the same switch (`6118eb82`).
 
 **Discard.** A recording you don't want can be thrown away instead of
 stopped. The pill has a trash can beside its red Stop; it asks "Discard this
-recording?" with a grey Keep and a red Discard in the pill itself, and moving the pointer
+recording?" with a red Discard and a grey Keep in the pill itself (Keep
+where the trash can was, so a double click keeps; the question lies over the
+recording row, so the pill doesn't shrink under the pointer), and moving the pointer
 off the pill answers Keep. The Meetings window has a trash button beside
 Mute my mic, which asks the same in a dialog. Discard
 (`MeetingEngine.discardRecording`) stops both tracks, skips transcription
