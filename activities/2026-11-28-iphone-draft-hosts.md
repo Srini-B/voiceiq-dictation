@@ -53,7 +53,7 @@ count the marked draft.
 - A key, Delete, cursor move, Paste last or Undo in the run loop turn of a
   `setMarkedText` or `unmarkText` runs on the next turn
   (`EditController.runsNow`, `KeyboardModel.markedTextThisTurn`), and so
-  does a result or Paste last. The keys read the text before the cursor
+  does a result or Paste last (a result waits for the next poll). The keys read the text before the cursor
   with the waiting edits in it (`EditController.projected`), so a word-wise
   Delete swipe takes the right words. Checked on the fake host only.
 - Mac: a ⌘V draft the field never showed is `DraftShown.unseen`; the pill
@@ -61,7 +61,8 @@ count the marked draft.
 
 ## Verification
 
-Mac mini, iOS 27 Simulator: `swift test --package-path VoiceIQCore`, both
-schemes built unsigned, and KeyboardTests, on the PR's final head (counts in
-the PR). Messages rechecked on the branch with the probe. No real device was
+Mac mini, iOS 27 Simulator, and CI: `swift test --package-path VoiceIQCore`,
+both schemes built unsigned, and KeyboardTests (counts in PR #171). Contacts
+and Calendar were measured in their notes fields; their other prose fields
+(titles, search) get drafts by the same bundle ID unmeasured. Messages rechecked on the branch with the probe. No real device was
 used.

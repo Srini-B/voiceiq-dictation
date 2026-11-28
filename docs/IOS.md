@@ -240,7 +240,8 @@ is the Mac's draft (`TextDraft`), done by the keyboard:
    Undo history is cleared when a draft goes in.
 3. The app offers a draft only for a destination in `Delivery.draftHosts`,
    so the written text is never held back elsewhere. A destination whose app
-   the keyboard could not name at Stop gets no draft. It waits up to 0.6 s
+   the keyboard could not name at Stop (at Dictate, for a dictation stopped
+   outside a keyboard) gets no draft. It waits up to 0.6 s
    (`Delivery.draftWait`) for that ID, then
    withdraws the draft from the snapshot. Without the ID, the written text
    comes as a plain result that still names the draft, in the dictation's
@@ -314,8 +315,7 @@ run loop. A key, Delete, cursor move, Paste last or Undo tapped in the turn
 of a `setMarkedText` or `unmarkText` runs on the next turn instead
 (`KeyboardModel.markedTextThisTurn`, `EditController.runsNow`): the host
 would apply it first, so it would land before a new draft, which then went
-in twice, or replace a draft just made plain. A result, Paste last
-included, waits the same way. The keys read the text before the cursor with
+in twice, or replace a draft just made plain. Paste last waits the same way, and a result waits for the next poll. The keys read the text before the cursor with
 the edits still waiting in it (`EditController.projected`), so a word-wise
 Delete reads each next word after the last one it took. That counts inserts
 and Deletes before the cursor only, not a waiting cursor move or a Delete

@@ -688,7 +688,8 @@ public final class DictationCoordinator: ObservableObject {
         lastResult = outcome.cleanedTranscript
         if session?.id == sessionID {
             // Set before the state changes, so observers of the state read it.
-            // The insertion's own notice (clipboard, secure field) comes first.
+            // The insertion's own notice (clipboard, secure field) comes first,
+            // except after an unseen paste.
             if case .inserted = insertionOutcome {
                 insertedNotice = notice
             }
