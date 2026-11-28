@@ -1,5 +1,7 @@
 # Experience & Design Plan — Google-styled macOS Dictation App
 
+> Colour and type in this plan were replaced by the November 2026 redesign: see `redesign-2026-11.md`. Motion and sound still apply.
+
 > **Historical planning record.** Captures the design as planned; it may diverge
 > from what shipped. `LICENSE` and `THIRD_PARTY_NOTICES.md` are authoritative for
 > licensing, and the code is authoritative for behaviour.
