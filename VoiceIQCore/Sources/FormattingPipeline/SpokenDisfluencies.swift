@@ -153,13 +153,21 @@ enum SpokenDisfluencies {
             let capital = tokens[index].word.first?.isUppercase == true
             if let count = repeatLength(tokens, at: index) ?? falseStartLength(tokens, at: index) {
                 tokens.removeSubrange(index..<(index + count))
-            } else if let run = fillerRemovals(tokens, at: index) {
+            } else if let run = fillerRun(tokens, at: index) {
+                // A run is judged once, whole: what stays of it is never judged again from its middle.
+                guard !run.removed.isEmpty else { index = run.end; continue }
                 for range in run.removed.reversed() { tokens.removeSubrange(range) }
+                let kept = run.end - index - run.removed.reduce(0) { $0 + $1.count }
                 // "I went, like, to the store": the comma before was the pause too. "So, like, we" keeps it,
                 // and so does a run with a "like" that stays ("took, you know, like, five hours").
-                if !run.keepsOne, index > 0, tokens[index - 1].hasComma, index < tokens.count,
+                if kept == 0, index > 0, tokens[index - 1].hasComma, index < tokens.count,
                    tokens[index].word.first?.isLowercase == true, clauseWords(tokens, before: index) >= 2 {
                     tokens[index - 1].word.removeLast()
+                }
+                if kept > 0 {
+                    if opens, capital { tokens[index].word = TidyText.capitalizingFirst(tokens[index].word) }
+                    index += kept
+                    continue
                 }
             } else {
                 index += 1
@@ -227,36 +235,40 @@ enum SpokenDisfluencies {
         return 2
     }
 
-    /// The comma-set "like" and "you know" of the run starting at `index` ("like, you know,") that
-    /// go, and whether one stays. The run goes between commas mid-sentence, or opening a sentence
-    /// with its comma, judged by the words on either side of the whole run. Not before "and" or
-    /// "or" ("share, like, and comment"), a list item ("follow, like, subscribe, and share") or a
-    /// sentence's last word ("Wait, you know, right?").
-    private static func fillerRemovals(_ tokens: [Token], at index: Int) -> (removed: [Range<Int>], keepsOne: Bool)? {
+    /// The comma-set run of "like" and "you know" starting at `index` ("like, you know,"): the
+    /// fillers in it that go, and where it ends; nil when no run starts there. The run goes
+    /// between commas mid-sentence, or opening a sentence with its comma, judged by the words on
+    /// either side of the whole run. Nothing goes before "and" or "or" ("share, like, and
+    /// comment"), a list item ("follow, like, subscribe, and share") or a sentence's last word
+    /// ("Wait, you know, right?").
+    private static func fillerRun(_ tokens: [Token], at index: Int) -> (removed: [Range<Int>], end: Int)? {
         var fillers: [Range<Int>] = []
         var after = index
         while after < tokens.count, let count = fillerWords(tokens, at: after), tokens[after + count - 1].hasComma {
             fillers.append(after..<(after + count))
             after += count
         }
-        guard !fillers.isEmpty, after < tokens.count, !tokens[after].quoted, !tokens[after].bare.isEmpty,
+        guard !fillers.isEmpty else { return nil }
+        let opensSentence = startsSentence(tokens, at: index)
+        guard after < tokens.count, !tokens[after].quoted, !tokens[after].bare.isEmpty,
               !tokens[after].hasComma, !["and", "or"].contains(tokens[after].bare), !endsSentence(tokens[after].word),
-              !capitalizedMidSentence(tokens, at: index) else { return nil }
+              // A capital mid-sentence may be a name: "We met, you know, Like, to discuss it".
+              !fillers.contains(where: { capitalizedMidSentence(tokens, at: $0.lowerBound) }),
+              opensSentence ? nounStarts.contains(tokens[after].bare) : tokens[index - 1].hasComma && !tokens[index - 1].quoted
+        else { return ([], after) }
         let next = tokens[after]
-        if startsSentence(tokens, at: index) {
-            guard nounStarts.contains(next.bare) else { return nil }
-        } else {
-            guard tokens[index - 1].hasComma, !tokens[index - 1].quoted else { return nil }
-        }
-        let before = index > 0 ? tokens[index - 1].bare : ""
+        // The word after `next`, past the empty words of a double space.
+        let then = tokens[(after + 1)...].first { !$0.word.isEmpty }
+        // The last sentence's word says nothing about this one: "Done. Like, the build passed."
+        let before = opensSentence ? "" : tokens[index - 1].bare
         let removed = fillers.filter { filler in
             if tokens[filler.lowerBound].bare == "like" {
-                return !likeMeansSomething(before: before, next: next, then: after + 1 < tokens.count ? tokens[after + 1] : nil)
+                return !likeMeansSomething(before: before, next: next, then: then)
             }
             // "Wait, you know, don't you?": the words are the question.
-            return !(auxiliaries.contains(next.bare) || next.bare.hasSuffix("n't") || next.bare.hasSuffix("n’t"))
+            return !(auxiliaries.contains(next.bare) || next.bare.hasSuffix("n't"))
         }
-        return removed.isEmpty ? nil : (removed, removed.count < fillers.count)
+        return (removed, after)
     }
 
     /// 1 for a "like", 2 for a "you know", at `index`; nil for anything else.

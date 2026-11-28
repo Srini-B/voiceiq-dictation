@@ -110,3 +110,13 @@ a "like" that stays keeps its commas ("took, like, you know, five hours" →
 "took, like, five hours"). "like" before a determiner or object pronoun is an
 example ("a tool, like, my hammer"); after 'm and 're it quotes ("I'm, like, no
 way"); time words count against "such as" but not against quoting after go.
+
+## Neon review (agy, f308f08)
+
+Verdict: merge after one fix. A run that was rejected or kept in part was
+judged again from its middle, where the checks at its edges no longer applied,
+and lost a comma ("You know, like, of course, …" → "You know of course, …").
+A run is now judged once and skipped past. Also: every filler in a run is
+checked for a mid-sentence capital, a sentence-opening run ignores the last
+sentence's word, and a double space no longer hides the word after the run.
+Left as over-keeping: "So, like, I wanted to check." keeps "like".
