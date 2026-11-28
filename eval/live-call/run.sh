@@ -6,6 +6,9 @@
 #   OWNER_DEVICE="Device name" plays owner.wav into that output device, such as
 #   a loopback the owner's default input hears. Without it, afplay plays it to
 #   the default output.
+#   OWNER_VIEW="activespeaker=1" adds vdo.ninja view parameters to the owner's
+#   room address only, such as an active-speaker view, which shows one guest
+#   at a time, the way Meet's and Zoom's speaker views do.
 #   OUT=dir keeps the guest check's recording and results (default: the
 #   current directory). CHECK=warn goes on when a guest is not heard; by
 #   default the run stops there, since a probe without the far side measures
@@ -100,7 +103,7 @@ for index in {1..${#guests}}; do
 done
 
 # A fresh profile has had no click, so Chrome would block the call's sound.
-join $scratch/owner "Owner" "webcam&videodevice=0" --autoplay-policy=no-user-gesture-required
+join $scratch/owner "Owner" "webcam&videodevice=0${OWNER_VIEW:+&$OWNER_VIEW}" --autoplay-policy=no-user-gesture-required
 speech_at=$(( EPOCHSECONDS + lead ))
 echo "$(date +%T) Owner joined. Accept VoiceiQ's offer or press Option-M within ${lead}s."
 $scratch/taprecord $(( lead - 6 )) $out/guest-check.wav "--user-data-dir=$scratch/owner" &

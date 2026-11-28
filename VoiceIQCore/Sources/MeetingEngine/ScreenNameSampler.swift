@@ -52,7 +52,8 @@ public final class ScreenNameSampler: @unchecked Sendable {
         switch source {
         case let .app(bundleID, _): self.bundleID = bundleID; chats = false
         case let .browser(bundleID, host): self.bundleID = bundleID; chats = CallApps.isChat(host: host)
-        case nil: bundleID = nil; chats = true
+        // Join and Record joins Zoom, Meet, Teams or Webex, never a chat site.
+        case nil: bundleID = nil; chats = joining == nil
         }
         self.joining = joining
     }

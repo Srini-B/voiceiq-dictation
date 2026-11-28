@@ -72,7 +72,7 @@ enum CallApps {
 
     /// The call detected is on a chat site ("web.whatsapp.com").
     static func isChat(host: String) -> Bool {
-        chatPages.contains { host.lowercased().hasSuffix(String($0.prefix { $0 != "/" })) }
+        chatPages.contains { host.lowercased().contains(String($0.prefix { $0 != "/" })) }
     }
     /// Addresses of a joined call room, where sound alone is a call: an owner
     /// who joined muted holds no mic. Not a site's home or post-call page
