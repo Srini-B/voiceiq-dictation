@@ -106,6 +106,11 @@ public struct InsertionCoordinator: TextInserting {
             break
         }
 
+        guard stillWanted() else {
+            Log.insertion.info("no longer wanted after the Accessibility attempt — not pasted")
+            return (.fellBackToClipboard, false)
+        }
+
         // Guard 1 re-check: the AX attempt takes up to ~350ms — a ⌘Tab in that
         // window would land the ⌘V in the wrong app (production pass 2).
         if let expectedPID = context.targetPID,
@@ -114,11 +119,6 @@ public struct InsertionCoordinator: TextInserting {
             Log.insertion.info("frontmost changed during AX attempt — no blind paste")
             paster.copyOnly(text)
             return (.frontmostChanged, false)
-        }
-
-        guard stillWanted() else {
-            Log.insertion.info("no longer wanted after the Accessibility attempt — not pasted")
-            return (.fellBackToClipboard, false)
         }
 
         // Tier 2a: apps where ⌘V fails get the text typed instead.
