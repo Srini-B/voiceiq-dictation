@@ -173,6 +173,8 @@ struct MeetingsPane: View {
     private func row(_ meeting: MeetingMeta) -> some View {
         VStack(alignment: .leading, spacing: 3) {
             Text(title(meeting)).font(VoiceIQUI.TypeScale.body()).lineLimit(1)
+                // Room for the hover folder button, which otherwise covers the title's end.
+                .padding(.trailing, hovered == meeting.id ? 36 : 0)
             if case let .recording(id, since) = engine.phase, id == meeting.id {
                 // The length ticks while it records; the stored one is written at Stop.
                 TimelineView(.periodic(from: since, by: 1)) { context in
