@@ -79,6 +79,8 @@ public final class ScreenNameSampler: @unchecked Sendable {
     private func resolveCallApp(accessibility: Bool) -> Bool {
         if bundleID == nil { bundleID = Self.frontCallApp(among: joining) }
         guard let bundleID else { return false }
+        // A call app relaunched mid-call is a new process (Codex on #146).
+        if let held = pid, NSRunningApplication(processIdentifier: held)?.isTerminated != false { pid = nil; pidHoldsRoom = false }
         if !pidHoldsRoom, accessibility, let found = Self.callPID(bundleID: bundleID) {
             if pid != found.pid { switchOffTries = 0 }
             pid = found.pid; pidHoldsRoom = found.joined

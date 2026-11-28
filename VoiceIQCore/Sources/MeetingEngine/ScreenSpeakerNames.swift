@@ -138,8 +138,9 @@ public enum ScreenSpeakerNames {
         "toolbar", "new", "open", "edit", "file", "window", "tab", "tabs", "bookmarks", "history", "profile",
         "account", "back", "forward", "reload", "live", "rec", "busy", "away", "offline", "available", "guest",
         "now", "today", "yesterday", "files", "notes", "tasks", "contacts", "react", "hide", "show", "unknown",
-        // Chrome's own bars over a call page (2026-11-28 probe: "Infobar Container", "Relaunch", "Install").
-        "infobar", "container", "relaunch", "install", "update",
+        // Chrome's own bars over a call page (2026-11-28 probe: "Infobar Container", "Relaunch", "Install"),
+        // and vdo.ninja's label on a silent tile ("No Audio").
+        "infobar", "container", "relaunch", "install", "update", "no",
     ]
 
     /// Other people the call showed: the participants button less the owner.
