@@ -694,7 +694,9 @@ above both the notes and the transcript, so it keeps playing in any layout. On
 iPhone it is in the Audio card. Download is in the Mac header and under the bar
 on iPhone. Both are unavailable when the audio is not on the device: a dictation
 synced from the other device or removed by audio retention, or a meeting still
-recording. Redo transcript and notes is disabled the same way.
+recording. On the Mac the buttons are disabled and a meeting's playback bar is hidden. On iPhone they are hidden
+and a line says the audio isn't on this device. Redo transcript and notes is
+disabled the same way.
 
 `RecordedAudio` (VoiceIQCore, `Support/RecordedAudio.swift`) makes one AAC
 `.m4a` per recording in its folder's `playback/` folder and both buttons use
