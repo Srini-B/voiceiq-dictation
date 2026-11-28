@@ -84,10 +84,13 @@ enum SpokenDisfluencies {
     /// So does "like" after these, unless a place follows: "he goes, like, no way" but "I went, like, to the store".
     private static let goVerbs: Set<String> = ["go", "goes", "going", "went"]
     private static let placeWords: Set<String> = ["to", "into", "in", "at", "on", "out", "home", "back", "there", "up", "down"]
-    /// "like" before these means "about": "it took, like, five hours".
+    /// "like" before these, or "a" or "an" and one of these, means "about": "it took, like, five
+    /// hours", "like, a hundred".
     private static let numberWords: Set<String> = [
         "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve",
-        "fifteen", "twenty", "thirty", "forty", "fifty", "hundred", "thousand", "million", "half",
+        "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen", "twenty", "thirty",
+        "forty", "fifty", "sixty", "seventy", "eighty", "ninety", "hundred", "thousand", "million", "billion",
+        "dozen", "couple", "few", "half", "hundreds", "thousands", "millions", "dozens",
     ]
     /// Cut-offs that are also prefixes or words ("re- read", "A- average", "No- not now").
     private static let notCutOffs: Set<String> = ["re", "co", "un", "no", "a"]
@@ -106,8 +109,26 @@ enum SpokenDisfluencies {
                 start += word.count + 1
             }
             offset += line.count + 1
+            markSingleQuoted(&tokens)
             return removing(tokens)
         }.joined(separator: "\n")
+    }
+
+    /// Marks a single-quoted span ('put the the book', ‘…’) as quoted, from a word that opens
+    /// with a quote to the next word that closes one. An opening with no close on the line
+    /// ("'cause") marks nothing.
+    private static func markSingleQuoted(_ tokens: inout [Token]) {
+        var index = 0
+        while index < tokens.count {
+            guard let first = tokens[index].word.first, "'‘".contains(first) else { index += 1; continue }
+            let closes = { (word: String) -> Bool in
+                word.trimmingCharacters(in: CharacterSet(charactersIn: ",.;:!?…)")).last.map { "'’".contains($0) } ?? false
+            }
+            guard let end = (index..<tokens.count).first(where: { closes(tokens[$0].word) && ($0 > index || tokens[$0].word.count > 1) })
+            else { index += 1; continue }
+            for quoted in index...end { tokens[quoted] = Token(word: tokens[quoted].word, quoted: true) }
+            index = end + 1
+        }
     }
 
     private static func removing(_ line: [Token]) -> String {
@@ -217,6 +238,7 @@ enum SpokenDisfluencies {
             if quotativeVerbs.contains(before) || before.hasSuffix("'s") || before.hasSuffix("’s")
                 || goVerbs.contains(before) && !placeWords.contains(next.bare)
                 || next.word.first?.isNumber == true || numberWords.contains(next.bare)
+                || ["a", "an"].contains(next.bare) && after + 1 < tokens.count && numberWords.contains(tokens[after + 1].bare)
                 || next.word.first?.isUppercase == true && !isPronounI(next.bare) {
                 return nil
             }

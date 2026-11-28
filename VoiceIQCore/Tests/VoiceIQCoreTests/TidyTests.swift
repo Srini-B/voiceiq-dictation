@@ -101,7 +101,8 @@ final class TidyTests: XCTestCase {
                      "You know, of course, that this is confidential.",
                      // Quoting, "about", "such as", and a "you know" that is the question.
                      "And he was, like, I'm not going.", "She was, like, what are you doing?",
-                     "It took, like, five hours.", "It took, like, 5 hours.", "We saw cities, like, Paris and Rome.",
+                     "It took, like, five hours.", "It took, like, 5 hours.", "It cost, like, thirteen dollars.",
+                     "It took, like, a hundred hours.", "We saw cities, like, Paris and Rome.",
                      "I told Sam, like, Priya said no.", "Wait, you know, don't you?"] {
             XCTAssertEqual(tidy(kept), kept)
         }
@@ -126,7 +127,8 @@ final class TidyTests: XCTestCase {
                      "Pack a bag of tea, a bag of tea.", "Tell Hye-jin I said thanks.",
                      "Who am I, I wonder?", "Who are we, we who stayed behind?",
                      // Single quotes are quotes; prefixes and "No-" are not cut-offs.
-                     "He wrote 'the the' on the board.", "Please re- read the draft.", "A- average work.",
+                     "He wrote 'the the' on the board.", "He wrote 'put the the book on the shelf' on the board.",
+                     "He wrote ‘put the the book away’ today.", "Please re- read the draft.", "A- average work.",
                      "No- not now."] {
             XCTAssertEqual(tidy(kept), kept)
         }
