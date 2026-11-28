@@ -17,12 +17,17 @@ public struct KeyboardCommand: Codable, Equatable, Sendable, Identifiable {
     public var documentID: UUID?
     /// The text around the cursor then (`FieldIdentity.draft`).
     public var draft: String?
+    /// The text around the cursor then, for the writing model to fit the
+    /// dictation to (`SurroundingText.excerpt`). Nil when the keyboard
+    /// could not read it or the field is not a prose field.
+    public var surroundingText: SurroundingText?
 
     public init(
         id: UUID = UUID(),
         action: Action,
         issuedAt: Date = Date(),
-        field: FieldIdentity? = nil
+        field: FieldIdentity? = nil,
+        surroundingText: SurroundingText? = nil
     ) {
         self.id = id
         self.action = action
@@ -30,6 +35,7 @@ public struct KeyboardCommand: Codable, Equatable, Sendable, Identifiable {
         self.hostBundleID = field?.hostBundleID
         self.documentID = field?.documentID
         self.draft = field?.draft
+        self.surroundingText = surroundingText?.excerpt
     }
 
     /// Where the keyboard was when it sent this. Nil from a keyboard that
@@ -85,7 +91,7 @@ public struct FieldVisit: Codable, Equatable, Sendable {
 }
 
 /// The text a keyboard reads around the cursor, reduced to a fingerprint so
-/// two readings can be compared without the App Group keeping the text.
+/// two readings can be compared without keeping the text with the field.
 public enum Draft {
     public static func fingerprint(before: String?, after: String?) -> String? {
         let text = (before ?? "") + (after ?? "")

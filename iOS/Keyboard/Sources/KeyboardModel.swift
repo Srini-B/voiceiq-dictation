@@ -137,22 +137,93 @@ final class KeyboardModel: ObservableObject {
     /// The keyboard is going: a draft still marked becomes plain text, as
     /// heard. Its written text is in Paste last and History.
     func willDisappear() {
-        guard let held = draft else { return }
-        draft = nil
-        if documentID == held.documentID, let proxy = controller?.textDocumentProxy { held.commit(proxy) }
-        KeyboardLog.note("[\(instanceTag)] draft stays as heard: the keyboard was dismissed")
+        keepDraft(.alone, because: "the keyboard was dismissed")
     }
 
-    /// The user is about to edit the field with this keyboard. The draft
-    /// is made plain text first, so the edit goes in after it instead of
-    /// replacing it, and stays as heard: after an edit the text around the
-    /// cursor can match the draft's without being it (a deleted draft after
-    /// an earlier copy of its words).
+    /// The app and input session this keyboard last typed a draft in. When
+    /// another app is opened over a draft, iOS tells the keyboard seconds
+    /// later, and what it writes until then and on being told reaches no
+    /// field: back in Messages the draft was still marked, with no keyboard
+    /// holding it, and the next key would have replaced it (iOS 27 Simulator;
+    /// `activities/2026-11-28-iphone-draft-swap-by-insert.md`). A keyboard
+    /// cannot tell which of its writes were lost, so the next input session
+    /// in that app begins with `unmarkText` (`settleLeftDraft`). Kept on
+    /// disk: iOS often ends the keyboard's process while its app is away.
+    private static var lastDraftPlace: (host: String, session: UUID)? {
+        get {
+            guard let pair = UserDefaults.standard.stringArray(forKey: lastDraftPlaceKey), pair.count == 2,
+                  let session = UUID(uuidString: pair[1]) else { return nil }
+            return (pair[0], session)
+        }
+        set { UserDefaults.standard.set(newValue.map { [$0.host, $0.session.uuidString] }, forKey: lastDraftPlaceKey) }
+    }
+    private static let lastDraftPlaceKey = "keyboard.lastDraftPlace"
+
+    /// Makes plain a draft left marked in an earlier input session
+    /// (`lastDraftPlace`); in a field with no marked text `unmarkText`
+    /// changes nothing. In that draft's app it is sent once and the place
+    /// forgotten. An app that cannot be named, which is every app in a new
+    /// keyboard process, may be that app: waiting for a name would leave the
+    /// draft to the next key, so each such session gets one too, and the
+    /// place is kept until that app is named. True when it was sent, which
+    /// must be this turn's only write.
+    private func settleLeftDraft() -> Bool {
+        guard draft == nil, let left = Self.lastDraftPlace, let session, session.documentID == documentID,
+              session.documentID != left.session, session.documentID != settledSession,
+              let proxy = controller?.textDocumentProxy else { return false }
+        settledSession = session.documentID
+        resolveHostIfMissing(now: true)
+        let host = self.session?.host
+        guard host == nil || host == left.host else { return false }
+        if host != nil { Self.lastDraftPlace = nil }
+        proxy.unmarkText()
+        lastUnmark = Date()
+        KeyboardLog.note("[\(instanceTag)] new session in \(host ?? "an unresolved host"): unmarkText sent, in case the draft typed in \(left.host) is still marked")
+        return true
+    }
+    /// The input session `settleLeftDraft` has looked at, once each.
+    private var settledSession: UUID?
+    /// When this keyboard last called `unmarkText`. Polls can share a turn
+    /// of the run loop (the timer's and a ping's), and an insert or new
+    /// marked text in that turn would reach the host first.
+    private var lastUnmark = Date.distantPast
+    private static let unmarkQuiet: TimeInterval = 0.05
+
+    /// The user is about to edit the field with this keyboard, in this same
+    /// turn. The draft is made plain text first (`KeyboardDraft.Commit`), so
+    /// the edit goes in after it instead of replacing it, and stays as heard.
     func userWillEdit() {
+        keepDraft(.beforeEdit, because: "the user edited the field")
+    }
+
+    /// The host says its text or selection changed: a draft the change
+    /// touched stays as heard now, not at the next poll.
+    func hostChanged() {
+        keepDraftIfDisturbed()
+    }
+
+    /// The text before the cursor with the held draft in it
+    /// (`KeyboardDraft.textBefore`). Nil while this keyboard holds no draft
+    /// in this field: the proxy's text is then the field's.
+    var textBeforeWithDraft: String? {
+        guard let held = draft, documentID == held.documentID, let proxy = controller?.textDocumentProxy else { return nil }
+        return held.textBefore(proxy)
+    }
+
+    /// Ends the draft this keyboard holds, leaving its text in the field as
+    /// heard. Its written text is in Paste last and History.
+    private func keepDraft(_ commit: KeyboardDraft.Commit, because reason: String) {
         guard let held = draft else { return }
         draft = nil
-        if documentID == held.documentID, let proxy = controller?.textDocumentProxy { held.commit(proxy) }
-        KeyboardLog.note("[\(instanceTag)] draft stays as heard: the user edited the field")
+        lastUnmark = Date()
+        if documentID == held.documentID, let proxy = controller?.textDocumentProxy { held.keep(proxy, commit) }
+        KeyboardLog.note("[\(instanceTag)] draft stays as heard: \(reason)")
+    }
+
+    private func keepDraftIfDisturbed() {
+        guard let held = draft, documentID == held.documentID, let proxy = controller?.textDocumentProxy,
+              !held.isInPlace(proxy) else { return }
+        keepDraft(.alone, because: "the field changed around it")
     }
 
     func disappeared() {
@@ -167,12 +238,13 @@ final class KeyboardModel: ObservableObject {
     /// also polls while it is on screen. Reads are local and cheap.
     private func refresh() {
         trackSession()
-        if let held = draft, documentID == held.documentID, let proxy = controller?.textDocumentProxy,
-           !held.follow(proxy) {
-            draft = nil
-            held.commit(proxy)
-            KeyboardLog.note("[\(instanceTag)] draft stays as heard: the field changed around it")
-        }
+        // The host applies a turn's insertions before its `unmarkText`, and
+        // new marked text replaces marked text. So the turn that ends a
+        // draft with `unmarkText` types no result, and a new draft is marked
+        // only in a turn that began with none. The same goes for the turn
+        // that makes a left draft plain, and for `unmarkQuiet` after either.
+        let heldDraft = draft != nil || settleLeftDraft() || Date().timeIntervalSince(lastUnmark) < Self.unmarkQuiet
+        keepDraftIfDisturbed()
         let fresh = store.snapshot
         if fresh != snapshot { snapshot = fresh }
         let alive = store.appIsAlive()
@@ -185,9 +257,9 @@ final class KeyboardModel: ObservableObject {
             waitingForApp = false
             pendingCommandID = nil
         }
-        deliverIfNeeded()
+        if draft != nil || !heldDraft { deliverIfNeeded() }
         dropDraftIfOver()
-        typeDraftIfNeeded()
+        if !heldDraft { typeDraftIfNeeded() }
         showNoticeIfNeeded()
     }
 
@@ -204,7 +276,7 @@ final class KeyboardModel: ObservableObject {
             // The text goes where Stop was tapped.
             let field = fieldForCommand()
             KeyboardLog.note("[\(instanceTag)] stop in \(Self.describe(field))")
-            send(KeyboardCommand(action: .stop, field: field))
+            send(KeyboardCommand(action: .stop, field: field, surroundingText: textForWriter()))
         case .processing:
             if needsAppToFinish { controller?.openURL(BridgeURL.app) }
         case .warm, .off:
@@ -246,9 +318,10 @@ final class KeyboardModel: ObservableObject {
     }
 
     private func start() {
+        keepDraft(.alone, because: "another dictation started")
         let field = fieldForCommand()
         KeyboardLog.note("[\(instanceTag)] start in \(Self.describe(field))")
-        let command = KeyboardCommand(action: .start, field: field)
+        let command = KeyboardCommand(action: .start, field: field, surroundingText: textForWriter())
         let alive = appAlive
         send(command)
         waitingForApp = true
@@ -428,9 +501,11 @@ final class KeyboardModel: ObservableObject {
 
     /// Types the transcript as an underlined draft while the writing model
     /// rewrites it (`SessionSnapshot.draft`), only in the input session Stop
-    /// was tapped in, and says so (`SharedStore.typedDraftID`). The written
-    /// text then replaces it (`finishDraft`). Anywhere else, and over a
-    /// selection, the written text comes alone as before.
+    /// was tapped in, in a prose field of an app drafts were tried in
+    /// (`KeyboardDraft.verifiedHosts`), and says so
+    /// (`SharedStore.typedDraftID`). The written text then replaces it
+    /// (`finishDraft`). Anywhere else, and over a selection, the written text
+    /// comes alone as before.
     private func typeDraftIfNeeded() {
         guard draft == nil, let offered = snapshot.draft, offered.id != store.typedDraftID,
               offered.id != skippedDraftID, offered.isFreshDraft(), appAlive, snapshot.phase == .processing,
@@ -438,13 +513,16 @@ final class KeyboardModel: ObservableObject {
               let proxy = controller?.textDocumentProxy, let documentID,
               offered.route(in: currentField(), handledID: nil, firstReturn: false) == .type(.sameSession)
         else { return }
-        guard let typed = KeyboardDraft.type(offered.text, id: offered.id, documentID: documentID, into: proxy,
+        resolveHostIfMissing(now: true)
+        guard fieldTakesProse, let host = session?.host, KeyboardDraft.verifiedHosts.contains(host),
+              let typed = KeyboardDraft.type(offered.text, id: offered.id, documentID: documentID, into: proxy,
                                              fit: Self.fitted) else {
             skippedDraftID = offered.id
-            KeyboardLog.note("[\(instanceTag)] draft not typed: text is selected, or it could not be swapped later; the written text comes alone")
+            KeyboardLog.note("[\(instanceTag)] draft not typed: not a prose field, drafts were not tried in this app, text is selected, or the transcript has a line break; the written text comes alone")
             return
         }
         draft = typed
+        Self.lastDraftPlace = (host, documentID)
         // Undo replays edits before the cursor, which the draft has moved.
         editor?.resetUndo()
         // Only once it is in: the app then sends the written text to replace it.
@@ -454,9 +532,9 @@ final class KeyboardModel: ObservableObject {
 
     /// The written text for a draft (`Delivery.replacesDraft`). It replaces
     /// the draft only in the input session this keyboard typed it in, and
-    /// only while the draft is still exactly there (`KeyboardDraft.replace`).
-    /// Otherwise the draft stays as heard and the written text is in Paste
-    /// last and History. It is never typed beside the draft.
+    /// only while the field looks as the draft left it
+    /// (`KeyboardDraft.replace`). Otherwise the draft stays as heard and the
+    /// written text is in Paste last and History.
     private func finishDraft(with delivery: Delivery) {
         if waitingResult != nil { waitingResult = nil }
         guard let held = draft, held.id == delivery.replacesDraft else {
@@ -472,37 +550,33 @@ final class KeyboardModel: ObservableObject {
             KeyboardLog.note("[\(instanceTag)] written text not typed: the keyboard moved to another field; the draft stays as heard")
             return
         }
-        Task { @MainActor [weak self] in
-            let swap = await held.replace(with: delivery.text, in: proxy, fit: Self.fitted)
-            guard let self else { return }
-            switch swap {
-            case .retyped(let fitted):
-                // The cursor is right after the written text: Undo takes it
-                // out, as for a dictation typed in.
-                self.editor?.recordDictation(inserted: fitted)
-                self.onDidInsertDictation?(fitted, held.before, held.after)
-                KeyboardLog.note("[\(self.instanceTag)] written text replaced its draft in \(Self.describe(self.currentField()))")
-            case .kept:
-                KeyboardLog.note("[\(self.instanceTag)] written text not typed: the draft was edited or moved, so it stays as heard")
-            }
+        switch held.replace(with: delivery.text, in: proxy, fit: Self.fitted) {
+        case .replaced(let fitted):
+            // The cursor is right after the written text: Undo takes it
+            // out, as for a dictation typed in.
+            editor?.recordDictation(inserted: fitted)
+            onDidInsertDictation?(fitted, held.before, held.after)
+            KeyboardLog.note("[\(instanceTag)] written text replaced its draft in \(Self.describe(currentField()))")
+        case .kept:
+            lastUnmark = Date()
+            KeyboardLog.note("[\(instanceTag)] written text not typed: the field changed around its draft, which stays as heard")
         }
     }
 
     /// A draft whose written text will not come here stays as heard: the
-    /// keyboard moved to another field (whose host has committed it already),
-    /// the dictation ended without it, or the app stopped answering.
+    /// keyboard moved to another field (whose host has committed it already)
+    /// or has been in none for `moveGap`, the dictation ended without it, or
+    /// the app stopped answering.
     private func dropDraftIfOver() {
         guard let held = draft else { return }
-        let moved = documentID.map { $0 != held.documentID } ?? false
+        let moved = documentID.map { $0 != held.documentID } ?? (session == nil)
         let expired = Date().timeIntervalSince(held.typedAt) > Self.draftLimit
         // Published and waiting for this keyboard to be in a field again.
         let writtenWaits = snapshot.delivery.map {
             $0.replacesDraft == held.id && $0.isPending(handledID: store.insertedDeliveryID)
         } ?? false
         guard moved || expired || (!writtenWaits && (!appAlive || snapshot.phase != .processing)) else { return }
-        draft = nil
-        if !moved, documentID != nil, let proxy = controller?.textDocumentProxy { held.commit(proxy) }
-        KeyboardLog.note("[\(instanceTag)] draft stays as heard: \(moved ? "the keyboard moved to another field" : "no written text came")")
+        keepDraft(.alone, because: moved ? "the keyboard moved to another field" : "no written text came")
     }
 
     /// The fitting `insert` does, for a draft and its written text alike.
@@ -517,17 +591,33 @@ final class KeyboardModel: ObservableObject {
         flash(fresh.text, for: 4, isProblem: true)
     }
 
-    /// Fits the new text to the text around the cursor: spaces on both
-    /// sides and a capital at the start of a sentence.
+    /// Fits the new text to the text around the cursor, as the Mac does
+    /// (`SurroundingText.fitted`): the space or line break before it, a
+    /// capital at the start of a sentence, punctuation the field already has
+    /// dropped, and the gap after it. As written when the host shows none of
+    /// a field that has text.
     @discardableResult
     private func insert(_ text: String) -> (fitted: String, before: String, after: String)? {
-        guard let proxy = controller?.textDocumentProxy, !text.isEmpty else { return nil }
-        let before = proxy.documentContextBeforeInput ?? ""
-        let after = proxy.documentContextAfterInput ?? ""
-        let surrounding = SurroundingText(before: before, after: after)
-        let fitted = surrounding.fitted(text)
+        guard controller?.textDocumentProxy != nil, !text.isEmpty else { return nil }
+        // Before the text around the cursor is read, which then has the draft in it.
+        keepDraft(.beforeEdit, because: "this keyboard typed other text")
+        let surrounding = surroundingText()
+        let fitted = surrounding?.fitted(text) ?? text
         editor?.type(fitted)
-        return (fitted, before, after)
+        return (fitted, surrounding?.before ?? "", surrounding?.after ?? "")
+    }
+
+    /// The text around the cursor for the writing model: from prose fields
+    /// only, never a code, number or address field.
+    private func textForWriter() -> SurroundingText? {
+        fieldTakesProse ? surroundingText() : nil
+    }
+
+    /// The text around the cursor (`SurroundingText(keyboardBefore:)`).
+    private func surroundingText() -> SurroundingText? {
+        guard let proxy = controller?.textDocumentProxy else { return nil }
+        return SurroundingText(keyboardBefore: proxy.documentContextBeforeInput,
+                               after: proxy.documentContextAfterInput, fieldHasText: proxy.hasText)
     }
 }
 

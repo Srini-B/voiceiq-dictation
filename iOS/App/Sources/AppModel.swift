@@ -74,7 +74,8 @@ final class AppModel: ObservableObject {
             contextProvider: { [target] in
                 DictationContext(
                     targetAppBundleID: target.host,
-                    targetAppName: target.host.map(AppNames.displayName(for:))
+                    targetAppName: target.host.map(AppNames.displayName(for:)),
+                    focusedField: target.fields.text
                 )
             },
             localFactory: {
@@ -276,7 +277,7 @@ final class AppModel: ObservableObject {
         case .start:
             start(command)
         case .stop:
-            stopDictation(in: command.field, at: command.issuedAt)
+            stopDictation(in: command.field, surroundingText: command.surroundingText, at: command.issuedAt)
         case .cancel:
             coordinator.handle(.cancel)
         }
@@ -305,11 +306,13 @@ final class AppModel: ObservableObject {
     /// `field` is where a keyboard's Stop was tapped: the text goes there.
     /// `stoppedAt` is when it was tapped; the fields the keyboard is in after
     /// that are the ones a return is judged by (`Delivery.isFirstReturn`).
-    private func stopDictation(in field: FieldIdentity? = nil, at stoppedAt: Date = Date()) {
+    private func stopDictation(in field: FieldIdentity? = nil, surroundingText: SurroundingText? = nil,
+                               at stoppedAt: Date = Date()) {
         guard coordinator.state.isCapturing else { return }
         target.fields.stoppedAt = stoppedAt
         if let field {
             target.fields.stoppedIn = field
+            target.fields.text.set(nil, surroundingText: surroundingText)
             session.dictationField = target.destination
         }
         coordinator.handle(coordinator.audioFlowing ? .finalize : .cancel)
@@ -325,6 +328,7 @@ final class AppModel: ObservableObject {
         // A refused start leaves the dictation in progress its own target.
         let previous = target.fields
         target.fields = .init(host: command.hostBundleID, origin: command.field)
+        target.fields.text.set(nil, surroundingText: command.surroundingText)
         guard coordinator.handle(.begin) else {
             target.fields = previous
             let problem = coordinator.coachingHint ?? "Still working on the last one"

@@ -49,6 +49,38 @@ final class RecordedAudioTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: url.path))
     }
 
+    /// The waveform draws each side from its own track: iPhone's empty
+    /// system track means no call side, not a silent one.
+    func testLoudnessKeepsEachSideAndDropsAnEmptyCall() throws {
+        try track("mic.caf", seconds: 2)
+        try track("system.caf", seconds: 0)
+        let room = try MeetingLoudness.read(folder: folder)
+        XCTAssertNil(room.call)
+        XCTAssertEqual(room.duration, 2, accuracy: 0.01)
+        XCTAssertEqual(room.you.count, 20)
+        XCTAssertTrue(room.you.allSatisfy { $0 > 0.5 }, "\(room.you)")
+
+        try track("system.caf", seconds: 3)
+        let call = try MeetingLoudness.read(folder: folder)
+        XCTAssertEqual(call.call?.count, 30)
+        XCTAssertEqual(call.you.count, 20)
+        XCTAssertEqual(call.duration, 3, accuracy: 0.01)
+    }
+
+    /// A bar must neither fill up for steady talk nor vanish for someone who
+    /// speaks a tenth of its stretch (one bar of a long call).
+    func testPlaybackBarsShowShortTurnsAndKeepSteadyTalkBelowFull() {
+        let short = Array(repeating: Float(0.75), count: 10) + Array(repeating: 0, count: 90)
+        let steady = Array(repeating: Float(0.75), count: 100)
+        let loudness = MeetingLoudness(you: short, call: steady, duration: 10)
+        let bar = loudness.bars(1)[0]
+        // A 3 pt dot is the floor; a bar needs about 0.21 of its half to show above it.
+        XCTAssertGreaterThan(bar.you ?? 0, 0.21)
+        XCTAssertLessThan(bar.you ?? 1, 0.5)
+        XCTAssertEqual(bar.call ?? 0, 0.75, accuracy: 0.001)
+        XCTAssertEqual(MeetingLoudness(you: [0, 0], call: nil, duration: 1).bars(2).map { $0.you }, [0, 0])
+    }
+
     /// The longer track sets the length; an empty system track still mixes.
     func testMeetingTracksMixIntoOneM4A() async throws {
         try track("mic.caf", seconds: 3)
