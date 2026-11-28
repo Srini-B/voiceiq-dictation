@@ -23,6 +23,7 @@ final class StatusItemController: NSObject {
     private let onCheckForUpdates: () -> Void
     private let onJoinMeeting: (CalendarMeetings.Upcoming) -> Void
     private let nextMeetingButton: (CalendarMeetings.Upcoming) -> NextMeetingButton?
+    private let recentDictations: () -> [DictationRecord]
     private let templateImage: NSImage
     private var animationTimer: Timer?
     private var animationStartedAt = Date()
@@ -37,7 +38,8 @@ final class StatusItemController: NSObject {
         onOpenAbout: @escaping () -> Void,
         onCheckForUpdates: @escaping () -> Void,
         onJoinMeeting: @escaping (CalendarMeetings.Upcoming) -> Void,
-        nextMeetingButton: @escaping (CalendarMeetings.Upcoming) -> NextMeetingButton?
+        nextMeetingButton: @escaping (CalendarMeetings.Upcoming) -> NextMeetingButton?,
+        recentDictations: @escaping () -> [DictationRecord]
     ) {
         self.statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         self.onOpenHistory = onOpenHistory
@@ -49,6 +51,7 @@ final class StatusItemController: NSObject {
         self.onCheckForUpdates = onCheckForUpdates
         self.onJoinMeeting = onJoinMeeting
         self.nextMeetingButton = nextMeetingButton
+        self.recentDictations = recentDictations
         self.templateImage = Self.loadTemplateImage()
         super.init()
 
@@ -102,6 +105,9 @@ final class StatusItemController: NSObject {
     /// The next calendar meeting: a separator, a header with when it starts,
     /// its title and, when the invite has a call link, Join.
     private var nextMeetingItems: [NSMenuItem] = []
+    /// The last few dictations: a header and one item each that copies it.
+    private var recentItems: [NSMenuItem] = []
+    private static let recentCount = 3
 
     func setStatusLine(_ text: String) {
         statusLine?.title = text
@@ -132,34 +138,32 @@ final class StatusItemController: NSObject {
 
         menu.addItem(.separator())
 
-        let handsFree = NSMenuItem(title: "Start Hands-Free Dictation", action: #selector(startHandsFree), keyEquivalent: "")
-        handsFree.target = self
-        menu.addItem(handsFree)
+        // What you do comes first, each with an outline symbol
+        // (docs/design/redesign-2026-11.md › Menu bar menu).
+        menu.addItem(item("Start Hands-Free Dictation", symbol: "waveform", action: #selector(startHandsFree)))
+        menu.addItem(item("Paste Last Transcript", symbol: "doc.on.clipboard", action: #selector(pasteLastTranscript)))
 
-        let pasteLast = NSMenuItem(title: "Paste Last Transcript", action: #selector(pasteLastTranscript), keyEquivalent: "")
-        pasteLast.target = self
-        menu.addItem(pasteLast)
+        recentItems = [.separator(), .sectionHeader(title: "Recent — click to copy")]
+            + (0..<Self.recentCount).map { _ in item("", symbol: nil, action: #selector(copyRecent(_:))) }
+        recentItems.forEach { $0.isHidden = true; menu.addItem($0) }
 
-        let history = NSMenuItem(title: "History…", action: #selector(openHistory), keyEquivalent: "")
-        history.target = self
-        menu.addItem(history)
-
-        let addWord = NSMenuItem(title: "Add to Dictionary…", action: #selector(addToDictionary), keyEquivalent: "")
-        addWord.target = self
-        menu.addItem(addWord)
+        menu.addItem(.separator())
+        menu.addItem(item("History…", symbol: "clock", action: #selector(openHistory)))
+        menu.addItem(item("Add to Dictionary…", symbol: "character.book.closed", action: #selector(addToDictionary)))
 
         menu.addItem(.separator())
 
         // Which mic VoiceiQ hears through — moves the SYSTEM default input, exactly
         // like Control Center, so AirPods vs built-in is one click (dogfood).
         let micItem = NSMenuItem(title: "Microphone", action: nil, keyEquivalent: "")
+        micItem.image = NSImage(systemSymbolName: "mic", accessibilityDescription: nil)
         let micMenu = NSMenu(title: "Microphone")
         micMenu.delegate = self
         micItem.submenu = micMenu
         menu.addItem(micItem)
 
-        let settings = NSMenuItem(title: "Settings…", action: #selector(openSettings), keyEquivalent: ",")
-        settings.target = self
+        let settings = item("Settings…", symbol: "gearshape", action: #selector(openSettings))
+        settings.keyEquivalent = ","
         menu.addItem(settings)
 
         menu.addItem(.separator())
@@ -178,6 +182,35 @@ final class StatusItemController: NSObject {
 
         menu.delegate = self
         return menu
+    }
+
+    private func item(_ title: String, symbol: String?, action: Selector) -> NSMenuItem {
+        let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
+        item.target = self
+        if let symbol { item.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil) }
+        return item
+    }
+
+    /// Read when the menu opens: the newest dictations with words, one line each.
+    private func showRecentDictations() {
+        let records = recentDictations().filter { !$0.displayText.isEmpty }.prefix(Self.recentCount)
+        recentItems[0].isHidden = records.isEmpty
+        recentItems[1].isHidden = records.isEmpty
+        for (index, item) in recentItems.dropFirst(2).enumerated() {
+            guard index < records.count else { item.isHidden = true; continue }
+            let record = records[records.startIndex + index]
+            let line = record.displayText.split(whereSeparator: \.isNewline).first.map(String.init) ?? record.displayText
+            item.title = line.count > 44 ? String(line.prefix(43)) + "…" : line
+            item.toolTip = String(record.displayText.prefix(400))
+            item.representedObject = record.displayText
+            item.isHidden = false
+        }
+    }
+
+    @objc private func copyRecent(_ sender: NSMenuItem) {
+        guard let text = sender.representedObject as? String else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
     }
 
     /// Read when the menu opens, so it is never stale.
@@ -237,7 +270,10 @@ final class StatusItemController: NSObject {
 
 extension StatusItemController: NSMenuDelegate {
     func menuWillOpen(_ menu: NSMenu) {
-        if menu === statusItem.menu { showNextMeeting() }
+        if menu === statusItem.menu {
+            showNextMeeting()
+            showRecentDictations()
+        }
     }
 
     /// Rebuild the Microphone submenu each open — devices come and go

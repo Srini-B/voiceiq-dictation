@@ -524,6 +524,11 @@ final class DictationController {
         openMainWindow(section: .history)
     }
 
+    /// The newest dictations, for the menu bar's Recent items.
+    func recentDictations() -> [DictationRecord] {
+        historyStore?.records(limit: 8) ?? []
+    }
+
     func openSettings(section: String? = nil) {
         openMainWindow(section: section.flatMap(MainSection.init(rawValue:)) ?? .dictation)
     }

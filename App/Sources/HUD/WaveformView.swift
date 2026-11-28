@@ -1,4 +1,5 @@
 import SwiftUI
+import VoiceIQCore
 
 /// The 5-bar amplitude-reactive waveform (Gemini Live "condensed into a tiny pill").
 /// Both states run the four-color traveling sweep. Live state: bars follow the
@@ -107,15 +108,15 @@ struct WaveformView: View {
     }
 
     private func shimmerColor(at position: Double) -> Color {
-        let colors = VoiceIQUI.Colors.aiShimmer
-        return colors[Int(position * Double(colors.count)) % colors.count]
+        // A light sweep along the brand blue while the text is written.
+        let wave = 0.55 + 0.45 * sin(position * 2 * .pi)
+        return VQ.Colors.accent.opacity(wave)
     }
 
     private func quadColor(at position: Double) -> Color {
-        // Blue → Red → Yellow → Green loop.
-        let colors = VoiceIQUI.Colors.brandQuad
-        let scaled = position * Double(colors.count)
-        return colors[Int(scaled) % colors.count]
+        // Live bars are the brand blue (docs/design/redesign-2026-11.md).
+        _ = position
+        return VQ.Colors.accent
     }
 
     /// Reduce Motion: static 5-bar level meter, opacity-only response.
@@ -124,7 +125,7 @@ struct WaveformView: View {
             HStack(spacing: Self.gap) {
                 ForEach(0..<5, id: \.self) { index in
                     RoundedRectangle(cornerRadius: Self.barWidth / 2)
-                        .fill(tint ?? VoiceIQUI.Colors.brandQuad[index % 4])
+                        .fill(tint ?? VQ.Colors.accent)
                         .frame(
                             width: Self.barWidth,
                             height: Self.minHeight + Self.weights[index] * 14
