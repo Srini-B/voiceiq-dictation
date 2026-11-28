@@ -303,7 +303,7 @@ public enum ScreenSpeakerNames {
             guard head.count < trimmed.count else { continue }
             let words = head.split(separator: " ")
             guard (1...3).contains(words.count), words.allSatisfy({ $0.first?.isUppercase == true }) else { continue }
-            let matches = names.filter { sameName(String(head), $0) }
+            let matches = names.filter { heard(String(head), as: $0) }
             if matches.count > 1 { return nil }
             found.formUnion(matches)
         }
@@ -326,6 +326,17 @@ public enum ScreenSpeakerNames {
     static let minimumEliminationWords = 10
 
     /// "Muhammed Hafeed" and "Hafeed", "Nihal" and "nihal": one name holds all of the other's words.
+    /// A spoken head ("Sarah", "Muhammad") is a name when each of its words is
+    /// one of the name's words or spelt within one letter in five of it, as
+    /// transcription spells names ("Sara Lindqvist", "Muhammed Hafeed").
+    /// MEASURED 2026-11-28: s2-echo and s3-echo heard "Muhammad" and "Sarah".
+    static func heard(_ head: String, as name: String) -> Bool {
+        let words = name.lowercased().split(separator: " ").map(String.init)
+        return head.lowercased().split(separator: " ").allSatisfy { spoken in
+            words.contains { $0 == spoken || (min($0.count, spoken.count) >= 4 && similarity($0, String(spoken)) >= 0.8) }
+        }
+    }
+
     static func sameName(_ a: String, _ b: String) -> Bool {
         let x = Set(a.lowercased().split(separator: " ")), y = Set(b.lowercased().split(separator: " "))
         return !x.isEmpty && !y.isEmpty && (x.isSubset(of: y) || y.isSubset(of: x))

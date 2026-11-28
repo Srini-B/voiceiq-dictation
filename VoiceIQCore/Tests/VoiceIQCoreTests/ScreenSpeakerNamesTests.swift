@@ -127,6 +127,13 @@ final class ScreenSpeakerNamesTests: XCTestCase {
                      TranscriptSegment(speaker: "s1", text: "I have four of the six done.", chunkIndex: 0, start: 3, end: 6)]
         XCTAssertEqual(ScreenSpeakerNames.byAddress(nil, transcript: short, invited: ["Nihal", "Muhammed Hafeed"])?.speakers["s1"]?.name,
                        "Muhammed Hafeed")
+        // Transcription's spelling of the name counts; a different name does not.
+        let spelt = [TranscriptSegment(speaker: "you", text: "Muhammad, where are we?", chunkIndex: 0, start: 0, end: 3),
+                     TranscriptSegment(speaker: "s1", text: "I have four of the six done.", chunkIndex: 0, start: 3, end: 6)]
+        XCTAssertEqual(ScreenSpeakerNames.byAddress(nil, transcript: spelt, invited: ["Nihal", "Muhammed Hafeed"])?.speakers["s1"]?.name,
+                       "Muhammed Hafeed")
+        let mary = [TranscriptSegment(speaker: "you", text: "Mary, where are we?", chunkIndex: 0, start: 0, end: 3), spelt[1]]
+        XCTAssertNil(ScreenSpeakerNames.byAddress(nil, transcript: mary, invited: ["Mark Stone", "Lee Park"]))
         // A gallery showing the invitees too is still one person per name.
         let gallery = ScreenNames(seen: ["Muhammed Hafeed", "Nihal", "Google Meet"], speakers: [:])
         XCTAssertEqual(ScreenSpeakerNames.byAddress(gallery, transcript: short, invited: ["Nihal", "Muhammed Hafeed"])?.speakers["s1"]?.name,
