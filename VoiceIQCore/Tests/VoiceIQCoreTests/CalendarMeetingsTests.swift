@@ -50,5 +50,20 @@ final class CalendarMeetingsTests: XCTestCase {
         XCTAssertEqual(CalendarMeetings.when(now.addingTimeInterval(59 * 60), now: now), "in 59 min")
         XCTAssertFalse(CalendarMeetings.when(now.addingTimeInterval(61 * 60), now: now).hasPrefix("in "))
     }
+
+    /// A Keychain save posts a settings change from a background task; the
+    /// model built on the main actor must take it there, not trap (a fresh
+    /// Mac crashed opening Settings › Advanced, 2026-11-28).
+    @MainActor
+    func testNextMeetingModelTakesSettingChangesFromBackgroundThreads() async {
+        let model = NextMeetingModel()
+        await Task.detached {
+            NotificationCenter.default.post(name: .gtSettingDidChange, object: "calendarForMeetings")
+            NotificationCenter.default.post(name: .gtSettingDidChange, object: "apiKey")
+            NotificationCenter.default.post(name: .EKEventStoreChanged, object: nil)
+        }.value
+        try? await Task.sleep(for: .milliseconds(200))
+        _ = model.next
+    }
 }
 #endif

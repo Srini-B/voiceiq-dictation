@@ -204,11 +204,15 @@ public final class NextMeetingModel: ObservableObject {
 
     public init() {
         refresh()
-        updates = Timer.publish(every: 30, on: .main, in: .common).autoconnect().map { _ in () }
-            .merge(with: NotificationCenter.default.publisher(for: .EKEventStoreChanged).map { _ in () })
-            .merge(with: NotificationCenter.default.publisher(for: .gtSettingDidChange)
-                .filter { $0.object as? String == "calendarForMeetings" }.map { _ in () })
+        // Both notifications can be posted off the main thread (a Keychain
+        // save posts .gtSettingDidChange from a background task), and the
+        // closures here are main-actor isolated, so hop to main before any.
+        updates = NotificationCenter.default.publisher(for: .EKEventStoreChanged)
+            .merge(with: NotificationCenter.default.publisher(for: .gtSettingDidChange))
             .receive(on: DispatchQueue.main)
+            .filter { $0.name == .EKEventStoreChanged || $0.object as? String == "calendarForMeetings" }
+            .map { _ in () }
+            .merge(with: Timer.publish(every: 30, on: .main, in: .common).autoconnect().map { _ in () })
             .sink { [weak self] in self?.refresh() }
     }
 
