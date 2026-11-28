@@ -119,11 +119,17 @@ final class KeyboardDraft {
         let rest = String(current.dropLast(text.count))
         let fitted = fit(written, rest, proxy.documentContextAfterInput ?? "")
         guard !fitted.isEmpty else { return .kept }
+        let following = proxy.documentContextAfterInput ?? ""
+        let document = proxy.documentIdentifier
         proxy.deleteBackward()
         guard let afterFirst = await Self.change(in: proxy, from: current) else {
             // The field never said what the press did: no more presses.
             return .kept
         }
+        // The user may have selected text or moved on while it waited: the
+        // presses and the written text go only where the draft still was.
+        guard (proxy.selectedText ?? "").isEmpty, (proxy.documentContextAfterInput ?? "") == following,
+              proxy.documentIdentifier == document else { return .kept }
         if afterFirst != rest {
             // One character went: the draft was plain text.
             guard afterFirst == String(current.dropLast()) else { return .kept }

@@ -51,7 +51,7 @@ final class ProxyField: NSObject, UITextDocumentProxy {
     var documentContextAfterInput: String? { String(text[(start + length)...]) }
     var selectedText: String? { length > 0 ? String(text[start..<(start + length)]) : nil }
     var documentInputMode: UITextInputMode? { nil }
-    var documentIdentifier: UUID { UUID() }
+    let documentIdentifier = UUID()
     var hasText: Bool { !text.isEmpty }
 
     func insertText(_ string: String) {
@@ -64,8 +64,15 @@ final class ProxyField: NSObject, UITextDocumentProxy {
 
     /// A host that ignores `unmarkText` and deletes marked text whole (Messages).
     var keepsMarkedText = false
+    /// Runs once after the next Delete: the user acting while the host applies it.
+    var afterNextDelete: (() -> Void)?
 
     func deleteBackward() {
+        defer {
+            let action = afterNextDelete
+            afterNextDelete = nil
+            action?()
+        }
         if keepsMarkedText, let range = marked, range.upperBound == start, length == 0 {
             text.removeSubrange(range)
             start = range.lowerBound

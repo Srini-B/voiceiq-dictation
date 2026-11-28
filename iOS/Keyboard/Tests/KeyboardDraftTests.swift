@@ -43,6 +43,19 @@ final class KeyboardDraftTests: XCTestCase {
         XCTAssertEqual(field.string, "The build is green. Noted And I'll ship it tomorrow.")
     }
 
+    /// The user selects the text after the cursor while the first Delete
+    /// lands: no more presses, and the selected text stays.
+    func testASelectionMadeDuringTheSwapIsNeverDeleted() async throws {
+        let field = ProxyField("hello KEEP", cursorAt: 5)
+        let draft = try XCTUnwrap(type("world", into: field))
+        XCTAssertEqual(field.string, "hello world KEEP")
+        field.afterNextDelete = { field.select(" KEEP") }
+
+        let swap = await draft.replace(with: "World.", in: field, fit: fit)
+        XCTAssertEqual(swap, .kept)
+        XCTAssertTrue(field.string.hasSuffix(" KEEP"))
+    }
+
     /// The host committed the draft without a word, right after it landed:
     /// the written text still replaces it and never goes in beside it.
     func testASilentHostCommitIsNotDuplicated() async throws {
