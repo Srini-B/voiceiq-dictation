@@ -9,14 +9,17 @@ noted that the company website says…".
 - "Speaker B" is the owner's name in the AMI eval. `eval/meetings/prepare.py`
   names AMI's anonymous agents "Speaker A…D" and passes the owner's label as
   `owner`, and the notes prompt treated it as a confirmed name. Real meetings
-  never give the owner a label-shaped name, but a screen tag or a typed name
-  could.
+  never give the owner a label-shaped name; the check covers the Settings name
+  only.
 - "Speaker 4" is the model breaking the prompt's own rule ("Never write a
   label such as 'Speaker 3' outside 'speakers'"). It happened once in 6 runs,
   and the transcript and labels were identical in all six.
 
 **Change:**
 - A label-shaped owner name counts as no name, so the owner is "Note owner".
-- After parsing, any label left in the notes text becomes the name the model
-  gave that label in "speakers", or "another participant". An action owner
-  that is a label becomes that name, or nil.
+- After parsing, any of this meeting's labels left in the notes text becomes
+  the name the model gave that label in "speakers", or "another participant".
+  An action owner that is a label becomes that name, or nil. Other "Speaker …"
+  text ("Speaker Q&A", a "Speaker 7" in a meeting without one) is content and
+  stays (Fable on #165). Each replacement is logged, so the M5 eval can still
+  count how often the model breaks the rule.

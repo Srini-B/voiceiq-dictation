@@ -14,12 +14,13 @@ final class MeetingNotesPromptTests: XCTestCase {
     /// MEASURED 2026-11-28, AMI ES2004a: "Speaker 4 noted that…" in 1 of 6
     /// runs, and "Speaker B" (the eval's owner) in another.
     func testSpeakerLabelsNeverReachTheNotes() throws {
-        let reply = #"{"title":"Kickoff","summary":"Speaker 4 noted the website. The team agreed with Speaker 2.","decisions":["Speaker 1 picks the colour."],"actions":[{"text":"Ask Speaker 1 for costs","owner":"Speaker 2"},{"text":"Draw","owner":"Speaker 1"}],"notes":[],"speakers":[{"label":"Speaker 1","name":"Sarah","evidence":"Thanks, Sarah"},{"label":"Speaker 2","name":null}]}"#
+        let reply = #"{"title":"Kickoff","summary":"Speaker 4 noted the website. The team agreed with Speaker 2.","decisions":["Speaker 1 picks the colour.","Speaker Q&A and the Speaker 7 slot stay."],"actions":[{"text":"Ask Speaker 1 for costs","owner":"Speaker 2"},{"text":"Draw","owner":"Speaker 1"}],"notes":[],"speakers":[{"label":"Speaker 1","name":"Sarah","evidence":"Thanks, Sarah"},{"label":"Speaker 2","name":"Speaker 2"}]}"#
 
-        let notes = try MeetingNotesPrompt.parse(reply)
+        let notes = try MeetingNotesPrompt.parse(reply, labels: ["Speaker 1", "Speaker 2", "Speaker 4"])
 
         XCTAssertEqual(notes.summary, "Another participant noted the website. The team agreed with another participant.")
-        XCTAssertEqual(notes.decisions, ["Sarah picks the colour."])
+        // Only this meeting's labels: other "Speaker …" text is content.
+        XCTAssertEqual(notes.decisions, ["Sarah picks the colour.", "Speaker Q&A and the Speaker 7 slot stay."])
         XCTAssertEqual(notes.actions.map(\.text), ["Ask Sarah for costs", "Draw"])
         XCTAssertEqual(notes.actions.map(\.owner), [nil, "Sarah"])
 

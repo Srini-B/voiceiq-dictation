@@ -95,14 +95,15 @@ public extension AssemblyAIClient {
     func meetingNotes(prompt: String, transcript: [TranscriptSegment], model: String,
                       deadline: TimeInterval) async throws -> MeetingNotes {
         let end = Date().addingTimeInterval(deadline)
+        let labels = Set(transcript.map(\.speaker).filter { $0 != MeetingSpeaker.you }.map(MeetingSpeaker.defaultName))
         let ask = { (prompt: String) in
             do {
                 return try MeetingNotesPrompt.parse(try await self.meetingNotesJSON(
-                    prompt: prompt, model: model, deadline: end.timeIntervalSinceNow))
+                    prompt: prompt, model: model, deadline: end.timeIntervalSinceNow), labels: labels)
             } catch let error where error is DecodingError || (error as NSError).domain == NSCocoaErrorDomain {
                 Log.transcription.info("notes reply was not notes JSON; asking again")
                 return try MeetingNotesPrompt.parse(try await self.meetingNotesJSON(
-                    prompt: prompt, model: model, deadline: end.timeIntervalSinceNow))
+                    prompt: prompt, model: model, deadline: end.timeIntervalSinceNow), labels: labels)
             }
         }
         let notes = try await ask(prompt)
