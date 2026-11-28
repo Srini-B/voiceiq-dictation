@@ -6,6 +6,7 @@ import UIKit
 
 /// One lock shared by dictation and meeting capture, so finishing one cannot
 /// release the other's protection. A warm microphone alone does not hold it.
+/// A meeting waiting to retry AssemblyAI does not hold it either.
 @MainActor
 public final class SessionSleepGuard {
     private var observation: AnyCancellable?
@@ -16,10 +17,11 @@ public final class SessionSleepGuard {
     #endif
 
     public init(dictation: DictationCoordinator, meetings: MeetingEngine) {
-        observation = dictation.$state.combineLatest(meetings.$phase, dictation.$hasBackgroundJobs)
-            .map { state, phase, background in
+        observation = dictation.$state.combineLatest(meetings.$phase, dictation.$hasBackgroundJobs, meetings.$processing)
+            .map { state, phase, background, writingUp in
                 if case .recording = phase { return true }
-                if background { return true }
+                // A stopped meeting holds it until its transcript and notes are saved or fail.
+                if background || !writingUp.isEmpty { return true }
                 switch state {
                 case .warming, .recording, .finalizing, .transcribing, .inserting: return true
                 case .idle, .done, .cancelled, .failed: return false
@@ -29,12 +31,15 @@ public final class SessionSleepGuard {
             .sink { [weak self] active in self?.setActive(active) }
     }
 
+    /// The name `pmset -g assertions` shows for the lock.
+    static let reason = "VoiceiQ is recording or transcribing a dictation or meeting"
+
     private func setActive(_ active: Bool) {
         #if os(macOS)
         if active, activity == nil {
             activity = ProcessInfo.processInfo.beginActivity(
                 options: [.idleSystemSleepDisabled, .idleDisplaySleepDisabled],
-                reason: "VoiceiQ dictation or meeting recording"
+                reason: Self.reason
             )
         } else if !active, let activity {
             ProcessInfo.processInfo.endActivity(activity)
