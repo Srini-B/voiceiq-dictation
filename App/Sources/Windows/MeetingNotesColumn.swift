@@ -13,6 +13,8 @@ struct MeetingNotesColumn<Live: View>: View {
     let chat: MeetingChatModel?
     /// Shown in place of the step while the meeting records; nil otherwise.
     let live: Live?
+    /// Played from the bar under the title once the meeting has stopped recording.
+    let audio: RecordedAudio
 
     var body: some View {
         ScrollViewReader { scroller in
@@ -30,6 +32,9 @@ struct MeetingNotesColumn<Live: View>: View {
                 Text(meeting.displayTitle(notes: notes) ?? "Meeting").font(GTFont.flex(22, weight: 600))
                 Text(meeting.whenText).font(VoiceIQUI.TypeScale.labelSmall()).foregroundStyle(.secondary)
                 if !speakers.isEmpty { people }
+            }
+            if audio.isAvailable {
+                MeetingPlaybackBar(audio: audio, style: .voiceIQ).textSelection(.disabled)
             }
             if let notes {
                 section("Summary") { Text(notes.summary) }

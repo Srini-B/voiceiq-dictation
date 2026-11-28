@@ -109,6 +109,13 @@ struct MeetingsView: View {
     }
 }
 
+extension WaveformStyle {
+    /// The iPhone's meeting waveforms: ink for the room, red only for now.
+    static let theme = WaveformStyle(you: Theme.Colors.ink, call: Theme.Colors.muted,
+                                     fill: Theme.Colors.surfaceNested, accent: Theme.Colors.recording,
+                                     label: Theme.Fonts.caption(), time: Theme.Fonts.caption().monospacedDigit())
+}
+
 /// The title a note's row shows.
 private func rowTitle(_ meta: MeetingMeta) -> String {
     meta.displayTitle() ?? "Notes"
@@ -174,6 +181,7 @@ private struct RecorderCard: View {
             Text(timerInterval: since...Date.distantFuture, countsDown: false)
                 .font(Theme.Fonts.numeric(48, weight: 250))
                 .foregroundStyle(Theme.Colors.ink)
+            LiveMeetingWaveform(engine: meetings, style: .theme, hearsCall: false)
             Button(action: model.stopMeeting) {
                 Label("Stop", systemImage: "stop.fill")
                     .font(Theme.Fonts.label())
@@ -337,7 +345,19 @@ private struct MeetingDetail: View {
                     if !gone {
                         VStack(alignment: .leading, spacing: Theme.Spacing.m) {
                             GroupLabel(text: "Audio")
-                            Card { RecordingAudioControls(audio: audio) }
+                            Card {
+                                if audio.isAvailable {
+                                    MeetingPlaybackBar(audio: audio, style: .theme)
+                                    ShareLink(item: audio, preview: SharePreview(audio.name)) {
+                                        Label("Download", systemImage: "arrow.down.circle")
+                                    }
+                                    .buttonStyle(.compactSecondary)
+                                } else {
+                                    Text("The audio isn't on this \(UIDevice.current.localizedModel).")
+                                        .font(Theme.Fonts.footnote())
+                                        .foregroundStyle(Theme.Colors.muted)
+                                }
+                            }
                         }
                     }
                     if !transcript.isEmpty { transcriptContent }

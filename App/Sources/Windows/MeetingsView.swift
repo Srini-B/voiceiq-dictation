@@ -254,7 +254,8 @@ struct MeetingsPane: View {
                     MeetingNotesColumn(meeting: meeting, notes: notes, transcript: transcript, step: step(meeting), chat: chat(meeting),
                                        live: recordingSince(meeting).map { since in
                                            MeetingRecordingStatus(engine: engine, since: since) { confirmingDiscard = true }
-                                       })
+                                       },
+                                       audio: audio(meeting))
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .id(meeting.id)
                 }
@@ -314,10 +315,13 @@ struct MeetingsPane: View {
         .help("Put this meeting in folders")
     }
 
+    /// Nothing to play while it records: its tracks are still being written.
+    private func audio(_ meeting: MeetingMeta) -> RecordedAudio {
+        RecordedAudio.meeting(folder: meeting.status == .recording ? nil : store.folder(for: meeting.id), name: title(meeting))
+    }
+
     private func header(_ meeting: MeetingMeta, wide: Bool, transcriptShown: Bool, filedIn: [String]) -> some View {
         let busy = engine.isBusy(meeting.id)
-        let audio = RecordedAudio.meeting(folder: meeting.status == .recording ? nil : store.folder(for: meeting.id),
-                                          name: title(meeting))
         return HStack(spacing: VoiceIQUI.Spacing.xs) {
             // The notes open with the title; only the transcript alone needs it here.
             if !wide && transcriptShown {
@@ -342,7 +346,8 @@ struct MeetingsPane: View {
                 .disabled(busy)
                 .help("Write the notes again with the speaker names you set")
             }
-            RecordingAudioButtons(audio: audio) { exported = $0 }
+            // Play is the bar under the title.
+            RecordingAudioButtons(audio: audio(meeting), play: false) { exported = $0 }
             Menu {
                 Section("Save to Downloads") { exportItems { export(meeting, $0) } }
                 Section("Copy") { exportItems { copy(meeting, $0) } }
@@ -363,7 +368,7 @@ struct MeetingsPane: View {
                 } else {
                     Button("Redo notes") { engine.regenerateNotes(id: meeting.id) }.disabled(transcript.isEmpty)
                     Button("Redo transcript and notes") { engine.retry(id: meeting.id, fresh: true) }
-                        .disabled(!audio.isAvailable)
+                        .disabled(!audio(meeting).isAvailable)
                 }
                 Divider()
                 Button("Delete…", role: .destructive) { confirmingDelete = true }

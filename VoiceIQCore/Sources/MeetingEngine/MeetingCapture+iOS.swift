@@ -21,6 +21,7 @@ public final class MicTap: @unchecked Sendable {
 
 
     public init(url: URL) { self.url = url }
+    public let sound = SoundClock()
 
     public func start() throws {
         writer = try CAFWriter(url: url, format: target)
@@ -83,6 +84,7 @@ public final class MicTap: @unchecked Sendable {
         do {
             try writer.write(out)
             frames += Int64(out.frameLength)
+            sound.hear(out)
         } catch { Log.meeting.error("mic write failed: \(String(describing: error), privacy: .public)") }
     }
 }
@@ -92,6 +94,8 @@ public final class MicTap: @unchecked Sendable {
 public final class SystemAudioTap: @unchecked Sendable {
     private let url: URL
     public init(url: URL) { self.url = url }
+    /// Never hears anything; here so the call's live level reads 0.
+    public let sound = SoundClock()
 
     public func start() throws {
         let format = AVAudioFormat(commonFormat: .pcmFormatInt16, sampleRate: 16_000, channels: 1, interleaved: true)!

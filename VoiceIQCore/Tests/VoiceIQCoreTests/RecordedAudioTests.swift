@@ -49,6 +49,24 @@ final class RecordedAudioTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: url.path))
     }
 
+    /// The waveform draws each side from its own track: iPhone's empty
+    /// system track means no call side, not a silent one.
+    func testLoudnessKeepsEachSideAndDropsAnEmptyCall() throws {
+        try track("mic.caf", seconds: 2)
+        try track("system.caf", seconds: 0)
+        let room = try MeetingLoudness.read(folder: folder)
+        XCTAssertNil(room.call)
+        XCTAssertEqual(room.duration, 2, accuracy: 0.01)
+        XCTAssertEqual(room.you.count, 20)
+        XCTAssertTrue(room.you.allSatisfy { $0 > 0.5 }, "\(room.you)")
+
+        try track("system.caf", seconds: 3)
+        let call = try MeetingLoudness.read(folder: folder)
+        XCTAssertEqual(call.call?.count, 30)
+        XCTAssertEqual(call.you.count, 20)
+        XCTAssertEqual(call.duration, 3, accuracy: 0.01)
+    }
+
     /// The longer track sets the length; an empty system track still mixes.
     func testMeetingTracksMixIntoOneM4A() async throws {
         try track("mic.caf", seconds: 3)

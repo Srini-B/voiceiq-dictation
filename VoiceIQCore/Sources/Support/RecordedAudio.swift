@@ -153,17 +153,49 @@ extension RecordedAudio: Transferable {
 
 /// Plays one recording at a time. A meeting is mixed into an `.m4a` first,
 /// which takes a few seconds for a long one, so `state` says `.preparing`.
+/// The meeting player pauses, seeks and changes speed; a dictation's Play only
+/// starts and stops (`toggle`).
 @MainActor public final class RecordingPlayer: NSObject, ObservableObject, AVAudioPlayerDelegate {
-    public enum State: Equatable { case idle, preparing, playing }
+    public enum State: Equatable { case idle, preparing, playing, paused }
     @Published public private(set) var state: State = .idle
+    /// Playback speed, kept across recordings and stops.
+    @Published public var rate: Float = 1 { didSet { player?.rate = rate } }
     private var player: AVAudioPlayer?
     private var preparing: Task<Void, Never>?
+    /// Where play starts when nothing is loaded: a seek made before Play.
+    private var parked: TimeInterval = 0
 
     public override init() { super.init() }
 
-    /// Plays `audio`, or stops whatever is preparing or playing.
+    /// Seconds into the recording; read it on a timeline, it is not published.
+    public var position: TimeInterval { player?.currentTime ?? parked }
+
+    /// Plays `audio`, or stops whatever is preparing, playing or paused.
     public func toggle(_ audio: RecordedAudio) {
         guard state == .idle else { stop(); return }
+        start(audio)
+    }
+
+    /// Play, Pause, and Play again from where it paused. Pressed while
+    /// the meeting is still being mixed, it cancels.
+    public func playPause(_ audio: RecordedAudio) {
+        switch state {
+        case .idle: start(audio)
+        case .preparing: stop()
+        case .playing: player?.pause(); state = .paused
+        case .paused: if player?.play() == true { state = .playing } else { stop() }
+        }
+    }
+
+    /// Moves to `seconds`, playing on from there if it was playing.
+    public func seek(to seconds: TimeInterval) {
+        let seconds = max(0, seconds)
+        // `position` is not published; a seek while paused still redraws.
+        objectWillChange.send()
+        if let player { player.currentTime = min(seconds, player.duration) } else { parked = seconds }
+    }
+
+    private func start(_ audio: RecordedAudio) {
         state = .preparing
         preparing = Task {
             do {
@@ -172,6 +204,10 @@ extension RecordedAudio: Transferable {
                 Self.activateSession()
                 let player = try AVAudioPlayer(contentsOf: url)
                 player.delegate = self
+                // Speed only works when set before the player prepares.
+                player.enableRate = true
+                player.rate = rate
+                player.currentTime = parked < player.duration ? parked : 0
                 guard player.play() else { throw CocoaError(.fileReadUnknown) }
                 self.player = player
                 state = .playing
@@ -185,9 +221,11 @@ extension RecordedAudio: Transferable {
         }
     }
 
+    /// Stops and goes back to the start.
     public func stop() {
         preparing?.cancel(); preparing = nil
         player?.stop(); player = nil
+        parked = 0
         state = .idle
         Self.deactivateSession()
     }
