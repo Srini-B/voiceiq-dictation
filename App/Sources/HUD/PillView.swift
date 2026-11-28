@@ -56,7 +56,10 @@ struct PillView: View {
                     }
                     WaveformView(level: model.level, processing: false)
                     if locked {
-                        cancelButton
+                        HStack(spacing: VoiceIQUI.Spacing.xxs) {
+                            cancelKeyCap
+                            cancelButton
+                        }
                         stopButton
                     }
                 }
@@ -180,6 +183,19 @@ struct PillView: View {
         .buttonStyle(.plain)
         .help("Cancel without inserting (⌘Esc)")
         .accessibilityLabel("Cancel dictation without inserting text")
+    }
+
+    /// The shortcut for Cancel, shown beside it while hands-free so it can be
+    /// learned without hovering. Fits the locked pill's existing width.
+    private var cancelKeyCap: some View {
+        Text("⌘esc")
+            .font(GTFont.flex(VQ.TypeScale.caption.size, weight: VQ.TypeScale.caption.weight))
+            .foregroundStyle(VQ.Colors.onPillMuted)
+            .padding(.horizontal, 5)
+            .frame(height: 18)
+            .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(VQ.Colors.onPillMuted.opacity(0.4), lineWidth: 1))
+            .fixedSize()
+            .accessibilityHidden(true)
     }
 
     private func successBadge(words: Int?) -> some View {

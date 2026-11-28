@@ -510,7 +510,7 @@ private struct PermissionsScreen: View {
                 }
 
                 HStack(spacing: VoiceIQUI.Spacing.s) {
-                    Text("Microphone and \(KeystrokeAccess.listName) are required")
+                    Text("The first two are required")
                         .font(GTFont.flex(VQ.TypeScale.meta.size, weight: VQ.TypeScale.meta.weight))
                         .foregroundStyle(VQ.Colors.muted)
                         .fixedSize(horizontal: false, vertical: true)

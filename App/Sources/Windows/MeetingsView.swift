@@ -95,7 +95,7 @@ struct MeetingsPane: View {
                 .font(VoiceIQUI.TypeScale.display())
                 .foregroundStyle(VQ.Colors.ink)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, VoiceIQUI.Spacing.m)
+                .padding(.horizontal, VQ.Spacing.page)
                 .padding(.top, VoiceIQUI.Spacing.l)
             if let next = nextMeeting.next {
                 NextMeetingCard(meeting: next, now: nextMeeting.now, engine: engine)
@@ -107,10 +107,13 @@ struct MeetingsPane: View {
                 engine.toggleRecording()
             } label: {
                 Label(recording ? "Stop recording" : "Record", systemImage: recording ? "stop.fill" : "record.circle")
+                    // White on the pale dark-mode accent read at 2.8:1; Stop
+                    // sits on the darker error fill so white stays readable.
+                    .foregroundStyle(recording ? Color.white : VQ.Colors.onAccent)
                     .frame(maxWidth: .infinity)
             }
             .controlSize(.large)
-            .tint(recording ? VQ.Colors.record : VQ.Colors.accent)
+            .tint(recording ? VoiceIQUI.Colors.errorFill : VQ.Colors.accent)
             .buttonStyle(.borderedProminent)
             .padding(.horizontal, VoiceIQUI.Spacing.s)
             .padding(.top, nextMeeting.next == nil ? VoiceIQUI.Spacing.l : VoiceIQUI.Spacing.s)
@@ -152,6 +155,7 @@ struct MeetingsPane: View {
                     }
                 }
             }
+            .scrollContentBackground(.hidden)
             .overlay {
                 if meetings.isEmpty {
                     Text("No meetings yet").foregroundStyle(.secondary)
@@ -349,18 +353,21 @@ struct MeetingsPane: View {
                 .help("Write the notes again with the speaker names you set")
             }
             RecordingAudioButtons(audio: audio) { exported = $0 }
-            Menu {
-                Section("Save to Downloads") { exportItems { export(meeting, $0) } }
-                Section("Copy") { exportItems { copy(meeting, $0) } }
-                if SettingsStore().agentAccessEnabled {
-                    Divider()
-                    Button("Copy prompt for an AI agent") { copyAgentPrompt(meeting) }
-                }
-            } label: {
-                Label("Export", systemImage: "square.and.arrow.up")
+                .buttonStyle(CircleButtonStyle())
+            // Icon-only when narrow, so the folder menu keeps its words.
+            if wide {
+                exportMenu(meeting)
+                    .fixedSize()
+                    .disabled(notes == nil && transcript.isEmpty)
+            } else {
+                exportMenu(meeting)
+                    .menuStyle(.button)
+                    .buttonStyle(CircleButtonStyle())
+                    .menuIndicator(.hidden)
+                    .fixedSize()
+                    .help("Export")
+                    .disabled(notes == nil && transcript.isEmpty)
             }
-            .fixedSize()
-            .disabled(notes == nil && transcript.isEmpty)
             Menu {
                 Button("Rename…") { titleDraft = title(meeting); renaming = true }
                 Divider()
@@ -385,6 +392,8 @@ struct MeetingsPane: View {
                     Text(Image(systemName: "ellipsis")).accessibilityLabel("More")
                 }
             }
+            .menuStyle(.button)
+            .buttonStyle(CircleButtonStyle())
             .menuIndicator(.hidden)
             .fixedSize()
             .disabled(busy)
@@ -393,12 +402,26 @@ struct MeetingsPane: View {
             } label: {
                 Image(systemName: wide ? "sidebar.right" : transcriptShown ? "doc.text" : "text.bubble")
             }
+            .buttonStyle(CircleButtonStyle())
             .help(transcriptShown ? (wide ? "Hide transcript" : "Show notes") : "Show transcript")
             .disabled(transcript.isEmpty)
         }
         .padding(.horizontal, VoiceIQUI.Spacing.l)
         .padding(.top, VoiceIQUI.Spacing.l)
         .padding(.bottom, VoiceIQUI.Spacing.s)
+    }
+
+    private func exportMenu(_ meeting: MeetingMeta) -> some View {
+        Menu {
+            Section("Save to Downloads") { exportItems { export(meeting, $0) } }
+            Section("Copy") { exportItems { copy(meeting, $0) } }
+            if SettingsStore().agentAccessEnabled {
+                Divider()
+                Button("Copy prompt for an AI agent") { copyAgentPrompt(meeting) }
+            }
+        } label: {
+            Label("Export", systemImage: "square.and.arrow.up")
+        }
     }
 
     /// What the meeting is doing in the background, in words; nil when idle.

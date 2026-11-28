@@ -26,7 +26,7 @@ struct DictionaryView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            header
+            PageHeader(title: "Dictionary", subtitle: "Names and terms VoiceiQ should always spell your way.")
             searchRow
             addRow
             if entries.isEmpty {
@@ -50,21 +50,6 @@ struct DictionaryView: View {
     // Same field as History's header, so the two data panes share one header
     // shape and the window titlebar stays a plain title (a toolbar search field
     // restyled the titlebar and pushed the sidebar down on this pane only).
-    private var header: some View {
-        VStack(alignment: .leading, spacing: VoiceIQUI.Spacing.xxs) {
-            Text("Dictionary")
-                .font(VoiceIQUI.TypeScale.display(grad: grad))
-                .foregroundStyle(VQ.Colors.ink)
-            Text("Names and terms VoiceiQ should always spell your way.")
-                .font(VoiceIQUI.TypeScale.body(grad: grad))
-                .foregroundStyle(VQ.Colors.muted)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, VQ.Spacing.page)
-        .padding(.top, VoiceIQUI.Spacing.l)
-        .padding(.bottom, VoiceIQUI.Spacing.s)
-    }
-
     private var searchRow: some View {
         HStack(spacing: VoiceIQUI.Spacing.xs) {
             Image(systemName: "magnifyingglass")
@@ -88,9 +73,12 @@ struct DictionaryView: View {
             labeledField("Heard as (optional)", example: "e.g. cooper netties", text: $newMisspelling, field: .heardAs)
             Button(action: add) {
                 Image(systemName: "plus.circle.fill")
-                    .foregroundStyle(newTerm.isEmpty ? VoiceIQUI.Colors.onSurfaceVariant : VoiceIQUI.Colors.primary)
+                    .font(.system(size: 20))
+                    .foregroundStyle(VQ.Colors.accent)
+                    .opacity(newTerm.isEmpty ? 0.4 : 1)
             }
             .buttonStyle(.plain)
+            .help("Add to your dictionary")
             .disabled(newTerm.isEmpty)
         }
         .padding(.horizontal, VoiceIQUI.Spacing.m)
@@ -162,7 +150,7 @@ struct DictionaryView: View {
                 reload()
             } label: {
                 Image(systemName: entry.starred ? "star.fill" : "star")
-                    .foregroundStyle(entry.starred ? VQ.Colors.warning : VQ.Colors.faint)
+                    .foregroundStyle(entry.starred ? VQ.Colors.accent : VQ.Colors.faint)
             }
             .buttonStyle(.plain)
             .help("Starred words are prioritized")

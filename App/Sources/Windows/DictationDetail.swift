@@ -22,21 +22,18 @@ struct DictationDetail: View {
         return raw
     }
 
-    /// A document page, as on the iPhone: a meta line with the actions, the
-    /// text at reading size, then the details under a caption.
+    /// A document page, as on the iPhone: the actions, a meta line, the text
+    /// at reading size, then the details under a caption.
     var body: some View {
         VStack(spacing: 0) {
             header
             ScrollView {
                 VStack(alignment: .leading, spacing: VoiceIQUI.Spacing.xl) {
+                    Text(metaLine)
+                        .font(GTFont.flex(VQ.TypeScale.meta.size, weight: VQ.TypeScale.meta.weight, grad: grad))
+                        .foregroundStyle(VQ.Colors.muted)
                     if heard != nil {
-                        Picker("Version", selection: $showsHeard) {
-                            Text("Written").tag(false)
-                            Text("What you said").tag(true)
-                        }
-                        .pickerStyle(.segmented)
-                        .labelsHidden()
-                        .fixedSize()
+                        SegmentSwitch(selection: $showsHeard, options: [("Written", false), ("What you said", true)])
                     }
                     Text(shownText)
                         .font(GTFont.flex(VQ.TypeScale.body.size + 1, weight: VQ.TypeScale.body.weight, grad: grad))
@@ -65,28 +62,25 @@ struct DictationDetail: View {
 
     private var header: some View {
         HStack(spacing: VoiceIQUI.Spacing.xs) {
-            Text(metaLine)
-                .font(GTFont.flex(VQ.TypeScale.meta.size, weight: VQ.TypeScale.meta.weight, grad: grad))
-                .foregroundStyle(VQ.Colors.muted)
-                .lineLimit(1)
-            Spacer(minLength: VoiceIQUI.Spacing.s)
+            Spacer(minLength: 0)
             RecordingAudioButtons(audio: audio) { exported = $0 }
-                .labelStyle(.iconOnly)
+                .buttonStyle(CircleButtonStyle())
             // Dictations synced from another device have no local folder to retry from.
             if !record.isFromOtherDevice {
                 Button("Retry transcription", systemImage: "arrow.clockwise", action: onRetry)
-                    .labelStyle(.iconOnly)
+                    .buttonStyle(CircleButtonStyle())
                     .help(RetryQueue.canRetry(record) ? "Retry transcription" : "The audio isn't on this Mac")
                     .disabled(!RetryQueue.canRetry(record))
             }
             Button("Delete", systemImage: "trash", role: .destructive, action: onDelete)
-                .labelStyle(.iconOnly)
+                .buttonStyle(CircleButtonStyle())
                 .help("Delete this dictation")
             Button("Copy", systemImage: "doc.on.doc") {
                 NSPasteboard.general.clearContents()
                 NSPasteboard.general.setString(shownText, forType: .string)
             }
             .buttonStyle(InkPillButtonStyle())
+            .fixedSize()
             .help("Copy")
         }
         .padding(.horizontal, VQ.Spacing.page + 4)
