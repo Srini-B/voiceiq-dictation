@@ -95,9 +95,14 @@ public final class FieldDraft: TextDraft {
               reading.value.utf16.count <= maxFieldLength else {
             return nil
         }
-        var role: CFTypeRef?
+        var role: CFTypeRef?, subrole: CFTypeRef?
         if AXUIElementCopyAttributeValue(element, kAXRoleAttribute as CFString, &role) == .success,
            let role = role as? String, role == "AXSecureTextField" || AXInserter.rolesWithoutText.contains(role) {
+            return nil
+        }
+        // A password field is a text field whose subrole says so.
+        if AXUIElementCopyAttributeValue(element, kAXSubroleAttribute as CFString, &subrole) == .success,
+           subrole as? String == "AXSecureTextField" {
             return nil
         }
         let draft = FieldDraft(element: element, context: context, inserter: inserter, marks: marks,
@@ -217,6 +222,13 @@ public final class FieldDraft: TextDraft {
         // The draft's own paste may still be restoring the clipboard. Wait it
         // out now, so every check below holds when the ⌘V is posted.
         await inserter.finishPendingPaste()
+        // The draft is selected for the swap: a key the user is typing
+        // would replace it. Wait for a pause in typing, then read the field
+        // as it is; through steady typing the draft stays as heard.
+        guard await Self.typingPaused() else {
+            Log.insertion.info("draft: the user is typing — kept as it was")
+            return false
+        }
         guard let reading = field.sync(), let span = field.ledger.draft(id) else {
             Log.insertion.info("draft: edited or gone — kept as it was")
             return false
@@ -287,6 +299,12 @@ public final class FieldDraft: TextDraft {
                   now.caret == span.location, now.selectionLength == span.length else { return }
             _ = await select(reading.caret, reading.selectionLength)
         }
+        // A password field took focus meanwhile: nothing is selected or
+        // written while secure input is on.
+        guard !SecureInput.isActive else {
+            Log.insertion.info("draft: secure input is on — kept as it was")
+            return false
+        }
         guard await select(span.location, span.length, holding: reading.value) else {
             await restoreIfStillSelected()
             // Focused and unchanged, the field itself refused the selection.
@@ -315,7 +333,7 @@ public final class FieldDraft: TextDraft {
         await inserter.finishPendingPaste()
         // ⌘V goes to the focused field only, and only while the draft is
         // still exactly what is selected.
-        guard Self.focusedTarget(context: context).map({ CFEqual($0, element) }) == true,
+        guard !SecureInput.isActive, Self.focusedTarget(context: context).map({ CFEqual($0, element) }) == true,
               let selected = PasteCheck.reading(of: element), selected.value == reading.value,
               selected.caret == span.location, selected.selectionLength == span.length else {
             await restoreIfStillSelected()
@@ -337,6 +355,20 @@ public final class FieldDraft: TextDraft {
         Log.insertion.info("draft: the paste over it never showed — kept as it was")
         return false
     }
+
+    /// No key pressed for `typingPause`, waited for up to `typingWait`.
+    /// Hardware keys only: VoiceiQ's own ⌘V doesn't count.
+    private static func typingPaused() async -> Bool {
+        let deadline = Date().addingTimeInterval(typingWait)
+        while CGEventSource.secondsSinceLastEventType(.hidSystemState, eventType: .keyDown) < typingPause {
+            guard Date() < deadline else { return false }
+            try? await Task.sleep(for: .milliseconds(50))
+        }
+        return true
+    }
+
+    static let typingPause: TimeInterval = 0.4
+    static let typingWait: TimeInterval = 2
 
     /// The text this dictation left in the field: the written text after a
     /// swap, else the draft.

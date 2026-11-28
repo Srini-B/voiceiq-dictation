@@ -1,4 +1,7 @@
 import XCTest
+#if os(macOS)
+import AppKit
+#endif
 import VoiceIQBridge
 @testable import VoiceIQCore
 
@@ -318,6 +321,30 @@ final class DraftInsertTests: XCTestCase {
         XCTAssertEqual(pastEdge?.minX, 300 - DraftOverlaySize.spinner - 5)
         XCTAssertEqual(FieldDraft.spinnerSpot(for: CGRect(x: 150, y: 503, width: 0, height: 16), in: field)?.minX, 150)
         XCTAssertNil(FieldDraft.spinnerSpot(for: CGRect(x: 150, y: 560, width: 0, height: 16), in: field))
+    }
+
+    /// A draft whose app is no longer in front goes nowhere, and leaves the
+    /// user's clipboard as it was: its written text comes next.
+    func testADraftForAnAppNoLongerInFrontLeavesTheClipboard() async throws {
+        guard let front = NSWorkspace.shared.frontmostApplication else { throw XCTSkip("no frontmost app") }
+        let pasteboard = NSPasteboard.general
+        let saved = pasteboard.string(forType: .string)
+        defer {
+            pasteboard.clearContents()
+            if let saved { pasteboard.setString(saved, forType: .string) }
+        }
+        pasteboard.clearContents()
+        pasteboard.setString("the user's clipboard", forType: .string)
+        let elsewhere = DictationContext(targetPID: front.processIdentifier + 100_000)
+
+        let draft = await InsertionCoordinator().insertReportingTier("raw words", context: elsewhere,
+                                                                     announcesMiss: false)
+        XCTAssertEqual(draft.outcome, .frontmostChanged)
+        XCTAssertEqual(pasteboard.string(forType: .string), "the user's clipboard")
+
+        let written = await InsertionCoordinator().insertReportingTier("Written words.", context: elsewhere)
+        XCTAssertEqual(written.outcome, .frontmostChanged)
+        XCTAssertEqual(pasteboard.string(forType: .string), "Written words.")
     }
 
     /// A field that answers a range with its own frame (VS Code's search
