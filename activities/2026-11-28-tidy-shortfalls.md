@@ -104,3 +104,16 @@ and passes here, except item 2's, which pins the current behaviour.
   50,000 dollars" not resolved, and "Wait, what question mark?" (as on
   main).
 - CI runs `swift test --package-path VoiceIQCore` on Xcode 27.
+
+## Follow-ups after the merge (Neon agy review of #131, session bad480e5)
+
+No High. Fixed on branch `tidy-followups`:
+
+- "at the rate" false joins at a sentence's end:
+  - After "and" or "or", only a strong word or a written address earlier in the sentence introduces a list; a weak one ("in", "to") no longer does ("Prices in Europe rose and fell at the rate gmail dot com." stays).
+  - The -ing and number guard now runs before a strong word within three words promotes the join ("Tell me it will be growing at the rate amazon dot com." stays). A word naming the address ("email", "address", "id") still joins "My email will be billing@gmail.com."
+  - A comma before a long "-ing" word or a number no longer counts as an introduction ("Prices kept rising, growing at the rate gmail dot com." stays).
+- Messages style: a title word's full stop ("Jr.", "Inc.") is dropped only when it is the message's one full stop; "Thanks. Ask Martin Luther King Jr." keeps it.
+- Left as intended: "Order 12, I mean, $15." and the one-word "Nice exclamation mark." → "Nice!".
+
+Each case is in `TidyTests`, and each fails on main's sources and passes here (Linux harness, Swift 6.2.1, 15 tests including the 334 cleanup cases).

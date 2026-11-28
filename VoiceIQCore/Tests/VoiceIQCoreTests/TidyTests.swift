@@ -44,6 +44,10 @@ final class TidyTests: XCTestCase {
         XCTAssertEqual(tidy("I think I can, i.e. maybe.", .messages), "i think i can, i.e. maybe")
         // A title's full stop ends no sentence, so this is one short message.
         XCTAssertEqual(tidy("Ask Prof. Iyer and Sgt. Lee and Capt. Rao.", .messages), "ask Prof. Iyer and Sgt. Lee and Capt. Rao")
+        // A title word ending a longer message keeps its full stop; alone it is the one to drop.
+        XCTAssertEqual(tidy("Thanks. Ask Martin Luther King Jr.", .messages), "thanks. ask Martin Luther King Jr.")
+        XCTAssertEqual(tidy("Sounds good. The invoice is from Acme Inc.", .messages), "sounds good. the invoice is from Acme Inc.")
+        XCTAssertEqual(tidy("Ask Martin Luther King Jr.", .messages), "ask Martin Luther King Jr")
         // "No." is a title only before a number ("No. 5"); here it is one of four sentences.
         XCTAssertEqual(tidy("Is it ok? No. Call me later. See you.", .messages), "is it ok? no. call me later. see you.")
     }
@@ -282,7 +286,12 @@ final class TidyTests: XCTestCase {
                      "I wrote to priya@gmail.com and growth at the rate google dot com, thanks.",
                      "It is growing at the rate amazon dot com.", "It will be growing at the rate amazon dot com.",
                      "Prices rose and fell at the rate gmail dot com.",
-                     "Tell me whether the market is moving at the rate google dot com, thanks.", "Revenue went from 5 or 10 at the rate amazon dot com.", "It's growing at the rate amazon dot com.", "Revenue went from 10 at the rate amazon dot com."] {
+                     "Tell me whether the market is moving at the rate google dot com, thanks.", "Revenue went from 5 or 10 at the rate amazon dot com.", "It's growing at the rate amazon dot com.", "Revenue went from 10 at the rate amazon dot com.",
+                     // A weak word earlier, a strong word before a verb, a comma before a verb or number.
+                     "Prices in Europe rose and fell at the rate gmail dot com.",
+                     "Tell me it will be growing at the rate amazon dot com.",
+                     "Prices kept rising, growing at the rate gmail dot com.",
+                     "Growth went up, 10 at the rate amazon dot com."] {
             XCTAssertEqual(SpokenAddresses.joining(in: kept), kept)
         }
     }

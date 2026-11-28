@@ -137,6 +137,8 @@ enum SpokenAddresses {
         "email", "e-mail", "mail", "cc", "bcc", "contact", "reach", "write", "ping", "address", "id", "me", "tell",
         "invite", "copy", "forward", "send", "reply", "notify", "message", "text", "include",
     ]
+    /// Of those, the words that name an address, so what follows them is one: "My email will be billing…".
+    private static let addressNouns: Set<String> = ["email", "e-mail", "mail", "address", "id"]
     /// Words that introduce an address only after one of those ("My email is
     /// priya…", "Write to priya…") or where the address ends the sentence:
     /// "The market is moving at the rate google dot com, thanks." stays.
@@ -152,6 +154,13 @@ enum SpokenAddresses {
         // A mailbox that opens the text or a line ("Contacts\npriya at the rate…").
         guard start > 0, !text[tokens[start - 1].range.upperBound..<tokens[start].range.lowerBound].contains("\n") else { return .strong }
         let previous = tokens[start - 1].word
+        let mailbox = bare(tokens[start].word)
+        // A verb or a number, not a mailbox: "growing at the rate…", "went from 10 at the rate…".
+        // Not "-ed" ("Ahmed") or a short "-ing" ("Ming").
+        let verb = mailbox.hasSuffix("ing") && mailbox.count >= 6
+        let number = mailbox.allSatisfy(\.isNumber)
+        // After a comma, only a mailbox that is no verb or number: "Prices kept rising, growing at the rate…".
+        if previous.last == ",", verb || number { return nil }
         if let last = previous.last, ".!?,:;".contains(last) { return .strong }
         let word = bare(previous).replacingOccurrences(of: "’", with: "'")
         if strongIntroductions.contains(word) { return .strong }
@@ -162,23 +171,24 @@ enum SpokenAddresses {
         var first = start - 1
         while first > 0, !(tokens[first - 1].word.last.map { ".!?".contains($0) } ?? false) { first -= 1 }
         let earlier = tokens[first..<(start - 1)].map { bare($0.word) }
-        let mailbox = bare(tokens[start].word)
         if weakIntroductions.contains(word) || contracted != nil {
+            // A word naming the address just before: "My email will be billing at the rate…".
+            let named = contracted == nil && earlier.suffix(3).contains(where: addressNouns.contains)
+            // "It is growing at the rate…", "went from 10 at the rate…", even after another strong word
+            // ("Tell me it will be growing…"). Not after "to" ("to billing", "to 123").
+            let progressive = ["is", "was", "are", "be"].contains(word) || contracted != nil
+            if !named, (progressive && verb) || ((progressive || word == "from") && number) { return nil }
             // Only within the phrase: "Tell me whether the market is moving at the rate…" stays.
             if contracted == nil, earlier.suffix(3).contains(where: strongIntroductions.contains) { return .strong }
-            // "It is growing at the rate…", "went from 10 at the rate…": a verb or a number, not a
-            // mailbox. Not "-ed" ("Ahmed"), a short "-ing" ("Ming"), or after "to" ("to billing", "to 123").
-            let progressive = ["is", "was", "are", "be"].contains(word) || contracted != nil
-            let verbOrNumber = (progressive && mailbox.hasSuffix("ing") && mailbox.count >= 6)
-                || ((progressive || word == "from") && mailbox.allSatisfy(\.isNumber))
-            return verbOrNumber ? nil : .weak
+            return .weak
         }
         guard ["and", "or"].contains(word) else { return nil }
         if lastAddress == start - 2 { return .strong }
-        // "Prices rose and fell at the rate…", "from 5 or 10 at the rate…": only a list after an
-        // introduction ("Send it to priya … and ravi…") names a mailbox, and never a number.
-        let introduced = earlier.isEmpty || earlier.contains { strongIntroductions.contains($0) || weakIntroductions.contains($0) || $0.contains("@") }
-        return introduced && !mailbox.allSatisfy(\.isNumber) ? .weak : nil
+        // "Prices in Europe rose and fell at the rate…", "from 5 or 10 at the rate…": only a list after a
+        // strong introduction or an address ("Send it to priya … and ravi…") names a mailbox, never a
+        // number; a weak word ("in", "to") anywhere earlier is no introduction.
+        let introduced = earlier.isEmpty || earlier.contains { strongIntroductions.contains($0) || $0.contains("@") }
+        return introduced && !number ? .weak : nil
     }
 
     private static func words(in text: String) -> [Token] {
