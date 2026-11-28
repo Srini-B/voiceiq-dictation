@@ -201,9 +201,9 @@ def main():
             raise SystemExit(f"{tool} not found")
     os.makedirs(args.out, exist_ok=True)
     cache = os.path.join(args.out, ".cache")
+    # AMI is rebuilt every run from the cached downloads, so a change to its
+    # names or mix reaches folders prepared before it.
     for meeting in args.ami:
-        if os.path.exists(os.path.join(args.out, f"ami-{meeting}", "reference.json")):
-            continue
         print("AMI", meeting, flush=True)
         ami(meeting, args.out, cache)
     if not args.no_synthetic:

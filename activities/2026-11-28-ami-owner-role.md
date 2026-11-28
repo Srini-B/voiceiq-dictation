@@ -17,8 +17,10 @@ input was wrong.
   summaries use. The owner's role goes to `input.json` as `owner`, and the same
   names are the `speaker` values in `reference.json`.
 - The scorer matches AMI speakers by overlap, not name, so M1–M4 are unchanged.
-  No stored baseline holds AMI speaker names; rerun `prepare.py` before the next
-  AMI run.
+  No stored baseline holds AMI speaker names. `prepare.py` now rebuilds AMI
+  folders on every run (about 12 s from its cached downloads) instead of
+  skipping ones with a `reference.json`, so folders prepared before this change
+  pick up the role names.
 
 ## Verification
 
