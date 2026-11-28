@@ -100,6 +100,66 @@ final class KeyboardDraftTests: XCTestCase {
         XCTAssertEqual(lost.string, "Dear Ana,!")
     }
 
+    private var controller: FieldController?
+
+    private func editor(for field: HostField) -> EditController {
+        let controller = FieldController(field)
+        self.controller = controller
+        let editor = EditController()
+        editor.controller = controller
+        editor.appeared()
+        return editor
+    }
+
+    /// Lets the main queue run once, which is the next run loop turn.
+    private func nextTurn() async {
+        await withCheckedContinuation { done in DispatchQueue.main.async { done.resume() } }
+    }
+
+    /// A key pressed in the turn the poll marked a draft, or made one plain
+    /// with `unmarkText`, would reach the host before that call: it would
+    /// land before the new draft, which then went in a second time ("Dear
+    /// Ana, see you at noon! see you at noon"), or replace the one made plain
+    /// ("Dear Ana,!"). The key waits for the next turn instead.
+    func testAKeyInTheTurnOfAMarkedTextCallGoesInOnTheNextTurn() async throws {
+        let marked = HostField("Dear Ana,")
+        var draft = KeyboardDraft.type("see you at noon", id: UUID(), documentID: UUID(), into: marked, fit: fit,
+                                       now: typedAt)
+        var markedThisTurn = true
+        let first = editor(for: marked)
+        first.markedTextThisTurn = { markedThisTurn }
+        first.willEdit = {
+            draft?.keep(marked, .beforeEdit)
+            draft = nil
+        }
+        first.type("!")
+        marked.endTurn()
+        XCTAssertEqual(marked.string, "Dear Ana, see you at noon")
+        markedThisTurn = false
+        await nextTurn()
+        marked.endTurn()
+        XCTAssertEqual(marked.string, "Dear Ana, see you at noon!")
+        XCTAssertNil(marked.marked)
+
+        let plain = HostField("Dear Ana,")
+        let held = try XCTUnwrap(type("see you at noon", into: plain))
+        var unmarkedThisTurn = false
+        let second = editor(for: plain)
+        second.markedTextThisTurn = { unmarkedThisTurn }
+        held.keep(plain, .alone)
+        unmarkedThisTurn = true
+        second.type("!?")
+        second.deleteBackward()
+        // The keys plan their next edit from the text as it will be.
+        XCTAssertEqual(second.projected("Dear Ana, see you at noon"), "Dear Ana, see you at noon!")
+        plain.endTurn()
+        XCTAssertEqual(plain.string, "Dear Ana, see you at noon")
+        unmarkedThisTurn = false
+        await nextTurn()
+        plain.endTurn()
+        XCTAssertEqual(plain.string, "Dear Ana, see you at noon!")
+    }
+
     /// Delete while the draft is marked takes one character, not the draft,
     /// and a cursor move leaves it whole.
     func testDeleteAndACursorMoveWhileTheDraftIsMarkedLeaveItsText() throws {

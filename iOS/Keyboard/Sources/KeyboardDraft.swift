@@ -47,13 +47,6 @@ final class KeyboardDraft {
         case beforeEdit
     }
 
-    /// Apps whose text fields were seen to take a draft and its swap as
-    /// described above. In any other app the written text goes in alone, as
-    /// before drafts: one that makes marked text plain on its own (a field
-    /// that rewrites its text on every change) would show every dictation
-    /// twice.
-    static let verifiedHosts: Set<String> = ["com.apple.MobileSMS"]
-
     let id: UUID
     /// The input session it was typed in.
     let documentID: UUID
@@ -147,14 +140,16 @@ final class KeyboardDraft {
     /// Makes the draft plain text, as heard. Before the keyboard's own edit
     /// that is an insert of its own text; in a field that has changed it is
     /// `unmarkText` even then, since a second copy of the draft could land
-    /// anywhere.
-    func keep(_ proxy: UITextDocumentProxy, _ commit: Commit) {
-        guard isMarked else { return }
+    /// anywhere. True when it called `unmarkText`.
+    @discardableResult
+    func keep(_ proxy: UITextDocumentProxy, _ commit: Commit) -> Bool {
+        guard isMarked else { return false }
         isMarked = false
         if commit == .beforeEdit, isInPlace(proxy) {
             proxy.insertText(text)
-        } else {
-            proxy.unmarkText()
+            return false
         }
+        proxy.unmarkText()
+        return true
     }
 }

@@ -11,8 +11,11 @@ import VoiceIQBridge
 final class DraftInsertTests: XCTestCase {
     /// Hears "raw words", then writes "Written words." a beat later.
     struct HearingTranscription: TranscriptionServicing {
+        /// The writer's own note, such as "Inserted as heard" when it failed.
+        var notice: String?
         func transcribe(audioURL: URL, durationSeconds: Double, context: DictationContext) async throws -> TranscriptionResult {
-            TranscriptionResult(rawTranscript: "raw words", cleanedTranscript: "Written words.", modelID: "test")
+            TranscriptionResult(rawTranscript: "raw words", cleanedTranscript: "Written words.", modelID: "test",
+                                notice: notice)
         }
         func transcribe(audioURL: URL, durationSeconds: Double, context: DictationContext,
                         live: RealtimeTranscription?,
@@ -63,11 +66,11 @@ final class DraftInsertTests: XCTestCase {
         try await super.tearDown()
     }
 
-    private func dictate(into inserter: DraftingInserter) async -> DictationCoordinator {
+    private func dictate(into inserter: DraftingInserter, notice: String? = nil) async -> DictationCoordinator {
         let capture = DictationCoordinatorTests.FakeCapture()
         let coordinator = DictationCoordinator(
             audioFactory: { capture },
-            transcription: HearingTranscription(),
+            transcription: HearingTranscription(notice: notice),
             insertion: inserter,
             secureInputActive: { false }
         )
@@ -111,6 +114,20 @@ final class DraftInsertTests: XCTestCase {
         XCTAssertEqual(c.lastResult, "Written words.")
     }
 
+    /// A ⌘V the field never showed: the written text does not go in beside
+    /// a paste that may be there, and the note does not claim the transcript
+    /// is in the field.
+    func testAnUnseenPasteGetsNoWrittenTextAndSaysItWasNotSeen() async {
+        let draft = FakeDraft(shows: .unseen)
+        let inserter = DraftingInserter(draft: draft)
+        // Also ahead of the writer's own note, which would say the text is in the field.
+        let c = await dictate(into: inserter, notice: "Inserted as heard: offline")
+        XCTAssertEqual(inserter.inserted, [])
+        XCTAssertFalse(draft.events.contains { $0.hasPrefix("replace") })
+        XCTAssertEqual(c.insertedNotice, DictationCoordinator.unseenDraftNotice)
+        XCTAssertEqual(c.lastResult, "Written words.")
+    }
+
     /// The user edited the draft: it stays, with a note, and Paste last
     /// holds the written text.
     func testAnEditedDraftStaysWithANote() async {
@@ -151,6 +168,26 @@ final class DraftInsertTests: XCTestCase {
         XCTAssertEqual(draft.events, ["show thank you", "replace ", "end"])
         XCTAssertEqual(inserter.inserted, [])
         XCTAssertFalse(c.writingDraft)
+    }
+
+    /// A dictation with no written text after a paste the field never
+    /// showed: nothing is taken out of the field, and nothing says the
+    /// transcript stayed in it.
+    func testAnUnseenPasteIsNotTakenOutOrAnnounced() async {
+        let draft = FakeDraft(shows: .unseen)
+        let inserter = DraftingInserter(draft: draft)
+        let announced = expectation(forNotification: .voiceIQDraftKept, object: nil)
+        announced.isInverted = true
+        let capture = DictationCoordinatorTests.FakeCapture()
+        let c = DictationCoordinator(audioFactory: { capture }, transcription: HeardThenNothing(),
+                                     insertion: inserter, secureInputActive: { false })
+        c.handle(.begin)
+        for _ in 0..<8 { await Task.yield() }
+        c.handle(.finalize)
+        for _ in 0..<300 where !c.state.isTerminal { try? await Task.sleep(nanoseconds: 2_000_000) }
+        XCTAssertFalse(draft.events.contains { $0.hasPrefix("replace") })
+        XCTAssertEqual(inserter.inserted, [])
+        await fulfillment(of: [announced], timeout: 0.3)
     }
 
     /// An unconfirmed draft (the iPhone's) still gets its written text

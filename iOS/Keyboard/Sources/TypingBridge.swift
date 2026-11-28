@@ -193,8 +193,11 @@ extension TypingBridge: @MainActor KeyboardTextTarget {
         .oneTimeCode, .password, .newPassword, .creditCardNumber, .telephoneNumber, .postalCode,
     ]
 
-    /// Hex plans its edits from this, so it has a held draft in it.
-    var documentContextBeforeInput: String? { textBeforeWithDraft?() ?? proxy?.documentContextBeforeInput }
+    /// Hex plans its edits from this, so it has a held draft in it, and the
+    /// edits waiting for the next turn (`EditController.projected`).
+    var documentContextBeforeInput: String? {
+        (textBeforeWithDraft?() ?? proxy?.documentContextBeforeInput).map { editor?.projected($0) ?? $0 }
+    }
     var hasText: Bool { proxy?.hasText ?? false }
     var autocapitalizationType: UITextAutocapitalizationType? { proxy?.autocapitalizationType }
     /// `.no` also turns off Hex's typing journal (`TypingJournal.allows`).
@@ -232,7 +235,7 @@ extension TypingBridge: @MainActor KeyboardTextTarget {
     }
 
     func adjustTextPosition(byCharacterOffset offset: Int) {
-        editor?.willEdit?()
+        if let editor, !editor.runsNow({ [weak self] in self?.adjustTextPosition(byCharacterOffset: offset) }) { return }
         proxy?.adjustTextPosition(byCharacterOffset: offset)
         editor?.cursorMovedExternally()
     }
