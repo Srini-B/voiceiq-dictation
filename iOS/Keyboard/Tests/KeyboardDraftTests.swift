@@ -11,14 +11,14 @@ final class KeyboardDraftTests: XCTestCase {
         before.isEmpty || before.last?.isWhitespace == true ? text : " " + text
     }
 
-    private func type(_ transcript: String, into field: Field) -> KeyboardDraft? {
+    private func type(_ transcript: String, into field: ProxyField) -> KeyboardDraft? {
         KeyboardDraft.type(transcript, id: UUID(), documentID: UUID(), into: field, fit: fit, now: typedAt)
     }
 
     /// The transcript goes in marked and fitted; the written text takes its
     /// place, fitted the same way, and nothing stays marked.
     func testTheWrittenTextReplacesTheMarkedDraft() throws {
-        let field = Field("Dear Ana,")
+        let field = ProxyField("Dear Ana,")
         let draft = try XCTUnwrap(type("see you at noon", into: field))
         XCTAssertEqual(field.string, "Dear Ana, see you at noon")
         XCTAssertNotNil(field.marked)
@@ -31,7 +31,7 @@ final class KeyboardDraftTests: XCTestCase {
     /// The host committed the draft without a word, right after it landed:
     /// the written text still replaces it and never goes in beside it.
     func testASilentHostCommitIsNotDuplicated() throws {
-        let field = Field("Dear Ana,")
+        let field = ProxyField("Dear Ana,")
         let draft = try XCTUnwrap(type("see you at noon", into: field))
         field.unmarkText()
 
@@ -43,7 +43,7 @@ final class KeyboardDraftTests: XCTestCase {
     /// left it right before the cursor: it is deleted and the written text
     /// typed, never typed beside it.
     func testAPlainDraftStillBeforeTheCursorIsRetyped() throws {
-        let field = Field("Dear Ana,")
+        let field = ProxyField("Dear Ana,")
         let draft = try XCTUnwrap(type("see you at noon", into: field))
         field.unmarkText()
 
@@ -54,7 +54,7 @@ final class KeyboardDraftTests: XCTestCase {
     /// Once the user typed after the draft, it is no longer at the end of the
     /// text before the cursor: it stays as heard and their text is untouched.
     func testAnEditedDraftIsLeftAlone() throws {
-        let field = Field("Dear Ana,")
+        let field = ProxyField("Dear Ana,")
         let draft = try XCTUnwrap(type("see you at noon", into: field))
         draft.commit(field)
         field.insertText(" ok")
@@ -65,7 +65,7 @@ final class KeyboardDraftTests: XCTestCase {
 
     /// The cursor moved into the draft: it stays, and nothing is deleted.
     func testADraftNoLongerBeforeTheCursorIsLeftAlone() throws {
-        let field = Field("Dear Ana,")
+        let field = ProxyField("Dear Ana,")
         let draft = try XCTUnwrap(type("see you at noon", into: field))
         field.adjustTextPosition(byCharacterOffset: -5)
 
@@ -76,7 +76,7 @@ final class KeyboardDraftTests: XCTestCase {
     /// The cursor moved back to an earlier copy of the same words: that copy
     /// is the user's text and stays, and so does the draft.
     func testAnEarlierCopyOfTheSameWordsIsNeverTakenForTheDraft() throws {
-        let field = Field("ok ok")
+        let field = ProxyField("ok ok")
         let draft = try XCTUnwrap(type("ok", into: field))
         draft.commit(field)
         field.adjustTextPosition(byCharacterOffset: -3)
@@ -88,7 +88,7 @@ final class KeyboardDraftTests: XCTestCase {
     /// The user deleted the draft and the space before it: the earlier copy
     /// now before the cursor is theirs, and is never deleted.
     func testADeletedDraftAfterTheSameWordsLeavesThemAlone() throws {
-        let field = Field("ok ")
+        let field = ProxyField("ok ")
         let draft = try XCTUnwrap(type("ok", into: field))
         draft.commit(field)
         for _ in 0..<3 { field.deleteBackward() }
@@ -102,7 +102,7 @@ final class KeyboardDraftTests: XCTestCase {
     /// the draft was seen: what is before the cursor still ends like the
     /// draft's surroundings, and is still never deleted.
     func testADraftTheHostDeletedAfterItLandedLeavesTheSameWordsAlone() throws {
-        let field = Field("ok ok ")
+        let field = ProxyField("ok ok ")
         let draft = try XCTUnwrap(type("ok", into: field))
         XCTAssertTrue(draft.follow(field))
         draft.commit(field)
@@ -118,7 +118,7 @@ final class KeyboardDraftTests: XCTestCase {
     /// leaves marked text out of the context: the few characters still
     /// before the cursor are not enough to take an earlier copy for it.
     func testADraftDeletedBeforeItWasSeenLeavesTheSameWordsAlone() throws {
-        let field = Field("ok ok ")
+        let field = ProxyField("ok ok ")
         field.hidesMarkedText = true
         let draft = try XCTUnwrap(type("ok", into: field))
         XCTAssertEqual(field.documentContextBeforeInput, "ok ok ")
@@ -134,14 +134,14 @@ final class KeyboardDraftTests: XCTestCase {
     /// still swapped.
     func testOnlyTheExactContextSwapsADraftTheHostShowedLate() throws {
         let repeated = String(repeating: "ok ", count: 8)
-        let field = Field(repeated)
+        let field = ProxyField(repeated)
         field.hidesMarkedText = true
         let deleted = try XCTUnwrap(type("ok", into: field))
         for _ in 0..<3 { field.deleteBackward() }
         XCTAssertEqual(deleted.replace(with: "OK.", in: field, fit: fit), .kept)
         XCTAssertEqual(field.string, String(repeating: "ok ", count: 7) + "ok")
 
-        let untouched = Field("Dear Ana,")
+        let untouched = ProxyField("Dear Ana,")
         untouched.hidesMarkedText = true
         let draft = try XCTUnwrap(type("see you at noon", into: untouched))
         XCTAssertEqual(draft.replace(with: "See you at noon.", in: untouched, fit: fit), .retyped(" See you at noon."))
@@ -153,7 +153,7 @@ final class KeyboardDraftTests: XCTestCase {
     /// Deleted, the draft leaves the user's words alone; untouched, it is
     /// swapped once committed.
     func testTextEndingLikeTheDraftIsNotTakenForIt() throws {
-        let deletedField = Field("ok ok")
+        let deletedField = ProxyField("ok ok")
         deletedField.hidesMarkedText = true
         let deleted = try XCTUnwrap(type("ok", into: deletedField))
         XCTAssertEqual(deleted.text, " ok")
@@ -161,7 +161,7 @@ final class KeyboardDraftTests: XCTestCase {
         XCTAssertEqual(deleted.replace(with: "OK.", in: deletedField, fit: fit), .kept)
         XCTAssertEqual(deletedField.string, "ok ok")
 
-        let untouchedField = Field("ok ok")
+        let untouchedField = ProxyField("ok ok")
         untouchedField.hidesMarkedText = true
         let untouched = try XCTUnwrap(type("ok", into: untouchedField))
         XCTAssertEqual(untouched.replace(with: "OK.", in: untouchedField, fit: fit), .retyped(" OK."))
@@ -172,7 +172,7 @@ final class KeyboardDraftTests: XCTestCase {
     /// with repeated words: deleting the draft leaves the same window, so
     /// a draft there is never swapped and the user's words stay.
     func testAShortWindowOverRepeatedWordsNeverSwaps() throws {
-        let field = Field("ok ok ok ")
+        let field = ProxyField("ok ok ok ")
         field.window = 4
         let draft = try XCTUnwrap(type("ok", into: field))
         XCTAssertEqual(field.documentContextBeforeInput, "k ok")
@@ -192,7 +192,7 @@ final class KeyboardDraftTests: XCTestCase {
     /// a draft longer than hosts show before the cursor. The written text
     /// then goes in alone, as before drafts.
     func testADraftThatCouldNotBeSwappedIsNotTyped() {
-        let field = Field("")
+        let field = ProxyField("")
         XCTAssertNil(type("வணக்கம்", into: field))
         XCTAssertNil(type("first line\nsecond line", into: field))
         XCTAssertNil(type(String(repeating: "word ", count: 41), into: field))
@@ -203,18 +203,18 @@ final class KeyboardDraftTests: XCTestCase {
 
     /// A selection is the user's: the written text never replaces it.
     func testASelectionIsNeverReplaced() throws {
-        let field = Field("Dear Ana,")
+        let field = ProxyField("Dear Ana,")
         let draft = try XCTUnwrap(type("see you at noon", into: field))
         field.select("noon")
 
         XCTAssertEqual(draft.replace(with: "See you at noon.", in: field, fit: fit), .kept)
         XCTAssertEqual(field.string, "Dear Ana, see you at noon")
-        XCTAssertNil(type("see you", into: Field("call Srini tomorrow", selecting: "Srini")))
+        XCTAssertNil(type("see you", into: ProxyField("call Srini tomorrow", selecting: "Srini")))
     }
 
     /// The keyboard going away leaves the transcript as plain text.
     func testCommitLeavesTheTranscript() throws {
-        let field = Field("")
+        let field = ProxyField("")
         let draft = try XCTUnwrap(type("hello", into: field))
         draft.commit(field)
         XCTAssertEqual(field.string, "hello")

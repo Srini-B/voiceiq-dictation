@@ -3,7 +3,7 @@ import XCTest
 
 /// A text field as a keyboard sees it: text with a cursor or a selection,
 /// and the keyboard's marked text, which the context includes, as UIKit's does.
-final class Field: NSObject, UITextDocumentProxy {
+final class ProxyField: NSObject, UITextDocumentProxy {
     var text: [Character]
     private var start: Int
     private var length: Int
@@ -94,9 +94,9 @@ final class Field: NSObject, UITextDocumentProxy {
 }
 
 final class FieldController: UIInputViewController {
-    let field: Field
+    let field: ProxyField
 
-    init(_ field: Field) {
+    init(_ field: ProxyField) {
         self.field = field
         super.init(nibName: nil, bundle: nil)
     }
@@ -110,7 +110,7 @@ final class FieldController: UIInputViewController {
 final class EditControllerTests: XCTestCase {
     private var controller: FieldController!
 
-    private func editor(for field: Field) -> EditController {
+    private func editor(for field: ProxyField) -> EditController {
         controller = FieldController(field)
         let editor = EditController()
         editor.controller = controller
@@ -121,7 +121,7 @@ final class EditControllerTests: XCTestCase {
     /// Undo takes back a whole dictation, then the deletes after it as one
     /// step, and redo puts them back in order.
     func testUndoAndRedoReplayDictationAndDeletes() {
-        let field = Field("Dear Ana, ")
+        let field = ProxyField("Dear Ana, ")
         let editor = editor(for: field)
 
         editor.type("see you at noon.")
@@ -144,7 +144,7 @@ final class EditControllerTests: XCTestCase {
     /// A draft swapped for its written text is one undo step, like a
     /// dictation typed in: undo leaves the field as it was before it.
     func testUndoTakesBackADraftDictation() throws {
-        let field = Field("Dear Ana,")
+        let field = ProxyField("Dear Ana,")
         let editor = editor(for: field)
         let draft = try XCTUnwrap(KeyboardDraft.type("see you at noon", id: UUID(), documentID: UUID(), into: field,
                                                      fit: { text, _, _ in " " + text }))
@@ -160,7 +160,7 @@ final class EditControllerTests: XCTestCase {
 
     /// Typing over a selection ends it, and undo brings the selected word back.
     func testTypingOverASelectionEndsItAndUndoRestoresTheWord() {
-        let field = Field("call Srini tomorrow", selecting: "Srini")
+        let field = ProxyField("call Srini tomorrow", selecting: "Srini")
         let editor = editor(for: field)
         XCTAssertEqual(editor.selection, "Srini")
 
@@ -175,7 +175,7 @@ final class EditControllerTests: XCTestCase {
     /// Word steps stop at the near edge of the next word; line steps stop at
     /// a line break.
     func testWordAndLineSteps() {
-        let field = Field("one two\nthree four", cursorAt: 11)
+        let field = ProxyField("one two\nthree four", cursorAt: 11)
         let editor = editor(for: field)
 
         editor.moveCursor(.lineStart)
@@ -192,7 +192,7 @@ final class EditControllerTests: XCTestCase {
     /// When the app itself changes the text, the keyboard's undo would
     /// replay at the wrong place, so it is dropped.
     func testAnEditByTheAppDropsUndo() {
-        let field = Field("Hi")
+        let field = ProxyField("Hi")
         let editor = editor(for: field)
         editor.type(" there")
         field.insertText("!")
@@ -203,7 +203,7 @@ final class EditControllerTests: XCTestCase {
     /// Undo replays at the cursor, so moving it from the edit panel drops
     /// undo instead of deleting text at the new place.
     func testMovingTheCursorDropsUndo() {
-        let field = Field("hello ")
+        let field = ProxyField("hello ")
         let editor = editor(for: field)
         editor.type("world")
         editor.moveCursor(.lineStart)
@@ -216,7 +216,7 @@ final class EditControllerTests: XCTestCase {
     /// turn: undo takes back the fix alone, then the typing. Backspaces on a
     /// later turn are their own step.
     func testAutocorrectionFromTheKeysIsOneUndoStep() {
-        let field = Field("I said ")
+        let field = ProxyField("I said ")
         let editor = editor(for: field)
         for letter in "teh" { editor.typeFromKeyboard(String(letter)) }
         for _ in 0..<3 { editor.deleteFromKeyboard() }
