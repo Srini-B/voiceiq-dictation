@@ -67,6 +67,20 @@ final class RecordedAudioTests: XCTestCase {
         XCTAssertEqual(call.duration, 3, accuracy: 0.01)
     }
 
+    /// A bar must neither fill up for steady talk nor vanish for someone who
+    /// speaks a tenth of its stretch (one bar of a long call).
+    func testPlaybackBarsShowShortTurnsAndKeepSteadyTalkBelowFull() {
+        let short = Array(repeating: Float(0.75), count: 10) + Array(repeating: 0, count: 90)
+        let steady = Array(repeating: Float(0.75), count: 100)
+        let loudness = MeetingLoudness(you: short, call: steady, duration: 10)
+        let bar = loudness.bars(1)[0]
+        // A 3 pt dot is the floor; a bar needs about 0.21 of its half to show above it.
+        XCTAssertGreaterThan(bar.you ?? 0, 0.21)
+        XCTAssertLessThan(bar.you ?? 1, 0.5)
+        XCTAssertEqual(bar.call ?? 0, 0.75, accuracy: 0.001)
+        XCTAssertEqual(MeetingLoudness(you: [0, 0], call: nil, duration: 1).bars(2).map { $0.you }, [0, 0])
+    }
+
     /// The longer track sets the length; an empty system track still mixes.
     func testMeetingTracksMixIntoOneM4A() async throws {
         try track("mic.caf", seconds: 3)
