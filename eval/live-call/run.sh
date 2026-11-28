@@ -19,9 +19,8 @@ site=${SITE:-jitsi}
 chrome="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 # The run records with the installed app, so it holds the shared app lock
 # (scripts/app-lock.sh); LOCK_OWNER names who holds it, such as a thread ID.
-owner=${LOCK_OWNER:?set LOCK_OWNER to your thread ID}
+lockowner=${LOCK_OWNER:?set LOCK_OWNER to your thread ID}
 applock=${0:A:h:h:h}/scripts/app-lock.sh
-$applock acquire $owner
 # Sparkle replaced the build under test mid-run on 2026-11-28 (0.7.17 to
 # 0.7.18); a test Mac never updates the app on its own.
 defaults write io.blue.voiceiq SUEnableAutomaticChecks -bool false
@@ -36,9 +35,11 @@ cleanup() {
   for pid in $pids; do kill $pid 2>/dev/null || true; done
   sleep 2
   rm -rf $scratch
-  $applock release $owner
+  $applock release $lockowner
 }
 trap cleanup EXIT
+# Taken only once cleanup can release it.
+$applock acquire $lockowner
 trap "exit 1" INT TERM
 
 url() { # display-name video-parameter
