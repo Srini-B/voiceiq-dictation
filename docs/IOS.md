@@ -498,8 +498,8 @@ posted each time the keyboard appears), and on `activityEnablementUpdates`.
 Returning from Settings with Full Access turned on shows it as granted without
 restarting the app, once the keyboard has opened: iOS gives the app no way to
 read the Full Access switch, so until the VoiceiQ keyboard has run with it,
-the setup card shows "Open it once" and "Not confirmed", and the Try it card
-lists how to switch to the VoiceiQ keyboard with the globe key.
+the "Dictation from the keyboard" row shows "Waiting…", and the Try it card
+shows how to switch to the VoiceiQ keyboard with the globe key.
 
 Permissions can be taken back after onboarding (2026-09-30):
 
@@ -515,8 +515,8 @@ Permissions can be taken back after onboarding (2026-09-30):
   show it. A tap in the keyboard while a warm session runs still gets the
   keyboard notice, as before.
 - Keyboard removed from Settings › Keyboards: `SetupStatus.current()` clears
-  `keyboardSeenAt`, so a keyboard added back reads "Open it once" until it
-  runs with Full Access again, instead of "Ready".
+  `keyboardSeenAt`, so for a keyboard added back the Full Access row reads
+  "Waiting…" until it runs with Full Access again, instead of "Allowed".
 - Full Access switched off: the keyboard shows "Allow Full Access", which
   opens `voiceiq://keyboard/setup`. That link is sent only by a keyboard
   without Full Access, so the app clears `keyboardSeenAt` on it before showing
@@ -526,8 +526,39 @@ Permissions can be taken back after onboarding (2026-09-30):
 Onboarding saves its page in `MobileSettings.onboardingStep`,
 so a trip to Settings resumes on the same page.
 
-Onboarding has four pages: welcome, the AssemblyAI API key, permissions
-(microphone and keyboard together), and a Try it field.
+Onboarding (`OnboardingView`) starts with three intro slides
+(`IntroSlides`: dictation in any app, the keyboard, meeting notes), each
+with a small looping scene drawn in SwiftUI. Setup follows, one page per
+step: the API key, the microphone, adding the keyboard in Settings,
+switching to it with the globe key, and a Try it field. Each page's
+`Step.isDone(_:)` reads `SetupStatus`: microphone granted (and Live
+Activities on, so the card about them on that page can be read), keyboard added
+(`AppleKeyboards`), and Full Access, which the keyboard proves by running
+(`keyboardSeenAt`), so the switch page's "in use" and "Full Access" checks
+tick together. When a page's step becomes done while it shows, or is
+already done when the user moves forward onto it, the page shows its check,
+plays the success haptic and moves on after about a second and a half,
+with no Continue on screen meanwhile; the footer then ignores taps for 0.6 s
+so a late tap can't press the next page's button. Back onto a page that is
+already done stays there and offers Continue; Back onto one that is not done
+moves on once it is. With VoiceOver on, pages announce the check and wait
+for Continue instead of moving on. Until Full Access is confirmed, the
+switch page's checklist carries a line pointing to Allow Full Access: iOS
+gives the app no reliable sign of which keyboard is up, so it is not timed.
+
+The keyboard guides live in `KeyboardGuides.swift`.
+`KeyboardSettingsWalkthrough` animates VoiceiQ's page in Settings
+(Keyboards, the VoiceiQ switch, Allow Full Access and its alert) in the
+app's own tokens, and Open VoiceiQ Settings opens that page
+(`UIApplication.openSettingsURLString`). `GlobeSwitchDemo` animates holding
+the globe key and picking VoiceiQ; on the switch page it hides while the
+practice field has focus, since the real keyboard is then on screen, and
+once Full Access is confirmed. Both loop while on screen and hold one
+frame with Reduce Motion, with every caption shown as current. The drawings
+cap Dynamic Type at xLarge; the intro slides scroll when large text needs
+it. Settings › Keyboard & Permissions and the Try it
+card reuse them, and the Keyboard & Permissions page uses the same
+`SetupCheckRow` checklist as onboarding.
 
 ### Design system
 
