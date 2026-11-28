@@ -65,6 +65,34 @@ enum CallApps {
         "vc.feishu.cn", "meetings.dialpad.com", "app.dialpad.com", "8x8.vc/", "meetings.vonage.com", "app.vonage.com",
         "Meet - ", "| Microsoft Teams", "Zoom Meeting", "Huddle",
     ]
+    /// Addresses of a joined call room, where sound alone is a call: an owner
+    /// who joined muted holds no mic. Not a site's home or post-call page
+    /// ("meet.google.com/" with no code, "meet.jit.si/static/…"), not Zoom's
+    /// /j/ launcher for the app, and not chat sites (WhatsApp, Telegram,
+    /// Messenger, Teams, Discord) that play voice messages and videos (Codex
+    /// and Neon on #138).
+    /// Anchored at the scheme and host, so a room link inside another page's
+    /// address (a search for it) is not a room (Codex on #138).
+    private nonisolated(unsafe) static let roomAddresses: [Regex<Substring>] = [
+        #/(?i)^https?://meet\.google\.com/[a-z]{3}-[a-z]{4}-[a-z]{3}/#,
+        #/(?i)^https?://(?:[a-z0-9-]+\.)*zoom\.us/wc/(?:join/)?\d/#,
+        #/(?i)^https?://app\.slack\.com/huddle/#,
+        #/(?i)^https?://(?:www\.)?(?:whereby\.com|meet\.jit\.si|talky\.io|8x8\.vc)/[A-Za-z0-9_-]+(?:[?#]|$)/#,
+        #/(?i)^https?://(?:www\.)?vdo\.ninja/[^#]*[?&](?:room|view|push)=/#,
+    ]
+    /// Titles of a joined room, read only when the browser gives no address:
+    /// any video can be titled "Zoom Meeting".
+    private nonisolated(unsafe) static let roomTitles: [Regex<Substring>] = [
+        #/(?i)^Meet - [a-z]{3}-[a-z]{4}-[a-z]{3}/#, #/^Zoom Meeting/#,
+    ]
+
+    static func isCallRoom(addresses: [String]) -> Bool {
+        addresses.contains { address in roomAddresses.contains { address.contains($0) } }
+    }
+
+    static func isCallRoom(titles: [String]) -> Bool {
+        titles.contains { title in roomTitles.contains { title.contains($0) } }
+    }
     /// What the offer calls a meeting found only by its window title.
     static let meetingTitles = [
         "Meet - ": "Google Meet", "| Microsoft Teams": "Microsoft Teams", "Zoom Meeting": "Zoom", "Huddle": "Slack huddle",

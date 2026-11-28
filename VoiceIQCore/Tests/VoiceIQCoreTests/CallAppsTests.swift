@@ -20,6 +20,29 @@ final class CallAppsTests: XCTestCase {
         XCTAssertEqual(CallApps.meetingName(match: "| Microsoft Teams", in: ["Weekly sync | Microsoft Teams"]), "Microsoft Teams")
     }
 
+    /// Sound alone is a call only in a joined room: not on a site's home
+    /// page, nor on a chat site that plays voice messages (Codex on #138).
+    func testOnlyAJoinedCallRoomCountsOnSoundAlone() {
+        for room in ["https://meet.google.com/abc-defg-hij", "https://meet.google.com/ABC-DEFG-HIJ?authuser=0",
+                     "https://app.zoom.us/wc/81234567890/join", "https://app.zoom.us/wc/join/81234567890",
+                     "https://vdo.ninja/?room=probe42&label=Owner", "https://meet.jit.si/WeeklySync"] {
+            XCTAssertTrue(CallApps.isCallRoom(addresses: [room]), room)
+        }
+        for page in ["https://meet.google.com/", "https://meet.google.com/landing", "https://vdo.ninja/", "https://meet.jit.si/",
+                     "https://meet.jit.si/static/close3.html", "https://zoom.us/j/81234567890",
+                     "https://web.whatsapp.com/", "https://web.telegram.org/k/", "https://www.messenger.com/t/123",
+                     "https://teams.microsoft.com/v2/", "https://discord.com/channels/1/2",
+                     "https://www.google.com/search?q=https://meet.google.com/abc-defg-hij",
+                     "https://mail.google.com/mail/u/0/#inbox?link=https://vdo.ninja/?room=x"] {
+            XCTAssertFalse(CallApps.isCallRoom(addresses: [page]), page)
+        }
+        // Titles count only when no address could be read; any video can carry one.
+        XCTAssertTrue(CallApps.isCallRoom(titles: ["Meet - abc-defg-hij"]))
+        XCTAssertTrue(CallApps.isCallRoom(titles: ["Zoom Meeting"]))
+        XCTAssertFalse(CallApps.isCallRoom(titles: ["Google Meet"]))
+        XCTAssertFalse(CallApps.isCallRoom(addresses: ["https://www.youtube.com/watch?v=x", "Zoom Meeting recap - YouTube"]))
+    }
+
     /// Granola's helper stands for Granola, so the offer never names the helper.
     func testHelperBelongsToTheOutermostApp() {
         XCTAssertEqual(CallDetector.containingBundle("/Applications/Granola.app/Contents/Frameworks/Granola Helper (MacOSMicAppsWithDevices).app"),
