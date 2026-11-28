@@ -76,7 +76,9 @@ Numbers use tabular figures.
 - **Radius:**
   - Chips, search, switches and buttons are capsules.
   - Cards are 16. Sheets are 28. The iPhone's Settings lists keep the system
-    inset-grouped radius, so they scroll, swipe and select like Settings.
+    inset-grouped radius, so they scroll, swipe and select like Settings. The
+    Mac Settings forms also keep the system grouped form, with its card
+    colours and radius, so their controls behave like System Settings.
   - Mac list selection is 10.
   - The Talk key is 20 on a 60-point square.
 - **Elevation.** Pages are flat. Only floating things cast a shadow: the dock,
