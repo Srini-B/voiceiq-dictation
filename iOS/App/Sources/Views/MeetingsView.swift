@@ -316,15 +316,19 @@ private struct MeetingDetail: View {
                         Card {
                             Text("The speaker model failed on this note, so some people may be shown as one speaker.")
                                 .font(Theme.Fonts.body()).foregroundStyle(Theme.Colors.muted)
-                            // A synced note has no recording to split (Codex on #133).
-                            Button("Split speakers again") { confirmingSplit = true }.buttonStyle(.primaryPill)
-                                .disabled(!audio.isAvailable)
-                                .alert("Split speakers again?", isPresented: $confirmingSplit) {
-                                    Button("Split") { model.meetings.retry(id: meta.id) }
-                                    Button("Cancel", role: .cancel) {}
-                                } message: {
-                                    Text("The notes are written again, and edits to the transcript are replaced.")
-                                }
+                            // A synced note has no recording to split; sync never carries audio (Neon on #133).
+                            if audio.isAvailable {
+                                Button("Split speakers again") { confirmingSplit = true }.buttonStyle(.primaryPill)
+                                    .alert("Split speakers again?", isPresented: $confirmingSplit) {
+                                        Button("Split") { model.meetings.retry(id: meta.id) }
+                                        Button("Cancel", role: .cancel) {}
+                                    } message: {
+                                        Text("The notes are written again, and edits to the transcript are replaced.")
+                                    }
+                            } else {
+                                Text("Open this note on the Mac that recorded it to split speakers again.")
+                                    .font(Theme.Fonts.footnote()).foregroundStyle(Theme.Colors.muted)
+                            }
                         }
                     }
                     if let notes { notesContent(notes) }

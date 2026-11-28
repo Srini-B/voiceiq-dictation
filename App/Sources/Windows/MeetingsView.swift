@@ -15,6 +15,7 @@ struct MeetingsPane: View {
     @State private var assigning = false
     @State private var confirmingDelete = false
     @State private var confirmingDiscard = false
+    @State private var confirmingSplit = false
     @State private var renaming = false
     @State private var titleDraft = ""
     /// The selected meeting is a call whose other side was never heard (`SilentSystemAudio`).
@@ -452,10 +453,16 @@ struct MeetingsPane: View {
                 .font(VoiceIQUI.TypeScale.body())
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .fixedSize(horizontal: false, vertical: true)
-            Button("Split Speakers Again") { engine.retry(id: meeting.id) }
+            Button("Split Speakers Again") { confirmingSplit = true }
                 // A meeting synced from the iPhone has no recording here (Codex on #133).
                 .disabled(!audio.isAvailable)
                 .help("Tells the voices apart again and rewrites the notes. Edits to the transcript are replaced.")
+                // Asks first, as the iPhone does: the run replaces transcript edits (Neon on #133).
+                .confirmationDialog("Split speakers again?", isPresented: $confirmingSplit) {
+                    Button("Split") { assigning = false; engine.retry(id: meeting.id) }
+                } message: {
+                    Text("The notes are written again, and edits to the transcript are replaced.")
+                }
         }
         .padding(VoiceIQUI.Spacing.m)
         .background(RoundedRectangle(cornerRadius: VoiceIQUI.Radius.medium).fill(VoiceIQUI.Colors.surfaceContainer))

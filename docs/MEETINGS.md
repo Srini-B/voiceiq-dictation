@@ -71,7 +71,9 @@ prediction using ML Program"), the model runs again after 2 s, then after
 far side keeps AssemblyAI's labels and the meeting is marked
 (`MeetingMeta.speakersUnsplit`): the Mac and iPhone say some people may be
 shown as one speaker and offer **Split speakers again**, a Retry that reuses
-the cached transcription
+the cached transcription. Both ask first, since the run replaces transcript
+edits. Only the Mac that recorded the meeting has its audio, so a synced copy
+says to split it there
 ([activities/2026-11-28-speaker-model-retry.md](../activities/2026-11-28-speaker-model-retry.md)).
 
 A far-side voice the model hears for less than 1% of the meeting is not a
