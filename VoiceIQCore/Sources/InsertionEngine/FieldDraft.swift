@@ -205,6 +205,8 @@ public final class FieldDraft: TextDraft {
             return false
         }
         guard let expected = span.replacing(in: reading.value, with: written) else { return false }
+        let following = Self.slice(reading.value, span.location + span.length,
+                                   min(20, reading.value.utf16.count - span.location - span.length))
         let selection = withdrawing && !replaced.isEmpty
             ? (location: span.location, length: replaced.utf16.count)
             : span.selection((reading.caret, reading.selectionLength), afterReplacingWith: written.utf16.count)
@@ -214,13 +216,14 @@ public final class FieldDraft: TextDraft {
         /// as an edit, and the text in it is not tracked as ours.
         func swapped(_ now: PasteCheck.Reading) async -> Bool? {
             // Taken out (an empty written text) shows only as the exact result.
-            // A written text that begins the draft shows only once the rest
-            // of the draft is gone from after it.
-            let tail = span.text.hasPrefix(written) ? String(span.text.dropFirst(written.count)) : ""
+            // The written text, followed by what followed the draft: a key
+            // typed over a draft the written text begins, or a host that
+            // inserted beside it, reads otherwise.
+            let end = written.utf16.count + span.location
             let placed = written.isEmpty ? now.value == expected
                 : DraftSpan(location: span.location, text: written).isIntact(in: now.value)
-                    && (tail.isEmpty || !DraftSpan(location: span.location + written.utf16.count, text: tail)
-                        .isIntact(in: now.value))
+                    && (following.isEmpty ? now.value.utf16.count == end
+                                          : DraftSpan(location: end, text: following).isIntact(in: now.value))
             if placed {
                 field.ledger.replace(id, with: written, landedIn: now.value)
                 landed = written
@@ -360,7 +363,9 @@ public final class FieldDraft: TextDraft {
     private static func slice(_ value: String, _ location: Int, _ length: Int) -> String {
         let units = Array(value.utf16)
         guard location >= 0, length > 0, location + length <= units.count else { return "" }
-        return String(decoding: units[location..<(location + length)], as: UTF16.self)
+        // Never half an emoji at the end.
+        let end = UTF16.isLeadSurrogate(units[location + length - 1]) ? location + length - 1 : location + length
+        return String(decoding: units[location..<end], as: UTF16.self)
     }
 
     /// The app's field refused a swap for a reason that isn't the user's:
