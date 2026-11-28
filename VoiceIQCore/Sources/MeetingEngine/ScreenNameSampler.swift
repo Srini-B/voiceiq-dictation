@@ -22,6 +22,9 @@ public final class ScreenNameSampler: @unchecked Sendable {
     private let startedAt = Date()
     private var bundleID: String?
     private var pid: pid_t?
+    /// `pid` was picked for showing a joined call room, not only a call
+    /// site's page; until then it is picked again on every tick.
+    private var pidHoldsRoom = false
     /// With no source: the apps the call being joined runs in, besides a
     /// browser. Nil reads any call app.
     private let joining: Set<String>?
@@ -66,9 +69,9 @@ public final class ScreenNameSampler: @unchecked Sendable {
     private func resolveCallApp(accessibility: Bool) -> Bool {
         if bundleID == nil { bundleID = Self.frontCallApp(among: joining) }
         guard let bundleID else { return false }
-        if pid == nil, accessibility, let found = Self.callPID(bundleID: bundleID) {
-            pid = found
-            AccessibilityWaker.wakeIfNeeded(bundleID: bundleID, pid: found)
+        if !pidHoldsRoom, accessibility, let found = Self.callPID(bundleID: bundleID) {
+            pid = found.pid; pidHoldsRoom = found.joined
+            AccessibilityWaker.wakeIfNeeded(bundleID: bundleID, pid: found.pid)
         }
         return snapshots || pid != nil
     }
@@ -80,9 +83,10 @@ public final class ScreenNameSampler: @unchecked Sendable {
     /// instance the system lists first. A call site's page alone (a Teams or
     /// WhatsApp chat) counts only when no instance shows a joined room, since
     /// not every site's room address is known (Codex on #146).
-    static func callPID(bundleID: String) -> pid_t? {
+    /// `joined`: the pick is final, the only instance or one showing a joined room.
+    static func callPID(bundleID: String) -> (pid: pid_t, joined: Bool)? {
         let pids = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).map(\.processIdentifier)
-        guard pids.count > 1, CallApps.browsers.contains(bundleID) else { return pids.first }
+        guard pids.count > 1, CallApps.browsers.contains(bundleID) else { return pids.first.map { ($0, true) } }
         let joined = Set(pids.filter(CallWindowText.showsJoinedRoom))
         let rooms = joined.isEmpty ? Set(pids.filter { !CallWindowText.meetingWindowTitles(pid: $0).isEmpty }) : joined
         guard !rooms.isEmpty else { return nil }
@@ -90,7 +94,7 @@ public final class ScreenNameSampler: @unchecked Sendable {
         let windows = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] ?? []
         let front = windows.lazy.filter { $0[kCGWindowLayer as String] as? Int == 0 }
             .compactMap { $0[kCGWindowOwnerPID as String] as? pid_t }.first(where: rooms.contains)
-        return front ?? rooms.min()
+        return (front ?? rooms.min()).map { ($0, !joined.isEmpty) }
     }
 
     /// The known call app, or the browser showing a meeting page (Google Meet
