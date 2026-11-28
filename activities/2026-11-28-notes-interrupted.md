@@ -27,3 +27,21 @@ instead of about 7 s, so this became likely.
 
 CI (`swift test`, App and iOS builds);
 `MeetingRenameTests.testAMeetingInterruptedWhileWritingUpFailsAtLaunch`.
+
+## Long-meeting notes on the LLM Gateway (probe)
+
+Neon's review of #132 asked whether a 1–2 hour meeting's notes at effort
+medium outrun the gateway's limits on a non-streaming request. One request at
+the app's settings (gpt-6-luna, strict notes schema, max_tokens 32,000) with
+a synthetic 120-minute transcript (714 turns, 23,437 input tokens) from this
+orb, 2026-11-28 (`.amp/in/orb-backup/long_notes_probe.py`):
+
+| Effort | Time | Output tokens | Result |
+|---|---|---|---|
+| medium (shipping) | 38.2 s | 4,771 | notes JSON, 14 actions |
+| high | 83.7 s | 10,586 | notes JSON, 14 actions |
+
+No gateway cut-off at 84 s, and the shipping setting used 15% of
+max_tokens and 4% of the 900 s notes deadline. The gateway reports
+`reasoning_tokens: 0` in usage at both efforts, so reasoning is not broken
+out. A real 2-hour call's transcript may run longer than this synthetic one.
