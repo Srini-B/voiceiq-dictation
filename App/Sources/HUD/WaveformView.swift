@@ -13,6 +13,8 @@ struct WaveformView: View {
     var level: LevelSource = .silent
     var processing: Bool
     var writing = false
+    /// One colour for every bar, as the Meetings window's level meter; nil keeps the brand colours.
+    var tint: Color? = nil
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -75,7 +77,7 @@ struct WaveformView: View {
             )
             let path = Path(roundedRect: rect, cornerRadius: Self.barWidth / 2)
             let hue = (Double(index) / 5.0 + sweep).truncatingRemainder(dividingBy: 1.0)
-            context.fill(path, with: .color(writing ? shimmerColor(at: hue) : quadColor(at: hue)))
+            context.fill(path, with: .color(tint ?? (writing ? shimmerColor(at: hue) : quadColor(at: hue))))
         }
     }
 
@@ -122,7 +124,7 @@ struct WaveformView: View {
             HStack(spacing: Self.gap) {
                 ForEach(0..<5, id: \.self) { index in
                     RoundedRectangle(cornerRadius: Self.barWidth / 2)
-                        .fill(VoiceIQUI.Colors.brandQuad[index % 4])
+                        .fill(tint ?? VoiceIQUI.Colors.brandQuad[index % 4])
                         .frame(
                             width: Self.barWidth,
                             height: Self.minHeight + Self.weights[index] * 14

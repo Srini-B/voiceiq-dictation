@@ -37,6 +37,10 @@ enum VoiceIQUI {
         static let error = dyn(light: 0xB3261E, dark: 0xF2B8B5)
         static let errorContainer = dyn(light: 0xF9DEDC, dark: 0x8C1D18)
         static let onErrorContainer = dyn(light: 0x410E0B, dark: 0xF9DEDC)
+        /// Fills under white text in both modes: `primary` and `error` turn
+        /// pale in dark mode, and white on `gRed` reads at 3.9:1.
+        static let primaryFill = Color(hex: 0x0B57D0)
+        static let errorFill = Color(hex: 0xB3261E)
         static let success = dyn(light: 0x146C2E, dark: 0x6DD58C)
 
         // Brand quad — waveform, processing sweep, and celebration ONLY.

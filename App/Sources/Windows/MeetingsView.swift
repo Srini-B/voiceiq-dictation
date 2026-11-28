@@ -39,7 +39,15 @@ struct MeetingsPane: View {
                 if let meeting = selected {
                     GeometryReader { geometry in detail(meeting, width: geometry.size.width) }
                 } else {
-                    ContentUnavailableView("No Meeting Selected", systemImage: "person.2")
+                    ContentUnavailableView {
+                        Label("No Meeting Selected", systemImage: "person.2")
+                    } description: {
+                        Text("Pick a meeting on the left, or record one. A call you join is offered on the pill.")
+                    } actions: {
+                        if !engine.isRecording {
+                            Button("Record") { engine.toggleRecording() }
+                        }
+                    }
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -110,7 +118,8 @@ struct MeetingsPane: View {
                               systemImage: engine.micMuted ? "mic.slash.fill" : "mic.fill")
                             .frame(maxWidth: .infinity)
                     }
-                    .tint(engine.micMuted ? VoiceIQUI.Colors.gRed : nil)
+                    // `error`, not gRed: red text on its own tint read at 4.1:1 (Fable, M6).
+                    .tint(engine.micMuted ? VoiceIQUI.Colors.error : nil)
                     .help(engine.micMuted ? "Record your voice again" : "Stop recording your voice; the other side keeps recording")
                 }
                 .controlSize(.large)
@@ -120,12 +129,20 @@ struct MeetingsPane: View {
             }
             folderFilter
             List(selection: $selection) {
+                // Day headings are rows, not Sections: macOS pins the top
+                // Section's header and draws a rule under it, so only "Today"
+                // had one (Fable, M6), whatever `listSectionSeparator` said.
                 ForEach(Self.days(listed), id: \.start) { day in
-                    Section(day.label) {
-                        ForEach(day.meetings) { meeting in
-                            // The heading already sets the day off; no rule above its first row.
-                            row(meeting).listRowSeparator(meeting.id == day.meetings.first?.id ? .hidden : .automatic, edges: .top)
-                        }
+                    Text(day.label)
+                        .font(GTFont.flex(11, weight: 600))
+                        .foregroundStyle(.secondary)
+                        .padding(.top, VoiceIQUI.Spacing.xs)
+                        .selectionDisabled()
+                        .listRowSeparator(.hidden)
+                        .accessibilityAddTraits(.isHeader)
+                    ForEach(day.meetings) { meeting in
+                        // The heading already sets the day off; no rule above its first row.
+                        row(meeting).listRowSeparator(meeting.id == day.meetings.first?.id ? .hidden : .automatic, edges: .top)
                     }
                 }
             }
@@ -148,16 +165,23 @@ struct MeetingsPane: View {
                     // Only the dot is red; red text on the selected row read at 3:1 (Fable).
                     (Text(Image(systemName: "circle.fill")).foregroundColor(VoiceIQUI.Colors.gRed)
                         + Text(" \(meeting.startedAt.formatted(date: .omitted, time: .shortened)) · \(MeetingRecordingStatus.clock(context.date.timeIntervalSince(since))) · Recording"))
-                        .font(VoiceIQUI.TypeScale.labelSmall().monospacedDigit()).foregroundStyle(.secondary).lineLimit(1)
+                        .font(VoiceIQUI.TypeScale.labelSmall().monospacedDigit())
+                        // Secondary on the selection read at 4.2:1 (Fable, M6).
+                        .foregroundStyle(selection == meeting.id ? HierarchicalShapeStyle.primary : .secondary)
+                        .lineLimit(1)
                 }
             } else {
-                Text(timeLine(meeting)).font(VoiceIQUI.TypeScale.labelSmall()).foregroundStyle(.secondary)
+                Text(timeLine(meeting)).font(VoiceIQUI.TypeScale.labelSmall())
+                    .foregroundStyle(selection == meeting.id ? HierarchicalShapeStyle.primary : .secondary)
+                    .lineLimit(1)
             }
             let names = folders.names(of: meeting.id)
             if !names.isEmpty {
                 // Text, not a Label: a list row gives a Label's icon a column of its own.
                 Text("\(Image(systemName: "folder")) \(names.joined(separator: ", "))")
-                    .font(VoiceIQUI.TypeScale.labelSmall()).foregroundStyle(.secondary).lineLimit(1)
+                    .font(VoiceIQUI.TypeScale.labelSmall())
+                    .foregroundStyle(selection == meeting.id ? HierarchicalShapeStyle.primary : .secondary)
+                    .lineLimit(1)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -552,11 +576,13 @@ struct MeetingsPane: View {
         }
         return days
     }
-    /// "11:50 PM · 17 min": the day is the section's. An import has no length
-    /// (Granola's export has none); anything in flight or failed says so.
+    /// "11:50 PM · 17 min · Zoom": the day is the section's. An import has no
+    /// length (Granola's export has none); anything in flight or failed says so.
     private func timeLine(_ meeting: MeetingMeta) -> String {
         let time = meeting.startedAt.formatted(date: .omitted, time: .shortened)
-        return meeting.importedFrom == nil ? "\(time) · \(durationLine(meeting))" : time
+        if let app = meeting.importedFrom { return "\(time) · \(app)" }
+        let line = "\(time) · \(durationLine(meeting))"
+        return meeting.source.map { "\(line) · \(MeetingEngine.name($0))" } ?? line
     }
     /// A finished meeting shows only its length; anything still in flight or failed says so.
     private func durationLine(_ meeting: MeetingMeta) -> String {

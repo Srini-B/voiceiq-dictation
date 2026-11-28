@@ -306,14 +306,17 @@ rest of `system.caf` silent. From Hex (`5704885d`, `4a3e9d49`); not yet
 measured on a live call.
 
 **Mute my mic.** While a meeting records, the Meetings window shows **Mute
-my mic** under Stop recording. Muted, `mic.caf` records silence of the same
+my mic** under Stop recording, and the pill has a mic button beside the
+trash can (`pillMeetingMuteTapped`). Muted, `mic.caf` records silence of the same
 length, so the timeline stays aligned, and the far side keeps recording;
 the pill reads "Mic muted". **Unmute my mic** records your voice again.
 Every recording starts unmuted. Hex has the same switch (`6118eb82`).
 
 **Discard.** A recording you don't want can be thrown away instead of
-stopped. The pill has a quiet × beside Stop; it asks "Discard this
-recording?" with Keep and Discard in the pill itself, and moving the pointer
+stopped. The pill has a trash can beside its red Stop; it asks "Discard this
+recording?" with a red Discard and a grey Keep in the pill itself (Keep
+where the trash can was, so a double click keeps; the question lies over the
+recording row, so the pill doesn't shrink under the pointer), and moving the pointer
 off the pill answers Keep. The Meetings window has a trash button beside
 Mute my mic, which asks the same in a dialog. Discard
 (`MeetingEngine.discardRecording`) stops both tracks, skips transcription
@@ -323,6 +326,22 @@ iCloud while it recorded (only finished meetings go up), and the delete is
 sent like any other. If the folder can't be deleted, the meeting stays in
 the list as failed with its audio, so it can be deleted by hand. Nothing
 discards without that confirmation. From Hex (`01e5209b`).
+
+**The pill's buttons.** The pill's panel never becomes key, so macOS draws
+system bordered buttons there in their inactive grey: Discard and Keep
+looked the same. Start, Stop now, Keep recording, Keep and Discard are
+`PillChip`s, capsules the pill fills itself: blue `#0B57D0` for Start, red
+`#B3261E` for Stop now and Discard (white text at 6.4:1 and 6.5:1; the
+brand red `gRed` gives 3.9:1), and a grey tint for the others. The
+recording pill's level bars are one colour, the Meetings window meter's
+green (`gGreen`).
+
+**Making notes.** After Stop, the pill shows "Making notes…" while
+`MeetingEngine.processing` is not empty and nothing records
+(`PillState.meetingNotes`, from `MeetingHUDController.restingState`). Saved
+notes replace it with the success check (`onNotesReady`); notes that fail
+fold it back to the resting pill. A Redo notes or Retry from the Meetings
+window shows it too.
 
 With no call detected (a recording started by hand), or when none of the
 call app's processes has audio open at the start, `system.caf` is a global
@@ -663,7 +682,7 @@ mirrored or AirPlay display, still shows the pill.
 
 | File | Shows |
 | --- | --- |
-| `MeetingsView.swift` | Record button (with Mute my mic and Discard under it while recording) and folder menu above the list, the list in one section per day (Today, Yesterday, then the date) with each row's start time and length, each row's folders, the detail header (the folder menu ([Folders](#folders)), or the title while the transcript fills the pane, since the notes open with it; progress while transcribing or making notes, Update notes after a speaker is renamed, Play and Download audio (`RecordingAudioButtons.swift`), Export menu with Copy prompt for an AI agent, `…` menu with Rename / Redo notes / Redo transcript and notes / Retry / Delete, transcript toggle), the warning on a call whose other side was not heard, the export message |
+| `MeetingsView.swift` | Record button (with Mute my mic and Discard under it while recording) and folder menu above the list, the list with a heading row per day (Today, Yesterday, then the date; rows, not Sections, because macOS pins the top Section's header with a rule under it) with each row's start time, length and call app (or the app it was imported from), the empty pane's Record button, each row's folders, the detail header (the folder menu ([Folders](#folders)), or the title while the transcript fills the pane, since the notes open with it; progress while transcribing or making notes, Update notes after a speaker is renamed, Play and Download audio (`RecordingAudioButtons.swift`), Export menu with Copy prompt for an AI agent, `…` menu with Rename / Redo notes / Redo transcript and notes / Retry / Delete, transcript toggle), the warning on a call whose other side was not heard, the export message |
 | `MeetingNotesColumn.swift` | Title, then the day, start time and length (`MeetingMeta.whenText`; the iPhone shows the same line), and everyone heard (the note owner first, each with a dot in their transcript colour), Summary, the meeting type's sections, Decisions, Action items as open circles ("Owner: task"), Notes, then the meeting's questions and answers (`MeetingChatView.swift`, which also has the question box `MeetingsView.swift` puts under both columns) |
 | `MeetingTranscriptColumn.swift` | The transcript in one `NSTextView`: one heading per turn (`MeetingSpeaker.turns`: lines in a row by the same speaker) with the name in its own colour (`SpeakerPalette`) and the turn's start time beside it, search that filters and highlights, Edit and Delete… on each line's right-click menu and the edit field above the transcript ([Editing the transcript](#editing-the-transcript)) |
 | `AssignSpeakersView.swift` | One card per speaker: name, a sample line, shuffle (next line), play (that line's audio) |
