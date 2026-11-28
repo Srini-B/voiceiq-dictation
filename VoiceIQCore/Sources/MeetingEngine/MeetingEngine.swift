@@ -345,7 +345,9 @@ import VoiceIQSpeech
         endingAt = nil
         let micDuration = mic?.stop() ?? 0, systemDuration = system?.stop() ?? 0
         mic = nil; system = nil; currentFolder = nil; currentMeta = nil
-        phase = .idle
+        // Lists reload on the phase change, so the folder goes first: deleted
+        // after it, the iPhone list kept a "Processing" row for it.
+        defer { phase = .idle }
         do {
             try store.delete(id: id)
             Log.meeting.info("meeting \(id.uuid.uuidString, privacy: .public) discarded")
