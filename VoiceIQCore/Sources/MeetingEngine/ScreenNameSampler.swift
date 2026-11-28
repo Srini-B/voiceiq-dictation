@@ -197,9 +197,13 @@ public final class ScreenNameSampler: @unchecked Sendable {
             }
             tick += 1
             if looked { record(lines, at: time) }
+            // Each tick's cost, so a slow cadence shows its cause (2026-11-28:
+            // 18 samples in 255 s, ticks meant to be 3 s apart).
+            let took = Date().timeIntervalSince(startedAt) - time
+            Log.meeting.notice("screen names tick \(tick) at \(String(format: "%.1f", time), privacy: .public) s took \(String(format: "%.2f", took), privacy: .public) s, \(looked ? "sample" : "nothing", privacy: .public)")
         } catch is CancellationError {
         } catch {
-            Log.meeting.info("screen names snapshot failed: \(String(describing: error), privacy: .public)")
+            Log.meeting.notice("screen names snapshot failed: \(String(describing: error), privacy: .public)")
         }
     }
 
