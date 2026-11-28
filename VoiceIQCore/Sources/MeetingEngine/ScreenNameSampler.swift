@@ -137,17 +137,28 @@ public final class ScreenNameSampler: @unchecked Sendable {
     private func sample() async {
         let time = Date().timeIntervalSince(startedAt)
         do {
-            var lines = snapshots ? try await capture().map(Self.read) ?? [] : []
+            let image = snapshots ? try await capture() : nil
+            var lines = try image.map(Self.read) ?? []
+            // A tick that looked at nothing records nothing: an empty sample
+            // counts against every name's share, and a Chromium page read only
+            // every fifth tick would otherwise cap a name at 20 %, under
+            // `match`'s 50 % (Codex on #146).
+            var looked = image != nil
             if let pid {
                 let browser = bundleID.map(CallApps.browsers.contains) ?? false
                 if chromium?.pid != pid { chromium = (pid, Self.isChromium(pid)) }
                 if browser, chromium?.isChromium == true, !Self.webTreeIsOpen(pid) {
-                    if tick % Self.browserTreeEvery == 0 { lines += await Self.whileWebTreeOpen(pid) { CallWindowText.lines(pid: pid, browser: true) } }
+                    if tick % Self.browserTreeEvery == 0 {
+                        lines += await Self.whileWebTreeOpen(pid) { CallWindowText.lines(pid: pid, browser: true) }
+                        looked = true
+                    }
                 } else {
                     lines += CallWindowText.lines(pid: pid, browser: browser)
+                    looked = true
                 }
             }
             tick += 1
+            guard looked else { return }
             let names = ScreenSpeakerNames.candidates(in: lines), me = ScreenSpeakerNames.owner(in: lines)
             let single = ScreenSpeakerNames.singleNames(in: lines), count = ScreenSpeakerNames.participantCount(in: lines)
             samples.withLock { $0.append(ScreenNameSample(time: time, names: names, me: me.isEmpty ? nil : me,
