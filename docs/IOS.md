@@ -526,8 +526,30 @@ Permissions can be taken back after onboarding (2026-09-30):
 Onboarding saves its page in `MobileSettings.onboardingStep`,
 so a trip to Settings resumes on the same page.
 
-Onboarding has four pages: welcome, the AssemblyAI API key, permissions
-(microphone and keyboard together), and a Try it field.
+Onboarding (`OnboardingView`) starts with three intro slides
+(`IntroSlides`: dictation in any app, the keyboard, meeting notes), each
+with a small looping scene drawn in SwiftUI. Setup follows, one page per
+step: the API key, the microphone, adding the keyboard in Settings,
+switching to it with the globe key, and a Try it field. Each page's
+`Step.isDone(_:)` reads `SetupStatus`: microphone granted, keyboard added
+(`AppleKeyboards`), and Full Access, which the keyboard proves by running
+(`keyboardSeenAt`), so the switch page's "in use" and "Full Access" checks
+tick together. When a page's step becomes done while it shows, or is
+already done when the user moves forward onto it, the page shows its check,
+plays the success haptic and moves on after about a second; going Back to
+a done page stays there. The switch page also watches
+`UITextInputMode.currentInputModeDidChangeNotification`: a keyboard change
+with no word from the VoiceiQ keyboard within four seconds shows a hint to
+turn on Allow Full Access.
+
+The keyboard guides live in `KeyboardGuides.swift`.
+`KeyboardSettingsWalkthrough` animates VoiceiQ's page in Settings
+(Keyboards, the VoiceiQ switch, Allow Full Access and its alert) in system
+colours, and Open VoiceiQ Settings opens that page
+(`UIApplication.openSettingsURLString`). `GlobeSwitchDemo` animates holding
+the globe key and picking VoiceiQ. Both loop while on screen and hold one
+frame with Reduce Motion. Settings › Keyboard & Permissions and the Try it
+card reuse them.
 
 ### Design system
 

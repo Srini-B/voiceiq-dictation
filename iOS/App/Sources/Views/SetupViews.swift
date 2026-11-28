@@ -1,17 +1,9 @@
 import SwiftUI
 
-/// Microphone, keyboard and (when off) Live Activities, on one page. Used by
-/// onboarding and by Settings › Keyboard & Permissions.
+/// Microphone, keyboard and (when off) Live Activities, on one page:
+/// Settings › Keyboard & Permissions.
 struct PermissionsPanel: View {
     @EnvironmentObject private var setup: SetupMonitor
-
-    /// The VoiceiQ Dictate control and its intent need iOS 18. On an older
-    /// iPad, which has no Action button either, the Live Activities card
-    /// would name a feature that does not exist.
-    private static var hasDictateControl: Bool {
-        if #available(iOS 18.0, *) { return true }
-        return false
-    }
 
     var body: some View {
         let status = setup.status
@@ -29,7 +21,7 @@ struct PermissionsPanel: View {
                     if status.micGranted {
                         StatusChip(text: "Allowed", tone: .done)
                     } else if status.micDenied {
-                        Button("Settings", action: openSettings).buttonStyle(.compactPrimary)
+                        Button("Settings", action: openAppSettings).buttonStyle(.compactPrimary)
                     } else {
                         Button("Allow", action: setup.requestMicrophone).buttonStyle(.compactPrimary)
                     }
@@ -47,8 +39,10 @@ struct PermissionsPanel: View {
                         StatusChip(text: "Open it once", tone: .pending)
                     }
                 }
-                SettingsMockup(keyboardOn: status.keyboardAdded,
-                               fullAccess: status.fullAccess ? .on : status.keyboardAdded ? .unconfirmed : .off)
+                if !status.keyboardReady {
+                    KeyboardSettingsWalkthrough()
+                    FullAccessPrivacyNote()
+                }
                 if status.keyboardAdded && !status.fullAccess {
                     // iOS does not tell the app whether Full Access is on. The
                     // keyboard reports it the first time it opens.
@@ -57,87 +51,60 @@ struct PermissionsPanel: View {
                         .font(Theme.Fonts.footnote())
                         .foregroundStyle(Theme.Colors.pending)
                         .fixedSize(horizontal: false, vertical: true)
-                    Button("Open Settings", action: openSettings).buttonStyle(.secondaryPill)
+                    Button("Open VoiceiQ Settings", action: openAppSettings).buttonStyle(.secondaryPill)
                 } else if !status.keyboardReady {
-                    Button("Open Settings", action: openSettings).buttonStyle(.primaryPill)
+                    Button("Open VoiceiQ Settings", action: openAppSettings).buttonStyle(.primaryPill)
                 }
             }
 
-            if !status.liveActivitiesEnabled, !UIDevice.isPad || Self.hasDictateControl {
-                Card {
-                    HStack(spacing: Theme.Spacing.m) {
-                        IconTile(systemImage: "circle.dashed.inset.filled", tint: Theme.Colors.pending, size: 32)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Live Activities are off").font(Theme.Fonts.headline()).foregroundStyle(Theme.Colors.ink)
-                            Text(UIDevice.isPad ? "VoiceiQ Dictate needs them to dictate without opening VoiceiQ." : "The Action button needs them to dictate without opening VoiceiQ.")
-                                .font(Theme.Fonts.footnote()).foregroundStyle(Theme.Colors.muted)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-                        Spacer(minLength: 0)
-                    }
-                    Button("Open Settings", action: openSettings).buttonStyle(.secondaryPill)
-                }
-            }
+            LiveActivitiesOffCard()
         }
-    }
-
-    private func openSettings() {
-        UIApplication.shared.open(URL(string: UIApplication.openSettingsURLString)!)
     }
 }
 
-/// A miniature of the Keyboards page in Settings with the two switches the
-/// user must turn on, mirroring what VoiceiQ knows of their state.
-private struct SettingsMockup: View {
-    enum FullAccess { case on, off, unconfirmed }
+/// Shown only while Live Activities are off for VoiceiQ: the Action button
+/// and the VoiceiQ Dictate control need them to dictate without opening it.
+struct LiveActivitiesOffCard: View {
+    @EnvironmentObject private var setup: SetupMonitor
 
-    let keyboardOn: Bool
-    let fullAccess: FullAccess
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("Settings  ›  Apps  ›  VoiceiQ  ›  Keyboards")
-                .font(Theme.Fonts.caption())
-                .foregroundStyle(Theme.Colors.muted)
-                .padding(.leading, 4)
-            VStack(spacing: 0) {
-                row("VoiceiQ", on: keyboardOn)
-                Divider().padding(.leading, 12)
-                if fullAccess == .unconfirmed {
-                    HStack {
-                        Text("Allow Full Access").font(Theme.Fonts.subheadline()).foregroundStyle(Theme.Colors.ink)
-                        Spacer()
-                        Text("Not confirmed").font(Theme.Fonts.caption()).foregroundStyle(Theme.Colors.pending)
-                    }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 11)
-                } else {
-                    row("Allow Full Access", on: fullAccess == .on)
-                }
-            }
-            .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Theme.Colors.surface))
-            .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Theme.Colors.hairline, lineWidth: 0.5))
-        }
-        .padding(Theme.Spacing.m)
-        .background(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous).fill(Theme.Colors.surfaceNested))
-        .accessibilityElement(children: .combine)
+    /// The VoiceiQ Dictate control and its intent need iOS 18. On an older
+    /// iPad, which has no Action button either, the card would name a
+    /// feature that does not exist.
+    private static var hasDictateControl: Bool {
+        if #available(iOS 18.0, *) { return true }
+        return false
     }
 
-    private func row(_ title: String, on: Bool) -> some View {
-        HStack {
-            Text(title).font(Theme.Fonts.subheadline()).foregroundStyle(Theme.Colors.ink)
-            Spacer()
-            Capsule()
-                .fill(on ? Theme.Colors.success : Theme.Colors.porcelain)
-                .frame(width: 38, height: 23)
-                .overlay(alignment: on ? .trailing : .leading) {
-                    Circle().fill(.white).frame(width: 19, height: 19).padding(2)
-                        .shadow(color: .black.opacity(0.15), radius: 1, y: 1)
+    var body: some View {
+        if !setup.status.liveActivitiesEnabled, !UIDevice.isPad || Self.hasDictateControl {
+            Card {
+                HStack(spacing: Theme.Spacing.m) {
+                    IconTile(systemImage: "circle.dashed.inset.filled", tint: Theme.Colors.pending, size: 32)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Live Activities are off").font(Theme.Fonts.headline()).foregroundStyle(Theme.Colors.ink)
+                        Text(UIDevice.isPad ? "VoiceiQ Dictate needs them to dictate without opening VoiceiQ." : "The Action button needs them to dictate without opening VoiceiQ.")
+                            .font(Theme.Fonts.footnote()).foregroundStyle(Theme.Colors.muted)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    Spacer(minLength: 0)
                 }
-                .animation(.spring(response: 0.3), value: on)
+                Button("Open Settings", action: openAppSettings).buttonStyle(.secondaryPill)
+            }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 9)
+    }
+}
+
+/// What Full Access is for, next to the switch that asks for it.
+struct FullAccessPrivacyNote: View {
+    var body: some View {
+        Label {
+            Text("Full Access lets the keyboard hand your voice to the VoiceiQ app. There is no VoiceiQ server, account or analytics.")
+        } icon: {
+            Image(systemName: "lock.fill").foregroundStyle(Theme.Colors.muted)
+        }
+        .font(Theme.Fonts.footnote())
+        .foregroundStyle(Theme.Colors.muted)
+        .fixedSize(horizontal: false, vertical: true)
     }
 }
 
@@ -181,6 +148,7 @@ struct TryItCard: View {
 private struct KeyboardSwitchSteps: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+            GlobeSwitchDemo().padding(.bottom, Theme.Spacing.xs)
             NumberedStep(number: 1, text: Text("Tap the box below."))
             NumberedStep(number: 2, text: Text("Touch and hold \(Image(systemName: "globe")) at the bottom left of the keyboard."))
             NumberedStep(number: 3, text: Text("Choose **VoiceiQ**, then tap the mic."))
