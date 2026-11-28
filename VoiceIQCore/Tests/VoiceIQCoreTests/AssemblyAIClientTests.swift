@@ -3,6 +3,21 @@ import XCTest
 
 /// The AssemblyAI transport's reading of the gateway's refusals.
 final class AssemblyAIClientTests: XCTestCase {
+    private var root: URL!
+
+    /// `send` appends every attempt to transport.jsonl under the data folder;
+    /// without this the suite wrote its 400s into the real one.
+    override func setUpWithError() throws {
+        root = FileManager.default.temporaryDirectory.appendingPathComponent("AssemblyAIClientTests-\(UUID().uuidString)")
+        FileLayout.overrideRoot = root
+    }
+
+    override func tearDownWithError() throws {
+        TransportLog.flush()
+        FileLayout.overrideRoot = nil
+        try? FileManager.default.removeItem(at: root)
+    }
+
     /// An account without an LLM Gateway balance gets a 400 that names the
     /// model; it must read as no balance, so the dictation goes in tidied
     /// with the balance notice instead of failing as a bad request.
