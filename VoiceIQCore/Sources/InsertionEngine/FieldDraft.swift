@@ -214,8 +214,13 @@ public final class FieldDraft: TextDraft {
         /// as an edit, and the text in it is not tracked as ours.
         func swapped(_ now: PasteCheck.Reading) async -> Bool? {
             // Taken out (an empty written text) shows only as the exact result.
+            // A written text that begins the draft shows only once the rest
+            // of the draft is gone from after it.
+            let tail = span.text.hasPrefix(written) ? String(span.text.dropFirst(written.count)) : ""
             let placed = written.isEmpty ? now.value == expected
-                                         : DraftSpan(location: span.location, text: written).isIntact(in: now.value)
+                : DraftSpan(location: span.location, text: written).isIntact(in: now.value)
+                    && (tail.isEmpty || !DraftSpan(location: span.location + written.utf16.count, text: tail)
+                        .isIntact(in: now.value))
             if placed {
                 field.ledger.replace(id, with: written, landedIn: now.value)
                 landed = written
@@ -229,17 +234,18 @@ public final class FieldDraft: TextDraft {
             Log.insertion.info("draft: the field changed otherwise after the write — left as it is")
             return false
         }
-        guard await select(span.location, span.length, holding: reading.value) else {
-            _ = await select(reading.caret, reading.selectionLength)
-            // Unchanged, the field itself refused the selection: not the user.
-            if PasteCheck.reading(of: element)?.value == reading.value { refusedByApp() }
-            Log.insertion.info("draft: the field didn't take the selection — kept as it was")
+        // The draft is selected and written only while its field is the
+        // focused one; an unfocused field's refusal says nothing of the app.
+        guard Self.focusedTarget(context: context).map({ CFEqual($0, element) }) == true else {
+            Log.insertion.info("draft: its field is no longer focused — kept as it was")
             return false
         }
-        // The draft is written only while its field is the focused one.
-        guard Self.focusedTarget(context: context).map({ CFEqual($0, element) }) == true else {
+        guard await select(span.location, span.length, holding: reading.value) else {
             _ = await select(reading.caret, reading.selectionLength)
-            Log.insertion.info("draft: its field is no longer focused — kept as it was")
+            // Focused and unchanged, the field itself refused the selection.
+            if Self.focusedTarget(context: context).map({ CFEqual($0, element) }) == true,
+               PasteCheck.reading(of: element)?.value == reading.value { refusedByApp() }
+            Log.insertion.info("draft: the field didn't take the selection — kept as it was")
             return false
         }
         if !usesPasteOnly,
@@ -257,6 +263,9 @@ public final class FieldDraft: TextDraft {
             Log.insertion.info("draft: the field took the write but never showed it — kept as it was")
             return false
         }
+        // Another dictation's paste may have started meanwhile: wait it out
+        // here, so `paste` posts right after the checks below.
+        await inserter.finishPendingPaste()
         // ⌘V goes to the focused field only, and only while the draft is
         // still exactly what is selected.
         guard Self.focusedTarget(context: context).map({ CFEqual($0, element) }) == true,
