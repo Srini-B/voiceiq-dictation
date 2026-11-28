@@ -53,8 +53,9 @@ public struct SurroundingText: Codable, Equatable, Sendable {
     /// capital first letter at the start of a sentence,
     /// punctuation the field already has dropped from the front of the
     /// result, and the gap after it that the text after the cursor needs.
-    /// Whether a result continues the sentence before it is left to the
-    /// writing model, which can tell a name from an ordinary word.
+    /// Mid-sentence, a first word that is only an ordinary word ("And",
+    /// "The", `midSentenceWords`) is lowercased, as the writing model is
+    /// asked to; any other capital (a name, "I", "iPhone") stays.
     public func fitted(_ text: String) -> String {
         var text = text
         let lastMark = before.last { !$0.isWhitespace }
@@ -68,7 +69,11 @@ public struct SurroundingText: Codable, Equatable, Sendable {
         // The gap reads the writing model's casing: a capital it wrote can
         // start a new paragraph, one added here only starts a sentence.
         let gap = FieldLayout.leadingGap(before: before, text: text)
-        if startsSentence { text = Self.capitalizingFirstWord(text) }
+        if startsSentence {
+            text = Self.capitalizingFirstWord(text)
+        } else if before.contains(where: { !$0.isWhitespace }) {
+            text = Self.lowercasingFirstWord(text)
+        }
         text = gap + text
         return text + FieldLayout.trailingGap(before: before, text: text, after: after)
     }
@@ -104,6 +109,30 @@ public struct SurroundingText: Codable, Equatable, Sendable {
         guard !word.dropFirst().contains(where: \.isUppercase) else { return text }
         return first.uppercased() + text.dropFirst()
     }
+
+    /// "And I'll" → "and I'll" after "Noted". Only a word from
+    /// `midSentenceWords` written with one capital: a name, an acronym
+    /// ("IT") or "I" is left as it is.
+    static func lowercasingFirstWord(_ text: String) -> String {
+        let word = text.prefix { $0.isLetter || $0 == "'" || $0 == "’" }
+        guard let first = word.first, first.isUppercase, !word.dropFirst().contains(where: \.isUppercase),
+              midSentenceWords.contains(word.lowercased()) else { return text }
+        return word.lowercased() + text.dropFirst(word.count)
+    }
+
+    /// Words that are never a name, so a capital on them mid-sentence is
+    /// only a sentence start. Names that are also words ("Will", "May",
+    /// "Grace") are left out.
+    static let midSentenceWords: Set<String> = [
+        "a", "an", "the", "and", "but", "or", "nor", "so", "yet", "then", "also", "because", "if", "when",
+        "while", "though", "although", "unless", "until", "since", "as", "than", "that", "which", "who",
+        "whom", "whose", "where", "what", "how", "why", "this", "these", "those", "it", "it's", "its", "we",
+        "we'll", "we're", "they", "they'll", "they're", "he", "she", "you", "you'll", "you're", "me", "us",
+        "them", "my", "our", "your", "their", "his", "her", "to", "of", "in", "on", "at", "for", "with",
+        "from", "by", "about", "into", "after", "before", "is", "are", "was", "were", "be", "been", "has",
+        "have", "had", "do", "does", "did", "can", "could", "would", "should", "might", "must", "not",
+        "just", "maybe", "please", "plus", "there", "here", "too", "very", "still", "even", "only",
+    ]
 
     static let terminators: Set<Character> = [".", "!", "?", "…"]
     static let joiners: Set<Character> = [",", ";", ":"]

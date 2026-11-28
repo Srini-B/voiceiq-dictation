@@ -231,6 +231,24 @@ final class DeliveryRouteTests: XCTestCase {
             .fitted("see you then."), " See you then. ")
     }
 
+    /// A written text that continues the sentence before it starts in
+    /// lowercase, on the iPhone and the Mac alike; a name, "I" or an
+    /// acronym keeps its capitals, and after a closed sentence it stays
+    /// capitalized.
+    func testTheWrittenTextContinuesASentenceInLowercase() {
+        let noted = SurroundingText(before: "The build is green. Noted", after: "")
+        XCTAssertEqual(noted.fitted("And I'll ship it tomorrow."), " and I'll ship it tomorrow.")
+        XCTAssertEqual(noted.fitted("I'll ship it tomorrow."), " I'll ship it tomorrow.")
+        XCTAssertEqual(noted.fitted("Priya will ship it."), " Priya will ship it.")
+        XCTAssertEqual(noted.fitted("IT will ship it."), " IT will ship it.")
+        XCTAssertEqual(noted.fitted("Will ship it."), " Will ship it.")
+        XCTAssertEqual(SurroundingText(before: "Sure,", after: "").fitted("The venue works."), " the venue works.")
+        XCTAssertEqual(SurroundingText(before: "Noted. ", after: "").fitted("and I'll ship it."), "And I'll ship it.")
+        XCTAssertEqual(SurroundingText(before: "Noted.", after: "").fitted("And I'll ship it."), " And I'll ship it.")
+        XCTAssertEqual(SurroundingText(before: "Noted\n", after: "").fitted("And I'll ship it."), "And I'll ship it.")
+        XCTAssertEqual(SurroundingText(before: "", after: "").fitted("And I'll ship it."), "And I'll ship it.")
+    }
+
     func testAHandledResultForgetsWhatItsFieldHeld() {
         let result = Delivery(text: "On my way", createdAt: made, destination: field(messages, draft: hello),
                               stoppedAt: made)
