@@ -242,6 +242,81 @@ public enum ScreenSpeakerNames {
         return out
     }
 
+    /// Names a far-side voice that answers right after someone addresses an
+    /// invitee or an on-screen name ("Nihal, can you give us the status?").
+    /// MEASURED 2026-11-28: the notes model on the gateway named these voices
+    /// in one run and not the next, with the same transcript; done here, the
+    /// names stay the same and the notes are written with them. A voice
+    /// answering two names keeps neither. Elimination waits for the notes,
+    /// which can find a self-introduction ("I'm Rahul, covering for Sara").
+    public static func byAddress(_ screen: ScreenNames?, transcript: [TranscriptSegment], invited: [String]) -> ScreenNames? {
+        // A far-side voice that may hold two people answers for both (Neon on #129).
+        guard screen?.probablyMerged != true else { return screen }
+        let known = (screen?.speakers ?? [:]).values.map(\.name)
+        // Known names and every invitee stay candidates, so "Sara" with Sara
+        // and Sara Smith invited, or with one Sara already named, is nobody's.
+        // Only a screen name that is one of those people's is dropped.
+        var names: [String] = []
+        for name in known + invited where !names.contains(where: { $0.lowercased() == name.lowercased() }) { names.append(name) }
+        let people = names
+        for name in (screen?.seen ?? []).filter({ !isUIText($0) })
+        where !people.contains(where: { sameName($0, name) }) && !names.contains(name) { names.append(name) }
+        var votes: [String: Set<String>] = [:]
+        for (index, turn) in transcript.enumerated() {
+            guard let name = addressed(in: turn.text, among: names), !known.contains(where: { sameName($0, name) }),
+                  // The very next segment: one where the addresser goes on means no answer came.
+                  index + 1 < transcript.count, case let answer = transcript[index + 1], answer.speaker != turn.speaker,
+                  answer.speaker != MeetingSpeaker.you, screen?.speakers[answer.speaker] == nil,
+                  // Speech that overlaps the address is an interjection, not the answer.
+                  (answer.start ?? .infinity) >= (turn.end ?? 0) - lag,
+                  // "Sara is out today": an answer about the person is not from them.
+                  !answer.text.split(whereSeparator: { !$0.isLetter }).contains(where: { heard(String($0), as: name) }) else { continue }
+            votes[answer.speaker, default: []].insert(name)
+        }
+        var out = screen ?? ScreenNames(seen: [], speakers: [:])
+        for (speaker, answered) in votes where answered.count == 1 {
+            // Every vote counts, a voice that answered two names included.
+            guard let name = answered.first, !votes.contains(where: { $0.key != speaker && $0.value.contains(name) }) else { continue }
+            // A voice that introduced itself by another name is left to the notes.
+            let introduced = transcript.filter { $0.speaker == speaker }.flatMap { introductions(in: $0.text) }
+            guard introduced.allSatisfy({ heard($0, as: name) }) else { continue }
+            out.speakers[speaker] = .init(name: name, seen: 0, of: 0, reason: "Answered right after being addressed as \(name)")
+        }
+        return screen == nil && out.speakers.isEmpty ? nil : out
+    }
+
+    nonisolated(unsafe) private static let introduction = #/(?:I['’]m|I am|[Tt]his is|[Mm]y name is) (\p{Lu}[\p{L}'’-]+)/#
+
+    /// Names a speaker gives themselves: "I'm Rahul", "this is Dana".
+    static func introductions(in text: String) -> [String] {
+        text.matches(of: introduction).map { String($0.output.1) }
+    }
+
+    /// The listed name the turn's sentences open with, followed by a comma:
+    /// "Sara, you first." and "Muhammed, where are we?" ("Muhammed Hafeed"),
+    /// not "Thanks Alex," or "Fair point Grace." A head matching two names,
+    /// or a turn addressing two people, is nobody's.
+    static func addressed(in text: String, among names: [String]) -> String? {
+        var found: Set<String> = []
+        for sentence in text.split(whereSeparator: { ".?!".contains($0) }) {
+            let trimmed = sentence.trimmingCharacters(in: .whitespaces)
+            let head = trimmed.prefix { $0 != "," }
+            guard head.count < trimmed.count else { continue }
+            let words = head.split(separator: " ")
+            guard (1...3).contains(words.count), words.allSatisfy({ $0.first?.isUppercase == true }),
+                  !openers.contains(words[0].lowercased()) else { continue }
+            let matches = names.filter { heard(String(head), as: $0) }
+            if matches.count > 1 { return nil }
+            found.formUnion(matches)
+        }
+        return found.count == 1 ? found.first : nil
+    }
+
+    /// Words that open a sentence before a comma and are not names: "Next,"
+    /// is not a slide titled "Next Steps", nor "Well," Tom Wells (Neon on #129).
+    static let openers: Set<String> = ["well", "next", "right", "sure", "great", "good", "wait", "thanks", "okay",
+                                       "so", "first", "back", "still", "also", "just", "look", "stop", "now"]
+
     /// `byElimination` once the notes are written: every name the meeting
     /// shows for a far-side speaker counts as known, and the calendar's
     /// invitees are the people expected.
@@ -258,6 +333,19 @@ public enum ScreenSpeakerNames {
     static let minimumEliminationWords = 10
 
     /// "Muhammed Hafeed" and "Hafeed", "Nihal" and "nihal": one name holds all of the other's words.
+    /// A spoken head ("Sarah", "Muhammad") is a name when each of its words is
+    /// one of the name's words or spelt within one letter in five of it, as
+    /// transcription spells names ("Sara Lindqvist", "Muhammed Hafeed").
+    /// MEASURED 2026-11-28: s2-echo and s3-echo heard "Muhammad" and "Sarah".
+    static func heard(_ head: String, as name: String) -> Bool {
+        let words = name.lowercased().split(separator: " ").map(String.init)
+        return head.lowercased().split(separator: " ").allSatisfy { spoken in
+            // The same first letter, so "Right," is not Chris Wright nor "Thanks," Tom Hanks.
+            words.contains { $0 == spoken || ($0.first == spoken.first && min($0.count, spoken.count) >= 4
+                                               && similarity($0, String(spoken)) >= 0.8) }
+        }
+    }
+
     static func sameName(_ a: String, _ b: String) -> Bool {
         let x = Set(a.lowercased().split(separator: " ")), y = Set(b.lowercased().split(separator: " "))
         return !x.isEmpty && !y.isEmpty && (x.isSubset(of: y) || y.isSubset(of: x))

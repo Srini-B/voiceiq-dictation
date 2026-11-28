@@ -93,4 +93,102 @@ final class ScreenSpeakerNamesTests: XCTestCase {
         let room = Array(call.dropFirst())
         XCTAssertNil(ScreenSpeakerNames.byElimination(nil, transcript: room, named: ["s1": "Dana"], invited: invited)?.speakers["s2"])
     }
+
+    /// s3-four-people's opening: Sara and Rahul answer when addressed. "Thanks
+    /// Alex." and "Fair point Grace." address the speaker before, so they name
+    /// nobody, and Grace waits for elimination after the notes.
+    func testAVoiceAnsweringItsNameIsNamed() {
+        let turns: [(String, String)] = [
+            ("you", "Morning everyone. Let's go round. Sara, you first."),
+            ("s1", "Thanks Alex. Signups were up eight percent last week."),
+            ("you", "Nice. Rahul, how did the onboarding email test go?"),
+            ("s2", "The shorter email won. Activation went from thirty one to thirty six percent."),
+            ("s3", "Before we do, can we check it with the Spanish users first?"),
+            ("s2", "Fair point Grace. I can run it on the Spanish segment for one more week."),
+        ]
+        let call = turns.enumerated().map { index, turn in
+            TranscriptSegment(speaker: turn.0, text: turn.1, chunkIndex: 0, start: Double(index * 5), end: Double(index * 5 + 4))
+        }
+        let invited = ["Sara Lindqvist", "Rahul Mehta", "Grace O'Neill"]
+        let named = ScreenSpeakerNames.byAddress(nil, transcript: call, invited: invited)
+        XCTAssertEqual(named?.speakers["s1"]?.name, "Sara Lindqvist")
+        XCTAssertEqual(named?.speakers["s2"]?.name, "Rahul Mehta")
+        XCTAssertNil(named?.speakers["s3"])
+
+        // An interjection during the address is not the answer.
+        let interjected = [TranscriptSegment(speaker: "you", text: "Lots to cover. Sara, can you give the update?", chunkIndex: 0, start: 0, end: 20),
+                           TranscriptSegment(speaker: "s2", text: "Sorry, one second.", chunkIndex: 0, start: 2, end: 4),
+                           TranscriptSegment(speaker: "s1", text: "Signups were up eight percent.", chunkIndex: 0, start: 21, end: 24)]
+        XCTAssertNil(ScreenSpeakerNames.byAddress(nil, transcript: interjected, invited: invited))
+
+        // Addressed by first name only, against a two-word invitee; a name on
+        // screen already given to another voice is not given again.
+        let short = [TranscriptSegment(speaker: "you", text: "Muhammed, where are we with the screenshots?", chunkIndex: 0, start: 0, end: 3),
+                     TranscriptSegment(speaker: "s1", text: "I have four of the six done.", chunkIndex: 0, start: 3, end: 6)]
+        XCTAssertEqual(ScreenSpeakerNames.byAddress(nil, transcript: short, invited: ["Nihal", "Muhammed Hafeed"])?.speakers["s1"]?.name,
+                       "Muhammed Hafeed")
+        // Transcription's spelling of the name counts; a different name does not.
+        let spelt = [TranscriptSegment(speaker: "you", text: "Muhammad, where are we?", chunkIndex: 0, start: 0, end: 3),
+                     TranscriptSegment(speaker: "s1", text: "I have four of the six done.", chunkIndex: 0, start: 3, end: 6)]
+        XCTAssertEqual(ScreenSpeakerNames.byAddress(nil, transcript: spelt, invited: ["Nihal", "Muhammed Hafeed"])?.speakers["s1"]?.name,
+                       "Muhammed Hafeed")
+        // Spelt the transcription's way in the answer too: still about Sara, so nobody's.
+        let sarah = [TranscriptSegment(speaker: "you", text: "Sarah, can you give the update?", chunkIndex: 0, start: 0, end: 2),
+                     TranscriptSegment(speaker: "s1", text: "Sarah is out today, I can cover.", chunkIndex: 0, start: 2, end: 5)]
+        XCTAssertNil(ScreenSpeakerNames.byAddress(nil, transcript: sarah, invited: ["Sara Lindqvist", "Lee Park"]))
+        // A reply that says the name, "I'm Sarah" included, is left to the notes, which read introductions.
+        let hiSarah = [sarah[0], TranscriptSegment(speaker: "s1", text: "Hi, I'm Sarah. Signups were up.", chunkIndex: 0, start: 2, end: 5)]
+        XCTAssertNil(ScreenSpeakerNames.byAddress(nil, transcript: hiSarah, invited: ["Sara Lindqvist", "Lee Park"]))
+        // Words that sound like a surname are not addresses (Codex on #129).
+        XCTAssertNil(ScreenSpeakerNames.addressed(in: "Right, let us move on.", among: ["Chris Wright"]))
+        XCTAssertNil(ScreenSpeakerNames.addressed(in: "Thanks, that helps.", among: ["Tom Hanks"]))
+        // Sentence openers are not names on screen or invitees (Neon on #129).
+        XCTAssertNil(ScreenSpeakerNames.addressed(in: "Next, let's check the budget.", among: ["Next Steps"]))
+        XCTAssertNil(ScreenSpeakerNames.addressed(in: "Well, you first.", among: ["Tom Wells"]))
+        let mary = [TranscriptSegment(speaker: "you", text: "Mary, where are we?", chunkIndex: 0, start: 0, end: 3), spelt[1]]
+        XCTAssertNil(ScreenSpeakerNames.byAddress(nil, transcript: mary, invited: ["Mark Stone", "Lee Park"]))
+        // A gallery showing the invitees too is still one person per name.
+        let gallery = ScreenNames(seen: ["Muhammed Hafeed", "Nihal", "Google Meet"], speakers: [:])
+        XCTAssertEqual(ScreenSpeakerNames.byAddress(gallery, transcript: short, invited: ["Nihal", "Muhammed Hafeed"])?.speakers["s1"]?.name,
+                       "Muhammed Hafeed")
+        // A voice that may be two people is named by nobody's answer.
+        let merged = ScreenNames(seen: [], speakers: [:], probablyMerged: true)
+        XCTAssertNil(ScreenSpeakerNames.byAddress(merged, transcript: short, invited: ["Nihal", "Muhammed Hafeed"])?.speakers["s1"])
+        let screen = ScreenNames(seen: [], speakers: ["s2": .init(name: "Muhammed Hafeed", seen: 9, of: 10)])
+        XCTAssertNil(ScreenSpeakerNames.byAddress(screen, transcript: short, invited: ["Nihal", "Muhammed Hafeed"])?.speakers["s1"])
+
+        // One voice answering two names keeps neither.
+        let both = short + [TranscriptSegment(speaker: "you", text: "Nihal, anything else?", chunkIndex: 0, start: 6, end: 8),
+                            TranscriptSegment(speaker: "s1", text: "No, that is all from me.", chunkIndex: 0, start: 8, end: 10)]
+        XCTAssertNil(ScreenSpeakerNames.byAddress(nil, transcript: both, invited: ["Nihal", "Muhammed Hafeed", "Lee Park"])?.speakers["s1"])
+        // A name another voice also answered is nobody's, even when the first
+        // voice answered two names (Codex on #129).
+        let crossed = both + [TranscriptSegment(speaker: "you", text: "Nihal, and you?", chunkIndex: 0, start: 10, end: 12),
+                              TranscriptSegment(speaker: "s2", text: "Fine here.", chunkIndex: 0, start: 12, end: 14)]
+        XCTAssertNil(ScreenSpeakerNames.byAddress(nil, transcript: crossed, invited: ["Nihal", "Muhammed Hafeed", "Lee Park"])?.speakers["s2"])
+        // A turn addressing two people hands over to neither.
+        let handover = [TranscriptSegment(speaker: "you", text: "Sara, thanks for yesterday. Rahul, can you give the update?", chunkIndex: 0, start: 0, end: 4),
+                        TranscriptSegment(speaker: "s1", text: "The shorter email won.", chunkIndex: 0, start: 4, end: 6)]
+        XCTAssertNil(ScreenSpeakerNames.byAddress(nil, transcript: handover, invited: ["Sara Lindqvist", "Rahul Mehta", "Lee Park"])?.speakers["s1"])
+        // Two Saras invited and one already on screen: "Sara," is still ambiguous.
+        let saras = ScreenNames(seen: [], speakers: ["s2": .init(name: "Sara Jones", seen: 9, of: 10)])
+        let ask = [TranscriptSegment(speaker: "you", text: "Sara, status?", chunkIndex: 0, start: 0, end: 2),
+                   TranscriptSegment(speaker: "s1", text: "All green.", chunkIndex: 0, start: 2, end: 4)]
+        XCTAssertNil(ScreenSpeakerNames.byAddress(saras, transcript: ask, invited: ["Sara Jones", "Sara Smith", "Lee Park"])?.speakers["s1"])
+        // Someone covering for the person addressed is not named after them.
+        let covering = [TranscriptSegment(speaker: "you", text: "Sara, can you give the update?", chunkIndex: 0, start: 0, end: 2),
+                        TranscriptSegment(speaker: "s1", text: "She is out today. I'm Rahul, covering for her.", chunkIndex: 0, start: 2, end: 5)]
+        XCTAssertNil(ScreenSpeakerNames.byAddress(nil, transcript: covering, invited: ["Sara Lindqvist", "Lee Park"]))
+        let curly = [covering[0], TranscriptSegment(speaker: "s1", text: "She is out today. I’m Rahul, covering for her.", chunkIndex: 0, start: 2, end: 5)]
+        XCTAssertNil(ScreenSpeakerNames.byAddress(nil, transcript: curly, invited: ["Sara Lindqvist", "Lee Park"]))
+        let mentioned = [covering[0], TranscriptSegment(speaker: "s1", text: "Sara is out, I can cover.", chunkIndex: 0, start: 2, end: 5)]
+        XCTAssertNil(ScreenSpeakerNames.byAddress(nil, transcript: mentioned, invited: ["Sara Lindqvist", "Lee Park"]))
+        // The addresser going on before anyone answers leaves the address unanswered.
+        let movedOn = [covering[0], TranscriptSegment(speaker: "you", text: "Never mind, let us move on to the budget.", chunkIndex: 0, start: 2, end: 5),
+                       TranscriptSegment(speaker: "s1", text: "The budget is on track.", chunkIndex: 0, start: 5, end: 7)]
+        XCTAssertNil(ScreenSpeakerNames.byAddress(nil, transcript: movedOn, invited: ["Sara Lindqvist", "Lee Park"]))
+        // "Sara" and "Sara Smith" invited, in either order, are two people.
+        XCTAssertNil(ScreenSpeakerNames.byAddress(nil, transcript: ask, invited: ["Sara", "Sara Smith", "Lee Park"])?.speakers["s1"])
+        XCTAssertNil(ScreenSpeakerNames.byAddress(nil, transcript: ask, invited: ["Sara Smith", "Sara", "Lee Park"])?.speakers["s1"])
+    }
 }

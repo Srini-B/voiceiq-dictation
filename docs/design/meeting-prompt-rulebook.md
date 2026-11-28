@@ -101,7 +101,7 @@ No surveyed repository lets the notes model rename speakers freely. The good one
 
 | Rule | Sources |
 | --- | --- |
-| Rank evidence in this order: a name the user confirmed, the mic track, a self-introduction ("Hi, I'm Priya"), repeated direct address across turns, and process of elimination once everyone else is named. A single address counts when the name is a calendar invitee or on-screen name and the voice answers in the very next turn (added 2026-11-26: in gallery-view calls each person is often addressed once, and the stricter rule left every voice unnamed). | screenpipe, pasrom/meeting-transcriber |
+| Rank evidence in this order: a name the user confirmed, the mic track, a self-introduction ("Hi, I'm Priya"), repeated direct address across turns, and process of elimination once everyone else is named. A single address counts when the name is a calendar invitee or on-screen name and the voice answers in the very next turn (added 2026-11-26: in gallery-view calls each person is often addressed once, and the stricter rule left every voice unnamed). Since 2026-11-28 `ScreenSpeakerNames.byAddress` applies the single-address rule in code before the notes, because the notes model on the gateway applied it in one run and not the next. | screenpipe, pasrom/meeting-transcriber |
 | Being addressed by a name identifies the listener, not the speaker. | screenpipe |
 | An attendee list names possible people. It does not map a label to a person, except in a clean one-to-one call with separate tracks. | screenpipe, OpenWhispr |
 | Never infer a name from role, tone, vocabulary, gender, accent, or speaking order. | screenpipe (mac-meeting-transcriber does this, and it is the counterexample) |

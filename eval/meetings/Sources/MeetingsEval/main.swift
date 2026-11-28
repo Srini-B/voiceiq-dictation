@@ -152,7 +152,8 @@ exit(failures == 0 ? 0 : 2)
         transcript = try await transcriber.transcribe(folder: folder)
     }
     seconds["transcribe"] = Date().timeIntervalSince(clock)
-    meta.screenNames = ScreenSpeakerNames.match(samples: samples, transcript: transcript)
+    meta.screenNames = ScreenSpeakerNames.byAddress(ScreenSpeakerNames.match(samples: samples, transcript: transcript),
+                                                    transcript: transcript, invited: meta.calendarEvent?.attendees ?? [])
     try store.save(transcript: transcript, id: meta.id)
 
     print("\(input.id): notes")
