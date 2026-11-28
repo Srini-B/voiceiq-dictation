@@ -50,6 +50,37 @@ final class MeetingTracksTests: XCTestCase {
         XCTAssertEqual(Set(twoOthers.map(\.speaker)), ["s2"])
     }
 
+    /// The owner's voice leaking into the far track comes back as a far-side
+    /// speaker repeating the owner; that run goes. A far-side "yeah, okay"
+    /// over the owner and a far-side sentence of its own stay, even when one
+    /// of its words is also the owner's, and so does a reply the same far
+    /// voice starts right after the leak.
+    func testTheOwnersVoiceOnTheFarTrackIsDropped() {
+        let you = MeetingSpeaker.you
+        let owner = ["hello", "everybody", "I'm", "Sarah", "the", "project", "manager"].enumerated()
+            .map { word($0.element, you, 10 + Double($0.offset) * 0.6) }
+        // The leak, slightly late and one word misheard ("Sara").
+        let leak = ["Hello", "everybody.", "I'm", "Sara,", "the", "project", "manager."].enumerated()
+            .map { word($0.element, "spk:2", 10.2 + Double($0.offset) * 0.6) }
+        let backchannel = [word("Yeah,", "spk:1", 11.0), word("okay.", "spk:1", 11.4)]
+        let own = ["the", "budget", "is", "twelve", "euros"].enumerated()
+            .map { word($0.element, "spk:1", 20 + Double($0.offset) * 0.6) }
+        // Under the leak's label, less than a second after it.
+        let reply = ["I'll", "send", "the", "deck", "Friday."].enumerated()
+            .map { word($0.element, "spk:2", 14.5 + Double($0.offset) * 0.6) }
+        let kept = MeetingTranscriber.droppingOwnerEcho(leak + reply + backchannel + own, owner: owner)
+        XCTAssertEqual(kept.map(\.text), ["Yeah,", "okay.", "I'll", "send", "the", "deck", "Friday.",
+                                          "the", "budget", "is", "twelve", "euros"])
+
+        // Crosstalk: two of the owner's words land on the same words of a far
+        // sentence. Two stray matches are not an echo; the sentence stays whole.
+        let crosstalk = [word("the", you, 31.2), word("to", you, 32.4)]
+        let sentence = ["we", "should", "not", "cut", "the", "budget", "to", "zero"].enumerated()
+            .map { word($0.element, "spk:1", 29 + Double($0.offset) * 0.6) }
+        XCTAssertEqual(MeetingTranscriber.droppingOwnerEcho(sentence, owner: crosstalk).map(\.text),
+                       sentence.map(\.text))
+    }
+
     func testWordsGoToTheTrackTheyWereHeardOn() throws {
         let audio = try call(mic: [0...4], system: [4.2...11])
         let words = [word("hello", "s1", 1), word("me", "you", 2), word("yes", "you", 6), word("budget", "s2", 8)]

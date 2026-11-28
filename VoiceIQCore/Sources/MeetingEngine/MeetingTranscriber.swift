@@ -93,8 +93,72 @@ public struct MeetingTranscriber: Sendable {
             try await transcribe(window: regions, track: .far, audio: audio, known: known, remote: remote, budget: &budget,
                                  label: "far side \(index + 1)/\(farWindows.count)")
         }
-        return (owner + far).sorted { $0.start < $1.start }
+        let farSide = Self.droppingOwnerEcho(far, owner: owner)
+        if farSide.count < far.count {
+            Log.meeting.info("owner echo: dropped \(far.count - farSide.count, privacy: .public) of \(far.count, privacy: .public) far-side words")
+        }
+        return (owner + farSide).sorted { $0.start < $1.start }
     }
+
+    /// The far side without the owner's own voice. When the owner's speech
+    /// leaks into the far track (a remote speaker's mic picks it up, or a
+    /// headset bleeds into the others), the far side repeats the owner's words
+    /// as another speaker. In a run of one far-side speaker's words, split at
+    /// a pause, the stretch from its first word that matches an owner word
+    /// starting within `echoSlack` seconds to its last is that echo when at
+    /// least `echoRunWords` of its words, and at least `echoShare` of them,
+    /// match; that stretch goes, and the run's words before and after it stay
+    /// (a remote reply under the same label right after the leak). A short
+    /// overlapping "yeah" or "okay" stays: the far side really says those
+    /// over the owner.
+    /// MEASURED 2026-11-28 on AMI ES2004a: the leak was a fifth speaker with
+    /// 120 s and 362 words, 93% of its time inside the owner's turns.
+    static func droppingOwnerEcho(_ far: [TimedWord], owner: [TimedWord]) -> [TimedWord] {
+        func key(_ text: String) -> String { text.lowercased().filter { $0.isLetter || $0.isNumber } }
+        let ownerWords = owner.map { (key: key($0.text), start: $0.start) }.sorted { $0.start < $1.start }
+        let starts = ownerWords.map(\.start)
+        func echoes(_ word: TimedWord) -> Bool {
+            let k = key(word.text)
+            guard !k.isEmpty else { return false }
+            // The first owner word that starts no earlier than the slack allows.
+            var low = 0, high = starts.count
+            while low < high {
+                let mid = (low + high) / 2
+                if starts[mid] < word.start - echoSlack { low = mid + 1 } else { high = mid }
+            }
+            var i = low
+            while i < ownerWords.count, ownerWords[i].start <= word.start + echoSlack {
+                if ownerWords[i].key == k { return true }
+                i += 1
+            }
+            return false
+        }
+        // Runs are per speaker, so another voice talking over the echo can't cut it into short runs.
+        var kept: [TimedWord] = []
+        for words in Dictionary(grouping: far, by: \.speaker).values {
+            var run: [TimedWord] = []
+            func flush() {
+                defer { run = [] }
+                let matched = run.map(echoes)
+                guard let first = matched.firstIndex(of: true), let last = matched.lastIndex(of: true) else { kept += run; return }
+                let core = last - first + 1
+                let echoed = matched[first...last].filter { $0 }.count
+                guard echoed >= echoRunWords, Double(echoed) >= echoShare * Double(core) else { kept += run; return }
+                kept += run[..<first] + run[(last + 1)...]
+            }
+            for word in words.sorted(by: { $0.start < $1.start }) {
+                if let last = run.last, word.start - last.end > echoRunGap { flush() }
+                run.append(word)
+            }
+            flush()
+        }
+        return kept.sorted { $0.start < $1.start }
+    }
+
+    static let echoSlack: Double = 0.5
+    static let echoShare = 0.6
+    static let echoRunWords = 3
+    static let echoRunGap: Double = 1.0
 
     /// Both tracks as one timeline, for a mic that still carries the far
     /// side's echo or a recording with no far side: the owner is whoever is
