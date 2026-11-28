@@ -506,7 +506,6 @@ final class KeyboardModel: ObservableObject {
             store.markInserted(delivery)
             let waited = Int(Date().timeIntervalSince(delivery.createdAt).rounded())
             let replacesSelection = !(controller?.textDocumentProxy.selectedText ?? "").isEmpty
-            onWillInsertDictation?()
             let inserted = insert(delivery.text)
             // Hex's Undo chip only deletes the dictation; over a selection, the
             // edit panel's Undo is the one that brings the selected text back.
@@ -636,6 +635,9 @@ final class KeyboardModel: ObservableObject {
     @discardableResult
     private func insert(_ text: String) -> (fitted: String, before: String, after: String)? {
         guard controller?.textDocumentProxy != nil, !text.isEmpty else { return nil }
+        // Every typed result (a delivery or Paste last) settles the dictation before
+        // it first, so the new text never reads as an edit of the old one.
+        onWillInsertDictation?()
         // Before the text around the cursor is read, which then has the draft in it.
         keepDraft(.beforeEdit, because: "this keyboard typed other text")
         let surrounding = surroundingText()

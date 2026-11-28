@@ -832,7 +832,7 @@ doesn't). `KeyboardModel`'s 0.1 s poll ends that window (`onPoll` →
 3 s (at most 10 s past the window), so a word being retyped at 60 s settles
 whole and a later keystroke belongs to no dictation; a fix made inside the window stands
 even if the dictation is deleted later, as in Hex. It also ends when the
-keyboard hides or reappears, Send is tapped, the next dictation or its draft
+keyboard hides or reappears, Send is tapped, the next dictation, its draft or Paste last
 goes in (`KeyboardModel.onWillInsertDictation`, before `EditController`
 reports the new text as an edit), focus moves to another field (another
 `documentIdentifier`; a dictation whose input session UIKit didn't name is
