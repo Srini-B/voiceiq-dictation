@@ -16,7 +16,9 @@ for minutes.
 The guard now also holds while `MeetingEngine.processing` lists a meeting.
 Every exit from the write-up (notes saved, transcript or notes failed, no
 speech, waiting for AssemblyAI) clears that entry, and the AssemblyAI calls
-carry 15-minute deadlines, so the lock cannot stay held. The macOS activity
+carry deadlines; the guard also lets a write-up hold the lock for at most an
+hour, so a step that never returns cannot keep the Mac awake. The display
+stays on during the write-up as requested. The macOS activity
 reason now reads "VoiceiQ is recording or transcribing a dictation or
 meeting". The same rule applies on iOS, which keeps the screen on while notes
 are written in the foreground.

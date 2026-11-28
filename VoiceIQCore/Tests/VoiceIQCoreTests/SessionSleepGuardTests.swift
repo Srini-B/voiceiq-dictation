@@ -59,6 +59,7 @@ final class SessionSleepGuardTests: XCTestCase {
         meta.status = .failed("earlier"); meta.failedStep = .transcript
         try store.save(meta: meta)
         let (sleepGuard, _, _) = makeGuard(meetings: meetings)
+        defer { sleepGuard.stop() }
         XCTAssertTrue(heldAssertionTypes().isEmpty)
 
         meetings.retry(id: meta.id)
@@ -68,7 +69,6 @@ final class SessionSleepGuardTests: XCTestCase {
         XCTAssertTrue(meetings.processing.isEmpty)
         guard case .failed = try XCTUnwrap(store.list().first).status else { return XCTFail("meeting should fail") }
         XCTAssertTrue(heldAssertionTypes().isEmpty)
-        sleepGuard.stop()
     }
 
     /// Dictation holds the lock from the start; cancelling it lets go, and so
@@ -76,6 +76,7 @@ final class SessionSleepGuardTests: XCTestCase {
     func testCancelAndShutdownReleaseADictationsLock() async {
         let (meetings, _) = makeMeetings()
         let (sleepGuard, dictation, _) = makeGuard(meetings: meetings)
+        defer { sleepGuard.stop(); dictation.handle(.cancel) }
 
         dictation.handle(.begin)
         XCTAssertEqual(heldAssertionTypes(), awake)
@@ -87,7 +88,6 @@ final class SessionSleepGuardTests: XCTestCase {
         XCTAssertEqual(heldAssertionTypes(), awake)
         sleepGuard.stop()
         XCTAssertTrue(heldAssertionTypes().isEmpty)
-        dictation.handle(.cancel)
     }
 }
 #endif

@@ -16,12 +16,20 @@ public final class SessionSleepGuard {
     private var previousIdleTimerDisabled: Bool?
     #endif
 
-    public init(dictation: DictationCoordinator, meetings: MeetingEngine) {
-        observation = dictation.$state.combineLatest(meetings.$phase, dictation.$hasBackgroundJobs, meetings.$processing)
+    public init(dictation: DictationCoordinator, meetings: MeetingEngine, writeUpCap: TimeInterval = 60 * 60) {
+        // A stopped meeting holds it until its transcript and notes are saved
+        // or fail, and at most `writeUpCap`, so a step that never returns
+        // cannot keep the Mac awake until quit.
+        let writingUp = meetings.$processing.map { !$0.isEmpty }.removeDuplicates()
+            .map { busy in
+                busy ? Just(true).append(Just(false).delay(for: .seconds(writeUpCap), scheduler: DispatchQueue.main)).eraseToAnyPublisher()
+                     : Just(false).eraseToAnyPublisher()
+            }
+            .switchToLatest()
+        observation = dictation.$state.combineLatest(meetings.$phase, dictation.$hasBackgroundJobs, writingUp)
             .map { state, phase, background, writingUp in
                 if case .recording = phase { return true }
-                // A stopped meeting holds it until its transcript and notes are saved or fail.
-                if background || !writingUp.isEmpty { return true }
+                if background || writingUp { return true }
                 switch state {
                 case .warming, .recording, .finalizing, .transcribing, .inserting: return true
                 case .idle, .done, .cancelled, .failed: return false
