@@ -149,7 +149,8 @@ enum SpokenDisfluencies {
                 while let more = fillerLength(tokens, at: index) { tokens.removeSubrange(index..<(index + more)) }
                 // "I went, like, to the store": the comma before was the pause too. "So, like, we" keeps it,
                 // and so does "I told Sam, like, Priya said no".
-                if index > 0, tokens[index - 1].hasComma, index < tokens.count,
+                // A comma-set word that stays keeps the comma before it: "took, you know, like, five hours".
+                if index > 0, tokens[index - 1].hasComma, index < tokens.count, !tokens[index].hasComma,
                    tokens[index].word.first?.isLowercase == true, clauseWords(tokens, before: index) >= 2 {
                     tokens[index - 1].word.removeLast()
                 }
@@ -262,7 +263,10 @@ enum SpokenDisfluencies {
             return nil
         }
         if startsSentence(tokens, at: index) {
-            return nounStarts.contains(next.bare) ? filler.count : nil
+            // "You know, like, I think": the word after the whole run decides.
+            var look = after
+            while look + 1 < tokens.count, tokens[look].hasComma, tokens[look].spoken.map(bare) == "like" { look += 1 }
+            return nounStarts.contains(tokens[look].bare) ? filler.count : nil
         }
         return tokens[index - 1].hasComma && !tokens[index - 1].quoted ? filler.count : nil
     }

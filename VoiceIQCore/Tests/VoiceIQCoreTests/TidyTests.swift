@@ -92,6 +92,8 @@ final class TidyTests: XCTestCase {
             ("So, like, we should go.", "So, we should go."),
             ("We left, like, you know, after lunch.", "We left after lunch."),
             ("We left, you know, like, after lunch.", "We left after lunch."),
+            ("You know, like, I think it works.", "I think it works."),
+            ("It took, you know, like, five hours.", "It took, like, five hours."),
         ] {
             XCTAssertEqual(tidy(said), written, said)
         }
