@@ -26,7 +26,7 @@ struct Spec: Decodable {
 
 let spec = try JSONDecoder().decode(Spec.self, from: FileHandle.standardInput.readDataToEndOfFile())
 if let output = spec.output {
-    print(EmailLayout.apply(output), terminator: "")
+    print(EmailLayout.apply(ValidationGate.stripArtifacts(output).trimmingCharacters(in: .whitespacesAndNewlines)), terminator: "")
     exit(0)
 }
 let surrounding = (spec.before != nil || spec.after != nil)

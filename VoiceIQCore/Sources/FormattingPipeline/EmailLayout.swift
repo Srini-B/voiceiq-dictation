@@ -31,7 +31,7 @@ enum EmailLayout {
     private static let name = #"\p{Lu}[\p{L}'’-]*\.?(?: \p{Lu}[\p{L}'’-]*\.?){0,2}"#
     nonisolated(unsafe) private static let pattern = try! NSRegularExpression(pattern:
         #"^((?:Hi|Hey|Hello|Dear|Good morning|Good afternoon|Good evening) (?:"# + name + #"|team|all|everyone|folks|there),)"#
-        + #"\s*([\s\S]+?[.!?])\s*"#
+        + #"\s*([\s\S]+?[.!?]["”’)]*)\s*"#
         + #"(Thanks|Thank you|Thanks again|Many thanks|Cheers|Best|Best regards|Regards|Kind regards|Warm regards|Sincerely|Talk soon|Take care)"#
         + #",?\s+("# + name + #")\.?$"#)
 }
