@@ -52,9 +52,12 @@ public struct InsertionCoordinator: TextInserting {
     }
 
     /// `insert`, saying whether the text went in by Accessibility (tier 1),
-    /// which was then verified, or by a paste or typing.
+    /// which was then verified, or by a paste or typing. With
+    /// `announcesMiss` false, a paste the field never shows is neither
+    /// copied nor announced: a draft's caller handles that itself.
     @MainActor
-    public func insertReportingTier(_ text: String, context: DictationContext) async
+    public func insertReportingTier(_ text: String, context: DictationContext,
+                                    announcesMiss: Bool = true) async
         -> (outcome: InsertionOutcome, byAccessibility: Bool) {
         // Before the guards, so the frontmost app and the field they check
         // are still the target after waiting out an earlier paste.
@@ -139,6 +142,7 @@ public struct InsertionCoordinator: TextInserting {
             let postedAt = Date()
             let check = Task { @MainActor [paster] () -> PasteCheck.Verdict in
                 await PasteCheck.watch(element: before.element, before: before.reading, text: text, postedAt: postedAt) {
+                    guard announcesMiss else { return }
                     paster.copyOnly(text)
                     NotificationCenter.default.post(name: .voiceIQPasteMissed, object: text)
                 }

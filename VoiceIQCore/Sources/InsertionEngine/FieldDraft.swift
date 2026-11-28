@@ -43,7 +43,7 @@ public final class FieldDraft: TextDraft {
     private var usesPasteOnly: Bool
     /// Apps whose field showed nothing of a posted draft: they get no more
     /// drafts until VoiceiQ restarts.
-    private static var noDraftApps: Set<pid_t> = []
+    private static var noDraftApps: Set<String> = []
     private let id = UUID()
     private var field: DraftField?
     /// The text this dictation left in the field, once shown.
@@ -81,7 +81,7 @@ public final class FieldDraft: TextDraft {
         guard !SecureInput.isActive, !ReturnAfterPaste.isWanted(for: context) else { return nil }
         let bundleID = context.targetAppBundleID
         if let bundleID, AppQuirks.forcePaste.contains(bundleID) { return nil }
-        if let pid = context.targetPID, noDraftApps.contains(pid) { return nil }
+        if let app = appKey(context), noDraftApps.contains(app) { return nil }
         let bundleURL = context.targetPID.flatMap { NSRunningApplication(processIdentifier: $0)?.bundleURL }
         guard TypingInserter.mode(bundleID: bundleID, bundleURL: bundleURL) == nil else { return nil }
         guard let element = focusedTarget(context: context), let reading = PasteCheck.reading(of: element),
@@ -95,7 +95,7 @@ public final class FieldDraft: TextDraft {
         }
         let draft = FieldDraft(element: element, context: context, inserter: inserter, marks: marks,
                                usesPasteOnly: isChromiumOrElectron(bundleID: bundleID, bundleURL: bundleURL)
-                                   || isInWebArea(element))
+                                   || bundleID?.hasPrefix("com.apple.Safari") == true || isInWebArea(element))
         if let caret = caretRect(in: element, at: reading.caret, of: reading.value) { marks.showSpinner(at: caret) }
         return draft
     }
@@ -116,7 +116,7 @@ public final class FieldDraft: TextDraft {
         }
         let fitted = InsertionCoordinator.fitted(text, context: context)
         replaced = Self.slice(before.value, before.caret, before.selectionLength)
-        let insert = await inserter.insertReportingTier(fitted, context: context)
+        let insert = await inserter.insertReportingTier(fitted, context: context, announcesMiss: false)
         guard insert.outcome == .inserted else {
             marks.clear()
             return .notInserted
@@ -144,15 +144,15 @@ public final class FieldDraft: TextDraft {
                 Log.insertion.info("draft: went in but not as one exact insert — it stays")
                 return .lost
             }
-            // Nothing showed. Let the paste's own read-back finish (it copies
-            // the draft on a certain miss): a field still exactly as before
+            // Nothing showed. Let the paste's own read-back finish (quiet for
+            // a draft, so the raw text is never offered): a field still exactly as before
             // never took the paste, so the written text goes in by the usual
             // ladder, which copies it on a miss too, and the app gets no
             // more drafts. Anything else may be a late paste: the written text
             // never goes in beside it.
             await inserter.finishPendingPaste()
             if let now = PasteCheck.reading(of: element), now.value == before.value {
-                if let pid = context.targetPID { Self.noDraftApps.insert(pid) }
+                if let app = Self.appKey(context) { Self.noDraftApps.insert(app) }
                 Log.insertion.info("draft: the field never showed the paste — no more drafts in this app")
                 return .notInserted
             }
@@ -338,6 +338,12 @@ public final class FieldDraft: TextDraft {
         return String(decoding: units[location..<(location + length)], as: UTF16.self)
     }
 
+    /// The app a field that never shows a draft belongs to, by bundle ID
+    /// so it holds across that app's restarts.
+    private static func appKey(_ context: DictationContext) -> String? {
+        context.targetAppBundleID ?? context.targetPID.map { "pid \($0)" }
+    }
+
     static func isChromiumOrElectron(bundleID: String?, bundleURL: URL?) -> Bool {
         bundleID.map(AppQuirks.needsManualAccessibility.contains) == true
             || AccessibilityWaker.isElectron(bundleURL)
@@ -348,9 +354,13 @@ public final class FieldDraft: TextDraft {
     /// the same line: an empty range at the end of an NSTextView reports
     /// the line below.
     static func caretRect(in element: AXUIElement, at caret: Int, of value: String) -> CGRect? {
-        let units = Array(value.utf16)
-        let afterBreak = caret == 0 || caret > units.count || [0x0A, 0x0D, 0x2028, 0x2029].contains(units[caret - 1])
-        if !afterBreak, let rect = bounds(in: element, location: caret - 1, length: 1), rect.height > 1 {
+        let utf16 = value.utf16
+        // The whole character before the caret: an emoji is two UTF-16 units.
+        if caret > 0, caret <= utf16.count,
+           let end = utf16.index(utf16.startIndex, offsetBy: caret).samePosition(in: value),
+           let previous = value[..<end].last, !previous.isNewline,
+           let rect = bounds(in: element, location: caret - previous.utf16.count, length: previous.utf16.count),
+           rect.height > 1 {
             return CGRect(x: rect.maxX, y: rect.minY, width: 0, height: rect.height)
         }
         if let rect = bounds(in: element, location: caret, length: 0), rect.height > 1 {
@@ -363,7 +373,8 @@ public final class FieldDraft: TextDraft {
     /// done and ignore it, so they are written by ⌘V.
     static func isInWebArea(_ element: AXUIElement) -> Bool {
         var current = element
-        for _ in 0..<40 {
+        for _ in 0..<80 {
+            AXUIElementSetMessagingTimeout(current, 0.25)
             var role: CFTypeRef?
             if AXUIElementCopyAttributeValue(current, kAXRoleAttribute as CFString, &role) == .success,
                role as? String == "AXWebArea" { return true }
