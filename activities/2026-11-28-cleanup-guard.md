@@ -79,3 +79,24 @@ the words themselves.
 Pending Mac build: `swift test --package-path VoiceIQCore` (TidyTests,
 CleanupCasesTests). Expected outputs were derived by hand from the rules; no
 Swift toolchain in the orb.
+
+## Neon review (agy, 0b7d7be) and Codex P2
+
+Fixed in the next commit, each with a kept case in `TidyTests`:
+
+- A comma-set "like" stays where it means something: quoting after a form of
+  be, feel, look or sound, or after go when no place follows ("he was, like,
+  I'm not going"); "about" before a number ("took, like, five hours"); "such
+  as" before a capitalized word ("cities, like, Paris").
+- "You know" stays before an auxiliary or a negation ("Wait, you know, don't
+  you?"), and a sentence-opening "You know," only goes before a subject word
+  (Codex: "You know, of course, that ...").
+- Single-quoted words are quotes: "He wrote 'the the'" stays.
+- A cut-off is 1–2 letters and never "re", "co", "un", "no" or "a", so "re-
+  read", "A- average" and "No- not now" stay.
+- A run of fillers goes as one span ("left, like, you know, after lunch").
+- A chain of restarted questions stays ("Should we, could we, would we?").
+- The capital handed on after a removal skips emails and file names.
+
+Left as they are: commas after "By the way", no capital after ":", "Mr." read
+as a sentence's end; each leaves the words as said.

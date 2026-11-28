@@ -88,9 +88,9 @@ final class TidyTests: XCTestCase {
             ("It was, you know, pretty late.", "It was pretty late."),
             ("Like, I don't know.", "I don't know."),
             ("You know, I think it works.", "I think it works."),
-            // A clause of one word keeps its comma, and so does one before a name.
+            // A clause of one word keeps its comma.
             ("So, like, we should go.", "So, we should go."),
-            ("I told Sam, like, Priya said no.", "I told Sam, Priya said no."),
+            ("We left, like, you know, after lunch.", "We left after lunch."),
         ] {
             XCTAssertEqual(tidy(said), written, said)
         }
@@ -98,7 +98,11 @@ final class TidyTests: XCTestCase {
         for kept in ["It was like a dream.", "Arrange the folders like we did yesterday.", "Like, comment and share.",
                      "Please share, like, and comment.", "Please follow, like, subscribe, and share.",
                      "Wait, you know, right?", "You know, don't you, that the meeting is tomorrow?",
-                     "You know, of course, that this is confidential."] {
+                     "You know, of course, that this is confidential.",
+                     // Quoting, "about", "such as", and a "you know" that is the question.
+                     "And he was, like, I'm not going.", "She was, like, what are you doing?",
+                     "It took, like, five hours.", "It took, like, 5 hours.", "We saw cities, like, Paris and Rome.",
+                     "I told Sam, like, Priya said no.", "Wait, you know, don't you?"] {
             XCTAssertEqual(tidy(kept), kept)
         }
     }
@@ -120,7 +124,10 @@ final class TidyTests: XCTestCase {
                      "That was really, really good.", "No, no, no.", "Priya, Priya, are you there?",
                      "Will, Will, are you there?", "A box of red pencils, a box of blue pencils.",
                      "Pack a bag of tea, a bag of tea.", "Tell Hye-jin I said thanks.",
-                     "Who am I, I wonder?", "Who are we, we who stayed behind?"] {
+                     "Who am I, I wonder?", "Who are we, we who stayed behind?",
+                     // Single quotes are quotes; prefixes and "No-" are not cut-offs.
+                     "He wrote 'the the' on the board.", "Please re- read the draft.", "A- average work.",
+                     "No- not now."] {
             XCTAssertEqual(tidy(kept), kept)
         }
     }
@@ -135,7 +142,7 @@ final class TidyTests: XCTestCase {
         ] {
             XCTAssertEqual(tidy(said), written, said)
         }
-        for kept in ["If you can, call me.", "When you can, can you call me?"] {
+        for kept in ["If you can, call me.", "When you can, can you call me?", "Should we, could we, would we?"] {
             XCTAssertEqual(tidy(kept), kept)
         }
     }
