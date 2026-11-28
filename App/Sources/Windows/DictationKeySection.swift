@@ -209,8 +209,8 @@ private struct PermissionRow: View {
     var body: some View {
         LabeledContent(title) {
             HStack(spacing: 8) {
-                Image(systemName: granted ? "checkmark.circle" : "xmark.circle.fill")
-                    .foregroundStyle(granted ? AnyShapeStyle(.secondary) : AnyShapeStyle(VoiceIQUI.Colors.error))
+                Image(systemName: granted ? "checkmark.circle" : "exclamationmark.circle")
+                    .foregroundStyle(granted ? AnyShapeStyle(.secondary) : AnyShapeStyle(VQ.Colors.warning))
                 Text(granted ? "Granted" : "Not granted")
                     .foregroundStyle(.secondary)
                 if !granted {
