@@ -39,11 +39,18 @@ run_locked() {
 case $action in
 acquire)
   [[ -d $(dirname "$lock") ]] || { echo "app lock: $(dirname "$lock") does not exist" >&2; exit 1; }
+  misses=0
   while ! mkdir "$lock" 2>/dev/null; do
     # Renewing your own lock runs under the file lock, so a stale-lock
     # reclaim can't delete it between the check and the touch.
     if [[ $(held_by) == "$owner" ]] && run_locked _renew "$owner"; then exit 0; fi
-    [[ -d $lock ]] || continue  # released since the mkdir: try again now
+    if [[ ! -d $lock ]]; then
+      # Released since the mkdir: try again now. If mkdir keeps failing with
+      # no lock there (a permission error, say), report it instead.
+      if (( ++misses > 5 )); then echo "app lock: cannot create $lock: $(mkdir "$lock" 2>&1)" >&2; exit 1; fi
+      sleep 0.2; continue
+    fi
+    misses=0
     if (( $(age) >= stale )); then
       run_locked _reclaim "$owner"
       continue
