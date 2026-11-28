@@ -35,7 +35,16 @@ final class Field: NSObject, UITextDocumentProxy {
     /// A host that leaves marked text out of the context until it is committed.
     var hidesMarkedText = false
 
+    /// A host that shows only this many characters before the cursor.
+    var window: Int?
+
     var documentContextBeforeInput: String? {
+        let full = fullContextBefore
+        guard let window else { return full }
+        return String(full.suffix(window))
+    }
+
+    private var fullContextBefore: String {
         guard hidesMarkedText, let marked, marked.upperBound <= start else { return String(text[..<start]) }
         return String(text[..<marked.lowerBound]) + String(text[marked.upperBound..<start])
     }

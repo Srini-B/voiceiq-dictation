@@ -58,16 +58,9 @@ final class KeyboardDraft {
         proxy.setMarkedText(fitted, selectedRange: NSRange(location: fitted.utf16.count, length: 0))
         let draft = KeyboardDraft(id: id, documentID: documentID, text: fitted, before: before, after: after,
                                   typedAt: now)
-        // Read right after this keyboard's own write, so nothing else can
-        // have changed the field: a host that shows the draft at once, also
-        // with less of the text before it, has it recorded here.
-        let current = proxy.documentContextBeforeInput ?? ""
-        // A context that did not change could be the host leaving marked
-        // text out, with the user's own text ending like the draft.
-        if current != before, current.hasSuffix(fitted), (proxy.documentContextAfterInput ?? "") == after,
-           before.hasSuffix(current.dropLast(fitted.count)) {
-            draft.landedBefore = current
-        }
+        // Read right after this keyboard's own write: a host that shows the
+        // draft at once, with all the text it showed before, has it recorded.
+        _ = draft.follow(proxy)
         return draft
     }
 
@@ -131,10 +124,9 @@ final class KeyboardDraft {
     /// other text around it and is never taken for the draft.
     private func isStillAround(_ proxy: UITextDocumentProxy, before current: String) -> Bool {
         guard (proxy.documentContextAfterInput ?? "") == after else { return false }
-        // Exactly the text that was before it: a host that shows less of it
-        // now could be showing an earlier copy of the draft's words left by
-        // an edit nobody saw. Such hosts swap only a draft seen as it was
-        // typed (`landedBefore`).
+        // Exactly the text that was before it, all of it still shown: in a
+        // host that shows less, a repeated stretch of text could look the
+        // same after an edit nobody saw, so there the draft stays as heard.
         if let landedBefore { return current == landedBefore }
         return String(current.dropLast(text.count)) == before
     }

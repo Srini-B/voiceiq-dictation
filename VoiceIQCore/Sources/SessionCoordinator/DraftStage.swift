@@ -63,8 +63,9 @@ final class DraftStage {
         let draft = draft
         await Task { @MainActor in
             let shown = await showing.value
-            guard shown == .shown || shown == .pending else { return }
-            if await draft.replace(with: "") != true {
+            guard shown != .notInserted else { return }
+            // A lost draft may be in the field and can't be found to take out.
+            if shown == .lost || (await draft.replace(with: "")) != true {
                 NotificationCenter.default.post(name: .voiceIQDraftKept, object: DictationCoordinator.withdrawKeptNotice)
             }
         }.value

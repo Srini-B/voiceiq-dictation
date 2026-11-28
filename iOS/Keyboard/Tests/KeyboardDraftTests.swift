@@ -168,6 +168,25 @@ final class KeyboardDraftTests: XCTestCase {
         XCTAssertEqual(untouchedField.string, "ok ok OK.")
     }
 
+    /// A host that shows only the last few characters before the cursor,
+    /// with repeated words: deleting the draft leaves the same window, so
+    /// a draft there is never swapped and the user's words stay.
+    func testAShortWindowOverRepeatedWordsNeverSwaps() throws {
+        let field = Field("ok ok ok ")
+        field.window = 4
+        let draft = try XCTUnwrap(type("ok", into: field))
+        XCTAssertEqual(field.documentContextBeforeInput, "k ok")
+        XCTAssertTrue(draft.follow(field))
+        draft.commit(field)
+        for _ in 0..<3 { field.deleteBackward() }
+        XCTAssertEqual(field.string, "ok ok ok")
+        XCTAssertEqual(field.documentContextBeforeInput, "k ok")
+
+        XCTAssertTrue(draft.follow(field))
+        XCTAssertEqual(draft.replace(with: "OK.", in: field, fit: fit), .kept)
+        XCTAssertEqual(field.string, "ok ok ok")
+    }
+
     /// A draft the swap could not take back out is never typed: Tamil,
     /// whose vowel signs a host may delete on their own, a line break, and
     /// a draft longer than hosts show before the cursor. The written text
