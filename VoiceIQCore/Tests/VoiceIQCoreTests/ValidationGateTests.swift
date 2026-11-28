@@ -18,4 +18,17 @@ final class ValidationGateTests: XCTestCase {
     func testLeavesInternalQuotesAlone() {
         XCTAssertEqual(ValidationGate.stripArtifacts("She said \"hi\" to me."), "She said \"hi\" to me.")
     }
+
+    /// The writer's one-line email gets the email layout; a message without
+    /// both a greeting and a signed sign-off is left as written.
+    func testAOneLineEmailIsLaidOut() {
+        XCTAssertEqual(EmailLayout.apply("Hello Dr. Kim, I wanted to confirm my appointment at 3. Best, Sam."),
+                       "Hello Dr. Kim,\n\nI wanted to confirm my appointment at 3.\n\nBest,\nSam")
+        let laidOut = "Hi Priya,\n\nCan we move it to net 30?\n\nThanks,\nSrini"
+        XCTAssertEqual(EmailLayout.apply(laidOut), laidOut)
+        for prose in ["Hey, can you check the logs? Thanks, Ana.", "Thanks, Sam. I'll look at it tomorrow.",
+                      "Dear team,\n\nThe release is ready."] {
+            XCTAssertEqual(EmailLayout.apply(prose), prose)
+        }
+    }
 }

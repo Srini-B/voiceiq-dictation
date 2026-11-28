@@ -6,6 +6,8 @@ import VoiceIQBridge
 // {"vocabulary": [...], "spellings": [["wrong","right"]], "customRules": "...", "spelling": "...",
 //  "screenText": ["..."], "app": "...", "window": "...", "page": "...",
 //  "before": "...", "after": "...", "transcript": "..."}
+// With {"output": "..."} instead, it prints the writer's answer after the
+// app's own post-processing (EmailLayout), as AssemblyAITranscriptionService does.
 
 struct Spec: Decodable {
     var vocabulary: [String]?
@@ -19,9 +21,14 @@ struct Spec: Decodable {
     var before: String?
     var after: String?
     var transcript: String?
+    var output: String?
 }
 
 let spec = try JSONDecoder().decode(Spec.self, from: FileHandle.standardInput.readDataToEndOfFile())
+if let output = spec.output {
+    print(EmailLayout.apply(output), terminator: "")
+    exit(0)
+}
 let surrounding = (spec.before != nil || spec.after != nil)
     ? SurroundingText(before: spec.before ?? "", after: spec.after ?? "") : nil
 let place = DictationPlace(appName: spec.app, windowTitle: spec.window, pageURL: spec.page)
