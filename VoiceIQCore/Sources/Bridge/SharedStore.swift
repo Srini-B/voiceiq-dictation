@@ -162,9 +162,9 @@ public final class SharedStore: @unchecked Sendable {
         decode([DictionaryAddition].self, forKey: Key.dictionaryAdditions) ?? []
     }
 
-    public func requestDictionaryAddition(_ term: String, learnedFrom: String? = nil) {
+    public func requestDictionaryAddition(_ term: String, learnedFrom: String? = nil, startsSentence: Bool? = nil) {
         var list = dictionaryAdditions
-        list.append(DictionaryAddition(term: term, learnedFrom: learnedFrom))
+        list.append(DictionaryAddition(term: term, learnedFrom: learnedFrom, startsSentence: startsSentence))
         encode(Array(list.suffix(50)), forKey: Key.dictionaryAdditions)
         DarwinNotifier.post(.dictionary)
     }

@@ -24,9 +24,16 @@ Auto-learned section.
   replaced (`DictationOutcome.edited`, `.substituted` pairs), each fixed word
   goes to the app with the dictated wording as `DictionaryAddition.learnedFrom`,
   spelled as the field has it: Hex's classifier lowers a sentence-start
-  capital, so `DictationLearning.spelling` puts back a capital the user left
+  capital, so `DictationLearning.fix` puts back a capital the user left
   ("Saran went home" teaches "Saran"; a lowercase word stays lowercase), since
   a lowercase term would make the writer and the spelling pass lowercase the name.
+  Whether the fix begins a sentence goes along (`DictionaryAddition.startsSentence`,
+  into `LearnedCorrection.startsSentence`), so "Sory, I'm late" → "Sorry, I'm
+  late" is not learned by the name exception (PR #168 review).
+- The tracker remembers the input session (`documentIdentifier`) its dictation
+  went into. Text from another session settles it where it was last seen, so
+  moving focus to a field holding "…Saran…" no longer reads as a fix of a
+  dictation typed into an empty field (PR #168 review).
   Rewritten, deleted, undone and redictated dictations teach nothing.
 - The app (`DictionaryBridge`) learns such an addition with
   `DictionaryStore.learn`, the Mac's rule for a new word, now shared:
@@ -58,10 +65,13 @@ Auto-learned entries are vocabulary only (no `misspelling`, so never a
   to "Saran" in a kept dictation is handed over as heard "Sharon"; a rewritten
   dictation, a deleted one and one deleted and dictated again ("Saran" the
   second time) hand over nothing; "Sharon went home." fixed to "Saran went
-  home." hands over "Saran" with its capital.
+  home." hands over "Saran" with its capital, and "Sory, I'm late." fixed
+  to "Sorry" is marked as a sentence start; text in another field after a
+  dictation into an empty field hands over nothing.
 - `EditLearnerTests.testAFixFromTheIPhoneKeyboardIsLearnedByTheMacsRules`
   (VoiceIQCore, macOS): `DictionaryStore.learn` keeps "Saran" heard as
-  "Sharon" as an auto entry, skips "Then" → "Than", and skips a second
+  "Sharon" as an auto entry, skips "Then" → "Than" and "Sory" → "Sorry" at
+  a sentence start, and skips a second
   spelling learned from the same wording.
 - On Linux (Swift 6.2.1, Swift 6 mode): the keyboard test's scenarios run
   against the vendored tracker and classifier with the same results, and a

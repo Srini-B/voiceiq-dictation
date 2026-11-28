@@ -376,12 +376,17 @@ public struct DictionaryAddition: Codable, Equatable, Sendable, Identifiable {
     /// dictated wording it replaced. The app then learns it as the Mac does
     /// (`DictionaryStore.learn`). Nil for a word the user chose to add.
     public let learnedFrom: String?
+    /// With `learnedFrom`: the fixed word began a sentence in the field, so its
+    /// capital may not mark a name (`LearnedCorrection.startsSentence`).
+    public let startsSentence: Bool?
 
-    public init(id: UUID = UUID(), term: String, createdAt: Date = Date(), learnedFrom: String? = nil) {
+    public init(id: UUID = UUID(), term: String, createdAt: Date = Date(), learnedFrom: String? = nil,
+                startsSentence: Bool? = nil) {
         self.id = id
         self.term = term
         self.createdAt = createdAt
         self.learnedFrom = learnedFrom
+        self.startsSentence = startsSentence
     }
 
     /// What the keyboard offers to add: one line, 1–60 characters after

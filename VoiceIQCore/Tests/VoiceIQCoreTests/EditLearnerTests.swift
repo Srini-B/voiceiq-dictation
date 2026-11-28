@@ -56,6 +56,8 @@ final class EditLearnerTests: XCTestCase {
     func testAFixFromTheIPhoneKeyboardIsLearnedByTheMacsRules() {
         XCTAssertTrue(store.learn(LearnedCorrection(original: "Sharon", replacement: "Saran", words: 0..<0)))
         XCTAssertFalse(store.learn(LearnedCorrection(original: "Then", replacement: "Than", words: 0..<0)))
+        // The capital only starts the sentence: an ordinary word, not a name.
+        XCTAssertFalse(store.learn(LearnedCorrection(original: "Sory", replacement: "Sorry", words: 0..<0, startsSentence: true)))
         // Something was already learned from this wording.
         XCTAssertFalse(store.learn(LearnedCorrection(original: "sharon", replacement: "Shaaron", words: 0..<0)))
         XCTAssertEqual(store.entries().map(\.term), ["Saran"])

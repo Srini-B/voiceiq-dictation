@@ -8,56 +8,75 @@ final class DictationLearningTests: XCTestCase {
 
     private let empty = Context(before: "", after: "", hasText: false)
     private let dictated = "I had lunch with Sharon today."
-    /// Each fix handed over, as "heard → term".
+    private let field = UUID()
+    /// Each fix handed over, as "heard → term", marked when it starts a sentence.
     private var learned: [String] = []
 
     private func makeLearning() -> DictationLearning {
-        DictationLearning(learn: { [unowned self] term, heard in learned.append("\(heard) → \(term)") })
+        DictationLearning(learn: { [unowned self] fix in
+            learned.append("\(fix.heard) → \(fix.term)" + (fix.startsSentence ? " (sentence start)" : ""))
+        })
     }
 
     /// The dictation goes into an empty field, cursor after it.
     private func dictate(_ text: String, into learning: DictationLearning) {
-        learning.inserted(text, before: empty, after: Context(before: text, after: "", hasText: true), learns: true)
+        learning.inserted(text, before: empty, after: Context(before: text, after: "", hasText: true),
+                          in: field, learns: true)
+    }
+
+    /// The user edits the field to `before`|`after` and the keyboard goes.
+    private func leave(_ learning: DictationLearning, as before: String, _ after: String = "") {
+        let context = Context(before: before, after: after, hasText: !(before + after).isEmpty)
+        learning.observe(context, in: field, fromKeys: true)
+        learning.finish(context, in: field)
     }
 
     func testAMisheardNameFixedInAKeptDictationIsLearned() {
         let learning = makeLearning()
         dictate(dictated, into: learning)
         // The user selects "Sharon" and types "Saran".
-        let fixed = Context(before: "I had lunch with Saran", after: " today.", hasText: true)
-        learning.observe(fixed, fromKeys: true)
-        learning.finish(fixed)
+        leave(learning, as: "I had lunch with Saran", " today.")
         XCTAssertEqual(learned, ["Sharon → Saran"])
     }
 
-    /// Hex drops a capital that starts a sentence; a name fixed as the first word keeps it.
-    func testANameFixedAsTheFirstWordKeepsItsCapital() {
+    /// Hex drops a capital that starts a sentence: a name fixed as the first word keeps
+    /// it, and the app is told it starts the sentence, as the Mac would be.
+    func testAWordFixedAtASentenceStartKeepsItsCapitalAndSaysSo() {
         let learning = makeLearning()
         dictate("Sharon went home.", into: learning)
-        let fixed = Context(before: "Saran", after: " went home.", hasText: true)
-        learning.observe(fixed, fromKeys: true)
-        learning.finish(fixed)
-        XCTAssertEqual(learned, ["Sharon → Saran"])
+        leave(learning, as: "Saran", " went home.")
+        dictate("Sory, I'm late.", into: learning)
+        leave(learning, as: "Sorry", ", I'm late.")
+        XCTAssertEqual(learned, ["Sharon → Saran (sentence start)", "Sory → Sorry (sentence start)"])
     }
 
     func testARewrittenDeletedOrRedictatedDictationTeachesNothing() {
         let learning = makeLearning()
         dictate(dictated, into: learning)
-        let rewritten = Context(before: "Meeting moved to Friday instead.", after: "", hasText: true)
-        learning.observe(rewritten, fromKeys: true)
-        learning.finish(rewritten)
+        leave(learning, as: "Meeting moved to Friday instead.")
 
         dictate(dictated, into: learning)
-        learning.observe(empty, fromKeys: true)
-        learning.finish(empty)
+        leave(learning, as: "")
 
         // Deleted and dictated again: the word that came out differently is the
         // speech model's second guess, not a fix the user typed.
         dictate(dictated, into: learning)
-        learning.observe(empty, fromKeys: true)
+        learning.observe(empty, in: field, fromKeys: true)
         dictate("I had lunch with Saran today.", into: learning)
-        learning.finish(Context(before: "I had lunch with Saran today.", after: "", hasText: true))
+        leave(learning, as: "I had lunch with Saran today.")
 
+        XCTAssertEqual(learned, [])
+    }
+
+    /// Focus moved to another field without the keyboard hiding: that field's text is
+    /// not an edit of the dictation, even when it reads like one.
+    func testAnotherFieldsTextIsNotAFix() {
+        let learning = makeLearning()
+        dictate(dictated, into: learning)
+        let other = UUID()
+        let elsewhere = Context(before: "I had lunch with Saran today.", after: "", hasText: true)
+        learning.observe(elsewhere, in: other, fromKeys: false)
+        learning.finish(elsewhere, in: other)
         XCTAssertEqual(learned, [])
     }
 }

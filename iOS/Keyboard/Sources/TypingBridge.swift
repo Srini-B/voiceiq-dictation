@@ -82,7 +82,7 @@ final class TypingBridge: ObservableObject {
         // A return key labelled Send ends the dictation's edit window: what is there is sent.
         view.onReturnKey = { [weak self] in
             guard let self, self.proxy?.returnKeyType == .send else { return }
-            self.learning.finish(self.editContext)
+            self.learning.finish(self.editContext, in: self.documentIdentifier)
         }
         view.onStripRowLayout = { [weak self] row, emojiOpen in
             guard let self else { return }
@@ -133,12 +133,12 @@ final class TypingBridge: ObservableObject {
     func didInsertDictation(_ text: String, before: String, after: String) {
         keyboard?.didInsertDictation(text, before: before, after: after)
         learning.inserted(text, before: .init(before: before, after: after, hasText: !(before + after).isEmpty),
-                          after: editContext, learns: learnsFromDictation)
+                          after: editContext, in: documentIdentifier, learns: learnsFromDictation)
     }
 
     /// While the text connection still reaches the field.
     func willDisappear() {
-        learning.finish(editContext)
+        learning.finish(editContext, in: documentIdentifier)
     }
 
     // MARK: - Learning from fixes to dictations
@@ -155,7 +155,7 @@ final class TypingBridge: ObservableObject {
     }
 
     private func observeDictation(fromKeys: Bool) {
-        learning.observe(editContext, fromKeys: fromKeys)
+        learning.observe(editContext, in: documentIdentifier, fromKeys: fromKeys)
     }
 
     func loadLexicon(_ lexicon: UILexicon) {

@@ -38,7 +38,10 @@ enum DictionaryBridge {
         for addition in queued where !handled.contains(addition.id.uuidString) {
             if let heard = addition.learnedFrom {
                 // A fix to dictated text, learned as the Mac learns one.
-                let learned = DictionaryStore().learn(LearnedCorrection(original: heard, replacement: addition.term, words: 0..<0))
+                let learned = DictionaryStore().learn(LearnedCorrection(
+                    original: heard, replacement: addition.term, words: 0..<0,
+                    startsSentence: addition.startsSentence ?? false
+                ))
                 SessionDiagnostics.note("keyboard dictation fix \(learned ? "learned" : "skipped")")
             } else {
                 let added = DictionaryStore().add(term: addition.term)

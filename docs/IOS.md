@@ -825,19 +825,25 @@ each dictation it types in with Hex's `DictationEditTracker`, as Hex's
 keyboard does (`DictationLearning`, owned by `TypingBridge`): from the text
 around the cursor when it goes in, through every edit by the keys, the edit
 panel or the app, until the keyboard hides, Send is tapped, the next
-dictation goes in or an edit comes more than a minute after it went in. It
+dictation goes in, focus moves to another field (another
+`documentIdentifier`: the dictation settles where it was last seen, so the
+other field's text never reads as an edit of it) or an edit comes more than a
+minute after it went in. It
 needs Full Access, like everything the keyboard hands the app, and runs only
 in fields Hex's journal may learn from (`TypingJournal.allows`: text and web
 search fields that allow autocorrect, never a secure field, a password, code,
-username, email, URL, card or phone field). Hex's `DictationEditClassifier` then says what became
-of it. Each word or phrase of up to three words you replaced in a dictation
+username, email, URL, card or phone field). Hex's `DictationEditClassifier`
+then says what became of it. Each word or phrase of up to three words you replaced in a dictation
 you kept, by a respelling of it (`isPlausibleFix`, the bound the Mac's
 `EditDiff` uses), goes to the app as a Dictionary word with
 `DictionaryAddition.learnedFrom` set to the dictated wording, spelled as it
-is in the field: Hex drops a capital that starts a sentence, so a name fixed
-as the first word keeps the capital the user left (`DictationLearning.spelling`);
-a dictation
-rewritten (more than half changed), deleted, undone with Undo dictation or
+is in the field: Hex drops a capital that starts a sentence, so a fix as the
+first word keeps the capital the user left (`DictationLearning.fix`).
+`DictionaryAddition.startsSentence` says whether the fix begins a sentence,
+so the app judges its capital as the Mac does: at a sentence start a capital
+is not a name, and an ordinary word ("Sory" → "Sorry", but also "Sharon" →
+"Saran", since the spell checker knows "saran") is not learned there. A
+dictation rewritten (more than half changed), deleted, undone with Undo dictation or
 dictated again teaches nothing. The app keeps it by the Mac's rules
 (`DictionaryStore.learn`): not a word the Dictionary has or already learned
 from that wording, and not ordinary English (`CommonWords`, `UITextChecker`
