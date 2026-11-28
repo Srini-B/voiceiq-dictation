@@ -992,6 +992,8 @@ final class DictationController {
     private func flushPendingNotice() {
         guard let notice = pendingNotice else { return }
         pendingNotice = nil
+        // A background dictation's writer note that the foreground one just showed.
+        if notice.message == coordinator.insertedNotice { return }
         // Give the terminal pill (success check / error chip) its moment first.
         Task { @MainActor [weak self] in
             try? await Task.sleep(nanoseconds: 1_800_000_000)

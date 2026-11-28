@@ -183,15 +183,16 @@ public actor AssemblyAIClient {
         // A 5-minute file completes in about 9 s at p50 (AssemblyAI's planning figure).
         var wait: UInt64 = 700_000_000
         var offline = false
+        // Polls that ran out of time offline are offline, so the recording queues for the reconnect.
+        func timeLeft() throws -> TimeInterval {
+            do { return try remaining() } catch { throw offline ? TranscriptionError.offline : error }
+        }
         while true {
-            try await Task.sleep(nanoseconds: wait)
+            // Never sleeps past the deadline, however long a 429 asked for.
+            try await Task.sleep(nanoseconds: min(wait, UInt64(try timeLeft() * 1_000_000_000)))
             wait = min(wait * 3 / 2, 3_000_000_000)
             let data: Data
-            let pollDeadline: TimeInterval
-            do { pollDeadline = min(30, try remaining()) } catch {
-                // Polls that ran out of time offline are offline, so the recording queues for the reconnect.
-                throw offline ? TranscriptionError.offline : error
-            }
+            let pollDeadline = min(30, try timeLeft())
             do {
                 data = try await send(url: AssemblyAIConfig.api.appendingPathComponent("v2/transcript/\(id)"), body: nil,
                                       deadline: pollDeadline, modelLabel: model, stage: stage)
@@ -200,6 +201,7 @@ public actor AssemblyAIClient {
                 // The job is uploaded and billed; a throttled poll waits as
                 // long as the server asks (up to 30 s) and asks again.
                 if let retryAfter { wait = max(wait, UInt64(min(retryAfter, 30) * 1_000_000_000)) }
+                offline = false
                 continue
             } catch TranscriptionError.offline {
                 offline = true

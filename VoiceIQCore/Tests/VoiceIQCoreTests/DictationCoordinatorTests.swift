@@ -503,11 +503,20 @@ final class DictationCoordinatorTests: XCTestCase {
 
     /// A press while the last dictation is still being written starts a new
     /// one at once, and the texts land in the order they were spoken even
-    /// when the second is written first. The background job's writer note
-    /// still reaches the app.
+    /// when the second is written first.
     func testNewDictationWhileTheLastIsTranscribingInsertsInSpokenOrder() async {
+        await assertDetachedFirstJob(notice: nil, reports: .outcome(.inserted))
+    }
+
+    /// A background job's writer note (no gateway balance) still reaches the app.
+    func testDetachedDictationKeepsItsWriterNote() async {
+        await assertDetachedFirstJob(notice: "Inserted as heard: offline",
+                                     reports: .insertedWithNotice("Inserted as heard: offline"))
+    }
+
+    private func assertDetachedFirstJob(notice: String?, reports expected: DictationCoordinator.DetachedResult) async {
         let transcription = SequencedTranscription([("first", 300_000_000), ("second", 10_000_000)])
-        transcription.notices["first"] = "Inserted as heard: offline"
+        transcription.notices["first"] = notice
         let c = makeCoordinator(transcription: transcription)
         var detachedResults: [DictationCoordinator.DetachedResult] = []
         c.onDetachedResult = { detachedResults.append($0) }
@@ -526,7 +535,7 @@ final class DictationCoordinatorTests: XCTestCase {
 
         XCTAssertEqual(c.state, .done(.inserted))
         XCTAssertEqual(inserter.insertedTexts, ["first", "second"])
-        XCTAssertEqual(detachedResults, [.insertedWithNotice("Inserted as heard: offline")])
+        XCTAssertEqual(detachedResults, [expected])
         XCTAssertFalse(c.hasBackgroundJobs)
     }
 
