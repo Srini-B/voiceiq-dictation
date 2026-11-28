@@ -131,9 +131,10 @@ final class EditControllerTests: XCTestCase {
     func testUndoTakesBackADraftDictation() throws {
         let field = ProxyField("Dear Ana,")
         let editor = editor(for: field)
-        let draft = try XCTUnwrap(KeyboardDraft.type("see you at noon", id: UUID(), documentID: UUID(), into: field,
+        let id = UUID()
+        let draft = try XCTUnwrap(KeyboardDraft.type("see you at noon", id: id, documentID: UUID(), into: field,
                                                      fit: { text, _, _ in " " + text }))
-        let swap = draft.replace(with: "See you at noon.", in: field, fit: { text, _, _ in " " + text })
+        let swap = draft.replace(id, with: "See you at noon.", in: field, fit: { text, _, _ in " " + text })
         guard case .replaced(let fitted) = swap else {
             return XCTFail("not swapped")
         }

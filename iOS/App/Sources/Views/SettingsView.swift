@@ -378,6 +378,7 @@ struct AdvancedView: View {
     private let settings = SettingsStore()
     @State private var writingModel = SettingsStore().writingModelOverride ?? ""
     @State private var debugLog = DebugLog.isEnabled
+    @State private var moreDraftHosts = SharedStore.shared.triesMoreDraftHosts
 
     var body: some View {
         Form {
@@ -390,6 +391,12 @@ struct AdvancedView: View {
                 NavigationLink("Debug log") { DebugLogView() }
             } footer: {
                 Text("While this is on, VoiceiQ and its keyboard write down everything they do: dictation, transcription, meetings, settings changes, sync, network requests and errors. Share the file with a bug report. API keys and tokens are removed, and transcripts are never written. VoiceiQ keeps the last \(DebugLog.keepDays) days, up to \(DebugLog.maxTotalBytes / 1_000_000) MB, and deletes older entries on its own.")
+            }
+            Section {
+                Toggle("Try drafts in Notes, Mail and WhatsApp", isOn: $moreDraftHosts)
+                    .onChange(of: moreDraftHosts) { _, on in SharedStore.shared.triesMoreDraftHosts = on }
+            } footer: {
+                Text("In Messages, Reminders, Contacts and Calendar the keyboard types what you said, underlined, and swaps in the written text when it's ready. This also tries it in Notes, Mail and WhatsApp, which haven't been tested yet. If a dictation shows up more than once there, turn this off. History always has the written text.")
             }
             Section {
                 field("Writing model", text: $writingModel, prompt: AssemblyAIConfig.defaultWritingModel) { settings.setWritingModelOverride($0) }

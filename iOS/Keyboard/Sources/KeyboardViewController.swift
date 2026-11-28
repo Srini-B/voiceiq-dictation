@@ -40,6 +40,7 @@ final class KeyboardViewController: UIInputViewController {
         model.onDidInsertDictation = { [weak typing] text, before, after in
             typing?.didInsertDictation(text, before: before, after: after)
         }
+        model.onDraftChange = { [weak typing] in typing?.draftChanged() }
         editor.controller = self
         editor.onExternalEdit = { [weak typing] in typing?.textDidChange(fromKeys: true) }
         editor.willEdit = { [weak model] in model?.userWillEdit() }

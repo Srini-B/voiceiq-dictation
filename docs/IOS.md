@@ -260,13 +260,41 @@ is the Mac's draft (`TextDraft`), done by the keyboard:
    Where a host made the draft plain text without telling the keyboard,
    the insert lands beside it: the dictation is there twice, and no text is
    lost. So the keyboard types drafts only in apps this was tried in
-   (`Delivery.draftHosts`: Messages, Reminders, Contacts, Calendar). Safari stays off: a page field whose script rewrites its value on every change makes the draft plain text without telling the keyboard, and every dictation went in twice, while a plain textarea and a contenteditable passed; a keyboard can't tell these fields apart. Notes, Mail and third-party apps (WhatsApp, Slack, Chrome, Gmail) can't run in the Simulator and wait for a device run. No transcript with a line break is drafted
+   (`Delivery.draftHosts`: Messages, Reminders, Contacts, Calendar). Safari stays off: a page field whose script rewrites its value on every change makes the draft plain text without telling the keyboard, and every dictation went in twice, while a plain textarea and a contenteditable passed; a keyboard can't tell these fields apart. Notes, Mail and third-party apps (WhatsApp, Slack, Chrome, Gmail) can't run in the Simulator and wait for a device run. For that run, Settings › Advanced › Try drafts in Notes, Mail and WhatsApp (off by default; `SharedStore.triesMoreDraftHosts`, writer: app) adds `Delivery.trialDraftHosts` for both the app's offer and the keyboard (`Delivery.takesDrafts`). The session log names the app each draft was typed in. No transcript with a line break is drafted
    (`KeyboardDraft.canType`). Elsewhere the
    written text goes in once, as before.
-5. A written text whose draft this keyboard no longer holds (the keyboard
+5. The app refuses a new dictation until the last one is delivered
+   (`AppModel.startBlocker`: "Still working on the last one", from the
+   keyboard, the Action button and Control Center alike), so today one draft
+   is held at a time. The keyboard still handles a second draft offered while
+   one is marked, which a later change allowing overlapping dictations on
+   iPhone would produce (the Mac allows them): it joins that draft
+   (`KeyboardDraft.add`): the
+   marked text becomes both transcripts, each fitted to the text before
+   it, since new marked text replaces the old and a second, separate draft
+   would take the first one's place. Each written text takes its own part's
+   place in the marked text as it comes, in either order
+   (`KeyboardDraft.Swap.waiting`; a written text with a line break is not
+   marked, and the field keeps that part's transcript until then), and the
+   whole goes in with one `insertText` once every part has its written
+   text. A field that changed around the draft takes no new part, and that
+   dictation's written text comes alone. Whether a draft still waits is not
+   read from the phase, which shows only the foreground dictation: the app
+   lists the drafts whose written text is still to come
+   (`SessionSnapshot.writingDrafts`, from the moment a draft is confirmed
+   or given up on, before the offer is withdrawn, until its job ends), and
+   the keyboard makes a draft plain as heard once none of its unwritten
+   parts is listed or offered and no written text for it waits. The
+   snapshot holds one result, so the app holds a written text that names a
+   draft until the keyboard has handled the one before it that names
+   another draft (up to `Delivery.draftWait`). The keyboard remembers the
+   last eight drafts it typed (`KeyboardModel.typedDraftIDs`, in its own
+   `UserDefaults`), so a written text for a part of a draft that ended
+   early is marked handled, never typed beside its transcript.
+6. A written text whose draft this keyboard no longer holds (the keyboard
    was dismissed or moved to another field) is marked handled and never
    typed beside the draft.
-6. A dictation that ends without written text (Cancel, no speech, a
+7. A dictation that ends without written text (Cancel, no speech, a
    failure) leaves its draft in the field as heard: the keyboard does not
    take text back out of a field. The Mac does (`DraftStage.withdraw`).
 
@@ -280,7 +308,8 @@ ends in one of three ways, each one kind of call (`KeyboardDraft`):
 | A key, Delete, a cursor move, Paste last or Undo on this keyboard (`EditController.willEdit`) | `insertText(draft)`, then the edit in the same turn | plain text, as heard, with the edit after it |
 | The keyboard is dismissed, the field changed without the keyboard (read every 0.1 s and on `textDidChange` and `selectionDidChange`), another dictation starts, or no written text comes | `unmarkText()`, and nothing else in that turn | plain text, as heard |
 
-A new draft is marked only in a poll that began with none, and the poll
+A new draft is marked only in a poll that began with none, or that began
+with a held draft no call of that turn has changed (step 5), and the poll
 that ends a draft with `unmarkText` types no result: either would reach
 the host before the `unmarkText` and replace the draft. Paste last and
 History always have the written text.
@@ -306,7 +335,12 @@ its offset. The proxy leaves a marked draft out of that text. So while a
 draft is held, the keys read the proxy's text with the draft added
 (`KeyboardDraft.textBefore`, through `TypingBridge.documentContextBeforeInput`),
 and the keyboard's own cursor moves and Paste last make the draft plain
-before they read. Planned from the proxy's text alone, a space after a draft
+before they read. Shift reads the same text: the host tells a keyboard
+only of changes made elsewhere, so after marking or changing a draft the
+keyboard refreshes the keys itself (`KeyboardModel.onDraftChange`). Without
+that, Shift stayed as it was before the draft, and after "Earlier line. "
+the first letter typed during a draft that ends mid-sentence came out a
+capital. Planned from the proxy's text alone, a space after a draft
 would have corrected the word before the draft and deleted into both.
 
 After any `unmarkText` the keyboard types no result and marks no draft for

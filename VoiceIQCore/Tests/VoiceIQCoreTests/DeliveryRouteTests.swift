@@ -283,6 +283,7 @@ final class DeliveryRouteTests: XCTestCase {
         XCTAssertNil(snapshot.field)
         XCTAssertNil(snapshot.draft)
         XCTAssertNil(snapshot.delivery?.replacesDraft)
+        XCTAssertNil(snapshot.writingDrafts)
     }
 
     // MARK: - Drafts
@@ -294,11 +295,20 @@ final class DeliveryRouteTests: XCTestCase {
         let draft = Delivery(text: "see you at noon", createdAt: made, destination: destination)
         let written = Delivery(text: "See you at noon.", createdAt: made, destination: destination,
                                stoppedAt: made, replacesDraft: draft.id)
-        let sent = SessionSnapshot(phase: .processing, delivery: written, draft: draft)
+        let sent = SessionSnapshot(phase: .processing, delivery: written, draft: draft, writingDrafts: [draft.id])
         let read = try JSONDecoder().decode(SessionSnapshot.self, from: JSONEncoder().encode(sent))
         XCTAssertEqual(read, sent)
         XCTAssertEqual(read.delivery?.replacesDraft, draft.id)
         XCTAssertEqual(written.forgettingDraft().replacesDraft, draft.id)
+    }
+
+    /// Drafts go into the measured apps always, and into the trial apps only
+    /// while the Advanced switch is on; never into a browser.
+    func testDraftsGoOnlyIntoMeasuredAppsAndTrialAppsWhenTried() {
+        XCTAssertTrue(Delivery.takesDrafts("com.apple.reminders", trying: false))
+        XCTAssertFalse(Delivery.takesDrafts("com.apple.mobilenotes", trying: false))
+        XCTAssertTrue(Delivery.takesDrafts("com.apple.mobilenotes", trying: true))
+        XCTAssertFalse(Delivery.takesDrafts("com.apple.mobilesafari", trying: true))
     }
 
     /// A keyboard types a draft only while it is fresh, so it never types

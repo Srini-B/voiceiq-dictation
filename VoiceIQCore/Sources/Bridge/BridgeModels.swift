@@ -166,6 +166,20 @@ public struct Delivery: Codable, Equatable, Sendable, Identifiable {
         "com.apple.MobileSMS", "com.apple.reminders", "com.apple.MobileAddressBook", "com.apple.mobilecal",
     ]
 
+    /// Apps that can't run in the Simulator, so their fields were never
+    /// measured: Notes, Mail and WhatsApp. They get drafts only while
+    /// Settings › Advanced › Try drafts in Notes, Mail and WhatsApp is on
+    /// (`SharedStore.triesMoreDraftHosts`), for a run on a device.
+    public static let trialDraftHosts: Set<String> = [
+        "com.apple.mobilenotes", "com.apple.mobilemail", "net.whatsapp.WhatsApp",
+    ]
+
+    /// Whether drafts go into `host`'s fields: `draftHosts`, and
+    /// `trialDraftHosts` while `trying`.
+    public static func takesDrafts(_ host: String, trying: Bool) -> Bool {
+        draftHosts.contains(host) || (trying && trialDraftHosts.contains(host))
+    }
+
     /// Whether a keyboard may still type this draft.
     public func isFreshDraft(now: Date = Date()) -> Bool {
         let age = now.timeIntervalSince(createdAt)
@@ -302,6 +316,12 @@ public struct SessionSnapshot: Codable, Equatable, Sendable {
     /// that names it (`Delivery.replacesDraft`). The app withdraws it once
     /// a keyboard took it or `Delivery.draftWait` passed.
     public var draft: Delivery?
+    /// Drafts a keyboard typed (or may have) whose written text has not
+    /// been sent yet: their dictations' jobs still run, in the foreground or
+    /// in the background behind a later dictation. A keyboard keeps a draft
+    /// marked while one of its parts is here or its written text waits.
+    /// Nil reads as none.
+    public var writingDrafts: [UUID]?
 
     public init(
         phase: Phase = .off,
@@ -310,7 +330,8 @@ public struct SessionSnapshot: Codable, Equatable, Sendable {
         notice: Notice? = nil,
         meetingActive: Bool = false,
         field: FieldIdentity? = nil,
-        draft: Delivery? = nil
+        draft: Delivery? = nil,
+        writingDrafts: [UUID]? = nil
     ) {
         self.phase = phase
         self.recordingStartedAt = recordingStartedAt
@@ -319,6 +340,7 @@ public struct SessionSnapshot: Codable, Equatable, Sendable {
         self.meetingActive = meetingActive
         self.field = field
         self.draft = draft
+        self.writingDrafts = writingDrafts
     }
 }
 

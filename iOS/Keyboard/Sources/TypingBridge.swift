@@ -130,6 +130,13 @@ final class TypingBridge: ObservableObject {
         observeDictation(fromKeys: fromKeys)
     }
 
+    /// The keyboard marked or changed a draft itself, which the host doesn't
+    /// report: the keys read the text again (Shift, suggestions). Not an edit
+    /// to the dictation before it.
+    func draftChanged() {
+        keyboard?.textDidChange()
+    }
+
     /// A dictation is about to be typed through `EditController`, whose edit callback
     /// would otherwise show its text to the dictation before it as an edit.
     func willInsertDictation() {
