@@ -24,6 +24,17 @@ The iPhone draft-swap check that gates 0.7.19 waited more than 30 minutes behind
 - **Two slots.** A started job keeps its slot until `done`, so a later release job waits for a slot rather than pushing past the cap.
 - **Stale tickets** older than 3 hours are dropped. A longer job runs `wait` again to refresh its ticket.
 
-Tested on Linux with a 1 s poll: two running jobs, then a third (`other`) and a fourth (`release`, arriving later). The release job started first when a slot opened, and never more than two ran at once.
+Joining the queue and the check-then-start step run under one mutex, so a later, higher-priority arrival can't slip in between another waiter's check and its start (Codex found that race). Tested on Linux:
+- Two running jobs, then an `other` job and a later `release` job: the release job started first when a slot opened.
+- 12 jobs of mixed classes joining at once: never more than two running, 6 of 6 runs.
 
 The app lock's stale-lock takeover and its release both go through one mutex, so neither can delete a fresh lock another owner just took (Codex found both races). Race tests: 6 contenders on one stale lock, 30/30 rounds with exactly one winner; a release racing a takeover, 40/40 rounds with the new owner keeping its lock.
+
+## Seed data reached iCloud
+
+At 20:03 IST a gate run launched the iCloud-enabled `/Applications/VoiceiQ.app` while the redesign worker's seed data (8 dictations, 4 meetings, 10 Dictionary terms, all with C0FFEE IDs) sat in the real data folder. The seed data synced to the owner's iCloud. The redesign worker deleted exactly those items through the app so the deletions sync. A restore at about 20:17 put 0.7.17 (92) back in `/Applications`. No 0.7.19 build had been installed, so there was nothing to reinstall.
+
+New rules, in AGENTS.md:
+- Before launching or installing the real app, take the app lock, check the installed build, and check that the data folder holds no seed or test data.
+- Test runs that create dictations, meetings or Dictionary terms use an isolated copy with its own bundle ID, or turn iCloud sync off for the run and back on afterwards.
+- After the cleanup, check that the 10 seed Dictionary terms are gone from iCloud: Priya Raman, Kubernetes, Indiranagar, Northwind, Okafor, SwiftUI, PostgreSQL, Aiko Tanaka, metformin, Sentry. They would bias the owner's dictation.

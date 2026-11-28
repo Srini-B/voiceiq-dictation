@@ -20,7 +20,12 @@ action=${1:?acquire or release}
 owner=${2:?owner (thread ID)}
 
 held_by() { cat "$lock/owner" 2>/dev/null | head -1; }
-mtime() { stat -c %Y "$1" 2>/dev/null || stat -f %m "$1" 2>/dev/null || date +%s; }
+# A path that vanished reads as just now. BSD stat (macOS) or GNU stat.
+if stat -f %m / >/dev/null 2>&1 && ! stat -c %Y / >/dev/null 2>&1; then
+  mtime() { stat -f %m "$1" 2>/dev/null || date +%s; }
+else
+  mtime() { stat -c %Y "$1" 2>/dev/null || date +%s; }
+fi
 age() { echo $(( $(date +%s) - $(mtime "$lock") )); }
 
 # Reclaiming a stale lock and releasing one both check the owner, then
