@@ -48,7 +48,9 @@ so VoiceiQ detects the call and reads names from the screen.
   nobody quits or reinstalls the real app under a probe. Setup and teardown
   outside the script must take under 30 minutes, the lock's stale age, or
   renew it with another `acquire`.
-- `ASSEMBLYAI_API_KEY` set in the app, so the meeting is transcribed. Notes
+- An AssemblyAI key in the test-mode app, so the meeting is transcribed. Test
+  mode has its own Keychain keys, none in a new data folder: enter the key in
+  its Settings, or put it in ~/.config/voiceiq/apikey.dev before launch. Notes
   need an LLM Gateway balance. Without one they fail with `noBalance`, and
   the probe scores the transcript only.
 - Google Chrome. The script creates throwaway profiles in a temporary

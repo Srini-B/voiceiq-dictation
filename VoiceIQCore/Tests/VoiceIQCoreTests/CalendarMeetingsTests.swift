@@ -57,13 +57,15 @@ final class CalendarMeetingsTests: XCTestCase {
     @MainActor
     func testNextMeetingModelTakesSettingChangesFromBackgroundThreads() async {
         let model = NextMeetingModel()
+        let before = model.now
+        try? await Task.sleep(for: .milliseconds(10))
         await Task.detached {
             NotificationCenter.default.post(name: .gtSettingDidChange, object: "calendarForMeetings")
             NotificationCenter.default.post(name: .gtSettingDidChange, object: "apiKey")
             NotificationCenter.default.post(name: .EKEventStoreChanged, object: nil)
         }.value
         try? await Task.sleep(for: .milliseconds(200))
-        _ = model.next
+        XCTAssertGreaterThan(model.now, before, "the calendar setting change should refresh the model")
     }
 }
 #endif
