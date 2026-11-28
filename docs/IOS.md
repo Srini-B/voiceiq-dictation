@@ -233,11 +233,15 @@ is the Mac's draft (`TextDraft`), done by the keyboard:
    before the cursor, nothing is selected, and the text around it is the
    text that was around it when it went in. It never sets marked text over
    the draft: a host can commit marked text without telling the keyboard,
-   and the written text would then go in beside it. A draft whose
-   characters are not single code points (Tamil, Devanagari, emoji
-   sequences) is not deleted key by key, since a host may delete one code
-   point per press. Otherwise the draft stays as heard, and the session
-   log says why.
+   and the written text would then go in beside it. Otherwise the draft
+   stays as heard, and the session log says why.
+
+   A transcript the keyboard could not swap later is never typed as a
+   draft (`KeyboardDraft.canSwap`): one with characters of more than one
+   code point (Tamil, Devanagari, emoji sequences, which a host may delete
+   one code point per press), a line break, or more than 200 characters
+   (hosts show only about the last sentence before the cursor). Its written
+   text goes in once, as before.
 5. A written text whose draft this keyboard no longer holds (the keyboard
    was dismissed or moved to another field) is marked handled and never
    typed beside the draft.

@@ -432,7 +432,7 @@ final class KeyboardModel: ObservableObject {
         guard let typed = KeyboardDraft.type(offered.text, id: offered.id, documentID: documentID, into: proxy,
                                              fit: Self.fitted) else {
             skippedDraftID = offered.id
-            KeyboardLog.note("[\(instanceTag)] draft not typed: text is selected; the written text comes alone")
+            KeyboardLog.note("[\(instanceTag)] draft not typed: text is selected, or it could not be swapped later; the written text comes alone")
             return
         }
         draft = typed

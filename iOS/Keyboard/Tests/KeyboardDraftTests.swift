@@ -85,14 +85,18 @@ final class KeyboardDraftTests: XCTestCase {
         XCTAssertEqual(field.string, "ok ok ok")
     }
 
-    /// A committed Tamil draft is not retyped: Delete may take one code
-    /// point at a time and leave pieces of it.
-    func testADraftWithCombiningMarksIsNotRetyped() throws {
+    /// A draft the swap could not take back out is never typed: Tamil,
+    /// whose vowel signs a host may delete on their own, a line break, and
+    /// a draft longer than hosts show before the cursor. The written text
+    /// then goes in alone, as before drafts.
+    func testADraftThatCouldNotBeSwappedIsNotTyped() {
         let field = Field("")
-        let draft = try XCTUnwrap(type("வணக்கம்", into: field))
-        draft.commit(field)
-        XCTAssertEqual(draft.replace(with: "வணக்கம்.", in: field, fit: fit), .kept)
-        XCTAssertEqual(field.string, "வணக்கம்")
+        XCTAssertNil(type("வணக்கம்", into: field))
+        XCTAssertNil(type("first line\nsecond line", into: field))
+        XCTAssertNil(type(String(repeating: "word ", count: 41), into: field))
+        XCTAssertEqual(field.string, "")
+        XCTAssertNil(field.marked)
+        XCTAssertNotNil(type(String(repeating: "word ", count: 39), into: field))
     }
 
     /// A selection is the user's: the written text never replaces it.

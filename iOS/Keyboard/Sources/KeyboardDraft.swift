@@ -41,17 +41,32 @@ final class KeyboardDraft {
     }
 
     /// Types `transcript` at the cursor as marked text. Nil over a selection,
-    /// which the written text replaces alone, and when nothing is left to type.
+    /// and for a draft that could not be swapped (`canSwap`): the written
+    /// text then goes in alone.
     static func type(_ transcript: String, id: UUID, documentID: UUID, into proxy: UITextDocumentProxy,
                      fit: Fit, now: Date = Date()) -> KeyboardDraft? {
         guard (proxy.selectedText ?? "").isEmpty else { return nil }
         let before = proxy.documentContextBeforeInput ?? ""
         let after = proxy.documentContextAfterInput ?? ""
         let fitted = fit(transcript, before, after)
-        guard !fitted.isEmpty else { return nil }
+        guard canSwap(fitted) else { return nil }
         proxy.setMarkedText(fitted, selectedRange: NSRange(location: fitted.utf16.count, length: 0))
         return KeyboardDraft(id: id, documentID: documentID, text: fitted, before: before, after: after, typedAt: now)
     }
+
+    /// Whether a draft of `text` could be swapped later. The swap deletes
+    /// it one key at a time and must see all of it before the cursor, so a
+    /// draft is typed only when its characters are single code points (a
+    /// host may delete a Tamil or Devanagari vowel sign, or part of an
+    /// emoji, on its own), it has no line break and it is short enough for
+    /// hosts that show only the last sentence or so before the cursor.
+    /// Otherwise the written text goes in once, as before drafts.
+    static func canSwap(_ text: String) -> Bool {
+        !text.isEmpty && text.count <= maxLength && text.unicodeScalars.count == text.count
+            && !text.contains(where: \.isNewline)
+    }
+
+    static let maxLength = 200
 
     /// Makes the marked draft plain text, as heard: the keyboard is going,
     /// or the user edits with it.
@@ -69,12 +84,8 @@ final class KeyboardDraft {
     func replace(with written: String, in proxy: UITextDocumentProxy, fit: Fit) -> Swap {
         commit(proxy)
         let current = proxy.documentContextBeforeInput ?? ""
-        // Delete deletes one character per press, but a host may take one
-        // code point instead (a Tamil or Devanagari vowel sign), which would
-        // leave pieces of the draft: only drafts whose characters are single
-        // code points are retyped.
         guard (proxy.selectedText ?? "").isEmpty, current.hasSuffix(text), isStillAround(proxy, before: current),
-              text.unicodeScalars.count == text.count
+              Self.canSwap(text)
         else { return .kept }
         let fitted = fit(written, String(current.dropLast(text.count)), proxy.documentContextAfterInput ?? "")
         guard !fitted.isEmpty else { return .kept }
