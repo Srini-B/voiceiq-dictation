@@ -31,8 +31,10 @@ final class DictationLearning {
     /// dictation went into; nil when UIKit didn't name it.
     private var document: UUID?
     /// The field's text as last seen with text in it, to read back how a fixed word is
-    /// spelled there (`fix(for:in:)`). A send that empties the field leaves it as it was.
+    /// spelled there (`fix(for:in:dictated:)`). A send that empties the field leaves it as it was.
     private var fieldText = ""
+    /// The followed dictation as typed in, to read back the heard wording's punctuation.
+    private var dictatedText = ""
 
     init(
         now: @escaping () -> TimeInterval = { Date().timeIntervalSince1970 },
@@ -44,7 +46,7 @@ final class DictationLearning {
     ) {
         tracker = DictationEditTracker(now: now)
         tracker.onResult = { [unowned self] result in
-            for fix in Self.fixes(in: result, field: fieldText) { learn(fix) }
+            for fix in Self.fixes(in: result, field: fieldText, dictated: dictatedText) { learn(fix) }
         }
     }
 
@@ -57,6 +59,8 @@ final class DictationLearning {
         self.document = document
         note(before)
         tracker.willInsert(heard: nil, inserted: text, context: before)
+        // After `willInsert`, which settles the dictation before with its own text.
+        dictatedText = text
         note(after)
         tracker.observe(after, fromKeys: true)
     }
@@ -104,41 +108,50 @@ final class DictationLearning {
     /// them by. Hex's classifier has already left out rewrites (more than half
     /// changed), changes too long to be one fix (over three words a side) and
     /// replacements that don't read as a respelling of what was dictated.
-    nonisolated static func fixes(in result: DictationEditResult, field: String) -> [Fix] {
+    nonisolated static func fixes(in result: DictationEditResult, field: String, dictated: String) -> [Fix] {
         guard result.outcome == .edited else { return [] }
-        return result.pairs.filter { $0.kind == .substituted }.map { fix(for: $0, in: field) }
+        return result.pairs.filter { $0.kind == .substituted }.map { fix(for: $0, in: field, dictated: dictated) }
     }
 
-    /// The fix as it reads in the field, found between the dictated words around it.
-    /// Hex lowers a capital that only starts a sentence ("Saran went home" teaches
-    /// "saran"); the capital the user left comes back, and the fix starts a sentence.
-    /// A lowercase word the user left at the start stays lowercase. Otherwise the fix
+    /// The fix as it reads in the field and the words it replaced as they read in the
+    /// dictation, each found between the dictated words around it. Hex's pairs are word
+    /// tokens joined by spaces, so the text is taken from the first word's start to the
+    /// last word's end, keeping what joins them ("GPT-4", not "GPT 4"). Hex lowers a
+    /// capital that only starts a sentence ("Saran went home" teaches "saran"); the
+    /// field's text keeps the capital the user left, and the fix starts a sentence. A
+    /// lowercase word the user left at the start stays lowercase. Otherwise the fix
     /// starts a sentence when the field has `.`, `!`, `?`, `…`, `:` or a line break
     /// before it, or nothing.
-    nonisolated static func fix(for pair: DictationEditPair, in field: String) -> Fix {
-        let meant = pair.meant
-        var fix = Fix(heard: pair.heard, term: meant, startsSentence: false)
-        let words = DictationText.words(in: field)
-        let key = DictationText.phraseKey(meant)
-        let count = DictationText.words(in: meant).count
-        guard count > 0, words.count >= count else { return fix }
+    nonisolated static func fix(for pair: DictationEditPair, in field: String, dictated: String) -> Fix {
+        var fix = Fix(heard: pair.heard, term: pair.meant, startsSentence: false)
+        if let range = span(of: pair.heard, before: pair.before, after: pair.after, in: dictated) {
+            fix.heard = String(dictated[range])
+        }
+        guard let range = span(of: pair.meant, before: pair.before, after: pair.after, in: field) else { return fix }
+        fix.term = String(field[range])
+        let capitalRestored = pair.meant.first?.isLowercase == true && fix.term.first?.isUppercase == true
+        fix.startsSentence = capitalRestored || startsSentence(at: range.lowerBound, in: field)
+        return fix
+    }
+
+    /// Where the words of `phrase` are in `text`, ignoring case, with the word `before`
+    /// right before them and `after` right after (when given): from the first word's
+    /// start to the last word's end.
+    private nonisolated static func span(of phrase: String, before: String?, after: String?,
+                                         in text: String) -> Range<String.Index>? {
+        let words = DictationText.words(in: text)
+        let key = DictationText.phraseKey(phrase)
+        let count = DictationText.words(in: phrase).count
+        guard count > 0, words.count >= count else { return nil }
         for start in 0...(words.count - count) {
             let end = start + count
-            let window = words[start..<end].map(\.text)
-            guard window.map(DictationText.key).joined(separator: " ") == key,
-                  pair.before.map({ start > 0 && DictationText.key(words[start - 1].text) == DictationText.key($0) }) ?? true,
-                  pair.after.map({ end < words.count && DictationText.key(words[end].text) == DictationText.key($0) }) ?? true
+            guard words[start..<end].map({ DictationText.key($0.text) }).joined(separator: " ") == key,
+                  before.map({ start > 0 && DictationText.key(words[start - 1].text) == DictationText.key($0) }) ?? true,
+                  after.map({ end < words.count && DictationText.key(words[end].text) == DictationText.key($0) }) ?? true
             else { continue }
-            if let first = meant.first, first.isLowercase,
-               window.joined(separator: " ") == first.uppercased() + meant.dropFirst() {
-                fix.term = first.uppercased() + meant.dropFirst()
-                fix.startsSentence = true
-            } else {
-                fix.startsSentence = startsSentence(at: words[start].range.lowerBound, in: field)
-            }
-            return fix
+            return words[start].range.lowerBound..<words[end - 1].range.upperBound
         }
-        return fix
+        return nil
     }
 
     private nonisolated static func startsSentence(at index: String.Index, in text: String) -> Bool {

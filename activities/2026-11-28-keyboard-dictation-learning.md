@@ -30,6 +30,10 @@ Auto-learned section.
   Whether the fix begins a sentence goes along (`DictionaryAddition.startsSentence`,
   into `LearnedCorrection.startsSentence`), so "Sory, I'm late" → "Sorry, I'm
   late" is not learned by the name exception (PR #168 review).
+- Hex's pairs join word tokens with spaces, so the term is taken from the
+  field and the heard wording from the dictation, from the first matched
+  word's start to the last's end: "I tested GPT4 today." fixed to "GPT-4"
+  teaches "GPT-4" heard as "GPT4", not "GPT 4" (PR #168 review).
 - The tracker remembers the input session (`documentIdentifier`) its dictation
   went into. Text from another session settles it where it was last seen, so
   moving focus to a field holding "…Saran…" no longer reads as a fix of a
@@ -66,7 +70,8 @@ Auto-learned entries are vocabulary only (no `misspelling`, so never a
   dictation, a deleted one and one deleted and dictated again ("Saran" the
   second time) hand over nothing; "Sharon went home." fixed to "Saran went
   home." hands over "Saran" with its capital, and "Sory, I'm late." fixed
-  to "Sorry" is marked as a sentence start; text in another field after a
+  to "Sorry" is marked as a sentence start; "GPT4" fixed to "GPT-4" hands
+  over "GPT4 → GPT-4"; text in another field after a
   dictation into an empty field hands over nothing.
 - `EditLearnerTests.testAFixFromTheIPhoneKeyboardIsLearnedByTheMacsRules`
   (VoiceIQCore, macOS): `DictionaryStore.learn` keeps "Saran" heard as

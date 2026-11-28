@@ -50,6 +50,14 @@ final class DictationLearningTests: XCTestCase {
         XCTAssertEqual(learned, ["Sharon → Saran (sentence start)", "Sory → Sorry (sentence start)"])
     }
 
+    /// Hex's word pairs lose what joins words; the term is the field's text.
+    func testPunctuationInsideAFixIsKept() {
+        let learning = makeLearning()
+        dictate("I tested GPT4 today.", into: learning)
+        leave(learning, as: "I tested GPT-4", " today.")
+        XCTAssertEqual(learned, ["GPT4 → GPT-4"])
+    }
+
     func testARewrittenDeletedOrRedictatedDictationTeachesNothing() {
         let learning = makeLearning()
         dictate(dictated, into: learning)

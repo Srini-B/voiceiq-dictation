@@ -838,7 +838,10 @@ you kept, by a respelling of it (`isPlausibleFix`, the bound the Mac's
 `EditDiff` uses), goes to the app as a Dictionary word with
 `DictionaryAddition.learnedFrom` set to the dictated wording, spelled as it
 is in the field: Hex drops a capital that starts a sentence, so a fix as the
-first word keeps the capital the user left (`DictationLearning.fix`).
+first word keeps the capital the user left, and Hex's pairs are words joined
+by spaces, so the term is the field's text from the fix's first word to its
+last and the heard wording the dictation's, keeping hyphens and dots inside
+them ("GPT4" → "GPT-4", not "GPT 4"; `DictationLearning.fix`).
 `DictionaryAddition.startsSentence` says whether the fix begins a sentence,
 so the app judges its capital as the Mac does: at a sentence start a capital
 is not a name, and an ordinary word ("Sory" → "Sorry", but also "Sharon" →
