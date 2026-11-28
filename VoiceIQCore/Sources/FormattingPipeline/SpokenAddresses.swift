@@ -164,7 +164,8 @@ enum SpokenAddresses {
         let earlier = tokens[first..<(start - 1)].map { bare($0.word) }
         let mailbox = bare(tokens[start].word)
         if weakIntroductions.contains(word) || contracted != nil {
-            if contracted == nil, earlier.contains(where: strongIntroductions.contains) { return .strong }
+            // Only within the phrase: "Tell me whether the market is moving at the rate…" stays.
+            if contracted == nil, earlier.suffix(3).contains(where: strongIntroductions.contains) { return .strong }
             // "It is growing at the rate…", "went from 10 at the rate…": a verb or a number, not a
             // mailbox. Not "-ed" ("Ahmed"), a short "-ing" ("Ming"), or after "to" ("to billing", "to 123").
             let progressive = ["is", "was", "are", "be"].contains(word) || contracted != nil

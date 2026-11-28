@@ -281,7 +281,8 @@ final class TidyTests: XCTestCase {
                      "The market is moving at the rate google dot com, thanks.",
                      "I wrote to priya@gmail.com and growth at the rate google dot com, thanks.",
                      "It is growing at the rate amazon dot com.", "It will be growing at the rate amazon dot com.",
-                     "Prices rose and fell at the rate gmail dot com.", "Revenue went from 5 or 10 at the rate amazon dot com.", "It's growing at the rate amazon dot com.", "Revenue went from 10 at the rate amazon dot com."] {
+                     "Prices rose and fell at the rate gmail dot com.",
+                     "Tell me whether the market is moving at the rate google dot com, thanks.", "Revenue went from 5 or 10 at the rate amazon dot com.", "It's growing at the rate amazon dot com.", "Revenue went from 10 at the rate amazon dot com."] {
             XCTAssertEqual(SpokenAddresses.joining(in: kept), kept)
         }
     }
