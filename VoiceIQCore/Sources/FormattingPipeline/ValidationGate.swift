@@ -50,20 +50,22 @@ public enum ValidationGate {
     }
 
     /// The words open the transcript, after any fillers ("so um hi Priya").
-    /// A number counts as spoken when the transcript opens with any number,
-    /// since the writer turns "three" into "3".
+    /// A number also counts when the transcript's first word is that number
+    /// spoken ("three" written "3."); "okay, one more thing" after "[1] " does not.
     private static func spoken(_ repeated: [String], in transcript: String) -> Bool {
         guard !repeated.isEmpty else { return false }
-        let heard = words(transcript).prefix(repeated.count + 4)
+        let all = words(transcript)
+        let heard = all.prefix(repeated.count + 4)
         if heard.indices.contains(where: { heard[$0...].starts(with: repeated) }) { return true }
-        let isNumber = { (word: String) in word.allSatisfy(\.isNumber) || numberWords.contains(word) }
-        return repeated.contains(where: isNumber) && heard.contains(where: isNumber)
+        guard let first = all.first, let said = numberWords[first] ?? Int(first) else { return false }
+        return repeated.contains { Int($0) == said }
     }
 
-    private static let numberWords: Set<String> = [
-        "zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve",
-        "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen", "twenty", "thirty",
-        "forty", "fifty", "sixty", "seventy", "eighty", "ninety", "hundred", "thousand", "first", "second", "third",
+    private static let numberWords: [String: Int] = [
+        "zero": 0, "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9,
+        "ten": 10, "eleven": 11, "twelve": 12, "thirteen": 13, "fourteen": 14, "fifteen": 15, "sixteen": 16,
+        "seventeen": 17, "eighteen": 18, "nineteen": 19, "twenty": 20, "first": 1, "second": 2, "third": 3,
+        "fourth": 4, "fifth": 5, "sixth": 6, "seventh": 7, "eighth": 8, "ninth": 9, "tenth": 10,
     ]
 
     private static func words(_ text: String) -> [String] {

@@ -27,6 +27,8 @@ final class ValidationGateTests: XCTestCase {
         XCTAssertEqual(ValidationGate.droppingEcho("Hi Omar, it looks better.", before: "Hi Omar, ",
                                                    transcript: "it looks better"),
                        "it looks better.")
+        XCTAssertEqual(ValidationGate.droppingEcho("[1] Okay, one more thing.", before: "[1] ", transcript: "okay one more thing"),
+                       "Okay, one more thing.")
     }
 
     /// Words the speaker said, or that only look like the field's end, stay.

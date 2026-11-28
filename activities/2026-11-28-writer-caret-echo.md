@@ -44,8 +44,9 @@ Priya," and is accepted.
   transcript does not start with the same words. It drops only a line
   marker or label (punctuation or a symbol, not a plain number), a name with
   its comma, or several words; a lone word stays, and so does a start the
-  speaker said within the first few words after fillers, or any number when
-  the transcript opens with one ("three" written "3."). Review findings
+  speaker said within the first few words after fillers, or a number when the
+  transcript's first word is that number ("three" written "3."; "okay,
+  one more thing" after "[1] " is still an echo). Review findings
   (Neon hand read via agy, Codex) led to those last three conditions.
 - `eval/dictation/writer.py` passes the field text and transcript to the
   same post-processing, so the eval matches the app.
