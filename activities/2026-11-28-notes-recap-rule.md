@@ -16,7 +16,9 @@ meeting's 3-run mean drops by more than 1 point.
 
 `MeetingNotesPrompt.rules` has a `recaps` rule under actions, and
 `docs/design/meeting-prompt-rulebook.md` has the same rule. It is
-c774793b's wording, the only one that scored well on the full meetings:
+c774793b's wording. Set A's first version also scored well but dropped a task
+first given to a named person in the recap (the probe below); this wording
+keeps it and scored best on the full meetings:
 
 - A closing recap that restates tasks creates no new action. Each recapped
   task matches its earlier commitment and takes the deadline the recap
@@ -91,8 +93,17 @@ per meeting.
   missed $4,000 estimate). Overall stays 92.4.
 - Not measured: main's #146 rewrote the LANGUAGE rule after these runs. The
   merge is clean, but the merged prompt has not been scored.
-- Follow-up: the misheard-owner duplicate above, and a probe that uses all
-  three s4-echo transcripts before any further change to this rule.
+- Follow-ups, none blocking:
+  - The misheard-owner duplicate above is an old gap: main without the rule
+    also duplicates it, 2 of 2 on the same probe.
+  - Read to the letter, the last sentence would drop a first-person task or
+    a group step first made in the recap, since neither names a person. The
+    general action rules keep them: the probe kept "I'll email legal" in 2 of
+    2, and set C kept the s2 follow-up meeting in 4 of 6 and AMI's group step
+    in 3 of 3.
+  - The rule doesn't say an earlier deadline stays when a recap repeats a
+    task without one; the deadline rule should hold it, untested.
+  - Probe with all three s4-echo transcripts before any further change.
 - The rule was written for s4-names-unsaid-echo, a scored meeting, so its
   gain there is expected; the other eight meetings and the probes are the
   evidence it generalises.
