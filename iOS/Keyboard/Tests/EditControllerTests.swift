@@ -1,11 +1,14 @@
 import UIKit
 import XCTest
 
-/// A text field as a keyboard sees it: text with a cursor or a selection.
-private final class Field: NSObject, UITextDocumentProxy {
+/// A text field as a keyboard sees it: text with a cursor or a selection,
+/// and the keyboard's marked text, which the context includes, as UIKit's does.
+final class Field: NSObject, UITextDocumentProxy {
     var text: [Character]
     private var start: Int
     private var length: Int
+    /// Where the marked text is, in characters.
+    private(set) var marked: Range<Int>?
 
     init(_ text: String, cursorAt offset: Int? = nil, selecting word: String? = nil) {
         self.text = Array(text)
@@ -21,6 +24,14 @@ private final class Field: NSObject, UITextDocumentProxy {
     var string: String { String(text) }
     var cursor: Int { start }
 
+    /// The user selects the last occurrence of `word`; the host commits marked text.
+    func select(_ word: String) {
+        guard let range = string.range(of: word, options: .backwards) else { return }
+        start = string.distance(from: string.startIndex, to: range.lowerBound)
+        length = word.count
+        marked = nil
+    }
+
     var documentContextBeforeInput: String? { String(text[..<start]) }
     var documentContextAfterInput: String? { String(text[(start + length)...]) }
     var selectedText: String? { length > 0 ? String(text[start..<(start + length)]) : nil }
@@ -29,12 +40,15 @@ private final class Field: NSObject, UITextDocumentProxy {
     var hasText: Bool { !text.isEmpty }
 
     func insertText(_ string: String) {
-        text.replaceSubrange(start..<(start + length), with: string)
-        start += string.count
+        let range = marked ?? start..<(start + length)
+        text.replaceSubrange(range, with: string)
+        start = range.lowerBound + string.count
         length = 0
+        marked = nil
     }
 
     func deleteBackward() {
+        marked = nil
         if length > 0 {
             text.removeSubrange(start..<(start + length))
         } else if start > 0 {
@@ -45,15 +59,26 @@ private final class Field: NSObject, UITextDocumentProxy {
     }
 
     func adjustTextPosition(byCharacterOffset offset: Int) {
+        marked = nil
         start = min(max((offset < 0 ? start : start + length) + offset, 0), text.count)
         length = 0
     }
 
-    func setMarkedText(_ markedText: String, selectedRange: NSRange) {}
-    func unmarkText() {}
+    /// The cursor goes to the end of the marked text: the keyboard always asks for that.
+    func setMarkedText(_ markedText: String, selectedRange: NSRange) {
+        let range = marked ?? start..<(start + length)
+        text.replaceSubrange(range, with: markedText)
+        marked = markedText.isEmpty ? nil : range.lowerBound..<(range.lowerBound + markedText.count)
+        start = range.lowerBound + markedText.count
+        length = 0
+    }
+
+    func unmarkText() {
+        marked = nil
+    }
 }
 
-private final class FieldController: UIInputViewController {
+final class FieldController: UIInputViewController {
     let field: Field
 
     init(_ field: Field) {

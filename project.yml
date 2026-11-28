@@ -306,7 +306,7 @@ targets:
     sources:
       - iOS/Keyboard/Tests
       - path: iOS/Keyboard/Sources
-        includes: [EditController.swift]
+        includes: [EditController.swift, KeyboardDraft.swift]
 
   VoiceIQLiveActivity:
     type: app-extension

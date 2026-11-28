@@ -207,6 +207,49 @@ Settings › Privacy has
 the same "Keep dictations" picker as the Mac (`transcriptRetentionDays`);
 `AppModel` runs `RetentionPolicy.purge()` on launch.
 
+#### The transcript as a draft
+
+When the keyboard never left the field (the first rule above) and the
+writing model will rewrite the transcript, the keyboard shows the
+transcript first and swaps in the written text about a second later. This
+is the Mac's draft (`TextDraft`), done by the keyboard:
+
+1. The moment the transcript is heard, the app publishes it as
+   `SessionSnapshot.draft`, a `Delivery` with the same destination.
+2. A keyboard on screen in the destination's input session types it with
+   `setMarkedText`, fitted like any result. iOS hosts underline marked
+   text. The keyboard then writes the draft's ID to
+   `SharedStore.typedDraftID` (writer: keyboard). It types a draft only
+   within 0.45 s of its creation (`Delivery.draftWindow`), and never over a
+   selection.
+3. The app waits up to 0.6 s (`Delivery.draftWait`) for that ID, then
+   withdraws the draft from the snapshot. Without the ID, the written text
+   comes alone, as before.
+4. The written text comes as a delivery with `replacesDraft` set to the
+   draft's ID. The keyboard replaces the draft in place with
+   `setMarkedText` and `unmarkText` when the field still reads as the
+   draft left it and nothing changed in it after the draft landed. If the
+   host already committed the draft, the keyboard deletes it and types the
+   written text, but only when the draft is right before the cursor and
+   nothing is selected. Otherwise the draft stays as heard, and the session
+   log says why.
+5. A written text whose draft this keyboard no longer holds (the keyboard
+   was dismissed or moved to another field) is marked handled and never
+   typed beside the draft.
+
+While the keyboard holds a draft, the strip shows a writing animation (one
+crest sweeping across five bars) instead of the spinner. A key, a cursor
+move, Paste last or Undo while the draft is marked commits it first
+(`EditController.willEdit`), so the edit cannot replace it. A dismissed
+keyboard commits it too. Paste last and History always have the written
+text.
+
+The keyboard does not show a spinner in the field before the draft
+lands. It would be marked text too, and a host commits marked text as
+plain text when focus moves or iOS ends the keyboard, which would leave a
+spinner glyph in the user's text. The strip's spinner shows the wait
+instead.
+
 ### Returning to the app
 
 The keyboard learns the host's bundle ID from two private UIKit surfaces

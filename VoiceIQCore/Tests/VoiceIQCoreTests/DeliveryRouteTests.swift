@@ -228,5 +228,33 @@ final class DeliveryRouteTests: XCTestCase {
         XCTAssertNil(snapshot.delivery?.destination)
         XCTAssertNil(snapshot.delivery?.stoppedAt)
         XCTAssertNil(snapshot.field)
+        XCTAssertNil(snapshot.draft)
+        XCTAssertNil(snapshot.delivery?.replacesDraft)
+    }
+
+    // MARK: - Drafts
+
+    /// The draft and the written text that names it reach the keyboard as
+    /// the app wrote them, and a handled result still names its draft.
+    func testADraftAndTheTextReplacingItRoundTrip() throws {
+        let destination = field(messages, draft: hello)
+        let draft = Delivery(text: "see you at noon", createdAt: made, destination: destination)
+        let written = Delivery(text: "See you at noon.", createdAt: made, destination: destination,
+                               stoppedAt: made, replacesDraft: draft.id)
+        let sent = SessionSnapshot(phase: .processing, delivery: written, draft: draft)
+        let read = try JSONDecoder().decode(SessionSnapshot.self, from: JSONEncoder().encode(sent))
+        XCTAssertEqual(read, sent)
+        XCTAssertEqual(read.delivery?.replacesDraft, draft.id)
+        XCTAssertEqual(written.forgettingDraft().replacesDraft, draft.id)
+    }
+
+    /// A keyboard types a draft only while it is fresh, so it never types
+    /// one after the app stopped waiting and sent the written text alone.
+    func testADraftIsTypedOnlyWithinItsWindowWhichEndsBeforeTheAppStopsWaiting() {
+        let draft = Delivery(text: "see you", createdAt: made, destination: field(messages))
+        XCTAssertTrue(draft.isFreshDraft(now: made.addingTimeInterval(0.1)))
+        XCTAssertFalse(draft.isFreshDraft(now: made.addingTimeInterval(Delivery.draftWindow)))
+        XCTAssertFalse(draft.isFreshDraft(now: made.addingTimeInterval(-1)), "a clock that went back")
+        XCTAssertLessThan(Delivery.draftWindow, Delivery.draftWait)
     }
 }
