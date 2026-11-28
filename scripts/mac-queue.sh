@@ -49,10 +49,13 @@ run_locked() {
   perl -e 'use Fcntl qw(:flock); $^F = 255; open(my $f, ">>", shift) or die "lock: $!"; flock($f, LOCK_EX) or die "lock: $!"; exec @ARGV or die "exec: $!"' "$dir.lock" "$0" "$@"
 }
 # The owner is everything after "[0-]<rank>-<sequence>-", compared literally.
-ticket_of() {
+# Prints every ticket the owner has, oldest name first. Tickets from before
+# the 9-digit sequence carry a 10-digit timestamp there; they match too, so
+# `done` clears them.
+tickets_of() {
   local f
   for f in $(ls "$dir" 2>/dev/null); do
-    [[ $f =~ ^(0-)?[0-9]-[0-9]{9}-(.*)$ && ${BASH_REMATCH[2]} == "$1" ]] && { echo "$f"; return 0; }
+    [[ $f =~ ^(0-)?[0-9]-[0-9]+-(.*)$ && ${BASH_REMATCH[2]} == "$1" ]] && echo "$f"
   done
   return 0
 }
@@ -63,7 +66,7 @@ case $action in
 _join)  # under the lock: prints the ticket; exits 3 if it is already running
   owner=$2 class=$3 note=${4:-}
   prune
-  t=$(ticket_of "$owner")
+  t=$(tickets_of "$owner" | head -1)
   if [[ -z $t ]]; then
     n=$(( $(cat "$dir.seq" 2>/dev/null || echo 0) + 1 )); echo $n > "$dir.seq"
     t="$(rank "$class")-$(printf %09d $n)-$owner"
@@ -103,8 +106,7 @@ wait)
   ;;
 done)
   owner=${2:?owner (thread ID)}
-  t=$(ticket_of "$owner")
-  [[ -n $t ]] && rm -f "$dir/$t"
+  for t in $(tickets_of "$owner"); do rm -f "$dir/$t"; done
   exit 0
   ;;
 _prune)  # under the lock
