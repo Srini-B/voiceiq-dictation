@@ -48,6 +48,10 @@ public final class FieldDraft: TextDraft {
     private var field: DraftField?
     /// The text this dictation left in the field, once shown.
     private var landed: String?
+    /// The selected text the draft went in over, put back if the draft is
+    /// taken out.
+    private var replaced = ""
+
     private var tracking: Task<Void, Never>?
     private var ended = false
 
@@ -110,6 +114,7 @@ public final class FieldDraft: TextDraft {
             return .notInserted
         }
         let fitted = InsertionCoordinator.fitted(text, context: context)
+        replaced = Self.slice(before.value, before.caret, before.selectionLength)
         let insert = await inserter.insertReportingTier(fitted, context: context)
         guard insert.outcome == .inserted else {
             marks.clear()
@@ -181,11 +186,15 @@ public final class FieldDraft: TextDraft {
             Log.insertion.info("draft: edited or gone — kept as it was")
             return false
         }
-        let written = span.surrounding(in: reading.value)?.fitted(text) ?? text
+        // An empty text takes the draft out (`DraftStage.withdraw`): the
+        // text it went in over comes back, selected as it was.
+        let withdrawing = text.isEmpty
+        let written = withdrawing ? replaced : span.surrounding(in: reading.value)?.fitted(text) ?? text
         guard written != span.text else { return true }
         guard let expected = span.replacing(in: reading.value, with: written) else { return false }
-        let selection = span.selection((reading.caret, reading.selectionLength),
-                                       afterReplacingWith: written.utf16.count)
+        let selection = withdrawing && !replaced.isEmpty
+            ? (location: span.location, length: replaced.utf16.count)
+            : span.selection((reading.caret, reading.selectionLength), afterReplacingWith: written.utf16.count)
         /// The field changed after the write: the swap only when the written
         /// text is where the draft was. A field that reads otherwise (the app
         /// adjusted the text, or a key typed over the selection) is followed
@@ -316,6 +325,12 @@ public final class FieldDraft: TextDraft {
         AXUIElementSetMessagingTimeout(element, 0.25)
         if let start = context.focusedField?.element, !CFEqual(start as CFTypeRef, element) { return nil }
         return element
+    }
+
+    private static func slice(_ value: String, _ location: Int, _ length: Int) -> String {
+        let units = Array(value.utf16)
+        guard location >= 0, length > 0, location + length <= units.count else { return "" }
+        return String(decoding: units[location..<(location + length)], as: UTF16.self)
     }
 
     static func isChromiumOrElectron(bundleID: String?, bundleURL: URL?) -> Bool {
