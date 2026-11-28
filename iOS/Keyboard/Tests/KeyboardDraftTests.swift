@@ -148,7 +148,10 @@ final class KeyboardDraftTests: XCTestCase {
         second.markedTextThisTurn = { unmarkedThisTurn }
         held.keep(plain, .alone)
         unmarkedThisTurn = true
-        second.type("!")
+        second.type("!?")
+        second.deleteBackward()
+        // The keys plan their next edit from the text as it will be.
+        XCTAssertEqual(second.projected("Dear Ana, see you at noon"), "Dear Ana, see you at noon!")
         plain.endTurn()
         XCTAssertEqual(plain.string, "Dear Ana, see you at noon")
         unmarkedThisTurn = false

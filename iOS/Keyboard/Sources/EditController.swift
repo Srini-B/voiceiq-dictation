@@ -129,17 +129,32 @@ final class EditController: ObservableObject {
     /// draft was made plain with `unmarkText` would replace it. In such a
     /// turn `edit` runs again on the next one and this returns false;
     /// otherwise a held draft is made plain first (`willEdit`), which may
-    /// itself be such a call.
-    func runsNow(_ edit: @escaping @MainActor @Sendable () -> Void) -> Bool {
+    /// itself be such a call. `change` is what `edit` does to the text
+    /// before the cursor, which `projected` counts until it runs.
+    func runsNow(changing change: TextEdit? = nil, _ edit: @escaping @MainActor @Sendable () -> Void) -> Bool {
         if markedTextThisTurn?() != true { willEdit?() }
         guard markedTextThisTurn?() == true else { return true }
-        DispatchQueue.main.async { edit() }
+        if let change { waiting.append(change) }
+        DispatchQueue.main.async { [weak self] in
+            if change != nil { self?.waiting.removeFirst() }
+            edit()
+        }
         return false
+    }
+
+    /// Edits `runsNow` moved to the next turn, in order.
+    private var waiting: [TextEdit] = []
+
+    /// The text before the cursor as it will be once the edits waiting for
+    /// the next turn are made. The keys read this between their own edits:
+    /// a word-wise Delete reads the word to take after each word it took.
+    func projected(_ before: String) -> String {
+        waiting.reduce(before) { String($0.dropLast($1.remove)) + $1.append }
     }
 
     /// Types `text` over the selection, if any, as one undo step of `kind`.
     func type(_ text: String, as kind: Kind = .other) {
-        guard !text.isEmpty, runsNow({ [weak self] in self?.type(text, as: kind) }) else { return }
+        guard !text.isEmpty, runsNow(changing: TextEdit(append: text)) { [weak self] in self?.type(text, as: kind) } else { return }
         checkpoint(kind)
         insert(text)
         refresh()
@@ -147,7 +162,7 @@ final class EditController: ObservableObject {
     }
 
     func deleteBackward() {
-        guard runsNow({ [weak self] in self?.deleteBackward() }) else { return }
+        guard runsNow(changing: TextEdit(remove: 1)) { [weak self] in self?.deleteBackward() } else { return }
         checkpoint(.deleting)
         deleteBack()
         refresh()
@@ -156,7 +171,7 @@ final class EditController: ObservableObject {
 
     /// Insert driven by Hex's `FullKeyboardEngine` (already owns keyboard state).
     func typeFromKeyboard(_ text: String) {
-        guard !text.isEmpty, runsNow({ [weak self] in self?.typeFromKeyboard(text) }) else { return }
+        guard !text.isEmpty, runsNow(changing: TextEdit(append: text)) { [weak self] in self?.typeFromKeyboard(text) } else { return }
         let wordCharacter = text.count == 1 && (text.first?.isLetter == true || text.first?.isNumber == true)
         if deletedThisTurn {
             groupTurnDeletes()
@@ -170,7 +185,7 @@ final class EditController: ObservableObject {
 
     /// Delete driven by Hex's `FullKeyboardEngine`.
     func deleteFromKeyboard() {
-        guard runsNow({ [weak self] in self?.deleteFromKeyboard() }) else { return }
+        guard runsNow(changing: TextEdit(remove: 1)) { [weak self] in self?.deleteFromKeyboard() } else { return }
         if !deletedThisTurn {
             deletedThisTurn = true
             undoBeforeTurn = undoStack
@@ -255,7 +270,7 @@ final class EditController: ObservableObject {
     }
 
     private func replay(_ edit: TextEdit) {
-        guard let proxy, runsNow({ [weak self] in self?.replay(edit) }) else { return }
+        guard let proxy, runsNow(changing: edit) { [weak self] in self?.replay(edit) } else { return }
         for _ in 0..<edit.remove { proxy.deleteBackward() }
         if !edit.append.isEmpty { proxy.insertText(edit.append) }
         lastKind = nil
