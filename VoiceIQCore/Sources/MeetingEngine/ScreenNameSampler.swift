@@ -31,10 +31,6 @@ public final class ScreenNameSampler: @unchecked Sendable {
     /// a read-back shows it off again. Its "on" is ours, not another tool's.
     private let pulsedPID = OSAllocatedUnfairLock<pid_t?>(initialState: nil)
     private var switchOffTries = 0
-    /// The last Chromium page read, carried to the ticks until the next one,
-    /// so a name the page shows keeps its share of samples whether or not
-    /// each tick also has a snapshot (Codex and agy on #146).
-    private var pageLines: [String]?
     /// A Chromium browser's page text is read on every this-many ticks (15 s),
     /// since each read briefly makes the browser animate its window moves.
     static let browserTreeEvery = 5
@@ -84,7 +80,7 @@ public final class ScreenNameSampler: @unchecked Sendable {
         if bundleID == nil { bundleID = Self.frontCallApp(among: joining) }
         guard let bundleID else { return false }
         if !pidHoldsRoom, accessibility, let found = Self.callPID(bundleID: bundleID) {
-            if pid != found.pid { pageLines = nil; switchOffTries = 0 }
+            if pid != found.pid { switchOffTries = 0 }
             pid = found.pid; pidHoldsRoom = found.joined
             AccessibilityWaker.wakeIfNeeded(bundleID: bundleID, pid: found.pid)
         }
@@ -172,14 +168,16 @@ public final class ScreenNameSampler: @unchecked Sendable {
                 if browser, chromium?.isChromium == true, ours || !Self.webTreeIsOpen(pid) {
                     if tick % Self.browserTreeEvery == 0 {
                         pulsedPID.withLock { $0 = pid }; switchOffTries = 0
-                        pageLines = await Self.whileWebTreeOpen(pid) { CallWindowText.lines(pid: pid, browser: true) }
+                        lines += await Self.whileWebTreeOpen(pid) { CallWindowText.lines(pid: pid, browser: true) }
                         if Self.switchOff(pid) { pulsedPID.withLock { $0 = nil } }
+                        looked = true
                     }
-                    // Nil until the first page read: those ticks looked at nothing.
-                    if let pageLines { lines += pageLines; looked = true }
+                    // Page text counts only at the time it was read: carried to
+                    // later ticks, an active-speaker tile's old name lands on the
+                    // next speaker's turn, and `match` pairs names with voices by
+                    // time (Codex on #146). A name only the page shows (not a
+                    // tile) therefore has a lower share when snapshots also run.
                 } else {
-                    // Read live here; a page read from before must not come back later.
-                    pageLines = nil
                     lines += CallWindowText.lines(pid: pid, browser: browser)
                     looked = true
                 }
