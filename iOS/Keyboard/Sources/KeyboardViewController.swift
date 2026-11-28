@@ -43,6 +43,7 @@ final class KeyboardViewController: UIInputViewController {
         editor.willEdit = { [weak model] in model?.userWillEdit() }
         typing.controller = self
         typing.editor = editor
+        typing.textBeforeWithDraft = { [weak model] in model?.textBeforeWithDraft }
         typing.onPreferredHeightChange = { [weak self] in self?.updateHeight() }
         typing.dictation.onDictateTap = { [weak model] in model?.micTapped() }
         typing.dictation.onOpenURL = { [weak self] url in self?.openURL(url) }

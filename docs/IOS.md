@@ -284,9 +284,26 @@ next key would replace it. A keyboard cannot tell which of its writes were
 lost. So it keeps the app and input session of the last draft it typed
 (`KeyboardModel.lastDraftPlace`, in the keyboard's own `UserDefaults`, since
 iOS often ends the keyboard's process while its app is away), and the first
-poll of the next input session in that app, or in an app it cannot name,
-sends one `unmarkText` and nothing else (`settleLeftDraft`). The draft is
-then plain text, as heard. Where nothing is marked the call changes nothing.
+poll of the next input session in that app sends one `unmarkText` and
+nothing else (`settleLeftDraft`), then forgets the place. The draft is then
+plain text, as heard. Where nothing is marked the call changes nothing. A
+session in an app the keyboard cannot name gets one `unmarkText` too, since
+it may be that app (a new keyboard process can name none), and the place is
+kept until that app is named. This is the one call the keyboard makes for a
+draft outside `verifiedHosts`.
+
+The keys plan an edit from the text before the cursor before they make it:
+autocorrect counts its Deletes from the word it read, and a word-wise move
+its offset. The proxy leaves a marked draft out of that text. So while a
+draft is held, the keys read the proxy's text with the draft added
+(`KeyboardDraft.textBefore`, through `TypingBridge.documentContextBeforeInput`),
+and the keyboard's own cursor moves and Paste last make the draft plain
+before they read. Planned from the proxy's text alone, a space after a draft
+would have corrected the word before the draft and deleted into both.
+
+After any `unmarkText` the keyboard types no result and marks no draft for
+0.05 s (`KeyboardModel.unmarkQuiet`): two polls can run in one turn of the
+run loop. A key tapped in that same turn is not covered.
 
 The keyboard does not show a spinner in the field before the draft
 lands. It would be marked text too, and a host commits marked text as

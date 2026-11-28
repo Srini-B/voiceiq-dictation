@@ -190,6 +190,8 @@ final class EditController: ObservableObject {
 
     func moveCursor(_ move: CursorMove) {
         guard let proxy else { return }
+        // First: the offsets below count a draft's text once it is plain.
+        willEdit?()
         let before = Array(proxy.documentContextBeforeInput ?? "")
         let after = Array(proxy.documentContextAfterInput ?? "")
         let offset: Int
@@ -202,7 +204,6 @@ final class EditController: ObservableObject {
         case .lineEnd: offset = after.firstIndex(of: "\n") ?? after.count
         }
         guard offset != 0 else { return }
-        willEdit?()
         proxy.adjustTextPosition(byCharacterOffset: offset)
         // Undo replays at the cursor, so a moved cursor drops it.
         resetUndo()

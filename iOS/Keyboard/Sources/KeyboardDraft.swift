@@ -108,10 +108,25 @@ final class KeyboardDraft {
         guard proxy.hasText, (proxy.selectedText ?? "").isEmpty,
               (proxy.documentContextAfterInput ?? "") == after else { return false }
         let current = proxy.documentContextBeforeInput ?? ""
-        if current == before { return true }
-        // A host reports as much text before the cursor as it likes, so with
-        // the draft in it the start of the earlier text may be cut off.
-        return current.hasSuffix(text) && before.hasSuffix(String(current.dropLast(text.count)))
+        return current == before || reportsDraft(current)
+    }
+
+    /// Whether `current`, the proxy's text before the cursor, has the draft
+    /// in it. A host reports as much text before the cursor as it likes, so
+    /// the start of the earlier text may be cut off.
+    private func reportsDraft(_ current: String) -> Bool {
+        current.hasSuffix(text) && before.hasSuffix(String(current.dropLast(text.count)))
+    }
+
+    /// The text before the cursor as the field has it: the proxy's, with the
+    /// marked draft it leaves out. The keys plan an edit from this text
+    /// before they make it (autocorrect counts its Deletes, a word-wise move
+    /// its offset); planned from the proxy's text alone, they would count
+    /// from the word before the draft and, once the draft is plain, delete
+    /// into it and into that word.
+    func textBefore(_ proxy: UITextDocumentProxy) -> String {
+        let current = proxy.documentContextBeforeInput ?? ""
+        return isMarked && current == before ? current + text : current
     }
 
     /// Replaces the draft with `written`, fitted to the text that was around

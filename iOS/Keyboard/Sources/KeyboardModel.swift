@@ -161,18 +161,33 @@ final class KeyboardModel: ObservableObject {
 
     /// Makes plain a draft left marked in an earlier input session
     /// (`lastDraftPlace`); in a field with no marked text `unmarkText`
-    /// changes nothing. Also where the app cannot be named, which is so in a
-    /// new keyboard process: waiting for a name would leave the draft to the
-    /// next key. True when it was sent, which must be this turn's only write.
+    /// changes nothing. In that draft's app it is sent once and the place
+    /// forgotten. An app that cannot be named, which is every app in a new
+    /// keyboard process, may be that app: waiting for a name would leave the
+    /// draft to the next key, so each such session gets one too, and the
+    /// place is kept until that app is named. True when it was sent, which
+    /// must be this turn's only write.
     private func settleLeftDraft() -> Bool {
         guard draft == nil, let left = Self.lastDraftPlace, let session, session.documentID == documentID,
-              session.documentID != left.session, session.host == nil || session.host == left.host,
+              session.documentID != left.session, session.documentID != settledSession,
               let proxy = controller?.textDocumentProxy else { return false }
-        Self.lastDraftPlace = nil
+        settledSession = session.documentID
+        resolveHostIfMissing(now: true)
+        let host = self.session?.host
+        guard host == nil || host == left.host else { return false }
+        if host != nil { Self.lastDraftPlace = nil }
         proxy.unmarkText()
-        KeyboardLog.note("[\(instanceTag)] new session in \(session.host ?? "an unresolved host"): unmarkText sent, in case the draft typed in \(left.host) is still marked")
+        lastUnmark = Date()
+        KeyboardLog.note("[\(instanceTag)] new session in \(host ?? "an unresolved host"): unmarkText sent, in case the draft typed in \(left.host) is still marked")
         return true
     }
+    /// The input session `settleLeftDraft` has looked at, once each.
+    private var settledSession: UUID?
+    /// When this keyboard last called `unmarkText`. Polls can share a turn
+    /// of the run loop (the timer's and a ping's), and an insert or new
+    /// marked text in that turn would reach the host first.
+    private var lastUnmark = Date.distantPast
+    private static let unmarkQuiet: TimeInterval = 0.05
 
     /// The user is about to edit the field with this keyboard, in this same
     /// turn. The draft is made plain text first (`KeyboardDraft.Commit`), so
@@ -187,11 +202,20 @@ final class KeyboardModel: ObservableObject {
         keepDraftIfDisturbed()
     }
 
+    /// The text before the cursor with the held draft in it
+    /// (`KeyboardDraft.textBefore`). Nil while this keyboard holds no draft
+    /// in this field: the proxy's text is then the field's.
+    var textBeforeWithDraft: String? {
+        guard let held = draft, documentID == held.documentID, let proxy = controller?.textDocumentProxy else { return nil }
+        return held.textBefore(proxy)
+    }
+
     /// Ends the draft this keyboard holds, leaving its text in the field as
     /// heard. Its written text is in Paste last and History.
     private func keepDraft(_ commit: KeyboardDraft.Commit, because reason: String) {
         guard let held = draft else { return }
         draft = nil
+        lastUnmark = Date()
         if documentID == held.documentID, let proxy = controller?.textDocumentProxy { held.keep(proxy, commit) }
         KeyboardLog.note("[\(instanceTag)] draft stays as heard: \(reason)")
     }
@@ -218,8 +242,8 @@ final class KeyboardModel: ObservableObject {
         // new marked text replaces marked text. So the turn that ends a
         // draft with `unmarkText` types no result, and a new draft is marked
         // only in a turn that began with none. The same goes for the turn
-        // that makes a left draft plain.
-        let heldDraft = draft != nil || settleLeftDraft()
+        // that makes a left draft plain, and for `unmarkQuiet` after either.
+        let heldDraft = draft != nil || settleLeftDraft() || Date().timeIntervalSince(lastUnmark) < Self.unmarkQuiet
         keepDraftIfDisturbed()
         let fresh = store.snapshot
         if fresh != snapshot { snapshot = fresh }
@@ -534,6 +558,7 @@ final class KeyboardModel: ObservableObject {
             onDidInsertDictation?(fitted, held.before, held.after)
             KeyboardLog.note("[\(instanceTag)] written text replaced its draft in \(Self.describe(currentField()))")
         case .kept:
+            lastUnmark = Date()
             KeyboardLog.note("[\(instanceTag)] written text not typed: the field changed around its draft, which stays as heard")
         }
     }
@@ -573,7 +598,9 @@ final class KeyboardModel: ObservableObject {
     /// a field that has text.
     @discardableResult
     private func insert(_ text: String) -> (fitted: String, before: String, after: String)? {
-        guard let proxy = controller?.textDocumentProxy, !text.isEmpty else { return nil }
+        guard controller?.textDocumentProxy != nil, !text.isEmpty else { return nil }
+        // Before the text around the cursor is read, which then has the draft in it.
+        keepDraft(.beforeEdit, because: "this keyboard typed other text")
         let surrounding = surroundingText()
         let fitted = surrounding?.fitted(text) ?? text
         editor?.type(fitted)

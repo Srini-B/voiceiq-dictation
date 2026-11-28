@@ -120,6 +120,26 @@ final class KeyboardDraftTests: XCTestCase {
         XCTAssertEqual(moved.string, "Dear Ana, see you at 12 noon")
     }
 
+    /// Autocorrect on the keys counts its Deletes from the text before the
+    /// cursor, read before its first edit. With the draft in that text it
+    /// corrects the draft's last word, and the word before the draft is not
+    /// touched. The proxy alone answers "Lets meet tomorow".
+    func testAnEditPlannedFromTheTextBeforeTheCursorStaysInsideTheDraft() throws {
+        let field = HostField("Lets meet tomorow")
+        let draft = try XCTUnwrap(type("see you thier", into: field))
+        let read = draft.textBefore(field)
+        XCTAssertEqual(read, "Lets meet tomorow see you thier")
+        let word = read.split(separator: " ").last.map(String.init) ?? ""
+
+        draft.keep(field, .beforeEdit)
+        for _ in word { field.deleteBackward() }
+        field.insertText("there ")
+        field.endTurn()
+        XCTAssertEqual(field.string, "Lets meet tomorow see you there ")
+        XCTAssertNil(field.marked)
+        XCTAssertEqual(draft.textBefore(field), "Lets meet tomorow see you there ")
+    }
+
     /// The keyboard going away, or a dictation that ends with no written
     /// text, leaves the transcript as plain text; what is typed next goes in
     /// after it.

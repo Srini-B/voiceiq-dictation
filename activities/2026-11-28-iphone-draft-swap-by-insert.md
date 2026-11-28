@@ -84,6 +84,8 @@ followed took the 25 characters before it.
 - `KeyboardModel.lastDraftPlace` and `settleLeftDraft` (added after the
   dismissal check below): the first poll of a new input session in the app
   of the last draft sends one `unmarkText`.
+- `KeyboardDraft.textBefore` and `KeyboardModel.unmarkQuiet` (added after
+  the review below).
 
 ## What the other design would have done
 
@@ -138,10 +140,40 @@ smart-insert work.
 - With nothing marked, the `unmarkText` of a new session left the field's
   text as it was (two runs).
 
+## Review before the push
+
+A reviewing subagent of this thread read the diff at 7221cfe2 (code only,
+nothing run) and said not to push. What it found and what was done:
+
+- High: the keys read the text before the cursor from the proxy, which
+  leaves the draft out, and only then make their edit. A space after a
+  misspelt word with a draft after it would have counted its Deletes from
+  that word and, with the draft plain by then, deleted the draft and part of
+  the word. Reproduced in the Simulator with the fix switched
+  off: `Lets meet Tomorrow tomorow`, a marked draft ` ok`, then space gave
+  `Lets meet Tomorrow tomtomorrow `. With the fix the same steps gave
+  `… tomorow ok `, and space after a draft `see you tomorow` corrected the
+  draft's own word to `tomorrow`. Fixed: `KeyboardDraft.textBefore`, read by the keys;
+  `EditController.moveCursor` and `KeyboardModel.insert` make the draft
+  plain before they read.
+- Medium: `settleLeftDraft` forgot the place after an `unmarkText` in an app
+  it could not name, which may have been another app. Fixed: the place is
+  forgotten only in the named app; an unnamed session gets one call and the
+  place stays.
+- Medium, to measure: whether `hasText` is true in a field whose only text
+  is a marked draft. Measured: in an empty Messages
+  field with only the marked draft, the proxy gave no text before the cursor
+  and `hasText` true, and the written text replaced the draft.
+- Low: a second poll in the run-loop turn of an `unmarkText` could type a
+  result or mark a draft. Fixed: `unmarkQuiet`.
+- Not changed: tests that state the fake's measured behaviour stay, since
+  the fake is the record of the measurements; a key tapped in the same turn
+  as a lone `unmarkText` is still not covered.
+
 ## Verification
 
-- Mac mini, `KeyboardTests` on the iOS 27.0 Simulator: 23 passed, exit 0, on
-  the final code.
+- Mac mini, `KeyboardTests` on the iOS 27.0 Simulator: 24 passed, exit 0, on
+  the final code with the review fixes (23 passed on 7221cfe2 before them).
 - Simulator, Messages, the keyboard's real draft code with the app's part
   played by the probe (it published the draft and the written text through
   `SharedStore`; no speech or model ran), on the final base (07b32b53, which
@@ -155,7 +187,8 @@ smart-insert work.
   casing is decided at the swap.
 - Same setup, a key tapped while the draft was marked: the draft stayed and
   the key went in after it. Delete tapped instead: one character went.
-- The dismissal and app-switch runs above.
+- The dismissal and app-switch runs above. On the final code the Messages
+  check and the Settings round trip were run again with the same results.
 - `settleLeftDraft` has no unit test: `KeyboardModel` has no test harness,
   and the fake host would only test itself. It was checked in the Simulator.
 - Seen twice and not explained: a draft the probe offered was not typed and
