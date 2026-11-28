@@ -158,18 +158,19 @@ import VoiceIQSpeech
         }
     }
 
-    /// Sends again every meeting that failed only for want of Gemini: the
-    /// notes alone when its transcript is saved (a synced meeting has no
-    /// audio, and edits to the transcript stay), else the recording.
+    /// Sends again every meeting that failed only for want of Gemini, from
+    /// the step that failed: the notes alone keep transcript edits and work
+    /// for a synced meeting without audio; a transcript step (also Redo
+    /// transcript and notes) transcribes the recording again.
     public func transcribeWaiting() {
         guard hasKey() else { return }
-        for meta in store.list() where meta.waitsForGemini == true && !isBusy(meta.id) {
+        for meta in store.list() where !isBusy(meta.id) {
+            guard let step = meta.waitsForGemini else { continue }
             guard case .failed = meta.status else { continue }
             Log.meeting.info("meeting \(meta.id.uuid.uuidString, privacy: .public) waited for Gemini; sending it again")
-            if let transcript = try? store.loadTranscript(id: meta.id), !transcript.isEmpty {
-                regenerateNotes(id: meta.id)
-            } else {
-                retry(id: meta.id)
+            switch step {
+            case .notes: regenerateNotes(id: meta.id)
+            case .transcript: retry(id: meta.id)
             }
         }
     }
@@ -458,14 +459,16 @@ import VoiceIQSpeech
     private func saveFailure(id: MeetingID, meta: inout MeetingMeta, error: Error) {
         let reason = MeetingFailure.reason(for: error)
         Log.meeting.error("meeting \(id.uuid.uuidString, privacy: .public) failed: \(String(describing: error), privacy: .public)")
+        // `mark` saved the step that was running when it failed.
+        let step: GeminiStep = meta.status == .summarizing ? .notes : .transcript
         meta.status = .failed(reason)
-        meta.waitsForGemini = MeetingFailure.waitsForGemini(error) ? true : nil
+        meta.waitsForGemini = MeetingFailure.waitsForGemini(error) ? step : nil
         try? store.save(meta: meta)
         processing[id] = nil
-        if meta.waitsForGemini == true, hasKey() { scheduleWaitingRetry() }
+        if meta.waitsForGemini != nil, hasKey() { scheduleWaitingRetry() }
         switch error as? MeetingFailure {
         case .noKey: onNotice?("\(MeetingFailure.noun) saved — it is transcribed once you add a Gemini key")
-        case nil where meta.waitsForGemini == true: onNotice?("\(MeetingFailure.noun) saved — it is transcribed when Gemini can be reached")
+        case nil where meta.waitsForGemini != nil: onNotice?("\(MeetingFailure.noun) saved — it is transcribed when Gemini can be reached")
         case nil: onNotice?("\(MeetingFailure.noun) transcript failed — see \(MeetingFailure.listName)")
         }
     }
@@ -522,7 +525,7 @@ import VoiceIQSpeech
         try store.save(notes: notes, id: id)
         meta.screenNames = ScreenSpeakerNames.byElimination(meta: meta, transcript: transcript, notes: notes)
         meta.title = notes.title; meta.status = .done; meta.notesSpeakerNames = meta.speakerNames
-        if meta.waitsForGemini == true { waitingDelay = .seconds(300) }
+        if meta.waitsForGemini != nil { waitingDelay = .seconds(300) }
         meta.waitsForGemini = nil
         // Names typed while the notes were written stay, and show the notes as out of date.
         if let current = store.list().first(where: { $0.id == id }) { meta.speakerNames = current.speakerNames }
@@ -576,14 +579,18 @@ public enum MeetingFailure: Error, Equatable {
     static let listName = "Notes", noun = "Note"
     #endif
 
-    /// Gemini was out of reach, not wrong: no key, offline, a timeout, or a
-    /// rate limit. A rejected key or a refusal needs the user instead.
+    /// Gemini was out of reach, not wrong: no key, offline, a timeout, a
+    /// transport error, a 5xx or a per-minute rate limit. A rejected key, a
+    /// 4xx, an unreadable answer or the daily quota fails the same way on
+    /// every retry, so it needs the user instead.
     static func waitsForGemini(_ error: Error) -> Bool {
         switch error {
         case MeetingFailure.noKey: return true
         case let error as TranscriptionError:
             switch error {
-            case .offline, .timeout, .network, .rateLimitedTransient, .rateLimitedDaily: return true
+            case .offline, .timeout, .rateLimitedTransient: return true
+            // GeminiClient sends a URLError code as its number, a 5xx as "http_5xx".
+            case .network(let code): return Int(code) != nil || code.hasPrefix("http_5")
             default: return false
             }
         default: return false

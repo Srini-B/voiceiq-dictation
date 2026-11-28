@@ -100,7 +100,11 @@ final class MeetingCaptureTests: XCTestCase {
     func testOnlyUnreachableGeminiMakesAMeetingWait() {
         XCTAssertTrue(MeetingFailure.waitsForGemini(MeetingFailure.noKey))
         XCTAssertTrue(MeetingFailure.waitsForGemini(TranscriptionError.offline))
-        XCTAssertTrue(MeetingFailure.waitsForGemini(TranscriptionError.network("reset")))
+        XCTAssertTrue(MeetingFailure.waitsForGemini(TranscriptionError.network("-1004")))
+        XCTAssertTrue(MeetingFailure.waitsForGemini(TranscriptionError.network("http_503")))
+        XCTAssertFalse(MeetingFailure.waitsForGemini(TranscriptionError.network("interactions_unavailable_403")))
+        XCTAssertFalse(MeetingFailure.waitsForGemini(TranscriptionError.network("bad_url")))
+        XCTAssertFalse(MeetingFailure.waitsForGemini(TranscriptionError.rateLimitedDaily))
         XCTAssertTrue(MeetingFailure.waitsForGemini(TranscriptionError.rateLimitedTransient(retryAfter: 30)))
         XCTAssertFalse(MeetingFailure.waitsForGemini(TranscriptionError.auth))
         XCTAssertFalse(MeetingFailure.waitsForGemini(TranscriptionError.safetyBlocked))

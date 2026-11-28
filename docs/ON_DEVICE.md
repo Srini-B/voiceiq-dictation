@@ -170,13 +170,15 @@ the far-side track and lays its stretches over Gemini's words
 (`FarSideSpeakers`). `LocalMeetingJob` keeps its speech step only for the
 offline meeting eval.
 
-A meeting that cannot reach Gemini (no key, offline, a timeout or a rate
-limit) keeps its audio and is marked as waiting (`MeetingMeta.waitsForGemini`).
+A meeting that cannot reach Gemini (no key, offline, a timeout, a transport
+error or 5xx, a per-minute rate limit) keeps its audio and is marked as waiting (`MeetingMeta.waitsForGemini`).
 `MeetingEngine.transcribeWaiting` sends it again at launch, when the network
 comes back, when a key is saved, and on a timer (5 minutes, doubling to an
 hour) while it waits with a key, since Gemini recovering or a quota reset
-raises no other signal. A meeting whose transcript is saved gets only its
-notes again, so edits stay and a synced meeting without audio recovers too.
+raises no other signal. The step that failed runs again: a meeting
+that failed while writing notes gets only its notes, so transcript edits stay
+and a synced meeting without audio recovers; one that failed while
+transcribing (also Redo transcript and notes) is transcribed again.
 
 ## Tidy dictation
 

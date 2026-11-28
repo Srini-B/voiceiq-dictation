@@ -23,14 +23,17 @@ the on-device speaker model, which only splits the far side's voices.
   `LocalMeetingJob` keeps its speech step because the offline meeting eval
   (#117) still measures it.
 - **Waiting for Gemini.** A meeting that fails because Gemini is out of
-  reach (no key, offline, a timeout, a rate limit) is saved with
-  `MeetingMeta.waitsForGemini`. `MeetingEngine.transcribeWaiting` sends it
+  reach (no key, offline, a timeout, a transport error or 5xx, a per-minute
+  rate limit; Neon review) is saved with
+  `MeetingMeta.waitsForGemini`, the step it still needs. `MeetingEngine.transcribeWaiting` sends it
   again at launch, when the network comes back (`NWPathMonitor`), and when
   a key is saved (`KeychainStore.saveAPIKey` posts `.apiKeySaved`), and on
   a timer while it waits with a key (5 minutes, doubling to an hour), since
-  Gemini recovering or a quota reset raises no other signal. A meeting
-  whose transcript is saved gets only its notes again (Codex review), so
-  transcript edits stay and a synced meeting without audio recovers. The Mac
+  Gemini recovering or a quota reset raises no other signal. The failed
+  step is saved (`GeminiStep`, Codex review): notes alone when notes
+  failed, so transcript edits stay and a synced meeting without audio
+  recovers; a new transcript when transcription failed, so a Redo
+  transcript and notes is not silently turned into notes only. The Mac
   list shows "Waiting for Gemini" and a grey clock instead of a red error;
   the iPhone list shows "Waiting". A rejected key or a refusal still fails
   for the user to fix.

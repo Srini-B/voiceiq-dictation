@@ -203,7 +203,7 @@ struct MeetingsPane: View {
             Divider()
             if case .failed(let reason) = meeting.status {
                 // Waiting for Gemini is not an error: it goes again by itself.
-                let waiting = meeting.waitsForGemini == true
+                let waiting = meeting.waitsForGemini != nil
                 let tint = waiting ? Color.secondary : VoiceIQUI.Colors.error
                 Label(reason, systemImage: waiting ? "clock" : "exclamationmark.triangle.fill")
                     .font(VoiceIQUI.TypeScale.body())
@@ -504,7 +504,7 @@ struct MeetingsPane: View {
         case .recording: return "\(length) · Recording"
         case .transcribing: return "\(length) · Transcribing"
         case .summarizing: return "\(length) · Making notes"
-        case .failed: return "\(length) · " + (meeting.waitsForGemini == true ? "Waiting for Gemini" : "Failed")
+        case .failed: return "\(length) · " + (meeting.waitsForGemini != nil ? "Waiting for Gemini" : "Failed")
         }
     }
 }

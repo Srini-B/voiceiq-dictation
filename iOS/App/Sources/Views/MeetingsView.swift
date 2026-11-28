@@ -215,7 +215,7 @@ private struct MeetingRow: View {
     @ViewBuilder private var status: some View {
         switch meta.status {
         case .done: EmptyView()
-        case .failed where meta.waitsForGemini == true: StatusChip(text: "Waiting", tone: .pending)
+        case .failed where meta.waitsForGemini != nil: StatusChip(text: "Waiting", tone: .pending)
         case .failed:
             Text("Failed")
                 .font(Theme.Fonts.caption())
