@@ -250,6 +250,8 @@ final class TidyTests: XCTestCase {
             ("Mail john at the rate gmail dot com, thanks.", "Mail john@gmail.com, thanks."),
             ("Send it to ahmed at the rate gmail dot com.", "Send it to ahmed@gmail.com."),
             ("Contacts\npriya at the rate gmail dot com.", "Contacts\npriya@gmail.com."),
+            ("My email's priya at the rate gmail dot com, thanks.", "My email's priya@gmail.com, thanks."),
+            ("It’s priya at the rate gmail dot com.", "It’s priya@gmail.com."),
             ("Send it to ming at the rate gmail dot com.", "Send it to ming@gmail.com."),
         ] {
             XCTAssertEqual(SpokenAddresses.joining(in: spoken), written)
@@ -264,7 +266,7 @@ final class TidyTests: XCTestCase {
                      // Before ", thanks" or another address, "is" or a written address is too weak an introduction.
                      "The market is moving at the rate google dot com, thanks.",
                      "I wrote to priya@gmail.com and growth at the rate google dot com, thanks.",
-                     "It is growing at the rate amazon dot com.", "Revenue went from 10 at the rate amazon dot com."] {
+                     "It is growing at the rate amazon dot com.", "It's growing at the rate amazon dot com.", "Revenue went from 10 at the rate amazon dot com."] {
             XCTAssertEqual(SpokenAddresses.joining(in: kept), kept)
         }
     }

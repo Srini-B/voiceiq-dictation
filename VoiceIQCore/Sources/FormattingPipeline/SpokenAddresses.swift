@@ -148,10 +148,13 @@ enum SpokenAddresses {
         guard start > 0, !text[tokens[start - 1].range.upperBound..<tokens[start].range.lowerBound].contains("\n") else { return .strong }
         let previous = tokens[start - 1].word
         if let last = previous.last, ".!?,:;".contains(last) { return .strong }
-        let word = bare(previous)
+        let word = bare(previous).replacingOccurrences(of: "’", with: "'")
         if strongIntroductions.contains(word) { return .strong }
-        if weakIntroductions.contains(word) {
-            if start >= 2, strongIntroductions.contains(bare(tokens[start - 2].word)) { return .strong }
+        // "My email's priya…" is "email is"; "It's priya…" is "it is".
+        let contracted = word.hasSuffix("'s") ? String(word.dropLast(2)) : nil
+        if let contracted, strongIntroductions.contains(contracted) { return .strong }
+        if weakIntroductions.contains(word) || contracted != nil {
+            if contracted == nil, start >= 2, strongIntroductions.contains(bare(tokens[start - 2].word)) { return .strong }
             // "It is growing at the rate…", "went from 10 at the rate…": a verb or a number, not a
             // mailbox. Not "-ed" ("Ahmed") or a short "-ing" ("Ming").
             let mailbox = bare(tokens[start].word)
