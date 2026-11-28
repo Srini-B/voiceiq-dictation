@@ -61,6 +61,18 @@ final class OnDeviceDictationTests: XCTestCase {
         XCTAssertLessThan(try XCTUnwrap(prompt.range(of: "THE DICTATION:")).lowerBound, screen.lowerBound)
     }
 
+    /// Tamil-English gives the writer the English pass as LATIN right after
+    /// RAW; other dictations carry no LATIN block.
+    func testLatinTranscriptFollowsRaw() throws {
+        XCTAssertFalse(service.dictationPrompt(context: DictationContext(), transcript: "hi").contains("<latin>"))
+        let prompt = service.dictationPrompt(context: DictationContext(), transcript: "நாளைக்கு கிளையன்ட் கால்",
+                                             latin: "Nalaiku client call")
+        let raw = try XCTUnwrap(prompt.range(of: "<raw>\nநாளைக்கு கிளையன்ட் கால்\n</raw>"))
+        let latin = try XCTUnwrap(prompt.range(of: "<latin>\nNalaiku client call\n</latin>"))
+        XCTAssertLessThan(raw.upperBound, latin.lowerBound)
+        XCTAssertLessThan(latin.upperBound, try XCTUnwrap(prompt.range(of: PromptV1.noSpeechToken, options: .backwards)).lowerBound)
+    }
+
     /// A decode with no words is an empty dictation, judged by the
     /// coordinator like an empty AssemblyAI transcript, not an empty insert.
     func testEmptyTranscriptIsAnEmptyDictation() async {

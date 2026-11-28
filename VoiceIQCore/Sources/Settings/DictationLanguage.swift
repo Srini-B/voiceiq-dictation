@@ -10,6 +10,10 @@ public struct DictationLanguage: Hashable, Sendable, Identifiable {
     public let name: String
     /// STT-3.7 Realtime covers it; false means Universal-2.
     public let streams: Bool
+    /// Spoken mixed with English: a second Universal-2 pass in English gives
+    /// the writer the English words in Latin letters (Universal-2 Tamil
+    /// respells them in Tamil script).
+    public var latinCompanion = false
 
     public var id: String { code ?? "auto" }
 
@@ -22,7 +26,8 @@ public struct DictationLanguage: Hashable, Sendable, Identifiable {
            ("ko", "Korean"), ("es", "Spanish"), ("fr", "French"), ("de", "German"), ("it", "Italian"), ("pt", "Portuguese"),
            ("nl", "Dutch"), ("ru", "Russian"), ("tr", "Turkish"), ("vi", "Vietnamese"), ("fa", "Persian"), ("he", "Hebrew")]
             .map { DictationLanguage(code: $0.0, name: $0.1, streams: true) }
-        + [("ta", "Tamil"), ("te", "Telugu"), ("kn", "Kannada"), ("ml", "Malayalam"), ("bn", "Bengali"),
+        + [DictationLanguage(code: "ta", name: "Tamil-English (Universal-2, slower)", streams: false, latinCompanion: true)]
+        + [("te", "Telugu"), ("kn", "Kannada"), ("ml", "Malayalam"), ("bn", "Bengali"),
            ("gu", "Gujarati"), ("pa", "Punjabi")]
             .map { DictationLanguage(code: $0.0, name: "\($0.1) (Universal-2, slower)", streams: false) }
 }

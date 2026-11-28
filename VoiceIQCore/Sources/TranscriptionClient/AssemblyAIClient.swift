@@ -12,6 +12,10 @@ public struct AssemblyAIConfig: Sendable, Equatable {
 
     /// GPT-6 Luna: chosen 2026-11-28 on the dictation eval (activities/2026-11-28-assemblyai.md).
     public static let defaultWritingModel = "gpt-6-luna"
+    /// Tamil-English (two transcripts to merge): Luna kept a retracted detail
+    /// and Haiku 5.5 misspelled Tamil on the D3 eval; Gemini 3.8 Flash at low
+    /// effort scored best (activities/2026-11-28-tamil-english.md).
+    public static let mixedLanguageWritingModel = "gemini-3.8-flash"
     /// Pre-recorded transcription: STT-3.7 for its 32 languages, Universal-2 for the rest.
     public static let transcribeModel = "assemblyai-stt-3-7"
     public static let fallbackModel = "universal-2"

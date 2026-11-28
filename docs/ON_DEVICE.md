@@ -66,6 +66,14 @@ deleted or the download cancelled.
 Language (`DictationLanguage`): English by default, one of STT-3.7's 32
 languages, Detect (STT-3.7 works out the language and each switch among its
 languages), or a language only Universal-2 has, transcribed after you stop.
+Tamil-English runs Universal-2 twice at once, in Tamil and in English, and
+the writer gets both: Tamil words come from the Tamil pass, English words in
+Latin letters from the English pass (Universal-2 in Tamil respells English
+words in Tamil script, and STT-3.7 does not know Tamil). Both passes are
+billed. If the English pass fails, the writer works from the Tamil pass alone.
+Tamil-English is written by Gemini 3.8 Flash on the gateway
+(`AssemblyAIConfig.mixedLanguageWritingModel`, low reasoning effort) instead
+of Luna, unless Settings → Advanced pins a writing model.
 The writing rules keep each language in its own script. With Dictation On
 device, the transcription group's Language picker applies; the writing step
 is told no language, and an AssemblyAI fallback uses the Dictation language.

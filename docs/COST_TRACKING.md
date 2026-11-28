@@ -25,7 +25,8 @@ migration `v2-audioSeconds`; per-minute calls booked before it have no length.
 
 Activities: `dictation`, `meeting`, `other`. Stages: `liveTranscribe` (the
 STT-3.7 Realtime stream of a dictation), `transcribe` (pre-recorded
-transcription, when the stream failed or for a Universal-2 language),
+transcription, when the stream failed or for a Universal-2 language;
+Tamil-English books two Universal-2 passes),
 `cleanup` (the writing model), `meetingTranscribe`, `meetingSummary`,
 `meetingChat`. The activities `askAnything`, `translate` and `agent` and the
 stages `answer`, `translate`, `webQuery` and `agentStep` are no longer
