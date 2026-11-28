@@ -140,11 +140,13 @@ public final class FieldDraft: TextDraft {
                                                         })
         guard insert.outcome == .inserted else {
             marks.clear()
-            // Withdrawn after Accessibility was tried: a write that shows
-            // late may be the draft, which then stays (and is announced).
+            // Withdrawn after Accessibility was tried: only a field read
+            // unchanged for 0.5 s counts as untouched. A write that shows
+            // late, or a field that can no longer be read, may hold the
+            // draft, which then stays and is announced.
             if stopped {
                 for _ in 0..<10 {
-                    if let now = PasteCheck.reading(of: element), now.value != before.value { return .lost }
+                    guard let now = PasteCheck.reading(of: element), now.value == before.value else { return .lost }
                     try? await Task.sleep(for: .milliseconds(50))
                 }
             }
