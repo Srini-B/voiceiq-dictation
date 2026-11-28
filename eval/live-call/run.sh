@@ -11,6 +11,7 @@
 #   default the run stops there, since a probe without the far side measures
 #   nothing.
 set -euo pipefail
+zmodload zsh/datetime  # EPOCHSECONDS
 
 room=$1 seconds=$2 owner=${3:A}; shift 3
 guests=(${@:A})
@@ -107,7 +108,7 @@ tap=$!
 pids+=$tap
 status=0; wait $tap || status=$?
 if (( status == 3 )); then
-  echo "the guest check recorded only zeros: give this terminal System Audio Recording permission" >&2; exit 1
+  echo "the guest check recorded only zeros: this terminal lacks System Audio Recording permission, or the owner's Chrome played only silence" >&2; exit 1
 elif (( status != 0 )); then
   echo "the guest check could not tap the owner's Chrome" >&2; exit 1
 fi

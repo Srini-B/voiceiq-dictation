@@ -13,6 +13,8 @@ import struct
 import subprocess
 import sys
 
+# Pitches no guest beeps at, so even one guest must stand above something.
+REFERENCES = [600, 900, 1600]  # also no guest pitch's 2nd or 3rd harmonic
 RATE, FRAME = 8000, 800  # 0.1 s; pitches are multiples of 100 Hz, so each sits on a bin
 LEVEL_DB, MARGIN_DB, MIN_FRAMES = -50.0, 15.0, 4
 
@@ -33,7 +35,7 @@ def main():
                           "-f", "s16le", "-"], check=True, capture_output=True).stdout
     samples = [s / 32768 for s in struct.unpack(f"<{len(raw) // 2}h", raw[: len(raw) // 2 * 2])]
     frames = [samples[i:i + FRAME] for i in range(0, len(samples) - FRAME + 1, FRAME)]
-    levels = [[level(f, p) for p in pitches] for f in frames]
+    levels = [[level(f, p) for p in pitches + REFERENCES] for f in frames]
     missing = 0
     for g, pitch in enumerate(pitches):
         clear = [row[g] - max((v for k, v in enumerate(row) if k != g), default=-120)

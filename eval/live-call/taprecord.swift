@@ -101,6 +101,6 @@ queue.sync { file.close() }
 AudioHardwareDestroyAggregateDevice(device)
 AudioHardwareDestroyProcessTap(tap)
 if !(queue.sync { heardSound }) {
-    FileHandle.standardError.write("the tap recorded only zeros: give the terminal or agent System Audio Recording permission\n".data(using: .utf8)!)
+    FileHandle.standardError.write("the tap recorded only zeros: the terminal or agent lacks System Audio Recording permission, or the call played only silence\n".data(using: .utf8)!)
     exit(3)
 }

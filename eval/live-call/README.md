@@ -53,6 +53,13 @@ SITE=vdo OWNER_DEVICE="Jump Desktop Audio" eval/live-call/run.sh ROOM SECONDS ow
 `OWNER_DEVICE` names the loopback output (`system_profiler SPAudioDataType`
 lists the devices). `playto.swift` plays the owner's WAV into it from memory.
 
+The script turns off Sparkle's automatic checks and installs for VoiceiQ
+(`SUEnableAutomaticChecks`, `SUAutomaticallyUpdate`), so an update cannot
+replace the build under test mid-run. They stay off after the run; turn them
+back on with `defaults delete io.blue.voiceiq SUEnableAutomaticChecks` and
+`defaults delete io.blue.voiceiq SUAutomaticallyUpdate` on a Mac that is not
+only for testing.
+
 The script:
 
 1. Opens one Chrome window per guest WAV in the room, 3 s apart, named
