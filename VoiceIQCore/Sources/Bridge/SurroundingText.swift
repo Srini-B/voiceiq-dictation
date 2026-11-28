@@ -71,7 +71,9 @@ public struct SurroundingText: Codable, Equatable, Sendable {
         let gap = FieldLayout.leadingGap(before: before, text: text)
         if startsSentence {
             text = Self.capitalizingFirstWord(text)
-        } else if before.contains(where: { !$0.isWhitespace }) {
+        } else if before.contains(where: { !$0.isWhitespace }), !gap.contains(where: \.isNewline) {
+            // On the same line only: after a heading, quote or table row
+            // the layout starts a new line, and the model's capital stays.
             text = Self.lowercasingFirstWord(text)
         }
         text = gap + text
