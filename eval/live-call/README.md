@@ -25,19 +25,16 @@ so VoiceiQ detects the call and reads names from the screen.
 
 ## What the probe needs
 
-- The Release build of the commit under test, run as an isolated copy, never
-  `/Applications/VoiceiQ.app`. The installed app syncs every meeting to the
-  owner's iCloud, and nothing in it turns meeting sync off. Copy the signed
-  Release build to `~/Applications/VoiceiQ-probe.app`, give it its own bundle
-  ID (`io.blue.voiceiq.probe`), and re-sign it ad hoc without the iCloud
-  entitlement. That alone doesn't isolate it: every build writes to the same
-  `~/Library/Application Support/VoiceiQ`, and the real app later uploads
-  the probe's meetings from there. Until the test-mode data-root override
-  (PR #161) is merged, run the probe under a separate macOS user account.
-  After that, set `DebugDisableCloudSync` and `DebugDataFolder` in the copy's
-  domain and check its menu shows "Data in <path> (test)" (AGENTS.md). Grant the copy
-  its own Microphone, Screen Recording and Accessibility permission before
-  the first run. Do not test a Debug build.
+- The signed Release build of the commit under test, installed as
+  `/Applications/VoiceiQ.app` and run in test mode (docs/DEBUG_LOG.md, Test
+  mode), so the probe's meetings stay out of the owner's data and iCloud.
+  Don't use a re-signed copy: granting it Screen Recording and Accessibility
+  needs the admin password. With the app quit, set
+  `defaults write io.blue.voiceiq DebugDisableCloudSync -bool true` and
+  `defaults write io.blue.voiceiq DebugDataFolder /absolute/path`, launch it,
+  and check its menu shows "Sync off (test)" and "Data in <path> (test)"
+  before the call. Afterwards quit it, delete both defaults, relaunch it and
+  check neither "(test)" line is left (AGENTS.md). Do not test a Debug build.
 - `run.sh` also holds the shared app lock for the run (`LOCK_OWNER` set to
   your thread ID), so nobody quits or reinstalls the real app under a
   probe.
