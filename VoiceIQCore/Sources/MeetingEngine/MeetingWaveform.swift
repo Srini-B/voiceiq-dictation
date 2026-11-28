@@ -228,7 +228,10 @@ public struct MeetingPlaybackBar: View {
         .task(id: audio.source) {
             loudness = nil
             guard case .meeting(let folder) = audio.source else { return }
-            loudness = try? await Task.detached(priority: .userInitiated) { try MeetingLoudness.read(folder: folder) }.value
+            let read = try? await Task.detached(priority: .userInitiated) { try MeetingLoudness.read(folder: folder) }.value
+            // Another meeting was chosen while this one read: its own task sets the waveform.
+            guard !Task.isCancelled else { return }
+            loudness = read
         }
         .onChange(of: audio.source) { _, _ in player.stop() }
         .onDisappear { player.stop() }
