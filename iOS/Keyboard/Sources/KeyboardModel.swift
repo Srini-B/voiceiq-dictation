@@ -472,15 +472,19 @@ final class KeyboardModel: ObservableObject {
             KeyboardLog.note("[\(instanceTag)] written text not typed: the keyboard moved to another field; the draft stays as heard")
             return
         }
-        switch held.replace(with: delivery.text, in: proxy, fit: Self.fitted) {
-        case .retyped(let fitted):
-            // The cursor is right after the written text: Undo takes it out,
-            // as for a dictation typed in.
-            editor?.recordDictation(inserted: fitted)
-            onDidInsertDictation?(fitted, held.before, held.after)
-            KeyboardLog.note("[\(instanceTag)] written text replaced its draft in \(Self.describe(currentField()))")
-        case .kept:
-            KeyboardLog.note("[\(instanceTag)] written text not typed: the draft was edited or moved, so it stays as heard")
+        Task { @MainActor [weak self] in
+            let swap = await held.replace(with: delivery.text, in: proxy, fit: Self.fitted)
+            guard let self else { return }
+            switch swap {
+            case .retyped(let fitted):
+                // The cursor is right after the written text: Undo takes it
+                // out, as for a dictation typed in.
+                self.editor?.recordDictation(inserted: fitted)
+                self.onDidInsertDictation?(fitted, held.before, held.after)
+                KeyboardLog.note("[\(self.instanceTag)] written text replaced its draft in \(Self.describe(self.currentField()))")
+            case .kept:
+                KeyboardLog.note("[\(self.instanceTag)] written text not typed: the draft was edited or moved, so it stays as heard")
+            }
         }
     }
 

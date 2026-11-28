@@ -235,7 +235,10 @@ is the Mac's draft (`TextDraft`), done by the keyboard:
    before the cursor, nothing is selected, and the text around it is the
    text that was around it when it went in. It never sets marked text over
    the draft: a host can commit marked text without telling the keyboard,
-   and the written text would then go in beside it. Otherwise the draft
+   and the written text would then go in beside it. A host can also ignore
+   the commit and take the still-marked draft out whole on the first Delete
+   (Messages does), so the keyboard reads the field after that first press
+   and presses Delete again only when it took one character. Otherwise the draft
    stays as heard, and the session log says why.
 
    A transcript the keyboard could not swap later is never typed as a

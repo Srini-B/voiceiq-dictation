@@ -62,7 +62,16 @@ final class ProxyField: NSObject, UITextDocumentProxy {
         marked = nil
     }
 
+    /// A host that ignores `unmarkText` and deletes marked text whole (Messages).
+    var keepsMarkedText = false
+
     func deleteBackward() {
+        if keepsMarkedText, let range = marked, range.upperBound == start, length == 0 {
+            text.removeSubrange(range)
+            start = range.lowerBound
+            marked = nil
+            return
+        }
         marked = nil
         if length > 0 {
             text.removeSubrange(start..<(start + length))
@@ -89,7 +98,7 @@ final class ProxyField: NSObject, UITextDocumentProxy {
     }
 
     func unmarkText() {
-        marked = nil
+        if !keepsMarkedText { marked = nil }
     }
 }
 
@@ -143,13 +152,13 @@ final class EditControllerTests: XCTestCase {
 
     /// A draft swapped for its written text is one undo step, like a
     /// dictation typed in: undo leaves the field as it was before it.
-    func testUndoTakesBackADraftDictation() throws {
+    func testUndoTakesBackADraftDictation() async throws {
         let field = ProxyField("Dear Ana,")
         let editor = editor(for: field)
         let draft = try XCTUnwrap(KeyboardDraft.type("see you at noon", id: UUID(), documentID: UUID(), into: field,
                                                      fit: { text, _, _ in " " + text }))
-        guard case .retyped(let fitted) = draft.replace(with: "See you at noon.", in: field,
-                                                               fit: { text, _, _ in " " + text }) else {
+        let swap = await draft.replace(with: "See you at noon.", in: field, fit: { text, _, _ in " " + text })
+        guard case .retyped(let fitted) = swap else {
             return XCTFail("not swapped")
         }
         editor.recordDictation(inserted: fitted)

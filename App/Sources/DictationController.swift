@@ -64,7 +64,10 @@ final class DictationController {
         )
         coordinator = DictationCoordinator(
             // Debug: a listed audio file plays in as the microphone (`FileAudioCapture`).
-            audioFactory: { [warmEngines] in FileAudioCapture.fromDefaults() ?? warmEngines.take() },
+            audioFactory: { [warmEngines] () -> AudioCapturing in
+                if let file = FileAudioCapture.fromDefaults() { return file }
+                return warmEngines.take()
+            },
             transcription: service,
             insertion: LearningInserter(learner: learner),
             contextProvider: {

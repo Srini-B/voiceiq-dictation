@@ -105,17 +105,43 @@ final class KeyboardDraft {
     /// commit marked text without saying so, and marked text set over it
     /// would then go in beside it, so the draft is always committed first and
     /// swapped as plain text. Anything else keeps it.
-    func replace(with written: String, in proxy: UITextDocumentProxy, fit: Fit) -> Swap {
+    ///
+    /// A host can also ignore the commit and take a still-marked draft out
+    /// whole on the first Delete (Messages does): the rest of the presses
+    /// would then delete the user's text. So the first press is checked
+    /// before any other: when it took the whole draft, that is the end of it.
+    func replace(with written: String, in proxy: UITextDocumentProxy, fit: Fit) async -> Swap {
         commit(proxy)
         let current = proxy.documentContextBeforeInput ?? ""
         guard (proxy.selectedText ?? "").isEmpty, current.hasSuffix(text), isStillAround(proxy, before: current),
               Self.canSwap(text)
         else { return .kept }
-        let fitted = fit(written, String(current.dropLast(text.count)), proxy.documentContextAfterInput ?? "")
+        let rest = String(current.dropLast(text.count))
+        let fitted = fit(written, rest, proxy.documentContextAfterInput ?? "")
         guard !fitted.isEmpty else { return .kept }
-        for _ in 0..<text.count { proxy.deleteBackward() }
+        proxy.deleteBackward()
+        guard let afterFirst = await Self.change(in: proxy, from: current) else {
+            // The field never said what the press did: no more presses.
+            return .kept
+        }
+        if afterFirst != rest {
+            // One character went: the draft was plain text.
+            guard afterFirst == String(current.dropLast()) else { return .kept }
+            for _ in 1..<text.count { proxy.deleteBackward() }
+        }
         proxy.insertText(fitted)
         return .retyped(fitted)
+    }
+
+    /// The text before the cursor once it differs from `old`, read for up to
+    /// half a second: the host applies a key press after this call returns.
+    private static func change(in proxy: UITextDocumentProxy, from old: String) async -> String? {
+        for attempt in 0..<25 {
+            if attempt > 0 { try? await Task.sleep(for: .milliseconds(20)) }
+            let now = proxy.documentContextBeforeInput ?? ""
+            if now != old { return now }
+        }
+        return nil
     }
 
     /// The text around the cursor is still the text around the draft: the
