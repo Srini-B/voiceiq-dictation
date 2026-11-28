@@ -209,11 +209,13 @@ struct DictionaryView: View {
             Spacer()
             Button("Import CSV…", action: importCSV)
                 .font(VoiceIQUI.TypeScale.labelSmall(grad: grad))
+                .foregroundStyle(VQ.Colors.accent)
             Button("Export CSV…", action: exportCSV)
                 .font(VoiceIQUI.TypeScale.labelSmall(grad: grad))
+                .foregroundStyle(entries.isEmpty ? VQ.Colors.faint : VQ.Colors.accent)
                 .disabled(entries.isEmpty)
         }
-        .buttonStyle(.link)
+        .buttonStyle(.plain)
         .padding(.horizontal, VQ.Spacing.page)
         .padding(.vertical, VoiceIQUI.Spacing.s)
     }

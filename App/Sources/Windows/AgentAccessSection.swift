@@ -67,11 +67,14 @@ struct AgentAccessSection: View {
                     .foregroundStyle(.secondary)
                 Link("Tools, routes and security", destination: URL(string: "https://github.com/Srini-B/voiceiq-dictation/blob/main/docs/AGENT_ACCESS.md")!)
                     .font(VoiceIQUI.TypeScale.labelSmall())
+                    .foregroundStyle(VQ.Colors.accent)
             }
         } header: {
             Text("Coding agents")
+                .font(VoiceIQUI.TypeScale.labelSmall())
         } footer: {
             Text("Claude Code, Codex, Amp and other tools on this Mac can list and search your dictations and meetings, including the ones synced from your iPhone, and read a meeting's notes, transcript and questions. They can't change or delete anything. VoiceiQ answers only on 127.0.0.1, only while this is on, and only to requests carrying the access key, which stays in your Keychain and in the agents you give it to. Anything an agent reads goes to that agent's AI provider.")
+                .font(GTFont.flex(VQ.TypeScale.meta.size, weight: VQ.TypeScale.meta.weight))
         }
         .onReceive(NotificationCenter.default.publisher(for: .gtAgentServerStateDidChange)) { _ in
             state = AgentServer.shared.state
