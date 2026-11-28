@@ -242,6 +242,7 @@ final class TidyTests: XCTestCase {
             // Before "and" and another address, and before a courtesy after a comma.
             ("Mail priya at the rate gmail dot com and ravi at the rate gmail dot com.", "Mail priya@gmail.com and ravi@gmail.com."),
             ("Write to priya at the rate gmail dot com or ravi at sign gmail dot com.", "Write to priya@gmail.com or ravi@gmail.com."),
+            ("Mail priya@gmail.com and ravi at the rate gmail dot com.", "Mail priya@gmail.com and ravi@gmail.com."),
             ("priya at the rate gmail dot com, please.", "priya@gmail.com, please."),
             ("Mail john at the rate gmail dot com, thanks.", "Mail john@gmail.com, thanks."),
         ] {

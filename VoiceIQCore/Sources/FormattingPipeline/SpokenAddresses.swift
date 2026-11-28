@@ -129,14 +129,15 @@ enum SpokenAddresses {
 
     /// Whether the mailbox starting at `start` may join "at the rate": it opens
     /// the sentence or a clause, follows a word from `addressIntroductions`, or
-    /// follows "and" or "or" right after another address (`after`).
+    /// follows "and" or "or" right after another address, joined here
+    /// (`after`) or already written ("priya@gmail.com and ravi at the rate…").
     private static func introducesAddress(_ tokens: [Token], before start: Int, after lastAddress: Int?) -> Bool {
         guard start > 0 else { return true }
         let previous = tokens[start - 1].word
         if let last = previous.last, ".!?,:;".contains(last) { return true }
         let word = bare(previous)
         if addressIntroductions.contains(word) { return true }
-        return ["and", "or"].contains(word) && lastAddress == start - 2
+        return ["and", "or"].contains(word) && start >= 2 && (lastAddress == start - 2 || tokens[start - 2].word.contains("@"))
     }
 
     private static func words(in text: String) -> [Token] {
