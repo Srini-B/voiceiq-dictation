@@ -14,34 +14,49 @@ struct DictationDetail: View {
     @State private var exported: ExportResult?
     private var grad: CGFloat { scheme == .dark ? 25 : 0 }
 
+    /// The written text or, when they differ, what was heard.
+    @State private var showsHeard = false
+
+    private var heard: String? {
+        guard let raw = record.rawTranscript, raw != (record.cleanedTranscript ?? raw), !raw.isEmpty else { return nil }
+        return raw
+    }
+
+    /// A document page, as on the iPhone: a meta line with the actions, the
+    /// text at reading size, then the details under a caption.
     var body: some View {
         VStack(spacing: 0) {
             header
-            Divider()
             ScrollView {
-                VStack(alignment: .leading, spacing: VoiceIQUI.Spacing.l) {
-                    Text(shownText)
-                        .font(VoiceIQUI.TypeScale.bodyLarge(grad: grad))
-                        .textSelection(.enabled)
-                    // What the transcription model heard, before the writing rules.
-                    // Shown only when the writing model changed it, as on iPhone.
-                    if let raw = record.rawTranscript, raw != shownText {
-                        VStack(alignment: .leading, spacing: VoiceIQUI.Spacing.xs) {
-                            metaLabel("As heard")
-                            Text(raw)
-                                .font(VoiceIQUI.TypeScale.bodyLarge(grad: grad))
-                                .foregroundStyle(.secondary)
-                                .textSelection(.enabled)
+                VStack(alignment: .leading, spacing: VoiceIQUI.Spacing.xl) {
+                    if heard != nil {
+                        Picker("Version", selection: $showsHeard) {
+                            Text("Written").tag(false)
+                            Text("What you said").tag(true)
                         }
+                        .pickerStyle(.segmented)
+                        .labelsHidden()
+                        .fixedSize()
                     }
-                    Divider()
-                    metadata
+                    Text(shownText)
+                        .font(GTFont.flex(VQ.TypeScale.body.size + 1, weight: VQ.TypeScale.body.weight, grad: grad))
+                        .lineSpacing(5)
+                        .foregroundStyle(VQ.Colors.ink)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: 640, alignment: .leading)
+                    VStack(alignment: .leading, spacing: VoiceIQUI.Spacing.s) {
+                        SectionCaption(text: "Details")
+                        metadata
+                    }
+                    .frame(maxWidth: 640, alignment: .leading)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, VoiceIQUI.Spacing.xxl)
-                .padding(.vertical, VoiceIQUI.Spacing.xl)
+                .padding(.horizontal, VQ.Spacing.page + 4)
+                .padding(.top, VoiceIQUI.Spacing.s)
+                .padding(.bottom, VoiceIQUI.Spacing.xl)
             }
         }
+        .background(VQ.Colors.canvas)
         .overlay(alignment: .bottom) {
             if let exported { ExportToast(result: exported) { self.exported = nil }.padding(.bottom, VoiceIQUI.Spacing.l) }
         }
@@ -50,29 +65,42 @@ struct DictationDetail: View {
 
     private var header: some View {
         HStack(spacing: VoiceIQUI.Spacing.xs) {
-            Text(record.startedAt.formatted(date: .abbreviated, time: .shortened))
-                .font(VoiceIQUI.TypeScale.title(grad: grad))
+            Text(metaLine)
+                .font(GTFont.flex(VQ.TypeScale.meta.size, weight: VQ.TypeScale.meta.weight, grad: grad))
+                .foregroundStyle(VQ.Colors.muted)
                 .lineLimit(1)
             Spacer(minLength: VoiceIQUI.Spacing.s)
             RecordingAudioButtons(audio: audio) { exported = $0 }
+                .labelStyle(.iconOnly)
             // Dictations synced from another device have no local folder to retry from.
             if !record.isFromOtherDevice {
                 Button("Retry transcription", systemImage: "arrow.clockwise", action: onRetry)
+                    .labelStyle(.iconOnly)
                     .help(RetryQueue.canRetry(record) ? "Retry transcription" : "The audio isn't on this Mac")
                     .disabled(!RetryQueue.canRetry(record))
             }
+            Button("Delete", systemImage: "trash", role: .destructive, action: onDelete)
+                .labelStyle(.iconOnly)
+                .help("Delete this dictation")
             Button("Copy", systemImage: "doc.on.doc") {
                 NSPasteboard.general.clearContents()
                 NSPasteboard.general.setString(shownText, forType: .string)
             }
+            .buttonStyle(InkPillButtonStyle())
             .help("Copy")
-            Button("Delete", systemImage: "trash", role: .destructive, action: onDelete)
-                .help("Delete this dictation")
         }
-        .labelStyle(.iconOnly)
-        .padding(.horizontal, VoiceIQUI.Spacing.l)
+        .padding(.horizontal, VQ.Spacing.page + 4)
         .padding(.top, VoiceIQUI.Spacing.l)
-        .padding(.bottom, VoiceIQUI.Spacing.s)
+        .padding(.bottom, VoiceIQUI.Spacing.m)
+    }
+
+    private var metaLine: String {
+        var parts = [record.startedAt.formatted(date: .abbreviated, time: .shortened)]
+        if let app = record.targetAppName { parts.append(app) }
+        if let seconds = record.durationSeconds, seconds > 0 {
+            parts.append(Duration.seconds(seconds).formatted(.time(pattern: .minuteSecond)))
+        }
+        return parts.joined(separator: " · ")
     }
 
     private var metadata: some View {
@@ -120,16 +148,17 @@ struct DictationDetail: View {
     }
 
     private var shownText: String {
-        record.cleanedTranscript ?? record.rawTranscript ?? "—"
+        if showsHeard, let heard { return heard }
+        return record.cleanedTranscript ?? record.rawTranscript ?? "—"
     }
 
     private var audio: RecordedAudio { .dictation(folder: record.folderURL, startedAt: record.startedAt) }
 
     private func metaLabel(_ text: String) -> some View {
-        Text(text).font(VoiceIQUI.TypeScale.labelSmall(grad: grad)).foregroundStyle(.secondary)
+        Text(text).font(VoiceIQUI.TypeScale.label(grad: grad)).foregroundStyle(VQ.Colors.muted)
     }
 
     private func metaValue(_ text: String) -> some View {
-        Text(text).font(VoiceIQUI.TypeScale.labelSmall(grad: grad)).textSelection(.enabled)
+        Text(text).font(VoiceIQUI.TypeScale.label(grad: grad)).foregroundStyle(VQ.Colors.ink).textSelection(.enabled)
     }
 }
