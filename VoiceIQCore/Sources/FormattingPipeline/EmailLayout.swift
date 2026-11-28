@@ -22,10 +22,15 @@ enum EmailLayout {
               let name = Range(match.range(at: 4), in: trimmed) else { return text }
         let middle = trimmed[body].trimmingCharacters(in: .whitespacesAndNewlines)
         guard !middle.isEmpty else { return text }
+        // "Please talk to Dr. Best, Dana." names Dr. Best; it is not signed "Best,".
+        let titles: Set<Substring> = ["Dr.", "Mr.", "Mrs.", "Ms.", "Prof.", "St."]
+        if let last = middle.split(separator: " ").last, titles.contains(last) { return text }
         // A body the writer started lowercase after "Hi Sam," starts a sentence
-        // now; a word with a capital inside it (iOS, eBay) keeps its spelling.
-        let first = middle.prefix { !$0.isWhitespace && !$0.isPunctuation }
-        let opened = first.allSatisfy(\.isLowercase) ? middle.prefix(1).uppercased() + middle.dropFirst() : middle
+        // now. A first word with a capital inside it (iOS, eBay) or other
+        // characters (user_id, config.json) is an identifier and keeps its spelling.
+        let first = middle.prefix { !$0.isWhitespace }.trimmingCharacters(in: CharacterSet(charactersIn: ",;:!?."))
+        let word = first.allSatisfy { $0.isLowercase || $0 == "'" || $0 == "’" }
+        let opened = word ? middle.prefix(1).uppercased() + middle.dropFirst() : middle
         // "Srini." ends a sentence; "Ana J." keeps its initial's period.
         var signed = String(trimmed[name])
         if signed.hasSuffix("."), (signed.split(separator: " ").last?.count ?? 0) > 2 { signed.removeLast() }
@@ -36,7 +41,9 @@ enum EmailLayout {
     nonisolated(unsafe) private static let pattern = try! NSRegularExpression(pattern:
         #"^((?:Hi|Hey|Hello|Dear|Good morning|Good afternoon|Good evening) (?:"# + name + #"|team|all|everyone|folks|there),)"#
         + #"\s*([\s\S]+?[.!?]["”’)]*)\s*"#
-        + #"(Thanks|Thank you|Thanks again|Many thanks|Cheers|Best|Best regards|Regards|Kind regards|Warm regards|Sincerely|Talk soon|Take care)"#
+        // A one-word closing is a sign-off only with its comma: "Best Buy." and
+        // "Thanks All." are not "Best," signed "Buy".
+        + #"((?:Thank you|Thanks again|Many thanks|Best regards|Kind regards|Warm regards|Talk soon|Take care)(?=,?\s)|(?:Thanks|Cheers|Best|Regards|Sincerely)(?=,))"#
         // "Best Regards." and "Thanks Again." are unsigned closings, not "Best," signed "Regards".
         + #",?\s+(?!(?i:regards|again|you|thanks|soon|care)\b)("# + name + #")\.?$"#)
 }

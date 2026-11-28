@@ -28,6 +28,10 @@ final class ValidationGateTests: XCTestCase {
                        "Hi Sam,\n\niOS 18 is required.\n\nBest,\nDana")
         XCTAssertEqual(EmailLayout.apply("Hi Sam, She replied, “Approved.” Thanks, Dana."),
                        "Hi Sam,\n\nShe replied, “Approved.”\n\nThanks,\nDana")
+        XCTAssertEqual(EmailLayout.apply("Hi Sam, user_id is null in prod. Thanks, Dana"),
+                       "Hi Sam,\n\nuser_id is null in prod.\n\nThanks,\nDana")
+        XCTAssertEqual(EmailLayout.apply("Hi Sam, can you check it? Thanks again, Dana"),
+                       "Hi Sam,\n\nCan you check it?\n\nThanks again,\nDana")
         let oneLine = "Hi Sam, The release is ready. Thanks, Dana"
         XCTAssertEqual(EmailLayout.apply(oneLine, customRules: "Keep messages in a single paragraph."), oneLine)
         XCTAssertEqual(EmailLayout.apply(oneLine, customRules: "Spell it VoiceiQ."),
@@ -35,7 +39,8 @@ final class ValidationGateTests: XCTestCase {
         let laidOut = "Hi Priya,\n\nCan we move it to net 30?\n\nThanks,\nSrini"
         XCTAssertEqual(EmailLayout.apply(laidOut), laidOut)
         for prose in ["Hey, can you check the logs? Thanks, Ana.", "Hi Sam, Please review the report. Best Regards.",
-                      "Hi Sam, Please review the report. Thanks Again.", "Thanks, Sam. I'll look at it tomorrow.",
+                      "Hi Sam, Please review the report. Thanks Again.", "Hi Sam, Please review the report. Sincerely Yours.",
+                      "Hi Sam, Let's check the store. Best Buy.", "Hi Sam, Please talk to Dr. Best, Dana.", "Thanks, Sam. I'll look at it tomorrow.",
                       "Dear team,\n\nThe release is ready."] {
             XCTAssertEqual(EmailLayout.apply(prose), prose)
         }
