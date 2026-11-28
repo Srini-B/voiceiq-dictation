@@ -314,8 +314,11 @@ targets:
         excludes: [MANIFEST, UPSTREAM, LICENSE, "patches/**", "**/LICENSE-*", "TypingModel/**"]
     dependencies:
       - target: VoiceIQiOS
+      # Built for its module only: the app already holds VoiceIQBridge, and a
+      # second copy in the tests gives duplicate classes at run time.
       - package: VoiceIQCore
         product: VoiceIQBridge
+        link: false
 
   VoiceIQLiveActivity:
     type: app-extension
