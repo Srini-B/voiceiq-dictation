@@ -127,6 +127,18 @@ private struct RecorderCard: View {
             default: idle
             }
         }
+        // An alert, not a confirmation dialog: on iOS 27 the dialog drew as a
+        // popover with no background over the Past notes rows.
+        .alert("Discard this recording?", isPresented: $confirmingDiscard) {
+            Button("Discard", role: .destructive) { meetings.discardRecording() }
+            Button("Keep recording", role: .cancel) {}
+        } message: {
+            Text("Its audio is deleted and no notes are made.")
+        }
+        // A recording that stops on its own never leaves its Discard question up.
+        .onChange(of: meetings.phase) { _, phase in
+            if case .recording = phase {} else { confirmingDiscard = false }
+        }
     }
 
     private var idle: some View {
@@ -171,19 +183,13 @@ private struct RecorderCard: View {
                     .background(Capsule().fill(Theme.Colors.recording))
             }
             .buttonStyle(.plain)
+            // Borderless: in a List row, a default-style button takes every tap on the card.
             Button("Discard", role: .destructive) { confirmingDiscard = true }
+                .buttonStyle(.borderless)
                 .font(Theme.Fonts.label())
                 .frame(minHeight: 44)
         }
         .frame(maxWidth: .infinity)
-        // An alert, not a confirmation dialog: on iOS 27 the dialog drew as a
-        // popover with no background over the Past notes rows.
-        .alert("Discard this recording?", isPresented: $confirmingDiscard) {
-            Button("Discard", role: .destructive) { meetings.discardRecording() }
-            Button("Keep recording", role: .cancel) {}
-        } message: {
-            Text("Its audio is deleted and no notes are made.")
-        }
         .onAppear {
             withAnimation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true)) { pulse = true }
         }
@@ -232,7 +238,7 @@ private struct MeetingRow: View {
             Label("Recording", systemImage: "circle.fill")
                 .labelStyle(.titleAndIcon)
                 .font(Theme.Fonts.caption())
-                .foregroundStyle(Theme.Colors.recording)
+                .foregroundStyle(prominence == .increased ? Theme.Colors.onAccent : Theme.Colors.recording)
                 .imageScale(.small)
         case .failed where meta.waitsForService != nil: StatusChip(text: "Waiting", tone: .pending)
         case .failed:
@@ -303,7 +309,8 @@ private struct MeetingDetail: View {
                     }
                     if let step { processingCard(step) }
                     // Above the notes too: a failed redo keeps the old notes (Neon).
-                    if let failure { failureCard(failure) }
+                    // Not during a Retry: its spinner replaces the old error.
+                    if step == nil, let failure { failureCard(failure) }
                     if let notes { notesContent(notes) }
                     else if failure == nil && step == nil && !gone { processingCard(.summarizing) }
                     if let chat { MeetingChatTurns(chat: chat, scroller: scroller) }
