@@ -653,6 +653,9 @@ public final class DictationCoordinator: ObservableObject {
         let insertionOutcome: InsertionOutcome
         // Set when the written text did not go in: it is in Paste last.
         var draftNotice: String?
+        // Whether that note comes before the writer's own ("Inserted as
+        // heard"), which would say the text is in the field.
+        var draftNoticeFirst = false
         switch shown {
         case .shown, .pending:
             if await draft?.draft.replace(with: outcome.cleanedTranscript) != true { draftNotice = Self.keptDraftNotice }
@@ -662,12 +665,14 @@ public final class DictationCoordinator: ObservableObject {
             insertionOutcome = .inserted
         case .unseen:
             draftNotice = Self.unseenDraftNotice
+            draftNoticeFirst = true
             insertionOutcome = .inserted
         case .notInserted:
             draft?.end()
             insertionOutcome = await insertion.insert(outcome.cleanedTranscript, context: job.context)
         }
         if draftNotice != nil { Log.insertion.info("draft kept as it was: the written text has no safe place to go") }
+        let notice = draftNoticeFirst ? draftNotice : outcome.notice ?? draftNotice
         let insertedAt = Date()
         let pipelineSeconds = insertedAt.timeIntervalSince(startedAt)
         // From the text being ready, so saving it to History counts here too.
@@ -685,7 +690,7 @@ public final class DictationCoordinator: ObservableObject {
             // Set before the state changes, so observers of the state read it.
             // The insertion's own notice (clipboard, secure field) comes first.
             if case .inserted = insertionOutcome {
-                insertedNotice = outcome.notice ?? draftNotice
+                insertedNotice = notice
             }
             apply(event)
             session = nil
@@ -694,7 +699,7 @@ public final class DictationCoordinator: ObservableObject {
             // A detached job has no pill: its notice, or its kept draft's, is
             // shown in the background.
             if case .inserted = insertionOutcome,
-               let notice = outcome.notice ?? draftNotice {
+               let notice {
                 onDetachedResult?(.insertedWithNotice(notice))
             } else {
                 onDetachedResult?(.outcome(result))

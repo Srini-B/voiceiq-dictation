@@ -166,6 +166,26 @@ final class DraftInsertTests: XCTestCase {
         XCTAssertFalse(c.writingDraft)
     }
 
+    /// A dictation with no written text after a paste the field never
+    /// showed: nothing is taken out of the field, and nothing says the
+    /// transcript stayed in it.
+    func testAnUnseenPasteIsNotTakenOutOrAnnounced() async {
+        let draft = FakeDraft(shows: .unseen)
+        let inserter = DraftingInserter(draft: draft)
+        let announced = expectation(forNotification: .voiceIQDraftKept, object: nil)
+        announced.isInverted = true
+        let capture = DictationCoordinatorTests.FakeCapture()
+        let c = DictationCoordinator(audioFactory: { capture }, transcription: HeardThenNothing(),
+                                     insertion: inserter, secureInputActive: { false })
+        c.handle(.begin)
+        for _ in 0..<8 { await Task.yield() }
+        c.handle(.finalize)
+        for _ in 0..<300 where !c.state.isTerminal { try? await Task.sleep(nanoseconds: 2_000_000) }
+        XCTAssertFalse(draft.events.contains { $0.hasPrefix("replace") })
+        XCTAssertEqual(inserter.inserted, [])
+        await fulfillment(of: [announced], timeout: 0.3)
+    }
+
     /// An unconfirmed draft (the iPhone's) still gets its written text
     /// through `replace`, which names it.
     func testAPendingDraftIsReplacedNotInsertedBeside() async {

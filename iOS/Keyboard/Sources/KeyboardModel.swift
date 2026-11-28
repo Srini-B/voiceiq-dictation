@@ -313,6 +313,11 @@ final class KeyboardModel: ObservableObject {
 
     /// Types the last result here, wherever it belonged.
     func pasteLast() {
+        // After the marked-text call of this turn, as every edit (`EditController.runsNow`).
+        guard !markedTextThisTurn else {
+            DispatchQueue.main.async { [weak self] in self?.pasteLast() }
+            return
+        }
         guard let delivery = snapshot.delivery else {
             // Without Full Access the app's last dictation can't be read, not that there is none.
             return flash(hasFullAccess ? "Nothing dictated yet" : "Allow Full Access to paste dictations", for: 3, isProblem: false)
@@ -459,7 +464,9 @@ final class KeyboardModel: ObservableObject {
     /// alive, still polling, with a text connection that reaches no field),
     /// and a result is marked handled only by the keyboard that types it.
     private func deliverIfNeeded() {
-        guard Self.onScreen === self, controller?.viewIfLoaded?.window != nil else { return }
+        // A result typed now would reach the host before this turn's
+        // marked-text call; the next poll types it.
+        guard Self.onScreen === self, controller?.viewIfLoaded?.window != nil, !markedTextThisTurn else { return }
         guard let delivery = snapshot.delivery, delivery.isPending(handledID: store.insertedDeliveryID) else {
             if waitingResult != nil { waitingResult = nil }
             return

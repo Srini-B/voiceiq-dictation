@@ -52,12 +52,16 @@ count the marked draft.
   one of these, so elsewhere the written text is not held back.
 - A key, Delete, cursor move, Paste last or Undo in the run loop turn of a
   `setMarkedText` or `unmarkText` runs on the next turn
-  (`EditController.runsNow`, `KeyboardModel.markedTextThisTurn`).
+  (`EditController.runsNow`, `KeyboardModel.markedTextThisTurn`), and so
+  does a result or Paste last. The keys read the text before the cursor
+  with the waiting edits in it (`EditController.projected`), so a word-wise
+  Delete swipe takes the right words. Checked on the fake host only.
 - Mac: a ⌘V draft the field never showed is `DraftShown.unseen`; the pill
   says "Couldn't see the text land. Paste last has it", not "Kept as heard".
 
 ## Verification
 
-`swift test --package-path VoiceIQCore` 363 tests, 0 failures; both schemes
-built unsigned; KeyboardTests 25, 0 failures (Mac mini, iOS 27 Simulator).
-Messages rechecked on the branch with the probe. No real device was used.
+Mac mini, iOS 27 Simulator: `swift test --package-path VoiceIQCore`, both
+schemes built unsigned, and KeyboardTests, on the PR's final head (counts in
+the PR). Messages rechecked on the branch with the probe. No real device was
+used.

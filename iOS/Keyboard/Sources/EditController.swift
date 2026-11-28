@@ -148,13 +148,17 @@ final class EditController: ObservableObject {
     /// The text before the cursor as it will be once the edits waiting for
     /// the next turn are made. The keys read this between their own edits:
     /// a word-wise Delete reads the word to take after each word it took.
+    /// It counts inserts and Deletes before the cursor only: a waiting cursor
+    /// move, or a Delete over a selection, is not in it, and the selection
+    /// and the text after the cursor are read as they are. Such an edit needs
+    /// a key in the one turn of a marked-text call.
     func projected(_ before: String) -> String {
         waiting.reduce(before) { String($0.dropLast($1.remove)) + $1.append }
     }
 
     /// Types `text` over the selection, if any, as one undo step of `kind`.
     func type(_ text: String, as kind: Kind = .other) {
-        guard !text.isEmpty, runsNow(changing: TextEdit(append: text)) { [weak self] in self?.type(text, as: kind) } else { return }
+        guard !text.isEmpty, runsNow(changing: TextEdit(append: text), { [weak self] in self?.type(text, as: kind) }) else { return }
         checkpoint(kind)
         insert(text)
         refresh()
@@ -162,7 +166,7 @@ final class EditController: ObservableObject {
     }
 
     func deleteBackward() {
-        guard runsNow(changing: TextEdit(remove: 1)) { [weak self] in self?.deleteBackward() } else { return }
+        guard runsNow(changing: TextEdit(remove: 1), { [weak self] in self?.deleteBackward() }) else { return }
         checkpoint(.deleting)
         deleteBack()
         refresh()
@@ -171,7 +175,7 @@ final class EditController: ObservableObject {
 
     /// Insert driven by Hex's `FullKeyboardEngine` (already owns keyboard state).
     func typeFromKeyboard(_ text: String) {
-        guard !text.isEmpty, runsNow(changing: TextEdit(append: text)) { [weak self] in self?.typeFromKeyboard(text) } else { return }
+        guard !text.isEmpty, runsNow(changing: TextEdit(append: text), { [weak self] in self?.typeFromKeyboard(text) }) else { return }
         let wordCharacter = text.count == 1 && (text.first?.isLetter == true || text.first?.isNumber == true)
         if deletedThisTurn {
             groupTurnDeletes()
@@ -185,7 +189,7 @@ final class EditController: ObservableObject {
 
     /// Delete driven by Hex's `FullKeyboardEngine`.
     func deleteFromKeyboard() {
-        guard runsNow(changing: TextEdit(remove: 1)) { [weak self] in self?.deleteFromKeyboard() } else { return }
+        guard runsNow(changing: TextEdit(remove: 1), { [weak self] in self?.deleteFromKeyboard() }) else { return }
         if !deletedThisTurn {
             deletedThisTurn = true
             undoBeforeTurn = undoStack
@@ -270,7 +274,7 @@ final class EditController: ObservableObject {
     }
 
     private func replay(_ edit: TextEdit) {
-        guard let proxy, runsNow(changing: edit) { [weak self] in self?.replay(edit) } else { return }
+        guard let proxy, runsNow(changing: edit, { [weak self] in self?.replay(edit) }) else { return }
         for _ in 0..<edit.remove { proxy.deleteBackward() }
         if !edit.append.isEmpty { proxy.insertText(edit.append) }
         lastKind = nil
