@@ -34,18 +34,19 @@ public final class SessionSleepGuard {
     /// True while a stopped meeting's transcript and notes are being written,
     /// for at most `cap` after the latest meeting joined, so a step that never
     /// returns cannot keep the device awake until quit. A meeting leaving
-    /// never extends it.
+    /// never extends it. Times are uptime, which a clock change cannot move.
     nonisolated static func writingUp<P: Publisher<Set<MeetingID>, Never>>(
-        _ ids: P, cap: TimeInterval, now: @escaping @Sendable () -> Date = Date.init
+        _ ids: P, cap: TimeInterval
     ) -> AnyPublisher<Bool, Never> {
-        ids.removeDuplicates()
-            .scan([MeetingID: Date]()) { joined, ids in
+        let now = { ProcessInfo.processInfo.systemUptime }
+        return ids.removeDuplicates()
+            .scan([MeetingID: TimeInterval]()) { joined, ids in
                 var next = joined.filter { ids.contains($0.key) }
                 for id in ids where next[id] == nil { next[id] = now() }
                 return next
             }
             .map { joined -> AnyPublisher<Bool, Never> in
-                let left = joined.values.max().map { $0.addingTimeInterval(cap).timeIntervalSince(now()) } ?? 0
+                let left = joined.values.max().map { $0 + cap - now() } ?? 0
                 guard left > 0 else { return Just(false).eraseToAnyPublisher() }
                 return Just(true).append(Just(false).delay(for: .seconds(left), scheduler: DispatchQueue.main)).eraseToAnyPublisher()
             }
