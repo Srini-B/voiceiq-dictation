@@ -91,6 +91,12 @@ struct MeetingsPane: View {
 
     private var sidebar: some View {
         VStack(spacing: 0) {
+            Text("Meetings")
+                .font(VoiceIQUI.TypeScale.display())
+                .foregroundStyle(VQ.Colors.ink)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, VoiceIQUI.Spacing.m)
+                .padding(.top, VoiceIQUI.Spacing.l)
             if let next = nextMeeting.next {
                 NextMeetingCard(meeting: next, now: nextMeeting.now, engine: engine)
                     .padding(.horizontal, VoiceIQUI.Spacing.s)
@@ -104,7 +110,7 @@ struct MeetingsPane: View {
                     .frame(maxWidth: .infinity)
             }
             .controlSize(.large)
-            .tint(recording ? VoiceIQUI.Colors.gRed : nil)
+            .tint(recording ? VQ.Colors.record : VQ.Colors.accent)
             .buttonStyle(.borderedProminent)
             .padding(.horizontal, VoiceIQUI.Spacing.s)
             .padding(.top, nextMeeting.next == nil ? VoiceIQUI.Spacing.l : VoiceIQUI.Spacing.s)
@@ -163,7 +169,7 @@ struct MeetingsPane: View {
                 // The length ticks while it records; the stored one is written at Stop.
                 TimelineView(.periodic(from: since, by: 1)) { context in
                     // Only the dot is red; red text on the selected row read at 3:1 (Fable).
-                    (Text(Image(systemName: "circle.fill")).foregroundColor(VoiceIQUI.Colors.gRed)
+                    (Text(Image(systemName: "circle.fill")).foregroundColor(VQ.Colors.record)
                         + Text(" \(meeting.startedAt.formatted(date: .omitted, time: .shortened)) · \(MeetingRecordingStatus.clock(context.date.timeIntervalSince(since))) · Recording"))
                         .font(VoiceIQUI.TypeScale.labelSmall().monospacedDigit())
                         // Secondary on the selection read at 4.2:1 (Fable, M6).
