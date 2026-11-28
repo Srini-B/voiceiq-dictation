@@ -13,7 +13,7 @@ struct RootView: View {
             if onboarded {
                 TabView(selection: $tab) {
                     HomeView(tab: $tab)
-                        .tabItem { Label("Home", systemImage: "waveform").environment(\.symbolVariants, .none) }
+                        .tabItem { Label("Home", systemImage: "list.bullet").environment(\.symbolVariants, .none) }
                         .tag(Tab.home)
                     MeetingsView()
                         .tabItem { Label("Notes", systemImage: "record.circle").environment(\.symbolVariants, .none) }
