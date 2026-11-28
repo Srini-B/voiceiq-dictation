@@ -156,7 +156,7 @@ extension RecordedAudio: Transferable {
 /// The meeting player pauses, seeks and changes speed; a dictation's Play only
 /// starts and stops (`toggle`).
 @MainActor public final class RecordingPlayer: NSObject, ObservableObject, AVAudioPlayerDelegate {
-    public enum State: Equatable { case idle, preparing, playing, paused }
+    public enum State: Equatable, Sendable { case idle, preparing, playing, paused }
     @Published public private(set) var state: State = .idle
     /// Playback speed; the meeting playback bar sets it.
     @Published public var rate: Float = 1 { didSet { player?.rate = rate } }
