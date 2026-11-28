@@ -33,20 +33,26 @@ struct SectionCaption: View {
     }
 }
 
-/// A selectable list row's highlight, passed to `.listRowBackground`: accent
-/// while the list has focus, the soft fill when it doesn't, so an unfocused
-/// selection is not the system grey. The opaque backing hides the system
-/// highlight at the rounded corners; it matches the panes' window background.
+/// A selectable list row's highlight, passed to `.listRowBackground`: brand
+/// blue while the list has focus in the key window, the soft fill otherwise,
+/// so an unfocused selection is not the system grey. The opaque backing hides
+/// the system highlight at the rounded corners; it matches the panes' window
+/// background.
 struct ListSelectionBackground: View {
     let selected: Bool
     let focused: Bool
+    @Environment(\.controlActiveState) private var windowState
+
+    /// The light accent in both modes: macOS draws the selected row's text
+    /// white, and white on the dark-mode accent read at 2.3:1.
+    private static let emphasized = VQ.Colors.dynamic(light: 0x2252BC, dark: 0x2252BC)
 
     var body: some View {
         if selected {
             ZStack {
                 Color(nsColor: .windowBackgroundColor)
                 RoundedRectangle(cornerRadius: VQ.Radius.control, style: .continuous)
-                    .fill(focused ? VQ.Colors.accent : VQ.Colors.fill)
+                    .fill(focused && windowState == .key ? Self.emphasized : VQ.Colors.fill)
             }
         } else {
             Color.clear
