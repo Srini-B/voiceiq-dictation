@@ -25,11 +25,17 @@ so VoiceiQ detects the call and reads names from the screen.
 
 ## What the probe needs
 
-- A signed build of the commit under test, installed as `/Applications/VoiceiQ.app`.
-  Take the shared app lock before quitting or installing it
-  (`scripts/app-lock.sh acquire <thread ID>`). `run.sh` holds the lock for the
-  run and needs `LOCK_OWNER` set to your thread ID.
-  Do not test a Debug build (AGENTS.md).
+- The Release build of the commit under test, run as an isolated copy, never
+  `/Applications/VoiceiQ.app`. The installed app syncs every meeting to the
+  owner's iCloud, and nothing in it turns meeting sync off. Copy the signed
+  Release build to `~/Applications/VoiceiQ-probe.app`, give it its own bundle
+  ID (`io.blue.voiceiq.probe`), and re-sign it ad hoc without the iCloud
+  entitlement, so its meetings stay on the Mac (AGENTS.md). Grant the copy
+  its own Microphone, Screen Recording and Accessibility permission before
+  the first run. Do not test a Debug build.
+- `run.sh` also holds the shared app lock for the run (`LOCK_OWNER` set to
+  your thread ID), so nobody quits or reinstalls the real app under a
+  probe.
 - `ASSEMBLYAI_API_KEY` set in the app, so the meeting is transcribed. Notes
   need an LLM Gateway balance. Without one they fail with `noBalance`, and
   the probe scores the transcript only.
