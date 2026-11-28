@@ -4,8 +4,13 @@
 
 Two problems left by PR #171 (`activities/2026-11-28-iphone-draft-hosts.md`):
 the first letter typed during a draft that ends mid-sentence came out a
-capital, and a dictation whose transcript arrived while an earlier draft was
-still marked showed no draft.
+capital, and a draft offered while an earlier draft was still marked was
+never typed. The second came from a debug probe that wrote drafts straight
+into the shared store. In the app it can't happen today: `AppModel.startBlocker`
+refuses a new dictation ("Still working on the last one") until the last one
+is delivered, from the keyboard, the Action button and Control Center. The
+keyboard now handles it anyway, so overlapping dictations can be allowed on
+iPhone later (in their own change, measured) without a keyboard change.
 
 ## Causes
 
@@ -40,5 +45,6 @@ after a joined draft ended early; fixed with `typedDraftIDs`.
 
 ## Verification
 
-KeyboardDraftTests on the fake host; iOS 27 Simulator measurements and demo
-videos in PR #173.
+KeyboardDraftTests on the fake host, Core tests for the snapshot and the
+trial hosts; iOS 27 Simulator measurements on the Mac mini (results and demo
+videos posted on PR #173).

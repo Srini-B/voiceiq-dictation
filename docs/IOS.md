@@ -263,10 +263,13 @@ is the Mac's draft (`TextDraft`), done by the keyboard:
    (`Delivery.draftHosts`: Messages, Reminders, Contacts, Calendar). Safari stays off: a page field whose script rewrites its value on every change makes the draft plain text without telling the keyboard, and every dictation went in twice, while a plain textarea and a contenteditable passed; a keyboard can't tell these fields apart. Notes, Mail and third-party apps (WhatsApp, Slack, Chrome, Gmail) can't run in the Simulator and wait for a device run. For that run, Settings › Advanced › Try drafts in Notes, Mail and WhatsApp (off by default; `SharedStore.triesMoreDraftHosts`, writer: app) adds `Delivery.trialDraftHosts` for both the app's offer and the keyboard (`Delivery.takesDrafts`). The session log names the app each draft was typed in. No transcript with a line break is drafted
    (`KeyboardDraft.canType`). Elsewhere the
    written text goes in once, as before.
-5. A dictation whose transcript comes while an earlier one's draft is still
-   marked (its writer still running, also while a later dictation records;
-   started from the Action button or Control Center, or the earlier
-   transcript came late) joins that draft (`KeyboardDraft.add`): the
+5. The app refuses a new dictation until the last one is delivered
+   (`AppModel.startBlocker`: "Still working on the last one", from the
+   keyboard, the Action button and Control Center alike), so today one draft
+   is held at a time. The keyboard still handles a second draft offered while
+   one is marked, which a later change allowing overlapping dictations on
+   iPhone would produce (the Mac allows them): it joins that draft
+   (`KeyboardDraft.add`): the
    marked text becomes both transcripts, each fitted to the text before
    it, since new marked text replaces the old and a second, separate draft
    would take the first one's place. Each written text takes its own part's

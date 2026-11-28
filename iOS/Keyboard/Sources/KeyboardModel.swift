@@ -578,10 +578,10 @@ final class KeyboardModel: ObservableObject {
         Self.lastDraftPlace = (host, documentID)
         // Undo replays edits before the cursor, which the draft has moved.
         editor?.resetUndo()
-        onDraftChange?()
         // Only once it is in: the app then sends the written text to replace it.
         store.typedDraftID = offered.id
         Self.typedDraftIDs.append(offered.id)
+        onDraftChange?()
         KeyboardLog.note("[\(instanceTag)] draft typed in \(Self.describe(currentField()))\(joined ? ", after the earlier one still being written" : "")")
     }
 

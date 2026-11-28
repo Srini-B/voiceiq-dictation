@@ -127,8 +127,11 @@ private final class KeyboardTextDraft: TextDraft {
         // draft would stay as heard: a keyboard takes it first.
         let deadline = Date().addingTimeInterval(Delivery.draftWait)
         store.reloadFromDisk()
+        // Only for one just sent: an older one only offered in another
+        // field stays pending for an hour.
         while Date() < deadline, let waiting = store.snapshot.delivery, waiting.replacesDraft != nil,
-              waiting.replacesDraft != draftID, waiting.isPending(handledID: store.insertedDeliveryID) {
+              waiting.replacesDraft != draftID, waiting.isPending(handledID: store.insertedDeliveryID),
+              Date().timeIntervalSince(waiting.createdAt) < Delivery.draftWait {
             try? await Task.sleep(for: .milliseconds(50))
             store.reloadFromDisk()
         }
