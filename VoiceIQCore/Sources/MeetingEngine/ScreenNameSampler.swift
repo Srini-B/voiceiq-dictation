@@ -215,20 +215,21 @@ public final class ScreenNameSampler: @unchecked Sendable {
         return read()
     }
 
-    /// Sets it back to false; true once a read-back shows it off, or cannot
-    /// read it at all. Chrome returns an error code even for a write that
-    /// works (-25208), so only the read-back says, and a write can time out
-    /// while Chrome builds the tree it just opened (agy on #146).
+    /// Sets it back to false; true once a read-back shows it off, the
+    /// browser cannot report it at all, or it has quit. Chrome returns an
+    /// error code even for a write that works (-25208), so only the
+    /// read-back says; a write or read that times out while Chrome builds the
+    /// tree it just opened keeps the pulse ours, to retry (agy, Codex on #146).
     static func switchOff(_ pid: pid_t) -> Bool {
         let app = AXUIElementCreateApplication(pid)
         AXUIElementSetMessagingTimeout(app, 1)
         AXUIElementSetAttributeValue(app, enhancedUI, kCFBooleanFalse)
         var value: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(app, enhancedUI, &value) == .success, (value as? Bool) == true else {
-            UserDefaults.standard.removeObject(forKey: pulsedKey)
-            return true
-        }
-        return false
+        let read = AXUIElementCopyAttributeValue(app, enhancedUI, &value)
+        let off = read == .success ? (value as? Bool) != true
+            : read == .attributeUnsupported || read == .noValue || NSRunningApplication(processIdentifier: pid) == nil
+        if off { UserDefaults.standard.removeObject(forKey: pulsedKey) }
+        return off
     }
 
     static func webTreeIsOpen(_ pid: pid_t) -> Bool {
