@@ -380,7 +380,7 @@ struct TalkKey: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(PressScaleStyle())
-        .accessibilityLabel(recording ? "Open the note being recorded" : "Record a note")
+        .accessibilityLabel(recording ? "Stop recording" : "Record a note")
     }
 }
 

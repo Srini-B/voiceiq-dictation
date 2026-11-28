@@ -57,6 +57,8 @@ struct HomeView: View {
             .listStyle(.plain)
             .scrollContentBackground(.hidden)
             .background(Theme.Colors.canvas.ignoresSafeArea())
+            // Rows end at the bar and day header instead of showing through.
+            .modifier(HardTopEdge())
             .keyboardDismissable()
             .searchable(text: $search, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search what you said")
             .onChange(of: search) { _, _ in reload() }
@@ -138,9 +140,14 @@ struct HomeView: View {
                 Image(systemName: "keyboard")
                 Text("Try the VoiceiQ keyboard")
             }
+            // The key does what it shows: record and open Notes, or stop.
             TalkKey(recording: model.meetings.isRecording) {
-                if !model.meetings.isRecording { model.startMeeting() }
-                tab = .meetings
+                if model.meetings.isRecording {
+                    model.stopMeeting()
+                } else {
+                    model.startMeeting()
+                    tab = .meetings
+                }
             }
         }
         .padding(.horizontal, Theme.Spacing.page)
