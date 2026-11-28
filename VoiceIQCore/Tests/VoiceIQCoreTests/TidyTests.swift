@@ -49,6 +49,7 @@ final class TidyTests: XCTestCase {
         XCTAssertEqual(tidy("Sounds good. The invoice is from Acme Inc.", .messages), "sounds good. the invoice is from Acme Inc.")
         XCTAssertEqual(tidy("Ask Martin Luther King Jr.", .messages), "ask Martin Luther King Jr")
         XCTAssertEqual(tidy("Ask Dr. Smith Jr.", .messages), "ask Dr. Smith Jr.")
+        XCTAssertEqual(tidy("Sounds good! The invoice is from Acme Inc.", .messages), "sounds good! the invoice is from Acme Inc.")
         // "No." is a title only before a number ("No. 5"); here it is one of four sentences.
         XCTAssertEqual(tidy("Is it ok? No. Call me later. See you.", .messages), "is it ok? no. call me later. see you.")
     }
@@ -274,6 +275,12 @@ final class TidyTests: XCTestCase {
             ("Send it to ming at the rate gmail dot com.", "Send it to ming@gmail.com."),
             ("Send it from 123 dot support at the rate gmail dot com.", "Send it from 123.support@gmail.com."),
             ("My email's billing at the rate gmail dot com.", "My email's billing@gmail.com."),
+            // A comma that ends an address, and words that name one, still introduce an "-ing" mailbox.
+            ("cc priya@gmail.com, marketing at the rate acme dot com.", "cc priya@gmail.com, marketing@acme.com."),
+            ("cc priya at sign gmail dot com, accounting at the rate acme dot com.",
+             "cc priya@gmail.com, accounting@acme.com."),
+            ("The contact is billing at the rate acme dot com.", "The contact is billing@acme.com."),
+            ("The CC is accounting at the rate acme dot com.", "The CC is accounting@acme.com."),
         ] {
             XCTAssertEqual(SpokenAddresses.joining(in: spoken), written)
         }

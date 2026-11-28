@@ -138,7 +138,9 @@ enum SpokenAddresses {
         "invite", "copy", "forward", "send", "reply", "notify", "message", "text", "include",
     ]
     /// Of those, the words that name an address, so what follows them is one: "My email will be billing…".
-    private static let addressNouns: Set<String> = ["email", "e-mail", "mail", "address", "id"]
+    private static let addressNouns: Set<String> = [
+        "email", "e-mail", "mail", "address", "id", "contact", "cc", "bcc", "inbox",
+    ]
     /// Words that introduce an address only after one of those ("My email is
     /// priya…", "Write to priya…") or where the address ends the sentence:
     /// "The market is moving at the rate google dot com, thanks." stays.
@@ -158,10 +160,11 @@ enum SpokenAddresses {
         // A one-word verb or number, not a mailbox: "growing at the rate…", "went from 10 at the rate…".
         // Not "-ed" ("Ahmed"), a short "-ing" ("Ming"), or a mailbox of parts ("123 dot support").
         let single = start + 1 >= tokens.count || tokens[start + 1].word.lowercased() != "dot"
-        let verb = single && mailbox.hasSuffix("ing") && mailbox.count >= 6
+        let verb = single && mailbox.hasSuffix("ing") && mailbox.count >= 6 && mailbox.allSatisfy(\.isLetter)
         let number = single && mailbox.allSatisfy(\.isNumber)
-        // After a comma, only a mailbox that is no verb or number: "Prices kept rising, growing at the rate…".
-        if previous.last == ",", verb || number { return nil }
+        // After a comma, only a mailbox that is no verb or number ("Prices kept rising, growing at the
+        // rate…"), unless the comma ends an address: "cc priya@gmail.com, marketing at the rate…".
+        if previous.last == ",", verb || number, lastAddress != start - 1, !previous.contains("@") { return nil }
         if let last = previous.last, ".!?,:;".contains(last) { return .strong }
         let word = bare(previous).replacingOccurrences(of: "’", with: "'")
         if strongIntroductions.contains(word) { return .strong }
