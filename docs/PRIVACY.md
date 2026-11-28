@@ -110,8 +110,8 @@ With no usable key, nothing is sent and the recording stays on your Mac.
 5. **Your API key**, only in the request header to AssemblyAI. It is stored in
    the macOS Keychain, never in files or preferences. Requests to AssemblyAI
    also carry a User-Agent naming the app version, the platform and its
-   version, and "dev" on development builds ("VoiceiQ/0.7.19 (macOS 27.0)",
-   "VoiceiQ/0.7.19 (iOS 27.1)"), nothing that identifies you or your device.
+   version, and "dev" on development builds ("VoiceiQ/0.8.0 (macOS 27.0)",
+   "VoiceiQ/0.8.0 (iOS 27.1)"), nothing that identifies you or your device.
 6. **Update checks.** Every six hours, and when you choose Check for Updates, the
    app downloads the update feed (`appcast.xml`) from the project's GitHub
    Releases (`github.com`, which redirects to GitHub's download host). The
@@ -207,7 +207,7 @@ provider's terms. It is off by default; details in
   Settings. Core ML's prepared copies of them (on the Mac,
   `~/Library/Caches/io.blue.voiceiq.localspeech`) are deleted with any model,
   and at launch when no model is downloaded. See [ON_DEVICE.md](ON_DEVICE.md).
-- The first launch of 0.7.19 deletes the Gemini key that earlier versions
+- The first launch of 0.8.0 deletes the Gemini key that earlier versions
   stored in the Keychain and the Gemini endpoint and model overrides
   (`SettingsStore.removeRetiredSettingsOnce`). Nothing is sent to Google.
 - The first launch of 0.7.12 deletes the OpenAI, ElevenLabs, TinyFish and

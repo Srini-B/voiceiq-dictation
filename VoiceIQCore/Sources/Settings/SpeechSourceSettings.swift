@@ -3,7 +3,7 @@ import VoiceIQSpeech
 
 /// Who turns dictation into text: AssemblyAI (the default) or a Fluid Speech
 /// model on this device. AssemblyAI's raw value is "gemini", the provider
-/// builds before 0.7.19 stored, so the choice carries over.
+/// builds before 0.8.0 stored, so the choice carries over.
 public enum TranscriptionSource: String, CaseIterable, Sendable, Identifiable {
     case assemblyAI = "gemini"
     case onDevice
@@ -21,7 +21,7 @@ public enum TranscriptionSource: String, CaseIterable, Sendable, Identifiable {
 /// Who applies the writing rules to a dictation: the writing model on
 /// AssemblyAI's LLM Gateway, or nobody, so an on-device transcript never
 /// leaves the device. With Off, a dictation is tidied on the device
-/// (`TidyStyle`). The raw value "gemini" is what builds before 0.7.19 stored.
+/// (`TidyStyle`). The raw value "gemini" is what builds before 0.8.0 stored.
 public enum CleanupSource: String, CaseIterable, Sendable, Identifiable {
     case assemblyAI = "gemini"
     case none

@@ -122,7 +122,7 @@ def main() -> None:
     n = len({r["sessionID"] for r in dict_calls if r["sessionID"]}) or len(done)
     text = sum(r["textIn"] + r["cachedIn"] for r in dict_calls)
     sessions = {r["sessionID"] for r in dict_calls if r["sessionID"]}
-    # The writing model's calls: before 0.7.19 every Gemini dictation call
+    # The writing model's calls: before 0.8.0 every Gemini dictation call
     # (one call heard and wrote, booked as transcribe); since, the gateway
     # writer's (cleanup), not AssemblyAI's speech calls.
     writer_dict = [r for r in dict_calls if r["stage"] == "cleanup" or "gemini" in r["model"].lower()]

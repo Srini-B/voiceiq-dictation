@@ -6,7 +6,7 @@ import Foundation
 /// rows, labelled `assemblyai/<model>`, price from the same table. Speech on
 /// AssemblyAI is billed per hour and booked with its cost
 /// (`TokenUsage.reportedCostUSD`). The Gemini rows price what builds before
-/// 0.7.19 booked.
+/// 0.8.0 booked.
 ///
 /// Models are matched by prefix, longest first, so a dated suffix
 /// (`-preview-09-2026`) still resolves.

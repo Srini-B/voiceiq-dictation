@@ -59,7 +59,7 @@ speech. AssemblyAI's free credit is not subtracted.
 
 ## Retired providers
 
-Gemini was the provider until 0.7.19, OpenAI and ElevenLabs until 0.7.12,
+Gemini was the provider until 0.8.0, OpenAI and ElevenLabs until 0.7.12,
 and Claude until 2026-11-10. Their rows keep their stored cost, and `PriceBook` keeps their
 prices so rows without one still price: Gemini's token prices, OpenAI's token prices and per-minute
 transcription prices (`gpt-transcribe`, `gpt-live-transcribe`,
