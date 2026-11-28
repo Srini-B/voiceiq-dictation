@@ -133,7 +133,11 @@ public final class FieldDraft: TextDraft {
             marks.clear()
             return .notInserted
         }
-        let insert = await inserter.insertReportingTier(fitted, context: context, announcesMiss: false)
+        // A withdraw while Accessibility was tried stops the paste after it.
+        let insert = await inserter.insertReportingTier(fitted, context: context, announcesMiss: false,
+                                                        stillWanted: { [weak self] in
+                                                            self.map { !$0.stopped && !$0.ended } ?? false
+                                                        })
         guard insert.outcome == .inserted else {
             marks.clear()
             return .notInserted

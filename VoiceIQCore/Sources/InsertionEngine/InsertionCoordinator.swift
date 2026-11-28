@@ -54,10 +54,13 @@ public struct InsertionCoordinator: TextInserting {
     /// `insert`, saying whether the text went in by Accessibility (tier 1),
     /// which was then verified, or by a paste or typing. With
     /// `announcesMiss` false, a paste the field never shows is neither
-    /// copied nor announced: a draft's caller handles that itself.
+    /// copied nor announced: a draft's caller handles that itself. When
+    /// `stillWanted` turns false while Accessibility was tried, nothing more
+    /// is typed or pasted, and nothing is copied.
     @MainActor
     public func insertReportingTier(_ text: String, context: DictationContext,
-                                    announcesMiss: Bool = true) async
+                                    announcesMiss: Bool = true,
+                                    stillWanted: @MainActor () -> Bool = { true }) async
         -> (outcome: InsertionOutcome, byAccessibility: Bool) {
         // Before the guards, so the frontmost app and the field they check
         // are still the target after waiting out an earlier paste.
@@ -111,6 +114,11 @@ public struct InsertionCoordinator: TextInserting {
             Log.insertion.info("frontmost changed during AX attempt — no blind paste")
             paster.copyOnly(text)
             return (.frontmostChanged, false)
+        }
+
+        guard stillWanted() else {
+            Log.insertion.info("no longer wanted after the Accessibility attempt — not pasted")
+            return (.fellBackToClipboard, false)
         }
 
         // Tier 2a: apps where ⌘V fails get the text typed instead.
