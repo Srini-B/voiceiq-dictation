@@ -1,4 +1,7 @@
 import AVFoundation
+#if os(macOS)
+import CoreAudio
+#endif
 import XCTest
 @testable import VoiceIQCore
 
@@ -17,9 +20,8 @@ final class RecordingPlayerTests: XCTestCase {
         let frames = AVAudioFrameCount(4 * 16_000)
         let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frames)!
         buffer.frameLength = frames
-        for index in 0..<Int(frames) {
-            buffer.int16ChannelData![0][index] = Int16(4_000 * sin(2 * .pi * 440 * Double(index) / 16_000))
-        }
+        // Silence: nothing here needs the sound, and the tests shouldn't play a tone aloud.
+        buffer.int16ChannelData![0].update(repeating: 0, count: Int(frames))
         try writer.write(buffer)
     }
 
@@ -55,21 +57,22 @@ final class RecordingPlayerTests: XCTestCase {
         XCTAssertEqual(player.position, held, accuracy: 0.01, "paused does not move")
 
         player.seek(to: 3)
-        XCTAssertEqual(player.position, 3, accuracy: 0.01)
+        // One 16 kHz AAC packet is 64 ms; currentTime may land on its start.
+        XCTAssertEqual(player.position, 3, accuracy: 0.07)
         player.seek(to: 60)
-        XCTAssertLessThan(player.position, 4, "a seek past the end stays inside the recording")
+        XCTAssertLessThan(player.position, player.duration ?? 0, "a seek past the end stays inside the recording")
 
         player.seek(to: 2)
         player.playPause(audio)
         XCTAssertEqual(player.state, .playing)
-        XCTAssertGreaterThanOrEqual(player.position, 1.99)
+        XCTAssertGreaterThanOrEqual(player.position, 1.93)
 
         player.stop()
         XCTAssertEqual(player.state, .idle)
         XCTAssertEqual(player.position, 0)
     }
 
-    func testAnInterruptionPausesInsteadOfLeavingPlayShowing() async throws {
+    func testAnInterruptionPausesInsteadOfLeavingPauseShowing() async throws {
         let player = RecordingPlayer()
         let audio = RecordedAudio.dictation(folder: folder, startedAt: Date())
         player.playPause(audio)
@@ -81,11 +84,31 @@ final class RecordingPlayerTests: XCTestCase {
         player.stop()
     }
 
-    /// Waits for the `.m4a` to render and play; a machine with no audio output skips.
+    /// Waits for the `.m4a` to render and play. Only a machine with no audio
+    /// output skips (CI's runners sometimes have none); anything else that keeps
+    /// it from playing fails.
     private func started(_ player: RecordingPlayer) async throws {
-        for _ in 0..<100 where player.state == .preparing {
+        try XCTSkipUnless(Self.hasAudioOutput, "this machine has no audio output device")
+        for _ in 0..<300 where player.state == .preparing {
             try await Task.sleep(for: .milliseconds(50))
         }
-        guard player.state == .playing else { throw XCTSkip("this machine could not start audio playback") }
+        // An error, not a skip: the test fails.
+        guard player.state == .playing else { throw PlaybackDidNotStart(state: player.state) }
+    }
+
+    private struct PlaybackDidNotStart: Error { let state: RecordingPlayer.State }
+
+    private static var hasAudioOutput: Bool {
+        #if os(macOS)
+        var device = AudioObjectID(kAudioObjectUnknown)
+        var size = UInt32(MemoryLayout<AudioObjectID>.size)
+        var address = AudioObjectPropertyAddress(mSelector: kAudioHardwarePropertyDefaultOutputDevice,
+                                                 mScope: kAudioObjectPropertyScopeGlobal,
+                                                 mElement: kAudioObjectPropertyElementMain)
+        let status = AudioObjectGetPropertyData(AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &size, &device)
+        return status == noErr && device != kAudioObjectUnknown
+        #else
+        return true
+        #endif
     }
 }

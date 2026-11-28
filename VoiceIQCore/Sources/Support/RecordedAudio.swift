@@ -212,7 +212,8 @@ extension RecordedAudio: Transferable {
         case .paused:
             // A voice session that held the audio session may have ended while paused.
             Self.activateSession()
-            if player?.play() == true { state = .playing } else { stop() }
+            // Refused while a call still holds the audio: stay paused at the same place.
+            if player?.play() == true { state = .playing }
         }
     }
 
