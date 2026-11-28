@@ -72,8 +72,11 @@ for index in {1..${#guests}}; do
     -filter_complex "[0]aresample=48000,adelay=${pad}000:all=1[g];[1]adelay=${tone_at}000:all=1[t];[g][t]amix=inputs=2:duration=longest:normalize=0" \
     -ar 48000 -ac 1 -c:a pcm_s16le $scratch/guest$index.wav
 done
+# Chrome's sandboxed audio service cannot read the file and sends silence
+# instead, so the guests run it unsandboxed.
 for index in {1..${#guests}}; do
   join $scratch/guest$index "Guest $index" webcam --mute-audio --use-fake-device-for-media-stream \
+    --disable-features=AudioServiceSandbox \
     "--use-file-for-fake-audio-capture=$scratch/guest$index.wav%noloop"
   sleep 3
 done

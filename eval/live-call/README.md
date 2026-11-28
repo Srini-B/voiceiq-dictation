@@ -13,6 +13,9 @@ room. Each one plays a prepared WAV as its microphone
 (`--use-fake-device-for-media-stream --use-file-for-fake-audio-capture`) and
 plays no sound itself (`--mute-audio`). VoiceiQ taps every Chrome process, so
 a guest window that played the call would put the owner into `system.caf`.
+Guests run Chrome's audio service unsandboxed
+(`--disable-features=AudioServiceSandbox`): the sandboxed service cannot
+read the WAV and sends digital silence without an error.
 The owner's side is whatever the Mac's default input hears.
 
 meet.jit.si opens a room only after a moderator signs in, so the throwaway
@@ -66,9 +69,9 @@ The script:
    goes on anyway. The recording and the levels are written to
    `$OUT/guest-check.wav` and `guest-check.txt`. The terminal or agent
    running the script needs System Audio Recording permission for the tap.
-   Until 2026-11-28 no run checked this, and in every run so far the
-   guests' audio never reached the owner
-   (`activities/2026-11-28-silent-call-tap.md`).
+   Until 2026-11-28 no run checked this, and in every run before then the
+   guests' audio never reached the owner, because the sandboxed audio
+   service sent silence (`activities/2026-11-28-silent-call-tap.md`).
 4. Plays `owner.wav` into `OWNER_DEVICE`, or through `afplay` to the
    default output.
 5. Leaves the call after `SECONDS` and closes every window.
