@@ -143,6 +143,7 @@ public struct InsertionCoordinator: TextInserting {
             let check = Task { @MainActor [paster] () -> PasteCheck.Verdict in
                 await PasteCheck.watch(element: before.element, before: before.reading, text: text, postedAt: postedAt) {
                     guard announcesMiss else { return }
+                    Log.insertion.info("paste missed — text copied instead")
                     paster.copyOnly(text)
                     NotificationCenter.default.post(name: .voiceIQPasteMissed, object: text)
                 }

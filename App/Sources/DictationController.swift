@@ -161,6 +161,12 @@ final class DictationController {
             }
         }
 
+        NotificationCenter.default.addObserver(forName: .voiceIQDraftKept, object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor in
+                self?.showBackgroundNotice("The transcript stayed in the field as heard", for: 4.0, sound: nil)
+            }
+        }
+
         NotificationCenter.default.addObserver(forName: .pillStopTapped, object: nil, queue: .main) { [weak self] _ in
             Task { @MainActor in
                 self?.coordinator.handle(.finalize)

@@ -1,5 +1,11 @@
 import Foundation
 
+public extension Notification.Name {
+    /// A dictation ended without written text and its draft could not be
+    /// taken back out: the transcript stays in the field as heard.
+    static let voiceIQDraftKept = Notification.Name("io.blue.voiceiq.draft-kept")
+}
+
 /// One dictation's draft: the transcript goes in once, the moment it is
 /// heard and after the text of every dictation spoken before it, and the job
 /// then swaps it for the written text, whatever the earlier ones' writers
@@ -51,6 +57,7 @@ final class DraftStage {
     /// draft that went in is taken back out through the same verified swap,
     /// so the field is left as it was. One the user edited stays. Run in its
     /// own task, so the job's cancellation doesn't cut its waits short.
+    /// A draft that stays is announced (`voiceIQDraftKept`).
     func withdraw() async {
         withdrawn = true
         guard let showing else { return }
@@ -58,7 +65,9 @@ final class DraftStage {
         await Task { @MainActor in
             let shown = await showing.value
             guard shown == .shown || shown == .pending else { return }
-            _ = await draft.replace(with: "")
+            if await draft.replace(with: "") != true {
+                NotificationCenter.default.post(name: .voiceIQDraftKept, object: nil)
+            }
         }.value
     }
 

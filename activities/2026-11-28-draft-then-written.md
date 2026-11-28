@@ -75,7 +75,9 @@ characters).
 
 Hand review on BlueLobster (each head), Codex (six findings, all fixed),
 Fable 5.2 (78/100 at 390def9: four Mediums, fixed in the next head; 88/100
-at 089351d with no High or Medium, short of 90 for want of device proof). Main
+at 089351d with no High or Medium, short of 90 for want of device proof;
+87/100 at 98edb9b: a ⌘V-only field keeps its draft on Esc or no speech
+silently, now announced on the pill rather than removed by a posted Delete). Main
 changes from review: the selection read-back checks the whole value and is
 polled; a posted draft is never followed by the written text beside it; an
 accepted Accessibility write never falls back to ⌘V; the swap method follows
