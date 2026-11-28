@@ -300,16 +300,24 @@ SOFTWARE.
 
 - Files: everything under `iOS/Keyboard/Hex` (letters and number layers,
   suggestion bar, auto-correction, slide to type, emoji panel, trackpad
-  cursor, the English typing model `en.hextm`), copied unchanged by
+  cursor, the English typing model `en.hextm` and its spellings
+  `en.spellings`), copied unchanged by
   `scripts/sync-hex-keyboard.sh` except for the patches in
   `iOS/Keyboard/Hex/patches`. The commit is in `iOS/Keyboard/Hex/UPSTREAM`
-  (`012bdbbe`, 2026-11-25).
+  (`f5819f4c`, 2026-11-27).
 - Source: [anomalyco/hex](https://github.com/anomalyco/hex)
   (`ios/HEXShared/FullKeyboard`, `ios/HEXKeyboard`), MIT, the licence above;
   its text is also in `iOS/Keyboard/Hex/LICENSE`.
 - Data inside it, per Hex's `ios/docs/acknowledgements.md`: `en.hextm` is
-  built from Google Books Ngram (CC BY 3.0), SCOWL and WordNet (permissive
-  licences) and Hex's own word list (MIT); `never-suggest.tsv` is curated
+  built from Google Books Ngram (CC BY 3.0), SCOWL (including its names,
+  days and places lists) and WordNet (permissive licences) and Hex's own word
+  list (MIT). Words newer than the books and their spellings in `en.hextm` and
+  `en.spellings` ("ChatGPT", "TikTok") come from the Leipzig Corpora
+  Collection's English news downloads for 2023 to 2025, Leipzig University and
+  the Saxon Academy of Sciences and Humanities in Leipzig (D. Goldhahn,
+  T. Eckart and U. Quasthoff, LREC 2012), CC BY 4.0
+  (https://creativecommons.org/licenses/by/4.0/); only word counts, how many
+  sites use each word, and spellings are kept. `never-suggest.tsv` is curated
   from LDNOOBW (CC BY 4.0); `Emoji/emoji-index-en.txt` is built from
   Unicode's emoji-test.txt and CLDR (Unicode License v3, text in
   `iOS/Keyboard/Hex/FullKeyboard/Emoji/LICENSE-Unicode.txt`).
