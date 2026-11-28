@@ -148,6 +148,26 @@ final class KeyboardDraftTests: XCTestCase {
         XCTAssertEqual(untouched.string, "Dear Ana, See you at noon.")
     }
 
+    /// The text before the cursor already ends like the draft, in a host
+    /// that leaves marked text out: that text is not taken for the draft.
+    /// Deleted, the draft leaves the user's words alone; untouched, it is
+    /// swapped once committed.
+    func testTextEndingLikeTheDraftIsNotTakenForIt() throws {
+        let deletedField = Field("ok ok")
+        deletedField.hidesMarkedText = true
+        let deleted = try XCTUnwrap(type("ok", into: deletedField))
+        XCTAssertEqual(deleted.text, " ok")
+        for _ in 0..<3 { deletedField.deleteBackward() }
+        XCTAssertEqual(deleted.replace(with: "OK.", in: deletedField, fit: fit), .kept)
+        XCTAssertEqual(deletedField.string, "ok ok")
+
+        let untouchedField = Field("ok ok")
+        untouchedField.hidesMarkedText = true
+        let untouched = try XCTUnwrap(type("ok", into: untouchedField))
+        XCTAssertEqual(untouched.replace(with: "OK.", in: untouchedField, fit: fit), .retyped(" OK."))
+        XCTAssertEqual(untouchedField.string, "ok ok OK.")
+    }
+
     /// A draft the swap could not take back out is never typed: Tamil,
     /// whose vowel signs a host may delete on their own, a line break, and
     /// a draft longer than hosts show before the cursor. The written text

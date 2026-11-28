@@ -62,7 +62,9 @@ final class KeyboardDraft {
         // have changed the field: a host that shows the draft at once, also
         // with less of the text before it, has it recorded here.
         let current = proxy.documentContextBeforeInput ?? ""
-        if current.hasSuffix(fitted), (proxy.documentContextAfterInput ?? "") == after,
+        // A context that did not change could be the host leaving marked
+        // text out, with the user's own text ending like the draft.
+        if current != before, current.hasSuffix(fitted), (proxy.documentContextAfterInput ?? "") == after,
            before.hasSuffix(current.dropLast(fitted.count)) {
             draft.landedBefore = current
         }
