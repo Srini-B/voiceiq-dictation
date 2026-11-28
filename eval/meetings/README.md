@@ -98,6 +98,12 @@ time printed after its start time (a one-line change to Hex's report).
 | `s4-names-unsaid` | Three people on a Slack huddle with no window names; one person never says their name and is named only by the calendar. |
 | `*-echo` | The same meeting with the far side leaking into the mic through the speakers (60 ms late, a third of its level). |
 
+Run `prepare.py` from Terminal.app, not from a background process such as an
+Amp runner. Siri neural voices like Aman read files that macOS lets only
+Terminal reach, and `say` fails without them. Check every new render: on
+2026-11-28 `s3-four-people` was rebuilt because its earlier Aman render had
+garbled Rahul's lines (see `activities/2026-11-28-eval-s3-aman-regen.md`).
+
 Each folder holds `mic.caf` and `system.caf` (16 kHz mono, as the app records),
 `input.json` (what the app knows: owner, call app, calendar invitees, whether
 the call window shows everyone) and `reference.json`.
