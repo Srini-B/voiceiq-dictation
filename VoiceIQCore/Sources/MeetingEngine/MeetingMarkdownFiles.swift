@@ -79,6 +79,8 @@ public struct MeetingMarkdownFiles: Sendable {
         }
         // A file that appears at the free name before the write (a sync client, another app) is kept; the next number is tried.
         // Numbering goes on from the one that failed, so a name fileExists misses (a dangling symlink) cannot loop.
+        // A failed write keeps the entry for the folder it was in before.
+        let before = ledger[key]
         var number = 1
         while true {
             let url: URL
@@ -91,7 +93,7 @@ public struct MeetingMarkdownFiles: Sendable {
             } catch let error as CocoaError where error.code == .fileWriteFileExists {
                 continue
             } catch {
-                try? record(nil)
+                try? record(before)
                 throw error
             }
         }

@@ -66,6 +66,20 @@ final class MeetingMarkdownFilesTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: first.path))
     }
 
+    /// A folder that can't be written (here, one that doesn't exist) keeps the
+    /// first folder's file: switching back rewrites it instead of adding " 2".
+    func testAFailedWriteElsewhereKeepsTheFirstFolderFile() throws {
+        try finish()
+        guard case .wrote(let first) = try files.save(id) else { return XCTFail("not written") }
+        let missing = MeetingMarkdownFiles(store: store, folder: root.appendingPathComponent("Gone", isDirectory: true),
+                                           ledgerURL: files.ledgerURL)
+        XCTAssertThrowsError(try missing.save(id))
+
+        try store.save(notes: notes("Pricing sync", summary: "Pricing ships in June."), id: id)
+        XCTAssertEqual(try files.save(id), .wrote(first))
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: files.folder.path), [first.lastPathComponent])
+    }
+
     /// On a case-insensitive disk the old name still "exists" under the new
     /// case; the file must be renamed in place, not copied to " 2".
     func testARenameThatChangesOnlyLetterCaseKeepsOneFile() throws {

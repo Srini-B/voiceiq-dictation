@@ -129,7 +129,7 @@ public struct AgentLibrary: Sendable {
         let meta = try self.meta(reference)
         let notes = try? meetings.loadNotes(id: meta.id)
         let transcript = (try? meetings.loadTranscript(id: meta.id)) ?? []
-        let untimed = range != nil && !Self.hasTimes(transcript)
+        let untimed = range != nil && Self.isUntimed(transcript)
         let range = untimed ? nil : range
         return Meeting(
             meeting: listing(meta, notes: notes, transcript: transcript, folders: meetings.foldersSnapshot()), notes: notes,
@@ -146,7 +146,7 @@ public struct AgentLibrary: Sendable {
     /// With a range, the transcript holds only the turns that overlap it.
     public func meetingMarkdown(_ reference: String, range: TranscriptRange? = nil) throws -> String {
         let meta = try self.meta(reference)
-        let untimed = range != nil && !Self.hasTimes((try? meetings.loadTranscript(id: meta.id)) ?? [])
+        let untimed = range != nil && Self.isUntimed((try? meetings.loadTranscript(id: meta.id)) ?? [])
         let range = untimed ? nil : range
         var text = try meetings.markdown(id: meta.id, parts: .both, range: range)
         let chat = meetings.loadChat(id: meta.id, setAsideUnreadable: false)
@@ -163,7 +163,10 @@ public struct AgentLibrary: Sendable {
 
     /// An imported or older meeting can have turns without times; a range
     /// would leave them all out and look like nothing was said, so it shows all of them.
-    private static func hasTimes(_ transcript: [TranscriptSegment]) -> Bool { transcript.contains { $0.start != nil } }
+    /// Turns, none with a time; an empty transcript has nothing to leave out.
+    private static func isUntimed(_ transcript: [TranscriptSegment]) -> Bool {
+        !transcript.isEmpty && !transcript.contains { $0.start != nil }
+    }
     static let untimedNotice = "all of it, because this transcript has no times; leave out from and to"
 
     private func meta(_ reference: String) throws -> MeetingMeta {

@@ -111,7 +111,7 @@ struct MeetingsView: View {
 
 /// The title a note's row shows.
 private func rowTitle(_ meta: MeetingMeta) -> String {
-    [meta.shownTitle(), meta.calendarEvent?.title].compactMap { $0 }.first { !$0.isEmpty } ?? "Notes"
+    meta.displayTitle() ?? "Notes"
 }
 
 private struct RecorderCard: View {
@@ -261,7 +261,7 @@ private struct MeetingDetail: View {
     /// Nothing to play while the note is still recording.
     private var audio: RecordedAudio {
         .meeting(folder: meta.status == .recording ? nil : model.meetings.store.folder(for: meta.id),
-                 name: meta.shownTitle(notes: notes) ?? "Notes")
+                 name: meta.displayTitle(notes: notes) ?? "Notes")
     }
 
     /// Nil until the note has a transcript to ask about.
@@ -283,9 +283,10 @@ private struct MeetingDetail: View {
                             .foregroundStyle(Theme.Colors.muted)
                     }
                     if let step { processingCard(step) }
+                    // Above the notes too: a failed redo keeps the old notes (Neon).
+                    if let failure { failureCard(failure) }
                     if let notes { notesContent(notes) }
-                    else if case .failed(let reason) = meta.status { failureCard(reason) }
-                    else if step == nil && !gone { processingCard(.summarizing) }
+                    else if failure == nil && step == nil && !gone { processingCard(.summarizing) }
                     if let chat { MeetingChatTurns(chat: chat, scroller: scroller) }
                     if !gone {
                         VStack(alignment: .leading, spacing: Theme.Spacing.m) {
@@ -323,7 +324,10 @@ private struct MeetingDetail: View {
                             Label("Folders", systemImage: folders.names(of: meta.id).isEmpty ? "folder" : "folder.fill")
                         }
                     }
-                    if meta.status == .done && !gone {
+                    if failure != nil && !gone {
+                        Button { model.meetings.retry(id: meta.id) } label: { Label("Retry", systemImage: "arrow.clockwise") }
+                            .disabled(model.meetings.isBusy(meta.id))
+                    } else if meta.status == .done && !gone {
                         Menu {
                             Button("Notes") { model.meetings.regenerateNotes(id: meta.id) }.disabled(transcript.isEmpty)
                             Button("Transcript and notes") { model.meetings.retry(id: meta.id, fresh: true) }
@@ -365,7 +369,7 @@ private struct MeetingDetail: View {
     @ViewBuilder private func notesContent(_ notes: MeetingNotes) -> some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.m) {
             VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                Text(meta.shownTitle(notes: notes) ?? notes.title).font(Theme.Fonts.title2()).foregroundStyle(Theme.Colors.ink)
+                Text(meta.displayTitle(notes: notes) ?? notes.title).font(Theme.Fonts.title2()).foregroundStyle(Theme.Colors.ink)
                     .onGeometryChange(for: CGFloat.self) { $0.frame(in: .named("note")).maxY } action: { titleBottom = $0 }
                 // The kind sits on the date line, so the title has the full width.
                 HStack(spacing: Theme.Spacing.s) {
@@ -527,6 +531,10 @@ private struct MeetingDetail: View {
         load()
     }
 
+    private var failure: String? {
+        if case .failed(let reason) = meta.status { reason } else { nil }
+    }
+
     private func failureCard(_ reason: String) -> some View {
         Card {
             Text(reason).font(Theme.Fonts.body()).foregroundStyle(Theme.Colors.muted)
@@ -554,7 +562,7 @@ private struct MeetingDetail: View {
         notes = try? store.loadNotes(id: meta.id)
         transcript = (try? store.loadTranscript(id: meta.id)) ?? []
         // Shared as files so "Save to Files" keeps a .md named after the note.
-        let title = (meta.shownTitle(notes: notes) ?? "Notes").replacingOccurrences(of: "/", with: "-")
+        let title = (meta.displayTitle(notes: notes) ?? "Notes").replacingOccurrences(of: "/", with: "-")
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent(meta.id.uuid.uuidString, isDirectory: true)
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         var choices: [(String, String, MeetingStore.ExportParts)] = []

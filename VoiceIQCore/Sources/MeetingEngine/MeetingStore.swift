@@ -115,7 +115,7 @@ public final class MeetingStore: @unchecked Sendable {
     public func markdown(id: MeetingID, parts: ExportParts, range: TranscriptRange? = nil) throws -> String {
         let folder = try requiredFolder(id), meta = try load(MeetingMeta.self, from: folder.appendingPathComponent("meta.json"))
         let notes = try? loadNotes(id: id)
-        var lines = ["# \(meta.shownTitle(notes: notes) ?? "Meeting")", "", meta.startedAt.formatted(date: .long, time: .shortened),
+        var lines = ["# \(meta.displayTitle(notes: notes) ?? "Meeting")", "", meta.startedAt.formatted(date: .long, time: .shortened),
                      meta.importedFrom.map { "Imported from \($0)" } ?? Duration.seconds(meta.durationSeconds.rounded())
                          .formatted(.units(allowed: [.hours, .minutes, .seconds], width: .wide, maximumUnitCount: 2))]
         if parts.contains(.notes), let notes {
