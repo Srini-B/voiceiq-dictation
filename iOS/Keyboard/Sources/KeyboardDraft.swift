@@ -178,7 +178,9 @@ final class KeyboardDraft {
         }
         parts = updated
         guard parts.allSatisfy({ $0.written != nil }) else {
-            mark(fitted, in: proxy)
+            // A line break is never marked (`canType`): the field keeps the
+            // transcript of this part until the last written text comes.
+            if Self.canType(fitted) { mark(fitted, in: proxy) }
             return .waiting
         }
         isMarked = false

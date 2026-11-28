@@ -97,6 +97,36 @@ final class KeyboardDraftTests: XCTestCase {
         }
     }
 
+    /// A written text with a line break is never marked: while the other
+    /// part waits, the field keeps this part's transcript, and the one
+    /// insert at the end has both written texts.
+    func testAWrittenTextWithALineBreakWaitsUnmarked() throws {
+        let field = HostField("Earlier line.")
+        let draft = try XCTUnwrap(type("the build is green", into: field))
+        XCTAssertTrue(add("ship it today", to: draft, in: field))
+        XCTAssertEqual(swap(draft, part: 1, for: "Ship it:\n- today", in: field), .waiting)
+        XCTAssertEqual(field.marked, " the build is green ship it today")
+        XCTAssertEqual(swap(draft, part: 0, for: "The build is green.", in: field),
+                       .replaced(" The build is green. Ship it:\n- today"))
+        XCTAssertEqual(field.string, "Earlier line. The build is green. Ship it:\n- today")
+        XCTAssertNil(field.marked)
+    }
+
+    /// A key on a draft of two parts: both transcripts go in as heard, the
+    /// key after them, and a written text that comes later finds no draft.
+    func testAKeyOnATwoPartDraftKeepsBothTranscripts() throws {
+        let field = HostField("Earlier line.")
+        let draft = try XCTUnwrap(type("the build is green", into: field))
+        XCTAssertTrue(add("ship it today", to: draft, in: field))
+        draft.keep(field, .beforeEdit)
+        field.insertText("!")
+        field.endTurn()
+        XCTAssertEqual(field.string, "Earlier line. the build is green ship it today!")
+        XCTAssertNil(field.marked)
+        XCTAssertEqual(swap(draft, part: 0, for: "The build is green.", in: field), .kept)
+        XCTAssertEqual(field.string, "Earlier line. the build is green ship it today!")
+    }
+
     /// A draft the field changed around takes no later dictation: that one's
     /// written text comes alone, and the draft stays as it is.
     func testADraftTheFieldChangedAroundTakesNoLaterDictation() throws {

@@ -263,18 +263,31 @@ is the Mac's draft (`TextDraft`), done by the keyboard:
    (`Delivery.draftHosts`: Messages, Reminders, Contacts, Calendar). Safari stays off: a page field whose script rewrites its value on every change makes the draft plain text without telling the keyboard, and every dictation went in twice, while a plain textarea and a contenteditable passed; a keyboard can't tell these fields apart. Notes, Mail and third-party apps (WhatsApp, Slack, Chrome, Gmail) can't run in the Simulator and wait for a device run. For that run, Settings › Advanced › Try drafts in Notes, Mail and WhatsApp (off by default; `SharedStore.triesMoreDraftHosts`, writer: app) adds `Delivery.trialDraftHosts` for both the app's offer and the keyboard (`Delivery.takesDrafts`). The session log names the app each draft was typed in. No transcript with a line break is drafted
    (`KeyboardDraft.canType`). Elsewhere the
    written text goes in once, as before.
-5. A dictation stopped while an earlier one's draft is still marked (its
-   writer still running) joins that draft (`KeyboardDraft.add`): the
+5. A dictation whose transcript comes while an earlier one's draft is still
+   marked (its writer still running, also while a later dictation records;
+   started from the Action button or Control Center, or the earlier
+   transcript came late) joins that draft (`KeyboardDraft.add`): the
    marked text becomes both transcripts, each fitted to the text before
    it, since new marked text replaces the old and a second, separate draft
    would take the first one's place. Each written text takes its own part's
    place in the marked text as it comes, in either order
-   (`KeyboardDraft.Swap.waiting`), and the whole goes in with one
-   `insertText` once every part has its written text. While a later part is
-   written and an earlier one is not, the draft waits even though the app
-   shows no dictation: the earlier writer goes on in the background. A
-   field that changed around the draft takes no new part, and that
-   dictation's written text comes alone.
+   (`KeyboardDraft.Swap.waiting`; a written text with a line break is not
+   marked, and the field keeps that part's transcript until then), and the
+   whole goes in with one `insertText` once every part has its written
+   text. A field that changed around the draft takes no new part, and that
+   dictation's written text comes alone. Whether a draft still waits is not
+   read from the phase, which shows only the foreground dictation: the app
+   lists the drafts whose written text is still to come
+   (`SessionSnapshot.writingDrafts`, from the moment a draft is confirmed
+   or given up on, before the offer is withdrawn, until its job ends), and
+   the keyboard makes a draft plain as heard once none of its unwritten
+   parts is listed or offered and no written text for it waits. The
+   snapshot holds one result, so the app holds a written text that names a
+   draft until the keyboard has handled the one before it that names
+   another draft (up to `Delivery.draftWait`). The keyboard remembers the
+   last eight drafts it typed (`KeyboardModel.typedDraftIDs`, in its own
+   `UserDefaults`), so a written text for a part of a draft that ended
+   early is marked handled, never typed beside its transcript.
 6. A written text whose draft this keyboard no longer holds (the keyboard
    was dismissed or moved to another field) is marked handled and never
    typed beside the draft.

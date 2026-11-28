@@ -61,6 +61,8 @@ final class VoiceSession: ObservableObject {
     /// The transcript offered as a draft while the writing model works
     /// (`SessionSnapshot.draft`). Never carried over from an earlier process.
     private var draft: Delivery?
+    /// `SessionSnapshot.writingDrafts`.
+    private var writingDrafts: [UUID] = []
     private var notice: Notice?
     private var lastPublished: SessionSnapshot?
     private var bars = LevelBars()
@@ -256,6 +258,16 @@ final class VoiceSession: ObservableObject {
         publish(force: true)
     }
 
+    /// A draft's written text is still to come (`SessionSnapshot.writingDrafts`),
+    /// or no longer is.
+    func setWriting(_ draftID: UUID, _ writing: Bool) {
+        let others = writingDrafts.filter { $0 != draftID }
+        let next = writing ? others + [draftID] : others
+        guard next != writingDrafts else { return }
+        writingDrafts = next
+        publish(force: true)
+    }
+
     /// A keyboard typed the result, or the app copied it.
     func resultSettled() {
         forgetDraftIfSettled()
@@ -326,7 +338,8 @@ final class VoiceSession: ObservableObject {
             notice: notice,
             meetingActive: meetingStartedAt != nil,
             field: dictationPhase.hasDictation ? dictationField : nil,
-            draft: isActive ? draft : nil
+            draft: isActive ? draft : nil,
+            writingDrafts: isActive && !writingDrafts.isEmpty ? writingDrafts : nil
         )
     }
 

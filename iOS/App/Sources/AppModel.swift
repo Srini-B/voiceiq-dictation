@@ -86,6 +86,7 @@ final class AppModel: ObservableObject {
         sleepGuard = SessionSleepGuard(dictation: coordinator, meetings: meetings)
         inserter.onDeliver = { [weak self] text, draftID in self?.deliver(text, replacing: draftID) }
         inserter.onDraft = { [weak self] draft in self?.session.showDraft(draft) }
+        inserter.onWriting = { [weak self] id, writing in self?.session.setWriting(id, writing) }
         inserter.destination = { [target] in target.destination }
         // The load overlaps the recording; a load longer than the recording
         // is what the user waits for in "processing".

@@ -39,6 +39,9 @@ final class KeyboardInserter: TextInserting {
     /// Publishes a draft for the keyboard (`SessionSnapshot.draft`), or
     /// withdraws it with nil.
     var onDraft: ((Delivery?) -> Void)?
+    /// Says a typed draft's written text is still to come, or no longer is
+    /// (`SessionSnapshot.writingDrafts`).
+    var onWriting: ((UUID, Bool) -> Void)?
     /// Where the dictation in progress goes (`DictationTarget.destination`).
     var destination: (() -> FieldIdentity?)?
 
@@ -98,6 +101,9 @@ private final class KeyboardTextDraft: TextDraft {
             try? await Task.sleep(for: .milliseconds(50))
             store.reloadFromDisk()
         }
+        // Before the offer goes, so a keyboard that typed it never sees the
+        // draft as neither offered nor being written.
+        if !ended { inserter.onWriting?(draft.id, true) }
         withdraw()
         guard !ended else { return .notInserted }
         // Whether or not a keyboard said it typed the draft, the written
@@ -116,6 +122,16 @@ private final class KeyboardTextDraft: TextDraft {
     func replace(with text: String) async -> Bool {
         // The keyboard can't take a draft back out; it stays as heard.
         guard let draftID, !text.isEmpty else { return false }
+        // The snapshot holds one result. One naming another draft that no
+        // keyboard has handled yet would be lost under this one, and that
+        // draft would stay as heard: a keyboard takes it first.
+        let deadline = Date().addingTimeInterval(Delivery.draftWait)
+        store.reloadFromDisk()
+        while Date() < deadline, let waiting = store.snapshot.delivery, waiting.replacesDraft != nil,
+              waiting.replacesDraft != draftID, waiting.isPending(handledID: store.insertedDeliveryID) {
+            try? await Task.sleep(for: .milliseconds(50))
+            store.reloadFromDisk()
+        }
         // The keyboard does the swap, leaves the draft as heard, or types
         // the text as a plain result where no draft went in.
         inserter.onDeliver?(text, draftID)
@@ -128,6 +144,7 @@ private final class KeyboardTextDraft: TextDraft {
     func end() {
         ended = true
         withdraw()
+        if let draftID { inserter.onWriting?(draftID, false) }
     }
 
     private func withdraw() {

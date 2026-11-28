@@ -396,7 +396,7 @@ struct AdvancedView: View {
                 Toggle("Try drafts in Notes, Mail and WhatsApp", isOn: $moreDraftHosts)
                     .onChange(of: moreDraftHosts) { _, on in SharedStore.shared.triesMoreDraftHosts = on }
             } footer: {
-                Text("In Messages, Reminders, Contacts and Calendar the keyboard types what you said, underlined, and swaps in the written text when it's ready. This also tries it in Notes, Mail and WhatsApp, which haven't been tested yet. If a dictation shows up twice there, turn this off. Paste last always has the written text.")
+                Text("In Messages, Reminders, Contacts and Calendar the keyboard types what you said, underlined, and swaps in the written text when it's ready. This also tries it in Notes, Mail and WhatsApp, which haven't been tested yet. If a dictation shows up more than once there, turn this off. History always has the written text.")
             }
             Section {
                 field("Writing model", text: $writingModel, prompt: AssemblyAIConfig.defaultWritingModel) { settings.setWritingModelOverride($0) }

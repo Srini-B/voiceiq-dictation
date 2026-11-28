@@ -50,21 +50,18 @@ final class KeyboardModel: ObservableObject {
     /// The draft this keyboard typed, one part per dictation, until their
     /// written text comes or it stays as heard.
     private var draft: KeyboardDraft? {
-        didSet {
-            if holdsDraft != (draft != nil) { holdsDraft = draft != nil }
-            if let ended = oldValue, ended !== draft { Self.endedDraftIDs += ended.parts.map(\.id) }
-        }
+        didSet { if holdsDraft != (draft != nil) { holdsDraft = draft != nil } }
     }
-    /// The dictations of drafts this keyboard no longer holds, newest last.
-    /// `SharedStore.typedDraftID` names only the last one typed; the written
-    /// text of an earlier part of a joined draft must not be typed beside
-    /// its transcript either. In the keyboard's own `UserDefaults`, since a
-    /// written text can reach a later keyboard process.
-    private static var endedDraftIDs: [UUID] {
-        get { (UserDefaults.standard.stringArray(forKey: endedDraftIDsKey) ?? []).compactMap(UUID.init(uuidString:)) }
-        set { UserDefaults.standard.set(newValue.suffix(8).map(\.uuidString), forKey: endedDraftIDsKey) }
+    /// The drafts this keyboard typed, newest last. `SharedStore.typedDraftID`
+    /// names only the last one; the written text of an earlier part of a
+    /// joined draft that ended early must not be typed beside its transcript
+    /// either. In the keyboard's own `UserDefaults`, since a written text can
+    /// reach a later keyboard process.
+    private static var typedDraftIDs: [UUID] {
+        get { (UserDefaults.standard.stringArray(forKey: typedDraftIDsKey) ?? []).compactMap(UUID.init(uuidString:)) }
+        set { UserDefaults.standard.set(newValue.suffix(8).map(\.uuidString), forKey: typedDraftIDsKey) }
     }
-    private static let endedDraftIDsKey = "keyboard.endedDraftIDs"
+    private static let typedDraftIDsKey = "keyboard.typedDraftIDs"
     /// A draft this keyboard could not type, logged once.
     private var skippedDraftID: UUID?
     /// How long a typed draft waits for its written text.
@@ -492,7 +489,7 @@ final class KeyboardModel: ObservableObject {
             return
         }
         if let named = delivery.replacesDraft,
-           draft?.holds(named) == true || named == store.typedDraftID || Self.endedDraftIDs.contains(named) {
+           draft?.holds(named) == true || named == store.typedDraftID || Self.typedDraftIDs.contains(named) {
             return finishDraft(with: delivery)
         }
         // A dismissed keyboard can keep polling with its view in a window.
@@ -552,7 +549,7 @@ final class KeyboardModel: ObservableObject {
     /// selection, the written text comes alone as before.
     private func typeDraftIfNeeded() {
         guard let offered = snapshot.draft, offered.id != store.typedDraftID,
-              offered.id != skippedDraftID, offered.isFreshDraft(), appAlive, snapshot.phase == .processing,
+              offered.id != skippedDraftID, offered.isFreshDraft(), appAlive, snapshot.phase.hasDictation,
               Self.onScreen === self, controller?.viewIfLoaded?.window != nil,
               let proxy = controller?.textDocumentProxy, let documentID,
               offered.route(in: currentField(), handledID: nil, firstReturn: false) == .type(.sameSession)
@@ -573,6 +570,7 @@ final class KeyboardModel: ObservableObject {
         onDraftChange?()
         // Only once it is in: the app then sends the written text to replace it.
         store.typedDraftID = offered.id
+        Self.typedDraftIDs.append(offered.id)
         KeyboardLog.note("[\(instanceTag)] draft typed in \(Self.describe(currentField()))\(joined ? ", after the earlier one still being written" : "")")
     }
 
@@ -639,10 +637,10 @@ final class KeyboardModel: ObservableObject {
         let writtenWaits = snapshot.delivery.map {
             held.holds($0.replacesDraft) && $0.isPending(handledID: store.insertedDeliveryID)
         } ?? false
-        // The last part is the dictation in progress. Once it is written,
-        // an earlier one still being written goes on in the background,
-        // while the app shows no dictation.
-        let ended = snapshot.phase != .processing && held.parts.last?.written == nil
+        // Whatever the app shows now: a part's dictation may be written in
+        // the background behind a later one, which may be recording.
+        let writing = Set(snapshot.writingDrafts ?? []).union([snapshot.draft?.id].compactMap { $0 })
+        let ended = !held.parts.contains { $0.written == nil && writing.contains($0.id) }
         guard moved || expired || (!writtenWaits && (!appAlive || ended)) else { return }
         keepDraft(.alone, because: moved ? "the keyboard moved to another field" : "no written text came")
     }

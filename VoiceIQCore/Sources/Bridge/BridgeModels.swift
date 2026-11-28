@@ -316,6 +316,12 @@ public struct SessionSnapshot: Codable, Equatable, Sendable {
     /// that names it (`Delivery.replacesDraft`). The app withdraws it once
     /// a keyboard took it or `Delivery.draftWait` passed.
     public var draft: Delivery?
+    /// Drafts a keyboard typed (or may have) whose written text has not
+    /// been sent yet: their dictations' jobs still run, in the foreground or
+    /// in the background behind a later dictation. A keyboard keeps a draft
+    /// marked while one of its parts is here or its written text waits.
+    /// Nil reads as none.
+    public var writingDrafts: [UUID]?
 
     public init(
         phase: Phase = .off,
@@ -324,7 +330,8 @@ public struct SessionSnapshot: Codable, Equatable, Sendable {
         notice: Notice? = nil,
         meetingActive: Bool = false,
         field: FieldIdentity? = nil,
-        draft: Delivery? = nil
+        draft: Delivery? = nil,
+        writingDrafts: [UUID]? = nil
     ) {
         self.phase = phase
         self.recordingStartedAt = recordingStartedAt
@@ -333,6 +340,7 @@ public struct SessionSnapshot: Codable, Equatable, Sendable {
         self.meetingActive = meetingActive
         self.field = field
         self.draft = draft
+        self.writingDrafts = writingDrafts
     }
 }
 
