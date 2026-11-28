@@ -152,6 +152,12 @@ final class ScreenSpeakerNamesTests: XCTestCase {
         let ask = [TranscriptSegment(speaker: "you", text: "Sara, status?", chunkIndex: 0, start: 0, end: 2),
                    TranscriptSegment(speaker: "s1", text: "All green.", chunkIndex: 0, start: 2, end: 4)]
         XCTAssertNil(ScreenSpeakerNames.byAddress(saras, transcript: ask, invited: ["Sara Jones", "Sara Smith", "Lee Park"])?.speakers["s1"])
+        // Someone covering for the person addressed is not named after them.
+        let covering = [TranscriptSegment(speaker: "you", text: "Sara, can you give the update?", chunkIndex: 0, start: 0, end: 2),
+                        TranscriptSegment(speaker: "s1", text: "She is out today. I'm Rahul, covering for her.", chunkIndex: 0, start: 2, end: 5)]
+        XCTAssertNil(ScreenSpeakerNames.byAddress(nil, transcript: covering, invited: ["Sara Lindqvist", "Lee Park"]))
+        let mentioned = [covering[0], TranscriptSegment(speaker: "s1", text: "Sara is out, I can cover.", chunkIndex: 0, start: 2, end: 5)]
+        XCTAssertNil(ScreenSpeakerNames.byAddress(nil, transcript: mentioned, invited: ["Sara Lindqvist", "Lee Park"]))
         // "Sara" and "Sara Smith" invited, in either order, are two people.
         XCTAssertNil(ScreenSpeakerNames.byAddress(nil, transcript: ask, invited: ["Sara", "Sara Smith", "Lee Park"])?.speakers["s1"])
         XCTAssertNil(ScreenSpeakerNames.byAddress(nil, transcript: ask, invited: ["Sara Smith", "Sara", "Lee Park"])?.speakers["s1"])

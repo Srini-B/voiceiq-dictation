@@ -265,16 +265,29 @@ public enum ScreenSpeakerNames {
                   let answer = transcript[(index + 1)...].first(where: { $0.speaker != turn.speaker }),
                   answer.speaker != MeetingSpeaker.you, screen?.speakers[answer.speaker] == nil,
                   // Speech that overlaps the address is an interjection, not the answer.
-                  (answer.start ?? .infinity) >= (turn.end ?? 0) - lag else { continue }
+                  (answer.start ?? .infinity) >= (turn.end ?? 0) - lag,
+                  // "Sara is out today": an answer about the person is not from them.
+                  !answer.text.split(whereSeparator: { !$0.isLetter }).contains(where: { word in
+                      name.split(separator: " ").contains { $0.lowercased() == word.lowercased() } }) else { continue }
             votes[answer.speaker, default: []].insert(name)
         }
         var out = screen ?? ScreenNames(seen: [], speakers: [:])
         for (speaker, heard) in votes where heard.count == 1 {
             // Every vote counts, a voice that answered two names included.
             guard let name = heard.first, !votes.contains(where: { $0.key != speaker && $0.value.contains(name) }) else { continue }
+            // A voice that introduced itself by another name is left to the notes.
+            let introduced = transcript.filter { $0.speaker == speaker }.flatMap { introductions(in: $0.text) }
+            guard introduced.allSatisfy({ sameName($0, name) }) else { continue }
             out.speakers[speaker] = .init(name: name, seen: 0, of: 0, reason: "Answered right after being addressed as \(name)")
         }
         return screen == nil && out.speakers.isEmpty ? nil : out
+    }
+
+    nonisolated(unsafe) private static let introduction = #/(?:I'm|I am|[Tt]his is|[Mm]y name is) (\p{Lu}[\p{L}'’-]+)/#
+
+    /// Names a speaker gives themselves: "I'm Rahul", "this is Dana".
+    static func introductions(in text: String) -> [String] {
+        text.matches(of: introduction).map { String($0.output.1) }
     }
 
     /// The listed name the turn's sentences open with, followed by a comma:
