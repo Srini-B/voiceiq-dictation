@@ -198,14 +198,16 @@ import VoiceIQSpeech
         }
     }
 
-    /// A meeting still marked `.recording` at launch belonged to a process that
-    /// died; nothing will ever stop it, so the list would show "Recording"
-    /// forever.
+    /// A meeting still marked `.recording`, `.transcribing` or `.summarizing`
+    /// at launch belonged to a process that died (quit, or iOS ended it in the
+    /// background); nothing will ever finish it, so the list would show
+    /// "Recording" or "Making notes" forever. It fails as interrupted, with
+    /// Retry; one that was writing its notes keeps its transcript and Retry
+    /// writes only the notes. A waiting meeting waits on.
     private func failInterruptedRecordings() {
         for var meta in store.list() {
-            // A waiting meeting the app quit on while it went again waits on.
-            let resumable = meta.waitsForService != nil && (meta.status == .transcribing || meta.status == .summarizing)
-            guard meta.status == .recording || resumable else { continue }
+            guard meta.status == .recording || meta.status == .transcribing || meta.status == .summarizing else { continue }
+            if meta.status == .summarizing { meta.failedStep = meta.failedStep ?? .notes }
             meta.status = .failed("interrupted")
             meta.endedAt = meta.endedAt ?? meta.startedAt.addingTimeInterval(meta.durationSeconds)
             try? store.save(meta: meta)

@@ -86,6 +86,7 @@ public enum MeetingChat {
         case TranscriptionError.rateLimitedTransient: return "AssemblyAI is rate limiting requests. Try again in a minute."
         case TranscriptionError.modelUnavailable(let model, _): return "Your key can't use \(model)."
         case TranscriptionError.safetyBlocked: return "The model declined to answer this question."
+        case TranscriptionError.network("output_truncated"): return "The answer ran past the model's length limit. Try a narrower question."
         default: return "Couldn't reach AssemblyAI. Try again."
         }
     }
