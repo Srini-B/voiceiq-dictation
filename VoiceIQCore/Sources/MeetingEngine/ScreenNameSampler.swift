@@ -171,10 +171,12 @@ public final class ScreenNameSampler: @unchecked Sendable {
                         if looked { record(lines, at: time); looked = false }
                         pulsedPID.withLock { $0 = pid }; switchOffTries = 0
                         let page = await Self.whileWebTreeOpen(pid) { CallWindowText.lines(pid: pid, browser: true) }
+                        // Its own sample, stamped when it was read (before a
+                        // switch-off that can wait 2 s), about 3 s after the
+                        // snapshot: `match` pairs by time (agy on #146).
+                        let readAt = Date().timeIntervalSince(startedAt)
                         if Self.switchOff(pid) { pulsedPID.withLock { $0 = nil } }
-                        // Its own sample, stamped when it was read, about 3 s
-                        // after the snapshot: `match` pairs by time (agy on #146).
-                        if !Task.isCancelled { record(page, at: Date().timeIntervalSince(startedAt)) }
+                        if !Task.isCancelled { record(page, at: readAt) }
                     }
                     // Page text counts only at the time it was read: carried to
                     // later ticks, an active-speaker tile's old name lands on the
