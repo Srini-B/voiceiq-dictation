@@ -64,22 +64,34 @@ enum CallWindowText {
         return out
     }
 
-    /// Titles of the app's windows whose front tab is a call: `joined`, a
-    /// joined call room (`CallApps.isCallRoom`); `pages`, any call site's
-    /// page, which includes a Teams or WhatsApp chat (Codex on #146). A
-    /// browser's window title is the page's own ("Owner – Audio playing"), so
-    /// its address (AXDocument) says which.
-    static func callWindowTitles(pid: pid_t) -> (joined: [String], pages: [String]) {
+    /// Frames, in global screen points, of the app's windows whose front tab
+    /// is a call: `joined`, a joined call room (`CallApps.isCallRoom`);
+    /// `pages`, any call site's page, which includes a Teams or WhatsApp chat
+    /// (Codex on #146). A browser's window title is the page's own, so its
+    /// address (AXDocument) says which. Frames, not titles, pick the
+    /// ScreenCaptureKit window: MEASURED 2026-11-28, Chrome on vdo.ninja,
+    /// Accessibility titles the window "Owner – Audio playing - Google
+    /// Chrome" and ScreenCaptureKit "Owner".
+    static func callWindowFrames(pid: pid_t) -> (joined: [CGRect], pages: [CGRect]) {
         guard AXIsProcessTrusted() else { return ([], []) }
         let app = AXUIElementCreateApplication(pid)
         AXUIElementSetMessagingTimeout(app, 0.25)
-        var joined: [String] = [], pages: [String] = []
+        var joined: [CGRect] = [], pages: [CGRect] = []
         for window in value(app, kAXWindowsAttribute) as? [AXUIElement] ?? [] where isMeeting(window) {
-            guard let title = value(window, kAXTitleAttribute) as? String else { continue }
-            pages.append(title)
-            if isJoinedRoom(window) { joined.append(title) }
+            guard let frame = frame(window) else { continue }
+            pages.append(frame)
+            if isJoinedRoom(window) { joined.append(frame) }
         }
         return (joined, pages)
+    }
+
+    private static func frame(_ window: AXUIElement) -> CGRect? {
+        var origin = CGPoint.zero, size = CGSize.zero
+        guard let position = value(window, kAXPositionAttribute), CFGetTypeID(position) == AXValueGetTypeID(),
+              let extent = value(window, kAXSizeAttribute), CFGetTypeID(extent) == AXValueGetTypeID(),
+              AXValueGetValue(position as! AXValue, .cgPoint, &origin), AXValueGetValue(extent as! AXValue, .cgSize, &size)
+        else { return nil }
+        return CGRect(origin: origin, size: size)
     }
 
     /// A button's label with the text inside it, such as "People 3".

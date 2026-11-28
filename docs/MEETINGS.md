@@ -421,7 +421,7 @@ meeting never raises a permission prompt (`CGPreflightScreenCaptureAccess`,
    playing" on vdo.ninja), so with Accessibility the window whose address
    (AXDocument) is a call page counts too, and one showing a joined call
    room wins over the app's other call-site pages, which include chats
-   (`CallWindowText.callWindowTitles`).
+   (`CallWindowText.callWindowFrames`, matched to the ScreenCaptureKit window by frame, since the two APIs title a Chrome window differently).
    A browser with no such window gives no image, because its other
    windows are other pages. It never captures the whole display, because other apps' windows
    (a dictation app, a chat, a document) hold names that are not the

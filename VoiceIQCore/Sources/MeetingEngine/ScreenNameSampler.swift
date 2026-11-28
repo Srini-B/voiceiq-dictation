@@ -87,7 +87,7 @@ public final class ScreenNameSampler: @unchecked Sendable {
     static func callPID(bundleID: String) -> (pid: pid_t, joined: Bool)? {
         let pids = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).map(\.processIdentifier)
         guard pids.count > 1, CallApps.browsers.contains(bundleID) else { return pids.first.map { ($0, true) } }
-        let windows = Dictionary(uniqueKeysWithValues: pids.map { ($0, CallWindowText.callWindowTitles(pid: $0)) })
+        let windows = Dictionary(uniqueKeysWithValues: pids.map { ($0, CallWindowText.callWindowFrames(pid: $0)) })
         let joined = Set(pids.filter { windows[$0]?.joined.isEmpty == false })
         let rooms = joined.isEmpty ? Set(pids.filter { windows[$0]?.pages.isEmpty == false }) : joined
         guard !rooms.isEmpty else { return nil }
@@ -155,16 +155,19 @@ public final class ScreenNameSampler: @unchecked Sendable {
                 && pid.map { window.owningApplication?.processID == $0 } ?? true
         }
         // A browser has other windows; the call is the one whose tab is a call
-        // page. Its title is the page's own ("Owner – Audio playing" on
-        // vdo.ninja), so the address read through Accessibility says which;
-        // without Accessibility only a title naming the site can.
-        // A joined room wins over the same app's call-site pages, which
-        // include chats (Codex on #146).
-        let known: (joined: [String], pages: [String]) = pid.map { CallWindowText.callWindowTitles(pid: $0) } ?? (joined: [], pages: [])
-        let joined = windows.filter { window in window.title.map { known.joined.contains($0) } == true }
+        // page. Its title is the page's own ("Owner" on vdo.ninja), so the
+        // address read through Accessibility says which, matched by frame;
+        // without Accessibility only a title naming the site can. A joined
+        // room wins over the same app's call-site pages, which include chats
+        // (Codex on #146).
+        let known: (joined: [CGRect], pages: [CGRect]) = pid.map { CallWindowText.callWindowFrames(pid: $0) } ?? (joined: [], pages: [])
+        let near = { (frames: [CGRect], window: SCWindow) in
+            frames.contains { abs($0.minX - window.frame.minX) < 2 && abs($0.minY - window.frame.minY) < 2
+                && abs($0.width - window.frame.width) < 2 && abs($0.height - window.frame.height) < 2 }
+        }
+        let joined = windows.filter { near(known.joined, $0) }
         let meeting = !joined.isEmpty ? joined : windows.filter { window in
-            guard let title = window.title else { return false }
-            return known.pages.contains(title) || CallApps.meetingPages.contains { title.localizedCaseInsensitiveContains($0) }
+            near(known.pages, window) || window.title.map { title in CallApps.meetingPages.contains { title.localizedCaseInsensitiveContains($0) } } == true
         }
         let candidates = meeting.isEmpty && !CallApps.browsers.contains(bundleID) ? windows : meeting
         // On screen first (a window on another Space still counts), then the largest.
