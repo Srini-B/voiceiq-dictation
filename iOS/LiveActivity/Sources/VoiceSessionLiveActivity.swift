@@ -185,7 +185,9 @@ private struct TimerText: View {
 
     @ViewBuilder var body: some View {
         if let since = state.since, isRecording(state.phase) {
-            Text(timerInterval: since...Date.distantFuture, countsDown: false)
+            // A date timer, not `timerInterval`: the locked Lock Screen showed
+            // that one's open-ended range as "8:––" about 3½ min in (#148, Simulator).
+            Text(since, style: .timer)
                 .multilineTextAlignment(alignment)
         }
     }
