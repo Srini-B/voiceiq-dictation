@@ -196,9 +196,12 @@ app reads it once at launch (`FileLayout.testDataFolder`), logs
 `data folder (test): <path>`, and shows "Test data folder" in the Mac menu.
 Both defaults live in the copy's own domain, so `defaults delete
 io.blue.voiceiq.probe` turns them off too; check the menu lines after a reset.
-With the folder set, the copy leaves the agent server and the user's agent
-configs alone, and does not clear the prepared-model cache it shares with the
-real app. Everything the app stores on disk
+With the folder set, the copy does not start the agent server or touch the
+user's agent configs at launch, and does not clear the prepared-model cache it
+shares with the real app. Its Settings still act on the shared state when
+clicked: the Coding agents buttons (Set Up, Update, Remove, New Key…) change
+the real agent configs and Keychain key, and deleting a model clears the shared
+cache. Leave them alone in a test copy. Everything the app stores on disk
 moves there: dictations, meetings, folders, usage and downloaded models.
 Still shared with the real app: the debug log in ~/Library/Logs/VoiceiQ and
 its on/off switch, which a copy reads from the real app's defaults domain; the
