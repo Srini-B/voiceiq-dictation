@@ -15,6 +15,7 @@ struct HomeView: View {
     @State private var stats: HistoryStore.Stats?
     @State private var confirmDeleteAll = false
     @State private var tryingKeyboard = false
+    @State private var setupStep: SetupStep?
 
     private var sections: [HistoryDaySection] { HistoryDaySection.group(records) }
 
@@ -60,6 +61,13 @@ struct HomeView: View {
             .onChange(of: search) { _, _ in reload() }
             .navigationTitle("VoiceiQ")
             .toolbar { toolbar }
+            // Outside the List: a destination inside a lazy container is ignored.
+            .navigationDestination(item: $setupStep) { step in
+                switch step {
+                case .key: KeysView()
+                case .keyboard: KeyboardSetupView()
+                }
+            }
             .overlay(alignment: .bottom) { dock }
             .confirmationDialog("Delete all history?", isPresented: $confirmDeleteAll, titleVisibility: .visible) {
                 Button("Delete All", role: .destructive) {
@@ -81,7 +89,7 @@ struct HomeView: View {
     /// steps, and one line of totals that opens Statistics.
     @ViewBuilder private var overview: some View {
         if !setup.status.isComplete {
-            SetupCard().homeRow(separator: false)
+            SetupCard(open: { setupStep = $0 }).homeRow(separator: false)
         }
         if UIDevice.isPad {
             VStack(alignment: .leading, spacing: Theme.Spacing.m) {
@@ -91,7 +99,9 @@ struct HomeView: View {
             .homeRow(separator: false)
         }
         if let stats, stats.totalDictations > 0 {
-            NavigationLink { StatsView() } label: { StatsLine(stats: stats) }
+            // A hidden link, so the list adds no second chevron after the line's own.
+            StatsLine(stats: stats)
+                .background { NavigationLink("") { StatsView() }.opacity(0) }
                 .homeRow(separator: false)
         } else if records.isEmpty {
             Text("Your dictations will appear here. Tap the mic on the VoiceiQ keyboard in any app, or try it below.")
@@ -132,6 +142,13 @@ struct HomeView: View {
         }
         .padding(.horizontal, Theme.Spacing.l)
         .padding(.bottom, Theme.Spacing.s)
+        // Rows fade out behind the dock instead of showing through around it.
+        .background(alignment: .bottom) {
+            LinearGradient(colors: [Theme.Colors.canvas.opacity(0), Theme.Colors.canvas], startPoint: .top, endPoint: .center)
+                .padding(.top, -28)
+                .ignoresSafeArea(edges: .bottom)
+                .allowsHitTesting(false)
+        }
     }
 
     private func delete(_ record: DictationRecord) {
@@ -298,8 +315,13 @@ private struct TryKeyboardSheet: View {
     }
 }
 
+private enum SetupStep: Hashable { case key, keyboard }
+
+/// Buttons rather than links: a link in a list row gets the list's own
+/// chevron beside the line's, and three links in one row share one tap.
 private struct SetupCard: View {
     @EnvironmentObject private var setup: SetupMonitor
+    let open: (SetupStep) -> Void
 
     var body: some View {
         let status = setup.status
@@ -307,19 +329,20 @@ private struct SetupCard: View {
             GroupLabel(text: "Finish setup")
             Card(padding: 0) {
                 VStack(spacing: 0) {
-                    NavigationLink { KeysView() } label: {
+                    Button { open(.key) } label: {
                         SetupLine(title: "API key", done: status.hasKey)
                     }
                     Divider().padding(.leading, 52)
-                    NavigationLink { KeyboardSetupView() } label: {
+                    Button { open(.keyboard) } label: {
                         SetupLine(title: "Microphone", done: status.micGranted)
                     }
                     Divider().padding(.leading, 52)
-                    NavigationLink { KeyboardSetupView() } label: {
+                    Button { open(.keyboard) } label: {
                         SetupLine(title: "Keyboard and Full Access", done: status.keyboardReady,
                                   waiting: status.keyboardAdded && !status.fullAccess)
                     }
                 }
+                .buttonStyle(.plain)
             }
         }
     }
