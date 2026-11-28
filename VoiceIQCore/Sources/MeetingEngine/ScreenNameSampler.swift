@@ -29,7 +29,12 @@ public final class ScreenNameSampler: @unchecked Sendable {
     private var chromium: (pid: pid_t, isChromium: Bool)?
     /// A browser this sampler switched AXEnhancedUserInterface on in, until
     /// a read-back shows it off again. Its "on" is ours, not another tool's.
-    private var pulsedPID: pid_t?
+    private let pulsedPID = OSAllocatedUnfairLock<pid_t?>(initialState: nil)
+    private var switchOffTries = 0
+    /// The last Chromium page read, carried to the ticks until the next one,
+    /// so a name the page shows keeps its share of samples whether or not
+    /// each tick also has a snapshot (Codex and agy on #146).
+    private var pageLines: [String]?
     /// A Chromium browser's page text is read on every this-many ticks (15 s),
     /// since each read briefly makes the browser animate its window moves.
     static let browserTreeEvery = 5
@@ -132,7 +137,8 @@ public final class ScreenNameSampler: @unchecked Sendable {
     /// Everything read so far, in time order.
     public func stop() -> [ScreenNameSample] {
         task?.cancel(); task = nil
-        if let pulsedPID { _ = Self.switchOff(pulsedPID) }
+        // Off the caller's thread: each AX call can wait up to 1 s on a busy Chrome.
+        if let pid = pulsedPID.withLock({ $0 }) { Task.detached { _ = Self.switchOff(pid) } }
         let out = samples.withLock { $0 }
         Log.meeting.info("screen names: \(out.count, privacy: .public) snapshots, \(out.filter { !$0.names.isEmpty }.count, privacy: .public) with names")
         return out
@@ -151,15 +157,24 @@ public final class ScreenNameSampler: @unchecked Sendable {
             if let pid {
                 let browser = bundleID.map(CallApps.browsers.contains) ?? false
                 if chromium?.pid != pid { chromium = (pid, Self.isChromium(pid)) }
-                // A switch-off that timed out while Chrome built its tree is retried, not mistaken for another tool's setting.
-                if pulsedPID == pid, Self.switchOff(pid) { pulsedPID = nil }
-                if browser, chromium?.isChromium == true, pulsedPID == pid || !Self.webTreeIsOpen(pid) {
-                    if tick % Self.browserTreeEvery == 0 {
-                        pulsedPID = pid
-                        lines += await Self.whileWebTreeOpen(pid) { CallWindowText.lines(pid: pid, browser: true) }
-                        if Self.switchOff(pid) { pulsedPID = nil }
-                        looked = true
+                // A switch-off that timed out while Chrome built its tree is
+                // retried, not mistaken for another tool's setting; after 3
+                // tries, or under VoiceOver, the "on" is that tool's.
+                if pulsedPID.withLock({ $0 }) == pid {
+                    switchOffTries += 1
+                    if Self.switchOff(pid) || switchOffTries >= 3 || NSWorkspace.shared.isVoiceOverEnabled {
+                        pulsedPID.withLock { $0 = nil }
                     }
+                }
+                let ours = pulsedPID.withLock { $0 } == pid
+                if browser, chromium?.isChromium == true, ours || !Self.webTreeIsOpen(pid) {
+                    if tick % Self.browserTreeEvery == 0 {
+                        pulsedPID.withLock { $0 = pid }; switchOffTries = 0
+                        pageLines = await Self.whileWebTreeOpen(pid) { CallWindowText.lines(pid: pid, browser: true) }
+                        if Self.switchOff(pid) { pulsedPID.withLock { $0 = nil } }
+                    }
+                    // Nil until the first page read: those ticks looked at nothing.
+                    if let pageLines { lines += pageLines; looked = true }
                 } else {
                     lines += CallWindowText.lines(pid: pid, browser: browser)
                     looked = true
