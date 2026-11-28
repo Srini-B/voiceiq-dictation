@@ -80,7 +80,10 @@ public actor AssemblyAIClient {
         messages: [[String: Any]], model: String, schema: (name: String, schema: [String: Any])? = nil,
         deadline: TimeInterval, stage: UsageStage
     ) async throws -> String {
-        var body: [String: Any] = ["model": model, "messages": messages, "max_tokens": 8_000]
+        // Reasoning counts against max_tokens; notes at effort medium reason for
+        // thousands of tokens before the JSON.
+        var body: [String: Any] = ["model": model, "messages": messages,
+                                   "max_tokens": stage == .meetingSummary ? 32_000 : 8_000]
         if let schema {
             body["response_format"] = ["type": "json_schema",
                                        "json_schema": ["name": schema.name, "strict": true, "schema": schema.schema]]
@@ -99,19 +102,23 @@ public actor AssemblyAIClient {
             throw TranscriptionError.network("unparseable_response")
         }
         if choice["finish_reason"] as? String == "content_filter" { throw TranscriptionError.safetyBlocked }
+        // A reply cut off at max_tokens is cut off again when asked again.
+        if choice["finish_reason"] as? String == "length" { throw TranscriptionError.network("output_truncated") }
         return message["content"] as? String ?? ""
     }
 
     /// No reasoning for the writers that support switching it off: the
     /// writing rules need none, and reasoning is billed as output. Meeting
-    /// notes reason a little: they name far-side voices from who answers
-    /// whom, once per meeting.
+    /// notes reason: they name far-side voices from who answers whom and
+    /// assign owners, once per meeting, in the background.
     /// MEASURED 2026-11-28, 9 meetings on the LLM Gateway: GPT-6 Luna at
     /// effort none left the echo meetings' voices unnamed in some runs
-    /// (pooled M1 89.3 and 81.5 over two runs); at low every voice was named
-    /// (M1 98.9), for $0.0123 against $0.0084 in notes.
+    /// (pooled M1 89.3 and 81.5); low and medium named every voice (98.9).
+    /// Judged notes (M5) were 86.1 at none, 85.3 at low and 91.9 at medium,
+    /// the only one with every meeting at 85 or more; medium costs about
+    /// $0.003 and 40 s a meeting.
     static func reasoningEffort(model: String, stage: UsageStage) -> String? {
-        if model.hasPrefix("gpt-6") { return stage == .meetingSummary ? "low" : "none" }
+        if model.hasPrefix("gpt-6") { return stage == .meetingSummary ? "medium" : "none" }
         if model.hasPrefix("gemini-3") { return "low" }
         return nil
     }
