@@ -20,13 +20,16 @@ public enum MeetingNotesPrompt {
         public var writingRules: String?
         /// The calendar event the meeting belongs to, when the calendar is connected.
         public var calendarEvent: CalendarMeetings.Event?
+        /// The language picked in Settings (`dictationLanguage`'s code); nil
+        /// (Detect) means English, the app's default.
+        public var languageCode: String?
         public init(startedAt: Date, durationSeconds: Double, app: String?, names: [String: String], screenNames: ScreenNames? = nil,
                     ownerName: String? = nil, vocabulary: [String] = [], spellings: [(wrong: String, right: String)] = [],
-                    writingRules: String? = nil, calendarEvent: CalendarMeetings.Event? = nil) {
+                    writingRules: String? = nil, calendarEvent: CalendarMeetings.Event? = nil, languageCode: String? = "en") {
             self.startedAt = startedAt; self.durationSeconds = durationSeconds; self.app = app; self.names = names
             self.screenNames = screenNames; self.ownerName = ownerName
             self.vocabulary = vocabulary; self.spellings = spellings; self.writingRules = writingRules
-            self.calendarEvent = calendarEvent
+            self.calendarEvent = calendarEvent; self.languageCode = languageCode
         }
 
         /// Typed names, then names read off the screen. The owner's comes from
@@ -78,9 +81,8 @@ public enum MeetingNotesPrompt {
 
             - Speaker labels: the call showed \(context.screenNames?.remote ?? 0) other people, more than the transcript's other speakers, so one label may hold several people. Where the content makes clear who is talking (a name said in reply, a change of topic owner), say so; never credit one person with all of that label's lines.
             """ : ""
-        let language = dominantLanguage(transcript).map {
-            "OUTPUT LANGUAGE: \($0). The transcript was detected as mostly \($0); write every field in \($0)."
-        } ?? "OUTPUT LANGUAGE: follow the LANGUAGE rule."
+        let output = outputLanguage(transcript, preferred: context.languageCode)
+        let language = "OUTPUT LANGUAGE: \(output). Write every field in \(output)."
         return """
         \(rules)
 
@@ -123,16 +125,25 @@ public enum MeetingNotesPrompt {
         return parts.isEmpty ? "" : "\n" + parts.joined(separator: "\n\n") + "\n"
     }
 
-    /// The transcript's main language by name ("English"), when the
-    /// recognizer is sure of it. MEASURED 2026-10-29: an all-English meeting
-    /// got Hindi notes from the LANGUAGE rule alone, and English on a redo of
-    /// the byte-identical request; the model must not choose.
-    static func dominantLanguage(_ transcript: [TranscriptSegment]) -> String? {
+    /// The language the notes are written in, by name ("English"): the one
+    /// picked in Settings, English with none, and another only when the
+    /// transcript is long and almost surely in it. The model never chooses:
+    /// MEASURED 2026-10-29, an all-English meeting got Hindi notes and, on
+    /// 2026-11-28, an English AMI meeting a Portuguese title, each time the
+    /// recognizer was unsure and the request left the language to the model.
+    static func outputLanguage(_ transcript: [TranscriptSegment], preferred code: String?) -> String {
+        let name = { (code: String) in Locale(identifier: "en").localizedString(forLanguageCode: code) }
+        let preferred = code.flatMap(name) ?? "English"
+        let text = transcript.map(\.text).joined(separator: " ")
+        guard text.split(whereSeparator: \.isWhitespace).count >= minWordsToOverride else { return preferred }
         let recognizer = NLLanguageRecognizer()
-        recognizer.processString(transcript.map(\.text).joined(separator: " "))
-        guard let (language, confidence) = recognizer.languageHypotheses(withMaximum: 1).first, confidence >= 0.6 else { return nil }
-        return Locale(identifier: "en").localizedString(forLanguageCode: language.rawValue)
+        recognizer.processString(text)
+        guard let (language, confidence) = recognizer.languageHypotheses(withMaximum: 1).first,
+              confidence >= overrideConfidence, let detected = name(language.rawValue) else { return preferred }
+        return detected
     }
+    static let minWordsToOverride = 150
+    static let overrideConfidence = 0.9
 
     /// Decodes the model's JSON; an unknown type falls back to general.
     public static func parse(_ text: String) throws -> MeetingNotes {
@@ -287,7 +298,7 @@ public enum MeetingNotesPrompt {
     - "participants": the entries from "Other text seen on screen" that are people's names, spelled as seen. Leave out titles, product, company, and app names, and anything that is not a person. Empty when there is none.
 
     LANGUAGE
-    When OUTPUT LANGUAGE below names a language, write every field in it. Otherwise write every field in the language the participants spoke most. When languages are mixed, use the one that carries most of the discussion. Judge by the grammar of the sentences, not by borrowed words: Tamil or Hindi full of English technical terms is still Tamil or Hindi. Never translate into English unless English was that language. Keep technical terms, product names, identifiers, URLs, and numbers in their original form. "type" and the JSON keys stay in English; section titles follow the output language.
+    Write every field in the OUTPUT LANGUAGE named below, even where the participants spoke another. Keep technical terms, product names, identifiers, URLs, and numbers in their original form. "type" and the JSON keys stay in English; section titles follow the output language.
 
     EMPTY MEETINGS
     If there is no substantive discussion (only greetings, sound checks, or fragments), use type "general", a short title or an empty title, a one-sentence summary saying no substantive content was captured, and empty arrays. Never invent topics to fill fields.

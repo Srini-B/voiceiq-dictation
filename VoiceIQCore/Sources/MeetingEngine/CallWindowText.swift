@@ -59,6 +59,17 @@ enum CallWindowText {
         return out
     }
 
+    /// Titles of the app's windows whose front tab is a call page. A
+    /// browser's window title is the page's title ("Owner – Audio playing"),
+    /// so only its address (AXDocument) may say it is the call.
+    static func meetingWindowTitles(pid: pid_t) -> [String] {
+        guard AXIsProcessTrusted() else { return [] }
+        let app = AXUIElementCreateApplication(pid)
+        AXUIElementSetMessagingTimeout(app, 0.25)
+        let windows = value(app, kAXWindowsAttribute) as? [AXUIElement] ?? []
+        return windows.filter(isMeeting).compactMap { value($0, kAXTitleAttribute) as? String }
+    }
+
     /// A button's label with the text inside it, such as "People 3".
     private static func buttonText(_ element: AXUIElement) -> String? {
         var parts: [String] = []

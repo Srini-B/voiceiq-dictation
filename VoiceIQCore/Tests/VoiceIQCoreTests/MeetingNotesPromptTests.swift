@@ -26,4 +26,17 @@ final class MeetingNotesPromptTests: XCTestCase {
         XCTAssertNil(MeetingNotesPrompt.missingActions(listed, transcript: call))
         XCTAssertNil(MeetingNotesPrompt.missingActions(empty, transcript: Array(call.prefix(2))))
     }
+
+    func testNotesLanguageIsTheSettingUnlessTheTranscriptIsClearlyAnother() {
+        let say = { (text: String) in [TranscriptSegment(speaker: "s1", text: text, chunkIndex: 0, start: 0, end: 1)] }
+        let shortForeign = say("Design de produto e usabilidade, vamos falar do controle remoto.")
+        let spanish = say(Array(repeating: "Hoy vamos a revisar el presupuesto del proyecto y decidir quién prepara el informe para la reunión del viernes con el cliente.", count: 8).joined(separator: " "))
+        let english = say(Array(repeating: "Okay so um the remote control should be cheap and we need to decide the buttons before Friday.", count: 10).joined(separator: " "))
+
+        XCTAssertEqual(MeetingNotesPrompt.outputLanguage(shortForeign, preferred: nil), "English")
+        XCTAssertEqual(MeetingNotesPrompt.outputLanguage(shortForeign, preferred: "en"), "English")
+        XCTAssertEqual(MeetingNotesPrompt.outputLanguage(shortForeign, preferred: "hi"), "Hindi")
+        XCTAssertEqual(MeetingNotesPrompt.outputLanguage(spanish, preferred: "en"), "Spanish")
+        XCTAssertEqual(MeetingNotesPrompt.outputLanguage(english, preferred: "pt"), "English")
+    }
 }

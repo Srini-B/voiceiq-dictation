@@ -539,7 +539,7 @@ import VoiceIQSpeech
                 app: meta.source.map(Self.name), names: meta.speakerNames, screenNames: meta.screenNames,
                 ownerName: settings.meetingOwnerName, vocabulary: dictionary.sanitizedVocabulary(),
                 spellings: dictionary.spellings(), writingRules: settings.customWritingRules,
-                calendarEvent: meta.calendarEvent)), transcript: transcript, model: cfg.writingModel, deadline: MeetingEngine.notesDeadline)
+                calendarEvent: meta.calendarEvent, languageCode: settings.dictationLanguage.code)), transcript: transcript, model: cfg.writingModel, deadline: MeetingEngine.notesDeadline)
         }
         let notes = try await write(meta)
         let named = ScreenSpeakerNames.byElimination(meta: meta, transcript: transcript, notes: notes)

@@ -407,12 +407,19 @@ meeting never raises a permission prompt (`CGPreflightScreenCaptureAccess`,
 1. `MeetingEngine.startRecording` starts a `ScreenNameSampler` with the
    detected call source. A recording started by hand with no call detected
    reads the frontmost known call app (`ScreenNameSampler.frontCallApp`).
-   With no call app, the sampler does not run.
+   With no call app, the sampler does not run. A browser running several
+   instances under one bundle ID (separate profiles) is read in the one with
+   a call-room window, the frontmost such (`ScreenNameSampler.callPID`); the
+   first instance found was read before, and on 2026-11-28 a probe with four
+   Chromes read no names in 102 samples.
 2. With Screen Recording granted, every 3 s the sampler captures one window of the call app or browser
    with ScreenCaptureKit (`SCContentFilter(desktopIndependentWindow:)`, so it
    works when the window is covered). It picks a window whose title names a
    page in `CallApps.meetingPages` first, then a window on screen, then the
-   largest. A browser with no such window gives no image, because its other
+   largest. A browser's window title is the page's own ("Owner – Audio
+   playing" on vdo.ninja), so with Accessibility the window whose address
+   (AXDocument) is a call page counts too (`CallWindowText.meetingWindowTitles`).
+   A browser with no such window gives no image, because its other
    windows are other pages. It never captures the whole display, because other apps' windows
    (a dictation app, a chat, a document) hold names that are not the
    meeting's. When the call app has no window to read, the sample has no
@@ -495,10 +502,14 @@ Rules added 2026-11-26 after a Fable judge scored the notes
 
 Fixes from 2026-10-29:
 
-- **Output language.** `NLLanguageRecognizer` names the transcript's main
-  language when it is at least 60 % sure, and the request says
-  `OUTPUT LANGUAGE: English`. An all-English meeting had come back in Hindi
-  once, and in English on a redo of the byte-identical request.
+- **Output language.** The request always names one
+  (`MeetingNotesPrompt.outputLanguage`): the language picked in Settings →
+  Dictation (`dictationLanguage`), English when it is English or Detect.
+  Another language is used only when the transcript has at least 150 words
+  and `NLLanguageRecognizer` is at least 90 % sure of it. The model never
+  chooses: an all-English meeting came back in Hindi once (2026-10-29), and
+  an English AMI meeting got a Portuguese title (2026-11-28), each time when
+  the recognizer was unsure and the request left the language open.
 - **The owner by name.** Notes are shared, so the owner is never "You" in
   them. The owner's label is, in order: the name typed for that meeting, the
   owner marker on screen, **Your name in meeting notes** in Settings →

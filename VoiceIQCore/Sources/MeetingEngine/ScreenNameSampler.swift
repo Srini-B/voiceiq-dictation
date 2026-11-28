@@ -66,12 +66,28 @@ public final class ScreenNameSampler: @unchecked Sendable {
     private func resolveCallApp(accessibility: Bool) -> Bool {
         if bundleID == nil { bundleID = Self.frontCallApp(among: joining) }
         guard let bundleID else { return false }
-        if pid == nil, accessibility,
-           let app = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).first {
-            pid = app.processIdentifier
-            AccessibilityWaker.wakeIfNeeded(bundleID: bundleID, pid: app.processIdentifier)
+        if pid == nil, accessibility, let found = Self.callPID(bundleID: bundleID) {
+            pid = found
+            AccessibilityWaker.wakeIfNeeded(bundleID: bundleID, pid: found)
         }
         return snapshots || pid != nil
+    }
+
+    /// The process that holds the call. A browser can run several instances
+    /// under one bundle ID (separate profiles, the live-call probe's four
+    /// Chromes), and Core Audio's tap takes all of them, so the call is the
+    /// one with a call-room window, the frontmost such, not whichever
+    /// instance the system lists first.
+    static func callPID(bundleID: String) -> pid_t? {
+        let pids = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).map(\.processIdentifier)
+        guard pids.count > 1, CallApps.browsers.contains(bundleID) else { return pids.first }
+        let rooms = Set(pids.filter { !CallWindowText.meetingWindowTitles(pid: $0).isEmpty })
+        guard !rooms.isEmpty else { return nil }
+        // Front to back, as `frontCallApp` reads them.
+        let windows = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] ?? []
+        let front = windows.lazy.filter { $0[kCGWindowLayer as String] as? Int == 0 }
+            .compactMap { $0[kCGWindowOwnerPID as String] as? pid_t }.first(where: rooms.contains)
+        return front ?? rooms.min()
     }
 
     /// The known call app, or the browser showing a meeting page (Google Meet
@@ -126,10 +142,19 @@ public final class ScreenNameSampler: @unchecked Sendable {
     private func capture() async throws -> CGImage? {
         guard let bundleID else { return nil }
         let content = try await SCShareableContent.excludingDesktopWindows(true, onScreenWindowsOnly: false)
-        let windows = content.windows.filter { $0.owningApplication?.bundleIdentifier == bundleID && $0.windowLayer == 0 && $0.frame.width >= 320 }
-        // A browser has other windows; the meeting tab's title says which one
-        // is the call, and with no such title none is.
-        let meeting = windows.filter { window in CallApps.meetingPages.contains { window.title?.localizedCaseInsensitiveContains($0) == true } }
+        let windows = content.windows.filter { window in
+            window.owningApplication?.bundleIdentifier == bundleID && window.windowLayer == 0 && window.frame.width >= 320
+                && pid.map { window.owningApplication?.processID == $0 } ?? true
+        }
+        // A browser has other windows; the call is the one whose tab is a call
+        // page. Its title is the page's own ("Owner – Audio playing" on
+        // vdo.ninja), so the address read through Accessibility says which;
+        // without Accessibility only a title naming the site can.
+        let rooms = pid.map(CallWindowText.meetingWindowTitles) ?? []
+        let meeting = windows.filter { window in
+            guard let title = window.title else { return false }
+            return rooms.contains(title) || CallApps.meetingPages.contains { title.localizedCaseInsensitiveContains($0) }
+        }
         let candidates = meeting.isEmpty && !CallApps.browsers.contains(bundleID) ? windows : meeting
         // On screen first (a window on another Space still counts), then the largest.
         let rank = { (window: SCWindow) in (window.isOnScreen ? 1 : 0, window.frame.width * window.frame.height) }
