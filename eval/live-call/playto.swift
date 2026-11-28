@@ -22,12 +22,19 @@ func deviceID(named name: String) -> AudioDeviceID? {
 }
 guard args.count == 3, var device = deviceID(named: args[1]) else { print("usage: playto DEVICE FILE"); exit(2) }
 let file = try AVAudioFile(forReading: URL(fileURLWithPath: args[2]))
-let mono = AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: AVAudioFrameCount(file.length))!
-try file.read(into: mono)
+let input = AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: AVAudioFrameCount(file.length))!
+try file.read(into: input)
 let stereoFormat = AVAudioFormat(standardFormatWithSampleRate: file.processingFormat.sampleRate, channels: 2)!
-let buffer = AVAudioPCMBuffer(pcmFormat: stereoFormat, frameCapacity: mono.frameLength)!
-buffer.frameLength = mono.frameLength
-for c in 0..<2 { memcpy(buffer.floatChannelData![c], mono.floatChannelData![0], Int(mono.frameLength) * 4) }
+let buffer = AVAudioPCMBuffer(pcmFormat: stereoFormat, frameCapacity: input.frameLength)!
+buffer.frameLength = input.frameLength
+// Every input channel, averaged, on both outputs: a stereo file with speech
+// on one side only must not play silence.
+let channels = Int(input.format.channelCount)
+for frame in 0..<Int(input.frameLength) {
+    var sum: Float = 0
+    for c in 0..<channels { sum += input.floatChannelData![c][frame] }
+    for c in 0..<2 { buffer.floatChannelData![c][frame] = sum / Float(channels) }
+}
 let engine = AVAudioEngine()
 var unit = engine.outputNode.audioUnit!
 AudioUnitSetProperty(unit, kAudioOutputUnitProperty_CurrentDevice, kAudioUnitScope_Global, 0, &device, 4)

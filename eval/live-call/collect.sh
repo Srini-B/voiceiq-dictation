@@ -7,6 +7,8 @@ set -euo pipefail
 folder=$1 out=$2
 mkdir -p $out
 for file in mic.caf mic-aec.caf system.caf meta.json transcript.json notes.json screen-names.json; do
+  # A reused OUT_DIR must not report an earlier meeting's track.
+  rm -f $out/$file
   if [[ -e $folder/$file ]]; then cp $folder/$file $out/; fi
 done
 [[ -e $out/meta.json ]] && echo "recording: $(python3 -c 'import json, sys; print(round(json.load(open(sys.argv[1]))["durationSeconds"], 1))' $out/meta.json)s"

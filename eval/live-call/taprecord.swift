@@ -23,7 +23,8 @@ func check(_ status: OSStatus, _ what: String) {
 }
 
 let args = CommandLine.arguments
-guard #available(macOS 14.2, *), args.count >= 4, let seconds = Double(args[1]) else {
+// 15, not the tap's 14.2: AVAudioFile.close() below is macOS 15.
+guard #available(macOS 15.0, *), args.count >= 4, let seconds = Double(args[1]) else {
     print("usage: taprecord SECONDS OUT.wav PID [PID…]"); exit(2)
 }
 let pids = args[3...].compactMap { pid_t($0) }
