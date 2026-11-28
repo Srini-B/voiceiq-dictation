@@ -291,8 +291,9 @@ targets:
             PrimaryLanguage: en-US
             RequestsOpenAccess: true
 
-  # The keyboard's edit code, compiled on its own: an extension cannot host
-  # tests. Runs in the VoiceIQiOS scheme on a Simulator.
+  # The keyboard's code, compiled into the tests: an extension cannot host
+  # tests, so the app does, and its embedded keyboard supplies the typing
+  # model. Runs in the VoiceIQiOS scheme on a Simulator.
   KeyboardTests:
     type: bundle.unit-test
     platform: iOS
@@ -303,10 +304,18 @@ targets:
         SWIFT_VERSION: "6.0"
         GENERATE_INFOPLIST_FILE: YES
         CODE_SIGNING_ALLOWED: NO
+        SWIFT_OBJC_BRIDGING_HEADER: iOS/Keyboard/Sources/Keyboard-Bridging-Header.h
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/VoiceiQ.app/VoiceiQ"
+        BUNDLE_LOADER: "$(TEST_HOST)"
     sources:
       - iOS/Keyboard/Tests
       - path: iOS/Keyboard/Sources
-        includes: [EditController.swift]
+      - path: iOS/Keyboard/Hex
+        excludes: [MANIFEST, UPSTREAM, LICENSE, "patches/**", "**/LICENSE-*", "TypingModel/**"]
+    dependencies:
+      - target: VoiceIQiOS
+      - package: VoiceIQCore
+        product: VoiceIQBridge
 
   VoiceIQLiveActivity:
     type: app-extension

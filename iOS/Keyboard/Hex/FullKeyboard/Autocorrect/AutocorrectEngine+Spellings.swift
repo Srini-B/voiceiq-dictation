@@ -6,12 +6,13 @@ import Foundation
 /// "GitHub", "figma" -> "Figma"), whatever the phone's dictionary knows.
 @MainActor
 extension AutocorrectEngine {
-    /// `word`, all lowercase, as the layout language's model spells it; nil when it has no
-    /// spelling of its own.
+    /// `word`, all lowercase or with only a capital first letter (a sentence's start: "Chatgpt"),
+    /// as the layout language's model spells it; nil when it has no spelling of its own.
     func modelSpelling(of word: String) -> String? {
-        guard word == word.lowercased(), let model = contextModel ?? decoder?.model,
+        let lower = word.lowercased()
+        guard word == lower || word.dropFirst() == lower.dropFirst(), let model = contextModel ?? decoder?.model,
               model.language == language.rawValue else { return nil }
-        return HexWordList.bundled(model.language, "spellings")?.text(of: word)
+        return HexWordList.bundled(model.language, "spellings")?.text(of: lower)
     }
 
     /// A model word (lowercase) as the strip offers it before it is cased like what you typed:
