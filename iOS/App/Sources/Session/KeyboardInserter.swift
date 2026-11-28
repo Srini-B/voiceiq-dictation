@@ -38,24 +38,16 @@ final class KeyboardInserter: TextInserting {
     /// Where the dictation in progress goes (`DictationTarget.destination`).
     var destination: (() -> FieldIdentity?)?
 
-    /// A draft offered for this dictation that no keyboard confirmed in
-    /// time. The written text still names it: a keyboard whose report came
-    /// late swaps it rather than typing the written text beside it, and a
-    /// keyboard that never typed it types the written text as usual.
-    fileprivate var unconfirmedDraftID: UUID?
-
     func insert(_ text: String, context: DictationContext) async -> InsertionOutcome {
-        onDeliver?(text, unconfirmedDraftID)
-        unconfirmedDraftID = nil
+        onDeliver?(text, nil)
         return .inserted
     }
 
     /// A draft when the dictation goes back to a keyboard's input session.
     /// Whether a keyboard is still there to type it is the keyboard's call
     /// (`KeyboardModel.typeDraftIfNeeded`); when none does, the written text
-    /// comes alone, as before.
+    /// is typed as a plain result, as before.
     func draft(context: DictationContext) async -> TextDraft? {
-        unconfirmedDraftID = nil
         guard destination?()?.documentID != nil else { return nil }
         return KeyboardTextDraft(inserter: self)
     }
@@ -71,8 +63,8 @@ private final class KeyboardTextDraft: TextDraft {
     private let store = SharedStore.shared
     /// The draft in the snapshot, until it is withdrawn.
     private var offered: Delivery?
-    /// The draft a keyboard typed.
-    private var typedID: UUID?
+    /// The draft this dictation offered, which its written text names.
+    private var draftID: UUID?
     private var ended = false
 
     init(inserter: KeyboardInserter) {
@@ -80,7 +72,7 @@ private final class KeyboardTextDraft: TextDraft {
     }
 
     func show(_ text: String) async -> DraftShown {
-        guard !ended, offered == nil, typedID == nil, let destination = inserter.destination?() else {
+        guard !ended, offered == nil, draftID == nil, let destination = inserter.destination?() else {
             return .notInserted
         }
         let draft = Delivery(text: text, destination: destination)
@@ -92,23 +84,24 @@ private final class KeyboardTextDraft: TextDraft {
             store.reloadFromDisk()
         }
         withdraw()
-        // A keyboard types a draft only within `Delivery.draftWindow`, well
-        // inside the wait: one that did not say so by now never will.
+        guard !ended else { return .notInserted }
+        // Whether or not a keyboard said it typed the draft, the written
+        // text comes naming it, from this dictation alone: a keyboard holding
+        // it swaps it (also one whose report came late), and any other types
+        // the written text as a plain result. So it is never typed beside
+        // the draft, and no other dictation's text can carry its name.
+        draftID = draft.id
         store.reloadFromDisk()
-        guard store.typedDraftID == draft.id else {
-            inserter.unconfirmedDraftID = draft.id
-            SessionDiagnostics.note("draft not typed by a keyboard; the written text comes alone")
-            return .notInserted
-        }
-        typedID = draft.id
-        SessionDiagnostics.note("draft typed by the keyboard")
+        SessionDiagnostics.note(store.typedDraftID == draft.id ? "draft typed by the keyboard"
+                                                               : "draft not confirmed by a keyboard in time")
         return .shown
     }
 
     func replace(with text: String) async -> Bool {
-        guard let typedID else { return false }
-        // The keyboard does the swap, or leaves the draft as heard.
-        inserter.onDeliver?(text, typedID)
+        guard let draftID else { return false }
+        // The keyboard does the swap, leaves the draft as heard, or types
+        // the text as a plain result where no draft went in.
+        inserter.onDeliver?(text, draftID)
         return true
     }
 

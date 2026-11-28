@@ -25,9 +25,9 @@ public final class DictationCoordinator: ObservableObject {
     private var drafting: Set<UUID> = [] {
         didSet { if writingDraft != !drafting.isEmpty { writingDraft = !drafting.isEmpty } }
     }
-    /// The pill's note when the draft stayed because the field changed
-    /// around it; the written text is in History and Paste last.
-    nonisolated static let keptDraftNotice = "Kept as heard: the field changed meanwhile"
+    /// The pill's note when the draft stayed (edited, or not found for
+    /// certain); the written text is in History and Paste last.
+    nonisolated static let keptDraftNotice = "Kept as heard. Paste last has the written text"
 
     @Published public private(set) var coachingHint: String?
     /// The last inserted dictation's note, such as "Inserted as heard" when

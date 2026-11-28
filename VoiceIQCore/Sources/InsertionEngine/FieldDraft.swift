@@ -51,6 +51,9 @@ public final class FieldDraft: TextDraft {
     static let landingWait: TimeInterval = 1.5
     /// How often the underline follows the text while the writer runs.
     static let trackingInterval: TimeInterval = 0.15
+    /// Above this the field is read too often to follow its drafts cheaply
+    /// (a long document); it keeps the single paste.
+    static let maxFieldLength = 20_000
     /// Underlines for longer drafts would mean dozens of windows.
     static let maxLines = 30
 
@@ -72,7 +75,8 @@ public final class FieldDraft: TextDraft {
         if let bundleID, AppQuirks.forcePaste.contains(bundleID) { return nil }
         let bundleURL = context.targetPID.flatMap { NSRunningApplication(processIdentifier: $0)?.bundleURL }
         guard TypingInserter.mode(bundleID: bundleID, bundleURL: bundleURL) == nil else { return nil }
-        guard let element = focusedTarget(context: context), let reading = PasteCheck.reading(of: element) else {
+        guard let element = focusedTarget(context: context), let reading = PasteCheck.reading(of: element),
+              reading.value.utf16.count <= maxFieldLength else {
             return nil
         }
         var role: CFTypeRef?
@@ -120,9 +124,10 @@ public final class FieldDraft: TextDraft {
         }
         guard landed != nil else {
             marks.clear()
-            // Nothing changed: nothing went in, so the written text may.
-            if !changed { return .notInserted }
-            Log.insertion.info("draft: went in but not as one exact insert — it stays")
+            // A posted ⌘V can still land after the wait, so the written text
+            // never goes in beside it: Paste last and History have it.
+            Log.insertion.info(changed ? "draft: went in but not as one exact insert — it stays"
+                                       : "draft: not seen in the field in time — the written text is in Paste last")
             return .lost
         }
         guard !ended else { return .shown }
@@ -164,17 +169,23 @@ public final class FieldDraft: TextDraft {
             }
             return true
         }
-        guard select(span.location, span.length) else {
+        guard select(span.location, span.length, holding: reading.value) else {
             _ = select(reading.caret, reading.selectionLength)
             Log.insertion.info("draft: the field didn't take the selection — kept as it was")
             return false
         }
         if !usesPasteOnly,
            AXUIElementSetAttributeValue(element, kAXSelectedTextAttribute as CFString, written as CFTypeRef) == .success {
-            for _ in 0..<4 {
+            // An app that took the write may show it late; a ⌘V now could
+            // put the text in twice. Wait for it, and never paste after it.
+            let deadline = Date().addingTimeInterval(Self.landingWait)
+            while Date() < deadline {
                 if let now = PasteCheck.reading(of: element), now.value != reading.value { return swapped(now) }
                 try? await Task.sleep(for: .milliseconds(40))
             }
+            _ = select(reading.caret, reading.selectionLength)
+            Log.insertion.info("draft: the field took the write but never showed it — kept as it was")
+            return false
         }
         // ⌘V goes to the focused field only, and only while the draft is
         // still exactly what is selected.
@@ -194,6 +205,7 @@ public final class FieldDraft: TextDraft {
             if let now = PasteCheck.reading(of: element), now.value != reading.value { return swapped(now) }
             try? await Task.sleep(for: .milliseconds(50))
         }
+        _ = select(reading.caret, reading.selectionLength)
         Log.insertion.info("draft: the paste over it never showed — kept as it was")
         return false
     }
@@ -224,12 +236,15 @@ public final class FieldDraft: TextDraft {
         marks.underline(Self.lineRects(in: element, location: span.location, length: span.length))
     }
 
-    private func select(_ location: Int, _ length: Int) -> Bool {
+    /// Sets the selection and reads it back. With `holding`, the field must
+    /// also still read exactly that text: a key typed between the read and
+    /// the selection would shift what the range covers.
+    private func select(_ location: Int, _ length: Int, holding value: String? = nil) -> Bool {
         var range = CFRange(location: location, length: length)
-        guard let value = AXValueCreate(.cfRange, &range),
-              AXUIElementSetAttributeValue(element, kAXSelectedTextRangeAttribute as CFString, value) == .success,
+        guard let rangeValue = AXValueCreate(.cfRange, &range),
+              AXUIElementSetAttributeValue(element, kAXSelectedTextRangeAttribute as CFString, rangeValue) == .success,
               let now = PasteCheck.reading(of: element) else { return false }
-        return now.caret == location && now.selectionLength == length
+        return now.caret == location && now.selectionLength == length && (value == nil || now.value == value)
     }
 
     /// The focused element when it belongs to the frontmost target app and

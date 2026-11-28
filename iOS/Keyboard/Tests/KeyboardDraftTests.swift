@@ -79,6 +79,17 @@ final class KeyboardDraftTests: XCTestCase {
         XCTAssertEqual(field.string, "ok ok ok")
     }
 
+    /// A committed Tamil draft is not retyped: Delete may take one code
+    /// point at a time and leave pieces of it.
+    func testADraftWithCombiningMarksIsNotRetyped() throws {
+        let field = Field("")
+        let draft = try XCTUnwrap(type("வணக்கம்", into: field))
+        draft.commit(field)
+        draft.fieldChanged(field, now: typedAt.addingTimeInterval(2))
+        XCTAssertEqual(draft.replace(with: "வணக்கம்.", in: field, fit: fit), .kept)
+        XCTAssertEqual(field.string, "வணக்கம்")
+    }
+
     /// A selection is the user's: the written text never replaces it.
     func testASelectionIsNeverReplaced() throws {
         let field = Field("Dear Ana,")

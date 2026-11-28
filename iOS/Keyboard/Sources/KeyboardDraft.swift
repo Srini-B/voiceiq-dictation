@@ -97,7 +97,12 @@ final class KeyboardDraft {
         }
         commit(proxy)
         let current = proxy.documentContextBeforeInput ?? ""
-        guard (proxy.selectedText ?? "").isEmpty, current.hasSuffix(text), isStillAround(proxy, before: current)
+        // Delete deletes one character per press, but a host may take one
+        // code point instead (a Tamil or Devanagari vowel sign), which would
+        // leave pieces of the draft: only drafts whose characters are single
+        // code points are retyped.
+        guard (proxy.selectedText ?? "").isEmpty, current.hasSuffix(text), isStillAround(proxy, before: current),
+              text.unicodeScalars.count == text.count
         else { return .kept }
         let fitted = fit(written, String(current.dropLast(text.count)), proxy.documentContextAfterInput ?? "")
         guard !fitted.isEmpty else { return .kept }
