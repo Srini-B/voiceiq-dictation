@@ -7,7 +7,13 @@ and exports it. Meetings are transcribed by AssemblyAI's pre-recorded STT-3.7
 (Universal-2 for languages it lacks), always from the saved tracks
 after the recording stops; there is no live transcript while a meeting
 records. Notes and meeting chat come from the writing model (`gpt-6-luna`)
-on AssemblyAI's LLM Gateway, which needs a balance on the account. There is
+on AssemblyAI's LLM Gateway, which needs a balance on the account. Notes ask
+GPT-6 models for reasoning effort medium (dictation and chat ask for none),
+so the notes name far-side voices the same way from run to run and assign
+owners correctly; they take about 40 s, in the background, and allow up to
+32,000 output tokens, reasoning included. A reply cut off at that limit
+fails the notes, with its own message, instead of being asked again. Each
+notes request has 15 minutes, rate-limit waits included. There is
 no on-device meeting transcription; a meeting that cannot reach AssemblyAI waits
 with its audio and is sent when AssemblyAI can be reached ([ON_DEVICE.md](ON_DEVICE.md#meetings)). What is sent,
 and the notes prompt, are covered in
@@ -51,7 +57,7 @@ in Settings as Speaker Separation) runs over the whole system track and
 decides which far-side person said each word (`MeetingTranscriber.splitFarSide`,
 cached as `transcribe-far-speakers-v1.json`). AssemblyAI's own far-side labels are
 kept only when the model is unavailable or heard nobody. In an outside test
-Gemini, the provider before 0.7.18, got the speaker count right in 16 of 36
+Gemini, the provider before 0.7.19, got the speaker count right in 16 of 36
 runs; the model got 31 of 33 in ours
 ([activities/2026-11-06-offline-speaker-diarizer.md](../activities/2026-11-06-offline-speaker-diarizer.md)).
 When the model is missing, the first meeting that needs it downloads it

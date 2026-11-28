@@ -59,6 +59,9 @@ public final class DictationCoordinator: ObservableObject {
     /// new recording, so the app reports these on their own.
     public enum DetachedResult: Equatable, Sendable {
         case outcome(DictationOutcome)
+        /// Pasted, with a note the user should see, such as the writer's
+        /// fallback ("Inserted as heard: …").
+        case insertedWithNotice(String)
         case failure(DictationFailure)
     }
     public var onDetachedResult: ((DetachedResult) -> Void)?
@@ -681,9 +684,14 @@ public final class DictationCoordinator: ObservableObject {
             session = nil
         } else {
             endDetached(sessionID)
-            onDetachedResult?(.outcome(result))
-            // A detached job has no pill: its kept draft is told like a withdraw's.
-            if keptDraft { NotificationCenter.default.post(name: .voiceIQDraftKept, object: Self.keptDraftNotice) }
+            // A detached job has no pill: its notice, or its kept draft's, is
+            // shown in the background.
+            if case .inserted = insertionOutcome,
+               let notice = outcome.notice ?? (keptDraft ? Self.keptDraftNotice : nil) {
+                onDetachedResult?(.insertedWithNotice(notice))
+            } else {
+                onDetachedResult?(.outcome(result))
+            }
         }
         reportStageTimes(stages, sessionID: sessionID, requestedAt: startedAt)
     }

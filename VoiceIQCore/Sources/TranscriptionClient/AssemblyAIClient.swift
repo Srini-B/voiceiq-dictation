@@ -80,12 +80,15 @@ public actor AssemblyAIClient {
         messages: [[String: Any]], model: String, schema: (name: String, schema: [String: Any])? = nil,
         deadline: TimeInterval, stage: UsageStage
     ) async throws -> String {
-        var body: [String: Any] = ["model": model, "messages": messages, "max_tokens": 8_000]
+        // Reasoning counts against max_tokens; notes at effort medium reason for
+        // thousands of tokens before the JSON.
+        var body: [String: Any] = ["model": model, "messages": messages,
+                                   "max_tokens": stage == .meetingSummary ? 32_000 : 8_000]
         if let schema {
             body["response_format"] = ["type": "json_schema",
                                        "json_schema": ["name": schema.name, "strict": true, "schema": schema.schema]]
         }
-        if let effort = Self.reasoningEffort(model: model) { body["reasoning_effort"] = effort }
+        if let effort = Self.reasoningEffort(model: model, stage: stage) { body["reasoning_effort"] = effort }
         let data = try await send(
             url: AssemblyAIConfig.gateway.appendingPathComponent("v1/chat/completions"),
             body: try JSONSerialization.data(withJSONObject: body), deadline: deadline,
@@ -99,13 +102,23 @@ public actor AssemblyAIClient {
             throw TranscriptionError.network("unparseable_response")
         }
         if choice["finish_reason"] as? String == "content_filter" { throw TranscriptionError.safetyBlocked }
+        // A reply cut off at max_tokens is cut off again when asked again.
+        if choice["finish_reason"] as? String == "length" { throw TranscriptionError.network("output_truncated") }
         return message["content"] as? String ?? ""
     }
 
     /// No reasoning for the writers that support switching it off: the
-    /// writing rules need none, and reasoning is billed as output.
-    static func reasoningEffort(model: String) -> String? {
-        if model.hasPrefix("gpt-6") { return "none" }
+    /// writing rules need none, and reasoning is billed as output. Meeting
+    /// notes reason: they name far-side voices from who answers whom and
+    /// assign owners, once per meeting, in the background.
+    /// MEASURED 2026-11-28, 9 meetings on the LLM Gateway: GPT-6 Luna at
+    /// effort none left the echo meetings' voices unnamed in some runs
+    /// (pooled M1 89.3 and 81.5); low and medium named every voice (98.9).
+    /// Judged notes (M5) were 86.1 at none, 85.3 at low and 91.9 at medium,
+    /// the only one with every meeting at 85 or more; medium costs about
+    /// $0.003 and 40 s a meeting.
+    static func reasoningEffort(model: String, stage: UsageStage) -> String? {
+        if model.hasPrefix("gpt-6") { return stage == .meetingSummary ? "medium" : "none" }
         if model.hasPrefix("gemini-3") { return "low" }
         return nil
     }
@@ -182,18 +195,36 @@ public actor AssemblyAIClient {
         else { throw TranscriptionError.network("transcript_unparseable") }
         // A 5-minute file completes in about 9 s at p50 (AssemblyAI's planning figure).
         var wait: UInt64 = 700_000_000
+        var offline = false
+        // Polls that ran out of time offline are offline, so the recording queues for the reconnect.
+        func timeLeft() throws -> TimeInterval {
+            do { return try remaining() } catch { throw offline ? TranscriptionError.offline : error }
+        }
         while true {
+            // No poll could follow a sleep that long: give up now, as offline
+            // or as a timeout, rather than idle to the deadline.
+            let left = try timeLeft()
+            if Double(wait) / 1_000_000_000 + 0.25 >= left { throw offline ? TranscriptionError.offline : TranscriptionError.timeout }
             try await Task.sleep(nanoseconds: wait)
             wait = min(wait * 3 / 2, 3_000_000_000)
             let data: Data
-            let pollDeadline = min(30, try remaining())
+            let pollDeadline = min(30, try timeLeft())
             do {
                 data = try await send(url: AssemblyAIConfig.api.appendingPathComponent("v2/transcript/\(id)"), body: nil,
                                       deadline: pollDeadline, modelLabel: model, stage: stage)
-            } catch TranscriptionError.network, TranscriptionError.timeout, TranscriptionError.offline,
-                    TranscriptionError.rateLimitedTransient {
-                // The job is uploaded and billed; a failed poll asks again
-                // rather than sending the audio a second time.
+                offline = false
+            } catch TranscriptionError.rateLimitedTransient(let retryAfter) {
+                // The job is uploaded and billed; a throttled poll waits as
+                // long as the server asks (up to 30 s) and asks again.
+                if let retryAfter { wait = max(wait, UInt64(min(retryAfter, 30) * 1_000_000_000)) }
+                offline = false
+                continue
+            } catch TranscriptionError.offline {
+                offline = true
+                continue
+            } catch TranscriptionError.network, TranscriptionError.timeout {
+                // A failed poll asks again rather than sending the audio a second time.
+                offline = false
                 continue
             }
             guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { continue }
@@ -342,7 +373,9 @@ public actor AssemblyAIClient {
 
     /// Races an operation against a hard wall-clock deadline.
     static func withDeadline<T: Sendable>(seconds: TimeInterval, _ operation: @escaping @Sendable () async throws -> T) async throws -> T {
-        try await withThrowingTaskGroup(of: T.self) { group in
+        // A deadline already gone (or NaN) would trap converting to nanoseconds.
+        guard seconds > 0 else { throw DeadlineExceeded() }
+        return try await withThrowingTaskGroup(of: T.self) { group in
             group.addTask { try await operation() }
             group.addTask {
                 try await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
