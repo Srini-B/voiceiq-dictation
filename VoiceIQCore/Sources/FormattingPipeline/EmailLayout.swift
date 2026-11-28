@@ -29,7 +29,7 @@ enum EmailLayout {
         // now. A first word with a capital inside it (iOS, eBay) or other
         // characters (user_id, config.json) is an identifier and keeps its spelling.
         let first = middle.prefix { !$0.isWhitespace }.trimmingCharacters(in: CharacterSet(charactersIn: ",;:!?."))
-        let word = first.allSatisfy { $0.isLowercase || $0 == "'" || $0 == "’" }
+        let word = first.allSatisfy { $0.isLowercase || "'’-".contains($0) }
         let opened = word ? middle.prefix(1).uppercased() + middle.dropFirst() : middle
         // "Srini." ends a sentence; "Ana J." keeps its initial's period.
         var signed = String(trimmed[name])

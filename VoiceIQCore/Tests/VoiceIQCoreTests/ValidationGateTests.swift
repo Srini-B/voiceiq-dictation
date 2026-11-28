@@ -30,6 +30,8 @@ final class ValidationGateTests: XCTestCase {
                        "Hi Sam,\n\nShe replied, “Approved.”\n\nThanks,\nDana")
         XCTAssertEqual(EmailLayout.apply("Hi Sam, user_id is null in prod. Thanks, Dana"),
                        "Hi Sam,\n\nuser_id is null in prod.\n\nThanks,\nDana")
+        XCTAssertEqual(EmailLayout.apply("Hi Sam, follow-up is ready. Best, Dana"),
+                       "Hi Sam,\n\nFollow-up is ready.\n\nBest,\nDana")
         XCTAssertEqual(EmailLayout.apply("Hi Sam, can you check it? Thanks again, Dana"),
                        "Hi Sam,\n\nCan you check it?\n\nThanks again,\nDana")
         let oneLine = "Hi Sam, The release is ready. Thanks, Dana"
