@@ -22,5 +22,11 @@ to them. Hex fixed this in `f5819f4c`.
 
 ## Verification
 
-Pending: Mac build, tests, before/after word list and memory on the
-lobsters-mac-mini runner; K1 re-score by Fable; Neon via agy.
+On the lobsters-mac-mini runner (Xcode 27.0, iOS 27.0 Simulator, iPhone 17 Pro), at `63e714a`:
+
+- `swift test --package-path VoiceIQCore`: 331 tests, 0 failures. VoiceIQ (macOS) and VoiceIQiOS build unsigned; `xcodebuild test -scheme VoiceIQiOS` passes.
+- Word list through Hex's real key plane and engine (scratch test, not committed), each word swiped through its key centres and 7/5 pt off them:
+  - Swipe: main 14/28, this branch 22/28. Claude, Monday, London and Christmas now come out right; on main they gave clause, noonday, longeron/kingdom and christens/christenings. Mary (may) still misses. ChatGPT now gives "chatgpt" (main "chatbot") and GitHub gives "Github" (main gothic/virgin). Controls (the, hello, keyboard, clause, money, about, people) are unchanged.
+  - Typed then space, after "I said ": 12/14 on both. claude, mondya, mray, github are right on both; lindon and chatgpt miss on both. Mid-sentence, "ask chatgpt " now becomes "ask ChatGPT" (main leaves it lowercase).
+- Size, Debug: VoiceiQ.app +152 KB, VoiceIQKeyboard.appex +12 KB (en.hextm 3,599,997 bytes, en.spellings 4,588 bytes, new).
+- Keyboard memory (`footprint`, same steps in Reminders): this branch 33 MB at open, 37 to 39 MB after typing and swipes, peak 50.4 MB; main 30 MB, 37 to 41 MB, peak 49.0 MB. en.hextm stays clean mapped memory (3.5 MB, 0 dirty). Both peaks are above the 44 MB docs/IOS.md gives for iOS 27.2; that is the same on main, so not from this change.
