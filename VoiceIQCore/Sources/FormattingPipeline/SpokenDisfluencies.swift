@@ -135,7 +135,9 @@ enum SpokenDisfluencies {
             guard span.allSatisfy({ token in token.spoken.map { functionWords.contains(bare($0)) } == true }),
                   span.dropLast().allSatisfy({ !$0.hasComma }),
                   again.dropLast().allSatisfy({ $0.spoken != nil && !$0.hasComma }), again.last?.quoted == false,
-                  span.map(\.bare) == again.map(\.bare), opensOnly.contains(span[length - 1].bare) else { continue }
+                  span.map(\.bare) == again.map(\.bare), opensOnly.contains(span[length - 1].bare),
+                  // A pronoun before a comma can end an inverted question: "Who am I, I wonder?"
+                  !(span[length - 1].hasComma && pronouns.contains(span[length - 1].bare)) else { continue }
             // A word capitalized mid-sentence, or said again with its capital, may be a name: "Will, Will".
             guard !(index..<(index + length)).contains(where: { capitalizedMidSentence(tokens, at: $0) }),
                   !again.contains(where: { $0.word.first?.isUppercase == true && !isPronounI($0.bare) }) else { return nil }
@@ -175,7 +177,9 @@ enum SpokenDisfluencies {
         }
         let last = index + filler.count - 1
         let after = last + 1
+        // The next word with its own comma is a list item, and "like" the verb: "follow, like, subscribe, and share".
         guard tokens[last].hasComma, after < tokens.count, !tokens[after].quoted, !tokens[after].bare.isEmpty,
+              !tokens[after].hasComma,
               !["and", "or"].contains(tokens[after].bare), !endsSentence(tokens[after].word),
               !capitalizedMidSentence(tokens, at: index) else { return nil }
         if startsSentence(tokens, at: index) {

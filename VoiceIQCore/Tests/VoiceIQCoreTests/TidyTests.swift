@@ -95,7 +95,8 @@ final class TidyTests: XCTestCase {
         }
         // "like" as the verb or "such as", a list, a question tag.
         for kept in ["It was like a dream.", "Arrange the folders like we did yesterday.", "Like, comment and share.",
-                     "Please share, like, and comment.", "Wait, you know, right?"] {
+                     "Please share, like, and comment.", "Please follow, like, subscribe, and share.",
+                     "Wait, you know, right?"] {
             XCTAssertEqual(tidy(kept), kept)
         }
     }
@@ -116,7 +117,8 @@ final class TidyTests: XCTestCase {
         for kept in ["I had had enough.", "I know that that works.", "Whatever you do, do it well.",
                      "That was really, really good.", "No, no, no.", "Priya, Priya, are you there?",
                      "Will, Will, are you there?", "A box of red pencils, a box of blue pencils.",
-                     "Pack a bag of tea, a bag of tea.", "Tell Hye-jin I said thanks."] {
+                     "Pack a bag of tea, a bag of tea.", "Tell Hye-jin I said thanks.",
+                     "Who am I, I wonder?", "Who are we, we who stayed behind?"] {
             XCTAssertEqual(tidy(kept), kept)
         }
     }
