@@ -836,7 +836,10 @@ keyboard hides or reappears, Send is tapped, the next dictation, its draft or Pa
 goes in (`KeyboardModel.onWillInsertDictation`, before `EditController`
 reports the new text as an edit), focus moves to another field (another
 `documentIdentifier`; a dictation whose input session UIKit didn't name is
-not followed at all), or the field stops being one it may read. It needs
+not followed at all), or the field stops being one it may read. A result
+typed over a selection, or with Paste last, is not followed: over a selection
+there is no clean span to compare with, and Paste last re-types a result that
+may already have been followed where it first went in. It needs
 Full Access, like everything the keyboard hands the app, and runs only in
 fields Hex's journal may learn from (`TypingJournal.allows`: text and web
 search fields that allow autocorrect, never a secure field, a password,
