@@ -441,7 +441,13 @@ meeting never raises a permission prompt (`CGPreflightScreenCaptureAccess`,
    and group labels (name tags, the participants list), not buttons or menus.
    The walk stops at 2,500 elements or 0.8 s, because each read waits on the
    call app. Electron and Chromium apps are woken first with
-   `AccessibilityWaker`. Either permission is enough for sampling to run.
+   `AccessibilityWaker`. Chrome opens a web page's tree only while
+   `AXEnhancedUserInterface` is on (`AXManualAccessibility` opens nothing,
+   measured 2026-11-28), and that setting makes it animate window moves. So
+   in a Chromium browser the page text is read every 15 s, not every 3 s:
+   the sampler switches the setting on, reads 2.5 s later, and switches it
+   off again at once, which closes the tree and stops the animation
+   (`ScreenNameSampler.whileWebTreeOpen`). Under VoiceOver it is left alone. Either permission is enough for sampling to run.
    Zoom 7.2 exposes each video tile as an `AXTabGroup` described "Name,
    Computer audio unmuted", and the participants list as `AXStaticText`
    rows such as "Name (me)".

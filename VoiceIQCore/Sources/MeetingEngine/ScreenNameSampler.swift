@@ -25,6 +25,10 @@ public final class ScreenNameSampler: @unchecked Sendable {
     /// `pid` was picked for showing a joined call room, not only a call
     /// site's page; until then it is picked again on every tick.
     private var pidHoldsRoom = false
+    private var tick = 0
+    /// A Chromium browser's page text is read on every this-many ticks (15 s),
+    /// since each read briefly makes the browser animate its window moves.
+    static let browserTreeEvery = 5
     /// With no source: the apps the call being joined runs in, besides a
     /// browser. Nil reads any call app.
     private let joining: Set<String>?
@@ -132,7 +136,15 @@ public final class ScreenNameSampler: @unchecked Sendable {
         let time = Date().timeIntervalSince(startedAt)
         do {
             var lines = snapshots ? try await capture().map(Self.read) ?? [] : []
-            if let pid { lines += CallWindowText.lines(pid: pid, browser: bundleID.map(CallApps.browsers.contains) ?? false) }
+            if let pid {
+                let browser = bundleID.map(CallApps.browsers.contains) ?? false
+                if browser, Self.isChromium(pid), !NSWorkspace.shared.isVoiceOverEnabled {
+                    if tick % Self.browserTreeEvery == 0 { lines += await Self.whileWebTreeOpen(pid) { CallWindowText.lines(pid: pid, browser: true) } }
+                } else {
+                    lines += CallWindowText.lines(pid: pid, browser: browser)
+                }
+            }
+            tick += 1
             let names = ScreenSpeakerNames.candidates(in: lines), me = ScreenSpeakerNames.owner(in: lines)
             let single = ScreenSpeakerNames.singleNames(in: lines), count = ScreenSpeakerNames.participantCount(in: lines)
             samples.withLock { $0.append(ScreenNameSample(time: time, names: names, me: me.isEmpty ? nil : me,
@@ -141,6 +153,28 @@ public final class ScreenNameSampler: @unchecked Sendable {
         } catch {
             Log.meeting.info("screen names snapshot failed: \(String(describing: error), privacy: .public)")
         }
+    }
+
+    /// Chrome opens its web pages' accessibility tree only while
+    /// AXEnhancedUserInterface is on; AXManualAccessibility, which
+    /// `AccessibilityWaker` sets, returns -25205 and opens nothing. MEASURED
+    /// 2026-11-28 on the Mac mini, Chrome on vdo.ninja from a cold start:
+    /// 55 elements and no names until it is set; 161 with the three name
+    /// tags 2 s after; 55 again the moment it is set back to false, which
+    /// also stops the window-move animation it causes. So the read happens
+    /// with it on, and it is always switched off after, even on cancel.
+    /// Skipped under VoiceOver, which keeps it on for its own use.
+    static func whileWebTreeOpen<T>(_ pid: pid_t, read: () -> T) async -> T {
+        let app = AXUIElementCreateApplication(pid)
+        AXUIElementSetMessagingTimeout(app, 0.25)
+        AXUIElementSetAttributeValue(app, "AXEnhancedUserInterface" as CFString, kCFBooleanTrue)
+        defer { AXUIElementSetAttributeValue(app, "AXEnhancedUserInterface" as CFString, kCFBooleanFalse) }
+        try? await Task.sleep(for: .milliseconds(2500))
+        return read()
+    }
+
+    static func isChromium(_ pid: pid_t) -> Bool {
+        NSRunningApplication(processIdentifier: pid)?.bundleURL.map { !TypingInserter.chromiumMajorVersions(in: $0).isEmpty } == true
     }
 
     /// The call's own window, read even while other windows cover it (a shared
