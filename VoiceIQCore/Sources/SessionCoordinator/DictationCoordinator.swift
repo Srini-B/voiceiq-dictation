@@ -21,6 +21,10 @@ public final class DictationCoordinator: ObservableObject {
     /// The transcript is in the field as a draft and the writing model is
     /// rewriting it; the pill shows the writing animation.
     @Published public private(set) var writingDraft = false
+    /// Dictations whose draft is in the field while their writer runs.
+    private var drafting: Set<UUID> = [] {
+        didSet { if writingDraft != !drafting.isEmpty { writingDraft = !drafting.isEmpty } }
+    }
     /// The pill's note when the draft stayed because the field changed
     /// around it; the written text is in History and Paste last.
     nonisolated static let keptDraftNotice = "Kept as heard: the field changed meanwhile"
@@ -546,19 +550,19 @@ public final class DictationCoordinator: ObservableObject {
         localTranscriber = nil
         let stream = live
         live = nil
-        // A draft only while no earlier dictation still has text to put in:
-        // two drafts in one field could not be told apart.
-        let mayDraft = local == nil && detached.isEmpty
+        // Every dictation transcribed in the cloud may draft, also while an
+        // earlier one's writer still runs: each swaps only its own text.
+        let mayDraft = local == nil
         inFlightTask = Task { [weak self] in
           var stage: DraftStage?
           // Every way out of the job frees the next one's turn, closes a
           // stream nothing used, and ends a draft (its text stays).
-          defer { ticket.finish(); stream?.cancel(); stage?.end(); self?.writingDraft = false }
+          defer { ticket.finish(); stream?.cancel(); stage?.end(); self?.drafting.remove(sessionID) }
           await UsageMeter.$scope.withValue(usageScope) {
             guard let self else { return }
             if mayDraft, let draft = await self.insertion.draft(context: session.context) {
                 stage = DraftStage(draft: draft, turn: ticket) { [weak self] in
-                    if self?.session?.id == sessionID { self?.writingDraft = true }
+                    self?.drafting.insert(sessionID)
                 }
             }
             let heard: (@Sendable (String) -> Void)? = stage.map { stage in
@@ -615,9 +619,12 @@ public final class DictationCoordinator: ObservableObject {
             $0.modelID = outcome.modelID
             $0.status = .transcribing
         }
-        // Still .transcribing while an earlier job inserts, so a press now
+        // A draft in the field is swapped on its own, whatever earlier
+        // dictations are still doing. Text with no draft waits its turn,
+        // still .transcribing while an earlier job inserts, so a press now
         // can detach this one too.
-        await waiting.turn?.waitForPrevious()
+        let shown = await draft?.shown() ?? .notInserted
+        if shown == .notInserted { await waiting.turn?.waitForPrevious() }
         guard !Task.isCancelled, let job = self.job(sessionID) else { return } // cancelled while waiting
         let isForeground = session?.id == sessionID
         if isForeground { apply(.transcriptReady) }
@@ -627,7 +634,7 @@ public final class DictationCoordinator: ObservableObject {
         // the ladder.
         let insertionOutcome: InsertionOutcome
         var keptDraft = false
-        switch await draft?.shown() ?? .notInserted {
+        switch shown {
         case .shown:
             keptDraft = await draft?.draft.replace(with: outcome.cleanedTranscript) != true
             insertionOutcome = .inserted

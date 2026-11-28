@@ -10,7 +10,6 @@ import VoiceIQCore
 @MainActor
 final class LearningInserter: TextInserting {
     private let inner = InsertionCoordinator()
-    private let overlay = DraftOverlay()
     let learner: EditLearner
 
     init(learner: EditLearner) {
@@ -27,7 +26,7 @@ final class LearningInserter: TextInserting {
     }
 
     func draft(context: DictationContext) async -> TextDraft? {
-        guard let draft = FieldDraft.begin(context: context, inserter: inner, marks: overlay) else { return nil }
+        guard let draft = FieldDraft.begin(context: context, inserter: inner, marks: DraftOverlay()) else { return nil }
         return LearningDraft(draft: draft, learner: learner, context: context)
     }
 }

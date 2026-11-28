@@ -27,16 +27,35 @@ final class InsertTurns {
     struct Ticket: Sendable {
         fileprivate let previous: Gate?
         fileprivate let done: Gate
+        fileprivate let previousPlaced: Gate?
+        fileprivate let placed: Gate
 
         /// Returns once every earlier job has inserted or given up.
         func waitForPrevious() async {
             await previous?.wait()
         }
 
+        /// Returns once every earlier job's text is in the field, as a
+        /// draft or written, or it gave up. A draft goes in after the
+        /// drafts spoken before it, without waiting for their writers.
+        func waitForPreviousPlaced() async {
+            await previousPlaced?.wait()
+        }
+
+        /// This job's text is in the field (or never will be); the next
+        /// job's draft may go in after it. Never ahead of an earlier job.
+        func markPlaced() {
+            Task { @MainActor [previousPlaced, placed] in
+                await previousPlaced?.wait()
+                placed.open()
+            }
+        }
+
         /// Frees the next job's turn, but never ahead of an earlier job: a job
         /// that fails or is cancelled while the one before it still runs
         /// passes its turn on only when that one is done. Safe to call twice.
         func finish() {
+            markPlaced()
             Task { @MainActor [previous, done] in
                 await previous?.wait()
                 done.open()
@@ -45,10 +64,11 @@ final class InsertTurns {
     }
 
     private var last: Gate?
+    private var lastPlaced: Gate?
 
     func take() -> Ticket {
-        let done = Gate()
-        defer { last = done }
-        return Ticket(previous: last, done: done)
+        let done = Gate(), placed = Gate()
+        defer { last = done; lastPlaced = placed }
+        return Ticket(previous: last, done: done, previousPlaced: lastPlaced, placed: placed)
     }
 }

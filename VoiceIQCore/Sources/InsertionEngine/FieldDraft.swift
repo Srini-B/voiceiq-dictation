@@ -22,10 +22,13 @@ public protocol DraftMarking: AnyObject {
 /// draft (`begin` returns nil otherwise, and the dictation pastes once as
 /// before): terminals, typed-in apps, unreadable fields such as Google Docs'
 /// canvas, Press Return after paste, and secure input all keep the single
-/// paste. The swap writes only over text that is still exactly the draft
-/// (`DraftSpan`): once the user edits it, or it can't be told apart, it
-/// stays. The selection is set and read back before anything is written,
-/// and a ⌘V goes only to the focused field. AGIHunt/blurt (MIT) replaces a
+/// paste. Every draft in a field is followed through each change to it
+/// (`DraftLedger`, one per field, `DraftField`): each dictation swaps only
+/// its own range, so earlier dictations' text, written or still a draft,
+/// and anything the user typed are never written over, and an edit inside
+/// a draft makes it the user's text. Writes to one field take turns. The
+/// selection is set and read back before anything is written, and a ⌘V
+/// goes only to the focused field. AGIHunt/blurt (MIT) replaces a
 /// pasted dictation the same way; this is our own implementation.
 @MainActor
 public final class FieldDraft: TextDraft {
@@ -37,7 +40,10 @@ public final class FieldDraft: TextDraft {
     /// never happened, or a stale value after one that did; their swap is a
     /// verified selection plus ⌘V.
     private let usesPasteOnly: Bool
-    private var span: DraftSpan?
+    private let id = UUID()
+    private var field: DraftField?
+    /// The text this dictation left in the field, once shown.
+    private var landed: String?
     private var tracking: Task<Void, Never>?
     private var ended = false
 
@@ -81,8 +87,13 @@ public final class FieldDraft: TextDraft {
     }
 
     public func show(_ text: String) async -> DraftShown {
+        guard !ended else { return .notInserted }
+        let field = DraftField.open(element)
+        self.field = field
+        await field.acquire()
+        defer { field.release() }
         guard !ended, Self.focusedTarget(context: context).map({ CFEqual($0, element) }) == true,
-              let before = PasteCheck.reading(of: element) else {
+              let before = field.sync() else {
             marks.clear()
             return .notInserted
         }
@@ -92,24 +103,26 @@ public final class FieldDraft: TextDraft {
             return .notInserted
         }
         // A paste lands when the app gets to it; Accessibility catches up
-        // after that.
-        let expected = DraftSpan(location: before.caret, text: fitted)
+        // after that. Only exactly this insert counts as the draft.
         let deadline = Date().addingTimeInterval(Self.landingWait)
-        var last: PasteCheck.Reading?
+        var changed = false
         while true {
-            last = PasteCheck.reading(of: element)
-            if let last, last.value != before.value, let found = expected.located(in: last.value) {
-                span = found
-                break
+            if let now = PasteCheck.reading(of: element), now.value != field.ledger.value {
+                changed = true
+                if let span = field.ledger.add(id, text: fitted, at: before.caret, over: before.selectionLength,
+                                               landedIn: now.value) {
+                    landed = span.text
+                    break
+                }
             }
             guard Date() < deadline, !ended else { break }
             try? await Task.sleep(for: .milliseconds(50))
         }
-        guard span != nil else {
+        guard landed != nil else {
             marks.clear()
-            // Exactly as before: nothing went in, so the written text may.
-            if last == before { return .notInserted }
-            Log.insertion.info("draft: pasted but not found in the field — it stays")
+            // Nothing changed: nothing went in, so the written text may.
+            if !changed { return .notInserted }
+            Log.insertion.info("draft: went in but not as one exact insert — it stays")
             return .lost
         }
         guard !ended else { return .shown }
@@ -126,7 +139,10 @@ public final class FieldDraft: TextDraft {
     public func replace(with text: String) async -> Bool {
         tracking?.cancel()
         defer { marks.clear() }
-        guard let reading = PasteCheck.reading(of: element), let span = span?.located(in: reading.value) else {
+        guard let field, landed != nil else { return false }
+        await field.acquire()
+        defer { field.release() }
+        guard let reading = field.sync(), let span = field.ledger.draft(id) else {
             Log.insertion.info("draft: edited or gone — kept as it was")
             return false
         }
@@ -135,6 +151,16 @@ public final class FieldDraft: TextDraft {
         guard let expected = span.replacing(in: reading.value, with: written) else { return false }
         let selection = span.selection((reading.caret, reading.selectionLength),
                                        afterReplacingWith: written.utf16.count)
+        func swapped(_ now: PasteCheck.Reading) -> Bool {
+            field.ledger.replace(id, with: written, landedIn: now.value)
+            landed = written
+            if now.value == expected {
+                _ = select(selection.location, selection.length)
+            } else {
+                Log.insertion.info("draft: replaced, and the app adjusted the text")
+            }
+            return true
+        }
         guard select(span.location, span.length) else {
             _ = select(reading.caret, reading.selectionLength)
             Log.insertion.info("draft: the field didn't take the selection — kept as it was")
@@ -143,12 +169,7 @@ public final class FieldDraft: TextDraft {
         if !usesPasteOnly,
            AXUIElementSetAttributeValue(element, kAXSelectedTextAttribute as CFString, written as CFTypeRef) == .success {
             for _ in 0..<4 {
-                if let now = PasteCheck.reading(of: element), now.value != reading.value {
-                    self.span = DraftSpan(location: span.location, text: written)
-                    _ = select(selection.location, selection.length)
-                    if now.value != expected { Log.insertion.info("draft: replaced, and the app adjusted the text") }
-                    return true
-                }
+                if let now = PasteCheck.reading(of: element), now.value != reading.value { return swapped(now) }
                 try? await Task.sleep(for: .milliseconds(40))
             }
         }
@@ -167,25 +188,22 @@ public final class FieldDraft: TextDraft {
         }
         let deadline = Date().addingTimeInterval(Self.landingWait)
         while Date() < deadline {
-            if let now = PasteCheck.reading(of: element), now.value != reading.value {
-                self.span = DraftSpan(location: span.location, text: written)
-                if now.value == expected { _ = select(selection.location, selection.length) }
-                return true
-            }
+            if let now = PasteCheck.reading(of: element), now.value != reading.value { return swapped(now) }
             try? await Task.sleep(for: .milliseconds(50))
         }
         Log.insertion.info("draft: the paste over it never showed — kept as it was")
         return false
     }
 
-    /// The text the field holds for this dictation: the written text after
-    /// a swap, else the draft.
-    public var text: String? { span?.text }
+    /// The text this dictation left in the field: the written text after a
+    /// swap, else the draft.
+    public var text: String? { landed }
 
     public func end() {
         ended = true
         tracking?.cancel()
         marks.clear()
+        field?.forget(id)
     }
 
     // MARK: - Field geometry
@@ -193,17 +211,13 @@ public final class FieldDraft: TextDraft {
     /// The underline follows the draft as the user types around it, and
     /// goes when the draft can no longer be found.
     private func follow() {
-        guard !ended else { return }
-        guard let reading = PasteCheck.reading(of: element), let found = span?.located(in: reading.value) else {
-            marks.underline([])
-            return
-        }
-        span = found
+        guard !ended, let field, !field.isBusy else { return }
+        _ = field.sync()
         drawUnderline()
     }
 
     private func drawUnderline() {
-        guard let span else { return }
+        guard let span = field?.ledger.draft(id) else { return marks.underline([]) }
         marks.underline(Self.lineRects(in: element, location: span.location, length: span.length))
     }
 
@@ -294,6 +308,54 @@ public final class FieldDraft: TextDraft {
         var range = CFRange()
         guard AXValueGetValue(out as! AXValue, .cfRange, &range) else { return nil }
         return range
+    }
+}
+/// One field's drafts, shared by the dictations that have one in it, and
+/// a turn for writing to it: one dictation's selection must never take
+/// another's paste.
+@MainActor
+final class DraftField {
+    let element: AXUIElement
+    var ledger: DraftLedger
+    private var locked = false
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+    private static var fields: [DraftField] = []
+
+    private init(element: AXUIElement, value: String) {
+        self.element = element
+        self.ledger = DraftLedger(value: value)
+    }
+
+    /// The field's ledger, made when its first draft starts.
+    static func open(_ element: AXUIElement) -> DraftField {
+        if let field = fields.first(where: { CFEqual($0.element, element) }) { return field }
+        let field = DraftField(element: element, value: PasteCheck.reading(of: element)?.value ?? "")
+        fields.append(field)
+        return field
+    }
+
+    /// Reads the field and follows the drafts through what changed.
+    func sync() -> PasteCheck.Reading? {
+        guard let reading = PasteCheck.reading(of: element) else { return nil }
+        ledger.observe(reading.value)
+        return reading
+    }
+
+    var isBusy: Bool { locked }
+
+    func acquire() async {
+        guard locked else { locked = true; return }
+        await withCheckedContinuation { waiters.append($0) }
+    }
+
+    func release() {
+        if waiters.isEmpty { locked = false } else { waiters.removeFirst().resume() }
+    }
+
+    /// A dictation is done with its draft; a field with none left is closed.
+    func forget(_ id: UUID) {
+        ledger.remove(id)
+        if ledger.drafts.isEmpty, !locked { Self.fields.removeAll { $0 === self } }
     }
 }
 #endif
