@@ -51,6 +51,18 @@ final class EditLearnerTests: XCTestCase {
         XCTAssertEqual(store.entries().map(\.term), ["Saran"])
     }
 
+    /// The iPhone keyboard's fixes to dictated text (`DictionaryStore.learn`)
+    /// follow the rules a new word on the Mac does.
+    func testAFixFromTheIPhoneKeyboardIsLearnedByTheMacsRules() {
+        XCTAssertTrue(store.learn(LearnedCorrection(original: "Sharon", replacement: "Saran", words: 0..<0)))
+        XCTAssertFalse(store.learn(LearnedCorrection(original: "Then", replacement: "Than", words: 0..<0)))
+        // Something was already learned from this wording.
+        XCTAssertFalse(store.learn(LearnedCorrection(original: "sharon", replacement: "Shaaron", words: 0..<0)))
+        XCTAssertEqual(store.entries().map(\.term), ["Saran"])
+        XCTAssertEqual(store.entries().first?.source, .auto)
+        XCTAssertEqual(store.entries().first?.learnedFrom, "Sharon")
+    }
+
     func testAKeptWordHeardAsItsOwnLowercaseDoesNotBlockTheNewSpelling() {
         let learner = EditLearner(dictionary: store)
         learner.learn([.learn(fix("qrinzo", "Qrinzo", 1..<2))], stillTaught: ["qrinzo": 1])

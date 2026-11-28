@@ -3,8 +3,9 @@ import VoiceIQBridge
 import VoiceIQCore
 
 /// The dictionary's links outside the app: iCloud sync with the Mac, words
-/// the keyboard queues from a selection or the clipboard, and the word list
-/// the keyboard reads to tell whether a selection is already saved.
+/// the keyboard queues from a selection, the clipboard or a fix to dictated
+/// text, and the word list the keyboard reads to tell whether a selection is
+/// already saved.
 @MainActor
 enum DictionaryBridge {
     /// IDs of keyboard additions already added. Writer: app (own defaults).
@@ -35,8 +36,14 @@ enum DictionaryBridge {
         let queued = shared.dictionaryAdditions
         var handled = Set(UserDefaults.standard.stringArray(forKey: handledKey) ?? [])
         for addition in queued where !handled.contains(addition.id.uuidString) {
-            let added = DictionaryStore().add(term: addition.term)
-            SessionDiagnostics.note("keyboard dictionary word \(added ? "added" : "already saved")")
+            if let heard = addition.learnedFrom {
+                // A fix to dictated text, learned as the Mac learns one.
+                let learned = DictionaryStore().learn(LearnedCorrection(original: heard, replacement: addition.term, words: 0..<0))
+                SessionDiagnostics.note("keyboard dictation fix \(learned ? "learned" : "skipped")")
+            } else {
+                let added = DictionaryStore().add(term: addition.term)
+                SessionDiagnostics.note("keyboard dictionary word \(added ? "added" : "already saved")")
+            }
             handled.insert(addition.id.uuidString)
         }
         // Only IDs still in the keyboard's list can come up again.
