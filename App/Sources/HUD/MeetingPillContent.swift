@@ -71,7 +71,7 @@ struct MeetingEndingContent: View {
 struct MeetingNotesContent: View {
     var body: some View {
         HStack(spacing: VoiceIQUI.Spacing.s) {
-            WaveformView(processing: true, tint: VoiceIQUI.Colors.gGreen)
+            WaveformView(processing: true, tint: VQ.Colors.accent)
             Text("Making notes…")
                 .font(VoiceIQUI.TypeScale.label())
                 .foregroundStyle(VoiceIQUI.Colors.onSurfaceVariant)
@@ -153,7 +153,7 @@ struct MeetingRecordingContent: View {
                 .foregroundStyle(VoiceIQUI.Colors.onSurfaceVariant)
         }
         // One colour, the window meter's green: red bars beside the record mark read as a warning (Fable, M6).
-        WaveformView(processing: true, tint: VoiceIQUI.Colors.gGreen)
+        WaveformView(processing: true, tint: VQ.Colors.accent)
         // The longer label always holds its place, so muting doesn't move the buttons.
         ZStack(alignment: .leading) {
             Text("Recording meeting").opacity(micMuted ? 0 : 1).accessibilityHidden(micMuted)
@@ -193,7 +193,7 @@ struct MeetingRecordingContent: View {
         } label: {
             ZStack {
                 // Red, as the Meetings window's Stop recording (Fable, M6).
-                Circle().fill(VoiceIQUI.Colors.gRed)
+                Circle().fill(VQ.Colors.record)
                 RoundedRectangle(cornerRadius: 2.5)
                     .fill(Color.white)
                     .frame(width: 10, height: 10)

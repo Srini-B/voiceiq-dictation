@@ -36,6 +36,9 @@ final class PillHUDController {
         panel.hidesOnDeactivate = false
         panel.becomesKeyOnlyIfNeeded = true
         panel.acceptsMouseMovedEvents = true
+        // The pill is a dark capsule in both appearances, so it reads over any
+        // app (docs/design/redesign-2026-11.md); its colors resolve as dark.
+        panel.appearance = NSAppearance(named: .darkAqua)
         applyScreenSharingPrivacy()
         panel.contentView = NSHostingView(
             rootView: PillRootView(model: model)

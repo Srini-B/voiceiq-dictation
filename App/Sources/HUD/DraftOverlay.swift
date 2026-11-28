@@ -66,7 +66,7 @@ final class DraftOverlay: DraftMarking {
     }
 }
 
-/// A turning arc in the brand colors: the words are on their way.
+/// A turning arc in the brand blue: the words are on their way.
 private struct DraftSpinner: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -75,7 +75,7 @@ private struct DraftSpinner: View {
             let turn = timeline.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 0.9) / 0.9
             Circle()
                 .trim(from: 0.08, to: 0.78)
-                .stroke(AngularGradient(colors: VoiceIQUI.Colors.brandQuad + [VoiceIQUI.Colors.gBlue], center: .center),
+                .stroke(AngularGradient(colors: [VQ.Colors.accent.opacity(0.15), VQ.Colors.accent], center: .center),
                         style: StrokeStyle(lineWidth: 2.4, lineCap: .round))
                 .rotationEffect(.degrees(reduceMotion ? 0 : turn * 360))
                 .padding(2)
@@ -91,7 +91,7 @@ private struct DraftUnderline: View {
     var body: some View {
         TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: reduceMotion)) { timeline in
             let phase = timeline.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 1.6) / 1.6
-            let colors = VoiceIQUI.Colors.aiShimmer
+            let colors = [VQ.Colors.accent.opacity(0.35), VQ.Colors.accent, VQ.Colors.accent.opacity(0.35)]
             GeometryReader { proxy in
                 Capsule()
                     .fill(LinearGradient(colors: colors + colors.reversed() + colors, startPoint: .leading, endPoint: .trailing))

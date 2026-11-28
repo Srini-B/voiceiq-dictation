@@ -56,7 +56,11 @@ struct PillView: View {
                     }
                     WaveformView(level: model.level, processing: false)
                     if locked {
-                        cancelButton
+                        HStack(spacing: VQ.Spacing.xs) {
+                            cancelKeyCap
+                            cancelButton
+                        }
+                        .padding(.leading, VQ.Spacing.xxs)
                         stopButton
                     }
                 }
@@ -182,6 +186,19 @@ struct PillView: View {
         .accessibilityLabel("Cancel dictation without inserting text")
     }
 
+    /// The shortcut for Cancel, shown beside it while hands-free so it can be
+    /// learned without hovering. Fits the locked pill's existing width.
+    private var cancelKeyCap: some View {
+        Text("⌘esc")
+            .font(GTFont.flex(VQ.TypeScale.caption.size, weight: VQ.TypeScale.caption.weight))
+            .foregroundStyle(VQ.Colors.onPillMuted)
+            .padding(.horizontal, 5)
+            .frame(height: 18)
+            .background(RoundedRectangle(cornerRadius: 4).fill(VQ.Colors.onPillMuted.opacity(0.15)))
+            .fixedSize()
+            .accessibilityHidden(true)
+    }
+
     private func successBadge(words: Int?) -> some View {
         VStack(spacing: VoiceIQUI.Spacing.xxs) {
             CheckmarkShape()
@@ -268,7 +285,7 @@ private struct IdleDotView: View {
             HStack(spacing: VoiceIQUI.Spacing.xs) {
                 Image(systemName: "mic.fill")
                     .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(VoiceIQUI.Colors.gBlue)
+                    .foregroundStyle(VQ.Colors.accent)
                 Text("Dictate")
                     .font(VoiceIQUI.TypeScale.label())
                     .foregroundStyle(VoiceIQUI.Colors.onSurface)
@@ -309,14 +326,15 @@ extension View {
                 // colors follow the system appearance: in dark mode over a white
                 // page the pill turned light grey under light text. A surface
                 // fill keeps the pill dark in dark mode and light in light mode.
-                self.background(Capsule().fill(VoiceIQUI.Colors.surface.opacity(0.75)))
+                self.background(Capsule().fill(VQ.Colors.pill.opacity(0.88)))
                     .glassEffect(.regular, in: .capsule)
             }
         } else {
             self.background(
                 Capsule()
-                    .fill(tint ?? VoiceIQUI.Colors.surface)
-                    .shadow(color: .black.opacity(0.20), radius: 12, y: 2)
+                    .fill(tint ?? VQ.Colors.pill)
+                    .overlay(Capsule().strokeBorder(.white.opacity(0.08), lineWidth: 1))
+                    .shadow(color: .black.opacity(0.28), radius: 14, y: 4)
             )
         }
     }
@@ -328,8 +346,9 @@ extension View {
         } else {
             self.background(
                 Circle()
-                    .fill(VoiceIQUI.Colors.surface)
-                    .shadow(color: .black.opacity(0.20), radius: 12, y: 2)
+                    .fill(VQ.Colors.pill)
+                    .overlay(Circle().strokeBorder(.white.opacity(0.08), lineWidth: 1))
+                    .shadow(color: .black.opacity(0.28), radius: 14, y: 4)
             )
         }
     }
