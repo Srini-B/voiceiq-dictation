@@ -340,7 +340,7 @@ struct DurationChip: View {
         Label(Duration.seconds(seconds).formatted(.time(pattern: .minuteSecond)), systemImage: "waveform")
             .labelStyle(.titleAndIcon)
             .font(Theme.Fonts.flex(12.5, weight: 500, style: .caption1).monospacedDigit())
-            .foregroundStyle(Theme.Colors.ink2)
+            .foregroundStyle(Theme.Colors.inkSecondary)
             .padding(.horizontal, 10)
             .frame(height: 26)
             .overlay(Capsule().strokeBorder(Theme.Colors.hairline, lineWidth: 1))
