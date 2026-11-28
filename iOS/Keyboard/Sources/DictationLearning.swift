@@ -102,6 +102,7 @@ final class DictationLearning {
         // A window that ended since the last poll ends on what was seen before this edit,
         // which then belongs to no dictation.
         tick()
+        guard tracker.isTracking else { return }
         note(context)
         tracker.observe(context, fromKeys: fromKeys)
     }
@@ -115,6 +116,7 @@ final class DictationLearning {
         if time - lastSeenAt < Self.typingPause,
            time - insertedAt < DictationEditTracker.editWindow + Self.longestWait { return }
         tracker.tick { lastSeen }
+        if !tracker.isTracking { self.lastSeen = nil }
     }
 
     /// A dictation is about to go in through the keyboard's own edits: the one before it
