@@ -236,6 +236,8 @@ private struct MeetingDetail: View {
     @Environment(\.dismiss) private var dismiss
     /// Deleted on another device while open.
     @State private var gone = false
+    /// The large title has scrolled under the bar, which then shows it instead.
+    @State private var titleHidden = false
     @State private var meta: MeetingMeta
     @State private var notes: MeetingNotes?
     @State private var transcript: [TranscriptSegment] = []
@@ -297,10 +299,11 @@ private struct MeetingDetail: View {
             }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            if let chat { MeetingChatInput(chat: chat) }
+            if let chat { MeetingChatInput(chat: chat, noun: notes?.type == nil ? "note" : "meeting") }
         }
         .themedBackground()
-        .navigationTitle(meta.displayTitle(notes: notes) ?? "Notes")
+        // Not twice: the bar shows the title only once the page's own has scrolled away (Fable, M6).
+        .navigationTitle(notes == nil || titleHidden ? meta.displayTitle(notes: notes) ?? "Notes" : "")
         .navigationBarTitleDisplayMode(.inline)
         // The title has the bar to itself; folders, redo and export are one menu (Fable, M6).
         .toolbar {
@@ -354,16 +357,17 @@ private struct MeetingDetail: View {
 
     @ViewBuilder private func notesContent(_ notes: MeetingNotes) -> some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.m) {
-            HStack(alignment: .firstTextBaseline) {
-                VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
-                    Text(meta.shownTitle(notes: notes) ?? notes.title).font(Theme.Fonts.title2()).foregroundStyle(Theme.Colors.ink)
+            VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
+                Text(meta.shownTitle(notes: notes) ?? notes.title).font(Theme.Fonts.title2()).foregroundStyle(Theme.Colors.ink)
+                    .onGeometryChange(for: Bool.self) { $0.frame(in: .global).maxY < 100 } action: { titleHidden = $0 }
+                // The kind sits on the date line, so the title has the full width.
+                HStack(spacing: Theme.Spacing.s) {
                     Text(meta.whenText).font(Theme.Fonts.footnote()).foregroundStyle(Theme.Colors.muted)
-                    if !speakers.isEmpty { people }
+                    if let kind = notes.type.flatMap(MeetingKind.init(rawValue:)) {
+                        StatusChip(text: kind.displayName, tone: .off)
+                    }
                 }
-                Spacer(minLength: Theme.Spacing.s)
-                if let kind = notes.type.flatMap(MeetingKind.init(rawValue:)) {
-                    StatusChip(text: kind.displayName, tone: .off)
-                }
+                if !speakers.isEmpty { people }
             }
             Card { Text(notes.summary).font(Theme.Fonts.body()).foregroundStyle(Theme.Colors.ink) }
         }

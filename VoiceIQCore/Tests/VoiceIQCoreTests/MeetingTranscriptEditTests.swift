@@ -47,6 +47,10 @@ final class MeetingTranscriptEditTests: XCTestCase {
         ])
         XCTAssertEqual(turns[1].lines.map(\.aside), [false, true, false, true, false])
         XCTAssertEqual(turns[1].lines.map(\.id), [lines[1].id, lines[2].id, lines[3].id, lines[5].id, lines[6].id])
+        // Written without spaces, a whole turn is one "word"; it still gets its own heading.
+        let chinese = MeetingSpeaker.turns(in: [line("you", "我们先看一下上周的数据。"),
+                                                line("s1", "注册量上周增长了百分之八，主要来自新的推荐链接。")])
+        XCTAssertEqual(chinese.map(\.speaker), ["you", "s1"])
     }
 
     private func finishedMeeting(_ transcript: [TranscriptSegment]) throws -> MeetingID {

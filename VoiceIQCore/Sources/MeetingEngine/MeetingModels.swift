@@ -105,13 +105,19 @@ public enum MeetingSpeaker {
         for segment in transcript where !isFragment(segment.text) {
             if let last = turns.last, last.speaker == segment.speaker {
                 turns[turns.count - 1].lines.append(.init(segment: segment, aside: false))
-            } else if !turns.isEmpty, segment.text.split(whereSeparator: \.isWhitespace).count <= 2 {
+            } else if !turns.isEmpty, isShortReply(segment.text) {
                 turns[turns.count - 1].lines.append(.init(segment: segment, aside: true))
             } else {
                 turns.append(TranscriptTurn(speaker: segment.speaker, lines: [.init(segment: segment, aside: false)]))
             }
         }
         return turns
+    }
+
+    /// One or two words, and short: Chinese or Japanese is written without
+    /// spaces, so a whole turn there is one "word" (Codex review).
+    static func isShortReply(_ text: String) -> Bool {
+        text.split(whereSeparator: \.isWhitespace).count <= 2 && text.count <= 20
     }
 
     static func isFragment(_ text: String) -> Bool {

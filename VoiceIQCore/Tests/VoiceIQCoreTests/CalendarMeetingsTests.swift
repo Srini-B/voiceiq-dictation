@@ -26,7 +26,7 @@ final class CalendarMeetingsTests: XCTestCase {
         let vendor: E = ("vendor", now.addingTimeInterval(-120), "Join https://acme.zoom.us/j/1")
         let soon: E = ("soon", now.addingTimeInterval(300), "Room 4")
         func pick(_ events: [E], _ source: CallSource?) -> String? {
-            CalendarMeetings.pick(events, at: now, service: source.flatMap(CalendarMeetings.service(of:)), start: \.start, text: \.text)?.name
+            CalendarMeetings.pick(events, at: now, services: source.map(CalendarMeetings.services(of:)) ?? [], start: \.start, text: \.text)?.name
         }
         let meet = CallSource.browser(bundleID: "com.google.Chrome", host: "meet.google.com")
         let zoom = CallSource.app(bundleID: "us.zoom.xos", name: "Zoom")
@@ -36,6 +36,8 @@ final class CalendarMeetingsTests: XCTestCase {
         XCTAssertNil(pick([standup, vendor], .app(bundleID: "com.tinyspeck.slackmacgap", name: "Slack")))
         XCTAssertEqual(pick([standup, soon], nil), "standup")
         XCTAssertEqual(pick([soon], zoom), "soon")
+        let teamsLive: E = ("teams", now.addingTimeInterval(-600), "https://teams.live.com/meet/123")
+        XCTAssertEqual(pick([vendor, teamsLive], .app(bundleID: "com.microsoft.teams2", name: "Microsoft Teams")), "teams")
     }
 
     func testWhenCountsMinutesForTheFirstHour() {

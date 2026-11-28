@@ -29,6 +29,13 @@ takes the deductions that were left.
   so a call that overlapped a later event took that event's title and
   invitees.
 
+- **Review fixes** (Codex and Fable at da97b09, scored 94):
+  - Search keeps the run's speaker as the heading. Before, hiding a turn's first line put an aside speaker's name over the owner's words.
+  - A reply is an aside only if it is at most 20 characters, so a Chinese or Japanese turn without spaces keeps its own heading.
+  - The Teams app matches both teams.microsoft.com and teams.live.com links.
+  - On the iPhone the note title shows once. The bar takes the title only after the page's large title has scrolled away. The kind badge sits on the date line, and the ask field says "meeting" when the badge does.
+- **Play and Download stay visible but disabled** when a meeting has no audio, as decided on 2026-11-12 (9d7dd3e). The UI fixtures have no audio, so those buttons show disabled in the captures.
+
 ## Not done
 
 - **Divider under the first day heading.** Neither `.listSectionSeparator(.hidden)`

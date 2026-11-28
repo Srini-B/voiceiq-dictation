@@ -70,13 +70,15 @@ struct MeetingChatTurns: View {
 /// The question box pinned to the bottom of a note.
 struct MeetingChatInput: View {
     @ObservedObject var chat: MeetingChatModel
+    /// "meeting" when the notes name a kind of meeting, as the badge above does.
+    var noun = "note"
     @State private var draft = ""
 
     var body: some View {
         HStack(spacing: Theme.Spacing.s) {
             // One line: a vertical field on iOS takes Return as a new line, not Send.
             // The system placeholder was 1.7:1 on the field; muted ink reads (Fable, M6).
-            TextField("Ask about this note", text: $draft, prompt: Text("Ask about this note").foregroundStyle(Theme.Colors.muted))
+            TextField("Ask about this \(noun)", text: $draft, prompt: Text("Ask about this \(noun)").foregroundStyle(Theme.Colors.muted))
                 .font(Theme.Fonts.body())
                 .submitLabel(.send)
                 .onSubmit(send)

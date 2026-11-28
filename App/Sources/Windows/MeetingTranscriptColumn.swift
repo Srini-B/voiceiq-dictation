@@ -146,14 +146,23 @@ struct MeetingTranscriptColumn: View {
         asideLast.firstLineHeadIndent = 12; asideLast.headIndent = 12
         let out = NSMutableAttributedString()
         // Grouped before the search filters, so turns apart stay apart.
-        let turns = MeetingSpeaker.turns(in: transcript)
-            .map { turn in var turn = turn; turn.lines = turn.lines.filter { matches($0.segment) }; return turn }
-            .filter { !$0.lines.isEmpty }
+        let turns = MeetingSpeaker.turns(in: transcript).compactMap { turn -> TranscriptTurn? in
+            var turn = turn
+            turn.lines = turn.lines.filter { matches($0.segment) }
+            guard let first = turn.lines.first else { return nil }
+            // Only asides matched: they read as their speaker's own lines, not under someone silent.
+            if turn.lines.allSatisfy(\.aside) {
+                turn.speaker = first.segment.speaker
+                turn.lines = turn.lines.map { var line = $0; line.aside = false; return line }
+            }
+            return turn
+        }
         for turn in turns {
-            let first = turn.lines[0].segment
-            // The heading belongs to the turn's first line, for the right-click menu.
-            out.append(NSAttributedString(string: meeting.displayName(first.speaker, notes: notes), attributes: [
-                .font: nameFont, .foregroundColor: SpeakerPalette.color(first.speaker, order: order), .paragraphStyle: head,
+            // The heading is the run's speaker even when search hid their first line (Codex);
+            // it belongs to their first shown line, for the right-click menu and the time.
+            let first = (turn.lines.first { !$0.aside } ?? turn.lines[0]).segment
+            out.append(NSAttributedString(string: meeting.displayName(turn.speaker, notes: notes), attributes: [
+                .font: nameFont, .foregroundColor: SpeakerPalette.color(turn.speaker, order: order), .paragraphStyle: head,
                 Self.segmentKey: first.id,
             ]))
             if let start = first.start {

@@ -52,7 +52,7 @@ public enum CalendarMeetings {
                                                  end: date.addingTimeInterval(earlyStart), calendars: nil)
         let candidates = store.events(matching: predicate)
             .filter { $0.startDate.addingTimeInterval(-earlyStart) <= date && date < $0.endDate && isMeeting($0) }
-        let best = pick(candidates, at: date, service: source.flatMap(service(of:)), start: \.startDate) {
+        let best = pick(candidates, at: date, services: source.map(services(of:)) ?? [], start: \.startDate) {
             [$0.url?.absoluteString, $0.location, $0.notes].compactMap { $0 }.joined(separator: " ")
         }
         guard let best, let title = best.title?.trimmingCharacters(in: .whitespacesAndNewlines), !title.isEmpty else { return nil }
@@ -65,17 +65,19 @@ public enum CalendarMeetings {
     /// title and invitees would name the speakers wrongly. Hex matches the
     /// same way (anomalyco/hex 566c99fc); the nearest start used before took
     /// whichever of two overlapping meetings began later.
-    static func pick<E>(_ events: [E], at date: Date, service: String?, start: (E) -> Date, text: (E) -> String) -> E? {
+    static func pick<E>(_ events: [E], at date: Date, services: [String], start: (E) -> Date, text: (E) -> String) -> E? {
         func only(_ list: [E]) -> E? { list.count == 1 ? list[0] : nil }
-        if let service, let match = only(events.filter { text($0).lowercased().contains(service) }) { return match }
+        let byService = events.filter { event in services.contains { text(event).lowercased().contains($0) } }
+        if let match = only(byService) { return match }
         return only(events.filter { start($0) <= date }) ?? only(events.filter { start($0) > date })
     }
 
-    /// The call service a detected call runs on, as call links name it.
-    static func service(of source: CallSource) -> String? {
+    /// The call service a detected call runs on, as call links name it; the
+    /// Teams app serves both teams.microsoft.com and teams.live.com links.
+    static func services(of source: CallSource) -> [String] {
         switch source {
-        case let .browser(_, host): return callHosts.first { host == $0 || host.hasSuffix("." + $0) }
-        case let .app(bundleID, _): return joinApps.first { $0.bundleIDs.contains(bundleID) }?.service
+        case let .browser(_, host): return callHosts.filter { host == $0 || host.hasSuffix("." + $0) }
+        case let .app(bundleID, _): return joinApps.filter { $0.bundleIDs.contains(bundleID) }.map(\.service)
         }
     }
 
