@@ -11,6 +11,23 @@ final class MeetingNotesPromptTests: XCTestCase {
         XCTAssertEqual(notes.summary, "Moved to \"Wednesday\".")
     }
 
+    /// MEASURED 2026-11-28, AMI ES2004a: "Speaker 4 noted that…" in 1 of 6
+    /// runs, and "Speaker B" (the eval's owner) in another.
+    func testSpeakerLabelsNeverReachTheNotes() throws {
+        let reply = #"{"title":"Kickoff","summary":"Speaker 4 noted the website. The team agreed with Speaker 2.","decisions":["Speaker 1 picks the colour."],"actions":[{"text":"Ask Speaker 1 for costs","owner":"Speaker 2"},{"text":"Draw","owner":"Speaker 1"}],"notes":[],"speakers":[{"label":"Speaker 1","name":"Sarah","evidence":"Thanks, Sarah"},{"label":"Speaker 2","name":null}]}"#
+
+        let notes = try MeetingNotesPrompt.parse(reply)
+
+        XCTAssertEqual(notes.summary, "Another participant noted the website. The team agreed with another participant.")
+        XCTAssertEqual(notes.decisions, ["Sarah picks the colour."])
+        XCTAssertEqual(notes.actions.map(\.text), ["Ask Sarah for costs", "Draw"])
+        XCTAssertEqual(notes.actions.map(\.owner), [nil, "Sarah"])
+
+        let prompt = MeetingNotesPrompt.build(transcript: [TranscriptSegment(speaker: "you", text: "Hi.", chunkIndex: 0, start: 1)],
+                                              context: .init(startedAt: Date(), durationSeconds: 60, app: nil, names: [:], ownerName: "Speaker B"))
+        XCTAssertFalse(prompt.contains("Speaker B"))
+    }
+
     func testNotesWithoutActionsForACommitmentAreAskedForAgain() {
         let call = [TranscriptSegment(speaker: "you", text: "Can I ask where the screenshots are?", chunkIndex: 0, start: 2, end: 4),
                     TranscriptSegment(speaker: "s1", text: "I think they're nearly done.", chunkIndex: 0, start: 5, end: 7),

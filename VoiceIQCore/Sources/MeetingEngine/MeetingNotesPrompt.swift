@@ -41,8 +41,11 @@ public enum MeetingNotesPrompt {
             return out
         }
 
+        /// A speaker label is no name: given as the owner's (the AMI eval's
+        /// "Speaker B"), the notes model wrote it into the notes as one.
         static func clean(_ name: String?) -> String? {
-            guard let name = name?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty else { return nil }
+            guard let name = name?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty,
+                  name.wholeMatch(of: MeetingNotesPrompt.speakerLabel) == nil else { return nil }
             return name
         }
     }
@@ -159,7 +162,35 @@ public enum MeetingNotesPrompt {
         if let type = notes.type, MeetingKind(rawValue: type) == nil { notes.type = MeetingKind.general.rawValue }
         notes.sections = notes.sections?.filter { !$0.items.isEmpty }
         notes.speakers = notes.speakers?.filter { !($0.name ?? "").isEmpty }
-        return notes
+        return withoutLabels(notes)
+    }
+
+    nonisolated(unsafe) static let speakerLabel = #/\bSpeaker [A-Z0-9]{1,3}\b/#
+
+    /// The prompt forbids labels outside "speakers", but the model still wrote
+    /// one in 1 of 6 AMI runs on 2026-11-28 ("Speaker 4 noted that…"). Each
+    /// becomes the name the model gave that label, else "another participant";
+    /// an action owner that is a label becomes nil, as the prompt asks.
+    static func withoutLabels(_ notes: MeetingNotes) -> MeetingNotes {
+        var names: [String: String] = [:]
+        for speaker in notes.speakers ?? [] { if let name = speaker.name { names[speaker.label] = name } }
+        func fix(_ text: String) -> String {
+            var out = text.replacing(speakerLabel) { match in names[String(match.output)] ?? "another participant" }
+            // At the start of a sentence.
+            out = out.replacing(#/(^|[.!?]\s+|\n\s*)another participant/#) { $0.output.1 + "Another participant" }
+            return out
+        }
+        var out = notes
+        out.title = fix(notes.title); out.summary = fix(notes.summary)
+        out.sections = notes.sections?.map { NoteSection(title: fix($0.title), items: $0.items.map(fix)) }
+        out.decisions = notes.decisions.map(fix); out.notes = notes.notes.map(fix)
+        out.actions = notes.actions.map { action in
+            var action = action
+            action.text = fix(action.text)
+            if let owner = action.owner, owner.wholeMatch(of: speakerLabel) != nil { action.owner = names[owner] }
+            return action
+        }
+        return out
     }
 
     /// The first whole JSON object in `text`. MEASURED 2026-11-26: on a
