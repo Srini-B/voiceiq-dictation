@@ -11,9 +11,10 @@ final class DictationLearningTests: XCTestCase {
     private let field = UUID()
     /// Each fix handed over, as "heard → term", marked when it starts a sentence.
     private var learned: [String] = []
+    private var clock: TimeInterval = 0
 
     private func makeLearning() -> DictationLearning {
-        DictationLearning(learn: { [unowned self] fix in
+        DictationLearning(now: { [unowned self] in clock }, learn: { [unowned self] fix in
             learned.append("\(fix.heard) → \(fix.term)" + (fix.startsSentence ? " (sentence start)" : ""))
         })
     }
@@ -73,6 +74,36 @@ final class DictationLearningTests: XCTestCase {
         dictate("I had lunch with Saran today.", into: learning)
         leave(learning, as: "I had lunch with Saran today.")
 
+        XCTAssertEqual(learned, [])
+    }
+
+    /// The order the keyboard really calls in: `KeyboardModel` announces the delivery
+    /// (`willInsert`), `EditController` types it and its edit callback reports the new
+    /// text, then the dictation is reported inserted. A dictation deleted and dictated
+    /// again with "Saran" for "Sharon" is not a fix the user typed.
+    func testADictationTypedAfterADeletedOneIsNotAnEditOfIt() {
+        let learning = makeLearning()
+        dictate(dictated, into: learning)
+        learning.observe(empty, in: field, fromKeys: true)
+        let again = "I had lunch with Saran today."
+        let typed = Context(before: again, after: "", hasText: true)
+        learning.willInsert(empty, in: field)
+        learning.observe(typed, in: field, fromKeys: true)
+        learning.inserted(again, before: empty, after: typed, in: field, learns: true)
+        leave(learning, as: again)
+        XCTAssertEqual(learned, [])
+    }
+
+    /// A fix made in the edit window, then the whole dictation deleted by the keys after
+    /// it: the deletion is what the dictation became.
+    func testADictationDeletedByKeysAfterTheEditWindowTeachesNothing() {
+        let learning = makeLearning()
+        dictate(dictated, into: learning)
+        clock = 10
+        learning.observe(Context(before: "I had lunch with Saran", after: " today.", hasText: true), in: field, fromKeys: true)
+        clock = DictationEditTracker.editWindow + 1
+        learning.observe(empty, in: field, fromKeys: true)
+        learning.finish(empty, in: field)
         XCTAssertEqual(learned, [])
     }
 

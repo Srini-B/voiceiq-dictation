@@ -32,6 +32,9 @@ final class KeyboardModel: ObservableObject {
     weak var editor: EditController?
     /// Called after a dictation delivery is typed so Hex's suggestion strip can offer Undo dictation.
     var onDidInsertDictation: ((String, String, String) -> Void)?
+    /// Called just before a dictation delivery is typed, while the field is as it was,
+    /// so the dictation before it settles on that text (`DictationLearning.willInsert`).
+    var onWillInsertDictation: (() -> Void)?
     private let store = SharedStore.shared
     private var observer: UUID?
     private var timer: Timer?
@@ -498,6 +501,7 @@ final class KeyboardModel: ObservableObject {
             store.markInserted(delivery)
             let waited = Int(Date().timeIntervalSince(delivery.createdAt).rounded())
             let replacesSelection = !(controller?.textDocumentProxy.selectedText ?? "").isEmpty
+            onWillInsertDictation?()
             let inserted = insert(delivery.text)
             // Hex's Undo chip only deletes the dictation; over a selection, the
             // edit panel's Undo is the one that brings the selected text back.

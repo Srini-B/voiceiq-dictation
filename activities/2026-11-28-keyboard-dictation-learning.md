@@ -34,6 +34,13 @@ Auto-learned section.
   field and the heard wording from the dictation, from the first matched
   word's start to the last's end: "I tested GPT4 today." fixed to "GPT-4"
   teaches "GPT-4" heard as "GPT4", not "GPT 4" (PR #168 review).
+- CodeRabbit on PR #168: a new dictation typed through `EditController`
+  reached the dictation before as an edit, so one deleted and dictated again
+  could teach; `KeyboardModel.onWillInsertDictation` now settles it on the
+  field as it was first. An observation applies before the edit window's
+  expiry, so a delete by the keys after the window reads as a deletion. A
+  field that stops being one Hex's journal may read (a username or password
+  field in the same session) settles the dictation and is not read.
 - The tracker remembers the input session (`documentIdentifier`) its dictation
   went into. Text from another session settles it where it was last seen, so
   moving focus to a field holding "…Saran…" no longer reads as a fix of a
@@ -71,7 +78,9 @@ Auto-learned entries are vocabulary only (no `misspelling`, so never a
   second time) hand over nothing; "Sharon went home." fixed to "Saran went
   home." hands over "Saran" with its capital, and "Sory, I'm late." fixed
   to "Sorry" is marked as a sentence start; "GPT4" fixed to "GPT-4" hands
-  over "GPT4 → GPT-4"; text in another field after a
+  over "GPT4 → GPT-4"; a dictation typed through the edit callback after a
+  deleted one, and one fixed then deleted by the keys after the window, hand
+  over nothing; text in another field after a
   dictation into an empty field hands over nothing.
 - `EditLearnerTests.testAFixFromTheIPhoneKeyboardIsLearnedByTheMacsRules`
   (VoiceIQCore, macOS): `DictionaryStore.learn` keeps "Saran" heard as

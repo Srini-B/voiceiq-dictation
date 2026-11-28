@@ -76,8 +76,18 @@ final class DictationLearning {
             return
         }
         note(context)
-        tracker.tick { context }
+        // The edit first, so a delete by the keys that empties the field after the edit
+        // window reads as a deletion, not as the host clearing it.
         tracker.observe(context, fromKeys: fromKeys)
+        tracker.tick { context }
+    }
+
+    /// A dictation is about to go in through the keyboard's own edits: the one before it
+    /// settles on the field as it is now (`context`, nil when it may not be read), so the
+    /// new text never reaches it as an edit. Hex pairs a dictation deleted and dictated
+    /// again; nothing is learned from those either way.
+    func willInsert(_ context: Context?, in document: UUID?) {
+        finish(context, in: document)
     }
 
     func undone() {

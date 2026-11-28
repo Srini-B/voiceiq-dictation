@@ -82,7 +82,7 @@ final class TypingBridge: ObservableObject {
         // A return key labelled Send ends the dictation's edit window: what is there is sent.
         view.onReturnKey = { [weak self] in
             guard let self, self.proxy?.returnKeyType == .send else { return }
-            self.learning.finish(self.editContext, in: self.documentIdentifier)
+            self.learning.finish(self.learningContext, in: self.documentIdentifier)
         }
         view.onStripRowLayout = { [weak self] row, emojiOpen in
             guard let self else { return }
@@ -130,6 +130,12 @@ final class TypingBridge: ObservableObject {
         observeDictation(fromKeys: fromKeys)
     }
 
+    /// A dictation is about to be typed through `EditController`, whose edit callback
+    /// would otherwise show its text to the dictation before it as an edit.
+    func willInsertDictation() {
+        learning.willInsert(learningContext, in: documentIdentifier)
+    }
+
     func didInsertDictation(_ text: String, before: String, after: String) {
         keyboard?.didInsertDictation(text, before: before, after: after)
         learning.inserted(text, before: .init(before: before, after: after, hasText: !(before + after).isEmpty),
@@ -138,7 +144,7 @@ final class TypingBridge: ObservableObject {
 
     /// While the text connection still reaches the field.
     func willDisappear() {
-        learning.finish(editContext, in: documentIdentifier)
+        learning.finish(learningContext, in: documentIdentifier)
     }
 
     // MARK: - Learning from fixes to dictations
@@ -154,8 +160,15 @@ final class TypingBridge: ObservableObject {
               hasText: proxy?.hasText ?? false)
     }
 
+    /// The field's text for the tracker; nil once the field is one it may not read
+    /// (it turned into a username or password field in the same input session).
+    private var learningContext: DictationLearning.Context? {
+        learnsFromDictation ? editContext : nil
+    }
+
     private func observeDictation(fromKeys: Bool) {
-        learning.observe(editContext, in: documentIdentifier, fromKeys: fromKeys)
+        guard let context = learningContext else { return learning.finish(nil) }
+        learning.observe(context, in: documentIdentifier, fromKeys: fromKeys)
     }
 
     func loadLexicon(_ lexicon: UILexicon) {

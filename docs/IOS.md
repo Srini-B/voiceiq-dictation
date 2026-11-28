@@ -827,8 +827,11 @@ around the cursor when it goes in, through every edit by the keys, the edit
 panel or the app, until the keyboard hides, Send is tapped, the next
 dictation goes in, focus moves to another field (another
 `documentIdentifier`: the dictation settles where it was last seen, so the
-other field's text never reads as an edit of it) or an edit comes more than a
-minute after it went in. It
+other field's text never reads as an edit of it), the field stops being one
+it may read, or an edit comes more than a minute after it went in. A new
+dictation settles the one before on the field as it was just before it goes
+in (`KeyboardModel.onWillInsertDictation`), since `EditController` reports
+typing it as an edit. It
 needs Full Access, like everything the keyboard hands the app, and runs only
 in fields Hex's journal may learn from (`TypingJournal.allows`: text and web
 search fields that allow autocorrect, never a secure field, a password, code,
