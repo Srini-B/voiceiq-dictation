@@ -38,11 +38,10 @@ the right to contribute it under this repository's license.
 
 ## Ground rules
 
-1. **Swift, Apple platforms, Gemini models.** macOS and iOS, native
-   frameworks only. Gemini models only, reached on Google's Gemini API with
-   the user's own key (see `docs/design/architecture.md`). No on-device
-   speech models, no other model families, no gateways, no cross-platform
-   layers.
+1. **Swift, Apple platforms, AssemblyAI.** macOS and iOS, native
+   frameworks only. AssemblyAI only: its speech-to-text API and its LLM
+   Gateway, with the user's own key (see `docs/design/architecture.md`). No
+   other model providers, no other gateways, no cross-platform layers.
 2. **Share code through `VoiceIQCore`.** Logic both apps need goes in the
    package, not in `App/` or `iOS/`. Mac-only code is wrapped in
    `#if os(macOS)`; its iPhone stand-in lives in a sibling file ending
@@ -67,7 +66,7 @@ the right to contribute it under this repository's license.
    uses standard SwiftUI controls and the `Brand` colors in
    `iOS/App/Sources/VoiceIQMobileApp.swift`.
 8. **Prompt changes need evidence in the PR.** `PromptV1.swift` is the
-   dictation prompt: one call hears the recording and writes the text. Run
+   dictation prompt: the writing model gets the transcript and writes the text. Run
    the eval set in `eval/SCORECARD.md` on main and on your branch and put both
    scores in the PR. It covers a self-correction, a spoken list,
    question-shaped speech, spoken punctuation, an all-filler take, a spoken
@@ -78,7 +77,7 @@ the right to contribute it under this repository's license.
    network I/O begins; every failure writes a terminal status; errors are never
    modal; nothing is silently discarded.
 10. **No telemetry.** PRs adding analytics, tracking, or phone-home behavior will
-   be declined. The only model service is the Gemini API, with the user's
+   be declined. The only model service is AssemblyAI, with the user's
    key.
 11. **Keep files small.** Around 500 lines per source file; split when it improves
    clarity, not to hit a number.

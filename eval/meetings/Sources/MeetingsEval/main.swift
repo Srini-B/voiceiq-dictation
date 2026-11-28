@@ -3,10 +3,10 @@ import VoiceIQCore
 import VoiceIQInference
 import VoiceIQSpeech
 
-// Usage: GEMINI_API_KEY=… swift run -c release MeetingsEval DATA_DIR OUT_DIR [meeting-id …]
+// Usage: ASSEMBLYAI_API_KEY=… swift run -c release MeetingsEval DATA_DIR OUT_DIR [meeting-id …]
 //
 // For each meeting prepare.py wrote, does what MeetingEngine does after a
-// recording stops: transcribe (Gemini + the on-device speaker model), match
+// recording stops: transcribe (AssemblyAI STT-3.7 + the on-device speaker model), match
 // the call window's names, write the notes, and name the speakers the way the
 // meeting screen shows them. Writes OUT_DIR/<id>.json for the scorer.
 
@@ -28,7 +28,7 @@ struct Output: Encodable {
     var participants: [String]
     var notes: String
     var seconds: [String: Double]
-    /// Every Gemini call the meeting made, as `UsageMeter` recorded it, priced
+    /// Every AssemblyAI call the meeting made, as `UsageMeter` recorded it, priced
     /// by `PriceBook` at January 2027 prices. Without transcription calls when EVAL_TRANSCRIPTS was set.
     var usage: [Call]
     var duration_seconds: Double
@@ -81,13 +81,13 @@ func diarizerDirectory() async -> URL {
 setvbuf(stdout, nil, _IOLBF, 0)
 let args = CommandLine.arguments
 guard args.count >= 3 else { fail("usage: MeetingsEval DATA_DIR OUT_DIR [meeting-id …]") }
-guard let key = ProcessInfo.processInfo.environment["GEMINI_API_KEY"], !key.isEmpty else { fail("GEMINI_API_KEY is not set") }
+guard let key = ProcessInfo.processInfo.environment["ASSEMBLYAI_API_KEY"], !key.isEmpty else { fail("ASSEMBLYAI_API_KEY is not set") }
 let data = URL(fileURLWithPath: args[1]), out = URL(fileURLWithPath: args[2])
 let only = Set(args.dropFirst(3))
 try FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
 
-let config = GeminiConfig()
-let client = GeminiClient(apiKey: { key })
+let config = AssemblyAIConfig()
+let client = AssemblyAIClient(apiKey: { key })
 // EVAL_NO_SPEAKER_MODEL=1 runs without the on-device speaker model, as an
 // install that never downloaded it did before it was fetched automatically.
 // EVAL_TRANSCRIPTS=DIR takes each meeting's transcript from an earlier run's
@@ -103,9 +103,8 @@ if let diarizer {
             LocalMeetingRequest(speechDirectory: nil, diarizerDirectory: diarizer, audio: audio)).segments
     }
 }
-let transcriber = MeetingTranscriber(client: client, models: .init(transcribe: config.transcribeModel),
-                                     endpoint: config.endpoint, diarizeFarSide: diarizeFarSide)
-// Priced as of January 2027, the prices the C1 cost gate uses (gemini-3.8-flash doubles then).
+let transcriber = MeetingTranscriber(client: client, diarizeFarSide: diarizeFarSide)
+// Priced as of January 2027, the date the C1 cost gate uses.
 let pricedAt = ISO8601DateFormatter().date(from: "2027-01-02T00:00:00Z")!
 let scratch = FileManager.default.temporaryDirectory.appendingPathComponent("meetings-eval-usage-\(UUID().uuidString).sqlite")
 let usageStore = try UsageStore(databaseURL: scratch)
@@ -162,10 +161,15 @@ exit(failures == 0 ? 0 : 2)
         try await client.meetingNotes(prompt: MeetingNotesPrompt.build(transcript: transcript, context: .init(
             startedAt: meta.startedAt, durationSeconds: meta.durationSeconds, app: input.app, names: [:],
             screenNames: meta.screenNames, ownerName: input.owner, calendarEvent: meta.calendarEvent)),
-            transcript: transcript, model: config.writingModel, endpoint: config.endpoint, deadline: 300)
+            transcript: transcript, model: config.writingModel, deadline: 300)
     }
     // As MeetingEngine.writeNotes does: a voice named by elimination gets the notes written again.
-    var notes = try await write(meta)
+    // An account without a gateway balance still scores the transcript (M2–M4).
+    var notes: MeetingNotes
+    do { notes = try await write(meta) } catch TranscriptionError.noBalance {
+        print("\(input.id): no gateway balance; transcript only")
+        notes = MeetingNotes(title: "Meeting", summary: "", decisions: [], actions: [], notes: [])
+    }
     let named = ScreenSpeakerNames.byElimination(meta: meta, transcript: transcript, notes: notes)
     if named != meta.screenNames {
         meta.screenNames = named
@@ -193,7 +197,7 @@ exit(failures == 0 ? 0 : 2)
     let calls = usageStore.records(forSession: input.id).map { r in
         Output.Call(stage: r.stage, model: r.model, text_in: r.textIn, audio_in: r.audioIn, image_in: r.imageIn,
                     cached_in: r.cachedIn, text_out: r.textOut, audio_out: r.audioOut, thought_out: r.thoughtOut,
-                    estimated: r.isEstimated, cost_usd: PriceBook.cost(model: r.model, usage: r.usage, at: pricedAt))
+                    estimated: r.isEstimated, cost_usd: PriceBook.cost(model: r.model, usage: r.usage, at: pricedAt) ?? r.costUSD)
     }
     let total = { (calls: [Output.Call]) -> Double? in
         calls.allSatisfy { $0.cost_usd != nil } ? calls.compactMap(\.cost_usd).reduce(0, +) : nil

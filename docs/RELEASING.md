@@ -31,7 +31,8 @@ preflight (tools, identity, credentials)
    number must be higher than every build already on TestFlight or GitHub.
 2. Confirm `./scripts/build.sh` and `./scripts/build-ios.sh` pass.
 3. Confirm the production models are available with a real dictation
-   (`gemini-3.8-flash`) and a short meeting (`gemini-3.5-transcribe`).
+   (STT-3.7 Realtime and `gpt-6-luna` on the LLM Gateway) and a short
+   meeting (STT-3.7 with speaker labels).
 
 No model weights ship in either app bundle; downloaded on-device models live
 in Application Support. The Mac UI links `VoiceIQCore`; the keyboard

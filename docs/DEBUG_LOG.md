@@ -43,18 +43,20 @@ Each process writes its own file per day, such as
 `debug-2026-11-12-app.log` and `debug-2026-11-12-keyboard.log`. Two processes never write the same file. A line looks like:
 
 ```text
-2026-11-22 14:03:22.481 app notice [transcription] call transcribe (gemini-3.8-flash) id=… attempt=1 h2 ok in 812ms, first byte 640ms, sent 52311 bytes
+2026-11-22 14:03:22.481 app notice [transcription] call cleanup (gpt-6-luna) id=… attempt=1 h2 ok in 812ms, first byte 640ms, sent 5231 bytes
 ```
 
-A dictation also gets a `[transcription] timing:` line once its one Gemini
-call ends: the FLAC encode, the dictation call that hears the audio and
-writes the text, the model, the word count and the audio length. An upload
-that fails before any text has none. Every dictation that reaches insertion
+A dictation also gets two `[transcription] timing:` lines: one when its
+transcript is ready (from key-up, with the speech model: STT-3.7 Realtime
+when the stream held, pre-recorded STT-3.7 or Universal-2 when it did not)
+and one when the writing model has written the text. A dictation that fails
+before any text has none. Every dictation that reaches insertion
 gets one `[session] timing` line from key-up to the result; a dictation that
 fails before then has none:
 
 ```text
-… app notice [transcription] timing: encode 31ms, dictation call 2604ms (gemini-3.8-flash), 41 words, 18.2s audio
+… app notice [transcription] timing: transcript 180ms (assemblyai-stt-3-7-realtime), 18.2s audio
+… app notice [transcription] timing: key-up to text 2620ms
 … app notice [session] timing 26A1A1D4-…: finalize 233ms, upload 2638ms, insert 133ms, key-up to done 3004ms
 ```
 

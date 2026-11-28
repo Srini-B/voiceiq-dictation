@@ -5,7 +5,7 @@ public extension Notification.Name {
     /// with `object` = "sync" when `MeetingSync` made the change and
     /// `userInfo[MeetingStore.idKey]` = the meeting's id.
     static let gtMeetingsDidChange = Notification.Name("io.blue.voiceiq.meetings-changed")
-    /// A Gemini key was saved (`KeychainStore.saveAPIKey`).
+    /// An AssemblyAI key was saved (`KeychainStore.saveAPIKey`).
     static let apiKeySaved = Notification.Name("io.blue.voiceiq.api-key-saved")
 }
 

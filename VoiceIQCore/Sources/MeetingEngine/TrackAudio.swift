@@ -264,11 +264,4 @@ public struct AssembledAudio: Sendable {
         let begin = piece.track + min(max(0, start - piece.at), piece.length)
         return begin...max(begin, piece.track + min(max(0, finish - piece.at), piece.length))
     }
-
-    /// Meeting time for a time inside the body, or nil for anchor audio.
-    public func trackTime(_ seconds: Double) -> Double? {
-        guard seconds >= bodyStart - 0.2, seconds <= duration + 1,
-              let piece = pieces.last(where: { $0.at <= seconds + 0.05 }) ?? pieces.first else { return nil }
-        return piece.track + min(max(0, seconds - piece.at), piece.length)
-    }
 }

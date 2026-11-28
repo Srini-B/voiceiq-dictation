@@ -4,7 +4,7 @@ A full QWERTY keyboard with VoiceiQ dictation on one tap and a cursor control
 panel. The keyboard never records or calls a model. It sends
 commands to the VoiceiQ app, which records, transcribes with your own API key,
 and hands the text back.
-Like the Mac, it runs Gemini models with your own Gemini API key.
+Like the Mac, it runs on AssemblyAI with your own AssemblyAI API key.
 
 ## Targets
 
@@ -33,7 +33,7 @@ second, extension-safe library in the same package.
 ```
 Keyboard ──command + Darwin ping──▶ App Group ──▶ App (background audio)
    ▲                                                   │ DictationCoordinator
-   └──────snapshot + Darwin ping ◀── App Group ◀───────┘ → Gemini
+   └──────snapshot + Darwin ping ◀── App Group ◀───────┘ → AssemblyAI
 ```
 
 `VoiceIQBridge` defines the protocol:
@@ -455,7 +455,7 @@ Permissions can be taken back after onboarding (2026-09-30):
 Onboarding saves its page in `MobileSettings.onboardingStep`,
 so a trip to Settings resumes on the same page.
 
-Onboarding has four pages: welcome, the Gemini API key, permissions
+Onboarding has four pages: welcome, the AssemblyAI API key, permissions
 (microphone and keyboard together), and a Try it field.
 
 ### Design system
@@ -484,7 +484,7 @@ far-side reference, so `MeetingTranscriber.callAudio` skips echo cancellation
 (the WebRTC AEC3 xcframework ships a macOS slice only and is not linked on
 iOS). Speaker linking, meeting-type notes, suggested speaker names and Redo
 (notes only, or transcript and notes) work as on the Mac. Dictation is refused
-while notes record. Notes are transcribed by Gemini after you stop, as on the
+while notes record. Notes are transcribed by AssemblyAI after you stop, as on the
 Mac; there is no live transcript while they record.
 Folders work as on the Mac (MEETINGS.md, Folders): the folder button in the
 list's toolbar shows one folder and makes, renames, or deletes folders; the
@@ -804,15 +804,16 @@ runs. Everything needs Full Access.
 | Pill | Keyboard status plus Dynamic Island |
 | AX and paste insertion | `textDocumentProxy.insertText` |
 | Paste last | Paste last |
-| Gemini API key | Same, in Settings › API Key and the iOS Keychain. The key card carries Gemini's favicon from `Assets.xcassets/ProviderGemini.imageset` (`BrandTile`) |
+| AssemblyAI API key | Same, in Settings › API Key and the iOS Keychain. The key card shows an SF Symbol tile (`BrandTile`) |
 | History stats: words, dictations, WPM, audio time, time saved, day streak, with a period menu | Statistics (`StatsView`), opened from the row above History's days or from Home's stats grid. Same `HistoryStore.stats(period:)` and the same remembered period (`historyStatsPeriod`); the Mac's streak tooltip (longest streak, active days) is a line under the tiles. Home's grid shows all time |
 | Dictionary with search, CSV and Auto-learned | Same, synced through iCloud, plus adding a selection or a copied word from the keyboard |
 | Custom rules; spelling from the region | Same: custom rules in Settings › Dictation, spelling from the iPhone's region |
 | `[transcription] timing:` and `[session] timing` debug log lines | Same lines, in the app's debug log file |
 | Microphone picker | Microphone: Automatic, iPhone or Bluetooth (see the voice session section) |
 | History, retry, crash recovery, retention | Same. The detail shows Pipeline, the seconds from Stop to the text being ready (`DictationRecord.pipelineSeconds`, as on the Mac; absent for dictations synced from the Mac), the cost and one row per stage and model (stage, model, call count when above one, summed cost; `UsageLine.lines` over `UsageStore.records(forSession:)`), and Copy turns into "Copied" with a checkmark and a success haptic for 1.5 s |
-| Cost for Gemini (plus OpenAI, ElevenLabs or Claude while History has calls booked to them), periods and Detailed | Same |
-| Advanced: Dictation model and Meeting model | Same, as Dictation and Notes, plus the session log |
+| Cost for AssemblyAI (plus Gemini, OpenAI, ElevenLabs or Claude while History has calls booked to them), periods and Detailed | Same |
+| Advanced: Writing model | Same, plus the session log |
+| Language picker in Settings › Dictation | Same, in Settings › Dictation |
 | Screen context | Not on iOS: an app cannot capture other apps' screens (`PlatformStubs+iOS.swift`) |
 | Text around the cursor sent with each dictation | Not yet: the keyboard reads it to fit spaces and capitals, but does not hand it to the app |
 | Learning from your edits | Not yet: needs the keyboard to read the field again after the text lands |

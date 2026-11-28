@@ -1,7 +1,7 @@
 import SwiftUI
 import VoiceIQCore
 
-/// Cost for Gemini, and for each retired provider while History still has
+/// Cost for AssemblyAI, and for each retired provider while History still has
 /// its calls.
 /// Period totals, cost per action, and in Detailed the per-model table and
 /// the most recent calls.
@@ -29,8 +29,8 @@ struct UsageView: View {
         }
     }
 
-    @State private var source = CostSource.gemini
-    /// Gemini, plus each retired provider while it has rows (`reload`).
+    @State private var source = CostSource.assemblyAI
+    /// AssemblyAI, plus each retired provider while it has rows (`reload`).
     @State private var sources = CostSource.allCases.filter(\.isCurrent)
     @State private var period: Period = .month
     @AppStorage("costPaneDetailed") private var detailed = false
@@ -133,7 +133,7 @@ struct UsageView: View {
     private func reload() {
         guard let store = UsageMeter.store else { return }
         sources = CostSource.allCases.filter { $0.isCurrent || store.total(source: $0).calls > 0 }
-        if !sources.contains(source) { source = .gemini }
+        if !sources.contains(source) { source = .assemblyAI }
         total = store.total(since: period.start, source: source)
         byActivity = store.totalsByActivity(since: period.start, source: source)
         byModel = store.totalsByModel(since: period.start, source: source)

@@ -27,6 +27,12 @@ public final class AudioCaptureEngine: AudioCapturing, @unchecked Sendable {
     public var onDeviceChange: (@Sendable (String) -> Void)?
     public var onWriteFailure: (@Sendable () -> Void)?
     public var onEngineDied: (@Sendable (String) -> Void)?
+    /// Guarded by `stateLock`: the coordinator sets it while the write queue reads it.
+    public var onSamples: (@Sendable ([Int16]) -> Void)? {
+        get { stateLock.withLock { samplesHandler } }
+        set { stateLock.withLock { samplesHandler = newValue } }
+    }
+    private var samplesHandler: (@Sendable ([Int16]) -> Void)?
 
     private let targetFormat = AVAudioFormat(
         commonFormat: .pcmFormatInt16, sampleRate: 16_000, channels: 1, interleaved: true
@@ -55,8 +61,6 @@ public final class AudioCaptureEngine: AudioCapturing, @unchecked Sendable {
     private let queue = DispatchQueue(label: "io.blue.voiceiq.audio.write", qos: .userInitiated)
     private let stateLock = NSLock()
     private var framesWritten: Int64 = 0
-    /// What has been written, for send-on-pause. Guarded by `stateLock`.
-    private var recorded = RecordedSpeech()
     private var stopped = false
     private var startedAt: Date?
     private var gapMarkers: [Double] = []
@@ -149,7 +153,6 @@ public final class AudioCaptureEngine: AudioCapturing, @unchecked Sendable {
         }
         stateLock.lock()
         framesWritten = 0
-        recorded = RecordedSpeech()
         stopped = false
         gapMarkers = []
         startedAt = Date()
@@ -201,18 +204,6 @@ public final class AudioCaptureEngine: AudioCapturing, @unchecked Sendable {
         isPrewarmed = false
         try buildAndStartEngine(reason: "start")
         armFirstBufferWatchdog(generation: generation)
-    }
-
-    public func pausedSpeech(after pause: Double, minimumSpeech: Double) -> Range<AVAudioFramePosition>? {
-        withStateLock { recorded.pausedSpeech(after: pause, minimumSpeech: minimumSpeech) }
-    }
-
-    public func recordedSamples(in range: Range<AVAudioFramePosition>) -> [Int16]? {
-        withStateLock { recorded.samples(in: range) }
-    }
-
-    public func trailingSilence() -> Double? {
-        withStateLock { recorded.trailingSilence }
     }
 
     public func stop() async -> AudioCaptureResult {
@@ -718,11 +709,11 @@ public final class AudioCaptureEngine: AudioCapturing, @unchecked Sendable {
             try writer.write(out)
             stateLock.lock()
             framesWritten += Int64(out.frameLength)
-            if let samples = out.int16ChannelData?[0] {
-                recorded.append(UnsafeBufferPointer(start: samples, count: Int(out.frameLength)))
-            }
             consecutiveWriteFailures = 0
             stateLock.unlock()
+            if let onSamples, let samples = out.int16ChannelData?[0] {
+                onSamples(Array(UnsafeBufferPointer(start: samples, count: Int(out.frameLength))))
+            }
             // A stop() waiting on the tail can finish once this buffer reaches
             // key-up.
             resumeTailWaiterIfCaughtUp()

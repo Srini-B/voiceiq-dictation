@@ -1,34 +1,36 @@
 import Foundation
 import VoiceIQSpeech
 
-/// Who turns dictation into text: Gemini (the
-/// default) or a Fluid Speech model on this device.
+/// Who turns dictation into text: AssemblyAI (the default) or a Fluid Speech
+/// model on this device. AssemblyAI's raw value is "gemini", the provider
+/// builds before 0.7.18 stored, so the choice carries over.
 public enum TranscriptionSource: String, CaseIterable, Sendable, Identifiable {
-    case gemini
+    case assemblyAI = "gemini"
     case onDevice
 
     public var id: String { rawValue }
 
     public var displayName: String {
         switch self {
-        case .gemini: return "Gemini"
+        case .assemblyAI: return "AssemblyAI"
         case .onDevice: return "On device"
         }
     }
 }
 
-/// Who applies the writing rules to an on-device dictation: Gemini, or
-/// nobody, so the words never leave the device. With Off, a dictation is tidied on the device (`TidyStyle`). A
-/// Gemini transcript is always written by the rules in the same request.
+/// Who applies the writing rules to a dictation: the writing model on
+/// AssemblyAI's LLM Gateway, or nobody, so an on-device transcript never
+/// leaves the device. With Off, a dictation is tidied on the device
+/// (`TidyStyle`). The raw value "gemini" is what builds before 0.7.18 stored.
 public enum CleanupSource: String, CaseIterable, Sendable, Identifiable {
-    case gemini
+    case assemblyAI = "gemini"
     case none
 
     public var id: String { rawValue }
 
     public var displayName: String {
         switch self {
-        case .gemini: return "Gemini"
+        case .assemblyAI: return "AssemblyAI"
         case .none: return "Off"
         }
     }
@@ -36,7 +38,7 @@ public enum CleanupSource: String, CaseIterable, Sendable, Identifiable {
 
 public extension SettingsStore {
     /// Who transcribes dictation. On a device without local models it reads
-    /// as Gemini.
+    /// as AssemblyAI.
     var dictationSource: TranscriptionSource { source(forKey: "transcriptionSource") }
 
     func setDictationSource(_ source: TranscriptionSource) {
@@ -45,14 +47,14 @@ public extension SettingsStore {
 
     var localTranscriptionEnabled: Bool { dictationSource == .onDevice }
 
-    /// Who applies the writing rules to an on-device dictation. Gemini unless
-    /// the user chose Off. "onDevice", stored by 0.7.15 and earlier for the
+    /// Who applies the writing rules to a dictation. AssemblyAI unless the
+    /// user chose Off. "onDevice", stored by 0.7.15 and earlier for the
     /// retired on-device writer, reads as Off, so a local-only choice never
-    /// turns into Gemini.
+    /// turns into a cloud call.
     var cleanupSource: CleanupSource {
         switch Self.defaults.string(forKey: "cleanupSource") {
         case "onDevice": return .none
-        case let stored: return stored.flatMap(CleanupSource.init(rawValue:)) ?? .gemini
+        case let stored: return stored.flatMap(CleanupSource.init(rawValue:)) ?? .assemblyAI
         }
     }
 
@@ -100,7 +102,7 @@ public extension SettingsStore {
     }
 
     private func source(forKey key: String) -> TranscriptionSource {
-        let stored = Self.defaults.string(forKey: key).flatMap(TranscriptionSource.init(rawValue:)) ?? .gemini
-        return LocalModelSupport.isAvailable ? stored : .gemini
+        let stored = Self.defaults.string(forKey: key).flatMap(TranscriptionSource.init(rawValue:)) ?? .assemblyAI
+        return LocalModelSupport.isAvailable ? stored : .assemblyAI
     }
 }

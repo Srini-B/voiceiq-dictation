@@ -2,7 +2,7 @@
 import PackageDescription
 
 // MeetingsEval runs prepared meetings through VoiceiQ's own meeting code:
-// Gemini for the words, the on-device speaker model for the far side, the
+// AssemblyAI STT-3.7 for the words, the on-device speaker model for the far side, the
 // screen and calendar names, and the notes request. LocalMeetingsEval runs
 // them fully on device, as the app does and through a port of Hex's offline
 // pass, and makes no network call beyond the model downloads. See README.md.

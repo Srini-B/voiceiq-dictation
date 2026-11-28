@@ -6,7 +6,7 @@ Rules for every model call in the meeting pipeline. They were collected on 2026-
 
 | Stage | Code |
 | --- | --- |
-| Transcript and speakers | `MeetingTranscriber`, `CallAudio`, `SpeakerLinker`, and `GeminiClient.transcribeSpeakers`. The pipeline is described in `docs/design/architecture.md` under **Meeting transcription**. |
+| Transcript and speakers | `MeetingTranscriber`, `CallAudio`, `SpeakerLinker`, and `AssemblyAIClient.transcribeSpeakers`. The pipeline is described in `docs/design/architecture.md` under **Meeting transcription**. |
 | Notes, meeting type, and speaker names | `MeetingNotesPrompt.rules` and `MeetingKind`. The notes model also suggests speaker names, so there is no separate naming call. |
 
 The research on 2026-09-27 found four pipeline defects that no prompt could fix. All four are now fixed:

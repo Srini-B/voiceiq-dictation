@@ -22,10 +22,10 @@ final class TransportTests: XCTestCase {
     func testLostConnectionRetriesOnceOnANewConnection() async throws {
         let server = try ScriptedServer(dropFirst: 1)
         defer { server.stop() }
-        let client = GeminiClient(apiKey: { "test" })
+        let client = AssemblyAIClient(apiKey: { "test" })
 
-        let data = try await client.post(path: "v1beta/models/m:generateContent", body: Data("{}".utf8),
-                                         endpoint: server.url, deadline: 10, modelLabel: "m", stage: .transcribe)
+        let data = try await client.send(url: server.url.appendingPathComponent("v1/chat/completions"), body: Data("{}".utf8),
+                                         deadline: 10, modelLabel: "m", stage: .transcribe)
 
         XCTAssertEqual(String(decoding: data, as: UTF8.self), ScriptedServer.okBody)
         let requests = server.requests
@@ -46,10 +46,10 @@ final class TransportTests: XCTestCase {
     func testTwoLostConnectionsReportOffline() async throws {
         let server = try ScriptedServer(dropFirst: 2)
         defer { server.stop() }
-        let client = GeminiClient(apiKey: { "test" })
+        let client = AssemblyAIClient(apiKey: { "test" })
 
         do {
-            _ = try await client.post(path: "x", body: Data("{}".utf8), endpoint: server.url, deadline: 10,
+            _ = try await client.send(url: server.url.appendingPathComponent("x"), body: Data("{}".utf8), deadline: 10,
                                       modelLabel: "m", stage: .transcribe)
             XCTFail("expected a failure")
         } catch {
@@ -61,9 +61,9 @@ final class TransportTests: XCTestCase {
     func testEveryRequestOpensItsOwnConnection() async throws {
         let server = try ScriptedServer(dropFirst: 0)
         defer { server.stop() }
-        let client = GeminiClient(apiKey: { "test" })
+        let client = AssemblyAIClient(apiKey: { "test" })
         for _ in 0..<2 {
-            _ = try await client.post(path: "x", body: Data("{}".utf8), endpoint: server.url, deadline: 10,
+            _ = try await client.send(url: server.url.appendingPathComponent("x"), body: Data("{}".utf8), deadline: 10,
                                       modelLabel: "m", stage: .cleanup)
         }
         let requests = server.requests
@@ -84,9 +84,9 @@ final class TransportTests: XCTestCase {
 
 /// A local HTTP/1.1 server that reads each request, then closes the first
 /// `dropFirst` connections without answering (the client sees -1005) and
-/// answers the rest with 200 and `reply`.
+/// answers the rest with `status` and `reply`.
 final class ScriptedServer: @unchecked Sendable {
-    static let okBody = #"{"candidates":[{"content":{"parts":[{"text":"ok"}]}}]}"#
+    static let okBody = #"{"choices":[{"message":{"content":"ok"}}]}"#
 
     struct Request {
         let connection: Int
@@ -102,13 +102,15 @@ final class ScriptedServer: @unchecked Sendable {
     private var recorded: [Request] = []
     private var dropsLeft: Int
     private let reply: String
+    private let status: Int
     private var connectionCount = 0
     private(set) var url: URL!
 
     var requests: [Request] { lock.lock(); defer { lock.unlock() }; return recorded }
 
-    init(dropFirst: Int = 0, reply: String = ScriptedServer.okBody) throws {
+    init(dropFirst: Int = 0, status: Int = 200, reply: String = ScriptedServer.okBody) throws {
         dropsLeft = dropFirst
+        self.status = status
         self.reply = reply
         listener = try NWListener(using: .tcp, on: .any)
         let ready = DispatchSemaphore(value: 0)
@@ -153,7 +155,7 @@ final class ScriptedServer: @unchecked Sendable {
             return
         }
         let body = Data(reply.utf8)
-        let head = "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: \(body.count)\r\nConnection: keep-alive\r\n\r\n"
+        let head = "HTTP/1.1 \(status) \(status == 200 ? "OK" : "Error")\r\nContent-Type: application/json\r\nContent-Length: \(body.count)\r\nConnection: keep-alive\r\n\r\n"
         connection.send(content: Data(head.utf8) + body, completion: .contentProcessed { _ in })
     }
 

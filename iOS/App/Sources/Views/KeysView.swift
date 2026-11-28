@@ -17,14 +17,14 @@ struct KeysView: View {
     }
 }
 
-/// The Gemini key, the only one VoiceiQ uses.
+/// The AssemblyAI key, the only one VoiceiQ uses.
 struct ModelKeysForm: View {
     var body: some View {
         KeyCard()
     }
 }
 
-/// The saved-or-not Gemini key, with its purpose, a field and its actions.
+/// The saved-or-not AssemblyAI key, with its purpose, a field and its actions.
 private struct KeyCard: View {
     @State private var text = ""
     @State private var stored = false
@@ -36,13 +36,13 @@ private struct KeyCard: View {
     var body: some View {
         Card {
             HStack(spacing: Theme.Spacing.m) {
-                BrandTile(image: "ProviderGemini", size: 32)
-                Text("Gemini").font(Theme.Fonts.headline()).foregroundStyle(Theme.Colors.ink)
+                BrandTile(systemImage: "waveform", size: 32)
+                Text("AssemblyAI").font(Theme.Fonts.headline()).foregroundStyle(Theme.Colors.ink)
                 Spacer(minLength: 0)
                 if stored {
                     StatusChip(text: "Saved", tone: .done)
                 } else {
-                    Link(destination: URL(string: "https://aistudio.google.com/apikey")!) {
+                    Link(destination: URL(string: "https://www.assemblyai.com/dashboard/api-keys")!) {
                         Label("Get a key", systemImage: "arrow.up.right")
                             .labelStyle(TrailingIconLabelStyle())
                             .font(Theme.Fonts.label())
@@ -50,7 +50,7 @@ private struct KeyCard: View {
                     }
                 }
             }
-            Text("Google's Gemini API, with a free tier. Stored in your \(UIDevice.current.localizedModel)'s Keychain and only ever sent to Google.")
+            Text("AssemblyAI, with $50 of free credit at sign-up; the writing step needs a small balance, since the free credit doesn't cover the LLM Gateway. Stored in your \(UIDevice.current.localizedModel)'s Keychain and only ever sent to AssemblyAI.")
                 .font(Theme.Fonts.footnote())
                 .foregroundStyle(Theme.Colors.muted)
                 .fixedSize(horizontal: false, vertical: true)
@@ -120,10 +120,10 @@ private struct KeyCard: View {
         guard !key.isEmpty, !checking else { return }
         checking = true
         defer { checking = false }
-        let check = await GeminiClient(apiKey: { key }).validateKey(endpoint: SettingsStore().geminiConfig.endpoint)
+        let check = await AssemblyAIClient(apiKey: { key }).validateKey()
         switch check {
         case .rejected(let detail):
-            message = detail ?? "Gemini rejected that key."
+            message = detail ?? "AssemblyAI rejected that key."
             return
         case .valid, .unreachable:
             guard KeychainStore.saveAPIKey(key) else {

@@ -54,6 +54,7 @@ struct DictationPane: View {
     @State private var pressReturnApps = SettingsStore().pressReturnApps
     @State private var preferredMicrophone = SettingsStore().preferredInputDeviceUID
     @State private var microphones = AudioInputDevices.list()
+    @State private var language = SettingsStore().dictationLanguage
 
     var body: some View {
         Form {
@@ -113,6 +114,14 @@ struct DictationPane: View {
             }
             .onChange(of: pressReturnApps) { _, apps in settings.setPressReturnApps(apps) }
 
+            Section {
+                SearchablePicker("Language", selection: $language,
+                                 options: DictationLanguage.all.map { SearchOption(value: $0, name: $0.name) })
+                .onChange(of: language) { _, language in settings.setDictationLanguage(language) }
+            } footer: {
+                Text("English is the default. STT-3.7 languages are transcribed as you speak; languages marked Universal-2 are transcribed after you stop and take a few seconds longer.")
+            }
+
             SpeechSourceSection(device: "Mac") { Text($0) }
 
             Section {
@@ -147,7 +156,7 @@ struct DictationPane: View {
             } header: {
                 Text("Custom rules")
             } footer: {
-                Text("Gemini hears each dictation and writes it in one step, by the built-in writing rules and yours: corrections you speak later fix what you said earlier, grammar is fixed, sentences are split by grammar rather than pauses, and the layout follows what you said. Spelling follows your Mac's region. Words you change after a dictation lands are added to the Dictionary.")
+                Text("AssemblyAI transcribes each dictation as you speak, then a writing model on AssemblyAI writes it by the built-in writing rules and yours: corrections you speak later fix what you said earlier, grammar is fixed, sentences are split by grammar rather than pauses, and the layout follows what you said. If the writing step can't run, the transcript goes in tidied. Spelling follows your Mac's region. Words you change after a dictation lands are added to the Dictionary.")
             }
 
             Section {

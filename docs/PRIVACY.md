@@ -2,17 +2,18 @@
 
 ## The promise
 
-Your voice goes from your Mac directly to Google's Gemini API
-(`generativelanguage.googleapis.com`), using your own API key. Dictation,
+Your voice goes from your Mac directly to AssemblyAI
+(`streaming.assemblyai.com`, `api.assemblyai.com` and its LLM Gateway,
+`llm-gateway.assemblyai.com`), using your own API key. Dictation,
 meetings and screen context all use it by default, and VoiceiQ sends nothing
 to any other model service. You can instead transcribe dictations on your
 Mac, iPhone or iPad (Settings → Dictation → Speech, see
-[ON_DEVICE.md](ON_DEVICE.md)); meetings always go to Gemini. For a dictation
-transcribed on device, "Writing rules" decides what Gemini gets. Set to Gemini, it gets the
+[ON_DEVICE.md](ON_DEVICE.md)); meetings always go to AssemblyAI. For a dictation
+transcribed on device, "Writing rules" decides what AssemblyAI gets. Set to AssemblyAI, it gets the
 transcript text (with the screen's text, if screen context is on),
 and the audio only if the on-device model is missing, busy or fails. Set
-to Off, nothing transcribed on device goes to Gemini for writing, but a recording the on-device models could not transcribe still goes
-to Gemini as audio when a key is stored. Finished text still syncs to your own iCloud like any dictation
+to Off, nothing transcribed on device goes to AssemblyAI for writing, but a recording the on-device models could not transcribe still goes
+to AssemblyAI as audio when a key is stored. Finished text still syncs to your own iCloud like any dictation
 (see iCloud below). Models download from Hugging Face only when you ask for
 them, except the 21.6 MB meeting speaker model, which downloads for the first
 meeting; it runs on the Mac and sends nothing.
@@ -23,16 +24,15 @@ With no usable key, nothing is sent and the recording stays on your Mac.
 
 ## What leaves your machine (the complete list)
 
-1. **Each dictation**, in a request to Gemini. The request holds the
-   FLAC-compressed recording and the dictation prompt, and the model
-   answers with the finished text. To save time, a request can go out
-   while you are still recording: once you have spoken for a second and
-   then paused for a second, the speech so far is sent, up to three times
-   per dictation. If you speak again, that request is cancelled and its
-   answer is never used, but the audio up to the pause has already left
-   your Mac. If you cancel after a pause, audio up to that pause may
-   already have been sent to Gemini; nothing is inserted or kept. Once a
-   recording passes two minutes, nothing more is sent before you stop.
+1. **Each dictation**, in two steps. While you speak, the audio streams to
+   AssemblyAI's STT-3.7 Realtime as it is recorded, so the audio leaves
+   your Mac before you stop; if you cancel, the stream is closed and
+   nothing is inserted or kept. If the stream fails, or for a language
+   STT-3.7 lacks (Settings → Dictation → Language), the FLAC-compressed
+   recording is uploaded to AssemblyAI after you stop and transcribed
+   there (STT-3.7, or Universal-2). Then the transcript and the dictation
+   prompt go to the writing model (GPT-6 Luna) on AssemblyAI's LLM Gateway,
+   which answers with the finished text; it never gets the audio.
    The prompt contains the built-in writing rules, your custom rules from
    Settings → Dictation, the regional spelling
    of your Mac (read from its region for each dictation), the frontmost
@@ -45,17 +45,17 @@ With no usable key, nothing is sent and the recording stays on your Mac.
    model reads intent from your speech and uses the app and window names
    only to tell what kind of text this is and how names on screen are
    spelled.
-2. **Your dictionary terms**, in that same request. The model uses them to
-   bias what it hears, which is why names and jargon come out spelled right
-   as you speak rather than being corrected afterwards. Up to 100 words and
-   up to 10 "heard as" spellings (the misspelling and its correction) are
-   sent.
+2. **Your dictionary terms**, in the writing request only. They are not
+   sent to the speech model as keyterms: on our eval that pulled
+   similar-sounding names toward Dictionary words (Karen became Karan). The
+   writing request carries up to 100 words and up to 10 "heard as" spellings (the
+   misspelling and its correction).
 3. **Screen context**, while "Screen context" is on in Settings → Dictation — off
    by default since 2026-10-13. VoiceiQ captures the frontmost window (only
    that window, never the rest of the display) when dictation starts and when
    the frontmost app changes during that dictation, reads its text on the Mac
    with Apple's Vision framework, and sends that text (up to 6,000 characters)
-   in the same dictation request. Nothing is captured while a password field
+   in the same writing request. Nothing is captured while a password field
    has secure input on or while a password manager (1Password, Passwords,
    Bitwarden, LastPass, Dashlane, KeePassXC, Enpass, Keychain Access) or VoiceiQ itself is in front. No image leaves the Mac; the captures stay in memory
    only until they are read and are never stored on disk. macOS asks for
@@ -84,9 +84,10 @@ With no usable key, nothing is sent and the recording stays on your Mac.
    recording with no call detected records the default microphone and all
    system sound.
    Recording stops only when you stop it; the stretches with speech are then
-   sent to Gemini for a speaker-labelled transcript. That transcript is sent
-   back to Gemini, with your dictionary terms and custom rules, for a summary
-   and action items. Turn the setting off and no call detection runs.
+   sent to AssemblyAI (STT-3.7, with speaker labels) for a
+   speaker-labelled transcript. That transcript is sent to the writing model
+   on AssemblyAI's LLM Gateway, with your dictionary terms and custom rules,
+   for a summary and action items. Turn the setting off and no call detection runs.
    While a meeting records on the Mac, VoiceiQ reads names off the call
    window to name its speakers. With Screen Recording granted (asked during
    onboarding, optional), it takes a snapshot of the call window every 3
@@ -102,11 +103,11 @@ With no usable key, nothing is sent and the recording stays on your Mac.
    are kept, in `screen-names.json` in the meeting's folder, and only the
    names are sent with the transcript for the notes. A meeting never asks
    for Screen Recording or Accessibility itself.
-   A question you type in a meeting's question box is sent to Gemini with
+   A question you type in a meeting's question box is sent to the LLM Gateway with
    that meeting's notes, transcript and your earlier questions
    and answers. The questions and answers are kept in `chat.json` in the
    meeting's folder and deleted with the meeting.
-5. **Your API key**, only in the request header to Google. It is stored in
+5. **Your API key**, only in the request header to AssemblyAI. It is stored in
    the macOS Keychain, never in files or preferences.
 6. **Update checks.** Every six hours, and when you choose Check for Updates, the
    app downloads the update feed (`appcast.xml`) from the project's GitHub
@@ -121,7 +122,7 @@ re-reads the field VoiceiQ typed into, through the Accessibility API, for up to 
 minutes after an insertion, waits until you have stopped editing for a few
 seconds, and adds the short replacements you made (one to three words) to the
 Dictionary as words, skipping ordinary words (anything in the macOS spelling
-dictionary, checked on the Mac). They ride with your audio like any other
+dictionary, checked on the Mac). They are sent like any other
 dictionary term and are never applied as automatic text replacements.
 Everything it reads stays on this Mac.
 
@@ -141,7 +142,7 @@ provider's terms. It is off by default; details in
   only as part of the requests above (or to a coding agent you allowed), never
   in bulk and never anywhere else
 - Your dictionary as a file, to anyone but you. Individual terms and
-  "heard as" spellings ride with the audio as described above. The
+  "heard as" spellings are sent as described above. The
   dictionary itself (words,
   "heard as" spellings, stars, and when entries were added or deleted) is
   kept in your own iCloud account, in VoiceiQ's key-value storage, so the Mac
@@ -200,6 +201,9 @@ provider's terms. It is off by default; details in
   Settings. Core ML's prepared copies of them (on the Mac,
   `~/Library/Caches/io.blue.voiceiq.localspeech`) are deleted with any model,
   and at launch when no model is downloaded. See [ON_DEVICE.md](ON_DEVICE.md).
+- The first launch of 0.7.18 deletes the Gemini key that earlier versions
+  stored in the Keychain and the Gemini endpoint and model overrides
+  (`SettingsStore.removeRetiredSettingsOnce`). Nothing is sent to Google.
 - The first launch of 0.7.12 deletes the OpenAI, ElevenLabs, TinyFish and
   agent-provider keys that earlier versions stored in the Keychain, their
   settings, and Agent mode's saved runs
@@ -213,12 +217,13 @@ provider's terms. It is off by default; details in
   Chromium browsers' `NativeMessagingHosts` folders. If you loaded the
   extension in a browser, remove it on that browser's Extensions page.
 
-## Google's side of the wire
+## AssemblyAI's side of the wire
 
-Your audio is governed by your own terms with Google: the Gemini API terms.
-As of writing, paid-tier API usage is not used for model training, and
-free-tier usage may be. That relationship is yours — this app doesn't broker
-it. Review the [Gemini API terms](https://ai.google.dev/gemini-api/terms).
+Your audio and text are governed by your own terms with AssemblyAI, including
+how long it keeps them and what the LLM Gateway passes to the writing model's
+provider. That relationship is yours — this app doesn't broker it. Review
+AssemblyAI's [terms](https://www.assemblyai.com/legal/terms-of-service) and
+[privacy policy](https://www.assemblyai.com/legal/privacy-policy).
 
 ## Secure input
 
@@ -230,9 +235,12 @@ the clipboard.
 
 - Build from source (`./scripts/build.sh`).
 - Watch traffic with Little Snitch or `nettop` — a dictation reaches
-  `generativelanguage.googleapis.com` and no other model host.
+  `streaming.assemblyai.com` and `llm-gateway.assemblyai.com` (and
+  `api.assemblyai.com` when the stream fails) and no other model host.
 - Read the prompts: they are source files. The dictation prompt is
   [PromptV1.swift](../VoiceIQCore/Sources/FormattingPipeline/PromptV1.swift), which holds
   the built-in writing rules;
-  meeting transcription and summarising are in
-  [GeminiClient+Meetings.swift](../VoiceIQCore/Sources/TranscriptionClient/GeminiClient+Meetings.swift).
+  the AssemblyAI calls are in
+  [TranscriptionClient](../VoiceIQCore/Sources/TranscriptionClient/), and
+  meeting transcription and summarising in
+  [MeetingEngine](../VoiceIQCore/Sources/MeetingEngine/).

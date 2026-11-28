@@ -12,8 +12,8 @@ public final class LocalTranscriber: Sendable {
     /// Waits for any warm-up, then loads the model. Starts with the recording.
     private let load: Task<Void, Never>
     /// A load still running `TimeoutPolicy.localColdLoad` after the recording
-    /// sends the dictation to Gemini and goes on as a warm-up. The caller
-    /// passes whether Gemini can take it.
+    /// sends the dictation to AssemblyAI and goes on as a warm-up. The caller
+    /// passes whether AssemblyAI can take it.
     private let cloudOnColdLoad: Bool
     /// Set when the load was handed to `LocalModelWarmup`; a later `abort`
     /// must then leave it running.
@@ -22,10 +22,10 @@ public final class LocalTranscriber: Sendable {
     public enum LoadEvent: Sendable {
         /// The model loaded, in `seconds` from the start of the recording.
         case loaded(LocalSpeechModel, seconds: TimeInterval)
-        /// The load failed after `seconds`; the dictation goes to Gemini.
+        /// The load failed after `seconds`; the dictation goes to AssemblyAI.
         case failed(LocalSpeechModel, seconds: TimeInterval)
         /// The model was still loading `waited` seconds after the recording
-        /// ended; the dictation went to Gemini and the load goes on.
+        /// ended; the dictation went to AssemblyAI and the load goes on.
         case stillLoading(LocalSpeechModel, waited: TimeInterval)
     }
 
@@ -51,7 +51,7 @@ public final class LocalTranscriber: Sendable {
     }
 
     /// The transcriber for a dictation by the on-device settings, or nil when
-    /// they pick Gemini or the model is not downloaded or busy.
+    /// they pick AssemblyAI or the model is not downloaded or busy.
     @MainActor public static func makeFromSettings(audioURL: URL, cloudOnColdLoad: Bool,
                                                    makeSession: LocalSpeechSessionFactory) -> LocalTranscriber? {
         let settings = SettingsStore()
@@ -61,7 +61,7 @@ public final class LocalTranscriber: Sendable {
                                 cloudOnColdLoad: cloudOnColdLoad, makeSession: makeSession)
     }
 
-    /// `cloudOnColdLoad`: Gemini can transcribe, so a dictation whose model
+    /// `cloudOnColdLoad`: AssemblyAI can transcribe, so a dictation whose model
     /// is still loading after the recording can go there.
     @MainActor public init?(audioURL: URL, model: LocalSpeechModel, language: LocalSpeechLanguage,
                            cloudOnColdLoad: Bool, makeSession: LocalSpeechSessionFactory) {
@@ -96,7 +96,7 @@ public final class LocalTranscriber: Sendable {
         }
     }
 
-    /// The transcript of the saved recording, or nil when Gemini should
+    /// The transcript of the saved recording, or nil when AssemblyAI should
     /// transcribe it instead: the load failed, or ran past its time.
     public func finish(framesWritten: Int64) async -> TranscriptionResult? {
         if cloudOnColdLoad,
@@ -104,7 +104,7 @@ public final class LocalTranscriber: Sendable {
            !Task.isCancelled {
             // The load cannot be stopped, so it is finished as a warm-up: the
             // stores stay claimed and the next dictation waits for it.
-            Log.transcription.notice("On-device model still loading \(TimeoutPolicy.localColdLoad, format: .fixed(precision: 0))s after the recording; using Gemini, load goes on as a warm-up")
+            Log.transcription.notice("On-device model still loading \(TimeoutPolicy.localColdLoad, format: .fixed(precision: 0))s after the recording; using AssemblyAI, load goes on as a warm-up")
             handedOff.withLock { $0 = true }
             let worker = worker
             await LocalModelWarmup.adopt(id: id, model: model, load: load, stop: { await worker.stop() })
@@ -135,7 +135,7 @@ public final class LocalTranscriber: Sendable {
         if case .finished = outcome {
             await release()
         } else {
-            Log.transcription.notice("On-device transcription passed \(deadline, format: .fixed(precision: 0))s; using saved audio with Gemini")
+            Log.transcription.notice("On-device transcription passed \(deadline, format: .fixed(precision: 0))s; using saved audio with AssemblyAI")
             Task { await release() }
         }
         guard !Task.isCancelled, case .finished(let text?) = outcome else { return nil }

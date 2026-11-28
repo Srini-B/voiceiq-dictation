@@ -1,5 +1,5 @@
 {
-  "about": "Cleanup cases for both writing paths. `said` is what the speaker says (speak it, or synthesize it, for the Gemini path). `heard` is what an on-device model writes for it, the input to the writing-Off tidy-up. `written` is the expected text. `style` is the Tidy dictation style (default sentences) and `language` the dictation language (default en-US). `tidy` is set only where the tidy-up knowingly falls short of `written`, and holds what it writes instead. CleanupCasesTests checks every case against the tidy-up.",
+  "about": "Cleanup cases for both writing paths. `said` is what the speaker says (speak it, or synthesize it, for the AssemblyAI path). `heard` is what an on-device model writes for it, the input to the writing-Off tidy-up. `written` is the expected text. `style` is the Tidy dictation style (default sentences) and `language` the dictation language (default en-US). `tidy` is set only where the tidy-up knowingly falls short of `written`, and holds what it writes instead. CleanupCasesTests checks every case against the tidy-up.",
   "cases": [
     {
       "id": "correction-day",

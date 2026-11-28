@@ -1,9 +1,12 @@
 import Foundation
 
-/// Paid-tier Standard prices from ai.google.dev/gemini-api/docs/pricing,
-/// USD per one million tokens, copied 2026-09-26. A free-tier key is billed
-/// nothing; the app cannot tell which tier a key is on, so it always shows
-/// the paid-tier figure and says so on the Cost pane.
+/// Token prices, USD per one million tokens. The AssemblyAI LLM Gateway
+/// charges the providers' list prices (llm-gateway.assemblyai.com/v1/models,
+/// read 2026-11-28: gpt-6-luna $0.10 in, $0.01 cached, $0.50 out), so its
+/// rows, labelled `assemblyai/<model>`, price from the same table. Speech on
+/// AssemblyAI is billed per hour and booked with its cost
+/// (`TokenUsage.reportedCostUSD`). The Gemini rows price what builds before
+/// 0.7.18 booked.
 ///
 /// Models are matched by prefix, longest first, so a dated suffix
 /// (`-preview-09-2026`) still resolves.
@@ -50,6 +53,7 @@ public enum PriceBook {
                 : ModelPrice(textIn: 0.75, cachedIn: 0.075, textOut: 3.75)),
             ("gemini-3.5-transcribe-live", ModelPrice(textIn: 3.50, audioIn: 3.50, textOut: 21.00)),
             ("gemini-3.5-transcribe", ModelPrice(textIn: 2.00, audioIn: 2.00, textOut: 12.00)),
+            ("gemini-3.5-flash-lite", ModelPrice(textIn: 0.30, cachedIn: 0.03, textOut: 2.50)), // LLM Gateway, 2026-11-28
             ("gemini-3.1-flash-lite", ModelPrice(textIn: 0.25, audioIn: 0.50, cachedIn: 0.025, textOut: 1.50)),
             ("gemini-3-flash", ModelPrice(textIn: 0.50, audioIn: 1.00, cachedIn: 0.05, textOut: 3.00)),
             ("gemini-2.5-flash-lite", ModelPrice(textIn: 0.10, audioIn: 0.30, textOut: 0.40)),
@@ -94,8 +98,8 @@ public enum PriceBook {
 
     /// Price for a model ID, or nil when the pricing page has no entry.
     public static func price(for model: String, at date: Date = Date()) -> ModelPrice? {
-        // Rows booked through the removed gateways are labelled `google/<id>`;
-        // the list price is the same.
+        // Rows are labelled `assemblyai/<id>`, and those booked through the
+        // removed gateways `google/<id>`; the list price is the same.
         let id = model.lowercased().split(separator: "/").last.map(String.init) ?? model.lowercased()
         return prices(at: date)
             .filter { id.hasPrefix($0.prefix) }
@@ -106,11 +110,5 @@ public enum PriceBook {
     /// Cost in USD, or nil for a model with no price entry.
     public static func cost(model: String, usage: TokenUsage, at date: Date = Date()) -> Double? {
         price(for: model, at: date)?.cost(usage)
-    }
-
-    /// Audio tokens per second for estimation: the transcribe models bill 25,
-    /// every other Gemini model 32 (both from the pricing page).
-    public static func audioTokensPerSecond(model: String) -> Double {
-        model.lowercased().contains("transcribe") ? 25 : 32
     }
 }

@@ -13,13 +13,13 @@ public enum KeychainStore {
 
     /// One keychain item per secret. `rawValue` is the `kSecAttrAccount`.
     public enum Secret: String {
-        case gemini = "gemini-api-key"
+        case assemblyAI = "assemblyai-api-key"
         /// The bearer key coding agents send to the local API (`AgentServer`).
         case agentAccess = "agent-access-key"
 
         var label: String {
             switch self {
-            case .gemini: "VoiceiQ — Gemini API key"
+            case .assemblyAI: "VoiceiQ — AssemblyAI API key"
             case .agentAccess: "VoiceiQ — coding agent access key"
             }
         }
@@ -27,7 +27,7 @@ public enum KeychainStore {
         /// `object` of `.gtSettingDidChange` when this secret changes.
         public var settingKey: String {
             switch self {
-            case .gemini: "apiKey"
+            case .assemblyAI: "apiKey"
             case .agentAccess: "agentAccessKey"
             }
         }
@@ -60,31 +60,31 @@ public enum KeychainStore {
         return query
     }
 
-    // MARK: - Gemini
+    // MARK: - AssemblyAI
 
-    public static func loadAPIKey() -> String? {
-        if let key = load(.gemini, service: service) { return key }
-        guard let legacyKey = load(.gemini, service: legacyService) else { return nil }
-        if saveAPIKey(legacyKey) {
-            delete(.gemini, service: legacyService)
-            Log.permissions.info("KeychainStore: migrated API key to VoiceiQ service")
-        }
-        return legacyKey
-    }
+    public static func loadAPIKey() -> String? { load(.assemblyAI, service: service) }
 
-    /// Posts `apiKeySaved` on success, so meetings waiting for Gemini go.
+    /// Posts `apiKeySaved` on success, so meetings waiting for AssemblyAI go.
     @discardableResult
     public static func saveAPIKey(_ key: String) -> Bool {
-        guard save(key, for: .gemini) else { return false }
+        guard save(key, for: .assemblyAI) else { return false }
         NotificationCenter.default.post(name: .apiKeySaved, object: nil)
         return true
     }
 
     @discardableResult
-    public static func deleteAPIKey(notify: Bool = false) -> Bool { delete(.gemini, notify: notify) }
+    public static func deleteAPIKey(notify: Bool = false) -> Bool { delete(.assemblyAI, notify: notify) }
 
-    /// Whether a Gemini key is stored.
+    /// Whether an AssemblyAI key is stored.
     public static var hasModelKey: Bool { loadAPIKey() != nil }
+
+    /// Deletes the Gemini key builds before AssemblyAI stored, here and under
+    /// the pre-VoiceiQ service; see `SettingsStore.removeGeminiSettingsOnce`.
+    public static func deleteGeminiKey() {
+        for service in [service, legacyService] where delete(account: "gemini-api-key", service: service) {
+            Log.permissions.info("KeychainStore: deleted the Gemini key")
+        }
+    }
 
     // MARK: - Coding agent access
 

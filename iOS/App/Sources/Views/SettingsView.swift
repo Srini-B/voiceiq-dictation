@@ -128,6 +128,7 @@ struct DictationSettingsView: View {
     private var calendarDenied: Bool { !calendar && CalendarMeetings.isDenied }
     @State private var microphone = MobileSettings.microphoneChoice
     @State private var voiceIsolation = SettingsStore().voiceIsolation
+    @State private var language = SettingsStore().dictationLanguage
     @State private var warmWindow = MobileSettings.warmWindow
     @State private var showsSessionActivity = MobileSettings.showsSessionActivity
     @ObservedObject private var cellularDownloads = CellularModelDownloads.shared
@@ -163,6 +164,14 @@ struct DictationSettingsView: View {
             } footer: {
                 Text("Automatic uses a wired headset's mic, or the car's in CarPlay, and otherwise your \(UIDevice.current.localizedModel)'s, so AirPods keep playing in full quality. \(UIDevice.current.localizedModel) always uses its own mic. Bluetooth also uses AirPods and car kits, which switch to call-quality sound while you dictate. Voice isolation turns down background noise while you dictate; it can switch Bluetooth headphones to call-quality sound too.")
             }
+            Section {
+                Picker("Language", selection: $language) {
+                    ForEach(DictationLanguage.all) { Text($0.name).tag($0) }
+                }
+                .onChange(of: language) { _, value in settings.setDictationLanguage(value) }
+            } footer: {
+                Text("English is the default. STT-3.7 languages are transcribed as you speak; languages marked Universal-2 are transcribed after you stop and take a few seconds longer.")
+            }
             SpeechSourceSection(device: UIDevice.current.localizedModel) { SettingsSectionHeader($0) }
             Section {
                 Toggle("Use calendar for notes", isOn: $calendar)
@@ -177,7 +186,7 @@ struct DictationSettingsView: View {
             Section {
                 NavigationLink("Custom rules") { CustomRulesView(text: $customRules) }
             } footer: {
-                Text("Gemini hears each dictation and writes it in one step, by the built-in writing rules and yours: it fixes grammar, applies spoken corrections and lays the text out. Spelling follows your \(UIDevice.current.localizedModel)'s region.")
+                Text("AssemblyAI transcribes each dictation as you speak, then a writing model on AssemblyAI writes it by the built-in writing rules and yours: it fixes grammar, applies spoken corrections and lays the text out. If the writing step can't run, the transcript goes in tidied. Spelling follows your \(UIDevice.current.localizedModel)'s region.")
             }
             if UIDevice.isPad {
                 Section {
@@ -344,8 +353,8 @@ struct PrivacyView: View {
                 }
             }
             Section {
-                LocalAudioPrivacyRow(provider: "Gemini", cloudDescription: "Google's Gemini API, with your key")
-                LabeledContent("Notes audio", value: "Gemini, for the transcript and notes")
+                LocalAudioPrivacyRow(provider: "AssemblyAI", cloudDescription: "AssemblyAI, with your key")
+                LabeledContent("Notes audio", value: "AssemblyAI, for the transcript and notes")
                 LabeledContent("Dictionary terms", value: "With each dictation and notes")
                 LabeledContent("Dictionary", value: "Your iCloud, to sync")
                 LabeledContent("History", value: "Your iCloud, to sync final text")
@@ -358,21 +367,12 @@ struct PrivacyView: View {
     }
 }
 
-/// Session log and the Gemini models, as in the Mac's Advanced pane. The
+/// Session log and the writing model, as in the Mac's Advanced pane. The
 /// key is under API Key.
 struct AdvancedView: View {
     private let settings = SettingsStore()
-    @State private var endpoint = SettingsStore().endpointOverride ?? ""
-    @State private var transcribeModel = SettingsStore().transcribeModelOverride ?? ""
-    @State private var cleanupModel = SettingsStore().cleanupModelOverride ?? ""
+    @State private var writingModel = SettingsStore().writingModelOverride ?? ""
     @State private var debugLog = DebugLog.isEnabled
-    private let geminiDefaults = GeminiConfig()
-
-    /// The same test the client uses, so the warning matches what happens.
-    private var endpointInvalid: Bool {
-        let trimmed = endpoint.trimmingCharacters(in: .whitespacesAndNewlines)
-        return !trimmed.isEmpty && SettingsStore.usableEndpointURL(trimmed) == nil
-    }
 
     var body: some View {
         Form {
@@ -387,16 +387,9 @@ struct AdvancedView: View {
                 Text("While this is on, VoiceiQ and its keyboard write down everything they do: dictation, transcription, meetings, settings changes, sync, network requests and errors. Share the file with a bug report. API keys and tokens are removed, and transcripts are never written. VoiceiQ keeps the last \(DebugLog.keepDays) days, up to \(DebugLog.maxTotalBytes / 1_000_000) MB, and deletes older entries on its own.")
             }
             Section {
-                field("Endpoint", text: $endpoint, prompt: geminiDefaults.endpoint.absoluteString) { settings.setEndpointOverride($0) }
-                if endpointInvalid {
-                    Text("Not a valid http(s) URL — the default endpoint is being used.")
-                        .font(Theme.Fonts.footnote())
-                        .foregroundStyle(Theme.Colors.recording)
-                }
-                field("Dictation", text: $cleanupModel, prompt: geminiDefaults.writingModel) { settings.setCleanupModelOverride($0) }
-                field("Notes", text: $transcribeModel, prompt: geminiDefaults.transcribeModel) { settings.setTranscribeModelOverride($0) }
-            } header: { SettingsSectionHeader("Gemini models") } footer: {
-                Text("The dictation model hears each dictation and writes its text in one call, and writes notes and answers questions about them. The notes model transcribes notes with speakers and word times.")
+                field("Writing model", text: $writingModel, prompt: AssemblyAIConfig.defaultWritingModel) { settings.setWritingModelOverride($0) }
+            } header: { SettingsSectionHeader("AssemblyAI") } footer: {
+                Text("The writing model on AssemblyAI's LLM Gateway writes each dictation's transcript by the writing rules, and writes notes and answers questions about them. Leave blank for the default.")
             }
         }
         .settingsPage(title: "Advanced", keyboard: true)

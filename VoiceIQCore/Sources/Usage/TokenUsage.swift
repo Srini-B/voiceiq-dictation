@@ -1,11 +1,10 @@
 import Foundation
 
-/// Token counts for one model call, split the way Gemini prices them.
+/// Token counts for one model call, split the way providers price them.
 ///
-/// Three response envelopes carry usage and none of them agree on field
-/// names, so each has its own parser here. Every parser is defensive: a
-/// missing field is zero, never a thrown error, because billing bookkeeping
-/// must not be able to fail a dictation.
+/// The parser is defensive: a missing field is zero, never a thrown error,
+/// because billing bookkeeping must not be able to fail a dictation. Rows
+/// booked by older builds keep their audio and image counts.
 public struct TokenUsage: Equatable, Sendable, Codable {
     public var textIn: Int = 0
     public var audioIn: Int = 0
@@ -61,111 +60,27 @@ public struct TokenUsage: Equatable, Sendable, Codable {
         )
     }
 
-    // MARK: - Estimation
+    // MARK: - LLM Gateway chat completions
 
-    /// Gemini bills audio at 32 tokens per second and text at roughly four
-    /// characters per token. Used only when the server sent no counts.
-    public static let audioTokensPerSecond = 32.0
-
-    public static func estimated(audioSeconds: Double, outputCharacters: Int,
-                                 audioTokensPerSecond rate: Double = audioTokensPerSecond) -> TokenUsage {
-        TokenUsage(
-            audioIn: Int((audioSeconds * rate).rounded()),
-            textOut: Int((Double(outputCharacters) / 4).rounded()),
-            isEstimated: true
-        )
-    }
-
-    // MARK: - `:generateContent`
-
-    /// `usageMetadata` as returned by `models/*:generateContent` (probed 2026-09-26):
-    /// `promptTokenCount`, `candidatesTokenCount`, optional `thoughtsTokenCount`,
-    /// `cachedContentTokenCount`, and per-modality `promptTokensDetails` /
-    /// `candidatesTokensDetails` as `[{modality, tokenCount}]`.
-    public static func fromGenerateContent(_ data: Data) -> TokenUsage? {
-        guard let root = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
-              let meta = root["usageMetadata"] as? [String: Any] else { return nil }
-        return fromUsageMetadata(meta)
-    }
-
-    /// REST `usageMetadata`; also accepts `responseTokenCount` /
-    /// `responseTokensDetails` in place of the candidates fields.
-    static func fromUsageMetadata(_ meta: [String: Any]) -> TokenUsage {
-        var usage = TokenUsage()
-        let promptDetails = details(meta, "promptTokensDetails", "prompt_tokens_details", countKey: "tokenCount")
-        let outDetails = details(meta, "candidatesTokensDetails", "candidates_tokens_details", countKey: "tokenCount")
-            + details(meta, "responseTokensDetails", "response_tokens_details", countKey: "tokenCount")
-        usage.cachedIn = int(meta, "cachedContentTokenCount", "cached_content_token_count")
-        usage.thoughtOut = int(meta, "thoughtsTokenCount", "thoughts_token_count")
-        if promptDetails.isEmpty {
-            usage.textIn = max(0, int(meta, "promptTokenCount", "prompt_token_count") - usage.cachedIn)
-        } else {
-            apply(promptDetails, input: true, to: &usage)
-            // Details include cached tokens under their modality; keep the split
-            // additive so the total still matches the server's promptTokenCount.
-            usage.textIn = max(0, usage.textIn - usage.cachedIn)
-        }
-        if outDetails.isEmpty {
-            usage.textOut = int(meta, "candidatesTokenCount", "candidates_token_count")
-                + int(meta, "responseTokenCount", "response_token_count")
-        } else {
-            apply(outDetails, input: false, to: &usage)
-        }
-        return usage
-    }
-
-    // MARK: - `v1beta/interactions`
-
-    /// `usage` as returned by the interactions envelope (probed 2026-09-26).
-    /// `total_output_tokens` came back 0 while `model_invocation_token_counts`
-    /// carried 307 output tokens, so the per-invocation list is authoritative
-    /// and the totals are only a fallback.
-    public static func fromInteraction(_ data: Data) -> TokenUsage? {
+    /// `usage` of a chat completion (OpenAI's shape, which the AssemblyAI LLM
+    /// Gateway returns for every model): `prompt_tokens` including
+    /// `prompt_tokens_details.cached_tokens`, `completion_tokens` including
+    /// `completion_tokens_details.reasoning_tokens`.
+    public static func fromChatCompletion(_ data: Data) -> TokenUsage? {
         guard let root = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
               let meta = root["usage"] as? [String: Any] else { return nil }
-        var usage = TokenUsage()
-        usage.cachedIn = int(meta, "total_cached_tokens", "totalCachedTokens")
-        usage.thoughtOut = int(meta, "total_thought_tokens", "totalThoughtTokens")
-        let invocations = (meta["model_invocation_token_counts"] ?? meta["modelInvocationTokenCounts"]) as? [[String: Any]] ?? []
-        if invocations.isEmpty {
-            apply(details(meta, "input_tokens_by_modality", "inputTokensByModality", countKey: "tokens"), input: true, to: &usage)
-            if usage.totalIn == 0 { usage.textIn = int(meta, "total_input_tokens", "totalInputTokens") }
-            usage.textOut = int(meta, "total_output_tokens", "totalOutputTokens")
-        } else {
-            for invocation in invocations {
-                apply(details(invocation, "prompt_tokens_details", "promptTokensDetails", countKey: "tokens"), input: true, to: &usage)
-                apply(details(invocation, "candidates_tokens_details", "candidatesTokensDetails", countKey: "tokens"), input: false, to: &usage)
-            }
-        }
-        return usage
+        let cached = int(meta["prompt_tokens_details"] as? [String: Any] ?? [:], "cachedTokens", "cached_tokens")
+        let reasoning = int(meta["completion_tokens_details"] as? [String: Any] ?? [:], "reasoningTokens", "reasoning_tokens")
+        // The gateway's guide shows prompt/completion_tokens, its API reference input/output_tokens.
+        let completion = max(int(meta, "completionTokens", "completion_tokens"), int(meta, "outputTokens", "output_tokens"))
+        let prompt = max(int(meta, "promptTokens", "prompt_tokens"), int(meta, "inputTokens", "input_tokens"))
+        return TokenUsage(textIn: max(0, prompt - cached), cachedIn: cached,
+                          textOut: max(0, completion - reasoning), thoughtOut: reasoning)
     }
 
     // MARK: - Helpers
 
     private static func int(_ node: [String: Any], _ camel: String, _ snake: String) -> Int {
         ((node[camel] ?? node[snake]) as? NSNumber)?.intValue ?? 0
-    }
-
-    private static func details(_ node: [String: Any], _ camel: String, _ snake: String, countKey: String) -> [(String, Int)] {
-        let list = (node[camel] ?? node[snake]) as? [[String: Any]] ?? []
-        return list.compactMap { entry in
-            guard let modality = entry["modality"] as? String else { return nil }
-            let count = (entry[countKey] as? NSNumber)?.intValue
-                ?? (entry["tokenCount"] as? NSNumber)?.intValue
-                ?? (entry["tokens"] as? NSNumber)?.intValue ?? 0
-            return (modality.uppercased(), count)
-        }
-    }
-
-    private static func apply(_ details: [(String, Int)], input: Bool, to usage: inout TokenUsage) {
-        for (modality, count) in details {
-            switch (modality, input) {
-            case ("AUDIO", true): usage.audioIn += count
-            case ("IMAGE", true), ("VIDEO", true): usage.imageIn += count
-            case (_, true): usage.textIn += count
-            case ("AUDIO", false): usage.audioOut += count
-            case (_, false): usage.textOut += count
-            }
-        }
     }
 }

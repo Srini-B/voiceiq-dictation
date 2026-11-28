@@ -5,7 +5,7 @@ what the app would show, one JSON per meeting, for a scorer to compare with
 the reference. It uses the same steps `MeetingEngine` runs after a recording
 stops:
 
-1. `MeetingTranscriber` transcribes with Gemini and lets the on-device
+1. `MeetingTranscriber` transcribes with AssemblyAI STT-3.7 and lets the on-device
    speaker model (pyannote community-1) decide who on the far side said what.
 2. `ScreenSpeakerNames.match` names speakers from the call window's names.
 3. `MeetingNotesPrompt` writes the notes, and `ScreenSpeakerNames.byElimination`
@@ -24,16 +24,18 @@ On a Mac with Xcode, ffmpeg and python3:
 ```sh
 cd eval/meetings
 python3 prepare.py ~/evaldata                  # AMI ES2004a + synthetic meetings
-GEMINI_API_KEY=… swift run -c release MeetingsEval ~/evaldata ~/evalout
+ASSEMBLYAI_API_KEY=… swift run -c release MeetingsEval ~/evaldata ~/evalout
 ```
 
 `MeetingsEval DATA OUT [meeting-id …]` runs only the meetings named.
 `EVAL_NO_SPEAKER_MODEL=1` runs without the on-device speaker model.
+An account without an LLM Gateway balance gets transcripts but no notes,
+so M2–M4 score and M1 counts only names from the call window.
 The first run downloads the speaker model (21.6 MB) into the app's model folder.
 
 ## On device, and Hex's offline pass
 
-`LocalMeetingsEval` transcribes the same prepared meetings with no Gemini
+`LocalMeetingsEval` transcribes the same prepared meetings with no cloud
 call, for comparing the on-device meeting path with other ways of doing it.
 It writes one folder of outputs per pipeline:
 
@@ -118,10 +120,8 @@ the script's decisions and action items), and for synthetic meetings
 
 ## Cost
 
-Every Gemini call a meeting makes is metered the way the app meters it
-(`UsageMeter`), priced by `PriceBook` **at January 2027 prices** (2027-01-02;
-gemini-3.8-flash doubles then, so until January these read about twice the
-app's Cost pane), and written to the output (values illustrative):
+Every AssemblyAI call a meeting makes is metered the way the app meters it
+(`UsageMeter`), priced by `PriceBook` **at January 2027 prices** (2027-01-02), and written to the output (values illustrative):
 
 ```json
 "usage": [{"stage": "meetingSummary", "model": "gemini-3.8-flash", "text_in": 2001,
