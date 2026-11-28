@@ -24,6 +24,8 @@ final class ValidationGateTests: XCTestCase {
     func testAOneLineEmailIsLaidOut() {
         XCTAssertEqual(EmailLayout.apply("Hello Dr. Kim, I wanted to confirm my appointment at 3. Best, Sam."),
                        "Hello Dr. Kim,\n\nI wanted to confirm my appointment at 3.\n\nBest,\nSam")
+        XCTAssertEqual(EmailLayout.apply("Hi Sam, iOS 18 is required. Best, Dana"),
+                       "Hi Sam,\n\niOS 18 is required.\n\nBest,\nDana")
         let laidOut = "Hi Priya,\n\nCan we move it to net 30?\n\nThanks,\nSrini"
         XCTAssertEqual(EmailLayout.apply(laidOut), laidOut)
         for prose in ["Hey, can you check the logs? Thanks, Ana.", "Thanks, Sam. I'll look at it tomorrow.",

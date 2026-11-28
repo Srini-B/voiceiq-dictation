@@ -18,8 +18,10 @@ enum EmailLayout {
               let name = Range(match.range(at: 4), in: trimmed) else { return text }
         let middle = trimmed[body].trimmingCharacters(in: .whitespacesAndNewlines)
         guard !middle.isEmpty else { return text }
-        // A body the writer started lowercase after "Hi Sam," starts a sentence now.
-        let opened = middle.prefix(1).uppercased() + middle.dropFirst()
+        // A body the writer started lowercase after "Hi Sam," starts a sentence
+        // now; a word with a capital inside it (iOS, eBay) keeps its spelling.
+        let first = middle.prefix { !$0.isWhitespace && !$0.isPunctuation }
+        let opened = first.allSatisfy(\.isLowercase) ? middle.prefix(1).uppercased() + middle.dropFirst() : middle
         // "Srini." ends a sentence; "Ana J." keeps its initial's period.
         var signed = String(trimmed[name])
         if signed.hasSuffix("."), (signed.split(separator: " ").last?.count ?? 0) > 2 { signed.removeLast() }
