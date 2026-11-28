@@ -139,6 +139,9 @@ final class ScreenSpeakerNamesTests: XCTestCase {
         // A reply that says the name, "I'm Sarah" included, is left to the notes, which read introductions.
         let hiSarah = [sarah[0], TranscriptSegment(speaker: "s1", text: "Hi, I'm Sarah. Signups were up.", chunkIndex: 0, start: 2, end: 5)]
         XCTAssertNil(ScreenSpeakerNames.byAddress(nil, transcript: hiSarah, invited: ["Sara Lindqvist", "Lee Park"]))
+        // Words that sound like a surname are not addresses (Codex on #129).
+        XCTAssertNil(ScreenSpeakerNames.addressed(in: "Right, let us move on.", among: ["Chris Wright"]))
+        XCTAssertNil(ScreenSpeakerNames.addressed(in: "Thanks, that helps.", among: ["Tom Hanks"]))
         let mary = [TranscriptSegment(speaker: "you", text: "Mary, where are we?", chunkIndex: 0, start: 0, end: 3), spelt[1]]
         XCTAssertNil(ScreenSpeakerNames.byAddress(nil, transcript: mary, invited: ["Mark Stone", "Lee Park"]))
         // A gallery showing the invitees too is still one person per name.

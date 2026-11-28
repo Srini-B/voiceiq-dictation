@@ -332,7 +332,9 @@ public enum ScreenSpeakerNames {
     static func heard(_ head: String, as name: String) -> Bool {
         let words = name.lowercased().split(separator: " ").map(String.init)
         return head.lowercased().split(separator: " ").allSatisfy { spoken in
-            words.contains { $0 == spoken || (min($0.count, spoken.count) >= 4 && similarity($0, String(spoken)) >= 0.8) }
+            // The same first letter, so "Right," is not Chris Wright nor "Thanks," Tom Hanks.
+            words.contains { $0 == spoken || ($0.first == spoken.first && min($0.count, spoken.count) >= 4
+                                               && similarity($0, String(spoken)) >= 0.8) }
         }
     }
 
