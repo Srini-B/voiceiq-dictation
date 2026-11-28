@@ -260,6 +260,8 @@ final class TidyTests: XCTestCase {
             ("Tell priya at the rate gmail dot com, thanks.", "Tell priya@gmail.com, thanks."),
             ("My email will be priya at the rate gmail dot com.", "My email will be priya@gmail.com."),
             ("Contact me via priya at the rate gmail dot com.", "Contact me via priya@gmail.com."),
+            ("My email will be billing at the rate gmail dot com.", "My email will be billing@gmail.com."),
+            ("And priya at the rate gmail dot com.", "And priya@gmail.com."),
             ("Send it to priya at the rate gmail dot com or ravi at sign yahoo dot com.", "Send it to priya@gmail.com or ravi@yahoo.com."),
             // A list of addresses ends where its last one does.
             ("Send it to priya at the rate gmail dot com and ravi at the rate yahoo dot com.",
@@ -278,7 +280,8 @@ final class TidyTests: XCTestCase {
                      // Before ", thanks" or another address, "is" or a written address is too weak an introduction.
                      "The market is moving at the rate google dot com, thanks.",
                      "I wrote to priya@gmail.com and growth at the rate google dot com, thanks.",
-                     "It is growing at the rate amazon dot com.", "It's growing at the rate amazon dot com.", "Revenue went from 10 at the rate amazon dot com."] {
+                     "It is growing at the rate amazon dot com.", "It will be growing at the rate amazon dot com.",
+                     "Prices rose and fell at the rate gmail dot com.", "Revenue went from 5 or 10 at the rate amazon dot com.", "It's growing at the rate amazon dot com.", "Revenue went from 10 at the rate amazon dot com."] {
             XCTAssertEqual(SpokenAddresses.joining(in: kept), kept)
         }
     }

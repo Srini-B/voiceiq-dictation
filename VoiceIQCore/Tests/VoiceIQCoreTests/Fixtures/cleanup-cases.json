@@ -2418,6 +2418,20 @@
       "heard": "Ask Prof. Iyer and Sgt. Lee and Capt. Rao.",
       "written": "ask Prof. Iyer and Sgt. Lee and Capt. Rao",
       "style": "messages"
+    },
+    {
+      "id": "kept-at-the-rate-after-and",
+      "check": "kept as said",
+      "said": "prices rose and fell at the rate gmail dot com",
+      "heard": "Prices rose and fell at the rate gmail dot com.",
+      "written": "Prices rose and fell at the rate gmail dot com."
+    },
+    {
+      "id": "kept-at-the-rate-will-be-growing",
+      "check": "kept as said",
+      "said": "it will be growing at the rate amazon dot com",
+      "heard": "It will be growing at the rate amazon dot com.",
+      "written": "It will be growing at the rate amazon dot com."
     }
   ]
 }

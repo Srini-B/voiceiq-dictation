@@ -158,18 +158,26 @@ enum SpokenAddresses {
         // "My email's priya…" is "email is"; "It's priya…" is "it is".
         let contracted = word.hasSuffix("'s") ? String(word.dropLast(2)) : nil
         if let contracted, strongIntroductions.contains(contracted) { return .strong }
+        // The words before it in its sentence: "My email will be priya…" has "email" earlier.
+        var first = start - 1
+        while first > 0, !(tokens[first - 1].word.last.map { ".!?".contains($0) } ?? false) { first -= 1 }
+        let earlier = tokens[first..<(start - 1)].map { bare($0.word) }
+        let mailbox = bare(tokens[start].word)
         if weakIntroductions.contains(word) || contracted != nil {
-            if contracted == nil, start >= 2, strongIntroductions.contains(bare(tokens[start - 2].word)) { return .strong }
+            if contracted == nil, earlier.contains(where: strongIntroductions.contains) { return .strong }
             // "It is growing at the rate…", "went from 10 at the rate…": a verb or a number, not a
             // mailbox. Not "-ed" ("Ahmed"), a short "-ing" ("Ming"), or after "to" ("to billing", "to 123").
-            let mailbox = bare(tokens[start].word)
-            let progressive = ["is", "was", "are"].contains(word) || contracted != nil
+            let progressive = ["is", "was", "are", "be"].contains(word) || contracted != nil
             let verbOrNumber = (progressive && mailbox.hasSuffix("ing") && mailbox.count >= 6)
                 || ((progressive || word == "from") && mailbox.allSatisfy(\.isNumber))
             return verbOrNumber ? nil : .weak
         }
         guard ["and", "or"].contains(word) else { return nil }
-        return lastAddress == start - 2 ? .strong : .weak
+        if lastAddress == start - 2 { return .strong }
+        // "Prices rose and fell at the rate…", "from 5 or 10 at the rate…": only a list after an
+        // introduction ("Send it to priya … and ravi…") names a mailbox, and never a number.
+        let introduced = earlier.isEmpty || earlier.contains { strongIntroductions.contains($0) || weakIntroductions.contains($0) || $0.contains("@") }
+        return introduced && !mailbox.allSatisfy(\.isNumber) ? .weak : nil
     }
 
     private static func words(in text: String) -> [Token] {

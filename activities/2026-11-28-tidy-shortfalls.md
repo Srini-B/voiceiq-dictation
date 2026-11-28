@@ -92,4 +92,15 @@ and passes here, except item 2's, which pins the current behaviour.
   dictations (30 introductions × 7 mailboxes × 10 endings): the only joins
   main makes and this branch does not are "Prices rose X…" (item 1) and
   "It is" / "It's" before a long "-ing" word or a number, both meant.
+- Neon (agy, gemini-4-neon-high) at `c3c1584`: no High; two Mediums fixed.
+  "Prices rose and fell at the rate gmail dot com." joined "fell@…": after
+  "and"/"or" with no address just before, a mailbox now needs an
+  introduction earlier in the sentence (or "and" opening it), and is never
+  a number. "It will be growing at the rate amazon dot com." joined: "be"
+  now counts as progressive, while a strong word earlier in the sentence
+  ("My email will be billing at the rate…") still joins. Left as Lows that
+  keep the words: a written address second in a list, a comma before
+  "and", a dotted mailbox starting with an -ing word, "No, 15,000, I mean,
+  50,000 dollars" not resolved, and "Wait, what question mark?" (as on
+  main).
 - CI runs `swift test --package-path VoiceIQCore` on Xcode 27.
