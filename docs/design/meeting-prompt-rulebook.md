@@ -55,7 +55,7 @@ These rules decide which bucket each item lands in, which is the weak spot today
 | The owner is the person who takes the task or is asked to do it, not the person who raised the topic. | OpenWhispr |
 | Set an owner only when it is explicit or unambiguous. Otherwise leave it null. Never write a placeholder such as "Owner not specified". | Anarlog, OpenWhispr, Open Granola, ours |
 | Keep the deadline exactly as spoken ("by Friday", "end of Q3"). Do not convert it to a date and do not infer one. | Open Granola, Fabric, ours |
-| A closing recap creates no new action. Match each recapped task to its earlier commitment and give it the deadline the recap states. A task the recap gives a named person for the first time is a new action. A recapped phrase that names no one and matches nothing earlier is not an action. | ours |
+| A closing recap creates no new action. Match each recapped task to its earlier commitment and give it the deadline the recap states, keeping its earlier deadline and owner when the recap states none. A task the recap gives a named person for the first time is a new action, and a step the group agrees to there is a group action. Any other recapped phrase that names no one and matches nothing earlier is not an action. | ours |
 | Open questions, risks, blockers, and dependencies go in notes, not actions. | OpenWhispr (Follow-ups), Meetily project sync (Risks), ours |
 | State each fact once. If it is a decision or an action, do not repeat it in the summary bullets or notes. | Fabric, Recall summarizer, ours |
 | Keep dissent and each person's reasons separate. Do not merge two people's objections unless the transcript says they share one. | Recall summarizer |

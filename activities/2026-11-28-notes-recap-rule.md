@@ -29,6 +29,16 @@ revision (bb4b0fe6) keeps a task first given to a named person in the
 recap. It got all four probe cases right in 2 of 2 runs: restated tasks,
 a new request, a new assignment, and the s4-echo transcript.
 
+Review (Neon hand read via agy) found two gaps, fixed in the last commit:
+a group step first agreed in the recap would have been dropped, and a recap
+that states no deadline could read as clearing the earlier one. The rule
+now keeps the earlier deadline and owner when the recap states none, and
+keeps a group step agreed in the recap. On the LLM Gateway probe (2 runs
+each) all six cases come out right: s4-echo, restated tasks, a new request,
+a new assignment, a group step and a recap with no date. The 9-meeting
+measurement below was on the wording before this fix, which only adds
+those two exceptions.
+
 ## Measured
 
 MeetingsEval on lobsters-mac-mini, notes only (`EVAL_TRANSCRIPTS`), on the
@@ -53,6 +63,9 @@ s3-four-people-echo. Notes on gpt-6-luna medium. M5 judged by Fable.
   moves of that size as one judge's noise: the single-run misses behind them
   (Muhammed's "send them to Nihal" dropped, "other vendors in the spring"
   dropped) have no link to recaps.
+- The rule was written for s4-names-unsaid-echo, a scored meeting, so its
+  gain there is expected; the other eight meetings and the probes are the
+  evidence it generalises.
 - One to watch: AMI run 3 listed Sarah's closing aside ("I get to do another
   fantastic PowerPoint presentation") as an action. That is the kind of
   first-time assignment the revision keeps; one run cannot show cause.
