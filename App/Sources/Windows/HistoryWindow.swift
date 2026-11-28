@@ -230,13 +230,12 @@ struct HistoryPane: View {
                 Text(attentionTitle(record))
                     .font(VoiceIQUI.TypeScale.body(grad: grad))
                     .foregroundStyle(.primary)
-                HStack(spacing: VoiceIQUI.Spacing.xs) {
-                    if let app = record.targetAppName { Text(app) }
-                    if let duration = record.durationSeconds {
-                        Text(String(format: "%.0fs of audio", duration))
-                    }
-                    Text(record.startedAt.formatted(.dateTime.month(.abbreviated).day().hour().minute()))
-                }
+                // One line joined with dots, as on the rows below; it fits beside Retry.
+                Text([
+                    record.targetAppName,
+                    record.durationSeconds.map { String(format: "%.0fs", $0) },
+                    record.startedAt.formatted(.dateTime.month(.abbreviated).day().hour().minute()),
+                ].compactMap { $0 }.joined(separator: " · "))
                 .font(VoiceIQUI.TypeScale.labelSmall(grad: grad))
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
