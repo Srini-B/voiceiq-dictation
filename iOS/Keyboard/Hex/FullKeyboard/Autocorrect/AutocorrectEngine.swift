@@ -1110,7 +1110,10 @@ final class AutocorrectEngine {
             // (a name, day or place), or that German's `de.capitals` calls a noun, typed in
             // lowercase, is capitalised as the dictionary path does ("mary" -> "Mary",
             // "haus" -> "Haus"), unless Auto-capitalization is off.
-            return addsCapitals ? nounCapitalised(for: token, typed: token) : nil
+            // Nothing when that is what you typed ("Airbnb" after Shift): no auto-replace to undo.
+            guard addsCapitals, let capitalised = nounCapitalised(for: token, typed: token), capitalised != token
+            else { return nil }
+            return capitalised
         }
 
         // 3. A two-letter non-word one neighbouring key from a very common two-letter word

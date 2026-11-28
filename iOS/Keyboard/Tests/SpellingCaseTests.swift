@@ -18,6 +18,16 @@ final class SpellingCaseTests: XCTestCase {
             XCTAssertEqual(field.text, before + want + " ", "typed \(typed) after \"\(before)\"")
         }
 
+        // A spelling that is only a capital ("Airbnb"), typed after the sentence's own capital,
+        // is already right: space has nothing to replace.
+        let airbnb = Field()
+        let typing = try engine(airbnb)
+        for letter in "airbnb" { tap(.character(String(letter)), typing) }
+        XCTAssertFalse(typing.suggestions.contains { if case .primary(autoReplace: true) = $0.kind { true } else { false } },
+                       "\(typing.suggestions.map(\.displayText))")
+        tap(.space, typing)
+        XCTAssertEqual(airbnb.text, "Airbnb ")
+
         let field = Field()
         let keys = try engine(field)
         let plane = KeyboardKeyPlaneView(engine: keys)

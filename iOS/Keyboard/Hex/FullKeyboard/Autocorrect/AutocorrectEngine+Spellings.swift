@@ -7,10 +7,12 @@ import Foundation
 @MainActor
 extension AutocorrectEngine {
     /// `word`, all lowercase or with only a capital first letter (a sentence's start: "Chatgpt"),
-    /// as the layout language's model spells it; nil when it has no spelling of its own.
+    /// as the layout language's model spells it; nil when it has no spelling of its own or is
+    /// one of your own spellings ("Fitzgerald" from Contacts stays).
     func modelSpelling(of word: String) -> String? {
         let lower = word.lowercased()
-        guard word == lower || word.dropFirst() == lower.dropFirst(), let model = contextModel ?? decoder?.model,
+        guard word == lower || word.dropFirst() == lower.dropFirst(), !isOwnSpelling(word),
+              let model = contextModel ?? decoder?.model,
               model.language == language.rawValue else { return nil }
         return HexWordList.bundled(model.language, "spellings")?.text(of: lower)
     }

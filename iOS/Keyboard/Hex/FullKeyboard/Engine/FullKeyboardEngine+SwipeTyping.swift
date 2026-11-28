@@ -168,7 +168,9 @@ extension FullKeyboardEngine {
         if shift.state == .locked { return word.uppercased() }
         guard let first = word.first else { return word }
         if capital {
-            if let spelled = autocorrect.modelSpelling(of: word), spelled != spelled.lowercased() { return spelled }
+            if autoCapitalizes, let spelled = autocorrect.modelSpelling(of: word), spelled != spelled.lowercased() {
+                return spelled
+            }
             return first.uppercased() + word.dropFirst()
         }
         if !autoCapitalizes {
