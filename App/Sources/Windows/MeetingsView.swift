@@ -249,13 +249,18 @@ struct MeetingsPane: View {
             }
             if let unheardCall, unheardCall.id == meeting.id { unheardWarning(unheardCall.why) }
             if meeting.speakersUnsplit == true, meeting.status == .done, !engine.isBusy(meeting.id) { unsplitWarning(meeting) }
+            // Above both columns, so it keeps playing whichever of notes and transcript is shown.
+            if audio(meeting).isAvailable {
+                MeetingPlaybackBar(audio: audio(meeting), style: .voiceIQ)
+                    .padding(.horizontal, VoiceIQUI.Spacing.xxl)
+                    .padding(.top, VoiceIQUI.Spacing.m)
+            }
             HStack(spacing: 0) {
                 if wide || !transcriptShown {
                     MeetingNotesColumn(meeting: meeting, notes: notes, transcript: transcript, step: step(meeting), chat: chat(meeting),
                                        live: recordingSince(meeting).map { since in
                                            MeetingRecordingStatus(engine: engine, since: since) { confirmingDiscard = true }
-                                       },
-                                       audio: audio(meeting))
+                                       })
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .id(meeting.id)
                 }
@@ -346,7 +351,7 @@ struct MeetingsPane: View {
                 .disabled(busy)
                 .help("Write the notes again with the speaker names you set")
             }
-            // Play is the bar under the title.
+            // Play is the bar under the header.
             RecordingAudioButtons(audio: audio(meeting), play: false) { exported = $0 }
             Menu {
                 Section("Save to Downloads") { exportItems { export(meeting, $0) } }

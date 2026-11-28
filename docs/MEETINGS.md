@@ -641,9 +641,10 @@ since a redo then would write over the change.
 
 Every meeting and dictation detail has Play and Download for its audio.
 A dictation has a Play icon in the Mac header and a Play button on iPhone. A
-meeting plays from its playback bar (below), under the title on the Mac and in
-the Audio card on iPhone, with Download in the Mac header and under the bar on
-iPhone. Both are unavailable when the audio is not on the device: a dictation
+meeting plays from its playback bar (below): on the Mac it sits under the header,
+above both the notes and the transcript, so it keeps playing in any layout. On
+iPhone it is in the Audio card. Download is in the Mac header and under the bar
+on iPhone. Both are unavailable when the audio is not on the device: a dictation
 synced from the other device or removed by audio retention, or a meeting still
 recording. Redo transcript and notes is disabled the same way.
 
@@ -710,8 +711,8 @@ mirrored or AirPlay display, still shows the pill.
 
 | File | Shows |
 | --- | --- |
-| `MeetingsView.swift` | Record button (with Mute my mic and Discard under it while recording) and folder menu above the list, the list with a heading row per day (Today, Yesterday, then the date; rows, not Sections, because macOS pins the top Section's header with a rule under it) with each row's start time, length and call app (or the app it was imported from), the empty pane's Record button, each row's folders, the detail header (the folder menu ([Folders](#folders)), or the title while the transcript fills the pane, since the notes open with it; progress while transcribing or making notes, Update notes after a speaker is renamed, Download audio (`RecordingAudioButtons.swift`; a meeting plays from its playback bar), Export menu with Copy prompt for an AI agent, `…` menu with Rename / Redo notes / Redo transcript and notes / Retry / Delete, transcript toggle), the warning on a call whose other side was not heard, the export message |
-| `MeetingNotesColumn.swift` | Title, then the day, start time and length (`MeetingMeta.whenText`; the iPhone shows the same line), and everyone heard (the note owner first, each with a dot in their transcript colour), the playback bar ([Meeting waveforms](#meeting-waveforms)), or the live waveform card while it records (`MeetingRecordingStatus.swift`), Summary, the meeting type's sections, Decisions, Action items as open circles ("Owner: task"), Notes, then the meeting's questions and answers (`MeetingChatView.swift`, which also has the question box `MeetingsView.swift` puts under both columns) |
+| `MeetingsView.swift` | Record button (with Mute my mic and Discard under it while recording) and folder menu above the list, the list with a heading row per day (Today, Yesterday, then the date; rows, not Sections, because macOS pins the top Section's header with a rule under it) with each row's start time, length and call app (or the app it was imported from), the empty pane's Record button, each row's folders, the detail header (the folder menu ([Folders](#folders)), or the title while the transcript fills the pane, since the notes open with it; progress while transcribing or making notes, Update notes after a speaker is renamed, Download audio (`RecordingAudioButtons.swift`), Export menu with Copy prompt for an AI agent, `…` menu with Rename / Redo notes / Redo transcript and notes / Retry / Delete, transcript toggle), the playback bar under it ([Meeting waveforms](#meeting-waveforms)), the warning on a call whose other side was not heard, the export message |
+| `MeetingNotesColumn.swift` | Title, then the day, start time and length (`MeetingMeta.whenText`; the iPhone shows the same line), and everyone heard (the note owner first, each with a dot in their transcript colour), the live waveform card while it records (`MeetingRecordingStatus.swift`), Summary, the meeting type's sections, Decisions, Action items as open circles ("Owner: task"), Notes, then the meeting's questions and answers (`MeetingChatView.swift`, which also has the question box `MeetingsView.swift` puts under both columns) |
 | `MeetingTranscriptColumn.swift` | The transcript in one `NSTextView`: one heading per turn (`MeetingSpeaker.turns`: lines in a row by the same speaker) with the name in its own colour (`SpeakerPalette`) and the turn's start time beside it, search that filters and highlights, Edit and Delete… on each line's right-click menu and the edit field above the transcript ([Editing the transcript](#editing-the-transcript)) |
 | `AssignSpeakersView.swift` | One card per speaker: name, a sample line, shuffle (next line), play (that line's audio) |
 
