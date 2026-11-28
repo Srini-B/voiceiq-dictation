@@ -87,3 +87,28 @@ struct SegmentSwitch<Value: Hashable>: View {
         .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }
+
+/// A page's title in the display style with a muted one-line subtitle, at the
+/// top of a pane.
+struct PageHeader: View {
+    let title: String
+    let subtitle: String
+
+    @Environment(\.colorScheme) private var scheme
+    private var grad: CGFloat { scheme == .dark ? 25 : 0 }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: VoiceIQUI.Spacing.xxs) {
+            Text(title)
+                .font(VoiceIQUI.TypeScale.display(grad: grad))
+                .foregroundStyle(VQ.Colors.ink)
+            Text(subtitle)
+                .font(VoiceIQUI.TypeScale.body(grad: grad))
+                .foregroundStyle(VQ.Colors.muted)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, VQ.Spacing.page)
+        .padding(.top, VoiceIQUI.Spacing.l)
+        .padding(.bottom, VoiceIQUI.Spacing.s)
+    }
+}

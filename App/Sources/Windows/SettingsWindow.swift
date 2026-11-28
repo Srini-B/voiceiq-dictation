@@ -263,88 +263,94 @@ struct PrivacyPane: View {
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
 
     var body: some View {
-        Form {
-            Section {
-                Toggle("Start VoiceiQ at login", isOn: $launchAtLogin)
-                    .onChange(of: launchAtLogin) { _, enabled in
-                        // The failure-path revert below re-enters onChange with the
-                        // inverted value — this guard stops the bounce from calling
-                        // into SMAppService a second time.
-                        guard enabled != (SMAppService.mainApp.status == .enabled) else { return }
-                        do {
-                            if enabled {
-                                try SMAppService.mainApp.register()
-                            } else {
-                                try SMAppService.mainApp.unregister()
+        VStack(spacing: 0) {
+            PageHeader(title: "Privacy & Storage", subtitle: "What stays on this Mac, what leaves it, and how long it's kept.")
+            Form {
+                Group {
+                    Section {
+                        Toggle("Start VoiceiQ at login", isOn: $launchAtLogin)
+                            .onChange(of: launchAtLogin) { _, enabled in
+                                // The failure-path revert below re-enters onChange with the
+                                // inverted value — this guard stops the bounce from calling
+                                // into SMAppService a second time.
+                                guard enabled != (SMAppService.mainApp.status == .enabled) else { return }
+                                do {
+                                    if enabled {
+                                        try SMAppService.mainApp.register()
+                                    } else {
+                                        try SMAppService.mainApp.unregister()
+                                    }
+                                } catch {
+                                    Log.ui.error("launch-at-login toggle failed: \(error)")
+                                    launchAtLogin = SMAppService.mainApp.status == .enabled
+                                }
                             }
-                        } catch {
-                            Log.ui.error("launch-at-login toggle failed: \(error)")
-                            launchAtLogin = SMAppService.mainApp.status == .enabled
+                    }
+
+                    Section {
+                        SearchablePicker("Keep audio recordings", selection: $retentionDays, options: [
+                            SearchOption(value: -1, name: "Never (disables Retry)"), SearchOption(value: 1, name: "24 hours"),
+                            SearchOption(value: 7, name: "7 days"), SearchOption(value: 30, name: "30 days"),
+                            SearchOption(value: 0, name: "Forever"),
+                        ])
+                        .onChange(of: retentionDays) { _, days in
+                            settings.setAudioRetentionDays(days)
+                            // Off the main thread — the purge walks every recording folder
+                            // and would hitch the pane with a large history (the 6h timer
+                            // path already detaches).
+                            Task.detached(priority: .utility) {
+                                RetentionPolicy(audioRetentionDays: days).purgeExpiredAudio()
+                            }
+                        }
+                        SearchablePicker("Keep dictations", selection: $transcriptRetentionDays, options: [
+                            SearchOption(value: -1, name: "Never (no History)"), SearchOption(value: 1, name: "24 hours"),
+                            SearchOption(value: 7, name: "7 days"), SearchOption(value: 30, name: "30 days"),
+                            SearchOption(value: 365, name: "1 year"), SearchOption(value: 0, name: "Forever"),
+                        ])
+                        .onChange(of: transcriptRetentionDays) { _, days in
+                            settings.setTranscriptRetentionDays(days)
+                            Task.detached(priority: .utility) {
+                                RetentionPolicy(transcriptRetentionDays: days).purgeExpiredTranscripts()
+                            }
+                        }
+                    } footer: {
+                        Text("Dictations that still need you (a failed upload with Retry, text held for a secure field) stay until you deal with them.")
+                    }
+
+                    Section {
+                        LocalAudioPrivacyRow(provider: "AssemblyAI", cloudDescription: "Sent to AssemblyAI with your key, transcribed every time")
+                        leaves("Text around the cursor", "Sent with each dictation, so it fits the text already there")
+                        leaves("Where you are typing", "App name, window title and browser page address, with each dictation")
+                        leaves("Meeting audio", "Only if call recording is on; transcribed and turned into notes by AssemblyAI")
+                        leaves("Dictionary terms", "Sent with each dictation and meeting notes, so names are spelled right")
+                        leaves("Dictionary", "Synced to your iPhone through your iCloud account")
+                        leaves("History", "Final text synced to your iPhone through your iCloud account")
+                        leaves("Meetings", "Notes, transcripts and questions synced to your iPhone through your iCloud account; recordings stay on this Mac")
+                        leaves("Coding agents", "Only if you let them read History and meetings; what they read goes to their AI provider")
+                        leaves("Screen snapshots", "Only if screen context is on; never stored")
+                        leaves("Names on a call screen", "Read on this Mac while a meeting records; only the names go to AssemblyAI for notes")
+                        leaves("Everything else", "Never leaves this Mac")
+                    } header: {
+                        Text("What leaves your Mac")
+                    } footer: {
+                        Text("No middleman server, no account, no analytics, no keystroke logging. Only AssemblyAI, plus the AI providers of any coding agents you let read History and meetings.")
+                    }
+
+                    GranolaImportSection { Text("Import meetings") }
+
+                    Section {
+                        Button("Delete All History…", role: .destructive) {
+                            confirmingDelete = true
+                        }
+                        .confirmationDialog(
+                            "Delete all dictation history? Audio and transcripts will be removed from this Mac.",
+                            isPresented: $confirmingDelete
+                        ) {
+                            Button("Delete Everything", role: .destructive) { onDeleteAllHistory() }
                         }
                     }
-            }
-
-            Section {
-                SearchablePicker("Keep audio recordings", selection: $retentionDays, options: [
-                    SearchOption(value: -1, name: "Never (disables Retry)"), SearchOption(value: 1, name: "24 hours"),
-                    SearchOption(value: 7, name: "7 days"), SearchOption(value: 30, name: "30 days"),
-                    SearchOption(value: 0, name: "Forever"),
-                ])
-                .onChange(of: retentionDays) { _, days in
-                    settings.setAudioRetentionDays(days)
-                    // Off the main thread — the purge walks every recording folder
-                    // and would hitch the pane with a large history (the 6h timer
-                    // path already detaches).
-                    Task.detached(priority: .utility) {
-                        RetentionPolicy(audioRetentionDays: days).purgeExpiredAudio()
-                    }
                 }
-                SearchablePicker("Keep dictations", selection: $transcriptRetentionDays, options: [
-                    SearchOption(value: -1, name: "Never (no History)"), SearchOption(value: 1, name: "24 hours"),
-                    SearchOption(value: 7, name: "7 days"), SearchOption(value: 30, name: "30 days"),
-                    SearchOption(value: 365, name: "1 year"), SearchOption(value: 0, name: "Forever"),
-                ])
-                .onChange(of: transcriptRetentionDays) { _, days in
-                    settings.setTranscriptRetentionDays(days)
-                    Task.detached(priority: .utility) {
-                        RetentionPolicy(transcriptRetentionDays: days).purgeExpiredTranscripts()
-                    }
-                }
-            } footer: {
-                Text("Dictations that still need you (a failed upload with Retry, text held for a secure field) stay until you deal with them.")
-            }
-
-            Section {
-                LocalAudioPrivacyRow(provider: "AssemblyAI", cloudDescription: "Sent to AssemblyAI with your key, transcribed every time")
-                LabeledContent("Text around the cursor") { Text("Sent with each dictation, so it fits the text already there") }
-                LabeledContent("Where you are typing") { Text("App name, window title and browser page address, with each dictation") }
-                LabeledContent("Meeting audio") { Text("Only if call recording is on; transcribed and turned into notes by AssemblyAI") }
-                LabeledContent("Dictionary terms") { Text("Sent with each dictation and meeting notes, so names are spelled right") }
-                LabeledContent("Dictionary") { Text("Synced to your iPhone through your iCloud account") }
-                LabeledContent("History") { Text("Final text synced to your iPhone through your iCloud account") }
-                LabeledContent("Meetings") { Text("Notes, transcripts and questions synced to your iPhone through your iCloud account; recordings stay on this Mac") }
-                LabeledContent("Coding agents") { Text("Only if you let them read History and meetings; what they read goes to their AI provider") }
-                LabeledContent("Screen snapshots") { Text("Only if screen context is on; never stored") }
-                LabeledContent("Names on a call screen") { Text("Read on this Mac while a meeting records; only the names go to AssemblyAI for notes") }
-                LabeledContent("Everything else") { Text("Never leaves this Mac") }
-            } header: {
-                Text("What leaves your Mac")
-            } footer: {
-                Text("No middleman server, no account, no analytics, no keystroke logging. Only AssemblyAI, plus the AI providers of any coding agents you let read History and meetings.")
-            }
-
-            GranolaImportSection { Text("Import meetings") }
-
-            Section {
-                Button("Delete All History…", role: .destructive) {
-                    confirmingDelete = true
-                }
-                .confirmationDialog(
-                    "Delete all dictation history? Audio and transcripts will be removed from this Mac.",
-                    isPresented: $confirmingDelete
-                ) {
-                    Button("Delete Everything", role: .destructive) { onDeleteAllHistory() }
-                }
+                .listRowBackground(VQ.Colors.surface)
             }
         }
         // Login-item state lives in macOS, not in our defaults, so it can change
@@ -352,6 +358,16 @@ struct PrivacyPane: View {
         // off without telling us. Re-reading on appear covers reopening the window.
         .onAppear {
             launchAtLogin = SMAppService.mainApp.status == .enabled
+        }
+    }
+
+    /// One "What leaves your Mac" row: the data, with where it goes under it.
+    private func leaves(_ label: String, _ detail: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(label)
+            Text(detail)
+                .font(.footnote)
+                .foregroundStyle(VQ.Colors.muted)
         }
     }
 }
@@ -372,14 +388,20 @@ struct AdvancedPane: View {
     private var hasStoredKey: Bool { keyStatus == .stored || keyStatus == .valid || keyStatus == .savedOffline }
 
     var body: some View {
-        Form {
-            assemblyAIKeySection
+        VStack(spacing: 0) {
+            PageHeader(title: "Advanced", subtitle: "Your AssemblyAI key and model, coding agent access, and logs.")
+            Form {
+                Group {
+                    assemblyAIKeySection
 
-            assemblyAIModelSection
+                    assemblyAIModelSection
 
-            AgentAccessSection()
+                    AgentAccessSection()
 
-            DebugLogSection()
+                    DebugLogSection()
+                }
+                .listRowBackground(VQ.Colors.surface)
+            }
         }
         // Key saved elsewhere (onboarding, dev-file migration) while this pane is
         // open: refresh the badge — but never clobber in-flight feedback.

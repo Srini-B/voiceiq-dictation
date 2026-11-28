@@ -47,43 +47,11 @@ struct CostPane: View {
     private var grad: CGFloat { scheme == .dark ? 25 : 0 }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: VoiceIQUI.Spacing.l) {
-                // Its own row: beside the totals, four sources squeezed them
-                // into "$0.01…". Hidden when AssemblyAI is the only one.
-                if sources.count > 1 { HStack {
-                    Picker("Source", selection: $source) {
-                        ForEach(sources) { Text($0.displayName).tag($0) }
-                    }
-                    .pickerStyle(.segmented)
-                    .labelsHidden()
-                    .fixedSize()
-                    .onChange(of: source) { _, _ in reload() }
-                    Spacer()
-                } }
-                summary
-                HStack(spacing: VoiceIQUI.Spacing.m) {
-                    Picker("Period", selection: $period) {
-                        ForEach(Period.allCases) { Text($0.title).tag($0) }
-                    }
-                    .pickerStyle(.segmented)
-                    .labelsHidden()
-                    .onChange(of: period) { _, _ in reloadBreakdown() }
-                    Toggle("Detailed", isOn: $detailed)
-                        .toggleStyle(.switch)
-                        .controlSize(.small)
-                        .font(VoiceIQUI.TypeScale.body(grad: grad))
-                }
-                breakdown("By action", rows: byActivity.map { (UsageActivity(rawValue: $0.key)?.displayName ?? $0.key, $0.total) })
-                if detailed {
-                    breakdown("By model", rows: byModel.map { ($0.key, $0.total) })
-                    recentCalls
-                }
-                Text(footer)
-                    .font(VoiceIQUI.TypeScale.labelSmall(grad: grad))
-                    .foregroundStyle(.secondary)
+        VStack(spacing: 0) {
+            PageHeader(title: "Cost Analysis", subtitle: "What the model calls behind each action cost, in dollars.")
+            ScrollView {
+                content
             }
-            .padding(VoiceIQUI.Spacing.l)
         }
         .onAppear {
             reload()
@@ -92,6 +60,44 @@ struct CostPane: View {
             NotificationCenter.default.publisher(for: .gtUsageDidChange)
                 .debounce(for: .milliseconds(250), scheduler: RunLoop.main)
         ) { _ in reload() }
+    }
+
+    private var content: some View {
+        VStack(alignment: .leading, spacing: VoiceIQUI.Spacing.l) {
+            // Its own row: beside the totals, four sources squeezed them
+            // into "$0.01…". Hidden when AssemblyAI is the only one.
+            if sources.count > 1 { HStack {
+                Picker("Source", selection: $source) {
+                    ForEach(sources) { Text($0.displayName).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .fixedSize()
+                .onChange(of: source) { _, _ in reload() }
+                Spacer()
+            } }
+            summary
+            HStack(spacing: VoiceIQUI.Spacing.m) {
+                SegmentSwitch(selection: $period, options: Period.allCases.map { (label: $0.title, value: $0) })
+                    .onChange(of: period) { _, _ in reloadBreakdown() }
+                Spacer(minLength: 0)
+                Toggle("Detailed", isOn: $detailed)
+                    .toggleStyle(.switch)
+                    .controlSize(.small)
+                    .font(VoiceIQUI.TypeScale.body(grad: grad))
+            }
+            breakdown("By action", rows: byActivity.map { (UsageActivity(rawValue: $0.key)?.displayName ?? $0.key, $0.total) })
+            if detailed {
+                breakdown("By model", rows: byModel.map { ($0.key, $0.total) })
+                recentCalls
+            }
+            Text(footer)
+                .font(VoiceIQUI.TypeScale.labelSmall(grad: grad))
+                .foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, VQ.Spacing.page)
+        .padding(.top, VoiceIQUI.Spacing.s)
+        .padding(.bottom, VoiceIQUI.Spacing.l)
     }
 
     // MARK: - Sections
@@ -122,7 +128,7 @@ struct CostPane: View {
 
     private func breakdown(_ title: String, rows: [(String, UsageStore.Total)]) -> some View {
         VStack(alignment: .leading, spacing: VoiceIQUI.Spacing.xs) {
-            Text(title).font(VoiceIQUI.TypeScale.title(grad: grad))
+            SectionCaption(text: title)
             if rows.isEmpty {
                 Text("No calls in this period")
                     .font(VoiceIQUI.TypeScale.body(grad: grad))
@@ -136,6 +142,8 @@ struct CostPane: View {
                         header("Cost")
                     }
                     ForEach(rows, id: \.0) { name, total in
+                        Rectangle().fill(VQ.Colors.hairline).frame(height: 1)
+                            .gridCellUnsizedAxes(.horizontal)
                         GridRow {
                             Text(name).font(VoiceIQUI.TypeScale.body(grad: grad))
                                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -151,9 +159,7 @@ struct CostPane: View {
                 }
             }
         }
-        .padding(VoiceIQUI.Spacing.m)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: VoiceIQUI.Radius.medium).fill(.quaternary.opacity(0.4)))
     }
 
     private var recentCalls: some View {
