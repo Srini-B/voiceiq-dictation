@@ -359,19 +359,22 @@ public struct MeetingPlaybackBar: View {
         .help("Playback speed")
     }
 
-    /// Each bar the loudest moment in its stretch of the meeting.
+    /// Each bar the average loudness of its stretch of the meeting. The loudest
+    /// moment would draw steady talk as a solid block: a few seconds of speech
+    /// always holds one near-full 100 ms window.
     private func bars(_ count: Int) -> [WaveBar] {
         guard let loudness, !loudness.you.isEmpty || !(loudness.call ?? []).isEmpty else {
             return Array(repeating: WaveBar(you: 0, call: loudness?.call == nil ? nil : 0), count: count)
         }
         let length = max(loudness.you.count, loudness.call?.count ?? 0)
-        func peak(_ values: [Float], _ index: Int) -> Float {
+        func level(_ values: [Float], _ index: Int) -> Float {
             let start = index * length / count, end = max(start + 1, (index + 1) * length / count)
             guard start < values.count else { return 0 }
-            return values[start..<min(end, values.count)].max() ?? 0
+            let stretch = values[start..<min(end, values.count)]
+            return stretch.reduce(0, +) / Float(stretch.count)
         }
         return (0..<count).map { index in
-            WaveBar(you: peak(loudness.you, index), call: loudness.call.map { peak($0, index) })
+            WaveBar(you: level(loudness.you, index), call: loudness.call.map { level($0, index) })
         }
     }
 

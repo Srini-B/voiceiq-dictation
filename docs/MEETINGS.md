@@ -732,7 +732,7 @@ colours on both platforms: ink for you, grey for the call.
   from `MeetingLoudness.read`, which takes each track's 100 ms levels
   (`TrackAudio`) with its transcription gain, so a quiet call side draws as tall
   as the mic, and maps them from −50 dBFS (flat) to −10 dBFS (full). Each bar is
-  the loudest moment in its stretch. An empty `system.caf`, as on iPhone, means
+  the average of its stretch, so steady talk keeps its shape. An empty `system.caf`, as on iPhone, means
   no call side. The last eight waveforms read are kept, so reopening a meeting
   doesn't read its tracks again, and choosing another meeting stops a read in
   progress. Seeking waits until the length is known. On iPhone, a drag scrubs
