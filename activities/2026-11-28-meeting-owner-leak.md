@@ -20,6 +20,13 @@ Two meetings also failed at the notes step on a gateway 429 (Retry-After
   up to 4 asks) before the meeting falls back to its own waiting retry. The
   meetings eval calls the same function, so a 429 no longer scores as a
   failure.
+- From Neon's review (agy, session e5a6275a): the echo drop removes only the
+  matched stretch of a run, not the whole run, so a real reply under the
+  leak's label less than a second later stays. `meetingNotes` gives all its
+  asks one deadline and skips the missing-actions ask with under a minute
+  left, so rate limits can't hold a meeting in "Making notes" for several
+  deadlines; `meetingNotesJSON` stops once its deadline has passed (a wake
+  from sleep during a wait).
 
 ## Verification
 

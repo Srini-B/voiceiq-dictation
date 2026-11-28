@@ -103,11 +103,14 @@ public struct MeetingTranscriber: Sendable {
     /// The far side without the owner's own voice. When the owner's speech
     /// leaks into the far track (a remote speaker's mic picks it up, or a
     /// headset bleeds into the others), the far side repeats the owner's words
-    /// as another speaker. A run of one far-side speaker's words, split at a
-    /// pause, is that echo when it has at least `echoRunWords` words and
-    /// at least `echoShare` of them match an owner word starting within
-    /// `echoSlack` seconds; the whole run goes. A short overlapping "yeah" or
-    /// "okay" stays: the far side really says those over the owner.
+    /// as another speaker. In a run of one far-side speaker's words, split at
+    /// a pause, the stretch from its first word that matches an owner word
+    /// starting within `echoSlack` seconds to its last is that echo when it
+    /// has at least `echoRunWords` words and at least `echoShare` of them
+    /// match; that stretch goes, and the run's words before and after it stay
+    /// (a remote reply under the same label right after the leak). A short
+    /// overlapping "yeah" or "okay" stays: the far side really says those
+    /// over the owner.
     /// MEASURED 2026-11-28 on AMI ES2004a: the leak was a fifth speaker with
     /// 120 s and 362 words, 93% of its time inside the owner's turns.
     static func droppingOwnerEcho(_ far: [TimedWord], owner: [TimedWord]) -> [TimedWord] {
@@ -135,9 +138,13 @@ public struct MeetingTranscriber: Sendable {
         for words in Dictionary(grouping: far, by: \.speaker).values {
             var run: [TimedWord] = []
             func flush() {
-                let matched = run.filter(echoes).count
-                if run.count < echoRunWords || Double(matched) < echoShare * Double(run.count) { kept += run }
-                run = []
+                defer { run = [] }
+                let matched = run.map(echoes)
+                guard let first = matched.firstIndex(of: true), let last = matched.lastIndex(of: true) else { kept += run; return }
+                let core = last - first + 1
+                let echoed = matched[first...last].filter { $0 }.count
+                guard core >= echoRunWords, Double(echoed) >= echoShare * Double(core) else { kept += run; return }
+                kept += run[..<first] + run[(last + 1)...]
             }
             for word in words.sorted(by: { $0.start < $1.start }) {
                 if let last = run.last, word.start - last.end > echoRunGap { flush() }

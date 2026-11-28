@@ -53,7 +53,8 @@ final class MeetingTracksTests: XCTestCase {
     /// The owner's voice leaking into the far track comes back as a far-side
     /// speaker repeating the owner; that run goes. A far-side "yeah, okay"
     /// over the owner and a far-side sentence of its own stay, even when one
-    /// of its words is also the owner's.
+    /// of its words is also the owner's, and so does a reply the same far
+    /// voice starts right after the leak.
     func testTheOwnersVoiceOnTheFarTrackIsDropped() {
         let you = MeetingSpeaker.you
         let owner = ["hello", "everybody", "I'm", "Sarah", "the", "project", "manager"].enumerated()
@@ -64,8 +65,12 @@ final class MeetingTracksTests: XCTestCase {
         let backchannel = [word("Yeah,", "spk:1", 11.0), word("okay.", "spk:1", 11.4)]
         let own = ["the", "budget", "is", "twelve", "euros"].enumerated()
             .map { word($0.element, "spk:1", 20 + Double($0.offset) * 0.6) }
-        let kept = MeetingTranscriber.droppingOwnerEcho(leak + backchannel + own, owner: owner)
-        XCTAssertEqual(kept.map(\.text), ["Yeah,", "okay.", "the", "budget", "is", "twelve", "euros"])
+        // Under the leak's label, less than a second after it.
+        let reply = ["I'll", "send", "the", "deck", "Friday."].enumerated()
+            .map { word($0.element, "spk:2", 14.5 + Double($0.offset) * 0.6) }
+        let kept = MeetingTranscriber.droppingOwnerEcho(leak + reply + backchannel + own, owner: owner)
+        XCTAssertEqual(kept.map(\.text), ["Yeah,", "okay.", "I'll", "send", "the", "deck", "Friday.",
+                                          "the", "budget", "is", "twelve", "euros"])
     }
 
     func testWordsGoToTheTrackTheyWereHeardOn() throws {

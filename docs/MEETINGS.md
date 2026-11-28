@@ -35,11 +35,14 @@ What a request holds depends on the mic:
   is on its own track. Cached as `mic-N.json` and `far-N.json`. The owner's
   voice can still leak into the far track (a remote mic picks it up, or one
   headset bleeds into the others) and come back as a far-side speaker
-  repeating the owner. `MeetingTranscriber.droppingOwnerEcho` drops a run of
-  three or more words from one far-side speaker, split at a 1 s pause,
-  when at least 60% of them match an owner word starting within 0.5 s. A
-  short "yeah" or "okay" over the owner stays. On AMI ES2004a the leak was a
-  fifth speaker of 120 s.
+  repeating the owner. `MeetingTranscriber.droppingOwnerEcho` looks at each
+  far-side speaker's words split at a 1 s pause, and in each run at the
+  stretch from the first word that matches an owner word starting within
+  0.5 s to the last. That stretch goes when it has three or more words and
+  at least 60% of them match; the run's words before and after it stay, so a
+  reply the same voice starts right after the leak is kept. A short "yeah"
+  or "okay" over the owner stays. On AMI ES2004a the leak was a fifth
+  speaker of 120 s.
 - **Otherwise** (speakerphone echo the canceller could not remove, or a
   recording with no far side): both tracks as one levelled timeline
   (`CallAudio.samples`), as before. Cached as `N.json`.

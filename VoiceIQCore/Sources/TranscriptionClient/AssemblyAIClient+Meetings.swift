@@ -35,6 +35,8 @@ public extension AssemblyAIClient {
         let end = Date().addingTimeInterval(deadline)
         var tries = 0
         while true {
+            // A wake from sleep can pass the deadline during the wait.
+            guard end.timeIntervalSinceNow > 0 else { throw TranscriptionError.timeout }
             do {
                 return try await complete(messages: [["role": "user", "content": prompt]], model: model,
                                           schema: ("meeting_notes", Self.notesSchema),
@@ -87,19 +89,25 @@ public extension AssemblyAIClient {
     /// each of those meetings ended without notes.
     /// Notes with no action items for a transcript that holds commitments are
     /// asked for once more with those lines quoted
-    /// (`MeetingNotesPrompt.missingActions`).
+    /// (`MeetingNotesPrompt.missingActions`), when a minute is left.
+    /// `deadline` covers every ask together, so rate limits can't hold the
+    /// meeting in "Making notes" for several deadlines.
     func meetingNotes(prompt: String, transcript: [TranscriptSegment], model: String,
                       deadline: TimeInterval) async throws -> MeetingNotes {
+        let end = Date().addingTimeInterval(deadline)
         let ask = { (prompt: String) in
             do {
-                return try MeetingNotesPrompt.parse(try await self.meetingNotesJSON(prompt: prompt, model: model, deadline: deadline))
+                return try MeetingNotesPrompt.parse(try await self.meetingNotesJSON(
+                    prompt: prompt, model: model, deadline: end.timeIntervalSinceNow))
             } catch let error where error is DecodingError || (error as NSError).domain == NSCocoaErrorDomain {
                 Log.transcription.info("notes reply was not notes JSON; asking again")
-                return try MeetingNotesPrompt.parse(try await self.meetingNotesJSON(prompt: prompt, model: model, deadline: deadline))
+                return try MeetingNotesPrompt.parse(try await self.meetingNotesJSON(
+                    prompt: prompt, model: model, deadline: end.timeIntervalSinceNow))
             }
         }
         let notes = try await ask(prompt)
-        guard let missing = MeetingNotesPrompt.missingActions(notes, transcript: transcript) else { return notes }
+        guard end.timeIntervalSinceNow > 60,
+              let missing = MeetingNotesPrompt.missingActions(notes, transcript: transcript) else { return notes }
         Log.transcription.info("notes had no action items for a transcript with commitments; asking again")
         guard let again = try? await ask(prompt + missing), !again.actions.isEmpty else { return notes }
         return again
