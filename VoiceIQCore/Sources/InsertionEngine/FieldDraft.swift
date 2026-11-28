@@ -263,6 +263,14 @@ public final class FieldDraft: TextDraft {
             Log.insertion.info("draft: its field is no longer focused — kept as it was")
             return false
         }
+        /// Puts the user's selection back only while the field still shows
+        /// the draft selected as this swap left it: a caret the user moved
+        /// meanwhile stays where they put it.
+        func restoreIfStillSelected() async {
+            guard let now = PasteCheck.reading(of: element), now.caret == span.location,
+                  now.selectionLength == span.length else { return }
+            _ = await select(reading.caret, reading.selectionLength)
+        }
         guard await select(span.location, span.length, holding: reading.value) else {
             _ = await select(reading.caret, reading.selectionLength)
             // Focused and unchanged, the field itself refused the selection.
@@ -281,7 +289,7 @@ public final class FieldDraft: TextDraft {
                    let result = await swapped(now) { return result }
                 try? await Task.sleep(for: .milliseconds(40))
             }
-            _ = await select(reading.caret, reading.selectionLength)
+            await restoreIfStillSelected()
             if PasteCheck.reading(of: element)?.value == reading.value { refusedByApp() }
             Log.insertion.info("draft: the field took the write but never showed it — kept as it was")
             return false
@@ -294,12 +302,12 @@ public final class FieldDraft: TextDraft {
         guard Self.focusedTarget(context: context).map({ CFEqual($0, element) }) == true,
               let selected = PasteCheck.reading(of: element), selected.value == reading.value,
               selected.caret == span.location, selected.selectionLength == span.length else {
-            _ = await select(reading.caret, reading.selectionLength)
+            await restoreIfStillSelected()
             Log.insertion.info("draft: not focused or the selection moved — kept as it was")
             return false
         }
         guard await inserter.paste(written) else {
-            _ = await select(reading.caret, reading.selectionLength)
+            await restoreIfStillSelected()
             return false
         }
         let deadline = Date().addingTimeInterval(Self.landingWait)
@@ -308,7 +316,7 @@ public final class FieldDraft: TextDraft {
                let result = await swapped(now) { return result }
             try? await Task.sleep(for: .milliseconds(50))
         }
-        _ = await select(reading.caret, reading.selectionLength)
+        await restoreIfStillSelected()
         if PasteCheck.reading(of: element)?.value == reading.value { refusedByApp() }
         Log.insertion.info("draft: the paste over it never showed — kept as it was")
         return false
