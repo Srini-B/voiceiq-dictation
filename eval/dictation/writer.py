@@ -51,9 +51,10 @@ def prompt_for(case: dict, spec: dict, transcript: str, promptdump: str) -> str:
     return out.stdout.decode()
 
 
-def post(text: str, promptdump: str) -> str:
-    """The app's post-processing of the writer's answer (EmailLayout), from its own Swift."""
-    out = subprocess.run([promptdump], input=json.dumps({"output": text}).encode(), capture_output=True, check=True)
+def post(text: str, promptdump: str, before: str = "", transcript: str = "") -> str:
+    """The app's post-processing of the writer's answer (the echo guard and EmailLayout), from its own Swift."""
+    request = {"output": text, "before": before, "transcript": transcript}
+    out = subprocess.run([promptdump], input=json.dumps(request).encode(), capture_output=True, check=True)
     return out.stdout.decode()
 
 
@@ -129,7 +130,7 @@ def main() -> None:
         round_, case, prompt = job
         s = stt[case["id"]]
         text, seconds, usage = call(prompt, args.model, args.effort, args.via)
-        text = post(text, args.promptdump)
+        text = post(text, args.promptdump, case.get("before", ""), s["transcript"])
         usage["realtime_usd"] = (s.get("session_seconds") or 0) / 3600 * REALTIME_PER_HOUR
         print(f"{case['id']:<18} r{round_} {seconds:5.2f}s  {text[:80]}", flush=True)
         return {"id": case["id"], "round": round_, "output": text, "seconds": round((s["tail"] or 0) + seconds, 3),

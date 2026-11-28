@@ -15,6 +15,32 @@ final class ValidationGateTests: XCTestCase {
         XCTAssertEqual(ValidationGate.stripArtifacts("\"Hello there.\""), "Hello there.")
     }
 
+    /// The writer repeated the line's marker or greeting that the field
+    /// already holds; the field would show it twice.
+    func testDropsTextTheFieldAlreadyEndsWith() {
+        XCTAssertEqual(ValidationGate.droppingEcho("[2] The caterer needs a head count.", before: "[1] Venue booked.\n[2] ",
+                                                   transcript: "okay so the caterer needs a head count"),
+                       "The caterer needs a head count.")
+        XCTAssertEqual(ValidationGate.droppingEcho("- Phone charger\n- Adapter", before: "Packing\n- Passport\n- ",
+                                                   transcript: "phone charger and the adapter"),
+                       "Phone charger\n- Adapter")
+        XCTAssertEqual(ValidationGate.droppingEcho("Hi Omar, it looks better.", before: "Hi Omar, ",
+                                                   transcript: "it looks better"),
+                       "it looks better.")
+    }
+
+    /// Words the speaker said, or that only look like the field's end, stay.
+    func testKeepsASpokenRepeatAndLookalikes() {
+        XCTAssertEqual(ValidationGate.droppingEcho("Hi Omar, it looks better.", before: "Hi Omar, ",
+                                                   transcript: "hi omar it looks better"),
+                       "Hi Omar, it looks better.")
+        XCTAssertEqual(ValidationGate.droppingEcho("The report is ready.", before: "I sent the", transcript: "report is ready"),
+                       "The report is ready.")
+        XCTAssertEqual(ValidationGate.droppingEcho("3.5 million signed up.", before: "Totals 3.", transcript: "three point five million"),
+                       "3.5 million signed up.")
+        XCTAssertEqual(ValidationGate.droppingEcho("[1]", before: "[1] ", transcript: "one"), "[1]")
+    }
+
     func testLeavesInternalQuotesAlone() {
         XCTAssertEqual(ValidationGate.stripArtifacts("She said \"hi\" to me."), "She said \"hi\" to me.")
     }

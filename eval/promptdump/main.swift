@@ -7,7 +7,8 @@ import VoiceIQBridge
 //  "screenText": ["..."], "app": "...", "window": "...", "page": "...",
 //  "before": "...", "after": "...", "transcript": "..."}
 // With {"output": "..."} instead, it prints the writer's answer after the
-// app's own post-processing (EmailLayout), as AssemblyAITranscriptionService does.
+// app's own post-processing (the echo guard, given "before" and "transcript",
+// and EmailLayout), as AssemblyAITranscriptionService does.
 
 struct Spec: Decodable {
     var vocabulary: [String]?
@@ -26,7 +27,8 @@ struct Spec: Decodable {
 
 let spec = try JSONDecoder().decode(Spec.self, from: FileHandle.standardInput.readDataToEndOfFile())
 if let output = spec.output {
-    print(EmailLayout.apply(ValidationGate.stripArtifacts(output).trimmingCharacters(in: .whitespacesAndNewlines),
+    let unechoed = ValidationGate.droppingEcho(ValidationGate.stripArtifacts(output), before: spec.before ?? "", transcript: spec.transcript ?? "")
+    print(EmailLayout.apply(unechoed.trimmingCharacters(in: .whitespacesAndNewlines),
                             customRules: spec.customRules ?? ""), terminator: "")
     exit(0)
 }
