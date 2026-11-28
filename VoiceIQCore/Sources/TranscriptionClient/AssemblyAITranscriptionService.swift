@@ -12,6 +12,8 @@ import VoiceIQSpeech
 ///
 /// When the stream failed, or for a retry from History, the recording on disk
 /// goes to pre-recorded STT-3.7 (Universal-2 for languages STT-3.7 lacks).
+/// Tamil-English runs Universal-2 twice at once, in Tamil and in English, and
+/// the writer takes the Tamil words from one and the English from the other.
 /// When the writing model fails, including an account without a gateway
 /// balance, the transcript goes in tidied on the device, with a note on the
 /// pill: a dictation is never lost to the writing step.
@@ -39,14 +41,14 @@ public struct AssemblyAITranscriptionService: TranscriptionServicing {
                            live: RealtimeTranscription?) async throws -> TranscriptionResult {
         let clock = ContinuousClock()
         let started = clock.now
-        var heard: (text: String, model: String)?
+        var heard: Heard?
         if let live {
             do {
                 let text = try await live.finish()
                 // A stream that heard nothing is checked against the
                 // recording: the file can hold speech the stream missed.
                 if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    heard = (text, AssemblyAIConfig.realtimeModel)
+                    heard = Heard(text: text, model: AssemblyAIConfig.realtimeModel)
                 } else {
                     Log.transcription.notice("realtime transcript empty, transcribing the recording")
                 }
@@ -65,14 +67,21 @@ public struct AssemblyAITranscriptionService: TranscriptionServicing {
         func ms(_ duration: Duration) -> Int { Int(duration / .milliseconds(1)) }
         Log.transcription.notice("timing: transcript \(ms(clock.now - started))ms (\(heard.model, privacy: .public)), \(String(format: "%.1f", durationSeconds), privacy: .public)s audio")
         let transcript = TranscriptionResult(rawTranscript: heard.text, cleanedTranscript: heard.text, modelID: heard.model)
-        let written = try await write(transcript, context: context)
+        let written = try await write(transcript, context: context, latin: heard.latin)
         Log.transcription.notice("timing: key-up to text \(ms(clock.now - started))ms")
         return written
     }
 
+    private struct Heard {
+        var text: String
+        var model: String
+        /// The English-language pass for a language with `latinCompanion`.
+        var latin: String?
+    }
+
     /// The recording without its leading and trailing silence, as FLAC, through
     /// pre-recorded transcription.
-    private func transcribeRecording(audioURL: URL, durationSeconds: Double) async throws -> (text: String, model: String) {
+    private func transcribeRecording(audioURL: URL, durationSeconds: Double) async throws -> Heard {
         let file = try AVAudioFile(forReading: audioURL, commonFormat: .pcmFormatInt16, interleaved: true)
         let range = SpeechRange.speechRange(in: file)
         let flacURL = audioURL.deletingLastPathComponent().appendingPathComponent("audio.flac")
@@ -85,12 +94,22 @@ public struct AssemblyAITranscriptionService: TranscriptionServicing {
             speechModels: language.streams
                 ? [AssemblyAIConfig.transcribeModel, AssemblyAIConfig.fallbackModel] : [AssemblyAIConfig.fallbackModel],
             languageCode: language.code)
-        let transcript = try await withTransientRetry {
-            try await client.transcribe(audio: flac, request: request,
-                                        deadline: TimeoutPolicy.transcriptDeadline(audioDuration: durationSeconds),
-                                        stage: .transcribe)
+        let deadline = TimeoutPolicy.transcriptDeadline(audioDuration: durationSeconds)
+        @Sendable func pass(_ request: AssemblyAIClient.TranscriptRequest) async throws -> AssemblyAIClient.Transcript {
+            try await withTransientRetry {
+                try await client.transcribe(audio: flac, request: request, deadline: deadline, stage: .transcribe)
+            }
         }
-        return (transcript.text, transcript.model)
+        guard language.latinCompanion else {
+            let transcript = try await pass(request)
+            return Heard(text: transcript.text, model: transcript.model)
+        }
+        async let main = pass(request)
+        async let english = pass(.init(speechModels: [AssemblyAIConfig.fallbackModel], languageCode: "en"))
+        let transcript = try await main
+        // Without the English pass the writer works from the Tamil-script transcript alone.
+        let latin = try? await english
+        return Heard(text: transcript.text, model: transcript.model, latin: latin?.text)
     }
 
     /// Writes a transcript, from STT-3.7 or the on-device model. With writing
@@ -103,6 +122,12 @@ public struct AssemblyAITranscriptionService: TranscriptionServicing {
     /// path; the writing model gets the transcript as heard and the
     /// replacements apply after.
     public func write(_ transcript: TranscriptionResult, context: DictationContext) async throws -> TranscriptionResult {
+        try await write(transcript, context: context, latin: nil)
+    }
+
+    /// `latin`: the recording transcribed again in English, for a language with `latinCompanion`.
+    func write(_ transcript: TranscriptionResult, context: DictationContext,
+               latin: String?) async throws -> TranscriptionResult {
         let rules = DictionaryStore().replacementRules()
         let raw = transcript.cleanedTranscript
         guard !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw TranscriptionError.emptyTranscript }
@@ -128,8 +153,9 @@ public struct AssemblyAITranscriptionService: TranscriptionServicing {
         // device dictation, so it never skips the writer for AssemblyAI's transcripts.
         guard heardInCloud || settings.cleanupSource != .none else { return try tidied(notice: nil) }
         guard KeychainStore.loadAPIKey() != nil else { return try tidied(notice: nil) }
-        let model = settings.assemblyAIConfig.writingModel
-        let prompt = dictationPrompt(context: context, transcript: raw)
+        let model = heardInCloud && settings.dictationLanguage.latinCompanion && settings.writingModelOverride == nil
+            ? AssemblyAIConfig.mixedLanguageWritingModel : settings.assemblyAIConfig.writingModel
+        let prompt = dictationPrompt(context: context, transcript: raw, latin: latin)
         do {
             // Luna answers in about 1 s (p90 under 2 s on the eval). A second
             // attempt starts after 5 s or a lost connection, and the tidied
@@ -167,7 +193,7 @@ public struct AssemblyAITranscriptionService: TranscriptionServicing {
         }
     }
 
-    func dictationPrompt(context: DictationContext, transcript: String) -> String {
+    func dictationPrompt(context: DictationContext, transcript: String, latin: String? = nil) -> String {
         let dictionary = DictionaryStore()
         let place = DictationPlace(appName: context.targetAppName,
                                    windowTitle: context.focusedField?.windowTitle,
@@ -178,7 +204,8 @@ public struct AssemblyAITranscriptionService: TranscriptionServicing {
             screenText: settings.screenContextEnabled ? context.screenText : [],
             surroundingText: context.focusedField?.surroundingText,
             place: place,
-            transcript: transcript
+            transcript: transcript,
+            latin: latin
         )
     }
 

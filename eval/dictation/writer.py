@@ -12,6 +12,9 @@ the model calls take. usage carries the gateway's token counts and the cost
 of the writer call and of the realtime session, in USD.
 
 Usage: writer.py LABEL --stt STT_LABEL --model MODEL [--effort none|low] [--rounds 2] [--via gateway|openrouter]
+                 [--latin-stt STT_LABEL]
+--latin-stt adds a second transcript as the prompt's LATIN block for the cases it
+holds, as the app does for Tamil-English (Universal-2 in Tamil plus in English).
 Needs ASSEMBLYAI_API_KEY with a funded balance (the gateway is not covered by the free
 credit), or OPENROUTER_API_KEY with --via openrouter for the same model elsewhere.
 """
@@ -39,7 +42,7 @@ SCHEMA = {"type": "object", "properties": {"text": {"type": "string"}}, "require
           "additionalProperties": False}
 
 
-def prompt_for(case: dict, spec: dict, transcript: str, promptdump: str) -> str:
+def prompt_for(case: dict, spec: dict, transcript: str, promptdump: str, latin: str | None = None) -> str:
     request = {"vocabulary": spec["dictionary"], "app": spec["screen"]["app"], "window": spec["screen"]["window"],
                "screenText": ["\n".join([spec["screen"]["window"]] + spec["screen"]["lines"])],
                "transcript": transcript}
@@ -47,6 +50,8 @@ def prompt_for(case: dict, spec: dict, transcript: str, promptdump: str) -> str:
         request["spelling"] = spec["spelling"]
     if "before" in case:
         request["before"] = case["before"]
+    if latin is not None:
+        request["latin"] = latin
     out = subprocess.run([promptdump], input=json.dumps(request).encode(), capture_output=True, check=True)
     return out.stdout.decode()
 
@@ -108,12 +113,15 @@ def main() -> None:
     ap.add_argument("--rounds", type=int, default=2)
     ap.add_argument("--workers", type=int, default=4)
     ap.add_argument("--skip", nargs="*", default=[], help="case id prefixes to leave out, such as ml_ta")
+    ap.add_argument("--latin-stt", help="STT label whose transcripts go in as LATIN")
     ap.add_argument("--promptdump", default=str(HERE.parent / "promptdump" / "promptdump"))
     args = ap.parse_args()
     spec = json.loads((HERE / "cases.json").read_text())
     stt = {r["id"]: r for r in json.loads((HERE / "results" / f"{args.stt}.stt.json").read_text())["results"]}
+    latin = ({r["id"]: r["transcript"] for r in json.loads((HERE / "results" / f"{args.latin_stt}.stt.json").read_text())["results"]}
+             if args.latin_stt else {})
     cases = [c for c in spec["cases"] if c["id"] in stt and not c["id"].startswith(tuple(args.skip) or ("\0",))]
-    jobs = [(r, c, prompt_for(c, spec, stt[c["id"]]["transcript"], args.promptdump))
+    jobs = [(r, c, prompt_for(c, spec, stt[c["id"]]["transcript"], args.promptdump, latin.get(c["id"])))
             for r in range(args.rounds) for c in cases]
     print(f"{len(jobs)} calls on {args.model}, prompt {len(jobs[0][2])} chars")
     out = HERE / "results" / f"{args.label}.json"
@@ -139,7 +147,7 @@ def main() -> None:
                 print(f"{case['id']:<18} r{round_} FAILED {error}", flush=True)
     results.sort(key=lambda r: (r["round"], r["id"]))
     spent = sum(r["usage"]["writer_usd"] for r in results)
-    out.write_text(json.dumps({"label": args.label, "model": f"{args.stt}+{args.model}", "prompt_chars": len(jobs[0][2]),
+    out.write_text(json.dumps({"label": args.label, "model": f"{args.stt}+{args.latin_stt + '+' if args.latin_stt else ''}{args.model}", "prompt_chars": len(jobs[0][2]),
                                "screenshots": 1, "complete": not failed, "failed": failed, "writer_usd": spent,
                                "results": results}, indent=1, ensure_ascii=False))
     print(f"wrote {out}: {len(results)} calls, {len(failed)} failed, writer ${spent:.4f}")

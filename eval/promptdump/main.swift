@@ -5,7 +5,7 @@ import VoiceIQBridge
 // for one eval case read as JSON on stdin:
 // {"vocabulary": [...], "spellings": [["wrong","right"]], "customRules": "...", "spelling": "...",
 //  "screenText": ["..."], "app": "...", "window": "...", "page": "...",
-//  "before": "...", "after": "...", "transcript": "..."}
+//  "before": "...", "after": "...", "transcript": "...", "latin": "..."}
 
 struct Spec: Decodable {
     var vocabulary: [String]?
@@ -19,6 +19,7 @@ struct Spec: Decodable {
     var before: String?
     var after: String?
     var transcript: String?
+    var latin: String?
 }
 
 let spec = try JSONDecoder().decode(Spec.self, from: FileHandle.standardInput.readDataToEndOfFile())
@@ -33,6 +34,7 @@ let prompt = PromptV1.dictationPrompt(
     screenText: spec.screenText ?? [],
     surroundingText: surrounding,
     place: place,
-    transcript: spec.transcript ?? ""
+    transcript: spec.transcript ?? "",
+    latin: spec.latin
 )
 print(prompt, terminator: "")
