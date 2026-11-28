@@ -159,12 +159,17 @@ public protocol TextDraft: AnyObject {
     /// edited, is gone, or can't be told apart; it then stays.
     func replace(with text: String) async -> Bool
     /// Ends the draft: the spinner and the marks go, the text stays.
+    /// `replace(with: "")` first takes it out instead.
     func end()
 }
 
 public enum DraftShown: Equatable, Sendable {
     /// In the field, and found again for the replace.
     case shown
+    /// Offered to the field but not confirmed (the iPhone keyboard may have
+    /// typed it). The written text still goes through `replace`, which
+    /// names the draft, but in the dictation's insert turn.
+    case pending
     /// Nothing went in: the written text goes in by `insert`.
     case notInserted
     /// It went in, or may have, but can't be found again; it stays, and the

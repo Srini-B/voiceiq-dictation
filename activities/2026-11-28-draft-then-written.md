@@ -51,9 +51,10 @@ back before anything is written.
 - Mac: `FieldDraft` and `DraftField` (Accessibility), `DraftOverlay`
   (spinner and shimmer underline), `WaveformView(writing:)`.
 - iPhone: the keyboard types the draft as marked text (hosts underline it)
-  only in the input session Stop was tapped in, and swaps it with
-  `setMarkedText` + `unmarkText`, or retypes it while it is plain text right
-  before the cursor; otherwise it stays. The strip shows a writing crest. No
+  only in the input session Stop was tapped in, and only when it could swap
+  it later (single-code-point characters, no line break, at most 200
+  characters). The swap commits it and retypes it while it sits right
+  before the cursor with the same text around it; otherwise it stays. The strip shows a writing crest. No
   spinner in the field: a host commits marked text when focus moves, which
   could leave a spinner glyph in the user's text.
 - Docs: `architecture.md` ("Draft, then the written text"), `IOS.md` ("The
@@ -62,10 +63,24 @@ back before anything is written.
 ## Where it falls back to one paste
 
 Terminals (`AppQuirks.forcePaste`), typed-in apps (`TypingInserter`), fields
-Accessibility can't read (Google Docs' canvas), secure input, Press Return
-after paste, focus outside the field the dictation started in, on-device
-transcription, no AssemblyAI key. On iPhone: any field other than the input
-session Stop was tapped in.
+Accessibility can't read (Google Docs' canvas), fields over 20,000 UTF-16
+units, secure input, Press Return after paste, focus outside the field the
+dictation started in, an app whose field once never showed a posted draft
+(until restart), on-device transcription, no AssemblyAI key. On iPhone: any
+field other than the input session Stop was tapped in, and transcripts the
+keyboard could not swap (Tamil and Devanagari, line breaks, over 200
+characters).
+
+## Review rounds
+
+Hand review on BlueLobster (each head), Codex (six findings, all fixed),
+Fable 5.2 (78/100 at 390def9: four Mediums, fixed in the next head). Main
+changes from review: the selection read-back checks the whole value and is
+polled; a posted draft is never followed by the written text beside it; an
+accepted Accessibility write never falls back to ⌘V; the swap method follows
+how the draft went in; a draft beside an identical copy of its text is
+dropped on an ambiguous edit (`FieldEdit.earliest`); Esc or a failure takes
+the Mac draft back out; iPhone never sets marked text over a draft.
 
 ## Verification
 

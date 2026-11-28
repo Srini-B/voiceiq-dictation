@@ -224,9 +224,9 @@ is the Mac's draft (`TextDraft`), done by the keyboard:
    selection.
 3. The app waits up to 0.6 s (`Delivery.draftWait`) for that ID, then
    withdraws the draft from the snapshot. Without the ID, the written text
-   comes as a plain result that still names the draft: a keyboard whose
-   report was late swaps its draft, and any other keyboard types it as
-   before.
+   comes as a plain result that still names the draft, in the dictation's
+   insert turn (`DraftShown.pending`): a keyboard whose report was late
+   swaps its draft, and any other keyboard types it as before.
 4. The written text comes as a delivery with `replacesDraft` set to the
    draft's ID. The keyboard commits the marked draft (`unmarkText`), then
    deletes it and types the written text, but only when the draft is right
@@ -245,6 +245,9 @@ is the Mac's draft (`TextDraft`), done by the keyboard:
 5. A written text whose draft this keyboard no longer holds (the keyboard
    was dismissed or moved to another field) is marked handled and never
    typed beside the draft.
+6. A dictation that ends without written text (Cancel, no speech, a
+   failure) leaves its draft in the field as heard: the keyboard does not
+   take text back out of a field. The Mac does (`DraftStage.withdraw`).
 
 While the keyboard holds a draft, the strip shows a writing animation (one
 crest sweeping across five bars) instead of the spinner. A key, a cursor

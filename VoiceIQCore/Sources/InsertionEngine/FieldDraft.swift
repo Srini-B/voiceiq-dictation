@@ -38,8 +38,12 @@ public final class FieldDraft: TextDraft {
     private let marks: DraftMarking
     /// Chromium and Electron fields can report an Accessibility write that
     /// never happened, or a stale value after one that did; their swap is a
-    /// verified selection plus ⌘V.
-    private let usesPasteOnly: Bool
+    /// verified selection plus ⌘V. So is the swap in any field the draft
+    /// itself went into by paste.
+    private var usesPasteOnly: Bool
+    /// Apps whose field showed nothing of a posted draft: they get no more
+    /// drafts until VoiceiQ restarts.
+    private static var noDraftApps: Set<pid_t> = []
     private let id = UUID()
     private var field: DraftField?
     /// The text this dictation left in the field, once shown.
@@ -73,6 +77,7 @@ public final class FieldDraft: TextDraft {
         guard !SecureInput.isActive, !ReturnAfterPaste.isWanted(for: context) else { return nil }
         let bundleID = context.targetAppBundleID
         if let bundleID, AppQuirks.forcePaste.contains(bundleID) { return nil }
+        if let pid = context.targetPID, noDraftApps.contains(pid) { return nil }
         let bundleURL = context.targetPID.flatMap { NSRunningApplication(processIdentifier: $0)?.bundleURL }
         guard TypingInserter.mode(bundleID: bundleID, bundleURL: bundleURL) == nil else { return nil }
         guard let element = focusedTarget(context: context), let reading = PasteCheck.reading(of: element),
@@ -85,7 +90,7 @@ public final class FieldDraft: TextDraft {
             return nil
         }
         let draft = FieldDraft(element: element, context: context, inserter: inserter, marks: marks,
-                               usesPasteOnly: bundleID.map(AppQuirks.needsManualAccessibility.contains) ?? false)
+                               usesPasteOnly: isChromiumOrElectron(bundleID: bundleID, bundleURL: bundleURL))
         if let caret = caretRect(in: element, at: reading.caret) { marks.showSpinner(at: caret) }
         return draft
     }
@@ -105,10 +110,12 @@ public final class FieldDraft: TextDraft {
             return .notInserted
         }
         let fitted = InsertionCoordinator.fitted(text, context: context)
-        guard await inserter.insert(fitted, context: context) == .inserted else {
+        let insert = await inserter.insertReportingTier(fitted, context: context)
+        guard insert.outcome == .inserted else {
             marks.clear()
             return .notInserted
         }
+        if !insert.byAccessibility { usesPasteOnly = true }
         // A paste lands when the app gets to it; Accessibility catches up
         // after that. Only exactly this insert counts as the draft.
         let deadline = Date().addingTimeInterval(Self.landingWait)
@@ -127,13 +134,30 @@ public final class FieldDraft: TextDraft {
         }
         guard landed != nil else {
             marks.clear()
-            // A posted ⌘V can still land after the wait, so the written text
-            // never goes in beside it: Paste last and History have it.
-            Log.insertion.info(changed ? "draft: went in but not as one exact insert — it stays"
-                                       : "draft: not seen in the field in time — the written text is in Paste last")
+            if changed {
+                Log.insertion.info("draft: went in but not as one exact insert — it stays")
+                return .lost
+            }
+            // Nothing showed. Let the paste's own read-back finish (it copies
+            // the draft on a certain miss): a field still exactly as before
+            // never took the paste, so the written text goes in by the usual
+            // ladder, which copies it on a miss too, and the app gets no
+            // more drafts. Anything else may be a late paste: the written text
+            // never goes in beside it.
+            await inserter.finishPendingPaste()
+            if let now = PasteCheck.reading(of: element), now.value == before.value {
+                if let pid = context.targetPID { Self.noDraftApps.insert(pid) }
+                Log.insertion.info("draft: the field never showed the paste — no more drafts in this app")
+                return .notInserted
+            }
+            Log.insertion.info("draft: not seen in the field in time — the written text is in Paste last")
             return .lost
         }
-        guard !ended else { return .shown }
+        guard !ended else {
+            // Ended while it landed: the ledger must not keep it.
+            field.forget(id)
+            return .shown
+        }
         drawUnderline()
         tracking = Task { [weak self] in
             while !Task.isCancelled {
@@ -162,18 +186,29 @@ public final class FieldDraft: TextDraft {
         guard let expected = span.replacing(in: reading.value, with: written) else { return false }
         let selection = span.selection((reading.caret, reading.selectionLength),
                                        afterReplacingWith: written.utf16.count)
-        func swapped(_ now: PasteCheck.Reading) -> Bool {
-            field.ledger.replace(id, with: written, landedIn: now.value)
-            landed = written
-            if now.value == expected {
-                _ = select(selection.location, selection.length)
-            } else {
-                Log.insertion.info("draft: replaced, and the app adjusted the text")
+        /// The field changed after the write: the swap only when the written
+        /// text is where the draft was. A field that reads otherwise (the app
+        /// adjusted the text, or a key typed over the selection) is followed
+        /// as an edit, and the text in it is not tracked as ours.
+        func swapped(_ now: PasteCheck.Reading) async -> Bool? {
+            // Taken out (an empty written text) shows only as the exact result.
+            let placed = written.isEmpty ? now.value == expected
+                                         : DraftSpan(location: span.location, text: written).isIntact(in: now.value)
+            if placed {
+                field.ledger.replace(id, with: written, landedIn: now.value)
+                landed = written
+                if now.value == expected { _ = await select(selection.location, selection.length) }
+                return true
             }
-            return true
+            // Still the draft, selected: the write has not shown yet.
+            if span.isIntact(in: now.value) { return nil }
+            field.ledger.observe(now.value)
+            landed = nil
+            Log.insertion.info("draft: the field changed otherwise after the write — left as it is")
+            return false
         }
-        guard select(span.location, span.length, holding: reading.value) else {
-            _ = select(reading.caret, reading.selectionLength)
+        guard await select(span.location, span.length, holding: reading.value) else {
+            _ = await select(reading.caret, reading.selectionLength)
             Log.insertion.info("draft: the field didn't take the selection — kept as it was")
             return false
         }
@@ -183,10 +218,11 @@ public final class FieldDraft: TextDraft {
             // put the text in twice. Wait for it, and never paste after it.
             let deadline = Date().addingTimeInterval(Self.landingWait)
             while Date() < deadline {
-                if let now = PasteCheck.reading(of: element), now.value != reading.value { return swapped(now) }
+                if let now = PasteCheck.reading(of: element), now.value != reading.value,
+                   let result = await swapped(now) { return result }
                 try? await Task.sleep(for: .milliseconds(40))
             }
-            _ = select(reading.caret, reading.selectionLength)
+            _ = await select(reading.caret, reading.selectionLength)
             Log.insertion.info("draft: the field took the write but never showed it — kept as it was")
             return false
         }
@@ -195,20 +231,23 @@ public final class FieldDraft: TextDraft {
         guard Self.focusedTarget(context: context).map({ CFEqual($0, element) }) == true,
               let selected = PasteCheck.reading(of: element), selected.value == reading.value,
               selected.caret == span.location, selected.selectionLength == span.length else {
-            _ = select(reading.caret, reading.selectionLength)
+            _ = await select(reading.caret, reading.selectionLength)
             Log.insertion.info("draft: not focused or the selection moved — kept as it was")
             return false
         }
-        guard await inserter.paste(written) else {
-            _ = select(reading.caret, reading.selectionLength)
+        // An empty written text takes the draft out: Delete over the
+        // selection, never a paste of nothing.
+        guard await (written.isEmpty ? inserter.pressDelete() : inserter.paste(written)) else {
+            _ = await select(reading.caret, reading.selectionLength)
             return false
         }
         let deadline = Date().addingTimeInterval(Self.landingWait)
         while Date() < deadline {
-            if let now = PasteCheck.reading(of: element), now.value != reading.value { return swapped(now) }
+            if let now = PasteCheck.reading(of: element), now.value != reading.value,
+               let result = await swapped(now) { return result }
             try? await Task.sleep(for: .milliseconds(50))
         }
-        _ = select(reading.caret, reading.selectionLength)
+        _ = await select(reading.caret, reading.selectionLength)
         Log.insertion.info("draft: the paste over it never showed — kept as it was")
         return false
     }
@@ -230,6 +269,10 @@ public final class FieldDraft: TextDraft {
     /// goes when the draft can no longer be found.
     private func follow() {
         guard !ended, let field, !field.isBusy else { return }
+        // Another app or field in front: no marks over it.
+        guard Self.focusedTarget(context: context).map({ CFEqual($0, element) }) == true else {
+            return marks.underline([])
+        }
         _ = field.sync()
         drawUnderline()
     }
@@ -242,12 +285,20 @@ public final class FieldDraft: TextDraft {
     /// Sets the selection and reads it back. With `holding`, the field must
     /// also still read exactly that text: a key typed between the read and
     /// the selection would shift what the range covers.
-    private func select(_ location: Int, _ length: Int, holding value: String? = nil) -> Bool {
+    /// Chromium applies the selection in its renderer and answers from its
+    /// tree afterwards, so the read-back is polled for up to 200 ms.
+    private func select(_ location: Int, _ length: Int, holding value: String? = nil) async -> Bool {
         var range = CFRange(location: location, length: length)
         guard let rangeValue = AXValueCreate(.cfRange, &range),
-              AXUIElementSetAttributeValue(element, kAXSelectedTextRangeAttribute as CFString, rangeValue) == .success,
-              let now = PasteCheck.reading(of: element) else { return false }
-        return now.caret == location && now.selectionLength == length && (value == nil || now.value == value)
+              AXUIElementSetAttributeValue(element, kAXSelectedTextRangeAttribute as CFString, rangeValue) == .success
+        else { return false }
+        for attempt in 0..<6 {
+            if attempt > 0 { try? await Task.sleep(for: .milliseconds(40)) }
+            guard let now = PasteCheck.reading(of: element) else { return false }
+            if let value, now.value != value { return false }
+            if now.caret == location, now.selectionLength == length { return true }
+        }
+        return false
     }
 
     /// The focused element when it belongs to the frontmost target app and
@@ -265,6 +316,12 @@ public final class FieldDraft: TextDraft {
         AXUIElementSetMessagingTimeout(element, 0.25)
         if let start = context.focusedField?.element, !CFEqual(start as CFTypeRef, element) { return nil }
         return element
+    }
+
+    static func isChromiumOrElectron(bundleID: String?, bundleURL: URL?) -> Bool {
+        bundleID.map(AppQuirks.needsManualAccessibility.contains) == true
+            || AccessibilityWaker.isElectron(bundleURL)
+            || bundleURL.map { !TypingInserter.chromiumMajorVersions(in: $0).isEmpty } == true
     }
 
     static func caretRect(in element: AXUIElement, at caret: Int) -> CGRect? {

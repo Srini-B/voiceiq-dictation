@@ -118,6 +118,48 @@ final class DraftInsertTests: XCTestCase {
         XCTAssertEqual(c.lastResult, "Written words.")
     }
 
+    /// Hears a transcript, then the writer finds no speech in it.
+    struct HeardThenNothing: TranscriptionServicing {
+        func transcribe(audioURL: URL, durationSeconds: Double, context: DictationContext) async throws -> TranscriptionResult {
+            throw TranscriptionError.emptyTranscript
+        }
+        func transcribe(audioURL: URL, durationSeconds: Double, context: DictationContext,
+                        live: RealtimeTranscription?,
+                        onHeard: (@Sendable (String) -> Void)?) async throws -> TranscriptionResult {
+            onHeard?("thank you")
+            try? await Task.sleep(nanoseconds: 30_000_000)
+            throw TranscriptionError.emptyTranscript
+        }
+    }
+
+    /// A dictation that ends without written text takes its draft back out,
+    /// so the field is as it was, and inserts nothing.
+    func testADictationWithNoWrittenTextTakesItsDraftOut() async {
+        let draft = FakeDraft(shows: .shown)
+        let inserter = DraftingInserter(draft: draft)
+        let capture = DictationCoordinatorTests.FakeCapture()
+        let c = DictationCoordinator(audioFactory: { capture }, transcription: HeardThenNothing(),
+                                     insertion: inserter, secureInputActive: { false })
+        c.handle(.begin)
+        for _ in 0..<8 { await Task.yield() }
+        c.handle(.finalize)
+        for _ in 0..<300 where !c.state.isTerminal { try? await Task.sleep(nanoseconds: 2_000_000) }
+        XCTAssertEqual(draft.events, ["show thank you", "replace ", "end"])
+        XCTAssertEqual(inserter.inserted, [])
+        XCTAssertFalse(c.writingDraft)
+    }
+
+    /// An unconfirmed draft (the iPhone's) still gets its written text
+    /// through `replace`, which names it.
+    func testAPendingDraftIsReplacedNotInsertedBeside() async {
+        let draft = FakeDraft(shows: .pending)
+        let inserter = DraftingInserter(draft: draft)
+        let c = await dictate(into: inserter)
+        XCTAssertEqual(draft.events, ["show raw words", "replace Written words.", "end"])
+        XCTAssertEqual(inserter.inserted, [])
+        XCTAssertFalse(c.writingDraft, "no writing animation for a draft nobody confirmed")
+    }
+
     // MARK: Back-to-back dictations into one field
 
     /// One dictation per call, in order: what it hears and, after `delay`,
@@ -142,6 +184,8 @@ final class DraftInsertTests: XCTestCase {
     /// anywhere. Drafts are followed by the real `DraftLedger`.
     final class Field: TextInserting {
         var ledger: DraftLedger
+        /// Drafts whose insert lands late.
+        var slow: Set<String> = []
         init(_ value: String) { ledger = DraftLedger(value: value) }
         var value: String { ledger.value }
         func type(_ new: String) { ledger.observe(new) }
@@ -157,6 +201,8 @@ final class DraftInsertTests: XCTestCase {
         let id = UUID()
         init(field: Field) { self.field = field }
         func show(_ text: String) async -> DraftShown {
+            // A paste the app takes a while to show.
+            if field.slow.contains(text) { try? await Task.sleep(nanoseconds: 200_000_000) }
             let at = field.value.utf16.count
             return field.ledger.add(id, text: text, at: at, over: 0, landedIn: field.value + text) == nil ? .lost : .shown
         }
@@ -225,5 +271,33 @@ final class DraftInsertTests: XCTestCase {
         coordinator.handle(.finalize)
         await waitUntil { !coordinator.hasBackgroundJobs && coordinator.state.isTerminal && field.value.hasPrefix("OK") }
         XCTAssertEqual(field.value, "OK, Okay.")
+    }
+
+    /// The second dictation is heard while the first's draft is still going
+    /// in: it waits for it, so the drafts stand in spoken order, and each
+    /// still swaps only its own text.
+    func testALaterDraftWaitsForTheEarlierOneToLand() async {
+        let field = Field("Notes:")
+        field.slow = [" first one"]
+        let script = Script([
+            (heard: " first one", written: " First one.", delay: 500_000_000),
+            (heard: " second one", written: " Second one.", delay: 50_000_000),
+        ])
+        let coordinator = DictationCoordinator(
+            audioFactory: { DictationCoordinatorTests.FakeCapture() },
+            transcription: script, insertion: field, secureInputActive: { false }
+        )
+        coordinator.handle(.begin)
+        for _ in 0..<8 { await Task.yield() }
+        coordinator.handle(.finalize)
+        try? await Task.sleep(nanoseconds: 20_000_000)  // heard, still landing
+        XCTAssertEqual(field.value, "Notes:")
+        coordinator.handle(.begin)
+        for _ in 0..<8 { await Task.yield() }
+        coordinator.handle(.finalize)
+        await waitUntil { field.value.contains("second") || field.value.contains("Second") }
+        XCTAssertTrue(field.value.hasPrefix("Notes: first one"), field.value)
+        await waitUntil { !coordinator.hasBackgroundJobs && coordinator.state.isTerminal && field.value.contains("First") }
+        XCTAssertEqual(field.value, "Notes: First one. Second one.")
     }
 }

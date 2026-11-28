@@ -11,6 +11,7 @@ final class DraftStage {
     private let onShown: () -> Void
     private var showing: Task<DraftShown, Never>?
     private var ended = false
+    private var withdrawn = false
 
     init(draft: TextDraft, turn: InsertTurns.Ticket?, onShown: @escaping () -> Void) {
         self.draft = draft
@@ -23,7 +24,7 @@ final class DraftStage {
         showing = Task { [weak self, draft, turn, onShown] in
             await turn?.waitForPreviousPlaced()
             // Cancelled (Esc) or finished while it waited its turn.
-            guard self?.ended == false else { return .notInserted }
+            guard self?.ended == false, self?.withdrawn == false else { return .notInserted }
             let shown = await draft.show(text)
             // A draft that never went in leaves the place to the written
             // text, which takes the whole turn.
@@ -44,6 +45,21 @@ final class DraftStage {
             return .notInserted
         }
         return await showing.value
+    }
+
+    /// The job ends without written text (Esc, no speech, a failure): a
+    /// draft that went in is taken back out through the same verified swap,
+    /// so the field is left as it was. One the user edited stays. Run in its
+    /// own task, so the job's cancellation doesn't cut its waits short.
+    func withdraw() async {
+        withdrawn = true
+        guard let showing else { return }
+        let draft = draft
+        await Task { @MainActor in
+            let shown = await showing.value
+            guard shown == .shown || shown == .pending else { return }
+            _ = await draft.replace(with: "")
+        }.value
     }
 
     func end() {

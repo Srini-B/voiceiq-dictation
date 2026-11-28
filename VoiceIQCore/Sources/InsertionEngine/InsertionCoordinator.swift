@@ -1,5 +1,6 @@
 #if os(macOS)
 import AppKit
+import Carbon.HIToolbox
 import Foundation
 import VoiceIQBridge
 
@@ -39,6 +40,25 @@ public struct InsertionCoordinator: TextInserting {
         await paster.paste(text)
     }
 
+    /// Presses Delete once, for taking a selected draft out of a field
+    /// whose Accessibility writes don't count (`FieldDraft`). False when
+    /// keystrokes can't be posted.
+    @MainActor
+    public func pressDelete() async -> Bool {
+        guard KeystrokeAccess.mayPost, let source = CGEventSource(stateID: .privateState),
+              let down = CGEvent(keyboardEventSource: source, virtualKey: CGKeyCode(kVK_Delete), keyDown: true),
+              let up = CGEvent(keyboardEventSource: source, virtualKey: CGKeyCode(kVK_Delete), keyDown: false)
+        else { return false }
+        for event in [down, up] {
+            event.flags = []
+            event.setIntegerValueField(.eventSourceUserData, value: SyntheticEventTag.magic)
+        }
+        down.post(tap: .cghidEventTap)
+        try? await Task.sleep(nanoseconds: 10_000_000)
+        up.post(tap: .cghidEventTap)
+        return true
+    }
+
     /// Waits out the last paste's read-back and clipboard restore (up to
     /// about 1.5 s), so a paste after it posts without waiting.
     @MainActor
@@ -48,13 +68,21 @@ public struct InsertionCoordinator: TextInserting {
 
     @MainActor
     public func insert(_ text: String, context: DictationContext) async -> InsertionOutcome {
+        await insertReportingTier(text, context: context).outcome
+    }
+
+    /// `insert`, saying whether the text went in by Accessibility (tier 1),
+    /// which was then verified, or by a paste or typing.
+    @MainActor
+    public func insertReportingTier(_ text: String, context: DictationContext) async
+        -> (outcome: InsertionOutcome, byAccessibility: Bool) {
         // Before the guards, so the frontmost app and the field they check
         // are still the target after waiting out an earlier paste.
         await paster.finishPendingRestore()
         // Guard 2: secure input — the transcript stays in History only.
         if SecureInput.isActive {
             Log.insertion.warning("secure input active at insert time — refusing (text in History only)")
-            return .blockedSecureField
+            return (.blockedSecureField, false)
         }
 
         // Guard 1: is the user still where they started dictating?
@@ -62,7 +90,7 @@ public struct InsertionCoordinator: TextInserting {
         if let expectedPID = context.targetPID, let frontmost, frontmost.processIdentifier != expectedPID {
             Log.insertion.info("frontmost changed (\(context.targetAppName ?? "?", privacy: .private) → \(frontmost.localizedName ?? "?", privacy: .private)) — no blind paste")
             paster.copyOnly(text)
-            return .frontmostChanged
+            return (.frontmostChanged, false)
         }
 
         // The field the text is about to go into, taken before any tier
@@ -75,15 +103,15 @@ public struct InsertionCoordinator: TextInserting {
         case .landed:
             Log.insertion.info("inserted via AX")
             await ReturnAfterPaste.pressIfWanted(context: context, target: returnTarget)
-            return .inserted
+            return (.inserted, true)
         case .focusElsewhere:
             // PROVEN focus theft — a blind ⌘V would paste into the thief.
             // Same treatment as the frontmost-changed guard: chip, never blind.
             paster.copyOnly(text)
-            return .frontmostChanged
+            return (.frontmostChanged, false)
         case .notATextField:
             paster.copyOnly(text)
-            return .fellBackToClipboard
+            return (.fellBackToClipboard, false)
         case .notPossible:
             break
         }
@@ -95,7 +123,7 @@ public struct InsertionCoordinator: TextInserting {
            nowFront.processIdentifier != expectedPID {
             Log.insertion.info("frontmost changed during AX attempt — no blind paste")
             paster.copyOnly(text)
-            return .frontmostChanged
+            return (.frontmostChanged, false)
         }
 
         // Tier 2a: apps where ⌘V fails get the text typed instead.
@@ -105,16 +133,16 @@ public struct InsertionCoordinator: TextInserting {
             case .typed:
                 Log.insertion.info("typed instead of pasting (\(String(describing: mode), privacy: .public))")
                 await ReturnAfterPaste.pressIfWanted(context: context, target: returnTarget)
-                return .inserted
+                return (.inserted, false)
             case .stopped(let rest):
                 // The user switched apps part way: the rest must not land
                 // there, and the part already typed must not be pasted twice.
                 paster.copyOnly(rest)
-                return .frontmostChanged
+                return (.frontmostChanged, false)
             case .unsupported:
                 // A real ⌘V in the remote session still pastes it.
                 paster.copyOnly(text)
-                return .fellBackToClipboard
+                return (.fellBackToClipboard, false)
             }
         }
 
@@ -126,7 +154,7 @@ public struct InsertionCoordinator: TextInserting {
             Log.insertion.info("⌘V posted")
             guard let before else {
                 await ReturnAfterPaste.pressIfWanted(context: context, target: returnTarget)
-                return .inserted
+                return (.inserted, false)
             }
             let postedAt = Date()
             let check = Task { @MainActor [paster] () -> PasteCheck.Verdict in
@@ -146,12 +174,12 @@ public struct InsertionCoordinator: TextInserting {
                     Log.insertion.info("paste not seen in the field — no Return")
                 }
             }
-            return .inserted
+            return (.inserted, false)
         }
 
         // Tier 3: clipboard floor.
         paster.copyOnly(text)
-        return .fellBackToClipboard
+        return (.fellBackToClipboard, false)
     }
 }
 #endif

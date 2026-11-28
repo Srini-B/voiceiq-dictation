@@ -92,13 +92,15 @@ private final class KeyboardTextDraft: TextDraft {
         // the draft, and no other dictation's text can carry its name.
         draftID = draft.id
         store.reloadFromDisk()
-        SessionDiagnostics.note(store.typedDraftID == draft.id ? "draft typed by the keyboard"
-                                                               : "draft not confirmed by a keyboard in time")
-        return .shown
+        let confirmed = store.typedDraftID == draft.id
+        SessionDiagnostics.note(confirmed ? "draft typed by the keyboard" : "draft not confirmed by a keyboard in time")
+        // Unconfirmed, the written text takes the dictation's insert turn.
+        return confirmed ? .shown : .pending
     }
 
     func replace(with text: String) async -> Bool {
-        guard let draftID else { return false }
+        // The keyboard can't take a draft back out; it stays as heard.
+        guard let draftID, !text.isEmpty else { return false }
         // The keyboard does the swap, leaves the draft as heard, or types
         // the text as a plain result where no draft went in.
         inserter.onDeliver?(text, draftID)

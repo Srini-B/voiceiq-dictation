@@ -556,7 +556,8 @@ public final class DictationCoordinator: ObservableObject {
         inFlightTask = Task { [weak self] in
           var stage: DraftStage?
           // Every way out of the job frees the next one's turn, closes a
-          // stream nothing used, and ends a draft (its text stays).
+          // stream nothing used, and ends a draft. A job that ends without
+          // written text first takes its draft back out (`withdraw`).
           defer { ticket.finish(); stream?.cancel(); stage?.end(); self?.drafting.remove(sessionID) }
           await UsageMeter.$scope.withValue(usageScope) {
             guard let self else { return }
@@ -595,12 +596,16 @@ public final class DictationCoordinator: ObservableObject {
                                             transcription: Date().timeIntervalSince(finalizeStartedAt))
                 }
                 let readyAt = Date()
-                guard !Task.isCancelled else { return }
+                guard !Task.isCancelled else {
+                    await stage?.withdraw()
+                    return
+                }
                 await self.completeTranscription(
                     sessionID: sessionID, outcome: outcome,
                     startedAt: requestedAt, readyAt: readyAt, stages: stages, draft: stage
                 )
             } catch {
+                await stage?.withdraw()
                 guard !Task.isCancelled else { return }
                 await self.failTranscription(sessionID: sessionID, error: error)
             }
@@ -625,8 +630,11 @@ public final class DictationCoordinator: ObservableObject {
         // still .transcribing while an earlier job inserts, so a press now
         // can detach this one too.
         let shown = await draft?.shown() ?? .notInserted
-        if shown == .notInserted { await waiting.turn?.waitForPrevious() }
-        guard !Task.isCancelled, let job = self.job(sessionID) else { return } // cancelled while waiting
+        if shown == .notInserted || shown == .pending { await waiting.turn?.waitForPrevious() }
+        guard !Task.isCancelled, let job = self.job(sessionID) else { // cancelled while waiting
+            await draft?.withdraw()
+            return
+        }
         let isForeground = session?.id == sessionID
         if isForeground { apply(.transcriptReady) }
 
@@ -636,7 +644,7 @@ public final class DictationCoordinator: ObservableObject {
         let insertionOutcome: InsertionOutcome
         var keptDraft = false
         switch shown {
-        case .shown:
+        case .shown, .pending:
             keptDraft = await draft?.draft.replace(with: outcome.cleanedTranscript) != true
             insertionOutcome = .inserted
         case .lost:

@@ -53,7 +53,7 @@ private final class LearningDraft: TextDraft {
 
     func replace(with text: String) async -> Bool {
         let replaced = await draft.replace(with: text)
-        if replaced, let field, let written = draft.text { learner.track(inserted: written, in: field) }
+        if replaced, let field, let written = draft.text, !written.isEmpty { learner.track(inserted: written, in: field) }
         return replaced
     }
 
