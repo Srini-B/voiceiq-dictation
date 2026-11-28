@@ -73,7 +73,7 @@ enum SpokenAddresses {
             // "Prices rose at the rate gmail dot com": with "at the rate", the mailbox
             // opens the sentence or a clause, or follows a word that introduces an address;
             // before ", thanks" or "and" another address, only a strong one ("is moving" stays).
-            let introduced = marker.ambiguous ? introduction(tokens, before: start, after: lastAddress) : .strong
+            let introduced = marker.ambiguous ? introduction(tokens, in: text, before: start, after: lastAddress) : .strong
             guard !local.isEmpty, let introduced, introduced == .strong || ending == .sentence else {
                 index = marker.end + 1
                 continue
@@ -143,8 +143,9 @@ enum SpokenAddresses {
     /// nil: strongly when it opens the sentence or a clause, follows a strong
     /// word, or follows "and" or "or" after an address joined here (`after`);
     /// weakly after a weak word, or after "and" or "or" and a written address.
-    private static func introduction(_ tokens: [Token], before start: Int, after lastAddress: Int?) -> Introduction? {
-        guard start > 0 else { return .strong }
+    private static func introduction(_ tokens: [Token], in text: String, before start: Int, after lastAddress: Int?) -> Introduction? {
+        // A mailbox that opens the text or a line ("Contacts\npriya at the rate…").
+        guard start > 0, !text[tokens[start - 1].range.upperBound..<tokens[start].range.lowerBound].contains("\n") else { return .strong }
         let previous = tokens[start - 1].word
         if let last = previous.last, ".!?,:;".contains(last) { return .strong }
         let word = bare(previous)

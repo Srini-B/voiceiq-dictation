@@ -249,6 +249,7 @@ final class TidyTests: XCTestCase {
             ("priya at the rate gmail dot com, please.", "priya@gmail.com, please."),
             ("Mail john at the rate gmail dot com, thanks.", "Mail john@gmail.com, thanks."),
             ("Send it to ahmed at the rate gmail dot com.", "Send it to ahmed@gmail.com."),
+            ("Contacts\npriya at the rate gmail dot com.", "Contacts\npriya@gmail.com."),
             ("Send it to ming at the rate gmail dot com.", "Send it to ming@gmail.com."),
         ] {
             XCTAssertEqual(SpokenAddresses.joining(in: spoken), written)
