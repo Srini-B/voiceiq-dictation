@@ -598,7 +598,7 @@ public enum MeetingFailure: Error, Equatable {
             switch error {
             case .offline, .timeout, .rateLimitedTransient: return true
             // AssemblyAIClient sends a URLError code as its number, a 5xx as "http_5xx".
-            case .network(let code): return Int(code) != nil || code.hasPrefix("http_5")
+            case .network(let code): return Int(code) != nil || code.hasPrefix("http_5") || code == "transcript_server_error"
             default: return false
             }
         default: return false

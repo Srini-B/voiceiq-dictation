@@ -208,11 +208,15 @@ public final class RealtimeTranscription: @unchecked Sendable {
 
     private func fail(_ error: TranscriptionError) {
         lock.lock()
-        let first = failure == nil && !terminated
+        // After close() the socket's own cancel arrives here; that is no failure.
+        let first = failure == nil && !terminated && !closed
         if first { failure = error }
         lock.unlock()
-        if first { Log.transcription.error("realtime: stream failed (\(String(describing: error), privacy: .public))") }
         resumeWaiter()
+        guard first else { return }
+        Log.transcription.error("realtime: stream failed (\(String(describing: error), privacy: .public))")
+        // Closed now, so the session is booked to the failure, not to key-up.
+        close()
     }
 
     private func resumeWaiter() {

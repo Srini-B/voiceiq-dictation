@@ -102,6 +102,7 @@ final class MeetingCaptureTests: XCTestCase {
         XCTAssertTrue(MeetingFailure.waitsForService(TranscriptionError.offline))
         XCTAssertTrue(MeetingFailure.waitsForService(TranscriptionError.network("-1004")))
         XCTAssertTrue(MeetingFailure.waitsForService(TranscriptionError.network("http_503")))
+        XCTAssertTrue(MeetingFailure.waitsForService(TranscriptionError.network("transcript_server_error")))
         XCTAssertFalse(MeetingFailure.waitsForService(TranscriptionError.network("unparseable_response")))
         XCTAssertFalse(MeetingFailure.waitsForService(TranscriptionError.network("bad_url")))
         XCTAssertFalse(MeetingFailure.waitsForService(TranscriptionError.rateLimitedDaily))

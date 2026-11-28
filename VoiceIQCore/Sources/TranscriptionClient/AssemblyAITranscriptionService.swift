@@ -139,7 +139,12 @@ public struct AssemblyAITranscriptionService: TranscriptionServicing {
             }
             let written = try await AssemblyAIClient.firstSuccess(retryAfter: 5, first: attempt, retry: attempt)
             let text = ValidationGate.stripArtifacts(written).trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !text.isEmpty else { throw TranscriptionError.emptyTranscript }
+            // "" is the writer's no-speech answer; an answer that was only
+            // artifacts ("CLEAN:") is a writer failure, tidied below.
+            if text.isEmpty {
+                if written.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { throw TranscriptionError.emptyTranscript }
+                throw TranscriptionError.network("blank_answer")
+            }
             return TranscriptionResult(rawTranscript: transcript.rawTranscript,
                                        cleanedTranscript: ReplacementEngine.apply(rules, to: text),
                                        modelID: "\(transcript.modelID)+\(model)/writing-rules")
