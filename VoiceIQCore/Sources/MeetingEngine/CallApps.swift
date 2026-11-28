@@ -71,9 +71,14 @@ enum CallApps {
     /// /j/ launcher for the app, and not chat sites (WhatsApp, Telegram,
     /// Messenger, Teams, Discord) that play voice messages and videos (Codex
     /// and Neon on #138).
+    /// Anchored at the scheme and host, so a room link inside another page's
+    /// address (a search for it) is not a room (Codex on #138).
     private nonisolated(unsafe) static let roomAddresses: [Regex<Substring>] = [
-        #/(?i)meet\.google\.com/[a-z]{3}-[a-z]{4}-[a-z]{3}/#, #/zoom\.us/wc/(?:join/)?\d/#, #/app\.slack\.com/huddle/#,
-        #/(?:whereby\.com|meet\.jit\.si|talky\.io|8x8\.vc)/[A-Za-z0-9_-]+(?:[?#]|$)/#, #/vdo\.ninja/.*[?&](?:room|view|push)=/#,
+        #/(?i)^https?://meet\.google\.com/[a-z]{3}-[a-z]{4}-[a-z]{3}/#,
+        #/(?i)^https?://(?:[a-z0-9-]+\.)*zoom\.us/wc/(?:join/)?\d/#,
+        #/(?i)^https?://app\.slack\.com/huddle/#,
+        #/(?i)^https?://(?:www\.)?(?:whereby\.com|meet\.jit\.si|talky\.io|8x8\.vc)/[A-Za-z0-9_-]+(?:[?#]|$)/#,
+        #/(?i)^https?://(?:www\.)?vdo\.ninja/[^#]*[?&](?:room|view|push)=/#,
     ]
     /// Titles of a joined room, read only when the browser gives no address:
     /// any video can be titled "Zoom Meeting".

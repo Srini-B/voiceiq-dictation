@@ -31,7 +31,9 @@ final class CallAppsTests: XCTestCase {
         for page in ["https://meet.google.com/", "https://meet.google.com/landing", "https://vdo.ninja/", "https://meet.jit.si/",
                      "https://meet.jit.si/static/close3.html", "https://zoom.us/j/81234567890",
                      "https://web.whatsapp.com/", "https://web.telegram.org/k/", "https://www.messenger.com/t/123",
-                     "https://teams.microsoft.com/v2/", "https://discord.com/channels/1/2"] {
+                     "https://teams.microsoft.com/v2/", "https://discord.com/channels/1/2",
+                     "https://www.google.com/search?q=https://meet.google.com/abc-defg-hij",
+                     "https://mail.google.com/mail/u/0/#inbox?link=https://vdo.ninja/?room=x"] {
             XCTAssertFalse(CallApps.isCallRoom(addresses: [page]), page)
         }
         // Titles count only when no address could be read; any video can carry one.
