@@ -160,6 +160,7 @@ final class KeyboardViewController: UIInputViewController {
         HostAppResolver.harvest()
         Self.onScreen.moved(keyboardID, to: TypingLogTraits.documentIdentifier(of: textDocumentProxy))
         updateBackdrop()
+        model.hostChanged()
         editor.textChanged()
         typing.textDidChange()
     }
@@ -167,6 +168,7 @@ final class KeyboardViewController: UIInputViewController {
     override func selectionDidChange(_ textInput: UITextInput?) {
         super.selectionDidChange(textInput)
         HostAppResolver.harvest()
+        model.hostChanged()
         editor.textChanged()
         typing.textDidChange()
     }

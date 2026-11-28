@@ -32,22 +32,7 @@ final class ProxyField: NSObject, UITextDocumentProxy {
         marked = nil
     }
 
-    /// A host that leaves marked text out of the context until it is committed.
-    var hidesMarkedText = false
-
-    /// A host that shows only this many characters before the cursor.
-    var window: Int?
-
-    var documentContextBeforeInput: String? {
-        let full = fullContextBefore
-        guard let window else { return full }
-        return String(full.suffix(window))
-    }
-
-    private var fullContextBefore: String {
-        guard hidesMarkedText, let marked, marked.upperBound <= start else { return String(text[..<start]) }
-        return String(text[..<marked.lowerBound]) + String(text[marked.upperBound..<start])
-    }
+    var documentContextBeforeInput: String? { String(text[..<start]) }
     var documentContextAfterInput: String? { String(text[(start + length)...]) }
     var selectedText: String? { length > 0 ? String(text[start..<(start + length)]) : nil }
     var documentInputMode: UITextInputMode? { nil }
@@ -62,23 +47,7 @@ final class ProxyField: NSObject, UITextDocumentProxy {
         marked = nil
     }
 
-    /// A host that ignores `unmarkText` and deletes marked text whole (Messages).
-    var keepsMarkedText = false
-    /// Runs once after the next Delete: the user acting while the host applies it.
-    var afterNextDelete: (() -> Void)?
-
     func deleteBackward() {
-        defer {
-            let action = afterNextDelete
-            afterNextDelete = nil
-            action?()
-        }
-        if keepsMarkedText, let range = marked, range.upperBound == start, length == 0 {
-            text.removeSubrange(range)
-            start = range.lowerBound
-            marked = nil
-            return
-        }
         marked = nil
         if length > 0 {
             text.removeSubrange(start..<(start + length))
@@ -105,7 +74,7 @@ final class ProxyField: NSObject, UITextDocumentProxy {
     }
 
     func unmarkText() {
-        if !keepsMarkedText { marked = nil }
+        marked = nil
     }
 }
 
@@ -159,13 +128,13 @@ final class EditControllerTests: XCTestCase {
 
     /// A draft swapped for its written text is one undo step, like a
     /// dictation typed in: undo leaves the field as it was before it.
-    func testUndoTakesBackADraftDictation() async throws {
+    func testUndoTakesBackADraftDictation() throws {
         let field = ProxyField("Dear Ana,")
         let editor = editor(for: field)
         let draft = try XCTUnwrap(KeyboardDraft.type("see you at noon", id: UUID(), documentID: UUID(), into: field,
                                                      fit: { text, _, _ in " " + text }))
-        let swap = await draft.replace(with: "See you at noon.", in: field, fit: { text, _, _ in " " + text })
-        guard case .retyped(let fitted) = swap else {
+        let swap = draft.replace(with: "See you at noon.", in: field, fit: { text, _, _ in " " + text })
+        guard case .replaced(let fitted) = swap else {
             return XCTFail("not swapped")
         }
         editor.recordDictation(inserted: fitted)

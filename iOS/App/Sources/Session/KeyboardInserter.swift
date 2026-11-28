@@ -47,13 +47,14 @@ final class KeyboardInserter: TextInserting {
         return .inserted
     }
 
-    /// Off until the swap is safe in every host: in Messages the keyboard's
-    /// view of the field (`documentContextBeforeInput`) read the expected
-    /// text after a swap while the field itself held only the written text,
-    /// with the earlier dictation and typed text gone (2026-11-28, simulator).
-    /// No read-back the keyboard can do catches that, so the iPhone types the
-    /// written text once, as before drafts.
-    static let offersDrafts = false
+    /// On. The keyboard types a draft only in apps the swap was tried in
+    /// (`KeyboardDraft.verifiedHosts`); in every other app it says nothing
+    /// and the written text is typed once, as before drafts. The swap is one
+    /// insert over the marked draft (`KeyboardDraft`), tried in the iOS 27
+    /// Simulator, not yet on a device. The first swap deleted the draft key
+    /// by key and, in Messages, took the earlier dictation and typed text
+    /// with it (2026-11-28).
+    static let offersDrafts = true
 
     /// A draft when the dictation goes back to a keyboard's input session.
     /// Whether a keyboard is still there to type it is the keyboard's call
