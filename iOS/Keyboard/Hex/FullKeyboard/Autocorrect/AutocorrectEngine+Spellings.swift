@@ -7,14 +7,16 @@ import Foundation
 @MainActor
 extension AutocorrectEngine {
     /// `word`, all lowercase or with only a capital first letter (a sentence's start: "Chatgpt"),
-    /// as the layout language's model spells it; nil when it has no spelling of its own or is
-    /// one of your own spellings ("Fitzgerald" from Contacts stays).
+    /// as the layout language's model spells it, or as you spell the same letters with capitals
+    /// ("Fitzgerald" from Contacts over the model's "FitzGerald"); nil when the model has no
+    /// spelling of its own, or with Auto-capitalization off.
     func modelSpelling(of word: String) -> String? {
         let lower = word.lowercased()
-        guard word == lower || word.dropFirst() == lower.dropFirst(), !isOwnSpelling(word),
-              let model = contextModel ?? decoder?.model,
-              model.language == language.rawValue else { return nil }
-        return HexWordList.bundled(model.language, "spellings")?.text(of: lower)
+        guard addsCapitals, word == lower || word.dropFirst() == lower.dropFirst(),
+              let model = contextModel ?? decoder?.model, model.language == language.rawValue,
+              let spelled = HexWordList.bundled(model.language, "spellings")?.text(of: lower) else { return nil }
+        // Learned words are stored lowercase, so only Contacts, Dictionary and learned fixes carry a casing.
+        return (lexiconTerms + learning.typos.values).first { $0 != lower && $0.lowercased() == lower } ?? spelled
     }
 
     /// A model word (lowercase) as the strip offers it before it is cased like what you typed:

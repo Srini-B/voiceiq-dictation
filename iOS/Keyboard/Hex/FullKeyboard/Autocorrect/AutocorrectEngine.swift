@@ -627,7 +627,7 @@ final class AutocorrectEngine {
         var out: [KeyboardSuggestion] = []
         for word in words where out.count < 3 {
             guard previous.map({ word.lowercased() != $0 }) ?? true, mayOffer(word, after: previous) else { continue }
-            let spelled = addsCapitals ? modelSpelling(of: word) ?? word : word
+            let spelled = modelSpelling(of: word) ?? word
             let text = capitalized && addsCapitals && spelled == spelled.lowercased()
                 ? spelled.prefix(1).uppercased() + spelled.dropFirst() : spelled
             guard !out.contains(where: { $0.replacement.caseInsensitiveCompare(text) == .orderedSame }) else { continue }

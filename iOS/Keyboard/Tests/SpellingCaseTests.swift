@@ -28,22 +28,70 @@ final class SpellingCaseTests: XCTestCase {
         tap(.space, typing)
         XCTAssertEqual(airbnb.text, "Airbnb ")
 
-        let field = Field()
+        for (word, want) in [("chatgpt", "ChatGPT"), ("iphone", "iPhone")] {
+            XCTAssertEqual(try swiped(word, into: Field()), want, "swiped \(word)")
+        }
+    }
+
+    /// Your own words: a word learned in lowercase ("chatgpt") still swipes as the model spells it,
+    /// and a Contacts or Dictionary spelling of the same letters wins over the model's.
+    func testYourOwnWordsAndTheModelsSpellings() throws {
+        // Space never replaces a learned word, so this is the swipe.
+        let learned = Field(text: "I said ")
+        let keys = try engine(learned) { $0.learn("chatgpt") }
+        XCTAssertEqual(try swiped("chatgpt", into: learned, keys: keys), "I said ChatGPT")
+
+        let contact = Field(text: "I said ")
+        let typing = try engine(contact)
+        typing.autocorrect.setVocabulary(["Fitzgerald"])
+        for letter in "fitzgerald" { tap(.character(String(letter)), typing) }
+        tap(.space, typing)
+        XCTAssertEqual(contact.text, "I said Fitzgerald ")
+    }
+
+    /// With Auto-capitalization off, Shift gives one capital and the model adds none.
+    func testAutoCapitalizationOffAddsNoSpellingCapitals() throws {
+        let field = Field(text: "I said ")
         let keys = try engine(field)
+        keys.autoCapitalizes = false
+        tap(.shift, keys)
+        for letter in "cha" { tap(.character(String(letter)), keys) }
+        XCTAssertFalse(keys.suggestions.contains { $0.displayText == "ChatGPT" }, "\(keys.suggestions.map(\.displayText))")
+
+        let swipe = Field(text: "I said ")
+        let swiping = try engine(swipe)
+        swiping.autoCapitalizes = false
+        tap(.shift, swiping)
+        XCTAssertEqual(try swiped("iphone", into: swipe, keys: swiping), "I said Iphone")
+    }
+
+    private func swiped(_ word: String, into field: Field, keys given: FullKeyboardEngine? = nil) throws -> String {
+        let keys = try given ?? engine(field)
         let plane = KeyboardKeyPlaneView(engine: keys)
         plane.swipe = SwipeTyping(engine: keys, model: try XCTUnwrap(keys.letterOdds))
-        let points = swipePath("chatgpt", keys: keys.swipeKeys)
+        let points = swipePath(word, keys: keys.swipeKeys)
         plane.began(id: 50, sample: TypingLogTouchSample(point: points[0], timestamp: 0))
         for point in points.dropFirst() { plane.moved(id: 50, sample: TypingLogTouchSample(point: point, timestamp: 0)) }
         plane.ended(id: 50, sample: TypingLogTouchSample(point: points[points.count - 1], timestamp: 0))
-        XCTAssertEqual(field.text.trimmingCharacters(in: .whitespaces), "ChatGPT", "swiped chatgpt")
+        return field.text.trimmingCharacters(in: .whitespaces)
+    }
+
+    private var suites: [String] = []
+
+    override func tearDown() {
+        for suite in suites { UserDefaults().removePersistentDomain(forName: suite) }
+        suites = []
+        super.tearDown()
     }
 
     /// The engine with the English model attached as `FullKeyboardView.syncSpatialAutocorrect`
     /// attaches it with Spatial autocorrect on (the default).
-    private func engine(_ field: Field) throws -> FullKeyboardEngine {
-        let defaults = UserDefaults(suiteName: "spelling-case-\(UUID().uuidString)")!
-        let keys = FullKeyboardEngine(target: field, autocorrect: AutocorrectEngine(learnedWords: LearnedWordsStore(defaults: defaults)))
+    private func engine(_ field: Field, learned: (LearnedWordsStore) -> Void = { _ in }) throws -> FullKeyboardEngine {
+        let suite = "spelling-case-\(UUID().uuidString)"
+        suites.append(suite)
+        let store = LearnedWordsStore(defaults: UserDefaults(suiteName: suite)!)
+        learned(store)
+        let keys = FullKeyboardEngine(target: field, autocorrect: AutocorrectEngine(learnedWords: store))
         keys.width = 393
         keys.language = .english
         let model = try XCTUnwrap(TypingDecoderModel.bundled("en"))

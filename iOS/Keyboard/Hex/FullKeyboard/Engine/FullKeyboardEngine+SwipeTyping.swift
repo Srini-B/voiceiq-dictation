@@ -168,9 +168,9 @@ extension FullKeyboardEngine {
         if shift.state == .locked { return word.uppercased() }
         guard let first = word.first else { return word }
         if capital {
-            if autoCapitalizes, let spelled = autocorrect.modelSpelling(of: word), spelled != spelled.lowercased() {
-                return spelled
-            }
+            // A spelling with inner capitals keeps them: the model's ("ChatGPT") or your own ("iPhone").
+            if word.dropFirst().contains(where: \.isUppercase) { return word }
+            if let spelled = autocorrect.modelSpelling(of: word), spelled != spelled.lowercased() { return spelled }
             return first.uppercased() + word.dropFirst()
         }
         if !autoCapitalizes {
