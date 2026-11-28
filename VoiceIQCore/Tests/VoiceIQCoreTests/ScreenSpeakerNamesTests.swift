@@ -132,6 +132,13 @@ final class ScreenSpeakerNamesTests: XCTestCase {
                      TranscriptSegment(speaker: "s1", text: "I have four of the six done.", chunkIndex: 0, start: 3, end: 6)]
         XCTAssertEqual(ScreenSpeakerNames.byAddress(nil, transcript: spelt, invited: ["Nihal", "Muhammed Hafeed"])?.speakers["s1"]?.name,
                        "Muhammed Hafeed")
+        // Spelt the transcription's way in the answer too: still about Sara, so nobody's.
+        let sarah = [TranscriptSegment(speaker: "you", text: "Sarah, can you give the update?", chunkIndex: 0, start: 0, end: 2),
+                     TranscriptSegment(speaker: "s1", text: "Sarah is out today, I can cover.", chunkIndex: 0, start: 2, end: 5)]
+        XCTAssertNil(ScreenSpeakerNames.byAddress(nil, transcript: sarah, invited: ["Sara Lindqvist", "Lee Park"]))
+        // A reply that says the name, "I'm Sarah" included, is left to the notes, which read introductions.
+        let hiSarah = [sarah[0], TranscriptSegment(speaker: "s1", text: "Hi, I'm Sarah. Signups were up.", chunkIndex: 0, start: 2, end: 5)]
+        XCTAssertNil(ScreenSpeakerNames.byAddress(nil, transcript: hiSarah, invited: ["Sara Lindqvist", "Lee Park"]))
         let mary = [TranscriptSegment(speaker: "you", text: "Mary, where are we?", chunkIndex: 0, start: 0, end: 3), spelt[1]]
         XCTAssertNil(ScreenSpeakerNames.byAddress(nil, transcript: mary, invited: ["Mark Stone", "Lee Park"]))
         // A gallery showing the invitees too is still one person per name.

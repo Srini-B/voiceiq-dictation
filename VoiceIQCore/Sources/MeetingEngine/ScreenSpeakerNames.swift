@@ -268,8 +268,7 @@ public enum ScreenSpeakerNames {
                   // Speech that overlaps the address is an interjection, not the answer.
                   (answer.start ?? .infinity) >= (turn.end ?? 0) - lag,
                   // "Sara is out today": an answer about the person is not from them.
-                  !answer.text.split(whereSeparator: { !$0.isLetter }).contains(where: { word in
-                      name.split(separator: " ").contains { $0.lowercased() == word.lowercased() } }) else { continue }
+                  !answer.text.split(whereSeparator: { !$0.isLetter }).contains(where: { heard(String($0), as: name) }) else { continue }
             votes[answer.speaker, default: []].insert(name)
         }
         var out = screen ?? ScreenNames(seen: [], speakers: [:])
@@ -278,7 +277,7 @@ public enum ScreenSpeakerNames {
             guard let name = heard.first, !votes.contains(where: { $0.key != speaker && $0.value.contains(name) }) else { continue }
             // A voice that introduced itself by another name is left to the notes.
             let introduced = transcript.filter { $0.speaker == speaker }.flatMap { introductions(in: $0.text) }
-            guard introduced.allSatisfy({ sameName($0, name) }) else { continue }
+            guard introduced.allSatisfy({ heard($0, as: name) }) else { continue }
             out.speakers[speaker] = .init(name: name, seen: 0, of: 0, reason: "Answered right after being addressed as \(name)")
         }
         return screen == nil && out.speakers.isEmpty ? nil : out
