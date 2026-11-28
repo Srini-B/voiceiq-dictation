@@ -42,6 +42,7 @@ struct HomeView: View {
                             .font(Theme.Fonts.caption())
                             .foregroundStyle(Theme.Colors.muted)
                             .textCase(nil)
+                            .listRowInsets(EdgeInsets(top: Theme.Spacing.l, leading: Theme.Spacing.page, bottom: Theme.Spacing.s, trailing: Theme.Spacing.page))
                     }
                 }
                 if !search.isEmpty && records.isEmpty {
@@ -57,7 +58,7 @@ struct HomeView: View {
             .scrollContentBackground(.hidden)
             .background(Theme.Colors.canvas.ignoresSafeArea())
             .keyboardDismissable()
-            .searchable(text: $search, prompt: "Search what you said")
+            .searchable(text: $search, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search what you said")
             .onChange(of: search) { _, _ in reload() }
             .navigationTitle("VoiceiQ")
             .toolbar { toolbar }
@@ -113,7 +114,8 @@ struct HomeView: View {
     }
 
     @ToolbarContentBuilder private var toolbar: some ToolbarContent {
-        ToolbarItem(placement: .topBarTrailing) {
+        // Leading, so it reads as its own control and not part of the ⋯ button.
+        ToolbarItem(placement: .topBarLeading) {
             if session.isActive { SessionChip() }
         }
         ToolbarItem(placement: .topBarTrailing) {
@@ -125,6 +127,7 @@ struct HomeView: View {
             } label: {
                 Image(systemName: "ellipsis")
             }
+            .tint(Theme.Colors.inkSecondary)
             .accessibilityLabel("More")
         }
     }
@@ -140,14 +143,19 @@ struct HomeView: View {
                 tab = .meetings
             }
         }
-        .padding(.horizontal, Theme.Spacing.l)
+        .padding(.horizontal, Theme.Spacing.page)
         .padding(.bottom, Theme.Spacing.s)
-        // Rows fade out behind the dock instead of showing through around it.
+        // Rows fade out above the dock and stop behind it, so no text shows
+        // around the capsule or between it and the Talk key.
         .background(alignment: .bottom) {
-            LinearGradient(colors: [Theme.Colors.canvas.opacity(0), Theme.Colors.canvas], startPoint: .top, endPoint: .center)
-                .padding(.top, -28)
-                .ignoresSafeArea(edges: .bottom)
-                .allowsHitTesting(false)
+            VStack(spacing: 0) {
+                LinearGradient(colors: [Theme.Colors.canvas.opacity(0), Theme.Colors.canvas], startPoint: .top, endPoint: .bottom)
+                    .frame(height: 28)
+                Theme.Colors.canvas
+            }
+            .padding(.top, -28)
+            .ignoresSafeArea(edges: .bottom)
+            .allowsHitTesting(false)
         }
     }
 
@@ -175,6 +183,7 @@ private extension View {
             .listRowSeparator(separator ? .visible : .hidden)
             .listRowSeparatorTint(Theme.Colors.hairline)
             .alignmentGuide(.listRowSeparatorLeading) { _ in 0 }
+            .alignmentGuide(.listRowSeparatorTrailing) { $0.width }
     }
 }
 
@@ -193,7 +202,9 @@ private struct DictationRow: View {
             }
             .font(Theme.Fonts.footnote())
             .foregroundStyle(selected ? Theme.Colors.onAccent.opacity(0.8) : Theme.Colors.muted)
-            Text(record.displayText.isEmpty ? statusLabel : record.displayText)
+            // One paragraph: the row's three lines show words, not the blank
+            // lines between paragraphs.
+            Text(record.displayText.isEmpty ? statusLabel : preview)
                 .font(Theme.Fonts.body())
                 .foregroundStyle(record.displayText.isEmpty ? Theme.Colors.muted : (selected ? Theme.Colors.onAccent : Theme.Colors.ink))
                 .lineLimit(3)
@@ -222,9 +233,17 @@ private struct DictationRow: View {
         .padding(.vertical, 14)
     }
 
+    private var preview: String {
+        record.displayText.split(whereSeparator: \.isNewline).joined(separator: " ")
+    }
+
+    /// Red is only for recording; a failure is amber, and named once: in the
+    /// meta line when the row shows words, in the body when it has none.
     @ViewBuilder private var statusView: some View {
-        if record.status == "failed" {
-            Text("· Failed").foregroundStyle(Theme.Colors.recording)
+        if record.displayText.isEmpty {
+            EmptyView()
+        } else if record.status == "failed" {
+            Text("· Failed").foregroundStyle(Theme.Colors.pending)
         } else if record.status == "queuedForRetry" {
             Text("· Waiting to send").foregroundStyle(Theme.Colors.pending)
         }

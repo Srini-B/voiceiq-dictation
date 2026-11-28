@@ -84,7 +84,7 @@ struct MeetingChatInput: View {
                 .onSubmit(send)
                 .padding(.horizontal, Theme.Spacing.m)
                 .padding(.vertical, Theme.Spacing.s)
-                .background(RoundedRectangle(cornerRadius: Theme.Radius.field).fill(Theme.Colors.surfaceNested))
+                .background(Capsule().fill(Theme.Colors.surfaceNested))
             Button(action: send) {
                 Image(systemName: "arrow.up.circle.fill").font(.system(size: 30))
             }
@@ -94,7 +94,7 @@ struct MeetingChatInput: View {
         }
         .padding(.horizontal, Theme.Spacing.page)
         .padding(.vertical, Theme.Spacing.s)
-        .background(.bar)
+        .background(Theme.Colors.canvas)
     }
 
     private var canSend: Bool { !chat.isAsking && !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
