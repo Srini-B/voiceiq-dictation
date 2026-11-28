@@ -293,21 +293,20 @@ public struct MeetingPlaybackBar: View {
         GeometryReader { geometry in
             let count = max(1, Int(geometry.size.width / 5))
             let width = geometry.size.width
-            func at(_ x: CGFloat) -> Double { min(max(x / width, 0), 1) }
             // Sideways only, and alongside the scroll view, so a vertical swipe still scrolls the note.
             let drag = DragGesture(minimumDistance: Self.dragStart)
                 .updating($scrub) { value, scrub, _ in
                     if scrub != nil || abs(value.translation.width) > abs(value.translation.height) {
-                        scrub = at(value.location.x)
+                        scrub = Self.fraction(value.location.x, of: width)
                     }
                 }
                 .onEnded { value in
                     guard abs(value.translation.width) > abs(value.translation.height) else { return }
-                    seek(to: at(value.location.x) * duration, of: duration)
+                    seek(to: Self.fraction(value.location.x, of: width) * duration, of: duration)
                 }
             WaveBars(bars: bars(count), style: style, played: Int((progress * Double(count)).rounded()))
                 .contentShape(Rectangle())
-                .onTapGesture(coordinateSpace: .local) { seek(to: at($0.x) * duration, of: duration) }
+                .onTapGesture(coordinateSpace: .local) { seek(to: Self.fraction($0.x, of: width) * duration, of: duration) }
                 .simultaneousGesture(drag)
                 // Nothing to seek in until the length is known.
                 .allowsHitTesting(duration > 0)
@@ -321,6 +320,9 @@ public struct MeetingPlaybackBar: View {
             seek(to: player.position + (direction == .increment ? 15 : -15), of: duration)
         }
     }
+
+    /// How far along the waveform `x` is, 0 to 1.
+    private static func fraction(_ x: CGFloat, of width: CGFloat) -> Double { min(max(x / width, 0), 1) }
 
     /// Within the recording: past the end would start the next Play from 0:00.
     private func seek(to seconds: TimeInterval, of duration: TimeInterval) {
