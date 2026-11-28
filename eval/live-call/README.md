@@ -64,7 +64,8 @@ The script:
 3. Checks that the owner hears every guest. Before anyone speaks, each
    guest beeps at its own pitch (500 Hz, 850 Hz, 1200 Hz…, 3 s apart), and
    `taprecord.swift` records the owner's Chrome through a Core Audio process
-   tap. A guest whose pitch peaks below −45 dBFS there was not heard. The run
+   tap. A guest whose pitch peaks below −45 dBFS there, through an 80 Hz-wide
+   FIR filter, was not heard. The run
    stops, because a probe without the far side measures nothing; `CHECK=warn`
    goes on anyway. The recording and the levels are written to
    `$OUT/guest-check.wav` and `guest-check.txt`. The terminal or agent

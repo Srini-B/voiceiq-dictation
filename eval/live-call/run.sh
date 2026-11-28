@@ -60,6 +60,9 @@ fi
 # runs the guests' sound never reached the owner, and the probe could not
 # tell. Every file opens 3 s after the previous one, so the same offset puts
 # the beeps 3 s apart in the call.
+# The beeps fade in and out, and an 80 Hz-wide FIR filter measures each
+# pitch: hard-gated beeps through a bandpass biquad put any loud guest
+# above −45 dBFS in every other guest's band, so a silent guest passed.
 out=${OUT:-$PWD}
 mkdir -p $out
 tone_at=$(( 3 * ${#guests} + 12 ))
@@ -68,7 +71,7 @@ swiftc -O -suppress-warnings $here/taprecord.swift -o $scratch/taprecord
 for index in {1..${#guests}}; do
   pad=$(( 3 * (${#guests} - index + 1) + lead ))
   ffmpeg -nostdin -loglevel error -i ${guests[index]} \
-    -f lavfi -i "aevalsrc='0.4*sin(2*PI*$(pitch $index)*t)*lt(mod(t\,0.4)\,0.25)':d=2:s=48000" \
+    -f lavfi -i "aevalsrc='0.4*sin(2*PI*$(pitch $index)*t)*pow(sin(PI*mod(t\,0.4)/0.25)\,2)*lt(mod(t\,0.4)\,0.25)':d=2:s=48000" \
     -filter_complex "[0]aresample=48000,adelay=${pad}000:all=1[g];[1]adelay=${tone_at}000:all=1[t];[g][t]amix=inputs=2:duration=longest:normalize=0" \
     -ar 48000 -ac 1 -c:a pcm_s16le $scratch/guest$index.wav
 done
@@ -92,7 +95,8 @@ wait $! || { echo "the guest check could not tap the owner's Chrome" >&2; exit 1
 heard=0
 for index in {1..${#guests}}; do
   level=$(ffmpeg -nostdin -hide_banner -i $out/guest-check.wav \
-    -af "bandpass=f=$(pitch $index):width_type=h:w=60,volumedetect" -f null - 2>&1 | awk '/max_volume/ {print $5}')
+    -af "firequalizer=gain='if(between(f\,$(( $(pitch $index) - 40 ))\,$(( $(pitch $index) + 40 )))\,0\,-100)':delay=0.05,volumedetect" \
+    -f null - 2>&1 | awk '/max_volume/ {print $5}')
   level=${level:--999}
   if (( level > -45 )); then result=heard; heard=$(( heard + 1 )); else result="NOT HEARD"; fi
   echo "Guest $index ($(pitch $index) Hz): peak ${level} dBFS at the owner, $result" | tee -a $out/guest-check.txt
