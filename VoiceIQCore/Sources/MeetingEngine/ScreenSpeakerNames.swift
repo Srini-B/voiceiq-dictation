@@ -138,6 +138,8 @@ public enum ScreenSpeakerNames {
         "toolbar", "new", "open", "edit", "file", "window", "tab", "tabs", "bookmarks", "history", "profile",
         "account", "back", "forward", "reload", "live", "rec", "busy", "away", "offline", "available", "guest",
         "now", "today", "yesterday", "files", "notes", "tasks", "contacts", "react", "hide", "show", "unknown",
+        // Chrome's own bars over a call page (2026-11-28 probe: "Infobar Container", "Relaunch", "Install").
+        "infobar", "container", "relaunch", "install", "update",
     ]
 
     /// Other people the call showed: the participants button less the owner.
@@ -214,7 +216,7 @@ public enum ScreenSpeakerNames {
            !used.contains(others[0]) {
             speakers[speaker] = .init(name: others[0], seen: total[others[0]] ?? 0, of: samples.count)
         }
-        let ranked = total.sorted { $0.value != $1.value ? $0.value > $1.value : $0.key < $1.key }.map(\.key)
+        let ranked = total.filter { !isUIText($0.key) }.sorted { $0.value != $1.value ? $0.value > $1.value : $0.key < $1.key }.map(\.key)
         let merged = remote.map { !far.isEmpty && $0 > far.count }
         return ScreenNames(seen: Array(ranked.prefix(seenLimit)), speakers: speakers, remote: remote,
                            probablyMerged: merged == true ? true : nil)
@@ -357,15 +359,18 @@ public enum ScreenSpeakerNames {
     }
 
     /// Single words join a snapshot's names when they stay on screen in at
-    /// least a quarter of the snapshots and are not the first word of a longer
-    /// name seen too ("Muhammed" of "Muhammed Hafeed").
+    /// least a quarter of the snapshots and are not the start of a longer
+    /// name's first word: the first name itself ("Muhammed" of "Muhammed
+    /// Hafeed") or a tag cut short, by OCR or a control bar over it. MEASURED
+    /// 2026-11-28, vdo.ninja: "May" of "Maya Patel" was named a speaker that
+    /// was Daniel Okafor, read as "Danie".
     static func withSteadySingles(_ samples: [ScreenNameSample]) -> [ScreenNameSample] {
         var counts: [String: Int] = [:]
         for sample in samples { for word in Set(sample.single ?? []) { counts[word, default: 0] += 1 } }
         let longer = Set(samples.flatMap(\.names))
         let steady = Set(counts.filter { word, count in
             count >= minimumSeen && Double(count) >= 0.25 * Double(samples.count)
-                && !longer.contains { $0.hasPrefix(word + " ") }
+                && !longer.contains { $0.split(separator: " ").first?.hasPrefix(word) == true }
         }.keys)
         return samples.map { sample in
             var out = sample
