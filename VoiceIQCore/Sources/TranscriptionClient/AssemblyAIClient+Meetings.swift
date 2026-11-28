@@ -95,7 +95,9 @@ public extension AssemblyAIClient {
     func meetingNotes(prompt: String, transcript: [TranscriptSegment], model: String,
                       deadline: TimeInterval) async throws -> MeetingNotes {
         let end = Date().addingTimeInterval(deadline)
-        let labels = Set(transcript.map(\.speaker).filter { $0 != MeetingSpeaker.you }.map(MeetingSpeaker.defaultName))
+        // Only label-shaped ones: an unlabelled import's id ("Transcript") is a word (Fable on #165).
+        let labels = Set(transcript.map(\.speaker).filter { $0 != MeetingSpeaker.you }.map(MeetingSpeaker.defaultName)
+            .filter { $0.wholeMatch(of: MeetingNotesPrompt.speakerLabel) != nil })
         let ask = { (prompt: String) in
             do {
                 return try MeetingNotesPrompt.parse(try await self.meetingNotesJSON(
