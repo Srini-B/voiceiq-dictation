@@ -167,10 +167,14 @@ public final class ScreenNameSampler: @unchecked Sendable {
                 let ours = pulsedPID.withLock { $0 } == pid
                 if browser, chromium?.isChromium == true, ours || !Self.webTreeIsOpen(pid) {
                     if tick % Self.browserTreeEvery == 0 {
+                        // The snapshot first, so samples stay in time order.
+                        if looked { record(lines, at: time); looked = false }
                         pulsedPID.withLock { $0 = pid }; switchOffTries = 0
-                        lines += await Self.whileWebTreeOpen(pid) { CallWindowText.lines(pid: pid, browser: true) }
+                        let page = await Self.whileWebTreeOpen(pid) { CallWindowText.lines(pid: pid, browser: true) }
                         if Self.switchOff(pid) { pulsedPID.withLock { $0 = nil } }
-                        looked = true
+                        // Its own sample, stamped when it was read, about 3 s
+                        // after the snapshot: `match` pairs by time (agy on #146).
+                        if !Task.isCancelled { record(page, at: Date().timeIntervalSince(startedAt)) }
                     }
                     // Page text counts only at the time it was read: carried to
                     // later ticks, an active-speaker tile's old name lands on the
@@ -183,15 +187,18 @@ public final class ScreenNameSampler: @unchecked Sendable {
                 }
             }
             tick += 1
-            guard looked else { return }
-            let names = ScreenSpeakerNames.candidates(in: lines), me = ScreenSpeakerNames.owner(in: lines)
-            let single = ScreenSpeakerNames.singleNames(in: lines), count = ScreenSpeakerNames.participantCount(in: lines)
-            samples.withLock { $0.append(ScreenNameSample(time: time, names: names, me: me.isEmpty ? nil : me,
-                                                          single: single.isEmpty ? nil : single, count: count)) }
+            if looked { record(lines, at: time) }
         } catch is CancellationError {
         } catch {
             Log.meeting.info("screen names snapshot failed: \(String(describing: error), privacy: .public)")
         }
+    }
+
+    private func record(_ lines: [String], at time: TimeInterval) {
+        let names = ScreenSpeakerNames.candidates(in: lines), me = ScreenSpeakerNames.owner(in: lines)
+        let single = ScreenSpeakerNames.singleNames(in: lines), count = ScreenSpeakerNames.participantCount(in: lines)
+        samples.withLock { $0.append(ScreenNameSample(time: time, names: names, me: me.isEmpty ? nil : me,
+                                                      single: single.isEmpty ? nil : single, count: count)) }
     }
 
     /// Chrome opens its web pages' accessibility tree only while
