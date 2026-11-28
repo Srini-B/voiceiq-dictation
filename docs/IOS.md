@@ -213,7 +213,7 @@ the same "Keep dictations" picker as the Mac (`transcriptRetentionDays`);
 
 #### The transcript as a draft
 
-**On in Messages' prose fields only (`KeyboardDraft.verifiedHosts`, 2026-11-28).** In every other app the keyboard types the written text once, as before drafts. The first swap committed the draft, deleted it key by key and typed the written text. In Messages, after one dictation and typed text, the second dictation's swap left the field holding only the written text, while the keyboard's `documentContextBeforeInput` read exactly the text it expected (52 characters against the field's 27). The swap is now one insert over the marked draft, described below. It was tried in the Simulator, not on a device (`activities/2026-11-28-iphone-draft-swap-by-insert.md`).
+**On in the prose fields of Messages, Reminders, Contacts and Calendar (`Delivery.draftHosts`, 2026-11-28; `activities/2026-11-28-iphone-draft-hosts.md`).** In every other app, including Safari and every other browser, the keyboard types the written text once, as before drafts. The first swap committed the draft, deleted it key by key and typed the written text. In Messages, after one dictation and typed text, the second dictation's swap left the field holding only the written text, while the keyboard's `documentContextBeforeInput` read exactly the text it expected (52 characters against the field's 27). The swap is now one insert over the marked draft, described below. It was tried in the Simulator, not on a device (`activities/2026-11-28-iphone-draft-swap-by-insert.md`).
 
 What a keyboard can rely on, measured in the iOS 27.0 Simulator in Messages, its search field, the app's Try it field and a Safari textarea:
 
@@ -238,7 +238,9 @@ is the Mac's draft (`TextDraft`), done by the keyboard:
    selection, and never into a field that reports text (`hasText`) but
    shows none around the cursor, since an edit there could not be noticed.
    Undo history is cleared when a draft goes in.
-3. The app waits up to 0.6 s (`Delivery.draftWait`) for that ID, then
+3. The app offers a draft only for a destination in `Delivery.draftHosts`,
+   so the written text is never held back elsewhere. It waits up to 0.6 s
+   (`Delivery.draftWait`) for that ID, then
    withdraws the draft from the snapshot. Without the ID, the written text
    comes as a plain result that still names the draft, in the dictation's
    insert turn (`DraftShown.pending`): a keyboard whose report was late
@@ -256,8 +258,8 @@ is the Mac's draft (`TextDraft`), done by the keyboard:
    Where a host made the draft plain text without telling the keyboard,
    the insert lands beside it: the dictation is there twice, and no text is
    lost. So the keyboard types drafts only in apps this was tried in
-   (`KeyboardDraft.verifiedHosts`: Messages; VoiceiQ's own Try it field waits for a run of the keyboard's draft code there), and never a
-   transcript with a line break (`KeyboardDraft.canType`). Elsewhere the
+   (`Delivery.draftHosts`: Messages, Reminders, Contacts, Calendar). Safari stays off: a page field whose script rewrites its value on every change makes the draft plain text without telling the keyboard, and every dictation went in twice, while a plain textarea and a contenteditable passed; a keyboard can't tell these fields apart. Notes, Mail and third-party apps (WhatsApp, Slack, Chrome, Gmail) can't run in the Simulator and wait for a device run. No transcript with a line break is drafted
+   (`KeyboardDraft.canType`). Elsewhere the
    written text goes in once, as before.
 5. A written text whose draft this keyboard no longer holds (the keyboard
    was dismissed or moved to another field) is marked handled and never

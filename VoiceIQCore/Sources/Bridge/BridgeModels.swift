@@ -158,8 +158,13 @@ public struct Delivery: Codable, Equatable, Sendable, Identifiable {
     /// offers one, and waits `draftWait` for it, only for a destination in
     /// one of them. In any other app the written text goes in alone: one
     /// that makes marked text plain on its own would show every dictation
-    /// twice.
-    public static let draftHosts: Set<String> = ["com.apple.MobileSMS"]
+    /// twice, which a Safari page field whose script rewrites its value on
+    /// every change did (iOS 27 Simulator, 2026-11-28;
+    /// `activities/2026-11-28-iphone-draft-hosts.md`). A keyboard can't tell
+    /// one page field from another, so no browser is in this list.
+    public static let draftHosts: Set<String> = [
+        "com.apple.MobileSMS", "com.apple.reminders", "com.apple.MobileAddressBook", "com.apple.mobilecal",
+    ]
 
     /// Whether a keyboard may still type this draft.
     public func isFreshDraft(now: Date = Date()) -> Bool {
