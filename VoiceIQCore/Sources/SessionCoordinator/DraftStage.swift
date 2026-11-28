@@ -28,7 +28,9 @@ final class DraftStage {
             // A draft that never went in leaves the place to the written
             // text, which takes the whole turn.
             if shown != .notInserted { turn?.markPlaced() }
-            if shown == .shown { onShown() }
+            // The job may have ended while the draft went in: its cleanup has
+            // run, so nothing would take the writing animation down again.
+            if shown == .shown, self?.ended == false { onShown() }
             return shown
         }
     }
