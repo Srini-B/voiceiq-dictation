@@ -38,7 +38,8 @@ import CoreAudio
         guard !polling else { return }
         polling = true
         Task { [weak self] in
-            let found = await Task.detached(priority: .utility) { Self.detectedSource() }.value
+            let continuing = Self.app(of: self.active)
+            let found = await Task.detached(priority: .utility) { Self.detectedSource(continuing: continuing) }.value
             guard let self else { return }
             self.polling = false
             let source = found?.0, confirmed = found?.confirmed ?? false
@@ -221,7 +222,8 @@ import CoreAudio
     }()
 
     /// The call, and whether it is confirmed rather than a browser that only looks like one.
-    private nonisolated static func detectedSource() -> (CallSource, confirmed: Bool)? {
+    /// `continuing` is the app of the call already offered or recording.
+    private nonisolated static func detectedSource(continuing: String?) -> (CallSource, confirmed: Bool)? {
         let audio = runningAudio()
         // Pre-14.2: only a global "mic is in use" bit exists. VoiceiQ's own meeting
         // tap trips it, so there the call ends only when the app or tab goes away,
@@ -257,12 +259,16 @@ import CoreAudio
             let name = app.localizedName ?? id
             guard CallApps.browsers.contains(id) || name.localizedCaseInsensitiveContains("Chrome")
                     || name.localizedCaseInsensitiveContains("Chromium") else { continue }
-            let page = BrowserPages.read(pid: app.processIdentifier)
             // A joined call room in front that only plays counts: an owner who
             // joined muted can hold no mic at all (the live-call probe's owner,
             // 2026-11-28). The sound is the whole browser's, so a room in a back
-            // window does not count (Codex on #138).
-            if let match = page.meeting, capturing || page.room { return (.browser(bundleID: id, host: match), true) }
+            // window does not start a call (Codex on #138), and a browser that
+            // only plays (music, video) has only its front window read. The call
+            // already offered stays while its browser plays and any window shows
+            // its page, so a muted owner can switch tabs (Neon on #138).
+            let continues = continuing == id
+            let page = BrowserPages.read(pid: app.processIdentifier, frontOnly: !capturing && !continues)
+            if let match = page.meeting, capturing || page.room || continues { return (.browser(bundleID: id, host: match), true) }
             if capturing, playing, !page.excluded, lookalike == nil { lookalike = .browser(bundleID: id, host: page.host ?? name) }
         }
         return lookalike.map { ($0, false) }
@@ -322,35 +328,41 @@ enum BrowserPages {
         var host: String?
         /// The front page is one `CallApps.notCallPages` lists.
         var excluded = false
-        /// The front window shows a joined call room (`CallApps.isCallRoom`).
+        /// The front page is a joined call room (`CallApps.isCallRoom`).
         var room = false
     }
 
     /// Window titles, plus the URL of each window's web area: titles can be
     /// anything a page sets, the URL is where the tab is. Chrome and Safari put
     /// the web area several levels below the window, so the search is bounded.
-    static func read(pid: pid_t) -> Page {
+    /// `frontOnly` stops after the front page.
+    static func read(pid: pid_t, frontOnly: Bool = false) -> Page {
         let app = AXUIElementCreateApplication(pid)
         AXUIElementSetMessagingTimeout(app, 0.5)
         guard let windows = value(app, kAXWindowsAttribute) as? [AXUIElement] else { return Page() }
         var page = Page()
-        for (index, window) in windows.enumerated() {
-            var strings: [String] = []
-            for key in [kAXTitleAttribute as String, kAXDocumentAttribute as String, "AXURL"] {
-                if let string = value(window, key) as? String { strings.append(string) }
-            }
+        for window in windows {
+            let titles = [value(window, kAXTitleAttribute as String) as? String].compactMap { $0 }
+            var addresses = [kAXDocumentAttribute as String, "AXURL"].compactMap { value(window, $0) as? String }
             let url = webAreaURL(window)
-            if let url { strings.append(url.absoluteString) }
-            if index == 0 { page.room = CallApps.isCallRoom(strings) }
-            // Windows come front to back: the first page with an address is the one in front.
+            if let url { addresses.append(url.absoluteString) }
+            let strings = titles + addresses
+            // Windows come front to back: the first page with an address is the
+            // one in front; a picture-in-picture or popup window has none.
             if page.host == nil, let host = url?.host() {
                 page.host = host.replacingOccurrences(of: "www.", with: "")
                 page.excluded = CallApps.notCallPages.contains { host.hasSuffix($0) }
+                page.room = CallApps.isCallRoom(addresses: addresses)
             }
             if let match = CallApps.meetingPages.first(where: { needle in strings.contains { $0.localizedCaseInsensitiveContains(needle) } }) {
                 page.meeting = CallApps.meetingName(match: match, in: strings)
-                return page
+                break
             }
+            if frontOnly, page.host != nil { break }
+        }
+        // No address could be read: the front window's title is all there is.
+        if page.host == nil, let title = windows.first.flatMap({ value($0, kAXTitleAttribute as String) as? String }) {
+            page.room = CallApps.isCallRoom(titles: [title])
         }
         return page
     }
