@@ -64,6 +64,11 @@ struct SettingsView: View {
                         Text(versionText)
                             .font(Theme.Fonts.caption())
                             .foregroundStyle(Theme.Colors.muted)
+                        if CloudSync.isDisabledForTests {
+                            Text("Sync off (test)")
+                                .font(Theme.Fonts.caption())
+                                .foregroundStyle(Theme.Colors.recording)
+                        }
                     }
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, Theme.Spacing.m)
