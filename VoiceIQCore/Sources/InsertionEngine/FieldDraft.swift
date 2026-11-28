@@ -253,7 +253,7 @@ public final class FieldDraft: TextDraft {
                 try? await Task.sleep(for: .milliseconds(40))
             }
             _ = await select(reading.caret, reading.selectionLength)
-            refusedByApp()
+            if PasteCheck.reading(of: element)?.value == reading.value { refusedByApp() }
             Log.insertion.info("draft: the field took the write but never showed it — kept as it was")
             return false
         }
@@ -277,7 +277,7 @@ public final class FieldDraft: TextDraft {
             try? await Task.sleep(for: .milliseconds(50))
         }
         _ = await select(reading.caret, reading.selectionLength)
-        refusedByApp()
+        if PasteCheck.reading(of: element)?.value == reading.value { refusedByApp() }
         Log.insertion.info("draft: the paste over it never showed — kept as it was")
         return false
     }
