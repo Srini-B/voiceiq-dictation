@@ -211,7 +211,9 @@ enum SpokenMarks {
                           // ends the line or comes before a word that opens one ("ready
                           // exclamation mark please test it"). "The Unicode question mark is
                           // U+003F" names the mark.
-                          : wordsInSentence(chars, before: index).count > 1 && opensClause(chars, after: end),
+                          // A one-word clause is an exclamation said on its own ("Great exclamation
+                          // mark see you soon"), never a word that describes the mark ("Double").
+                          : endsClause(wordsInSentence(chars, before: index), chars, after: end) && opensClause(chars, after: end),
                       words != ["comma"] || !beforeCompound(chars, after: end, ["separated", "separate", "delimited", "splice", "splices", "rules", "key"]),
                       // "That's my final answer, full stop.": emphasis, said after a comma.
                       words != ["full", "stop"] || !afterComma(chars, at: index) else { return nil }
@@ -247,6 +249,23 @@ enum SpokenMarks {
             .map { $0.lowercased() }
         return words.lastIndex(of: "quote").map { Array(words[($0 + 1)...]) } ?? words
     }
+
+    /// Whether an end mark may follow `words`: a clause of two words or more,
+    /// or one word said as an exclamation or a question of its own, unless a
+    /// written mark follows: "Really question mark? I didn't type one." asks about it.
+    private static func endsClause(_ words: [String], _ chars: [Character], after end: Int) -> Bool {
+        if words.count > 1 { return true }
+        let next = skip(chars, from: end, also: "")
+        return words.count == 1 && exclamations.contains(words[0]) && !(next < chars.count && "?!".contains(chars[next]))
+    }
+
+    private static let exclamations: Set<String> = [
+        // Not "what" or "why": "What question mark? I didn't type one." asks about the mark.
+        "great", "thanks", "wow", "yes", "yeah", "no", "ok", "okay", "sure", "hi", "hello", "hey", "congrats",
+        "congratulations", "awesome", "perfect", "nice", "cool", "done", "sorry", "oops", "yay", "really", "seriously",
+        "right", "agreed", "absolutely", "excellent", "amazing",
+        "brilliant", "fantastic", "wonderful", "welcome", "cheers", "bye", "goodbye", "exactly", "indeed",
+    ]
 
     /// Whether `index` comes two or three words into a sentence that opens
     /// with a greeting: "Dear Sam", "Hi team", "Thanks Priya".
@@ -323,6 +342,9 @@ enum SpokenMarks {
             var mark = index
             while mark > 0, TidyText.isSpace(chars[mark - 1]) { mark -= 1 }
             if chars[mark - 1] == "\u{E000}" { return true }
+            // "She bought a car, new line, I think": a hedge after it ends the thought
+            // "new line" is part of, so the words name something.
+            if ",;".contains(chars[mark - 1]), hedgeEndsSentence(chars, after: end) { return false }
             let after = skip(chars, from: end, also: "")
             guard after == chars.count || ",.;:!?\n".contains(chars[after]) else { return false }
             let next = skip(chars, from: after, also: ",.;:!?")
@@ -331,6 +353,19 @@ enum SpokenMarks {
             return !["and", "or", "but", "y", "o", "pero"].contains(String(chars[next..<stop]).lowercased())
         }
         return before.map { !describesLayout($0) } ?? false
+    }
+
+    /// Whether all that follows on the line, to the sentence's end, is a hedge: "I think.", "I guess".
+    private static func hedgeEndsSentence(_ chars: [Character], after end: Int) -> Bool {
+        let start = skip(chars, from: end, also: ",")
+        let stop = chars[start...].firstIndex { ".!?\n".contains($0) } ?? chars.count
+        let words = String(chars[start..<stop]).lowercased().replacingOccurrences(of: "’", with: "'")
+            .split { !TidyText.isWordCharacter($0) && $0 != "'" }.joined(separator: " ")
+        return [
+            "i think", "i guess", "i believe", "i suppose", "i think so", "i guess so", "i believe so", "i'd say",
+            "i reckon", "i hope", "i heard", "i hear",
+            "maybe", "probably", "apparently", "you know", "or so",
+        ].contains(words)
     }
 
     /// Words before "new line" that make it a noun: "a new line of shoes",

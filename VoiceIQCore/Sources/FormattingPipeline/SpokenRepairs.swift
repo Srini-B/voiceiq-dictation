@@ -28,6 +28,12 @@ enum SpokenRepairs {
         "dollars", "euros", "pounds", "rupees", "percent", "people", "minutes", "hours", "days", "weeks", "months",
         "years", "am", "pm", "a.m", "p.m",
     ]
+    /// Words a number names a thing after: "flight 101", "room 12".
+    private static let labels: Set<String> = [
+        "flight", "room", "gate", "platform", "bus", "train", "route", "seat", "page", "chapter", "line", "order",
+        "ticket", "table", "number", "no", "apartment", "suite", "floor", "level", "terminal", "track", "exit",
+        "version", "case", "item", "step", "row", "unit", "bay", "lane", "channel", "extension", "invoice", "account",
+    ]
 
     /// `text` with each like-for-like spoken self-correction resolved: a day
     /// for a day or a number for a number (not names: "I met John, I mean,
@@ -115,6 +121,9 @@ enum SpokenRepairs {
             let digits = { (word: String) in word.filter(\.isNumber).count }
             guard start == cue - 1, digits(tokens[start].word) == digits(fixed[0].word),
                   start == 0 || self.kind(tokens[start - 1].word, opensClause: false) != .number else { return nil }
+            // "Flight 101, I mean, 102 minutes": a unit after a number that names
+            // something may be a second fact ("flight 101, 102 minutes long").
+            if fixed.count == 2, start > 0, labels.contains(tokens[start - 1].bare) { return nil }
         }
         return start
     }

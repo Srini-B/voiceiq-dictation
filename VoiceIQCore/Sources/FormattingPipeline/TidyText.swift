@@ -305,13 +305,15 @@ enum TidyText {
     }
 
     /// Whether the full stop at `index` ends "i.e.", "e.g.", "vs." or a title ("Prof.").
-    private static func endsAbbreviation(_ chars: [Character], at index: Int) -> Bool {
+    static func endsAbbreviation(_ chars: [Character], at index: Int) -> Bool {
         var start = index
         while start > 0, !chars[start - 1].isWhitespace { start -= 1 }
         let word = String(chars[start...index]).lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "(\"“"))
+        // "No. 5" is a number; "No. Call me later." is a sentence.
+        if word == "no." { return chars[(index + 1)...].drop(while: \.isWhitespace).first?.isNumber == true }
         // "at 9 a.m. tomorrow", "Apple Inc. announced", "the U.S. yesterday": the model's case stays.
         return ["i.e.", "e.g.", "vs.", "cf.", "inc.", "ltd.", "co.", "corp.", "mr.", "mrs.", "ms.", "dr.", "jr.", "sr.",
-                "st.", "no.", "approx.", "prof.", "sgt.", "capt.", "gen.", "col.", "lt.", "rev.", "hon."].contains(word)
+                "st.", "approx.", "prof.", "sgt.", "capt.", "gen.", "col.", "lt.", "rev.", "hon."].contains(word)
             || endsWithInitialism(word)
     }
 

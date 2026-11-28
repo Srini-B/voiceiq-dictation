@@ -188,7 +188,10 @@ public enum Tidy {
         if english { message = TidyText.recasingPronounI(message, from: "I", to: "i") }
         // A short message drops its final full stop; a question or an exclamation keeps its mark.
         let chars = Array(message)
-        let sentences = chars.indices.filter { TidyText.endsSentence(chars, at: $0) }.count
+        // A title's full stop ends no sentence: "ask Sgt. Lee and Capt. Rao." is one.
+        let sentences = chars.indices.filter {
+            TidyText.endsSentence(chars, at: $0) && !(chars[$0] == "." && TidyText.endsAbbreviation(chars, at: $0))
+        }.count
         // "Well..." keeps its ellipsis.
         // "U.S." and "p.m." keep their last full stop.
         if !message.contains("\n"), sentences <= 3, message.last == "." || message.last == "。", !message.hasSuffix(".."),
@@ -275,10 +278,12 @@ public enum Tidy {
     }
 
     /// One note: no opening "so," or "and then" (English), no final full
-    /// stop, and a capital first letter.
+    /// stop, comma or semicolon, and a capital first letter.
     private static func conciseNote(_ line: String, english: Bool) -> String {
         var note = TidyText.tighteningPunctuation(line)
         if english { note = droppingConnectives(note) }
+        // "bullet point milk, bullet point eggs": the comma before the next bullet ends nothing.
+        while let last = note.last, last == "," || last == ";" { note.removeLast() }
         if note.last == "." || note.last == "。", !note.hasSuffix("..."), !TidyText.endsWithInitialism(note) { note.removeLast() }
         return TidyText.capitalizingFirstLetter(TidyText.trimmed(note))
     }

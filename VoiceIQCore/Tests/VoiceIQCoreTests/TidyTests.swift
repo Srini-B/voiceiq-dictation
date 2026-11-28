@@ -42,6 +42,10 @@ final class TidyTests: XCTestCase {
         XCTAssertEqual(tidy("NASA launched it. Wow!", .messages), "NASA launched it. wow!")
         XCTAssertEqual(tidy("One. Two. Three. Four.", .messages), "one. two. three. four.")
         XCTAssertEqual(tidy("I think I can, i.e. maybe.", .messages), "i think i can, i.e. maybe")
+        // A title's full stop ends no sentence, so this is one short message.
+        XCTAssertEqual(tidy("Ask Prof. Iyer and Sgt. Lee and Capt. Rao.", .messages), "ask Prof. Iyer and Sgt. Lee and Capt. Rao")
+        // "No." is a title only before a number ("No. 5"); here it is one of four sentences.
+        XCTAssertEqual(tidy("Is it ok? No. Call me later. See you.", .messages), "is it ok? no. call me later. see you.")
     }
 
     func testLists() {
@@ -52,6 +56,8 @@ final class TidyTests: XCTestCase {
         XCTAssertEqual(tidy("Dr. Patel called. Call her back.", .lists), "- Dr. Patel called\n- Call her back")
         XCTAssertEqual(tidy("Note: the build is green.", .lists), "Note: the build is green")
         XCTAssertEqual(tidy("bullet point ship it bullet point tag it", .lists), "- Ship it\n- Tag it")
+        XCTAssertEqual(tidy("Groceries: bullet point milk, bullet point eggs; bullet point bread.", .lists),
+                       "Groceries:\n- Milk\n- Eggs\n- Bread")
         XCTAssertEqual(tidy("Groceries, new line, milk. New paragraph, then eggs", .lists), "Groceries\nMilk\n\nThen eggs")
         XCTAssertEqual(tidy("买牛奶。给妈妈打电话。", .lists, "zh-CN"), "- 买牛奶\n- 给妈妈打电话")
     }
@@ -66,6 +72,9 @@ final class TidyTests: XCTestCase {
         XCTAssertEqual(tidy("Mmm, creo que sí, eh, pero no estoy seguro.", .sentences, "es-ES"), "Creo que sí, pero no estoy seguro.")
         XCTAssertEqual(tidy("i think it's gonna work", .sentences, "it-IT"), "I think it's gonna work.")
         XCTAssertEqual(tidy("Um, uh.", .sentences), "")
+        // A run of hesitations is still hesitations; "As spoken" keeps a stammer that is meant.
+        XCTAssertEqual(tidy("He kept going uh, uh, uh."), "He kept going.")
+        XCTAssertEqual(tidy("He kept going uh, uh, uh.", .asSpoken), "He kept going uh, uh, uh.")
     }
 
     func testEnglishHesitationsGoWithTheirCommasAndHandOnTheirCapital() {
@@ -174,7 +183,10 @@ final class TidyTests: XCTestCase {
     /// correction, and quoted words are kept as said.
     func testIMeanAndQuotedWordsStayAsSaid() {
         XCTAssertEqual(tidy("Let's meet Monday, I mean, Tuesday."), "Let's meet Tuesday.")
-        for kept in ["It's good. I mean, really good.", "We met on Friday, I mean, Monday works too.",
+        XCTAssertEqual(tidy("It took 101, I mean, 102 minutes."), "It took 102 minutes.")
+        XCTAssertEqual(tidy("Meet at gate 12, I mean, 14."), "Meet at gate 14.")
+        // A unit after a number that names something may be a second fact: "flight 101, 102 minutes long".
+        for kept in ["Flight 101, I mean, 102 minutes.", "It's good. I mean, really good.", "We met on Friday, I mean, Monday works too.",
                      "It was, I mean, pretty good.", "He wrote \"the the\" on the board.",
                      "She said \"I went, like, home\" and left."] {
             XCTAssertEqual(tidy(kept), kept)
@@ -190,11 +202,24 @@ final class TidyTests: XCTestCase {
         for kept in ["quote unquote experts", "The newline character", "renew line items", "open quotes", "Can I get a quote for this"] {
             XCTAssertEqual(SpokenMarks.layout(in: kept), kept)
         }
+        // Set off by commas, "new line" breaks the line unless only a hedge follows: then the words name something.
+        XCTAssertEqual(tidy("Yeah, I'll ping Sam, new line, thanks.", .messages), "yeah i'll ping Sam\nthanks.")
+        XCTAssertEqual(tidy("I bought the milk, new line, then I left."), "I bought the milk.\nThen I left.")
+        for kept in ["She bought a car, new line, I think.", "It's their new model, new line, I guess.", "It's the blue one, new line, I think so."] {
+            XCTAssertEqual(tidy(kept), kept)
+        }
     }
 
     func testSpokenSymbols() {
         XCTAssertEqual(SpokenMarks.symbols(in: "Dear Sam comma thanks"), "Dear Sam, thanks")
         XCTAssertEqual(SpokenMarks.symbols(in: "Is it ready question mark"), "Is it ready?")
+        // One word ends a clause only when it is said as an exclamation or a question.
+        XCTAssertEqual(SpokenMarks.symbols(in: "Great exclamation mark see you soon."), "Great! see you soon.")
+        XCTAssertEqual(SpokenMarks.symbols(in: "Really question mark I doubt it."), "Really? I doubt it.")
+        XCTAssertEqual(SpokenMarks.symbols(in: "Double exclamation mark please see it."), "Double exclamation mark please see it.")
+        for kept in ["What question mark? I didn't type one.", "Really question mark? I didn't type one."] {
+            XCTAssertEqual(SpokenMarks.symbols(in: kept), kept)
+        }
         // Names that are also prose words, and Spanish marks, stay as said.
         for kept in ["commas", "hashtag release", "my underscore variable", "and slash or", "the colonel",
                      "Colon biopsy results", "a bigger colon", "comma separated values", "one question mark left",
@@ -220,12 +245,44 @@ final class TidyTests: XCTestCase {
             ("ravi at the rate, gmail dot com", "ravi@gmail.com"),
             ("My email is John at the rategmail.com.", "My email is john@gmail.com."),
             ("Send it to Priya at signyahoo.com.", "Send it to priya@yahoo.com."),
+            // Before "and" and another address, and before a courtesy after a comma.
+            ("Mail priya at the rate gmail dot com and ravi at the rate gmail dot com.", "Mail priya@gmail.com and ravi@gmail.com."),
+            ("Write to priya at the rate gmail dot com or ravi at sign gmail dot com.", "Write to priya@gmail.com or ravi@gmail.com."),
+            ("Mail priya@gmail.com and ravi at the rate gmail dot com.", "Mail priya@gmail.com and ravi@gmail.com."),
+            ("priya at the rate gmail dot com, please.", "priya@gmail.com, please."),
+            ("Mail john at the rate gmail dot com, thanks.", "Mail john@gmail.com, thanks."),
+            ("Send it to ahmed at the rate gmail dot com.", "Send it to ahmed@gmail.com."),
+            ("Contacts\npriya at the rate gmail dot com.", "Contacts\npriya@gmail.com."),
+            ("My email's priya at the rate gmail dot com, thanks.", "My email's priya@gmail.com, thanks."),
+            ("It’s priya at the rate gmail dot com.", "It’s priya@gmail.com."),
+            ("Send it to billing at the rate company dot com.", "Send it to billing@company.com."),
+            ("Send it to 123 at the rate gmail dot com.", "Send it to 123@gmail.com."),
+            ("Tell priya at the rate gmail dot com, thanks.", "Tell priya@gmail.com, thanks."),
+            ("My email will be priya at the rate gmail dot com.", "My email will be priya@gmail.com."),
+            ("Contact me via priya at the rate gmail dot com.", "Contact me via priya@gmail.com."),
+            ("My email will be billing at the rate gmail dot com.", "My email will be billing@gmail.com."),
+            ("And priya at the rate gmail dot com.", "And priya@gmail.com."),
+            ("Send it to priya at the rate gmail dot com or ravi at sign yahoo dot com.", "Send it to priya@gmail.com or ravi@yahoo.com."),
+            // A list of addresses ends where its last one does.
+            ("Send it to priya at the rate gmail dot com and ravi at the rate yahoo dot com.",
+             "Send it to priya@gmail.com and ravi@yahoo.com."),
+            ("Send it to ming at the rate gmail dot com.", "Send it to ming@gmail.com."),
         ] {
             XCTAssertEqual(SpokenAddresses.joining(in: spoken), written)
         }
         for kept in ["At the rate you're going, you'll finish early.", "john at the rate gmail", "Wait at the gate dot com",
                      "Rates went up at the ratepayers' meeting.", "My email is john at gmail.com.",
-                     "We grew at the rate Amazon dot com predicted.", "The password is \"john at sign gmail dot com\"."] {
+                     "We grew at the rate Amazon dot com predicted.", "The password is \"john at sign gmail dot com\".",
+                     // With "at the rate", a verb is no mailbox, and a comma ends no address before more words.
+                     "Prices rose at the rate gmail dot com.",
+                     "Mail priya at the rate gmail dot com and ravi at the rate gmail dot com predicted it.",
+                     "priya at the rate gmail dot com, Walmart and Target agreed.",
+                     // Before ", thanks" or another address, "is" or a written address is too weak an introduction.
+                     "The market is moving at the rate google dot com, thanks.",
+                     "I wrote to priya@gmail.com and growth at the rate google dot com, thanks.",
+                     "It is growing at the rate amazon dot com.", "It will be growing at the rate amazon dot com.",
+                     "Prices rose and fell at the rate gmail dot com.",
+                     "Tell me whether the market is moving at the rate google dot com, thanks.", "Revenue went from 5 or 10 at the rate amazon dot com.", "It's growing at the rate amazon dot com.", "Revenue went from 10 at the rate amazon dot com."] {
             XCTAssertEqual(SpokenAddresses.joining(in: kept), kept)
         }
     }

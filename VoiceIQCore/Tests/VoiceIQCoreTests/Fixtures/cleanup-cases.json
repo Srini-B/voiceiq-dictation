@@ -2353,6 +2353,85 @@
       "said": "open c colon backslash users backslash er backslash documents",
       "heard": "Open C:\\Users\\er\\Documents.",
       "written": "Open C:\\Users\\er\\Documents."
+    },
+    {
+      "id": "kept-at-the-rate-after-verb",
+      "check": "kept as said",
+      "said": "prices rose at the rate gmail dot com",
+      "heard": "Prices rose at the rate gmail dot com.",
+      "written": "Prices rose at the rate gmail dot com."
+    },
+    {
+      "id": "hesitation-run",
+      "check": "mixed punctuation",
+      "said": "he kept going uh uh uh",
+      "heard": "He kept going uh, uh, uh.",
+      "written": "He kept going."
+    },
+    {
+      "id": "kept-new-line-mid-thought",
+      "check": "kept as said",
+      "said": "she bought a car new line i think",
+      "heard": "She bought a car, new line, I think.",
+      "written": "She bought a car, new line, I think."
+    },
+    {
+      "id": "kept-number-then-minutes",
+      "check": "self-correction",
+      "said": "flight one oh one i mean one oh two minutes",
+      "heard": "Flight 101, I mean, 102 minutes.",
+      "written": "Flight 101, I mean, 102 minutes."
+    },
+    {
+      "id": "email-two-at-the-rate",
+      "check": "email layout",
+      "said": "mail priya at the rate gmail dot com and ravi at the rate gmail dot com",
+      "heard": "Mail priya at the rate gmail dot com and ravi at the rate gmail dot com.",
+      "written": "Mail priya@gmail.com and ravi@gmail.com."
+    },
+    {
+      "id": "email-at-the-rate-please",
+      "check": "email layout",
+      "said": "priya at the rate gmail dot com please",
+      "heard": "priya at the rate gmail dot com, please.",
+      "written": "priya@gmail.com, please."
+    },
+    {
+      "id": "punctuation-one-word-exclamation",
+      "check": "spoken punctuation",
+      "said": "great exclamation mark see you soon",
+      "heard": "Great exclamation mark see you soon.",
+      "written": "Great! See you soon."
+    },
+    {
+      "id": "list-bullets-comma",
+      "check": "spoken list",
+      "said": "groceries bullet point milk bullet point eggs",
+      "heard": "Groceries: bullet point milk, bullet point eggs.",
+      "written": "Groceries:\n- Milk\n- Eggs",
+      "style": "lists"
+    },
+    {
+      "id": "message-titles",
+      "check": "kept as said",
+      "said": "ask prof iyer and sgt lee and capt rao",
+      "heard": "Ask Prof. Iyer and Sgt. Lee and Capt. Rao.",
+      "written": "ask Prof. Iyer and Sgt. Lee and Capt. Rao",
+      "style": "messages"
+    },
+    {
+      "id": "kept-at-the-rate-after-and",
+      "check": "kept as said",
+      "said": "prices rose and fell at the rate gmail dot com",
+      "heard": "Prices rose and fell at the rate gmail dot com.",
+      "written": "Prices rose and fell at the rate gmail dot com."
+    },
+    {
+      "id": "kept-at-the-rate-will-be-growing",
+      "check": "kept as said",
+      "said": "it will be growing at the rate amazon dot com",
+      "heard": "It will be growing at the rate amazon dot com.",
+      "written": "It will be growing at the rate amazon dot com."
     }
   ]
 }
