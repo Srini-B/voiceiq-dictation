@@ -36,8 +36,8 @@ struct SectionCaption: View {
 /// A selectable list row's highlight, passed to `.listRowBackground`: brand
 /// blue while the list has focus in the key window, the soft fill otherwise,
 /// so an unfocused selection is not the system grey. The opaque backing hides
-/// the system highlight at the rounded corners; it matches the panes' window
-/// background.
+/// the system highlight at the rounded corners; it matches the data panes'
+/// canvas.
 struct ListSelectionBackground: View {
     let selected: Bool
     let focused: Bool
@@ -50,7 +50,7 @@ struct ListSelectionBackground: View {
     var body: some View {
         if selected {
             ZStack {
-                Color(nsColor: .windowBackgroundColor)
+                VQ.Colors.canvas
                 RoundedRectangle(cornerRadius: VQ.Radius.control, style: .continuous)
                     .fill(focused && windowState == .key ? Self.emphasized : VQ.Colors.fill)
             }
@@ -112,5 +112,30 @@ struct SegmentSwitch<Value: Hashable>: View {
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+}
+
+/// A page's title in the display style with a muted one-line subtitle, at the
+/// top of a pane.
+struct PageHeader: View {
+    let title: String
+    let subtitle: String
+
+    @Environment(\.colorScheme) private var scheme
+    private var grad: CGFloat { scheme == .dark ? 25 : 0 }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: VoiceIQUI.Spacing.xxs) {
+            Text(title)
+                .font(VoiceIQUI.TypeScale.display(grad: grad))
+                .foregroundStyle(VQ.Colors.ink)
+            Text(subtitle)
+                .font(VoiceIQUI.TypeScale.body(grad: grad))
+                .foregroundStyle(VQ.Colors.muted)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, VQ.Spacing.page)
+        .padding(.top, VoiceIQUI.Spacing.l)
+        .padding(.bottom, VoiceIQUI.Spacing.s)
     }
 }
