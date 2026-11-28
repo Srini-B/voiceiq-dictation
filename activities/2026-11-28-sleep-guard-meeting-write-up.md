@@ -32,4 +32,25 @@ dictation and app shutdown let go. A third test drives the write-up hold with
 a 1 s cap: on at once, off at the cap while a meeting stays stuck, off at
 once when the write-up empties, and not extended by a meeting leaving.
 
-Mac mini and iOS simulator runtime checks: pending.
+CI on 5dab5c9 passed (352 core tests, Mac and iOS builds); the three
+SessionSleepGuardTests passed on CI and on the Mac mini.
+
+Mac mini, signed and notarized build of 72770a8 (nothing published; the
+installed app was restored afterwards). `pmset -g assertions` showed both
+assertions under the new reason during a dictation, none after Cancel, both
+during a meeting recording, both still held after Stop while AssemblyAI
+transcribed and wrote the notes (18:36:57 to 18:37:08), and none once the
+meeting was saved. The failed write-up path was covered by the test only.
+
+iOS Simulator (iPhone, iOS 27), Debug build of 50e8153: LLDB read
+`isIdleTimerDisabled` NO before, YES while recording notes, NO after Stop.
+With the app in the background and the simulator locked, mic.caf kept growing
+(about 32 KB/s for over two minutes), the meeting came out 5:46 long, and the
+lock screen showed the "Recording notes" Live Activity with Stop. The write-up
+took 0.4 s (silent simulator mic), so YES during a write-up was not observed
+on iOS. No physical iPhone was tested.
+
+Seen in passing, not changed: the Live Activity's time read "8:--" about four
+minutes in, and the Past notes row of a meeting in progress reads
+"Recording · 0:00". One ⌘Esc keystroke sent through System Events quit the
+Mac app mid-dictation; the cause was not found.
