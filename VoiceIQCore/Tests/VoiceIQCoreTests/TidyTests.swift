@@ -112,7 +112,8 @@ final class TidyTests: XCTestCase {
                      "It took, like, a hundred hours.", "Use a tool, like, a hammer.",
                      "We need supplies, like, paper and pens.",
                      "Bring a tool, like, my hammer.", "Use a tool, like, this one.",
-                     "She goes, like, before you leave, call me.", "And I'm, like, no way.", "We saw cities, like, Paris and Rome.",
+                     "She goes, like, before you leave, call me.", "And I'm, like, no way.",
+                     "Do it, like, you did last time.", "Arrange the folders, like, we did yesterday.", "We saw cities, like, Paris and Rome.",
                      "I told Sam, like, Priya said no.", "Wait, you know, don't you?"] {
             XCTAssertEqual(tidy(kept), kept)
         }

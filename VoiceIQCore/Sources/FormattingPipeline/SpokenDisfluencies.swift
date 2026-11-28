@@ -88,6 +88,10 @@ enum SpokenDisfluencies {
         "to", "into", "in", "at", "on", "out", "home", "back", "there", "up", "down", "over", "under", "near",
         "through", "across",
     ]
+    /// After "like" and a subject pronoun, these make "like" mean "as": "like, you did last time".
+    private static let comparisonVerbs: Set<String> = [
+        "do", "does", "did", "said", "say", "says", "told", "showed", "asked", "planned", "wanted", "agreed",
+    ]
     private static let timeWords: Set<String> = ["after", "before", "during", "around", "since", "until"]
     /// Words that open an example after "like": "a tool, like, my hammer", "like, this one".
     private static let exampleStarts: Set<String> = [
@@ -278,6 +282,8 @@ enum SpokenDisfluencies {
             || ["a", "an"].contains(next.bare) && then.map({ numberWords.contains($0.bare) }) == true {
             return true
         }
+        // As: before a clause that points back, "do it, like, you did last time", "like, we said".
+        if pronouns.contains(next.bare), let verb = then?.bare, comparisonVerbs.contains(verb) { return true }
         // Such as: before a name ("cities, like, Paris"), or between a thing and an example ("a tool, like,
         // a hammer"; "supplies, like, paper"; "a tool, like, my hammer").
         if next.word.first?.isUppercase == true && !isPronounI(next.bare) { return true }
