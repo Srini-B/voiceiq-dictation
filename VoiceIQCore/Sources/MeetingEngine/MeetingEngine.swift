@@ -206,17 +206,32 @@ import VoiceIQSpeech
         }
     }
 
-    /// A meeting still marked `.recording` at launch belonged to a process that
-    /// died; nothing will ever stop it, so the list would show "Recording"
-    /// forever.
+    /// A meeting still marked `.recording`, `.transcribing` or `.summarizing`
+    /// at launch belonged to a process that died (quit, or iOS ended it in the
+    /// background); nothing will ever finish it, so the list would show
+    /// "Recording" or "Making notes" forever. It fails with Retry and a reason
+    /// that says which step was cut off; one that was writing its notes keeps
+    /// its transcript and Retry writes only the notes. A waiting meeting also
+    /// keeps waiting (`waitsForService`) and goes again on its own.
     private func failInterruptedRecordings() {
         for var meta in store.list() {
-            // A waiting meeting the app quit on while it went again waits on.
-            let resumable = meta.waitsForService != nil && (meta.status == .transcribing || meta.status == .summarizing)
-            guard meta.status == .recording || resumable else { continue }
-            meta.status = .failed("interrupted")
+            guard meta.status == .recording || meta.status == .transcribing || meta.status == .summarizing else { continue }
+            // Retry resumes the step that was cut off, not one an earlier failure left marked.
+            let step: ServiceStep = meta.status == .summarizing ? .notes : .transcript
+            meta.failedStep = step
+            if meta.waitsForService != nil { meta.waitsForService = step }
+            meta.status = .failed(Self.interruptedReason(meta.status))
             meta.endedAt = meta.endedAt ?? meta.startedAt.addingTimeInterval(meta.durationSeconds)
             try? store.save(meta: meta)
+        }
+    }
+
+    /// What the meeting shows after the app closed on it, by the step it was on.
+    static func interruptedReason(_ status: MeetingStatus) -> String {
+        switch status {
+        case .recording: return "VoiceiQ closed while recording. What was recorded is saved. Press Retry to transcribe it."
+        case .summarizing: return "VoiceiQ closed while writing the notes. The transcript is saved. Press Retry to write them."
+        default: return "VoiceiQ closed while transcribing. The recording is saved. Press Retry to transcribe it."
         }
     }
 

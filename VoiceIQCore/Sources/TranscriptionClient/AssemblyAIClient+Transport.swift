@@ -119,6 +119,8 @@ extension AssemblyAIClient {
     /// request or a quota fails the same way on any connection.
     static func isConnectionFailure(_ error: Error) -> Bool {
         switch error as? TranscriptionError {
+        // A reply cut off at max_tokens is cut off again on any connection.
+        case .network("output_truncated"): return false
         case .timeout, .network, .offline: return true
         default: return false
         }
