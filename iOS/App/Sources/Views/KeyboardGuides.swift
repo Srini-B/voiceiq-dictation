@@ -2,11 +2,11 @@ import SwiftUI
 
 // Animated how-tos for the two things iOS makes the user do by hand: turning
 // the keyboard on in Settings, and switching to it with the globe key. Both
-// loop; with Reduce Motion each holds its most telling frame.
+// are simple drawings in the app's own tokens that loop while on screen; with
+// Reduce Motion each holds its most telling frame.
 
-/// Settings › Apps › VoiceiQ, then Keyboards, VoiceiQ on, Allow Full Access on
-/// and its alert, drawn with system colours and type so it reads as the real
-/// Settings pages in light and dark mode.
+/// VoiceiQ's page in Settings, then Keyboards: the VoiceiQ switch, Allow Full
+/// Access and its alert, with a caption for each step under the drawing.
 struct KeyboardSettingsWalkthrough: View {
     @State private var phase = Phase.appPage
 
@@ -37,9 +37,9 @@ struct KeyboardSettingsWalkthrough: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.l) {
             screen
-                .frame(height: 248)
-                .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).strokeBorder(Theme.Colors.hairline, lineWidth: 0.5))
+                .frame(height: 216)
+                .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous).strokeBorder(Theme.Colors.hairline, lineWidth: 1))
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: Theme.Spacing.s) {
                 GuideInstruction(number: 1, text: Text("Tap **Keyboards**"), current: phase.instruction == 0)
@@ -49,19 +49,19 @@ struct KeyboardSettingsWalkthrough: View {
         }
         .loopingPhases($phase, still: .done)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("In VoiceiQ's Settings, tap Keyboards, turn on VoiceiQ, then turn on Allow Full Access and tap Allow.")
+        .accessibilityLabel("In VoiceiQ's page in Settings, tap Keyboards, turn on VoiceiQ, then turn on Allow Full Access and tap Allow.")
     }
 
     private var screen: some View {
         ZStack {
-            Color(uiColor: .systemGroupedBackground)
+            Theme.Colors.grouped
             if phase.rawValue < Phase.keyboardsPage.rawValue {
                 appPage.transition(.move(edge: .leading))
             } else {
                 keyboardsPage.transition(.move(edge: .trailing))
             }
             if phase == .alert || phase == .tapAllow {
-                Color.black.opacity(0.25).transition(.opacity)
+                Color.black.opacity(0.2).transition(.opacity)
                 FullAccessAlert(tapping: phase == .tapAllow)
                     .transition(.scale(scale: 1.1).combined(with: .opacity))
             }
@@ -69,17 +69,12 @@ struct KeyboardSettingsWalkthrough: View {
     }
 
     private var appPage: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        VStack(spacing: 0) {
             MockNavigationBar(back: "Apps", title: "VoiceiQ")
-            MockSectionHeader(text: "Allow VoiceiQ to access")
             MockGroup {
-                MockRow(symbol: "mic.fill", tint: .orange, title: "Microphone") { MockSwitch(on: true) }
-                MockRow(symbol: "waveform.circle.fill", tint: .indigo, title: "Live Activities") { MockSwitch(on: true) }
-            }
-            Spacer().frame(height: 14)
-            MockGroup {
-                MockRow(symbol: "keyboard.fill", tint: .gray, title: "Keyboards", tapping: phase == .tapKeyboards) {
-                    Image(systemName: "chevron.right").font(.footnote.weight(.semibold)).foregroundStyle(.tertiary)
+                MockRow(title: "Microphone") { MockSwitch(on: true) }
+                MockRow(title: "Keyboards", tapping: phase == .tapKeyboards) {
+                    Image(systemName: "chevron.right").font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.Colors.faint)
                 }
             }
             Spacer(minLength: 0)
@@ -87,9 +82,8 @@ struct KeyboardSettingsWalkthrough: View {
     }
 
     private var keyboardsPage: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        VStack(spacing: 0) {
             MockNavigationBar(back: "VoiceiQ", title: "Keyboards")
-            Spacer().frame(height: 14)
             MockGroup {
                 MockRow(title: "VoiceiQ", tapping: phase == .voiceIQOn) {
                     MockSwitch(on: phase.rawValue >= Phase.voiceIQOn.rawValue)
@@ -98,18 +92,12 @@ struct KeyboardSettingsWalkthrough: View {
                     MockSwitch(on: phase == .done)
                 }
             }
-            Text("Full Access lets the keyboard hand your voice to the VoiceiQ app.")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 30)
-                .padding(.top, 6)
             Spacer(minLength: 0)
         }
     }
 }
 
-/// Touch and hold the globe key, pick VoiceiQ, and the VoiceiQ keyboard comes
-/// up: Apple's keyboard, its keyboard menu, then VoiceiQ's.
+/// Touch and hold the globe key, and pick VoiceiQ in the menu that opens.
 struct GlobeSwitchDemo: View {
     @State private var phase = Phase.idle
 
@@ -119,24 +107,48 @@ struct GlobeSwitchDemo: View {
         var hold: Double {
             switch self {
             case .idle: return 1.0
-            case .holding: return 0.7
+            case .holding: return 0.8
             case .menu: return 0.8
-            case .pickVoiceIQ: return 0.8
-            case .switched: return 2.2
+            case .pickVoiceIQ: return 0.9
+            case .switched: return 1.8
             }
         }
     }
 
     var body: some View {
-        ZStack(alignment: .bottomLeading) {
-            MiniKeyboard(style: phase == .switched ? .voiceIQ(listening: false) : .apple,
-                         globePressed: phase == .holding || phase == .menu || phase == .pickVoiceIQ)
-            if phase == .menu || phase == .pickVoiceIQ {
-                KeyboardMenu(voiceIQSelected: phase == .pickVoiceIQ)
-                    .padding(.leading, 8)
-                    .padding(.bottom, 40)
-                    .transition(.scale(scale: 0.6, anchor: .bottomLeading).combined(with: .opacity))
+        let pressed = phase == .holding || phase == .menu || phase == .pickVoiceIQ
+        VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+            KeyboardMenu(voiceIQSelected: phase == .pickVoiceIQ)
+                .opacity(phase == .menu || phase == .pickVoiceIQ ? 1 : 0)
+                .scaleEffect(phase == .menu || phase == .pickVoiceIQ ? 1 : 0.7, anchor: .bottomLeading)
+            HStack(spacing: Theme.Spacing.s) {
+                KeyCapShape(width: 56) {
+                    Image(systemName: "globe").font(.system(size: 20, weight: .regular)).foregroundStyle(Theme.Colors.inkSecondary)
+                }
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .trim(from: 0, to: pressed ? 1 : 0)
+                        .stroke(Theme.Colors.accent, style: StrokeStyle(lineWidth: 2, lineCap: .round))
+                        .animation(phase == .holding ? .linear(duration: 0.7) : .default, value: pressed)
+                )
+                .overlay(TouchDot(visible: pressed, size: 52))
+                KeyCapShape(width: nil) {
+                    Text(phase == .switched ? "VoiceiQ" : "space")
+                        .font(Theme.Fonts.footnote())
+                        .foregroundStyle(phase == .switched ? Theme.Colors.ink : Theme.Colors.faint)
+                        .contentTransition(.opacity)
+                }
+                if phase == .switched {
+                    TalkKeyGlyph(size: 44).transition(.scale.combined(with: .opacity))
+                } else {
+                    KeyCapShape(width: 44) {
+                        Image(systemName: "return").font(.system(size: 15)).foregroundStyle(Theme.Colors.inkSecondary)
+                    }
+                }
             }
+            .padding(Theme.Spacing.s)
+            .background(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous).fill(Theme.Colors.grouped))
+            .overlay(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous).strokeBorder(Theme.Colors.hairline, lineWidth: 1))
         }
         .loopingPhases($phase, still: .pickVoiceIQ)
         .accessibilityElement(children: .ignore)
@@ -167,95 +179,40 @@ struct GuideInstruction: View {
     }
 }
 
-// MARK: - Mini keyboard
-
-/// A small drawing of an iPhone keyboard with the globe and dictation keys
-/// below it. `.voiceIQ` adds the bar with VoiceiQ's mic.
-struct MiniKeyboard: View {
-    enum Style: Equatable { case apple, voiceIQ(listening: Bool) }
-
-    var style: Style = .apple
-    var globePressed = false
-
-    private static let rows = ["qwertyuiop", "asdfghjkl", "zxcvbnm"]
-    private static let tray = Theme.Colors.dynamic(light: 0xD3D5DB, dark: 0x2C2C2F)
-    private static let key = Theme.Colors.dynamic(light: 0xFFFFFF, dark: 0x6A6A6E)
-    private static let modifierKey = Theme.Colors.dynamic(light: 0xAEB2BB, dark: 0x464649)
+/// VoiceiQ's Talk key: a blue rounded square with the waveform, red with a
+/// stop square while it records.
+struct TalkKeyGlyph: View {
+    var size: CGFloat = 44
+    var recording = false
 
     var body: some View {
-        VStack(spacing: 6) {
-            if case .voiceIQ(let listening) = style {
-                HStack {
-                    Wordmark(height: 13).opacity(0.7)
-                    Spacer()
-                    micButton(listening: listening)
+        RoundedRectangle(cornerRadius: size / 3, style: .continuous)
+            .fill(recording ? Theme.Colors.recording : Theme.Colors.accent)
+            .frame(width: size, height: size)
+            .overlay {
+                if recording {
+                    RoundedRectangle(cornerRadius: 2).fill(.white).frame(width: size * 0.26, height: size * 0.26)
+                } else {
+                    Image(systemName: "waveform").font(.system(size: size * 0.4, weight: .semibold)).foregroundStyle(.white)
                 }
-                .padding(.horizontal, 4)
-                .frame(height: 30)
-                .transition(.opacity)
             }
-            ForEach(Array(Self.rows.enumerated()), id: \.offset) { index, row in
-                HStack(spacing: 4) {
-                    if index == 2 { modifier("shift") }
-                    ForEach(Array(row), id: \.self) { letter in
-                        Text(String(letter))
-                            .font(.system(size: 12))
-                            .foregroundStyle(Theme.Colors.ink)
-                            .frame(maxWidth: .infinity, minHeight: 26)
-                            .background(RoundedRectangle(cornerRadius: 4).fill(Self.key))
-                    }
-                    if index == 2 { modifier("delete.left") }
-                }
-                .padding(.horizontal, index == 1 ? 12 : 0)
-            }
-            HStack(spacing: 4) {
-                Text("123").font(.system(size: 11)).frame(width: 40, height: 26)
-                    .background(RoundedRectangle(cornerRadius: 4).fill(Self.modifierKey))
-                Text(style == .apple ? "space" : "VoiceiQ").font(.system(size: 11))
-                    .frame(maxWidth: .infinity, minHeight: 26)
-                    .background(RoundedRectangle(cornerRadius: 4).fill(Self.key))
-                Image(systemName: "return").font(.system(size: 11)).frame(width: 52, height: 26)
-                    .background(RoundedRectangle(cornerRadius: 4).fill(Self.modifierKey))
-            }
-            .foregroundStyle(Theme.Colors.ink)
-            HStack {
-                globe
-                Spacer()
-                Image(systemName: "mic").font(.system(size: 16)).foregroundStyle(Theme.Colors.ink.opacity(0.8))
-            }
-            .padding(.horizontal, 10)
-            .frame(height: 34)
-        }
-        .padding(6)
-        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Self.tray))
+            .animation(.easeInOut(duration: 0.2), value: recording)
     }
+}
 
-    private func modifier(_ symbol: String) -> some View {
-        Image(systemName: symbol).font(.system(size: 11)).foregroundStyle(Theme.Colors.ink)
-            .frame(width: 32, height: 26)
-            .background(RoundedRectangle(cornerRadius: 4).fill(Self.modifierKey))
-    }
+/// A key on a drawn keyboard: a fill rectangle holding a label.
+struct KeyCapShape<Label: View>: View {
+    let width: CGFloat?
+    var height: CGFloat = 44
+    @ViewBuilder var label: Label
 
-    private var globe: some View {
-        Image(systemName: "globe")
-            .font(.system(size: 18))
-            .foregroundStyle(Theme.Colors.ink.opacity(0.8))
-            .frame(width: 34, height: 34)
-            .background(Circle().fill(Self.key.opacity(globePressed ? 1 : 0)))
-            .overlay(TouchDot(visible: globePressed, size: 44))
-    }
-
-    private func micButton(listening: Bool) -> some View {
-        ZStack {
-            if listening {
-                Circle().stroke(Theme.Colors.accent.opacity(0.35), lineWidth: 6).frame(width: 34, height: 34)
-            }
-            Circle().fill(listening ? Theme.Colors.recording : Theme.Colors.accent).frame(width: 28, height: 28)
-            Image(systemName: listening ? "waveform" : "mic.fill")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(.white)
-                .symbolEffect(.variableColor.iterative, isActive: listening)
-        }
+    var body: some View {
+        RoundedRectangle(cornerRadius: 10, style: .continuous)
+            .fill(Theme.Colors.surface)
+            .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Theme.Colors.hairline, lineWidth: 1))
+            .overlay(label)
+            .frame(width: width, height: height)
+            .frame(maxWidth: width == nil ? .infinity : nil)
     }
 }
 
@@ -265,35 +222,34 @@ private struct KeyboardMenu: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text("Keyboard Settings…")
-                .font(.system(size: 13))
-                .padding(.horizontal, 12)
-                .padding(.vertical, 7)
-            item(title: "English (US)", subtitle: nil, selected: !voiceIQSelected)
-            item(title: "VoiceiQ", subtitle: "English", selected: voiceIQSelected)
+            item("English (US)", selected: !voiceIQSelected)
+            item("VoiceiQ", selected: voiceIQSelected)
         }
-        .foregroundStyle(Color.primary)
         .padding(6)
-        .frame(width: 176, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(.regularMaterial)
-            .shadow(color: .black.opacity(0.18), radius: 14, y: 6))
+        .frame(width: 184, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous).fill(Theme.Colors.surface)
+            .shadow(color: .black.opacity(0.12), radius: 14, y: 6))
+        .overlay(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous).strokeBorder(Theme.Colors.hairline, lineWidth: 1))
     }
 
-    private func item(title: String, subtitle: String?, selected: Bool) -> some View {
-        VStack(alignment: .leading, spacing: 1) {
-            Text(title).font(.system(size: 14, weight: selected ? .semibold : .regular))
-            if let subtitle {
-                Text(subtitle).font(.system(size: 10)).foregroundStyle(.secondary)
+    private func item(_ title: String, selected: Bool) -> some View {
+        HStack {
+            Text(title).font(Theme.Fonts.callout()).foregroundStyle(Theme.Colors.ink)
+            Spacer()
+            if selected {
+                Image(systemName: "checkmark").font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.Colors.accent)
             }
         }
         .padding(.horizontal, 12)
-        .padding(.vertical, 6)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Capsule().fill(Color.primary.opacity(selected ? 0.1 : 0)))
+        .padding(.vertical, 8)
+        .background(Capsule().fill(selected ? Theme.Colors.accentSoft : .clear))
+        .overlay(alignment: .trailing) {
+            TouchDot(visible: selected && title == "VoiceiQ", size: 36).padding(.trailing, 20)
+        }
     }
 }
 
-// MARK: - Settings mock parts
+// MARK: - Settings drawing
 
 private struct MockNavigationBar: View {
     let back: String
@@ -301,30 +257,16 @@ private struct MockNavigationBar: View {
 
     var body: some View {
         ZStack {
-            Text(title).font(.system(size: 15, weight: .semibold))
+            Text(title).font(Theme.Fonts.headline()).foregroundStyle(Theme.Colors.ink)
             HStack(spacing: 2) {
-                Image(systemName: "chevron.left").font(.system(size: 15, weight: .semibold))
-                Text(back).font(.system(size: 15))
+                Image(systemName: "chevron.left").font(.system(size: 14, weight: .semibold))
+                Text(back).font(Theme.Fonts.callout())
                 Spacer()
             }
-            .foregroundStyle(Color(uiColor: .systemBlue))
+            .foregroundStyle(Theme.Colors.inkSecondary)
         }
-        .foregroundStyle(Color.primary)
-        .padding(.horizontal, 12)
-        .frame(height: 44)
-    }
-}
-
-private struct MockSectionHeader: View {
-    let text: String
-
-    var body: some View {
-        Text(text.uppercased())
-            .font(.system(size: 11))
-            .foregroundStyle(.secondary)
-            .padding(.horizontal, 30)
-            .padding(.top, 8)
-            .padding(.bottom, 5)
+        .padding(.horizontal, Theme.Spacing.m)
+        .frame(height: 48)
     }
 }
 
@@ -333,48 +275,39 @@ private struct MockGroup<Content: View>: View {
 
     var body: some View {
         VStack(spacing: 0) { content }
-            .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color(uiColor: .secondarySystemGroupedBackground)))
-            .padding(.horizontal, 14)
+            .background(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous).fill(Theme.Colors.surface))
+            .padding(.horizontal, Theme.Spacing.m)
+            .padding(.top, Theme.Spacing.s)
     }
 }
 
 private struct MockRow<Accessory: View>: View {
-    var symbol: String?
-    var tint: Color = .gray
     let title: String
     var tapping = false
     @ViewBuilder var accessory: Accessory
 
     var body: some View {
-        HStack(spacing: 10) {
-            if let symbol {
-                Image(systemName: symbol)
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .frame(width: 24, height: 24)
-                    .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(tint))
-            }
-            Text(title).font(.system(size: 15)).foregroundStyle(Color.primary)
+        HStack {
+            Text(title).font(Theme.Fonts.callout()).foregroundStyle(Theme.Colors.ink)
             Spacer()
             accessory.overlay(TouchDot(visible: tapping, size: 40))
         }
-        .padding(.horizontal, 12)
-        .frame(height: 44)
-        .background(Color.primary.opacity(tapping && symbol != nil ? 0.08 : 0))
+        .padding(.horizontal, Theme.Spacing.m)
+        .frame(height: 46)
     }
 }
 
-/// A drawn UISwitch.
+/// A drawn switch, green when on as in Settings.
 private struct MockSwitch: View {
     let on: Bool
 
     var body: some View {
         Capsule()
-            .fill(on ? Color(uiColor: .systemGreen) : Color(uiColor: .systemFill))
-            .frame(width: 46, height: 28)
+            .fill(on ? Theme.Colors.success : Theme.Colors.porcelain)
+            .frame(width: 44, height: 26)
             .overlay(alignment: on ? .trailing : .leading) {
-                Circle().fill(.white).frame(width: 24, height: 24).padding(2)
-                    .shadow(color: .black.opacity(0.15), radius: 2, y: 1)
+                Circle().fill(.white).frame(width: 22, height: 22).padding(2)
+                    .shadow(color: .black.opacity(0.15), radius: 1.5, y: 1)
             }
     }
 }
@@ -384,28 +317,25 @@ private struct FullAccessAlert: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            VStack(spacing: 4) {
-                Text("Allow Full Access for “VoiceiQ” Keyboards?")
-                    .font(.system(size: 14, weight: .semibold))
-                Text("Full access allows the developer of this keyboard to transmit anything you type.")
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
-            }
-            .multilineTextAlignment(.center)
-            .padding(14)
-            Divider()
+            Text("Allow Full Access for “VoiceiQ” Keyboards?")
+                .font(Theme.Fonts.label())
+                .foregroundStyle(Theme.Colors.ink)
+                .multilineTextAlignment(.center)
+                .padding(Theme.Spacing.l)
+            Rectangle().fill(Theme.Colors.hairline).frame(height: 1)
             HStack(spacing: 0) {
                 Text("Don’t Allow").frame(maxWidth: .infinity)
-                Divider()
+                Rectangle().fill(Theme.Colors.hairline).frame(width: 1)
                 Text("Allow").fontWeight(.semibold).frame(maxWidth: .infinity)
                     .overlay(TouchDot(visible: tapping, size: 40))
             }
-            .font(.system(size: 14))
-            .foregroundStyle(Color(uiColor: .systemBlue))
-            .frame(height: 40)
+            .font(Theme.Fonts.callout())
+            .foregroundStyle(Theme.Colors.accent)
+            .frame(height: 42)
         }
         .frame(width: 236)
-        .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(.thickMaterial))
+        .background(RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous).fill(Theme.Colors.surface))
+        .shadow(color: .black.opacity(0.18), radius: 18, y: 8)
     }
 }
 
@@ -416,8 +346,8 @@ struct TouchDot: View {
 
     var body: some View {
         Circle()
-            .fill(Theme.Colors.accent.opacity(0.25))
-            .overlay(Circle().strokeBorder(Theme.Colors.accent.opacity(0.6), lineWidth: 2))
+            .fill(Theme.Colors.accent.opacity(0.18))
+            .overlay(Circle().strokeBorder(Theme.Colors.accent.opacity(0.5), lineWidth: 2))
             .frame(width: size, height: size)
             .scaleEffect(visible ? 1 : 1.6)
             .opacity(visible ? 1 : 0)

@@ -9,56 +9,103 @@ struct PermissionsPanel: View {
         let status = setup.status
         VStack(spacing: Theme.Spacing.m) {
             Card {
-                HStack(spacing: Theme.Spacing.m) {
-                    IconTile(systemImage: "mic.fill", size: 32)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Microphone").font(Theme.Fonts.headline()).foregroundStyle(Theme.Colors.ink)
-                        Text("Used only while you dictate or record notes.")
-                            .font(Theme.Fonts.footnote()).foregroundStyle(Theme.Colors.muted)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    Spacer(minLength: 0)
-                    if status.micGranted {
-                        StatusChip(text: "Allowed", tone: .done)
-                    } else if status.micDenied {
+                SetupCheckRow(symbol: "mic",
+                              title: "Dictate with your voice",
+                              detail: "The microphone, used only while you dictate or record notes.",
+                              state: status.micGranted ? .done("Allowed") : .todo) {
+                    if status.micDenied {
                         Button("Settings", action: openAppSettings).buttonStyle(.compactPrimary)
-                    } else {
+                    } else if !status.micGranted {
                         Button("Allow", action: setup.requestMicrophone).buttonStyle(.compactPrimary)
                     }
                 }
             }
 
             Card {
-                HStack(spacing: Theme.Spacing.m) {
-                    IconTile(systemImage: "keyboard.fill", size: 32)
-                    Text("VoiceiQ keyboard").font(Theme.Fonts.headline()).foregroundStyle(Theme.Colors.ink)
-                    Spacer(minLength: 0)
-                    if status.keyboardReady {
-                        StatusChip(text: "Ready", tone: .done)
-                    } else if status.keyboardAdded {
-                        StatusChip(text: "Open it once", tone: .pending)
-                    }
-                }
+                SetupCheckRow(symbol: "keyboard",
+                              title: "VoiceiQ in every app",
+                              detail: "The VoiceiQ keyboard, added in Settings.",
+                              state: status.keyboardAdded ? .done("Added") : .todo)
+                Divider()
+                SetupCheckRow(symbol: "lock.open",
+                              title: "Dictation from the keyboard",
+                              detail: status.keyboardAdded && !status.fullAccess
+                                  ? "Allow Full Access. iOS shows it to VoiceiQ only from the keyboard: switch to it once in the Try it box."
+                                  : "Allow Full Access.",
+                              state: status.fullAccess ? .done("Allowed") : status.keyboardAdded ? .waiting : .todo)
                 if !status.keyboardReady {
-                    KeyboardSettingsWalkthrough()
+                    KeyboardSettingsWalkthrough().padding(.top, Theme.Spacing.s)
                     FullAccessPrivacyNote()
-                }
-                if status.keyboardAdded && !status.fullAccess {
-                    // iOS does not tell the app whether Full Access is on. The
-                    // keyboard reports it the first time it opens.
-                    Label("iOS only lets VoiceiQ check Full Access from the keyboard. Switch to the VoiceiQ keyboard once in the Try it box to finish.",
-                          systemImage: "keyboard")
-                        .font(Theme.Fonts.footnote())
-                        .foregroundStyle(Theme.Colors.pending)
-                        .fixedSize(horizontal: false, vertical: true)
-                    Button("Open VoiceiQ Settings", action: openAppSettings).buttonStyle(.secondaryPill)
-                } else if !status.keyboardReady {
-                    Button("Open VoiceiQ Settings", action: openAppSettings).buttonStyle(.primaryPill)
+                    Button("Open VoiceiQ Settings", action: openAppSettings)
+                        .buttonStyle(PillButtonStyle(kind: status.keyboardAdded ? .secondary : .primary))
                 }
             }
 
             LiveActivitiesOffCard()
         }
+    }
+}
+
+/// One setup step, named for what the user gets: an outline symbol, the
+/// benefit, why it's needed, and its state, which turns to a green ✓ once
+/// VoiceiQ sees it done. `action` shows in place of the state while the step
+/// is still to do.
+struct SetupCheckRow<Action: View>: View {
+    enum Progress: Equatable {
+        case todo
+        /// Done on the user's side, but VoiceiQ can't see it yet.
+        case waiting
+        case done(String)
+    }
+
+    let symbol: String
+    let title: String
+    let detail: String
+    let state: Progress
+    @ViewBuilder var action: Action
+
+    var body: some View {
+        HStack(alignment: .center, spacing: Theme.Spacing.m) {
+            Image(systemName: symbol)
+                .font(.system(size: 18, weight: .regular))
+                .foregroundStyle(Theme.Colors.inkSecondary)
+                .frame(width: 28)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(Theme.Fonts.headline()).foregroundStyle(Theme.Colors.ink)
+                Text(detail).font(Theme.Fonts.footnote()).foregroundStyle(Theme.Colors.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: Theme.Spacing.s)
+            trailing
+        }
+        .padding(.vertical, 2)
+        .animation(.spring(response: 0.35, dampingFraction: 0.8), value: state)
+        .accessibilityElement(children: .combine)
+    }
+
+    @ViewBuilder private var trailing: some View {
+        switch state {
+        case .done(let text):
+            Label(text, systemImage: "checkmark")
+                .font(Theme.Fonts.label())
+                .foregroundStyle(Theme.Colors.success)
+                .labelStyle(.titleAndIcon)
+                .transition(.scale(scale: 0.8).combined(with: .opacity))
+        case .waiting:
+            HStack(spacing: 6) {
+                ProgressView().controlSize(.mini)
+                Text("Waiting…").font(Theme.Fonts.footnote()).foregroundStyle(Theme.Colors.muted)
+            }
+        case .todo:
+            action
+        }
+    }
+}
+
+extension SetupCheckRow where Action == EmptyView {
+    init(symbol: String, title: String, detail: String, state: Progress) {
+        self.init(symbol: symbol, title: title, detail: detail, state: state) { EmptyView() }
     }
 }
 
@@ -78,17 +125,12 @@ struct LiveActivitiesOffCard: View {
     var body: some View {
         if !setup.status.liveActivitiesEnabled, !UIDevice.isPad || Self.hasDictateControl {
             Card {
-                HStack(spacing: Theme.Spacing.m) {
-                    IconTile(systemImage: "circle.dashed.inset.filled", tint: Theme.Colors.pending, size: 32)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Live Activities are off").font(Theme.Fonts.headline()).foregroundStyle(Theme.Colors.ink)
-                        Text(UIDevice.isPad ? "VoiceiQ Dictate needs them to dictate without opening VoiceiQ." : "The Action button needs them to dictate without opening VoiceiQ.")
-                            .font(Theme.Fonts.footnote()).foregroundStyle(Theme.Colors.muted)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    Spacer(minLength: 0)
+                SetupCheckRow(symbol: "bolt",
+                              title: "Dictate without opening VoiceiQ",
+                              detail: UIDevice.isPad ? "Turn on Live Activities for VoiceiQ Dictate." : "Turn on Live Activities for the Action button.",
+                              state: .todo) {
+                    Button("Settings", action: openAppSettings).buttonStyle(.compactSecondary)
                 }
-                Button("Open Settings", action: openAppSettings).buttonStyle(.secondaryPill)
             }
         }
     }
@@ -100,7 +142,7 @@ struct FullAccessPrivacyNote: View {
         Label {
             Text("Full Access lets the keyboard hand your voice to the VoiceiQ app. There is no VoiceiQ server, account or analytics.")
         } icon: {
-            Image(systemName: "lock.fill").foregroundStyle(Theme.Colors.muted)
+            Image(systemName: "lock").foregroundStyle(Theme.Colors.muted)
         }
         .font(Theme.Fonts.footnote())
         .foregroundStyle(Theme.Colors.muted)

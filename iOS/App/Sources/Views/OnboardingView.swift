@@ -182,8 +182,7 @@ struct OnboardingView: View {
     UIApplication.shared.open(URL(string: UIApplication.openSettingsURLString)!)
 }
 
-/// Back button and a segmented bar: one segment per setup page, filled up to
-/// the current one.
+/// A round back button and a thin bar filled to the current setup page.
 private struct OnboardingHeader: View {
     let step: Int
     let total: Int
@@ -193,24 +192,52 @@ private struct OnboardingHeader: View {
         HStack(spacing: Theme.Spacing.l) {
             Button(action: back) {
                 Image(systemName: "chevron.left")
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.system(size: 15, weight: .medium))
                     .foregroundStyle(Theme.Colors.ink)
-                    .frame(width: 36, height: 36)
-                    .background(Circle().fill(Theme.Colors.porcelain))
+                    .frame(width: 38, height: 38)
+                    .overlay(Circle().strokeBorder(Theme.Colors.hairline, lineWidth: 1))
+                    .contentShape(Circle())
             }
             .accessibilityLabel("Back")
-            HStack(spacing: 6) {
-                ForEach(1...total, id: \.self) { index in
-                    Capsule()
-                        .fill(index <= step ? Theme.Colors.accent : Theme.Colors.hairline)
-                        .frame(height: 4)
+            Capsule()
+                .fill(Theme.Colors.porcelain)
+                .frame(height: 4)
+                .overlay(alignment: .leading) {
+                    GeometryReader { proxy in
+                        Capsule()
+                            .fill(Theme.Colors.ink)
+                            .frame(width: proxy.size.width * CGFloat(step) / CGFloat(total))
+                    }
                 }
-            }
-            .animation(.easeInOut(duration: 0.3), value: step)
-            .accessibilityElement()
-            .accessibilityLabel("Step \(step) of \(total)")
-            Color.clear.frame(width: 36, height: 36)
+                .animation(.easeInOut(duration: 0.35), value: step)
+                .accessibilityElement()
+                .accessibilityLabel("Step \(step) of \(total)")
+            Color.clear.frame(width: 38, height: 38)
         }
+    }
+}
+
+/// A setup page's title in the display face, with one muted line under it.
+private struct StepTitle: View {
+    let title: Text
+    var detail: Text?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Theme.Spacing.s) {
+            title
+                .font(Theme.Fonts.display())
+                .foregroundStyle(Theme.Colors.ink)
+                .fixedSize(horizontal: false, vertical: true)
+            if let detail {
+                detail
+                    .font(Theme.Fonts.callout())
+                    .foregroundStyle(Theme.Colors.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isHeader)
     }
 }
 
@@ -219,7 +246,7 @@ private struct OnboardingHeader: View {
 private struct KeysPage: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.xl) {
-            PageTitle(title: "Connect a model", detail: "VoiceiQ runs on your own API key.")
+            StepTitle(title: Text("Connect a model"), detail: Text("VoiceiQ runs on your own API key."))
             ModelKeysForm()
         }
     }
@@ -231,20 +258,18 @@ private struct MicrophonePage: View {
     var body: some View {
         let status = setup.status
         VStack(alignment: .leading, spacing: Theme.Spacing.xl) {
-            PageTitle(title: "Allow the microphone",
-                      detail: "VoiceiQ listens only while you dictate or record a note.")
+            StepTitle(title: Text("Allow the microphone"),
+                      detail: Text("VoiceiQ listens only while you talk to it."))
             MicrophoneMark(granted: status.micGranted)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, Theme.Spacing.l)
             Card {
-                if status.micDenied {
-                    CheckLine(title: "Microphone is off",
-                              detail: "Turn on Microphone in VoiceiQ’s page in Settings. VoiceiQ sees it when you come back.",
-                              done: false, waiting: true)
-                } else {
-                    CheckLine(title: status.micGranted ? "Microphone allowed" : "Microphone not allowed yet",
-                              done: status.micGranted)
-                }
+                SetupCheckRow(symbol: "mic",
+                              title: "Dictate with your voice",
+                              detail: status.micDenied
+                                  ? "The microphone is off. Turn it on in VoiceiQ’s page in Settings."
+                                  : "Used only while you dictate or record a note.",
+                              state: status.micGranted ? .done("Allowed") : .todo)
             }
             LiveActivitiesOffCard()
         }
@@ -257,16 +282,19 @@ private struct AddKeyboardPage: View {
     var body: some View {
         let status = setup.status
         VStack(alignment: .leading, spacing: Theme.Spacing.xl) {
-            PageTitle(title: "Add the VoiceiQ keyboard",
-                      detail: "Two switches in Settings. Open VoiceiQ’s page there, then come back: this page checks itself off.")
+            StepTitle(title: Text("Add the keyboard"),
+                      detail: Text("Two switches in Settings. Come back and this page checks itself."))
             KeyboardSettingsWalkthrough()
             Card {
-                CheckLine(title: status.keyboardAdded ? "VoiceiQ keyboard added" : "VoiceiQ keyboard not added yet",
-                          done: status.keyboardAdded)
-                CheckLine(title: "Allow Full Access",
-                          detail: status.fullAccess ? nil : "iOS lets VoiceiQ see this only from its keyboard, so it’s checked on the next page.",
-                          done: status.fullAccess,
-                          waiting: status.keyboardAdded && !status.fullAccess)
+                SetupCheckRow(symbol: "keyboard",
+                              title: "VoiceiQ in every app",
+                              detail: "The VoiceiQ keyboard, added in Settings.",
+                              state: status.keyboardAdded ? .done("Added") : .todo)
+                Divider()
+                SetupCheckRow(symbol: "lock.open",
+                              title: "Dictation from the keyboard",
+                              detail: "Allow Full Access. iOS shows it to VoiceiQ when the keyboard first opens, on the next page.",
+                              state: status.fullAccess ? .done("Allowed") : status.keyboardAdded ? .waiting : .todo)
             }
             FullAccessPrivacyNote()
         }
@@ -285,28 +313,27 @@ private struct SwitchKeyboardPage: View {
     var body: some View {
         let status = setup.status
         VStack(alignment: .leading, spacing: Theme.Spacing.xl) {
-            (Text("Hold ") + Text(Image(systemName: "globe")) + Text(" to switch to VoiceiQ"))
-                .font(Theme.Fonts.title())
-                .foregroundStyle(Theme.Colors.ink)
-                .fixedSize(horizontal: false, vertical: true)
-                .accessibilityLabel("Hold the globe key to switch to VoiceiQ")
+            StepTitle(title: Text("Hold \(Image(systemName: "globe")) to switch"),
+                      detail: Text("Then pick VoiceiQ. Or tap \(Image(systemName: "globe")) until it comes up."))
             GlobeSwitchDemo()
-            VStack(alignment: .leading, spacing: Theme.Spacing.s) {
-                TextField("Tap here, then hold the globe key", text: $text, axis: .vertical)
-                    .font(Theme.Fonts.body())
-                    .lineLimit(1...3)
-                    .focused($focused)
-                    .padding(Theme.Spacing.m)
-                    .background(RoundedRectangle(cornerRadius: Theme.Radius.field, style: .continuous).fill(Theme.Colors.surface))
-                    .overlay(RoundedRectangle(cornerRadius: Theme.Radius.field, style: .continuous)
-                        .strokeBorder(focused ? Theme.Colors.accent : Theme.Colors.hairline, lineWidth: focused ? 1.5 : 0.5))
-                Text("Or tap \(Image(systemName: "globe")) until VoiceiQ comes up.")
-                    .font(Theme.Fonts.footnote())
-                    .foregroundStyle(Theme.Colors.muted)
-            }
+            TextField("Tap here, then hold the globe key", text: $text, axis: .vertical)
+                .font(Theme.Fonts.body())
+                .lineLimit(1...3)
+                .focused($focused)
+                .padding(Theme.Spacing.m)
+                .background(RoundedRectangle(cornerRadius: Theme.Radius.field, style: .continuous).fill(Theme.Colors.surface))
+                .overlay(RoundedRectangle(cornerRadius: Theme.Radius.field, style: .continuous)
+                    .strokeBorder(focused ? Theme.Colors.accent : Theme.Colors.hairline, lineWidth: focused ? 1.5 : 1))
             Card {
-                CheckLine(title: "VoiceiQ keyboard in use", done: status.fullAccess)
-                CheckLine(title: "Full Access on", done: status.fullAccess)
+                SetupCheckRow(symbol: "character.cursor.ibeam",
+                              title: "Dictate where you type",
+                              detail: "The VoiceiQ keyboard, in use.",
+                              state: status.fullAccess ? .done("In use") : .waiting)
+                Divider()
+                SetupCheckRow(symbol: "lock.open",
+                              title: "Dictation from the keyboard",
+                              detail: "Allow Full Access.",
+                              state: status.fullAccess ? .done("Allowed") : .waiting)
             }
             if !status.fullAccess, let switchedAt {
                 TimelineView(.periodic(from: switchedAt, by: 1)) { context in
@@ -324,11 +351,11 @@ private struct SwitchKeyboardPage: View {
     private var noCheckHint: some View {
         Card {
             Label {
-                Text("On the VoiceiQ keyboard but no checks here? Turn on **Allow Full Access** in VoiceiQ › Keyboards in Settings.")
+                Text("On the VoiceiQ keyboard but nothing ticked? Turn on **Allow Full Access** in VoiceiQ › Keyboards in Settings.")
             } icon: {
-                Image(systemName: "exclamationmark.circle.fill").foregroundStyle(Theme.Colors.pending)
+                Image(systemName: "exclamationmark.circle").foregroundStyle(Theme.Colors.pending)
             }
-            .font(Theme.Fonts.footnote())
+            .font(Theme.Fonts.callout())
             .foregroundStyle(Theme.Colors.ink)
             .fixedSize(horizontal: false, vertical: true)
             Button("Open VoiceiQ Settings", action: openAppSettings).buttonStyle(.compactSecondary)
@@ -340,10 +367,7 @@ private struct SwitchKeyboardPage: View {
 private struct TryItPage: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Theme.Spacing.xl) {
-            (Text("Tap ") + Text(Image(systemName: "mic.fill")) + Text(" and talk"))
-                .font(Theme.Fonts.title())
-                .foregroundStyle(Theme.Colors.ink)
-                .accessibilityLabel("Tap the mic and talk")
+            StepTitle(title: Text("Try it"), detail: Text("Tap the Talk key and say something."))
             TryItCard()
             if UIDevice.isPad {
                 VStack(alignment: .leading, spacing: Theme.Spacing.m) {
@@ -355,26 +379,27 @@ private struct TryItPage: View {
     }
 }
 
-/// The microphone in a soft halo that breathes until access is granted, then
-/// turns into a check.
+/// The microphone in hairline rings that breathe until access is granted,
+/// then a check in success green.
 private struct MicrophoneMark: View {
     let granted: Bool
     @State private var breathing = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        let tint = granted ? Theme.Colors.success : Theme.Colors.accent
         ZStack {
-            ForEach(0..<2, id: \.self) { ring in
+            ForEach(0..<3, id: \.self) { ring in
                 Circle()
-                    .fill(tint.opacity(0.08))
-                    .frame(width: 112 + CGFloat(ring) * 44, height: 112 + CGFloat(ring) * 44)
-                    .scaleEffect(breathing && !granted ? 1.08 : 1)
+                    .strokeBorder(Theme.Colors.hairline, lineWidth: 1)
+                    .frame(width: 96 + CGFloat(ring) * 40, height: 96 + CGFloat(ring) * 40)
+                    .scaleEffect(breathing && !granted ? 1 + 0.04 * CGFloat(ring + 1) : 1)
             }
-            Circle().fill(tint).frame(width: 92, height: 92)
-            Image(systemName: granted ? "checkmark" : "mic.fill")
-                .font(.system(size: 36, weight: .semibold))
-                .foregroundStyle(.white)
+            Circle()
+                .strokeBorder(granted ? Theme.Colors.success : Theme.Colors.inkSecondary, lineWidth: 1.5)
+                .frame(width: 88, height: 88)
+            Image(systemName: granted ? "checkmark" : "mic")
+                .font(.system(size: 34, weight: .light))
+                .foregroundStyle(granted ? Theme.Colors.success : Theme.Colors.inkSecondary)
                 .contentTransition(.symbolEffect(.replace))
         }
         .animation(.spring(response: 0.4, dampingFraction: 0.7), value: granted)
