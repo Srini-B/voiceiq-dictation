@@ -589,7 +589,8 @@ struct MeetingsPane: View {
         let length = meeting.lengthText
         switch meeting.status {
         case .done: return length
-        case .recording: return "\(length) · Recording"
+        // Its stored length is 0 until it stops.
+        case .recording: return "Recording"
         case .transcribing: return "\(length) · Transcribing"
         case .summarizing: return "\(length) · Making notes"
         case .failed: return "\(length) · " + (meeting.waitsForService != nil ? "Waiting for AssemblyAI" : "Failed")

@@ -210,10 +210,14 @@ private struct MeetingRow: View {
                     .font(Theme.Fonts.callout())
                     .foregroundStyle(selected ? Theme.Colors.onAccent : Theme.Colors.ink)
                     .lineLimit(1)
-                // An import has no length to show (Granola's export has none).
-                Text(meta.importedFrom == nil
-                     ? "\(meta.startedAt.formatted(date: .abbreviated, time: .shortened)) · \(duration)"
-                     : meta.startedAt.formatted(date: .abbreviated, time: .shortened))
+                // An import has no length to show (Granola's export has none);
+                // one being recorded counts up instead of a stored 0:00.
+                let start = meta.startedAt.formatted(date: .abbreviated, time: .shortened)
+                Group {
+                    if meta.importedFrom != nil { Text(start) }
+                    else if meta.status == .recording { Text("\(start) · \(Text(meta.startedAt, style: .timer))") }
+                    else { Text("\(start) · \(duration)") }
+                }
                     .font(Theme.Fonts.caption())
                     .foregroundStyle(selected ? Theme.Colors.onAccent.opacity(0.8) : Theme.Colors.muted)
                 if !folders.isEmpty {
