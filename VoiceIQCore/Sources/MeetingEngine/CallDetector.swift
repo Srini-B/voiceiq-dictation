@@ -38,7 +38,7 @@ import CoreAudio
         guard !polling else { return }
         polling = true
         Task { [weak self] in
-            let continuing = Self.app(of: self.active)
+            let continuing = self?.active
             let found = await Task.detached(priority: .utility) { Self.detectedSource(continuing: continuing) }.value
             guard let self else { return }
             self.polling = false
@@ -222,8 +222,8 @@ import CoreAudio
     }()
 
     /// The call, and whether it is confirmed rather than a browser that only looks like one.
-    /// `continuing` is the app of the call already offered or recording.
-    private nonisolated static func detectedSource(continuing: String?) -> (CallSource, confirmed: Bool)? {
+    /// `continuing` is the call already offered or recording.
+    private nonisolated static func detectedSource(continuing: CallSource?) -> (CallSource, confirmed: Bool)? {
         let audio = runningAudio()
         // Pre-14.2: only a global "mic is in use" bit exists. VoiceiQ's own meeting
         // tap trips it, so there the call ends only when the app or tab goes away,
@@ -265,10 +265,12 @@ import CoreAudio
             // window does not start a call (Codex on #138), and a browser that
             // only plays (music, video) has only its front window read. The call
             // already offered stays while its browser plays and any window shows
-            // its page, so a muted owner can switch tabs (Neon on #138).
-            let continues = continuing == id
-            let page = BrowserPages.read(pid: app.processIdentifier, frontOnly: !capturing && !continues)
-            if let match = page.meeting, capturing || page.room || continues { return (.browser(bundleID: id, host: match), true) }
+            // that page, so a muted owner can switch tabs, and only that page:
+            // a chat page in front does not take the call over (Neon on #138).
+            var held: String?
+            if case let .browser(bundleID, host) = continuing, bundleID == id, !capturing { held = host }
+            let page = BrowserPages.read(pid: app.processIdentifier, frontOnly: !capturing && held == nil, seeking: held)
+            if let match = page.meeting, capturing || page.room || match == held { return (.browser(bundleID: id, host: match), true) }
             if capturing, playing, !page.excluded, lookalike == nil { lookalike = .browser(bundleID: id, host: page.host ?? name) }
         }
         return lookalike.map { ($0, false) }
@@ -335,12 +337,13 @@ enum BrowserPages {
     /// Window titles, plus the URL of each window's web area: titles can be
     /// anything a page sets, the URL is where the tab is. Chrome and Safari put
     /// the web area several levels below the window, so the search is bounded.
-    /// `frontOnly` stops after the front page.
-    static func read(pid: pid_t, frontOnly: Bool = false) -> Page {
+    /// `frontOnly` stops after the front page; `seeking` takes only the
+    /// meeting page of that name, in any window.
+    static func read(pid: pid_t, frontOnly: Bool = false, seeking: String? = nil) -> Page {
         let app = AXUIElementCreateApplication(pid)
         AXUIElementSetMessagingTimeout(app, 0.5)
         guard let windows = value(app, kAXWindowsAttribute) as? [AXUIElement] else { return Page() }
-        var page = Page()
+        var page = Page(), addressed = false
         for window in windows {
             let titles = [value(window, kAXTitleAttribute as String) as? String].compactMap { $0 }
             var addresses = [kAXDocumentAttribute as String, "AXURL"].compactMap { value(window, $0) as? String }
@@ -349,19 +352,19 @@ enum BrowserPages {
             let strings = titles + addresses
             // Windows come front to back: the first page with an address is the
             // one in front; a picture-in-picture or popup window has none.
+            if !addressed, !addresses.isEmpty { addressed = true; page.room = CallApps.isCallRoom(addresses: addresses) }
             if page.host == nil, let host = url?.host() {
                 page.host = host.replacingOccurrences(of: "www.", with: "")
                 page.excluded = CallApps.notCallPages.contains { host.hasSuffix($0) }
-                page.room = CallApps.isCallRoom(addresses: addresses)
             }
             if let match = CallApps.meetingPages.first(where: { needle in strings.contains { $0.localizedCaseInsensitiveContains(needle) } }) {
-                page.meeting = CallApps.meetingName(match: match, in: strings)
-                break
+                let name = CallApps.meetingName(match: match, in: strings)
+                if seeking == nil || name == seeking { page.meeting = name; break }
             }
-            if frontOnly, page.host != nil { break }
+            if frontOnly, addressed { break }
         }
-        // No address could be read: the front window's title is all there is.
-        if page.host == nil, let title = windows.first.flatMap({ value($0, kAXTitleAttribute as String) as? String }) {
+        // No address could be read, in any attribute (Codex on #138): the front window's title is all there is.
+        if !addressed, let title = windows.first.flatMap({ value($0, kAXTitleAttribute as String) as? String }) {
             page.room = CallApps.isCallRoom(titles: [title])
         }
         return page
