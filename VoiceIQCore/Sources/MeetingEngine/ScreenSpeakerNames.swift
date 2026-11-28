@@ -165,7 +165,11 @@ public enum ScreenSpeakerNames {
 
     public static func match(samples: [ScreenNameSample], transcript: [TranscriptSegment]) -> ScreenNames? {
         guard !samples.isEmpty else { return nil }
-        let samples = folded(withSteadySingles(samples))
+        let samples = folded(withSteadySingles(samples).map { sample in
+            var out = sample
+            out.names.removeAll(where: isUIText)
+            return out
+        })
         var total: [String: Int] = [:]
         for sample in samples { for name in sample.names { total[name, default: 0] += 1 } }
 
@@ -211,12 +215,12 @@ public enum ScreenSpeakerNames {
         let far = Set(transcript.map(\.speaker)).subtracting([MeetingSpeaker.you])
         let remote = expectedRemote(samples: samples)
         let owners = Set(marked.keys)
-        let others = total.filter { $0.value * 2 >= samples.count && !owners.contains($0.key) && !isUIText($0.key) }.map(\.key)
+        let others = total.filter { $0.value * 2 >= samples.count && !owners.contains($0.key) }.map(\.key)
         if far.count == 1, let speaker = far.first, speakers[speaker] == nil, others.count == 1, (remote ?? 1) <= 1,
            !used.contains(others[0]) {
             speakers[speaker] = .init(name: others[0], seen: total[others[0]] ?? 0, of: samples.count)
         }
-        let ranked = total.filter { !isUIText($0.key) }.sorted { $0.value != $1.value ? $0.value > $1.value : $0.key < $1.key }.map(\.key)
+        let ranked = total.sorted { $0.value != $1.value ? $0.value > $1.value : $0.key < $1.key }.map(\.key)
         let merged = remote.map { !far.isEmpty && $0 > far.count }
         return ScreenNames(seen: Array(ranked.prefix(seenLimit)), speakers: speakers, remote: remote,
                            probablyMerged: merged == true ? true : nil)
@@ -359,18 +363,24 @@ public enum ScreenSpeakerNames {
     }
 
     /// Single words join a snapshot's names when they stay on screen in at
-    /// least a quarter of the snapshots and are not the start of a longer
-    /// name's first word: the first name itself ("Muhammed" of "Muhammed
-    /// Hafeed") or a tag cut short, by OCR or a control bar over it. MEASURED
+    /// least a quarter of the snapshots and are not a steady longer name's
+    /// first word, whole ("Muhammed" of "Muhammed Hafeed") or cut short by at
+    /// most two letters, by OCR or a control bar over the tag. MEASURED
     /// 2026-11-28, vdo.ninja: "May" of "Maya Patel" was named a speaker that
-    /// was Daniel Okafor, read as "Danie".
+    /// was Daniel Okafor, read as "Danie". A shorter start is a name of its
+    /// own ("Dan" beside "Daniel Okafor"). The cut tag shares snapshots with
+    /// the full one ("May" and "Maya Patel" at 14.1 s), so co-occurrence
+    /// cannot tell them apart.
     static func withSteadySingles(_ samples: [ScreenNameSample]) -> [ScreenNameSample] {
-        var counts: [String: Int] = [:]
-        for sample in samples { for word in Set(sample.single ?? []) { counts[word, default: 0] += 1 } }
-        let longer = Set(samples.flatMap(\.names))
+        var counts: [String: Int] = [:], named: [String: Int] = [:]
+        for sample in samples {
+            for word in Set(sample.single ?? []) { counts[word, default: 0] += 1 }
+            for name in Set(sample.names) { named[name, default: 0] += 1 }
+        }
+        let firsts = named.filter { $0.value >= minimumSeen }.keys.compactMap { $0.split(separator: " ").first }
         let steady = Set(counts.filter { word, count in
             count >= minimumSeen && Double(count) >= 0.25 * Double(samples.count)
-                && !longer.contains { $0.split(separator: " ").first?.hasPrefix(word) == true }
+                && !firsts.contains { $0.hasPrefix(word) && $0.count - word.count <= 2 }
         }.keys)
         return samples.map { sample in
             var out = sample

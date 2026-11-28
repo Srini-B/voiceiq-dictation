@@ -41,6 +41,10 @@ final class ScreenSpeakerNamesTests: XCTestCase {
         let cut = ScreenSpeakerNames.match(samples: samples(["Maya Patel", "Infobar Container"], single: ["May", "Relaunch"]), transcript: twoPeople)
         XCTAssertEqual(cut?.seen, ["Maya Patel"])
         XCTAssertEqual(cut?.speakers["s1"]?.name, "Maya Patel")
+
+        // A name that only starts someone else's first name is a person of its own.
+        let dan = ScreenSpeakerNames.match(samples: samples(["Daniel Okafor"], single: ["Dan"]), transcript: twoPeople)
+        XCTAssertEqual(dan?.seen, ["Dan", "Daniel Okafor"])
     }
 
     func testTheParticipantCountIsReadFromItsButton() {
