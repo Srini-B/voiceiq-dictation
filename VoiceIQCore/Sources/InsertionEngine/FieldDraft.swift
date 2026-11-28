@@ -227,7 +227,11 @@ public final class FieldDraft: TextDraft {
             if placed {
                 field.ledger.replace(id, with: written, landedIn: now.value)
                 landed = written
-                if now.value == expected { _ = await select(selection.location, selection.length) }
+                // Only over the caret the write left: a caret the user moved
+                // since then stays where they put it.
+                if now.value == expected, now.caret == end, now.selectionLength == 0 {
+                    _ = await select(selection.location, selection.length)
+                }
                 return true
             }
             // Still the draft, selected: the write has not shown yet.
