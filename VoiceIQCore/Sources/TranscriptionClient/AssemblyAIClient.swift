@@ -182,18 +182,36 @@ public actor AssemblyAIClient {
         else { throw TranscriptionError.network("transcript_unparseable") }
         // A 5-minute file completes in about 9 s at p50 (AssemblyAI's planning figure).
         var wait: UInt64 = 700_000_000
+        var offline = false
+        // Polls that ran out of time offline are offline, so the recording queues for the reconnect.
+        func timeLeft() throws -> TimeInterval {
+            do { return try remaining() } catch { throw offline ? TranscriptionError.offline : error }
+        }
         while true {
+            // No poll could follow a sleep that long: give up now, as offline
+            // or as a timeout, rather than idle to the deadline.
+            let left = try timeLeft()
+            if Double(wait) / 1_000_000_000 + 0.25 >= left { throw offline ? TranscriptionError.offline : TranscriptionError.timeout }
             try await Task.sleep(nanoseconds: wait)
             wait = min(wait * 3 / 2, 3_000_000_000)
             let data: Data
-            let pollDeadline = min(30, try remaining())
+            let pollDeadline = min(30, try timeLeft())
             do {
                 data = try await send(url: AssemblyAIConfig.api.appendingPathComponent("v2/transcript/\(id)"), body: nil,
                                       deadline: pollDeadline, modelLabel: model, stage: stage)
-            } catch TranscriptionError.network, TranscriptionError.timeout, TranscriptionError.offline,
-                    TranscriptionError.rateLimitedTransient {
-                // The job is uploaded and billed; a failed poll asks again
-                // rather than sending the audio a second time.
+                offline = false
+            } catch TranscriptionError.rateLimitedTransient(let retryAfter) {
+                // The job is uploaded and billed; a throttled poll waits as
+                // long as the server asks (up to 30 s) and asks again.
+                if let retryAfter { wait = max(wait, UInt64(min(retryAfter, 30) * 1_000_000_000)) }
+                offline = false
+                continue
+            } catch TranscriptionError.offline {
+                offline = true
+                continue
+            } catch TranscriptionError.network, TranscriptionError.timeout {
+                // A failed poll asks again rather than sending the audio a second time.
+                offline = false
                 continue
             }
             guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { continue }
@@ -342,7 +360,9 @@ public actor AssemblyAIClient {
 
     /// Races an operation against a hard wall-clock deadline.
     static func withDeadline<T: Sendable>(seconds: TimeInterval, _ operation: @escaping @Sendable () async throws -> T) async throws -> T {
-        try await withThrowingTaskGroup(of: T.self) { group in
+        // A deadline already gone (or NaN) would trap converting to nanoseconds.
+        guard seconds > 0 else { throw DeadlineExceeded() }
+        return try await withThrowingTaskGroup(of: T.self) { group in
             group.addTask { try await operation() }
             group.addTask {
                 try await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))

@@ -70,11 +70,14 @@ final class DictationCoordinatorTests: XCTestCase {
     /// Hands out a different text and delay for each dictation, in order.
     final class SequencedTranscription: TranscriptionServicing, @unchecked Sendable {
         private var replies: [(text: String, delayNanos: UInt64)]
+        /// The pill note a reply's result carries, by its text.
+        var notices: [String: String] = [:]
         init(_ replies: [(text: String, delayNanos: UInt64)]) { self.replies = replies }
         func transcribe(audioURL: URL, durationSeconds: Double, context: DictationContext) async throws -> TranscriptionResult {
             let reply = await MainActor.run { replies.removeFirst() }
             try? await Task.sleep(nanoseconds: reply.delayNanos)
-            return TranscriptionResult(rawTranscript: reply.text, cleanedTranscript: reply.text, modelID: "test")
+            return TranscriptionResult(rawTranscript: reply.text, cleanedTranscript: reply.text, modelID: "test",
+                                       notice: notices[reply.text])
         }
     }
 
@@ -502,9 +505,19 @@ final class DictationCoordinatorTests: XCTestCase {
     /// one at once, and the texts land in the order they were spoken even
     /// when the second is written first.
     func testNewDictationWhileTheLastIsTranscribingInsertsInSpokenOrder() async {
-        let c = makeCoordinator(transcription: SequencedTranscription([
-            ("first", 300_000_000), ("second", 10_000_000),
-        ]))
+        await assertDetachedFirstJob(notice: nil, reports: .outcome(.inserted))
+    }
+
+    /// A background job's writer note (no gateway balance) still reaches the app.
+    func testDetachedDictationKeepsItsWriterNote() async {
+        await assertDetachedFirstJob(notice: "Inserted as heard: offline",
+                                     reports: .insertedWithNotice("Inserted as heard: offline"))
+    }
+
+    private func assertDetachedFirstJob(notice: String?, reports expected: DictationCoordinator.DetachedResult) async {
+        let transcription = SequencedTranscription([("first", 300_000_000), ("second", 10_000_000)])
+        transcription.notices["first"] = notice
+        let c = makeCoordinator(transcription: transcription)
         var detachedResults: [DictationCoordinator.DetachedResult] = []
         c.onDetachedResult = { detachedResults.append($0) }
         c.handle(.begin)
@@ -522,7 +535,7 @@ final class DictationCoordinatorTests: XCTestCase {
 
         XCTAssertEqual(c.state, .done(.inserted))
         XCTAssertEqual(inserter.insertedTexts, ["first", "second"])
-        XCTAssertEqual(detachedResults, [.outcome(.inserted)])
+        XCTAssertEqual(detachedResults, [expected])
         XCTAssertFalse(c.hasBackgroundJobs)
     }
 

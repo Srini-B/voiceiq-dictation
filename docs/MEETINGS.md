@@ -51,7 +51,7 @@ in Settings as Speaker Separation) runs over the whole system track and
 decides which far-side person said each word (`MeetingTranscriber.splitFarSide`,
 cached as `transcribe-far-speakers-v1.json`). AssemblyAI's own far-side labels are
 kept only when the model is unavailable or heard nobody. In an outside test
-Gemini, the provider before 0.7.18, got the speaker count right in 16 of 36
+Gemini, the provider before 0.7.19, got the speaker count right in 16 of 36
 runs; the model got 31 of 33 in ours
 ([activities/2026-11-06-offline-speaker-diarizer.md](../activities/2026-11-06-offline-speaker-diarizer.md)).
 When the model is missing, the first meeting that needs it downloads it

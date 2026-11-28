@@ -936,6 +936,7 @@ final class DictationController {
     private func reportDetached(_ result: DictationCoordinator.DetachedResult) {
         switch result {
         case .outcome(.inserted), .outcome(.silent): break
+        case .insertedWithNotice(let notice): showBackgroundNotice(notice, for: 4.0, sound: .success)
         case .outcome(.copiedToClipboard) where !KeystrokeAccess.mayPost:
             showBackgroundNotice(KeystrokeAccess.refusedNotice, for: 6.0, sound: .error)
         case .outcome(.copiedToClipboard): showBackgroundNotice("Copied — press ⌘V to paste", for: 4.0, sound: .success)
@@ -991,10 +992,14 @@ final class DictationController {
     private func flushPendingNotice() {
         guard let notice = pendingNotice else { return }
         pendingNotice = nil
+        // A background dictation's writer note that the foreground one just showed.
+        if notice.message == coordinator.insertedNotice { return }
         // Give the terminal pill (success check / error chip) its moment first.
         Task { @MainActor [weak self] in
             try? await Task.sleep(nanoseconds: 1_800_000_000)
             guard let self else { return }
+            // A later dictation may have shown the same note in the meantime.
+            if notice.message == self.coordinator.insertedNotice { return }
             switch self.coordinator.state {
             case .idle, .done, .cancelled, .failed:
                 self.showNotice(notice.message, for: notice.seconds, sound: notice.sound)
