@@ -38,6 +38,9 @@ public final class ScreenNameSampler: @unchecked Sendable {
     /// browser. Nil reads any call app.
     private let joining: Set<String>?
     private var snapshots = false
+    /// A chat site's page may be the call's window: the call was detected on
+    /// one, or not detected at all (Fable on #146).
+    private let chats: Bool
     private let samples = OSAllocatedUnfairLock(initialState: [ScreenNameSample]())
     private var task: Task<Void, Never>?
 
@@ -47,8 +50,9 @@ public final class ScreenNameSampler: @unchecked Sendable {
     /// another call app left open is not read; with none of them, nothing is.
     public init(source: CallSource?, joining: Set<String>? = nil) {
         switch source {
-        case let .app(bundleID, _), let .browser(bundleID, _): self.bundleID = bundleID
-        case nil: bundleID = nil
+        case let .app(bundleID, _): self.bundleID = bundleID; chats = false
+        case let .browser(bundleID, host): self.bundleID = bundleID; chats = CallApps.isChat(host: host)
+        case nil: bundleID = nil; chats = true
         }
         self.joining = joining
     }
@@ -81,7 +85,7 @@ public final class ScreenNameSampler: @unchecked Sendable {
         guard let bundleID else { return false }
         // A call app relaunched mid-call is a new process (Codex on #146).
         if let held = pid, NSRunningApplication(processIdentifier: held)?.isTerminated != false { pid = nil; pidHoldsRoom = false }
-        if !pidHoldsRoom, accessibility, let found = Self.callPID(bundleID: bundleID) {
+        if !pidHoldsRoom, accessibility, let found = Self.callPID(bundleID: bundleID, chats: chats) {
             if pid != found.pid { switchOffTries = 0 }
             pid = found.pid; pidHoldsRoom = found.joined
             AccessibilityWaker.wakeIfNeeded(bundleID: bundleID, pid: found.pid)
@@ -97,10 +101,10 @@ public final class ScreenNameSampler: @unchecked Sendable {
     /// WhatsApp chat) counts only when no instance shows a joined room, since
     /// not every site's room address is known (Codex on #146).
     /// `joined`: the pick is final, the only instance or one showing a joined room.
-    static func callPID(bundleID: String) -> (pid: pid_t, joined: Bool)? {
+    static func callPID(bundleID: String, chats: Bool) -> (pid: pid_t, joined: Bool)? {
         let pids = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).map(\.processIdentifier)
         guard pids.count > 1, CallApps.browsers.contains(bundleID) else { return pids.first.map { ($0, true) } }
-        let windows = Dictionary(pids.map { ($0, CallWindowText.callWindowFrames(pid: $0)) }, uniquingKeysWith: { first, _ in first })
+        let windows = Dictionary(pids.map { ($0, CallWindowText.callWindowFrames(pid: $0, chats: chats)) }, uniquingKeysWith: { first, _ in first })
         let joined = Set(pids.filter { windows[$0]?.joined.isEmpty == false })
         let rooms = joined.isEmpty ? Set(pids.filter { windows[$0]?.pages.isEmpty == false }) : joined
         guard !rooms.isEmpty else { return nil }
@@ -172,7 +176,7 @@ public final class ScreenNameSampler: @unchecked Sendable {
                         // The snapshot first, so samples stay in time order.
                         if looked { record(lines, at: time); looked = false }
                         pulsedPID.withLock { $0 = pid }; switchOffTries = 0
-                        let page = await Self.whileWebTreeOpen(pid) { CallWindowText.lines(pid: pid, browser: true) }
+                        let page = await Self.whileWebTreeOpen(pid) { CallWindowText.lines(pid: pid, browser: true, chats: chats) }
                         // Its own sample, stamped when it was read (before a
                         // switch-off that can wait 2 s), about 3 s after the
                         // snapshot: `match` pairs by time (agy on #146).
@@ -186,7 +190,7 @@ public final class ScreenNameSampler: @unchecked Sendable {
                     // time (Codex on #146). A name only the page shows (not a
                     // tile) therefore has a lower share when snapshots also run.
                 } else {
-                    lines += CallWindowText.lines(pid: pid, browser: browser)
+                    lines += CallWindowText.lines(pid: pid, browser: browser, chats: chats)
                     looked = true
                 }
             }
@@ -260,8 +264,8 @@ public final class ScreenNameSampler: @unchecked Sendable {
     }
 
     /// Switches off a pulse a crashed or quit app left on, if that browser
-    /// still runs. Called at launch and when a sampler starts; off the main
-    /// thread, since Chrome can take up to the timeout to answer.
+    /// still runs. Called at launch, off the main thread since Chrome can take
+    /// up to the 1 s timeout to answer, and when a sampler starts.
     public static func endLeftoverPulse() {
         let pid = pid_t(UserDefaults.standard.integer(forKey: pulsedKey))
         guard pid > 0 else { return }
@@ -298,7 +302,7 @@ public final class ScreenNameSampler: @unchecked Sendable {
         // without Accessibility only a title naming the site can. A joined
         // room wins over the same app's call-site pages, which include chats
         // (Codex on #146).
-        let known: (joined: [CallWindow], pages: [CallWindow]) = pid.map { CallWindowText.callWindowFrames(pid: $0) } ?? (joined: [], pages: [])
+        let known: (joined: [CallWindow], pages: [CallWindow]) = pid.map { CallWindowText.callWindowFrames(pid: $0, chats: chats) } ?? (joined: [], pages: [])
         // Same frame within 2 pt; of two windows with one frame (both zoomed),
         // the one whose title starts the AX title.
         let matching = { (known: [CallWindow]) -> [SCWindow] in

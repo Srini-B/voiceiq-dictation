@@ -451,8 +451,15 @@ meeting never raises a permission prompt (`CGPreflightScreenCaptureAccess`,
    that browser instance animates its moves and resizes, and Chrome builds
    the tree for all its tabs. When something already keeps the setting on
    (VoiceOver, Voice Control, a window manager), the tree is read on every
-   tick and the setting is never touched. If VoiceiQ quits inside a pulse,
-   the next meeting's sampler switches it off. Either permission is enough for sampling to run.
+   tick and the setting is never touched, and a read of it that fails or
+   times out skips the pulse. If VoiceiQ quits or crashes inside a pulse, it
+   switches the setting off at its next launch (and the next meeting's
+   sampler does too). Either permission is enough for sampling to run.
+   A chat site's page (WhatsApp, Telegram, Messenger, Discord) is read as
+   the call only when the call was detected on a chat site, or not at all,
+   and no other call page is open: Accessibility lists only the windows on
+   the Space in view, so a call full screen in its own Space would otherwise
+   lose to a chat window beside the user.
    Zoom 7.2 exposes each video tile as an `AXTabGroup` described "Name,
    Computer audio unmuted", and the participants list as `AXStaticText`
    rows such as "Name (me)".
@@ -461,6 +468,16 @@ meeting never raises a permission prompt (`CGPreflightScreenCaptureAccess`,
    (`ScreenSpeakerNames.owner(in:)`).
 7. After transcription, `ScreenSpeakerNames.match(samples:transcript:)` runs
    (also on Retry, from the saved file):
+   - A lone word on screen ("Nihal") joins the names when it is in at least
+     a quarter of the samples. The first word of a full name seen twice is
+     that person and is skipped. A word at most two letters short of such a
+     first word ("May" of "Maya") is taken as a cut tag and dropped. A
+     shorter start ("Dan" beside "Daniel") stays in `seen` but is never
+     given a voice.
+   - With one far-side voice and one other name always on screen, that name
+     is the voice's, unless a word was dropped or kept as above and the
+     participant count doesn't say one other person: "Dan" may be beside
+     "Dana Smith".
    - Spellings within 0.8 Levenshtein similarity fold into the most frequent one.
    - For each speaker other than "you", it counts snapshots taken while only
      that speaker talked (1 s lag for the tile switch).

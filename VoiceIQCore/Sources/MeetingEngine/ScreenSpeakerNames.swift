@@ -219,9 +219,10 @@ public enum ScreenSpeakerNames {
         let owners = Set(marked.keys)
         let others = total.filter { $0.value * 2 >= samples.count && !owners.contains($0.key) }.map(\.key)
         // A dropped cut tag may have been a second person ("Dan" beside "Dana
-        // Smith"), unless the participant count says there is only one.
+        // Smith"), and a kept partial one is; unless the participant count
+        // says there is only one.
         if far.count == 1, let speaker = far.first, speakers[speaker] == nil, others.count == 1, (remote ?? 1) <= 1,
-           !cut || remote == 1,
+           (!cut && partial.isEmpty) || remote == 1,
            !used.contains(others[0]) {
             speakers[speaker] = .init(name: others[0], seen: total[others[0]] ?? 0, of: samples.count)
         }

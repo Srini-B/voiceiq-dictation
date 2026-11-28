@@ -66,8 +66,14 @@ enum CallApps {
         "Meet - ", "| Microsoft Teams", "Zoom Meeting", "Huddle",
     ]
     /// Call sites that are mostly chats: a page of theirs is the call only
-    /// when no other call page is open (Fable on #146).
+    /// when the call was detected on a chat site, or not at all, and no other
+    /// call page is open (Fable on #146).
     static let chatPages = ["web.whatsapp.com", "web.telegram.org", "messenger.com", "discord.com/channels"]
+
+    /// The call detected is on a chat site ("web.whatsapp.com").
+    static func isChat(host: String) -> Bool {
+        chatPages.contains { host.lowercased().hasSuffix(String($0.prefix { $0 != "/" })) }
+    }
     /// Addresses of a joined call room, where sound alone is a call: an owner
     /// who joined muted holds no mic. Not a site's home or post-call page
     /// ("meet.google.com/" with no code, "meet.jit.si/static/…"), not Zoom's

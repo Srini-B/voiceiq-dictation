@@ -31,7 +31,8 @@ enum CallWindowText {
     /// `browser`: only the window whose tab is the meeting is read. Every
     /// window was read before; on 2026-11-23 a GitHub tab's names reached a
     /// Meet call's notes.
-    static func lines(pid: pid_t, browser: Bool = false) -> [String] {
+    /// `chats`: a chat site's page may be the call (`ScreenNameSampler.chats`).
+    static func lines(pid: pid_t, browser: Bool = false, chats: Bool = true) -> [String] {
         guard AXIsProcessTrusted() else { return [] }
         let app = AXUIElementCreateApplication(pid)
         AXUIElementSetMessagingTimeout(app, 0.25)
@@ -41,7 +42,7 @@ enum CallWindowText {
             // A joined room wins over the browser's other call-site pages, and
             // those over chat sites (Codex and Fable on #146).
             let rooms = windows.filter(isJoinedRoom), calls = windows.filter { !isChat($0) }
-            windows = !rooms.isEmpty ? rooms : !calls.isEmpty ? calls : windows
+            windows = !rooms.isEmpty ? rooms : !calls.isEmpty || !chats ? calls : windows
         }
         let deadline = Date().addingTimeInterval(timeBudget)
         var budget = elementBudget
@@ -73,8 +74,10 @@ enum CallWindowText {
     /// Frames, in global screen points, of the app's windows whose front tab
     /// is a call: `joined`, a joined call room (`CallApps.isCallRoom`);
     /// `pages`, any call site's page, which includes a Teams chat (Codex on
-    /// #146); a chat site's (WhatsApp, Discord) only when no other is open
-    /// (Fable on #146). A browser's window title is the page's own, so its
+    /// #146); a chat site's (WhatsApp, Discord) only when the call is on a
+    /// chat site or unknown, and no other call page is open: Accessibility
+    /// lists only the Space in view, so a call full screen in its own Space
+    /// leaves the chat beside the user (Fable on #146). A browser's window title is the page's own, so its
     /// address (AXDocument) says which. Frames, not titles, pick the
     /// ScreenCaptureKit window: MEASURED 2026-11-28, Chrome on vdo.ninja,
     /// Accessibility titles the window "Owner – Audio playing - Google
@@ -82,7 +85,7 @@ enum CallWindowText {
     /// Each comes with its AX title, which breaks a tie between two windows
     /// with one frame (both zoomed on one display): ScreenCaptureKit's title
     /// is the start of it.
-    static func callWindowFrames(pid: pid_t) -> (joined: [CallWindow], pages: [CallWindow]) {
+    static func callWindowFrames(pid: pid_t, chats allowChats: Bool = true) -> (joined: [CallWindow], pages: [CallWindow]) {
         guard AXIsProcessTrusted() else { return ([], []) }
         let app = AXUIElementCreateApplication(pid)
         AXUIElementSetMessagingTimeout(app, 0.25)
@@ -93,7 +96,7 @@ enum CallWindowText {
             if isChat(window) { chats.append(found) } else { calls.append(found) }
             if isJoinedRoom(window) { joined.append(found) }
         }
-        return (joined, calls.isEmpty ? chats : calls)
+        return (joined, calls.isEmpty && allowChats ? chats : calls)
     }
 
     private static func frame(_ window: AXUIElement) -> CGRect? {
