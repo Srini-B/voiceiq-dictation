@@ -251,12 +251,14 @@ public enum ScreenSpeakerNames {
     /// which can find a self-introduction ("I'm Rahul, covering for Sara").
     public static func byAddress(_ screen: ScreenNames?, transcript: [TranscriptSegment], invited: [String]) -> ScreenNames? {
         let known = (screen?.speakers ?? [:]).values.map(\.name)
-        // Known names stay candidates, so "Sara" with two Saras invited is
-        // nobody's even when one is named; the invite's spelling comes first,
-        // and a gallery tile repeating it is the same person.
+        // Known names and every invitee stay candidates, so "Sara" with Sara
+        // and Sara Smith invited, or with one Sara already named, is nobody's.
+        // Only a screen name that is one of those people's is dropped.
         var names: [String] = []
-        for name in known + invited + (screen?.seen ?? []).filter({ !isUIText($0) })
-        where !names.contains(where: { sameName($0, name) }) { names.append(name) }
+        for name in known + invited where !names.contains(where: { $0.lowercased() == name.lowercased() }) { names.append(name) }
+        let people = names
+        for name in (screen?.seen ?? []).filter({ !isUIText($0) })
+        where !people.contains(where: { sameName($0, name) }) && !names.contains(name) { names.append(name) }
         var votes: [String: Set<String>] = [:]
         for (index, turn) in transcript.enumerated() {
             guard let name = addressed(in: turn.text, among: names), !known.contains(where: { sameName($0, name) }),
