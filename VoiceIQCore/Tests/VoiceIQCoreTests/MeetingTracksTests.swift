@@ -143,6 +143,11 @@ final class MeetingTracksTests: XCTestCase {
         XCTAssertEqual(kept.map(\.speaker), words.map(\.speaker))
         XCTAssertTrue(MeetingTranscriber.farSideFailed(folder: root))
 
+        #if os(macOS)
+        // On the Mac the helper reports the failure as text, whatever wraps Core ML's error.
+        XCTAssertTrue(FarSideSpeakers.failedPrediction(LocalMeetingHelper.Failure.helper("processingFailed(\"segmentation\")")))
+        XCTAssertFalse(FarSideSpeakers.failedPrediction(LocalMeetingHelper.Failure.timedOut))
+        #endif
         let other = Calls()
         _ = try await transcriber(failures: 1, error: CocoaError(.fileReadCorruptFile), calls: other).splitFarSide(words, audio: audio, folder: root)
         XCTAssertEqual(other.cpuOnly, [false])

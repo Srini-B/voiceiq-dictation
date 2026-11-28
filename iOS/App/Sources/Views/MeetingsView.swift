@@ -263,6 +263,7 @@ private struct MeetingDetail: View {
     @State private var gone = false
     /// The large title has scrolled under the bar, which then shows it instead.
     @State private var titleHidden = false
+    @State private var confirmingSplit = false
     /// The page title's bottom in the scroll content.
     @State private var titleBottom: CGFloat = .infinity
     @State private var meta: MeetingMeta
@@ -315,7 +316,15 @@ private struct MeetingDetail: View {
                         Card {
                             Text("The speaker model failed on this note, so some people may be shown as one speaker.")
                                 .font(Theme.Fonts.body()).foregroundStyle(Theme.Colors.muted)
-                            Button("Split speakers again") { model.meetings.retry(id: meta.id) }.buttonStyle(.primaryPill)
+                            // A synced note has no recording to split (Codex on #133).
+                            Button("Split speakers again") { confirmingSplit = true }.buttonStyle(.primaryPill)
+                                .disabled(!audio.isAvailable)
+                                .alert("Split speakers again?", isPresented: $confirmingSplit) {
+                                    Button("Split") { model.meetings.retry(id: meta.id) }
+                                    Button("Cancel", role: .cancel) {}
+                                } message: {
+                                    Text("The notes are written again, and edits to the transcript are replaced.")
+                                }
                         }
                     }
                     if let notes { notesContent(notes) }

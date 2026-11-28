@@ -27,8 +27,13 @@ enum FarSideSpeakers {
     }
 
     /// Core ML's failed prediction, as thrown in this process or as the
-    /// helper's message about it.
+    /// helper's message about it. On the Mac any model failure the helper
+    /// reports counts: each try is a fresh helper, and its message may not
+    /// carry Core ML's words. A helper that ran out of time does not.
     static func failedPrediction(_ error: Error) -> Bool {
+        #if os(macOS)
+        if case LocalMeetingHelper.Failure.helper = error { return true }
+        #endif
         let text = "\(String(describing: error)) \(error.localizedDescription)"
         return (error as NSError).domain == "com.apple.CoreML" || text.contains("Unable to compute the") || text.contains("prediction using ML Program")
     }

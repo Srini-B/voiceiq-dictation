@@ -445,13 +445,16 @@ struct MeetingsPane: View {
 
     /// The speaker model failed, so two people on the call may share a voice.
     private func unsplitWarning(_ meeting: MeetingMeta) -> some View {
-        HStack(spacing: VoiceIQUI.Spacing.s) {
+        let audio = RecordedAudio.meeting(folder: store.folder(for: meeting.id), name: title(meeting))
+        return HStack(spacing: VoiceIQUI.Spacing.s) {
             Label("The speaker model failed on this meeting, so some people on the call may be shown as one speaker.",
                   systemImage: "person.2.slash")
                 .font(VoiceIQUI.TypeScale.body())
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .fixedSize(horizontal: false, vertical: true)
             Button("Split Speakers Again") { engine.retry(id: meeting.id) }
+                // A meeting synced from the iPhone has no recording here (Codex on #133).
+                .disabled(!audio.isAvailable)
                 .help("Tells the voices apart again and rewrites the notes. Edits to the transcript are replaced.")
         }
         .padding(VoiceIQUI.Spacing.m)

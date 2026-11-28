@@ -70,7 +70,10 @@ private actor HelperLifetime {
                 let result = try await LocalMeetingJob.run(request)
                 return .meeting(result)
             } catch {
-                return .meetingFailed(error.localizedDescription)
+                // The wrapped error too: FluidAudio's own error can hide Core ML's
+                // message, which the app retries on (`FarSideSpeakers.failedPrediction`).
+                let wrapped = String(describing: error)
+                return .meetingFailed(wrapped == error.localizedDescription ? wrapped : "\(error.localizedDescription) (\(wrapped))")
             }
         }
     }
