@@ -337,8 +337,10 @@ private struct SwitchKeyboardPage: View {
                 }
             }
             // With the keyboard up the real globe key is on screen, so the
-            // drawing steps aside and the checks and field fit above it.
-            if !focused {
+            // drawing steps aside and the checks and field fit above it. Once
+            // the checks tick it stays away: focus blinks while iOS swaps
+            // keyboards, which would flash it back under the keyboard.
+            if !focused && !status.fullAccess {
                 GlobeSwitchDemo().transition(.opacity)
             }
             TextField("Tap here, then hold the globe key", text: $text, axis: .vertical)
