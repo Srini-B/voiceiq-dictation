@@ -179,6 +179,10 @@ public enum DraftShown: Equatable, Sendable {
     /// It went in, or may have, but can't be found again; it stays, and the
     /// written text is not inserted a second time.
     case lost
+    /// Pasted with ⌘V into a field that still reads exactly as before: the
+    /// paste may be there (a field that clears itself once it passes text
+    /// on) or not, so the written text is not inserted beside it either.
+    case unseen
 }
 
 public enum InsertionOutcome: Equatable, Sendable {

@@ -203,7 +203,7 @@ public final class FieldDraft: TextDraft {
                 // after a ⌘V the written text never goes in beside it.
                 guard insert.byAccessibility else {
                     Log.insertion.info("draft: the field never showed the paste — it may be there; no more drafts in this app")
-                    return .lost
+                    return .unseen
                 }
                 Log.insertion.info("draft: the field never showed the write — no more drafts in this app")
                 return .notInserted

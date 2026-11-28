@@ -294,7 +294,7 @@ plain text, as heard. Where nothing is marked the call changes nothing. A
 session in an app the keyboard cannot name gets one `unmarkText` too, since
 it may be that app (a new keyboard process can name none), and the place is
 kept until that app is named. This is the one call the keyboard makes for a
-draft outside `verifiedHosts`.
+draft outside `Delivery.draftHosts`.
 
 The keys plan an edit from the text before the cursor before they make it:
 autocorrect counts its Deletes from the word it read, and a word-wise move
@@ -307,7 +307,11 @@ would have corrected the word before the draft and deleted into both.
 
 After any `unmarkText` the keyboard types no result and marks no draft for
 0.05 s (`KeyboardModel.unmarkQuiet`): two polls can run in one turn of the
-run loop. A key tapped in that same turn is not covered.
+run loop. A key, Delete, cursor move, Paste last or Undo tapped in the turn
+of a `setMarkedText` or `unmarkText` runs on the next turn instead
+(`KeyboardModel.markedTextThisTurn`, `EditController.runsNow`): the host
+would apply it first, so it would land before a new draft, which then went
+in twice, or replace a draft just made plain.
 
 The keyboard does not show a spinner in the field before the draft
 lands. It would be marked text too, and a host commits marked text as

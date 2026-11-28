@@ -152,6 +152,15 @@ public struct Delivery: Codable, Equatable, Sendable, Identifiable {
     public static let draftWindow: TimeInterval = 0.45
     public static let draftWait: TimeInterval = 0.6
 
+    /// Apps whose text fields were seen to take a keyboard's draft and its
+    /// swap (`KeyboardDraft`) with earlier text, typed text and back-to-back
+    /// dictations intact. A keyboard types drafts only in these, and the app
+    /// offers one, and waits `draftWait` for it, only for a destination in
+    /// one of them. In any other app the written text goes in alone: one
+    /// that makes marked text plain on its own would show every dictation
+    /// twice.
+    public static let draftHosts: Set<String> = ["com.apple.MobileSMS"]
+
     /// Whether a keyboard may still type this draft.
     public func isFreshDraft(now: Date = Date()) -> Bool {
         let age = now.timeIntervalSince(createdAt)

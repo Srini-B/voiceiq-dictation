@@ -41,6 +41,7 @@ final class KeyboardViewController: UIInputViewController {
         editor.controller = self
         editor.onExternalEdit = { [weak typing] in typing?.textDidChange() }
         editor.willEdit = { [weak model] in model?.userWillEdit() }
+        editor.markedTextThisTurn = { [weak model] in model?.markedTextThisTurn ?? false }
         typing.controller = self
         typing.editor = editor
         typing.textBeforeWithDraft = { [weak model] in model?.textBeforeWithDraft }

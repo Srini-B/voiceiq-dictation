@@ -79,9 +79,9 @@ final class ProxyField: NSObject, UITextDocumentProxy {
 }
 
 final class FieldController: UIInputViewController {
-    let field: ProxyField
+    let field: UITextDocumentProxy
 
-    init(_ field: ProxyField) {
+    init(_ field: UITextDocumentProxy) {
         self.field = field
         super.init(nibName: nil, bundle: nil)
     }

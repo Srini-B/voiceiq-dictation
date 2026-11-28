@@ -178,6 +178,7 @@ final class KeyboardModel: ObservableObject {
         if host != nil { Self.lastDraftPlace = nil }
         proxy.unmarkText()
         lastUnmark = Date()
+        noteMarkedTextCall()
         KeyboardLog.note("[\(instanceTag)] new session in \(host ?? "an unresolved host"): unmarkText sent, in case the draft typed in \(left.host) is still marked")
         return true
     }
@@ -188,6 +189,18 @@ final class KeyboardModel: ObservableObject {
     /// marked text in that turn would reach the host first.
     private var lastUnmark = Date.distantPast
     private static let unmarkQuiet: TimeInterval = 0.05
+
+    /// True from a call of `setMarkedText` or `unmarkText` until the main
+    /// queue runs again, which is the next run loop turn. The keys wait for
+    /// it (`EditController.runsNow`): the host would apply a key of this turn
+    /// before the marked-text call.
+    private(set) var markedTextThisTurn = false
+
+    private func noteMarkedTextCall() {
+        guard !markedTextThisTurn else { return }
+        markedTextThisTurn = true
+        DispatchQueue.main.async { [weak self] in self?.markedTextThisTurn = false }
+    }
 
     /// The user is about to edit the field with this keyboard, in this same
     /// turn. The draft is made plain text first (`KeyboardDraft.Commit`), so
@@ -216,7 +229,9 @@ final class KeyboardModel: ObservableObject {
         guard let held = draft else { return }
         draft = nil
         lastUnmark = Date()
-        if documentID == held.documentID, let proxy = controller?.textDocumentProxy { held.keep(proxy, commit) }
+        if documentID == held.documentID, let proxy = controller?.textDocumentProxy, held.keep(proxy, commit) {
+            noteMarkedTextCall()
+        }
         KeyboardLog.note("[\(instanceTag)] draft stays as heard: \(reason)")
     }
 
@@ -502,7 +517,7 @@ final class KeyboardModel: ObservableObject {
     /// Types the transcript as an underlined draft while the writing model
     /// rewrites it (`SessionSnapshot.draft`), only in the input session Stop
     /// was tapped in, in a prose field of an app drafts were tried in
-    /// (`KeyboardDraft.verifiedHosts`), and says so
+    /// (`Delivery.draftHosts`), and says so
     /// (`SharedStore.typedDraftID`). The written text then replaces it
     /// (`finishDraft`). Anywhere else, and over a selection, the written text
     /// comes alone as before.
@@ -514,7 +529,7 @@ final class KeyboardModel: ObservableObject {
               offered.route(in: currentField(), handledID: nil, firstReturn: false) == .type(.sameSession)
         else { return }
         resolveHostIfMissing(now: true)
-        guard fieldTakesProse, let host = session?.host, KeyboardDraft.verifiedHosts.contains(host),
+        guard fieldTakesProse, let host = session?.host, Delivery.draftHosts.contains(host),
               let typed = KeyboardDraft.type(offered.text, id: offered.id, documentID: documentID, into: proxy,
                                              fit: Self.fitted) else {
             skippedDraftID = offered.id
@@ -522,6 +537,7 @@ final class KeyboardModel: ObservableObject {
             return
         }
         draft = typed
+        noteMarkedTextCall()
         Self.lastDraftPlace = (host, documentID)
         // Undo replays edits before the cursor, which the draft has moved.
         editor?.resetUndo()
@@ -559,6 +575,7 @@ final class KeyboardModel: ObservableObject {
             KeyboardLog.note("[\(instanceTag)] written text replaced its draft in \(Self.describe(currentField()))")
         case .kept:
             lastUnmark = Date()
+            noteMarkedTextCall()
             KeyboardLog.note("[\(instanceTag)] written text not typed: the field changed around its draft, which stays as heard")
         }
     }

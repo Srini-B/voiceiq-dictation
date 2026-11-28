@@ -111,6 +111,19 @@ final class DraftInsertTests: XCTestCase {
         XCTAssertEqual(c.lastResult, "Written words.")
     }
 
+    /// A ⌘V the field never showed: the written text does not go in beside
+    /// a paste that may be there, and the note does not claim the transcript
+    /// is in the field.
+    func testAnUnseenPasteGetsNoWrittenTextAndSaysItWasNotSeen() async {
+        let draft = FakeDraft(shows: .unseen)
+        let inserter = DraftingInserter(draft: draft)
+        let c = await dictate(into: inserter)
+        XCTAssertEqual(inserter.inserted, [])
+        XCTAssertFalse(draft.events.contains { $0.hasPrefix("replace") })
+        XCTAssertEqual(c.insertedNotice, DictationCoordinator.unseenDraftNotice)
+        XCTAssertEqual(c.lastResult, "Written words.")
+    }
+
     /// The user edited the draft: it stays, with a note, and Paste last
     /// holds the written text.
     func testAnEditedDraftStaysWithANote() async {

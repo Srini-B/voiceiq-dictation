@@ -47,21 +47,22 @@ final class KeyboardInserter: TextInserting {
         return .inserted
     }
 
-    /// On. The keyboard types a draft only in apps the swap was tried in
-    /// (`KeyboardDraft.verifiedHosts`); in every other app it says nothing
-    /// and the written text is typed once, as before drafts. The swap is one
-    /// insert over the marked draft (`KeyboardDraft`), tried in the iOS 27
-    /// Simulator, not yet on a device. The first swap deleted the draft key
-    /// by key and, in Messages, took the earlier dictation and typed text
-    /// with it (2026-11-28).
+    /// On. The swap is one insert over the marked draft (`KeyboardDraft`),
+    /// tried in the iOS 27 Simulator, not yet on a device. The first swap
+    /// deleted the draft key by key and, in Messages, took the earlier
+    /// dictation and typed text with it (2026-11-28).
     static let offersDrafts = true
 
-    /// A draft when the dictation goes back to a keyboard's input session.
-    /// Whether a keyboard is still there to type it is the keyboard's call
+    /// A draft when the dictation goes back to a keyboard's input session in
+    /// an app the swap was tried in (`Delivery.draftHosts`). Elsewhere no
+    /// draft is offered, so the written text is not held back by the wait
+    /// for one, and is typed once, as before drafts. Whether a keyboard is
+    /// still there to type it is the keyboard's call
     /// (`KeyboardModel.typeDraftIfNeeded`); when none does, the written text
     /// is typed as a plain result, as before.
     func draft(context: DictationContext) async -> TextDraft? {
-        guard Self.offersDrafts, destination?()?.documentID != nil else { return nil }
+        guard Self.offersDrafts, let destination = destination?(), destination.documentID != nil,
+              let host = destination.hostBundleID, Delivery.draftHosts.contains(host) else { return nil }
         return KeyboardTextDraft(inserter: self)
     }
 }

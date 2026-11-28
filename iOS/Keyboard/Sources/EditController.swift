@@ -59,6 +59,9 @@ final class EditController: ObservableObject {
     /// (`KeyboardDraft`) becomes plain text first and the edit cannot
     /// replace it.
     var willEdit: (() -> Void)?
+    /// Whether this run loop turn has a marked-text call in it
+    /// (`KeyboardModel.markedTextThisTurn`).
+    var markedTextThisTurn: (() -> Bool)?
     private var proxy: UITextDocumentProxy? { controller?.textDocumentProxy }
     private var lastKind: Kind?
     /// The text around the cursor after the keyboard's last edit, to tell
@@ -120,10 +123,23 @@ final class EditController: ObservableObject {
 
     // MARK: - Keys
 
+    /// Every edit starts here. The host applies a turn's inserts, Deletes
+    /// and cursor moves before its marked-text calls, so an edit in the turn
+    /// a draft was marked would land before the draft, and one in the turn a
+    /// draft was made plain with `unmarkText` would replace it. In such a
+    /// turn `edit` runs again on the next one and this returns false;
+    /// otherwise a held draft is made plain first (`willEdit`), which may
+    /// itself be such a call.
+    func runsNow(_ edit: @escaping @MainActor @Sendable () -> Void) -> Bool {
+        if markedTextThisTurn?() != true { willEdit?() }
+        guard markedTextThisTurn?() == true else { return true }
+        DispatchQueue.main.async { edit() }
+        return false
+    }
+
     /// Types `text` over the selection, if any, as one undo step of `kind`.
     func type(_ text: String, as kind: Kind = .other) {
-        guard !text.isEmpty else { return }
-        willEdit?()
+        guard !text.isEmpty, runsNow({ [weak self] in self?.type(text, as: kind) }) else { return }
         checkpoint(kind)
         insert(text)
         refresh()
@@ -131,7 +147,7 @@ final class EditController: ObservableObject {
     }
 
     func deleteBackward() {
-        willEdit?()
+        guard runsNow({ [weak self] in self?.deleteBackward() }) else { return }
         checkpoint(.deleting)
         deleteBack()
         refresh()
@@ -140,8 +156,7 @@ final class EditController: ObservableObject {
 
     /// Insert driven by Hex's `FullKeyboardEngine` (already owns keyboard state).
     func typeFromKeyboard(_ text: String) {
-        guard !text.isEmpty else { return }
-        willEdit?()
+        guard !text.isEmpty, runsNow({ [weak self] in self?.typeFromKeyboard(text) }) else { return }
         let wordCharacter = text.count == 1 && (text.first?.isLetter == true || text.first?.isNumber == true)
         if deletedThisTurn {
             groupTurnDeletes()
@@ -155,7 +170,7 @@ final class EditController: ObservableObject {
 
     /// Delete driven by Hex's `FullKeyboardEngine`.
     func deleteFromKeyboard() {
-        willEdit?()
+        guard runsNow({ [weak self] in self?.deleteFromKeyboard() }) else { return }
         if !deletedThisTurn {
             deletedThisTurn = true
             undoBeforeTurn = undoStack
@@ -189,9 +204,8 @@ final class EditController: ObservableObject {
     }
 
     func moveCursor(_ move: CursorMove) {
-        guard let proxy else { return }
         // First: the offsets below count a draft's text once it is plain.
-        willEdit?()
+        guard let proxy, runsNow({ [weak self] in self?.moveCursor(move) }) else { return }
         let before = Array(proxy.documentContextBeforeInput ?? "")
         let after = Array(proxy.documentContextAfterInput ?? "")
         let offset: Int
@@ -214,8 +228,7 @@ final class EditController: ObservableObject {
     func copySelection(cut: Bool) {
         guard canUsePasteboard, let text = proxy?.selectedText, !text.isEmpty else { return }
         UIPasteboard.general.string = text
-        guard cut else { return }
-        willEdit?()
+        guard cut, runsNow({ [weak self] in self?.copySelection(cut: true) }) else { return }
         checkpoint(.other)
         deleteBack()
         refresh()
@@ -242,8 +255,7 @@ final class EditController: ObservableObject {
     }
 
     private func replay(_ edit: TextEdit) {
-        guard let proxy else { return }
-        willEdit?()
+        guard let proxy, runsNow({ [weak self] in self?.replay(edit) }) else { return }
         for _ in 0..<edit.remove { proxy.deleteBackward() }
         if !edit.append.isEmpty { proxy.insertText(edit.append) }
         lastKind = nil

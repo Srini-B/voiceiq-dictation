@@ -64,7 +64,8 @@ final class DraftStage {
         let draft = draft
         await Task { @MainActor in
             let shown = await showing.value
-            guard shown != .notInserted else { return }
+            // A paste the field never showed may not be there to stay.
+            guard shown != .notInserted, shown != .unseen else { return }
             // A lost draft may be in the field and can't be found to take out.
             let removed = shown == .lost ? false : await draft.replace(with: "")
             if !removed {
