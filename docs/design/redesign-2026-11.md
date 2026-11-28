@@ -128,7 +128,7 @@ the separate microphone and Accessibility screens.
   into the list. It closes once that permission is granted.
 - **Microphone check.** Once the microphone is allowed, a line under its row
   says whether sound is arriving and offers the input picker.
-- **Footer.** "Microphone and Accessibility are required" in muted, then
+- **Footer.** "The first two are required" in muted, then
   Continue, which stays disabled until both are granted.
 - **Not asked.** Input Monitoring. The key is read through active event
   taps, which macOS grants under Accessibility.
