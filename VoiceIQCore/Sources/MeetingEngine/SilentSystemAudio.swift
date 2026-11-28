@@ -31,7 +31,7 @@ public enum SilentSystemAudio {
     static func unheard(_ url: URL) throws -> Unheard? {
         var zeros = true
         let file = try AVAudioFile(forReading: url, commonFormat: .pcmFormatInt16, interleaved: true)
-        guard let buffer = AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: 160_000) else { return false }
+        guard let buffer = AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: 160_000) else { return nil }
         while file.framePosition < file.length {
             try file.read(into: buffer)
             guard buffer.frameLength > 0, let channel = buffer.int16ChannelData?[0] else { break }
