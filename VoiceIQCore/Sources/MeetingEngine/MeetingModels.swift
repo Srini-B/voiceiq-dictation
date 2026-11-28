@@ -108,10 +108,12 @@ public enum MeetingSpeaker {
         let lines = transcript.filter { !isFragment($0.text) }
         var turns: [TranscriptTurn] = []
         for (index, segment) in lines.enumerated() {
-            let next = index + 1 < lines.count ? lines[index + 1].speaker : nil
             if let last = turns.last, last.speaker == segment.speaker {
                 turns[turns.count - 1].lines.append(.init(segment: segment, aside: false))
-            } else if let last = turns.last, next == nil || next == last.speaker, isShortReply(segment.text) {
+            } else if let last = turns.last, isShortReply(segment.text),
+                      // Who speaks next past other short replies ("Okay." then "Yes." from two people).
+                      lines[(index + 1)...].first(where: { $0.speaker == last.speaker || !isShortReply($0.text) })
+                          .map({ $0.speaker == last.speaker }) ?? true {
                 turns[turns.count - 1].lines.append(.init(segment: segment, aside: true))
             } else {
                 turns.append(TranscriptTurn(speaker: segment.speaker, lines: [.init(segment: segment, aside: false)]))
@@ -123,7 +125,8 @@ public enum MeetingSpeaker {
     /// One or two words, and short: Chinese or Japanese is written without
     /// spaces, so a whole turn there is one "word" (Codex review).
     static func isShortReply(_ text: String) -> Bool {
-        text.split(whereSeparator: \.isWhitespace).count <= 2 && text.count <= 20
+        let words = text.split(whereSeparator: \.isWhitespace).count
+        return words <= 2 && text.count <= (words == 1 && text.count > 1 && !text.contains { $0.isASCII && $0.isLetter } ? 6 : 20)
     }
 
     /// A single Latin letter and nothing else. "B." (an answer), "I.", a

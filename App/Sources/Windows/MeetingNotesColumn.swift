@@ -3,7 +3,7 @@ import SwiftUI
 
 /// The notes: title, when and who, summary, the meeting type's sections, decisions, action
 /// items, notes, then the questions asked about the meeting and their answers.
-struct MeetingNotesColumn: View {
+struct MeetingNotesColumn<Live: View>: View {
     let meeting: MeetingMeta
     let notes: MeetingNotes?
     let transcript: [TranscriptSegment]
@@ -11,6 +11,8 @@ struct MeetingNotesColumn: View {
     let step: String?
     /// Nil until the meeting has a transcript to ask about.
     let chat: MeetingChatModel?
+    /// Shown in place of the step while the meeting records.
+    @ViewBuilder let live: () -> Live
 
     var body: some View {
         ScrollViewReader { scroller in
@@ -41,6 +43,8 @@ struct MeetingNotesColumn: View {
                     }
                 }
                 bullets("Notes", notes.notes)
+            } else if step == "Recording" {
+                live()
             } else if let step {
                 HStack(spacing: VoiceIQUI.Spacing.xs) {
                     ProgressView().controlSize(.small)

@@ -100,13 +100,6 @@ struct MeetingsPane: View {
                     }
                     .tint(engine.micMuted ? VoiceIQUI.Colors.gRed : nil)
                     .help(engine.micMuted ? "Record your voice again" : "Stop recording your voice; the other side keeps recording")
-                    Button {
-                        confirmingDiscard = true
-                    } label: {
-                        Image(systemName: "trash")
-                    }
-                    .help("Discard this recording")
-                    .accessibilityLabel("Discard this recording")
                 }
                 .controlSize(.large)
                 .buttonStyle(.bordered)
@@ -143,7 +136,15 @@ struct MeetingsPane: View {
     private func row(_ meeting: MeetingMeta) -> some View {
         VStack(alignment: .leading, spacing: 3) {
             Text(title(meeting)).font(VoiceIQUI.TypeScale.body()).lineLimit(1)
-            Text(timeLine(meeting)).font(VoiceIQUI.TypeScale.labelSmall()).foregroundStyle(.secondary)
+            if case let .recording(id, since) = engine.phase, id == meeting.id {
+                // The length ticks while it records; the stored one is written at Stop.
+                TimelineView(.periodic(from: since, by: 1)) { context in
+                    Text("\(Image(systemName: "circle.fill")) \(meeting.startedAt.formatted(date: .omitted, time: .shortened)) · \(MeetingRecordingStatus.clock(context.date.timeIntervalSince(since))) · Recording")
+                        .font(VoiceIQUI.TypeScale.labelSmall().monospacedDigit()).foregroundStyle(VoiceIQUI.Colors.gRed)
+                }
+            } else {
+                Text(timeLine(meeting)).font(VoiceIQUI.TypeScale.labelSmall()).foregroundStyle(.secondary)
+            }
             let names = folders.names(of: meeting.id)
             if !names.isEmpty {
                 // Text, not a Label: a list row gives a Label's icon a column of its own.
@@ -217,7 +218,11 @@ struct MeetingsPane: View {
             if unheardCall == meeting.id { unheardWarning }
             HStack(spacing: 0) {
                 if wide || !transcriptShown {
-                    MeetingNotesColumn(meeting: meeting, notes: notes, transcript: transcript, step: step(meeting), chat: chat(meeting))
+                    MeetingNotesColumn(meeting: meeting, notes: notes, transcript: transcript, step: step(meeting), chat: chat(meeting)) {
+                        if case let .recording(id, since) = engine.phase, id == meeting.id {
+                            MeetingRecordingStatus(engine: engine, since: since) { confirmingDiscard = true }
+                        }
+                    }
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .id(meeting.id)
                 }
@@ -472,7 +477,8 @@ struct MeetingsPane: View {
     }
 
     private func title(_ meeting: MeetingMeta) -> String {
-        meeting.displayTitle() ?? meeting.startedAt.formatted(date: .abbreviated, time: .shortened)
+        // As the notes pane names it; the time is on the row's second line.
+        meeting.displayTitle() ?? "Meeting"
     }
     /// The list's sections: one per day the meetings started on, in the list's newest-first order.
     private static func days(_ meetings: [MeetingMeta]) -> [(start: Date, label: String, meetings: [MeetingMeta])] {

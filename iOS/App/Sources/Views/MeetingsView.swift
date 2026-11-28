@@ -238,6 +238,9 @@ private struct MeetingDetail: View {
     @State private var gone = false
     /// The large title has scrolled under the bar, which then shows it instead.
     @State private var titleHidden = false
+    /// The page title's bottom in the scroll content, and how far the content has scrolled under the bar.
+    @State private var titleBottom: CGFloat = .infinity
+    @State private var scrolled: CGFloat = 0
     @State private var meta: MeetingMeta
     @State private var notes: MeetingNotes?
     @State private var transcript: [TranscriptSegment] = []
@@ -296,10 +299,15 @@ private struct MeetingDetail: View {
                 .padding(.horizontal, Theme.Spacing.page)
                 .padding(.vertical, Theme.Spacing.l)
                 .readableWidth()
+                .coordinateSpace(.named("note"))
+            }
+            // Measured in the content, so the bar's height on each device or window doesn't matter (Neon).
+            .onScrollGeometryChange(for: CGFloat.self) { $0.contentOffset.y + $0.contentInsets.top } action: { _, offset in
+                scrolled = offset; titleHidden = offset >= titleBottom
             }
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
-            if let chat { MeetingChatInput(chat: chat, noun: notes?.type == nil ? "note" : "meeting") }
+            if let chat { MeetingChatInput(chat: chat, noun: notes?.type.flatMap(MeetingKind.init(rawValue:)) == nil ? "note" : "meeting") }
         }
         .themedBackground()
         // Not twice: the bar shows the title only once the page's own has scrolled away (Fable, M6).
@@ -359,7 +367,7 @@ private struct MeetingDetail: View {
         VStack(alignment: .leading, spacing: Theme.Spacing.m) {
             VStack(alignment: .leading, spacing: Theme.Spacing.xs) {
                 Text(meta.shownTitle(notes: notes) ?? notes.title).font(Theme.Fonts.title2()).foregroundStyle(Theme.Colors.ink)
-                    .onGeometryChange(for: Bool.self) { $0.frame(in: .global).maxY < 100 } action: { titleHidden = $0 }
+                    .onGeometryChange(for: CGFloat.self) { $0.frame(in: .named("note")).maxY } action: { titleBottom = $0; titleHidden = scrolled >= $0 }
                 // The kind sits on the date line, so the title has the full width.
                 HStack(spacing: Theme.Spacing.s) {
                     Text(meta.whenText).font(Theme.Fonts.footnote()).foregroundStyle(Theme.Colors.muted)

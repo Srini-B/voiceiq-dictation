@@ -8,8 +8,11 @@ public final class SoundClock: @unchecked Sendable {
     /// About −40 dBFS RMS: below speech at a laptop mic, above a quiet room.
     static let threshold: Float = 0.01
     private let last = OSAllocatedUnfairLock(initialState: Date())
+    private let latest = OSAllocatedUnfairLock<Float>(initialState: 0)
 
     public var lastSound: Date { last.withLock { $0 } }
+    /// The last buffer's RMS, 0 to 1, for the Meetings window's level meter.
+    public var level: Float { latest.withLock { $0 } }
 
     /// From the tap's I/O queue, with 16-bit mono audio.
     func hear(_ buffer: AVAudioPCMBuffer) {
@@ -19,7 +22,9 @@ public final class SoundClock: @unchecked Sendable {
             let sample = Float(samples[index]) / Float(Int16.max)
             sum += sample * sample
         }
-        if (sum / Float(buffer.frameLength)).squareRoot() >= Self.threshold {
+        let rms = (sum / Float(buffer.frameLength)).squareRoot()
+        latest.withLock { $0 = rms }
+        if rms >= Self.threshold {
             last.withLock { $0 = Date() }
         }
     }

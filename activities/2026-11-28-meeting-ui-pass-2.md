@@ -43,6 +43,14 @@ takes the deductions that were left.
 - **Focus ring on "History":** the satellite has full keyboard navigation on (`AppleKeyboardUIMode` = 2), so the first sidebar button takes focus. With the default setting it does not show.
 - **Play and Download stay visible but disabled** when a meeting has no audio, as decided on 2026-11-12 (9d7dd3e). The UI fixtures have no audio, so those buttons show disabled in the captures.
 
+- **Recording state** (Fable, M6 92 at 6d0e946, and the integrator's order before merge):
+  - While a meeting records, the notes pane shows a red mark, a running time and a live level for "You" and "Call". `SoundClock.level` is the last buffer's RMS, and `MeetingEngine.liveLevels` exposes it. "Discard…" moved there from beside Mute.
+  - The row shows a red dot with the ticking length and "Recording".
+  - An untitled meeting is called "Meeting" in both the row and the pane; the time is only on the row's second line.
+  - Stop recording was already a red prominent button. Fable's capture showed it grey because Finder was the active app.
+- **Short replies, further:** two short replies in a row from different people stay asides. Text without spaces counts as short only up to 6 characters.
+- **iPhone title,** further: the bar takes the title once the page title passes the bar's measured bottom, not a fixed 100 pt (Neon). The ask field's noun uses the same test as the badge.
+
 ## Not done
 
 - **Divider under the first day heading.** Neither `.listSectionSeparator(.hidden)`
